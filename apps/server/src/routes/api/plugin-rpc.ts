@@ -246,7 +246,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // otherwise tool calls would resolve to `undefined` in the executor.
     // No-op for builtin/official plugins (already loaded at boot) and for
     // already-activated community plugins (idempotent).
-    await c.get("activatePluginLocalTools")?.(body.pluginId, sessionId);
+    await c.get("activatePluginServerCode")?.(body.pluginId, sessionId);
 
     const turnId = crypto.randomUUID();
 
@@ -579,7 +579,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // doesn't register `action`, dispatch throws unknown-action → 404 below.
   if (pendingEntryActivation || needsServerCodeGrant) {
     if (pendingEntryActivation) {
-      await c.get("activatePluginLocalTools")?.(pluginId, sessionId);
+      await c.get("activatePluginServerCode")?.(pluginId, sessionId);
       const activatedEntry = registry.getPluginAction(pluginId, action);
       if (!activatedEntry) {
         return c.json(

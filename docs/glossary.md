@@ -62,7 +62,7 @@ See: [docs/guide/plugin-authoring.md](./guide/plugin-authoring.md), [docs/refere
 
 ## Runtime manifest
 
-The parsed YAML frontmatter of a `PLUGIN.md`, plus derived fields. Carries the `pluginId`, `name` (runtimeId), `trigger`, the scheduling surface (`stage`, `needs`, `after`, `inputs` — legacy `priority` / `upstreamRequired` are compat-folded into it at load), `outputKind`, `capabilities`, `model`, `permissions`, and UI spec references.
+The parsed YAML frontmatter of a `PLUGIN.md`, plus derived fields. Carries the `pluginId`, `name` (runtimeId), `trigger`, the scheduling surface (`stage`, `needs`, `after`, `inputs` — legacy `priority` / `upstreamRequired` are rejected at load), `outputKind`, `capabilities`, `model`, `permissions`, and UI spec references.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), [docs/guide/plugin-authoring.md](./guide/plugin-authoring.md).
 

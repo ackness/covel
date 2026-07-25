@@ -1736,7 +1736,7 @@ rpc:
 }
 ```
 
-> **`triggerTypes` 中的 reserved 项**：`triggerTypes` 列出的是 **schema 接受**的全部取值。其中 `conditional` 与 `error-retry` 目前是 **reserved——生产中永不触发**（无条件表达式引擎；调度器恒置 `hasUpstreamFailure: false`），声明它们的 runtime 会被 `shouldTrigger` 静默跳过并打印一次性 warning。生产可用的仅 `auto` / `manual` / `scheduled` / `event` 四种。详见 [reference/plugins.md → trigger 类型](./plugins.md#trigger-类型)。
+> **`triggerTypes` 的取值范围**：`triggerTypes` 列出的是 **schema 接受**的全部取值，即 `auto` / `manual` / `scheduled` / `event` 四种。曾经预留的 `conditional` 与 `error-retry` 已从 trigger 枚举中移除——声明它们的 manifest 在**加载时被拒绝**，不会出现在该列表里。详见 [reference/plugins.md → trigger 类型](./plugins.md#trigger-类型)。
 
 #### `GET /api/plugins`
 
@@ -3071,7 +3071,7 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 | 适用场景 | 测试 / 一次性 demo     | 单机部署（默认）                           | 生产环境                                                 |
 | 配置     | `STORE_BACKEND=memory` | 默认（`STORE_BACKEND=sqlite`，可显式指定） | `STORE_BACKEND=pg` + `DATABASE_URL`                      |
 
-> **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。每次 `/api/actions` / `/api/sessions/:id/turn` / `/api/sessions/:id/resume` 都会在专用 PG 连接上拿到 `pg_advisory_lock(hash(sessionId))`，确保同一 session 在任意时刻只有一个 Node 进程执行 turn。Memory / SQLite 后端使用进程内 `Map` 锁，足以覆盖单进程场景。
+> **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。每次 `/api/actions` / `/api/sessions/:id/resume` 都会在专用 PG 连接上拿到 `pg_advisory_lock(hash(sessionId))`，确保同一 session 在任意时刻只有一个 Node 进程执行 turn。Memory / SQLite 后端使用进程内 `Map` 锁，足以覆盖单进程场景。
 
 ### 关键环境变量
 

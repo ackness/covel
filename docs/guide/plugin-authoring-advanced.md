@@ -830,7 +830,7 @@ my-plugin/
 
 ## 迁移到调度声明面（三方插件）
 
-调度重设计已完成切换:`stage` + `needs` / `after` / `inputs` 是唯一的调度权威。旧字段(`priority` / `upstreamRequired`)仅由 manifest **compat 输入 schema** 为存量三方插件保留——归一层把 `upstreamRequired` 别名为 `needs`、在 `stage` 缺失时用 `priority` 派生 `stage`,数字本身不再参与调度(与显式 `stage` 并存时完全无作用)。存量三方插件按下面几步迁移,每一步都能独立发布。
+调度重设计已完成切换:`stage` + `needs` / `after` / `inputs` 是唯一的调度权威。旧字段(`priority` / `upstreamRequired` / `jobStatus`)**已从两套 manifest schema 中彻底移除**——声明其中任何一个的 PLUGIN.md 直接加载失败(报错会指向 `stage` / `needs`),不再有兼容折算。存量三方插件必须先完成第 ① 步才能继续加载,其余几步可独立发布。
 
 **① manifest 单声明。** 删掉 `priority` / `upstreamRequired`,直接写新声明。`stage` 用命名阶段(语义见 [plugins.md 调度层级](../reference/plugins.md#调度层级));上游依赖用 `needs`(gate,取代 `upstreamRequired`)或 `inputs`(把某条隐式依赖转成有类型绑定);对 `event` / `manual` runtime 不写 `stage`。改完跑 `pnpm validate:plugin <插件目录>`——strict authoring schema 会拒绝残留的 legacy 字段。
 

@@ -478,7 +478,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
       c.set("rpcApprovalGate", gate);
       c.set("pluginRegistry", createPluginRegistry());
       c.set("hasPendingPluginEntry", hasPendingEntry);
-      c.set("activatePluginLocalTools", activate);
+      c.set("activatePluginServerCode", activate);
       await next();
     });
     app.route("/api/sessions", pluginRpcRoutes);

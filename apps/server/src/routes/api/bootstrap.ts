@@ -585,7 +585,7 @@ export async function bootstrapApi(
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("clearSessionToolOverrides", clearSessionToolOverrides);
     c.set("getPluginSource", getPluginSource);
-    c.set("activatePluginLocalTools", activatePluginServerCode);
+    c.set("activatePluginServerCode", activatePluginServerCode);
     c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);
     c.set("reservedPluginIds", reservedPluginIds);
     if (config.worldsDirs) {

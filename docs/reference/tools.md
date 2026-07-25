@@ -388,7 +388,7 @@ interface UIRenderPart {
 - **LLM 看到的内容 = `_text` 的原始文本**，不带 JSON 包装
 - **框架追踪 / 前端 trace UI 看到的是完整 `parsedResult` 对象**（含 `_text` + 结构化字段）
 
-框架层面（`packages/runtime/tool-executor.ts`）检测 `_text` 字段：
+框架层面（`packages/runtime/src/agent-loop/tool-executor.ts`）检测 `_text` 字段：
 
 - 如果存在且为字符串 → LLM tool message content 直接写原始文本
 - 如果不存在 → 退回到旧的 `JSON.stringify(result)` 行为（向后兼容）

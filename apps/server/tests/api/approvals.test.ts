@@ -302,7 +302,7 @@ describe("Plugin RPC approval flow", () => {
       const app = new Hono<
         Env & {
           Variables: {
-            activatePluginLocalTools?: (id: string) => Promise<void>;
+            activatePluginServerCode?: (id: string) => Promise<void>;
           };
         }
       >();
@@ -311,7 +311,7 @@ describe("Plugin RPC approval flow", () => {
         c.set("rpcExecutor", executor);
         c.set("rpcRegistry", registry);
         c.set("rpcApprovalGate", gate);
-        c.set("activatePluginLocalTools", async (pluginId: string) => {
+        c.set("activatePluginServerCode", async (pluginId: string) => {
           activatorCalls.push(pluginId);
         });
         await next();
@@ -322,7 +322,7 @@ describe("Plugin RPC approval flow", () => {
       return { app, store, gate, activatorCalls };
     }
 
-    it("calls activatePluginLocalTools(pluginId) on allow decision", async () => {
+    it("calls activatePluginServerCode(pluginId) on allow decision", async () => {
       const { app, store, activatorCalls } = setupWithActivator();
       await seedSession(store);
 
@@ -371,7 +371,7 @@ describe("Plugin RPC approval flow", () => {
       const app = new Hono<
         Env & {
           Variables: {
-            activatePluginLocalTools?: (id: string) => Promise<void>;
+            activatePluginServerCode?: (id: string) => Promise<void>;
           };
         }
       >();
@@ -380,7 +380,7 @@ describe("Plugin RPC approval flow", () => {
         c.set("rpcExecutor", executor);
         c.set("rpcRegistry", registry);
         c.set("rpcApprovalGate", gate);
-        c.set("activatePluginLocalTools", async () => {
+        c.set("activatePluginServerCode", async () => {
           throw new Error("boom");
         });
         await next();

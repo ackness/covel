@@ -45,16 +45,16 @@ export function stageMessageOrder(stage: Stage | undefined): number {
 function foldTrigger(
   manifest: RuntimeManifest,
   stage: Stage | undefined,
-  legacyFields: string[],
+  derivedFrom: string[],
 ): TriggerSpec {
   const declared = manifest.trigger ?? { type: "auto" as const };
-  if (manifest.trigger === undefined) legacyFields.push("trigger:default-auto");
+  if (manifest.trigger === undefined) derivedFrom.push("trigger:default-auto");
 
   // Setup runtimes are auto-only in the new model. The legacy idiom
   // `scheduled + interval: 1 + maxTriggerCount: 1` in the pre-game band is
   // behaviorally equivalent to `auto + maxTriggerCount: 1`, so fold it.
   if (stage === "setup" && declared.type === "scheduled") {
-    legacyFields.push("trigger:scheduled-as-auto");
+    derivedFrom.push("trigger:scheduled-as-auto");
     const { interval, startTurn, cooldownTurns, ...rest } = declared;
     void interval;
     void startTurn;
@@ -87,13 +87,13 @@ function collectExportBindings(
 export function normalizeRuntimeManifest(
   manifest: RuntimeManifest,
 ): NormalizedRuntimeSpec {
-  const legacyFields: string[] = [];
+  const derivedFrom: string[] = [];
 
   const stage: Stage | undefined = manifest.stage;
 
-  const declaredTrigger = foldTrigger(manifest, stage, legacyFields);
+  const declaredTrigger = foldTrigger(manifest, stage, derivedFrom);
 
-  if (manifest.execution === "background") legacyFields.push("execution");
+  if (manifest.execution === "background") derivedFrom.push("execution");
 
   const needs: readonly DependencyRef[] = manifest.needs ?? [];
 
@@ -128,7 +128,7 @@ export function normalizeRuntimeManifest(
       ? { effectsDecl: manifest.effects }
       : {}),
     httpPermissions: manifest.permissions?.http ?? [],
-    provenance: { legacyFields },
+    provenance: { derivedFrom },
   };
 }
 

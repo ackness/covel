@@ -124,13 +124,13 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(pregame.declaredTrigger.type).toBe("auto");
     expect(pregame.declaredTrigger.interval).toBeUndefined();
     expect(pregame.declaredTrigger.maxTriggerCount).toBe(1);
-    expect(pregame.provenance.legacyFields).toEqual([]);
+    expect(pregame.provenance.derivedFrom).toEqual([]);
 
     const schemaGen = requireSpec(specs, "world-init/schema-gen");
     expect(schemaGen.stage).toBe("setup");
     expect(schemaGen.declaredTrigger.type).toBe("auto");
     expect(schemaGen.deps.after).toEqual(["pregame"]);
-    expect(schemaGen.provenance.legacyFields).toEqual([]);
+    expect(schemaGen.provenance.derivedFrom).toEqual([]);
 
     // player-init: explicit `stage: setup` plus turn-scoped `needs`, which are
     // the DAG edge and the same-turn gate.
@@ -162,7 +162,6 @@ describe("normalize golden (bundled plugin set)", () => {
     ]) {
       const spec = requireSpec(specs, id);
       expect(spec.stage).toBe("post-turn");
-      expect(spec.provenance.legacyFields).not.toContain("priority:stage");
       expect(spec.deps.needs).toEqual([{ capability: "narrative-engine" }]);
     }
 

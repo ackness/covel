@@ -311,8 +311,8 @@ plugins/my-plugin/
           select: "/narrativeOutput"
     function runtime 从 ctx.inputs.narrative.value 读取，不需要按
     名字翻 completedResults（agent runtime 则注入保留 prompt 块）。
-  · 旧字段 `upstreamRequired` 仅作为第三方兼容别名保留，归一层把它
-    折算为 needs（turn 作用域）；bundled 插件已全部直接声明 needs。
+  · 旧字段 `upstreamRequired` 已删除：声明它的 manifest 在加载时被
+    拒绝（报错指向 `needs`），不存在任何兼容别名折算。
 ```
 
 ### 4.3 插件触发决策树

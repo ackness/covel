@@ -222,8 +222,12 @@ export interface NormalizedRuntimeSpec {
   readonly outputRecordAs?: string;
   readonly effectsDecl?: EffectsDecl;
   readonly httpPermissions: readonly HttpPermissionDecl[];
-  /** Which spec fields were derived from legacy manifest fields (diagnostics). */
-  readonly provenance: { readonly legacyFields: readonly string[] };
+  /**
+   * Which spec fields the normalizer derived rather than read verbatim
+   * (diagnostics) — e.g. `trigger:default-auto` when no trigger is declared.
+   * Every entry names a live normalization; legacy-field folding is gone.
+   */
+  readonly provenance: { readonly derivedFrom: readonly string[] };
 }
 
 // ── Execution identity ───────────────────────────────────────────
