@@ -134,7 +134,7 @@ export function useBuildSessionActions({
         handleSseEvent,
         dispatch,
       ).finally(() => {
-        finalizeActionExecution(dispatch);
+        finalizeActionExecution(dispatch, sessionId, sessionIdRef);
         resyncSession(sessionId);
       });
     };
@@ -229,7 +229,10 @@ export function useBuildSessionActions({
           ).then(resolve);
         };
 
-        ensureServerThenRun(ds, sessionId, fireAction);
+        // Settle the promise on an aborted sync too, or `sendMessage`'s
+        // `.finally(finalizeActionExecution)` never runs and the UI stays
+        // stuck on "executing".
+        ensureServerThenRun(ds, sessionId, fireAction, resolve);
       });
     },
     [ds, dispatch, state.session, handleSseEvent],
@@ -243,7 +246,7 @@ export function useBuildSessionActions({
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
       runSingleAction(content, { echoUserMessage: true }).finally(() => {
-        finalizeActionExecution(dispatch);
+        finalizeActionExecution(dispatch, state.session?.id, sessionIdRef);
         if (state.session) resyncSession(state.session.id);
       });
     },
@@ -386,9 +389,9 @@ export function useBuildSessionActions({
           // Non-critical: the character panel refreshes on reconnect/restore.
         }
       } finally {
-        finalizeActionExecution(dispatch);
-        const sid = sessionIdRef.current;
-        if (sid) resyncSession(sid);
+        finalizeActionExecution(dispatch, sid, sessionIdRef);
+        const currentSid = sessionIdRef.current;
+        if (currentSid) resyncSession(currentSid);
       }
     },
     [
@@ -407,11 +410,11 @@ export function useBuildSessionActions({
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
       runActionStream(request, handleSseEvent, dispatch).finally(() => {
-        finalizeActionExecution(dispatch);
+        finalizeActionExecution(dispatch, request.sessionId, sessionIdRef);
         if (request.sessionId) resyncSession(request.sessionId);
       });
     },
-    [dispatch, handleSseEvent, resyncSession],
+    [dispatch, handleSseEvent, resyncSession, sessionIdRef],
   );
 
   const executeCommand = useCallback(
