@@ -143,6 +143,14 @@ export const createChoicesTool = tool({
 
 // ── create-notification ──────────────────────────────────────────
 
+/**
+ * The runtime only promotes a tool result that carries `ui` or `interaction`
+ * (`findPresentableToolOutput`). A notification is not awaiting player input,
+ * so it takes the `ui` channel: the block is normalized into a `ui.render`
+ * proposal, and the renderer maps a part whose `content` is itself a
+ * json-render spec onto that component — here `Alert`, whose props are
+ * exactly level/title/message.
+ */
 export const createNotificationTool = tool({
   name: "create-notification",
   description:
@@ -151,11 +159,29 @@ export const createNotificationTool = tool({
     level: z.enum(["info", "success", "warning", "error"]).describe("通知级别"),
     title: z.string().min(1).describe("通知标题"),
     message: z.string().min(1).describe("通知内容"),
-    icon: z.string().optional().describe("图标名称"),
   }),
   execute: async (params) => ({
     notified: true,
     level: params.level,
+    ui: [
+      {
+        parts: [
+          {
+            id: "notification-1",
+            type: "notification",
+            status: "success" as const,
+            content: {
+              type: "Alert",
+              props: {
+                level: params.level,
+                title: params.title,
+                message: params.message,
+              },
+            },
+          },
+        ],
+      },
+    ],
   }),
 });
 
