@@ -4,6 +4,7 @@
       "name": "agent-records-note-with-local-tool",
       "runtimeId": "{{pluginName}}",
       "message": "The player opened the sealed vault and found a silver key.",
+      "ignoreUpstreams": true,
       "llmResponses": [
         {
           "content": null,

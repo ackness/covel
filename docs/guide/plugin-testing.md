@@ -91,6 +91,10 @@ pnpm vitest run plugins/<id>/tests
 - `<pluginId>`：读取插件根目录下的 `tests/runtime-cases.json` 或 `covel.test.json`，执行声明的 cases。
 - `<pluginId>/<runtimeId>`：直接手动触发某个 runtime，适合临时调试。
 
+harness 会执行插件的 `entry` 模块并注册它导出的工具，所以用 `tools.plugin` 声明的工具在 case 里可以被 mock LLM 直接调用。hook / RPC / wire 的注册会被接受但不生效——它们属于 server bootstrap 的职责，单 runtime 的 harness 回合走不到。
+
+harness 只加载被测插件，所以跨插件的 `needs`（如 `{ capability: narrative-engine }`）必然不满足、runtime 会被 gate 跳过。case 里加 `"ignoreUpstreams": true` 可以绕过（等价于 CLI 的 `--ignore-upstreams`）。
+
 常用命令：
 
 ```bash

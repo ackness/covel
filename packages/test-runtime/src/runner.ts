@@ -112,14 +112,15 @@ export async function runRuntimeDebug(
   const store = createMemoryStore();
   const mediaStore = options.mediaStore ?? createMemoryMediaStore();
 
-  const { discovery, manifests, loadedCache } = await loadRuntimeBundle({
-    pluginsDir,
-    pluginId,
-    runtimeId,
-    locale,
-    ignoreUpstreams: options.ignoreUpstreams,
-    store,
-  });
+  const { discovery, manifests, loadedCache, entryTools } =
+    await loadRuntimeBundle({
+      pluginsDir,
+      pluginId,
+      runtimeId,
+      locale,
+      ignoreUpstreams: options.ignoreUpstreams,
+      store,
+    });
 
   const now = new Date().toISOString();
   await store.createSession({
@@ -141,6 +142,17 @@ export async function runRuntimeDebug(
   for (const t of createCharacterTools(store, {
     findWorldDataPluginId: () => pluginId,
   })) {
+    toolMap.set(t.name, t);
+  }
+  // Entry-registered plugin tools last: a name collision means the plugin is
+  // shadowing a framework tool, which the server bootstrap rejects — surface
+  // it here rather than silently running a different implementation.
+  for (const t of entryTools) {
+    if (toolMap.has(t.name)) {
+      throw new Error(
+        `entry registered tool "${t.name}", which collides with a framework tool`,
+      );
+    }
     toolMap.set(t.name, t);
   }
   const llm = buildMockLlm(options);

@@ -4,6 +4,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import type { RuntimeManifest } from "@covel/shared";
 import type { DataStore } from "@covel/store";
+import { fetchWithRetry, validateBaseUrlForPlugin } from "@covel/ai-provider";
+import type { PluginAPI } from "@covel/runtime";
 import {
   discoverPlugins,
   loadPluginManifest,
@@ -26,10 +28,8 @@ export interface RuntimeLoadResult {
   readonly manifests: readonly RuntimeManifest[];
   readonly target: RuntimeManifest;
   readonly loadedCache: Map<string, LoadedRuntime>;
-  // ponytail: this harness registers builtin tools only. Plugin tools are
-  // registered by the plugin's `entry` module, which needs the PluginAPI
-  // facade the server bootstrap builds — wire that in if a harness run ever
-  // needs to exercise a plugin-registered tool.
+  /** Tools the plugin's `entry` module registered, if it declares one. */
+  readonly entryTools: readonly ToolModule[];
 }
 
 export function expandPath(input: string): string {
@@ -124,11 +124,68 @@ export async function loadRuntimeBundle(args: {
     rawManifests,
     locale: args.locale,
   });
+  const entryTools = await loadEntryTools(discovery, manifests, args.store);
   return {
     discovery,
     rawManifests,
     manifests,
     target,
     loadedCache,
+    entryTools,
   };
+}
+
+/**
+ * Run the plugin's `entry` module and collect the tools it registers.
+ *
+ * The harness only needs the tool surface, so the `PluginAPI` it passes
+ * implements `registerTool` and no-ops the rest: hooks, RPC actions and media
+ * wires are server-bootstrap concerns that a single-runtime harness turn never
+ * reaches. An entry that registers one of those still runs to completion — it
+ * just has no observable effect here.
+ */
+export async function loadEntryTools(
+  discovery: PluginDiscoveryResult,
+  manifests: readonly RuntimeManifest[],
+  store?: DataStore,
+): Promise<readonly ToolModule[]> {
+  const entryPath = manifests.find((m) => m.entry)?.entry;
+  if (!entryPath) return [];
+
+  const fullPath = path.resolve(discovery.rootPath, entryPath);
+  const rel = path.relative(discovery.rootPath, fullPath);
+  if (rel.startsWith("..") || path.isAbsolute(rel)) {
+    throw new Error(`entry path escapes plugin root: ${entryPath}`);
+  }
+  if (!fs.existsSync(fullPath)) {
+    throw new Error(`entry file not found: ${fullPath}`);
+  }
+
+  const registered: ToolModule[] = [];
+  const covel = {
+    pluginId: discovery.id,
+    toolkit: {
+      tool,
+      z,
+      shortId,
+      shortIdBatch,
+      withPendingProposals,
+      ...(store ? { store } : {}),
+    },
+    http: { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin },
+    registerTool(toolModule: ToolModule) {
+      registered.push(toolModule);
+    },
+    on() {},
+    registerRpc() {},
+    registerWires() {},
+  } as unknown as PluginAPI;
+
+  const mod = await import(pathToFileURL(fullPath).href);
+  const factory = mod.default;
+  if (typeof factory !== "function") {
+    throw new Error(`entry module must default-export a function: ${fullPath}`);
+  }
+  await factory(covel);
+  return registered;
 }
