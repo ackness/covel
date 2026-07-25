@@ -15,6 +15,30 @@ import {
   type FlowSegmentId,
 } from "./shared.js";
 
+// Stage-driven segment labels (player-facing plain language). A
+// `Record<Stage, …>` so adding a stage to STAGE_ORDER is a compile error here
+// instead of a silently missing segment.
+const STAGE_SEGMENT_META: Record<Stage, { labelText: I18nText }> = {
+  setup: { labelText: { "zh-CN": "开场准备", "en-US": "Setup" } },
+  "pre-turn": { labelText: { "zh-CN": "叙事前", "en-US": "Pre-Turn" } },
+  narrative: { labelText: { "zh-CN": "叙事", "en-US": "Narrative" } },
+  "post-turn": { labelText: { "zh-CN": "叙事后", "en-US": "Post-Turn" } },
+  audit: { labelText: { "zh-CN": "审计", "en-US": "Audit" } },
+};
+
+/** Ordered flow segments; the frontend groups steps by `segmentId`. */
+const FLOW_SEGMENTS: ReadonlyArray<{ id: FlowSegmentId; labelText: I18nText }> =
+  [
+    ...STAGE_ORDER.map((stage) => ({
+      id: stage,
+      ...STAGE_SEGMENT_META[stage],
+    })),
+    {
+      id: "event-manual" as const,
+      labelText: { "zh-CN": "事件 / 手动", "en-US": "Event & Manual" },
+    },
+  ];
+
 export async function buildPluginFlowResponse() {
   const discoveries = await discoverPluginsMulti(resolvePluginsDirs());
 
@@ -61,31 +85,6 @@ export async function buildPluginFlowResponse() {
     docPath: string;
     isStoryRuntime: boolean;
   }> = [];
-  // Stage-driven segments (player-facing plain-language labels); the frontend
-  // groups by `segmentId`. The per-stage meta is a Record<Stage, …> so adding
-  // a stage to STAGE_ORDER is a compile error here instead of a silently
-  // missing segment.
-  const STAGE_SEGMENT_META: Record<Stage, { labelText: I18nText }> = {
-    setup: { labelText: { "zh-CN": "开场准备", "en-US": "Setup" } },
-    "pre-turn": { labelText: { "zh-CN": "叙事前", "en-US": "Pre-Turn" } },
-    narrative: { labelText: { "zh-CN": "叙事", "en-US": "Narrative" } },
-    "post-turn": { labelText: { "zh-CN": "叙事后", "en-US": "Post-Turn" } },
-    audit: { labelText: { "zh-CN": "审计", "en-US": "Audit" } },
-  };
-  const flowSegments: Array<{
-    id: FlowSegmentId;
-    labelText: I18nText;
-  }> = [
-    ...STAGE_ORDER.map((stage) => ({
-      id: stage,
-      ...STAGE_SEGMENT_META[stage],
-    })),
-    {
-      id: "event-manual" as const,
-      labelText: { "zh-CN": "事件 / 手动", "en-US": "Event & Manual" },
-    },
-  ];
-
   for (const discovery of discoveries) {
     const [summary, manifests] = await Promise.all([
       loadPluginSummary(discovery),
@@ -185,7 +184,7 @@ export async function buildPluginFlowResponse() {
 
   return {
     generatedAt: new Date().toISOString(),
-    segments: flowSegments.map((segment) => ({
+    segments: FLOW_SEGMENTS.map((segment) => ({
       ...segment,
       label: textValue(segment.labelText),
     })),
