@@ -82,7 +82,14 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
-  plugins: [TanStackRouterVite(), tailwindcss(), react()],
+  plugins: [
+    // Split each route into its own chunk. Without it every route — including
+    // the whole world editor and settings surface — lands in the entry chunk
+    // and ships to a visitor who only opens the landing page.
+    TanStackRouterVite({ autoCodeSplitting: true }),
+    tailwindcss(),
+    react(),
+  ],
   server: {
     proxy: createRuntimeProxyConfig(),
     fs: {
@@ -93,9 +100,10 @@ export default defineConfig({
     outDir: fileURLToPath(new URL("../../dist/web", import.meta.url)),
     emptyOutDir: true,
     // Bundle budget: warn (don't fail) when any chunk exceeds 600 kB raw.
-    // The main chunk currently sits ~350 kB raw after manualChunks; bumping
-    // this floor higher would hide regressions, lower would noise on
-    // every CI run.
+    // The entry chunk currently sits ~906 kB raw (≈1.40 MB / 400 kB gzip of
+    // eager JS on first paint) and so trips this warning on every build —
+    // deliberately, until the landing surface is trimmed further. Raising the
+    // floor to silence it would hide the regression it is there to catch.
     chunkSizeWarningLimit: 600,
     rolldownOptions: {
       output: {
@@ -109,9 +117,7 @@ export default defineConfig({
         //   - `i18n-vendor`: i18next + react-i18next (used everywhere)
         //   - `markdown-vendor`: react-markdown + remark/rehype (lazy on
         //                       message render)
-        //   - `graph-vendor`: react-force-graph + three (debug page only)
-        //   - `motion-vendor`: framer-motion (animation surfaces)
-        //   - `tanstack-query-vendor`: TanStack Query
+        //   - `json-render-vendor` / `radix-vendor` / `forms-vendor`: see below
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
           // Match against the path AFTER node_modules/ to be resilient to
@@ -127,14 +133,7 @@ export default defineConfig({
           if (/(?:^|\/)@tanstack\/(?:react-)?router/.test(after)) {
             return "router-vendor";
           }
-          if (/(?:^|\/)@tanstack\/(?:react-)?query/.test(after)) {
-            return "tanstack-query-vendor";
-          }
-          if (
-            /(?:^|\/)(react-i18next|i18next|i18next-browser-languagedetector)\//.test(
-              after,
-            )
-          ) {
+          if (/(?:^|\/)(react-i18next|i18next)\//.test(after)) {
             return "i18n-vendor";
           }
           if (
@@ -144,12 +143,13 @@ export default defineConfig({
           ) {
             return "markdown-vendor";
           }
-          if (/(?:^|\/)(react-force-graph|three|d3-)/.test(after)) {
-            return "graph-vendor";
-          }
-          if (/(?:^|\/)(framer-motion|motion)\//.test(after)) {
-            return "motion-vendor";
-          }
+          // NOTE: react-force-graph + d3 are deliberately NOT given a manual
+          // chunk. They are reachable only through `lazy(() => import(...))` in
+          // lib/graph-canvas.tsx, so rolldown already isolates them in an async
+          // chunk. Forcing them into a named chunk pulled a shared React CJS
+          // interop module in with them, which made every other chunk — react-
+          // vendor included — statically depend on 194 kB of graph code on the
+          // landing page. Measured, not theoretical: see the audit.
           // json-render engine (core + react bindings) — drives every plugin
           // panel and the message surface, so it can't be lazy, but peeling it
           // into its own chunk trims the main bundle and lets it load in
@@ -162,8 +162,12 @@ export default defineConfig({
           if (/(?:^|\/)@radix-ui\//.test(after)) {
             return "radix-vendor";
           }
-          // Schema / serialization libs used at panel + form boundaries.
-          if (/(?:^|\/)(zod|yaml)\//.test(after)) {
+          // Zod validates panel + form boundaries and is needed eagerly (the
+          // settings registry builds its schemas at boot). `yaml` is NOT listed
+          // here: it is only reached through `await import("yaml")` in the
+          // dimension importer, and grouping it with zod would drag it onto the
+          // critical path — the same mistake the graph chunk made above.
+          if (/(?:^|\/)zod\//.test(after)) {
             return "forms-vendor";
           }
           return undefined;

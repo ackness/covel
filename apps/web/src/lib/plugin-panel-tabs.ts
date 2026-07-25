@@ -1,5 +1,5 @@
 import type { UISlotEntry } from "@/services/api.js";
-import { resolveI18n } from "@/lib/catalog.js";
+import { resolveI18n } from "@/lib/catalog/helpers.js";
 
 export interface PluginPanelSubPanel {
   readonly id: string;

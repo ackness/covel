@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Flame } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
-import { resolveI18n } from "@/lib/catalog.js";
+import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import type { WorldRecord } from "@/services/api.js";
 
