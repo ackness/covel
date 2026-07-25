@@ -76,9 +76,17 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       if (filters?.sinceTimestamp) {
         rows = rows.filter((r) => r.timestamp >= filters.sinceTimestamp!);
       }
-      rows = [...rows].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      if (filters?.limit !== undefined) {
-        rows = rows.slice(0, filters.limit);
+      // `id` tie-break mirrors the SQL backends so offset paging is stable.
+      rows = [...rows].sort(
+        (a, b) =>
+          b.timestamp.localeCompare(a.timestamp) || b.id.localeCompare(a.id),
+      );
+      const offset = filters?.offset ?? 0;
+      if (offset > 0 || filters?.limit !== undefined) {
+        rows = rows.slice(
+          offset,
+          filters?.limit === undefined ? undefined : offset + filters.limit,
+        );
       }
       return rows;
     },

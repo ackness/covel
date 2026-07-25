@@ -43,6 +43,9 @@ type PluginDataTable = Table & {
   pluginId: Column;
   namespace: Column;
   key: Column;
+  // Ordering keys for offset pagination — see the list methods below.
+  createdAt: Column;
+  id: Column;
 };
 type WorkingMemoryTable = Table & {
   sessionId: Column;
@@ -172,6 +175,10 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
       }
       const rows = await runner.select<PluginDataRow>(pluginData, {
         where: and(...conditions),
+        // Offset pagination needs a total order the engine cannot perturb.
+        // `createdAt` survives upsert (only value/updatedAt are rewritten) and
+        // `id` breaks same-millisecond ties, so pages never skip or repeat.
+        orderBy: [asc(pluginData.createdAt), asc(pluginData.id)],
         limit: pagination?.limit,
         offset: pagination?.offset,
       });
@@ -188,6 +195,10 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
       // `plugin_data_session_id_idx` index.
       const rows = await runner.select<PluginDataRow>(pluginData, {
         where: eq(pluginData.sessionId, sessionId),
+        // Media GC pages through this to collect still-referenced asset ids;
+        // without a stable total order PG may hand the same row twice or skip
+        // it entirely, and a skipped row means live bytes get swept.
+        orderBy: [asc(pluginData.createdAt), asc(pluginData.id)],
         limit: pagination?.limit,
         offset: pagination?.offset,
       });

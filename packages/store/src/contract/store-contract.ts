@@ -13,6 +13,7 @@ import { registerLifecycleStoreSuites } from "./suites/lifecycle-suites.js";
 import { registerExportStoreSuites } from "./suites/export-suites.js";
 import { registerPluginDataStoreSuite } from "./suites/plugin-data-suite.js";
 import { registerRuntimeRecordStoreSuites } from "./suites/runtime-record-suites.js";
+import { registerPaginationStoreSuites } from "./suites/pagination-suites.js";
 
 // ── Contract test suite ─────────────────────────────────────────
 
@@ -44,6 +45,7 @@ export function runStoreContractTests(
     registerCoreStoreSuites(getStore);
     registerPluginDataStoreSuite(getStore);
     registerRuntimeRecordStoreSuites(getStore);
+    registerPaginationStoreSuites(getStore);
     registerPersistenceStoreSuites(getStore);
     registerIntegrityStoreSuites(getStore);
     registerLifecycleStoreSuites(getStore);

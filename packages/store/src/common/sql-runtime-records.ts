@@ -215,8 +215,10 @@ export function createSqlRuntimeRecords(
       }
       const rows = await runner.select<RuntimeOutputRow>(runtimeOutputs, {
         where: and(...conditions),
-        orderBy: [desc(runtimeOutputs.timestamp)],
+        // `id` breaks same-timestamp ties so offset pagination is stable.
+        orderBy: [desc(runtimeOutputs.timestamp), desc(runtimeOutputs.id)],
         limit: filters?.limit,
+        offset: filters?.offset,
       });
       return rows.map((row) => toRuntimeOutputRecord(row, json));
     },

@@ -45,10 +45,15 @@ export function sortByCreatedAtAsc<T extends { readonly createdAt: string }>(
   return [...rows].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
-export function sortByTimestampDesc<T extends { readonly timestamp: string }>(
-  rows: readonly T[],
-): T[] {
-  return [...rows].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+export function sortByTimestampDesc<
+  T extends { readonly timestamp: string; readonly id: string },
+>(rows: readonly T[]): T[] {
+  // `id` tie-break mirrors the SQL backends: same-timestamp rows must land in
+  // one fixed order, or offset pagination can drop or repeat them.
+  return [...rows].sort(
+    (a, b) =>
+      b.timestamp.localeCompare(a.timestamp) || b.id.localeCompare(a.id),
+  );
 }
 
 export function limitRows<T>(rows: readonly T[], limit?: number): T[] {
@@ -78,7 +83,11 @@ export function filterRuntimeOutputs(
       (row) => row.timestamp >= filters.sinceTimestamp!,
     );
   }
-  return limitRows(sortByTimestampDesc(filtered), filters?.limit);
+  const ordered = sortByTimestampDesc(filtered);
+  const offset = filters?.offset ?? 0;
+  return offset > 0
+    ? limitRows(ordered.slice(offset), filters?.limit)
+    : limitRows(ordered, filters?.limit);
 }
 
 export function filterInteractionRecords(
