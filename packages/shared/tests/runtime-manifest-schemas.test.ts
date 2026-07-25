@@ -180,11 +180,11 @@ const authoringI18nDescriptionPositive: Fixture = {
 
 const authoringStructuralRejections: readonly Fixture[] = [
   {
-    name: "priority (removed field)",
+    name: "priority (unknown field)",
     manifest: { ...base, stage: "narrative", priority: 500 },
   },
   {
-    name: "upstreamRequired (removed field)",
+    name: "upstreamRequired (unknown field)",
     manifest: {
       ...base,
       stage: "post-turn",
@@ -193,15 +193,15 @@ const authoringStructuralRejections: readonly Fixture[] = [
     },
   },
   {
-    name: "conditional trigger (reserved)",
+    name: "conditional trigger (not in the enum)",
     manifest: { ...base, stage: "narrative", trigger: { type: "conditional" } },
   },
   {
-    name: "error-retry trigger (reserved)",
+    name: "error-retry trigger (not in the enum)",
     manifest: { ...base, stage: "narrative", trigger: { type: "error-retry" } },
   },
   {
-    name: "jobStatus.legacyViews (compat-only)",
+    name: "jobStatus.legacyViews (unknown field)",
     manifest: {
       ...base,
       stage: "post-turn",

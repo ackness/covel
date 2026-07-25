@@ -70,16 +70,11 @@ export function prepareRuntimeManifests(args: {
   readonly manifests: readonly RuntimeManifest[];
   readonly target: RuntimeManifest;
 } {
-  // Strip BOTH upstream-gate surfaces: the legacy `upstreamRequired` alias
-  // and the stage-scheduler `needs` declaration it normalizes into — a case
-  // run in isolation has no upstream results, so either form would skip the
-  // target with "upstream not success".
+  // Strip the upstream gate: a case run in isolation has no upstream results,
+  // so any `needs` declaration would skip the target with "upstream not
+  // success".
   const manifests = args.ignoreUpstreams
-    ? args.rawManifests.map((manifest) => ({
-        ...manifest,
-        upstreamRequired: undefined,
-        needs: undefined,
-      }))
+    ? args.rawManifests.map((manifest) => ({ ...manifest, needs: undefined }))
     : args.rawManifests;
   const target = manifests.find((manifest) => manifest.name === args.runtimeId);
   if (!target) {

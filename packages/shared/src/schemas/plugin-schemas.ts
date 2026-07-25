@@ -98,7 +98,7 @@ export const triggerConfigSchema = z
  * Authoring schema — identical to the compat schema now that reserved triggers
  * are rejected on both. Kept as distinct exports so the authoring / compat call
  * sites stay explicit (and can diverge again if the authoring surface tightens
- * further, e.g. dropping `priority` / `upstreamRequired`).
+ * further).
  */
 export const authoringTriggerTypeSchema = triggerTypeSchema;
 
@@ -545,7 +545,7 @@ export const pluginUserSettingSpecSchema = z
 
 // ── Scheduling: stage / dependencies / bindings ──────────────────
 
-/** Coarse scheduling stage (replaces numeric priority bands). Derived from
+/** Coarse scheduling stage: which band a runtime runs in. Derived from
  * the canonical STAGE_ORDER tuple so the enum can never drift from it. */
 export const stageSchema = z.enum(STAGE_ORDER);
 
@@ -680,7 +680,7 @@ export const permissionsDeclSchema = z
 
 /**
  * Structural view of the manifest fields the cross-field checks read. Kept
- * loose so both the compat (priority present) and authoring parsed shapes are
+ * loose so both the compat and authoring parsed shapes are
  * accepted; the checks work off plain data and return issues, so neither
  * superRefine has to name Zod's refinement-ctx type.
  */
@@ -743,8 +743,8 @@ function sharedManifestCrossFieldIssues(
   // `needs(scope: session)` gates on the persistent setup snapshot — the
   // positive gate lives in the setup selection path only, so on any other
   // stage the declaration would be accepted-but-inert. Reject it instead of
-  // letting a dead gate ship (a legacy-priority setup runtime that wants this
-  // must declare `stage: setup` explicitly).
+  // letting a dead gate ship (a runtime that wants this gate must declare
+  // `stage: setup` explicitly).
   if (m.stage !== "setup") {
     for (const [i, need] of (m.needs ?? []).entries()) {
       if (typeof need !== "string" && need.scope === "session") {
@@ -799,9 +799,9 @@ function authoringManifestCrossFieldIssues(
 
 /**
  * Field definitions shared by the compat (`runtimeManifestInputSchema`) and
- * strict authoring (`runtimeManifestAuthoringSchema`) manifest schemas. The
- * legacy-only fields (`priority`, `upstreamRequired`, `jobStatus`) and the
- * schema-specific `trigger` are added per schema below, so the two never drift.
+ * strict authoring (`runtimeManifestAuthoringSchema`) manifest schemas. Only
+ * the schema-specific `trigger` is added per schema below, so the two never
+ * drift.
  */
 const runtimeManifestCommonShape = {
   name: z
@@ -879,11 +879,11 @@ const runtimeManifestCommonShape = {
   capabilities: z.array(z.string().min(1)).optional(),
   tags: z.array(pluginTagSchema).optional(),
   relations: pluginRelationsSchema.optional(),
-  /** Coarse scheduling stage (replaces numeric priority bands). */
+  /** Coarse scheduling stage: which band this runtime runs in. */
   stage: stageSchema.optional(),
   /** Weak ordering dependencies (no gate). */
   after: z.array(afterRefSchema).optional(),
-  /** Strong dependencies: ordering + gate (supersedes `upstreamRequired`). */
+  /** Strong dependencies: ordering + gate. */
   needs: z.array(needsRefSchema).optional(),
   /** Typed same-execution data bindings, keyed by local binding name. */
   inputs: inputsBindingMapSchema.optional(),
@@ -924,12 +924,11 @@ const runtimeManifestCommonShape = {
 } as const;
 
 /**
- * Compat input schema — a superset of the strict authoring schema that keeps
- * the legacy fields (`priority` / `upstreamRequired` / `jobStatus`) so every
- * currently-shipping PLUGIN.md still parses. The trigger enum is the same
- * four production types on both schemas. The cross-field checks it adds all
- * have zero current violations (grepped against the bundled plugins), so they
- * never reject a shipping manifest.
+ * Loader input schema — decides whether a PLUGIN.md parses at all. Accepts the
+ * same field set as the authoring schema (both are `.strict()`, so an unknown
+ * field is an error on either); it differs only in enforcing the smaller set of
+ * cross-field constraints, so a manifest can load without yet satisfying every
+ * authoring rule.
  */
 export const runtimeManifestInputSchema = z
   .object({
@@ -956,11 +955,9 @@ export const runtimeManifestSchema = runtimeManifestInputSchema;
 
 /**
  * Strict authoring target — the shape new plugins should be written against.
- * Shares {@link runtimeManifestCommonShape}, but: the trigger enum drops the
- * reserved types; `priority` / `upstreamRequired` / `jobStatus` are rejected
- * (omitted under `.strict()`); and every cross-field constraint is enforced,
- * including "auto / scheduled runtimes must declare a stage". Background
- * `execution` stays legal (it is a live mechanism, not a legacy field).
+ * Shares {@link runtimeManifestCommonShape} with the loader schema, and adds
+ * every cross-field constraint, including "auto / scheduled runtimes must
+ * declare a stage".
  */
 export const runtimeManifestAuthoringSchema = z
   .object({

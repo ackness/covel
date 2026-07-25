@@ -1,6 +1,6 @@
 /**
- * manifest.upstreamRequired — skip downstream runtimes when a declared
- * upstream failed in the same turn.
+ * manifest.needs — skip downstream runtimes when a declared upstream failed
+ * in the same turn.
  *
  * Without this safeguard, plugins like `guide`/`codex` that inject
  * `<narrator-output>` would still run when `narrator` failed, feeding the
@@ -82,7 +82,7 @@ async function runTurn(
   return executeTurn(input, manifests, deps);
 }
 
-describe("executeTurn: manifest.upstreamRequired", () => {
+describe("executeTurn: manifest.needs", () => {
   it("skips a downstream runtime when its declared upstream failed", async () => {
     const upstream = manifest("narrator", { stage: "narrative" });
     const downstream = manifest("guide", {
@@ -226,7 +226,7 @@ describe("executeTurn: manifest.upstreamRequired", () => {
   });
 });
 
-describe("executeTurn: capability-based upstreamRequired", () => {
+describe("executeTurn: capability-based needs", () => {
   it("runs when an in-scope capability provider succeeded — discovered by capability, not name", async () => {
     // The downstream never names chat-mode-narrator; it gates on the
     // `narrative-engine` capability, which chat-mode-narrator declares. This is

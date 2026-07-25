@@ -5,9 +5,8 @@
  * `NormalizedRuntimeSpec` (per-manifest, no session resolution), and the
  * session scheduler resolves the active set into a `SessionExecutionPlan`
  * (providers resolved, DAG layered). Schedulers, validators, and traces
- * consume only this IR; all legacy-compat mapping (priority band folding,
- * `upstreamRequired` aliasing, scheduled→auto folding for setup) is
- * centralized at the loader exit.
+ * consume only this IR; every manifest-shape normalization (e.g. the
+ * scheduled→auto fold for setup) is centralized at the loader exit.
  */
 
 import type { TriggerConfig } from "./plugin.js";
@@ -28,10 +27,9 @@ export type JsonValue =
 // ── Stage axis ───────────────────────────────────────────────────
 
 /**
- * Coarse-grained named phases replacing the numeric priority bands:
- * setup (0–99), pre-turn (100–499), narrative (500), post-turn (501–999),
- * audit (1000). Strict barrier between stages; intra-stage order comes
- * exclusively from dependencies.
+ * Coarse-grained named phases, run in this order every main-loop turn
+ * (`setup` runs instead, while `session.phase === 'setup'`). Strict barrier
+ * between stages; intra-stage order comes exclusively from dependencies.
  *
  * Single source of truth: `Stage` derives from this tuple, and so do the
  * zod `stageSchema` and the plugin-flow segment table — adding a sixth
@@ -205,7 +203,7 @@ export interface NormalizedRuntimeSpec {
   readonly backgroundWhenDetached: boolean;
   /** Guides result parsing before normalization. Defaults to `legacy`. */
   readonly resultFormat: RuntimeResultFormat;
-  /** Absent for event/manual runtimes and for legacy UI-only (no-priority) declarations. */
+  /** Absent for event/manual runtimes and for UI-only registration surfaces. */
   readonly stage?: Stage;
   /** capability refs unresolved at this level. */
   readonly deps: {

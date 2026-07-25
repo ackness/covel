@@ -18,7 +18,7 @@ function manifest(patch: Partial<RuntimeManifest> = {}): RuntimeManifest {
     name: "plugin/main",
     pluginId: "plugin",
     description: "Main runtime",
-    upstreamRequired: ["plugin/upstream"],
+    needs: ["plugin/upstream"],
     ...patch,
   };
 }
@@ -52,8 +52,8 @@ describe("test-runtime runtime loading helpers", () => {
     });
 
     expect(prepared.target.name).toBe("plugin/main");
-    expect(prepared.manifests[0]?.upstreamRequired).toBeUndefined();
-    expect(raw[0]?.upstreamRequired).toEqual(["plugin/upstream"]);
+    expect(prepared.manifests[0]?.needs).toBeUndefined();
+    expect(raw[0]?.needs).toEqual(["plugin/upstream"]);
   });
 
   it("throws clear errors for missing target runtimes", () => {

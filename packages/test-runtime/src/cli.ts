@@ -48,7 +48,7 @@ Options:
   --expects-background-follower
                              Write a failed _jobs row when no deferred follower is emitted.
   --show-prompts             Include captured LLM messages in output.
-  --ignore-upstreams         Clear upstreamRequired during this debug run.
+  --ignore-upstreams         Clear the runtime's needs gate during this debug run.
   --pretty                   Pretty-print JSON output.
   --help                     Show this help.
 

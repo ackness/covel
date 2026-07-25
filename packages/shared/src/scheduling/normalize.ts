@@ -6,9 +6,8 @@
  * band and the DAG orders within it (see packages/runtime/src/schedule).
  *
  * `execution: background` and setup runtimes declared as `scheduled
- * interval: 1` still fold here; the numeric `priority` band map and the
- * `upstreamRequired` alias are gone — every manifest single-declares
- * `stage` + `needs`/`after`.
+ * interval: 1` fold here. Every manifest single-declares `stage` +
+ * `needs`/`after` — there is no alternative spelling to reconcile.
  */
 
 import type {

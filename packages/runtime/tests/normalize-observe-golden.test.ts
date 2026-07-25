@@ -151,8 +151,8 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(narrator.stage).toBe("narrative");
     expect(requireSpec(specs, "chat-mode-narrator").stage).toBe("narrative");
 
-    // post-turn `needs: [{capability}]` runtimes — single-declared now, so the
-    // capability entry appears exactly once (no upstreamRequired alias).
+    // post-turn `needs: [{capability}]` runtimes — the capability entry
+    // appears exactly once in the normalized spec.
     for (const id of [
       "guide",
       "codex",
