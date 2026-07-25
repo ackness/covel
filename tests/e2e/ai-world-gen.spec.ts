@@ -1,4 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
+import {
+  composerInput,
+  expectPlayerCanAct,
+  seedAppSettings,
+  waitForTurnIdle,
+} from "./helpers/player.js";
 
 /**
  * AI World Generation E2E — tests the full flow:
@@ -282,7 +288,7 @@ test.describe("AI World Generation", () => {
     await startButton.click();
 
     // Wait for game view (input field + sid in URL)
-    await expect(page.locator("input[type=text]").last()).toBeVisible({
+    await expect(composerInput(page)).toBeVisible({
       timeout: 30_000,
     });
     await expect(page).toHaveURL(/sid=/, { timeout: 10_000 });
@@ -387,7 +393,7 @@ test.describe("AI World Generation", () => {
     console.log("Character creation submitted");
 
     // Wait for the response after character creation
-    await waitForExecDone(page);
+    await waitForTurnIdle(page);
     console.log("Character creation response received");
 
     await page.screenshot({
@@ -396,8 +402,7 @@ test.describe("AI World Generation", () => {
 
     // Verify we're still in a valid game session
     expect(page.url()).toMatch(/sid=/);
-    const finalInput = page.locator("input[type=text]").last();
-    await expect(finalInput).toBeEnabled({ timeout: 5_000 });
+    await expectPlayerCanAct(page);
   });
 
   test("example prompt chips populate the textarea", async ({ page }) => {
@@ -446,31 +451,6 @@ test.describe("AI World Generation", () => {
 });
 
 // ── Helpers ──────────────────────────────────────────────────────
-
-async function seedAppSettings(page: Page) {
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      "covel:settings",
-      JSON.stringify({
-        schemaVersion: 1,
-        savedAt: new Date().toISOString(),
-        entries: {
-          "ui.onboardedVersion": 3,
-          "ui.locale": "zh-CN",
-        },
-      }),
-    );
-  });
-}
-
-async function waitForExecDone(page: Page) {
-  const input = page.locator("input[type=text]").last();
-  try {
-    await expect(input).toBeEnabled({ timeout: 10_000 });
-  } catch {
-    await expect(input).toBeEnabled({ timeout: 180_000 });
-  }
-}
 
 async function updatedWorldCount(page: Page): Promise<number> {
   return page

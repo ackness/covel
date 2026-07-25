@@ -1,4 +1,12 @@
 import { test, expect, type Page } from "@playwright/test";
+import {
+  composerInput,
+  expectPlayerCanAct,
+  seedAppSettings,
+  selectWorldByText,
+  sendPlayerMessage,
+  waitForTurnIdle,
+} from "./helpers/player.js";
 
 /**
  * Real game session E2E — 3 rounds of interaction:
@@ -54,7 +62,7 @@ test.describe("Game Session — 3 Round Flow", () => {
     await startButton.click();
 
     // Wait for game view
-    await expect(page.locator("input[type=text]").last()).toBeVisible({
+    await expect(composerInput(page)).toBeVisible({
       timeout: 30_000,
     });
     await expect(page).toHaveURL(/sid=/, { timeout: 10_000 });
@@ -66,7 +74,7 @@ test.describe("Game Session — 3 Round Flow", () => {
     await beginButton.click();
 
     // Wait for start_session to complete (narrator + init plugins)
-    await waitForExecDone(page);
+    await waitForTurnIdle(page);
     await page.screenshot({
       path: "tests/e2e/artifacts/game-r0-session-start.png",
     });
@@ -75,7 +83,7 @@ test.describe("Game Session — 3 Round Flow", () => {
     // Round 1: Character creation — enter name and submit
     // ══════════════════════════════════════════════════════════
     await handleCharacterCreation(page);
-    await waitForExecDone(page);
+    await waitForTurnIdle(page);
     await page.screenshot({
       path: "tests/e2e/artifacts/game-r1-char-created.png",
     });
@@ -91,12 +99,15 @@ test.describe("Game Session — 3 Round Flow", () => {
     await sendPlayerMessage(page, "我环顾四周，观察周围的环境");
     await page.screenshot({ path: "tests/e2e/artifacts/game-r2-sent.png" });
 
-    await waitForExecDone(page);
+    await waitForTurnIdle(page);
     await page.screenshot({ path: "tests/e2e/artifacts/game-r2-response.png" });
 
     const guideR2 = await detectGuideOutput(page);
     console.log(`Round 2 (manual message): guide triggered = ${guideR2}`);
     expect(guideR2).toBeTruthy();
+
+    // The guide panel is a suggestion surface — it must not lock free text.
+    await expectPlayerCanAct(page);
 
     // ══════════════════════════════════════════════════════════
     // Round 3: Send another message (or click guide choice)
@@ -112,7 +123,7 @@ test.describe("Game Session — 3 Round Flow", () => {
       await page.screenshot({ path: "tests/e2e/artifacts/game-r3-sent.png" });
     }
 
-    await waitForExecDone(page);
+    await waitForTurnIdle(page);
     await page.screenshot({ path: "tests/e2e/artifacts/game-r3-response.png" });
 
     const guideR3 = await detectGuideOutput(page);
@@ -121,60 +132,12 @@ test.describe("Game Session — 3 Round Flow", () => {
 
     // ── Final verification ───────────────────────────────────
     expect(page.url()).toMatch(/sid=/);
-    const finalInput = page.locator("input[type=text]").last();
-    await expect(finalInput).toBeEnabled({ timeout: 5_000 });
+    await expectPlayerCanAct(page);
   });
 });
 
 // ── Helpers ──────────────────────────────────────────────────────
-
-async function seedAppSettings(page: Page) {
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      "covel:settings",
-      JSON.stringify({
-        schemaVersion: 1,
-        savedAt: new Date().toISOString(),
-        entries: {
-          "ui.onboardedVersion": 3,
-          "ui.locale": "zh-CN",
-        },
-      }),
-    );
-  });
-}
-
-async function selectWorldByText(page: Page, text: RegExp) {
-  const worldCard = page.locator("article").filter({ hasText: text }).first();
-  await expect(worldCard).toBeVisible({ timeout: 15_000 });
-  await worldCard.click();
-}
-
-/**
- * Wait for execution to complete.
- * Fast check first (10s), then slow fallback (3 min) for multi-runtime turns.
- */
-async function waitForExecDone(page: Page) {
-  const input = page.locator("input[type=text]").last();
-  try {
-    await expect(input).toBeEnabled({ timeout: 10_000 });
-  } catch {
-    await expect(input).toBeEnabled({ timeout: 180_000 });
-  }
-}
-
-/**
- * Send a player message via the game input.
- */
-async function sendPlayerMessage(page: Page, text: string) {
-  const input = page.locator("input[type=text]").last();
-  await expect(input).toBeEnabled({ timeout: 30_000 });
-  await input.fill(text);
-  const container = input.locator("..");
-  await container.locator("button").last().click();
-  // Verify message appears in chat
-  await expect(page.getByText(text).first()).toBeVisible({ timeout: 10_000 });
-}
+// Shared session helpers live in ./helpers/player.ts.
 
 /**
  * Fill and submit the character creation form.
