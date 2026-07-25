@@ -20,7 +20,7 @@ export {
 export { z } from "zod";
 
 // ── Tool client ──────────────────────────────────────────────────
-export type { ToolCallResult, ToolClient, ToolDefinition } from "./client.js";
+export type { ToolCallResult } from "./client.js";
 
 // ── Output validation ────────────────────────────────────────────
 export { validateOutput } from "./output-validator.js";
@@ -88,6 +88,5 @@ export type {
   ToolModule,
   ToolDefinitionInput,
   ToolSource,
-  ResolvedTool,
   ValidationResult,
 } from "./types.js";

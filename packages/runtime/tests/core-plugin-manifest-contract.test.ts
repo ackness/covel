@@ -51,17 +51,18 @@ describe("core plugin manifest contract", () => {
 
     expect(pregame).toMatchObject({
       pluginType: "core-plugin",
-      priority: 10,
+      stage: "setup",
       runtimeType: "function",
       handler: "./handler.js",
-      trigger: { type: "scheduled", interval: 1, maxTriggerCount: 1 },
+      trigger: { type: "auto", maxTriggerCount: 1 },
     });
     expect(schemaGen).toMatchObject({
       pluginType: "core-plugin",
-      priority: 40,
+      stage: "setup",
+      after: ["pregame"],
       model: "plugin",
       guard: "../../guard.js",
-      trigger: { type: "scheduled", interval: 1, maxTriggerCount: 1 },
+      trigger: { type: "auto", maxTriggerCount: 1 },
     });
     expect(schemaGen.tools?.plugin).toEqual([
       "set-world-schema",
@@ -78,12 +79,10 @@ describe("core plugin manifest contract", () => {
       model: "plugin",
       guard: "./guard.js",
       trigger: { type: "auto" },
-      // Single-declared now: turn-scoped needs replace upstreamRequired (order +
-      // same-turn gate). priority removed (explicit stage).
+      // Turn-scoped needs carry both the intra-stage order and the same-turn
+      // gate; the explicit stage picks the band.
       needs: ["pregame", "world-init/schema-gen"],
     });
-    expect(playerInit.priority).toBeUndefined();
-    expect(playerInit.upstreamRequired).toBeUndefined();
     expect(playerInit.input?.inject).toEqual([
       {
         kind: "runtime",
@@ -152,11 +151,8 @@ describe("core plugin manifest contract", () => {
     // engine the current mode loaded) and injects from both known engines so
     // it works under narrator OR chat-mode-narrator. An exact `narrator`
     // upstream would permanently skip these runtimes in dialogue mode.
-    // Single-declared now: the turn-scoped `needs` capability entry (no
-    // upstreamRequired alias).
     for (const downstream of downstreams) {
       expect(downstream.needs).toEqual([{ capability: "narrative-engine" }]);
-      expect(downstream.upstreamRequired).toBeUndefined();
       for (const engine of ["narrator", "chat-mode-narrator"]) {
         expect(downstream.input?.inject).toContainEqual({
           kind: "runtime",

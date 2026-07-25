@@ -36,8 +36,8 @@ function writeMap(map: Record<string, string>): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
   } catch {
-    // ponytail: localStorage unavailable — tokens just won't persist across
-    // reloads; nothing to recover here.
+    // localStorage unavailable (private mode, storage blocked). Tokens just
+    // won't persist across reloads; there is nothing to recover here.
   }
 }
 

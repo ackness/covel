@@ -37,7 +37,6 @@ export * from "./env/index.js";
 // ── Scheduling IR normalization ───────────────────────────────────
 export {
   normalizeRuntimeManifest,
-  stageForPriority,
   stageRank,
   stageMessageOrder,
   getRuntimeSpec,
@@ -97,7 +96,6 @@ export {
   runtimeBindingSchema,
   effectsDeclSchema,
   permissionsDeclSchema,
-  jobStatusDeclSchema,
   validateRuntimeManifestSemantics,
 } from "./schemas/plugin.js";
 

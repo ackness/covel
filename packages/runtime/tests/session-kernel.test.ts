@@ -1763,7 +1763,7 @@ describe("createTraceRecorder", () => {
     await recorder.runtimeStarted({
       runtimeId: "narrator",
       pluginId: "narrator",
-      priority: 500,
+      stage: "narrative",
     });
 
     expect(store.addTraceEvent).toHaveBeenCalledOnce();
@@ -1772,7 +1772,7 @@ describe("createTraceRecorder", () => {
     expect(arg.sessionId).toBe(SESSION_ID);
     expect(arg.turnId).toBe(TURN_ID);
     expect(arg.payload.runtimeId).toBe("narrator");
-    expect(arg.payload.priority).toBe(500);
+    expect(arg.payload.stage).toBe("narrative");
   });
 
   it("should record runtime.completed trace events", async () => {

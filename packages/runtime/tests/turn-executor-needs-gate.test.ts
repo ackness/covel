@@ -1,6 +1,6 @@
 /**
- * manifest.upstreamRequired — skip downstream runtimes when a declared
- * upstream failed in the same turn.
+ * manifest.needs — skip downstream runtimes when a declared upstream failed
+ * in the same turn.
  *
  * Without this safeguard, plugins like `guide`/`codex` that inject
  * `<narrator-output>` would still run when `narrator` failed, feeding the
@@ -53,7 +53,7 @@ function manifest(
     name,
     pluginId: name.split("/")[0]!,
     description: name,
-    priority: 500,
+    stage: "narrative",
     runtimeType: "function",
     handler: "./h.js",
     trigger: { type: "auto" },
@@ -82,12 +82,12 @@ async function runTurn(
   return executeTurn(input, manifests, deps);
 }
 
-describe("executeTurn: manifest.upstreamRequired", () => {
+describe("executeTurn: manifest.needs", () => {
   it("skips a downstream runtime when its declared upstream failed", async () => {
-    const upstream = manifest("narrator", { priority: 500 });
+    const upstream = manifest("narrator", { stage: "narrative" });
     const downstream = manifest("guide", {
-      priority: 550,
-      upstreamRequired: ["narrator"],
+      stage: "post-turn",
+      needs: ["narrator"],
     });
 
     const result = await runTurn([upstream, downstream], {
@@ -113,10 +113,10 @@ describe("executeTurn: manifest.upstreamRequired", () => {
   });
 
   it("still runs a downstream when the upstream succeeded", async () => {
-    const upstream = manifest("narrator", { priority: 500 });
+    const upstream = manifest("narrator", { stage: "narrative" });
     const downstream = manifest("guide", {
-      priority: 550,
-      upstreamRequired: ["narrator"],
+      stage: "post-turn",
+      needs: ["narrator"],
     });
 
     let downstreamRan = false;
@@ -136,13 +136,13 @@ describe("executeTurn: manifest.upstreamRequired", () => {
 
   it("treats a guard-skipped initialization upstream as satisfied", async () => {
     const upstream = manifest("world-init/schema-gen", {
-      priority: 100,
+      stage: "pre-turn",
       runtimeType: "agent",
       guard: "./guard.js",
     });
     const downstream = manifest("char-creator/player-init", {
-      priority: 150,
-      upstreamRequired: ["world-init/schema-gen"],
+      stage: "pre-turn",
+      needs: ["world-init/schema-gen"],
     });
     let downstreamRan = false;
     const input: TurnInput = {
@@ -189,8 +189,8 @@ describe("executeTurn: manifest.upstreamRequired", () => {
     // list (e.g. disabled for this session). Framework must still skip
     // rather than treating "absent upstream" as success.
     const downstream = manifest("guide", {
-      priority: 550,
-      upstreamRequired: ["narrator"],
+      stage: "post-turn",
+      needs: ["narrator"],
     });
 
     const result = await runTurn([downstream], {
@@ -204,11 +204,11 @@ describe("executeTurn: manifest.upstreamRequired", () => {
   });
 
   it("requires ALL listed upstreams to succeed (not any)", async () => {
-    const a = manifest("narrator", { priority: 500 });
-    const b = manifest("npc-graph/rag-retriever", { priority: 490 });
+    const a = manifest("narrator", { stage: "narrative" });
+    const b = manifest("npc-graph/rag-retriever", { stage: "pre-turn" });
     const downstream = manifest("guide", {
-      priority: 550,
-      upstreamRequired: ["narrator", "npc-graph/rag-retriever"],
+      stage: "post-turn",
+      needs: ["narrator", "npc-graph/rag-retriever"],
     });
 
     const result = await runTurn([a, b, downstream], {
@@ -226,18 +226,18 @@ describe("executeTurn: manifest.upstreamRequired", () => {
   });
 });
 
-describe("executeTurn: capability-based upstreamRequired", () => {
+describe("executeTurn: capability-based needs", () => {
   it("runs when an in-scope capability provider succeeded — discovered by capability, not name", async () => {
     // The downstream never names chat-mode-narrator; it gates on the
     // `narrative-engine` capability, which chat-mode-narrator declares. This is
     // what lets the same guidance plugin work under either narrative engine.
     const engine = manifest("chat-mode-narrator", {
-      priority: 500,
+      stage: "narrative",
       capabilities: ["narrative-engine"],
     });
     const downstream = manifest("guide", {
-      priority: 600,
-      upstreamRequired: [{ capability: "narrative-engine" }],
+      stage: "post-turn",
+      needs: [{ capability: "narrative-engine" }],
     });
 
     let ran = false;
@@ -256,12 +256,12 @@ describe("executeTurn: capability-based upstreamRequired", () => {
 
   it("skips when the in-scope capability provider failed", async () => {
     const engine = manifest("narrator", {
-      priority: 500,
+      stage: "narrative",
       capabilities: ["narrative-engine"],
     });
     const downstream = manifest("guide", {
-      priority: 600,
-      upstreamRequired: [{ capability: "narrative-engine" }],
+      stage: "post-turn",
+      needs: [{ capability: "narrative-engine" }],
     });
 
     const result = await runTurn([engine, downstream], {
@@ -281,8 +281,8 @@ describe("executeTurn: capability-based upstreamRequired", () => {
   it("skips when no in-scope runtime provides the capability", async () => {
     // A guidance runtime with no narrative engine active has nothing to act on.
     const downstream = manifest("guide", {
-      priority: 600,
-      upstreamRequired: [{ capability: "narrative-engine" }],
+      stage: "post-turn",
+      needs: [{ capability: "narrative-engine" }],
     });
 
     const result = await runTurn([downstream], {

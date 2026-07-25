@@ -88,9 +88,8 @@ async function generate(
   config: ProviderConfig,
   params: ImageGenerationParams,
 ): Promise<ImageGenerationResult> {
-  // ponytail: imageWire is a routing hint consumed by the caller before it
-  // reaches here, not a real request param — strip it so it never leaks
-  // onto the wire.
+  // `imageWire` is a routing hint the caller consumes before reaching here,
+  // not a real request param — strip it so it never leaks onto the wire.
   const { imageWire: _ignored, ...extra } =
     params.providerRequestMetadata ?? {};
 

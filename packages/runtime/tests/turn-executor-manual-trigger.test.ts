@@ -70,7 +70,7 @@ function fnManifest(
     name,
     pluginId: name.split("/")[0]!,
     description: name,
-    priority: 500,
+    stage: "narrative",
     runtimeType: "function",
     handler: "./h.js",
     trigger: { type: "auto" },
@@ -187,7 +187,7 @@ describe("executeTurn: manual trigger", () => {
     const target = fnManifest("plug/target", { trigger: { type: "manual" } });
     const chained = fnManifest("plug/chained", {
       trigger: { type: "event", topic: "target.done" },
-      priority: 510,
+      stage: "post-turn",
     });
 
     const { handlerCalls } = await runTurn(
@@ -552,15 +552,15 @@ describe("executeTurn: manual trigger", () => {
   it("schedules event-triggered followers in the same turn after the manual runtime emits", async () => {
     const target = fnManifest("plug/target", {
       trigger: { type: "manual" },
-      priority: 600,
+      stage: "post-turn",
     });
     const follower = fnManifest("plug/follower", {
       trigger: { type: "event", topic: "image.prompt.ready" },
-      priority: 610,
+      stage: "post-turn",
     });
     const unrelatedEvent = fnManifest("plug/other-event", {
       trigger: { type: "event", topic: "something.else" },
-      priority: 620,
+      stage: "post-turn",
     });
 
     const { result, handlerCalls } = await runTurn(

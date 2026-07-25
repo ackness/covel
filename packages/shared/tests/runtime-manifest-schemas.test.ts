@@ -77,7 +77,6 @@ const newShapeFields = {
     },
   },
   resultFormat: "envelope-v1",
-  suspensionSafe: true,
   effects: {
     reads: ["narrative:*", "plugin-data:self:codex"],
     writes: ["state:*", "event:codex.updated"],
@@ -106,23 +105,22 @@ const newShapeFields = {
 
 const compatCurrentPositives: readonly Fixture[] = [
   {
-    name: "priority 500 + auto trigger (narrator)",
-    manifest: { ...base, priority: 500, trigger: { type: "auto" } },
+    name: "stage narrative + auto trigger (narrator)",
+    manifest: { ...base, stage: "narrative", trigger: { type: "auto" } },
   },
   {
-    name: "priority 600 + upstreamRequired capability",
+    name: "post-turn stage + capability needs",
     manifest: {
       ...base,
-      priority: 600,
+      stage: "post-turn",
       trigger: { type: "scheduled", interval: 1 },
-      upstreamRequired: [{ capability: "narrative-engine" }],
+      needs: [{ capability: "narrative-engine" }],
     },
   },
   {
-    name: "event trigger + topic + priority",
+    name: "event trigger + topic (no stage)",
     manifest: {
       ...base,
-      priority: 460,
       trigger: { type: "event", topic: "scene.set" },
     },
   },
@@ -135,11 +133,11 @@ const compatCurrentPositives: readonly Fixture[] = [
     },
   },
   {
-    name: "scheduled interval + maxTriggerCount",
+    name: "setup stage + auto trigger + maxTriggerCount",
     manifest: {
       ...base,
-      priority: 40,
-      trigger: { type: "scheduled", interval: 1, maxTriggerCount: 1 },
+      stage: "setup",
+      trigger: { type: "auto", maxTriggerCount: 1 },
     },
   },
 ];
@@ -148,13 +146,8 @@ const compatNewPositive: Fixture = {
   name: "full new-shape manifest (compat superset)",
   manifest: {
     ...base,
-    priority: 700,
+    stage: "post-turn",
     trigger: { type: "scheduled", interval: 1 },
-    jobStatus: {
-      legacyViews: [
-        { namespace: "tracks", keyFrom: "/jobId", valueFrom: "/data" },
-      ],
-    },
     ...newShapeFields,
   },
 };
@@ -187,11 +180,11 @@ const authoringI18nDescriptionPositive: Fixture = {
 
 const authoringStructuralRejections: readonly Fixture[] = [
   {
-    name: "priority (legacy field)",
+    name: "priority (unknown field)",
     manifest: { ...base, stage: "narrative", priority: 500 },
   },
   {
-    name: "upstreamRequired (legacy field)",
+    name: "upstreamRequired (unknown field)",
     manifest: {
       ...base,
       stage: "post-turn",
@@ -200,15 +193,15 @@ const authoringStructuralRejections: readonly Fixture[] = [
     },
   },
   {
-    name: "conditional trigger (reserved)",
+    name: "conditional trigger (not in the enum)",
     manifest: { ...base, stage: "narrative", trigger: { type: "conditional" } },
   },
   {
-    name: "error-retry trigger (reserved)",
+    name: "error-retry trigger (not in the enum)",
     manifest: { ...base, stage: "narrative", trigger: { type: "error-retry" } },
   },
   {
-    name: "jobStatus.legacyViews (compat-only)",
+    name: "jobStatus.legacyViews (unknown field)",
     manifest: {
       ...base,
       stage: "post-turn",
@@ -290,7 +283,7 @@ const compatMalformedRejections: readonly Fixture[] = [
     name: "inputs.select with an illegal JSON Pointer",
     manifest: {
       ...base,
-      priority: 500,
+      stage: "narrative",
       inputs: {
         prose: { from: { runtime: "narrator" }, select: "narrativeOutput" },
       },
@@ -300,23 +293,23 @@ const compatMalformedRejections: readonly Fixture[] = [
     name: "permissions.http origin is not https",
     manifest: {
       ...base,
-      priority: 500,
+      stage: "narrative",
       permissions: { http: [{ origin: "http://api.example.com" }] },
     },
   },
   {
     name: "unknown top-level field",
-    manifest: { ...base, priority: 500, bogusField: true },
+    manifest: { ...base, stage: "narrative", bogusField: true },
   },
   {
     // Step 6: reserved triggers are now rejected by the compat input schema too
     // (the enum narrowed to the four production types).
     name: "reserved conditional trigger (rejected)",
-    manifest: { ...base, priority: 500, trigger: { type: "conditional" } },
+    manifest: { ...base, stage: "narrative", trigger: { type: "conditional" } },
   },
   {
     name: "reserved error-retry trigger (rejected)",
-    manifest: { ...base, priority: 500, trigger: { type: "error-retry" } },
+    manifest: { ...base, stage: "narrative", trigger: { type: "error-retry" } },
   },
 ];
 

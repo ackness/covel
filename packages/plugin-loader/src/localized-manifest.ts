@@ -62,6 +62,13 @@ function reconcileValue(
   path: string,
   drift: string[],
 ): unknown {
+  // A translation that simply omits a field inherits it — that is the intended
+  // shape of a locale variant, not a divergence. Treating omission as drift is
+  // what forced every locale file to mirror the whole manifest, and mirrored
+  // manifests are precisely what goes stale as the canonical one evolves.
+  // A field the translation DECLARES differently is still reported below.
+  if (localized === undefined) return canonical;
+
   if (isPlainObject(canonical) && isPlainObject(localized)) {
     const out: Record<string, unknown> = {};
     for (const key of new Set([

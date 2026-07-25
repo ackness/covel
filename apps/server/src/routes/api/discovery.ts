@@ -42,7 +42,8 @@ export interface RuntimePluginContract {
   model?: unknown;
   tools: {
     builtin: string[];
-    local: Array<{ path?: string; name: string }>;
+    /** Entry-registered plugin tools, by name. */
+    local: Array<{ name: string }>;
   };
   input: {
     inject: unknown[];
@@ -216,15 +217,6 @@ function runtimeIdFromName(pluginId: string, runtimeName: string): string {
     : runtimeName;
 }
 
-function localToolName(path: string): string {
-  return (
-    path
-      .split("/")
-      .pop()
-      ?.replace(/\.[^.]+$/, "") ?? path
-  );
-}
-
 function buildRuntimeContract(
   pluginId: string,
   manifest: RuntimeManifest,
@@ -257,14 +249,7 @@ function buildRuntimeContract(
     ...(manifest.model ? { model: manifest.model } : {}),
     tools: {
       builtin: [...(manifest.tools?.builtin ?? [])],
-      local: [
-        // Entry-registered plugin tools — declared by name, no on-disk path.
-        ...(manifest.tools?.plugin ?? []).map((name) => ({ name })),
-        ...(manifest.tools?.local ?? []).map((path) => ({
-          path,
-          name: localToolName(path),
-        })),
-      ],
+      local: (manifest.tools?.plugin ?? []).map((name) => ({ name })),
     },
     input: {
       inject: [...(manifest.input?.inject ?? [])],

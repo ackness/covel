@@ -2,10 +2,7 @@
 export { shouldTrigger } from "./trigger/trigger.js";
 
 // ── Scheduler ────────────────────────────────────────────────────
-export {
-  scheduleByDag,
-  deriveConservativeSetupEdges,
-} from "./schedule/dag-scheduler.js";
+export { scheduleByDag } from "./schedule/dag-scheduler.js";
 
 // ── Effects hazard (same-layer read/write policy) ────────────────
 export {
@@ -90,7 +87,6 @@ export type {
 export { createModelResolver } from "./llm/model-resolver.js";
 
 // ── Per-Session Runtime Slot Resolver ───────────────────
-export { resolveRuntimeSlot } from "./llm/runtime-slot-resolver.js";
 
 // ── Public Plugin API (unified `entry` module contract) ────────
 export type {
@@ -173,8 +169,6 @@ export type { SaveAutoSnapshotOptions } from "./snapshot/auto-snapshot.js";
 export type { TriggerContext, ScheduledGroup } from "./types.js";
 
 // ── Prompt Delta (translation layer) ──────────────────────
-export { computePromptDelta, applyPromptDelta } from "./llm/prompt-delta.js";
-export type { PromptMessage } from "./llm/prompt-delta.js";
 
 // ── Hook Pipeline ────────────────────────────────────────────────
 export {

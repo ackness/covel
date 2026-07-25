@@ -8,7 +8,7 @@ import { getPluginTrustInfo } from "../src/trust.js";
 const FRONTMATTER = `---
 name: sample
 description: sample
-priority: 500
+stage: narrative
 ---
 
 agent.

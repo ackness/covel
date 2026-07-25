@@ -65,7 +65,7 @@ export const exists = (p) =>
 
 /** Run `worker` over items with a bounded concurrency pool. */
 export async function pool(items, limit, worker) {
-  const results = new Array(items.length);
+  const results = Array.from({ length: items.length });
   let idx = 0;
   const run = async () => {
     while (idx < items.length) {
@@ -97,8 +97,8 @@ export async function fetchImageBytes({
   const img = result.images[0];
   if (!img) throw new Error("wire returned no images");
   if (img.kind === "bytes") return img.bytes;
-  // ponytail: minimal SSRF + content-type guard. The wire returns a direct
-  // provider URL (not user input), so no redirect-hop revalidation.
+  // Minimal SSRF + content-type guard. The wire returns a direct provider
+  // URL (not user input), so no redirect-hop revalidation is needed.
   if (!validateBaseUrl(img.url)) {
     throw new Error(`image url rejected by SSRF policy: ${img.url}`);
   }

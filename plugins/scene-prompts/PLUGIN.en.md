@@ -7,7 +7,6 @@ description:
   zh: 根据当前场景给出几句可直接采用的行动短句。
   en: Suggests short actions that fit the current scene and can be used right away.
 pluginType: plugin
-priority: 600
 model: plugin
 outputKind: system
 timeoutMs: 120000
@@ -34,8 +33,6 @@ trigger:
 # correctly in either mode and still skips when that engine failed. The inject
 # lists both known engines; the absent one resolves to nothing, so exactly the
 # active engine's fresh prose fills <narrator-output>.
-upstreamRequired:
-  - capability: narrative-engine
 input:
   inject:
     - kind: runtime

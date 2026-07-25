@@ -11,11 +11,7 @@ export {
 } from "./load.js";
 
 // ── Registry ─────────────────────────────────────────────────────
-export {
-  normalizeRuntimeManifest,
-  stageForPriority,
-  getRuntimeSpec,
-} from "./normalize.js";
+export { normalizeRuntimeManifest, getRuntimeSpec } from "./normalize.js";
 
 export { createPluginRegistry } from "./registry.js";
 export type { PluginRegistry, PluginRegistryOptions } from "./registry.js";

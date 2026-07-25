@@ -44,7 +44,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "test-plugin",
     pluginId: "test-plugin",
     description: "Test plugin",
-    priority: 500,
+    stage: "narrative",
     runtimeType: "agent",
     ...overrides,
   };
@@ -219,7 +219,7 @@ describe("Turn executor hook wire-in", () => {
       });
 
       const manifest = makeManifest({
-        tools: { builtin: [], local: [] },
+        tools: { builtin: [], plugin: [] },
       });
 
       const deps: TurnExecutorDeps = {
@@ -398,7 +398,7 @@ describe("Turn executor hook wire-in", () => {
         ),
       });
 
-      const manifest = makeManifest({ tools: { builtin: [], local: [] } });
+      const manifest = makeManifest({ tools: { builtin: [], plugin: [] } });
       const deps: TurnExecutorDeps = {
         loadRuntime: async () => ({
           manifest,
@@ -688,7 +688,7 @@ describe("Turn executor hook wire-in", () => {
         }),
       });
 
-      const manifest = makeManifest({ tools: { builtin: [], local: [] } });
+      const manifest = makeManifest({ tools: { builtin: [], plugin: [] } });
       const deps: TurnExecutorDeps = {
         loadRuntime: async () => ({
           manifest,
@@ -761,7 +761,7 @@ describe("Turn executor hook wire-in", () => {
           ),
       });
 
-      const manifest = makeManifest({ tools: { builtin: [], local: [] } });
+      const manifest = makeManifest({ tools: { builtin: [], plugin: [] } });
       const deps: TurnExecutorDeps = {
         loadRuntime: async () => ({
           manifest,

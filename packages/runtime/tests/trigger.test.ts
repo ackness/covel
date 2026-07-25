@@ -8,7 +8,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "test-rt",
     pluginId: "test-rt",
     description: "test",
-    priority: 500,
+    stage: "narrative",
     ...overrides,
   };
 }
@@ -162,7 +162,7 @@ describe("shouldTrigger — preGameCompleted gate", () => {
       name: "pregame",
       pluginId: "pregame",
       description: "pre-game",
-      priority: 10,
+      stage: "setup",
       trigger: { type: "auto" },
     } as RuntimeManifest;
     const ctx: TriggerContext = {
@@ -182,7 +182,7 @@ describe("shouldTrigger — preGameCompleted gate", () => {
       name: "pregame",
       pluginId: "pregame",
       description: "pre-game",
-      priority: 10,
+      stage: "setup",
       trigger: { type: "auto" },
     } as RuntimeManifest;
     const ctx: TriggerContext = {
@@ -202,7 +202,7 @@ describe("shouldTrigger — preGameCompleted gate", () => {
       name: "narrator",
       pluginId: "narrator",
       description: "narrator",
-      priority: 500,
+      stage: "narrative",
       trigger: { type: "auto" },
     } as RuntimeManifest;
     const ctx: TriggerContext = {

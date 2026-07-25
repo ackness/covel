@@ -258,7 +258,7 @@ describe("agent export segment", () => {
     const manifest = {
       name: "c/main",
       pluginId: "c",
-      priority: 600,
+      stage: "post-turn",
     } as RuntimeManifest;
     const exportSlots = {
       cfg: {

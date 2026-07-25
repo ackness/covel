@@ -88,7 +88,7 @@ async function setupBasicSession() {
     parsedManifest({
       name: "plugin-a/main",
       pluginId: "plugin-a",
-      priority: 100,
+      stage: "pre-turn",
       events: [
         {
           topic: "scene.set",
@@ -114,7 +114,7 @@ async function setupBasicSession() {
     parsedManifest({
       name: "plugin-b/main",
       pluginId: "plugin-b",
-      priority: 200,
+      stage: "pre-turn",
       events: [
         {
           topic: "quest.done",
@@ -136,7 +136,7 @@ async function setupBasicSession() {
     parsedManifest({
       name: "plugin-c/main",
       pluginId: "plugin-c",
-      priority: 300,
+      stage: "pre-turn",
       events: [
         {
           topic: "npc.spawn",
@@ -312,7 +312,7 @@ describe("event directory", () => {
       parsedManifest({
         name: "plugin-a/main",
         pluginId: "plugin-a",
-        priority: 100,
+        stage: "pre-turn",
         events: [
           {
             topic: "scene.set",
@@ -338,7 +338,7 @@ describe("event directory", () => {
       parsedManifest({
         name: "plugin-e/main",
         pluginId: "plugin-e",
-        priority: 200,
+        stage: "pre-turn",
         events: [
           {
             topic: "scene.set",
@@ -387,7 +387,7 @@ describe("event directory", () => {
       parsedManifest({
         name: "plugin-a/main",
         pluginId: "plugin-a",
-        priority: 100,
+        stage: "pre-turn",
         events: [
           {
             topic: "scene.set",
@@ -413,7 +413,7 @@ describe("event directory", () => {
       parsedManifest({
         name: "plugin-e/main",
         pluginId: "plugin-e",
-        priority: 200,
+        stage: "pre-turn",
         events: [
           {
             topic: "scene.set",

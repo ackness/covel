@@ -31,5 +31,7 @@ export {
 } from "./http/openai-readers.js";
 export {
   readAnthropicText,
+  readAnthropicToolCalls,
   toAnthropicMessages,
+  toAnthropicTools,
 } from "./http/anthropic-readers.js";

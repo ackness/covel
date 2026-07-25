@@ -1,7 +1,7 @@
 {
   "$id": "https://covel.local/schemas/runtime-manifest.input.schema.json",
-  "title": "Covel runtime manifest (compat input)",
-  "description": "Backward-compatible superset accepted by the plugin loader. Retains legacy priority / upstreamRequired / jobStatus; the trigger enum is the four production types.\n\nEnforced by Zod but not representable in this JSON Schema (validate with the Zod schema for these):\n- output.schema is required when output.recordAs is set.\n- trigger.topic is required when trigger.type is 'event'.\n- a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.\n- stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.\n- needs entries with scope 'session' are only valid on stage 'setup' runtimes.\n- effects.reads, effects.writes and permissions.http[].methods must contain unique entries.\n- an i18n description map must have at least one locale entry.",
+  "title": "Covel runtime manifest (loader input)",
+  "description": "What the plugin loader accepts — the field set that decides whether a PLUGIN.md parses at all. Same fields as the authoring schema, with fewer cross-field constraints enforced.\n\nEnforced by Zod but not representable in this JSON Schema (validate with the Zod schema for these):\n- output.schema is required when output.recordAs is set.\n- trigger.topic is required when trigger.type is 'event'.\n- a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.\n- stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.\n- needs entries with scope 'session' are only valid on stage 'setup' runtimes.\n- effects.reads, effects.writes and permissions.http[].methods must contain unique entries.\n- an i18n description map must have at least one locale entry.",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
@@ -648,9 +648,6 @@
       "type": "string",
       "enum": ["legacy", "envelope-v1"]
     },
-    "suspensionSafe": {
-      "type": "boolean"
-    },
     "effects": {
       "type": "object",
       "properties": {
@@ -767,12 +764,6 @@
       "type": "object",
       "properties": {
         "builtin": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "local": {
           "type": "array",
           "items": {
             "type": "string"
@@ -1296,9 +1287,6 @@
             "type": "string",
             "enum": ["builtin", "official", "community"]
           },
-          "streaming": {
-            "type": "boolean"
-          },
           "description": {
             "type": "string"
           }
@@ -1363,33 +1351,6 @@
         "additionalProperties": false
       }
     },
-    "priority": {
-      "type": "integer",
-      "minimum": 0,
-      "maximum": 1000
-    },
-    "upstreamRequired": {
-      "type": "array",
-      "items": {
-        "anyOf": [
-          {
-            "type": "string",
-            "minLength": 1
-          },
-          {
-            "type": "object",
-            "properties": {
-              "capability": {
-                "type": "string",
-                "minLength": 1
-              }
-            },
-            "required": ["capability"],
-            "additionalProperties": false
-          }
-        ]
-      }
-    },
     "trigger": {
       "type": "object",
       "properties": {
@@ -1422,37 +1383,6 @@
         }
       },
       "required": ["type"],
-      "additionalProperties": false
-    },
-    "jobStatus": {
-      "type": "object",
-      "properties": {
-        "legacyViews": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "jobIdPrefix": {
-                "type": "string"
-              },
-              "namespace": {
-                "type": "string",
-                "minLength": 1
-              },
-              "keyFrom": {
-                "type": "string",
-                "pattern": "^(\\/([^/~]|~0|~1)*)*$"
-              },
-              "valueFrom": {
-                "type": "string",
-                "pattern": "^(\\/([^/~]|~0|~1)*)*$"
-              }
-            },
-            "required": ["namespace"],
-            "additionalProperties": false
-          }
-        }
-      },
       "additionalProperties": false
     }
   },

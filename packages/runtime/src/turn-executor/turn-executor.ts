@@ -20,10 +20,7 @@ import {
   resolveSetupGeneration,
 } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
-import {
-  deriveConservativeSetupEdges,
-  scheduleByDag,
-} from "../schedule/dag-scheduler.js";
+import { scheduleByDag } from "../schedule/dag-scheduler.js";
 import {
   applyHazardPolicy,
   resolveEffectsPolicy,
@@ -613,15 +610,12 @@ async function executeTurnImpl(
   // Late-setup pass (playing phase): a plugin enabled after the session left the
   // setup phase has pending setup runtimes the main-loop stages exclude. Run them
   // BEFORE the main groups — as a pre-turn catch-up layer — so their plugin's
-  // main runtimes gate on this turn's fresh result. Same setup DAG (declared
-  // edges + conservative legacy-order chain) as the setup phase. Blocked / done
-  // setup runtimes were already filtered out by selectTriggeredRuntimes.
+  // main runtimes gate on this turn's fresh result. Same declared-edge setup
+  // DAG as the setup phase. Blocked / done setup runtimes were already
+  // filtered out by selectTriggeredRuntimes.
   if (!isPreGamePending && !manualTarget && !playerAborted()) {
     const lateSetup = scheduledRuntimes.filter((rt) => isSetupRuntime(rt));
-    const lateSetupPlan = scheduleByDag(
-      lateSetup,
-      deriveConservativeSetupEdges(lateSetup),
-    );
+    const lateSetupPlan = scheduleByDag(lateSetup);
     for (const group of lateSetupPlan.groups) {
       if (playerAborted()) break;
       const results = await executeParallel(group.runtimes, (manifest) =>

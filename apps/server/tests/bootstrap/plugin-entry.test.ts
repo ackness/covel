@@ -401,7 +401,7 @@ export default async function (covel) {
       sessionId: "s1",
       pluginId: "entry-scope-a",
     } as never)) as string;
-    expect(error).toContain("not available to a community entry toolkit");
+    expect(error).toContain("not available to a community plugin toolkit");
 
     // Nothing landed anywhere — neither the forged victim namespace nor the
     // entry's own.
@@ -465,7 +465,9 @@ export default async function (covel) {
       sessionId: "s1",
       pluginId: "entry-deny-a",
     } as never)) as Record<string, string>;
-    const DENIED = "not available to a community entry toolkit";
+    // Shared with the legacy tools.local path, so the wording is "plugin"
+    // rather than "entry"; the `[plugin-entry]` prefix names the caller.
+    const DENIED = "not available to a community plugin toolkit";
     for (const method of [
       "upsertCharacter",
       "updateSession",

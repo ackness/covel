@@ -222,6 +222,7 @@ describe("[P2] provider keys raw exposure", () => {
     savedEnv = {
       COVEL_DESKTOP_REST_TOKEN: process.env.COVEL_DESKTOP_REST_TOKEN,
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      DEPLOYMENT_TIER: process.env.DEPLOYMENT_TIER,
     };
   });
 
@@ -255,6 +256,28 @@ describe("[P2] provider keys raw exposure", () => {
     expect(body.keys).toEqual({});
     expect(body.providers.openai).toMatchObject({ configured: true });
     expect(body.providers.openai.masked).toContain("...");
+  });
+
+  it("denies the masked listing to an anonymous caller on a hosted tier", async () => {
+    // Which providers are configured — and 8 chars of each key — is operator
+    // -only recon material on demo/commercial, where the caller is not the
+    // machine owner. Self/desktop keeps the unauthenticated masked listing.
+    process.env.DEPLOYMENT_TIER = "commercial";
+    process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
+    process.env.OPENAI_API_KEY = "sk-openai-secret";
+    const app = new Hono();
+    app.route(
+      "/",
+      createMiscApiRoutes(
+        makeAiStackStub(),
+        createPluginRegistry(),
+        createMemoryStore(),
+      ),
+    );
+
+    const res = await app.request("http://localhost/api/provider-keys");
+    expect(res.status).toBe(401);
+    expect(await res.text()).not.toContain("sk-op");
   });
 
   it("returns raw keys with the desktop bearer token", async () => {

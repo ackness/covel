@@ -14,7 +14,7 @@ import type { runtimeManifestSchema } from "./plugin-schemas.js";
 export type RuntimeManifestInput = z.input<typeof runtimeManifestSchema>;
 
 export type RuntimeManifestSemanticDiagnosticCode =
-  "manual-trigger-priority" | "capability-typo" | "schedulable-missing-stage";
+  "capability-typo" | "schedulable-missing-stage";
 
 export interface RuntimeManifestSemanticDiagnostic {
   readonly code: RuntimeManifestSemanticDiagnosticCode;
@@ -43,7 +43,7 @@ function editDistance(a: string, b: string): number {
 export function validateRuntimeManifestSemantics(
   // `capabilities` / `trigger.type` are widened so both the zod input shape
   // (mutable) and the parsed RuntimeManifest (readonly) are accepted.
-  manifest: Pick<RuntimeManifestInput, "name" | "priority"> & {
+  manifest: Pick<RuntimeManifestInput, "name"> & {
     readonly trigger?: { readonly type?: string };
     readonly capabilities?: readonly string[];
     readonly stage?: string;
@@ -59,8 +59,8 @@ export function validateRuntimeManifestSemantics(
   const diagnostics: RuntimeManifestSemanticDiagnostic[] = [];
 
   // A schedulable runtime (auto / scheduled — auto is the default when no
-  // trigger is declared) with neither `stage` nor a legacy `priority` to
-  // derive one from normalizes to the stage-less "UI-only" idiom: it is
+  // trigger is declared) that declares no `stage` normalizes to the
+  // stage-less "UI-only" idiom: it is
   // NEVER selected by the scheduler and produces no diagnostic at run time.
   // That is correct for pure registration-surface declarations (UI panels,
   // hook carriers, `entry` server modules, `wires` modules — cost-gate,
@@ -70,8 +70,7 @@ export function validateRuntimeManifestSemantics(
   {
     const triggerType = manifest.trigger?.type ?? "auto";
     const isSchedulable = triggerType === "auto" || triggerType === "scheduled";
-    const hasStageSignal =
-      manifest.stage !== undefined || typeof manifest.priority === "number";
+    const hasStageSignal = manifest.stage !== undefined;
     const isRegistrationOnlyIdiom =
       (manifest.ui !== undefined ||
         manifest.hooks !== undefined ||
@@ -92,21 +91,6 @@ export function validateRuntimeManifestSemantics(
           "or add a ui/hooks declaration if it is intentionally UI-only.",
       });
     }
-  }
-
-  if (
-    manifest.trigger?.type === "manual" &&
-    typeof manifest.priority === "number"
-  ) {
-    diagnostics.push({
-      code: "manual-trigger-priority",
-      severity: "warning",
-      path: ["priority"],
-      message:
-        `Runtime "${manifest.name}" declares trigger.type='manual' but also sets priority=${manifest.priority}. ` +
-        "Manual runtimes are UI-only and should omit priority entirely. " +
-        "Remove one of the two to keep the scheduler intent clear.",
-    });
   }
 
   // Capability tags are free-form, but the framework matches them exactly —

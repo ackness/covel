@@ -216,7 +216,7 @@ function makeCfgManifest(): RuntimeManifest {
     name: "cfg-plugin",
     pluginId: "cfg-plugin",
     description: "Configurable plugin",
-    priority: 500,
+    stage: "narrative",
     runtimeType: "agent",
     userSettings: [
       { key: "tone", type: "text", default: "neutral", label: "Tone" },

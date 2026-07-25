@@ -42,7 +42,7 @@ function makeSummary(id: string): PluginSummary {
 
 function makeManifest(args: {
   runtimeId: string;
-  priority: number;
+  stage?: RuntimeManifest["stage"];
   execution?: "background";
   trigger: RuntimeManifest["trigger"];
 }): RuntimeManifest {
@@ -50,7 +50,7 @@ function makeManifest(args: {
     name: args.runtimeId,
     pluginId: PLUGIN_ID,
     description: "test function runtime",
-    priority: args.priority,
+    ...(args.stage ? { stage: args.stage } : {}),
     runtimeType: "function",
     outputKind: "plugin",
     pluginType: "plugin",
@@ -78,7 +78,7 @@ describe("POST /api/actions — deferred background followers (main path)", () =
 
     const targetManifest = makeManifest({
       runtimeId: TARGET,
-      priority: 500,
+      stage: "narrative",
       trigger: { type: "auto" },
     });
     const targetHandler: FunctionHandler = async () => ({
@@ -93,7 +93,6 @@ describe("POST /api/actions — deferred background followers (main path)", () =
 
     const followerManifest = makeManifest({
       runtimeId: FOLLOWER,
-      priority: 600,
       execution: "background",
       trigger: { type: "event", topic: "test-deferred.ready" },
     });

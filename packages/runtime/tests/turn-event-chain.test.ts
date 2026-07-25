@@ -45,7 +45,7 @@ const relay = {
   name: "relay/main",
   pluginId: "relay",
   description: "re-emits topic-x once",
-  priority: 100,
+  stage: "pre-turn",
   runtimeType: "function",
   trigger: { type: "event", topic: "topic-x" },
 } as RuntimeManifest;
@@ -186,7 +186,7 @@ describe("runEventChain honours event-runtime throttling", () => {
     name: "setup/follower",
     pluginId: "setup",
     description: "Pre-Game follower that reports done once",
-    priority: 50,
+    stage: "setup",
     runtimeType: "function",
     trigger: { type: "event", topic: "topic-x" },
   } as RuntimeManifest;

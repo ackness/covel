@@ -3,8 +3,10 @@
  *
  * Resolves an `{ pluginId, action?, runtimeId? }` request against the
  * registry, loads the handler module if needed, and runs it with the
- * supplied context. Returns either a sync result or, for streaming
- * handlers, a generator the caller can pipe to SSE.
+ * supplied context, and returns the handler's result synchronously.
+ *
+ * Dispatch is always synchronous. Long-running work goes through a background
+ * job whose progress reaches the UI as `plugin-data.changed` SSE events.
  *
  * Resolution order for action-level dispatch:
  *   1. Plugin-declared action (`registry.getPluginAction`)

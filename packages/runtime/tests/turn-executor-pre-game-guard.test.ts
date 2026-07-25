@@ -13,7 +13,16 @@ function rt(name: string, priority: number): RuntimeManifest {
     name,
     pluginId: name.split("/")[0] ?? name,
     description: name,
-    priority,
+    stage:
+      priority <= 99
+        ? "setup"
+        : priority <= 499
+          ? "pre-turn"
+          : priority === 500
+            ? "narrative"
+            : priority <= 999
+              ? "post-turn"
+              : "audit",
     runtimeType: "agent",
   };
 }

@@ -35,7 +35,7 @@ function manifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "plug/loop",
     pluginId: "plug",
     description: "loop core fixture",
-    priority: 500,
+    stage: "narrative",
     outputKind: "plugin",
     trigger: { type: "auto" },
     tools: { plugin: ["mark"] },

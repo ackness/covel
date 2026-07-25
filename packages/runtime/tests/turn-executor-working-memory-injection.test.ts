@@ -37,7 +37,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     name: "wm-test-narrator",
     pluginId: "wm-test-narrator",
     description: "Synthetic narrator for working-memory injection tests.",
-    priority: 500,
+    stage: "narrative",
     runtimeType: "agent",
     outputKind: "story",
     ...overrides,

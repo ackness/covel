@@ -73,14 +73,6 @@ export async function buildPackagesResponse(registry: PluginRegistry): Promise<{
         id: t,
         kind: "local",
       })),
-      ...(m.manifest.tools?.local ?? []).map((t) => {
-        const basename =
-          t
-            .split("/")
-            .pop()
-            ?.replace(/\.[^.]+$/, "") ?? t;
-        return { id: basename, kind: "local" };
-      }),
     ]);
 
     // Aggregate userSettings across every runtime of this plugin so the

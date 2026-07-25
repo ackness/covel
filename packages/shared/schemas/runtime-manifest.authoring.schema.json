@@ -1,7 +1,7 @@
 {
   "$id": "https://covel.local/schemas/runtime-manifest.authoring.schema.json",
   "title": "Covel runtime manifest (strict authoring)",
-  "description": "Strict target for newly authored plugins. Rejects the legacy priority / upstreamRequired / jobStatus fields and requires a stage on auto / scheduled runtimes.\n\nEnforced by Zod but not representable in this JSON Schema (validate with the Zod schema for these):\n- output.schema is required when output.recordAs is set.\n- trigger.topic is required when trigger.type is 'event'.\n- a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.\n- stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.\n- needs entries with scope 'session' are only valid on stage 'setup' runtimes.\n- effects.reads, effects.writes and permissions.http[].methods must contain unique entries.\n- an i18n description map must have at least one locale entry.\n- auto / scheduled runtimes must declare a stage.",
+  "description": "Strict target for newly authored plugins. Enforces every cross-field constraint, including a required stage on auto / scheduled runtimes.\n\nEnforced by Zod but not representable in this JSON Schema (validate with the Zod schema for these):\n- output.schema is required when output.recordAs is set.\n- trigger.topic is required when trigger.type is 'event'.\n- a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.\n- stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.\n- needs entries with scope 'session' are only valid on stage 'setup' runtimes.\n- effects.reads, effects.writes and permissions.http[].methods must contain unique entries.\n- an i18n description map must have at least one locale entry.\n- auto / scheduled runtimes must declare a stage.",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
@@ -648,9 +648,6 @@
       "type": "string",
       "enum": ["legacy", "envelope-v1"]
     },
-    "suspensionSafe": {
-      "type": "boolean"
-    },
     "effects": {
       "type": "object",
       "properties": {
@@ -767,12 +764,6 @@
       "type": "object",
       "properties": {
         "builtin": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "local": {
           "type": "array",
           "items": {
             "type": "string"
@@ -1295,9 +1286,6 @@
           "trustLevel": {
             "type": "string",
             "enum": ["builtin", "official", "community"]
-          },
-          "streaming": {
-            "type": "boolean"
           },
           "description": {
             "type": "string"

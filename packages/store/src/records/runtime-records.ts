@@ -118,6 +118,12 @@ export interface RuntimeOutputFilters {
   readonly pluginId?: string;
   readonly sinceTimestamp?: string;
   readonly limit?: number;
+  /**
+   * Rows to skip, applied after ordering. Required for offset pagination —
+   * callers that page with `{ limit, offset }` would otherwise re-read page 0
+   * forever, since a dropped offset still yields a full page every round.
+   */
+  readonly offset?: number;
 }
 
 export interface InteractionRecordFilters {

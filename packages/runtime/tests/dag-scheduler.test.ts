@@ -1,5 +1,5 @@
 /**
- * DAG scheduler — derives parallel levels from manifest.input.inject + upstreamRequired.
+ * DAG scheduler — derives parallel levels from manifest.input.inject + needs.
  */
 
 import { describe, it, expect } from "vitest";
@@ -15,7 +15,16 @@ function mk(
     name,
     pluginId: name.split("/")[0]!,
     description: name,
-    priority,
+    stage:
+      priority <= 99
+        ? "setup"
+        : priority <= 499
+          ? "pre-turn"
+          : priority === 500
+            ? "narrative"
+            : priority <= 999
+              ? "post-turn"
+              : "audit",
     ...overrides,
   } as RuntimeManifest;
 }
@@ -120,8 +129,8 @@ describe("scheduleByDag", () => {
     );
   });
 
-  it("upstreamRequired adds an edge even without an inject declaration", () => {
-    const input = [mk("a", 100), mk("b", 200, { upstreamRequired: ["a"] })];
+  it("needs adds an edge even without an inject declaration", () => {
+    const input = [mk("a", 100), mk("b", 200, { needs: ["a"] })];
     const { groups } = scheduleByDag(input);
     expect(groups.length).toBe(2);
     expect(groups[0]!.runtimes.map((r) => r.name)).toEqual(["a"]);
@@ -166,14 +175,14 @@ describe("scheduleByDag", () => {
 
   it("reports an error on cycles", () => {
     const input = [
-      mk("a", 100, { upstreamRequired: ["b"] }),
-      mk("b", 200, { upstreamRequired: ["a"] }),
+      mk("a", 100, { needs: ["b"] }),
+      mk("b", 200, { needs: ["a"] }),
     ];
     const { error } = scheduleByDag(input);
     expect(error).toMatch(/cycle/i);
   });
 
-  it("orders same-level runtimes by name (priority ignored)", () => {
+  it("orders same-level runtimes by name", () => {
     const input = [mk("z", 100), mk("a", 900), mk("m", 500)];
     const { groups } = scheduleByDag(input);
     expect(groups).toHaveLength(1);

@@ -37,7 +37,7 @@ import type {
   PluginDiscoveryResult,
   ParsedPluginMd,
 } from "@covel/plugin-loader";
-import { createBootstrapLocalTools } from "./local-tools.js";
+import { buildPluginToolAccess } from "./plugin-tool-access.js";
 import type { EventDirectory } from "./event-directory.js";
 
 export interface SetupPluginToolsParams {
@@ -58,7 +58,6 @@ export interface PluginToolsResult {
   /** Drop the per-session tool override cache entry. Called on session
    *  end/delete so the map does not grow for the lifetime of the process. */
   readonly clearSessionToolOverrides: (sessionId: string) => void;
-  readonly activatePluginLocalTools: (pluginId: string) => Promise<void>;
   /** Mutable — the unified `entry` registration path (plugin-entry.ts) adds
    *  entry-registered tool names at invocation time. */
   readonly pluginToolAccess: Map<string, Set<string>>;
@@ -199,14 +198,7 @@ export async function setupPluginTools(
     builtinToolNames.add(t.name);
   }
 
-  const { activatePluginLocalTools, pluginToolAccess } =
-    await createBootstrapLocalTools({
-      discoveryMap,
-      manifestCache,
-      store,
-      toolMap,
-      localToolNames,
-    });
+  const pluginToolAccess = buildPluginToolAccess(manifestCache);
 
   // Approval: whitelist builtin + known local tools, deny unknown third-party
   const approvalRules: PermissionRule[] = [
@@ -252,7 +244,6 @@ export async function setupPluginTools(
     toolExecutor,
     prepareToolsForSession,
     clearSessionToolOverrides,
-    activatePluginLocalTools,
     pluginToolAccess,
   };
 }

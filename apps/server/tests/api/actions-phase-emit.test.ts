@@ -198,7 +198,7 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
       ...loaded,
       manifest: {
         ...loaded.manifest,
-        priority: 50,
+        stage: "setup",
       },
     };
     loadedByName.set(PREGAME_ID, pregameLoaded);

@@ -12,10 +12,10 @@
  *  1. `parsePluginMd` — the loader's own compat parse (I18nText description
  *     folding, lenient-field handling, line-numbered errors). This is what
  *     decides whether the plugin LOADS.
- *  2. `runtimeManifestAuthoringSchema` — the strict authoring target: stage
- *     required for auto/scheduled runtimes, legacy fields
- *     (`priority` / `upstreamRequired` / `jobStatus`) rejected. Skipped with
- *     `--compat` (for legacy third-party manifests).
+ *  2. `runtimeManifestAuthoringSchema` — the strict authoring target: every
+ *     cross-field constraint enforced, including a required stage on
+ *     auto/scheduled runtimes. Skipped with `--compat`, which checks only
+ *     whether the manifest loads.
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";

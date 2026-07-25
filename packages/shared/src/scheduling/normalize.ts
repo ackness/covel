@@ -1,22 +1,13 @@
 /**
  * Manifest → NormalizedRuntimeSpec normalization.
  *
- * This is the single place where legacy manifest surface (numeric
- * `priority` bands, `upstreamRequired`, `execution: background`, setup
- * runtimes declared as `scheduled interval: 1`) folds into the scheduling
- * IR. Production scheduling now consumes this IR: `stage` selects the band
- * and the DAG orders within it (see packages/runtime/src/schedule).
+ * This is the single place where the declared manifest surface folds into the
+ * scheduling IR. Production scheduling consumes that IR: `stage` selects the
+ * band and the DAG orders within it (see packages/runtime/src/schedule).
  *
- * Two legacy folds survive here as the compat bridge for third-party
- * manifests that have not migrated to the single-declaration surface:
- *   - `priority` → `stage` (the `stageForPriority` band map). Retired once no
- *     plugin declares `priority` without an explicit `stage`. Bundled
- *     pregame / schema-gen still ride it (the loader forbids `stage: setup`
- *     on their `scheduled` trigger).
- *   - `upstreamRequired` → `deps.needs` (turn-scoped alias). Retired once no
- *     plugin declares `upstreamRequired`; the IR-driven DAG + upstream gate
- *     read `deps.needs`, so the alias is what keeps third-party
- *     `upstreamRequired` gating/ordering under the new scheduler.
+ * `execution: background` and setup runtimes declared as `scheduled
+ * interval: 1` fold here. Every manifest single-declares `stage` +
+ * `needs`/`after` — there is no alternative spelling to reconcile.
  */
 
 import type {
@@ -29,19 +20,6 @@ import type {
 } from "../types/runtime-scheduling.js";
 import { STAGE_ORDER } from "../types/runtime-scheduling.js";
 import type { RuntimeManifest } from "../types/plugin.js";
-
-/**
- * Numeric priority band → named stage. Mirrors the priority bands the
- * kernel enforces today: pre-game 0–99, pre-narrator 100–499, narrator
- * 500, post-narrator 501–999, audit 1000.
- */
-export function stageForPriority(priority: number): Stage {
-  if (priority <= 99) return "setup";
-  if (priority <= 499) return "pre-turn";
-  if (priority === 500) return "narrative";
-  if (priority <= 999) return "post-turn";
-  return "audit";
-}
 
 /**
  * Sort rank for listing / serialization consumers that order by
@@ -66,16 +44,16 @@ export function stageMessageOrder(stage: Stage | undefined): number {
 function foldTrigger(
   manifest: RuntimeManifest,
   stage: Stage | undefined,
-  legacyFields: string[],
+  derivedFrom: string[],
 ): TriggerSpec {
   const declared = manifest.trigger ?? { type: "auto" as const };
-  if (manifest.trigger === undefined) legacyFields.push("trigger:default-auto");
+  if (manifest.trigger === undefined) derivedFrom.push("trigger:default-auto");
 
   // Setup runtimes are auto-only in the new model. The legacy idiom
   // `scheduled + interval: 1 + maxTriggerCount: 1` in the pre-game band is
   // behaviorally equivalent to `auto + maxTriggerCount: 1`, so fold it.
   if (stage === "setup" && declared.type === "scheduled") {
-    legacyFields.push("trigger:scheduled-as-auto");
+    derivedFrom.push("trigger:scheduled-as-auto");
     const { interval, startTurn, cooldownTurns, ...rest } = declared;
     void interval;
     void startTurn;
@@ -83,20 +61,6 @@ function foldTrigger(
     return { ...rest, type: "auto" };
   }
   return declared;
-}
-
-function aliasUpstreamRequired(
-  manifest: RuntimeManifest,
-  legacyFields: string[],
-): readonly DependencyRef[] {
-  if (!manifest.upstreamRequired?.length) return [];
-  legacyFields.push("upstreamRequired");
-  // Legacy semantics are "same-turn success required", which is exactly
-  // `needs(scope: turn)` — the default scope, so entries map through
-  // unchanged in shape.
-  return manifest.upstreamRequired.map((entry) =>
-    typeof entry === "string" ? entry : { capability: entry.capability },
-  );
 }
 
 function collectExportBindings(
@@ -114,35 +78,23 @@ function collectExportBindings(
 /**
  * Normalize one runtime manifest into the loader-level IR node.
  *
- * Stage resolution: an explicit `stage` declaration wins. Otherwise the
- * stage is derived from the priority band — but only for `auto` / `scheduled`
- * runtimes; `event` / `manual` runtimes never get a stage (fan-out orders
- * them by name, not priority), and a declared `auto` / `scheduled` runtime
- * without a priority is the legacy "UI-only" idiom: no stage, not schedulable.
+ * Stage resolution: `stage` is taken as declared. `event` / `manual` runtimes
+ * declare none (fan-out orders them by name), and an `auto` / `scheduled`
+ * runtime without one is not schedulable — the authoring schema rejects that
+ * combination, and the loader warns for the compat schema.
  */
 export function normalizeRuntimeManifest(
   manifest: RuntimeManifest,
 ): NormalizedRuntimeSpec {
-  const legacyFields: string[] = [];
+  const derivedFrom: string[] = [];
 
-  const declaredType = manifest.trigger?.type ?? "auto";
-  const isStageSource = declaredType === "auto" || declaredType === "scheduled";
+  const stage: Stage | undefined = manifest.stage;
 
-  let stage: Stage | undefined = manifest.stage;
-  if (stage === undefined && isStageSource && manifest.priority !== undefined) {
-    stage = stageForPriority(manifest.priority);
-    legacyFields.push("priority:stage");
-  }
+  const declaredTrigger = foldTrigger(manifest, stage, derivedFrom);
 
-  const declaredTrigger = foldTrigger(manifest, stage, legacyFields);
+  if (manifest.execution === "background") derivedFrom.push("execution");
 
-  if (manifest.priority !== undefined) legacyFields.push("priority");
-  if (manifest.execution === "background") legacyFields.push("execution");
-
-  const needs: DependencyRef[] = [
-    ...(manifest.needs ?? []),
-    ...aliasUpstreamRequired(manifest, legacyFields),
-  ];
+  const needs: readonly DependencyRef[] = manifest.needs ?? [];
 
   const bindings: Readonly<Record<string, RuntimeBinding>> =
     manifest.inputs ?? {};
@@ -152,7 +104,6 @@ export function normalizeRuntimeManifest(
     pluginId: manifest.pluginId,
     declaredTrigger,
     backgroundWhenDetached: manifest.execution === "background",
-    suspensionSafe: manifest.suspensionSafe ?? false,
     resultFormat: manifest.resultFormat ?? "legacy",
     ...(stage !== undefined ? { stage } : {}),
     deps: {
@@ -176,8 +127,7 @@ export function normalizeRuntimeManifest(
       ? { effectsDecl: manifest.effects }
       : {}),
     httpPermissions: manifest.permissions?.http ?? [],
-    legacyJobViews: manifest.jobStatus?.legacyViews ?? [],
-    provenance: { legacyFields },
+    provenance: { derivedFrom },
   };
 }
 

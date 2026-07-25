@@ -112,7 +112,7 @@ export async function runRuntimeDebug(
   const store = createMemoryStore();
   const mediaStore = options.mediaStore ?? createMemoryMediaStore();
 
-  const { discovery, manifests, loadedCache, localTools } =
+  const { discovery, manifests, loadedCache, entryTools } =
     await loadRuntimeBundle({
       pluginsDir,
       pluginId,
@@ -144,10 +144,17 @@ export async function runRuntimeDebug(
   })) {
     toolMap.set(t.name, t);
   }
-  for (const t of localTools) {
+  // Entry-registered plugin tools last: a name collision means the plugin is
+  // shadowing a framework tool, which the server bootstrap rejects — surface
+  // it here rather than silently running a different implementation.
+  for (const t of entryTools) {
+    if (toolMap.has(t.name)) {
+      throw new Error(
+        `entry registered tool "${t.name}", which collides with a framework tool`,
+      );
+    }
     toolMap.set(t.name, t);
   }
-
   const llm = buildMockLlm(options);
   const liveAdapters = options.mode === "live" ? makeLiveAdapters() : undefined;
   const result = await executeTurn(

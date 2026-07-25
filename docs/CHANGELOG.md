@@ -4,6 +4,52 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-07-25
+
+The cleanup release, following a full audit of the core framework. Nothing here adds capability; it removes surface that was declared but never honoured, and closes the security gaps that hid behind it.
+
+> **Breaking — six PLUGIN.md fields no longer parse.** A manifest declaring any of them fails to load, so check yours before upgrading. None of them did anything at runtime, so removing them changes no behaviour except that the declaration is now an error instead of a silent no-op.
+>
+> | Removed field      | Replacement                                                                                             |
+> | ------------------ | ------------------------------------------------------------------------------------------------------- |
+> | `priority`         | `stage` (`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`)                                    |
+> | `upstreamRequired` | `needs` (same entries; turn-scoped by default)                                                          |
+> | `jobStatus`        | — (its `legacyViews` projection had no reader)                                                          |
+> | `tools.local`      | register in the `entry` module via `covel.registerTool`, then list the **names** under `tools.plugin`   |
+> | `suspensionSafe`   | — (no handler replay exists to guard)                                                                   |
+> | rpc `streaming`    | — (dispatch is always synchronous; progress travels as `plugin-data.changed` SSE from a background job) |
+>
+> `priority`, `upstreamRequired` and `tools.local` produce a load error naming their replacement. One sharp edge inherited from the rpc parse policy: an unrecognized key skips the **whole** `rpc` block rather than the offending action, so a plugin that declared `streaming` loses every rpc action at once — the warning names the file, line and key.
+
+### Added
+
+- **The test-runtime harness loads entry-registered tools.** `pnpm test:runtime` runs a plugin's `tests/runtime-cases.json` through the real turn executor, so a case can have the mock LLM call the plugin's own tools — it never could, because the harness only ever read `tools.local` and every plugin moved to `entry` in v0.0.14. The concrete cost was the scaffolding template: `templates/plugin-with-tools` ships a case whose LLM calls `record-note`, so a new author's first `pnpm test:runtime` failed on a tool that was never registered. The harness now runs the `entry` module with a `PluginAPI` that implements `registerTool` and no-ops hooks / RPC / wires (server-bootstrap concerns a single-runtime harness turn never reaches), and a name collision with a framework tool throws rather than quietly shadowing it.
+
+### Fixed
+
+- **Tool calling on the Anthropic adapter.** `createAnthropicMessagesAdapter` never serialized `params.tools` and dropped every tool-role message, so an agent runtime routed to an `anthropic-messages-v1` slot sent no tool definitions, got no tool calls back, and produced no proposals — no character updates, no plugin data, no image generation. It degraded to plain narration with nothing logged as an error while the protocol registry advertised `function_calling` all along.
+- **`create-notification` renders again.** The tool returned `{ notified: true, level }`, which the runtime never promotes (only a result carrying `ui` or `interaction` is proposed) — the model was told the notification succeeded and the player saw nothing. It now returns the nested `Alert` spec the renderer expects.
+- **SVG media is rejected on upload and sandboxed on read.** `POST /api/media` accepted `image/svg+xml` under its `image/*` check and `GET /api/media/:id` echoed the MIME back with no `Content-Disposition`; a session owner could upload a scripted SVG, get a correctly signed URL, and read the web tier's localStorage provider keys from the app origin. Stored rows predating the ban are served as sandboxed attachments.
+- **Provider-key availability requires the operator token.** `GET /api/provider-keys` gated only its raw-key branch, so on demo/commercial an anonymous caller still got a masked listing revealing which providers were configured plus the first and last four characters of each key. The whole route is now behind `checkHostedOperator` (a strict no-op on self/desktop).
+- **Community local-tool factories get the deny-all store.** The unified `entry` path already scoped a community plugin's store, but the `tools.local` factory path injected the raw DataStore for every trust tier — a community plugin could call `listSessions()` or touch any session's plugin_data, bypassing proposal → validate → commit. Both paths now share `scopeStoreToPlugin`.
+- **Media-GC scans page soundly.** `buildProtectedMediaIds` paged four lists by offset over a non-total order (two had no `ORDER BY` at all), so a concurrently-upserted row could slip between pages and lose its media id — a destructive cleanup would then delete still-referenced bytes. All four now order by `(createdAt, id)`.
+- **Locale variants inherit what they omit.** `reconcileValue` treated any field a `PLUGIN.<locale>.md` did not declare as drift, forcing every translation to mirror the whole canonical manifest — and a mirrored manifest goes stale silently. An omitted field now inherits; a field declared with a different value still overrides and still warns.
+- **Unknown-field load errors name the field.** Zod reports `unrecognized_keys` with an empty `path`, so every unknown-field failure fell through to the "ensure the file begins with `---`" hint even though the frontmatter parsed fine. The hint now reads `issue.keys`, and removed scheduling fields point at their replacements.
+
+### Removed
+
+- **Legacy scheduling fields.** `priority`, `upstreamRequired` and `jobStatus` are rejected by both manifest schemas — a PLUGIN.md declaring any of them fails to load with a hint pointing at `stage` / `needs`. The compat fold (`stageForPriority`, `aliasUpstreamRequired`) and the never-read `jobStatus.legacyViews` projection are gone, and the `RuntimeManifest` type no longer carries the fields.
+- **Inert manifest fields `suspensionSafe` and rpc `streaming`.** Both were accepted and stored but never read: no handler replay exists (`resumeSuspendedRuntime` re-enters the shared agent tool loop without re-invoking the handler), and rpc dispatch is unconditionally synchronous. Removing them changes no runtime behaviour.
+- **The `tools.local` registration path.** It was the last loader that imported plugin code by frontmatter path. Plugin tools register in the `entry` module (`covel.registerTool`) and a runtime declares their names under `tools.plugin`; every bundled plugin moved in v0.0.14 and the field's own doc had promised removal in v0.0.17. Deleting it also removes — rather than patches — the trust asymmetry the audit found: the `entry` path scoped a community plugin's store to a deny-all view while this one injected the raw DataStore. `local-tools.ts` (240 lines) collapses to `plugin-tool-access.ts` (23); `activatePluginServerCode` now does exactly what its name says.
+- **Four designs that were drafted and never wired** — `prompt-delta` (+ `RuntimeOutput.metaData.rawPromptDelta`), `runtime-slot-resolver`, and the json-render presets. Each was reachable only from a barrel export and a test that supplied the input no producer ever supplied. `GET /runtime-outputs/:id/full-prompt` now returns history and states plainly that the system prompt and injected segments are absent; `trace_events` remains the exact path.
+
+### Changed
+
+- **Two identifiers renamed to match what they do** — `NormalizedRuntimeSpec.provenance.legacyFields` → `derivedFrom` (it records only live normalizations now), and the `activatePluginLocalTools` Hono context key → `activatePluginServerCode`.
+- **Redundancy the audit flagged.** The snapshot payload builder read every `turn_results` row for a session to build a plugin-id set, then filtered `plugin_data` by it — a filter that could never drop anything, since the set is the union of both sources. Long sessions paid a full-table read (each row carrying its complete runtimeResults payload) for a no-op. Also folded away an identity function (`summarizeStorageMigrations` → the `STORAGE_MIGRATIONS` constant), a nine-line `vector-factory.ts` whose comment explained there is no factory, a second identical `TimeCursor` definition, and the unconsumed `ResolvedTool` / `ToolClient` / `ToolDefinition` types.
+- **Ponytail debt is now a ledger.** `PONYTAIL-DEBT.md` lists the 19 deliberate shortcuts still carried, each with the ceiling it accepts and the observation that should trigger revisiting it. Six markers that explained _why the code is shaped as it is_ — rather than naming something owed — were downgraded to plain comments so the list stays readable.
+- **Docs realigned to the shipped surface.** Removed the deleted `POST /api/sessions/:id/turn` endpoint from the API reference, corrected pointers at moved/deleted modules, and rewrote every passage that described removed features as still-live compat — the reference docs now describe the current shape only, with history left to this changelog.
+
 ## [0.0.18] - 2026-07-24
 
 The scheduling release. The numeric priority scheduler is gone: runtimes now declare a named **stage** (`setup / pre-turn / narrative / post-turn / audit`, strict barriers between stages) plus typed dependency edges — `needs` (gate + DAG edge, by runtime id or capability), `after` (ordering only), and typed `inputs` bindings resolved into provenance-wrapped `ctx.inputs`. Session lifecycle truth moved to a dedicated clock (`phase` / `completedPlayerTurns` / `setupRuntimes`) with `turnCount` / `preGameCompleted` derived at read time, and turn counting became single-writer (turn-wide finalize transaction + an idempotent logical-turn ledger). A same-day extensibility audit closed every "declared but silently ignored" manifest surface it found.

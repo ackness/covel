@@ -4,7 +4,7 @@ import {
   loadPluginSummary,
 } from "@covel/plugin-loader";
 import type { I18nText, Stage } from "@covel/shared";
-import { getRuntimeSpec, stageRank } from "@covel/shared";
+import { getRuntimeSpec, stageRank, STAGE_ORDER } from "@covel/shared";
 import { resolve } from "node:path";
 import {
   docPathFromAbsolute,
@@ -14,6 +14,30 @@ import {
   uiSlotsOf,
   type FlowSegmentId,
 } from "./shared.js";
+
+// Stage-driven segment labels (player-facing plain language). A
+// `Record<Stage, …>` so adding a stage to STAGE_ORDER is a compile error here
+// instead of a silently missing segment.
+const STAGE_SEGMENT_META: Record<Stage, { labelText: I18nText }> = {
+  setup: { labelText: { "zh-CN": "开场准备", "en-US": "Setup" } },
+  "pre-turn": { labelText: { "zh-CN": "叙事前", "en-US": "Pre-Turn" } },
+  narrative: { labelText: { "zh-CN": "叙事", "en-US": "Narrative" } },
+  "post-turn": { labelText: { "zh-CN": "叙事后", "en-US": "Post-Turn" } },
+  audit: { labelText: { "zh-CN": "审计", "en-US": "Audit" } },
+};
+
+/** Ordered flow segments; the frontend groups steps by `segmentId`. */
+const FLOW_SEGMENTS: ReadonlyArray<{ id: FlowSegmentId; labelText: I18nText }> =
+  [
+    ...STAGE_ORDER.map((stage) => ({
+      id: stage,
+      ...STAGE_SEGMENT_META[stage],
+    })),
+    {
+      id: "event-manual" as const,
+      labelText: { "zh-CN": "事件 / 手动", "en-US": "Event & Manual" },
+    },
+  ];
 
 export async function buildPluginFlowResponse() {
   const discoveries = await discoverPluginsMulti(resolvePluginsDirs());
@@ -61,45 +85,6 @@ export async function buildPluginFlowResponse() {
     docPath: string;
     isStoryRuntime: boolean;
   }> = [];
-  // Stage-driven segments (player-facing plain-language labels). `rangeLabel` is
-  // a cosmetic legacy-band hint; the frontend groups by `segmentId`.
-  const flowSegments: Array<{
-    id: FlowSegmentId;
-    labelText: I18nText;
-    rangeLabel: string;
-  }> = [
-    {
-      id: "setup",
-      labelText: { "zh-CN": "开场准备", "en-US": "Setup" },
-      rangeLabel: "0-99",
-    },
-    {
-      id: "pre-turn",
-      labelText: { "zh-CN": "叙事前", "en-US": "Pre-Turn" },
-      rangeLabel: "100-499",
-    },
-    {
-      id: "narrative",
-      labelText: { "zh-CN": "叙事", "en-US": "Narrative" },
-      rangeLabel: "500",
-    },
-    {
-      id: "post-turn",
-      labelText: { "zh-CN": "叙事后", "en-US": "Post-Turn" },
-      rangeLabel: "501-999",
-    },
-    {
-      id: "audit",
-      labelText: { "zh-CN": "审计", "en-US": "Audit" },
-      rangeLabel: "1000",
-    },
-    {
-      id: "event-manual",
-      labelText: { "zh-CN": "事件 / 手动", "en-US": "Event & Manual" },
-      rangeLabel: "—",
-    },
-  ];
-
   for (const discovery of discoveries) {
     const [summary, manifests] = await Promise.all([
       loadPluginSummary(discovery),
@@ -170,17 +155,9 @@ export async function buildPluginFlowResponse() {
         })),
         tools: {
           builtin: [...(manifest.tools?.builtin ?? [])],
-          local: [
-            // `tools.plugin` are entry-registered tool NAMES — pass through
-            // unchanged (a dotted name like `foo.v2` must not lose its suffix).
-            ...(manifest.tools?.plugin ?? []),
-            // `tools.local` are relative file PATHS — strip dir + extension to
-            // recover the tool name (`server/tools/foo.js` → `foo`).
-            ...(manifest.tools?.local ?? []).map((toolPath) => {
-              const fileName = toolPath.split("/").at(-1) ?? toolPath;
-              return fileName.replace(/\.[^.]+$/, "");
-            }),
-          ],
+          // Entry-registered tool NAMES — pass through unchanged (a dotted
+          // name like `foo.v2` must not lose its suffix).
+          local: [...(manifest.tools?.plugin ?? [])],
         },
         uiSlots: uiSlotsOf(manifest),
         docPath,
@@ -199,7 +176,7 @@ export async function buildPluginFlowResponse() {
 
   return {
     generatedAt: new Date().toISOString(),
-    segments: flowSegments.map((segment) => ({
+    segments: FLOW_SEGMENTS.map((segment) => ({
       ...segment,
       label: textValue(segment.labelText),
     })),

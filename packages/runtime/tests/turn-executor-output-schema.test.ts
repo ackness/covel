@@ -30,7 +30,7 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
     name: "test-plugin/prompt-generator",
     pluginId: "test-plugin",
     description: "prompt generator",
-    priority: 10,
+    stage: "setup",
     runtimeType: "agent",
     trigger: { type: "auto" },
     outputKind: "plugin",

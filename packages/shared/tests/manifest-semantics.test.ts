@@ -36,13 +36,6 @@ describe("schedulable-missing-stage", () => {
     ).not.toContain("schedulable-missing-stage");
   });
 
-  it("does not warn when a legacy priority derives the stage", () => {
-    // pregame / world-init/schema-gen loader-gated exception path.
-    expect(
-      codes({ name: "pregame", trigger: { type: "scheduled" }, priority: 10 }),
-    ).not.toContain("schedulable-missing-stage");
-  });
-
   it("does not warn for the pure UI-panel idiom (memory plugin shape)", () => {
     expect(
       codes({ name: "memory", ui: { right: ["./ui/panel.json"] } }),

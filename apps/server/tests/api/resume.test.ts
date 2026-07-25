@@ -132,7 +132,7 @@ const TEST_MANIFEST: RuntimeManifest = {
   name: "test-plugin",
   pluginId: "test-plugin",
   pluginType: "community" as const,
-  priority: 500,
+  stage: "narrative",
   trigger: { type: "auto" as const },
   model: "gpt-4o-mini",
   // This fixture emulates a narrator-style runtime that appends to the

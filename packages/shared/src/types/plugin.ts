@@ -45,7 +45,7 @@ export interface TriggerConfig {
   readonly cooldownTurns?: number;
   /**
    * First main-loop turn at which this runtime may trigger. Optional —
-   * when unset the runtime triggers as soon as its band (100-1000) opens.
+   * when unset the runtime triggers as soon as its stage opens.
    * Compared against `turnNumber` directly.
    */
   readonly startTurn?: number;
@@ -337,14 +337,6 @@ export interface ToolsConfig {
   /** Builtin tool IDs to enable. */
   readonly builtin?: readonly string[];
   /**
-   * Relative paths to local tool modules.
-   * @deprecated Register tools imperatively in the unified `entry` module and
-   * list their names under `plugin` instead. All bundled plugins migrated in
-   * v0.0.14; this shim (and the legacy `hooks`/`rpc`/`wires` frontmatter
-   * fields) is planned for removal in v0.0.17.
-   */
-  readonly local?: readonly string[];
-  /**
    * Names of entry-registered plugin tools this runtime exposes to its LLM
    * (registration itself happens in the plugin's `entry` module).
    */
@@ -432,17 +424,6 @@ export interface UISpec {
 
 // ── Runtime manifest ─────────────────────────────────────────────
 
-/**
- * One entry in `upstreamRequired`. Either:
- *  • a runtime id (string) — that exact runtime must have succeeded; an absent
- *    (disabled) upstream still skips this runtime, never counts as success.
- *  • `{ capability }` — at least one in-scope runtime declaring that capability
- *    must have succeeded. Lets a runtime depend on "the active provider of X"
- *    (e.g. `narrative`) without naming a concrete plugin, so the same downstream
- *    works across modes that swap the provider (narrator ↔ chat-mode-narrator).
- */
-export type UpstreamRequirement = string | { readonly capability: string };
-
 export interface RuntimeManifest {
   readonly name: string;
   /**
@@ -459,7 +440,6 @@ export interface RuntimeManifest {
    * non-Chinese player sees e.g. "Action Guide" instead of the id "guide".
    */
   readonly displayName?: import("./world.js").I18nText;
-  readonly priority?: number;
   readonly version?: string;
   /**
    * Execution type: 'agent' (default) uses LLM pipeline, 'function' runs a pure handler.
@@ -577,40 +557,30 @@ export interface RuntimeManifest {
   /**
    * Optional dependency/conflict/provided-feature metadata used by plugin
    * selection UIs and future resolvers. Runtime execution semantics still
-   * come from triggers, input.inject, upstreamRequired, and scheduler config.
+   * come from triggers, input.inject, and the scheduling declarations below.
    */
   readonly relations?: PluginRelations;
   /**
-   * Upstreams this runtime depends on for a successful output. Each entry is a
-   * runtime id or a `{ capability }` requirement (see {@link UpstreamRequirement}).
-   * When a required upstream ran with `status !== 'success'` in the same turn —
-   * or, for a capability entry, no in-scope provider succeeded — the framework
-   * short-circuits this runtime with `status: 'skipped'` before the guard / LLM
-   * pipeline. Prevents downstream LLMs from being invoked with empty inject
-   * blocks when their upstream failed.
-   *
-   * Implemented in packages/runtime/src/turn-executor.ts (executeOneRuntime).
-   */
-  readonly upstreamRequired?: readonly UpstreamRequirement[];
-  /**
-   * Named scheduling stage (replaces numeric priority bands). Required for
-   * `auto` / `scheduled` runtimes under the strict authoring schema;
-   * forbidden for `event` / `manual`. During the compat period legacy
-   * manifests keep using `priority` and the loader derives the stage from
-   * the band. Declared but not yet consumed by the production scheduler.
+   * Named scheduling stage. Required for `auto` / `scheduled` runtimes under
+   * the strict authoring schema; forbidden for `event` / `manual`. Selects
+   * the band the runtime runs in; order *within* the band comes from the
+   * dependency edges below.
    */
   readonly stage?: import("./runtime-scheduling.js").Stage;
   /**
    * Weak ordering dependencies (pure ordering, no gate). Target failure or
-   * absence never blocks this runtime. Declared but not yet consumed.
+   * absence never blocks this runtime.
    */
   readonly after?: readonly import("./runtime-scheduling.js").DependencyRef[];
   /**
-   * Strong dependencies: ordering + gate. `scope: turn` (default) requires
-   * same-execution success; `scope: session` gates on the persistent
-   * snapshot frozen at execution start (setup runtimes only). Supersedes
-   * `upstreamRequired` (kept as a compat alias). Declared but not yet
-   * consumed by the production scheduler.
+   * Strong dependencies: ordering + gate. Each entry is a runtime id or a
+   * `{ capability }` requirement. `scope: turn` (default) requires
+   * same-execution success — when a required upstream ran with
+   * `status !== 'success'`, or no in-scope capability provider succeeded, the
+   * framework short-circuits this runtime with `status: 'skipped'` before the
+   * guard / LLM pipeline, so downstream LLMs never run with empty inject
+   * blocks. `scope: session` gates on the persistent snapshot frozen at
+   * execution start (setup runtimes only).
    */
   readonly needs?: readonly import("./runtime-scheduling.js").DependencyRef[];
   /**
@@ -631,11 +601,6 @@ export interface RuntimeManifest {
    */
   readonly resultFormat?: import("./runtime-scheduling.js").RuntimeResultFormat;
   /**
-   * Function runtimes only: handler may be replayed from a frozen
-   * activation boundary to resume approval/HTTP asks. Default false.
-   */
-  readonly suspensionSafe?: boolean;
-  /**
    * Explicit read/write-set override for parallel hazard detection.
    * Defaults are derived from declared builtin tools + proposal types.
    * Declared but not yet consumed.
@@ -648,14 +613,6 @@ export interface RuntimeManifest {
    */
   readonly permissions?: {
     readonly http?: readonly import("./runtime-scheduling.js").HttpPermissionDecl[];
-  };
-  /**
-   * Compat-period projection of kernel job-status records into this
-   * plugin's legacy plugin-data views. Rejected by the strict authoring
-   * schema. Declared but not yet consumed.
-   */
-  readonly jobStatus?: {
-    readonly legacyViews?: readonly import("./runtime-scheduling.js").LegacyJobViewDecl[];
   };
   readonly trigger?: TriggerConfig;
   /**

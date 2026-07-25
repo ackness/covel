@@ -186,7 +186,7 @@ describe("TurnExecutor E2E", () => {
     const preNarrator: RuntimeManifest = {
       name: "pre-process",
       description: "Pre-turn processing",
-      priority: 300,
+      stage: "pre-turn",
     };
 
     const preLoaded: LoadedRuntime = {
@@ -221,7 +221,7 @@ describe("TurnExecutor E2E", () => {
       name: "story-runtime",
       pluginId: "story-runtime",
       description: "Story runtime",
-      priority: 500,
+      stage: "narrative",
       outputKind: "story",
       model: "story",
     };
@@ -229,7 +229,7 @@ describe("TurnExecutor E2E", () => {
       name: "helper-runtime",
       pluginId: "helper-runtime",
       description: "Helper runtime",
-      priority: 550,
+      stage: "post-turn",
       model: "plugin",
     };
 
@@ -312,8 +312,8 @@ describe("TurnExecutor E2E", () => {
       name: "retry-guide",
       pluginId: "retry-guide",
       description: "Guide runtime with retryable tool-call error",
-      priority: 550,
-      tools: { local: ["./tools/generate-guide.js"] },
+      stage: "post-turn",
+      tools: { plugin: ["generate-guide"] },
     };
     const loaded: LoadedRuntime = {
       manifest,
@@ -395,7 +395,7 @@ describe("TurnExecutor E2E", () => {
     const manualRuntime: RuntimeManifest = {
       name: "manual-only",
       description: "Only runs when manually triggered",
-      priority: 600,
+      stage: "post-turn",
       trigger: { type: "manual" },
     };
 
@@ -482,8 +482,8 @@ describe("TurnExecutor E2E", () => {
       name: "test-guide",
       pluginId: "test-guide",
       description: "Tool-only guide runtime",
-      priority: 550,
-      tools: { local: ["./tools/generate-guide.js"] },
+      stage: "post-turn",
+      tools: { plugin: ["generate-guide"] },
     };
     const guideLoaded: LoadedRuntime = {
       manifest: guideManifest,
@@ -560,9 +560,9 @@ describe("TurnExecutor E2E", () => {
       name: "test-system-guide",
       pluginId: "test-system-guide",
       description: "System runtime that should not leak prose after tool calls",
-      priority: 550,
+      stage: "post-turn",
       outputKind: "system",
-      tools: { local: ["./tools/generate-guide.js"] },
+      tools: { plugin: ["generate-guide"] },
     };
     const loaded: LoadedRuntime = {
       manifest,
@@ -639,7 +639,7 @@ describe("TurnExecutor E2E", () => {
       name: "test-narrator",
       pluginId: "test-narrator",
       description: "Narrative runtime that keeps calling tools",
-      priority: 500,
+      stage: "narrative",
       tools: { builtin: ["world-dimension-get"] },
     };
     const lookupLoaded: LoadedRuntime = {
@@ -706,8 +706,8 @@ describe("TurnExecutor E2E", () => {
       name: "test-guide-invalid",
       pluginId: "test-guide-invalid",
       description: "Guide runtime with invalid tool args",
-      priority: 550,
-      tools: { local: ["./tools/generate-guide.js"] },
+      stage: "post-turn",
+      tools: { plugin: ["generate-guide"] },
     };
     const loaded: LoadedRuntime = {
       manifest,
@@ -919,7 +919,7 @@ describe("TurnExecutor _interaction protocol", () => {
     const isolatedManifest = {
       ...charManifest,
       needs: undefined,
-      upstreamRequired: undefined,
+      needs: undefined,
     };
     const result = await executeTurn(makeTurnInput(), [isolatedManifest], deps);
 

@@ -3,7 +3,12 @@ import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
 import { executeParallel } from "../src/schedule/parallel-executor.js";
 
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
-  return { name: "test-rt", description: "test", priority: 500, ...overrides };
+  return {
+    name: "test-rt",
+    description: "test",
+    stage: "narrative",
+    ...overrides,
+  };
 }
 
 function makeResult(overrides?: Partial<RuntimeResult>): RuntimeResult {

@@ -51,9 +51,9 @@ interface ManifestSchemaDoc {
 
 const INPUT_DOC: ManifestSchemaDoc = {
   id: "https://covel.local/schemas/runtime-manifest.input.schema.json",
-  title: "Covel runtime manifest (compat input)",
+  title: "Covel runtime manifest (loader input)",
   summary:
-    "Backward-compatible superset accepted by the plugin loader. Retains legacy priority / upstreamRequired / jobStatus; the trigger enum is the four production types.",
+    "What the plugin loader accepts — the field set that decides whether a PLUGIN.md parses at all. Same fields as the authoring schema, with fewer cross-field constraints enforced.",
   constraints: SHARED_UNREPRESENTABLE_CONSTRAINTS,
 };
 
@@ -61,7 +61,7 @@ const AUTHORING_DOC: ManifestSchemaDoc = {
   id: "https://covel.local/schemas/runtime-manifest.authoring.schema.json",
   title: "Covel runtime manifest (strict authoring)",
   summary:
-    "Strict target for newly authored plugins. Rejects the legacy priority / upstreamRequired / jobStatus fields and requires a stage on auto / scheduled runtimes.",
+    "Strict target for newly authored plugins. Enforces every cross-field constraint, including a required stage on auto / scheduled runtimes.",
   constraints: [
     ...SHARED_UNREPRESENTABLE_CONSTRAINTS,
     "auto / scheduled runtimes must declare a stage.",

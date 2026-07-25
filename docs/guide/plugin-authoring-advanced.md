@@ -28,8 +28,8 @@ import type {
   RuntimeManifest, // 运行时清单（PLUGIN.md frontmatter 的解析结果）
 
   // 触发系统
-  TriggerType, // 'auto' | 'manual' | 'scheduled' | 'event'（conditional / error-retry 已移除,声明即加载失败）
-  TriggerConfig, // { type, interval?, condition?, topic?, maxTriggerCount?, cooldownTurns? }
+  TriggerType, // 'auto' | 'manual' | 'scheduled' | 'event'(枚举闭合,其余取值加载失败)
+  TriggerConfig, // { type, interval?, topic?, maxTriggerCount?, cooldownTurns?, startTurn? }
 
   // 输入/输出
   InputConfig, // { inject?, tools? }
@@ -408,9 +408,7 @@ export default async function handler(ctx) {
 
 envelope-v1 下 value 是**强制校验**的:`success.value` 先过 JSON wire 边界检查(`undefined` / 函数 / 循环 / 非有限数 → 归一为 `failed`),若 manifest 还声明了 `output.schema` 则再按该 schema 校验,不匹配整个结果落成 `failed: output-schema-invalid`。非 success 分支(`skipped` / `failed`)只能带观测 effects(`jobStatus` / `diagnostics`)——任何领域写入会被 finalizer 剥离并记一条诊断。`legacy` 格式则只做观测式 warn,不强制。目前官方插件仍全部停在默认 `legacy`;新插件想要强类型 I/O 契约时再显式切 `envelope-v1`。
 
-### `suspensionSafe` 与 `permissions.http`
-
-**`suspensionSafe: boolean`(function runtime,默认 false)**:声明本 handler 可以从冻结的激活边界重放,以便在审批 / HTTP ask 处挂起后继续跑。只有幂等、可安全重入的 handler 才应打开——重放会从头再跑一遍 handler,非幂等副作用(外部下单、递增计数)会重复执行。
+### `permissions.http`
 
 **`permissions.http`(声明式网络上界)**:列出本插件可经 Public Plugin API 访问的规范 HTTPS origin(`origin` 不带 path/query/凭据)与方法(缺省仅 `GET`)。
 
@@ -810,14 +808,14 @@ my-plugin/
 
 ## 附录：旧注册字段迁移
 
-`tools.local` / `hooks` / `rpc` / `wires` 四个 frontmatter 注册字段已弃用（启动时每插件 warn 一次，保留一个发布周期后移除），统一迁移到 `entry` 模块的 `PluginAPI` facade。对照表：
+`tools.local` 已移除（声明即加载失败）；`hooks` / `rpc` / `wires` 仍被接受但已弃用（启动时每插件 warn 一次）。四者统一迁移到 `entry` 模块的 `PluginAPI` facade，对照表：
 
-| 旧 frontmatter 字段           | 新写法（entry 工厂内）                                                          | 备注                                                                                                                  |
-| ----------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `tools.local: [./tools/x.js]` | `covel.registerTool(makeX(covel.toolkit))`                                      | 工具工厂文件本身无需修改（`covel.toolkit` 就是旧的注入包）；runtime manifest 改用 `tools.plugin` 声明工具**名字**列表 |
-| `hooks: [{event, handler}]`   | `covel.on(event, handler, { match?, timeoutMs?, enforce? })`                    | 16 事件语义不变；`match` 从浅层等值 map 变为谓词函数                                                                  |
-| `rpc: { action: {handler} }`  | `covel.registerRpc(action, handler, { description?, streaming?, trustLevel? })` | handler 内联注册，不再 lazy import；信任等级仍按插件来源钳制                                                          |
-| `wires: lib/wires.js`         | `covel.registerWires({ image?, speech?, transcription? })`                      | 命名空间仍为 `<pluginId>/<wireId>`；SSRF 守卫和重试 fetch 经 `covel.http` 注入                                        |
+| 旧 frontmatter 字段                     | 新写法（entry 工厂内）                                              | 备注                                                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `tools.local: [./tools/x.js]`（已移除） | `covel.registerTool(makeX(covel.toolkit))`                          | 工具工厂文件本身无需修改（`covel.toolkit` 就是旧的注入包）；runtime manifest 改用 `tools.plugin` 声明工具**名字**列表 |
+| `hooks: [{event, handler}]`             | `covel.on(event, handler, { match?, timeoutMs?, enforce? })`        | 16 事件语义不变；`match` 从浅层等值 map 变为谓词函数                                                                  |
+| `rpc: { action: {handler} }`            | `covel.registerRpc(action, handler, { description?, trustLevel? })` | handler 内联注册，不再 lazy import；信任等级仍按插件来源钳制                                                          |
+| `wires: lib/wires.js`                   | `covel.registerWires({ image?, speech?, transcription? })`          | 命名空间仍为 `<pluginId>/<wireId>`；SSRF 守卫和重试 fetch 经 `covel.http` 注入                                        |
 
 迁移步骤：
 
@@ -830,15 +828,15 @@ my-plugin/
 
 ---
 
-## 迁移到调度声明面（三方插件）
+## 接入调度声明面（三方插件）
 
-调度重设计已完成切换:`stage` + `needs` / `after` / `inputs` 是唯一的调度权威。旧字段(`priority` / `upstreamRequired`)仅由 manifest **compat 输入 schema** 为存量三方插件保留——归一层把 `upstreamRequired` 别名为 `needs`、在 `stage` 缺失时用 `priority` 派生 `stage`,数字本身不再参与调度(与显式 `stage` 并存时完全无作用)。存量三方插件按下面几步迁移,每一步都能独立发布。
+`stage` + `needs` / `after` / `inputs` 是唯一的调度权威。三方插件按下面几步接入,每一步都能独立发布。
 
-**① manifest 单声明。** 删掉 `priority` / `upstreamRequired`,直接写新声明。`stage` 用命名阶段(语义见 [plugins.md 调度层级](../reference/plugins.md#调度层级));上游依赖用 `needs`(gate,取代 `upstreamRequired`)或 `inputs`(把某条隐式依赖转成有类型绑定);对 `event` / `manual` runtime 不写 `stage`。改完跑 `pnpm validate:plugin <插件目录>`——strict authoring schema 会拒绝残留的 legacy 字段。
+**① manifest 单声明。** `stage` 用命名阶段(语义见 [plugins.md 调度层级](../reference/plugins.md#调度层级));上游依赖用 `needs`(gate)或 `inputs`(把某条隐式依赖转成有类型绑定);对 `event` / `manual` runtime 不写 `stage`。写完跑 `pnpm validate:plugin <插件目录>`——manifest schema 是闭集,未列出的 frontmatter 字段一律报错。
 
 ```yaml
-stage: post-turn # 命名阶段(取代 priority)
-needs: # 取代 upstreamRequired,强度相同
+stage: post-turn # 命名阶段
+needs: # 强依赖:排序 + 门控
   - capability: narrative-engine
 inputs: # 读同回合上游数据的唯一通道
   narrative:
@@ -847,15 +845,15 @@ inputs: # 读同回合上游数据的唯一通道
     required: false
 ```
 
-**② handler:改读 `ctx.inputs`。** `ctx.completedResults` 已从 function handler context 移除——同回合上游数据只能通过 `inputs` 绑定进来(`manual` 激活不解析 turn 绑定,`ctx.inputs` 为空,手动场景把数据放 `manualPayload`)。
+**② handler:读 `ctx.inputs`。** 同回合上游数据只能通过 `inputs` 绑定进来(`manual` 激活不解析 turn 绑定,`ctx.inputs` 为空,手动场景把数据放 `manualPayload`)。
 
 ```ts
 const narrative = ctx.inputs?.narrative?.value as string | undefined;
 ```
 
-**③ 进度:`ctx.pluginData` 占位 → `ctx.progress.report`。** 长任务(图像 / TTS 生成)的实时进度从"写 plugin-data 占位行"改为走 job-status 通道:`ctx.progress.report(...)` 判空 + 吞异常(见上文调度 ctx API 小节)。durable 产出仍走返回值 / proposal——进度只是观测,不落游戏状态。前端读取旧 plugin-data 面板的话,兼容期可继续同时写占位行,待 UI 切到 job-status 源后再撤。
+**③ 进度:用 `ctx.progress.report`。** 长任务(图像 / TTS 生成)的实时进度走 job-status 通道:`ctx.progress.report(...)` 判空 + 吞异常(见上文调度 ctx API 小节)。durable 产出仍走返回值 / proposal——进度只是观测,不落游戏状态。该通道与 `plugin-data` 的 `_jobs` 占位行并存,前端面板仍读占位行时可两边同写。
 
-**④ envelope-v1 切换时机(可选,最后做)。** `resultFormat: envelope-v1` 是强类型 I/O 契约(强制 `output.schema` 校验 + 四分支 outcome),但**不是迁移必需项**。默认 `legacy` 已能用上前三步的全部收益。仅当你想要显式的 success/skipped/failed/suspended 语义、或想让框架强校验输出结构时再切;切换时同步补上 `output.schema`,并把 handler 返回值改成判别联合。
+**④ envelope-v1 切换时机(可选,最后做)。** `resultFormat: envelope-v1` 是强类型 I/O 契约(强制 `output.schema` 校验 + 四分支 outcome),但**不是必需项**。默认 `legacy` 已能用上前三步的全部收益。仅当你想要显式的 success/skipped/failed/suspended 语义、或想让框架强校验输出结构时再切;切换时同步补上 `output.schema`,并把 handler 返回值改成判别联合。
 
 ---
 

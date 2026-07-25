@@ -94,6 +94,9 @@ function jsonError(
  */
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
+/** Scriptable image type — rejected on upload, neutered on read. */
+const SVG_MIME = "image/svg+xml";
+
 // 20 MB per request — keep the per-IP budget tight so repeat uploads can't
 // hammer storage.
 mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
@@ -119,6 +122,17 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
     return jsonError(
       "invalid_request",
       "only image/* uploads are accepted",
+      400,
+    );
+  }
+  // SVG is an active content type, not an opaque raster: opened top-level it
+  // executes script on the app origin, so a (correctly signed) media URL
+  // becomes a delivery vector for stealing `covel:keys` out of localStorage.
+  // `nosniff` does not help — it blocks sniffing, not SVG's own scripting.
+  if (mime === SVG_MIME) {
+    return jsonError(
+      "invalid_request",
+      "image/svg+xml uploads are not accepted",
       400,
     );
   }
@@ -545,6 +559,14 @@ mediaRoutes.get("/:id", async (c) => {
     "cache-control": "private, max-age=300, immutable",
     // Asset is opaque content; instruct browsers not to sniff alternate types.
     "x-content-type-options": "nosniff",
+    // Uploads reject SVG, but rows predating that ban (or written by another
+    // media producer) must still never render inline on the app origin.
+    ...(lookup.mime === SVG_MIME
+      ? {
+          "content-disposition": "attachment",
+          "content-security-policy": "sandbox",
+        }
+      : {}),
   };
 
   try {

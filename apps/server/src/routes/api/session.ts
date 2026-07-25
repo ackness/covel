@@ -651,7 +651,7 @@ sessionRoutes.post("/:id/plugins/enable", async (c) => {
 
   // Trusted plugins are already loaded. Community code reaches this seam
   // only after the gate has recorded an explicit session/one-time grant.
-  await c.get("activatePluginLocalTools")?.(body.pluginId, id);
+  await c.get("activatePluginServerCode")?.(body.pluginId, id);
 
   const active = resolveEnabledSessionPlugins(
     session.activePlugins ?? [],

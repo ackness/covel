@@ -104,7 +104,7 @@ Trigger Verification 的裁决列：
 2. 创建会话后从 API **读回该会话真实的 `activePlugins`**（世界种子集，通常远小于全局插件池），逐轮刷新
 3. 按下面的 stage 调度语义推导每个 runtime 的期望，Turn 执行后对比实际 `runtimeResults`
 
-**期望推导规则（stage 调度器，非旧的数字优先级带 / interval 复刻）——三道闸门依次判定：**
+**期望推导规则（复刻 stage 调度器）——三道闸门依次判定：**
 
 1. **激活集**：`pluginId` 不在会话 `activePlugins` 里 → 永不调度（`SKIP`）。互斥 provider（如 `narrator` vs `chat-mode-narrator`、多家 image 引擎）在这一步天然收敛——只期望激活的那一个。
 2. **stage**：无 `stage` 的 runtime（event / manual / 仅贡献型，如 `memory` / `director` / `cost-gate`——它们 `trigger.type` 可能是 `auto` 但没有 stage）**永不进入 stage 调度**，与 trigger.type 无关（`SKIP`；若因自身 event/manual 触发而运行则记 `FIRE`）。
@@ -180,7 +180,7 @@ A: `--plugin guide --turns 2 --slot e2e_local`。其它 runtime 依然会运行�
 | `outputKind: story`                         | Runtime Timeline 的 output 列显示 `narrative(<字符数>c)`                    |
 | `outputKind: plugin`/`system`               | Runtime Timeline output 显示 `keys=[...]`                                   |
 | `maxSteps: N`                               | 工具循环耗尽时 failures.json 会看到 `exhausted the tool loop after N steps` |
-| `tools.builtin` / `tools.local`             | Tool Calls 表格里能观测实际调用次数和成功率                                 |
+| `tools.builtin` / `tools.plugin`            | Tool Calls 表格里能观测实际调用次数和成功率                                 |
 | `runtimeType: function`                     | Tool Calls 表为空（function runtime 不跑 LLM）                              |
 
 ## 扩展建议

@@ -39,7 +39,7 @@ type Env = {
      * Lazy activator for community plugins' `tools.local` modules. Wired
      * by bootstrap; absent in narrow test harnesses (use optional chaining).
      */
-    activatePluginLocalTools?: (
+    activatePluginServerCode?: (
       pluginId: string,
       sessionId?: string,
     ) => Promise<void>;
@@ -163,7 +163,7 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
   // are already loaded. Idempotent.
   if (decision.decision === "allow") {
     try {
-      await c.get("activatePluginLocalTools")?.(
+      await c.get("activatePluginServerCode")?.(
         result.pending.pluginId,
         result.pending.sessionId,
       );

@@ -22,7 +22,16 @@ function manifest(
     name,
     pluginId: name.split("/")[0],
     description: name,
-    priority,
+    stage:
+      priority <= 99
+        ? "setup"
+        : priority <= 499
+          ? "pre-turn"
+          : priority === 500
+            ? "narrative"
+            : priority <= 999
+              ? "post-turn"
+              : "audit",
     outputKind: "story",
     trigger: { type: "auto" },
     ...overrides,

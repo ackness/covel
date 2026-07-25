@@ -5,9 +5,8 @@
  * `NormalizedRuntimeSpec` (per-manifest, no session resolution), and the
  * session scheduler resolves the active set into a `SessionExecutionPlan`
  * (providers resolved, DAG layered). Schedulers, validators, and traces
- * consume only this IR; all legacy-compat mapping (priority band folding,
- * `upstreamRequired` aliasing, scheduled→auto folding for setup) is
- * centralized at the loader exit.
+ * consume only this IR; every manifest-shape normalization (e.g. the
+ * scheduled→auto fold for setup) is centralized at the loader exit.
  */
 
 import type { TriggerConfig } from "./plugin.js";
@@ -28,20 +27,23 @@ export type JsonValue =
 // ── Stage axis ───────────────────────────────────────────────────
 
 /**
- * Coarse-grained named phases replacing the numeric priority bands:
- * setup (0–99), pre-turn (100–499), narrative (500), post-turn (501–999),
- * audit (1000). Strict barrier between stages; intra-stage order comes
- * exclusively from dependencies.
+ * Coarse-grained named phases, run in this order every main-loop turn
+ * (`setup` runs instead, while `session.phase === 'setup'`). Strict barrier
+ * between stages; intra-stage order comes exclusively from dependencies.
+ *
+ * Single source of truth: `Stage` derives from this tuple, and so do the
+ * zod `stageSchema` and the plugin-flow segment table — adding a sixth
+ * stage here is a compile error everywhere a copy would otherwise drift.
  */
-export type Stage = "setup" | "pre-turn" | "narrative" | "post-turn" | "audit";
-
-export const STAGE_ORDER: readonly Stage[] = [
+export const STAGE_ORDER = [
   "setup",
   "pre-turn",
   "narrative",
   "post-turn",
   "audit",
-];
+] as const;
+
+export type Stage = (typeof STAGE_ORDER)[number];
 
 // ── Dependency axis ──────────────────────────────────────────────
 
@@ -181,19 +183,6 @@ export interface HttpPermissionDecl {
 
 // ── Legacy job view projection (compat only) ─────────────────────
 
-/**
- * Compat-period projection of kernel job-status records into a plugin's
- * legacy plugin-data view (e.g. the old `tracks` / `images` panels).
- * `keyFrom` / `valueFrom` are JSON Pointers into the full JobStatusEffect;
- * defaults are `jobId` and `/data`. Rejected by the strict authoring schema.
- */
-export interface LegacyJobViewDecl {
-  readonly jobIdPrefix?: string;
-  readonly namespace: string;
-  readonly keyFrom?: string;
-  readonly valueFrom?: string;
-}
-
 // ── Normalized runtime spec (loader-level IR) ────────────────────
 
 /** Declared trigger after normalization (e.g. setup scheduled→auto folding). */
@@ -212,11 +201,9 @@ export interface NormalizedRuntimeSpec {
   readonly declaredTrigger: TriggerSpec;
   /** Normalized from the legacy `execution: background` manifest field. */
   readonly backgroundWhenDetached: boolean;
-  /** Handler may be replayed from a frozen activation boundary on approval-resume. */
-  readonly suspensionSafe: boolean;
   /** Guides result parsing before normalization. Defaults to `legacy`. */
   readonly resultFormat: RuntimeResultFormat;
-  /** Absent for event/manual runtimes and for legacy UI-only (no-priority) declarations. */
+  /** Absent for event/manual runtimes and for UI-only registration surfaces. */
   readonly stage?: Stage;
   /** capability refs unresolved at this level. */
   readonly deps: {
@@ -233,10 +220,12 @@ export interface NormalizedRuntimeSpec {
   readonly outputRecordAs?: string;
   readonly effectsDecl?: EffectsDecl;
   readonly httpPermissions: readonly HttpPermissionDecl[];
-  /** Compat-period only; always empty under the strict authoring schema. */
-  readonly legacyJobViews: readonly LegacyJobViewDecl[];
-  /** Which spec fields were derived from legacy manifest fields (diagnostics). */
-  readonly provenance: { readonly legacyFields: readonly string[] };
+  /**
+   * Which spec fields the normalizer derived rather than read verbatim
+   * (diagnostics) — e.g. `trigger:default-auto` when no trigger is declared.
+   * Every entry names a live normalization; legacy-field folding is gone.
+   */
+  readonly provenance: { readonly derivedFrom: readonly string[] };
 }
 
 // ── Execution identity ───────────────────────────────────────────

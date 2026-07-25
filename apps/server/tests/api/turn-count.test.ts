@@ -13,7 +13,7 @@ function preGameRuntime(name: string): RuntimeManifest {
     name,
     pluginId: name.split("/")[0],
     pluginType: "core-plugin",
-    priority: 10, // Pre-Game band (<= 99)
+    stage: "setup", // Pre-Game band (<= 99)
     trigger: { type: "auto" },
   } as RuntimeManifest;
 }
@@ -23,7 +23,7 @@ function mainLoopRuntime(name: string): RuntimeManifest {
     name,
     pluginId: name.split("/")[0],
     pluginType: "plugin",
-    priority: 500, // main-loop band
+    stage: "narrative", // main-loop band
     trigger: { type: "auto" },
   } as RuntimeManifest;
 }

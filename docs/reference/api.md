@@ -59,7 +59,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 2. `X-Session-Token: <ownerToken>`
 3. `?session_token=<ownerToken>` query 参数（供无法设置 header 的 EventSource / SSE 客户端使用）
 
-**运维 master token**：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用），并且是 hosted 层级创建会话、世界写入/维度导入、AI 世界生成、模型探测/刷新以及 community server-code 激活的凭证。community ESM 会在服务端进程内注册全局能力，因此 hosted 层级同时要求 owner token 与 operator token；这是当前单运维方信任模型，不提供多租户代码沙箱。`DEPLOYMENT_TIER=demo|commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动。
+**运维 master token**：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用），并且是 hosted 层级创建会话、世界写入/维度导入、AI 世界生成、模型探测/刷新、provider key 可用性查询（`GET /api/provider-keys`）以及 community server-code 激活的凭证。community ESM 会在服务端进程内注册全局能力，因此 hosted 层级同时要求 owner token 与 operator token；这是当前单运维方信任模型，不提供多租户代码沙箱。`DEPLOYMENT_TIER=demo|commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动。
 
 纯 Web 客户端可在 **Settings → Operator Access（运维访问）** 输入或清除该 token。凭据只保存在当前浏览器的 `localStorage`，仅在上述 operator-gated 同源请求中作为 `Authorization: Bearer <token>` 发送；保存或清除后客户端会重新加载，以新凭据重取会话与世界数据。`self` 层级继续允许无 token 使用，并忽略该可选凭据。
 
@@ -236,9 +236,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### Turn 执行
 
-| 方法 | 路径                     | 描述         |
-| ---- | ------------------------ | ------------ |
-| POST | `/api/sessions/:id/turn` | 执行玩家回合 |
+回合执行的唯一入口是 [`POST /api/actions`](#post-apiactions)（SSE 桥接），没有 session 级的回合端点。
 
 ### 回合中控制（W4）
 
@@ -339,7 +337,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | ---- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | GET  | `/api/sessions/:id/runtime-outputs`                       | 列出该 session 的 runtime 输出记录，支持 `?runtimeId=` / `?pluginId=` / `?since=` / `?limit=` 过滤，按 timestamp 降序 |
 | GET  | `/api/sessions/:id/runtime-outputs/:outputId`             | 获取单条 runtime 输出记录                                                                                             |
-| GET  | `/api/sessions/:id/runtime-outputs/:outputId/full-prompt` | 从 `turn_messages` + `rawPromptDelta` 重建该次 LLM 调用的完整 prompt 历史（best-effort）                              |
+| GET  | `/api/sessions/:id/runtime-outputs/:outputId/full-prompt` | 从 `turn_messages` 重建该次调用时的消息历史（best-effort，不含 system prompt 与注入段）                               |
 | GET  | `/api/sessions/:id/interaction-records`                   | 列出该 session 的外部输入记录，支持 `?type=` / `?source=` / `?targetPluginId=` / `?limit=` 过滤                       |
 
 **`RuntimeOutput` 结构**：
@@ -388,7 +386,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 - 翻译层写入是 best-effort。失败只打 warn，不阻塞 turn pipeline
 - `rawPromptDelta` 在 PR-1 首迭代中不会被 turn-executor 自动填充。接入 LLM 调用链的 delta 采集在后续迭代完成
-- full-prompt 重建端点目前用 turn_messages + delta 做近似还原，对 compaction 后的 session 可能不完全精确 —— 调试用途足够，审计场景需要走 trace_events
+- full-prompt 重建端点只回放 turn_messages,不含 system prompt 与注入段落,对 compaction 后的 session 也不完全精确 —— 粗略调试够用,精确重建与审计场景走 trace_events
 
 ### 插件数据（Plugin Data）
 
@@ -499,30 +497,30 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 ### 媒体管理
 
-| 方法 | 路径                                | 描述                                                                                                                                       |
-| ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| GET  | `/api/media/:id?token=<signed>`     | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                                              |
-| GET  | `/api/sessions/:id/media-token?id=` | 为指定 mediaId 颁发短时签名 token，供上面的下载端点使用                                                                                    |
-| POST | `/api/media?sessionId=<id>`         | 玩家图片上传：原始字节 body（`Content-Type` = 文件 MIME，仅 `image/*`，≤20MB），内容寻址入库 + 记会话 owner/ref，返回 `{ id, mime, size }` |
-| POST | `/api/media/cleanup`                | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes`                           |
+| 方法 | 路径                                | 描述                                                                                                                                                                                                                              |
+| ---- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET  | `/api/media/:id?token=<signed>`     | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                                                                                                                                     |
+| GET  | `/api/sessions/:id/media-token?id=` | 为指定 mediaId 颁发短时签名 token，供上面的下载端点使用                                                                                                                                                                           |
+| POST | `/api/media?sessionId=<id>`         | 玩家图片上传：原始字节 body（`Content-Type` = 文件 MIME，仅 `image/*`，≤20MB），内容寻址入库 + 记会话 owner/ref，返回 `{ id, mime, size }`。**`image/svg+xml` 一律 400 拒绝**——SVG 是可执行内容类型，内联渲染时会在应用源执行脚本 |
+| POST | `/api/media/cleanup`                | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes`                                                                                                                  |
 
 ### 配置信息
 
-| 方法 | 路径                           | 描述                                                                                    |
-| ---- | ------------------------------ | --------------------------------------------------------------------------------------- |
-| GET  | `/api/presets`                 | 列出配置的模型预设                                                                      |
-| GET  | `/api/packages`                | 列出已加载插件包（含 runtime/tool/`userSettings`/`tags`/`relations` 信息）              |
-| GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件 |
-| GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                  |
-| POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`    |
-| GET  | `/api/provider-keys`           | 桌面 bearer client 返回原始 provider key；其他请求返回 masked availability              |
-| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                             |
-| GET  | `/api/config/keys`             | 仅桌面：列出已配置的 provider（不返回值）                                               |
-| PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                         |
-| GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                       |
-| PUT  | `/api/config/settings`         | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }`             |
-| PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                            |
-| POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                            |
+| 方法 | 路径                           | 描述                                                                                                                                                                |
+| ---- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET  | `/api/presets`                 | 列出配置的模型预设                                                                                                                                                  |
+| GET  | `/api/packages`                | 列出已加载插件包（含 runtime/tool/`userSettings`/`tags`/`relations` 信息）                                                                                          |
+| GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件                                                                             |
+| GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                                                                                              |
+| POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`                                                                                |
+| GET  | `/api/provider-keys`           | 桌面 bearer client 返回原始 provider key；其他请求返回 masked availability。`demo` / `commercial` 层**需运维 token**（已配置的 provider 清单与 key 掩码属运维信息） |
+| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                                                                                                         |
+| GET  | `/api/config/keys`             | 仅桌面：列出已配置的 provider（不返回值）                                                                                                                           |
+| PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                                                                                                     |
+| GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                                                                                                   |
+| PUT  | `/api/config/settings`         | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }`                                                                                         |
+| PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                                                                                                        |
+| POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                                                                                                        |
 
 #### GET /api/ui-specs
 
@@ -987,7 +985,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 - `metadata.requiredPlugins`：准备页锁定启用。
 - `metadata.recommendedPlugins`：准备页默认启用。
 - `metadata.excludedPlugins`：准备页默认关闭。
-- `metadata.pluginPolicy`：准备页组合包策略。可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`；旧的三组插件字段仍兼容并会参与合并。
+- `metadata.pluginPolicy`：准备页组合包策略。可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`；写在 `metadata` 顶层的同名三组字段也会参与合并。
 - `metadata.characterBlueprints`：创建 session 时自动导入到 `character-blueprint` 插件数据，并实例化为 NPC character。
 
 **响应:**
@@ -1130,69 +1128,13 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服务器按 stage（`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`，stage 间严格屏障，stage 内按 DAG 依赖并行）调度所有活跃的 Runtime，收集 LLM 输出并返回。
 
-#### `POST /api/sessions/:id/turn`
+唯一入口是 [`POST /api/actions`](#post-apiactions)——请求体、SSE 帧格式与开场接力语义见该章节。
 
-兼容的 headless/testing JSON 入口。Web UI 的主交互路径使用 `/api/actions`，因为它会返回 data-only SSE 流并转发回合内进度事件。保留该入口用于脚本、测试和不需要 SSE 的调用方；它和 `/api/actions` 共享 turn 执行、session lock、commit pipeline 与 `turnCount` 口径，但不会把回合内事件逐条流给客户端。
+**回合语义：**
 
-执行一个玩家回合。
-
-**参数:**
-
-| 参数 | 位置 | 说明    |
-| ---- | ---- | ------- |
-| `id` | 路径 | 会话 ID |
-
-**请求体:**
-
-```json
-{
-  "message": "我拔出剑，准备迎战",
-  "locale": "zh-CN",
-  "model": "deepseek-chat"
-}
-```
-
-| 字段      | 类型   | 必填 | 说明                      |
-| --------- | ------ | ---- | ------------------------- |
-| `message` | string | 是   | 玩家的文字输入            |
-| `locale`  | string | 否   | 覆盖会话语言              |
-| `model`   | string | 否   | 覆盖 LLM 模型（API 级别） |
-
-**响应:**
-
-```json
-{
-  "turnId": "a1b2c3d4-...",
-  "sessionId": "mistport-a1b2c3d4",
-  "runtimeResults": [
-    {
-      "pluginId": "narrator",
-      "runtimeId": "narrator-main",
-      "output": "你缓缓拔出腰间的长剑，剑刃在微弱的光芒中闪烁...",
-      "toolCalls": [],
-      "durationMs": 2340
-    }
-  ],
-  "durationMs": 2500
-}
-```
-
-**响应 404:**
-
-```json
-{
-  "error": "Session not found: <id>",
-  "code": "session_not_found"
-}
-```
-
-**使用说明:**
-
-- Turn 执行是同步的，响应时间取决于 LLM 调用耗时
 - 每个活跃 Runtime 按 stage 依次执行，stage 内独立 runtime 并行（依赖 `needs` / `after` / `inputs` 排序）
-- `runtimeResults` 包含每个 Runtime 的输出，可能包含叙事文本、工具调用结果等
 - `session.turnCount`（由 `phase` / `completedPlayerTurns` 读时派生的 legacy 字段）表示主循环进度：setup 阶段的执行会保存 `turn_results`，但不会计入主循环轮数；`phase` 翻到 `playing` 后最低读出 `1`
-- 服务端会对每个 runtimeResult 运行 `processRuntimeResult` 提交管道（与 `/api/actions` 一致）：normalize → state.commit → 触发后续 SessionEvent
+- 服务端对每个 runtimeResult 运行 `processRuntimeResult` 提交管道：normalize → state.commit → 触发后续 SessionEvent
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `plugin-rpc` 的 `framework.submit-form` action 提交玩家响应
 
 ---
@@ -1531,7 +1473,6 @@ rpc:
   regenerate:
     handler: ./rpc/regenerate.js
     input: ./rpc/regenerate.schema.json # 可选
-    streaming: false # 默认 false
     description: 重新生成上一次叙事
   cancel:
     handler: ./rpc/cancel.js
@@ -1542,6 +1483,8 @@ rpc:
 > Action 名不能以 `framework-` 开头(保留给框架默认 handler)。所有 action 名必须是 kebab-case。
 
 > Handler 是 `default export` 函数,签名 `(payload, context) => Promise<unknown>`。`context` 至少包含 `{ sessionId, pluginId, action, store }`。模块在首次调用时按需 `import()`。
+
+> RPC 分发一律同步返回。耗时工作走后台 job,进度经 `plugin-data.changed` SSE 推给前端(见 plugin-rpc 的 `mode: background`),没有流式 RPC 协议。
 
 ---
 
@@ -1735,7 +1678,7 @@ rpc:
 }
 ```
 
-> **`triggerTypes` 中的 reserved 项**：`triggerTypes` 列出的是 **schema 接受**的全部取值。其中 `conditional` 与 `error-retry` 目前是 **reserved——生产中永不触发**（无条件表达式引擎；调度器恒置 `hasUpstreamFailure: false`），声明它们的 runtime 会被 `shouldTrigger` 静默跳过并打印一次性 warning。生产可用的仅 `auto` / `manual` / `scheduled` / `event` 四种。详见 [reference/plugins.md → trigger 类型](./plugins.md#trigger-类型)。
+> **`triggerTypes` 的取值范围**：schema 接受且生产可用的取值就是 `auto` / `manual` / `scheduled` / `event` 四种，`triggerTypes` 完整列出它们。详见 [reference/plugins.md → trigger 类型](./plugins.md#trigger-类型)。
 
 #### `GET /api/plugins`
 
@@ -2624,9 +2567,7 @@ id: evt-002
 
 **开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力回合是第一个计数的玩家回合（`completedPlayerTurns` 0 → 1）。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_runtime` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
 
-> 旧版示例曾使用 `payload.message`，但服务端从未读取该字段，已统一为 `content` / `command`。
->
-> **移除（2026-07-20 审计 M-07）**：`type: "trigger_event"` 已删除——其 payload 从未被服务端读取、UI 无调用方。插件侧发事件请用 builtin `emit-event` 工具；再发送会得到 400。
+> 玩家输入字段是 `payload.content`（`send_message`）/ `payload.command`（`execute_command`），没有别的别名。插件侧发事件请用 builtin `emit-event` 工具；未列出的 `type` 一律 400。
 
 **请求头（可选）:**
 
@@ -2696,7 +2637,7 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 
 | 字段         | 类型   | 必填 | 说明                                                  |
 | ------------ | ------ | ---- | ----------------------------------------------------- |
-| `concept`    | string | 是   | 世界概念描述（最多 4000 字符）。兼容旧字段名 `prompt` |
+| `concept`    | string | 是   | 世界概念描述（最多 4000 字符）。也接受同义键 `prompt` |
 | `locale`     | string | 否   | 语言区域，默认 `zh-CN`                                |
 | `model`      | string | 否   | 覆盖 LLM 模型                                         |
 | `saveTarget` | string | 否   | 保存目标，默认 `server-file`。可选值见下表            |
@@ -3070,7 +3011,7 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 | 适用场景 | 测试 / 一次性 demo     | 单机部署（默认）                           | 生产环境                                                 |
 | 配置     | `STORE_BACKEND=memory` | 默认（`STORE_BACKEND=sqlite`，可显式指定） | `STORE_BACKEND=pg` + `DATABASE_URL`                      |
 
-> **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。每次 `/api/actions` / `/api/sessions/:id/turn` / `/api/sessions/:id/resume` 都会在专用 PG 连接上拿到 `pg_advisory_lock(hash(sessionId))`，确保同一 session 在任意时刻只有一个 Node 进程执行 turn。Memory / SQLite 后端使用进程内 `Map` 锁，足以覆盖单进程场景。
+> **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。每次 `/api/actions` / `/api/sessions/:id/resume` 都会在专用 PG 连接上拿到 `pg_advisory_lock(hash(sessionId))`，确保同一 session 在任意时刻只有一个 Node 进程执行 turn。Memory / SQLite 后端使用进程内 `Map` 锁，足以覆盖单进程场景。
 
 ### 关键环境变量
 

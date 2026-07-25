@@ -1,6 +1,6 @@
 # Prompt 结构参考
 
-Covel 当前使用单一路径组装 runtime context：`buildContext()` / `buildContextAsync()` 都委托给 `packages/context/src/prompt-assembler.ts` 的 segment-based assembler。早期的版本切换环境变量、版本选择 frontmatter、prompt cache 开关和 parity 迁移路径已移除。
+Covel 用单一路径组装 runtime context：`buildContext()` / `buildContextAsync()` 都委托给 `packages/context/src/prompt-assembler.ts` 的 segment-based assembler。没有版本切换开关，也没有第二条组装路径。
 
 ## 1. 构建入口
 

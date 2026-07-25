@@ -105,7 +105,6 @@ export interface RpcRegistryEntry {
   readonly action: string;
   readonly pluginId?: string;
   readonly trustLevel: RpcTrustLevel;
-  readonly streaming: boolean;
   readonly description?: string;
   /** For plugin-declared actions: relative path on disk to the handler module. */
   readonly handlerPath?: string;
@@ -132,7 +131,6 @@ export interface PluginRpcRegistry {
     handler: RpcHandler,
     options: {
       readonly description?: string;
-      readonly streaming?: boolean;
       readonly trustLevel?: RpcTrustLevel;
     },
     pluginTrust: RpcTrustLevel,
@@ -141,7 +139,7 @@ export interface PluginRpcRegistry {
   registerFrameworkDefault(
     action: string,
     handler: RpcHandler,
-    options?: { description?: string; streaming?: boolean },
+    options?: { description?: string },
   ): void;
   /** Look up a plugin action. Returns undefined when missing. */
   getPluginAction(
@@ -170,7 +168,6 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
         action,
         pluginId,
         trustLevel: resolveActionTrust(pluginId, action, decl, pluginTrust),
-        streaming: decl.streaming ?? false,
         description: decl.description,
         handlerPath: decl.handler,
       });
@@ -187,7 +184,6 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
         action,
         pluginId,
         trustLevel: resolveActionTrust(pluginId, action, options, pluginTrust),
-        streaming: options.streaming ?? false,
         description: options.description,
         handler,
       });
@@ -197,7 +193,6 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
       frameworkEntries.set(action, {
         action,
         trustLevel: "builtin",
-        streaming: options?.streaming ?? false,
         description: options?.description,
         handler,
       });

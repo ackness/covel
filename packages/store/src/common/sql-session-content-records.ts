@@ -150,7 +150,9 @@ export function createSqlSessionContentRecords(
     ): Promise<MessageRecord[]> {
       const rows = await runner.select<MessageRow>(messages, {
         where: eq(messages.sessionId, sessionId),
-        orderBy: [asc(messages.createdAt)],
+        // `id` breaks same-millisecond ties so offset pagination cannot swap
+        // rows between pages (media GC pages through this).
+        orderBy: [asc(messages.createdAt), asc(messages.id)],
         limit: pagination?.limit,
         offset: pagination?.offset,
       });

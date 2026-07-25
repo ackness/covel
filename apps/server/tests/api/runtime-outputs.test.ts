@@ -166,12 +166,9 @@ describe("runtime-outputs API", () => {
   });
 
   describe("GET /sessions/:id/runtime-outputs/:outputId/full-prompt", () => {
-    it("rebuilds messages from turn_messages plus delta", async () => {
+    it("rebuilds the message history from turn_messages", async () => {
       const ro = makeRuntimeOutput({
-        metaData: {
-          turn: 0,
-          rawPromptDelta: [{ role: "user", content: "go north" }],
-        },
+        metaData: { turn: 0 },
       });
       await store.saveRuntimeOutput(ro);
       await store.appendTurnMessage({
@@ -192,10 +189,11 @@ describe("runtime-outputs API", () => {
       const body = (await res.json()) as {
         messages: Array<{ role: string; content: string }>;
       };
-      expect(body.messages).toHaveLength(2);
+      // History only. The endpoint never had a second source: the delta it
+      // used to concatenate was read from a metaData field no producer wrote.
+      expect(body.messages).toHaveLength(1);
       expect(body.messages[0]!.role).toBe("system");
-      expect(body.messages[1]!.role).toBe("user");
-      expect(body.messages[1]!.content).toBe("go north");
+      expect(body.messages[0]!.content).toBe("you are a narrator");
     });
   });
 

@@ -4,19 +4,12 @@ description:
   zh: 开局引导你填写主角信息，并把主角加入故事。
   en: Guides you through creating your hero at the start and brings them into the story.
 pluginType: core-plugin
-priority: 50
 outputKind: system
 model: plugin
 timeoutMs: 180000
 guard: ./guard.js
 trigger:
   type: auto
-upstreamRequired:
-  # Pre-Game band: schema-gen (priority 40) populates plugin_data.schema,
-  # which SessionContextSnapshot surfaces as `{{ world.schema }}`. Without
-  # it the form would either be skipped or fall back to defaults (audit P0-2).
-  - pregame
-  - world-init/schema-gen
 input:
   inject:
     # Pre-Game band: narrator is NOT scheduled in turn 0, so we inject the

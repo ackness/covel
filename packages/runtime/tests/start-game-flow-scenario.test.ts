@@ -30,7 +30,16 @@ function fnManifest(
     pluginId: name.split("/")[0]!,
     pluginType: "core-plugin",
     description: name,
-    priority,
+    stage:
+      priority <= 99
+        ? "setup"
+        : priority <= 499
+          ? "pre-turn"
+          : priority === 500
+            ? "narrative"
+            : priority <= 999
+              ? "post-turn"
+              : "audit",
     runtimeType: "function",
     outputKind: "plugin",
     handler: "./handler.js",
@@ -43,7 +52,7 @@ const manifests = [
   fnManifest("pregame", 10),
   fnManifest("world-init/schema-gen", 85),
   fnManifest("char-creator/player-init", 90, {
-    upstreamRequired: ["pregame", "world-init/schema-gen"],
+    needs: ["pregame", "world-init/schema-gen"],
   }),
   fnManifest("narrator", 500, { outputKind: "story" }),
 ] as const;

@@ -17,7 +17,7 @@ describe("localized manifest / canonical manifest consistency", () => {
   const CANONICAL = `---
 name: demo
 description: 中文描述
-priority: 500
+stage: narrative
 capabilities:
   - narrative
 tools:
@@ -31,7 +31,7 @@ tools:
   const LOCALIZED = `---
 name: demo
 description: English description
-priority: 100
+stage: pre-turn
 capabilities:
   - narrative
   - image-generation
@@ -65,7 +65,7 @@ English prompt body.
 
     const loaded = await loadRuntime(discovery, "demo", "en-US");
 
-    expect(loaded.manifest.priority).toBe(500);
+    expect(loaded.manifest.stage).toBe("narrative");
     expect(loaded.manifest.capabilities).toEqual(["narrative"]);
     expect(loaded.manifest.tools?.builtin).toEqual(["plugin-data-set"]);
     // Prose and prompt body still come from the translation.
@@ -73,6 +73,67 @@ English prompt body.
     expect(loaded.promptTemplate).toContain("English prompt body.");
     // The drift is reported rather than swallowed.
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("PLUGIN.en.md"));
+    warn.mockRestore();
+  });
+});
+
+describe("reconcileLocalizedManifest omitted fields", () => {
+  it("inherits omitted structural fields silently instead of reporting drift", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // A translation that only carries prose is the intended shape: omitting a
+    // structural field means "inherit it", not "fork it". Reporting that as
+    // drift is what forced every locale file to mirror the whole manifest —
+    // and mirrored manifests are exactly what goes stale.
+    const canonical = {
+      name: "demo",
+      stage: "post-turn",
+      needs: ["pregame"],
+      tools: { builtin: ["plugin-data-set"] },
+      description: "中文描述",
+    } as unknown as import("@covel/shared").RuntimeManifest;
+    const localized = {
+      name: "demo",
+      description: "English description",
+    } as unknown as import("@covel/shared").RuntimeManifest;
+
+    const merged = reconcileLocalizedManifest(
+      canonical,
+      localized,
+      "PLUGIN.en.md",
+    ) as unknown as {
+      stage: string;
+      needs: string[];
+      tools: { builtin: string[] };
+      description: string;
+    };
+
+    expect(merged.stage).toBe("post-turn");
+    expect(merged.needs).toEqual(["pregame"]);
+    expect(merged.tools.builtin).toEqual(["plugin-data-set"]);
+    expect(merged.description).toBe("English description");
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("still reports a field the translation declares with a different value", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const canonical = {
+      name: "demo",
+      stage: "post-turn",
+    } as unknown as import("@covel/shared").RuntimeManifest;
+    const localized = {
+      name: "demo",
+      stage: "narrative",
+    } as unknown as import("@covel/shared").RuntimeManifest;
+
+    const merged = reconcileLocalizedManifest(
+      canonical,
+      localized,
+      "PLUGIN.en.md",
+    ) as unknown as { stage: string };
+
+    expect(merged.stage).toBe("post-turn");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("stage"));
     warn.mockRestore();
   });
 });

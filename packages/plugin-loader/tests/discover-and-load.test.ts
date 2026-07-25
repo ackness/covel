@@ -12,7 +12,7 @@ import {
 const MINIMAL_FRONTMATTER = `---
 name: test-plugin
 description: A test plugin
-priority: 500
+stage: narrative
 ---
 
 You are a test agent.
@@ -22,7 +22,7 @@ function makeFrontmatter(overrides: Record<string, unknown>): string {
   const base = {
     name: "test-plugin",
     description: "A test plugin",
-    priority: 500,
+    stage: "narrative",
   };
   const merged = { ...base, ...overrides };
   const yaml = Object.entries(merged)

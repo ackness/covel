@@ -127,7 +127,9 @@ export function createSqlSessionJournalRecords(
     ): Promise<TraceEventRecord[]> {
       const rows = await runner.select<TraceEventRow>(traceEvents, {
         where: eq(traceEvents.sessionId, sessionId),
-        orderBy: [asc(traceEvents.createdAt)],
+        // `id` breaks same-millisecond ties so offset pagination cannot swap
+        // rows between pages (media GC pages through this).
+        orderBy: [asc(traceEvents.createdAt), asc(traceEvents.id)],
         limit: pagination?.limit,
         offset: pagination?.offset,
       });

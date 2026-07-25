@@ -67,7 +67,7 @@ function createTestApp(
     c.set("store", store);
     c.set("pluginRegistry", registry);
     c.set("rpcApprovalGate", rpcApprovalGate);
-    c.set("activatePluginLocalTools", async () => {});
+    c.set("activatePluginServerCode", async () => {});
     await next();
   });
   app.route("/api/sessions", sessionRoutes);

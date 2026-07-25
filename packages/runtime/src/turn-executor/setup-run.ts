@@ -36,7 +36,7 @@ interface SetupResultClass {
 /** Classify a setup runtime's result into ledger + completion signals. */
 export function classifySetupResult(result: RuntimeResult): SetupResultClass {
   const output = result.output as Record<string, unknown> | undefined;
-  // Framework gate skip (upstreamRequired / dependency-cycle / setup-incomplete)
+  // Framework gate skip (needs / dependency-cycle / setup-incomplete)
   // short-circuits before the guard/handler → no attempt is spent.
   if (result.status === "skipped" && output?.skipped === true) {
     return { ran: false, doneSignal: false, ledgerState: "skipped" };

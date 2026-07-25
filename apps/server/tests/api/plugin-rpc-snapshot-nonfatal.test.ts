@@ -26,7 +26,7 @@ function manifest(): RuntimeManifest {
     pluginId: PLUGIN_ID,
     description: "snapshot non-fatal fixture",
     runtimeType: "function",
-    priority: 500,
+    stage: "narrative",
     trigger: { type: "manual" },
   };
 }

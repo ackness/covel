@@ -8,7 +8,11 @@ import {
 } from "@covel/shared";
 
 import type { ModelProviderAdapter } from "./adapter.js";
-import type { ProviderConfig, UsageSummary } from "../types.js";
+import type {
+  ModelRequestContext,
+  ProviderConfig,
+  UsageSummary,
+} from "../types.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
 import {
   createMetadataSanitizer,
@@ -22,9 +26,15 @@ import {
   createStructuredOutputError,
   createUnsupportedModeError,
   readAnthropicText,
+  readAnthropicToolCalls,
   toAnthropicMessages,
+  toAnthropicTools,
 } from "./http.js";
-
+/**
+ * Floor used only when the resolved model advertises no output budget.
+ * Anthropic requires `max_tokens`, so something must be sent — but a fixed
+ * 1024 silently truncates long narration on models capable of far more.
+ */
 const ANTHROPIC_DEFAULT_MAX_TOKENS = 1024;
 const ANTHROPIC_VERSION = "2023-06-01";
 
@@ -47,6 +57,7 @@ const ANTHROPIC_PROTECTED_KEYS = new Set([
   "stream",
   "max_tokens",
   "system",
+  "tools",
   "parameterOverrides",
 ]);
 
@@ -185,6 +196,13 @@ function anthropicHeaders(apiKey?: string): Record<string, string> {
   return h;
 }
 
+/** Prefer the resolved model's advertised output budget over the floor. */
+function resolveMaxTokens(context: ModelRequestContext | undefined): number {
+  return (
+    context?.preset?.capability?.maxOutputTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS
+  );
+}
+
 function readAnthropicUsage(payload: Record<string, unknown>): UsageSummary {
   const usage = payload.usage as Record<string, unknown> | undefined;
   return {
@@ -214,6 +232,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       const { system, messages } = toAnthropicMessages(
         applyCapabilityFallback(params.messages, context),
       );
+      const anthropicTools = toAnthropicTools(params.tools);
       const systemField = buildAnthropicSystemField(system, config);
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
@@ -222,9 +241,10 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         "/messages",
         {
           model: params.model,
-          max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
+          max_tokens: resolveMaxTokens(context),
           ...(hasSystem(systemField) ? { system: systemField } : {}),
           messages,
+          ...(anthropicTools ? { tools: anthropicTools } : {}),
           ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
           ...extractAnthropicParameterOverrides(params.providerRequestMetadata),
         },
@@ -234,10 +254,12 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       const payload = await parseJson(response);
       assertSuccess(response, payload, "anthropic");
 
+      const toolCalls = readAnthropicToolCalls(payload);
       return {
         text: readAnthropicText(payload),
         finishReason: String(payload.stop_reason ?? "stop"),
         usage: readAnthropicUsage(payload),
+        ...(toolCalls ? { toolCalls } : {}),
       };
     },
 
@@ -257,7 +279,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         "/messages",
         {
           model: params.model,
-          max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
+          max_tokens: resolveMaxTokens(context),
           system: systemField,
           messages,
           ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
@@ -291,6 +313,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
       const { system, messages } = toAnthropicMessages(
         applyCapabilityFallback(params.messages, context),
       );
+      const anthropicTools = toAnthropicTools(params.tools);
       const systemField = buildAnthropicSystemField(system, config);
       const headers = anthropicHeaders(config.apiKey);
       const configNoKey = { ...config, apiKey: undefined };
@@ -299,10 +322,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
         "/messages",
         {
           model: params.model,
-          max_tokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
+          max_tokens: resolveMaxTokens(context),
           stream: true,
           ...(hasSystem(systemField) ? { system: systemField } : {}),
           messages,
+          ...(anthropicTools ? { tools: anthropicTools } : {}),
           ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
           ...extractAnthropicParameterOverrides(params.providerRequestMetadata),
         },
@@ -317,6 +341,14 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
 
       let usage: UsageSummary = { inputTokens: 0, outputTokens: 0 };
       let finishReason = "stop";
+      // Anthropic streams a tool call as `content_block_start` (id + name),
+      // then its arguments as `input_json_delta` fragments, closed by
+      // `content_block_stop`. Accumulate per block index and emit once whole —
+      // a partial argument string is not valid JSON for the tool loop.
+      const pendingToolBlocks = new Map<
+        number,
+        { id: string; name: string; json: string }
+      >();
 
       for await (const payload of iterateSsePayloads(response)) {
         const delta = payload.delta as Record<string, unknown> | undefined;
@@ -326,6 +358,41 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
           typeof delta.text === "string"
         ) {
           yield { type: "text-delta", textDelta: delta.text };
+        }
+
+        if (payload.type === "content_block_start") {
+          const block = payload.content_block as
+            Record<string, unknown> | undefined;
+          if (block?.type === "tool_use") {
+            pendingToolBlocks.set(Number(payload.index ?? 0), {
+              id: String(block.id ?? ""),
+              name: String(block.name ?? ""),
+              json: "",
+            });
+          }
+        }
+
+        if (
+          payload.type === "content_block_delta" &&
+          delta?.type === "input_json_delta"
+        ) {
+          const pending = pendingToolBlocks.get(Number(payload.index ?? 0));
+          if (pending) pending.json += String(delta.partial_json ?? "");
+        }
+
+        if (payload.type === "content_block_stop") {
+          const index = Number(payload.index ?? 0);
+          const pending = pendingToolBlocks.get(index);
+          if (pending) {
+            pendingToolBlocks.delete(index);
+            yield {
+              type: "tool-call",
+              id: pending.id,
+              name: pending.name,
+              // A tool invoked with no arguments streams no deltas at all.
+              arguments: pending.json || "{}",
+            };
+          }
         }
 
         if (payload.type === "message_start") {

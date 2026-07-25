@@ -33,7 +33,7 @@ function makeRegistryEntry(handler: FunctionHandler): PluginRegistryEntry {
     name: RUNTIME,
     pluginId: PLUGIN_ID,
     description: "test function runtime",
-    priority: 500,
+    stage: "narrative",
     runtimeType: "function",
     outputKind: "plugin",
     pluginType: "plugin",

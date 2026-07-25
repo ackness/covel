@@ -5,7 +5,7 @@ import {
   createStore,
   createStoreFromEnv,
   resolveBackendFromEnv,
-  summarizeStorageMigrations,
+  STORAGE_MIGRATIONS,
 } from "../src/index.js";
 import { BROWSER_IDB_SCHEMA_VERSION } from "../src/indexeddb/idb-schema.js";
 
@@ -203,7 +203,7 @@ describe("store factory env wiring", () => {
   });
 
   it("summarizes storage migration descriptors", () => {
-    const summary = summarizeStorageMigrations();
+    const summary = STORAGE_MIGRATIONS;
 
     expect(summary).toEqual(
       expect.arrayContaining([
