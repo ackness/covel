@@ -91,6 +91,10 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 > **`PLUGIN.<locale>.md` 只能翻译，不能改契约。** 语言变体的正文和自然语言字段（`description` / `displayName` / `label` / `authorsNote.content` / `postHistory.content` / `i18n` 等）取自变体文件；`stage`、`needs`、`priority`（legacy）、`trigger`、`capabilities`、`tags`、`tools`、`input.inject`、`dataSchemas`、超时参数等**结构字段一律取自 canonical `PLUGIN.md`**。loader 每次加载语言变体时都会比对，逐字段报告差异并用 canonical 值覆盖（`[plugin-loader] … locale variant diverges from PLUGIN.md on non-translatable field(s) …`）。
 >
 > 这条规则的原因很直接：如果变体能改结构字段，同一个 runtime 会因为玩家界面语言不同而被排进不同 stage、拿到不同的工具白名单。看到这条 warning 就把改动挪回 `PLUGIN.md`。
+>
+> **变体应当只写需要翻译的字段。** 未声明的字段直接继承 canonical，不算差异、不会 warn——所以不要把 `PLUGIN.md` 整份复制过来再改几句译文：复制出来的结构字段不会生效，却会在 canonical 演进后变成过期副本，而 warning 只在值**不同**时才出现，漏改的那份会一直静默。一个健康的 `PLUGIN.en.md` 通常只有 `name` + `description` + `postHistory.content` 之类的自然语言字段，加上翻译好的正文。
+>
+> 注意变体仍要独立通过 frontmatter schema 校验：嵌套结构（如 `dataSchemas.<ns>`）一旦出现就必须写完整。只想翻译其中一句 `description` 时，通常更划算的做法是整块省略、继承 canonical。
 
 ## 程序化发现能力
 
