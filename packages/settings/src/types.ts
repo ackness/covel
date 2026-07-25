@@ -73,6 +73,12 @@ export interface SettingsStoreApi {
   subscribeAll(handler: SettingsListener): () => void;
   register<T>(entry: SettingEntry<T>): void;
   ready(): Promise<void>;
+  /**
+   * Whether persisted state was read successfully at `init()`. When false the
+   * store serves defaults and refuses writes — saving a full snapshot from a
+   * map that was never populated would destroy the settings/keys on disk.
+   */
+  isHydrated(): boolean;
   /** Raw snapshot of the secrets map — used by code that ships API keys as headers. */
   snapshotSecrets(): Record<string, string>;
 }
