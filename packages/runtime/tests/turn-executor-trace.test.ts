@@ -156,7 +156,7 @@ describe("turn-executor direct-generate error trace pairing (Q1)", () => {
       pluginId: "trace-fallback",
       description: "Runtime exercising the malformed-args fallback error path.",
       stage: "post-turn",
-      tools: { local: ["./tools/fallback-tool.js"] },
+      tools: { plugin: ["fallback-tool"] },
     };
     const loaded: LoadedRuntime = {
       manifest,

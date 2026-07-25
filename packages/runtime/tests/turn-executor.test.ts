@@ -313,7 +313,7 @@ describe("TurnExecutor E2E", () => {
       pluginId: "retry-guide",
       description: "Guide runtime with retryable tool-call error",
       stage: "post-turn",
-      tools: { local: ["./tools/generate-guide.js"] },
+      tools: { plugin: ["generate-guide"] },
     };
     const loaded: LoadedRuntime = {
       manifest,
@@ -483,7 +483,7 @@ describe("TurnExecutor E2E", () => {
       pluginId: "test-guide",
       description: "Tool-only guide runtime",
       stage: "post-turn",
-      tools: { local: ["./tools/generate-guide.js"] },
+      tools: { plugin: ["generate-guide"] },
     };
     const guideLoaded: LoadedRuntime = {
       manifest: guideManifest,
@@ -562,7 +562,7 @@ describe("TurnExecutor E2E", () => {
       description: "System runtime that should not leak prose after tool calls",
       stage: "post-turn",
       outputKind: "system",
-      tools: { local: ["./tools/generate-guide.js"] },
+      tools: { plugin: ["generate-guide"] },
     };
     const loaded: LoadedRuntime = {
       manifest,
@@ -707,7 +707,7 @@ describe("TurnExecutor E2E", () => {
       pluginId: "test-guide-invalid",
       description: "Guide runtime with invalid tool args",
       stage: "post-turn",
-      tools: { local: ["./tools/generate-guide.js"] },
+      tools: { plugin: ["generate-guide"] },
     };
     const loaded: LoadedRuntime = {
       manifest,

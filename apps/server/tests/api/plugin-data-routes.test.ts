@@ -36,7 +36,7 @@ function makeManifest(pluginId: string): RuntimeManifest {
     description: `${pluginId} runtime`,
     trigger: { type: "manual" },
     stage: "narrative",
-    tools: { builtin: [], local: [] },
+    tools: { builtin: [], plugin: [] },
     permissions: [],
     outputKind: "plugin",
   };

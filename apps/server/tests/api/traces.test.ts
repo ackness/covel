@@ -96,7 +96,7 @@ function makeEntry(
       },
       tools: {
         builtin: ["plugin-data-get"],
-        local: ["./tools/save-image.js"],
+        plugin: ["save-image"],
       },
       ui: {
         right: ["./ui/panel.json"],

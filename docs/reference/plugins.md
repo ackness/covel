@@ -1024,11 +1024,11 @@ tools:
     - plugin-data-get
 ```
 
-> **弃用说明**：`tools.local` / `hooks` / `rpc` / `wires` 四个 frontmatter 注册字段自 v0.0.14 起弃用（启动时每插件 warn 一次），**计划于 v0.0.17 移除**。内置插件已全部迁移到 `entry`；社区插件请尽快迁移。
+> **移除说明**：`tools.local` 已移除——声明它会让整个 manifest 加载失败。`hooks` / `rpc` / `wires` 三个注册字段仍被接受但已弃用（启动时每插件 warn 一次），请迁移到 `entry`。
 
 ### wires（媒体厂商 wire 注册，已弃用 — 改用 entry 的 `covel.registerWires`）
 
-`wires` 指向一个**插件根目录相对**的 JS 模块（同旧 `tools.local` 的解析约定），default export `{ image?, speech?, transcription? }` 三组 wire 数组，或一个接受 `{ fetchWithRetry, validateBaseUrl }` 注入的工厂函数。框架加载后把每个 wire 以 `<pluginId>/<wireId>` 命名空间注册进 `@covel/ai-provider` 的对应 registry，llm.toml slot 通过 `providerRequestMetadata.imageWire / speechWire / transcriptionWire` 选中它。
+`wires` 指向一个**插件根目录相对**的 JS 模块，default export `{ image?, speech?, transcription? }` 三组 wire 数组，或一个接受 `{ fetchWithRetry, validateBaseUrl }` 注入的工厂函数。框架加载后把每个 wire 以 `<pluginId>/<wireId>` 命名空间注册进 `@covel/ai-provider` 的对应 registry，llm.toml slot 通过 `providerRequestMetadata.imageWire / speechWire / transcriptionWire` 选中它。
 
 ```yaml
 wires: lib/wires.js # 整个插件声明一次即可（多 runtime 声明同一路径会去重）

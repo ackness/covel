@@ -21,7 +21,7 @@ function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
     version: "0.0.1",
     runtimeType: "agent",
     trigger: { type: "auto" },
-    tools: { builtin: [], local: [] },
+    tools: { builtin: [], plugin: [] },
     stage: "narrative",
     ...overrides,
   };

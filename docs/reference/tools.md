@@ -70,9 +70,9 @@ Local 工具承接插件自己的业务封装，例如：
 
 ### 目录与访问边界
 
-- local 工具在插件 `entry` 模块（frontmatter `entry` 字段，基于插件根目录解析）里用 `covel.registerTool()` 注册；旧的 `tools.local` 路径声明已弃用（保留一个发布周期），语义不变
+- local 工具在插件 `entry` 模块（frontmatter `entry` 字段，基于插件根目录解析）里用 `covel.registerTool()` 注册。旧的 `tools.local` 路径声明已移除,声明即加载失败
 - bootstrap 会校验 entry 路径边界，并只加载位于插件目录内的文件
-- local 工具访问权限按 `pluginId` 隔离，且**只在注册成功时授予**：`tools.plugin` / 旧 `tools.local` 的 manifest 声明只控制 runtime 的 LLM 可见面，本身不授予执行权——声明了未注册（或注册被碰撞跳过）的名字时，该名字对声明插件解析失败，不会命中其他插件的同名实现
+- local 工具访问权限按 `pluginId` 隔离，且**只在注册成功时授予**：`tools.plugin` 的 manifest 声明只控制 runtime 的 LLM 可见面，本身不授予执行权——声明了未注册（或注册被碰撞跳过）的名字时，该名字对声明插件解析失败，不会命中其他插件的同名实现
 - 工具名全局唯一：与 builtin 或其他插件已注册的工具重名时，注册会被拒绝（warn + skip），不会静默覆盖已有实现，声明方也不会因此获得已有实现的调用权
 
 ### 不是 Tool：`FunctionHandlerContext` 上的框架能力
@@ -718,7 +718,7 @@ Bootstrap 时自动分类：
 
 - **discovered**：拖拽 zip 经 `POST /api/install/plugin` 安装（含反 shadow 校验：保留内置 ID、强制 package.json 与 PLUGIN.md 名一致）。
 - **approved**：首次 deferred entry 调用先审批固定的 `covel:plugin-server-code`，加载并验证真实 action 后再做 action 审批。server-code 与 `runtime:*` 只接受 session scope；普通 action 支持 once/session。hosted 环境还要求 operator token，因为 community ESM 在服务端进程内执行。
-- **import**：approve 后经 `activatePluginLocalTools` JIT 懒加载该插件的服务端代码——先执行 `entry` 工厂（`ensurePluginEntry`）、再加载旧式 `tools.local`（allow 决定时 + RPC 派发时各触发一次）。
+- **import**：approve 后经 `activatePluginServerCode` JIT 懒加载该插件的服务端代码——先执行 `entry` 工厂（`ensurePluginEntry`）、再加载旧式 `tools.local`（allow 决定时 + RPC 派发时各触发一次）。
 - **active**：运行期工具调用受真实审批规则门控（builtin allow / local allow / third-party deny）。
 - **revoked**：`DELETE /api/sessions/:id/approvals[?pluginId=]` 与 plugin disable 会同时清除 session grant、one-time grant 和 pending approval。community grant 不跨 create/fork/进程重启恢复。
 - **uninstalled**：`DELETE /api/plugins/:id` 删除 `~/.covel/plugins/<id>` 目录（拒绝内置 ID，返回 `restartRequired:true`）；前端 Settings → Packages 面板列出已安装第三方插件并提供卸载按钮。
@@ -726,7 +726,7 @@ Bootstrap 时自动分类：
 实际影响：
 
 - 第三方插件可以通过 `/api/sessions/:id/plugin-rpc` 触发 runtime 调用（HITL 审批 OK）。
-- 审批激活后，entry 与旧式 `tools.local` 会 JIT 注册；未授权 session 无法触发 community runtime/hook。
+- 审批激活后，entry 模块会 JIT 执行并完成注册；未授权 session 无法触发 community runtime/hook。
 - community entry factory 的 `toolkit.store` 不开放任何方法，因为该全局 factory 没有可绑定的 request session；RPC/function runtime 使用各自的 session/plugin-scoped store。
 - community agent guard 仅获得只读 store 与纯输入；`pluginData`、logger、gateway、utils、media、assetProgress 等副作用能力不注入，`recursiveCall` 会拒绝。写入放在 runtime handler 返回的 proposal/`pluginData[]` 中。
 - 进程内 ESM 本身不是沙箱。self 层级以本机用户为信任边界；hosted 层级把 community server-code 定义为 operator 级全局信任。真正的多租户第三方代码需要独立 worker/process 隔离。
@@ -739,7 +739,7 @@ Bootstrap 时自动分类：
 
 ### 新增插件的工具
 
-新插件只需在 `PLUGIN.md` frontmatter 中声明 `tools.local` 或 `tools.builtin`，bootstrap 会自动发现、注册并归类为对应来源，无需手动修改白名单。
+新插件在 `entry` 模块里 `covel.registerTool()` 注册，并在 runtime manifest 用 `tools.plugin` 声明 LLM 可见性；builtin 能力直接列进 `tools.builtin`。bootstrap 自动归类来源，无需手动修改白名单。
 
 推荐同时补齐三项测试：
 

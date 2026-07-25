@@ -346,7 +346,7 @@ function runtime 和框架内部镜像仍然可以直接使用 `store.*`。这�
 在写工具前，先做一次选择：
 
 1. 通用、重复、跨插件复用的操作，优先使用 `tools.builtin`
-2. 插件自己的 schema、RAG、批量写入、领域动作，放进插件自己的 `tools.local`
+2. 插件自己的 schema、RAG、批量写入、领域动作，在 `entry` 模块里注册并用 `tools.plugin` 声明
 3. local tool 文件保持在插件目录内，例如 `plugins/my-plugin/tools/*.js`
 
 当前实现里，local tool 可以读取注入的 `store`，持久化写入优先返回 `withPendingProposals(...)`；deterministic function handler 继续使用 `store` 完成内部批量写入。插件自己的公开契约依旧建议通过 `PLUGIN.md + tools/ + tests/` 保持完整。

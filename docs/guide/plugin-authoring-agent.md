@@ -148,7 +148,7 @@ tools:
     - create-notification
 ```
 
-> 旧的 `tools.local`（路径列表）frontmatter 写法已弃用（保留一个发布周期），迁移对照见 [高级指南的迁移附录](./plugin-authoring-advanced.md#附录旧注册字段迁移)。
+> 旧的 `tools.local`（路径列表）frontmatter 写法已移除（声明即加载失败），迁移对照见 [高级指南的迁移附录](./plugin-authoring-advanced.md#附录旧注册字段迁移)。
 
 **package.json** — 工厂注入让工具在运行时无需 import 任何框架包；`@covel/runtime` 只是 JSDoc 类型引用（devDependency）：
 

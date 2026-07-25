@@ -180,7 +180,7 @@ A: `--plugin guide --turns 2 --slot e2e_local`。其它 runtime 依然会运行�
 | `outputKind: story`                         | Runtime Timeline 的 output 列显示 `narrative(<字符数>c)`                    |
 | `outputKind: plugin`/`system`               | Runtime Timeline output 显示 `keys=[...]`                                   |
 | `maxSteps: N`                               | 工具循环耗尽时 failures.json 会看到 `exhausted the tool loop after N steps` |
-| `tools.builtin` / `tools.local`             | Tool Calls 表格里能观测实际调用次数和成功率                                 |
+| `tools.builtin` / `tools.plugin`            | Tool Calls 表格里能观测实际调用次数和成功率                                 |
 | `runtimeType: function`                     | Tool Calls 表为空（function runtime 不跑 LLM）                              |
 
 ## 扩展建议

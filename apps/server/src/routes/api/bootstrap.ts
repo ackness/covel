@@ -382,7 +382,7 @@ export async function bootstrapApi(
         // plugin's handler.js — before any gateway call the handler makes.
         // ponytail: a community *wire-only* plugin (wires consumed by other
         // plugins' slots without its own runtime ever loading) would need
-        // ensurePluginWires added to the activatePluginLocalTools call
+        // ensurePluginWires added to the activatePluginServerCode call
         // sites too; no such plugin exists yet.
         // The entry check is the fail-closed approval boundary. Keep it ahead
         // of every other community import, including wire registration and
@@ -407,7 +407,6 @@ export async function bootstrapApi(
     toolExecutor,
     prepareToolsForSession,
     clearSessionToolOverrides,
-    activatePluginLocalTools,
     pluginToolAccess,
   } = await setupPluginTools({
     store,
@@ -503,14 +502,13 @@ export async function bootstrapApi(
   });
   ensurePluginEntry = pluginEntries.ensurePluginEntry;
 
-  // Community activation seam: entry runs before legacy local tools so both
-  // registration styles are live once activation resolves.
+  // Community activation seam: running the plugin's `entry` module is what
+  // registers its tools, hooks, rpc actions and wires.
   const activatePluginServerCode = async (
     pluginId: string,
     sessionId?: string,
   ): Promise<void> => {
     await pluginEntries.ensurePluginEntry(pluginId, sessionId);
-    await activatePluginLocalTools(pluginId);
   };
 
   const runtimeEnv = readRuntimeEnv();
