@@ -65,7 +65,7 @@ export const exists = (p) =>
 
 /** Run `worker` over items with a bounded concurrency pool. */
 export async function pool(items, limit, worker) {
-  const results = new Array(items.length);
+  const results = Array.from({ length: items.length });
   let idx = 0;
   const run = async () => {
     while (idx < items.length) {
