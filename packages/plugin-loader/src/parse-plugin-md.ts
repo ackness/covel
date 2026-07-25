@@ -98,6 +98,9 @@ function deriveFixHint(error: unknown): string {
         "`priority` was removed — declare a named `stage` instead (e.g. `stage: post-turn`).",
       upstreamRequired:
         "`upstreamRequired` was removed — declare `needs` instead (same entries, turn-scoped by default).",
+      local:
+        "`tools.local` was removed — register the tool in the plugin's `entry` module " +
+        "(`covel.registerTool`) and list its NAME under `tools.plugin`.",
     };
     const replaced = keys.filter((k) => k in replacements);
     if (replaced.length > 0) {
