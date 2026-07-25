@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-07-25
+
 The cleanup release, following a full audit of the core framework. Nothing here adds capability; it removes surface that was declared but never honoured, and closes the security gaps that hid behind it.
 
 > **Breaking — six PLUGIN.md fields no longer parse.** A manifest declaring any of them fails to load, so check yours before upgrading. None of them did anything at runtime, so removing them changes no behaviour except that the declaration is now an error instead of a silent no-op.
