@@ -4,7 +4,18 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
-## [0.0.19] - 2026-07-25
+## [0.0.20] - 2026-07-25
+
+A follow-up to the cleanup release, from watching real sessions run. Three fixes, all found by reading traces rather than tests: a runtime could report success having done nothing, a hazard warning fired every turn regardless of the truth, and several runtimes were handed tools their own prompts told them never to call.
+
+### Fixed
+
+- **A bare `runtime-done` no longer satisfies `requireToolUse`.** A runtime whose whole declared job is to call a tool could finish as a success having called only the framework's loop terminator. Seen in production with `scene-prompts`: the model answered with prose, the gate nudged it once, and the model replied by calling `runtime-done` with the reason "完成 scene prompts 生成" — the actual work tool was never called. The turn reported success in 47.6s and the player got an empty quick-reply panel behind a green check. Two paths let it through: the gate counted any successful call, terminator included, and the runtime-done early exit breaks the loop _before_ the gate runs. Both now require a business tool call, and an unmet contract finalizes as `failed` with a diagnostic instead of an empty success.
+- **UI effects hazards are reported per slot, not per plugin.** Any manifest declaring a `ui` block was credited with writing `ui:*`, so every pair of UI-declaring runtimes in a DAG layer was flagged — nine warnings in a three-turn session, all false: a right-panel plugin cannot overwrite a message block. `EffectResource` now admits `ui:<slot>` and the derivation emits one key per declared slot. `ui:*` still wildcard-matches them, so an explicit declaration keeps its meaning, and two plugins that really do share a surface still hazard.
+
+### Changed
+
+- **Runtimes no longer receive tools their prompts forbid.** Five declarations were paid for twice — once in the tool schema on every LLM call, once in the prompt text spent forbidding them. `character-tracker` dropped `list-characters` (its roster is injected as `<existing-characters>`), both image `prompt-generator` runtimes dropped `plugin-data-list` (they inject the `prompts` namespace), and `world-init/schema-gen` dropped `plugin-data-get` / `plugin-data-list` (it writes during setup and never reads back). `get-character` and `list-npc-graph` stay: unlike the others they are the documented escape hatch for a truncated snapshot, and a live session confirmed `get-character` being used exactly that way. `extractor`'s guidance, which said "**无需**调用" in bold and then described when to call it eight lines later, is now one instruction.
 
 The cleanup release, following a full audit of the core framework. Nothing here adds capability; it removes surface that was declared but never honoured, and closes the security gaps that hid behind it.
 
