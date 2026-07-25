@@ -1,15 +1,19 @@
 name: CI
 
-# Runs the actual verification gate that release.yml skips (lint + tests +
-# build) on every PR and every push to main / release branches. Setup steps
-# mirror release.yml (pnpm/action-setup + actions/setup-node with pnpm
-# cache) so both workflows install identically.
+# The full verification gate (lint + tests + build). release.yml only type
+# checks, so this is the only place the suite runs. Setup steps mirror
+# release.yml (pnpm/action-setup + actions/setup-node with pnpm cache) so both
+# workflows install identically.
+#
+# Push is scoped to main deliberately. A `*-dev` branch with an open PR gets
+# two runs of the same commit otherwise — the PR ref and the branch ref hash
+# to different concurrency groups, so neither cancels the other. The PR run
+# covers dev branches; this push trigger is the post-merge guard on main.
 on:
   pull_request:
   push:
     branches:
       - main
-      - "*-dev"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -35,6 +39,19 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Turborepo's local cache. lint/test/build are content-addressed per
+      # package, so a run that only touches one package replays the rest from
+      # here instead of re-running them. restore-keys falls back to the most
+      # recent cache on this OS when the exact SHA has no entry.
+      - name: Cache turbo
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
 
       - name: Check peer dependency compatibility
         run: pnpm peers check

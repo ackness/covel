@@ -34,7 +34,10 @@
         "src/**",
         "tests/**",
         "vitest.config.ts",
-        "$TURBO_ROOT$/plugins/**"
+        "$TURBO_ROOT$/plugins/*/*.md",
+        "$TURBO_ROOT$/plugins/*/*.js",
+        "$TURBO_ROOT$/plugins/*/package.json",
+        "$TURBO_ROOT$/plugins/*/{hooks,lib,runtimes,schemas,server,tests,tools,ui}/**"
       ]
     },
     "lint": {
