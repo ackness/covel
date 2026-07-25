@@ -5,8 +5,21 @@ import type {
   WorldRecord,
 } from "../api.js";
 import * as api from "../api.js";
+import { isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
 import type { DataService, WorldPatch } from "./types.js";
+
+/**
+ * `null` means "no such record" — nothing else. An auth failure, a 500, or a
+ * dead connection must propagate so the caller can say so; mapping them to
+ * `null` told a hosted player with an expired owner token that their session
+ * did not exist. Matches LocalDataService, which only returns `null` for a
+ * genuine miss.
+ */
+function nullIfMissing(err: unknown): null {
+  if (isNotFound(err)) return null;
+  throw err;
+}
 
 export class RemoteDataService implements DataService {
   async listWorlds() {
@@ -15,8 +28,8 @@ export class RemoteDataService implements DataService {
   async getWorld(id: string) {
     try {
       return await api.getWorld(id);
-    } catch {
-      return null;
+    } catch (err) {
+      return nullIfMissing(err);
     }
   }
   async createWorld(name: string, description: string) {
@@ -35,8 +48,8 @@ export class RemoteDataService implements DataService {
   async getSession(sessionId: string) {
     try {
       return await api.getSession(sessionId);
-    } catch {
-      return null;
+    } catch (err) {
+      return nullIfMissing(err);
     }
   }
   async createSession(
@@ -86,8 +99,8 @@ export class RemoteDataService implements DataService {
     // T3: load from server API
     try {
       return await api.loadStateSnapshot(sessionId);
-    } catch {
-      return null;
+    } catch (err) {
+      return nullIfMissing(err);
     }
   }
 

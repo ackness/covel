@@ -22,6 +22,28 @@ function sessionTokenHeader(url: string): Record<string, string> {
   return sessionAuthHeaders(decodeURIComponent(id));
 }
 
+/**
+ * HTTP failure from `request()`, carrying the status so callers can tell
+ * "this record does not exist" (404) from "we could not ask" (401/500/…).
+ * Collapsing both into `null` made a hosted player with an expired owner token
+ * see "session not found".
+ */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly url: string,
+    readonly body: string,
+  ) {
+    super(`API ${status}: ${body}`);
+    this.name = "ApiError";
+  }
+}
+
+/** True when the failure means the record genuinely isn't there. */
+export function isNotFound(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 404;
+}
+
 /** Options for the internal `request` fetch wrapper. */
 interface RequestOptions extends RequestInit {
   /** Session id carried in a body, query, or non-standard route path. */
@@ -127,7 +149,7 @@ export async function request<T>(
       }
       const text = await res.text().catch(() => "");
       if (!silentErrors) emitHttpErrorToast(url, res.status, text);
-      throw new Error(`API ${res.status}: ${text}`);
+      throw new ApiError(res.status, url, text);
     }
 
     return res.json();

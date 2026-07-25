@@ -222,5 +222,15 @@ export async function pingPreset(presetId: string): Promise<PingResult> {
     },
     body: JSON.stringify({ presetId }),
   });
-  return res.json() as Promise<PingResult>;
+  // A 500 or an HTML error body used to yield `{ ok: undefined }` — the UI then
+  // showed neither success nor a reason. Produce an explicit failure instead.
+  const body: unknown = await res.json().catch(() => null);
+  if (!res.ok || !body || typeof body !== "object") {
+    const detail =
+      body && typeof body === "object" && "error" in body
+        ? String((body as { error: unknown }).error)
+        : `HTTP ${res.status}`;
+    return { ok: false, latencyMs: 0, error: detail };
+  }
+  return body as PingResult;
 }
