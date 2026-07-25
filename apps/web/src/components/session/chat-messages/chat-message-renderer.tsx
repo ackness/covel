@@ -128,7 +128,10 @@ export function ChatMessageRenderer({
         {isUser
           ? t("session.player", "Player")
           : t("session.assistant", "Assistant")}
-        {msg.turnId && (
+        {/* Author-facing detail, same gate as the source badge above: a raw
+            turn UUID means nothing to a player and eats a full line on a
+            phone. */}
+        {msg.turnId && viewMode !== "parsed" && (
           <span className="ml-2 font-mono text-[10px]">
             {isUser ? `· ${msg.turnId}` : msg.turnId}
           </span>

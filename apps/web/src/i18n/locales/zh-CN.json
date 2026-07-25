@@ -995,7 +995,8 @@
     "inputPlaceholder": "输入你的回应…",
     "inputSendHint": "Enter 发送 · Shift+Enter 换行 · Esc 取消",
     "freeInputLabel": "✎ 自己输入…",
-    "thinkingLabel": "叙事生成中…"
+    "thinkingLabel": "叙事生成中…",
+    "advanceLabel": "点击继续对话"
   },
   "common": {
     "preview": "预览",

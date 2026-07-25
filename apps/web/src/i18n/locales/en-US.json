@@ -995,7 +995,8 @@
     "inputPlaceholder": "Type your response…",
     "inputSendHint": "Enter to send · Shift+Enter for a new line · Esc to cancel",
     "freeInputLabel": "✎ Write your own…",
-    "thinkingLabel": "Weaving the scene…"
+    "thinkingLabel": "Weaving the scene…",
+    "advanceLabel": "Continue the dialogue"
   },
   "common": {
     "preview": "Preview",
