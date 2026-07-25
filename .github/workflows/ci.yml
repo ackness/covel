@@ -65,7 +65,12 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Only the three apps have a build script, so this covers the bundling
+      # layer (vite/rolldown config, manualChunks, circular imports) that
+      # `tsc --noEmit` in Lint cannot see. Kept off PRs for faster feedback —
+      # push to main still gates it, well before a release tag would.
       - name: Build
+        if: github.event_name == 'push'
         run: pnpm build
 
       - name: Check plugin/world i18n coverage + READMEs
