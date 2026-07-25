@@ -141,14 +141,23 @@ describe.skipIf(!pgAvailable)("pg-session-lock", () => {
     const sessionId = `sess-cross-${Date.now()}`;
     const log: string[] = [];
 
+    // B must not start until A demonstrably holds the lock, or the two pools
+    // race to connect and whichever wins takes it first — the mutual exclusion
+    // still holds, but the winner is arbitrary and the assertion below is not
+    // about the winner. Gate on A's callback rather than a sleep, so the
+    // head start is a fact instead of a guess about connect latency.
+    let aHoldsLock!: () => void;
+    const aAcquired = new Promise<void>((resolve) => {
+      aHoldsLock = resolve;
+    });
+
     const a = lockA.withLock(sessionId, async () => {
       log.push("A-start");
+      aHoldsLock();
       await new Promise((r) => setTimeout(r, 100));
       log.push("A-end");
     });
-    // Give A a tiny head start so the ordering under test is
-    // deterministic even if the two pools race to connect.
-    await new Promise((r) => setTimeout(r, 10));
+    await aAcquired;
     const b = lockB.withLock(sessionId, async () => {
       log.push("B-start");
       log.push("B-end");
