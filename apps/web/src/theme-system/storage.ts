@@ -4,6 +4,18 @@ import type { StoredCustomTheme } from "./types.js";
 export const CUSTOM_THEMES_KEY = "ui.customThemes";
 export const THEME_MANAGER_WIDGET_KEY = "ui.themeManager";
 
+/**
+ * `ui.customThemes` is not a registered setting, so `SettingsStore.import`
+ * skips schema validation for it — a shared "settings backup" JSON can carry
+ * arbitrary cssText straight past `parseImportedThemeFile`. Strip `@import` on
+ * the way *in*, so one chokepoint covers file import, settings import, hand
+ * edits and legacy rows alike. (Full scope enforcement runs at import time;
+ * applying it here too would silently delete themes players already have.)
+ */
+function stripAtImports(cssText: string): string {
+  return cssText.replace(/@import\b[^;]*;?/gi, "");
+}
+
 function normalizeStoredTheme(value: unknown): StoredCustomTheme | null {
   if (!value || typeof value !== "object") return null;
   const raw = value as Partial<StoredCustomTheme>;
@@ -15,7 +27,7 @@ function normalizeStoredTheme(value: unknown): StoredCustomTheme | null {
   return {
     id: raw.id,
     label: raw.label,
-    cssText: raw.cssText,
+    cssText: stripAtImports(raw.cssText),
     schemes:
       Array.isArray(raw.schemes) && raw.schemes.length > 0
         ? raw.schemes.filter(

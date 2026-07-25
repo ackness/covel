@@ -79,6 +79,134 @@ function detectSchemes(
   return darkIds.includes(themeId) ? ["light", "dark"] : ["light"];
 }
 
+const AT_IMPORT_PATTERN = /@import\b/i;
+
+/**
+ * At-rules whose inner blocks are keyframe/descriptor lists, not selectors.
+ * `from`, `to`, `0%` and `src:` are not elements and must not be scope-checked.
+ */
+const NON_SELECTOR_AT_RULES = new Set([
+  "keyframes",
+  "font-face",
+  "counter-style",
+  "font-feature-values",
+  "property",
+  "page",
+]);
+
+/**
+ * Neutralise comments entirely, and braces *inside string literals*, preserving
+ * length so offsets still line up.
+ *
+ * Only the braces: a string's contents must survive, because the scope token
+ * itself lives inside one (`[data-theme="paper"]`). But an unbalanced brace in
+ * a declaration (`content: "{"`) would desync the depth tracking and make every
+ * later rule look nested — and therefore skipped.
+ */
+function blankNonCode(cssText: string): string {
+  const out = cssText.split("");
+  for (let i = 0; i < cssText.length; i++) {
+    if (cssText[i] === "/" && cssText[i + 1] === "*") {
+      const end = cssText.indexOf("*/", i + 2);
+      const stop = end === -1 ? cssText.length : end + 2;
+      for (let j = i; j < stop; j++) if (out[j] !== "\n") out[j] = " ";
+      i = stop - 1;
+      continue;
+    }
+    if (cssText[i] === '"' || cssText[i] === "'") {
+      const quote = cssText[i];
+      let j = i + 1;
+      while (j < cssText.length && cssText[j] !== quote) {
+        if (cssText[j] === "\\") j++;
+        else if (cssText[j] === "{" || cssText[j] === "}") out[j] = " ";
+        j++;
+      }
+      i = j;
+      continue;
+    }
+  }
+  return out.join("");
+}
+
+/** Drop functional-pseudo arguments so `:not([data-theme="x"])` can't satisfy the scope check. */
+function stripFunctionalArgs(selector: string): string {
+  let out = selector;
+  let previous: string;
+  do {
+    previous = out;
+    out = out.replace(/\([^()]*\)/g, "()");
+  } while (out !== previous);
+  return out;
+}
+
+/**
+ * Reject rules that escape the theme's own `data-theme` scope.
+ *
+ * NOT a sandbox, and deliberately not sold as one: a theme the player selected
+ * can restyle the whole app through a perfectly scoped
+ * `html[data-theme="x"] * { … }`, so no selector rule can prevent that. The
+ * actual containment is that only the *selected* custom theme is mounted
+ * (`registry.ts`). This check exists to catch honest authoring mistakes early
+ * with a clear message, which makes a false rejection worse than a miss — hence
+ * strings/comments are blanked and keyframe blocks are skipped rather than
+ * guessed at.
+ */
+function assertThemeCssIsScoped(cssText: string, themeId: string): void {
+  const css = blankNonCode(cssText);
+  // After blanking, so an `@import` mentioned in a comment doesn't trip it.
+  if (AT_IMPORT_PATTERN.test(css)) {
+    throw new Error("Theme CSS must not use @import.");
+  }
+
+  const scopePattern = new RegExp(
+    `\\[\\s*data-theme\\s*=\\s*["']${themeId}["']\\s*\\]`,
+  );
+  // Stack of enclosing blocks: an at-rule name, or "" for a style rule.
+  const stack: string[] = [];
+  let selectorStart = 0;
+
+  for (let i = 0; i < css.length; i++) {
+    const ch = css[i];
+    if (ch === "}") {
+      stack.pop();
+      selectorStart = i + 1;
+      continue;
+    }
+    if (ch === ";" && stack.length === 0) {
+      selectorStart = i + 1;
+      continue;
+    }
+    if (ch !== "{") continue;
+
+    const prelude = css.slice(selectorStart, i).trim();
+    selectorStart = i + 1;
+
+    if (prelude.startsWith("@")) {
+      stack.push(prelude.slice(1).split(/[\s(]/, 1)[0]?.toLowerCase() ?? "");
+      continue;
+    }
+
+    // Already inside a style rule → nested, so inherently scoped. Inside a
+    // keyframe/descriptor at-rule → not a selector at all.
+    const enclosing = stack[stack.length - 1];
+    const insideStyleRule = stack.includes("");
+    const insideNonSelectorAtRule =
+      enclosing !== undefined && NON_SELECTOR_AT_RULES.has(enclosing);
+    stack.push("");
+    if (insideStyleRule || insideNonSelectorAtRule || !prelude) continue;
+
+    for (const selector of prelude.split(",")) {
+      const trimmed = selector.trim();
+      if (!trimmed) continue;
+      if (!scopePattern.test(stripFunctionalArgs(trimmed))) {
+        throw new Error(
+          `Every theme rule must be scoped to [data-theme="${themeId}"] — found "${trimmed.slice(0, 60)}".`,
+        );
+      }
+    }
+  }
+}
+
 function assertThemeCssMatchesId(cssText: string, themeId: string): void {
   const { ids } = analyzeThemeSelectors(cssText);
   if (ids.length === 0) {
@@ -106,6 +234,7 @@ function parseCssTheme(text: string, fileName: string): ImportedThemePayload {
   }
 
   const id = themeIdSchema.parse(ids[0]);
+  assertThemeCssIsScoped(text, id);
   const schemes = detectSchemes(text, id);
   const theme: ThemeDefinition = {
     id,
@@ -121,6 +250,7 @@ function parseCssTheme(text: string, fileName: string): ImportedThemePayload {
 function parseJsonTheme(text: string, fileName: string): ImportedThemePayload {
   const parsed = jsonThemeSchema.parse(JSON.parse(text));
   assertThemeCssMatchesId(parsed.cssText, parsed.id);
+  assertThemeCssIsScoped(parsed.cssText, parsed.id);
   const theme: ThemeDefinition = {
     id: parsed.id,
     label: parsed.label,
