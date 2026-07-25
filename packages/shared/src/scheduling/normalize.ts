@@ -151,7 +151,6 @@ export function normalizeRuntimeManifest(
     pluginId: manifest.pluginId,
     declaredTrigger,
     backgroundWhenDetached: manifest.execution === "background",
-    suspensionSafe: manifest.suspensionSafe ?? false,
     resultFormat: manifest.resultFormat ?? "legacy",
     ...(stage !== undefined ? { stage } : {}),
     deps: {

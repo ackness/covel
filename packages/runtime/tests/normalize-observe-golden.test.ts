@@ -230,7 +230,6 @@ describe("normalize golden (bundled plugin set)", () => {
     for (const manifest of manifests) {
       const spec = normalizeRuntimeManifest(manifest);
       expect(spec.resultFormat).toBe(manifest.resultFormat ?? "legacy");
-      expect(spec.suspensionSafe).toBe(false);
       expect(spec.bindings).toEqual(manifest.inputs ?? {});
       expect(spec.exportBindings).toEqual({});
       expect(spec.httpPermissions).toEqual([]);

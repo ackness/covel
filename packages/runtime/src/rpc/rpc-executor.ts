@@ -5,9 +5,8 @@
  * registry, loads the handler module if needed, and runs it with the
  * supplied context, and returns the handler's result synchronously.
  *
- * There is no streaming dispatch: long-running work goes through a background
- * job whose progress reaches the UI as `plugin-data.changed` SSE events. The
- * `streaming` flag an action may declare is inert — see its schema doc.
+ * Dispatch is always synchronous. Long-running work goes through a background
+ * job whose progress reaches the UI as `plugin-data.changed` SSE events.
  *
  * Resolution order for action-level dispatch:
  *   1. Plugin-declared action (`registry.getPluginAction`)

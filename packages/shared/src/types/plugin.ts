@@ -631,16 +631,6 @@ export interface RuntimeManifest {
    */
   readonly resultFormat?: import("./runtime-scheduling.js").RuntimeResultFormat;
   /**
-   * Reserved, NOT enforced — declaring it changes nothing today.
-   *
-   * It was meant to mark a function handler replay-safe for a resume that
-   * re-invokes it, but no such replay exists: `resumeSuspendedRuntime`
-   * re-enters the shared agent tool loop rather than calling the handler
-   * again, and `ctx.http` has no approval-suspension path to replay from.
-   * Kept accepted so existing manifests keep loading.
-   */
-  readonly suspensionSafe?: boolean;
-  /**
    * Explicit read/write-set override for parallel hazard detection.
    * Defaults are derived from declared builtin tools + proposal types.
    * Declared but not yet consumed.

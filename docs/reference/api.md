@@ -1542,7 +1542,7 @@ rpc:
 
 > Handler 是 `default export` 函数,签名 `(payload, context) => Promise<unknown>`。`context` 至少包含 `{ sessionId, pluginId, action, store }`。模块在首次调用时按需 `import()`。
 
-> **`streaming` 字段是保留字段,当前不生效。** RPC 分发一律同步返回;耗时工作走后台 job,进度经 `plugin-data.changed` SSE 推给前端(见 plugin-rpc 的 `mode: background`),没有任何流式 RPC 协议会读它。schema 仍接受该字段,只为让已声明过的 manifest 继续加载。
+> RPC 分发一律同步返回。耗时工作走后台 job,进度经 `plugin-data.changed` SSE 推给前端(见 plugin-rpc 的 `mode: background`),没有流式 RPC 协议。
 
 ---
 

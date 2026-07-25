@@ -77,7 +77,6 @@ const newShapeFields = {
     },
   },
   resultFormat: "envelope-v1",
-  suspensionSafe: true,
   effects: {
     reads: ["narrative:*", "plugin-data:self:codex"],
     writes: ["state:*", "event:codex.updated"],

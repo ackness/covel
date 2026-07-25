@@ -1014,7 +1014,6 @@ describe("parsePluginMd", () => {
           "rpc:",
           "  regenerate:",
           "    handler: ./rpc/regenerate.js",
-          "    streaming: true",
           "    description: Re-run last narrator output",
           "  cancel:",
           "    handler: ./rpc/cancel.js",
@@ -1025,7 +1024,6 @@ describe("parsePluginMd", () => {
       const result = parsePluginMd(content, "plugins/test-rpc-full/PLUGIN.md");
       expect(result.manifest.rpc?.regenerate).toEqual({
         handler: "./rpc/regenerate.js",
-        streaming: true,
         description: "Re-run last narrator output",
       });
       expect(result.manifest.rpc?.cancel).toEqual({

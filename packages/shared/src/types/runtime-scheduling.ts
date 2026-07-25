@@ -216,8 +216,6 @@ export interface NormalizedRuntimeSpec {
   readonly declaredTrigger: TriggerSpec;
   /** Normalized from the legacy `execution: background` manifest field. */
   readonly backgroundWhenDetached: boolean;
-  /** Handler may be replayed from a frozen activation boundary on approval-resume. */
-  readonly suspensionSafe: boolean;
   /** Guides result parsing before normalization. Defaults to `legacy`. */
   readonly resultFormat: RuntimeResultFormat;
   /** Absent for event/manual runtimes and for legacy UI-only (no-priority) declarations. */

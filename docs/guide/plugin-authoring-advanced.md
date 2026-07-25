@@ -408,11 +408,7 @@ export default async function handler(ctx) {
 
 envelope-v1 下 value 是**强制校验**的:`success.value` 先过 JSON wire 边界检查(`undefined` / 函数 / 循环 / 非有限数 → 归一为 `failed`),若 manifest 还声明了 `output.schema` 则再按该 schema 校验,不匹配整个结果落成 `failed: output-schema-invalid`。非 success 分支(`skipped` / `failed`)只能带观测 effects(`jobStatus` / `diagnostics`)——任何领域写入会被 finalizer 剥离并记一条诊断。`legacy` 格式则只做观测式 warn,不强制。目前官方插件仍全部停在默认 `legacy`;新插件想要强类型 I/O 契约时再显式切 `envelope-v1`。
 
-### `suspensionSafe` 与 `permissions.http`
-
-**`suspensionSafe: boolean`(function runtime)**:**保留字段,当前不生效——声明与否行为完全一致,不要依赖它做安全假设。**
-
-它原本要标记"本 handler 可以从冻结的激活边界重放",但内核里没有这种重放:函数 runtime 挂起后,`resumeSuspendedRuntime` 重入的是共享的 agent 工具循环(把 resume 数据当一条 user 消息喂进去),handler 不会被再次调用;`ctx.http` 也没有审批挂起路径可供重放。字段仍被 schema 接受,只是为了让已经声明过它的 manifest 继续能加载。若将来真的落地"审批门控的 HTTP ask",届时会连同实际的闸门一起恢复语义。
+### `permissions.http`
 
 **`permissions.http`(声明式网络上界)**:列出本插件可经 Public Plugin API 访问的规范 HTTPS origin(`origin` 不带 path/query/凭据)与方法(缺省仅 `GET`)。
 
@@ -814,12 +810,12 @@ my-plugin/
 
 `tools.local` / `hooks` / `rpc` / `wires` 四个 frontmatter 注册字段已弃用（启动时每插件 warn 一次，保留一个发布周期后移除），统一迁移到 `entry` 模块的 `PluginAPI` facade。对照表：
 
-| 旧 frontmatter 字段           | 新写法（entry 工厂内）                                                          | 备注                                                                                                                  |
-| ----------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `tools.local: [./tools/x.js]` | `covel.registerTool(makeX(covel.toolkit))`                                      | 工具工厂文件本身无需修改（`covel.toolkit` 就是旧的注入包）；runtime manifest 改用 `tools.plugin` 声明工具**名字**列表 |
-| `hooks: [{event, handler}]`   | `covel.on(event, handler, { match?, timeoutMs?, enforce? })`                    | 16 事件语义不变；`match` 从浅层等值 map 变为谓词函数                                                                  |
-| `rpc: { action: {handler} }`  | `covel.registerRpc(action, handler, { description?, streaming?, trustLevel? })` | handler 内联注册，不再 lazy import；信任等级仍按插件来源钳制                                                          |
-| `wires: lib/wires.js`         | `covel.registerWires({ image?, speech?, transcription? })`                      | 命名空间仍为 `<pluginId>/<wireId>`；SSRF 守卫和重试 fetch 经 `covel.http` 注入                                        |
+| 旧 frontmatter 字段           | 新写法（entry 工厂内）                                              | 备注                                                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `tools.local: [./tools/x.js]` | `covel.registerTool(makeX(covel.toolkit))`                          | 工具工厂文件本身无需修改（`covel.toolkit` 就是旧的注入包）；runtime manifest 改用 `tools.plugin` 声明工具**名字**列表 |
+| `hooks: [{event, handler}]`   | `covel.on(event, handler, { match?, timeoutMs?, enforce? })`        | 16 事件语义不变；`match` 从浅层等值 map 变为谓词函数                                                                  |
+| `rpc: { action: {handler} }`  | `covel.registerRpc(action, handler, { description?, trustLevel? })` | handler 内联注册，不再 lazy import；信任等级仍按插件来源钳制                                                          |
+| `wires: lib/wires.js`         | `covel.registerWires({ image?, speech?, transcription? })`          | 命名空间仍为 `<pluginId>/<wireId>`；SSRF 守卫和重试 fetch 经 `covel.http` 注入                                        |
 
 迁移步骤：
 

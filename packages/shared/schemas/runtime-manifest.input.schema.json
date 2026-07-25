@@ -648,9 +648,6 @@
       "type": "string",
       "enum": ["legacy", "envelope-v1"]
     },
-    "suspensionSafe": {
-      "type": "boolean"
-    },
     "effects": {
       "type": "object",
       "properties": {
@@ -1295,9 +1292,6 @@
           "trustLevel": {
             "type": "string",
             "enum": ["builtin", "official", "community"]
-          },
-          "streaming": {
-            "type": "boolean"
           },
           "description": {
             "type": "string"
