@@ -35,7 +35,7 @@
 
 ## 一、事件类型（CovelEvent）
 
-所有 server→client 事件现在收口为 `packages/shared/src/types/protocol.ts` 中的**单一 discriminated union** `CovelEvent`（`{ type; payload }`），它是事件名、转发白名单、前端穷尽校验的唯一真相。`ProtocolEventType` 现为 `CovelEvent['type']` 的历史别名（保留向后兼容）。
+所有 server→client 事件现在收口为 `packages/shared/src/types/protocol.ts` 中的**单一 discriminated union** `CovelEvent`（`{ type; payload }`），它是事件名、转发白名单、前端穷尽校验的唯一真相。`ProtocolEventType` 是 `CovelEvent['type']` 的导出别名。
 
 新增一个 SSE 事件 = 在 `CovelEvent` 加一个成员 + 在 `COVEL_EVENT_META` 加一条元数据，二者由 `satisfies Record<CovelEventType, CovelEventMeta>` 互相约束——漏改任一处即编译失败。
 
@@ -113,7 +113,7 @@
 
 长耗时的 function runtime（媒体生成等）在 finalizer 提交之前，通过 `ctx.progress.report({ jobId, state, progress?, message?, data?, sequence })` 实时上报进度。这是 effects 隔离的**唯一实时例外**：上报写入内核 job-status 存储（追加式、按 `(sessionId, progressScopeId, pluginId, runtimeId, jobId, sequence)` 幂等），成功后立即发出本事件并经 `/actions` SSE 转发；它不写游戏态、不满足 binding/gate、不随领域事务回滚。`state` 取值为 `queued | running | progress | waiting-input | succeeded | failed | cancelled`；身份字段全部由内核注入，插件只提供作业业务字段。
 
-> 兼容期说明：本通道与旧的 `plugin-data` `_jobs` 占位路径并存，待后者退役后统一。
+> 本通道与 `plugin-data` 的 `_jobs` 命名空间并存：`_jobs` 是持久化的作业簿记，本事件是实时推送。
 
 ### 媒体资产事件
 
@@ -311,9 +311,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 `start_session` 要求会话已带非空 `activePlugins`（创建会话时选定）。空集合直接 400，不会退化成"激活全部注册插件"——详见 [api.md](./api.md#post-apiactions)。
 
-> **移除（2026-07-20 审计 M-07）**：`type: "trigger_event"` 已删除——其 payload 从未被服务端读取、UI 无调用方，请求效果只是空跑一整回合。插件侧发事件请用 builtin `emit-event` 工具；再发送 `trigger_event` 会得到 400 `Unsupported action type`。
-
-> **注意（audit P2-10）**：旧文档曾写 `type: "player_action"`，那是早期原型，当前实现已用 `send_message` 取代。若客户端仍发送 `player_action`，actions 路由会以 `unknown action type` 返回错误。
+> `type` 是闭集，上面四种之外的取值一律返回 400 `Unsupported action type`。插件侧发事件请用 builtin `emit-event` 工具。
 >
 > 区分 chat turn 与 plugin runtime 调用：
 >
@@ -454,9 +452,9 @@ error.occurred        → executionError
 
 ## 六、传输层（真实形态）
 
-> 本节描述真实实现，不是设想。早期类型里曾有一个 `SessionTransport` 接口，注释宣称「所有通讯都通过它抽象」，并列出 `SSETransport` / `WebSocketTransport` / `StdioTransport` / `HTTPTransport` / `LocalTransport` 等实现——但**没有任何实现存在**（全仓零 `implements`、零工厂）。该接口已随本次清理删除。请勿据此以为「换个 Transport 即可上 WebSocket」。
+> 本节描述真实实现，不是设想。**没有统一的 transport 抽象层**，也没有可替换的 Transport 实现——想上 WebSocket 需要改动下面列出的具体路径，而不是换一个实现类。
 
-当前没有统一的 transport 抽象层。通讯由以下几条**具体**路径承载（见「架构总览」的三类划分）：
+通讯由以下几条**具体**路径承载。通讯由以下几条**具体**路径承载（见「架构总览」的三类划分）：
 
 | 方向            | 真实实现                                                                                                                                         |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |

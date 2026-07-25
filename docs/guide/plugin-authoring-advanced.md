@@ -28,8 +28,8 @@ import type {
   RuntimeManifest, // 运行时清单（PLUGIN.md frontmatter 的解析结果）
 
   // 触发系统
-  TriggerType, // 'auto' | 'manual' | 'scheduled' | 'event'（conditional / error-retry 已移除,声明即加载失败）
-  TriggerConfig, // { type, interval?, condition?, topic?, maxTriggerCount?, cooldownTurns? }
+  TriggerType, // 'auto' | 'manual' | 'scheduled' | 'event'(枚举闭合,其余取值加载失败)
+  TriggerConfig, // { type, interval?, topic?, maxTriggerCount?, cooldownTurns?, startTurn? }
 
   // 输入/输出
   InputConfig, // { inject?, tools? }
@@ -828,15 +828,15 @@ my-plugin/
 
 ---
 
-## 迁移到调度声明面（三方插件）
+## 接入调度声明面（三方插件）
 
-调度重设计已完成切换:`stage` + `needs` / `after` / `inputs` 是唯一的调度权威。旧字段(`priority` / `upstreamRequired` / `jobStatus`)**已从两套 manifest schema 中彻底移除**——声明其中任何一个的 PLUGIN.md 直接加载失败(报错会指向 `stage` / `needs`),不再有兼容折算。存量三方插件必须先完成第 ① 步才能继续加载,其余几步可独立发布。
+`stage` + `needs` / `after` / `inputs` 是唯一的调度权威。三方插件按下面几步接入,每一步都能独立发布。
 
-**① manifest 单声明。** 删掉 `priority` / `upstreamRequired`,直接写新声明。`stage` 用命名阶段(语义见 [plugins.md 调度层级](../reference/plugins.md#调度层级));上游依赖用 `needs`(gate,取代 `upstreamRequired`)或 `inputs`(把某条隐式依赖转成有类型绑定);对 `event` / `manual` runtime 不写 `stage`。改完跑 `pnpm validate:plugin <插件目录>`——strict authoring schema 会拒绝残留的 legacy 字段。
+**① manifest 单声明。** `stage` 用命名阶段(语义见 [plugins.md 调度层级](../reference/plugins.md#调度层级));上游依赖用 `needs`(gate)或 `inputs`(把某条隐式依赖转成有类型绑定);对 `event` / `manual` runtime 不写 `stage`。写完跑 `pnpm validate:plugin <插件目录>`——manifest schema 是闭集,未列出的 frontmatter 字段一律报错。
 
 ```yaml
-stage: post-turn # 命名阶段(取代 priority)
-needs: # 取代 upstreamRequired,强度相同
+stage: post-turn # 命名阶段
+needs: # 强依赖:排序 + 门控
   - capability: narrative-engine
 inputs: # 读同回合上游数据的唯一通道
   narrative:
@@ -845,15 +845,15 @@ inputs: # 读同回合上游数据的唯一通道
     required: false
 ```
 
-**② handler:改读 `ctx.inputs`。** `ctx.completedResults` 已从 function handler context 移除——同回合上游数据只能通过 `inputs` 绑定进来(`manual` 激活不解析 turn 绑定,`ctx.inputs` 为空,手动场景把数据放 `manualPayload`)。
+**② handler:读 `ctx.inputs`。** 同回合上游数据只能通过 `inputs` 绑定进来(`manual` 激活不解析 turn 绑定,`ctx.inputs` 为空,手动场景把数据放 `manualPayload`)。
 
 ```ts
 const narrative = ctx.inputs?.narrative?.value as string | undefined;
 ```
 
-**③ 进度:`ctx.pluginData` 占位 → `ctx.progress.report`。** 长任务(图像 / TTS 生成)的实时进度从"写 plugin-data 占位行"改为走 job-status 通道:`ctx.progress.report(...)` 判空 + 吞异常(见上文调度 ctx API 小节)。durable 产出仍走返回值 / proposal——进度只是观测,不落游戏状态。前端读取旧 plugin-data 面板的话,兼容期可继续同时写占位行,待 UI 切到 job-status 源后再撤。
+**③ 进度:用 `ctx.progress.report`。** 长任务(图像 / TTS 生成)的实时进度走 job-status 通道:`ctx.progress.report(...)` 判空 + 吞异常(见上文调度 ctx API 小节)。durable 产出仍走返回值 / proposal——进度只是观测,不落游戏状态。该通道与 `plugin-data` 的 `_jobs` 占位行并存,前端面板仍读占位行时可两边同写。
 
-**④ envelope-v1 切换时机(可选,最后做)。** `resultFormat: envelope-v1` 是强类型 I/O 契约(强制 `output.schema` 校验 + 四分支 outcome),但**不是迁移必需项**。默认 `legacy` 已能用上前三步的全部收益。仅当你想要显式的 success/skipped/failed/suspended 语义、或想让框架强校验输出结构时再切;切换时同步补上 `output.schema`,并把 handler 返回值改成判别联合。
+**④ envelope-v1 切换时机(可选,最后做)。** `resultFormat: envelope-v1` 是强类型 I/O 契约(强制 `output.schema` 校验 + 四分支 outcome),但**不是必需项**。默认 `legacy` 已能用上前三步的全部收益。仅当你想要显式的 success/skipped/failed/suspended 语义、或想让框架强校验输出结构时再切;切换时同步补上 `output.schema`,并把 handler 返回值改成判别联合。
 
 ---
 

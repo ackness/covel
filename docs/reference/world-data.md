@@ -46,7 +46,7 @@ defaultViewMode: stage
 
 `defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。目前仅 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）有效，其他值按 `parsed` 处理。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
 
-> **@deprecated 顶层 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins`**：仍可用（向后兼容），但**请改用 `pluginPolicy` 下的同名字段**。加载时框架会把顶层这三个字段**折叠进 `pluginPolicy`（去重合并）**，`WorldRecord.metadata` 只保留 `pluginPolicy` 作为插件选择的唯一来源。`pluginPolicy` 还能表达 `preset` / `packs` / `preferTags` 等场景意图，顶层字段无法表达。
+> **请把 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins` 写在 `pluginPolicy` 下**。写在顶层同样被接受，加载时**折叠进 `pluginPolicy`（去重合并）**，`WorldRecord.metadata` 只保留 `pluginPolicy` 作为插件选择的唯一来源；但顶层无法表达 `preset` / `packs` / `preferTags` 等场景意图。
 
 `pluginPolicy` 字段：
 
@@ -218,7 +218,7 @@ world load 阶段只强校验内置 schema 和本地 schema；`plugin://...` sch
 3. 有 dimensions、无声明 → `deriveSchema(dimensions)` 推导通用属性（生命值、体力、货币、声望、能力阶层等）。
 4. 都没有 → 才由 `schema-gen` agent 用 LLM 生成。
 
-> **跨 session 复用已移除**：guard 曾扫描同世界的其他 session、挑数据最多的一个把整套 `schema` + `entries` 复制过来，为「既无声明属性又无 dimensions」的世界省一次 schema-gen 调用。该分支已删除——session plugin-data 不是可信来源：通用 `PUT /plugin-data` 允许会话持有者写任意已激活插件的 namespace，所以「最佳来源 session」可能携带玩家自造的值；在 hosted 层级这些 session 还可能属于**其他用户**，复制即同时构成泄露与投毒。声明属性（2）或自带 dimensions（3）的世界本来就走不到这一步，代价仅是这类世界每个 session 多一次 schema-gen 调用。
+> **快路径不跨 session 复制**：guard 只看当前 session、世界声明与世界 dimensions，绝不从同世界的其他 session 拷贝 `schema` / `entries`。session plugin-data 不是可信来源：通用 `PUT /plugin-data` 允许会话持有者写任意已激活插件的 namespace，来源 session 可能携带玩家自造的值；在 hosted 层级这些 session 还可能属于**其他用户**，复制即同时构成泄露与投毒。代价是「既无声明属性、又无 dimensions」的世界每个 session 多一次 schema-gen 调用。
 
 ### 在 `world.yaml` 声明 `characterAttributes`（推荐）
 
@@ -240,7 +240,7 @@ characterAttributes:
       en-US: Affection toward the player
 ```
 
-- 加载后写入 `WorldRecord.metadata.characterAttributes`（兼容旧字段名 `metadata.schemas`）。
+- 加载后写入 `WorldRecord.metadata.characterAttributes`（读取时也接受同义键 `metadata.schemas`）。
 - guard 把它**原样**写成 session 的 `(world-init, schema, character-attributes)`，**权威优先**——因此编辑 `characterAttributes` 会在**新 session** 生效（已开局的旧 session 在 Pre-Game 时已锁定 schema，不会回溯更新）。
 - `name` / `description` 的 `I18nText` 由框架按 locale 解析：右栏 `CharacterFieldsView` 按当前界面语言显示，注入 prompt 的 `<world-schema>` 也会先解析成单一语言。
 - `id` 必须与角色卡（`character-blueprint`）`attributes` 里的键一致，否则字段会落到右栏的「其他」分组里显示原始键名。

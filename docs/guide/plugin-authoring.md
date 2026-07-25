@@ -108,17 +108,17 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 ## 调度声明
 
-调度用命名的**阶段 + 依赖**声明替代了裸数字 `priority`——这是唯一的调度权威，旧的数字 priority 调度器（`scheduleByPriority`）已删除。写可调度 runtime（`auto` / `scheduled`）请直接用下面的字段；`event` / `manual` runtime 不写 `stage`。字段的完整语义与边界见 [plugins.md 调度层级](../reference/plugins.md#调度层级)。
+调度由命名的**阶段 + 依赖**声明表达，这是唯一的调度权威。写可调度 runtime（`auto` / `scheduled`）请直接用下面的字段；`event` / `manual` runtime 不写 `stage`。字段的完整语义与边界见 [plugins.md 调度层级](../reference/plugins.md#调度层级)。
 
 - **`stage`** — 五个命名阶段之一：`setup`（游戏初始化）· `pre-turn`（玩家操作前）· `narrative`（主叙事）· `post-turn`（叙事后处理）· `audit`（审计）。阶段之间是**严格屏障**（前一阶段全部结束才进下一阶段）；同阶段内部的先后**只由依赖决定**，无依赖的 runtime 并发执行。
 - **`after`** — 弱排序依赖（**只排序、不设门**）：目标失败或缺席都不会拦住本 runtime。
-- **`needs`** — 强依赖（**排序 + 门控**）：目标本次未成功则本 runtime 被 `skipped`。每项可以是 runtime id，或 `{ capability, cardinality }`（`cardinality: one` = 在场任一提供者成功即可，`all` = 全部成功）。`scope: turn`（默认）要求同一次执行内成功，同时是同一 pass 内的 DAG 排序边；`scope: session` 对准执行开始时冻结的持久快照判定（仅 setup 用）。`needs` 取代旧的 `upstreamRequired`。
+- **`needs`** — 强依赖（**排序 + 门控**）：目标本次未成功则本 runtime 被 `skipped`。每项可以是 runtime id，或 `{ capability, cardinality }`（`cardinality: one` = 在场任一提供者成功即可，`all` = 全部成功）。`scope: turn`（默认）要求同一次执行内成功，同时是同一 pass 内的 DAG 排序边；`scope: session` 对准执行开始时冻结的持久快照判定（仅 setup 用）。
 - **`inputs`** — 把某条隐式上游依赖升级为**有类型的同回合绑定**，解析进 function 的 `ctx.inputs.<name>`（agent 则注入一个保留 prompt 块）。每项：`from`（`{ runtime }` 或 `{ capability, cardinality }`）· `select`（RFC 6901 JSON Pointer，指进生产方成功 value）· `required`（`true` 蕴含 `needs(turn)` 门，`false` 蕴含 `after`）· `accepts`（runtime 目录相对的 JSON Schema 路径，校验最终注入值）。
 - **`input.schema`** — runtime 目录相对的 JSON Schema，校验本 runtime 的**激活载荷**（manual RPC / event payload），派发前强制执行。
 
-**已移除的字段**：`priority` / `upstreamRequired` / `jobStatus` 不再被任何 schema 接受——声明即加载失败（`priority` / `upstreamRequired` 有专门的报错提示指向 `stage` / `needs`）。所有 bundled 插件均单声明 `stage` + `needs`/`after`，无任何例外（历史上的 pregame / world-init/schema-gen 例外已迁移：`stage: setup` + `trigger: auto`，schema-gen 用显式 `after: [pregame]` 保持串行；旧的保守 setup 排序链已删除——同阶段内先后完全由声明边决定）。
+上面这组字段就是全部调度声明面，schema 对 frontmatter 做闭集校验，未列出的字段一律加载失败。所有 bundled 插件均单声明 `stage` + `needs`/`after`，无任何例外——`setup` 链是 `stage: setup` + `trigger: auto`，schema-gen 用显式 `after: [pregame]` 保持串行；同阶段内先后完全由声明边决定。
 
-**保留 trigger**：`conditional` / `error-retry` 已从 trigger 枚举中移除，声明它们的 manifest 在**加载时被拒绝**（不再是"接受但永不触发"的 reserved 状态）——生产可用的只有 `auto` / `manual` / `scheduled` / `event` 四种。
+**trigger 取值**：`auto` / `manual` / `scheduled` / `event` 四种，枚举闭合。
 
 **校验**：写完 manifest 跑 `pnpm validate:plugin <PLUGIN.md | 插件目录>`——一次执行 loader compat 解析（能否加载，报错带行号）+ strict authoring schema（`auto` / `scheduled` 缺 `stage` 直接报错）。另外 server 启动装载插件时会对「`auto` / `scheduled` 却没有 `stage`、又不是纯 UI / hook / entry / wires 注册面」的 runtime 打 `schedulable-missing-stage` warning——这类声明会被当作 UI-only 习语永不调度。
 

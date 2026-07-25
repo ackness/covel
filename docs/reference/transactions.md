@@ -224,9 +224,9 @@ Node-only and is never pulled into the IdbStore browser bundle.
 >   通过 `sessionClock` 参数把逻辑回合计数（`completedPlayerTurns` 的 logical-turn
 >   ledger 幂等推进）与 setup 频段翻转（`phase: setup → playing` + `setupRuntimes`
 >   镜像）折叠进 proposal 提交后、`commit_status` 结算前的同一事务（
->   `commit/session-clock.ts` 的 `applySessionClockTx`）。旧字段 `turnCount` /
->   `preGameCompleted` 由三字段公式派生并同事务写入。任一 proposal 失败即整体回滚——
->   计数、phase、派生旧字段都不推进，ledger 不写入。manual / background / resume
+>   `commit/session-clock.ts` 的 `applySessionClockTx`）。派生字段 `turnCount` /
+>   `preGameCompleted` 由三字段公式算出并同事务写入。任一 proposal 失败即整体回滚——
+>   计数、phase、派生字段都不推进，ledger 不写入。manual / background / resume
 >   finalize 不传 `sessionClock`，时钟不动。
 >
 > **降级**：不暴露 `withTransaction` 的 store（薄测试 mock / 旧后端）退回逐条提交，

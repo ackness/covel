@@ -62,7 +62,7 @@ See: [docs/guide/plugin-authoring.md](./guide/plugin-authoring.md), [docs/refere
 
 ## Runtime manifest
 
-The parsed YAML frontmatter of a `PLUGIN.md`, plus derived fields. Carries the `pluginId`, `name` (runtimeId), `trigger`, the scheduling surface (`stage`, `needs`, `after`, `inputs` — legacy `priority` / `upstreamRequired` are rejected at load), `outputKind`, `capabilities`, `model`, `permissions`, and UI spec references.
+The parsed YAML frontmatter of a `PLUGIN.md`, plus derived fields. Carries the `pluginId`, `name` (runtimeId), `trigger`, the scheduling surface (`stage`, `needs`, `after`, `inputs`), `outputKind`, `capabilities`, `model`, `permissions`, and UI spec references.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), [docs/guide/plugin-authoring.md](./guide/plugin-authoring.md).
 
@@ -86,7 +86,7 @@ See: [docs/reference/plugins.md](./reference/plugins.md), `llm.toml.example`.
 
 ## Trigger mode
 
-How a runtime decides it should run on a given turn: `auto`, `scheduled`, `manual`, or `event` (`conditional` / `error-retry` were removed from the trigger enum — manifests declaring them are rejected at load). Combined with `stage` (which band an `auto` / `scheduled` runtime belongs to; `event` / `manual` runtimes declare no stage) and the `scheduled` sub-fields (`interval` / `cooldownTurns` / `maxTriggerCount` / `startTurn`).
+How a runtime decides it should run on a given turn: `auto`, `scheduled`, `manual`, or `event` — the enum is closed, and a manifest declaring anything else is rejected at load. Combined with `stage` (which band an `auto` / `scheduled` runtime belongs to; `event` / `manual` runtimes declare no stage) and the `scheduled` sub-fields (`interval` / `cooldownTurns` / `maxTriggerCount` / `startTurn`).
 
 See: [docs/reference/plugins.md](./reference/plugins.md).
 

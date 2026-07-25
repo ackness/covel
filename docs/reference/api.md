@@ -236,9 +236,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### Turn 执行
 
-| 方法 | 路径                     | 描述         |
-| ---- | ------------------------ | ------------ |
-| POST | `/api/sessions/:id/turn` | 执行玩家回合 |
+回合执行的唯一入口是 [`POST /api/actions`](#post-apiactions)（SSE 桥接），没有 session 级的回合端点。
 
 ### 回合中控制（W4）
 
@@ -987,7 +985,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 - `metadata.requiredPlugins`：准备页锁定启用。
 - `metadata.recommendedPlugins`：准备页默认启用。
 - `metadata.excludedPlugins`：准备页默认关闭。
-- `metadata.pluginPolicy`：准备页组合包策略。可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`；旧的三组插件字段仍兼容并会参与合并。
+- `metadata.pluginPolicy`：准备页组合包策略。可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`；写在 `metadata` 顶层的同名三组字段也会参与合并。
 - `metadata.characterBlueprints`：创建 session 时自动导入到 `character-blueprint` 插件数据，并实例化为 NPC character。
 
 **响应:**
@@ -1130,69 +1128,13 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服务器按 stage（`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`，stage 间严格屏障，stage 内按 DAG 依赖并行）调度所有活跃的 Runtime，收集 LLM 输出并返回。
 
-#### `POST /api/sessions/:id/turn`
+唯一入口是 [`POST /api/actions`](#post-apiactions)——请求体、SSE 帧格式与开场接力语义见该章节。
 
-兼容的 headless/testing JSON 入口。Web UI 的主交互路径使用 `/api/actions`，因为它会返回 data-only SSE 流并转发回合内进度事件。保留该入口用于脚本、测试和不需要 SSE 的调用方；它和 `/api/actions` 共享 turn 执行、session lock、commit pipeline 与 `turnCount` 口径，但不会把回合内事件逐条流给客户端。
+**回合语义：**
 
-执行一个玩家回合。
-
-**参数:**
-
-| 参数 | 位置 | 说明    |
-| ---- | ---- | ------- |
-| `id` | 路径 | 会话 ID |
-
-**请求体:**
-
-```json
-{
-  "message": "我拔出剑，准备迎战",
-  "locale": "zh-CN",
-  "model": "deepseek-chat"
-}
-```
-
-| 字段      | 类型   | 必填 | 说明                      |
-| --------- | ------ | ---- | ------------------------- |
-| `message` | string | 是   | 玩家的文字输入            |
-| `locale`  | string | 否   | 覆盖会话语言              |
-| `model`   | string | 否   | 覆盖 LLM 模型（API 级别） |
-
-**响应:**
-
-```json
-{
-  "turnId": "a1b2c3d4-...",
-  "sessionId": "mistport-a1b2c3d4",
-  "runtimeResults": [
-    {
-      "pluginId": "narrator",
-      "runtimeId": "narrator-main",
-      "output": "你缓缓拔出腰间的长剑，剑刃在微弱的光芒中闪烁...",
-      "toolCalls": [],
-      "durationMs": 2340
-    }
-  ],
-  "durationMs": 2500
-}
-```
-
-**响应 404:**
-
-```json
-{
-  "error": "Session not found: <id>",
-  "code": "session_not_found"
-}
-```
-
-**使用说明:**
-
-- Turn 执行是同步的，响应时间取决于 LLM 调用耗时
 - 每个活跃 Runtime 按 stage 依次执行，stage 内独立 runtime 并行（依赖 `needs` / `after` / `inputs` 排序）
-- `runtimeResults` 包含每个 Runtime 的输出，可能包含叙事文本、工具调用结果等
 - `session.turnCount`（由 `phase` / `completedPlayerTurns` 读时派生的 legacy 字段）表示主循环进度：setup 阶段的执行会保存 `turn_results`，但不会计入主循环轮数；`phase` 翻到 `playing` 后最低读出 `1`
-- 服务端会对每个 runtimeResult 运行 `processRuntimeResult` 提交管道（与 `/api/actions` 一致）：normalize → state.commit → 触发后续 SessionEvent
+- 服务端对每个 runtimeResult 运行 `processRuntimeResult` 提交管道：normalize → state.commit → 触发后续 SessionEvent
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `plugin-rpc` 的 `framework.submit-form` action 提交玩家响应
 
 ---
@@ -1736,7 +1678,7 @@ rpc:
 }
 ```
 
-> **`triggerTypes` 的取值范围**：`triggerTypes` 列出的是 **schema 接受**的全部取值，即 `auto` / `manual` / `scheduled` / `event` 四种。曾经预留的 `conditional` 与 `error-retry` 已从 trigger 枚举中移除——声明它们的 manifest 在**加载时被拒绝**，不会出现在该列表里。详见 [reference/plugins.md → trigger 类型](./plugins.md#trigger-类型)。
+> **`triggerTypes` 的取值范围**：schema 接受且生产可用的取值就是 `auto` / `manual` / `scheduled` / `event` 四种，`triggerTypes` 完整列出它们。详见 [reference/plugins.md → trigger 类型](./plugins.md#trigger-类型)。
 
 #### `GET /api/plugins`
 
@@ -2625,9 +2567,7 @@ id: evt-002
 
 **开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力回合是第一个计数的玩家回合（`completedPlayerTurns` 0 → 1）。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_runtime` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
 
-> 旧版示例曾使用 `payload.message`，但服务端从未读取该字段，已统一为 `content` / `command`。
->
-> **移除（2026-07-20 审计 M-07）**：`type: "trigger_event"` 已删除——其 payload 从未被服务端读取、UI 无调用方。插件侧发事件请用 builtin `emit-event` 工具；再发送会得到 400。
+> 玩家输入字段是 `payload.content`（`send_message`）/ `payload.command`（`execute_command`），没有别的别名。插件侧发事件请用 builtin `emit-event` 工具；未列出的 `type` 一律 400。
 
 **请求头（可选）:**
 
@@ -2697,7 +2637,7 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 
 | 字段         | 类型   | 必填 | 说明                                                  |
 | ------------ | ------ | ---- | ----------------------------------------------------- |
-| `concept`    | string | 是   | 世界概念描述（最多 4000 字符）。兼容旧字段名 `prompt` |
+| `concept`    | string | 是   | 世界概念描述（最多 4000 字符）。也接受同义键 `prompt` |
 | `locale`     | string | 否   | 语言区域，默认 `zh-CN`                                |
 | `model`      | string | 否   | 覆盖 LLM 模型                                         |
 | `saveTarget` | string | 否   | 保存目标，默认 `server-file`。可选值见下表            |

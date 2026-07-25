@@ -139,9 +139,7 @@ Local 工具承接插件自己的业务封装，例如：
 | title   | string | ✓    | 通知标题                                 |
 | message | string | ✓    | 通知内容                                 |
 
-返回一个 `ui` 块(内容为 `Alert` 组件规格),经 `ui.render` proposal 提交后渲染在消息流中。
-
-> `icon` 参数已移除:前端 `Alert` 组件只渲染 level / title / message,该参数从未生效。
+返回一个 `ui` 块(内容为 `Alert` 组件规格),经 `ui.render` proposal 提交后渲染在消息流中。前端 `Alert` 组件只渲染 level / title / message。
 
 **使用者**: codex
 

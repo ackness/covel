@@ -114,7 +114,7 @@ trigger:
 | `post-turn` | 主循环第 3 段                  | 叙事后记账 / 状态写入 / 后台任务 | codex, guide, npc-graph/extractor                        |
 | `audit`     | 主循环第 4 段                  | 冲突/一致性审计（预留）          | —                                                        |
 
-> **阶段间是严格屏障**（前一阶段全部结束才进下一阶段），由 `session.phase` 而不是回合数选带。**同阶段内部的先后只由依赖决定**：声明 `needs`（强依赖，上游失败则本 runtime skipped）或 `after`（弱排序），无依赖的 runtime 并发执行，同名时按 `name` 定序。旧的数字 `priority` 调度器已删除——不要在新插件里写 `priority`。
+> **阶段间是严格屏障**（前一阶段全部结束才进下一阶段），由 `session.phase` 而不是回合数选带。**同阶段内部的先后只由依赖决定**：声明 `needs`（强依赖，上游失败则本 runtime skipped）或 `after`（弱排序），无依赖的 runtime 并发执行，同名时按 `name` 定序。
 
 ## 3. 提示词编写技巧
 
@@ -225,9 +225,9 @@ trigger:
 
 适用于：玩家主动点击按钮触发的功能（如查看角色面板）。manual runtime **永远不会**被每轮自动调度选中（也不可声明 `stage`），必须由 UI 或 `plugin-rpc` 显式按名触发；启用 manual 插件只表示该能力在 session 中可用。
 
-### conditional / error-retry — 已移除
+### 表达"有条件才跑"
 
-`conditional` 与 `error-retry` 已从 trigger 枚举中移除：声明它们的 manifest 在**加载时被直接拒绝**（插件不会加载）。表达运行条件请使用 `auto` + guard、`scheduled`、`event` 或 `manual`。
+trigger 枚举只有上面四种，没有条件表达式类型。要表达运行条件，请用 `auto` + guard、`scheduled`、`event` 或 `manual`。
 
 ### 冷却和重试
 
@@ -617,7 +617,7 @@ sources:
 
 **WORLD.md** 是默认的世界观长文本，框架通过 `{{ world.lore }}` 注入到插件提示词中。支持多语言：`WORLD.zh.md`、`WORLD.en.md`。
 
-**`requiredPlugins`** 是世界运行依赖，前端准备页会锁定这些插件。**`recommendedPlugins`** 会在准备页默认选中，**`excludedPlugins`** 会在准备页默认关闭。旧字段仍兼容；新 **`pluginPolicy`** 用于表达场景意图和组合包，可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`。内置前端组合包有 `traditional-story`、`dialogue-mode`、`low-cost`，世界可以用 `preset` 引用，也可以通过 `packs` 自定义。创建会话时，前端会把最终选择的插件列表传给 `POST /api/sessions`。
+**`requiredPlugins`** 是世界运行依赖，前端准备页会锁定这些插件。**`recommendedPlugins`** 会在准备页默认选中，**`excludedPlugins`** 会在准备页默认关闭。这三个字段写在顶层或 `pluginPolicy` 下都可以；**`pluginPolicy`** 额外能表达场景意图和组合包，可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`。内置前端组合包有 `traditional-story`、`dialogue-mode`、`low-cost`，世界可以用 `preset` 引用，也可以通过 `packs` 自定义。创建会话时，前端会把最终选择的插件列表传给 `POST /api/sessions`。
 
 **`worldData`** 指向统一数据索引。`to: world:metadata.dimensions` 会把维度写入 world metadata；`to: plugin:character-blueprint/blueprints` 加上 `effects: [characters]` 会在创建 session 时导入角色卡、实例化 NPC，并镜像到角色面板。运行中也可以在 `character-blueprint` 右侧面板用表单创建蓝图；完整迁移或调试时使用 JSON 导入入口。
 

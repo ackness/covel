@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tool calling on the Anthropic adapter.** `createAnthropicMessagesAdapter` never serialized `params.tools` and dropped every tool-role message, so an agent runtime routed to an `anthropic-messages-v1` slot sent no tool definitions, got no tool calls back, and produced no proposals — no character updates, no plugin data, no image generation. It degraded to plain narration with nothing logged as an error while the protocol registry advertised `function_calling` all along.
+- **`create-notification` renders again.** The tool returned `{ notified: true, level }`, which the runtime never promotes (only a result carrying `ui` or `interaction` is proposed) — the model was told the notification succeeded and the player saw nothing. It now returns the nested `Alert` spec the renderer expects.
+- **SVG media is rejected on upload and sandboxed on read.** `POST /api/media` accepted `image/svg+xml` under its `image/*` check and `GET /api/media/:id` echoed the MIME back with no `Content-Disposition`; a session owner could upload a scripted SVG, get a correctly signed URL, and read the web tier's localStorage provider keys from the app origin. Stored rows predating the ban are served as sandboxed attachments.
+- **Provider-key availability requires the operator token.** `GET /api/provider-keys` gated only its raw-key branch, so on demo/commercial an anonymous caller still got a masked listing revealing which providers were configured plus the first and last four characters of each key. The whole route is now behind `checkHostedOperator` (a strict no-op on self/desktop).
+- **Community local-tool factories get the deny-all store.** The unified `entry` path already scoped a community plugin's store, but the `tools.local` factory path injected the raw DataStore for every trust tier — a community plugin could call `listSessions()` or touch any session's plugin_data, bypassing proposal → validate → commit. Both paths now share `scopeStoreToPlugin`.
+- **Media-GC scans page soundly.** `buildProtectedMediaIds` paged four lists by offset over a non-total order (two had no `ORDER BY` at all), so a concurrently-upserted row could slip between pages and lose its media id — a destructive cleanup would then delete still-referenced bytes. All four now order by `(createdAt, id)`.
+- **Locale variants inherit what they omit.** `reconcileValue` treated any field a `PLUGIN.<locale>.md` did not declare as drift, forcing every translation to mirror the whole canonical manifest — and a mirrored manifest goes stale silently. An omitted field now inherits; a field declared with a different value still overrides and still warns.
+- **Unknown-field load errors name the field.** Zod reports `unrecognized_keys` with an empty `path`, so every unknown-field failure fell through to the "ensure the file begins with `---`" hint even though the frontmatter parsed fine. The hint now reads `issue.keys`, and removed scheduling fields point at their replacements.
+
+### Removed
+
+- **Legacy scheduling fields.** `priority`, `upstreamRequired` and `jobStatus` are rejected by both manifest schemas — a PLUGIN.md declaring any of them fails to load with a hint pointing at `stage` / `needs`. The compat fold (`stageForPriority`, `aliasUpstreamRequired`) and the never-read `jobStatus.legacyViews` projection are gone, and the `RuntimeManifest` type no longer carries the fields.
+- **Inert manifest fields `suspensionSafe` and rpc `streaming`.** Both were accepted and stored but never read: no handler replay exists (`resumeSuspendedRuntime` re-enters the shared agent tool loop without re-invoking the handler), and rpc dispatch is unconditionally synchronous. Removing them changes no runtime behaviour.
+- **Four designs that were drafted and never wired** — `prompt-delta` (+ `RuntimeOutput.metaData.rawPromptDelta`), `runtime-slot-resolver`, and the json-render presets. Each was reachable only from a barrel export and a test that supplied the input no producer ever supplied. `GET /runtime-outputs/:id/full-prompt` now returns history and states plainly that the system prompt and injected segments are absent; `trace_events` remains the exact path.
+
+### Changed
+
+- **Two identifiers renamed to match what they do** — `NormalizedRuntimeSpec.provenance.legacyFields` → `derivedFrom` (it records only live normalizations now), and the `activatePluginLocalTools` Hono context key → `activatePluginServerCode`.
+- **Docs realigned to the shipped surface.** Removed the deleted `POST /api/sessions/:id/turn` endpoint from the API reference, corrected pointers at moved/deleted modules, and rewrote every passage that described removed features as still-live compat — the reference docs now describe the current shape only, with history left to this changelog.
+
 ## [0.0.18] - 2026-07-24
 
 The scheduling release. The numeric priority scheduler is gone: runtimes now declare a named **stage** (`setup / pre-turn / narrative / post-turn / audit`, strict barriers between stages) plus typed dependency edges — `needs` (gate + DAG edge, by runtime id or capability), `after` (ordering only), and typed `inputs` bindings resolved into provenance-wrapped `ctx.inputs`. Session lifecycle truth moved to a dedicated clock (`phase` / `completedPlayerTurns` / `setupRuntimes`) with `turnCount` / `preGameCompleted` derived at read time, and turn counting became single-writer (turn-wide finalize transaction + an idempotent logical-turn ledger). A same-day extensibility audit closed every "declared but silently ignored" manifest surface it found.

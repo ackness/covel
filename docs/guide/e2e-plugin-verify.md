@@ -104,7 +104,7 @@ Trigger Verification 的裁决列：
 2. 创建会话后从 API **读回该会话真实的 `activePlugins`**（世界种子集，通常远小于全局插件池），逐轮刷新
 3. 按下面的 stage 调度语义推导每个 runtime 的期望，Turn 执行后对比实际 `runtimeResults`
 
-**期望推导规则（stage 调度器，非旧的数字优先级带 / interval 复刻）——三道闸门依次判定：**
+**期望推导规则（复刻 stage 调度器）——三道闸门依次判定：**
 
 1. **激活集**：`pluginId` 不在会话 `activePlugins` 里 → 永不调度（`SKIP`）。互斥 provider（如 `narrator` vs `chat-mode-narrator`、多家 image 引擎）在这一步天然收敛——只期望激活的那一个。
 2. **stage**：无 `stage` 的 runtime（event / manual / 仅贡献型，如 `memory` / `director` / `cost-gate`——它们 `trigger.type` 可能是 `auto` 但没有 stage）**永不进入 stage 调度**，与 trigger.type 无关（`SKIP`；若因自身 event/manual 触发而运行则记 `FIRE`）。
