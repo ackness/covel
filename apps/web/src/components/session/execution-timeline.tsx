@@ -231,8 +231,12 @@ export function ExecutionTimeline({
   onRetryAll?: () => void;
 }) {
   const { i18n, t } = useTranslation();
-  // Collapsed state: set of turnIds that are folded. Latest turn is always expanded.
-  const [collapsedTurns, setCollapsedTurns] = useState<Set<string>>(new Set());
+  // Per-turn explicit fold override. Without one, the runtime chips only show
+  // while the turn is actually running (useful progress); once it settles they
+  // fold away so per-runtime ids and timings don't sit in the story flow.
+  const [foldOverrides, setFoldOverrides] = useState<Record<string, boolean>>(
+    {},
+  );
 
   // Build label map from plugin manifests (pluginId → display name)
   const RUNTIME_LABELS: Record<string, string> = {};
@@ -256,13 +260,8 @@ export function ExecutionTimeline({
 
   const latestTurnId = turnGroups[turnGroups.length - 1]?.turnId;
 
-  const toggleTurn = (turnId: string) => {
-    setCollapsedTurns((prev) => {
-      const next = new Set(prev);
-      if (next.has(turnId)) next.delete(turnId);
-      else next.add(turnId);
-      return next;
-    });
+  const toggleTurn = (turnId: string, collapsed: boolean) => {
+    setFoldOverrides((prev) => ({ ...prev, [turnId]: !collapsed }));
   };
 
   return (
@@ -276,7 +275,8 @@ export function ExecutionTimeline({
         );
         const allDone = !executing || !isLatest ? !active : false;
         const canRetry = allDone && isLatest && !!onRetryRuntime;
-        const isCollapsed = collapsedTurns.has(group.turnId);
+        const isCollapsed =
+          foldOverrides[group.turnId] ?? !(executing && isLatest);
         const turnNumber = groupIdx + 1;
 
         return (
@@ -287,7 +287,7 @@ export function ExecutionTimeline({
             {/* Turn header */}
             <div className="flex items-center gap-2">
               <button
-                onClick={() => toggleTurn(group.turnId)}
+                onClick={() => toggleTurn(group.turnId, isCollapsed)}
                 className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
               >
                 {isCollapsed ? (

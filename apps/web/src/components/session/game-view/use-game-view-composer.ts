@@ -37,52 +37,74 @@ export function useGameViewComposer({
       ),
     [messages, submittedBlockIds],
   );
-  const composerBlocked = pendingDrafts.length > 0 || hasActiveInteractionBlock;
+  // Only a must-answer block (form / choice) locks the composer. Queued
+  // suggestion drafts don't: the player can keep typing, and submitting sends
+  // the selections and the typed line together as one turn.
+  const composerBlocked = hasActiveInteractionBlock;
   // While a turn is executing the composer stays usable — submitting
   // steers the in-flight turn instead of starting a new one.
   const composerDisabled = composerBlocked;
 
-  const handleConfirmDrafts = useCallback(() => {
-    if (pendingDrafts.length === 0) return;
-    const combined = pendingDrafts
-      .map((d) => String(d.values?.text ?? d.label ?? "").trim())
-      .filter(Boolean)
-      .join("\n");
-    if (!combined) {
-      clearInteractionDrafts();
-      return;
-    }
-    // Stamp each source block with the player's selection so the disabled
-    // re-render can show what was chosen. Generic across plugin types: any
-    // draft that names a sourceBlockId participates without per-plugin code.
-    const bySource = new Map<string, typeof pendingDrafts>();
-    for (const draft of pendingDrafts) {
-      if (!draft.sourceBlockId) continue;
-      const list = bySource.get(draft.sourceBlockId) ?? [];
-      list.push(draft);
-      bySource.set(draft.sourceBlockId, list);
-    }
-    for (const [blockId, drafts] of bySource) {
-      const items = drafts.map((d) => ({
-        type: d.type,
-        label: d.label,
-        values: d.values,
-        interactionId: d.interactionId,
-        selectionGroup: d.selectionGroup,
-      }));
-      const labelSummary = drafts
-        .map((d) => d.label)
+  const commitDrafts = useCallback(
+    (extraText?: string) => {
+      if (pendingDrafts.length === 0) return;
+      const combined = [
+        ...pendingDrafts.map((d) =>
+          String(d.values?.text ?? d.label ?? "").trim(),
+        ),
+        extraText ?? "",
+      ]
         .filter(Boolean)
-        .join(" / ");
-      submitBlock(blockId, { _kind: "selection", _label: labelSummary, items });
-    }
-    onSendMessage(combined);
-    clearInteractionDrafts();
-  }, [pendingDrafts, clearInteractionDrafts, onSendMessage, submitBlock]);
+        .join("\n");
+      if (!combined) {
+        clearInteractionDrafts();
+        return;
+      }
+      // Stamp each source block with the player's selection so the disabled
+      // re-render can show what was chosen. Generic across plugin types: any
+      // draft that names a sourceBlockId participates without per-plugin code.
+      const bySource = new Map<string, typeof pendingDrafts>();
+      for (const draft of pendingDrafts) {
+        if (!draft.sourceBlockId) continue;
+        const list = bySource.get(draft.sourceBlockId) ?? [];
+        list.push(draft);
+        bySource.set(draft.sourceBlockId, list);
+      }
+      for (const [blockId, drafts] of bySource) {
+        const items = drafts.map((d) => ({
+          type: d.type,
+          label: d.label,
+          values: d.values,
+          interactionId: d.interactionId,
+          selectionGroup: d.selectionGroup,
+        }));
+        const labelSummary = drafts
+          .map((d) => d.label)
+          .filter(Boolean)
+          .join(" / ");
+        submitBlock(blockId, {
+          _kind: "selection",
+          _label: labelSummary,
+          items,
+        });
+      }
+      onSendMessage(combined);
+      clearInteractionDrafts();
+    },
+    [pendingDrafts, clearInteractionDrafts, onSendMessage, submitBlock],
+  );
+
+  const handleConfirmDrafts = useCallback(() => commitDrafts(), [commitDrafts]);
 
   const handleSubmit = useCallback(() => {
     const val = inputValue.trim();
     if (!val || composerDisabled) return;
+    // Queued selections ride along with the typed line as a single turn.
+    if (!executing && pendingDrafts.length > 0) {
+      setInputValue("");
+      commitDrafts(val);
+      return;
+    }
     if (executing) {
       // Steer the in-flight turn; on failure (e.g. the turn ended first — 409)
       // restore the steered text to the composer so the player can re-send it.
@@ -97,7 +119,15 @@ export function useGameViewComposer({
     }
     onSendMessage(val);
     setInputValue("");
-  }, [inputValue, composerDisabled, executing, steerMessage, onSendMessage]);
+  }, [
+    inputValue,
+    composerDisabled,
+    executing,
+    pendingDrafts.length,
+    commitDrafts,
+    steerMessage,
+    onSendMessage,
+  ]);
 
   const handleAbort = useCallback(() => {
     void abortActiveTurn();
