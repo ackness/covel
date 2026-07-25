@@ -23,7 +23,11 @@ const HERE = fileURLToPath(new URL(".", import.meta.url));
 const WEB_ROOT = resolve(HERE, "..");
 const SRC_ROOT = resolve(WEB_ROOT, "src");
 
-const CJK_REGEX = /[\u4e00-\u9fff\u3400-\u4dbf]/;
+// Ideographs plus CJK punctuation and fullwidth forms. The punctuation ranges
+// matter: `join("\u3001")` and friends are just as locale-specific as a word, and
+// an en-US player sees them verbatim.
+const CJK_REGEX =
+  /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff01-\uff5e\uffe0-\uffe6]/;
 // Allow sentinel is recognized anywhere on the line (inside //, /* */ or
 // JSX {/* ... */}) so JSX authors can keep the marker visually close.
 const ALLOW_COMMENT = /\bi18n-allow\b/;
@@ -206,6 +210,67 @@ function scanFile(filePath) {
   return findings;
 }
 
+// ── Missing-key check ────────────────────────────────────────────────
+//
+// The CJK scan cannot see this class of bug: a `t("some.key", "English
+// default")` whose key was never added to the locale files has no CJK in it,
+// so the gate passed while zh-CN players silently read English. Collect the
+// statically-analysable keys and require both locales to define them.
+
+const LOCALE_FILES = ["zh-CN", "en-US"];
+// Only literal single-argument keys — `t(\`prefix.${x}\`)` is deliberately
+// skipped rather than guessed at.
+const T_CALL_REGEX = /\bt\(\s*"([A-Za-z0-9_.]+)"/g;
+
+function flattenKeys(obj, prefix, out) {
+  for (const [key, value] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      flattenKeys(value, path, out);
+    } else {
+      out.add(path);
+    }
+  }
+  return out;
+}
+
+function collectUsedKeys(files) {
+  const used = new Map(); // key -> "rel:line"
+  for (const file of files) {
+    const stripped = stripComments(readFileSync(file, "utf8"));
+    const rel = relative(WEB_ROOT, file);
+    // Scan the whole file, not line by line: prettier wraps long calls as
+    // `t(\n  "some.key",\n  "default",\n)` and a per-line regex misses every
+    // one of them — which is exactly how the missing keys got in.
+    for (const m of stripped.matchAll(T_CALL_REGEX)) {
+      // A bare word is a variable, not a dotted i18n path.
+      if (!m[1].includes(".")) continue;
+      if (used.has(m[1])) continue;
+      const line = stripped.slice(0, m.index).split("\n").length;
+      used.set(m[1], `${rel}:${line}`);
+    }
+  }
+  return used;
+}
+
+function checkMissingKeys(files) {
+  const defined = {};
+  for (const locale of LOCALE_FILES) {
+    const path = resolve(SRC_ROOT, "i18n/locales", `${locale}.json`);
+    defined[locale] = flattenKeys(
+      JSON.parse(readFileSync(path, "utf8")),
+      "",
+      new Set(),
+    );
+  }
+  const problems = [];
+  for (const [key, where] of collectUsedKeys(files)) {
+    const missing = LOCALE_FILES.filter((l) => !defined[l].has(key));
+    if (missing.length > 0) problems.push({ key, where, missing });
+  }
+  return problems;
+}
+
 function main() {
   const files = [];
   walk(SRC_ROOT, files);
@@ -224,6 +289,16 @@ function main() {
       console.error(`  ${f.excerpt}`);
     }
   }
+
+  const missingKeys = checkMissingKeys(files);
+  for (const { key, where, missing } of missingKeys) {
+    total += 1;
+    // eslint-disable-next-line no-console
+    console.error(
+      `${where}: i18n key "${key}" is not defined in ${missing.join(", ")}`,
+    );
+  }
+
   if (total > 0) {
     // eslint-disable-next-line no-console
     console.error(
@@ -232,7 +307,9 @@ function main() {
     process.exit(1);
   }
   // eslint-disable-next-line no-console
-  console.log(`check-no-chinese-literal: OK (${files.length} file(s) scanned)`);
+  console.log(
+    `check-no-chinese-literal: OK (${files.length} file(s) scanned, ${collectUsedKeys(files).size} i18n keys verified)`,
+  );
 }
 
 main();

@@ -727,7 +727,9 @@
     "pingErrorTooltip": "错误: {{error}}",
     "pingResolvedVia": "通过 {{resolvedVia}} 解析",
     "pingSlotFallbackTitle": "Slot 回退到 {{resolvedVia}}；请求的 slot 尚未配置。",
-    "pingFailed": "失败"
+    "pingFailed": "失败",
+    "saveFailed": "设置保存失败",
+    "runtimeSlotsDiscoveredHint": "以下槽位由当前启用插件的 runtime 声明自动发现。"
   },
   "plugin": {
     "runtimes": "运行时",
@@ -810,6 +812,11 @@
     "runtimeErrors": {
       "title": "最近的插件错误",
       "dismiss": "关闭插件错误"
+    },
+    "invalidPanelSpecReason": {
+      "missingView": "缺少 view 字段",
+      "badView": "view 必须是对象",
+      "conversionFailed": "无法渲染 view"
     }
   },
   "pluginJob": {
@@ -942,7 +949,8 @@
     "errorTitle": "出错了",
     "networkError": "网络异常 — 请检查网络连接",
     "bootFailed": "会话初始化失败",
-    "sendMessageFailed": "消息发送失败"
+    "sendMessageFailed": "消息发送失败",
+    "syncFailed": "无法将本局同步到服务器"
   },
   "error": {
     "plugin": {
@@ -955,7 +963,9 @@
       "appTitle": "渲染此视图时发生错误。",
       "appDescription": "请尝试下方操作。如果问题仍然存在，请复制错误并提交 issue。",
       "tryAgain": "重试",
-      "reloadApp": "重新加载应用"
+      "reloadApp": "重新加载应用",
+      "pluginSurface": "该插件面板渲染失败。",
+      "pluginSurfaceNamed": "来自「{{label}}」的面板渲染失败。"
     },
     "boot": {
       "title": "启动失败",
@@ -1156,5 +1166,10 @@
     "jobSubmitted": "已提交 branch-reply 任务: {{jobId}}",
     "approvalRequired": "Branch reply 操作需要授权。",
     "actionFailed": "Branch reply 操作失败"
+  },
+  "characterBlueprint": {
+    "empty": "暂无角色蓝图",
+    "instantiated": "已生成角色",
+    "blueprintOnly": "仅蓝图"
   }
 }

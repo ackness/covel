@@ -727,7 +727,9 @@
     "pingErrorTooltip": "Error: {{error}}",
     "pingResolvedVia": "resolved via {{resolvedVia}}",
     "pingSlotFallbackTitle": "Slot fell through to {{resolvedVia}}; the slot you requested is not configured.",
-    "pingFailed": "Failed"
+    "pingFailed": "Failed",
+    "saveFailed": "Could not save setting",
+    "runtimeSlotsDiscoveredHint": "These slots were discovered from the runtime declarations of the enabled plugins."
   },
   "plugin": {
     "runtimes": "Runtimes",
@@ -810,6 +812,11 @@
     "runtimeErrors": {
       "title": "Recent plugin error",
       "dismiss": "Dismiss plugin error"
+    },
+    "invalidPanelSpecReason": {
+      "missingView": "missing `view`",
+      "badView": "`view` must be an object",
+      "conversionFailed": "could not render `view`"
     }
   },
   "pluginJob": {
@@ -942,7 +949,8 @@
     "errorTitle": "Something went wrong",
     "networkError": "Network error — check your connection",
     "bootFailed": "Failed to initialise session",
-    "sendMessageFailed": "Failed to send message"
+    "sendMessageFailed": "Failed to send message",
+    "syncFailed": "Could not sync this session to the server"
   },
   "error": {
     "plugin": {
@@ -955,7 +963,9 @@
       "appTitle": "Something broke while rendering this view.",
       "appDescription": "Try the actions below. If the problem persists, copy the error and open an issue.",
       "tryAgain": "Try again",
-      "reloadApp": "Reload app"
+      "reloadApp": "Reload app",
+      "pluginSurface": "This plugin panel failed to render.",
+      "pluginSurfaceNamed": "This panel from “{{label}}” failed to render."
     },
     "boot": {
       "title": "Failed to start",
@@ -1156,5 +1166,10 @@
     "jobSubmitted": "Submitted branch-reply job: {{jobId}}",
     "approvalRequired": "Branch reply action requires approval.",
     "actionFailed": "Branch reply action failed"
+  },
+  "characterBlueprint": {
+    "empty": "No character blueprints yet",
+    "instantiated": "Instantiated",
+    "blueprintOnly": "Blueprint only"
   }
 }
