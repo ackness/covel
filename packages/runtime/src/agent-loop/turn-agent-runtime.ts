@@ -291,6 +291,7 @@ export async function executeAgentRuntime({
     stoppedWithResponse,
     effectiveMaxSteps,
     deadline,
+    requiredToolUseUnmet,
   } = toolLoop;
 
   // Shared PostRuntime-hook opts for every terminal path of this runtime.
@@ -322,6 +323,29 @@ export async function executeAgentRuntime({
         maxSteps: effectiveMaxSteps,
         failedToolCalls,
       }),
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // `requireToolUse` unmet: the runtime declared that calling a tool IS its
+  // job, and it never did — the loop already nudged it once and released so a
+  // stubborn model cannot wedge the turn. Reporting success here would hand the
+  // player an empty panel behind a green check, with nothing in the trace to
+  // explain it, so fail with a diagnostic instead. Whatever prose the model
+  // produced is not this runtime's contract and is deliberately dropped.
+  if (requiredToolUseUnmet) {
+    return finalizeFailure({
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      runId,
+      turnId: input.turnId,
+      status: "failed",
+      output: null,
+      toolCalls: collectedToolCalls,
+      durationMs: Date.now() - startTime,
+      error:
+        `${manifest.name} declares requireToolUse but finished without calling a business tool ` +
+        `(a bare \`runtime-done\` does not count). The model answered with prose instead of doing the work.`,
       timestamp: new Date().toISOString(),
     });
   }

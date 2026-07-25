@@ -19,7 +19,6 @@ trigger:
   type: manual
 tools:
   builtin:
-    - plugin-data-list
     - plugin-data-set
 input:
   inject:

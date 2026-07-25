@@ -454,6 +454,8 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 列出本 session 所有角色（session 作用域，跨插件可见）。输出是**紧凑文本列表**，一行一个角色，包含 id / 名字 / 类型 / 版本 / 简短描述 —— 方便 LLM 快速对齐已知人物，需要完整属性时再单独调用 `get-character`。
 
+> **当前无捆绑插件声明它。** `character-tracker` 曾经声明过，但它的角色名册是在构建 prompt 时通过 `input.inject` 注入的（`<existing-characters>`），拿工具再查一遍是多余的往返。需要名册的第三方插件仍可声明；插件自己已经注入名册时，改用 `get-character` 处理"摘要不够、要看完整属性"的场景。
+
 **排序算法**：主键 `version desc`（版本越高 = 被交互次数越多 = 频率越高），次键 `updatedAt desc`（频率相同时最近 turn 的优先）。
 
 | 参数 | 类型 | 必需 | 描述                                |

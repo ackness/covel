@@ -149,7 +149,7 @@ export type EffectResource =
   | "media:*"
   | "working-memory:*"
   | "lorebook:*"
-  | "ui:*"
+  | `ui:${string}`
   | "interaction:*"
   | "unknown:*"
   | `plugin-data:self:${string}`

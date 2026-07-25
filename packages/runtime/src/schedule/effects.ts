@@ -110,7 +110,14 @@ export function deriveEffects(manifest: RuntimeManifest): RuntimeEffects {
   // outputKind: story runtimes write the narrative stream. Declared UI panels
   // imply ui writes (conservative — better over-declared than a missed hazard).
   if (manifest.outputKind === "story") writes.add("narrative:*");
-  if (manifest.ui) writes.add("ui:*");
+  // One key per declared UI slot, not a blanket `ui:*`. Two plugins that
+  // render into different surfaces (a right-panel vs a message block) never
+  // collide, and reporting them as a hazard every turn buries the pairs that
+  // genuinely share a surface. `ui:*` still wildcard-matches these, so an
+  // explicit `effects.writes: ["ui:*"]` keeps its old meaning.
+  for (const slot of Object.keys(manifest.ui ?? {})) {
+    writes.add(`ui:${slot}` as EffectResource);
+  }
 
   // Explicit `effects` is UNIONed with the derivation (v1 rule): an author may
   // ADD or tighten reads+writes but can never REMOVE a derived resource, so a

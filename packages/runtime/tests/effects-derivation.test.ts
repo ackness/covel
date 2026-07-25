@@ -147,11 +147,41 @@ describe("deriveEffects — builtin tool mapping table", () => {
     expect(asSet(noTopics.writes)).toEqual(["event:*"]);
   });
 
-  it("derives narrative:* from outputKind story and ui:* from a declared ui block", () => {
+  it("derives narrative:* from outputKind story and one key per declared ui slot", () => {
     const e = deriveEffects(
       manifest({ outputKind: "story", ui: { right: "./ui.json" } as never }),
     );
-    expect(asSet(e.writes)).toEqual(["narrative:*", "ui:*"]);
+    expect(asSet(e.writes)).toEqual(["narrative:*", "ui:right"]);
+  });
+
+  it("keeps ui slots apart so different surfaces do not hazard", () => {
+    // Observed as noise in production: a right-panel plugin and two
+    // message-block plugins were reported as a same-layer hazard every turn
+    // purely because each declared *some* UI. They cannot overwrite one
+    // another — different surfaces entirely.
+    const panel = deriveEffects(
+      manifest({ ui: { right: "./panel.json" } as never }),
+    );
+    const block = deriveEffects(
+      manifest({ ui: { message: "./block.json" } as never }),
+    );
+    const otherBlock = deriveEffects(
+      manifest({ ui: { message: "./other.json" } as never }),
+    );
+
+    expect(effectsHazard(panel, block)).toBe(false);
+    // Same surface still hazards — the signal that is worth keeping.
+    expect(effectsHazard(block, otherBlock)).toBe(true);
+  });
+
+  it("an explicit ui:* declaration still covers every slot", () => {
+    const wildcard = deriveEffects(
+      manifest({ effects: { writes: ["ui:*"] } } as never),
+    );
+    const block = deriveEffects(
+      manifest({ ui: { message: "./block.json" } as never }),
+    );
+    expect(effectsHazard(wildcard, block)).toBe(true);
   });
 
   it("derives an empty set for an agent with no declared surfaces (no unknown:* injected)", () => {

@@ -29,9 +29,6 @@ tools:
   plugin:
     - set-world-schema
     - set-world-entries-batch
-  builtin:
-    - plugin-data-get
-    - plugin-data-list
 ui:
   right:
     # world-entries.json removed: for imported worlds it was a raw-JSON dump of

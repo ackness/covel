@@ -124,13 +124,25 @@ describe("char-creator plugin", () => {
       expect(manifest.stage).toBe("post-turn");
     });
 
-    it("declares the full character management tool suite", () => {
+    it("declares the write tools plus the on-demand detail read", () => {
       expect(manifest.tools?.builtin).toEqual(
         expect.arrayContaining([
           "create-character",
           "update-character",
-          "list-characters",
           "get-character",
+        ]),
+      );
+    });
+
+    it("does not declare list-characters — the roster is injected", () => {
+      // `<existing-characters>` is injected at prompt-build time, so a roster
+      // tool would be a round-trip the runtime is told never to make. Handing
+      // the model a tool its own prompt forbids costs tokens and invites a
+      // detour; `get-character` remains for the truncated-snapshot case.
+      expect(manifest.tools?.builtin).not.toContain("list-characters");
+      expect(manifest.input?.inject).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ namespace: "characters" }),
         ]),
       );
     });

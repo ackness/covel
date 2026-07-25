@@ -53,6 +53,12 @@ export interface AgentToolLoopCompleted {
   readonly stoppedWithResponse: boolean;
   readonly effectiveMaxSteps: number;
   readonly deadline: number;
+  /**
+   * True when the runtime declared `requireToolUse` but finished without ever
+   * executing a business tool, even after the corrective nudge. The loop
+   * releases rather than wedging; the caller decides the outcome.
+   */
+  readonly requiredToolUseUnmet: boolean;
 }
 
 export type AgentToolLoopResult = AgentToolLoopCompleted | RuntimeResult;
@@ -116,6 +122,16 @@ export async function runAgentToolLoop({
     ...(initialState?.collectedToolCalls ?? []),
   ];
   const executedToolCalls: ExecutedToolCallState[] = [];
+  // Work done before a suspension lives in the seeded `collectedToolCalls`
+  // only — `executedToolCalls` always starts empty — so the requireToolUse
+  // gate below must count it, or a resumed runtime that already called its
+  // tool would be judged as having done nothing.
+  const seededBusinessWork = (initialState?.collectedToolCalls ?? []).some(
+    (c) => c.toolName !== "runtime-done",
+  );
+  // Set when `requireToolUse` released a runtime that never did business
+  // work — the caller turns it into a failure rather than an empty success.
+  let requiredToolUseUnmet = false;
   const failedToolCalls: FailedToolCallState[] = [];
   const pendingProposals: Proposal[] = [
     ...(initialState?.pendingProposals ?? []),
@@ -508,6 +524,14 @@ export async function runAgentToolLoop({
         );
         collectedToolCalls.length = 0;
         collectedToolCalls.push(...businessCalls);
+        // A `requireToolUse` runtime can reach here having called nothing but
+        // the terminator — a nudged model will do exactly that to satisfy
+        // "call the declared tools". This exit runs before the gate below, so
+        // record the unmet contract here or the runtime finishes as an empty
+        // success.
+        if (requireToolUse && businessCalls.length === 0) {
+          requiredToolUseUnmet = true;
+        }
         // Preserve streamed / captured prose from earlier steps or this
         // step's response.content. Without this guard a story runtime that
         // interleaves narrative prose + tool calls + runtime-done would lose
@@ -555,12 +579,23 @@ export async function runAgentToolLoop({
     }
 
     // requireToolUse gate: a runtime whose whole job is to call a tool has
-    // drifted into free-form prose (zero tool calls, nothing executed). Nudge
-    // it back once with a corrective system message; on a second bare finish
-    // release it (maxSteps still bounds the loop) so a stubborn model cannot
-    // wedge the runtime. Only fires when no tool ever executed successfully —
+    // drifted into free-form prose. Nudge it back once with a corrective
+    // system message; on a second bare finish release it (maxSteps still
+    // bounds the loop) so a stubborn model cannot wedge the runtime, but mark
+    // the contract unmet so the caller can fail honestly instead of reporting
+    // an empty success. Only fires when no BUSINESS tool ever executed —
     // a runtime that did its work and then narrated is left alone.
-    if (requireToolUse && !executedToolCalls.some((c) => c.success)) {
+    //
+    // `runtime-done` does not count. It is the framework's loop terminator,
+    // and a nudged model will happily call it alone to satisfy "call the
+    // declared tools" while doing no work at all — observed in the wild with
+    // scene-prompts, which reported success with zero prompts generated.
+    const didBusinessToolWork =
+      seededBusinessWork ||
+      executedToolCalls.some(
+        (c) => c.success && !isRuntimeDoneSentinel(c.result),
+      );
+    if (requireToolUse && !didBusinessToolWork) {
       if (noToolCallCorrections === 0) {
         noToolCallCorrections++;
         console.warn(
@@ -575,8 +610,9 @@ export async function runAgentToolLoop({
         continue;
       }
       console.warn(
-        `[runtime-retry] ${manifest.name} reason=no-tool-call cause=still no tool call after correction; releasing`,
+        `[runtime-retry] ${manifest.name} reason=no-tool-call cause=still no business tool call after correction; releasing`,
       );
+      requiredToolUseUnmet = true;
     }
 
     // Late steering: an interjection that arrived while THIS response
@@ -621,5 +657,6 @@ export async function runAgentToolLoop({
     stoppedWithResponse,
     effectiveMaxSteps,
     deadline,
+    requiredToolUseUnmet,
   };
 }

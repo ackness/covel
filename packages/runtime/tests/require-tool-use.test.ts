@@ -11,7 +11,11 @@ import { describe, it, expect, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
-import { createEmitEventTool, type EventDirectoryLike } from "@covel/tools";
+import {
+  createEmitEventTool,
+  runtimeDoneTool,
+  type EventDirectoryLike,
+} from "@covel/tools";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
@@ -61,8 +65,13 @@ function manifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
 
 function toolExecutor(store: DataStore) {
   return createToolExecutor({
-    findTool: (name) =>
-      name === "emit-event" ? createEmitEventTool({ directory }) : undefined,
+    findTool: (name) => {
+      if (name === "emit-event") return createEmitEventTool({ directory });
+      // The gate must treat this as "no work done", so the harness has to be
+      // able to resolve it — otherwise the call fails for the wrong reason.
+      if (name === runtimeDoneTool.name) return runtimeDoneTool;
+      return undefined;
+    },
     store,
   });
 }
@@ -108,6 +117,34 @@ class ScriptedLLM implements LLMAdapter {
 // gets English.
 const CORRECTION = "You finished without calling any tool";
 const CORRECTION_ZH = "你没有调用任何工具就结束了";
+
+/** Answers the corrective nudge by calling only the loop terminator. */
+class DoneOnlyLLM implements LLMAdapter {
+  step = 0;
+  async generate(): Promise<LLMResponse> {
+    this.step++;
+    if (this.step === 1) {
+      return {
+        content: "The corridor stretches on and the story continues.",
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      };
+    }
+    return {
+      content: null,
+      toolCalls: [
+        {
+          id: `tc-done-${this.step}`,
+          name: "runtime-done",
+          arguments: JSON.stringify({ reason: "all set" }),
+        },
+      ],
+      finishReason: "tool_calls",
+      usage: { inputTokens: 10, outputTokens: 5 },
+    };
+  }
+}
 
 describe("requireToolUse gate", () => {
   it("injects one correction then succeeds when the retry calls the tool", async () => {
@@ -170,7 +207,7 @@ describe("requireToolUse gate", () => {
     ).toBe(true);
   });
 
-  it("releases with a warn when the retry still calls no tool", async () => {
+  it("releases with a warn and fails when the retry still calls no tool", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       const store = await mainLoopStore("sess-2");
@@ -196,10 +233,47 @@ describe("requireToolUse gate", () => {
           String(c[0]).includes("reason=no-tool-call"),
         ),
       ).toBe(true);
+      // Released, but NOT reported as success: the runtime's whole declared
+      // job is to call a tool, and it never did. An empty success would hand
+      // the player a blank panel behind a green check.
       const res = result.runtimeResults.find(
         (r) => r.runtimeId === "plug/gated",
       );
-      expect(res?.status).toBe("success");
+      expect(res?.status).toBe("failed");
+      expect(res?.error).toContain("requireToolUse");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("a bare runtime-done does not satisfy the gate", async () => {
+    // Observed in the wild: nudged with "call the declared tools", the model
+    // called only the framework's loop terminator and did no work. The gate
+    // counted it as a successful tool call, so the runtime reported success
+    // with zero output — a green check over an empty panel.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const store = await mainLoopStore("sess-done");
+      const llm = new DoneOnlyLLM();
+      const deps: TurnExecutorDeps = {
+        loadRuntime: async (m) => ({ manifest: m, promptTemplate: "prompt" }),
+        llm,
+        store,
+        toolExecutor: toolExecutor(store),
+      };
+
+      const result = await executeTurn(
+        makeTurnInput({ sessionId: "sess-done" }),
+        [manifest({ requireToolUse: true })],
+        deps,
+        { maxSteps: 5 },
+      );
+
+      const res = result.runtimeResults.find(
+        (r) => r.runtimeId === "plug/gated",
+      );
+      expect(res?.status).toBe("failed");
+      expect(res?.error).toContain("requireToolUse");
     } finally {
       warn.mockRestore();
     }
