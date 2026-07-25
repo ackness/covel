@@ -7,12 +7,10 @@ description:
   zh: 让故事更像角色对话，适合重视聊天和人物互动的玩法。
   en: Makes the story feel more like character dialogue, suited for play focused on conversation and interaction.
 pluginType: plugin
-priority: 500
 model: story
 timeoutMs: 240000
 callTimeoutMs: 120000
 outputKind: story
-capabilities: [narrative, chat-mode]
 advertiseEvents: true
 tags:
   - mode:dialogue
@@ -35,18 +33,6 @@ input:
       from: npc-graph/rag-retriever
       field: npcContext
       as: "<npc-relationships>"
-relations:
-  provides:
-    - narrative-engine
-  conflicts:
-    - narrator
-  requires:
-    - scene-cast
-    - scene-prompts
-    - character-blueprint
-    - character-presence
-    - living-world-rules
-    - branch-reply
 userSettings:
   - key: dialogueRatio
     type: number

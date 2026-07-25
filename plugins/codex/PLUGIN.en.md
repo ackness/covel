@@ -10,7 +10,6 @@ pluginType: plugin
 # Narrator-downstream layer (see guide for the rationale). Every
 # plugin in this layer shares priority 600 so priority-based fallback
 # scheduling still runs them in parallel.
-priority: 600
 outputKind: system
 model: plugin
 timeoutMs: 120000
@@ -27,8 +26,6 @@ trigger:
 # capability (narrative-engine → narrator in traditional, chat-mode-narrator
 # in dialogue) instead of naming one; the inject lists both known engines and
 # the absent one resolves to nothing.
-upstreamRequired:
-  - capability: narrative-engine
 input:
   inject:
     - kind: runtime

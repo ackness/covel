@@ -7,7 +7,6 @@ description:
   zh: 在每轮故事后给出几种行动建议，帮你更快决定下一步。
   en: Suggests a few possible actions after each story beat so you can choose your next move faster.
 pluginType: plugin
-priority: 600
 model: plugin
 outputKind: system
 timeoutMs: 120000
@@ -20,8 +19,6 @@ trigger:
 # chat-mode-narrator in dialogue). The inject lists both known engines; the
 # absent one resolves to nothing, so the active engine's output fills
 # <narrator-output> either way.
-upstreamRequired:
-  - capability: narrative-engine
 input:
   inject:
     - kind: runtime

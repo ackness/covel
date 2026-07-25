@@ -4,56 +4,12 @@ description:
   zh: 从故事里整理人物、势力和他们之间的关系。
   en: Collects characters, groups, factions, and the relationships between them from the story.
 pluginType: plugin
-# Narrator-downstream layer — shares priority 600 with guide, codex, and
-# character-tracker so scheduler runs them in parallel.
-priority: 600
-model: plugin
-timeoutMs: 240000
-capabilities: [npc-graph, relationship-tracking]
-tags:
-  - role:memory
-  - data:relationship-graph
-  - cost:llm
-  - ui:right-panel
-outputKind: system
-trigger:
-  type: scheduled
-  interval: 1
-  cooldownTurns: 1
-# Engine-agnostic extraction. The upstream gate discovers the active
-# narrative engine by capability (narrative-engine → narrator in traditional,
-# chat-mode-narrator in dialogue) instead of naming one, so the extractor
-# runs in either mode and still skips when that engine failed. The inject
-# lists both known engines; the absent one resolves to nothing, so exactly
-# the active engine's fresh prose fills <narrator-output>.
-upstreamRequired:
-  - capability: narrative-engine
-input:
-  inject:
-    - kind: runtime
-      from: narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-    - kind: runtime
-      from: chat-mode-narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-tools:
-  plugin:
-    - upsert-npc-graph
-    - list-npc-graph
-  builtin:
-    - plugin-data-list
-    - plugin-data-get
-ui:
-  right:
-    - ./ui/npc-graph-panel.json
 postHistory:
   role: system
   content: |
     Runtime workflow:
-    - First, call `list-npc-graph` once to inspect existing nodes / edges
-    - When new nodes or edges are found, call `upsert-npc-graph` once
+    - Existing nodes are in `<existing-npcs>` and existing relations in `<existing-relations>` (injected automatically at prompt-build time — do NOT call list-npc-graph)
+    - When new nodes or relations appear, call `upsert-npc-graph` once (submit by name; the tool maps names to ids internally)
     - When the turn had no significant character interaction, do NOT call `upsert-npc-graph`
     - After finishing (or deciding not to update), call `runtime-done` to end the turn
 ---
@@ -64,9 +20,14 @@ You are the NPC Graph Analyst. Your job is to continuously maintain a session-sc
 
 This turn's narrative is provided in the `<narrator-output>` block at the end of the prompt (injected automatically by the framework's `input.inject`; the body no longer inlines a second copy).
 
-## Existing graph
+## Existing graph (auto-injected, no tool needed)
 
-Call `list-npc-graph` first to view every node and edge already recorded for this session, so you avoid duplicates.
+The nodes and relations already recorded for this session are injected at the end of the prompt — you do **not** need to call `list-npc-graph`:
+
+- `<existing-npcs>`: existing nodes, one row per node — `- <node id> | <updated-at> | {name, type, summary, ...}`. Compare by **name** to avoid creating duplicates (the tool dedupes by name too).
+- `<existing-relations>`: existing relations, one row per edge — `- <edge id> | <updated-at> | {source, target, relation, strength, fact, validAt, invalidAt?}`. `source`/`target` are node ids; rows carrying `invalidAt` are superseded older versions — ignore them. The `fact` in the summary may be truncated: use it only to judge whether a relation is already on record, and skip re-recording unchanged ones.
+
+Only in the rare case where you need a relation's full `fact` to decide whether it changed should you call `list-npc-graph` on demand.
 
 ## Ontology constraints
 
@@ -82,7 +43,7 @@ Call `list-npc-graph` first to view every node and edge already recorded for thi
 
 ## Workflow
 
-1. **Read**: call `list-npc-graph` to obtain a summary of all nodes and edges in the current session
+1. **Read**: review the injected `<existing-npcs>` and `<existing-relations>` (no tool call needed)
 2. **Compare**: match what you read against the characters and interactions in `<narrator-output>`
 3. **Extract**:
    - **Newly appearing** characters / groups / factions → register as new nodes
