@@ -174,6 +174,11 @@ export function createMiscApiRoutes(
 
   // GET /api/provider-keys — return server-configured API keys to desktop bearer clients only.
   app.get("/api/provider-keys", (c) => {
+    // Which providers the deployment has configured — and the masked key
+    // fragments below — are operator-only facts on hosted tiers. Strict no-op
+    // on self/desktop, where the raw-key branch below is the real path.
+    const denied = checkHostedOperator(c);
+    if (denied) return denied;
     const KNOWN_PROVIDERS = [
       "DEEPSEEK",
       "DASHSCOPE",
