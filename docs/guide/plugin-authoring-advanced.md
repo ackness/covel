@@ -410,7 +410,9 @@ envelope-v1 下 value 是**强制校验**的:`success.value` 先过 JSON wire �
 
 ### `suspensionSafe` 与 `permissions.http`
 
-**`suspensionSafe: boolean`(function runtime,默认 false)**:声明本 handler 可以从冻结的激活边界重放,以便在审批 / HTTP ask 处挂起后继续跑。只有幂等、可安全重入的 handler 才应打开——重放会从头再跑一遍 handler,非幂等副作用(外部下单、递增计数)会重复执行。
+**`suspensionSafe: boolean`(function runtime)**:**保留字段,当前不生效——声明与否行为完全一致,不要依赖它做安全假设。**
+
+它原本要标记"本 handler 可以从冻结的激活边界重放",但内核里没有这种重放:函数 runtime 挂起后,`resumeSuspendedRuntime` 重入的是共享的 agent 工具循环(把 resume 数据当一条 user 消息喂进去),handler 不会被再次调用;`ctx.http` 也没有审批挂起路径可供重放。字段仍被 schema 接受,只是为了让已经声明过它的 manifest 继续能加载。若将来真的落地"审批门控的 HTTP ask",届时会连同实际的闸门一起恢复语义。
 
 **`permissions.http`(声明式网络上界)**:列出本插件可经 Public Plugin API 访问的规范 HTTPS origin(`origin` 不带 path/query/凭据)与方法(缺省仅 `GET`)。
 

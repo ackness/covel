@@ -351,6 +351,12 @@ export const rpcActionDeclSchema = z
     handler: pluginRelativeJsPath,
     input: pluginRelativeSchemaPath.optional(),
     trustLevel: z.enum(["builtin", "official", "community"]).optional(),
+    /**
+     * Reserved, NOT enforced. RPC dispatch is always synchronous; long-running
+     * work uses a background job and reports progress via `plugin-data.changed`
+     * SSE, so no streaming protocol reads this. Accepted so existing manifests
+     * keep loading; declaring it changes nothing.
+     */
     streaming: z.boolean().optional(),
     description: z.string().optional(),
   })
@@ -905,7 +911,13 @@ const runtimeManifestCommonShape = {
   inputs: inputsBindingMapSchema.optional(),
   /** How the normalizer parses this runtime's handler return value. */
   resultFormat: resultFormatSchema.optional(),
-  /** Handler may be replayed from a frozen activation boundary on resume. */
+  /**
+   * Reserved, NOT enforced. Intended to mark a handler as replay-safe for a
+   * resume that re-invokes it. No such replay exists: `resumeSuspendedRuntime`
+   * re-enters the shared agent tool loop and never calls the handler again,
+   * and `ctx.http` has no approval-suspension path to replay from. Accepted so
+   * existing manifests keep loading; declaring it changes nothing today.
+   */
   suspensionSafe: z.boolean().optional(),
   /** Explicit read/write-set override for parallel hazard detection. */
   effects: effectsDeclSchema.optional(),

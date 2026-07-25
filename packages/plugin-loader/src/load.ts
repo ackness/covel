@@ -489,23 +489,6 @@ export async function loadRuntime(
     guard = mod.default as FunctionHandler;
   }
 
-  // suspensionSafe pre-check (groundwork for approval-gated resumable asks): a
-  // non-builtin function runtime that can make HTTP calls (permissions.http) but
-  // is not replay-safe will not be resumable once those asks land. Warn now — no
-  // runtime gate. builtin plugins are shipped by us and exempt.
-  if (
-    parsed.manifest.runtimeType === "function" &&
-    discovery.source !== "builtin" &&
-    (parsed.manifest.permissions?.http?.length ?? 0) > 0 &&
-    parsed.manifest.suspensionSafe !== true
-  ) {
-    console.warn(
-      `[plugin-loader] ${parsed.manifest.name}: declares permissions.http but not ` +
-        `suspensionSafe — it will not be resumable once approval-gated HTTP asks land. ` +
-        `Declare suspensionSafe: true when the handler is replay-safe.`,
-    );
-  }
-
   // Load UI spec files from ui/ directory
   const uiSpecs = await loadUiSpecs(
     runtimeDir,

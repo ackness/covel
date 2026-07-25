@@ -631,8 +631,13 @@ export interface RuntimeManifest {
    */
   readonly resultFormat?: import("./runtime-scheduling.js").RuntimeResultFormat;
   /**
-   * Function runtimes only: handler may be replayed from a frozen
-   * activation boundary to resume approval/HTTP asks. Default false.
+   * Reserved, NOT enforced — declaring it changes nothing today.
+   *
+   * It was meant to mark a function handler replay-safe for a resume that
+   * re-invokes it, but no such replay exists: `resumeSuspendedRuntime`
+   * re-enters the shared agent tool loop rather than calling the handler
+   * again, and `ctx.http` has no approval-suspension path to replay from.
+   * Kept accepted so existing manifests keep loading.
    */
   readonly suspensionSafe?: boolean;
   /**
