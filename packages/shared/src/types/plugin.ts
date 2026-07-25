@@ -337,14 +337,6 @@ export interface ToolsConfig {
   /** Builtin tool IDs to enable. */
   readonly builtin?: readonly string[];
   /**
-   * Relative paths to local tool modules.
-   * @deprecated Register tools imperatively in the unified `entry` module and
-   * list their names under `plugin` instead. All bundled plugins migrated in
-   * v0.0.14; this shim (and the legacy `hooks`/`rpc`/`wires` frontmatter
-   * fields) is planned for removal in v0.0.17.
-   */
-  readonly local?: readonly string[];
-  /**
    * Names of entry-registered plugin tools this runtime exposes to its LLM
    * (registration itself happens in the plugin's `entry` module).
    */

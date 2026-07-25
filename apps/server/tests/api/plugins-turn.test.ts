@@ -167,7 +167,7 @@ describe("Plugin Routes", () => {
         execution: "background",
         tools: {
           builtin: ["plugin-data-get"],
-          local: ["./tools/save-image.js"],
+          plugin: ["save-image"],
         },
         input: {
           inject: [
@@ -220,12 +220,9 @@ describe("Plugin Routes", () => {
           },
         },
       });
+      // Entry-registered tools are declared by name; there is no on-disk path.
       expect(body.tools.local).toEqual([
-        {
-          runtimeId: "my-plugin/runner",
-          path: "./tools/save-image.js",
-          name: "save-image",
-        },
+        { runtimeId: "my-plugin/runner", name: "save-image" },
       ]);
       expect(body.runtimes[0]).toMatchObject({
         id: "my-plugin/runner",

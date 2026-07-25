@@ -419,7 +419,6 @@ function warnLegacyRegistrationFields(
     const legacy = new Set<string>();
     for (const parsed of manifests) {
       const m = parsed.manifest;
-      if (m.tools?.local?.length) legacy.add("tools.local");
       if (m.hooks?.length) legacy.add("hooks");
       if (m.rpc && Object.keys(m.rpc).length > 0) legacy.add("rpc");
       if (m.wires) legacy.add("wires");

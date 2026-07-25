@@ -77,8 +77,5 @@ const REGISTRY: readonly StorageMigrationSummary[] = [
   },
 ];
 
-export function summarizeStorageMigrations(
-  registry: readonly StorageMigrationSummary[] = REGISTRY,
-): readonly StorageMigrationSummary[] {
-  return registry;
-}
+/** The storage migrations this build knows about. */
+export const STORAGE_MIGRATIONS: readonly StorageMigrationSummary[] = REGISTRY;

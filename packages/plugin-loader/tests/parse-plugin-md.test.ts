@@ -175,7 +175,7 @@ describe("parsePluginMd", () => {
           "  builtin:",
           "    - state.get",
           "    - state.patch",
-          "  local:",
+          "  plugin:",
           "    - roll-dice",
           "input:",
           "  inject:",
@@ -220,7 +220,7 @@ describe("parsePluginMd", () => {
       });
       expect(result.manifest.tools).toEqual({
         builtin: ["state.get", "state.patch"],
-        local: ["roll-dice"],
+        plugin: ["roll-dice"],
       });
       expect(result.manifest.input).toEqual({
         inject: [

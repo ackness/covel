@@ -260,7 +260,6 @@ export const pluginDataSchemaMapSchema = z
 export const toolsConfigSchema = z
   .object({
     builtin: z.array(z.string()).optional(),
-    local: z.array(z.string()).optional(),
     /** Names of entry-registered plugin tools this runtime exposes to its LLM. */
     plugin: z.array(z.string()).optional(),
     /**

@@ -32,25 +32,15 @@ import type { ToolCallContext, ToolExecutor } from "./tool-executor.js";
 export { SEARCH_TOOLS_TOOL_NAME };
 
 /**
- * The runtime's declared tool names, in advertisement form (local paths
- * reduced to their file basename). Single source for both the initial
+ * The runtime's declared tool names. Single source for both the initial
  * advertisement list and the deferred-pool derivation, so the two can never
  * disagree on a name.
  */
 export function declaredToolNames(manifest: RuntimeManifest): string[] {
-  const names: string[] = [
+  return [
     ...(manifest.tools?.builtin ?? []),
     ...(manifest.tools?.plugin ?? []),
   ];
-  for (const p of manifest.tools?.local ?? []) {
-    names.push(
-      p
-        .split("/")
-        .pop()
-        ?.replace(/\.[^.]+$/, "") ?? p,
-    );
-  }
-  return names;
 }
 
 /**

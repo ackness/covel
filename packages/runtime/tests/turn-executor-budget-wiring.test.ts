@@ -192,7 +192,7 @@ describe("turn-executor → context budget wiring", () => {
     // budget injection must be skipped.
     const manifest = makeManifest({
       tools: {
-        local: ["./tools/dummy.ts"],
+        plugin: ["dummy"],
       },
     });
 

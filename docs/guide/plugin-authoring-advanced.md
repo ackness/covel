@@ -808,14 +808,14 @@ my-plugin/
 
 ## 附录：旧注册字段迁移
 
-`tools.local` / `hooks` / `rpc` / `wires` 四个 frontmatter 注册字段已弃用（启动时每插件 warn 一次，保留一个发布周期后移除），统一迁移到 `entry` 模块的 `PluginAPI` facade。对照表：
+`tools.local` 已移除（声明即加载失败）；`hooks` / `rpc` / `wires` 仍被接受但已弃用（启动时每插件 warn 一次）。四者统一迁移到 `entry` 模块的 `PluginAPI` facade，对照表：
 
-| 旧 frontmatter 字段           | 新写法（entry 工厂内）                                              | 备注                                                                                                                  |
-| ----------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `tools.local: [./tools/x.js]` | `covel.registerTool(makeX(covel.toolkit))`                          | 工具工厂文件本身无需修改（`covel.toolkit` 就是旧的注入包）；runtime manifest 改用 `tools.plugin` 声明工具**名字**列表 |
-| `hooks: [{event, handler}]`   | `covel.on(event, handler, { match?, timeoutMs?, enforce? })`        | 16 事件语义不变；`match` 从浅层等值 map 变为谓词函数                                                                  |
-| `rpc: { action: {handler} }`  | `covel.registerRpc(action, handler, { description?, trustLevel? })` | handler 内联注册，不再 lazy import；信任等级仍按插件来源钳制                                                          |
-| `wires: lib/wires.js`         | `covel.registerWires({ image?, speech?, transcription? })`          | 命名空间仍为 `<pluginId>/<wireId>`；SSRF 守卫和重试 fetch 经 `covel.http` 注入                                        |
+| 旧 frontmatter 字段                     | 新写法（entry 工厂内）                                              | 备注                                                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `tools.local: [./tools/x.js]`（已移除） | `covel.registerTool(makeX(covel.toolkit))`                          | 工具工厂文件本身无需修改（`covel.toolkit` 就是旧的注入包）；runtime manifest 改用 `tools.plugin` 声明工具**名字**列表 |
+| `hooks: [{event, handler}]`             | `covel.on(event, handler, { match?, timeoutMs?, enforce? })`        | 16 事件语义不变；`match` 从浅层等值 map 变为谓词函数                                                                  |
+| `rpc: { action: {handler} }`            | `covel.registerRpc(action, handler, { description?, trustLevel? })` | handler 内联注册，不再 lazy import；信任等级仍按插件来源钳制                                                          |
+| `wires: lib/wires.js`                   | `covel.registerWires({ image?, speech?, transcription? })`          | 命名空间仍为 `<pluginId>/<wireId>`；SSRF 守卫和重试 fetch 经 `covel.http` 注入                                        |
 
 迁移步骤：
 

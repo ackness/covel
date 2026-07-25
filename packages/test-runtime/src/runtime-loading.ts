@@ -26,7 +26,10 @@ export interface RuntimeLoadResult {
   readonly manifests: readonly RuntimeManifest[];
   readonly target: RuntimeManifest;
   readonly loadedCache: Map<string, LoadedRuntime>;
-  readonly localTools: readonly ToolModule[];
+  // ponytail: this harness registers builtin tools only. Plugin tools are
+  // registered by the plugin's `entry` module, which needs the PluginAPI
+  // facade the server bootstrap builds — wire that in if a harness run ever
+  // needs to exercise a plugin-registered tool.
 }
 
 export function expandPath(input: string): string {
@@ -121,54 +124,11 @@ export async function loadRuntimeBundle(args: {
     rawManifests,
     locale: args.locale,
   });
-  const localTools = await loadLocalTools(discovery, manifests, args.store);
   return {
     discovery,
     rawManifests,
     manifests,
     target,
     loadedCache,
-    localTools,
   };
-}
-
-export async function loadLocalTools(
-  discovery: PluginDiscoveryResult,
-  manifests: readonly RuntimeManifest[],
-  store?: DataStore,
-): Promise<readonly ToolModule[]> {
-  const loaded: ToolModule[] = [];
-  for (const manifest of manifests) {
-    for (const localPath of manifest.tools?.local ?? []) {
-      const fullPath = path.resolve(discovery.rootPath, localPath);
-      const rel = path.relative(discovery.rootPath, fullPath);
-      if (rel.startsWith("..") || path.isAbsolute(rel)) {
-        throw new Error(`tools.local path escapes plugin root: ${localPath}`);
-      }
-      if (!fs.existsSync(fullPath)) {
-        throw new Error(`tools.local file not found: ${fullPath}`);
-      }
-      const mod = await import(pathToFileURL(fullPath).href);
-      const exported = mod.default ?? Object.values(mod)[0];
-      const candidate =
-        typeof exported === "function"
-          ? exported({
-              tool,
-              z,
-              shortId,
-              shortIdBatch,
-              withPendingProposals,
-              store,
-            })
-          : exported;
-      if (
-        candidate &&
-        typeof candidate === "object" &&
-        (candidate as { _type?: unknown })._type === "covel-tool"
-      ) {
-        loaded.push(candidate as ToolModule);
-      }
-    }
-  }
-  return loaded;
 }

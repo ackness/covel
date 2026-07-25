@@ -112,15 +112,14 @@ export async function runRuntimeDebug(
   const store = createMemoryStore();
   const mediaStore = options.mediaStore ?? createMemoryMediaStore();
 
-  const { discovery, manifests, loadedCache, localTools } =
-    await loadRuntimeBundle({
-      pluginsDir,
-      pluginId,
-      runtimeId,
-      locale,
-      ignoreUpstreams: options.ignoreUpstreams,
-      store,
-    });
+  const { discovery, manifests, loadedCache } = await loadRuntimeBundle({
+    pluginsDir,
+    pluginId,
+    runtimeId,
+    locale,
+    ignoreUpstreams: options.ignoreUpstreams,
+    store,
+  });
 
   const now = new Date().toISOString();
   await store.createSession({
@@ -144,10 +143,6 @@ export async function runRuntimeDebug(
   })) {
     toolMap.set(t.name, t);
   }
-  for (const t of localTools) {
-    toolMap.set(t.name, t);
-  }
-
   const llm = buildMockLlm(options);
   const liveAdapters = options.mode === "live" ? makeLiveAdapters() : undefined;
   const result = await executeTurn(
