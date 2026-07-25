@@ -32,6 +32,12 @@ Covel is an AI RPG where the world keeps running between your turns: NPCs track 
 
 Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
 
+## What the agents leave behind
+
+![Core memory panel](./.assets/images/readme/memory-panel.png)
+
+Open a side panel mid-play and you are reading what the background agents wrote this turn: core memory (running plot, current scene, player state), the NPC relationship graph, the world codex, the on-stage cast. None of it is hand-authored — it accumulates as you play, and it is what the narrator reads back on the next turn.
+
 ## Quick start
 
 ### Play
