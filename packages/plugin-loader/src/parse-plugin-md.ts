@@ -54,6 +54,8 @@ interface ZodIssue {
   readonly code: string;
   readonly path: readonly (string | number)[];
   readonly message: string;
+  /** Present on `unrecognized_keys`; the offending names live here, not in `path`. */
+  readonly keys?: readonly string[];
 }
 interface ZodErrorLike {
   readonly name: string;
@@ -84,6 +86,27 @@ function deriveFixHint(error: unknown): string {
   const path = firstIssue.path.join(".");
   const code = firstIssue.code;
 
+  // Unknown keys come first: Zod reports them with an EMPTY `path` and the
+  // offending names in `keys`, so the `!path` branch below would otherwise
+  // swallow them behind the (wrong) "missing frontmatter" hint.
+  if (code === "unrecognized_keys") {
+    const keys = firstIssue.keys ?? (path ? [path] : []);
+    // Fields that were removed rather than misspelled: name the replacement,
+    // since "unknown field" alone would not tell the author where to go.
+    const replacements: Record<string, string> = {
+      priority:
+        "`priority` was removed — declare a named `stage` instead (e.g. `stage: post-turn`).",
+      upstreamRequired:
+        "`upstreamRequired` was removed — declare `needs` instead (same entries, turn-scoped by default).",
+    };
+    const replaced = keys.filter((k) => k in replacements);
+    if (replaced.length > 0) {
+      return replaced.map((k) => replacements[k]).join(" ");
+    }
+    const label = keys.length > 0 ? keys.map((k) => `"${k}"`).join(", ") : path;
+    return `Remove or rename the unknown field ${label} — refer to docs/reference/plugins.md for the full frontmatter schema.`;
+  }
+
   // Common, author-facing failures — keep these terse and specific.
   if (!path) {
     return "Ensure the PLUGIN.md file begins with `---` and contains valid YAML frontmatter.";
@@ -93,16 +116,6 @@ function deriveFixHint(error: unknown): string {
   }
   if (path === "description") {
     return 'Add a `description:` field — either a single string or an i18n map like `description: { en-US: "...", zh-CN: "..." }`.';
-  }
-  if (path === "priority" || path === "upstreamRequired") {
-    // Removed fields still worth a tailored hint: the generic
-    // "unknown field" message would not name the replacement.
-    return path === "priority"
-      ? "`priority` was removed — declare a named `stage` instead (e.g. `stage: post-turn`)."
-      : "`upstreamRequired` was removed — declare `needs` instead (same entries, turn-scoped by default).";
-  }
-  if (code === "unrecognized_keys") {
-    return `Remove or rename the unknown field at "${path}" — refer to docs/reference/plugins.md for the full frontmatter schema.`;
   }
   if (code === "invalid_type") {
     return `Field "${path}" has the wrong type — ${firstIssue.message}.`;

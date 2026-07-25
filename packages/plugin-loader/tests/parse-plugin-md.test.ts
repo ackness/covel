@@ -516,6 +516,58 @@ describe("parsePluginMd", () => {
       expect(caught!.message.toLowerCase()).toContain("kebab-case");
     });
 
+    // Zod reports `unrecognized_keys` with an EMPTY path and the offending
+    // names in `issue.keys`. Hint derivation must read `keys`, or every
+    // unknown-field failure falls through to the "missing frontmatter" hint,
+    // which is actively wrong — the frontmatter parsed fine.
+    it("names removed scheduling fields and points at their replacements", () => {
+      const content = md(
+        [
+          "name: legacy-decl",
+          "description: Still on the removed fields",
+          "priority: 500",
+          "upstreamRequired: [narrator]",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      let caught: Error | undefined;
+      try {
+        parsePluginMd(content, "plugins/legacy-decl/PLUGIN.md");
+      } catch (err) {
+        caught = err as Error;
+      }
+
+      expect(caught).toBeDefined();
+      expect(caught!.message).toContain("Fix:");
+      expect(caught!.message).toContain("`stage`");
+      expect(caught!.message).toContain("`needs`");
+      expect(caught!.message).not.toContain("begins with `---`");
+    });
+
+    it("names a misspelled field instead of blaming the frontmatter", () => {
+      const content = md(
+        [
+          "name: typo-decl",
+          "description: Misspelled capability field",
+          "stage: pre-turn",
+          "capabilties: [narrative]",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      let caught: Error | undefined;
+      try {
+        parsePluginMd(content, "plugins/typo-decl/PLUGIN.md");
+      } catch (err) {
+        caught = err as Error;
+      }
+
+      expect(caught).toBeDefined();
+      expect(caught!.message).toContain('"capabilties"');
+      expect(caught!.message).not.toContain("begins with `---`");
+    });
+
     it("includes a 1-based line number when the failing key appears in source", () => {
       const content = md(
         [
