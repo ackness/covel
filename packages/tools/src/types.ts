@@ -70,21 +70,9 @@ export interface ToolDefinitionInput<
   ): Promise<TOutput | ToolExecutionEnvelope<TOutput>>;
 }
 
-// ── Resolved tool (registered in registry) ───────────────────────
+// ── Tool provenance ──────────────────────────────────────────────
 
 export type ToolSource = "builtin" | "local";
-
-export interface ResolvedTool {
-  /** Full name: covel_{plugin}_{runtime}_{fn} */
-  readonly fullName: string;
-  /** Original function name */
-  readonly localName: string;
-  readonly pluginId: string;
-  readonly runtimeId: string;
-  readonly module: ToolModule;
-  readonly source: ToolSource;
-  readonly requiresApproval: boolean;
-}
 
 // ── Output validation ────────────────────────────────────────────
 

@@ -3,10 +3,7 @@ export {
   createStoreFromEnv,
   resolveBackendFromEnv,
 } from "./factory.js";
-export {
-  BROWSER_IDB_DATABASE_NAME,
-  summarizeStorageMigrations,
-} from "./migrations.js";
+export { BROWSER_IDB_DATABASE_NAME, STORAGE_MIGRATIONS } from "./migrations.js";
 export { describeStorageCapabilities } from "./storage-capabilities.js";
 export { createMemoryStore } from "./memory/memory-store.js";
 export { createSqliteStore } from "./sqlite/sqlite-store.js";
@@ -44,7 +41,7 @@ export type {
   FrontendStorageMode,
   StorageCapabilityDescriptor,
 } from "./storage-capabilities.js";
-export type { VectorBackend, VectorStore } from "./vector-factory.js";
+export type { VectorBackend, VectorStore } from "./vector-store.js";
 export type {
   VectorStoreCapability,
   VectorModelOps,

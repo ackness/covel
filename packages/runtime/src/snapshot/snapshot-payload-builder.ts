@@ -68,18 +68,11 @@ export async function buildSnapshotPayload(
   //     plugins that wrote during install hooks, data-only providers, and
   //     plugins that suspended before producing any runtime result.
   //
-  // The session-scope list already returns every plugin_data row for the
-  // session in one query (audit 2026-06-04 finding M1), so we filter that
-  // result by the discovered plugin-id set rather than re-querying per
-  // pluginId. Source #1 only ever *adds* ids that have no plugin_data rows,
-  // so filtering by the union still yields exactly the source-#2 rows.
-  const { pluginIds, pluginDataRows } = await discoverPluginIds(
-    store,
-    sessionId,
-  );
-  const pluginData: PluginDataRecord[] = pluginDataRows.filter((row) =>
-    pluginIds.has(row.pluginId),
-  );
+  // One query returns every plugin_data row for the session, which is exactly
+  // what the payload needs: a plugin with no rows contributes nothing here,
+  // and a plugin that never produced a runtime result still travels.
+  const pluginData: readonly PluginDataRecord[] =
+    await store.listPluginDataSessionScope(sessionId);
 
   // Working memory
   const workingMemory: readonly WorkingMemoryRecord[] =
@@ -143,46 +136,4 @@ export async function buildSnapshotPayload(
     suspensions,
     messagesCursor,
   };
-}
-
-/**
- * Discover plugin ids that have any data for the given session.
- *
- * Union of two sources (audit 2026-04-20 finding 7.2):
- *  - Runtime results — any plugin that ever ran in the session.
- *  - Plugin data — any plugin that ever wrote to `plugin_data`, even if it
- *    never produced a runtime result (install hooks, data-only providers,
- *    plugins that suspended before completing their first turn).
- *
- * Previously only the runtime-result source was walked, which silently
- * dropped plugins of the second shape from the snapshot payload.
- */
-async function discoverPluginIds(
-  store: DataStore,
-  sessionId: string,
-): Promise<{
-  pluginIds: ReadonlySet<string>;
-  pluginDataRows: readonly PluginDataRecord[];
-}> {
-  const [turnResults, pluginDataRows] = await Promise.all([
-    store.listTurnResults(sessionId),
-    store.listPluginDataSessionScope(sessionId),
-  ]);
-  const seen = new Set<string>();
-  for (const tr of turnResults) {
-    const runtimeResults = Array.isArray(tr.runtimeResults)
-      ? (tr.runtimeResults as Array<Record<string, unknown>>)
-      : [];
-    for (const rr of runtimeResults) {
-      const pid =
-        typeof rr["pluginId"] === "string"
-          ? (rr["pluginId"] as string)
-          : undefined;
-      if (pid) seen.add(pid);
-    }
-  }
-  for (const row of pluginDataRows) {
-    if (row.pluginId) seen.add(row.pluginId);
-  }
-  return { pluginIds: seen, pluginDataRows };
 }

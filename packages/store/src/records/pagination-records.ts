@@ -1,3 +1,7 @@
+import type { TimeCursor } from "@covel/shared";
+
+export type { TimeCursor };
+
 /**
  * Pagination options shared by list APIs.
  *
@@ -9,18 +13,6 @@ export interface PaginationOpts {
   readonly limit?: number;
   /** Number of rows to skip. Default: 0. */
   readonly offset?: number;
-}
-
-/**
- * A stable position in an append-only, time-ordered log, used as a keyset
- * ("cursor") for backward pagination. The `(createdAt, id)` tuple is a *total*
- * order even when many rows share a millisecond `createdAt` (common when a turn
- * commits several proposals at once), so paging by it never skips or repeats a
- * row — unlike a bare `createdAt` cursor.
- */
-export interface TimeCursor {
-  readonly createdAt: string;
-  readonly id: string;
 }
 
 /**

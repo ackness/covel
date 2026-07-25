@@ -1,8 +1,8 @@
 import type { DataStore, StoreBackend } from "./types.js";
 import type { MediaStore, MediaStoreBackend } from "./media-store.js";
-import { summarizeStorageMigrations } from "./migrations.js";
+import { STORAGE_MIGRATIONS } from "./migrations.js";
 import { supportsVector } from "./vector-store.js";
-import type { VectorBackend } from "./vector-factory.js";
+import type { VectorBackend } from "./vector-store.js";
 
 export type FrontendStorageMode = "local" | "remote";
 
@@ -26,7 +26,7 @@ export interface StorageCapabilityDescriptor {
     readonly modelCount: number;
     readonly tableCount: number;
   };
-  readonly migrations: ReturnType<typeof summarizeStorageMigrations>;
+  readonly migrations: typeof STORAGE_MIGRATIONS;
 }
 
 export interface DescribeStorageCapabilitiesOptions {
@@ -113,6 +113,6 @@ export async function describeStorageCapabilities(
       modelCount,
       tableCount,
     },
-    migrations: summarizeStorageMigrations(),
+    migrations: STORAGE_MIGRATIONS,
   };
 }
