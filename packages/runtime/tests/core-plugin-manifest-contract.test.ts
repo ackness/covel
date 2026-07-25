@@ -68,10 +68,10 @@ describe("core plugin manifest contract", () => {
       "set-world-schema",
       "set-world-entries-batch",
     ]);
-    expect(schemaGen.tools?.builtin).toEqual([
-      "plugin-data-get",
-      "plugin-data-list",
-    ]);
+    // schema-gen writes the world schema during setup; it has no reason to
+    // read its own plugin-data back, and its prompt never mentioned the read
+    // tools it used to declare.
+    expect(schemaGen.tools?.builtin).toBeUndefined();
 
     expect(playerInit).toMatchObject({
       pluginType: "core-plugin",

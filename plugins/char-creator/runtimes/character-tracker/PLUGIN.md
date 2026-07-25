@@ -38,8 +38,8 @@ input:
       field: narrativeOutput
       as: "<narrator-output>"
     # Existing roster injected at prompt-build time (own plugin_data[characters],
-    # keyed by character id). Removes the mandatory per-turn list-characters
-    # round-trip — same zero-cost pattern codex uses for its entries.
+    # keyed by character id) — a zero-cost read that replaces a per-turn
+    # roster tool call, the same pattern codex uses for its entries.
     - kind: plugin-data
       namespace: characters
       as: "<existing-characters>"
@@ -49,7 +49,6 @@ tools:
   builtin:
     - create-character
     - update-character
-    - list-characters
     - get-character
 dataSchemas:
   characters:
@@ -61,7 +60,7 @@ postHistory:
   role: system
   content: |
     本 runtime 工作流：
-    - 现有角色见 `<existing-characters>` 块（由框架在 prompt 构建时自动注入，每行 `- <id> | <更新时间> | <角色快照>`，无需调用 list-characters）
+    - 现有角色见 `<existing-characters>` 块（框架自动注入，每行 `- <id> | <更新时间> | <角色快照>`）
     - 有新角色或状态变化时，调用 `create-character` / `update-character`（update 用 `<existing-characters>` 里的 id）
     - 需要某角色的完整属性再决定如何改时，才按需调用 `get-character`
     - 没有变化时，不调用 create/update
@@ -82,7 +81,7 @@ postHistory:
 
 ### 第 1 步：查看现有角色概览（已自动注入，无需工具）
 
-现有角色列表在 prompt 末尾的 `<existing-characters>` 块中，由框架在构建 prompt 时自动注入，**不需要**调用 `list-characters`。每行格式为：
+现有角色列表在 prompt 末尾的 `<existing-characters>` 块中，由框架在构建 prompt 时自动注入。每行格式为：
 
 ```
 - char-abc | 2026-07-23T10:00:00Z | {"id":"char-abc","name":"苏婉","type":"npc","description":"青萍宗外门首席弟子，师姐",...}
@@ -130,7 +129,7 @@ postHistory:
 
 ### 硬规则
 
-- **先看 `<existing-characters>`**（已自动注入），再决定是否 create/update；不需要调用 list-characters
+- **先看 `<existing-characters>`**（已自动注入），再决定是否 create/update
 - **只处理叙事中明确出现的变化**，不要推测或发挥
 - **不要对同一角色连续调用 create-character**（即便是不同描述 —— 那是同一个人）
 - **不要修改玩家角色属性**，除非叙事明确描述了玩家受伤、成长等

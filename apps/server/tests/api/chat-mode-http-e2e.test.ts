@@ -83,7 +83,9 @@ class ChatModeMockLLM implements LLMAdapter {
       };
     }
 
-    if (toolNames.includes("list-characters")) {
+    // `create-character` is the tracker's signature tool — the roster it used
+    // to read with `list-characters` is injected now, so that name is gone.
+    if (toolNames.includes("create-character")) {
       // char-creator/character-tracker — engine-agnostic since the upstream
       // gate became capability-based, so it
       // runs in dialogue mode too (it used to be permanently skipped by an

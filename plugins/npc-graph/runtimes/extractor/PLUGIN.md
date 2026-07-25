@@ -66,7 +66,7 @@ postHistory:
   role: system
   content: |
     本 runtime 工作流：
-    - 已有节点见 `<existing-npcs>`、已有关系见 `<existing-relations>`（框架构建 prompt 时自动注入，无需调用 list-npc-graph）
+    - 已有节点见 `<existing-npcs>`、已有关系见 `<existing-relations>`（框架构建 prompt 时自动注入，直接读）
     - 有新节点或新关系时，调用一次 `upsert-npc-graph`（按 name 提交，工具内部映射 id）
     - 没有显著人物互动时，不调用 `upsert-npc-graph`
     - 完成（或决定不更新）后，立即调用 `runtime-done` 结束
@@ -78,14 +78,14 @@ postHistory:
 
 本轮叙事在 prompt 末尾的 `<narrator-output>` 块中（由框架 `input.inject` 自动注入，正文不再重复内联）。
 
-## 已有图谱（已自动注入，无需工具）
+## 已有图谱（已自动注入）
 
-本会话已登记的节点与关系在 prompt 末尾自动注入，**无需**调用 `list-npc-graph`：
+本会话已登记的节点与关系在 prompt 末尾自动注入，常规判断**直接读它就够**：
 
 - `<existing-npcs>`：已有节点，每行 `- <节点id> | <更新时间> | {name, type, summary, ...}`。按 **name** 比对避免重复创建（工具也按 name 去重）。
 - `<existing-relations>`：已有关系，每行 `- <边id> | <更新时间> | {source, target, relation, strength, fact, validAt, invalidAt?}`。`source`/`target` 是节点 id；带 `invalidAt` 的是已失效的旧版本，忽略。摘要里的 `fact` 可能被截断——只用来判断"这条关系是否已登记过"，据此避免重复记录未变化的关系。
 
-极少数需要某关系完整 fact 才能判断是否变化时，才按需调用 `list-npc-graph`。
+`list-npc-graph` 只有一个用途：注入的 `fact` 被截断、而你必须看到完整内容才能判断关系是否变化时，按边 id 取。除此之外不要调用它——注入的摘要已经覆盖了绝大多数判断。
 
 ## 本体约束
 
