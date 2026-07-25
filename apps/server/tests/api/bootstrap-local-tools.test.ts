@@ -139,6 +139,63 @@ describe("bootstrap local tools", () => {
     ).resolves.toEqual({ value: "loaded" });
   });
 
+  it.each([
+    ["community", true],
+    ["builtin", false],
+  ] as const)(
+    "gives a %s local-tool factory a store view whose deny-all is %s",
+    async (source, expectDenied) => {
+      // A factory closes over the injected store for the process lifetime and
+      // cannot be bound to a request session — so community code must get the
+      // same deny-all view the unified `entry` path already hands out.
+      const root = await makePluginRoot();
+      await writeFile(
+        path.join(root, "probe.mjs"),
+        [
+          "export default ({ tool, z, store }) => tool({",
+          "  name: 'probe',",
+          "  description: 'probe',",
+          "  parameters: z.object({}),",
+          "  async execute() {",
+          "    try { await store.listSessions(); return { denied: false }; }",
+          "    catch (err) { return { denied: true, message: String(err.message) }; }",
+          "  },",
+          "});",
+        ].join("\n"),
+      );
+
+      const loader = createLocalToolLoader({
+        discoveryMap: new Map([["p", discovery("p", root, source)]]),
+        manifestCache: new Map([
+          [
+            "p",
+            [
+              parsedManifest({
+                name: "p/main",
+                tools: { local: ["probe.mjs"] },
+              }),
+            ],
+          ],
+        ]),
+        store: createMemoryStore(),
+      });
+
+      const tools = await loader("p");
+      const result = (await tools[0]?.execute(
+        {},
+        {
+          sessionId: "session",
+          turnId: "turn",
+          pluginId: "p",
+          runtimeId: "p/main",
+        },
+      )) as { denied: boolean; message?: string };
+
+      expect(result.denied).toBe(expectDenied);
+      if (expectDenied) expect(result.message).toContain("local-tools");
+    },
+  );
+
   it("skips local tool paths that escape the plugin root", async () => {
     const root = await makePluginRoot();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);

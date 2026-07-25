@@ -50,6 +50,7 @@ import {
 } from "@covel/tools";
 import { z } from "zod";
 import { registerNamespaced } from "./plugin-wires.js";
+import { scopeStoreToPlugin } from "./plugin-store-scope.js";
 
 // `PluginAPI` / `PluginToolkit` (and the related option types) are the
 // Public Plugin API — they live in @covel/runtime so plugin authors can
@@ -94,42 +95,6 @@ export interface BootstrapPluginEntries {
    * inside the not-yet-run entry.
    */
   readonly hasPendingEntry: (pluginId: string) => boolean;
-}
-
-/**
- * Community-facing entry-factory store view: default-deny every method.
- *
- * Community entry factories close over `toolkit.store` for the lifetime of
- * the process, so this view must be safe on its own:
- *  - EVERY read and write — including own-namespace `setPluginData` /
- *    `setPluginDataBatch` / `deletePluginData` — and every other DataStore
- *    method throws a clear error. Community writes must flow through
- *    governed, session-bound surfaces: proposals → validate → commit from
- *    tools/runtimes, or the per-dispatch `createRpcHandlerStoreView` handed
- *    to RPC handlers at request time.
- *
- * Session scoping is NOT possible here (entries register at activation time,
- * before any request) — that is exactly why writes are denied outright
- * rather than clamped: an entry-level operation cannot be bound to a request
- * session, so there is no safe scope for it. Request/runtime handlers receive
- * their own session-scoped store surfaces.
- */
-function scopeStoreToPlugin(store: DataStore, pluginId: string): DataStore {
-  return new Proxy(store, {
-    get(target, prop, receiver) {
-      const value = Reflect.get(target, prop, receiver);
-      // Non-methods forward untouched — this keeps `await`'s `then` probe,
-      // Symbol.toStringTag, etc. working on the proxied store.
-      if (typeof value !== "function") return value;
-      return () => {
-        throw new Error(
-          `[plugin-entry] ${pluginId}: store.${String(prop)}() is not available to a community entry toolkit — ` +
-            `writes must go through proposals (or the session-scoped RPC store at dispatch time); ` +
-            `reads must use a request/runtime-scoped context`,
-        );
-      };
-    },
-  });
 }
 
 const HOOK_EVENT_SET: ReadonlySet<string> = new Set(HOOK_EVENTS);
@@ -181,7 +146,7 @@ export async function createBootstrapPluginEntries({
       withPendingProposals,
       store:
         pluginTrust === "community"
-          ? scopeStoreToPlugin(store, pluginId)
+          ? scopeStoreToPlugin(store, pluginId, "plugin-entry")
           : store,
     };
 

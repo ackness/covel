@@ -15,6 +15,7 @@ import {
   type ToolModule,
 } from "@covel/tools";
 import { z } from "zod";
+import { scopeStoreToPlugin } from "./plugin-store-scope.js";
 
 export interface BootstrapLocalToolsParams {
   readonly discoveryMap: ReadonlyMap<string, PluginDiscoveryResult>;
@@ -145,20 +146,26 @@ export function createLocalToolLoader({
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
   readonly store: DataStore;
 }): (pluginId: string) => Promise<readonly ToolModule[]> {
-  const toolInjection = {
-    tool,
-    z,
-    shortId,
-    shortIdBatch,
-    withPendingProposals,
-    store,
-  };
-
   return async (pluginId: string): Promise<readonly ToolModule[]> => {
     const discovery = discoveryMap.get(pluginId);
     if (!discovery) return [];
     const manifests = manifestCache.get(pluginId);
     if (!manifests) return [];
+    // Same trust split as the unified `entry` path (plugin-entry.ts): a
+    // community factory closes over this store for the process lifetime and
+    // cannot be bound to a request session, so it gets the deny-all view.
+    // Builtin/official keep the raw store.
+    const toolInjection = {
+      tool,
+      z,
+      shortId,
+      shortIdBatch,
+      withPendingProposals,
+      store:
+        getPluginTrustInfo(pluginId, discovery.source).source === "community"
+          ? scopeStoreToPlugin(store, pluginId, "local-tools")
+          : store,
+    };
     const collected: ToolModule[] = [];
     for (const parsed of manifests) {
       const localPaths = parsed.manifest.tools?.local ?? [];
