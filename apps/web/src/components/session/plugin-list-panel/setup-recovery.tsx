@@ -25,7 +25,6 @@ interface SetupRecoveryProps {
  * renders nothing. The retry/waive response is overlaid locally so the row
  * updates immediately — the global SessionRecord catches up on the next turn's
  * natural resync, so no dedicated dispatch path is needed.
- * ponytail: local overlay over prop; skipped a global resync action.
  */
 export function SetupRecovery({
   pluginId,
@@ -40,7 +39,7 @@ export function SetupRecovery({
 
   const states = useMemo(
     () =>
-      Object.entries({ ...(setupRuntimes ?? {}), ...overrides }).filter(
+      Object.entries({ ...setupRuntimes, ...overrides }).filter(
         ([runtimeId]) => pluginIdOf(runtimeId) === pluginId,
       ),
     [setupRuntimes, overrides, pluginId],

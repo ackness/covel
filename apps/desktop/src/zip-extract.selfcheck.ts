@@ -5,8 +5,8 @@
  *
  *   pnpm --filter @covel/desktop test
  *
- * ponytail: hand-crafted zip byte buffers, no fixtures/framework — asserts the
- * limits reject; the happy path is exercised by the real importer in the app.
+ * Hand-crafted zip byte buffers, no fixtures or test framework: this asserts
+ * the limits reject. The happy path is exercised by the real importer.
  */
 
 import assert from "node:assert/strict";

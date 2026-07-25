@@ -847,8 +847,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           store,
           sessionId,
           ...(userSettings ? { userSettings } : {}),
-          // ponytail: no manual-trigger concept on the main turn path —
-          // scheduleDeferredFollowers is the only method this route calls.
+          // The main turn path has no manual-trigger concept —
+          // `scheduleDeferredFollowers` is the only method this route calls.
           runManualTurn: () => {
             throw new Error("runManualTurn is unused on the main turn path");
           },
