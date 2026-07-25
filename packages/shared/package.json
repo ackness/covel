@@ -7,10 +7,6 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    },
-    "./json-render-presets": {
-      "types": "./src/json-render-presets/index.ts",
-      "import": "./src/json-render-presets/index.ts"
     }
   },
   "scripts": {

@@ -1,23 +1,17 @@
 /**
- * Result-layering contract types for the runtime-scheduling redesign (docs
- * 02 §4).
+ * `HandlerResult` — the plugin-facing return contract, plus the effect types
+ * it carries.
  *
- * Two layers:
- *  - `HandlerResult` — the PLUGIN return face. A function handler returns it
- *    directly (envelope-v1) or via the legacy adapter; an agent's finalizer
- *    normalizes into it. Four discriminated outcomes on `outcome`.
- *  - `RuntimeResultV2` — the PERSISTED result. `RuntimeResultBase` (identity +
- *    telemetry) intersected with `RuntimeOutcome` (four discriminated statuses).
+ * A function handler returns it directly (`resultFormat: envelope-v1`) or
+ * through the legacy adapter; an agent's finalizer normalizes into it. Four
+ * discriminated outcomes on `outcome`.
  *
- * These are declared alongside — not replacing — the in-flight `RuntimeResult`
- * (`execution.ts`). The executors still produce `RuntimeResult`; the switch to
- * `RuntimeResultV2` and the store/serializer projection land in a later step
- * (docs 02 §4, "Step 6"). Naming stays `*V2` until then to avoid a collision.
+ * The persisted shape is `RuntimeResult` (`execution.ts`) — a parallel
+ * "v2" persisted contract was drafted here and never wired, so it is gone.
  */
 
 import type { JsonValue } from "./runtime-scheduling.js";
 import type { JobStatusState } from "./runtime-lifecycle.js";
-import type { ToolCallRecord } from "./execution.js";
 
 /** A JSON Schema object (resume-form schema). Not structurally validated here. */
 export type JsonSchema = Readonly<Record<string, unknown>>;
@@ -99,51 +93,3 @@ export type HandlerResult =
       readonly error: string;
       readonly effects?: ObservabilityEffects;
     };
-
-// ── Persisted runtime result ─────────────────────────────────────
-
-export interface RuntimeResultBase {
-  readonly resultId: string;
-  readonly pluginId: string;
-  readonly runtimeId: string;
-  readonly runId: string;
-  readonly executionId: string;
-  readonly turnId: string;
-  readonly logicalTurnId?: string;
-  readonly toolCalls: readonly ToolCallRecord[];
-  readonly durationMs: number;
-  readonly tokenUsage?: { readonly input: number; readonly output: number };
-  readonly timestamp: string;
-}
-
-/**
- * `pending` / `running` are in-memory execution states and never enter a
- * persisted outcome. `suspended` carries a `suspensionId` + `resumeMode` the
- * `HandlerResult` suspend branch does not (the finalizer assigns them).
- */
-export type RuntimeOutcome =
-  | {
-      readonly status: "success";
-      readonly value?: JsonValue;
-      readonly effects?: RuntimeEffects;
-      readonly completion?: "done" | "pending";
-    }
-  | {
-      readonly status: "suspended";
-      readonly suspensionId: string;
-      readonly resumeMode: "continuation" | "approval-replay";
-      readonly reason: string;
-      readonly resumeSchema?: JsonSchema;
-    }
-  | {
-      readonly status: "skipped";
-      readonly skipReason: string;
-      readonly effects?: ObservabilityEffects;
-    }
-  | {
-      readonly status: "failed";
-      readonly error: string;
-      readonly effects?: ObservabilityEffects;
-    };
-
-export type RuntimeResultV2 = Readonly<RuntimeResultBase & RuntimeOutcome>;

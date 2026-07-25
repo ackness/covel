@@ -339,7 +339,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | ---- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | GET  | `/api/sessions/:id/runtime-outputs`                       | 列出该 session 的 runtime 输出记录，支持 `?runtimeId=` / `?pluginId=` / `?since=` / `?limit=` 过滤，按 timestamp 降序 |
 | GET  | `/api/sessions/:id/runtime-outputs/:outputId`             | 获取单条 runtime 输出记录                                                                                             |
-| GET  | `/api/sessions/:id/runtime-outputs/:outputId/full-prompt` | 从 `turn_messages` + `rawPromptDelta` 重建该次 LLM 调用的完整 prompt 历史（best-effort）                              |
+| GET  | `/api/sessions/:id/runtime-outputs/:outputId/full-prompt` | 从 `turn_messages` 重建该次调用时的消息历史（best-effort，不含 system prompt 与注入段）                               |
 | GET  | `/api/sessions/:id/interaction-records`                   | 列出该 session 的外部输入记录，支持 `?type=` / `?source=` / `?targetPluginId=` / `?limit=` 过滤                       |
 
 **`RuntimeOutput` 结构**：
@@ -388,7 +388,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 - 翻译层写入是 best-effort。失败只打 warn，不阻塞 turn pipeline
 - `rawPromptDelta` 在 PR-1 首迭代中不会被 turn-executor 自动填充。接入 LLM 调用链的 delta 采集在后续迭代完成
-- full-prompt 重建端点目前用 turn_messages + delta 做近似还原，对 compaction 后的 session 可能不完全精确 —— 调试用途足够，审计场景需要走 trace_events
+- full-prompt 重建端点只回放 turn_messages,不含 system prompt 与注入段落,对 compaction 后的 session 也不完全精确 —— 粗略调试够用,精确重建与审计场景走 trace_events
 
 ### 插件数据（Plugin Data）
 

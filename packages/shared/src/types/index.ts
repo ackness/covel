@@ -366,9 +366,6 @@ export type {
   ObservabilityEffects,
   RuntimeEffects,
   HandlerResult,
-  RuntimeResultBase,
-  RuntimeOutcome,
-  RuntimeResultV2,
-} from "./runtime-result-v2.js";
+} from "./handler-result.js";
 
 export type { RuntimeExportRecord } from "./runtime-exports.js";

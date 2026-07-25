@@ -8,8 +8,8 @@
  *     — fetch a single runtime output
  *
  *   GET /api/sessions/:id/runtime-outputs/:outputId/full-prompt
- *     — rebuild the complete prompt that was sent on that call from
- *       `turn_messages` + `rawPromptDelta`
+ *     — rebuild the prompt history that was in play on that call from
+ *       `turn_messages`
  *
  *   GET /api/sessions/:id/interaction-records?type=&source=&targetPluginId=&limit=
  *     — list external inputs recorded for the session
@@ -85,8 +85,6 @@ runtimeOutputRoutes.get("/:id/runtime-outputs/:outputId", async (c) => {
 //   1. Pull all `turn_messages` for the session up to and including the
 //      record's own turnId, sorted by `order`.
 //   2. Convert turn messages to { role, content } pairs.
-//   3. Append the record's `rawPromptDelta` (if any) as the suffix tail,
-//      since the delta represents the messages added on top of the base.
 runtimeOutputRoutes.get(
   "/:id/runtime-outputs/:outputId/full-prompt",
   async (c) => {
@@ -125,17 +123,12 @@ runtimeOutputRoutes.get(
         content: m.content,
       }));
 
-    const meta = record.metaData as {
-      rawPromptDelta?: Array<{ role: string; content: string }>;
-    } | null;
-    const delta = meta?.rawPromptDelta ?? [];
-
     return c.json({
       runtimeOutputId: record.id,
       runtimeId: record.runtimeId,
       turnId: record.turnId,
-      messages: [...history, ...delta],
-      note: "Best-effort rebuild: history comes from turn_messages, delta is stored on RuntimeOutput.metaData.rawPromptDelta.",
+      messages: history,
+      note: "Best-effort rebuild from turn_messages. The system prompt and injected segments are NOT included — use trace_events for an exact reconstruction.",
     });
   },
 );

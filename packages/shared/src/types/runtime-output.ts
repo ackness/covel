@@ -69,13 +69,6 @@ export interface RuntimeOutputMetaData {
    */
   readonly preGameDone?: boolean;
   /**
-   * Prompt delta relative to the previous call of the same runtime in
-   * the same turn. First call has delta = full prompt (or null for
-   * function runtimes). Full prompt reconstruction happens server-side
-   * via `/runtime-outputs/:id/full-prompt`.
-   */
-  readonly rawPromptDelta?: readonly RuntimeOutputPromptMessage[];
-  /**
    * Raw LLM responses (streaming events merged into final text), one
    * per assistant turn in the tool loop. Undefined for function runtimes.
    */
