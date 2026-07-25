@@ -86,6 +86,14 @@ describe("theme registry", () => {
       true,
     );
     expect(store.get(CUSTOM_THEMES_KEY)).toBeTruthy();
+    // Registered but not selected → not mounted. Mounting every imported theme
+    // let an unselected pack's unscoped rules apply globally.
+    expect(
+      document.head.querySelector('style[data-theme-style="ember"]'),
+    ).toBeNull();
+
+    await store.set("ui.appearance", "ember");
+    syncThemeRegistry(store);
     expect(
       document.head.querySelector('style[data-theme-style="ember"]'),
     ).toBeTruthy();

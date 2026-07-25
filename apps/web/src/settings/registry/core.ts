@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SettingsStoreApi } from "@covel/settings";
+import { resolveInitialLocale } from "@/i18n/locale-detector.js";
 import { registerThemeSettings } from "@/theme-system/settings.js";
 
 /**
@@ -9,7 +10,12 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
   store.register({
     key: "ui.locale",
     schema: z.enum(["zh-CN", "en-US"]),
-    default: "zh-CN",
+    // Browser-language detection only reaches the player through this default:
+    // `main.tsx` applies the store value unconditionally after hydration, so a
+    // hardcoded "zh-CN" here meant an English browser flashed English and then
+    // flipped to Chinese, permanently. Once the player picks a language the
+    // stored value wins and this is never consulted again.
+    default: resolveInitialLocale(),
     group: "general",
     widget: "select",
     label: { "zh-CN": "语言", "en-US": "Language" },

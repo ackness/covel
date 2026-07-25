@@ -26,6 +26,8 @@ export class SettingsStore implements SettingsStoreApi {
   private readonly globalListeners = new Set<SettingsListener>();
   private loaded: Promise<void>;
   private loadResolve!: () => void;
+  /** Set when `init()` could not read existing state. See {@link assertHydrated}. */
+  private hydrationError: Error | null = null;
 
   constructor(private readonly adapter: SettingsBackendAdapter) {
     this.loaded = new Promise<void>((resolve) => {
@@ -34,19 +36,88 @@ export class SettingsStore implements SettingsStoreApi {
   }
 
   async init(): Promise<void> {
-    const [entries, secrets] = await Promise.all([
-      this.adapter.load(),
-      this.adapter.loadSecrets(),
-    ]);
-    for (const [key, value] of Object.entries(entries)) {
-      this.values.set(key, value);
-    }
-    for (const [provider, keyValue] of Object.entries(secrets)) {
-      if (typeof keyValue === "string" && keyValue.length > 0) {
-        this.secrets.set(provider, keyValue);
+    try {
+      const [entries, secrets] = await Promise.all([
+        this.adapter.load(),
+        this.adapter.loadSecrets(),
+      ]);
+      for (const [key, value] of Object.entries(entries)) {
+        this.values.set(key, value);
       }
+      for (const [provider, keyValue] of Object.entries(secrets)) {
+        if (typeof keyValue === "string" && keyValue.length > 0) {
+          this.secrets.set(provider, keyValue);
+        }
+      }
+      this.hydrationError = null;
+    } catch (err) {
+      // Boot continues on defaults (read-only) rather than failing hard, but
+      // writes are refused: every save is a full snapshot, so writing from a
+      // half-empty map would destroy the settings/keys we failed to read.
+      this.hydrationError = err instanceof Error ? err : new Error(String(err));
+      console.error("[settings] hydration failed — writes disabled", err);
+    } finally {
+      this.loadResolve();
     }
-    this.loadResolve();
+  }
+
+  /** Whether `init()` successfully read the persisted state. */
+  isHydrated(): boolean {
+    return this.hydrationError === null;
+  }
+
+  private assertHydrated(): void {
+    if (this.hydrationError) {
+      throw new Error(
+        `[settings] refusing to write: state was never loaded (${this.hydrationError.message})`,
+      );
+    }
+  }
+
+  /**
+   * Apply an in-memory mutation and persist it, restoring the previous state if
+   * the adapter rejects.
+   *
+   * Without the rollback a single failed write (localStorage quota, sidecar
+   * hiccup) leaves the map ahead of storage. Every UI call site is
+   * fire-and-forget, so the player gets no signal, and each later write
+   * re-serialises the same oversized/stale map and fails the same way — the
+   * store is poisoned until reload.
+   */
+  private async persist(
+    target: "values" | "secrets",
+    mutate: () => () => void,
+  ): Promise<void> {
+    this.assertHydrated();
+    // `mutate` runs synchronously and returns its own undo. Two reasons it is
+    // not deferred into a queue and does not snapshot the whole map:
+    //   - Callers read back synchronously (`applyThemeSelection` does
+    //     `void set(...)` then `get(...)` in the same tick), so the value must
+    //     be visible immediately.
+    //   - A whole-map snapshot would, on failure, also revert a *concurrent*
+    //     write that had already succeeded. Undoing only the key we touched
+    //     leaves other writers alone.
+    const undo = mutate();
+    try {
+      await (target === "values"
+        ? this.adapter.save(this.serializeEntries())
+        : this.adapter.saveSecrets(
+            Object.fromEntries(this.secrets) as Record<string, string>,
+          ));
+    } catch (err) {
+      undo();
+      throw err;
+    }
+  }
+
+  /** Capture a key's current state so a failed write can put it back. */
+  private undoFor<V>(map: Map<string, V>, key: string): () => void {
+    const had = map.has(key);
+    const previous = map.get(key);
+    return () => {
+      if (had) map.set(key, previous as V);
+      else map.delete(key);
+    };
   }
 
   ready(): Promise<void> {
@@ -97,12 +168,18 @@ export class SettingsStore implements SettingsStoreApi {
     if (backend === "keys") {
       const provider = this.stripKeysPrefix(key);
       const str = typeof value === "string" ? value : String(value ?? "");
-      if (str.trim().length === 0) this.secrets.delete(provider);
-      else this.secrets.set(provider, str);
-      await this.adapter.saveSecrets(Object.fromEntries(this.secrets));
+      await this.persist("secrets", () => {
+        const undo = this.undoFor(this.secrets, provider);
+        if (str.trim().length === 0) this.secrets.delete(provider);
+        else this.secrets.set(provider, str);
+        return undo;
+      });
     } else {
-      this.values.set(key, value);
-      await this.adapter.save(this.serializeEntries());
+      await this.persist("values", () => {
+        const undo = this.undoFor(this.values, key);
+        this.values.set(key, value);
+        return undo;
+      });
     }
     this.notify(key, value);
   }
@@ -112,23 +189,50 @@ export class SettingsStore implements SettingsStoreApi {
     const backend =
       entry?.backend ?? (key.startsWith("keys.") ? "keys" : "settings");
     if (backend === "keys") {
-      this.secrets.delete(this.stripKeysPrefix(key));
-      await this.adapter.saveSecrets(Object.fromEntries(this.secrets));
+      await this.persist("secrets", () => {
+        const provider = this.stripKeysPrefix(key);
+        const undo = this.undoFor(this.secrets, provider);
+        this.secrets.delete(provider);
+        return undo;
+      });
     } else {
-      this.values.delete(key);
-      await this.adapter.save(this.serializeEntries());
+      await this.persist("values", () => {
+        const undo = this.undoFor(this.values, key);
+        this.values.delete(key);
+        return undo;
+      });
     }
     const fresh = entry ? entry.default : undefined;
     this.notify(key, fresh);
   }
 
   async clearAll(): Promise<void> {
+    // Guarded like every other write. A hydration failure makes the UI show
+    // defaults, which reads to the player as "my settings are gone" — and
+    // their natural response is to hit Reset, which would then wipe the very
+    // settings.json / keys.env we failed to read.
+    this.assertHydrated();
+    // A wipe is the one write where a whole-map snapshot IS the right undo —
+    // it touches every key by definition.
+    const valuesSnapshot = new Map(this.values);
+    const secretsSnapshot = new Map(this.secrets);
     this.values.clear();
     this.secrets.clear();
-    await Promise.all([this.adapter.save({}), this.adapter.saveSecrets({})]);
+    try {
+      await Promise.all([this.adapter.save({}), this.adapter.saveSecrets({})]);
+    } catch (err) {
+      this.restore(this.values, valuesSnapshot);
+      this.restore(this.secrets, secretsSnapshot);
+      throw err;
+    }
     for (const entry of this.registry.values()) {
       this.notify(entry.key, entry.default);
     }
+  }
+
+  private restore<V>(target: Map<string, V>, snapshot: Map<string, V>): void {
+    target.clear();
+    for (const [k, v] of snapshot) target.set(k, v);
   }
 
   list(group?: SettingGroup): readonly SettingEntry[] {
@@ -181,17 +285,28 @@ export class SettingsStore implements SettingsStoreApi {
         }
       }
     }
-    for (const [key, value] of nonSecretUpdates) {
-      this.values.set(key, value);
-    }
-    for (const [provider, keyValue] of secretUpdates) {
-      this.secrets.set(provider, keyValue);
-    }
+    // An import merges into existing state, so a failed write must not leave
+    // the map holding values that never reached storage.
     if (nonSecretUpdates.length > 0) {
-      await this.adapter.save(this.serializeEntries());
+      await this.persist("values", () => {
+        const undos = nonSecretUpdates.map(([key]) =>
+          this.undoFor(this.values, key),
+        );
+        for (const [key, value] of nonSecretUpdates)
+          this.values.set(key, value);
+        return () => undos.forEach((undo) => undo());
+      });
     }
     if (secretUpdates.length > 0) {
-      await this.adapter.saveSecrets(Object.fromEntries(this.secrets));
+      await this.persist("secrets", () => {
+        const undos = secretUpdates.map(([provider]) =>
+          this.undoFor(this.secrets, provider),
+        );
+        for (const [provider, keyValue] of secretUpdates) {
+          this.secrets.set(provider, keyValue);
+        }
+        return () => undos.forEach((undo) => undo());
+      });
     }
     for (const [key, value] of nonSecretUpdates) {
       this.notify(key, value);

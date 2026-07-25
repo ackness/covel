@@ -189,20 +189,34 @@ export function primeThemeRegistry(store: SettingsStoreApi): ThemeDefinition[] {
   return getRegisteredThemes();
 }
 
+const BUILTIN_THEME_IDS = new Set(builtinThemes.map((theme) => theme.id));
+
 export function syncThemeRegistry(store: SettingsStoreApi): ThemeDefinition[] {
-  const customThemes = loadStoredCustomThemes(store).map<ThemeDefinition>(
-    (theme) => ({
+  const customThemes = loadStoredCustomThemes(store)
+    // A custom theme declaring a builtin id would silently replace that
+    // builtin's styling everywhere (same `data-theme` value, same style
+    // element id). Builtins always win.
+    .filter((theme) => !BUILTIN_THEME_IDS.has(theme.id))
+    .map<ThemeDefinition>((theme) => ({
       ...theme,
       source: "custom",
-    }),
-  );
+    }));
   const nextThemes = sortThemes([...builtinThemes, ...customThemes]);
 
   themeRegistry = buildRegistry(nextThemes);
   registerAppearanceEntry(store);
   registerSchemeEntry(store);
   registerThemeManagerEntry(store);
-  syncThemeStyles(nextThemes);
+  // Mount builtins plus ONLY the selected custom theme. Mounting every
+  // registered theme meant an imported theme the player never selected still
+  // applied any rule that escaped its `data-theme` scope — and kept applying
+  // it after a restart.
+  const selectedId = store.get<string>("ui.appearance");
+  syncThemeStyles(
+    nextThemes.filter(
+      (theme) => theme.source !== "custom" || theme.id === selectedId,
+    ),
+  );
   applyThemeSelection(store);
 
   return nextThemes;

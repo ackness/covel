@@ -51,16 +51,23 @@ export function createJsonFileBackend(
         );
         return raw ?? {};
       }
-      try {
-        const res = await fetchImpl(endpoint);
-        if (!res.ok) return {};
-        const body = (await res.json()) as {
-          entries?: Record<SettingKey, unknown>;
-        };
-        return body.entries ?? {};
-      } catch {
-        return {};
+      // `GET /api/config/settings` is bearer-gated exactly like the PUT, so it
+      // needs the same header — without it a tokened desktop install 401s on
+      // every boot.
+      const res = await fetchImpl(endpoint, { headers: authHeaders() });
+      // 404 is "no settings file yet" — a legitimate empty state. Anything
+      // else (sidecar restarting, 500, offline) must propagate: `save()`
+      // always writes a full snapshot, so treating a failed load as "empty"
+      // makes the next single-setting change overwrite settings.json with
+      // just that one key.
+      if (res.status === 404) return {};
+      if (!res.ok) {
+        throw new Error(`[settings] load failed: HTTP ${res.status}`);
       }
+      const body = (await res.json()) as {
+        entries?: Record<SettingKey, unknown>;
+      };
+      return body.entries ?? {};
     },
     async save(entries): Promise<void> {
       const ipc = getIpc();
@@ -85,17 +92,18 @@ export function createJsonFileBackend(
         );
         return raw ?? {};
       }
-      try {
-        const res = await fetchImpl(secretsEndpoint);
-        if (!res.ok) return {};
-        const body = (await res.json().catch(() => ({}))) as Record<
-          string,
-          string
-        >;
-        return body ?? {};
-      } catch {
-        return {};
+      const res = await fetchImpl(secretsEndpoint, { headers: authHeaders() });
+      // Same contract as `load()` — a swallowed failure here would let the
+      // next key edit wipe every other provider key out of keys.env.
+      if (res.status === 404) return {};
+      if (!res.ok) {
+        throw new Error(`[settings] secrets load failed: HTTP ${res.status}`);
       }
+      const body = (await res.json().catch(() => ({}))) as Record<
+        string,
+        string
+      >;
+      return body ?? {};
     },
     async saveSecrets(keys): Promise<void> {
       const ipc = getIpc();

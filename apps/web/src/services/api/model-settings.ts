@@ -19,6 +19,22 @@ export function needsProviderKeys(url: string): boolean {
   return PLUGIN_RPC_ROUTE_REGEX.test(url);
 }
 
+/** `btoa` chokes on any codepoint above U+00FF, so a Chinese preset name or a
+ * CJK plugin setting would throw inside the header builder and take down every
+ * AI request with a misleading transport error. Encode to UTF-8 bytes first —
+ * that is also what the server assumes (`Buffer.from(h, "base64").toString("utf8")`).
+ * Chunked because `String.fromCharCode(...bytes)` overflows the call stack on
+ * large payloads. */
+export function encodeBase64Json(value: unknown): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  const CHUNK = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
 export function buildProviderKeysHeader(): Record<string, string> {
   const headers: Record<string, string> = {};
   // Pull every secret the store knows about (registered or not). The
@@ -40,7 +56,7 @@ export function buildProviderKeysHeader(): Record<string, string> {
     }
   }
   if (Object.keys(keys).length > 0) {
-    headers["X-Provider-Keys"] = btoa(JSON.stringify(keys));
+    headers["X-Provider-Keys"] = encodeBase64Json(keys);
   }
   return headers;
 }
@@ -94,7 +110,7 @@ function buildPluginUserSettingsHeader(): Record<string, string> {
   }
   if (Object.keys(buckets).length === 0) return {};
   return {
-    "X-Plugin-User-Settings": btoa(JSON.stringify(buckets)),
+    "X-Plugin-User-Settings": encodeBase64Json(buckets),
   };
 }
 
@@ -153,13 +169,11 @@ export function buildSlotConfigHeaderInternal(
   const hasCustom = customPresetDefs.length > 0;
   if (!hasSlotPresetOverrides && !hasParamOverrides && !hasCustom) return {};
   return {
-    "X-Slot-Config": btoa(
-      JSON.stringify({
-        ...(hasSlotPresetOverrides ? { slotPresetOverrides } : {}),
-        ...(hasParamOverrides ? { parameterOverrides: paramOverrides } : {}),
-        ...(hasCustom ? { customPresets: customPresetDefs } : {}),
-      }),
-    ),
+    "X-Slot-Config": encodeBase64Json({
+      ...(hasSlotPresetOverrides ? { slotPresetOverrides } : {}),
+      ...(hasParamOverrides ? { parameterOverrides: paramOverrides } : {}),
+      ...(hasCustom ? { customPresets: customPresetDefs } : {}),
+    }),
   };
 }
 

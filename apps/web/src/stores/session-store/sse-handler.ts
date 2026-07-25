@@ -224,6 +224,21 @@ export function createSseEventHandler(
 ): SseEventHandler {
   return (envelope) => {
     const { payload, turnId } = envelope;
+    // Nothing aborts the previous action stream when the player switches
+    // sessions mid-turn, so envelopes from the old session keep arriving on
+    // the still-open connection. Every downstream write stamps
+    // `sessionIdRef.current` (the NEW session), which in local/IDB mode
+    // persists the old session's narrative into the new one's history. Drop
+    // foreign envelopes here — the delta path already does this via
+    // `flushSessionId`, this closes the same hole for every other event.
+    const currentSessionId = deps.sessionIdRef.current;
+    if (
+      envelope.sessionId &&
+      currentSessionId &&
+      envelope.sessionId !== currentSessionId
+    ) {
+      return;
+    }
     // `SseEnvelope.type` is the raw, untrusted wire string. Narrow it to the
     // closed `CovelEventType` union so the switch below is exhaustiveness-
     // checked: every union member must be either handled or explicitly

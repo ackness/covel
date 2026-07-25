@@ -8,7 +8,7 @@ import {
   setStorageMode,
   storageModeForServerStorage,
 } from "@/services/data-service";
-import { loadProviderKeysFromStorage } from "@/services/api";
+import { fetchServerHealth, loadProviderKeysFromStorage } from "@/services/api";
 import { probeDesktopMode } from "@/lib/desktop-bridge";
 import {
   applyAppearance,
@@ -45,12 +45,13 @@ declare module "@tanstack/react-router" {
  */
 async function syncStorageMode(): Promise<void> {
   try {
-    const res = await fetch("/api/health");
-    if (!res.ok) return;
-    const health = (await res.json()) as {
-      storage?: Parameters<typeof storageModeForServerStorage>[0];
-    };
-    const mode = storageModeForServerStorage(health.storage);
+    // Shared helper rather than a second hand-rolled health fetch: it checks
+    // the status, rejects a non-JSON body, and carries a timeout so a wedged
+    // proxy can't hold first paint on a blank page.
+    const health = await fetchServerHealth();
+    const mode = storageModeForServerStorage(
+      health.storage as Parameters<typeof storageModeForServerStorage>[0],
+    );
     if (mode) {
       setStorageMode(mode);
     }
@@ -68,8 +69,15 @@ async function migrateLegacyThemeScheme(store: ReturnType<typeof getSettings>) {
     legacyTheme === "light" || legacyTheme === "dark"
       ? legacyTheme
       : DEFAULT_COLOR_SCHEME;
-  await store.set(THEME_SCHEME_KEY, scheme);
-  window.localStorage.removeItem("theme");
+  try {
+    await store.set(THEME_SCHEME_KEY, scheme);
+    window.localStorage.removeItem("theme");
+  } catch (err) {
+    // A read-only store (failed hydration) must not stop the app from booting;
+    // the migration retries on the next launch. Keep the legacy key so nothing
+    // is lost while writes are refused.
+    console.warn("[boot] theme-scheme migration skipped:", err);
+  }
 }
 
 function syncNextThemesStorage(scheme: ColorScheme): void {
@@ -124,6 +132,16 @@ probeDesktopMode()
       configureMessagesWindowCap(next);
     });
     return Promise.all([syncStorageMode(), loadProviderKeysFromStorage()]);
+  })
+  // Nothing in the bootstrap is allowed to stop the app from mounting. Every
+  // step above is a preference/hydration concern; a rejection here used to
+  // leave `createRoot` unreached and the page permanently blank, which is
+  // strictly worse than booting on defaults.
+  .catch((err: unknown) => {
+    console.error(
+      "[boot] bootstrap step failed — continuing on defaults:",
+      err,
+    );
   })
   .then(() => {
     createRoot(document.getElementById("root")!).render(

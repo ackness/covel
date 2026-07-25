@@ -9,9 +9,8 @@ import { getStreamingText } from "@/stores/streaming-text-store.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
-import { resolveI18n } from "@/lib/catalog.js";
+import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { initDesktopBridge } from "@/lib/desktop-bridge.js";
-import { onNavEvent } from "@/lib/nav-events.js";
 import { WorldSelectScreen } from "@/components/session/world-select-screen.js";
 import { SessionPrepScreen } from "@/components/session/session-prep-screen.js";
 import { OnboardingWizard } from "@/components/onboarding-wizard.js";
@@ -125,16 +124,17 @@ function SessionPage() {
   const tRef = useRef(t);
   tRef.current = t;
 
-  // Topbar nav → in-page panel toggles. The global topbar lives in __root and
-  // can't reach page-local state directly, so it dispatches via nav-events.
-  useEffect(() => {
-    return onNavEvent((event) => {
-      if (event === "open-plugins") {
-        settings.openWithKey("plugin");
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // NOTE: `open-plugins` is deliberately NOT handled here. `nav-events` is a
+  // broadcast, and GameView already subscribes (use-nav-tab-activation.ts) with
+  // the dialog instance it actually renders. A second subscription here only
+  // flipped this page's own, never-rendered dialog instance to open — which
+  // then popped up unbidden the next time the player navigated back to world
+  // select.
+  //
+  // Known gap, unchanged by the removal: `nav-events` has no replay, so firing
+  // from /debug or during GameView's lazy Suspense window drops the event and
+  // the player lands on /session without the panel opening. The old
+  // subscription here was equally unmounted in those states.
 
   useEffect(() => {
     return initDesktopBridge({

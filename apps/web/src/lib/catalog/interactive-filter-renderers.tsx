@@ -1,15 +1,17 @@
 import type { ComponentRenderer } from "@json-render/react";
 import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
-import { resolveIcon, useI18nResolver } from "./helpers.js";
+import { asOptionArray, resolveIcon, useI18nResolver } from "./helpers.js";
 import { inputBase } from "./interactive-input-renderers.js";
 
 export const Select: ComponentRenderer = ({ element, bindings }) => {
   const resolve = useI18nResolver();
   const label = resolve(element.props?.label);
   const value = (element.props?.value as string) ?? "";
-  const options =
-    (element.props?.options as Array<{ value: string; label: unknown }>) ?? [];
+  const options = asOptionArray(element.props?.options) as unknown as Array<{
+    value: string;
+    label: unknown;
+  }>;
   const { set } = useStateStore();
   const bindPath = bindings?.value;
 
@@ -67,12 +69,11 @@ export const Switch: ComponentRenderer = ({ element, bindings }) => {
 
 export const FilterBar: ComponentRenderer = ({ element, bindings }) => {
   const resolve = useI18nResolver();
-  const options =
-    (element.props?.options as Array<{
-      value: string;
-      label: unknown;
-      icon?: string;
-    }>) ?? [];
+  const options = asOptionArray(element.props?.options) as unknown as Array<{
+    value: string;
+    label: unknown;
+    icon?: string;
+  }>;
   const value = (element.props?.value as string) ?? "all";
   const { set } = useStateStore();
   const bindPath = bindings?.value;

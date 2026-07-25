@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-dashscope-image-gen",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "private": true,
   "type": "module",
   "description": "DashScope (Aliyun) image generation — manual-triggered two-stage pipeline: LLM-crafted prompt → wan2.x image model.",

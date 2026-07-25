@@ -42,13 +42,19 @@ export function Hero() {
             draggable={false}
             style={{ filter: "saturate(0.8) contrast(1.1)" }}
           />
-          <img
+          {/* H.264 rather than the 10 MB GIF `build-media` also produces:
+              same frames, ~8× smaller, and it decodes on the GPU. */}
+          <video
             className="h-full w-full object-cover opacity-60"
-            src="/media/demo.gif"
-            alt=""
+            src="/media/demo.mp4"
+            poster="/media/demo-poster.jpg"
             width={1152}
             height={720}
-            loading="lazy"
+            autoPlay
+            muted
+            loop
+            playsInline
+            aria-hidden
             draggable={false}
             style={{ filter: "saturate(0.85) contrast(1.05)" }}
           />

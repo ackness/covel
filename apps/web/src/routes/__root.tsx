@@ -6,10 +6,17 @@ import {
   useNavigate,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ToastHost } from "@/components/ui/toast-host";
 import { AppErrorBoundary } from "@/components/error-boundary";
@@ -29,6 +36,7 @@ const noDragStyle: CSSProperties = {
 
 function RootLayout() {
   const { t } = useTranslation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { locale, setLocale } = useLocalePreference();
   const location = useLocation();
   const navigate = useNavigate();
@@ -221,14 +229,63 @@ function RootLayout() {
                   </Link>
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={t("nav.primary", "Primary")}
-                className="md:hidden h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-[var(--radius-control)]"
-              >
-                <Menu className="h-4 w-4" />
-              </Button>
+              {/* The desktop nav and the language toggle are both `md:` only,
+                  so on a phone this dialog is the ONLY way to reach worlds /
+                  session / plugins / debug or switch language. Radix Dialog
+                  brings the focus trap, Escape handling and aria-modal that a
+                  hand-rolled dropdown would have to reimplement. */}
+              <Dialog open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={t("nav.primary", "Primary")}
+                    className="md:hidden h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-[var(--radius-control)]"
+                  >
+                    <Menu className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-xs">
+                  <DialogHeader>
+                    <DialogTitle>{t("nav.primary", "Primary")}</DialogTitle>
+                  </DialogHeader>
+                  <nav className="flex flex-col">
+                    {navItems.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        disabled={item.disabled}
+                        aria-current={
+                          activeNav === item.id ? "page" : undefined
+                        }
+                        onClick={() => {
+                          setMobileNavOpen(false);
+                          item.onClick();
+                        }}
+                        className={`h-11 px-2 text-left text-sm transition-colors rounded-[var(--radius-control)] ${
+                          activeNav === item.id
+                            ? "text-foreground font-medium"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                        } ${item.disabled ? "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground" : ""}`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileNavOpen(false);
+                        toggleLocale();
+                      }}
+                      className="h-11 px-2 mt-1 border-t border-border text-left text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {locale === "zh-CN"
+                        ? t("onboarding.localeEn", "Switch to English")
+                        : t("onboarding.localeZh", "Switch to Chinese")}
+                    </button>
+                  </nav>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </header>

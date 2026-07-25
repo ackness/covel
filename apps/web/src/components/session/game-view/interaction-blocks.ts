@@ -46,20 +46,17 @@ function isInteractiveBlock(block: Record<string, unknown>): boolean {
   return hasInteractiveAction(data.spec);
 }
 
+// Only actions the player MUST answer count as pending. `selectSuggestion` /
+// `draftMessage` are optional shortcuts (scene-prompts, guide) — treating them
+// as pending locked the main composer on every turn that offered suggestions,
+// so the player could no longer type their own action.
 function hasInteractiveAction(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   if (Array.isArray(value)) return value.some(hasInteractiveAction);
 
   const record = value as Record<string, unknown>;
   const action = record.action;
-  if (
-    action === "submitForm" ||
-    action === "selectChoice" ||
-    action === "selectSuggestion" ||
-    action === "draftMessage"
-  ) {
-    return true;
-  }
+  if (action === "submitForm" || action === "selectChoice") return true;
 
   return Object.values(record).some(hasInteractiveAction);
 }

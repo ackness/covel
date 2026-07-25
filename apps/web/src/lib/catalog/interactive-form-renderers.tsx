@@ -5,6 +5,8 @@ import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
 import * as Icons from "lucide-react";
 import {
+  asArray,
+  asOptionArray,
   filterItems,
   resolveIcon,
   resolvePath,
@@ -34,7 +36,7 @@ const tabColorAccents: Record<string, string> = {
  */
 export const Tabs: ComponentRenderer = ({ element, bindings }) => {
   const resolve = useI18nResolver();
-  const tabs = (element.props?.tabs as FilterTab[]) ?? [];
+  const tabs = asOptionArray(element.props?.tabs) as unknown as FilterTab[];
   const value = (element.props?.value as string) ?? tabs[0]?.value ?? "";
   const counts = element.props?.counts as Record<string, number> | undefined;
   const { set } = useStateStore();
@@ -135,11 +137,19 @@ export function createFilterContainer(
   const FilterContainer: ComponentRenderer = ({ element }) => {
     const { t } = useTranslation();
     const resolve = useI18nResolver();
-    const items = (element.props?.items as unknown[]) ?? [];
+    // Same unvalidated-spec rules as every other renderer. These three deserve
+    // the guard more than most: they are only touched on interaction (the first
+    // search keystroke, a tab click), so a bad shape renders fine and then
+    // throws once the player types.
+    const items = asArray(element.props?.items);
     const searchPlaceholder = resolve(element.props?.searchPlaceholder);
-    const searchFields = (element.props?.searchFields as string[]) ?? [];
+    const searchFields = asArray(element.props?.searchFields).filter(
+      (field): field is string => typeof field === "string",
+    );
     const filterField = element.props?.filterField as string | undefined;
-    const filterTabs = (element.props?.filterTabs as FilterTab[]) ?? [];
+    const filterTabs = asOptionArray(
+      element.props?.filterTabs,
+    ) as unknown as FilterTab[];
     const itemComponent = element.props?.itemComponent as string | undefined;
     const itemPropMap =
       (element.props?.itemPropMap as Record<string, string>) ?? {};

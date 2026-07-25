@@ -32,7 +32,15 @@ export function MessageComposer({
   const isEnded = session.status === "ended";
 
   return (
-    <div className="border-t border-[var(--rule-color)] shrink-0 px-3 md:px-4 py-4 md:py-5 bg-[var(--surface-page)]">
+    // `data-executing` / `data-blocked` are orthogonal: a turn can be running
+    // (composer still usable — submitting steers it) while nothing blocks it.
+    // E2E reads both instead of inferring turn state from `input:disabled`.
+    <div
+      data-testid="game-composer"
+      data-executing={executing}
+      data-blocked={composerBlocked}
+      className="border-t border-[var(--rule-color)] shrink-0 px-3 md:px-4 py-4 md:py-5 bg-[var(--surface-page)]"
+    >
       {isEnded ? (
         <p className="ui-empty-copy mx-auto text-center text-sm">
           {t("session.ended", "This session has ended.")}
@@ -41,6 +49,7 @@ export function MessageComposer({
         <div className="ui-composer-frame mx-auto">
           <div className="flex items-stretch rounded-[var(--radius-control)] border border-[var(--rule-color)] bg-[var(--surface-inset)] focus-within:border-[var(--accent-primary)] transition-colors">
             <input
+              data-testid="game-composer-input"
               type="text"
               value={inputValue}
               onChange={(e) => onInputValueChange(e.target.value)}

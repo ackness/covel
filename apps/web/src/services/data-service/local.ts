@@ -11,10 +11,12 @@ import type {
   StatePatchRecord,
   WorldRecord,
 } from "../api.js";
+import i18n from "i18next";
+import { resolveI18nText } from "@covel/shared";
 import * as api from "../api.js";
+import { isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
 import { createBrowserDataStore } from "../storage/index.js";
-import { text } from "@/components/world/editor-helpers.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import {
   toFrontendMessage,
@@ -249,6 +251,10 @@ export class LocalDataService implements DataService {
   }
 
   async deleteSession(sessionId: string): Promise<void> {
+    // Evict before the store teardown, not after: the in-memory list is
+    // authoritative once hydrated, so it must not survive a delete that failed
+    // partway through.
+    this.statePatches.delete(sessionId);
     const store = await this.getStore();
     await store.deleteSession(sessionId);
     appKv
@@ -312,21 +318,45 @@ export class LocalDataService implements DataService {
   // State patches
 
   async listStatePatches(sessionId: string): Promise<StatePatchRecord[]> {
-    // Try loading from IDB first, fall back to in-memory cache
-    const persisted = await appKv.getStatePatches(sessionId);
-    if (persisted && persisted.length > 0) return persisted;
-    return this.statePatches.get(sessionId) ?? [];
+    return this.hydrateStatePatches(sessionId);
+  }
+
+  /**
+   * The in-memory map is empty after a page reload, so appending straight to it
+   * and writing the result back to IDB used to overwrite the whole persisted
+   * array with a single patch — the session's entire state history, gone on the
+   * first turn after a refresh. Read through IDB before touching the list.
+   */
+  private async hydrateStatePatches(
+    sessionId: string,
+  ): Promise<StatePatchRecord[]> {
+    const cached = this.statePatches.get(sessionId);
+    if (cached) return cached;
+    const persisted = (await appKv.getStatePatches(sessionId)) ?? [];
+    // Re-read: an append may have landed while the IDB read was in flight.
+    const raced = this.statePatches.get(sessionId);
+    if (raced) return raced;
+    this.statePatches.set(sessionId, persisted);
+    return persisted;
   }
 
   async addStatePatch(
     sessionId: string,
     patch: StatePatchRecord,
   ): Promise<void> {
-    const list = this.statePatches.get(sessionId) ?? [];
-    this.statePatches.set(sessionId, [...list, patch]);
+    const hydrated = await this.hydrateStatePatches(sessionId);
+    // Re-read after the await. One turn commonly commits several `state.changed`
+    // events that arrive in a single flush, and `sse-handler` fires this
+    // fire-and-forget per event: without the re-read, two appends resolving in
+    // the same tick both build on the same base list and the second overwrites
+    // the first. Each continuation's `set` below is synchronous, so re-reading
+    // here always observes the previous append.
+    const list = this.statePatches.get(sessionId) ?? hydrated;
+    const next = [...list, patch];
+    this.statePatches.set(sessionId, next);
     // Persist to IDB (fire-and-forget)
     appKv
-      .saveStatePatches(sessionId, [...list, patch])
+      .saveStatePatches(sessionId, next)
       .catch(ignoreError("save state patches"));
   }
 
@@ -377,13 +407,16 @@ export class LocalDataService implements DataService {
     const serverWorldId = world.id.replace(/_/g, "-");
     const serverSessionId = session.id.replace(/_/g, "-");
 
-    // Ensure world exists on server (pass local ID so server uses the same ID)
+    // Ensure world exists on server (pass local ID so server uses the same ID).
+    // Only a 404 means "not there yet" — a transient 500 must not be answered
+    // by creating a second, empty world over the top of the real one.
     try {
       await api.getWorld(serverWorldId);
-    } catch {
+    } catch (err) {
+      if (!isNotFound(err)) throw err;
       await api.createWorld(
-        text(world.name),
-        text(world.description),
+        resolveI18nText(world.name, i18n.language) ?? "",
+        resolveI18nText(world.description, i18n.language) ?? "",
         serverWorldId,
       );
     }
@@ -391,36 +424,32 @@ export class LocalDataService implements DataService {
     // Ensure session exists on server (pass local ID so server uses the same ID)
     try {
       await api.getSession(serverSessionId);
-    } catch {
+    } catch (err) {
+      if (!isNotFound(err)) throw err;
       await api.createSession(serverWorldId, session.presetId, serverSessionId);
     }
 
-    // Upload messages so the server kernel can build LLM context
+    // Upload messages so the server kernel can build LLM context. This is NOT
+    // optional: silently skipping it means the next turn runs with empty
+    // history and the narrator visibly loses the whole story, with no error
+    // shown. Let it reject — `start-game` already has an error path.
     if (messages.length > 0) {
-      try {
-        await api.syncMessages(
-          serverSessionId,
-          messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-            turnId: m.turnId,
-            runtimeId: m.runtimeId,
-            block: m.block,
-          })),
-        );
-      } catch {
-        // Non-critical: server may not have sync endpoint
-      }
+      await api.syncMessages(
+        serverSessionId,
+        messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          turnId: m.turnId,
+          runtimeId: m.runtimeId,
+          block: m.block,
+        })),
+      );
     }
 
     // Upload state snapshot so the server kernel can rehydrate game state
     const snapshot = await this.loadStateSnapshot(session.id);
     if (snapshot) {
-      try {
-        await api.saveStateSnapshot(serverSessionId, snapshot);
-      } catch {
-        // Non-critical: server may not have state-snapshot endpoint in T1 mode
-      }
+      await api.saveStateSnapshot(serverSessionId, snapshot);
     }
   }
 

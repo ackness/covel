@@ -42,11 +42,17 @@ export function DemoSection() {
               : "none",
           }}
         >
-          <img
+          {/* See Hero.tsx — the MP4 is the same recording at ~1/8 the bytes. */}
+          <video
             className="w-full h-auto block"
-            src="/media/demo.gif"
+            src="/media/demo.mp4"
+            poster="/media/demo-poster.jpg"
             width={1152}
             height={720}
+            autoPlay
+            muted
+            loop
+            playsInline
             aria-label={t(
               "home.demo.videoAria",
               "Recording of a Covel session in progress",

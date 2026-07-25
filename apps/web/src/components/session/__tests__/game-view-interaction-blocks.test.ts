@@ -43,7 +43,29 @@ describe("game-view interaction block detection", () => {
     );
   });
 
-  it("detects plugin message specs with draft actions", () => {
+  it("detects plugin message specs that require an answer", () => {
+    const messages = [
+      baseMessage({
+        block: {
+          type: "plugin_message",
+          data: {
+            specs: [
+              {
+                component: "Button",
+                props: { onClick: { action: "submitForm" } },
+              },
+            ],
+          },
+        },
+      }),
+    ];
+
+    expect(isPendingInteractionMessage(messages[0], messages, new Set())).toBe(
+      true,
+    );
+  });
+
+  it("does not treat suggestion-only plugin panels as pending", () => {
     const messages = [
       baseMessage({
         block: {
@@ -54,6 +76,10 @@ describe("game-view interaction block detection", () => {
                 component: "Button",
                 props: { onClick: { action: "draftMessage" } },
               },
+              {
+                component: "Button",
+                props: { onClick: { action: "selectSuggestion" } },
+              },
             ],
           },
         },
@@ -61,7 +87,7 @@ describe("game-view interaction block detection", () => {
     ];
 
     expect(isPendingInteractionMessage(messages[0], messages, new Set())).toBe(
-      true,
+      false,
     );
   });
 });

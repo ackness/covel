@@ -18,6 +18,26 @@ import { parseJsonSseData, readSseStream } from "./sse.js";
 export type ConnectionState =
   "connecting" | "connected" | "reconnecting" | "closed";
 
+/**
+ * Client errors that may or may not clear. They are NOT terminal on the first
+ * hit: in local mode the subscription connects as soon as `SET_SESSION`
+ * dispatches, while `syncToServer` only creates the server-side session a few
+ * round-trips later, so the opening attempts legitimately 404 — and a token
+ * stored after the first attempt turns a 401 into a success on the retry.
+ * 408/429 are ordinary transient statuses and don't count against the streak.
+ */
+function isClientError(status: number): boolean {
+  return status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
+/**
+ * How many consecutive client errors to tolerate before giving up. Enough to
+ * cover the local-mode bootstrap and a token landing late; small enough that a
+ * genuinely deleted session stops reconnecting instead of retrying every 30s
+ * for the life of the tab.
+ */
+const MAX_CLIENT_ERROR_RETRIES = 5;
+
 // Single source of truth for the subscription event shape lives in
 // `@covel/shared` (topic: SubscriptionTopic, payload: Readonly<Record<...>>).
 // Re-exported here so existing `@/services/subscription` importers keep their
@@ -70,6 +90,7 @@ export function createSessionSubscription(
   let backoffMs = INITIAL_BACKOFF_MS;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
+  let clientErrorStreak = 0;
 
   // Topic -> Set<handler>
   const handlers = new Map<string, Set<SubscriptionEventHandler>>();
@@ -146,14 +167,28 @@ export function createSessionSubscription(
       });
 
       if (!res.ok) {
-        throw new Error(
-          `SSE stream ${res.status}: ${await res.text().catch(() => "")}`,
-        );
+        const body = await res.text().catch(() => "");
+        if (isClientError(res.status)) {
+          clientErrorStreak += 1;
+          if (clientErrorStreak >= MAX_CLIENT_ERROR_RETRIES) {
+            // Not self-healing: the session is really gone, or the token is
+            // really wrong. Retrying every 30s for the life of the tab just
+            // leaves the UI stuck on "reconnecting" forever.
+            console.error(
+              `[subscription] giving up after ${clientErrorStreak} client errors: SSE stream ${res.status} ${body}`,
+            );
+            closed = true;
+            setState("closed");
+            return;
+          }
+        }
+        throw new Error(`SSE stream ${res.status}: ${body}`);
       }
 
-      // Connected successfully — reset backoff
+      // Connected successfully — reset backoff and the client-error streak
       setState("connected");
       backoffMs = INITIAL_BACKOFF_MS;
+      clientErrorStreak = 0;
 
       await readSseStream({
         response: res,

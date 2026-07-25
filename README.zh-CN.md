@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.20-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.20)
+[![Version](https://img.shields.io/badge/version-v0.0.21-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.21)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](<>)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel 是一款 AI 驱动的 RPG，回合之间世界仍在运转：NPC 记录着对你的态度、世界典籍随游玩积累、记忆贯穿整局。支撑这一切的每个机制都是一个**以插件形式分发的自主 agent** —— 禁用一个、替换一个，或者自己写一个。
 
-> **当前公开版本：v0.0.20**，早期阶段 —— API、数据格式、插件 frontmatter 可能随版本变化。官方预编译包面向 macOS Apple Silicon 与 Windows x64，其余平台从源码构建。
+> **当前公开版本：v0.0.21**，早期阶段 —— API、数据格式、插件 frontmatter 可能随版本变化。官方预编译包面向 macOS Apple Silicon 与 Windows x64，其余平台从源码构建。
 
 ## 亮点
 
@@ -31,6 +31,12 @@ Covel 是一款 AI 驱动的 RPG，回合之间世界仍在运转：NPC 记录�
 | 背景、立绘与打字机对话；场景美术随探索自动解析与生成 | 经典叙事回合，内嵌选择肢与表单，每回合的 agent 时间线可见 |
 
 世界声明自己的默认档（`defaultViewMode: stage`），游戏中可随时切换。
+
+## agent 在后台留下了什么
+
+![核心记忆面板](./.assets/images/readme/memory-panel.png)
+
+游戏中随手打开侧栏，看到的就是后台 agent 这一回合写下的东西：核心记忆（进行中的剧情、当前场景、主角状态）、NPC 关系图谱、世界典籍、在场角色。这些都不是手写的 —— 它们随着你游玩不断累积，也正是叙事 agent 下一回合会读回去的内容。
 
 ## 快速开始
 

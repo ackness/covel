@@ -22,6 +22,8 @@ export function PendingDraftsBar({
 
   return (
     <div
+      data-testid="pending-drafts"
+      data-count={pendingDrafts.length}
       className="px-3 md:px-4 py-2.5 border-t border-[var(--rule-color)] shrink-0 relative"
       style={{
         background:

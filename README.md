@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.20-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.20)
+[![Version](https://img.shields.io/badge/version-v0.0.21-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.21)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](<>)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel is an AI RPG where the world keeps running between your turns: NPCs track how they feel about you, lore accumulates as you play, and memory carries the thread across the session. Every mechanic behind that is an **autonomous agent shipped as a plugin** — disable one, swap one, or write your own.
 
-> **Current public release: v0.0.20**, early access — APIs, data formats, and plugin frontmatter may change between versions. Prebuilt binaries target macOS Apple Silicon and Windows x64; other platforms build from source.
+> **Current public release: v0.0.21**, early access — APIs, data formats, and plugin frontmatter may change between versions. Prebuilt binaries target macOS Apple Silicon and Windows x64; other platforms build from source.
 
 ## Highlights
 
@@ -31,6 +31,12 @@ Covel is an AI RPG where the world keeps running between your turns: NPCs track 
 | Backdrops, sprites, and typewriter dialog; scene art resolves and generates as you explore | Classic narrated turns with inline choices, forms, and the per-turn agent timeline visible |
 
 Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
+
+## What the agents leave behind
+
+![Core memory panel](./.assets/images/readme/memory-panel.png)
+
+Open a side panel mid-play and you are reading what the background agents wrote this turn: core memory (running plot, current scene, player state), the NPC relationship graph, the world codex, the on-stage cast. None of it is hand-authored — it accumulates as you play, and it is what the narrator reads back on the next turn.
 
 ## Quick start
 

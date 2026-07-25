@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useInView } from "@/hooks/use-in-view";
-import { useI18nResolver } from "@/lib/catalog";
+import { useI18nResolver } from "@/lib/catalog/helpers";
 
 /**
  * Marketing tile descriptor. Only the visual layout (`span`) and the
