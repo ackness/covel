@@ -17,7 +17,7 @@ import { useState, type ReactNode } from "react";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
 import * as Icons from "lucide-react";
-import { resolveIcon, useI18nResolver } from "./helpers.js";
+import { resolveIcon, toTextArray, useI18nResolver } from "./helpers.js";
 import {
   gapClasses,
   alignClasses,
@@ -124,8 +124,8 @@ export const Icon: ComponentRenderer = ({ element }) => {
 };
 
 export const TagList: ComponentRenderer = ({ element }) => {
-  const tags = element.props?.tags as string[];
-  if (!tags || tags.length === 0) return null;
+  const tags = toTextArray(element.props?.tags);
+  if (tags.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-1">
       {tags.map((tag) => (
@@ -239,12 +239,21 @@ export const Section: ComponentRenderer = ({ element, children }) => {
   );
 };
 
+/** Deeper than any real plugin payload; a guard, not a display preference. */
+const MAX_JSON_RENDER_DEPTH = 32;
+
 /**
  * Render any JSON value with shape-aware styling.
  * Primitives inline, arrays of primitives as tag list, arrays of objects
  * as vertical list, nested objects as key: value pairs.
  */
 export function renderJsonValue(value: unknown, depth: number): ReactNode {
+  // Plugin data is arbitrarily deep and unvalidated; without a cap a pathological
+  // (or cyclic-looking) structure recurses until the stack blows, and a RangeError
+  // during render takes out the whole subtree.
+  if (depth > MAX_JSON_RENDER_DEPTH) {
+    return <span className="text-muted-foreground/60 text-[10px]">…</span>;
+  }
   if (value === null || value === undefined) {
     return (
       <span className="text-muted-foreground/60 italic text-[10px]">—</span>

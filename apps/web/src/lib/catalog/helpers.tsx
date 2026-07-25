@@ -11,7 +11,9 @@ export interface FilterTab {
 }
 
 export function resolveIcon(name: string | undefined): Icons.LucideIcon | null {
-  if (!name) return null;
+  // The declared type is a lie at runtime: `name` comes straight out of a
+  // plugin-authored spec, so anything can arrive here and `.split` would throw.
+  if (typeof name !== "string" || !name) return null;
   // Convert kebab-case to PascalCase: "book-open" -> "BookOpen"
   const pascal = name
     .split("-")
@@ -37,17 +39,30 @@ export function resolveIcon(name: string | undefined): Icons.LucideIcon | null {
 export function resolveI18n(value: unknown, locale?: string): string {
   if (typeof value === "string") return value;
   if (typeof value === "object" && value !== null) {
-    const obj = value as Record<string, string>;
+    // A locale-keyed record from a plugin spec is not guaranteed to hold
+    // strings. Returning a nested object here would reach React as a child and
+    // throw ("Objects are not valid as a React child"), so every branch below
+    // goes through `asString`.
+    const obj = value as Record<string, unknown>;
+    const asString = (v: unknown): string | undefined =>
+      typeof v === "string" ? v : undefined;
     const lang = locale ?? i18nInstance.language ?? "";
-    if (lang && obj[lang]) return obj[lang];
+    const exact = lang ? asString(obj[lang]) : undefined;
+    if (exact) return exact;
     const prefix = lang.split("-")[0];
     if (prefix) {
-      const prefixMatch = Object.keys(obj).find(
-        (k) => k === prefix || k.startsWith(`${prefix}-`),
-      );
-      if (prefixMatch && obj[prefixMatch]) return obj[prefixMatch];
+      for (const k of Object.keys(obj)) {
+        if (k !== prefix && !k.startsWith(`${prefix}-`)) continue;
+        const match = asString(obj[k]);
+        if (match) return match;
+      }
     }
-    return obj["en-US"] ?? obj["en"] ?? Object.values(obj)[0] ?? "";
+    return (
+      asString(obj["en-US"]) ??
+      asString(obj["en"]) ??
+      Object.values(obj).find((v): v is string => typeof v === "string") ??
+      ""
+    );
   }
   return String(value ?? "");
 }
@@ -70,10 +85,39 @@ export function isRecordLike(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+/**
+ * Spec-supplied list props are unvalidated — the server only checks the spec
+ * envelope, so `tabs`/`options`/`items` can be any shape. Normalise before
+ * `.map` instead of letting a TypeError unwind the render tree.
+ */
+export function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+/**
+ * Same idea for the option/tab lists whose entries are rendered with
+ * `key={item.value}` — drop anything that isn't a record with a string `value`
+ * so the renderer can't be handed a primitive or a nested object.
+ */
+export function asOptionArray(value: unknown): Record<string, unknown>[] {
+  return asArray(value).filter(
+    (item): item is Record<string, unknown> =>
+      isRecordLike(item) && typeof item.value === "string",
+  );
+}
+
 export function toTextArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .map((item) => {
+      // Coerce primitives rather than dropping them: an LLM-written `tags: [3]`
+      // used to render "3", and silently losing it is a worse regression than
+      // the object-child crash this guard exists to prevent.
+      if (typeof item === "string") return item.trim();
+      if (typeof item === "number" || typeof item === "boolean")
+        return String(item);
+      return "";
+    })
     .filter((item) => item.length > 0);
 }
 

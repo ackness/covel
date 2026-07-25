@@ -14,20 +14,26 @@ export function flattenStateForPluginPanel(
   return updates;
 }
 
+/** Mirrors the render-side cap in `catalog/core-renderers.tsx`. */
+const MAX_FLATTEN_DEPTH = 32;
+
 function flattenStateValue(
   updates: Record<string, unknown>,
   basePath: string,
   value: unknown,
+  depth = 0,
 ): void {
   if (Array.isArray(value)) {
     updates[basePath || "/"] = value;
     return;
   }
-  if (value && typeof value === "object") {
+  // Plugin data is unvalidated and arbitrarily deep. Past the cap, assign the
+  // subtree wholesale rather than recursing into a stack overflow.
+  if (value && typeof value === "object" && depth < MAX_FLATTEN_DEPTH) {
     for (const [key, child] of Object.entries(
       value as Record<string, unknown>,
     )) {
-      flattenStateValue(updates, `${basePath}/${key}`, child);
+      flattenStateValue(updates, `${basePath}/${key}`, child, depth + 1);
     }
     return;
   }

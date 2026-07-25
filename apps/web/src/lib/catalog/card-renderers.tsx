@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
 import * as Icons from "lucide-react";
-import { resolveIcon, useI18nResolver } from "./helpers.js";
+import { resolveIcon, toTextArray, useI18nResolver } from "./helpers.js";
 import { useCollapsible } from "./use-collapsible.js";
 import {
   categoryIconColors,
@@ -88,7 +88,7 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
   const title = resolve(element.props?.title);
   const category = (element.props?.category as string) ?? "";
   const content = resolve(element.props?.content);
-  const tags = element.props?.tags as string[] | undefined;
+  const tags = toTextArray(element.props?.tags);
   const rarity = (element.props?.rarity as string) ?? "common";
   // Optional plugin-supplied per-category icon + color (e.g. from a
   // plugin's categoryMeta payload). When provided they override the

@@ -20,6 +20,16 @@ import { Badge } from "@/components/ui/badge.js";
 import type { WorldDimensions } from "@covel/shared";
 import { text } from "@/components/world/editor-helpers.js";
 
+/**
+ * `WorldDimensions` declares these arrays as required, but the data is
+ * LLM-generated world content — an external boundary. `?.` only covers
+ * null/undefined; `regions: {}` would still throw on `.map`. Keeps the declared
+ * element type so the render bodies stay typed.
+ */
+function asArray<T>(value: readonly T[] | undefined): readonly T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function Section({
   title,
   icon: Icon,
@@ -72,7 +82,7 @@ export function WorldDimensionsPanel({
               {text(dims.geography.overview)}
             </p>
           )}
-          {dims.geography.regions.map((r, i) => (
+          {asArray(dims.geography.regions).map((r, i) => (
             <div key={i} className="text-[11px]">
               <span className="font-medium">{text(r.name)}</span>
               {r.climate && (
@@ -160,7 +170,7 @@ export function WorldDimensionsPanel({
       {/* Economy */}
       {dims.economy && (
         <Section title={t("world.economy")} icon={Coins}>
-          {dims.economy.currencies.map((c, i) => (
+          {asArray(dims.economy.currencies).map((c, i) => (
             <div key={i} className="text-[11px]">
               <span className="font-medium">{text(c.name)}</span>
               {c.symbol && <span> ({c.symbol})</span>}
@@ -191,7 +201,7 @@ export function WorldDimensionsPanel({
       {/* Social Structure */}
       {dims.socialStructure && (
         <Section title={t("world.socialStructure")} icon={Building2}>
-          {dims.socialStructure.classes?.map((cls, i) => (
+          {asArray(dims.socialStructure.classes).map((cls, i) => (
             <div key={i} className="text-[11px]">
               <span className="font-medium">{text(cls.name)}</span>
               {cls.description && (
@@ -209,7 +219,7 @@ export function WorldDimensionsPanel({
       {dims.tone && (
         <Section title={t("world.tone")} icon={Palette}>
           <div className="flex flex-wrap gap-1">
-            {dims.tone.genres.map((g, i) => (
+            {asArray(dims.tone.genres).map((g, i) => (
               <Badge
                 key={i}
                 variant="secondary"

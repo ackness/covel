@@ -83,7 +83,9 @@ export {
   useI18nResolver,
 } from "./catalog/helpers.js";
 
-const FilterContainer = createFilterContainer((name) => covelRegistry[name]);
+const FilterContainer = createFilterContainer((name) =>
+  Object.hasOwn(covelRegistry, name) ? covelRegistry[name] : undefined,
+);
 
 /**
  * Test-only export of internal pure helpers. Not part of the public catalog.
@@ -95,61 +97,69 @@ export const __filterContainerInternals = {
   filterItems,
 };
 
-export const covelRegistry: Record<string, ComponentRenderer> = {
-  // Layout
-  Stack,
-  Row,
-  Grid,
-  Separator,
-  // Display
-  Text,
-  Badge,
-  Icon,
-  TagList,
-  Source,
-  BranchReplyCandidates,
-  Image: ImageComponent,
-  Media: MediaCatalogComponent,
-  AudioPlayer: AudioPlayerCatalogComponent,
-  ImageGallery,
-  ImageJobs,
-  PortraitGallery,
-  // Data
-  Card,
-  CardList,
-  EntryCard,
-  StatBar,
-  Progress,
-  Accordion,
-  Section,
-  JsonView,
-  CharacterBlueprintList,
-  SceneCastList,
-  CharacterFieldsView,
-  CharacterAvatar,
-  // Interactive
-  Button,
-  Input,
-  Textarea,
-  SearchInput,
-  Select,
-  Switch,
-  FilterBar,
-  Tabs,
-  FilterContainer,
-  // Form
-  Form,
-  FormHeader,
-  FormField,
-  SubmitButton,
-  // Message (chat area)
-  Prose,
-  PlayerMessage,
-  Alert,
-  // Visualization
-  GraphCanvas,
-  WorldDimensions,
-  // Multimodal (P0-b — SPEC §5.7)
-  AssetRender: AssetRenderCatalog,
-  AssetTurnSidebar: AssetTurnSidebarCatalog,
-};
+// Null-prototype so a spec-supplied component name can never resolve through
+// `Object.prototype`. json-render looks components up as `registry[type]`, so a
+// plain object literal would answer `"constructor"` with `Object` — React then
+// calls it, gets the props object back, and throws "Objects are not valid as a
+// React child". `"toString"` renders junk text the same way.
+export const covelRegistry: Record<string, ComponentRenderer> = Object.assign(
+  Object.create(null) as Record<string, ComponentRenderer>,
+  {
+    // Layout
+    Stack,
+    Row,
+    Grid,
+    Separator,
+    // Display
+    Text,
+    Badge,
+    Icon,
+    TagList,
+    Source,
+    BranchReplyCandidates,
+    Image: ImageComponent,
+    Media: MediaCatalogComponent,
+    AudioPlayer: AudioPlayerCatalogComponent,
+    ImageGallery,
+    ImageJobs,
+    PortraitGallery,
+    // Data
+    Card,
+    CardList,
+    EntryCard,
+    StatBar,
+    Progress,
+    Accordion,
+    Section,
+    JsonView,
+    CharacterBlueprintList,
+    SceneCastList,
+    CharacterFieldsView,
+    CharacterAvatar,
+    // Interactive
+    Button,
+    Input,
+    Textarea,
+    SearchInput,
+    Select,
+    Switch,
+    FilterBar,
+    Tabs,
+    FilterContainer,
+    // Form
+    Form,
+    FormHeader,
+    FormField,
+    SubmitButton,
+    // Message (chat area)
+    Prose,
+    PlayerMessage,
+    Alert,
+    // Visualization
+    GraphCanvas,
+    WorldDimensions,
+    // Multimodal (P0-b — SPEC §5.7)
+    AssetRender: AssetRenderCatalog,
+    AssetTurnSidebar: AssetTurnSidebarCatalog,
+  },
+);

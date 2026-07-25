@@ -14,6 +14,7 @@ import {
   type StateStore,
 } from "@json-render/react";
 import { covelRegistry } from "@/lib/catalog.js";
+import { PluginSurfaceBoundary } from "@/components/error-boundary.js";
 import {
   usePluginJobs,
   usePluginNamespace,
@@ -347,13 +348,19 @@ export function PluginPanel({
       resolveEmptyMessage(spec.label) ||
       (typeof spec.id === "string" ? spec.id : pluginId);
     const view = spec.view;
+    // Sibling namespace, not `plugin.invalidPanelSpec.*`: that key is already a
+    // string, and i18next cannot resolve a key that is both a leaf and a
+    // parent — which is why these three silently fell back to English.
     const reason =
       view === undefined || view === null
-        ? t("plugin.invalidPanelSpec.missingView", "missing `view`")
+        ? t("plugin.invalidPanelSpecReason.missingView", "missing `view`")
         : typeof view !== "object" || Array.isArray(view)
-          ? t("plugin.invalidPanelSpec.badView", "`view` must be an object")
+          ? t(
+              "plugin.invalidPanelSpecReason.badView",
+              "`view` must be an object",
+            )
           : t(
-              "plugin.invalidPanelSpec.conversionFailed",
+              "plugin.invalidPanelSpecReason.conversionFailed",
               "could not render `view`",
             );
     return (
@@ -446,13 +453,17 @@ export function PluginPanel({
           </div>
         </div>
       )}
-      <JSONUIProvider
-        registry={covelRegistry}
-        store={stateStore}
-        handlers={handlers}
+      <PluginSurfaceBoundary
+        surfaceLabel={resolveEmptyMessage(spec.label) || pluginId}
       >
-        <Renderer spec={flatSpec} registry={covelRegistry} />
-      </JSONUIProvider>
+        <JSONUIProvider
+          registry={covelRegistry}
+          store={stateStore}
+          handlers={handlers}
+        >
+          <Renderer spec={flatSpec} registry={covelRegistry} />
+        </JSONUIProvider>
+      </PluginSurfaceBoundary>
       <Dialog
         open={confirmRequest !== null}
         onOpenChange={(open) => {

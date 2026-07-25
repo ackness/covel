@@ -4,6 +4,7 @@ import { JSONUIProvider, Renderer } from "@json-render/react";
 import { emitToast } from "@/lib/toast-channel.js";
 import { nestedToFlat } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
+import { PluginSurfaceBoundary } from "@/components/error-boundary.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { useSessionActions } from "@/stores/session-store.js";
@@ -107,13 +108,15 @@ export function UiRenderBlock({ block }: { block: Record<string, unknown> }) {
         if (!spec) return null;
         return (
           <div key={typeof part.id === "string" ? part.id : index}>
-            <JSONUIProvider
-              registry={covelRegistry}
-              initialState={{}}
-              handlers={{}}
-            >
-              <Renderer spec={nestedToFlat(spec)} registry={covelRegistry} />
-            </JSONUIProvider>
+            <PluginSurfaceBoundary>
+              <JSONUIProvider
+                registry={covelRegistry}
+                initialState={{}}
+                handlers={{}}
+              >
+                <Renderer spec={nestedToFlat(spec)} registry={covelRegistry} />
+              </JSONUIProvider>
+            </PluginSurfaceBoundary>
           </div>
         );
       })}
@@ -194,7 +197,7 @@ export function MessageBlockRenderer({
   onSendMessage: (msg: string) => void;
   onSubmitBlock: (blockId: string) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { upsertInteractionDraft } = useSessionActions();
   const formStateRef = useRef<Record<string, unknown>>({});
 
@@ -263,9 +266,14 @@ export function MessageBlockRenderer({
           return !formValues[field.name]?.trim();
         });
         if (missingFields.length > 0) {
-          const names = missingFields
-            .map((field) => field.label ?? field.name)
-            .join("、");
+          // Locale-aware list joining — a hardcoded "、" reached en-US players
+          // verbatim. Intl handles the separator and any "and" conjunction.
+          const names = new Intl.ListFormat(i18n.language, {
+            style: "narrow",
+            type: "unit",
+          }).format(
+            missingFields.map((field) => String(field.label ?? field.name)),
+          );
           emitToast(
             "error",
             t("form.requiredMissing", "Please fill in required fields"),

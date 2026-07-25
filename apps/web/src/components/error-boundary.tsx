@@ -5,6 +5,8 @@ interface ErrorBoundaryProps {
   children: React.ReactNode;
   fallbackMessage?: string;
   onReset?: () => void;
+  /** Identifies the failing surface in {@link PluginSurfaceBoundary}'s fallback. */
+  surfaceLabel?: string;
 }
 
 interface ErrorBoundaryState {
@@ -64,6 +66,59 @@ abstract class BaseBoundary extends React.Component<
   protected handleReload = (): void => {
     window.location.reload();
   };
+}
+
+/**
+ * Boundary for a single plugin-driven surface (a right-panel spec, a plugin
+ * message block, a `ui.render` block).
+ *
+ * Plugin UI specs are authored by third parties and are not gated by the
+ * server-code approval flow; the server validates only the spec envelope, so
+ * anything inside `view` reaches the catalog renderers unvalidated. Without a
+ * boundary here a single bad prop unwinds to {@link AppErrorBoundary} and
+ * replaces the whole game view — including a narrative that is still
+ * streaming. Worse, the offending spec/data is persisted, so a reload crashes
+ * again. Contain the blast radius to the one tile that failed.
+ *
+ * Caveat: React boundaries do not reset on prop change, so a panel that throws
+ * on one turn's data stays in the fallback even after later data would render.
+ * Recovery is the explicit "Try again" button, or switching right-panel tabs
+ * (Radix unmounts inactive ones). Deliberate — auto-resetting on every data
+ * change would re-throw in a loop for a persistently bad spec.
+ */
+export class PluginSurfaceBoundary extends BaseBoundary {
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    const label = this.props.surfaceLabel;
+    return (
+      <div className="border border-destructive/35 bg-destructive/10 px-3 py-2 text-xs text-destructive space-y-1">
+        <p className="leading-relaxed break-words [overflow-wrap:anywhere]">
+          {label
+            ? i18n.t("error.boundary.pluginSurfaceNamed", {
+                label,
+                defaultValue: "This panel from “{{label}}” failed to render.",
+              })
+            : i18n.t("error.boundary.pluginSurface", {
+                defaultValue: "This plugin panel failed to render.",
+              })}
+        </p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={this.handleReset}
+            className="underline underline-offset-2 hover:no-underline"
+          >
+            {i18n.t("error.boundary.tryAgain", { defaultValue: "Try again" })}
+          </button>
+          <button
+            onClick={this.handleCopy}
+            className="underline underline-offset-2 hover:no-underline"
+          >
+            {i18n.t("error.boundary.copyError", { defaultValue: "Copy error" })}
+          </button>
+        </div>
+      </div>
+    );
+  }
 }
 
 /**
