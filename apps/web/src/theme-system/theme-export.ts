@@ -232,18 +232,34 @@ export function buildThemeCss(
   };
 }
 
-/** `我的主题 2` → `my-theme-2`-ish; falls back to a stable generic id. */
+/**
+ * Fallback id for names that carry no latin characters at all.
+ *
+ * A shared constant here was a data-loss bug: every Chinese-named theme got
+ * the same id, and `saveCustomTheme` de-duplicates by id, so saving a second
+ * one silently deleted the first. Deriving the suffix from the name keeps
+ * re-saving the *same* name an update (same id, as intended) while two
+ * different names no longer collide.
+ */
+function fallbackThemeId(name: string): string {
+  let hash = 0;
+  for (let index = 0; index < name.length; index++) {
+    hash = (Math.imul(hash, 31) + name.charCodeAt(index)) | 0;
+  }
+  return `custom-theme-${(hash >>> 0).toString(36)}`;
+}
+
+/** `我的主题 2` → `my-theme-2`-ish; non-latin names get a name-derived id. */
 export function slugifyThemeId(input: string): string {
-  const slug = input
-    .trim()
+  const trimmed = input.trim();
+  const slug = trimmed
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
-  // Non-latin names (Chinese, Japanese) slugify to nothing — the id is an
-  // internal selector token, so a generic one is fine; the label keeps the
-  // player's original text.
-  return slug.length >= 2 ? slug : "custom-theme";
+  // The id is an internal selector token; the label keeps the player's
+  // original text either way.
+  return slug.length >= 2 ? slug : fallbackThemeId(trimmed);
 }
 
 /**

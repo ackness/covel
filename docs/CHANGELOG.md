@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Fixed
+
+- **Saving a theme with a Chinese name no longer deletes the previous one.** `slugifyThemeId` strips every non-`[a-z0-9]` character, so an all-CJK name reduced to an empty string and fell back to the shared constant `custom-theme` — 我的极光, 我的纸本 and 夜读模式 all produced the same id. `ensureThemeId` only de-duplicated against builtin ids, and `saveCustomTheme` writes with `filter(id !== …).concat(…)`, so the second save silently dropped the first theme with no warning and no undo. In a Chinese-first product that is the main path, not an edge case. The fallback is now derived from the name itself, which keeps re-saving the same name an update (same id, as intended) while two different names no longer collide.
+- **Colour swatches announce which token they belong to.** All 48 shared one hardcoded `aria-label="colour"`, so a screen-reader user heard the same word 48 times with no way to tell the page background from the danger accent. Both the swatch and its paired text field now carry the token's own label. The theme-name field gained an accessible name too — it had only a placeholder, which is not a reliable one and vanishes on input.
+- **Reading theme defaults ignores an in-flight drag preview.** `readTokenDefaults` lifted only the properties the override module had written, but the controls also paint directly to the element while a slider is being dragged. Inside the 200 ms commit debounce those two views disagreed, so a theme or scheme switch landing in that window could record a half-dragged preview as the theme's own default. It now lifts every adjustable token regardless of who wrote it.
+
 ## [0.0.22] - 2026-07-26
 
 Appearance stops being a three-way switch. The token system was already complete — every theme defines it and every atom consumes it — so what was missing was never the plumbing, only a way for the player to reach it. This release exposes 45 of those tokens grouped by the region they affect, adds a path from "I tuned it" to "here is a theme package", and publishes turn state to the DOM so a theme can finally react to what the game is doing. The rest is player-facing correctness: two inputs that accepted what they shouldn't, and one that rendered less than it should.

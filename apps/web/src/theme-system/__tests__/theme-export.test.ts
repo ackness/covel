@@ -51,10 +51,22 @@ describe("theme id derivation", () => {
     expect(slugifyThemeId("  Neon__Drift!! ")).toBe("neon-drift");
   });
 
-  it("falls back for names that slugify to nothing", () => {
+  it("gives names that slugify to nothing a name-derived id", () => {
     // CJK names are common here and carry no latin characters at all.
-    expect(slugifyThemeId("我的主题")).toBe("custom-theme");
-    expect(slugifyThemeId("!!!")).toBe("custom-theme");
+    const id = slugifyThemeId("我的主题");
+    expect(id).toMatch(/^custom-theme-[a-z0-9]+$/);
+    // Stable: re-saving the same name must update that theme, not add another.
+    expect(slugifyThemeId("我的主题")).toBe(id);
+    expect(slugifyThemeId("  我的主题  ")).toBe(id);
+  });
+
+  it("never gives two different non-latin names the same id", () => {
+    // Regression: a shared constant fallback made every Chinese-named theme
+    // collide, and saveCustomTheme de-duplicates by id — so saving a second
+    // one silently deleted the first.
+    const names = ["我的极光", "我的纸本", "夜读模式", "深色护眼", "ダーク"];
+    const ids = names.map(slugifyThemeId);
+    expect(new Set(ids).size).toBe(names.length);
   });
 
   it("never lands on a builtin id", () => {
