@@ -7,7 +7,9 @@ import {
   applyColorScheme,
   DEFAULT_APPEARANCE,
   DEFAULT_COLOR_SCHEME,
+  THEME_SCHEME_KEY,
 } from "@/lib/appearance.js";
+import { applyTokenOverrides } from "./overrides.js";
 import { syncThemeStyles } from "./runtime.js";
 import {
   CUSTOM_THEMES_KEY,
@@ -24,8 +26,8 @@ import type {
 
 const builtinThemes = getBuiltinThemes();
 let themeRegistry = new Map<string, ThemeDefinition>();
-const BUILTIN_THEME_ORDER = ["paper", "modern", "abyss"];
-export const THEME_SCHEME_KEY = "ui.scheme";
+const BUILTIN_THEME_ORDER = ["paper", "modern", "abyss", "aurora"];
+export { THEME_SCHEME_KEY };
 
 function toThemeOption(theme: ThemeManifest): SettingOption {
   return {
@@ -171,6 +173,10 @@ function applyThemeSelection(store: SettingsStoreApi): void {
   } else {
     applyColorScheme(resolvedScheme);
   }
+
+  // Re-point the player's token overrides last: they layer on whatever theme
+  // and scheme just resolved, and the colour half of them is scheme-specific.
+  applyTokenOverrides(store);
 }
 
 export function getRegisteredThemes(): ThemeDefinition[] {

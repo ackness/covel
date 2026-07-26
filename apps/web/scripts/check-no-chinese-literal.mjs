@@ -46,6 +46,7 @@ const WHITELIST_PREFIXES = [
   "src/settings/navigation.ts", // bilingual group/subgroup labels
   "src/settings/registry/", // bilingual SettingEntry registries (core, llm, keys)
   "src/theme-system/registry.ts", // bilingual appearance/theme registry
+  "src/theme-system/token-schema.ts", // bilingual adjustable-token declaration table
 ];
 
 // Directory suffixes to skip outright.

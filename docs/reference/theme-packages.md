@@ -95,7 +95,12 @@ apps/web/src/themes/builtins/
   abyss/
     manifest.json
     theme.css
+  aurora/
+    manifest.json
+    theme.css
 ```
+
+`aurora` 是效果参考实现：玻璃拟态、`@property` 驱动的流动渐变、消息入场动画、以及 §6.6 的状态驱动特效。要写"花哨"主题时直接抄它。
 
 `manifest.json` 结构：
 
@@ -271,6 +276,28 @@ apps/web/src/themes/builtins/
 - `.ui-meter-fill`
 - `.ui-pulse-dot`
 - `.ui-cursor`
+
+### 6.6 状态属性（状态驱动特效）
+
+除了类名，框架还把当前回合状态写在 `<html>` 上，让纯 CSS 能对游戏正在发生的事做出反应：
+
+| 属性           | 取值                                       | 含义                 |
+| -------------- | ------------------------------------------ | -------------------- |
+| `data-turn`    | `idle` / `executing` / `waiting` / `error` | 回合活动状态         |
+| `data-session` | `active` / `paused` / `ended`              | 会话生命周期         |
+| `data-theme`   | 主题 ID                                    | 当前主题（作用域用） |
+| `data-scheme`  | `light` / `dark`                           | 当前明暗模式         |
+
+`waiting` 优先于 `executing`：回合还开着，但内核在等玩家操作（表单、选择），这才是值得高亮的状态。
+
+```css
+/* AI 正在生成时，输入框呼吸 */
+html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
+  animation: my-breathe 2.4s ease-in-out infinite;
+}
+```
+
+这些属性由框架自身发布，只覆盖内核知道的状态。插件专属状态（场景、情绪、战斗）需要一条按 capability 声明的通道，框架不会硬编码插件 ID，目前尚未开放。
 
 ## 7. 运行时行为
 

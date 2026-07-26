@@ -21,6 +21,10 @@ import { getSettings, initSettings } from "@/settings/store";
 import { configureMessagesWindowCap } from "@/stores/session-store/reducer";
 import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
 import {
+  APPEARANCE_TOKENS_KEY,
+  applyTokenOverrides,
+} from "@/theme-system/overrides.js";
+import {
   syncThemeRegistry,
   THEME_SCHEME_KEY,
 } from "@/theme-system/registry.js";
@@ -120,6 +124,9 @@ probeDesktopMode()
     });
     store.subscribe(CUSTOM_THEMES_KEY, () => {
       syncThemeRegistry(store);
+    });
+    store.subscribe(APPEARANCE_TOKENS_KEY, () => {
+      applyTokenOverrides(store);
     });
     store.subscribe<SupportedLocale>("ui.locale", (next) => {
       if (i18n.language !== next) void i18n.changeLanguage(next);

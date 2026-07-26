@@ -731,6 +731,24 @@
     "saveFailed": "Could not save setting",
     "runtimeSlotsDiscoveredHint": "These slots were discovered from the runtime declarations of the enabled plugins."
   },
+  "appearance": {
+    "customizeTitle": "Fine tuning",
+    "customizeDesc": "Adjust on top of the current theme. Colours apply to {{scheme}} only; fonts and sizes apply to both schemes.",
+    "customizedCount": "{{count}} customised",
+    "usingThemeDefaults": "Theme defaults",
+    "resetAll": "Reset all",
+    "resetGroup": "Reset group",
+    "resetToken": "Restore theme default",
+    "followTheme": "Follow theme",
+    "saveAsThemeTitle": "Save as theme package",
+    "saveAsThemeHint": "Bake the active theme plus all your adjustments into a standalone theme — exportable, shareable, and open to hand-written CSS effects.",
+    "saveAsTheme": "Save as",
+    "themeNamePlaceholder": "Theme name",
+    "saveThemeFailed": "Could not save the theme.",
+    "export": "Export",
+    "import": "Import",
+    "importInvalid": "Could not parse the appearance file. Expected exported JSON."
+  },
   "plugin": {
     "runtimes": "Runtimes",
     "tools": "Tools",

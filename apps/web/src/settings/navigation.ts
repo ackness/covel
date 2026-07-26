@@ -27,6 +27,20 @@ const GROUP_ORDER: SettingGroup[] = [
 
 const PACKAGES_NODE_ID = "packages";
 const PACKAGES_LABEL = { "zh-CN": "导入包", "en-US": "Import Packages" };
+const APPEARANCE_NODE_ID = "appearance";
+const APPEARANCE_LABEL = { "zh-CN": "外观", "en-US": "Appearance" };
+
+/**
+ * Theme keys are registered under `general` so the store owns their values,
+ * but they render in the purpose-built Appearance pane instead of as loose
+ * widgets — listing them in both places would give the player two different
+ * controls for the same setting.
+ */
+const APPEARANCE_KEYS = new Set([
+  "ui.appearance",
+  "ui.scheme",
+  "ui.themeManager",
+]);
 const OPERATOR_ACCESS_NODE_ID = "operator-access";
 const OPERATOR_ACCESS_LABEL = {
   "zh-CN": "运维访问",
@@ -148,6 +162,24 @@ export function buildNavTree(
         kind: "group",
         children: entries,
       });
+    } else if (group === "general") {
+      const generalEntries = entries.filter((e) => !APPEARANCE_KEYS.has(e.key));
+      if (generalEntries.length > 0) {
+        nodes.push({
+          id: group,
+          label: groupLabel(group, locale),
+          kind: "group",
+          children: generalEntries,
+        });
+      }
+      nodes.push({
+        id: APPEARANCE_NODE_ID,
+        label: locale.startsWith("en")
+          ? APPEARANCE_LABEL["en-US"]
+          : APPEARANCE_LABEL["zh-CN"],
+        kind: "group",
+        children: [],
+      });
     } else if (entries.length > 0) {
       nodes.push({
         id: group,
@@ -181,7 +213,7 @@ export function buildNavTree(
   return nodes;
 }
 
-export { OPERATOR_ACCESS_NODE_ID, PACKAGES_NODE_ID };
+export { APPEARANCE_NODE_ID, OPERATOR_ACCESS_NODE_ID, PACKAGES_NODE_ID };
 
 export function filterNav(
   nodes: NavNode[],

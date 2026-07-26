@@ -25,6 +25,7 @@ import { useStageMediaPreload } from "./stage/use-stage-media-preload.js";
 import { useSession } from "@/stores/session-store.js";
 import type { SessionRecord } from "@/services/api.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
+import { useDocumentSessionState } from "@/hooks/use-document-session-state.js";
 import { LeftPanel } from "./left-panel.js";
 import { RightPanel } from "./right-panel.js";
 import {
@@ -103,6 +104,8 @@ export function GameView({ session }: GameViewProps) {
   const stageReady =
     session.turnCount >= 1 || hasSubmittedForm(messages, submittedBlockIds);
   const settings = useSettingsDialog(refreshSlots);
+  // Publishes data-turn / data-session on <html> for theme CSS to hook into.
+  useDocumentSessionState();
 
   const {
     inputValue,
