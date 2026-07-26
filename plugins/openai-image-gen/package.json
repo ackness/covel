@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-openai-image-gen",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "private": true,
   "type": "module",
   "description": "OpenAI-compatible image generation via the framework's unified ctx.images pipeline, works with OpenAI and any OpenAI-compatible third-party (gpt-image-2 default).",
