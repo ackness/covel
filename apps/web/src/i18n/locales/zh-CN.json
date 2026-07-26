@@ -296,6 +296,7 @@
     "removeDraft": "移除该选择",
     "composerBlockedPlaceholder": "请先完成当前交互",
     "composerBlockedHint": "请先提交或移除当前插件交互，再继续发送消息。",
+    "composerAwaitingBeginPlaceholder": "先点「开始冒险」，故事开始后再说话",
     "suspensionsBadge": "{{count}} 个等待中",
     "suspensionsTitle": "挂起的执行",
     "suspensionsDescription": "插件暂停等待外部数据，在下方输入 resume 数据以继续执行。",
@@ -731,6 +732,24 @@
     "saveFailed": "设置保存失败",
     "runtimeSlotsDiscoveredHint": "以下槽位由当前启用插件的 runtime 声明自动发现。"
   },
+  "appearance": {
+    "customizeTitle": "精细调整",
+    "customizeDesc": "在当前主题之上微调。颜色只作用于{{scheme}}模式，字体与尺寸两种模式通用。",
+    "customizedCount": "已自定义 {{count}} 项",
+    "usingThemeDefaults": "使用主题默认",
+    "resetAll": "全部重置",
+    "resetGroup": "重置本组",
+    "resetToken": "恢复主题默认值",
+    "followTheme": "跟随主题",
+    "saveAsThemeTitle": "另存为主题包",
+    "saveAsThemeHint": "把当前主题和你的所有调整烘焙成一个独立主题，可导出分享，也可以再手写 CSS 加特效。",
+    "saveAsTheme": "另存为",
+    "themeNamePlaceholder": "主题名称",
+    "saveThemeFailed": "主题保存失败。",
+    "export": "导出",
+    "import": "导入",
+    "importInvalid": "外观文件无法解析，请确认是导出的 JSON。"
+  },
   "plugin": {
     "runtimes": "运行时",
     "tools": "工具",
@@ -995,7 +1014,8 @@
     "inputPlaceholder": "输入你的回应…",
     "inputSendHint": "Enter 发送 · Shift+Enter 换行 · Esc 取消",
     "freeInputLabel": "✎ 自己输入…",
-    "thinkingLabel": "叙事生成中…"
+    "thinkingLabel": "叙事生成中…",
+    "advanceLabel": "点击继续对话"
   },
   "common": {
     "preview": "预览",

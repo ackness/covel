@@ -12,6 +12,7 @@ import { isDesktopApp } from "@/lib/desktop-bridge.js";
 import {
   buildNavTree,
   filterNav,
+  APPEARANCE_NODE_ID,
   OPERATOR_ACCESS_NODE_ID,
   PACKAGES_NODE_ID,
   type NavNode,
@@ -25,6 +26,7 @@ import { LlmKeysPane } from "./panes/LlmKeysPane.js";
 import { LlmAdvancedPane } from "./panes/LlmAdvancedPane.js";
 import { LlmPresetsPane } from "./panes/LlmPresetsPane.js";
 import { PackagesPane } from "./panes/PackagesPane.js";
+import { AppearancePane } from "./panes/AppearancePane.js";
 import { OperatorAccessPane } from "./panes/OperatorAccessPane.js";
 
 interface SettingsDialogProps {
@@ -202,6 +204,7 @@ function renderPane(
   if (node.id === "llm.advanced") return <LlmAdvancedPane />;
   if (node.id === "data") return <DataPane />;
   if (node.id === "desktop") return <DesktopPane />;
+  if (node.id === APPEARANCE_NODE_ID) return <AppearancePane />;
   if (node.id === OPERATOR_ACCESS_NODE_ID) return <OperatorAccessPane />;
   if (node.id === PACKAGES_NODE_ID) return <PackagesPane />;
 

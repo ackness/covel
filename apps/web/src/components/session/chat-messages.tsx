@@ -20,6 +20,7 @@ import { ChatBlockRenderer } from "./chat-messages/chat-block-renderer.js";
 import { useImageGeneration } from "./chat-messages/use-image-generation.js";
 import { useLoadOlderMessages } from "./chat-messages/use-load-older-messages.js";
 import { useMessageGrouping } from "./chat-messages/use-message-grouping.js";
+import { isPreGameSession } from "@/stores/session-store/selectors.js";
 import type { PluginRpcConfirmRequest } from "./plugin-rpc-ui.js";
 import type {
   WorldRecord,
@@ -120,7 +121,7 @@ export function ChatMessages({
     firstMessageId: messages[0]?.id,
     onLoadOlder: loadOlderMessages,
   });
-  const isPreGame = session.status === "active" && session.turnCount === 0;
+  const isPreGame = isPreGameSession(session);
   const isPlaying = session.status === "active" && session.turnCount > 0;
   const isEnded = session.status === "ended";
 

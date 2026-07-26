@@ -5,9 +5,7 @@ import type { SettingEntry, WidgetKind } from "@covel/settings";
 import { resolveI18nText } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
-import { ThemeManagerWidget } from "@/components/theme-manager.js";
 import { useSetting } from "../use-settings.js";
-import { THEME_MANAGER_WIDGET_KEY } from "@/theme-system/storage.js";
 
 function inferWidget(entry: SettingEntry): WidgetKind {
   if (entry.widget) return entry.widget;
@@ -243,10 +241,9 @@ function JsonWidget({ entry }: { entry: SettingEntry }) {
 }
 
 function CustomWidgetPlaceholder({ entry }: { entry: SettingEntry }) {
-  if (entry.key === THEME_MANAGER_WIDGET_KEY) {
-    return <ThemeManagerWidget />;
-  }
-
+  // The theme-library widget used to be dispatched here. It now renders inside
+  // the Appearance pane, which also filters `ui.themeManager` out of the nav —
+  // so this branch had become unreachable.
   const { t } = useTranslation();
   return (
     <FieldShell entry={entry}>

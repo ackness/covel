@@ -15,6 +15,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable.js";
+import { useDefaultLayout } from "react-resizable-panels";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
@@ -25,6 +26,7 @@ import { useStageMediaPreload } from "./stage/use-stage-media-preload.js";
 import { useSession } from "@/stores/session-store.js";
 import type { SessionRecord } from "@/services/api.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
+import { useDocumentSessionState } from "@/hooks/use-document-session-state.js";
 import { LeftPanel } from "./left-panel.js";
 import { RightPanel } from "./right-panel.js";
 import {
@@ -103,6 +105,8 @@ export function GameView({ session }: GameViewProps) {
   const stageReady =
     session.turnCount >= 1 || hasSubmittedForm(messages, submittedBlockIds);
   const settings = useSettingsDialog(refreshSlots);
+  // Publishes data-turn / data-session on <html> for theme CSS to hook into.
+  useDocumentSessionState();
 
   const {
     inputValue,
@@ -111,6 +115,7 @@ export function GameView({ session }: GameViewProps) {
     suspensions,
     composerBlocked,
     composerDisabled,
+    awaitingBegin,
     handleConfirmDrafts,
     handleSubmit,
     handleAbort,
@@ -122,6 +127,7 @@ export function GameView({ session }: GameViewProps) {
     messages,
     submittedBlockIds,
     executing,
+    session,
     onSendMessage,
   });
   const [suspensionsOpen, setSuspensionsOpen] = useState(false);
@@ -212,6 +218,16 @@ export function GameView({ session }: GameViewProps) {
   const direction = isMobile ? "vertical" : "horizontal";
   const visual = worldVisual(world);
 
+  // Remember how the player left the rails — collapsed, or dragged to a
+  // particular width. Mobile and desktop keep separate layouts: the mobile
+  // group stacks vertically and renders the right rail in a different slot,
+  // so one layout cannot describe both. Until a layout is stored, each
+  // panel's own `defaultSize` applies.
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
+    id: isMobile ? "covel:game-layout:mobile" : "covel:game-layout:desktop",
+    storage: localStorage,
+  });
+
   // ── Left Panel ─────────────────────────────────────────────────
 
   const enabledPackages = packages.filter((p) => p.enabled);
@@ -252,13 +268,18 @@ export function GameView({ session }: GameViewProps) {
       <ResizablePanelGroup
         id="game-layout"
         orientation={direction}
+        defaultLayout={defaultLayout}
+        onLayoutChanged={onLayoutChanged}
         className="w-full h-full"
       >
         {/* Left Panel */}
+        {/* Collapsed by default on every viewport: the rail holds studio
+            configuration (plugin toggles, model slots), not anything the
+            player acts on mid-story. The header toggle brings it back. */}
         <ResizablePanel
           id="left-panel"
           panelRef={leftPanelRef}
-          defaultSize={isMobile ? "0%" : "20%"}
+          defaultSize="0%"
           minSize="15%"
           maxSize={isMobile ? "80%" : "40%"}
           collapsible={true}
@@ -439,6 +460,7 @@ export function GameView({ session }: GameViewProps) {
                 inputValue={inputValue}
                 composerBlocked={composerBlocked}
                 composerDisabled={composerDisabled}
+                awaitingBegin={awaitingBegin}
                 onInputValueChange={setInputValue}
                 onSubmit={handleSubmit}
                 onAbort={handleAbort}

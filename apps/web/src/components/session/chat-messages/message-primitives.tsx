@@ -24,6 +24,19 @@ interface NarrativeMessageBodyProps {
  * expensive markdown parse — to re-render. Re-renders only when this row's own
  * content or display mode changes.
  */
+/**
+ * Markdown collapses a lone newline into a space, but a player who pressed
+ * Enter — or a choice label carrying its own line structure — meant a break.
+ * Promote single newlines to markdown hard breaks (two trailing spaces) and
+ * leave blank-line paragraph breaks untouched.
+ *
+ * ponytail: a string rewrite rather than the `remark-breaks` plugin — one
+ * regex against a dependency, for the same result everywhere but fenced code.
+ */
+export function preserveSoftBreaks(text: string): string {
+  return text.replace(/([^\n])\n(?!\n)/g, "$1  \n");
+}
+
 function NonMemoNarrativeMessageBody({
   isUser,
   isHiddenAssistantKind,
@@ -33,14 +46,16 @@ function NonMemoNarrativeMessageBody({
     <div
       className={`text-sm wrap-break-words w-full ${
         isUser
-          ? "ui-message-player max-w-[90%] md:max-w-[85%] border border-border p-4"
+          ? "ui-message-player prose prose-sm max-w-[90%] md:max-w-[85%] border border-border p-4 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
           : isHiddenAssistantKind
             ? "ui-message-assistant max-w-none border-l-2 border-border/40 pl-3 py-1 font-mono text-[12px] text-muted-foreground/80 whitespace-pre-wrap"
             : "ui-message-assistant ui-narrative prose prose-sm max-w-none border-0 p-0"
       }`}
     >
       {isUser ? (
-        <p className="m-0 text-[14px] leading-[1.6]">{content}</p>
+        // Players paste choice text and type markdown; render it the same way
+        // the narrative is rendered instead of as one flat line.
+        <Markdown>{preserveSoftBreaks(content)}</Markdown>
       ) : isHiddenAssistantKind ? (
         // Plugin/debug kinds in detailed view — preserve the raw text so the
         // structure of what the runtime emitted is visible, but skip the

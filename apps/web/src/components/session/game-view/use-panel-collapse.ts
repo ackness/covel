@@ -33,7 +33,9 @@ export function usePanelCollapse(
 ): PanelCollapseControls {
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
   const rightPanelRef = useRef<PanelImperativeHandle>(null);
-  const [isLeftCollapsed, setIsLeftCollapsed] = useState(false);
+  // Mirrors the left panel's `defaultSize="0%"` in GameView — the handle and
+  // the header toggle read this before the first `onResize` fires.
+  const [isLeftCollapsed, setIsLeftCollapsed] = useState(true);
   const [isRightCollapsed, setIsRightCollapsed] = useState(false);
 
   const isLeftCollapsedRef = useRef(isLeftCollapsed);

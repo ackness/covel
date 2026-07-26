@@ -296,6 +296,7 @@
     "removeDraft": "Remove this selection",
     "composerBlockedPlaceholder": "Complete the current interaction first",
     "composerBlockedHint": "Submit or remove the current plugin interaction before sending another message.",
+    "composerAwaitingBeginPlaceholder": "Click “Begin Adventure” first — the story has to start before you can speak",
     "suspensionsBadge": "{{count}} waiting",
     "suspensionsTitle": "Suspended executions",
     "suspensionsDescription": "Runtimes paused for external data. Enter resume data below to continue.",
@@ -731,6 +732,24 @@
     "saveFailed": "Could not save setting",
     "runtimeSlotsDiscoveredHint": "These slots were discovered from the runtime declarations of the enabled plugins."
   },
+  "appearance": {
+    "customizeTitle": "Fine tuning",
+    "customizeDesc": "Adjust on top of the current theme. Colours apply to {{scheme}} only; fonts and sizes apply to both schemes.",
+    "customizedCount": "{{count}} customised",
+    "usingThemeDefaults": "Theme defaults",
+    "resetAll": "Reset all",
+    "resetGroup": "Reset group",
+    "resetToken": "Restore theme default",
+    "followTheme": "Follow theme",
+    "saveAsThemeTitle": "Save as theme package",
+    "saveAsThemeHint": "Bake the active theme plus all your adjustments into a standalone theme — exportable, shareable, and open to hand-written CSS effects.",
+    "saveAsTheme": "Save as",
+    "themeNamePlaceholder": "Theme name",
+    "saveThemeFailed": "Could not save the theme.",
+    "export": "Export",
+    "import": "Import",
+    "importInvalid": "Could not parse the appearance file. Expected exported JSON."
+  },
   "plugin": {
     "runtimes": "Runtimes",
     "tools": "Tools",
@@ -995,7 +1014,8 @@
     "inputPlaceholder": "Type your response…",
     "inputSendHint": "Enter to send · Shift+Enter for a new line · Esc to cancel",
     "freeInputLabel": "✎ Write your own…",
-    "thinkingLabel": "Weaving the scene…"
+    "thinkingLabel": "Weaving the scene…",
+    "advanceLabel": "Continue the dialogue"
   },
   "common": {
     "preview": "Preview",

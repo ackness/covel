@@ -5,6 +5,8 @@ import paperManifest from "@/themes/builtins/paper/manifest.json";
 import paperCss from "@/themes/builtins/paper/theme.css?raw";
 import abyssManifest from "@/themes/builtins/abyss/manifest.json";
 import abyssCss from "@/themes/builtins/abyss/theme.css?raw";
+import auroraManifest from "@/themes/builtins/aurora/manifest.json";
+import auroraCss from "@/themes/builtins/aurora/theme.css?raw";
 
 function toThemeDefinition(
   manifest: ThemeManifest,
@@ -22,5 +24,6 @@ export function getBuiltinThemes(): ThemeDefinition[] {
     toThemeDefinition(paperManifest as ThemeManifest, paperCss),
     toThemeDefinition(modernManifest as ThemeManifest, modernCss),
     toThemeDefinition(abyssManifest as ThemeManifest, abyssCss),
+    toThemeDefinition(auroraManifest as ThemeManifest, auroraCss),
   ];
 }

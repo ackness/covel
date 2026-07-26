@@ -122,7 +122,8 @@ export function StageDialog({
           <button
             type="button"
             onClick={handleFrameClick}
-            className="flex w-full cursor-pointer flex-col gap-1.5 p-4 text-left"
+            aria-label={t("stage.advanceLabel")}
+            className="flex w-full cursor-pointer flex-col gap-1.5 rounded-[var(--radius-card)] p-4 text-left transition-colors hover:bg-[color-mix(in_oklab,var(--color-foreground)_5%,transparent)]"
           >
             {speakerName && (
               <span className="ui-stage-panel absolute -top-3.5 left-4 rounded-full border-[var(--accent-primary)] px-3.5 py-0.5 text-xs font-semibold text-[var(--accent-primary)]">

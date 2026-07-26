@@ -10,6 +10,8 @@ interface MessageComposerProps {
   inputValue: string;
   composerBlocked: boolean;
   composerDisabled: boolean;
+  /** The "begin adventure" hero is still waiting to be clicked. */
+  awaitingBegin: boolean;
   onInputValueChange: Dispatch<SetStateAction<string>>;
   onSubmit: () => void;
   onAbort?: () => void;
@@ -23,6 +25,7 @@ export function MessageComposer({
   inputValue,
   composerBlocked,
   composerDisabled,
+  awaitingBegin,
   onInputValueChange,
   onSubmit,
   onAbort,
@@ -61,14 +64,16 @@ export function MessageComposer({
               placeholder={
                 composerBlocked
                   ? t("session.composerBlockedPlaceholder")
-                  : executing
-                    ? t("session.steerPlaceholder", "Interject mid-turn...")
-                    : isPlaying
-                      ? t(
-                          "session.inputPlaceholder",
-                          "Enter action or command...",
-                        )
-                      : t("session.inputPlaceholderAny", "Send a message...")
+                  : awaitingBegin
+                    ? t("session.composerAwaitingBeginPlaceholder")
+                    : executing
+                      ? t("session.steerPlaceholder", "Interject mid-turn...")
+                      : isPlaying
+                        ? t(
+                            "session.inputPlaceholder",
+                            "Enter action or command...",
+                          )
+                        : t("session.inputPlaceholderAny", "Send a message...")
               }
               disabled={composerDisabled}
               className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-sm outline-none disabled:opacity-50 placeholder:text-muted-foreground"

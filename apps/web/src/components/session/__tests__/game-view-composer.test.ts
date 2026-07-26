@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamMessage } from "@/stores/session-store.js";
+import type { SessionRecord } from "@/services/api.js";
 import { useGameViewComposer } from "../game-view/use-game-view-composer.js";
 
 // Composer availability is the player's core affordance, so it gets a
@@ -53,13 +54,25 @@ const formBlock = message({
   data: { fields: [{ name: "name", type: "text" }] },
 });
 
-const setup = (messages: StreamMessage[], executing = false) => {
+// `turnCount: 0` is the pre-game state — the "begin adventure" hero is still
+// on screen. Default to a started session so the existing cases keep testing
+// in-play behaviour.
+const sessionRecord = (turnCount: number): SessionRecord => ({
+  id: "session-1",
+  worldId: "world-1",
+  status: "active",
+  turnCount,
+  createdAt: "2026-05-09T00:00:00.000Z",
+});
+
+const setup = (messages: StreamMessage[], executing = false, turnCount = 1) => {
   const onSendMessage = vi.fn();
   const view = renderHook(() =>
     useGameViewComposer({
       messages,
       submittedBlockIds: new Set<string>(),
       executing,
+      session: sessionRecord(turnCount),
       onSendMessage,
     }),
   );
@@ -70,6 +83,37 @@ describe("useGameViewComposer", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionMock.pendingInteractionDrafts = [];
+  });
+
+  it("locks the composer while the begin-adventure hero is still waiting", () => {
+    // Sending here would open a turn before any setup runtime has run, so the
+    // narrator would answer in a world with no character and no opening scene.
+    const { result } = setup([], false, 0);
+    expect(result.current.awaitingBegin).toBe(true);
+    expect(result.current.composerDisabled).toBe(true);
+    // Not "blocked" — that word is reserved for an unanswered interaction, and
+    // drives a placeholder telling the player to finish it.
+    expect(result.current.composerBlocked).toBe(false);
+  });
+
+  it("refuses to send while awaiting begin, including via Enter", () => {
+    const { result, onSendMessage } = setup([], false, 0);
+    act(() => result.current.setInputValue("我想先说点什么"));
+    act(() => result.current.handleSubmit());
+    expect(onSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("releases the composer once pre-game starts executing", () => {
+    // The hero disappears the moment the turn starts, so the composer should
+    // follow it and become a steer surface rather than staying dead.
+    const { result } = setup([], true, 0);
+    expect(result.current.awaitingBegin).toBe(false);
+    expect(result.current.composerDisabled).toBe(false);
+  });
+
+  it("releases the composer once the opening messages exist", () => {
+    const { result } = setup([suggestionPanel], false, 0);
+    expect(result.current.awaitingBegin).toBe(false);
   });
 
   it("keeps the composer usable when only suggestion panels are on screen", () => {

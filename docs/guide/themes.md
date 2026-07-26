@@ -356,7 +356,80 @@ Covel 为主题包暴露了一组稳定的语义 hook。玩家可以通过这些
 
 ---
 
-## 8. 一个完整主题包模板
+## 8. 玩家侧精细调整（设置 → 外观）
+
+主题包定的是**整体方案**；在它之上还有一层玩家自己的 **token 覆盖**，入口在「设置 → 外观 → 精细调整」。它不修改任何主题 CSS，而是把选中的 token 作为**内联样式写到 `<html>` 上**——内联样式天然压过任何样式表规则，取消覆盖后主题原值原样恢复。
+
+对主题作者来说，这意味着两件事：
+
+- 你在 §6 里定义的 token 越完整，玩家能调的东西就越多；漏定义的 token 会回退到 `index.css` 的基础值。
+- 玩家可以覆盖你的任何一个可调 token，所以**不要把关键可读性（对比度、行高）寄托在某个 token 一定不被改**。
+
+### 8.1 分组与作用范围
+
+面板按玩家能理解的区域分组，而不是按 CSS 变量名分组：
+
+| 分组       | 覆盖的 token                                                                        |
+| ---------- | ----------------------------------------------------------------------------------- |
+| 叙事正文   | `--story-*`（字体、字号、行高、字重、字距、栏宽）                                   |
+| 界面文字   | `--font-sans`、`--title-*`、`--meta-*`、`--eyebrow-*`                               |
+| 区域背景   | `--color-background`、`--surface-page/rail/inset/elevated/dialog/player`            |
+| 文字与描边 | `--color-foreground`、`--color-muted-foreground`、`--color-primary`、`--rule-*`     |
+| 强调色     | `--accent-primary/secondary/success/warning/danger`                                 |
+| 氛围背景   | `--ambience-image/opacity/blend`、`--noise-opacity`                                 |
+| 形状与投影 | `--radius-card/control/dialog`、`--shadow-card`                                     |
+| 区域尺寸   | `--rail-width-*`、`--session-column-max-width`、`--composer-max-width`、`--panel-*` |
+
+清单本身是一张声明表（`apps/web/src/theme-system/token-schema.ts`）：加一个可调项就是加一行，不需要动 UI。
+
+### 8.2 明暗分桶
+
+覆盖值存在 `ui.appearanceTokens`，分三个桶：
+
+```jsonc
+{
+  "shared": { "--story-font-size": "1.375rem" }, // 字体 / 尺寸 / 圆角：两种模式通用
+  "light": {},
+  "dark": { "--color-background": "#2a1e10" }, // 颜色：只作用于所在模式
+}
+```
+
+颜色按模式分开存（`TokenSpec.perScheme`）——同一个颜色在亮色和暗色下几乎不可能都合适；而「我要大字号」是跨模式的偏好，所以尺寸与字体共用一份。切换模式时，不属于当前模式的颜色覆盖会自动从 `<html>` 上移除。
+
+整套覆盖可以导出成 JSON 分享；导入时会过滤掉未知 token、非字符串值和超长值，所以一份手改过的文件最多只能设到真实存在的 token。
+
+### 8.3 另存为主题包
+
+「另存为」把**当前主题 + 你的全部覆盖**烘焙成一个独立主题包：快照 §6 的完整 token 契约（不只是被改过的那些），所以存下来的就是你看到的。存完会自动切到新主题并清空覆盖——那些值已经在主题里了。
+
+这条路把面板和手写 CSS 接上了：
+
+```text
+面板里调基础色和排版 → 另存为主题 → 导出 JSON → 在 cssText 里手写动画/玻璃/发光 → 重新导入
+```
+
+几个细节：
+
+- 主题 ID 由名称推导；中文名推不出合法 ID 时回退到 `custom-theme`，显示名保留你填的原文。
+- ID 不会落到内置主题的命名空间上（会自动加后缀），否则下次注册时会被内置主题顶掉而"静默消失"。
+- 单模式主题（如 `abyss` / `aurora`）另存后仍是单模式，不会被误标成亮色主题。
+- 生成的声明会过滤掉含 `;` 或大括号的值——那份 CSS 会被重新解析成主题，这类值可以提前闭合规则、逃出作用域。
+
+### 8.4 状态驱动特效
+
+主题不只能做静态样式。框架把回合状态写在 `<html>` 上（`data-turn` = `idle` / `executing` / `waiting` / `error`，`data-session` = 会话生命周期），CSS 可以直接选择：
+
+```css
+html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
+  animation: my-breathe 2.4s ease-in-out infinite;
+}
+```
+
+完整属性表见 [theme-packages.md §6.6](../reference/theme-packages.md)。内置的 `aurora` 主题是可直接抄的参考实现，涵盖 `@property` 渐变动画、`backdrop-filter` 玻璃、伪元素光层和上面这套状态特效——它同样要通过玩家主题的导入校验，所以照抄不会踩到作用域规则。
+
+---
+
+## 9. 一个完整主题包模板
 
 下面是一份适合直接复制的模板：
 
@@ -427,9 +500,9 @@ html[data-theme="my-theme"].dark {
 
 ---
 
-## 9. 导入与复用流程
+## 10. 导入与复用流程
 
-### 9.1 导入步骤
+### 10.1 导入步骤
 
 1. 打开 `Settings`
 2. 进入 `General`
@@ -439,7 +512,7 @@ html[data-theme="my-theme"].dark {
 6. 导入完成后，主题会自动出现在 `Appearance` 下拉菜单里
 7. 如果主题只支持单一颜色模式，`Color scheme` 会自动锁定到可用模式
 
-### 9.2 复用方式
+### 10.2 复用方式
 
 导入后的主题会自动保存在本地。之后你可以：
 
@@ -450,11 +523,11 @@ html[data-theme="my-theme"].dark {
 
 ---
 
-## 10. 主题包编写规范
+## 11. 主题包编写规范
 
 这组规则能保证主题在未来版本中保持稳定：
 
-### 10.1 作用域规范
+### 11.1 作用域规范
 
 所有规则都写在当前主题 ID 的作用域下：
 
@@ -464,11 +537,11 @@ html[data-theme="my-theme"] .ui-panel-header { ... }
 html[data-theme="my-theme"].dark { ... }
 ```
 
-### 10.2 优先覆盖 token
+### 11.2 优先覆盖 token
 
 优先覆盖 token，再覆盖 `.ui-*` hook。这样主题的可维护性更高，适配面更广。
 
-### 10.3 局部调整使用语义 hook
+### 11.3 局部调整使用语义 hook
 
 当你想调整局部布局和视觉细节时，直接覆盖 `.ui-*` hook。
 
@@ -484,13 +557,13 @@ html[data-theme="ledger"] .ui-chip {
 }
 ```
 
-### 10.4 设计方向保持一致
+### 11.4 设计方向保持一致
 
 颜色、字体、圆角、阴影统一服务一个主题方向，成品会更完整。
 
 ---
 
-## 11. 自检清单
+## 12. 自检清单
 
 一个合格主题包通常满足这份清单：
 
@@ -507,7 +580,7 @@ html[data-theme="ledger"] .ui-chip {
 
 ---
 
-## 12. 推荐练习路径
+## 13. 推荐练习路径
 
 如果你第一次写 Covel 主题，最顺手的路径是：
 
@@ -520,7 +593,7 @@ html[data-theme="ledger"] .ui-chip {
 
 ---
 
-## 13. 进阶参考
+## 14. 进阶参考
 
 更详细的字段、契约和内部加载机制见：
 

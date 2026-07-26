@@ -58,6 +58,7 @@ describe("theme registry", () => {
       "paper",
       "modern",
       "abyss",
+      "aurora",
     ]);
     expect(
       document.head.querySelector('style[data-theme-style="paper"]'),

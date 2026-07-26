@@ -1,0 +1,263 @@
+/* ─────────────────────────────────────────────────────────────────
+   Aurora — glassmorphism + drifting light
+   Doubles as the reference for what a theme package can actually do:
+   @property-driven gradients, keyframes, backdrop blur, pseudo-element
+   layers, and turn-state driven effects via [data-turn].
+   ───────────────────────────────────────────────────────────────── */
+
+/* Registering the angle as a real <angle> is what makes the conic gradient
+   animate — a plain custom property would jump between keyframes. */
+@property --aurora-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes aurora-drift {
+  to {
+    --aurora-angle: 360deg;
+  }
+}
+
+@keyframes aurora-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes aurora-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes aurora-alarm {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 oklch(62% 0.2 25 / 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 6px oklch(62% 0.2 25 / 0);
+  }
+}
+
+html[data-theme="aurora"] {
+  --color-background: oklch(14% 0.03 265);
+  --color-foreground: oklch(94% 0.012 250);
+  --color-card: oklch(20% 0.04 265);
+  --color-card-foreground: oklch(94% 0.012 250);
+  --color-popover: oklch(19% 0.04 265);
+  --color-popover-foreground: oklch(94% 0.012 250);
+  --color-primary: oklch(80% 0.14 185);
+  --color-primary-foreground: oklch(15% 0.03 265);
+  --color-secondary: oklch(24% 0.045 270);
+  --color-secondary-foreground: oklch(90% 0.015 250);
+  --color-muted: oklch(24% 0.04 268);
+  --color-muted-foreground: oklch(66% 0.03 255);
+  --color-accent: oklch(72% 0.16 305);
+  --color-accent-foreground: oklch(15% 0.03 265);
+  --color-destructive: oklch(64% 0.2 25);
+  --color-destructive-foreground: oklch(97% 0.01 250);
+  --color-border: oklch(34% 0.05 268);
+  --color-input: oklch(34% 0.05 268);
+  --color-ring: oklch(80% 0.14 185 / 0.55);
+
+  /* Translucent surfaces — required for backdrop-filter to read as glass. */
+  --surface-page: oklch(12% 0.028 265);
+  --surface-rail: color-mix(in oklab, oklch(22% 0.045 268) 55%, transparent);
+  --surface-inset: color-mix(in oklab, oklch(18% 0.04 265) 70%, transparent);
+  --surface-elevated: color-mix(in oklab, oklch(25% 0.05 270) 55%, transparent);
+  --surface-dialog: color-mix(in oklab, oklch(20% 0.045 268) 82%, transparent);
+  --surface-player: color-mix(in oklab, oklch(80% 0.14 185) 12%, transparent);
+
+  --surface-app: var(--surface-page);
+  --surface-panel: var(--surface-rail);
+  --surface-panel-strong: var(--surface-elevated);
+  --surface-empty: color-mix(in oklab, oklch(22% 0.04 268) 45%, transparent);
+  --border-subtle: color-mix(in oklab, var(--color-border) 55%, transparent);
+
+  --rule-color: color-mix(in oklab, oklch(70% 0.08 250) 22%, transparent);
+  --rule-strong-color: oklch(70% 0.1 250);
+  --rule-style: solid;
+  --rule-thickness: 1px;
+
+  --accent-primary: oklch(80% 0.14 185);
+  --accent-secondary: oklch(74% 0.16 305);
+  --accent-warning: oklch(80% 0.15 85);
+  --accent-danger: oklch(68% 0.2 25);
+  --accent-success: oklch(78% 0.15 155);
+
+  /* Static base wash; the animated layer lives on body::after. */
+  --ambience-image:
+    radial-gradient(
+      ellipse 80% 60% at 15% -10%,
+      oklch(60% 0.18 200 / 0.22),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 70% 50% at 85% 5%,
+      oklch(58% 0.2 310 / 0.2),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 90% 60% at 50% 110%,
+      oklch(55% 0.16 260 / 0.24),
+      transparent 60%
+    );
+  --noise-opacity: 0;
+
+  --radius-card: 0.875rem;
+  --radius-control: 0.625rem;
+  --radius-dialog: 1.125rem;
+  --radius-chip: 999px;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --title-font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --title-font-weight: 600;
+  --title-letter-spacing: -0.02em;
+
+  --story-font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --story-font-size: 1rem;
+  --story-line-height: 1.8;
+  --story-letter-spacing: 0.004em;
+
+  --shadow-card: 0 12px 40px -24px oklch(5% 0.05 265 / 0.9);
+  --shadow-dialog: 0 32px 90px -40px oklch(3% 0.05 265 / 0.95);
+  --shadow-pop: 0 12px 34px -22px oklch(5% 0.05 265 / 0.8);
+}
+
+/* ── Animated aurora layer ───────────────────────────────────────
+   body::before is already the noise layer, so the drifting light goes on
+   ::after. Heavily blurred and low-opacity so it reads as atmosphere. */
+html[data-theme="aurora"] body::after {
+  content: "";
+  position: fixed;
+  inset: -30%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
+  filter: blur(90px);
+  background: conic-gradient(
+    from var(--aurora-angle),
+    oklch(60% 0.18 200 / 0.35),
+    oklch(58% 0.2 310 / 0.3),
+    oklch(55% 0.16 260 / 0.35),
+    oklch(60% 0.18 200 / 0.35)
+  );
+  animation: aurora-drift 42s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="aurora"] body::after {
+    animation: none;
+  }
+}
+
+/* ── Glass surfaces ──────────────────────────────────────────────── */
+html[data-theme="aurora"] .ui-rail,
+html[data-theme="aurora"] .ui-panel-header,
+html[data-theme="aurora"] .ui-card-surface,
+html[data-theme="aurora"] .ui-dialog-shell {
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+}
+
+html[data-theme="aurora"] .ui-card-surface {
+  border: 1px solid var(--rule-color);
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+}
+
+html[data-theme="aurora"] .ui-card-surface:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, var(--accent-primary) 45%, transparent);
+  box-shadow:
+    var(--shadow-card),
+    0 0 24px -6px color-mix(in oklab, var(--accent-primary) 40%, transparent);
+}
+
+/* ── Messages rise in as they arrive ─────────────────────────────── */
+html[data-theme="aurora"] .ui-message-row {
+  animation: aurora-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+html[data-theme="aurora"] .ui-message-player {
+  border-left-width: 2px;
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ── Composer ────────────────────────────────────────────────────── */
+html[data-theme="aurora"] .ui-composer-input {
+  backdrop-filter: blur(18px) saturate(1.3);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+html[data-theme="aurora"] .ui-composer-input:focus-within {
+  border-color: color-mix(in oklab, var(--accent-primary) 60%, transparent);
+  box-shadow: 0 0 0 3px var(--color-ring);
+}
+
+/* ── Turn-state driven effects ───────────────────────────────────────
+   `data-turn` is published on <html> by the framework (idle / executing /
+   waiting / error), which is what lets pure CSS react to the game. */
+html[data-theme="aurora"][data-turn="executing"] body::after {
+  opacity: 0.85;
+  animation-duration: 14s;
+}
+
+html[data-theme="aurora"][data-turn="executing"] .ui-composer-input {
+  border-color: color-mix(in oklab, var(--accent-secondary) 55%, transparent);
+  animation: aurora-breathe 2.4s ease-in-out infinite;
+}
+
+html[data-theme="aurora"][data-turn="waiting"] .ui-composer-input {
+  border-color: color-mix(in oklab, var(--accent-warning) 65%, transparent);
+  box-shadow: 0 0 22px -8px
+    color-mix(in oklab, var(--accent-warning) 70%, transparent);
+}
+
+html[data-theme="aurora"][data-turn="error"] .ui-composer-input {
+  border-color: var(--accent-danger);
+  animation: aurora-alarm 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="aurora"][data-turn="executing"] .ui-composer-input,
+  html[data-theme="aurora"][data-turn="error"] .ui-composer-input {
+    animation: none;
+  }
+}
+
+/* ── Details ─────────────────────────────────────────────────────── */
+html[data-theme="aurora"] .ui-chip {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+html[data-theme="aurora"] .ui-title {
+  background: linear-gradient(
+    100deg,
+    var(--color-foreground) 20%,
+    var(--accent-primary) 55%,
+    var(--accent-secondary) 85%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
