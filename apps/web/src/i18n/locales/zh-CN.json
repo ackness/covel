@@ -296,6 +296,7 @@
     "removeDraft": "移除该选择",
     "composerBlockedPlaceholder": "请先完成当前交互",
     "composerBlockedHint": "请先提交或移除当前插件交互，再继续发送消息。",
+    "composerAwaitingBeginPlaceholder": "先点「开始冒险」，故事开始后再说话",
     "suspensionsBadge": "{{count}} 个等待中",
     "suspensionsTitle": "挂起的执行",
     "suspensionsDescription": "插件暂停等待外部数据，在下方输入 resume 数据以继续执行。",

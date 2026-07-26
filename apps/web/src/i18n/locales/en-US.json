@@ -296,6 +296,7 @@
     "removeDraft": "Remove this selection",
     "composerBlockedPlaceholder": "Complete the current interaction first",
     "composerBlockedHint": "Submit or remove the current plugin interaction before sending another message.",
+    "composerAwaitingBeginPlaceholder": "Click “Begin Adventure” first — the story has to start before you can speak",
     "suspensionsBadge": "{{count}} waiting",
     "suspensionsTitle": "Suspended executions",
     "suspensionsDescription": "Runtimes paused for external data. Enter resume data below to continue.",

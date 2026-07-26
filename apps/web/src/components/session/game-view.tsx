@@ -115,6 +115,7 @@ export function GameView({ session }: GameViewProps) {
     suspensions,
     composerBlocked,
     composerDisabled,
+    awaitingBegin,
     handleConfirmDrafts,
     handleSubmit,
     handleAbort,
@@ -126,6 +127,7 @@ export function GameView({ session }: GameViewProps) {
     messages,
     submittedBlockIds,
     executing,
+    session,
     onSendMessage,
   });
   const [suspensionsOpen, setSuspensionsOpen] = useState(false);
@@ -458,6 +460,7 @@ export function GameView({ session }: GameViewProps) {
                 inputValue={inputValue}
                 composerBlocked={composerBlocked}
                 composerDisabled={composerDisabled}
+                awaitingBegin={awaitingBegin}
                 onInputValueChange={setInputValue}
                 onSubmit={handleSubmit}
                 onAbort={handleAbort}

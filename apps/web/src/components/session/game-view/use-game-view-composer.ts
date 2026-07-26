@@ -1,11 +1,14 @@
 import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
 import { useSession, type StreamMessage } from "@/stores/session-store.js";
+import { isPreGameSession } from "@/stores/session-store/selectors.js";
+import type { SessionRecord } from "@/services/api.js";
 import { isPendingInteractionMessage } from "./interaction-blocks.js";
 
 interface UseGameViewComposerArgs {
   messages: StreamMessage[];
   submittedBlockIds: ReadonlySet<string>;
   executing: boolean;
+  session: SessionRecord;
   onSendMessage: (content: string) => void;
 }
 
@@ -13,6 +16,7 @@ export function useGameViewComposer({
   messages,
   submittedBlockIds,
   executing,
+  session,
   onSendMessage,
 }: UseGameViewComposerArgs) {
   const [inputValue, setInputValue] = useState("");
@@ -41,9 +45,17 @@ export function useGameViewComposer({
   // suggestion drafts don't: the player can keep typing, and submitting sends
   // the selections and the typed line together as one turn.
   const composerBlocked = hasActiveInteractionBlock;
+  /**
+   * The "begin adventure" hero is still on screen. Its render condition is
+   * mirrored here on purpose — sending a message in this state would open a
+   * turn before any setup runtime has run, so the narrator would be answering
+   * in a world with no character and no opening scene.
+   */
+  const awaitingBegin =
+    isPreGameSession(session) && messages.length === 0 && !executing;
   // While a turn is executing the composer stays usable — submitting
   // steers the in-flight turn instead of starting a new one.
-  const composerDisabled = composerBlocked;
+  const composerDisabled = composerBlocked || awaitingBegin;
 
   const commitDrafts = useCallback(
     (extraText?: string) => {
@@ -150,6 +162,7 @@ export function useGameViewComposer({
     suspensions,
     composerBlocked,
     composerDisabled,
+    awaitingBegin,
     handleConfirmDrafts,
     handleSubmit,
     handleAbort,
