@@ -127,4 +127,13 @@ export const SERVER_ENV_VARS = [
     defaultValue: "3001",
     description: "Host port for the Docker Compose app service.",
   },
+  {
+    name: "COVEL_LOG_QUIET_PATHS",
+    group: "server",
+    type: "string",
+    status: "active",
+    defaultValue: "/api/health",
+    description:
+      "Comma-separated request paths the Hono request logger skips, so health polling does not flood server.log.",
+  },
 ] as const satisfies readonly EnvVarDefinition[];
