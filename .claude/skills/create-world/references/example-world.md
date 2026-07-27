@@ -1,6 +1,6 @@
-# 示例：cloudmere 世界包
+# world.yaml 格式样例
 
-以下是 `worlds/cloudmere/world.yaml` 的缩略版，展示格式和风格：
+下面是一个虚构世界的缩略 manifest，用来示范字段结构和写作风格。**插件 ID 是真实存在的**——照抄前仍应 `ls plugins/` 复核。
 
 ```yaml
 schemaVersion: "1.0"
@@ -15,12 +15,13 @@ tags:
   - xianxia
   - adventure
   - political-intrigue
-requiredPlugins:
-  - narrator
+
+pluginPolicy:
+  preset: traditional-story
+  preferTags: [mode:traditional-story, role:codex, role:world-rules]
+  avoidTags: [mode:dialogue]
 recommendedPlugins:
-  - guide
-  - inventory
-  - combat
+  - player-identity
 
 dimensions:
   geography:
@@ -102,12 +103,21 @@ dimensions:
       丹药: 3
 ```
 
-注意：
-- history、economy、socialStructure 省略了，完整版见 `worlds/cloudmere/world.yaml`
-- 所有 id 字段使用 kebab-case 英文
-- 其余内容使用中文
+要点：
 
-其它风格的完整成品参考（都在仓库内）：
+- history、economy、socialStructure 为节省篇幅省略了，真实世界应当写全
+- 所有 id 字段用 kebab-case 英文，其余内容用中文
+- 这里把 `dimensions` 内联进 manifest，适合小世界；**仓库里两个真实世界都不是这么做的**——见下
 
-- `worlds/mistport` — 传统叙事 + 完整 worldData（角色蓝图 / 世界规则 / 立绘 presence）+ `pluginSettings` / `memoryBlocks` / `characterAttributes`
-- `worlds/haruka-academy` — **视觉小说**：`defaultViewMode: stage` + 对话模式插件集 + 立绘/场景背景资产管线（`media/portraits` + `media/scenes` + 双注册表 JSON）
+## 真实成品参考（在仓库内，随框架同步更新）
+
+对着这两个看，比对着上面的缩略示例看更准：
+
+| 世界                    | 风格                                | 值得抄的部分                                                                                                                       |
+| ----------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `worlds/mistport`       | 传统叙事                            | 完整 worldData 管线（`data/dimensions.yaml` 外置维度 + 角色蓝图 + 世界规则 + 立绘 presence）、`pluginSettings` / `memoryBlocks` / `characterAttributes`、`WORLD.en.md` + `WORLD.zh.md` 双语 lore |
+| `worlds/haruka-academy` | **视觉小说**（`defaultViewMode: stage`） | 对话模式插件集、立绘 + 场景背景资产管线（`media/portraits` + `media/scenes` + 双注册表 JSON）                                        |
+
+两个世界的 `data/world.data.yaml` 都很短（1KB 上下），是 worldData descriptor 最好的模板——直接读。
+
+`worlds/_archive/` 下的世界（`cloudmere` / `neonridge`）**不会被加载**，只当历史参考，不要当作可运行样例引用。
