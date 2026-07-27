@@ -1527,6 +1527,25 @@ async function runMain(
       type: "send_message",
       payload: { content: filled || "继续" },
     });
+    // The request that completes the LAST setup runtime chains one main-loop
+    // turn onto the same SSE stream ("opening continuation", see api.md), and
+    // that continuation is a NEW turnId — which is the record `runTurn` reads
+    // back. Re-read the session before classifying so the band reflects the
+    // turn this record actually belongs to. Judging it by the pre-request
+    // turnCount marks every narrative / post-turn runtime that legitimately ran
+    // in the continuation as an off-band anomaly. When setup did NOT finish,
+    // turnCount stays 0 and a genuine off-band run is still flagged.
+    const sessAfterTurn = await httpGet<SessionRecord>(
+      args.server,
+      `/sessions/${session.id}`,
+    );
+    const continued = ctx.turnCount === 0 && sessAfterTurn.turnCount >= 1;
+    refreshSession(sessAfterTurn);
+    if (continued) {
+      console.log(
+        `  (opening continuation: setup completed and chained a main-loop turn — band=${bandLabel()})`,
+      );
+    }
     reportTurn(ctx, exec);
     ctx.turnNumber += 1;
   }
