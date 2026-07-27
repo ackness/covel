@@ -39,47 +39,21 @@ Before changing anything non-trivial, consult the matching reference doc — the
 
 ## Commands
 
-```bash
-# Install & dev
-pnpm install
-pnpm dev              # web (5173) + server (3001), SqliteStore (default, ./data/covel.db)
-pnpm dev:web          # web only
-pnpm dev:server       # server only (SqliteStore default; STORE_BACKEND=memory for ephemeral)
-pnpm dev:pg           # server only, STORE_BACKEND=pg (auto-runs db preflight; needs pnpm db:up)
-pnpm stop             # kill stray dev/turbo processes (dev-supervisor)
+The git pre-commit hook runs prettier + oxlint + the full `pnpm lint`. Only the commands
+with non-obvious behaviour are listed here — the rest are plain scripts in `package.json`.
 
-# Build & check — the git pre-commit hook runs prettier + oxlint + full `pnpm lint`
-pnpm build            # build all
-pnpm lint             # tsc --noEmit across workspace (turbo lint; run the FULL workspace, not one pkg)
-pnpm format           # prettier --write .   (format:check = verify-only, for CI)
+```bash
+pnpm dev              # web (5173) + server (3001), SqliteStore (default, ./data/covel.db)
+pnpm dev:server       # server only (SqliteStore default; STORE_BACKEND=memory for ephemeral)
+pnpm dev:pg           # STORE_BACKEND=pg — auto-runs db preflight, needs `pnpm db:up` first
+pnpm stop             # kill stray dev/turbo processes (dev-supervisor)
+pnpm lint             # tsc --noEmit — run the FULL workspace, not one pkg
 pnpm deps:check       # knip — flag unused / undeclared workspace deps
 pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs (check:plugins is a subset)
-pnpm test             # vitest via turbo (cached)
-pnpm test:coverage    # + @vitest/coverage-v8
-pnpm clean
-
-# Single package tests — add --watch for watch, --run for single run
-pnpm --filter @covel/runtime test
-pnpm --filter @covel/<pkg> test
-
-# Database (Docker)
-pnpm db:up / db:down / db:generate / db:migrate / db:studio
-
-# E2E
-pnpm e2e              # Playwright headless (e2e:ui for the runner UI)
 pnpm e2e:verify       # API-driven, real-LLM plugin harness (needs .env.llm); pass --slot e2e_local --turns 3
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
-pnpm validate:plugin  # validate PLUGIN.md manifests (loader compat parse + strict authoring schema); pass file or plugin dir, --compat for legacy
-
-
-# Docker (full stack)
-pnpm docker:build / docker:up / docker:down / docker:logs
-
-# Desktop
-pnpm dev:electron     # Electron dev shell (real sidecar)
-pnpm build:electron   # platform installer → release/ (build:desktop is an alias)
-
-# Release
+pnpm validate:plugin  # validate PLUGIN.md manifests; pass file or plugin dir, --compat for legacy
+pnpm build:electron   # production desktop installer → release/ (build:desktop is an alias)
 pnpm release:preflight  # static pre-tag gate: lockfile sync, import resolution, plugin/world/prompt structure
 ```
 
@@ -106,35 +80,9 @@ Provider API keys flow through the `SettingsStore` too: writes end up in `keys.e
 - ESM-only (`"type": "module"`), TypeScript strict, ES2022, NodeNext module resolution — **use `.js` extensions in TS imports**.
 - Packages export TS source directly (`"import": "./src/index.ts"`) — no build step for dev.
 
-```
-apps/
-  web/              Web UI (React 19 + Vite + TanStack Router, json-render + plugin-driven panels)
-  server/           Hono API + Drizzle ORM
-  desktop/          Electron shell (sidecar)
-
-packages/           16 internal packages: shared, settings, context, ai-provider,
-                    plugin-loader, runtime, store, state, events, tools,
-                    approval, memory, create, plugin-test-utils, test-runtime,
-                    plugin-handlers-utils (pure helper utils for plugin
-                    function-runtime handlers). `settings` carries the unified
-                    SettingsStore + localStorage/json-file backends, split out of
-                    `shared` so pure-type consumers avoid browser/Electron code.
-
-plugins/            23 bundled plugin packages (see docs/reference/plugins.md)
-prompts/            Externalised prompt templates (locale-aware markdown)
-worlds/             2 curated sample world packages (mistport / haruka-academy);
-                    archived worlds in worlds/_archive/ are not loaded
-```
-
-Dependency flow (rough):
-
-```
-shared ← context ← runtime ← server (composes all)
-shared ← ai-provider ← runtime   (runtime re-exports the Public Plugin API types)
-shared ← settings ← web
-```
-
-All feature packages (`ai-provider`, `plugin-loader`, `store`, `state`, `events`, `tools`, `approval`, `memory`, `create`) are composed by `@covel/server`. See any package's own `package.json` for exact edges.
+- Top level: `apps/` (web · server · desktop) · `packages/` · `plugins/` (see [docs/reference/plugins.md](./docs/reference/plugins.md)) · `prompts/` (externalised locale-aware prompt templates) · `worlds/` — **`worlds/_archive/` is not loaded**.
+- `@covel/settings` carries the unified SettingsStore + localStorage/json-file backends, split out of `shared` so pure-type consumers avoid pulling in browser/Electron code.
+- Dependency flow: `shared` is the root of everything; `@covel/server` is the composition point for every feature package. Exact edges live in each package's own `package.json`.
 
 ## Architecture Essentials
 
