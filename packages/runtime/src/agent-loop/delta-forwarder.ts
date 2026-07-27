@@ -6,8 +6,6 @@
  * hands the request layer one `forward` function instead of an inline
  * closure over mutable state. Client disconnects are swallowed: the loop
  * keeps streaming to capture full content for persistence.
- *
- * Roadmap (scoped) — docs/superpowers/specs/2026-07-10-agent-core-refactor-roadmap.md.
  */
 
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
