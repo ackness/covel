@@ -1036,7 +1036,7 @@ wires: lib/wires.js # 整个插件声明一次即可（多 runtime 声明同一�
 
 - 信任门控与 local tools 一致：builtin/official 启动即注册，community 在其 runtime 首次加载时注册。
 - 路径逃逸 / 文件缺失 / 条目形状错误只 warn 跳过，不影响启动；重复注册幂等。
-- 教程与 wire 接口签名见 [plugin-authoring-advanced.md § 注册自定义 wire](../guide/plugin-authoring-advanced.md#注册自定义-wirewires-frontmatter-字段)，slot 侧配置见 [slots.md](./slots.md)。
+- 教程与 wire 接口签名见 [plugin-authoring-advanced.md § 注册自定义 wire](../guide/plugin-authoring-advanced.md#注册自定义-wireentry-里的-covelregisterwires)，slot 侧配置见 [slots.md](./slots.md)。
 
 ### dataSchemas
 

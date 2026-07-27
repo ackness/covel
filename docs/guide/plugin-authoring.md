@@ -20,7 +20,7 @@
 | 看所有已实现插件的 frontmatter、调度层级、capabilities 标签      | [docs/reference/plugins.md](../reference/plugins.md)                                                                                                                                                                                                       |
 | 写 json-render UI 面板（`ui.right` / `ui.message`）              | [docs/guide/plugin-ui-runtime-guidelines.md](./plugin-ui-runtime-guidelines.md)                                                                                                                                                                            |
 | 让 `ui.message` block 首次出现（避免"只有手动按钮无法自举"死锁） | [docs/reference/ui-panels.md#消息-block-声明](../reference/ui-panels.md#消息-block-声明)                                                                                                                                                                   |
-| 写生命周期 hook（工具调用前校验、commit 前审批、审计日志）       | [docs/reference/plugins.md#hooks](../reference/plugins.md#hooks)                                                                                                                                                                                           |
+| 写生命周期 hook（工具调用前校验、commit 前审批、审计日志）       | [docs/reference/plugins.md#hooks](../reference/plugins.md#hooksfrontmatter-声明式已弃用--改用-entry-的-covelon)                                                                                                                                            |
 | 写图像生成 / 媒体资产插件                                        | [docs/guide/plugin-authoring-advanced.md 第 6 节](./plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)（`ctx.images` 契约 + `registerImageWire`）· [docs/reference/media-store.md](../reference/media-store.md#metadata-conventions--querying) |
 | 让插件配套世界数据、角色卡、媒体或 override 包                   | [docs/reference/world-data.md](../reference/world-data.md)                                                                                                                                                                                                 |
 | 写单元 / 集成 / 真实 LLM E2E 测试                                | [docs/guide/plugin-testing.md](./plugin-testing.md) · [docs/guide/e2e-plugin-verify.md](./e2e-plugin-verify.md)                                                                                                                                            |
@@ -208,7 +208,7 @@ export default async function validateTool(ctx, payload) {
 
 `TurnStart`、`PostCompaction`、`PostRuntime`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
 
-排序先看 `enforce: pre | normal | post`，再看全局 hook 与插件 hook 分组，最后保持声明顺序。完整事件表见 [插件参考 / hooks](../reference/plugins.md#hooks)。
+排序先看 `enforce: pre | normal | post`，再看全局 hook 与插件 hook 分组，最后保持声明顺序。完整事件表见 [插件参考 / hooks](../reference/plugins.md#hooksfrontmatter-声明式已弃用--改用-entry-的-covelon)。
 
 ### D. 文件结构速查
 

@@ -66,6 +66,6 @@ See [`llm.toml.example`](../../llm.toml.example) at repo root. Each slot pairs a
 
 ## Related docs
 
-- [README · Quick Start](../../README.en.md#quick-start) — download & first launch
+- [README · Quick Start](../../README.md#quick-start) — download & first launch
 - [apps/desktop/PACKAGING.md](../../apps/desktop/PACKAGING.md) — local desktop builds, signing, notarisation
 - [reference/api.md](../reference/api.md) — backend API reference
