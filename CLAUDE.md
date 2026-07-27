@@ -16,7 +16,9 @@ Before changing anything non-trivial, consult the matching reference doc — the
 | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Project intro, quick start, roadmap                  | [README.md](./README.md) · [docs/README.md](./docs/README.md)                                                           |
 | End-to-end turn pipeline, full architecture          | [docs/architecture/flow.md](./docs/architecture/flow.md)                                                                |
-| Plugin registry (all plugins, priorities, triggers)  | [docs/reference/plugins.md](./docs/reference/plugins.md)                                                                |
+| Why it is built this way (kernel vs plugin ruling)   | [docs/architecture/design-principles.md](./docs/architecture/design-principles.md)                                      |
+| Storage contracts (DataStore / MediaStore / caches)  | [docs/architecture/storage.md](./docs/architecture/storage.md)                                                          |
+| Plugin registry (all plugins, stages, triggers)      | [docs/reference/plugins.md](./docs/reference/plugins.md)                                                                |
 | World Data (`worldData`, source import, overrides)   | [docs/reference/world-data.md](./docs/reference/world-data.md)                                                          |
 | Tool registry (builtin + local, approval policy)     | [docs/reference/tools.md](./docs/reference/tools.md)                                                                    |
 | HTTP API (all endpoints, request/response, curl)     | [docs/reference/api.md](./docs/reference/api.md)                                                                        |
