@@ -11,6 +11,7 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
   config.toml                ← data_root pointer + log rotation params
   llm.toml                   ← LLM slot config (provider / model / baseUrl)
   keys.env                   ← provider API keys, plain KEY=VALUE lines
+  settings.json              ← front-end preferences (unified SettingsStore: locale / appearance / slot overrides / per-plugin settings)
   plugins/                   ← user plugins (merged on top of bundled cores)
 
 <data_root>/                 ← default ~/.covel/data; redirectable

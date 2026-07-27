@@ -128,17 +128,36 @@ curl -X POST http://localhost:3001/api/sessions \
 
 记下返回的 `id`（格式为 `{worldId}-{uuid8}`，如 `mistport-a1b2c3d4`），后续请求都需要它。
 
-### 6. 执行第一个 Turn（玩家发言）
+### 6. 开局（激活插件并跑 setup）
+
+回合执行的唯一入口是 [`POST /api/actions`](#post-apiactions)——**没有** session 级的 `/turn` 端点。响应是 data-only SSE 流。
 
 ```bash
-curl -X POST http://localhost:3001/api/sessions/<sessionId>/turn \
+curl -N -X POST http://localhost:3001/api/actions \
   -H "Content-Type: application/json" \
   -d '{
-    "message": "我环顾四周，观察这个陌生的世界"
+    "requestId": "req-001",
+    "type": "start_session",
+    "sessionId": "<sessionId>",
+    "locale": "zh-CN"
   }'
 ```
 
-### 7. 查看游戏状态
+### 7. 执行第一个 Turn（玩家发言）
+
+```bash
+curl -N -X POST http://localhost:3001/api/actions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requestId": "req-002",
+    "type": "send_message",
+    "sessionId": "<sessionId>",
+    "locale": "zh-CN",
+    "payload": { "content": "我环顾四周，观察这个陌生的世界" }
+  }'
+```
+
+### 8. 查看游戏状态
 
 ```bash
 # 查看状态表
@@ -151,17 +170,21 @@ curl http://localhost:3001/api/sessions/<sessionId>/characters
 curl http://localhost:3001/api/sessions/<sessionId>/messages
 ```
 
-### 8. 继续对话
+### 9. 继续对话
 
 ```bash
-curl -X POST http://localhost:3001/api/sessions/<sessionId>/turn \
+curl -N -X POST http://localhost:3001/api/actions \
   -H "Content-Type: application/json" \
   -d '{
-    "message": "走向远处的城镇"
+    "requestId": "req-003",
+    "type": "send_message",
+    "sessionId": "<sessionId>",
+    "locale": "zh-CN",
+    "payload": { "content": "走向远处的城镇" }
   }'
 ```
 
-### 9. 提交玩家交互（如果 Turn 返回了 pendingInputs）
+### 10. 提交玩家交互（如果 Turn 返回了 pendingInputs）
 
 ```bash
 curl -X POST http://localhost:3001/api/sessions/<sessionId>/plugin-rpc \
@@ -182,7 +205,7 @@ curl -X POST http://localhost:3001/api/sessions/<sessionId>/plugin-rpc \
   }'
 ```
 
-### 10. 结束会话
+### 11. 结束会话
 
 ```bash
 curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
@@ -1326,7 +1349,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 **解析顺序(action 级):**
 
 1. 插件声明的 action(`manifest.rpc[action]`,通过 `pluginId` 命名空间隔离)
-2. 框架默认 action(全局,如 `submit-form` / `cancel`)
+2. 框架默认 action(全局)——当前只注册了 `submit-form` 一个(`bootstrap/plugin-rpc-wiring.ts` 的 `registerFrameworkDefault`)
 
 **框架默认 action:**
 
@@ -1699,7 +1722,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
       "runtimeCount": 1,
       "status": "active",
       "source": "builtin",
-      "capabilities": ["narrative"],
+      "capabilities": ["narrative", "narrative-engine"],
       "tags": ["mode:traditional-story", "role:narrator", "cost:llm"],
       "relations": {
         "provides": ["narrative-engine"],
@@ -1744,7 +1767,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
   "runtimeCount": 1,
   "status": "active",
   "source": "builtin",
-  "capabilities": ["narrative"],
+  "capabilities": ["narrative", "narrative-engine"],
   "tags": ["mode:traditional-story", "role:narrator", "cost:llm"],
   "relations": {
     "provides": ["narrative-engine"],
@@ -1771,7 +1794,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 ```json
 {
   "id": "codex",
-  "capabilities": ["codex"],
+  "capabilities": [],
   "declaredPluginDataNamespaces": ["entries"],
   "dataSchemas": {
     "entries": {
@@ -1783,13 +1806,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
   },
   "tools": {
     "builtin": [],
-    "local": [
-      {
-        "runtimeId": "codex",
-        "path": "./tools/unlock-codex-entries.js",
-        "name": "unlock-codex-entries"
-      }
-    ]
+    "local": [{ "runtimeId": "codex", "name": "unlock-codex-entries" }]
   },
   "ui": {
     "right": [{ "runtimeId": "codex", "path": "./ui/codex-panel.json" }],
@@ -1836,9 +1853,9 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
       "id": "narrator",
       "name": "核心叙事者",
       "description": "主要叙事生成插件",
-      "pluginType": "runtime",
+      "pluginType": "core-plugin",
       "active": true,
-      "capabilities": ["narrative"],
+      "capabilities": ["narrative", "narrative-engine"],
       "tags": ["mode:traditional-story", "role:narrator", "cost:llm"],
       "relations": {
         "provides": ["narrative-engine"],
@@ -2463,18 +2480,18 @@ curl -N "http://localhost:3001/api/events/stream?sessionId=<sessionId>"
 连接成功后收到的第一条消息：
 
 ```
-event: connected
+event: system.connected
 data: {"sessionId":"mistport-a1b2c3d4","timestamp":"2025-01-15T10:00:00.000Z"}
 ```
 
-后续事件：
+后续事件。命名事件头就是 `CovelEventType` 本身（`deriveSseEventName` 原样返回 `event.type`，不做任何改写），完整清单见 [protocol.md](./protocol.md)：
 
 ```
-event: turn.completed
-data: {"turnId":"a1b2c3d4-...","durationMs":2500}
+event: execution.completed
+data: {"runtimeCount":4,"resultCount":4,"durationMs":2500}
 id: evt-001
 
-event: state.updated
+event: state.changed
 data: {"table":"character_stats","field":"hp","value":85}
 id: evt-002
 ```
@@ -2911,6 +2928,9 @@ Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 | `turn.suspended`           | 流程控制     | `suspend()` 工具序列化 pendingContinuation                                                      |
 | `turn.resumed`             | 流程控制     | `POST /api/sessions/:id/resume` 重启 runtime                                                    |
 | `working_memory.changed`   | 流程控制     | `working_memory.set` proposal commit 后直接写入 `/api/actions`（commit-direct，不经转发白名单） |
+| `proposal.failed`          | 流程控制     | 单条 proposal 提交失败——显式上报而非静默丢弃，由提交方直接写入 action stream                    |
+| `job-status.updated`       | 流程控制     | 后台 function runtime 经 `ctx.progress` 汇报进度（append-only job 通道，转发到 action stream）  |
+| `context.pruned`           | 系统         | prompt 装配超出 slot 预算、历史被硬裁剪；仅 trace（`/debug` 用），不进 action stream            |
 | `error.occurred`           | 系统         | 执行错误                                                                                        |
 | `connection.restored`      | 系统         | 连接恢复                                                                                        |
 
@@ -2988,7 +3008,7 @@ STORE_BACKEND=memory pnpm dev:server  # 临时 Memory 后端（重启即丢失�
 - **服务器存储**: Memory 或 SQLite
 - **前端存储**: 演示公开写入可用 local IndexedDB；私有演示也可用 remote 服务端存储
 - **API 密钥**: 用户自行管理，HTTPS 传输必需
-- **认证**: 无
+- **认证**: **必需**——会话作用域端点强制 session owner token，全局/管理端点强制 operator token（`COVEL_DESKTOP_REST_TOKEN`）；缺 token 时 `validateSecurityPosture` 直接拒绝启动。详见上方[鉴权章节](#鉴权session-owner-tokenaudit-s-02)
 
 ### T3: 商业部署 (Commercial)
 

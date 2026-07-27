@@ -13,14 +13,19 @@ pnpm e2e
 ```
 
 `pnpm e2e` 使用 Playwright。未设置 `E2E_BASE_URL` 时，Playwright 会自动执行
-`pnpm dev`，等待 `http://localhost:3001/api/health` 可用后开始测试。
+`pnpm dev`，等待 `http://localhost:3001/api/health` 可用后开始测试；**页面导航则指向
+Vite 的 `http://localhost:5173`**（`pnpm dev` 下 server 不服务 SPA，3001 的页面路由是裸
+404；`/api/*` 由 Vite 代理回 3001）。
 
-如果你已经启动了服务，可以显式指定地址：
+如果你已经启动了服务，显式指定 **Vite** 地址：
 
 ```bash
 pnpm dev
-E2E_BASE_URL=http://localhost:3001 pnpm e2e
+E2E_BASE_URL=http://localhost:5173 pnpm e2e
 ```
+
+只有跑 **served-static 构建**（设了 `SERVE_STATIC` 的生产 / Docker 栈，SPA 由 server 自己
+托管）时才该指向 3001。
 
 需要交互式调试时使用：
 
@@ -75,7 +80,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 | 变量                    | 默认值                  | 说明                                                            |
 | ----------------------- | ----------------------- | --------------------------------------------------------------- |
-| `E2E_BASE_URL`          | `http://localhost:3001` | Playwright 访问的应用地址                                       |
+| `E2E_BASE_URL`          | `http://localhost:5173` | Playwright 页面导航地址（Vite）。设了它就不再自动起 `pnpm dev`  |
 | `E2E_MODEL_SLOT`        | `e2e`                   | `scripts/e2e-plugin-verify.ts` 使用的 slot                      |
 | `COVEL_STORY_BASE_URL`  | —                       | story LLM 代理地址；用于通过环境变量覆盖测试 slot 的 `baseUrl`  |
 | `COVEL_PLUGIN_BASE_URL` | —                       | plugin LLM 代理地址；用于通过环境变量覆盖测试 slot 的 `baseUrl` |
@@ -88,7 +93,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 ```bash
 pnpm db:up
 pnpm dev:pg
-E2E_BASE_URL=http://localhost:3001 pnpm e2e
+E2E_BASE_URL=http://localhost:5173 pnpm e2e
 ```
 
 清理数据库容器：

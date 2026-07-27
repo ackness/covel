@@ -298,7 +298,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ### 回合执行（SSE 流式响应）
 
-`/api/actions` 接受的 `type` 字段（实际由 `apps/server/src/routes/api/actions.ts:148` 的 `SUPPORTED_ACTIONS` 数组定义）：
+`/api/actions` 接受的 `type` 字段（实际由 `apps/server/src/routes/api/actions.ts` 的 `SUPPORTED_ACTIONS` 数组定义）：
 
 | 命令          | 方法 | 端点                                     | 响应                  |
 | ------------- | ---- | ---------------------------------------- | --------------------- |
@@ -412,7 +412,7 @@ community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 
 | 世界列表 | `GET /api/worlds`                                 | `{ items: WorldRecord[] }`                                        |
 | 执行追踪 | `GET /api/traces/:sessionId`                      | `{ events[] }`（全量）                                            |
 | 追踪分页 | `GET /api/traces/:sessionId/turns/page`           | `{ turns[], nextCursor }`（游标）                                 |
-| 服务健康 | `GET /api/health`                                 | `{ status, version, storeBackend }`                               |
+| 服务健康 | `GET /api/health`                                 | `{ status, version, bootId, timestamp, storage, vector }`         |
 
 ## 四、SSE 信封格式
 

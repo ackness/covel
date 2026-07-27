@@ -232,7 +232,7 @@ plugins/my-plugin/
 │   │  │ stage, needs, after, inputs     │ ← 调度声明（阶段 + 依赖）
 │   │  │ trigger: { type, interval, ... } │ ← 何时触发
 │   │  │ model: "fast"                   │ ← 用哪个 LLM slot
-│   │  │ tools: { local: [...], builtin: [...] } │ ← 可用工具
+│   │  │ tools: { plugin: [...], builtin: [...] }│ ← 可用工具（名字列表）
 │   │  │ input: { inject: [...] }        │ ← 依赖上游输出
 │   │  │ ui: { right: [...], message: [...] }    │ ← 前端 UI
 │   │  │ capabilities: [...]             │ ← 能力标签（框架发现用）
@@ -249,7 +249,15 @@ plugins/my-plugin/
 │   │  │ 2. 调用 tool-name 工具...         │
 │   │  └─────────────────────────────────┘
 │
-├── tools/                 ← 工具实现（注入式，零 import）
+├── server/index.js        ← 统一服务端入口（frontmatter `entry` 指向）
+│   └── export default function (covel) {
+│         covel.registerTool(makeMyTool(covel.toolkit));  // 工具注册
+│         covel.on("PostLLMResponse", handler);            // hook
+│         covel.registerRpc("my-action", handler);         // RPC
+│         covel.registerWires({ image: [myWire] });        // 媒体 wire
+│       }
+│
+├── tools/                 ← 工具实现（工厂式，参数即 covel.toolkit）
 │   └── my-tool.js
 │       export default function ({ tool, z, store, shortIdBatch }) {
 │         return tool({
@@ -578,7 +586,9 @@ plugin_data 表 (核心持久化接口):
   │                                                          │
   │  session-2 (同 world, 不同 session)                       │
   │  ├── world-init                                     │
-  │  │   └── (guard 从 session-1 复制 → 跳过 LLM)            │
+  │  │   └── (guard 只读世界声明 / dimensions 决定 schema，   │
+  │  │      **绝不从 session-1 复制** —— 跨 session 拷贝      │
+  │  │      等于泄露 + 投毒，见 world-data.md 快路径一节)     │
   │  └── ...                                                 │
   └──────────────────────────────────────────────────────────┘
 

@@ -32,15 +32,15 @@ import type {
   TriggerConfig, // { type, interval?, topic?, maxTriggerCount?, cooldownTurns?, startTurn? }
 
   // 输入/输出
-  InputConfig, // { inject?, tools? }
-  InputInjectDecl, // { from, field, as }
+  InputConfig, // { schema?, inject?, tools? }
+  InputInjectDecl, // 按 kind 分的联合：runtime | plugin-data | runtime-export
   OutputConfig, // { schema?, recordAs? }
 
   // 工具
-  ToolsConfig, // { builtin?, plugin?, local?(已弃用) }
+  ToolsConfig, // { builtin?, plugin?, defer? } —— 没有 local，声明即加载失败
 
   // 玩家可调设置（PLUGIN.md `userSettings`）
-  PluginUserSettingSpec, // { key, type, default?, label, min?, max?, options? }
+  PluginUserSettingSpec, // { key, type, default?, label, description?, min?, max?, step?, options? }
 
   // 运行时数据
   TurnInput, // 每轮输入

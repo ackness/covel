@@ -136,20 +136,22 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 ### B. 现有插件参考
 
-来源：`plugins/**/PLUGIN.md` 的 frontmatter（截至 v0.0.4）。
+来源：`plugins/**/PLUGIN.md` 的 frontmatter（截至 v0.0.22）。
 
-| Runtime                          | Stage       | 触发            | 类型          | 工具 / 关键能力       | 学习价值                        |
-| -------------------------------- | ----------- | --------------- | ------------- | --------------------- | ------------------------------- |
-| `pregame`                        | `setup`     | scheduled(首轮) | function      | 无                    | 最简 function runtime,纯初始化  |
-| `world-init/schema-gen`          | `setup`     | scheduled(首轮) | agent + guard | local 工具            | guard 在 LLM 前跳过门控,零开销  |
-| `char-creator/player-init`       | `setup`     | scheduled(首轮) | agent         | builtin (create-form) | 首轮表单 + setup 闸门           |
-| `npc-graph/rag-retriever`        | `pre-turn`  | auto            | function      | —                     | 给 narrator 预拉结构化检索      |
-| `narrator`                       | `narrative` | auto            | agent         | 无                    | 零代码主叙事                    |
-| `codex`                          | `post-turn` | auto            | agent         | local + builtin       | JS 工具 + plugin-data inject    |
-| `guide`                          | `post-turn` | auto            | agent         | builtin               | inject narrator output 生成选项 |
-| `npc-graph/extractor`            | `post-turn` | auto            | agent         | local                 | NPC 关系抽取 + 写入图谱         |
-| `char-creator/character-tracker` | `post-turn` | auto            | agent         | local                 | 跟踪 NPC 状态变化               |
-| `memory`                         | —           | UI only         | UI            | —                     | 纯前端面板,不占调度槽           |
+| Runtime                          | Stage       | 触发                                  | 类型          | 工具 / 关键能力                                              | 学习价值                        |
+| -------------------------------- | ----------- | ------------------------------------- | ------------- | ------------------------------------------------------------ | ------------------------------- |
+| `pregame`                        | `setup`     | `auto`（`maxTriggerCount: 1`）        | function      | 无                                                           | 最简 function runtime,纯初始化  |
+| `world-init/schema-gen`          | `setup`     | `auto`（`maxTriggerCount: 1`）        | agent + guard | `tools.plugin`（set-world-schema / set-world-entries-batch） | guard 在 LLM 前跳过门控,零开销  |
+| `char-creator/player-init`       | `setup`     | `auto`（guard 门控）                  | agent         | builtin `create-form`                                        | 首轮表单 + setup 闸门           |
+| `npc-graph/rag-retriever`        | `pre-turn`  | `scheduled`（interval 1）             | function      | —                                                            | 给 narrator 预拉结构化检索      |
+| `narrator`                       | `narrative` | `auto`                                | agent         | builtin `world-dimension-get` / `emit-event`                 | 零代码主叙事 + 事件发射         |
+| `codex`                          | `post-turn` | `auto`                                | agent         | `tools.plugin` + plugin-data inject                          | JS 工具 + 已有条目预注入        |
+| `guide`                          | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | `tools.plugin`（generate-guide）                             | inject narrator output 生成选项 |
+| `npc-graph/extractor`            | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | `tools.plugin`（upsert / list-npc-graph）                    | NPC 关系抽取 + 写入图谱         |
+| `char-creator/character-tracker` | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | builtin create/update/get-character                          | 跟踪 NPC 状态变化               |
+| `memory`                         | —           | UI only（无 trigger）                 | UI            | —                                                            | 纯前端面板,不占调度槽           |
+
+> 上表四个 `post-turn` runtime 都用 `needs: [{ capability: narrative-engine }]` 门控在当前模式的叙事引擎上，因此传统模式（`narrator`）与对话模式（`chat-mode-narrator`）通用。
 
 完整注册表（含 stage 分带、capabilities、frontmatter 全字段）见 [docs/reference/plugins.md](../reference/plugins.md)。
 

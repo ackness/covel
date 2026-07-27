@@ -142,12 +142,19 @@ sources:
 | `schema`  | no   | `covel://world/dimensions`、`plugin://<pluginId>/<namespace>`、或本地 JSON Schema path | 校验用 schema。`plugin://...` 是 schema URI。                                             |
 | `to`      | yes  | 见 [Target URI](#target-uri)                                                           | 写入目标 URI。`plugin:<id>/<namespace>` 是 target URI。                                   |
 | `key`     | no   | 简单字段名，例如 `id`、`characterId`、`filename`                                       | 批量 source 的稳定 key。media 常用 `filename`。                                           |
-| `indexTo` | no   | `plugin:<id>/<namespace>`                                                              | 仅 media source 使用，把媒体索引写入插件数据。                                            |
+| `indexTo` | no\* | `plugin:<id>/<namespace>`                                                              | 仅 media source 使用，把媒体索引写入插件数据。**对 media source 实为必需**——见下。        |
 | `effects` | no   | `characters`                                                                           | 额外投影；当前 `characters` 会把角色蓝图或简洁角色记录实例化为角色。                      |
 | `after`   | no   | source id 或 source id 数组                                                            | source 顺序依赖。source id 必须先声明且满足命名规则。                                     |
 | `enabled` | no   | boolean                                                                                | `false` 会跳过该 source。                                                                 |
 | `locale`  | no   | 长度至少 2 的字符串                                                                    | source 对应的内容语言。                                                                   |
 | `merge`   | no   | `replace`、`skipExisting`                                                              | 写入冲突策略。                                                                            |
+
+> **media source 必须同时声明 `key` 和 `indexTo`**，否则整条 source 静默失效：
+>
+> - 缺 `key` → 每个文件产出一条 error 诊断（`media source "<id>" needs key: filename or a literal key`）并被跳过。
+> - 缺 `indexTo` → 规划阶段不产出任何 `media-index` write；而**媒体字节的落库正是挂在这种 write 上**（`session-import/media-handling.ts` 只对 `kind: "media-index"` 调 `mediaStore.put()`）。结果是字节从不进 MediaStore，后续按 sha256 引用它的 `MediaRef` 全部解析失败。
+>
+> 声明的 `indexTo` 插件未被玩家启用是另一回事：那属于 warning 级降级，字节照常导入、只跳过索引写入。
 
 ### Locale 变体解析（`<name>.<lang>.<ext>`）
 
@@ -330,7 +337,7 @@ preflight 要求：`character-presence` 的 `assets` / `presence` namespace 已�
 | `subject`      | 英文画面描述（日图），composes 为 `style.prefix + subject + style.suffix`。                                             |
 | `subjectNight` | 可选，夜图专用画面描述；留空则夜图回退用 `subject`（配合 `style.nightSuffix`）。                                        |
 
-world 包用一条 media source 把生成好的 PNG 导入媒体库（沿用 portraits 的 `kind: media` 机制，按 sha256 内容寻址）：
+world 包用一条 media source 把生成好的 PNG 导入媒体库（沿用 portraits 的 `kind: media` 机制，按 sha256 内容寻址），再用第二条 json source 导入注册表。**两条都不可省**，且 media source 必须带 `key` + `indexTo`（否则字节不落库，见上方 media source 说明）：
 
 ```yaml
 sources:
@@ -338,17 +345,8 @@ sources:
     kind: media
     path: media/scenes
     to: media
-    after: dimensions
-```
-
-与 portraits 不同：**不加 `indexTo`**——`scenes.registry.json` 单独走第二条 source 整份导入，被 [`scene-stage`](plugins.md#scene-stage) 插件的 `scenes` namespace 消费（`schemaVersion` 仍为 1：纯增字段，向后兼容）：
-
-```yaml
-sources:
-  scenes:
-    kind: media
-    path: media/scenes
-    to: media
+    indexTo: plugin:scene-stage/assets
+    key: filename
     after: dimensions
   scenesRegistry:
     kind: json
@@ -358,6 +356,8 @@ sources:
     key: registryId
     after: dimensions
 ```
+
+与 portraits 的差别只在于**注册表另走一条 source**：portraits 把每张图的索引直接喂给 `character-presence/assets`，而场景图除了 `scene-stage/assets` 的字节索引外，还需要 `scenes.registry.json` 整份导入 `scene-stage/scenes` 供解析 runtime 一次读全（`schemaVersion` 仍为 1：纯增字段，向后兼容）。实际写法见 `worlds/haruka-academy/data/world.data.yaml`。
 
 `scenes.registry.json`（`scripts/emit-scenes.mjs` 自动生成，`{schemaVersion, registryId, style, scenes:[{sceneId,name,locationRef?,day,night}]}`，`day`/`night` 是 sha256 `MediaRef`）整份文档作为**一行** plugin_data 导入：`registryId: "scene-registry"` 是自描述常量字段，同时充当 `key`——scene-stage 的解析 runtime 读一行即得 `style`（增量生成用的画风 prompt 片段）与 `scenes[]` 全量，不需要按条目遍历。`scenes.registry.json` 是生成产物，不要手编，重新生成场景图后必须重跑 `emit-scenes.mjs` 刷新哈希与 `style` 块。
 

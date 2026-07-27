@@ -121,7 +121,7 @@ Session lifecycle tracked on `SessionRecord`:
 - `status: 'active' | 'paused' | 'ended'` — `paused`/`ended` halts scheduling.
 - `phase: 'setup' | 'playing'` — the stage-band selector (business truth; replaces the old `preGameCompleted`-derived band check).
 - `completedPlayerTurns: number` — business-truth count of completed **player** turns. Kernel auto-advances 0 → 1 once all setup runtimes report done. Non-player executions (manual plugin-rpc trigger, deferred background follower, nested `recursiveCall`) each persist their own `turn_results` row stamped with `origin` and are excluded from the count; several executions sharing one `turnId` count once.
-- `setupRuntimes: string[]` — business-truth runtimeIds that reported done during the `setup` stage.
+- `setupRuntimes: Record<runtimeId, SetupRuntimeState>` — business-truth per-runtime resolution mirror for the `setup` stage. `SetupRuntimeState` is a three-state union: `pending` / `done{resolution: "completed" | "waived"}` / `blocked` (retry budget exhausted — pins the session in setup until the `retry` / `waive` endpoints unblock it). Not a plain id list.
 
 `turnCount` and `preGameCompleted` are **legacy fields the kernel no longer writes** — API responses and snapshots derive them at read time from `phase` / `completedPlayerTurns` / `setupRuntimes` via a shared `deriveLegacyClockForSession` helper (response shape is unchanged). `turnCount` (now a derived value) still drives the UI turn display, auto-snapshot cadence, and snapshot numbering downstream of that derivation. The DB columns are retained (frozen) for old-kernel/rollback reads, and the one-time lazy backfill for pre-`phase` sessions is retained.
 
@@ -179,7 +179,7 @@ All store writes key on `pluginId`; all trace logs key on `runtimeId`.
 
 ### Tool scoping
 
-`bootstrap/local-tools.ts` builds `pluginToolAccess: Map<pluginId, Set<toolName>>`; the `findTool(name, context)` callback wired in `bootstrap/tools.ts` enforces (fail-closed — a call with no `context` resolves no local tool):
+`bootstrap/plugin-tool-access.ts` builds `pluginToolAccess: Map<pluginId, Set<toolName>>`; the `findTool(name, context)` callback wired in `bootstrap/tools.ts` enforces (fail-closed — a call with no `context` resolves no local tool):
 
 - Builtin tools — all plugins.
 - Local tools — only the declaring plugin.

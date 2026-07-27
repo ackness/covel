@@ -11,6 +11,7 @@
   config.toml                ← 数据位置指针 + 日志轮转参数（见下文）
   llm.toml                   ← LLM slot 配置（provider / model / baseUrl）
   keys.env                   ← provider API key，KEY=VALUE 纯文本
+  settings.json              ← 前端用户偏好（unified SettingsStore：locale / 外观 / slot 覆盖 / 每插件设置）
   plugins/                   ← 用户插件（和 app bundle 内的核心插件合并）
 
 <data_root>/                 ← 默认 ~/.covel/data；可改到任意路径

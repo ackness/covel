@@ -161,7 +161,7 @@ tools:
   "devDependencies": {
     "@covel/plugin-test-utils": "workspace:*",
     "@covel/runtime": "workspace:*",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.10"
   }
 }
 ```
@@ -235,35 +235,54 @@ execute: async (params) => ({
 
 通过 `input.inject` 声明依赖其他插件的输出。
 
-以 `char-creator` 为例——它需要读取 `narrator` 的开场叙事：
+以 `char-creator/player-init` 为例——它在 setup 阶段读取 `pregame` 写出的开场：
 
 ```yaml
+stage: setup
 trigger:
-  type: scheduled
-  interval: 1
-  maxTriggerCount: 1
+  type: auto
+needs: [pregame, world-init/schema-gen] # 强依赖：排序 + 门控
 input:
   inject:
     - kind: runtime
-      from: narrator # 来源插件 ID
+      from: pregame # 来源 runtime 名（pluginId 或 pluginId/runtimeId）
       field: narrativeOutput # 要提取的输出字段
-      as: "<narrator-opening>" # 包裹的 XML 标签名
+      as: "<pregame-opening>" # 包裹的 XML 标签名
 ```
 
-在提示词中通过模板变量访问注入的数据：
+在提示词中通过模板变量访问注入的数据（格式为 `inputs.<pluginId>.<runtimeId>.<field>`）：
 
 ```markdown
-## 主叙事开场
+## 开场
 
-<narrator-opening>{{ inputs.narrator.narrator.narrativeOutput }}</narrator-opening>
+<pregame-opening>{{ inputs.pregame.pregame.narrativeOutput }}</pregame-opening>
+```
+
+主循环里的典型形态是同时列出两个叙事引擎，缺席的那个解析为空（`codex` / `guide` 都这么写）：
+
+```yaml
+input:
+  inject:
+    - {
+        kind: runtime,
+        from: narrator,
+        field: narrativeOutput,
+        as: "<narrator-output>",
+      }
+    - {
+        kind: runtime,
+        from: chat-mode-narrator,
+        field: narrativeOutput,
+        as: "<narrator-output>",
+      }
 ```
 
 **注意：**
 
-- `from` 指定来源插件的 ID
+- `from` 指定来源 runtime 名
 - `field` 指定要提取的字段名
 - `as` 指定包裹的 XML 标签名，帮助 LLM 区分不同数据来源
-- 如果来源插件尚未执行（优先级更低），注入会为空
+- **`input.inject` 本身不构成调度依赖**：来源 runtime 本回合没跑、失败、或字段不存在时，该 entry 被静默跳过（注入为空），不会拦住本 runtime。要"上游没成功就别跑我"，得另外声明 `needs`（见上例）；执行先后由 stage 屏障 + stage 内 DAG 决定
 
 ## 4. 暴露 RPC action
 
@@ -345,7 +364,7 @@ curl -X POST http://localhost:3001/api/sessions/$SESSION_ID/plugin-rpc \
 {
   "devDependencies": {
     "@covel/plugin-test-utils": "workspace:*",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.10"
   }
 }
 ```
