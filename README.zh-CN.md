@@ -42,7 +42,7 @@ Covel 是一款 AI 驱动的 RPG，回合之间世界仍在运转：NPC 记录�
 
 ### 直接玩
 
-从 [Releases](https://github.com/ackness/covel/releases) 下载 **macOS Apple Silicon** 安装包，然后：打开设置 → 粘贴 LLM API 密钥 → 选一个世界 → 开玩。
+从 [Releases](https://github.com/ackness/covel/releases) 下载 **macOS Apple Silicon** 或 **Windows x64** 安装包，然后：打开设置 → 粘贴 LLM API 密钥 → 选一个世界 → 开玩。
 
 你的数据都在 `~/.covel/`（配置、密钥、SQLite、自定义世界、日志）—— 详见[桌面配置指南](./docs/guide/desktop-config.md)。版本说明：[`docs/CHANGELOG.md`](./docs/CHANGELOG.md)。
 
@@ -83,7 +83,7 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono 
 
 ## 路线图
 
-- Windows / Linux / Intel Mac 构建
+- Linux / Intel Mac 构建（macOS arm64 与 Windows x64 已发布）
 - 插件与世界包的官方分享社区
 - 桌面应用内置插件市场
 

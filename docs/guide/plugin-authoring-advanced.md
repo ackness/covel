@@ -219,7 +219,7 @@ plugins/my-combat/
 └── package.json
 ```
 
-`runtimes/*/PLUGIN.md` 才是真正的 runtime，有自己的优先级、触发条件和 LLM 提示词。它们可以：
+`runtimes/*/PLUGIN.md` 才是真正的 runtime，有自己的 stage、依赖边、触发条件和 LLM 提示词。它们可以：
 
 - 使用不同的 model slot（如战斗结算用 `balance`，初始化用 `fast`）
 - 设置不同的 trigger（如一个 auto，一个 event）

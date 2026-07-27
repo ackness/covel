@@ -172,7 +172,7 @@ pnpm validate:plugin plugins/<id>            # 目录:自动含根 PLUGIN.md + r
 pnpm validate:plugin ~/.covel/plugins/<id>   # 仓库外插件同样支持
 ```
 
-两道校验一次跑完：loader compat 解析（决定插件能不能加载，报错带行号）+ **strict authoring schema**（强制「auto/scheduled 必须声明 stage」、拒绝 legacy 字段 `priority` / `upstreamRequired`）。新插件必须干净通过；`--compat` 仅用于校验存量第三方 legacy manifest。
+两道校验一次跑完：loader 解析（决定插件能不能加载，报错带行号）+ **strict authoring schema**（额外强制「auto/scheduled 必须声明 stage」）。两者字段集相同、都是 `.strict()`，`priority` / `upstreamRequired` 这类已删除字段在任何一道都会判失败。新插件必须干净通过；`--compat` 只是**跳过 authoring 那道**（校验存量第三方 manifest 时用），不会放宽字段集。
 
 ### 5. 测试（按复杂度分层选）
 

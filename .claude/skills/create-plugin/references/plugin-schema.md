@@ -2,8 +2,10 @@
 
 Schema 使用 Zod **strict** 模式 — 不允许未定义字段，拼错会直接报错。有两套 schema（`packages/shared/src/schemas/plugin-schemas.ts`）：
 
-- **`runtimeManifestAuthoringSchema`（新插件按这个写）** — strict 目标：`auto` / `scheduled` runtime **必须声明 `stage`**；legacy 字段（`priority` / `upstreamRequired` / `jobStatus`）被拒绝。
-- **`runtimeManifestSchema`（loader 实际用的 compat 超集）** — 额外接受 legacy 字段做第三方兼容（`priority` 折叠出 `stage`、`upstreamRequired` 别名为 `needs`）。新插件不要用这些字段。
+- **`runtimeManifestAuthoringSchema`（新插件按这个写）** — 严格授权目标：`auto` / `scheduled` runtime **必须声明 `stage`**。
+- **`runtimeManifestSchema`（loader 实际用的）** — 与上者**共享同一份字段集**（同一个 `runtimeManifestCommonShape`，同样 `.strict()`），差别**只在跨字段约束**：它不强制「auto/scheduled 必须有 stage」，其余一致。
+
+> **两套 schema 的字段集完全相同，不存在「compat 超集」。** `priority` / `upstreamRequired` / `jobStatus` 已被整体删除（v0.0.19 的 `refactor!: remove the legacy priority / upstreamRequired / jobStatus surface`），**任何一套都会因未知键直接判加载失败**——不存在「priority 折叠出 stage」或「upstreamRequired 别名 needs」这类兼容行为。调度只能用 `stage` + `needs` / `after` / `inputs` 表达。
 
 两套 schema 都**拒绝** `trigger.type: conditional / error-retry`（已从枚举移除，声明即加载失败）。
 
@@ -68,7 +70,7 @@ handler 里读：`ctx.inputs.narrative?.value`（`cardinality: all` 时是 `.ite
 - `needs` 的 `scope: session` **只在 `stage: setup` 上合法**（它对准持久 setup 快照判定；其它 stage 声明会被两套 schema 直接拒绝）。
 - `event` / `manual` + `execution: background` 的 runtime 不可声明 `inputs` 绑定（永远 detached，绑定无法满足）。
 
-> 另有一条 server 装载期 warning：`auto` / `scheduled` 却既无 `stage` 也无 legacy `priority`、又不是纯 ui / hooks / entry / wires 注册面的 runtime，会收到 `schedulable-missing-stage` 警告（这类声明被当作 UI-only 习语，永不调度）。按本文档生成的插件不会触发它。
+> 另有一条 server 装载期 warning：`auto` / `scheduled` 却没有 `stage`、又不是纯 ui / hooks / entry / wires 注册面的 runtime，会收到 `schedulable-missing-stage` 警告（这类声明被当作 UI-only 习语，永不调度）。按本文档生成的插件不会触发它。
 
 ## 超时与重试（agent only）
 
@@ -251,7 +253,7 @@ userSettings:
 浏览器发起任何需要 userSettings 的请求(例如 `POST /api/sessions/:id/plugin-rpc`)时,前端把整个 `plugin.*` 分支做成 `X-Plugin-User-Settings: base64(JSON)` 头。服务端 `apps/server/src/routes/api/plugin-rpc.ts` 解码后:
 
 1. 塞进 `TurnInput.userSettings`(map<pluginId, map<key, value>>)。
-2. 经 `resolveUserSettings`(`packages/runtime/src/turn-executor-helpers.ts`)与 `manifest.userSettings[].default` 合并——缺失键总是填回默认值,handler 可以依赖所有声明键都有值。
+2. 经 `resolveUserSettings`(`packages/runtime/src/turn-executor/turn-executor-helpers.ts`)与 `manifest.userSettings[].default` 合并——缺失键总是填回默认值,handler 可以依赖所有声明键都有值。
 3. 同时暴露到两条通道:
    - **function runtime**: 作为 `ctx.userSettings`——handler 读 `ctx.userSettings.<key>` 即可;
    - **agent runtime prompt**: 作为 `{{ userSettings.<key> }}` 模板变量——PLUGIN.md 直接插值;

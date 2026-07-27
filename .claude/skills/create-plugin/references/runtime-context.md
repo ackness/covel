@@ -57,7 +57,9 @@ export default async function handler(ctx: FunctionHandlerContext) {
 
 ## `ctx.gateway`
 
-六个方法：`generateText` / `generateObject` / `resolveSlot` / `generateImage` / `synthesizeSpeech` / `transcribeAudio`。**没有** `embed` / `streamText`——embedding、视频、streaming 才需要 `resolveSlot` + 自管 wire，见 [`provider-quirks.md`](./provider-quirks.md)。
+六个方法：`generateText` / `generateObject` / `resolveSlot` / `generateImage` / `synthesizeSpeech` / `transcribeAudio`（后三个在接口上是 **optional**，判空后再调）。**没有** `embed` / `streamText`——embedding、视频、streaming 才需要 `resolveSlot` + 自管 wire，见 [`provider-quirks.md`](./provider-quirks.md)。
+
+> **别用 `generateObject`。** 服务端组合根（`apps/server/src/app.ts`）刻意不注入 JSON Schema → Zod 转换器，调用它会抛 `PluginRuntimeGateway.generateObject is unavailable in this host`。要结构化输出就写 **agent runtime**，用 `output.schema` / `responseFormat`——框架在那条路径上自动处理 schema → provider grammar。
 
 **媒体不要直接调 gateway**——用 `ctx.images` / `ctx.speech`（见下），它们在 gateway 之上多做了 promptHash 去重和 MediaStore 落库。
 
