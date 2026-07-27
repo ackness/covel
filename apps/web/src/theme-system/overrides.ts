@@ -131,9 +131,13 @@ export function applyTokenOverrides(store: SettingsStoreApi): void {
 export function readTokenDefaults(): Record<string, string> {
   if (typeof document === "undefined") return {};
   const root = document.documentElement;
-  const lifted = appliedProperties.map(
-    (name) => [name, root.style.getPropertyValue(name)] as const,
-  );
+  // Lift every adjustable token, not just the ones this module wrote: the
+  // controls paint directly to the element during a drag preview, and inside
+  // that debounce window those two views of the DOM disagree — reading it back
+  // would report a half-dragged preview as the theme's own default.
+  const lifted = listAdjustableTokens()
+    .map((name) => [name, root.style.getPropertyValue(name)] as const)
+    .filter(([, value]) => value !== "");
 
   for (const [name] of lifted) root.style.removeProperty(name);
   const computed = getComputedStyle(root);

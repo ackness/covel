@@ -204,6 +204,9 @@ export function AppearancePane() {
           <input
             type="text"
             value={themeName}
+            // A placeholder is not a reliable accessible name and disappears
+            // as soon as the player types.
+            aria-label={t("appearance.saveAsThemeTitle")}
             placeholder={t("appearance.themeNamePlaceholder")}
             onChange={(event) => setThemeName(event.target.value)}
             onKeyDown={(event) => {

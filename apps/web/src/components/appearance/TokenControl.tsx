@@ -131,7 +131,7 @@ interface TokenInputProps {
 function TokenInput({ spec, value, onPreview, onReset }: TokenInputProps) {
   switch (spec.control) {
     case "color":
-      return <ColorInput value={value} onPreview={onPreview} />;
+      return <ColorInput spec={spec} value={value} onPreview={onPreview} />;
     case "length":
       return <LengthInput spec={spec} value={value} onPreview={onPreview} />;
     case "number":
@@ -165,16 +165,23 @@ const FIELD_CLASS =
   "border border-[var(--rule-color)] bg-[var(--surface-page)] px-2 py-1 text-[11px] font-mono outline-none focus:ring-1 focus:ring-[var(--accent-primary)] rounded-[var(--radius-control)]";
 
 function ColorInput({
+  spec,
   value,
   onPreview,
 }: {
+  spec: TokenSpec;
   value: string;
   onPreview: (value: string) => void;
 }) {
+  const { i18n } = useTranslation();
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
   const swatch = toSwatchHex(value) ?? "#000000";
   const valid = !text.trim() || isValidCssColor(text);
+  // Both fields carry the token's own name: a shared literal meant a screen
+  // reader announced the same word for all 48 swatches, with no way to tell
+  // the page background from the danger accent.
+  const label = resolveI18nText(spec.label, i18n.language) ?? spec.name;
 
   return (
     <div className="flex items-center gap-1.5">
@@ -182,12 +189,13 @@ function ColorInput({
         type="color"
         value={swatch}
         onChange={(event) => onPreview(event.target.value)}
-        aria-label="colour"
+        aria-label={label}
         className="h-6 w-8 cursor-pointer border border-[var(--rule-color)] bg-transparent p-0.5 rounded-[var(--radius-control)]"
       />
       <input
         type="text"
         value={text}
+        aria-label={label}
         spellCheck={false}
         onChange={(event) => {
           setText(event.target.value);
