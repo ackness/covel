@@ -9,7 +9,7 @@
  * Registered ids are namespaced `"<pluginId>/<wireId>"` to prevent
  * collisions with builtin wires and other plugins.
  *
- * Trust gating mirrors local-tools.ts: builtin/official plugins load at
+ * Trust gating mirrors plugin-entry.ts: builtin/official plugins load at
  * bootstrap; community plugins load on `ensurePluginWires()` — called from
  * `loadRuntimeFn`, i.e. the same moment the framework would import the
  * plugin's handler.js anyway, so no new trust exposure.

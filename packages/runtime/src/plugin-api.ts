@@ -93,7 +93,6 @@ export interface PluginHookOptions {
 
 export interface PluginRpcOptions {
   readonly description?: string;
-  readonly streaming?: boolean;
   /** May only restrict (never escalate) the plugin's source trust. */
   readonly trustLevel?: RpcTrustLevel;
 }
