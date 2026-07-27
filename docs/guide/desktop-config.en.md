@@ -1,5 +1,7 @@
 # Desktop config & data layout
 
+> 🇨🇳 [中文版本](./desktop-config.md)
+
 Applies to [`apps/desktop/`](../../apps/desktop/) (Electron). The desktop shell boots the same Node sidecar bundle and feeds it the env-var contract documented below.
 
 ## Directory structure

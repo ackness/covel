@@ -3,34 +3,6 @@ name: world-init/schema-gen
 description:
   zh: 开局整理世界设定，让角色属性和背景资料更贴合这个世界。
   en: Organizes the setting at the start so character traits and background details fit the world.
-pluginType: core-plugin
-stage: setup
-# Weak ordering after pregame (historical serial order); player-init declares
-# the hard turn-scoped `needs` on both of us so it can read `{{ world.schema }}`.
-after:
-  - pregame
-model: plugin
-outputKind: system
-timeoutMs: 180000
-capabilities: [world-data-provider]
-guard: ../../guard.js
-trigger:
-  type: auto
-  maxTriggerCount: 1
-tools:
-  plugin:
-    - set-world-schema
-    - set-world-entries-batch
-  builtin:
-    - plugin-data-get
-    - plugin-data-list
-ui:
-  right:
-    # world-entries.json removed (mirror PLUGIN.md): redundant raw-JSON
-    # duplicate of world-overview for imported worlds. The `entries` plugin_data
-    # + lorebook/prompt write is unchanged.
-    - ./ui/world-overview.json
-    - ./ui/world-schema.json
 ---
 
 You are the World Dimension Initialization agent.

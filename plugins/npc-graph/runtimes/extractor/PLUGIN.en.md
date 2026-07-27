@@ -3,7 +3,6 @@ name: npc-graph/extractor
 description:
   zh: 从故事里整理人物、势力和他们之间的关系。
   en: Collects characters, groups, factions, and the relationships between them from the story.
-pluginType: plugin
 postHistory:
   role: system
   content: |

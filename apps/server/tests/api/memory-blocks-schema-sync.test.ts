@@ -60,8 +60,17 @@ describe("memory plugin memoryBlocks <-> DEFAULT_CORE_MEMORY_BLOCKS sync", () =>
     expect(normalize(declared)).toEqual(normalize(DEFAULT_CORE_MEMORY_BLOCKS));
   });
 
-  it("PLUGIN.en.md stays in sync with the engine fallback too", async () => {
-    const declared = await readPluginMemoryBlocks("PLUGIN.en.md");
-    expect(normalize(declared)).toEqual(normalize(DEFAULT_CORE_MEMORY_BLOCKS));
+  it("PLUGIN.en.md does not fork the block vocabulary", async () => {
+    // The locale variant deliberately declares NO `memoryBlocks`: omitted
+    // fields inherit from the canonical PLUGIN.md, whose copy is already fully
+    // bilingual (每块的 displayName / extractionHint 都带 zh + en). A third
+    // hand-written copy here would be one more thing to drift — exactly what
+    // this file exists to prevent. If it ever reappears, it must match.
+    const abs = path.join(REPO_ROOT, "plugins", "memory", "PLUGIN.en.md");
+    const parsed = parsePluginMd(await readFile(abs, "utf8"), abs);
+    const declared = parsed.manifest.memoryBlocks;
+    if (declared && declared.length > 0) {
+      expect(normalize(declared)).toEqual(normalize(DEFAULT_CORE_MEMORY_BLOCKS));
+    }
   });
 });

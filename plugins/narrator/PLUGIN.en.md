@@ -6,23 +6,6 @@ displayName:
 description:
   zh: 根据你的行动继续推进故事，描写场景、人物反应和结果。
   en: Continues the story from your actions, describing scenes, reactions, and outcomes.
-pluginType: core-plugin
-model: story
-timeoutMs: 240000
-outputKind: story
-advertiseEvents: true
-trigger:
-  type: auto
-tools:
-  builtin:
-    - world-dimension-get
-    - emit-event
-input:
-  inject:
-    - kind: runtime
-      from: npc-graph/rag-retriever
-      field: npcContext
-      as: npc-relationships
 postHistory:
   role: system
   content: |

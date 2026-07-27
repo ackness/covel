@@ -70,15 +70,21 @@ pluginPolicy:
 
 声明 `preset` 就已经拿到上表的组合，顶层 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins` 只用来**增补或推翻**其中几项，不必整份复述：
 
+**二选一**——下面是两套互斥配置，各自完整，不要合并进同一份 `world.yaml`（`pluginPolicy` 写两遍的话 YAML 只保留后一个）。
+
+传统故事模式（preset 已包含 narrator / guide / codex / npc-graph）：
+
 ```yaml
-# 传统故事模式 —— preset 已包含 narrator/guide/codex/npc-graph
 pluginPolicy:
   preset: traditional-story
   preferTags: [mode:traditional-story, role:codex, role:retrieval, role:world-rules]
   avoidTags: [mode:dialogue]
 recommendedPlugins: [player-identity] # preset 之外额外想要的
+```
 
-# 对话 / 视觉小说模式（参考 worlds/haruka-academy）
+对话 / 视觉小说模式（参考 `worlds/haruka-academy`）：
+
+```yaml
 defaultViewMode: stage # 全屏舞台：场景背景 + 角色立绘 + 打字机对话框
 pluginPolicy:
   preset: dialogue-mode

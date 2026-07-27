@@ -3,27 +3,6 @@ name: char-creator/player-init
 description:
   zh: 开局引导你填写主角信息，并把主角加入故事。
   en: Guides you through creating your hero at the start and brings them into the story.
-pluginType: core-plugin
-outputKind: system
-model: plugin
-timeoutMs: 180000
-guard: ./guard.js
-trigger:
-  type: auto
-input:
-  inject:
-    # Pre-Game band: narrator is NOT scheduled in turn 0, so we inject the
-    # pregame opening summary instead.
-    - kind: runtime
-      from: pregame
-      field: narrativeOutput
-      as: "<pregame-opening>"
-tools:
-  builtin:
-    - create-form
-ui:
-  right:
-    - ../../ui/character-panel.json
 postHistory:
   role: system
   content: |

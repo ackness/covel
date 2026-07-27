@@ -6,15 +6,6 @@ displayName:
 description:
   zh: 在开局时读取世界资料，准备好第一段冒险。
   en: Reads the world details at the start and prepares the first step of the adventure.
-pluginType: core-plugin
-stage: setup
-runtimeType: function
-resultFormat: envelope-v1
-outputKind: system
-handler: ./handler.js
-trigger:
-  type: auto
-  maxTriggerCount: 1
 ---
 
 # Pre-Game Initialization Plugin

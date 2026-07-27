@@ -6,50 +6,6 @@ displayName:
 description:
   zh: 根据当前场景给出几句可直接采用的行动短句。
   en: Suggests short actions that fit the current scene and can be used right away.
-pluginType: plugin
-model: plugin
-outputKind: system
-timeoutMs: 120000
-# This runtime's only job is to call generate-scene-prompts. Some models drift
-# into continuing the narrative and finish with zero tool calls; the gate gives
-# one corrective retry before releasing so the choices don't silently vanish.
-requireToolUse: true
-# Discovered by the stage choices layer via this capability (not a hardcoded
-# plugin id — framework↔plugin isolation rule). A third-party plugin declaring
-# `scene-prompts` transparently replaces this one as the stage's prompt source.
-capabilities:
-  - scene-prompts
-tags:
-  - mode:dialogue
-  - role:quick-reply
-  - cost:llm
-  - ui:message-block
-trigger:
-  type: scheduled
-  interval: 1
-# Engine-agnostic guidance. The upstream gate discovers the active narrative
-# engine by capability (narrative-engine → chat-mode-narrator in dialogue,
-# narrator in traditional) instead of naming one, so the same plugin gates
-# correctly in either mode and still skips when that engine failed. The inject
-# lists both known engines; the absent one resolves to nothing, so exactly the
-# active engine's fresh prose fills <narrator-output>.
-input:
-  inject:
-    - kind: runtime
-      from: chat-mode-narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-    - kind: runtime
-      from: narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-entry: ./server/index.js
-tools:
-  plugin:
-    - generate-scene-prompts
-ui:
-  message:
-    - ./ui/scene-prompts-block.json
 postHistory:
   role: system
   content: |

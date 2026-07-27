@@ -1,5 +1,7 @@
 # 桌面版配置与数据目录
 
+> 🇬🇧 [English version](./desktop-config.en.md)
+
 适用于 [`apps/desktop/`](../../apps/desktop/)（Electron）。桌面壳启动同一个 Node sidecar bundle，并按下文的目录契约喂入环境变量。
 
 ## 目录结构
