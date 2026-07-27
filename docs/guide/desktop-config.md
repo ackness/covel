@@ -1,5 +1,7 @@
 # 桌面版配置与数据目录
 
+> 🇬🇧 [English version](./desktop-config.en.md)
+
 适用于 [`apps/desktop/`](../../apps/desktop/)（Electron）。桌面壳启动同一个 Node sidecar bundle，并按下文的目录契约喂入环境变量。
 
 ## 目录结构
@@ -11,6 +13,7 @@
   config.toml                ← 数据位置指针 + 日志轮转参数（见下文）
   llm.toml                   ← LLM slot 配置（provider / model / baseUrl）
   keys.env                   ← provider API key，KEY=VALUE 纯文本
+  settings.json              ← 前端用户偏好（unified SettingsStore：locale / 外观 / slot 覆盖 / 每插件设置）
   plugins/                   ← 用户插件（和 app bundle 内的核心插件合并）
 
 <data_root>/                 ← 默认 ~/.covel/data；可改到任意路径
@@ -83,6 +86,6 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 ## 相关文档
 
-- [README · 快速开始](../../README.md#-快速开始) — 下载与首次启动
+- [README · 快速开始](../../README.zh-CN.md#快速开始) — 下载与首次启动
 - [apps/desktop/PACKAGING.md](../../apps/desktop/PACKAGING.md) — 桌面版本地构建、签名、公证
 - [reference/api.md](../reference/api.md) — 后端 API 参考

@@ -8,8 +8,6 @@
  * resulting `AgentLoopPolicy`, so its `while` reads as control flow rather
  * than policy derivation, and the loop core can be instantiated in tests
  * with a hand-built policy + minimal `AgentLoopDeps` fixture.
- *
- * Roadmap — docs/superpowers/specs/2026-07-10-agent-core-refactor-roadmap.md.
  */
 
 import type { RuntimeManifest, TurnInput } from "@covel/shared";

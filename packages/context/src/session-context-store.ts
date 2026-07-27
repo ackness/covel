@@ -7,7 +7,7 @@
  * at the composition root (server, plugin tests).
  *
  * Mirrors the `KernelStore` pattern in `@covel/runtime` —
- * see `packages/runtime/src/session-kernel.ts`.
+ * see `packages/runtime/src/commit/session-commit-pipeline.ts`.
  *
  * Only methods invoked by `session-context.ts`, `session-context-views.ts`,
  * `prompt-internals.ts`, and `compactor.ts` belong here. Adding a new store

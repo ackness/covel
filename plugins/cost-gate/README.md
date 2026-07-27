@@ -15,7 +15,7 @@ entirely through four lifecycle hooks declared in `PLUGIN.md`.
 | `TurnStart`       | At/above the **hard** cap, aborts the turn with reason `cost-gate: session token budget exhausted`. `enforce: pre` so it vetoes earliest.                                       |
 | `SessionEnd`      | Drops the session's counter (no cross-session leak).                                                                                                                            |
 
-Pre-Game runtimes (priority ≤ 99) are framework-protected and never trimmed.
+While `session.phase === "setup"`, `stage: setup` runtimes are framework-protected and never trimmed — `PreSchedule` narrowing only affects the main loop.
 
 ## Configuration
 

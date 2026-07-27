@@ -21,36 +21,24 @@
 
 ## L1 — Schema 校验
 
-每个 runtime 的 `PLUGIN.md` 都要单独校验。多 runtime 插件需要遍历 `runtimes/*/PLUGIN.md`。
-
-仓库内插件：
+用仓库自带的校验脚本，别手搓——它一次跑完两道校验（loader compat 解析 + strict authoring schema），传插件目录时会自动遍历 `runtimes/*/PLUGIN.md`：
 
 ```bash
-node --input-type=module -e "
-import matter from 'gray-matter';
-import { readFileSync } from 'fs';
-import { validatePluginManifest, formatValidationErrors } from '@covel/shared';
-const { data } = matter(readFileSync('plugins/<id>/PLUGIN.md','utf-8'));
-const r = validatePluginManifest(data);
-if(!r.valid){console.error(formatValidationErrors(r.errors));process.exit(1)}
-console.log('OK');
-"
+pnpm validate:plugin plugins/<id>          # 整个插件（含全部子 runtime）
+pnpm validate:plugin plugins/<id>/PLUGIN.md # 单份 manifest
+pnpm validate:plugin ~/.covel/plugins/<id>  # 仓库外插件，绝对路径即可
 ```
 
-仓库外插件（例如 `~/.covel/plugins/<id>`）在 Covel 仓库根目录运行，用绝对路径读文件即可：
+失败输出会指名违规字段并给替代写法，例如：
 
-```bash
-node --input-type=module -e "
-import matter from 'gray-matter';
-import { readFileSync } from 'fs';
-import { validatePluginManifest, formatValidationErrors } from '@covel/shared';
-const file = process.env.HOME + '/.covel/plugins/<id>/runtimes/<sub>/PLUGIN.md';
-const { data } = matter(readFileSync(file,'utf-8'));
-const r = validatePluginManifest(data);
-if(!r.valid){console.error(formatValidationErrors(r.errors));process.exit(1)}
-console.log('OK');
-"
 ```
+Fix: `tools.local` was removed — register the tool in the plugin's `entry`
+     module (`covel.registerTool`) and list its NAME under `tools.plugin`.
+```
+
+> 别改写成 `node -e "... import { validatePluginManifest } from '@covel/shared'"`：workspace 包直接导出 TS 源码（无构建产物），裸 `node` 会在解析 `@covel/shared` 时抛 `ERR_MODULE_NOT_FOUND`。`validate:plugin` 走的是 `tsx`。
+>
+> 注意有一类**不报错的失败**：rpc action 里出现未知字段时，loader 打印 `malformed rpc declaration skipped` 但整体仍判 `✓`——插件能加载，那个 action 却静默消失了。看到 `skipped` 就当失败处理。
 
 ---
 
@@ -257,7 +245,7 @@ pnpm test:runtime -- my-plugin \
 | `--llm-responses <json>`         | 多次 LLM 调用脚本，按顺序消费                                           |
 | `--mock-preset-id <id>`          | mock `resolveSlot()` 暴露的 synthetic preset id                         |
 | `--show-prompts`                 | 输出捕获的 LLM messages                                                 |
-| `--ignore-upstreams`             | 临时清空 `needs`（含 legacy `upstreamRequired` 别名）声明               |
+| `--ignore-upstreams`             | 本次调试运行清空该 runtime 的 `needs` 门控                              |
 | `--expects-background-follower`  | 没有 deferred follower 时写一个 failed `_jobs` 行，便于 UI 可见失败断言 |
 | `--pretty`                       | 格式化 JSON 输出                                                        |
 

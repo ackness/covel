@@ -20,7 +20,7 @@
 | 看所有已实现插件的 frontmatter、调度层级、capabilities 标签      | [docs/reference/plugins.md](../reference/plugins.md)                                                                                                                                                                                                       |
 | 写 json-render UI 面板（`ui.right` / `ui.message`）              | [docs/guide/plugin-ui-runtime-guidelines.md](./plugin-ui-runtime-guidelines.md)                                                                                                                                                                            |
 | 让 `ui.message` block 首次出现（避免"只有手动按钮无法自举"死锁） | [docs/reference/ui-panels.md#消息-block-声明](../reference/ui-panels.md#消息-block-声明)                                                                                                                                                                   |
-| 写生命周期 hook（工具调用前校验、commit 前审批、审计日志）       | [docs/reference/plugins.md#hooks](../reference/plugins.md#hooks)                                                                                                                                                                                           |
+| 写生命周期 hook（工具调用前校验、commit 前审批、审计日志）       | [docs/reference/plugins.md#hooks](../reference/plugins.md#hooksfrontmatter-声明式已弃用--改用-entry-的-covelon)                                                                                                                                            |
 | 写图像生成 / 媒体资产插件                                        | [docs/guide/plugin-authoring-advanced.md 第 6 节](./plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)（`ctx.images` 契约 + `registerImageWire`）· [docs/reference/media-store.md](../reference/media-store.md#metadata-conventions--querying) |
 | 让插件配套世界数据、角色卡、媒体或 override 包                   | [docs/reference/world-data.md](../reference/world-data.md)                                                                                                                                                                                                 |
 | 写单元 / 集成 / 真实 LLM E2E 测试                                | [docs/guide/plugin-testing.md](./plugin-testing.md) · [docs/guide/e2e-plugin-verify.md](./e2e-plugin-verify.md)                                                                                                                                            |
@@ -136,20 +136,22 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 ### B. 现有插件参考
 
-来源：`plugins/**/PLUGIN.md` 的 frontmatter（截至 v0.0.4）。
+来源：`plugins/**/PLUGIN.md` 的 frontmatter（截至 v0.0.22）。
 
-| Runtime                          | Stage       | 触发            | 类型          | 工具 / 关键能力       | 学习价值                        |
-| -------------------------------- | ----------- | --------------- | ------------- | --------------------- | ------------------------------- |
-| `pregame`                        | `setup`     | scheduled(首轮) | function      | 无                    | 最简 function runtime,纯初始化  |
-| `world-init/schema-gen`          | `setup`     | scheduled(首轮) | agent + guard | local 工具            | guard 在 LLM 前跳过门控,零开销  |
-| `char-creator/player-init`       | `setup`     | scheduled(首轮) | agent         | builtin (create-form) | 首轮表单 + setup 闸门           |
-| `npc-graph/rag-retriever`        | `pre-turn`  | auto            | function      | —                     | 给 narrator 预拉结构化检索      |
-| `narrator`                       | `narrative` | auto            | agent         | 无                    | 零代码主叙事                    |
-| `codex`                          | `post-turn` | auto            | agent         | local + builtin       | JS 工具 + plugin-data inject    |
-| `guide`                          | `post-turn` | auto            | agent         | builtin               | inject narrator output 生成选项 |
-| `npc-graph/extractor`            | `post-turn` | auto            | agent         | local                 | NPC 关系抽取 + 写入图谱         |
-| `char-creator/character-tracker` | `post-turn` | auto            | agent         | local                 | 跟踪 NPC 状态变化               |
-| `memory`                         | —           | UI only         | UI            | —                     | 纯前端面板,不占调度槽           |
+| Runtime                          | Stage       | 触发                                  | 类型          | 工具 / 关键能力                                              | 学习价值                        |
+| -------------------------------- | ----------- | ------------------------------------- | ------------- | ------------------------------------------------------------ | ------------------------------- |
+| `pregame`                        | `setup`     | `auto`（`maxTriggerCount: 1`）        | function      | 无                                                           | 最简 function runtime,纯初始化  |
+| `world-init/schema-gen`          | `setup`     | `auto`（`maxTriggerCount: 1`）        | agent + guard | `tools.plugin`（set-world-schema / set-world-entries-batch） | guard 在 LLM 前跳过门控,零开销  |
+| `char-creator/player-init`       | `setup`     | `auto`（guard 门控）                  | agent         | builtin `create-form`                                        | 首轮表单 + setup 闸门           |
+| `npc-graph/rag-retriever`        | `pre-turn`  | `scheduled`（interval 1）             | function      | —                                                            | 给 narrator 预拉结构化检索      |
+| `narrator`                       | `narrative` | `auto`                                | agent         | builtin `world-dimension-get` / `emit-event`                 | 零代码主叙事 + 事件发射         |
+| `codex`                          | `post-turn` | `auto`                                | agent         | `tools.plugin` + plugin-data inject                          | JS 工具 + 已有条目预注入        |
+| `guide`                          | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | `tools.plugin`（generate-guide）                             | inject narrator output 生成选项 |
+| `npc-graph/extractor`            | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | `tools.plugin`（upsert / list-npc-graph）                    | NPC 关系抽取 + 写入图谱         |
+| `char-creator/character-tracker` | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | builtin create/update/get-character                          | 跟踪 NPC 状态变化               |
+| `memory`                         | —           | UI only（无 trigger）                 | UI            | —                                                            | 纯前端面板,不占调度槽           |
+
+> 上表四个 `post-turn` runtime 都用 `needs: [{ capability: narrative-engine }]` 门控在当前模式的叙事引擎上，因此传统模式（`narrator`）与对话模式（`chat-mode-narrator`）通用。
 
 完整注册表（含 stage 分带、capabilities、frontmatter 全字段）见 [docs/reference/plugins.md](../reference/plugins.md)。
 
@@ -206,7 +208,7 @@ export default async function validateTool(ctx, payload) {
 
 `TurnStart`、`PostCompaction`、`PostRuntime`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
 
-排序先看 `enforce: pre | normal | post`，再看全局 hook 与插件 hook 分组，最后保持声明顺序。完整事件表见 [插件参考 / hooks](../reference/plugins.md#hooks)。
+排序先看 `enforce: pre | normal | post`，再看全局 hook 与插件 hook 分组，最后保持声明顺序。完整事件表见 [插件参考 / hooks](../reference/plugins.md#hooksfrontmatter-声明式已弃用--改用-entry-的-covelon)。
 
 ### D. 文件结构速查
 

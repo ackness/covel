@@ -107,7 +107,7 @@ Covel 当前的工具层分成两类：
 当前代码状态：
 
 - `apps/server/src/routes/api/bootstrap.ts` 会统一注册 builtin 工具
-- trusted 插件声明的 local tool 会按 manifest 自动加载
+- trusted（builtin / official）插件的 `entry` 模块在启动时执行，其 `covel.registerTool()` 注册的工具随即可用；community 插件延迟到审批通过后激活
 - local tool 访问权限按 `pluginId` 隔离，调用方只能访问自己声明的 local tool
 - local tool 与 deterministic handler 当前可以使用注入的 `store` 完成插件包内批量写入
 

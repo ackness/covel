@@ -309,10 +309,6 @@ affected table in the relevant reference doc.
 - Kernel commit path: `packages/runtime/src/commit/session-commit-pipeline.ts`, `packages/runtime/src/commit/session-commit-handlers.ts`
 - MediaStore schema: [`media-store.md`](./media-store.md)
 
-```
-
-```
-
 ## World data 写入的一致性边界
 
 - **`POST /worlds/:id/sync-dimensions`** — 四阶段重写（删除过期 plugin-data 行 → 批量写入 → upsert lorebook → 删除过期 lorebook）在**一个 SessionLock + 一个 store transaction** 内完成。失败整体回滚并返回 500，不会让下一轮 prompt 读到「删了一半」的世界数据。

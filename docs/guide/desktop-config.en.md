@@ -1,5 +1,7 @@
 # Desktop config & data layout
 
+> 🇨🇳 [中文版本](./desktop-config.md)
+
 Applies to [`apps/desktop/`](../../apps/desktop/) (Electron). The desktop shell boots the same Node sidecar bundle and feeds it the env-var contract documented below.
 
 ## Directory structure
@@ -11,6 +13,7 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
   config.toml                ← data_root pointer + log rotation params
   llm.toml                   ← LLM slot config (provider / model / baseUrl)
   keys.env                   ← provider API keys, plain KEY=VALUE lines
+  settings.json              ← front-end preferences (unified SettingsStore: locale / appearance / slot overrides / per-plugin settings)
   plugins/                   ← user plugins (merged on top of bundled cores)
 
 <data_root>/                 ← default ~/.covel/data; redirectable
@@ -65,6 +68,6 @@ See [`llm.toml.example`](../../llm.toml.example) at repo root. Each slot pairs a
 
 ## Related docs
 
-- [README · Quick Start](../../README.en.md#quick-start) — download & first launch
+- [README · Quick Start](../../README.md#quick-start) — download & first launch
 - [apps/desktop/PACKAGING.md](../../apps/desktop/PACKAGING.md) — local desktop builds, signing, notarisation
 - [reference/api.md](../reference/api.md) — backend API reference

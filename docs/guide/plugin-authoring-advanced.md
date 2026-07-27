@@ -32,15 +32,15 @@ import type {
   TriggerConfig, // { type, interval?, topic?, maxTriggerCount?, cooldownTurns?, startTurn? }
 
   // 输入/输出
-  InputConfig, // { inject?, tools? }
-  InputInjectDecl, // { from, field, as }
+  InputConfig, // { schema?, inject?, tools? }
+  InputInjectDecl, // 按 kind 分的联合：runtime | plugin-data | runtime-export
   OutputConfig, // { schema?, recordAs? }
 
   // 工具
-  ToolsConfig, // { builtin?, plugin?, local?(已弃用) }
+  ToolsConfig, // { builtin?, plugin?, defer? } —— 没有 local，声明即加载失败
 
   // 玩家可调设置（PLUGIN.md `userSettings`）
-  PluginUserSettingSpec, // { key, type, default?, label, min?, max?, options? }
+  PluginUserSettingSpec, // { key, type, default?, label, description?, min?, max?, step?, options? }
 
   // 运行时数据
   TurnInput, // 每轮输入
@@ -219,7 +219,7 @@ plugins/my-combat/
 └── package.json
 ```
 
-`runtimes/*/PLUGIN.md` 才是真正的 runtime，有自己的优先级、触发条件和 LLM 提示词。它们可以：
+`runtimes/*/PLUGIN.md` 才是真正的 runtime，有自己的 stage、依赖边、触发条件和 LLM 提示词。它们可以：
 
 - 使用不同的 model slot（如战斗结算用 `balance`，初始化用 `fast`）
 - 设置不同的 trigger（如一个 auto，一个 event）

@@ -20,7 +20,7 @@ import type { DataStore } from "@covel/store";
  * receive their own session-scoped store surfaces.
  *
  * @param context - Caller label for the thrown message, so an author can tell
- *   which loading path denied them (`plugin-entry` vs `local-tools`).
+ *   which loading path denied them (`plugin-entry`).
  */
 export function scopeStoreToPlugin(
   store: DataStore,

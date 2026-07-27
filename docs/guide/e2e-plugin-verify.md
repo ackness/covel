@@ -190,3 +190,7 @@ A: `--plugin guide --turns 2 --slot e2e_local`。其它 runtime 依然会运行�
 1. 用 `llmock` 录制一遍真实响应，落到 `debugs/llm-cache/`
 2. 后续跑 `COVEL_LLM_REPLAY=replay` 确保只读缓存
 3. 退出码 `0` 即通过
+
+> 第 2 步是**规划中**的形态：`COVEL_LLM_REPLAY` / `COVEL_LLM_REPLAY_DIR` 在
+> [env-registry](./env-registry.md) 里仍标记为 `documented`——源码尚无读取方，replay
+> cache 未实现。当前要在 CI 控成本，靠 `llmock` 自己的录制/回放代理（第 1 步）即可。

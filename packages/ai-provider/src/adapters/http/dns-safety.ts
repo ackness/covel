@@ -24,7 +24,7 @@ const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
  * pinned to the exact answer, preserving the anti-rebinding guarantee.
  *
  * NEVER granted to:
- *  - the plugin `ctx.http` path (`trustedProviderPath: false`) — third-party
+ *  - the plugin `fetchWithRetry` path (`trustedProviderPath: false`) — third-party
  *    plugin code must not reach internal services even on a local machine;
  *  - IP-LITERAL URLs — a raw `https://10.0.0.1` stays subject to the
  *    public-only rule (url-safety's string check also blocks it upstream);

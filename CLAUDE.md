@@ -16,7 +16,9 @@ Before changing anything non-trivial, consult the matching reference doc — the
 | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Project intro, quick start, roadmap                  | [README.md](./README.md) · [docs/README.md](./docs/README.md)                                                           |
 | End-to-end turn pipeline, full architecture          | [docs/architecture/flow.md](./docs/architecture/flow.md)                                                                |
-| Plugin registry (all plugins, priorities, triggers)  | [docs/reference/plugins.md](./docs/reference/plugins.md)                                                                |
+| Why it is built this way (kernel vs plugin ruling)   | [docs/architecture/design-principles.md](./docs/architecture/design-principles.md)                                      |
+| Storage contracts (DataStore / MediaStore / caches)  | [docs/architecture/storage.md](./docs/architecture/storage.md)                                                          |
+| Plugin registry (all plugins, stages, triggers)      | [docs/reference/plugins.md](./docs/reference/plugins.md)                                                                |
 | World Data (`worldData`, source import, overrides)   | [docs/reference/world-data.md](./docs/reference/world-data.md)                                                          |
 | Tool registry (builtin + local, approval policy)     | [docs/reference/tools.md](./docs/reference/tools.md)                                                                    |
 | HTTP API (all endpoints, request/response, curl)     | [docs/reference/api.md](./docs/reference/api.md)                                                                        |
@@ -39,47 +41,21 @@ Before changing anything non-trivial, consult the matching reference doc — the
 
 ## Commands
 
-```bash
-# Install & dev
-pnpm install
-pnpm dev              # web (5173) + server (3001), SqliteStore (default, ./data/covel.db)
-pnpm dev:web          # web only
-pnpm dev:server       # server only (SqliteStore default; STORE_BACKEND=memory for ephemeral)
-pnpm dev:pg           # server only, STORE_BACKEND=pg (auto-runs db preflight; needs pnpm db:up)
-pnpm stop             # kill stray dev/turbo processes (dev-supervisor)
+The git pre-commit hook runs prettier + oxlint + the full `pnpm lint`. Only the commands
+with non-obvious behaviour are listed here — the rest are plain scripts in `package.json`.
 
-# Build & check — the git pre-commit hook runs prettier + oxlint + full `pnpm lint`
-pnpm build            # build all
-pnpm lint             # tsc --noEmit across workspace (turbo lint; run the FULL workspace, not one pkg)
-pnpm format           # prettier --write .   (format:check = verify-only, for CI)
+```bash
+pnpm dev              # web (5173) + server (3001), SqliteStore (default, ./data/covel.db)
+pnpm dev:server       # server only (SqliteStore default; STORE_BACKEND=memory for ephemeral)
+pnpm dev:pg           # STORE_BACKEND=pg — auto-runs db preflight, needs `pnpm db:up` first
+pnpm stop             # kill stray dev/turbo processes (dev-supervisor)
+pnpm lint             # tsc --noEmit — run the FULL workspace, not one pkg
 pnpm deps:check       # knip — flag unused / undeclared workspace deps
 pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs (check:plugins is a subset)
-pnpm test             # vitest via turbo (cached)
-pnpm test:coverage    # + @vitest/coverage-v8
-pnpm clean
-
-# Single package tests — add --watch for watch, --run for single run
-pnpm --filter @covel/runtime test
-pnpm --filter @covel/<pkg> test
-
-# Database (Docker)
-pnpm db:up / db:down / db:generate / db:migrate / db:studio
-
-# E2E
-pnpm e2e              # Playwright headless (e2e:ui for the runner UI)
 pnpm e2e:verify       # API-driven, real-LLM plugin harness (needs .env.llm); pass --slot e2e_local --turns 3
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
-pnpm validate:plugin  # validate PLUGIN.md manifests (loader compat parse + strict authoring schema); pass file or plugin dir, --compat for legacy
-
-
-# Docker (full stack)
-pnpm docker:build / docker:up / docker:down / docker:logs
-
-# Desktop
-pnpm dev:electron     # Electron dev shell (real sidecar)
-pnpm build:electron   # platform installer → release/ (build:desktop is an alias)
-
-# Release
+pnpm validate:plugin  # validate PLUGIN.md manifests; pass file or plugin dir, --compat for legacy
+pnpm build:electron   # production desktop installer → release/ (build:desktop is an alias)
 pnpm release:preflight  # static pre-tag gate: lockfile sync, import resolution, plugin/world/prompt structure
 ```
 
@@ -106,35 +82,9 @@ Provider API keys flow through the `SettingsStore` too: writes end up in `keys.e
 - ESM-only (`"type": "module"`), TypeScript strict, ES2022, NodeNext module resolution — **use `.js` extensions in TS imports**.
 - Packages export TS source directly (`"import": "./src/index.ts"`) — no build step for dev.
 
-```
-apps/
-  web/              Web UI (React 19 + Vite + TanStack Router, json-render + plugin-driven panels)
-  server/           Hono API + Drizzle ORM
-  desktop/          Electron shell (sidecar)
-
-packages/           16 internal packages: shared, settings, context, ai-provider,
-                    plugin-loader, runtime, store, state, events, tools,
-                    approval, memory, create, plugin-test-utils, test-runtime,
-                    plugin-handlers-utils (pure helper utils for plugin
-                    function-runtime handlers). `settings` carries the unified
-                    SettingsStore + localStorage/json-file backends, split out of
-                    `shared` so pure-type consumers avoid browser/Electron code.
-
-plugins/            23 bundled plugin packages (see docs/reference/plugins.md)
-prompts/            Externalised prompt templates (locale-aware markdown)
-worlds/             2 curated sample world packages (mistport / haruka-academy);
-                    archived worlds in worlds/_archive/ are not loaded
-```
-
-Dependency flow (rough):
-
-```
-shared ← context ← runtime ← server (composes all)
-shared ← ai-provider ← runtime   (runtime re-exports the Public Plugin API types)
-shared ← settings ← web
-```
-
-All feature packages (`ai-provider`, `plugin-loader`, `store`, `state`, `events`, `tools`, `approval`, `memory`, `create`) are composed by `@covel/server`. See any package's own `package.json` for exact edges.
+- Top level: `apps/` (web · server · desktop) · `packages/` · `plugins/` (see [docs/reference/plugins.md](./docs/reference/plugins.md)) · `prompts/` (externalised locale-aware prompt templates) · `worlds/` — **`worlds/_archive/` is not loaded**.
+- `@covel/settings` carries the unified SettingsStore + localStorage/json-file backends, split out of `shared` so pure-type consumers avoid pulling in browser/Electron code.
+- Dependency flow: `shared` is the root of everything; `@covel/server` is the composition point for every feature package. Exact edges live in each package's own `package.json`.
 
 ## Architecture Essentials
 
@@ -173,7 +123,7 @@ Session lifecycle tracked on `SessionRecord`:
 - `status: 'active' | 'paused' | 'ended'` — `paused`/`ended` halts scheduling.
 - `phase: 'setup' | 'playing'` — the stage-band selector (business truth; replaces the old `preGameCompleted`-derived band check).
 - `completedPlayerTurns: number` — business-truth count of completed **player** turns. Kernel auto-advances 0 → 1 once all setup runtimes report done. Non-player executions (manual plugin-rpc trigger, deferred background follower, nested `recursiveCall`) each persist their own `turn_results` row stamped with `origin` and are excluded from the count; several executions sharing one `turnId` count once.
-- `setupRuntimes: string[]` — business-truth runtimeIds that reported done during the `setup` stage.
+- `setupRuntimes: Record<runtimeId, SetupRuntimeState>` — business-truth per-runtime resolution mirror for the `setup` stage. `SetupRuntimeState` is a three-state union: `pending` / `done{resolution: "completed" | "waived"}` / `blocked` (retry budget exhausted — pins the session in setup until the `retry` / `waive` endpoints unblock it). Not a plain id list.
 
 `turnCount` and `preGameCompleted` are **legacy fields the kernel no longer writes** — API responses and snapshots derive them at read time from `phase` / `completedPlayerTurns` / `setupRuntimes` via a shared `deriveLegacyClockForSession` helper (response shape is unchanged). `turnCount` (now a derived value) still drives the UI turn display, auto-snapshot cadence, and snapshot numbering downstream of that derivation. The DB columns are retained (frozen) for old-kernel/rollback reads, and the one-time lazy backfill for pre-`phase` sessions is retained.
 
@@ -231,7 +181,7 @@ All store writes key on `pluginId`; all trace logs key on `runtimeId`.
 
 ### Tool scoping
 
-`bootstrap/local-tools.ts` builds `pluginToolAccess: Map<pluginId, Set<toolName>>`; the `findTool(name, context)` callback wired in `bootstrap/tools.ts` enforces (fail-closed — a call with no `context` resolves no local tool):
+`bootstrap/plugin-tool-access.ts` builds `pluginToolAccess: Map<pluginId, Set<toolName>>`; the `findTool(name, context)` callback wired in `bootstrap/tools.ts` enforces (fail-closed — a call with no `context` resolves no local tool):
 
 - Builtin tools — all plugins.
 - Local tools — only the declaring plugin.
@@ -307,7 +257,7 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 
 ## Security & Operations
 
-- **SSRF guard**: `validateBaseUrl()` in `ai-provider/adapters/http.ts` is **open by default** — any public https host is allowed. Blocks: RFC1918 / link-local IPs (`10.x` / `172.16-31.x` / `192.168.x` / `169.254.x` / `fc00::` / `fe80::`), cloud metadata hostnames (`metadata.google.internal`, `metadata.internal`), non-https on remote hosts, non-http(s) protocols. Loopback (`localhost` / `127.0.0.1` / `::1`) bypasses the https requirement for Ollama-style local dev. Additionally, core provider requests (`postJson` / `getJson` / `postFormData`) and the plugin `ctx.http` helper resolve DNS through a pinning dispatcher (`adapters/http/dns-safety.ts`): every A/AAAA answer must be publicly routable (loopback hostnames must resolve to loopback), closing the string-check-to-connect DNS-rebinding gap. **Self-tier exemption (core provider path only)**: on the `self` tier (desktop/self-deploy default — already loopback-bound with owner/operator tokens as no-ops), the core provider path (the user's own configured LLM `baseUrl`) accepts any resolver answer for a hostname (the socket is still pinned to it). Single-user local machines run TUN proxies (Clash/mihomo/sing-box/Surge map every domain into a private/benchmark range and route by SNI) and LAN endpoints (Ollama at `192.168.x.x`) that the public-only rule wrongly rejected. The exemption is NOT granted to the plugin `ctx.http` path (third-party plugin code stays strict — no probing the local network even on a desktop install), to IP-literal URLs (url-safety's string check still blocks private literals), or to hosted tiers (`demo`/`commercial` may run inside a cloud network where private answers reach real internal services). There is **no host allowlist env** — the guard is open by design; third-party plugin authors targeting custom provider hosts do not need any env shim (the never-read `COVEL_ALLOWED_LLM_HOSTS` registry entry was removed).
+- **SSRF guard**: `validateBaseUrl()` in `ai-provider/adapters/http.ts` is **open by default** — any public https host is allowed. Blocks: RFC1918 / link-local IPs (`10.x` / `172.16-31.x` / `192.168.x` / `169.254.x` / `fc00::` / `fe80::`), cloud metadata hostnames (`metadata.google.internal`, `metadata.internal`), non-https on remote hosts, non-http(s) protocols. Loopback (`localhost` / `127.0.0.1` / `::1`) bypasses the https requirement for Ollama-style local dev. Additionally, core provider requests (`postJson` / `getJson` / `postFormData`) and the plugin `fetchWithRetry` helper (`plugin-utils.ts`; surfaced as `ctx.utils.fetchWithRetry` to handlers and `covel.http.fetchWithRetry` to entry modules) resolve DNS through a pinning dispatcher (`adapters/http/dns-safety.ts`): every A/AAAA answer must be publicly routable (loopback hostnames must resolve to loopback), closing the string-check-to-connect DNS-rebinding gap. **Self-tier exemption (core provider path only)**: on the `self` tier (desktop/self-deploy default — already loopback-bound with owner/operator tokens as no-ops), the core provider path (the user's own configured LLM `baseUrl`) accepts any resolver answer for a hostname (the socket is still pinned to it). Single-user local machines run TUN proxies (Clash/mihomo/sing-box/Surge map every domain into a private/benchmark range and route by SNI) and LAN endpoints (Ollama at `192.168.x.x`) that the public-only rule wrongly rejected. The exemption is NOT granted to the plugin `fetchWithRetry` path (third-party plugin code stays strict — no probing the local network even on a desktop install), to IP-literal URLs (url-safety's string check still blocks private literals), or to hosted tiers (`demo`/`commercial` may run inside a cloud network where private answers reach real internal services). There is **no host allowlist env** — the guard is open by design; third-party plugin authors targeting custom provider hosts do not need any env shim (the never-read `COVEL_ALLOWED_LLM_HOSTS` registry entry was removed).
 - **Env-key origin binding (S-01)**: server-env / platform API keys flow to the gateway as `envApiKeys`, separate from request-supplied `X-Provider-Keys` (`apiKeys`). The provider registry only attaches an env key when the resolved target's baseUrl origin matches trusted config (llm.toml / registered provider defaults) — a request-scoped custom preset (`X-Slot-Config` overlay) that redirects a provider to another origin gets no env key and no trusted default headers; it must supply its own key.
 - **Hosted auth (S-02/C-01/C-02)**: `demo` / `commercial` tiers enforce a per-session **owner token** (minted at session create, hash-persisted in `SessionRecord.metadata`, returned once) on every session-scoped route, and an **operator token** (`COVEL_DESKTOP_REST_TOKEN`, also a master key that passes any owner check) on global/admin routes (session create/list, world writes, AI/model, community server-code activation). `validateSecurityPosture` fails boot on a hosted tier missing the operator token / media secret / CORS origin. The server binds `127.0.0.1` by default (`COVEL_BIND_HOST` opts into `0.0.0.0`). `self` / desktop / dev are a strict no-op (single-user local play unchanged). Community server code (`entry` / handler / hook / wire / runtime JS) is import-gated behind two-phase approval (a `covel:plugin-server-code` grant, then the action grant). Full model: [docs/reference/api.md](./docs/reference/api.md) 鉴权 section.
 - **Signed media URLs**: `middleware/media-token.ts` signs `MediaRef` URLs with `COVEL_MEDIA_TOKEN_SECRET`. Desktop shells must provision it or generated images/portraits fail to load; web uses an ephemeral per-boot secret.

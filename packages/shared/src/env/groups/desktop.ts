@@ -99,6 +99,14 @@ export const DESKTOP_ENV_VARS = [
     description: "Desktop log rotation retained file count.",
   },
   {
+    name: "COVEL_SERVER_LOG_FILE",
+    group: "desktop",
+    type: "path",
+    status: "active",
+    description:
+      "Overrides where the server tees its stdout/stderr. Empty string disables the tee entirely; unset falls back to server.log under the logs directory.",
+  },
+  {
     name: "COVEL_APP_VERSION",
     group: "desktop",
     type: "string",

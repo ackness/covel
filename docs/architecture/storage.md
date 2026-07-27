@@ -2,12 +2,12 @@
 
 Covel storage has four separate contracts:
 
-| Category                  | Contract                    | Main implementations                           | Owner                                              |
-| ------------------------- | --------------------------- | ---------------------------------------------- | -------------------------------------------------- |
-| Business records          | `DataStore`                 | memory, sqlite, pg, idb                        | `@covel/store`                                     |
-| Binary assets             | `MediaStore`                | memory, sqlite, pg, idb                        | `@covel/store`                                     |
-| User preferences and keys | `SettingsStore`, `keys.env` | localStorage, Electron IPC, desktop REST files | `@covel/shared`, desktop shells, server config API |
-| Frontend caches           | app KV, media cache         | browser IndexedDB databases                    | `apps/web` storage facade                          |
+| Category                  | Contract                    | Main implementations                           | Owner                                                |
+| ------------------------- | --------------------------- | ---------------------------------------------- | ---------------------------------------------------- |
+| Business records          | `DataStore`                 | memory, sqlite, pg, idb                        | `@covel/store`                                       |
+| Binary assets             | `MediaStore`                | memory, sqlite, pg, idb                        | `@covel/store`                                       |
+| User preferences and keys | `SettingsStore`, `keys.env` | localStorage, Electron IPC, desktop REST files | `@covel/settings`, desktop shells, server config API |
+| Frontend caches           | app KV, media cache         | browser IndexedDB databases                    | `apps/web` storage facade                            |
 
 ## Backend Selection
 
@@ -67,10 +67,14 @@ user-authored worlds together. Small config and secrets remain under
 
 The web tier now has a storage facade under `apps/web/src/services/storage/`:
 
-- `data-store.ts` owns browser `DataStore` creation (`covel-browser`).
-- `media-store.ts` owns browser `MediaStore` creation (`covel-browser`).
+- `data-store.ts` owns browser `DataStore` creation (`covel-browser`) and exports `BROWSER_STORAGE_DB_NAME`.
 - `mode.ts` owns `covel:storageMode`.
 - `legacy-keys.ts` registers storage-related localStorage keys and prefixes.
+
+The browser `MediaStore` factory is no longer part of this facade — media on the
+web tier goes through the read-through render cache in
+`apps/web/src/lib/media-cache.ts` (same `covel-browser` database), and durable
+media stays server-side.
 
 The unified browser database is `covel-browser`. It contains local-mode
 business records, the browser `MediaStore`, frontend app-KV records, and the

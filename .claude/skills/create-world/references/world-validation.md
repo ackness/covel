@@ -4,27 +4,65 @@
 
 | 层 | 检查什么 | 怎么跑 | 必做? |
 |---|---|---|---|
-| **L1 Schema** | `validateWorldManifest`(Zod strict) | 一行 node 命令 | ✓ 必须 |
+| **L1 Schema** | `worldManifestSchema`(Zod strict) | 一行 tsx 命令 | ✓ 必须 |
+| **L1b worldData** | `worldDataDescriptorSchema`(Zod strict) | 一行 tsx 命令 | 声明了 `worldData` 时必须 |
 | **L2 引用一致性** | faction.relations.targetId 指向的 id 真实存在 | 一行 node 脚本 | 当 factions 含 relations 时必须 |
 | **L3 内容完整度** | WORLD.md 是否引用了 yaml 里的关键 region/faction/事件 | 人工肉眼或 grep | 准备发布时建议 |
+
+> **为什么是 `tsx` 而不是 `node`**：workspace 包直接导出 TS 源码(`"import": "./src/index.ts"`,没有构建产物),裸 `node` 会在 `@covel/shared` 上抛 `ERR_MODULE_NOT_FOUND`。同理别写 `import '@covel/shared'` —— 仓库根目录不依赖它,要按**相对路径**直接导入 schema 文件。只用 `yaml` + `fs` 的脚本(L2/L3)不受影响,纯 `node` 就能跑。
 
 ---
 
 ## L1 — Schema 校验(必做)
 
+在仓库根目录执行:
+
 ```bash
-node --input-type=module -e "
+npx tsx -e "
 import { parse } from 'yaml';
 import { readFileSync } from 'fs';
-import { validateWorldManifest, formatValidationErrors } from '@covel/shared';
+import { worldManifestSchema } from './packages/shared/src/schemas/world.ts';
 const y = parse(readFileSync('worlds/<id>/world.yaml','utf-8'));
-const r = validateWorldManifest(y);
-if(!r.valid){console.error(formatValidationErrors(r.errors));process.exit(1)}
+const r = worldManifestSchema.safeParse(y);
+if(!r.success){ for(const i of r.error.issues) console.error(\`  \${i.path.join('.')||'(root)'}: \${i.message}\`); process.exit(1); }
 console.log('schema OK');
 "
 ```
 
-仓库外世界(`~/.covel/worlds/<id>/`)同样脚本,但要在 `packages/plugin-loader/`(或任何已经 link 了 `@covel/shared` + `yaml` 的子目录) 下执行。
+失败输出形如:
+
+```
+  id: id must be lowercase with hyphens (e.g. "my-world")
+  (root): Unrecognized key: "bogusField"
+```
+
+仓库外世界(`~/.covel/worlds/<id>/`)用同一条命令,把 `readFileSync` 的路径换成绝对路径即可 —— schema 仍从本仓库相对路径导入。
+
+---
+
+## L1b — worldData descriptor 校验(声明了 worldData 就跑)
+
+`data/world.data.yaml` 走另一套 strict schema,manifest 校验通过**不代表**它合法:
+
+```bash
+npx tsx -e "
+import { parse } from 'yaml';
+import { readFileSync } from 'fs';
+import { worldDataDescriptorSchema } from './packages/shared/src/schemas/world-data.ts';
+const d = parse(readFileSync('worlds/<id>/data/world.data.yaml','utf-8'));
+const r = worldDataDescriptorSchema.safeParse(d);
+if(!r.success){ for(const i of r.error.issues) console.error(\`  \${i.path.join('.')||'(root)'}: \${i.message}\`); process.exit(1); }
+console.log('worldData OK');
+"
+```
+
+常见失败:
+
+- `schemaVersion` 写成 `"1"`(字符串)—— 必须是数字字面量 `1`
+- source id 不符合 `^[a-z][a-zA-Z0-9_-]{0,63}$`(如 `Cast`、`1cast`)
+- `to: media` 的 source 忘了写 `indexTo` —— **schema 会放行,但导入是 no-op**:字节进不了插件索引,舞台拿不到立绘/背景。凡是 `kind: media`,检查它有没有配套的 `indexTo`
+
+`after` 引用的 source id 必须在同一份 descriptor 里真实存在,这条 schema 不查,靠肉眼。
 
 ---
 
@@ -110,6 +148,7 @@ if (missing.length){
 ```
 写完 world.yaml + WORLD.md
 └─ L1 schema 校验(必做)
+   ├─ 声明了 worldData? → L1b descriptor 校验
    ├─ factions 有 relations? → L2 引用检查
    └─ 准备发布?
       ├─ 是 → L3 lore 覆盖度 grep + L4 真实游戏跑一回合

@@ -4,8 +4,6 @@
 .claude/*
 !.claude/skills/
 /.claude/skills/*
-!/.claude/skills/agent-browser/
-!/.claude/skills/agent-browser/**
 !/.claude/skills/create-plugin/
 !/.claude/skills/create-plugin/**
 !/.claude/skills/create-world/

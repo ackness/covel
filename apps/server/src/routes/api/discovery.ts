@@ -63,7 +63,6 @@ export interface RuntimePluginContract {
     handler: string;
     input?: unknown;
     trustLevel?: string;
-    streaming: boolean;
     description?: unknown;
   }>;
   hooks: unknown[];
@@ -268,7 +267,6 @@ function buildRuntimeContract(
       handler: decl.handler,
       ...(decl.input ? { input: decl.input } : {}),
       ...(decl.trustLevel ? { trustLevel: String(decl.trustLevel) } : {}),
-      streaming: decl.streaming ?? false,
       ...(decl.description ? { description: decl.description } : {}),
     })),
     hooks: [...(manifest.hooks ?? [])],

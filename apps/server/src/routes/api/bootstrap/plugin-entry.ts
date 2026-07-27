@@ -12,11 +12,12 @@
  *     covel.registerWires({ image: [myWire] });
  *   }
  *
- * This is the successor of the four legacy registration fields
- * (`tools.local`, `hooks`, `rpc`, `wires`), which keep working for one
- * deprecation cycle (warned once per plugin at boot).
+ * This is the successor of the four legacy registration fields. `tools.local`
+ * has been removed outright (declaring it fails the manifest load); `hooks` /
+ * `rpc` / `wires` still parse but are deprecated (warned once per plugin at
+ * boot).
  *
- * Trust gating mirrors local-tools.ts / plugin-wires.ts: builtin/official
+ * Trust gating mirrors plugin-wires.ts: builtin/official
  * entries run at bootstrap; community entries run on `ensurePluginEntry()`
  * (memoized, in-flight-deduped) — wired into the same activation seams as
  * local tools and wires.

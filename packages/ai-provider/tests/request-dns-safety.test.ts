@@ -3,7 +3,7 @@
  * the DNS-pinning dispatcher, so a hostname that passes the string-level
  * `validateBaseUrl` check but resolves to a private / loopback address is
  * rejected at connect time (closing the SSRF / DNS-rebinding gap that
- * previously only the plugin `ctx.http` helper covered).
+ * previously only the plugin `fetchWithRetry` helper covered).
  *
  * DNS is mocked; a private answer must fail before any socket I/O. The
  * loopback happy path runs against a real local HTTP server to prove the
@@ -79,7 +79,7 @@ describe("core request DNS SSRF safety", () => {
     }
   });
 
-  it("self tier still rejects private answers on the ctx.http (plugin) path", async () => {
+  it("self tier still rejects private answers on the fetchWithRetry (plugin) path", async () => {
     // Third-party plugin code never gets the self-tier exemption, so it can
     // not probe the local network even on a desktop install.
     lookupMock.mockResolvedValue([

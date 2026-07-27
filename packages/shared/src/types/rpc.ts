@@ -89,8 +89,6 @@ export interface RpcActionDecl {
   readonly input?: string;
   /** Trust level for approval gating. Defaults to the plugin's source trust. */
   readonly trustLevel?: RpcTrustLevel;
-  /** Whether the handler streams progress events. Defaults to `false`. */
-  readonly streaming?: boolean;
   /** One-line human-readable description for UI / approval dialogs. */
   readonly description?: string;
 }

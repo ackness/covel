@@ -101,8 +101,8 @@ export interface PluginDataInjectDecl {
  * Consume a producer runtime's persisted `recordAs` export from a previous
  * execution. The consumer reads the latest revision committed before this
  * execution started. Functions read `ctx.exports.<name>`; agents receive a
- * same-named prompt segment. Declared but not yet consumed by the framework —
- * consumption lands with the I/O-contract migration step.
+ * same-named prompt segment. Resolved by
+ * `@covel/runtime`'s `schedule/input-bindings.ts` (`exportBindings`).
  */
 export interface RuntimeExportInjectDecl {
   readonly kind: "runtime-export";
@@ -464,9 +464,9 @@ export interface RuntimeManifest {
    * registers the plugin's server-side capabilities imperatively —
    * `covel.registerTool()`, `covel.on(event, handler)`,
    * `covel.registerRpc()`, `covel.registerWires()` — replacing the legacy
-   * `tools.local` / `hooks` / `rpc` / `wires` frontmatter fields (which
-   * keep working for one deprecation cycle). Declare on ONE runtime per
-   * plugin (root PLUGIN.md by convention); loaded once per plugin,
+   * registration fields. `tools.local` is GONE (declaring it fails the load);
+   * `hooks` / `rpc` / `wires` still parse but are deprecated. Declare on ONE
+   * runtime per plugin (root PLUGIN.md by convention); loaded once per plugin,
    * trust-gated like local tools (builtin/official at boot, community on
    * activation).
    */
@@ -601,15 +601,20 @@ export interface RuntimeManifest {
    */
   readonly resultFormat?: import("./runtime-scheduling.js").RuntimeResultFormat;
   /**
-   * Explicit read/write-set override for parallel hazard detection.
-   * Defaults are derived from declared builtin tools + proposal types.
-   * Declared but not yet consumed.
+   * Explicit read/write-set override for parallel hazard detection. Defaults
+   * are derived from declared builtin tools / events / dataSchemas / ui /
+   * outputKind; an explicit declaration is UNIONed with that derivation (it can
+   * add, never remove). Consumed by `@covel/runtime`'s `schedule/effects.ts`;
+   * same-layer hazards warn by default, `COVEL_EFFECTS_POLICY=strict` splits
+   * conflicting pairs into serial sub-levels.
    */
   readonly effects?: import("./runtime-scheduling.js").EffectsDecl;
   /**
    * Declared permission upper bounds. `http` lists canonical HTTPS origins
-   * (+ methods) this plugin may call through the Public Plugin API.
-   * Declared but not yet enforced.
+   * (+ methods) this plugin may call through the Public Plugin API. Enforced
+   * fail-closed for **community**-tier plugins by
+   * `runtime/function-runtime/http-permissions.ts`; builtin / official are
+   * trusted and pass through unchecked.
    */
   readonly permissions?: {
     readonly http?: readonly import("./runtime-scheduling.js").HttpPermissionDecl[];

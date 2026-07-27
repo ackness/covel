@@ -42,7 +42,7 @@ Open a side panel mid-play and you are reading what the background agents wrote 
 
 ### Play
 
-Download the **macOS Apple Silicon** build from [Releases](https://github.com/ackness/covel/releases), then: open Settings → paste an LLM API key → pick a world → play.
+Download the **macOS Apple Silicon** or **Windows x64** build from [Releases](https://github.com/ackness/covel/releases), then: open Settings → paste an LLM API key → pick a world → play.
 
 Your data lives in `~/.covel/` (config, keys, SQLite, custom worlds, logs) — details in the [desktop config guide](./docs/guide/desktop-config.en.md). Per-release notes: [`docs/CHANGELOG.md`](./docs/CHANGELOG.md).
 
@@ -83,7 +83,7 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono 
 
 ## Roadmap
 
-- Windows / Linux / Intel Mac builds
+- Linux / Intel Mac builds (macOS arm64 and Windows x64 already ship)
 - Official community hub for plugins and world packs
 - Plugin marketplace inside the desktop app
 

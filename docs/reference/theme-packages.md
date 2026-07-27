@@ -14,6 +14,7 @@
 - 导入解析：`apps/web/src/theme-system/validate.ts`
 - 持久化：`apps/web/src/theme-system/storage.ts`
 - 内置主题包：`apps/web/src/themes/builtins/*`
+- 外观工作室（见 §9）：token 覆盖 `overrides.ts` · 可编辑 token 清单 `token-schema.ts` · 另存为主题 `theme-export.ts` · 颜色工具 `color.ts`
 
 当前运行时主题切换入口是：
 
@@ -197,6 +198,7 @@ apps/web/src/themes/builtins/
 
 ### 5.5 字体与排版 token
 
+- `--font-sans`
 - `--font-display`
 - `--font-serif`
 - `--font-mono`
@@ -326,7 +328,18 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 
 运行时会把这些记录恢复为 `ThemeDefinition`，并与内置主题一起排序和注册。
 
-## 9. 兼容性建议
+## 9. 外观工作室（token 覆盖 / 另存为主题）
+
+玩家不写 CSS 也能改外观：设置 → 外观提供逐 token 的控件（`token-schema.ts` 的 `TOKEN_GROUPS` 定义哪些 token 可编辑、用什么控件、有哪些预设值，包括字体栈 `FONT_STACKS` 与氛围底纹 `AMBIENCE_PRESETS`）。
+
+- **存储**：覆盖值存在设置项 `ui.appearanceTokens`，形状为 `{ shared, light, dark }`——**颜色按明暗模式分开存，尺寸 / 字体 / 圆角在两种模式间共享**。单个值上限 2048 字符（防止粘贴 data-URL 撑爆 localStorage 配额、连累其它设置）。
+- **生效方式**：`applyTokenOverrides()` 把 `{...shared, ...当前 scheme}` 作为**内联 style 写到 `<html>`**，因此优先级高于主题包 CSS；上一轮写入但本轮已移除的属性会被显式清掉，不留孤儿。非法 CSS 值由 CSSOM 直接丢弃——失败即回落到主题自己的值。
+- **基线读取**：`readTokenDefaults()` 临时撤下覆盖读出主题原值，再在同一同步块里恢复，所以控件能显示「未覆盖时是什么」且浏览器不会画出中间态。
+- **另存为主题**：`theme-export.ts` 的 `buildThemeCss()` 把当前覆盖编译成标准 `html[data-theme="..."]` CSS，`slugifyThemeId()` / `ensureThemeId()` 生成不冲突的 ID，产物就是一个普通自定义主题包（走 §8 的 `ui.customThemes` 持久化），可导出分发。
+
+覆盖是**全局的、不按主题分桶**（`ui.appearanceTokens` 只有 `shared` / `light` / `dark` 三个桶）：换主题后同一批覆盖继续叠加在新主题之上。想回到主题原貌需显式清除覆盖（`clearOverrides` / 逐项 `clearTokenOverride`）。写入前经 `isAdjustableToken` 过滤——只有 `TOKEN_GROUPS` 声明过的 token 能被覆盖，任意 CSS 变量无法经此通道注入。
+
+## 10. 兼容性建议
 
 想获得稳定兼容性的主题包，推荐遵守这组策略：
 

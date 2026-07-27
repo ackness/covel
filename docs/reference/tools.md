@@ -6,32 +6,36 @@
 
 ## 概览
 
-| 工具名                  | 来源    | 所属插件   | 审批策略   | 描述                                                                                |
-| ----------------------- | ------- | ---------- | ---------- | ----------------------------------------------------------------------------------- |
-| create-form             | builtin | —          | auto-allow | 创建玩家表单                                                                        |
-| create-choices          | builtin | —          | auto-allow | 创建选项列表                                                                        |
-| create-notification     | builtin | —          | auto-allow | 显示通知消息                                                                        |
-| render-ui               | builtin | —          | auto-allow | 渲染带独立 part 状态的 UI 块                                                        |
-| plugin-data-set         | builtin | —          | auto-allow | 写入插件持久化数据（单条）                                                          |
-| plugin-data-set-batch   | builtin | —          | auto-allow | 批量写入插件持久化数据                                                              |
-| plugin-data-get         | builtin | —          | auto-allow | 读取当前插件持久化数据                                                              |
-| plugin-data-list        | builtin | —          | auto-allow | 列出当前插件持久化数据                                                              |
-| **create-character**    | builtin | —          | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data             |
-| **update-character**    | builtin | —          | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                            |
-| **list-characters**     | builtin | —          | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                               |
-| **get-character**       | builtin | —          | auto-allow | 按 id 或 name 查找单个角色                                                          |
-| **world-dimension-get** | builtin | —          | auto-allow | 按需读取当前 session 世界的结构化维度字段                                           |
-| **emit-event**          | builtin | —          | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema    |
-| **suspend**             | builtin | —          | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复          |
-| **runtime-done**        | builtin | —          | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                    |
-| **search-tools**        | 注入    | —          | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 |
-| **memory-search**       | builtin | —          | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)           |
-| **memory-get-block**    | builtin | —          | auto-allow | 读取一个核心记忆块的当前内容                                                        |
-| **memory-update-block** | builtin | —          | auto-allow | 更新（完整替换）一个核心记忆块。无 capability 门控——列入 tools.builtin 即可用       |
-| set-world-schema        | local   | world-init | auto-allow | 定义世界角色属性 Schema                                                             |
-| set-world-entries-batch | local   | world-init | auto-allow | 批量写入世界词条                                                                    |
-| unlock-codex-entries    | local   | codex      | auto-allow | 批量解锁图鉴条目                                                                    |
-| update-codex-entry      | local   | codex      | auto-allow | 更新已有图鉴条目                                                                    |
+| 工具名                  | 来源    | 所属插件      | 审批策略   | 描述                                                                                |
+| ----------------------- | ------- | ------------- | ---------- | ----------------------------------------------------------------------------------- |
+| create-form             | builtin | —             | auto-allow | 创建玩家表单                                                                        |
+| create-choices          | builtin | —             | auto-allow | 创建选项列表                                                                        |
+| create-notification     | builtin | —             | auto-allow | 显示通知消息                                                                        |
+| render-ui               | builtin | —             | auto-allow | 渲染带独立 part 状态的 UI 块                                                        |
+| plugin-data-set         | builtin | —             | auto-allow | 写入插件持久化数据（单条）                                                          |
+| plugin-data-set-batch   | builtin | —             | auto-allow | 批量写入插件持久化数据                                                              |
+| plugin-data-get         | builtin | —             | auto-allow | 读取当前插件持久化数据                                                              |
+| plugin-data-list        | builtin | —             | auto-allow | 列出当前插件持久化数据                                                              |
+| **create-character**    | builtin | —             | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data             |
+| **update-character**    | builtin | —             | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                            |
+| **list-characters**     | builtin | —             | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                               |
+| **get-character**       | builtin | —             | auto-allow | 按 id 或 name 查找单个角色                                                          |
+| **world-dimension-get** | builtin | —             | auto-allow | 按需读取当前 session 世界的结构化维度字段                                           |
+| **emit-event**          | builtin | —             | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema    |
+| **suspend**             | builtin | —             | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复          |
+| **runtime-done**        | builtin | —             | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                    |
+| **search-tools**        | 注入    | —             | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 |
+| **memory-search**       | builtin | —             | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)           |
+| **memory-get-block**    | builtin | —             | auto-allow | 读取一个核心记忆块的当前内容                                                        |
+| **memory-update-block** | builtin | —             | auto-allow | 更新（完整替换）一个核心记忆块。无 capability 门控——列入 tools.builtin 即可用       |
+| set-world-schema        | local   | world-init    | auto-allow | 定义世界角色属性 Schema                                                             |
+| set-world-entries-batch | local   | world-init    | auto-allow | 批量写入世界词条                                                                    |
+| unlock-codex-entries    | local   | codex         | auto-allow | 批量解锁图鉴条目                                                                    |
+| update-codex-entry      | local   | codex         | auto-allow | 更新已有图鉴条目                                                                    |
+| generate-guide          | local   | guide         | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`      |
+| upsert-npc-graph        | local   | npc-graph     | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                  |
+| list-npc-graph          | local   | npc-graph     | auto-allow | 读取现有 NPC 图；图已注入 prompt，仅在需要某关系完整 `fact` 时按需调用              |
+| generate-scene-prompts  | local   | scene-prompts | auto-allow | 写入对话模式的玩家口吻快捷回复                                                      |
 
 ---
 
@@ -329,7 +333,7 @@ interface UIRenderPart {
 
 **一次一个 topic**：单次调用只发射一条事件；需要发多个领域事件时多次调用 `emit-event`。
 
-**去重的作用域是单个 tool loop**：`emittedEventTopics` 由 agent tool loop 逐次累积，因此同一 runtime 在同一回合内重复发同一 topic 会被 no-op。它**不跨 runtime**——同优先级并行组里的两个 runtime 可以各自发同一 topic。这不是缺陷：事件 fan-out 收集阶段按 topic 汇聚（同一深度内 first-emission-wins，见 `collectEventsFrom`），所以下游订阅者仍只被触发一次。
+**去重的作用域是单个 tool loop**：`emittedEventTopics` 由 agent tool loop 逐次累积，因此同一 runtime 在同一回合内重复发同一 topic 会被 no-op。它**不跨 runtime**——同一 DAG 层级（并行组）里的两个 runtime 可以各自发同一 topic。这不是缺陷：事件 fan-out 收集阶段按 topic 汇聚（同一深度内 first-emission-wins，见 `collectEventsFrom`），所以下游订阅者仍只被触发一次。
 
 **使用者**：任何声明了 `advertiseEvents: true` 且在 `tools.builtin` 里包含 `emit-event` 的 agent runtime，例如 `narrator`、`chat-mode-narrator`。
 
@@ -424,7 +428,7 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 > **提交语义（缓冲提交）**：`create-character` / `update-character` 在执行阶段**不再直写** `characters` 表，而是把写入缓冲成一条 [`character.upsert`](#characterupsert) proposal。同一 tool loop 内的读取走**读穿透 overlay**——先 create 再 update 时，update 能读到自己刚缓冲的 create。真正的 `characters` 表写入 + plugin-data 镜像（`characters` namespace）由 commit handler 在回合结束时随该执行的**单一事务**一起落库：`success` / `skipped` 结果会提交其缓冲 proposal，`failed` / `suspended` 则不提交。
 
-> **Turn-band 重构注记**：`create-character` 原本接受 `transitionPhase` 参数并通过 `CharacterToolHooks.onPhaseTransition` 驱动 SSE `phase.changed` 广播。该路径在 turn-band 重构中被移除——`SessionRecord.phase` 字段已去除，Pre-Game 段落的完成由 runtime 输出 `preGameDone: true` 累加到 `session.preGameCompleted` 集合表达。该工具不再触发任何 phase / status 副作用。
+> **Turn-band 重构注记**：`create-character` 原本接受 `transitionPhase` 参数并通过 `CharacterToolHooks.onPhaseTransition` 驱动 SSE `phase.changed` 广播。该路径在 turn-band 重构中被移除——setup 段落的完成改由 runtime 输出 `preGameDone: true`，框架据此写入 `session.setupRuntimes`（per-runtime 解析状态 map，见 `SetupRuntimeState`）；`session.phase`（`setup` / `playing`）仍是 stage-band 选择器，但由框架自己推进，工具无从触碰。legacy 的 `session.preGameCompleted` 现为读时派生的兼容字段。该工具不再触发任何 phase / status 副作用。
 
 ---
 
@@ -712,13 +716,13 @@ Bootstrap 时自动分类：
 
 ### 第三方插件 server-code / local tool 审批边界
 
-社区插件（位于 `~/.covel/plugins/` 或后续添加的非 first-dir 来源）会被 `getPluginTrustInfo` 标记为 `community`，bootstrap 在启动阶段**跳过这些插件的 `entry` 执行与 `tools.local` 急加载**（见 `apps/server/src/routes/api/bootstrap/plugin-entry.ts` / `local-tools.ts` 中 `if (!trust.autoLoad) continue;`）。
+社区插件（位于 `~/.covel/plugins/` 或后续添加的非 first-dir 来源）会被 `getPluginTrustInfo` 标记为 `community`，bootstrap 在启动阶段**跳过这些插件的 `entry` 执行**（见 `apps/server/src/routes/api/bootstrap/plugin-entry.ts` 中 `if (!trust.autoLoad) continue;`；工具访问表由 `plugin-tool-access.ts` 构建）。
 
 完整的 approval 生命周期 **discovered → approved → import → active → revoked / uninstalled 现已实现**：
 
 - **discovered**：拖拽 zip 经 `POST /api/install/plugin` 安装（含反 shadow 校验：保留内置 ID、强制 package.json 与 PLUGIN.md 名一致）。
 - **approved**：首次 deferred entry 调用先审批固定的 `covel:plugin-server-code`，加载并验证真实 action 后再做 action 审批。server-code 与 `runtime:*` 只接受 session scope；普通 action 支持 once/session。hosted 环境还要求 operator token，因为 community ESM 在服务端进程内执行。
-- **import**：approve 后经 `activatePluginServerCode` JIT 懒加载该插件的服务端代码——先执行 `entry` 工厂（`ensurePluginEntry`）、再加载旧式 `tools.local`（allow 决定时 + RPC 派发时各触发一次）。
+- **import**：approve 后经 `activatePluginServerCode` JIT 懒加载该插件的服务端代码——执行 `entry` 工厂（`ensurePluginEntry`，allow 决定时 + RPC 派发时各触发一次）。
 - **active**：运行期工具调用受真实审批规则门控（builtin allow / local allow / third-party deny）。
 - **revoked**：`DELETE /api/sessions/:id/approvals[?pluginId=]` 与 plugin disable 会同时清除 session grant、one-time grant 和 pending approval。community grant 不跨 create/fork/进程重启恢复。
 - **uninstalled**：`DELETE /api/plugins/:id` 删除 `~/.covel/plugins/<id>` 目录（拒绝内置 ID，返回 `restartRequired:true`）；前端 Settings → Packages 面板列出已安装第三方插件并提供卸载按钮。
@@ -830,7 +834,7 @@ POST /api/sessions/:id/plugin-rpc
 
 ### 方式一：工厂函数（推荐）
 
-插件本地工具使用工厂函数模式，框架通过注入提供 `tool`, `z`, `shortId`, `shortIdBatch`, `withPendingProposals`, `store`：
+插件本地工具使用工厂函数模式，工厂参数就是 `covel.toolkit`——框架注入 `tool`, `z`, `shortId`, `shortIdBatch`, `withPendingProposals`, `store`：
 
 ```javascript
 // tools/my-tool.js
@@ -881,17 +885,29 @@ export const myTool = tool({
 
 > 注意：直接导出模式无法使用 `shortId` 注入，需自行从 `@covel/tools` 导入。
 
-### 声明方式
+### 注册与声明
 
 如需玩家交互，在返回值中添加 `interaction`（见上方交互协议）。
 
-在 `PLUGIN.md` frontmatter 中声明：
+工具分两步接入——**在 `entry` 模块里注册**，再**在使用它的 runtime manifest 里声明可见性**：
+
+```js
+// server/index.js —— 由根 PLUGIN.md 的 `entry: ./server/index.js` 指向
+import makeMyTool from "../tools/my-tool.js";
+
+export default function (covel) {
+  covel.registerTool(makeMyTool(covel.toolkit));
+}
+```
 
 ```yaml
+# 使用该工具的 runtime 的 PLUGIN.md
 tools:
-  local:
-    - ./tools/my-tool-name.js
+  plugin: # entry 注册的工具名（不是文件路径）
+    - my-tool-name
 ```
+
+> `tools.local`（路径列表）**已移除**：声明它会让整个 manifest 加载失败。`tools.plugin` 只控制 LLM 可见面，执行权来自注册成功本身——声明了未注册的名字时该名字解析失败，不会命中其他插件的同名实现。
 
 ## Proposal 类型
 
@@ -930,7 +946,7 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
 
 ### `working_memory.set`（S3-T3）
 
-写入 session 级工作记忆。commit handler 把 payload 持久化到 `working_memory` 表，并发出一个名为 `working_memory.changed` 的 KernelEvent（runtime 内部事件，目前**不会**通过 SSE 推到前端 —— 相关接入状态见 `docs/reference/protocol.md` 的 "Working Memory / 上下文压缩事件" 段落）。
+写入 session 级工作记忆。commit handler 把 payload 持久化到 `working_memory` 表，并发出一个名为 `working_memory.changed` 的事件。该事件作为 commit event **直接写入 action stream**（不走 eventBus 转发，故 `COVEL_EVENT_META` 里 `forwardToActionStream: false`），前端 SSE handler 收到后**刻意不渲染**——工作记忆的变化经 `state.changed` 反映到 UI。它必须是 `CovelEvent` 联合成员，否则每次 commit 都会撞上前端的 `assertNeverEvent` 穷尽性守卫。详见 [`protocol.md`](protocol.md)。
 
 **Payload (`WorkingMemorySetPayload`):**
 

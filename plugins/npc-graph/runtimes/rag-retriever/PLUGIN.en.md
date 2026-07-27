@@ -3,15 +3,6 @@ name: npc-graph/rag-retriever
 description:
   zh: 当你提到某个人时，帮助故事想起相关人物和关系。
   en: When you mention someone, helps the story remember related people and relationships.
-pluginType: plugin
-capabilities: [npc-graph, graph-rag]
-outputKind: plugin
-runtimeType: function
-resultFormat: envelope-v1
-handler: ./handler.js
-trigger:
-  type: scheduled
-  interval: 1
 ---
 
 NPC graph retriever (function runtime).

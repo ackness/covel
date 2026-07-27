@@ -34,7 +34,7 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 
 | 问题                                 | 优先搜索                                                                                                                                                                               |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PLUGIN.md` 字段有哪些               | `packages/shared/src/schemas/plugin.ts`, `packages/plugin-loader/src/parse-plugin-md.ts`, `docs/reference/plugins.md`                                                                  |
+| `PLUGIN.md` 字段有哪些               | `packages/shared/src/schemas/plugin-schemas.ts`（zod 真身，`plugin.ts` 只是 re-export 聚合点）, `packages/plugin-loader/src/parse-plugin-md.ts`, `docs/reference/plugins.md`           |
 | world data 字段和 URI 怎么写         | `packages/shared/src/schemas/world-data.ts`, `apps/server/src/world-data/target-uri.ts`, `apps/server/src/world-data/schema-registry.ts`, `docs/reference/world-data.md`               |
 | 某个 HTTP endpoint 的真实行为        | `apps/server/src/routes/api/`, `docs/reference/api.md`                                                                                                                                 |
 | SSE / action 事件怎么消费            | `packages/shared/src/types/protocol.ts`, `apps/web/src/services/api/actions.ts`, `apps/web/src/services/subscription.ts`, `docs/reference/protocol.md`                                 |
@@ -55,7 +55,7 @@ docs/
 ├── guide/                     # how-to 教程
 ├── reference/                 # 权威框架契约
 ├── architecture/              # 架构与历史决策
-└── design/                    # UI 设计资产
+└── superpowers/plans/         # 内部草案与迁移计划（落地后迁入上面三个目录）
 ```
 
 ## Documentation Rules

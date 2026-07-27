@@ -10,7 +10,7 @@
  *
  * ## Why a sentinel?
  *
- * The turn executor (see `packages/runtime/src/turn-executor.ts`) builds a
+ * The turn executor (see `packages/runtime/src/turn-executor/turn-executor.ts`) builds a
  * single `system` LLM message from `AssembledContext.systemPrompt: string`
  * and forwards it through the gateway to each provider adapter. There is
  * currently no structural channel to carry per-segment cache metadata

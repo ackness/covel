@@ -235,7 +235,6 @@ describe("Plugin Routes", () => {
           runtimeId: "my-plugin/runner",
           action: "regenerate",
           handler: "./rpc/regenerate.js",
-          streaming: false,
           description: "Regenerate an image.",
         },
       ]);

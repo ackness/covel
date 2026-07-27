@@ -2,8 +2,10 @@
 
 Schema 使用 Zod **strict** 模式 — 不允许未定义字段，拼错会直接报错。有两套 schema（`packages/shared/src/schemas/plugin-schemas.ts`）：
 
-- **`runtimeManifestAuthoringSchema`（新插件按这个写）** — strict 目标：`auto` / `scheduled` runtime **必须声明 `stage`**；legacy 字段（`priority` / `upstreamRequired` / `jobStatus`）被拒绝。
-- **`runtimeManifestSchema`（loader 实际用的 compat 超集）** — 额外接受 legacy 字段做第三方兼容（`priority` 折叠出 `stage`、`upstreamRequired` 别名为 `needs`）。新插件不要用这些字段。
+- **`runtimeManifestAuthoringSchema`（新插件按这个写）** — 严格授权目标：`auto` / `scheduled` runtime **必须声明 `stage`**。
+- **`runtimeManifestSchema`（loader 实际用的）** — 与上者**共享同一份字段集**（同一个 `runtimeManifestCommonShape`，同样 `.strict()`），差别**只在跨字段约束**：它不强制「auto/scheduled 必须有 stage」，其余一致。
+
+> **两套 schema 的字段集完全相同，不存在「compat 超集」。** `priority` / `upstreamRequired` / `jobStatus` 已被整体删除（v0.0.19 的 `refactor!: remove the legacy priority / upstreamRequired / jobStatus surface`），**任何一套都会因未知键直接判加载失败**——不存在「priority 折叠出 stage」或「upstreamRequired 别名 needs」这类兼容行为。调度只能用 `stage` + `needs` / `after` / `inputs` 表达。
 
 两套 schema 都**拒绝** `trigger.type: conditional / error-retry`（已从枚举移除，声明即加载失败）。
 
@@ -31,9 +33,13 @@ Schema 使用 Zod **strict** 模式 — 不允许未定义字段，拼错会直�
 | `capabilities` | string[] | | 能力标签数组，框架按标签发现插件。常用:`narrative-engine`、`world-data-provider`、`image-generation`、`memory-panel`。自由标签合法，但拼错框架已知标签会在 bootstrap 时 warn |
 | `execution` | enum | | **仅对手动触发(`POST /plugin-rpc`)的 runtime 生效。** `sync`（默认） / `background`。background 返回 202 + `jobId`,框架走 kernel job-status 流,前端通过 `plugin-data.changed` SSE 感知 |
 | `resultFormat` | enum | | `legacy`（默认）/ `envelope-v1`。envelope-v1 时 handler 返回 `{outcome: success\|suspended\|skipped\|failed, ...}` 判别联合；setup 完成信号用 `completion: "done"` |
-| `suspensionSafe` | boolean | | handler 可从冻结的激活边界重放（审批 / 表单 resume）。默认 false |
 | `effects` | object | | `{reads?, writes?, parallelSafe?}` 显式读写集声明，用于同层并行冒险检测。资源键如 `state:*`、`plugin-data:self:<ns>`、`event:<topic>`、`http:https://<host>` |
-| `permissions` | object | | `{http: [{origin, methods?}]}` — 插件 `ctx.http` 出网上限声明。`origin` 必须是规范 https origin（无路径/查询），`methods` 默认仅 GET |
+| `permissions` | object | | `{http: [{origin, methods?}]}` — 出网 allowlist，管的是 `ctx.utils.fetchWithRetry`（entry 侧同一组 helper 叫 `covel.http`）。`origin` 必须是规范 https origin（无路径/查询），`methods` 默认仅 GET。**只对 community 插件 fail-closed 强制**；builtin / official 视为可信直接放行（SSRF 校验两边都照跑） |
+| `relations` | object | | `{provides?, requires?, recommends?, conflicts?}`，元素是插件 id 或 `{id, ...}`。**插件选择 UI 和 pack 解析读它**——`requires` 会把上游插件一并带进会话。它不改变执行语义（那是 trigger + 调度声明的事），但少写会让玩家只勾了你的插件时缺依赖 |
+| `dataSchemas` | map | | 本插件 plugin-data 各 namespace 的 schema 声明：`{namespace, schemaVersion, acceptsWorldData, schema（JSON Schema 相对路径）, description?}`。`acceptsWorldData: true` 才允许世界包的 worldData 往这个 namespace 灌数据 |
+| `memoryBlocks` | array | | 本插件贡献的 core-memory 块（`label` / `displayName` / `extractionHint` 必需，`icon` / `maxChars` 可选）。框架跨全部活跃插件聚合后驱动回合后抽取与 prompt 渲染；世界包也能加自己的块 |
+| `summaryFocus` | string[] | | 历史压缩（Compactor）时要求保留的主题，如 `['narrative', 'world-facts']`。框架聚合全部活跃 runtime 的声明后交给摘要 LLM |
+| `maxRecursionDepth` | number | | 本 runtime 的 `ctx.recursiveCall()` 最大嵌套深度，默认取执行器上限（当前 10） |
 
 ## 调度声明（stage / after / needs / inputs）
 
@@ -64,7 +70,7 @@ handler 里读：`ctx.inputs.narrative?.value`（`cardinality: all` 时是 `.ite
 - `needs` 的 `scope: session` **只在 `stage: setup` 上合法**（它对准持久 setup 快照判定；其它 stage 声明会被两套 schema 直接拒绝）。
 - `event` / `manual` + `execution: background` 的 runtime 不可声明 `inputs` 绑定（永远 detached，绑定无法满足）。
 
-> 另有一条 server 装载期 warning：`auto` / `scheduled` 却既无 `stage` 也无 legacy `priority`、又不是纯 ui / hooks / entry / wires 注册面的 runtime，会收到 `schedulable-missing-stage` 警告（这类声明被当作 UI-only 习语，永不调度）。按本文档生成的插件不会触发它。
+> 另有一条 server 装载期 warning：`auto` / `scheduled` 却没有 `stage`、又不是纯 ui / hooks / entry / wires 注册面的 runtime，会收到 `schedulable-missing-stage` 警告（这类声明被当作 UI-only 习语，永不调度）。按本文档生成的插件不会触发它。
 
 ## 超时与重试（agent only）
 
@@ -140,17 +146,24 @@ requireToolUse: true # 零成功工具调用就收场时，注入一条纠正消
 
 ```yaml
 tools:
-  builtin:                   # 框架内置工具(见 tools 清单)
+  builtin: # 框架内置工具,写名字
     - create-form
-    - create-choices
-    - create-notification
     - plugin-data-set
-    - plugin-data-get
-    - plugin-data-list
-    - plugin-data-set-batch
-  local:                     # 插件自定义工具,相对 PLUGIN.md 的路径
-    - ./tools/my-tool.js
+  plugin: # 本插件自有工具,写工具 NAME(不是路径),由 entry 模块注册
+    - generate-guide
+  defer: true # 可选:true 延迟整份白名单;或 [名字] 只延迟这几个(tool-search 按需拉取)
 ```
+
+内置工具全集（权威清单见 `docs/reference/tools.md`）：
+
+```
+create-character  create-choices  create-form  create-notification  emit-event
+get-character  list-characters  render-ui  runtime-done  suspend  update-character
+memory-get-block  memory-search  memory-update-block  world-dimension-get
+plugin-data-get  plugin-data-list  plugin-data-set  plugin-data-set-batch
+```
+
+> **`tools.local` 已被移除**（schema strict，声明即加载失败，报错会指向替代写法）。插件自有工具改走 `entry` 模块注册：工厂放 `tools/`，`entry: ./server/index.js` 里 `covel.registerTool(...)`，然后把**工具名**列进 `tools.plugin`。完整写法见 `references/tool-factory.md`。
 
 ## `input.inject`（prompt 上下文注入）
 
@@ -240,7 +253,7 @@ userSettings:
 浏览器发起任何需要 userSettings 的请求(例如 `POST /api/sessions/:id/plugin-rpc`)时,前端把整个 `plugin.*` 分支做成 `X-Plugin-User-Settings: base64(JSON)` 头。服务端 `apps/server/src/routes/api/plugin-rpc.ts` 解码后:
 
 1. 塞进 `TurnInput.userSettings`(map<pluginId, map<key, value>>)。
-2. 经 `resolveUserSettings`(`packages/runtime/src/turn-executor-helpers.ts`)与 `manifest.userSettings[].default` 合并——缺失键总是填回默认值,handler 可以依赖所有声明键都有值。
+2. 经 `resolveUserSettings`(`packages/runtime/src/turn-executor/turn-executor-helpers.ts`)与 `manifest.userSettings[].default` 合并——缺失键总是填回默认值,handler 可以依赖所有声明键都有值。
 3. 同时暴露到两条通道:
    - **function runtime**: 作为 `ctx.userSettings`——handler 读 `ctx.userSettings.<key>` 即可;
    - **agent runtime prompt**: 作为 `{{ userSettings.<key> }}` 模板变量——PLUGIN.md 直接插值;
@@ -266,7 +279,6 @@ rpc:
     handler: ./rpc/regenerate.js
     input: ./rpc/regenerate.schema.json     # 可选 JSON Schema
     trustLevel: community                   # builtin/official/community,覆盖插件默认
-    streaming: false
     description: 重新生成上一段叙事
 ```
 

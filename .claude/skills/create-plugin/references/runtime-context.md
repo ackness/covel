@@ -57,9 +57,13 @@ export default async function handler(ctx: FunctionHandlerContext) {
 
 ## `ctx.gateway`
 
-只暴露 **3 个方法**——`generateText` / `generateObject` / `resolveSlot`。**没有** `generateAudio` / `embed` / `streamText`。音频 / 视频 / embed / streaming 走 `resolveSlot` 自管 wire——见 [`provider-quirks.md`](./provider-quirks.md)。
+六个方法：`generateText` / `generateObject` / `resolveSlot` / `generateImage` / `synthesizeSpeech` / `transcribeAudio`（后三个在接口上是 **optional**，判空后再调）。**没有** `embed` / `streamText`——embedding、视频、streaming 才需要 `resolveSlot` + 自管 wire，见 [`provider-quirks.md`](./provider-quirks.md)。
 
-**图像是例外——用 `ctx.images.generate`（首选），不要自管 wire：**
+> **别用 `generateObject`。** 服务端组合根（`apps/server/src/app.ts`）刻意不注入 JSON Schema → Zod 转换器，调用它会抛 `PluginRuntimeGateway.generateObject is unavailable in this host`。要结构化输出就写 **agent runtime**，用 `output.schema` / `responseFormat`——框架在那条路径上自动处理 schema → provider grammar。
+
+**媒体不要直接调 gateway**——用 `ctx.images` / `ctx.speech`（见下），它们在 gateway 之上多做了 promptHash 去重和 MediaStore 落库。
+
+**图像用 `ctx.images.generate`（首选）：**
 
 ```js
 const { refs, warnings, cached } = await ctx.images.generate({
@@ -82,7 +86,7 @@ const { text, finishReason, usage } = await ctx.gateway.generateText({
   // 或：
   messages: [{ role: "user", content: "..." }],
   providerRequestMetadata: {}, // 可选，merge 到 provider 请求 body
-  signal: ctx.someSignal, // 可选 AbortSignal
+  signal: ctx.signal, // 可选 AbortSignal —— 玩家中止本回合时触发
 });
 ```
 
@@ -119,7 +123,46 @@ slot.metadata; // Readonly<Record<string,unknown>> — providerRequestMetadata �
 
 ---
 
+## `ctx.speech`
+
+与 `ctx.images` 同一套管线，覆盖 TTS 与转录——**不要为这两个模态自管 wire**：
+
+```js
+// 文本 → 语音
+const { refs, warnings, cached } = await ctx.speech.generate({
+  text: "他推开门，海风灌了进来。",
+  presetId: "mimo-tts", // 可选；缺省按 speech tag 回退
+  voice: "...", // 可选
+  format: "...", // 可选
+  metadata: { kind: "narration", turnId }, // 业务归档字段
+});
+
+// 语音 → 文本
+const result = await ctx.speech.transcribe({ audio, presetId: "..." });
+```
+
+与图像一样：框架按 slot 的 `providerRequestMetadata.speechWire` / `transcriptionWire` 选 wire（内置 `openai-speech` / `openai-transcription`），调 provider，落 MediaStore，promptHash 去重。handler 不接触字节流和凭据。
+
+**要接一个新供应商**（协议与内置 wire 不同），写 wire 模块然后在 entry 里注册，而不是在 handler 里自己 fetch：
+
+```js
+// server/index.js
+import buildWires from "../lib/wires.js";
+
+export default function register(covel) {
+  covel.registerWires(buildWires(covel.http)); // covel.http = { fetchWithRetry, validateBaseUrl }
+}
+```
+
+wire id 自动命名空间化为 `<pluginId>/<wireId>`，用户在 `llm.toml` 的 slot 里用 `providerRequestMetadata.speechWire` 指定。参考实现：`plugins/mimo-tts`（handler 调 `ctx.speech.generate`，entry 注册 MiMo wire）。
+
+> PLUGIN.md 的 `wires` frontmatter 字段仍能用，但正在落日，新插件用 `covel.registerWires()`。
+
+---
+
 ## `ctx.utils`
+
+> 这是 handler ctx 上的名字。entry 模块拿到的 facade 上同一组 helper 叫 `covel.http`（`{ fetchWithRetry, validateBaseUrl }`）——wire 工厂用的就是它。
 
 ```ts
 // SSRF guard（默认开放公网，仅 block RFC1918/link-local/cloud metadata/非 https）

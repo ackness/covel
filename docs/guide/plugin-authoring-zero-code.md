@@ -274,7 +274,7 @@ Covel 的主循环把每一轮拆成 `pre-turn → narrative → post-turn → a
 如果一个 runtime 内部的"读"只是**自身去重**而非"为别的 runtime 注入 context"，单 runtime 既读又写没问题：
 
 - `codex`（post-turn）是 agent runtime，通过 `input.inject: plugin-data` 让框架在 prompt 构建时把已有条目自动塞进 `<existing-entries>` 块，LLM 一次调用就决定 unlock 或 update。读没有跨 runtime 消费方，不需要拆。
-- `char-creator/character-tracker`（post-turn）是 agent runtime，先 `list-characters` 给自己看现有角色 id 列表，再决定 create/update。同理不需要拆。
+- `char-creator/character-tracker`（post-turn）是 agent runtime，同样用 `input.inject: plugin-data` 把现有角色名册注入 `<existing-characters>` 块，再决定 create/update。它**不声明** `list-characters`——名册已在 prompt 里，多一次工具往返是纯浪费；只保留 `get-character` 作为"摘要被截断、需要看完整属性"时的逃生口。同理不需要拆。
 
 判断标准：**这次"读"的结果有没有被别的 runtime 消费？**
 

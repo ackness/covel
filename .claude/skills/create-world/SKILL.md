@@ -18,48 +18,62 @@ description: 创建 Covel 世界包。根据用户概念直接生成 world.yaml 
 
 ### 2. 生成文件
 
-在 `worlds/<id>/` 下生成三个文件：
+```
+worlds/<id>/
+├── world.yaml          # 必需，世界 manifest（Zod strict，拒绝未定义字段）
+├── WORLD.md            # 必需，默认 lore 文档（800-1500 字）
+├── WORLD.<lang>.md     # 可选，仅在真的要提供第二语种时补
+└── data/
+    ├── world.data.yaml # worldData descriptor（推荐）
+    └── dimensions.yaml # 外置维度（两个内置世界的做法）
+```
 
-1. **world.yaml** — 完整的世界 manifest。读取 `references/world-yaml-schema.md` 获取准确的字段结构和约束。schema 使用 strict 模式，不允许未定义字段。0.0.3 起优先声明 `pluginPolicy` 和 `worldData: data/world.data.yaml`，让会话准备页和世界数据导入管线使用结构化信息。
-2. **WORLD.md** — 默认 lore 文档（800-1500 字）
-3. **WORLD.zh.md**（或对应 locale）— locale 版本的 lore
+lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD.md` 是所有 locale 的兜底，必须写；写了 `WORLD.zh.md` 却没有 `WORLD.md`，非 zh 的会话拿到的就是空 lore。`pnpm release:preflight` 会检查每个世界都有 `world.yaml` + 至少一个 `WORLD*.md`。
+
+**维度写在哪** —— 三选一，越往下越适合大世界：
+
+1. 内联 `world.yaml` 的 `dimensions:` —— 小世界最省事
+2. `dimensionSources:` 按维度键指向外部文件
+3. `worldData` descriptor 里一条 `to: world:metadata.dimensions` 的 source —— **`worlds/mistport` 和 `worlds/haruka-academy` 都是这种**，维度全写在 `data/dimensions.yaml`
 
 创作要求：
 
 - 至少 3 个地区、3 个阵营、4 个力量等级、3 个历史事件、3 个社会阶层
 - `openingScenario` 必须呈现即时的选择或紧张感
-- 按玩法选择 `pluginPolicy.preset`: 传统叙事用 `traditional-story`，对话/校园/群像用 `dialogue-mode`
-- **视觉小说世界**（对话模式的增强档）：声明 `defaultViewMode: stage` 进全屏舞台（背景 + 立绘 + 打字机），`recommendedPlugins` 加 `scene-stage` / `character-presence` / `character-blueprint`。资产（立绘/场景图）是**渐进增强**——没有也能跑（回退世界头图 + 占位卡），后续可用 `scripts/generate-portraits.mjs` / `generate-scenes.mjs` 补。结构见 `references/world-yaml-schema.md` 的"视觉小说资产管线"小节，成品参考 `worlds/haruka-academy`
-- 本仓库示例世界默认声明 `worldData: data/world.data.yaml`; 如果生成对应数据 descriptor，必须读取 `references/world-yaml-schema.md` 的 worldData 小节
+- 按玩法选 `pluginPolicy.preset`：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`
+- **视觉小说世界**（对话模式的增强档）：声明 `defaultViewMode: stage` 进全屏舞台（背景 + 立绘 + 打字机）。资产是**渐进增强**——没有立绘/场景图也能跑（回退世界头图 + 占位卡），后续可用 `scripts/generate-portraits.mjs` / `generate-scenes.mjs` 补。成品参考 `worlds/haruka-academy`
+- **写任何插件 ID 之前先 `ls plugins/` 确认它存在**——schema 不校验插件 ID，拼错要拖到建会话时才暴露
 - 避免泛化的奇幻套路，追求独特的世界设定
-- 所有 ID 字段（world id, faction id）使用 kebab-case 英文
-- 其余内容使用用户的语言（默认中文）
+- 所有 ID 字段（world id、faction id、worldData source id）用 kebab-case 英文；其余内容用用户的语言（默认中文）
 
-### 3. 验证（按需分层）
+### 3. 验证
 
-参考 `references/world-validation.md`(必读) — 给出三层校验脚本和决策树。简版决策：
-
-| 你写了什么                 | 至少要跑哪几层                                 |
-| -------------------------- | ---------------------------------------------- |
-| 最小 world.yaml + WORLD.md | **L1 schema**(必做)                            |
-| factions 含 `relations[]`  | + **L2 引用一致性**                            |
-| 准备对外发布               | + **L3 lore 覆盖度** + **L4 真实游戏跑一回合** |
-
-L1 一行命令(必做):
+**L1 schema 校验（必做）**，在仓库根目录跑：
 
 ```bash
-node --input-type=module -e "
+npx tsx -e "
 import { parse } from 'yaml';
 import { readFileSync } from 'fs';
-import { validateWorldManifest, formatValidationErrors } from '@covel/shared';
+import { worldManifestSchema } from './packages/shared/src/schemas/world.ts';
 const y = parse(readFileSync('worlds/<id>/world.yaml','utf-8'));
-const r = validateWorldManifest(y);
-if(!r.valid){console.error(formatValidationErrors(r.errors));process.exit(1)}
+const r = worldManifestSchema.safeParse(y);
+if(!r.success){ for(const i of r.error.issues) console.error(\`  \${i.path.join('.')||'(root)'}: \${i.message}\`); process.exit(1); }
 console.log('schema OK');
 "
 ```
 
-校验失败则修复后重新写入。L2/L3/L4 见 `references/world-validation.md`。
+> 必须用 `tsx`，并且按**相对路径**导入 schema。workspace 包直接导出 TS 源码（`\"import\": \"./src/index.ts\"`），裸 `node` 解析不了；`import '@covel/shared'` 在仓库根目录也解析不到包。
+
+按需追加：
+
+| 你写了什么                 | 至少要跑哪几层                             |
+| -------------------------- | ------------------------------------------ |
+| 最小 world.yaml + WORLD.md | **L1 schema**（必做）                      |
+| 声明了 `worldData`         | + **L1b descriptor 校验**                  |
+| factions 含 `relations[]`  | + **L2 引用一致性**                        |
+| 准备对外发布               | + **L3 lore 覆盖度** + **L4 真实跑一回合** |
+
+校验失败则修复后重新写入。L1b/L2/L3/L4 的现成脚本见 `references/world-validation.md`（必读）。
 
 ### 4. 展示结果
 
@@ -67,6 +81,8 @@ console.log('schema OK');
 
 ## References
 
-- 生成 world.yaml 前，读取 `references/world-yaml-schema.md` 了解完整字段结构和枚举值
-- 需要格式参考时，读取 `references/example-world.md` 查看现有世界的 world.yaml 样例
-- 验证阶段（特别是带 relations 或准备发布时），读取 `references/world-validation.md` 拿现成的校验脚本
+- 生成 world.yaml 前，读 `references/world-yaml-schema.md`——完整字段结构、枚举值、worldData descriptor
+- 需要格式参考时，读 `references/example-world.md`
+- 验证阶段读 `references/world-validation.md`——现成的校验脚本
+
+权威文档在 `docs/reference/world-data.md`（worldData / source import / override 的唯一真相源）；本目录的 references 是它的操作向导，冲突时以 docs 为准。

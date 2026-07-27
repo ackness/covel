@@ -56,7 +56,7 @@ See: `packages/ai-provider/`, [docs/reference/plugins.md](./reference/plugins.md
 
 ## Runtime
 
-The actual executable unit inside a plugin — either an `agent` (LLM-driven, loads `PLUGIN.md` as system prompt) or a `function` (pure JS handler). One plugin package may export multiple runtimes with different triggers and priorities.
+The actual executable unit inside a plugin — either an `agent` (LLM-driven, loads `PLUGIN.md` as system prompt) or a `function` (pure JS handler). One plugin package may export multiple runtimes with different triggers, stages, and dependency edges.
 
 See: [docs/guide/plugin-authoring.md](./guide/plugin-authoring.md), [docs/reference/plugins.md](./reference/plugins.md).
 

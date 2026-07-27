@@ -42,7 +42,7 @@ description: 创建 Covel 插件。通过对话了解需求，直接生成 PLUGI
 - **多媒体（图像 / 音频 / 视频 / 文件）**：用 `ctx.media`（不是 `pluginData` 直接塞 bytes）。`ctx.media.put(bytes, mime, meta) → MediaRef`；`ctx.media.ingestUrl(url, {allowedMimes})` 从 URL 拉取到 MediaStore。把 ref 写进 `pluginData.value.ref`，并在 runtime output 返回 `assetGenerations: [{ref, modality, meta}]` 让框架 emit `asset.generate` proposal（`assets` 仍是兼容 alias）。前端用 `<Media as="auto" ref={…}>` 渲染（自动按 mime 选 `<img>/<audio>/<video>/<a>` 控件）。完整契约见 [`runtime-context.md`](references/runtime-context.md) §`ctx.media`。
 - **UI**：`ui: { right | message | left: [./ui/xxx.json] }` 指向 json-render spec。`dataSource.namespace` 让 spec 自动从本插件的 plugin-data 读数据。所有组件 + binding 见 [`ui-components-quickref.md`](references/ui-components-quickref.md)。
 - **图像生成用 `ctx.images.generate`（首选，不要手写 provider fetch）**：框架统一原语——选 wire（openai-images / dashscope-wan / 插件注册的）、调 provider、落 MediaStore、按 promptHash 去重全由框架完成，handler 只给 prompt + metadata，返回 `{refs, warnings, cached}`。参考实现：`plugins/scene-stage/runtimes/background-gen/handler.js`。
-- **Gateway 其余能力**：`ctx.gateway` 有 `generateText` / `generateObject` / `resolveSlot`——**没有** `generateAudio` / `embed` / `streamText`。音频 / 视频 / embed / 转录仍走 `resolveSlot` + 自管 wire，详见 [`provider-quirks.md`](references/provider-quirks.md)。
+- **Gateway 其余能力**：`ctx.gateway` 有六个方法——`generateText` / `generateObject` / `resolveSlot` / `generateImage` / `synthesizeSpeech` / `transcribeAudio`，**没有** `embed` / `streamText`。但媒体别直接调 gateway：图像用 `ctx.images.generate`、语音与转录用 `ctx.speech.generate` / `.transcribe`（多做去重 + MediaStore 落库）。只有 embedding / 视频这类框架没有 wire 的模态才需要 `resolveSlot` + 自管 wire，详见 [`provider-quirks.md`](references/provider-quirks.md)。
 
 ## 流程
 
@@ -132,11 +132,13 @@ handler 签名（**单参**，运行时只传 `ctx`）：
 export default async function handler(ctx) {
   // ctx.triggerEvent = {topic, data}  // event 触发时存在
   // ctx.manualPayload                 // manual 触发 (POST /plugin-rpc payload)
-  // ctx.gateway                       // 只暴露 generateText / generateObject / resolveSlot
+  // ctx.gateway                       // generateText/generateObject/resolveSlot
+  //                                   // + generateImage/synthesizeSpeech/transcribeAudio
   //   generateObject 在当前 host 未注入 JSON Schema → Zod converter 时不可用;
   //   结构化 JSON 输出优先改用 agent runtime 的 output.schema 路径。
-  // ctx.images.generate({prompt, metadata}) // 图像生成首选:框架选 wire/落库/去重
-  //   音频/视频/embed/转录才用 resolveSlot 取配置后自管 fetch wire。
+  // ctx.images.generate({prompt, metadata}) // 图像首选:框架选 wire/落库/去重
+  // ctx.speech.generate({text}) / .transcribe({audio}) // 语音首选,同一套管线
+  //   只有 embedding/视频(框架无 wire)才用 resolveSlot 取配置后自管 fetch。
   // ctx.media                         // 生成媒体必须落 MediaStore,不要把 bytes/base64 直接塞 pluginData。
   // ctx.inputs.<name>.value           // frontmatter inputs 绑定的解析值(读同回合上游的唯一通道)
   // ctx.exports.<name>.value          // input.inject kind: runtime-export 的跨执行导出
@@ -170,7 +172,7 @@ pnpm validate:plugin plugins/<id>            # 目录:自动含根 PLUGIN.md + r
 pnpm validate:plugin ~/.covel/plugins/<id>   # 仓库外插件同样支持
 ```
 
-两道校验一次跑完：loader compat 解析（决定插件能不能加载，报错带行号）+ **strict authoring schema**（强制「auto/scheduled 必须声明 stage」、拒绝 legacy 字段 `priority` / `upstreamRequired`）。新插件必须干净通过；`--compat` 仅用于校验存量第三方 legacy manifest。
+两道校验一次跑完：loader 解析（决定插件能不能加载，报错带行号）+ **strict authoring schema**（额外强制「auto/scheduled 必须声明 stage」）。两者字段集相同、都是 `.strict()`，`priority` / `upstreamRequired` 这类已删除字段在任何一道都会判失败。新插件必须干净通过；`--compat` 只是**跳过 authoring 那道**（校验存量第三方 manifest 时用），不会放宽字段集。
 
 ### 5. 测试（按复杂度分层选）
 

@@ -11,12 +11,20 @@ export interface SessionRecord {
   readonly worldId?: string;
   /** Lifecycle flag — `active` / `paused` / `ended`. */
   readonly status: SessionStatus;
-  /** Band selector — 0 = Pre-Game (only priority 0-99 scheduled, may iterate);
-   *  >=1 = main loop (only priority 100-1000). Advances from 0 → 1 when all
-   *  Pre-Game runtimes report done. */
+  /**
+   * LEGACY band selector. The kernel no longer writes it — API responses and
+   * snapshots derive it at read time from {@link phase} /
+   * {@link completedPlayerTurns} via `deriveLegacyClockForSession`. The column
+   * is frozen for old-kernel / rollback reads. (The numeric priority bands it
+   * once selected — 0-99 vs 100-1000 — no longer exist; scheduling is by named
+   * stage plus a dependency DAG.)
+   */
   readonly turnCount: number;
-  /** RuntimeIds of Pre-Game runtimes that have completed. Used to gate the
-   *  turnCount 0 → 1 transition. */
+  /**
+   * LEGACY completion list, likewise derived at read time (the `done` entries
+   * of {@link setupRuntimes}, sorted). {@link setupRuntimes} is the business
+   * truth; this column is frozen for rollback reads.
+   */
   readonly preGameCompleted: readonly string[];
   readonly locale: string;
   readonly activePlugins: readonly string[];

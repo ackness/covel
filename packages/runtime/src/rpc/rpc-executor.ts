@@ -10,8 +10,8 @@
  *
  * Resolution order for action-level dispatch:
  *   1. Plugin-declared action (`registry.getPluginAction`)
- *   2. Framework default (`registry.getFrameworkDefault`) — covers
- *      `submit-form`, `cancel`, etc.
+ *   2. Framework default (`registry.getFrameworkDefault`) — currently
+ *      `submit-form` is the only one registered.
  *
  * Runtime-level dispatch is handled separately (`runtimeId` set) by the
  * caller — the dispatcher just exposes the registry-aware path here.

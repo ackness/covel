@@ -8,15 +8,19 @@ Covel 仓库 `.claude/skills/` 目录下的每个子目录都是一个**独立�
 
 ```
 .claude/skills/
-├── agent-browser/
-│   └── SKILL.md
+├── covel-static-turn-audit/
+│   ├── SKILL.md
+│   └── agents/openai.yaml # 外部代理的展示元信息
 ├── create-world/
 │   ├── SKILL.md           # 入口，YAML frontmatter 必须有 name + description
+│   ├── agents/openai.yaml
 │   └── references/        # 按需加载的细节参考
 │       ├── world-yaml-schema.md
 │       └── example-world.md
 └── create-plugin/
-    └── SKILL.md
+    ├── SKILL.md
+    ├── agents/openai.yaml
+    └── references/
 ```
 
 ## SKILL.md 模板
@@ -72,7 +76,6 @@ Covel 已经内置项目本地 skills：
 
 - `.claude/skills/create-plugin/`：生成插件骨架与作者参考。
 - `.claude/skills/create-world/`：生成世界包与校验参考。
-- `.claude/skills/agent-browser/`：浏览器调试辅助。
 - `.claude/skills/covel-static-turn-audit/`：静态审计 start-game、插件启用、turn 调度和多轮流程。
 
 ## 在外部代理中使用
@@ -89,7 +92,7 @@ Covel 已经内置项目本地 skills：
 1. 在 `.claude/skills/<your-skill>/` 下建 `SKILL.md`（参考上面模板）。
 2. 如果有详细参考，放到 `.claude/skills/<your-skill>/references/`。
 3. 新增 `agents/openai.yaml`，至少提供 `interface.display_name`、`short_description` 和 `default_prompt`。
-4. 运行 `python /Users/wuyong/.codex/skills/.system/skill-creator/scripts/quick_validate.py .claude/skills/<your-skill>`。
+4. 校验 frontmatter：确认 `SKILL.md` 的 YAML 头至少有 `name` + `description`，且 `name` 与目录名一致。（若你本地装了 skill-creator 之类的校验脚本，此处跑它；仓库不内置该工具，也不依赖它。）
 5. 在本页的目录结构和 README 相关入口里补充新 skill。
 6. 提 PR。
 

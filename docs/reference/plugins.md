@@ -81,11 +81,11 @@
 
 `needs` 的每一项可以是 **runtime id 字符串**（该 runtime 必须本回合成功，缺席=skip，绝不当作成功），或 **`{ capability: <name> }`**（本回合在场的某个声明该 capability 的 runtime 成功即满足；零个在场提供者=不满足→skip）。capability 形态让一个下游插件按 capability 发现"当前模式的提供者"，无需写死具体插件名 —— 例如 `guide`/`scene-prompts` 用 `{ capability: narrative-engine }` 同时适配 `narrator`（传统模式）与 `chat-mode-narrator`（对话模式）。两个叙事引擎都在 `capabilities` 里声明了 `narrative-engine`。
 
-| Stage       | Runtime                                                                      | 说明                                                                                                           |
-| ----------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `pre-turn`  | `npc-graph/rag-retriever` · `scene-cast`                                     | narrator 的依赖上游（function runtime，无 LLM）                                                                |
-| `narrative` | `narrator` · `chat-mode-narrator`                                            | 主叙事生成器（互斥，二选一激活）                                                                               |
-| `post-turn` | `guide` · `codex` · `npc-graph/extractor` · `char-creator/character-tracker` | 四者都以 `{ capability: narrative-engine }` 依赖当前模式的叙事引擎（H-04），彼此独立 → **同 stage 内并行执行** |
+| Stage       | Runtime                                                                                                                                   | 说明                                                                                                                                                                                 |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pre-turn`  | `npc-graph/rag-retriever` · `scene-cast`                                                                                                  | narrator 的依赖上游（function runtime，无 LLM）                                                                                                                                      |
+| `narrative` | `narrator` · `chat-mode-narrator`                                                                                                         | 主叙事生成器（互斥，二选一激活）                                                                                                                                                     |
+| `post-turn` | `guide` · `codex` · `npc-graph/extractor` · `char-creator/character-tracker` · `scene-prompts` · `mimo-tts/auto-narrate` · `branch-reply` | 前六者都以 `{ capability: narrative-engine }` 依赖当前模式的叙事引擎，`branch-reply` 无 `needs`（按 `narrativeOutput` 非空这一契约自行发现叙事）；彼此独立 → **同 stage 内并行执行** |
 
 `setup` stage（会话 `phase === "setup"` 时运行）走：`pregame → world-init/schema-gen → char-creator/player-init`，顺序完全由声明边决定：`world-init/schema-gen` 声明弱排序 `after: [pregame]`（pregame 失败不拦 schema 生成）；`char-creator/player-init` 声明 turn-scoped `needs: [pregame, world-init/schema-gen]`（player-init 读取 schema-gen 写出的 `world.schema`，`needs` 既是同一 pass 内的 DAG 边、也是同回合门控）。三者均为 `stage: setup` + `trigger: auto`（`maxTriggerCount` 为重试预算）。
 
@@ -117,7 +117,7 @@
 | codex                                | plugin      | `post-turn`                | auto（每轮，紧跟 narrator 之后）                                           | `plugin`  | 知识图鉴系统（agent runtime）                                                                  |
 | npc-graph/extractor                  | plugin      | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 关系图抽取器                                                                               |
 | char-creator/character-tracker       | core-plugin | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 发现 + 角色状态跟踪                                                                        |
-| scene-prompts                        | plugin      | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | 对话模式玩家口吻短回复                                                                         |
+| scene-prompts                        | plugin      | `post-turn`                | scheduled（interval=1）                                                    | `plugin`  | 对话模式玩家口吻短回复                                                                         |
 | character-blueprint                  | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 可复用角色蓝图；`dataSchemas` blueprints/characters 接收世界导入                               |
 | character-presence                   | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                      |
 | player-identity                      | plugin      | —                          | manual（按需）                                                             | —         | 玩家人设（`persona-provider`，注入 activePersona）                                             |
@@ -181,7 +181,7 @@
 | guard         | `../../guard.js`                                                                                                                        |
 | capabilities  | `[world-data-provider]`                                                                                                                 |
 | tools.plugin  | `set-world-schema`, `set-world-entries-batch`                                                                                           |
-| tools.builtin | `plugin-data-get`, `plugin-data-list`                                                                                                   |
+| tools.builtin | 无（setup 期只写世界 schema，不回读自身 plugin-data）                                                                                   |
 | ui.right      | `./ui/world-overview.json`, `./ui/world-schema.json`                                                                                    |
 
 **Guard 门控**: `guard.js` 在 LLM 调用前执行（纯函数，零 LLM 开销），按优先级决定角色属性 schema，命中任一即返回 `{ skip: true }` 跳过 LLM：
@@ -221,7 +221,7 @@
 | trigger         | `auto` — 每轮 `narrative` stage 执行                             |
 | outputKind      | `story`（输出显示在主聊天区）                                    |
 | model           | `story`                                                          |
-| capabilities    | `[narrative]`                                                    |
+| capabilities    | `[narrative, narrative-engine]`                                  |
 | tools.builtin   | `world-dimension-get`、`emit-event`                              |
 | advertiseEvents | `true`（segment 5 注入 `<available-events>` 目录）               |
 | input.inject    | `npc-graph/rag-retriever` → `npcContext` → `<npc-relationships>` |
@@ -402,13 +402,13 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | stage         | `post-turn`（与 guide / codex / extractor 同 stage 并行）                                                                                                                                                                                                                                    |
 | trigger       | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                                                                                               |
 | model         | `plugin`                                                                                                                                                                                                                                                                                     |
-| tools.builtin | `create-character`, `update-character`, `list-characters`, `get-character`（后两者仅按需，非每轮必调）                                                                                                                                                                                       |
+| tools.builtin | `create-character`, `update-character`, `get-character`（`get-character` 仅在注入名册被截断时按需调用；不声明 `list-characters`——名册已由 `<existing-characters>` 注入）                                                                                                                     |
 | input.inject  | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）；`plugin-data[characters]` → `<existing-characters>`（`format: summary`，现有角色名册在构建 prompt 时注入，免去每轮 `list-characters` 往返 —— 同 codex `<existing-entries>` 模式） |
 | needs         | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip                                                                                                                                                                                                       |
 
 **职责**: 每轮扫描 narrator 输出，发现新的有名字 NPC → `create-character(type="npc")`；检测叙事中的角色状态变化（受伤、死亡、装备、关系）→ `update-character(fields: {...})`。工作流：
 
-1. 查看 `<existing-characters>`（框架自动注入的现有角色名册，行首即角色 id）避免重复；不再每轮强制 `list-characters`
+1. 查看 `<existing-characters>`（框架自动注入的现有角色名册，行首即角色 id）避免重复——名册既已注入，本 runtime 不再声明 `list-characters`
 2. 阅读叙事识别新 NPC + 状态变化
 3. 仅对明确出现的变化调用 create/update 工具（update 用注入名册里的 id；摘要不足以决策时才按需 `get-character`）
 4. 每次最多创建 5 个 NPC（防止 runaway）
@@ -545,7 +545,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | trigger         | `auto`                                                                                                                                               |
 | outputKind      | `story`                                                                                                                                              |
 | model           | `story`                                                                                                                                              |
-| capabilities    | `[narrative, chat-mode]`                                                                                                                             |
+| capabilities    | `[narrative, chat-mode, narrative-engine]`                                                                                                           |
 | tags            | `mode:dialogue` · `role:narrator`                                                                                                                    |
 | relations       | `conflicts: narrator`；`requires: scene-cast, scene-stage, scene-prompts, character-blueprint, character-presence, living-world-rules, branch-reply` |
 | tools.builtin   | `emit-event`                                                                                                                                         |
@@ -662,7 +662,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | pluginType   | `plugin`                                                                                                |
 | stage        | `post-turn`                                                                                             |
 | runtimeType  | `agent`（model `plugin`）                                                                               |
-| trigger      | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                          |
+| trigger      | `scheduled`，`interval: 1`（无 `cooldownTurns`——每个玩家回合都出快捷回复）                              |
 | outputKind   | `system`                                                                                                |
 | capabilities | `[scene-prompts]`（舞台 choices 层按此能力发现，非硬编码插件 id）                                       |
 | tags         | `mode:dialogue` · `role:quick-reply`                                                                    |
@@ -1036,7 +1036,7 @@ wires: lib/wires.js # 整个插件声明一次即可（多 runtime 声明同一�
 
 - 信任门控与 local tools 一致：builtin/official 启动即注册，community 在其 runtime 首次加载时注册。
 - 路径逃逸 / 文件缺失 / 条目形状错误只 warn 跳过，不影响启动；重复注册幂等。
-- 教程与 wire 接口签名见 [plugin-authoring-advanced.md § 注册自定义 wire](../guide/plugin-authoring-advanced.md#注册自定义-wirewires-frontmatter-字段)，slot 侧配置见 [slots.md](./slots.md)。
+- 教程与 wire 接口签名见 [plugin-authoring-advanced.md § 注册自定义 wire](../guide/plugin-authoring-advanced.md#注册自定义-wireentry-里的-covelregisterwires)，slot 侧配置见 [slots.md](./slots.md)。
 
 ### dataSchemas
 
@@ -1415,7 +1415,7 @@ postHistory:
 
 ### rpc(PR-3 插件 RPC 通道，frontmatter 声明式已弃用 — 改用 entry 的 `covel.registerRpc`)
 
-声明插件暴露给 `POST /api/sessions/:id/plugin-rpc` 的结构化 action,供前端或外部代理用统一通道调用。每个 entry 是一个 RPC handler 模块的相对路径。新代码请在 [entry](#entry统一服务端入口) 模块里用 `covel.registerRpc(action, handler, { description?, streaming?, trustLevel? })` 内联注册；路由、审批门与信任钳制语义不变。
+声明插件暴露给 `POST /api/sessions/:id/plugin-rpc` 的结构化 action,供前端或外部代理用统一通道调用。每个 entry 是一个 RPC handler 模块的相对路径。新代码请在 [entry](#entry统一服务端入口) 模块里用 `covel.registerRpc(action, handler, { description?, trustLevel? })` 内联注册；路由、审批门与信任钳制语义不变。
 
 | 字段                   | 类型                                               | 说明                                                                                                                   |
 | ---------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -1423,8 +1423,9 @@ postHistory:
 | `<action>.handler`     | `string`(必填)                                     | handler 模块的插件相对路径,必须 `.js` / `.mjs` / `.cjs`,**不允许绝对路径或 `..` 段**(框架在 schema 与 loader 两层校验) |
 | `<action>.input`       | `string`(可选)                                     | payload 的 JSON Schema 路径,仅作文档参考,框架不强制                                                                    |
 | `<action>.trustLevel`  | `'builtin' \| 'official' \| 'community'`(可选)     | 强制声明此 action 的信任级别,**只能比插件源信任更严格(降级)**;尝试升级会被 clamp 并 warn                               |
-| `<action>.streaming`   | `boolean`(可选,默认 `false`)                       | 声明 handler 是流式还是单次。当前路由执行同步 handler,streaming 留给后续 PR                                            |
-| `<action>.description` | `string`(可选)                                     | 一句话描述,会显示在 PR-7 approval 对话框里                                                                             |
+| `<action>.description` | `string`(可选)                                     | 一句话描述,会显示在 approval 对话框里                                                                                  |
+
+> **已移除**：`<action>.streaming` 不再被 schema 接受。RPC 派发始终同步，长任务走 `execution: background` + `plugin-data.changed` SSE 汇报进度，从来没有流式协议读取该字段。注意 rpc 块的解析策略：**任何一个无法识别的 key 会跳过整个 `rpc` 块**（而非仅该 action），manifest 仍报告加载成功、只打一条指明文件/行/键名的 warning——所以残留 `streaming` 的插件会一次性丢掉全部 rpc action。
 
 handler 模块必须 default export 一个 `(payload, context) => Promise<unknown>` 函数。`context` 包含 `{ sessionId, pluginId, action, store: RpcHandlerStore }`,其中 `store` 是窄结构接口(`getSession` / `listTurnMessages` / `savePlayerInput` / 可选 plugin-data 三件套),不暴露完整的 `DataStore`。
 
