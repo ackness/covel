@@ -57,6 +57,7 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 - `COVEL_BIND_HOST` 默认 `127.0.0.1`（audit S-02）：本地 / 桌面部署只监听回环接口，网络上不可达。容器或多 pod 部署需显式设置 `COVEL_BIND_HOST=0.0.0.0`（`docker/docker-compose.yml` 已内置）——这是一次显式的部署决策，公开监听前请确认 `DEPLOYMENT_TIER` 与鉴权配置。
 - `COVEL_LLM_REPLAY`、`COVEL_LLM_REPLAY_DIR` 标记为 `documented`：源码中暂无读取方，实现 replay cache 时提升为 `active`。`TRUSTED_PROXY_IPS` 已是 `active`（由 `middleware/rate-limit.ts` 的 X-Forwarded-For 信任检查消费）。SSRF guard 设计上即 open-by-default，因此没有 LLM host 白名单变量。
 - `COVEL_TRACE_TRUNCATE` 标记为 `planned`，对应 debug trace 设计文档中的未来开关。
+- `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_BASE_URL` **不在本 registry 内**，也没有任何源码读取——`.env.example` 里保留它们只是 backlog 标记。当前的回合追踪落在 `trace_events` 表（`/debug` 页面或 `GET /api/traces/:sessionId`），不经任何外部观测服务。真接入时再按迁移规则第 1 条补 definition。
 - `COVEL_COMPACTOR_CONTEXT_WINDOW` 为**可选的显式覆盖**：未设置时，压缩阈值与 prompt 硬裁剪预算按当前叙事 slot（`default`，缺省为 llm.toml 首个 slot）的模型 capability `contextWindow` 动态解析（llm.toml 热重载即时生效），capability 也缺失时回退 `32768`。设置后固定使用该值，不再查 capability。
 - `COVEL_SNAPSHOT_INTERVAL_TURNS` 默认 `5`，控制 `kind=auto` 快照的 checkpoint 节奏：`turnCount <= 1`（pre-game 与首个正式回合）总是写入，其后每 N 回合写一份；`1` 表示每回合。resume 路径无视该节流强制写入。构建快照 payload 需要全量读取消息历史与全部 session-scoped 集合，逐回合写入会导致 O(T²) 成本与存储膨胀（audit 2026-07-11 R-04）。
 - `COVEL_MEDIA_CLEANUP_ENABLED` 默认 `false`，控制 `POST /api/media/cleanup` 的可用性。即使设为 `true`，`DEPLOYMENT_TIER=commercial` 时该端点仍强制 503，等待管理员鉴权中间件接入。详见 [`docs/reference/api.md`](../reference/api.md) 媒体管理章节。
