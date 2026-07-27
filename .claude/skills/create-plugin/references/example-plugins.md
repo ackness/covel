@@ -22,7 +22,7 @@ trigger:
 
 ---
 
-## codex（知识图鉴，stage: post-turn + needs 门控，auto 触发，含本地工具）
+## codex（知识图鉴，stage: post-turn + needs 门控，auto 触发，含插件自有工具）
 
 ```markdown
 ---
@@ -37,10 +37,11 @@ trigger:
 # 避免 LLM 对着空的 <narrator-output> 幻觉条目。
 needs:
   - capability: narrative-engine
+entry: ./server/index.js # 入口里 covel.registerTool(...) 注册下面两个工具
 tools:
-  local:
-    - ./tools/unlock-codex-entries.js
-    - ./tools/update-codex-entry.js
+  plugin: # 工具 NAME,不是路径
+    - unlock-codex-entries
+    - update-codex-entry
   builtin:
     - create-notification
 input:

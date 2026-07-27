@@ -31,9 +31,13 @@ Schema 使用 Zod **strict** 模式 — 不允许未定义字段，拼错会直�
 | `capabilities` | string[] | | 能力标签数组，框架按标签发现插件。常用:`narrative-engine`、`world-data-provider`、`image-generation`、`memory-panel`。自由标签合法，但拼错框架已知标签会在 bootstrap 时 warn |
 | `execution` | enum | | **仅对手动触发(`POST /plugin-rpc`)的 runtime 生效。** `sync`（默认） / `background`。background 返回 202 + `jobId`,框架走 kernel job-status 流,前端通过 `plugin-data.changed` SSE 感知 |
 | `resultFormat` | enum | | `legacy`（默认）/ `envelope-v1`。envelope-v1 时 handler 返回 `{outcome: success\|suspended\|skipped\|failed, ...}` 判别联合；setup 完成信号用 `completion: "done"` |
-| `suspensionSafe` | boolean | | handler 可从冻结的激活边界重放（审批 / 表单 resume）。默认 false |
 | `effects` | object | | `{reads?, writes?, parallelSafe?}` 显式读写集声明，用于同层并行冒险检测。资源键如 `state:*`、`plugin-data:self:<ns>`、`event:<topic>`、`http:https://<host>` |
 | `permissions` | object | | `{http: [{origin, methods?}]}` — 插件 `ctx.http` 出网上限声明。`origin` 必须是规范 https origin（无路径/查询），`methods` 默认仅 GET |
+| `relations` | object | | `{provides?, requires?, recommends?, conflicts?}`，元素是插件 id 或 `{id, ...}`。**插件选择 UI 和 pack 解析读它**——`requires` 会把上游插件一并带进会话。它不改变执行语义（那是 trigger + 调度声明的事），但少写会让玩家只勾了你的插件时缺依赖 |
+| `dataSchemas` | map | | 本插件 plugin-data 各 namespace 的 schema 声明：`{namespace, schemaVersion, acceptsWorldData, schema（JSON Schema 相对路径）, description?}`。`acceptsWorldData: true` 才允许世界包的 worldData 往这个 namespace 灌数据 |
+| `memoryBlocks` | array | | 本插件贡献的 core-memory 块（`label` / `displayName` / `extractionHint` 必需，`icon` / `maxChars` 可选）。框架跨全部活跃插件聚合后驱动回合后抽取与 prompt 渲染；世界包也能加自己的块 |
+| `summaryFocus` | string[] | | 历史压缩（Compactor）时要求保留的主题，如 `['narrative', 'world-facts']`。框架聚合全部活跃 runtime 的声明后交给摘要 LLM |
+| `maxRecursionDepth` | number | | 本 runtime 的 `ctx.recursiveCall()` 最大嵌套深度，默认取执行器上限（当前 10） |
 
 ## 调度声明（stage / after / needs / inputs）
 
@@ -140,17 +144,24 @@ requireToolUse: true # 零成功工具调用就收场时，注入一条纠正消
 
 ```yaml
 tools:
-  builtin:                   # 框架内置工具(见 tools 清单)
+  builtin: # 框架内置工具,写名字
     - create-form
-    - create-choices
-    - create-notification
     - plugin-data-set
-    - plugin-data-get
-    - plugin-data-list
-    - plugin-data-set-batch
-  local:                     # 插件自定义工具,相对 PLUGIN.md 的路径
-    - ./tools/my-tool.js
+  plugin: # 本插件自有工具,写工具 NAME(不是路径),由 entry 模块注册
+    - generate-guide
+  defer: true # 可选:true 延迟整份白名单;或 [名字] 只延迟这几个(tool-search 按需拉取)
 ```
+
+内置工具全集（权威清单见 `docs/reference/tools.md`）：
+
+```
+create-character  create-choices  create-form  create-notification  emit-event
+get-character  list-characters  render-ui  runtime-done  suspend  update-character
+memory-get-block  memory-search  memory-update-block  world-dimension-get
+plugin-data-get  plugin-data-list  plugin-data-set  plugin-data-set-batch
+```
+
+> **`tools.local` 已被移除**（schema strict，声明即加载失败，报错会指向替代写法）。插件自有工具改走 `entry` 模块注册：工厂放 `tools/`，`entry: ./server/index.js` 里 `covel.registerTool(...)`，然后把**工具名**列进 `tools.plugin`。完整写法见 `references/tool-factory.md`。
 
 ## `input.inject`（prompt 上下文注入）
 
@@ -266,7 +277,6 @@ rpc:
     handler: ./rpc/regenerate.js
     input: ./rpc/regenerate.schema.json     # 可选 JSON Schema
     trustLevel: community                   # builtin/official/community,覆盖插件默认
-    streaming: false
     description: 重新生成上一段叙事
 ```
 
