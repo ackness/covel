@@ -32,7 +32,7 @@ Schema 使用 Zod **strict** 模式 — 不允许未定义字段，拼错会直�
 | `execution` | enum | | **仅对手动触发(`POST /plugin-rpc`)的 runtime 生效。** `sync`（默认） / `background`。background 返回 202 + `jobId`,框架走 kernel job-status 流,前端通过 `plugin-data.changed` SSE 感知 |
 | `resultFormat` | enum | | `legacy`（默认）/ `envelope-v1`。envelope-v1 时 handler 返回 `{outcome: success\|suspended\|skipped\|failed, ...}` 判别联合；setup 完成信号用 `completion: "done"` |
 | `effects` | object | | `{reads?, writes?, parallelSafe?}` 显式读写集声明，用于同层并行冒险检测。资源键如 `state:*`、`plugin-data:self:<ns>`、`event:<topic>`、`http:https://<host>` |
-| `permissions` | object | | `{http: [{origin, methods?}]}` — 插件 `ctx.http` 出网上限声明。`origin` 必须是规范 https origin（无路径/查询），`methods` 默认仅 GET |
+| `permissions` | object | | `{http: [{origin, methods?}]}` — 出网 allowlist，管的是 `ctx.utils.fetchWithRetry`（entry 侧同一组 helper 叫 `covel.http`）。`origin` 必须是规范 https origin（无路径/查询），`methods` 默认仅 GET。**只对 community 插件 fail-closed 强制**；builtin / official 视为可信直接放行（SSRF 校验两边都照跑） |
 | `relations` | object | | `{provides?, requires?, recommends?, conflicts?}`，元素是插件 id 或 `{id, ...}`。**插件选择 UI 和 pack 解析读它**——`requires` 会把上游插件一并带进会话。它不改变执行语义（那是 trigger + 调度声明的事），但少写会让玩家只勾了你的插件时缺依赖 |
 | `dataSchemas` | map | | 本插件 plugin-data 各 namespace 的 schema 声明：`{namespace, schemaVersion, acceptsWorldData, schema（JSON Schema 相对路径）, description?}`。`acceptsWorldData: true` 才允许世界包的 worldData 往这个 namespace 灌数据 |
 | `memoryBlocks` | array | | 本插件贡献的 core-memory 块（`label` / `displayName` / `extractionHint` 必需，`icon` / `maxChars` 可选）。框架跨全部活跃插件聚合后驱动回合后抽取与 prompt 渲染；世界包也能加自己的块 |

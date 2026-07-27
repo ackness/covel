@@ -14,14 +14,16 @@
 │   └─ 自管 wire：ctx.gateway.resolveSlot(...) 取 baseUrl/apiKey/model，自己 fetch
 │
 ├─ 图像生成
-│   └─ 先用 ctx.images.generate（框架 wire：openai-images / dashscope-wan，
-│      可 registerImageWire 扩展）；仅框架 wire 不覆盖的 provider 才自管 wire
+│   └─ 先用 ctx.images.generate（框架 wire：openai-images / dashscope-wan）；
+│      协议不同的 provider 写 wire 模块，entry 里 covel.registerWires() 注册
 │
-├─ 音频 / 视频生成
-│   └─ 一定自管 wire（gateway 没有 generateAudio）
+├─ 语音合成 (TTS) / 转录 (ASR)
+│   └─ 先用 ctx.speech.generate / .transcribe（框架 wire：openai-speech /
+│      openai-transcription）；协议不同的 provider 同样走 covel.registerWires()
+│      注册自己的 wire，而不是在 handler 里 fetch。范例：plugins/mimo-tts
 │
-├─ Embedding / 转录（ASR）
-│   └─ 一定自管 wire（gateway 不暴露这两类）
+├─ Embedding / 视频生成
+│   └─ 一定自管 wire（框架没有这两类的 wire 注册表）
 │
 ├─ Async submit + poll（DashScope wan2.x、某些视频 API）
 │   └─ 一定自管 wire（框架的 generateText 不会等任务）
