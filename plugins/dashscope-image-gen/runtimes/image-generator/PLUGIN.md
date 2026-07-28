@@ -17,7 +17,7 @@ trigger:
   topic: image.generate.requested
 userSettings:
   - key: modelPresetId
-    type: text
+    type: slot
     default: image
     label:
       zh: 服务配置

@@ -50,12 +50,14 @@ Web 端：在前端 Settings → API Keys 录入 `xiaomi`。
 | Runtime      | 关键字段           | 说明                                                                                       |
 | ------------ | ------------------ | ------------------------------------------------------------------------------------------ |
 | auto-narrate | `enabled`          | 关掉就只剩手动朗读                                                                         |
-| 共用         | `modelPresetId`    | 默认 `mimo-tts`，对应 `[covel.mimo-tts]`                                                   |
+| 共用         | `modelPresetId`    | `slot` 类型（UI 渲染成已配置槽的选择器）；默认 `mimo-tts`，对应 `[covel.mimo-tts]`         |
 | 共用         | `model`            | 留空走 slot；填写则 per-call 覆盖（切 voicedesign / voiceclone 用）                        |
 | 共用         | `voice`            | 默认 `mimo_default`；voicedesign / voiceclone 用预生成的 id                                |
 | 共用         | `format`           | `mp3` (默认，audio/mpeg) / `wav` (audio/wav)。`pcm` / `pcm16` 浏览器无法直接播放，已不暴露 |
 | 共用         | `maxChars`         | 单次合成最大字符（避免触发 server 限制）                                                   |
 | 共用         | `requestTimeoutMs` | 单次请求超时                                                                               |
+
+> 「共用」= 两个 runtime 都声明、且**必须逐字相同**：存储键是插件级的 `plugin.mimo-tts.<key>`，声明不一致时只有一个生效。`pnpm validate:plugin plugins/mimo-tts` 会挡住漂移。
 
 ## 数据布局
 

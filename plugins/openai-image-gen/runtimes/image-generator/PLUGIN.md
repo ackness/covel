@@ -17,7 +17,7 @@ trigger:
   topic: openai-image.generate.requested
 userSettings:
   - key: modelPresetId
-    type: text
+    type: slot
     default: openai-image
     label:
       zh: 服务配置

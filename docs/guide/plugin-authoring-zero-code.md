@@ -510,10 +510,25 @@ userSettings:
 | `slider`   | 滑块（数值） | `min`, `max`, `step` |
 | `toggle`   | 开关         | —                    |
 | `select`   | 下拉选择     | `options`（必需）    |
+| `slot`     | 模型槽选择器 | —                    |
 
 字段说明：`key` 用作存储键（`/^[a-zA-Z][a-zA-Z0-9_-]*$/`）；`label` / `description` 是 `I18nText`（`string` 或 `{ zh, en }`）；`default` 可省（如 cost-gate 靠 env 兜底）。声明的 `min` / `max` / `options` 会进 schema 校验——越界值会被拒，不只是 UI 提示。
 
 框架会**自动**把每条注册成 `plugin.<pluginId>.<key>` 并渲染成对应控件，零前端代码。runtime 里读取：agent 用 `{{ userSettings.<key> }}` 模板变量；function/hook 用 `ctx.userSettings` / `ctx.getOwnSettings()`。
+
+**`type: slot`——让玩家选服务配置**：插件要调用 LLM / 图像 / TTS 时，得知道走 `llm.toml` 里哪个 `[covel.<slot>]`。声明成 `slot` 类型后，框架把已配置的槽渲染成选择器（不是让玩家手打槽名），并在开局准备界面直接给出同一个选择器 + 「该槽未配置」的红字提示：
+
+```yaml
+userSettings:
+  - key: modelPresetId # key 名随意，框架认的是 type
+    type: slot
+    default: image # 声明的默认槽即使还没配置，也始终出现在选项里
+    label: { zh: 服务配置, en: Service setup }
+```
+
+`default` 指向的槽由插件自己传给 `ctx.images.generate({ presetId })` / `ctx.speech.generate()` 等接口。框架**按 `type` 发现**这个设置，与 `key` 叫什么无关。
+
+> **多 runtime 插件注意**：`userSettings` 的存储键是 `plugin.<pluginId>.<key>`——**插件级**，不是 runtime 级。两个 runtime 声明同一个 `key` 就共用同一个值：完全相同的声明会自动去重（一个共享旋钮重复写在每个读它的 runtime 上，是正常写法），声明不一致则只有一个生效、另一个被丢弃，`pnpm validate:plugin <插件目录>` 会报错。
 
 **世界可预置默认值**：世界包能在 `world.yaml` 顶层用 `pluginSettings` 给这些 `userSettings` 设世界级默认（玩家仍可覆盖）。解析链是 `玩家覆盖 → 世界默认 → 这里声明的 default`。见 [world-data.md](../reference/world-data.md#插件配置默认值pluginsettings)。
 

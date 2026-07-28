@@ -366,11 +366,22 @@ export interface ToolsConfig {
 export interface PluginUserSettingSpec {
   readonly key: string;
   // `integer` is a `number` constrained to whole values; `slider` is a
-  // `number` rendered as a range control (declare `min`/`max`). `secret` is
-  // intentionally not yet supported — its keys.env storage + transport channel
-  // are unresolved (see the configurable-surface spec, Open Question #4).
+  // `number` rendered as a range control (declare `min`/`max`). `slot` is a
+  // `string` naming an `llm.toml` `[covel.<slot>]` section — the framework
+  // renders the configured slots as a picker and auto-binds the declared
+  // default, so a plugin never has to make the player type a slot id.
+  // `secret` is intentionally not yet supported — its keys.env storage +
+  // transport channel are unresolved (see the configurable-surface spec,
+  // Open Question #4).
   readonly type:
-    "text" | "textarea" | "number" | "integer" | "toggle" | "select" | "slider";
+    | "text"
+    | "textarea"
+    | "number"
+    | "integer"
+    | "toggle"
+    | "select"
+    | "slider"
+    | "slot";
   // Optional: a setting may declare no default (e.g. cost-gate). Mirrors the
   // schema's `z.unknown().optional()` so the parsed manifest type-checks.
   readonly default?: unknown;

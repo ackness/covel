@@ -42,7 +42,7 @@ userSettings:
       zh: 每轮故事结束后自动生成旁白。关闭后可以用「朗读」按钮手动生成。
       en: Creates narration automatically after each story turn. Turn it off to use the Speak button manually.
   - key: modelPresetId
-    type: text
+    type: slot
     default: mimo-tts
     label:
       zh: 服务配置
@@ -71,9 +71,11 @@ userSettings:
     description:
       zh: 推荐使用常见音频格式，方便直接播放。
       en: Common audio formats are recommended so playback works directly.
+  # Shared with manual-narrate: both runtimes read plugin.mimo-tts.maxChars,
+  # so the two declarations must stay identical.
   - key: maxChars
     type: number
-    default: 1200
+    default: 1500
     min: 100
     max: 4000
     label:
@@ -82,9 +84,10 @@ userSettings:
     description:
       zh: 单次朗读的最长文字。太长的内容会自动截短，避免等待过久。
       en: Maximum text length for one narration. Longer text is shortened to avoid long waits.
+  # Shared with manual-narrate — keep identical (see maxChars above).
   - key: requestTimeoutMs
     type: number
-    default: 60000
+    default: 90000
     min: 5000
     max: 600000
     label:

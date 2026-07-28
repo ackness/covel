@@ -521,6 +521,7 @@ export const pluginUserSettingSpecSchema = z
       "toggle",
       "select",
       "slider",
+      "slot",
     ]),
     // zod 4.4: a bare `z.unknown()` field in ANY object (strict or not) is now
     // treated as a required key (4.3 treated it as optional); `.optional()`

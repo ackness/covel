@@ -54,9 +54,24 @@ export async function bootSessionStore({
       api.fetchLlmConfig().catch(() => null),
     ]);
 
+    // Slot ids offered to `type: slot` settings — llm.toml sections plus any
+    // slot the player defined client-side. Options only: the schema stays a
+    // bare string so a slot added after boot is still accepted.
+    const slotIds = [
+      ...new Set([
+        ...Object.keys(llmConfig?.slots ?? {}),
+        ...Object.keys(api.getSlotConfig()),
+      ]),
+    ].sort((a, b) => a.localeCompare(b));
+
     for (const pkg of packagesRes.packages) {
       if (pkg.userSettings && pkg.userSettings.length > 0) {
-        registerPluginUserSettings(getSettings(), pkg.name, pkg.userSettings);
+        registerPluginUserSettings(
+          getSettings(),
+          pkg.name,
+          pkg.userSettings,
+          slotIds,
+        );
       }
     }
 

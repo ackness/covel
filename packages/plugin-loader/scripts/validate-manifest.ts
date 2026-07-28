@@ -58,7 +58,7 @@ function collectManifestFiles(path: string): string[] {
   return files;
 }
 
-function validateFile(filePath: string): boolean {
+function validateFile(filePath: string): Record<string, unknown> | null {
   const content = readFileSync(filePath, "utf-8");
 
   let manifest: Record<string, unknown>;
@@ -72,12 +72,12 @@ function validateFile(filePath: string): boolean {
     console.error(
       `  ${error instanceof Error ? error.message : String(error)}`,
     );
-    return false;
+    return null;
   }
 
   if (compatOnly) {
     console.log(`✓ ${filePath} (compat)`);
-    return true;
+    return manifest;
   }
 
   // parsePluginMd appends the derived pluginId; the strict schema rejects
@@ -91,13 +91,102 @@ function validateFile(filePath: string): boolean {
         `  - ${issue.path.join(".") || "(root)"}: ${issue.message}`,
       );
     }
-    return false;
+    return null;
   }
   console.log(`✓ ${filePath}`);
-  return true;
+  return manifest;
 }
 
-const files = paths.flatMap(collectManifestFiles);
-for (const file of files) {
-  if (!validateFile(file)) process.exitCode = 1;
+// ── Cross-runtime (plugin-scope) checks ───────────────────────────
+
+interface CheckedManifest {
+  readonly file: string;
+  readonly manifest: Record<string, unknown>;
+}
+
+/** Key-order-independent serialisation, so field ordering is not a difference. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, val: unknown) =>
+    val && typeof val === "object" && !Array.isArray(val)
+      ? Object.fromEntries(
+          Object.entries(val as Record<string, unknown>).sort(([a], [b]) =>
+            a.localeCompare(b),
+          ),
+        )
+      : val,
+  );
+}
+
+/**
+ * Fields that are plugin-scoped even though they are declared on a runtime
+ * manifest: the framework loads them once per plugin, so a second declaration
+ * is silently dropped rather than merged. The per-file schema cannot see this
+ * — it only ever looks at one manifest.
+ */
+const SINGLE_DECLARATION_FIELDS = ["entry", "wires"] as const;
+
+function checkSingleDeclaration(checked: readonly CheckedManifest[]): boolean {
+  let ok = true;
+  for (const field of SINGLE_DECLARATION_FIELDS) {
+    const declaring = checked.filter((c) => c.manifest[field] !== undefined);
+    if (declaring.length <= 1) continue;
+    ok = false;
+    console.error(
+      `✗ \`${field}\` is declared by ${declaring.length} runtimes — it is loaded once per plugin, so only one takes effect`,
+    );
+    for (const c of declaring) console.error(`  - ${c.file}`);
+    console.error(
+      `  Fix: keep the single \`${field}\` declaration on the root PLUGIN.md and remove the others.`,
+    );
+  }
+  return ok;
+}
+
+/**
+ * `userSettings` are stored under the plugin-scoped key
+ * `plugin.<pluginId>.<key>`, so two runtimes declaring the same key share one
+ * value. Identical declarations are fine (the server dedupes them); diverging
+ * ones mean only one wins, and which one depends on manifest load order.
+ */
+function checkUserSettingCollisions(
+  checked: readonly CheckedManifest[],
+): boolean {
+  const seen = new Map<string, { file: string; json: string }>();
+  let ok = true;
+  for (const { file, manifest } of checked) {
+    const specs = manifest.userSettings;
+    if (!Array.isArray(specs)) continue;
+    for (const spec of specs as Array<Record<string, unknown>>) {
+      const key = String(spec.key);
+      const json = stableJson(spec);
+      const prior = seen.get(key);
+      if (!prior) {
+        seen.set(key, { file, json });
+        continue;
+      }
+      if (prior.json === json) continue;
+      ok = false;
+      console.error(
+        `✗ userSettings key "${key}" is declared differently by two runtimes — both map to one stored value`,
+      );
+      console.error(`  - ${prior.file}`);
+      console.error(`  - ${file}`);
+      console.error(
+        `  Fix: declare the key on one runtime, or make both declarations identical.`,
+      );
+    }
+  }
+  return ok;
+}
+
+for (const path of paths) {
+  const checked: CheckedManifest[] = [];
+  for (const file of collectManifestFiles(path)) {
+    const manifest = validateFile(file);
+    if (manifest) checked.push({ file, manifest });
+    else process.exitCode = 1;
+  }
+  if (checked.length < 2) continue;
+  if (!checkSingleDeclaration(checked)) process.exitCode = 1;
+  if (!checkUserSettingCollisions(checked)) process.exitCode = 1;
 }

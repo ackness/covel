@@ -1084,7 +1084,8 @@
               "integer",
               "toggle",
               "select",
-              "slider"
+              "slider",
+              "slot"
             ]
           },
           "default": {},
