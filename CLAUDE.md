@@ -46,6 +46,7 @@ with non-obvious behaviour are listed here — the rest are plain scripts in `pa
 
 ```bash
 pnpm dev              # web (5173) + server (3001), SqliteStore (default, ./data/covel.db)
+                      # server watches plugins/**/*.{md,js,json} — editing a PLUGIN.md or handler restarts it
 pnpm dev:server       # server only (SqliteStore default; STORE_BACKEND=memory for ephemeral)
 pnpm dev:pg           # STORE_BACKEND=pg — auto-runs db preflight, needs `pnpm db:up` first
 pnpm stop             # kill stray dev/turbo processes (dev-supervisor)
@@ -55,6 +56,7 @@ pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs (check:plugi
 pnpm e2e:verify       # API-driven, real-LLM plugin harness (needs .env.llm); pass --slot e2e_local --turns 3
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
 pnpm validate:plugin  # validate PLUGIN.md manifests; pass file or plugin dir, --compat for legacy
+                      # a plugin DIR also gets cross-runtime checks (single-declaration entry/wires, userSettings key collisions)
 pnpm build:electron   # production desktop installer → release/
 pnpm release:preflight  # static pre-tag gate: lockfile sync, import resolution, plugin/world/prompt structure
 ```
