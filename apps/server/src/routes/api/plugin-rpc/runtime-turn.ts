@@ -55,6 +55,13 @@ export interface RunManualTurnArgs {
   readonly userSettings?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
+  /**
+   * Run the runtime outside the session lock, committing under it — set for
+   * `execution: background`, which has already detached from the request and
+   * may run for minutes. Sync callers leave it unset: they await the response
+   * and are short enough that holding the lock throughout costs nothing.
+   */
+  readonly detached?: boolean;
 }
 
 export interface RunDeferredFollowerArgs {
@@ -174,6 +181,67 @@ export function createPluginRpcRuntimeTurnRunner(
     };
   }
 
+  /**
+   * Run a detached execution: the runtime executes OUTSIDE the session lock and
+   * only its commit takes it. Shared by deferred followers and by manual
+   * triggers in `execution: background` mode — both are media generations that
+   * legitimately run for minutes, and holding the session lock across that
+   * makes every player action queue behind them (under PostgreSQL, where the
+   * acquire budget is 30s, it makes them fail outright).
+   *
+   * Executing unlocked is safe here because the session clock is untouched
+   * (this path passes no `sessionClock` to `finalizeExecution`, and
+   * `completedPlayerTurns` counts only player-origin executions), domain writes
+   * are buffered into the commit transaction rather than dribbling out during
+   * the run, and no turn messages are appended. Executions of the SAME runtime
+   * stay serialised on `followerJobLock`, which is what keeps a handler's
+   * "already generated?" check atomic and stops a double charge.
+   */
+  async function runDetached(
+    runtimeId: string,
+    turnInput: TurnInput,
+    emitter: ReturnType<typeof createTurnEmitter>,
+  ): Promise<{
+    readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly commit: TurnCommitOutcome;
+  }> {
+    return followerJobLock.withLock(
+      `${ctx.sessionId}::${runtimeId}`,
+      async () => {
+        const result = await executeTurn(turnInput, ctx.activeRuntimes, {
+          ...ctx.deps,
+          store: ctx.store,
+          eventBus: ctx.eventBus,
+          emitter,
+          ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+        });
+        const outcome = await ctx.sessionLock.withLock(
+          ctx.sessionId,
+          async () => {
+            // Minutes can pass while the generation runs, so the session state
+            // read before it started is no longer trustworthy. Re-read under
+            // the lock and refuse to commit into a session the player has since
+            // paused or ended — the throw is caught by the background job
+            // runner, which settles the job row as failed.
+            const live = await ctx.store.getSession(ctx.sessionId);
+            if (!live) {
+              throw new Error(
+                "session was deleted while the background job was running",
+              );
+            }
+            if (live.status && live.status !== "active") {
+              throw new Error(
+                `session is ${live.status}; background job results were discarded`,
+              );
+            }
+            return processTurnResults(result, emitter);
+          },
+        );
+        return { turnResult: result, commit: outcome };
+      },
+    );
+  }
+
   async function runManualTurn(
     args: RunManualTurnArgs,
   ): Promise<ManualTurnSummary> {
@@ -204,20 +272,27 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
-    const { result, commit } = await ctx.sessionLock.withLock(
-      ctx.sessionId,
-      async () => {
-        const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
-          ...ctx.deps,
-          store: ctx.store,
-          eventBus: ctx.eventBus,
-          emitter,
-          ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+    // Background mode has already returned 202 to the client and detached from
+    // the request, and the only manual runtime that uses it is a media
+    // generation (mimo-tts/manual-narrate) — exactly the shape that must not
+    // hold the session lock. Sync mode is request-bound, short, and its caller
+    // awaits the HTTP response, so it keeps the whole run serialised.
+    const { result, commit } = args.detached
+      ? await runDetached(args.runtimeId, turnInput, emitter).then((r) => ({
+          result: r.turnResult,
+          commit: r.commit,
+        }))
+      : await ctx.sessionLock.withLock(ctx.sessionId, async () => {
+          const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
+            ...ctx.deps,
+            store: ctx.store,
+            eventBus: ctx.eventBus,
+            emitter,
+            ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+          });
+          const outcome = await processTurnResults(turnResult, emitter);
+          return { result: turnResult, commit: outcome };
         });
-        const outcome = await processTurnResults(turnResult, emitter);
-        return { result: turnResult, commit: outcome };
-      },
-    );
 
     return {
       commit,
@@ -267,61 +342,7 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
-    // Execution runs OUTSIDE the session lock; only the commit takes it.
-    //
-    // A background follower is usually a media generation: `background-gen`
-    // declares `timeoutMs: 360000`, and a single image legitimately takes
-    // 60-300s. Holding the session lock across that made every player message
-    // queue behind the artwork — and under PostgreSQL the 30s acquire budget
-    // meant the player's action did not merely wait, it timed out.
-    //
-    // Executing unlocked is safe because the three reasons the lock was taken
-    // no longer apply to this path: the session clock is untouched (this path
-    // passes no `sessionClock` to `finalizeExecution`, and `completedPlayerTurns`
-    // counts only `origin: "player"` executions), domain writes are buffered and
-    // land in `finalizeExecution`'s single transaction rather than dribbling out
-    // during the run, and a follower appends no turn messages. What genuinely
-    // needs the lock is the commit itself plus the auto-snapshot, which must see
-    // a settled session — so `processTurnResults` keeps it.
-    //
-    // Same-runtime followers are still serialised, by `followerJobLock` above.
-    const { turnResult, commit } = await followerJobLock.withLock(
-      `${ctx.sessionId}::${args.runtimeId}`,
-      async () => {
-        const result = await executeTurn(turnInput, ctx.activeRuntimes, {
-          ...ctx.deps,
-          store: ctx.store,
-          eventBus: ctx.eventBus,
-          emitter,
-          ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-        });
-        const outcome = await ctx.sessionLock.withLock(
-          ctx.sessionId,
-          async () => {
-            // Minutes can pass while the generation runs, so the session state
-            // read before it started is no longer trustworthy. Re-read under
-            // the lock and refuse to commit into a session the player has since
-            // paused or ended — the throw is caught by the background job
-            // runner, which settles the job row as failed.
-            const live = await ctx.store.getSession(ctx.sessionId);
-            if (!live) {
-              throw new Error(
-                "session was deleted while the background job was running",
-              );
-            }
-            if (live.status && live.status !== "active") {
-              throw new Error(
-                `session is ${live.status}; background job results were discarded`,
-              );
-            }
-            return processTurnResults(result, emitter);
-          },
-        );
-        return { turnResult: result, commit: outcome };
-      },
-    );
-
-    return { turnResult, commit };
+    return runDetached(args.runtimeId, turnInput, emitter);
   }
 
   return { runManualTurn, runDeferredFollowerTurn };

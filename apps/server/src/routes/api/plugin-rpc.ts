@@ -287,6 +287,13 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       runtimeTurnRunner.runManualTurn({
         turnId,
         runtimeId: body.runtimeId!,
+        // Background mode returns 202 and detaches from this request, and the
+        // runtimes that use it are media generations that run for minutes —
+        // they must not hold the session lock while doing so. Sync mode is
+        // awaited by the caller and stays fully serialised.
+        ...((target.execution ?? "sync") === "background"
+          ? { detached: true }
+          : {}),
         ...(body.payload !== undefined ? { payload: body.payload } : {}),
         ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
       });

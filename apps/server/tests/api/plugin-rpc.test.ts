@@ -792,7 +792,7 @@ function setupRuntimeTestEnv(args: {
     await next();
   });
   app.route("/api/sessions", pluginRpcRoutes);
-  return { app, store, pluginRegistry, gate };
+  return { app, store, pluginRegistry, gate, sessionLock };
 }
 
 async function seedRuntimeSession(
@@ -1383,6 +1383,59 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     );
     expect(byKey.get("job-alpha")?.url).toBe("https://cdn.test/alpha.png");
     expect(byKey.get("job-beta")?.url).toBe("https://cdn.test/beta.png");
+  });
+
+  // `execution: background` has already returned 202 and detached from the
+  // request, and the runtimes using it are media generations — mimo-tts's
+  // manual narration runs for as long as the speech takes. Holding the session
+  // lock across that queues every player action behind it, and under
+  // PostgreSQL (30s acquire budget) makes them fail rather than wait.
+  it("leaves the session lock free while a background runtime executes", async () => {
+    let playerCouldAct = false;
+
+    const env = setupRuntimeTestEnv({
+      pluginId: PLUGIN_ID,
+      runtimeId: BG_RUNTIME,
+      execution: "background",
+      handler: async () => {
+        // Stands in for the player acting mid-generation. The timeout keeps a
+        // regression from hanging the suite: if execution moves back under the
+        // session lock this resolves `false` instead of deadlocking.
+        await Promise.race([
+          env.sessionLock.withLock(SESSION_ID, async () => {
+            playerCouldAct = true;
+          }),
+          new Promise((resolve) => setTimeout(resolve, 250)),
+        ]);
+        return { ok: true };
+      },
+    });
+    await seedRuntimeSession(env.store, PLUGIN_ID, SESSION_ID);
+
+    const res = await env.app.request(
+      `/api/sessions/${SESSION_ID}/plugin-rpc`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pluginId: PLUGIN_ID, runtimeId: BG_RUNTIME }),
+      },
+    );
+    expect(res.status).toBe(202);
+    const { jobId } = (await res.json()) as { jobId: string };
+
+    await waitFor(async () => {
+      const rows = await env.store.listPluginData(
+        SESSION_ID,
+        PLUGIN_ID,
+        "_jobs",
+      );
+      return (
+        (rows.find((r) => r.key === jobId)?.value as { status?: string })
+          ?.status === "done"
+      );
+    });
+
+    expect(playerCouldAct).toBe(true);
   });
 
   it("returns 202 + jobId for a background runtime and writes _jobs pending → done", async () => {
