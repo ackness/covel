@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -86,13 +86,27 @@ export function WorldSelectScreen({
   const [deletingWorldId, setDeletingWorldId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
+  // Entering a world used to defer the actual navigation to
+  // `requestAnimationFrame`, so the busy state could paint one frame first.
+  // Browsers pause rAF while a page is hidden, so a click on a backgrounded
+  // or throttled tab set the busy flag and then never navigated: the card
+  // spun forever, every other card went `pointer-events-none`, and there was
+  // no error and no way back short of a reload. Selecting a world is two
+  // dispatches — nothing worth deferring behind a frame that may never come.
   function handleEnterWorld(worldId: string) {
     if (enteringWorldId) return;
     setEnteringWorldId(worldId);
-    window.requestAnimationFrame(() => {
-      onSelectWorld(worldId);
-    });
+    onSelectWorld(worldId);
   }
+
+  // A successful selection unmounts this screen, so the flag disappears with
+  // it. Still being mounted means the navigation did not take — release the
+  // lock instead of stranding the player on a dead grid.
+  useEffect(() => {
+    if (!enteringWorldId) return;
+    const timer = setTimeout(() => setEnteringWorldId(null), 1500);
+    return () => clearTimeout(timer);
+  }, [enteringWorldId]);
 
   const selectedWorld = selectedWorldId
     ? (worlds.find((w) => w.id === selectedWorldId) ?? null)
