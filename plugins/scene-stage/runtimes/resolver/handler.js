@@ -1,4 +1,3 @@
-import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 import { createHash } from "node:crypto";
 import {
@@ -8,9 +7,8 @@ import {
   SCENES_NS,
   STAGE_KEY,
   STAGE_NS,
-  resolveMedia,
-  sourceLabelFor,
-  variantLabelFor,
+  buildStageRecord,
+  makeStageProposal,
 } from "../../lib/stage-data.js";
 
 const DEFAULT_MAX_GENERATED = 10;
@@ -80,19 +78,15 @@ export default async function handler(ctx) {
         }
       : buildUnmatchedCandidate(ctx, location, generatedRows);
 
-  const stage = {
+  const stage = buildStageRecord({
     sceneId: candidate.sceneId,
     name: candidate.name,
     variant,
-    variantLabel: variantLabelFor(variant),
     source: candidate.source,
     day: candidate.day,
     night: candidate.night,
-    resolved: resolveMedia(variant, candidate.day, candidate.night),
-    sourceLabel: sourceLabelFor(candidate.source),
     turnId: ctx.turnId,
-    updatedAt: new Date().toISOString(),
-  };
+  });
 
   // A "pending" previous stage is never a no-op: if background-gen failed
   // (no `generated` row written), a re-emitted scene.set is the only signal
@@ -274,12 +268,4 @@ function matchGenerated(rows, location) {
     if (key && (loc.includes(key) || key.includes(loc))) return value;
   }
   return null;
-}
-
-function makeStageProposal(ctx, stage) {
-  return makeProposal(ctx, new Date().toISOString(), "plugin.data", {
-    namespace: STAGE_NS,
-    key: STAGE_KEY,
-    value: stage,
-  });
 }
