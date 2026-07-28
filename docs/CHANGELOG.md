@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file. Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.23] - 2026-07-28
 
 ### Changed
 
@@ -855,7 +855,12 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.17...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.23...HEAD
+[0.0.23]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.23
+[0.0.22]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.22
+[0.0.21]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.21
+[0.0.20]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.20
+[0.0.18]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.18
 [0.0.17]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.17
 [0.0.16]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.16
 [0.0.15]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.15
