@@ -3,6 +3,7 @@ import {
   runtimeManifestSchema,
   validateRuntimeManifestSemantics,
 } from "../src/schemas/plugin.js";
+import { PLUGIN_SCOPED_FIELDS } from "../src/types/plugin.js";
 
 describe("plugin manifest dataSchemas", () => {
   it("normalizes keyed declarations into plugin data schema declarations", () => {
@@ -142,6 +143,50 @@ describe("plugin manifest semantic diagnostics", () => {
     });
 
     expect(validateRuntimeManifestSemantics(manifest)).toEqual([]);
+  });
+});
+
+describe("plugin-scoped field registry", () => {
+  // The registry exists so a new plugin-scoped field cannot be added without
+  // stating how it merges — `userSettings` shipped with no conflict handling
+  // precisely because that decision had no home. The type-level exhaustiveness
+  // check enforces membership at compile time; this pins the payload so a
+  // silent edit to a merge rule shows up as a failing test.
+  it("registers every field the manifest declares as plugin-scoped", () => {
+    expect(Object.keys(PLUGIN_SCOPED_FIELDS).sort()).toEqual([
+      "dataSchemas",
+      "displayName",
+      "entry",
+      "events",
+      "memoryBlocks",
+      "relations",
+      "tags",
+      "userSettings",
+      "wires",
+    ]);
+  });
+
+  it("keeps the strictest conflict rules where the framework enforces them", () => {
+    // dataSchemas is the only field that hard-fails; userSettings warns.
+    expect(PLUGIN_SCOPED_FIELDS.dataSchemas.conflict).toMatch(/throw/i);
+    expect(PLUGIN_SCOPED_FIELDS.userSettings.conflict).toMatch(/warn/i);
+    // entry/wires read as single-declaration fields but are additive.
+    expect(PLUGIN_SCOPED_FIELDS.entry.merge).toBe("union");
+    expect(PLUGIN_SCOPED_FIELDS.wires.merge).toBe("union");
+    // displayName is the sole root-only field.
+    expect(PLUGIN_SCOPED_FIELDS.displayName.merge).toBe("root-only");
+  });
+
+  it("points every field at the code implementing its merge", () => {
+    for (const [field, spec] of Object.entries(PLUGIN_SCOPED_FIELDS)) {
+      expect(spec.where, `${field} must name its implementation`).toMatch(
+        /^(apps|packages)\/.+\.ts/,
+      );
+      expect(
+        spec.conflict.length,
+        `${field} must describe conflicts`,
+      ).toBeGreaterThan(0);
+    }
   });
 });
 

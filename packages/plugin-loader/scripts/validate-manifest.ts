@@ -117,30 +117,11 @@ function stableJson(value: unknown): string {
   );
 }
 
-/**
- * Fields that are plugin-scoped even though they are declared on a runtime
- * manifest: the framework loads them once per plugin, so a second declaration
- * is silently dropped rather than merged. The per-file schema cannot see this
- * — it only ever looks at one manifest.
- */
-const SINGLE_DECLARATION_FIELDS = ["entry", "wires"] as const;
-
-function checkSingleDeclaration(checked: readonly CheckedManifest[]): boolean {
-  let ok = true;
-  for (const field of SINGLE_DECLARATION_FIELDS) {
-    const declaring = checked.filter((c) => c.manifest[field] !== undefined);
-    if (declaring.length <= 1) continue;
-    ok = false;
-    console.error(
-      `✗ \`${field}\` is declared by ${declaring.length} runtimes — it is loaded once per plugin, so only one takes effect`,
-    );
-    for (const c of declaring) console.error(`  - ${c.file}`);
-    console.error(
-      `  Fix: keep the single \`${field}\` declaration on the root PLUGIN.md and remove the others.`,
-    );
-  }
-  return ok;
-}
+// `entry` / `wires` are deliberately NOT checked here. They look like
+// single-declaration fields — the manifest comments long said "declare on ONE
+// runtime per plugin" — but the loaders collect every declared path into a Set
+// and run all of them, so a second declaration is additive, not dropped. See
+// `PLUGIN_SCOPED_FIELDS` in @covel/shared for each field's real merge rule.
 
 /**
  * `userSettings` are stored under the plugin-scoped key
@@ -187,6 +168,5 @@ for (const path of paths) {
     else process.exitCode = 1;
   }
   if (checked.length < 2) continue;
-  if (!checkSingleDeclaration(checked)) process.exitCode = 1;
   if (!checkUserSettingCollisions(checked)) process.exitCode = 1;
 }

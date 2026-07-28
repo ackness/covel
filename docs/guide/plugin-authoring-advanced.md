@@ -26,6 +26,7 @@ import type {
   PluginType, // 'core-plugin' | 'plugin'
   PluginManifest, // 完整插件清单
   RuntimeManifest, // 运行时清单（PLUGIN.md frontmatter 的解析结果）
+  PluginScopedManifestFields, // RuntimeManifest 中按“插件”而非按 runtime 消费的 9 个字段
 
   // 触发系统
   TriggerType, // 'auto' | 'manual' | 'scheduled' | 'event'(枚举闭合,其余取值加载失败)
@@ -226,9 +227,31 @@ plugins/my-combat/
 - 通过 `input.inject` 互相传递数据
 - 共享 `tools/` 目录下的工具
 
-`discoverPlugins()` 在检测到 `runtimes/` 子目录后**只**收集 `runtimes/*/PLUGIN.md` 作为 runtime；根目录的 `PLUGIN.md`（如果存在）仅被 `loadPluginSummary()` 读取，用于提供包级 `name`（displayName）和 `description`。**没有**根 PLUGIN.md 时，框架会把展示名强制设为 plugin id（如 `my-combat`），UI 会显得冗长。第三方插件作者建议提供根 PLUGIN.md；详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
+`discoverPlugins()` 在检测到 `runtimes/` 子目录后**只**收集 `runtimes/*/PLUGIN.md` 作为 runtime；根目录的 `PLUGIN.md`（如果存在）由 `loadPluginSummary()` 读取以提供包级 `name`（displayName）和 `description`，其 `entry` 字段另由 `plugin-entry.ts` 直接读取（它不在 runtime 列表里，早期版本因此丢过整个插件的本地工具注册）。**没有**根 PLUGIN.md 时，框架会把展示名强制设为 plugin id（如 `my-combat`），UI 会显得冗长。第三方插件作者建议提供根 PLUGIN.md；详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
 
 > 注意：单 runtime 插件正好相反 —— 没有 `runtimes/` 时，根目录的 `PLUGIN.md` 本身就是唯一的 runtime（其 frontmatter 同时承担 runtime 字段和包级摘要两种职责）。
+
+### 插件级字段的合并规则
+
+PLUGIN.md 只有一套 frontmatter schema，但其中 9 个字段是**按插件消费**而非按 runtime 消费的。多 runtime 插件重复声明它们时，各字段的处理方式并不统一——单一真相是 `@covel/shared` 的 `PLUGIN_SCOPED_FIELDS` 常量（`packages/shared/src/types/plugin.ts`），类型系统强制每个插件级字段都必须在那里登记合并规则：
+
+| 字段           | 多 runtime 声明时              | 冲突处理                         |
+| -------------- | ------------------------------ | -------------------------------- |
+| `entry`        | 全部执行（路径去重，含根）     | 无——都注册到同一个 pluginId      |
+| `wires`        | 全部加载                       | wire id 冲突由 wire registry 定  |
+| `tags`         | 合并去重                       | 无                               |
+| `relations`    | session 解析时合并所有 runtime | 无                               |
+| `userSettings` | 按 `key` 合并                  | **不一致则 warn，先声明的赢**    |
+| `dataSchemas`  | 按 namespace 合并              | **不一致直接抛错，插件注册失败** |
+| `events`       | 按 `topic` 合并                | 先声明的赢（跨插件冲突才 warn）  |
+| `memoryBlocks` | 按 `label` 跨**所有插件**合并  | 信任级高的赢，同级先声明的赢     |
+| `displayName`  | **只读根 PLUGIN.md**           | 不适用                           |
+
+要点：
+
+- `entry` / `wires` 惯例上写在根 PLUGIN.md，但**不是**只能写一处——两个 runtime 声明不同路径时两个都会加载。
+- `userSettings` 的存储键是 `plugin.<pluginId>.<key>`，两个 runtime 声明同一 key 就共用一个值，所以声明必须逐字相同。`pnpm validate:plugin <插件目录>` 会检查这一条。
+- `displayName` 无法在 runtime 上声明——runtime 的 displayName 描述的是那个 runtime，不是插件。
 
 `PluginManifest` 类型反映了这种结构：
 
