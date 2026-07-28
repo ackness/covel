@@ -656,10 +656,14 @@ handler: ./handler.js
 - `sync`(默认):HTTP 响应阻塞到 runtime 完成。适合能秒级返回的任务。
 - `background`:立即返回 202 + `jobId`,任务在 `setImmediate` 后台跑。框架在 `plugin_data` 表下 `_jobs/<jobId>` 写入 `{status: 'pending' → 'done' | 'failed', ...}` 三态,每次写入都通过 `plugin-data.changed` SSE 广播,前端通过订阅 `_jobs` 命名空间或你自己的业务命名空间(如 `images`)拿到最终态。
 
-**background 下的两个强约束:**
+**background 下的四个强约束:**
 
 1. 插件**禁止**直接写 `_jobs` 命名空间 —— 框架独占。业务状态请写到自己的命名空间(如 `images/{jobId}` `{status: 'pending'}` → `{status: 'ready', ref: ...}`)。
 2. `setImmediate` 中抛出的异常**不会**映射为 5xx —— 响应已发。失败信息会被框架写入 `_jobs/<jobId>.value.error`,前端通过 SSE 感知。
+3. **handler 不持会话锁**。只有提交阶段进锁——否则一次几分钟的出图会把玩家的下一条消息一起堵住。两个后果要写 handler 时记住:
+   - 同一 runtime 的并发执行由框架按 `<sessionId>::<runtimeId>` 串行,所以"这张图是不是已经生成过"这类 check-then-act **在同一 runtime 内是原子的**,不会重复计费;**跨 runtime 不保证**。
+   - handler 执行期间,并发的玩家回合可能改写会话数据。读-改-写**自己**的命名空间是安全的(读经 writeBuffer overlay、写在同一事务提交);但如果你把别处的状态读出来再写回去,要假设中途它已经变了。
+4. **进程重启不恢复,且框架不自动重跑**。后台任务由进程内队列驱动,没有持久队列。重启后开机扫描会把上个进程留下的 `pending` 行标为 `failed` + `reason: "orphaned"`,并保留 `payload` / `triggerEvent`。不自动重跑是有意的——重跑要再计一次费,且请求级 `userSettings` 没有持久化在任务行上,重跑等于换参数重新扣费。需要"一键重试"就自己读这行的 `triggerEvent` 提供入口。
 
 **事件链 chain:** 无论 sync 还是 background,runtime emit 的 `event.emit` proposal 都会触发同一 turn 内订阅该 topic 的下游 runtime(同一事件的多个订阅者按 `name` 定序),不需要额外协调。这让"按钮 → prompt-generator (agent) → image-generator (function, background)"这种多步 pipeline 完全声明式。
 
