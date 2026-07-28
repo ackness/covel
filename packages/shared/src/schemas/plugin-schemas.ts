@@ -434,6 +434,11 @@ const pluginTagSchema = z
       'tags must be identifiers such as "mode:dialogue", "role:narrator", or "ui-only"',
   });
 
+// A relation names a plugin — as a bare id, or as `runtime` / `plugin` when
+// the author wants to spell it out. `capability` / `tag` targets are NOT
+// accepted: nothing in the framework ever resolved them, so declaring one
+// would parse and then be silently ignored. Capability-based *scheduling*
+// dependencies are a different field — see `needs` / `after`.
 const relationTargetSchema = z
   .union([
     z.string().min(1),
@@ -441,8 +446,6 @@ const relationTargetSchema = z
       .object({
         plugin: z.string().min(1).optional(),
         runtime: z.string().min(1).optional(),
-        capability: z.string().min(1).optional(),
-        tag: pluginTagSchema.optional(),
       })
       .strict(),
   ])
@@ -456,8 +459,6 @@ const pluginRelationSchema = z
     target: relationTargetSchema,
     plugin: z.string().min(1).optional(),
     runtime: z.string().min(1).optional(),
-    capability: z.string().min(1).optional(),
-    tag: pluginTagSchema.optional(),
     optional: z.boolean().optional(),
     reason: i18nTextLoose.optional(),
   })
@@ -466,13 +467,8 @@ const pluginRelationSchema = z
     (value) =>
       value.target !== undefined ||
       value.plugin !== undefined ||
-      value.runtime !== undefined ||
-      value.capability !== undefined ||
-      value.tag !== undefined,
-    {
-      message:
-        "relation must declare target, plugin, runtime, capability, or tag",
-    },
+      value.runtime !== undefined,
+    { message: "relation must declare target, plugin, or runtime" },
   );
 
 export const pluginRelationsSchema = z

@@ -309,21 +309,35 @@ export type PluginTag = string;
 export interface PluginRelationTarget {
   readonly plugin?: string;
   readonly runtime?: string;
-  readonly capability?: string;
-  readonly tag?: PluginTag;
 }
 
+/**
+ * Long form of a relation entry. A bare string is the normal spelling and is
+ * what every bundled plugin uses; this object form only adds `optional` /
+ * `reason` metadata on top of the same target.
+ *
+ * There is deliberately no `capability` / `tag` target: relations are resolved
+ * to a plugin id (`relationPluginId` in the session-plugins route), so a
+ * capability target would parse and then never match anything. Capability-based
+ * *scheduling* dependencies are a separate, working mechanism — `needs` /
+ * `after`, see {@link RuntimeManifest.needs}.
+ */
 export interface PluginRelation {
   readonly type?: "requires" | "recommends" | "conflicts" | "provides";
   readonly target?: string | PluginRelationTarget;
   readonly plugin?: string;
   readonly runtime?: string;
-  readonly capability?: string;
-  readonly tag?: PluginTag;
   readonly optional?: boolean;
   readonly reason?: import("./world.js").I18nText;
 }
 
+/**
+ * Plugin catalogue relations. Entries are plugin ids (`scene-cast`) or
+ * `pluginId/runtimeId` — EXCEPT under `provides`, where the string is an
+ * opaque capability label two plugins can share to mark themselves as
+ * interchangeable (`narrator` and `chat-mode-narrator` both provide
+ * `narrative-engine`, which is how one may replace the other).
+ */
 export interface PluginRelations {
   readonly provides?: readonly (string | PluginRelation)[];
   readonly requires?: readonly (string | PluginRelation)[];

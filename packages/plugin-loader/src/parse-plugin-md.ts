@@ -56,6 +56,24 @@ interface ZodIssue {
   readonly message: string;
   /** Present on `unrecognized_keys`; the offending names live here, not in `path`. */
   readonly keys?: readonly string[];
+  /** Present on `invalid_union`; one entry per union branch that failed. */
+  readonly errors?: readonly (readonly ZodIssue[])[];
+}
+
+/**
+ * Zod reports a failed union as a single `invalid_union` issue whose real
+ * detail sits one level down, one array per branch. Left alone the hint
+ * degrades to a bare "Invalid input", which tells a plugin author nothing —
+ * so unwrap to the first branch issue naming an unrecognized key, rebasing its
+ * path onto the union's. Non-union issues pass through untouched.
+ */
+function unwrapUnionIssue(issue: ZodIssue | undefined): ZodIssue | undefined {
+  if (!issue || issue.code !== "invalid_union" || !issue.errors) return issue;
+  for (const branch of issue.errors) {
+    const inner = branch.find((i) => i.code === "unrecognized_keys");
+    if (inner) return { ...inner, path: [...issue.path, ...inner.path] };
+  }
+  return issue;
 }
 interface ZodErrorLike {
   readonly name: string;
@@ -79,7 +97,7 @@ function deriveFixHint(error: unknown): string {
   if (!zerr) {
     return "Check the PLUGIN.md frontmatter against docs/reference/plugins.md.";
   }
-  const firstIssue = zerr.issues[0];
+  const firstIssue = unwrapUnionIssue(zerr.issues[0]);
   if (!firstIssue)
     return "Check the PLUGIN.md frontmatter against docs/reference/plugins.md.";
 
@@ -101,6 +119,11 @@ function deriveFixHint(error: unknown): string {
       local:
         "`tools.local` was removed — register the tool in the plugin's `entry` module " +
         "(`covel.registerTool`) and list its NAME under `tools.plugin`.",
+      capability:
+        "a `relations` entry cannot target a `capability` — nothing ever resolved it, " +
+        "so it was removed. Name the plugin id instead. For a capability-based " +
+        "*scheduling* dependency use `needs` / `after`, which do resolve capabilities.",
+      tag: "a `relations` entry cannot target a `tag` — nothing ever resolved it, so it was removed. Name the plugin id instead.",
     };
     const replaced = keys.filter((k) => k in replacements);
     if (replaced.length > 0) {

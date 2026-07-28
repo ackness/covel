@@ -93,7 +93,7 @@ describe("plugin manifest dataSchemas", () => {
       tags: ["mode:dialogue", "role:narrator", "cost:llm"],
       relations: {
         provides: ["narrative-engine"],
-        requires: [{ capability: "scene-cast", reason: "Needs cast state" }],
+        requires: [{ plugin: "scene-cast", reason: "Needs cast state" }],
         conflicts: ["narrator"],
       },
     });
@@ -142,5 +142,67 @@ describe("plugin manifest semantic diagnostics", () => {
     });
 
     expect(validateRuntimeManifestSemantics(manifest)).toEqual([]);
+  });
+});
+
+describe("plugin manifest relations", () => {
+  const base = {
+    name: "relating-plugin",
+    description: "Relating plugin",
+    stage: "narrative" as const,
+  };
+
+  it("accepts bare plugin ids, the normal spelling", () => {
+    const manifest = runtimeManifestSchema.parse({
+      ...base,
+      relations: {
+        provides: ["narrative-engine"],
+        requires: ["scene-cast"],
+        conflicts: ["narrator"],
+      },
+    });
+
+    expect(manifest.relations?.requires).toEqual(["scene-cast"]);
+  });
+
+  it("accepts the long form with plugin/runtime and metadata", () => {
+    const manifest = runtimeManifestSchema.parse({
+      ...base,
+      relations: {
+        recommends: [
+          { plugin: "character-presence", optional: true, reason: "Avatars" },
+          { target: { runtime: "npc-graph/extractor" } },
+        ],
+      },
+    });
+
+    expect(manifest.relations?.recommends).toHaveLength(2);
+  });
+
+  it("rejects a capability target — it would parse and never resolve", () => {
+    expect(() =>
+      runtimeManifestSchema.parse({
+        ...base,
+        relations: { requires: [{ capability: "narrative" }] },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a tag target", () => {
+    expect(() =>
+      runtimeManifestSchema.parse({
+        ...base,
+        relations: { recommends: [{ tag: "mode:dialogue" }] },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects an entry that names no target at all", () => {
+    expect(() =>
+      runtimeManifestSchema.parse({
+        ...base,
+        relations: { requires: [{ optional: true }] },
+      }),
+    ).toThrow(/must declare target, plugin, or runtime/);
   });
 });

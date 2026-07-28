@@ -166,16 +166,6 @@
                           "runtime": {
                             "type": "string",
                             "minLength": 1
-                          },
-                          "capability": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "tag": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 64,
-                            "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
                           }
                         },
                         "additionalProperties": false
@@ -189,16 +179,6 @@
                   "runtime": {
                     "type": "string",
                     "minLength": 1
-                  },
-                  "capability": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "tag": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
                   },
                   "optional": {
                     "type": "boolean"
@@ -256,16 +236,6 @@
                           "runtime": {
                             "type": "string",
                             "minLength": 1
-                          },
-                          "capability": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "tag": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 64,
-                            "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
                           }
                         },
                         "additionalProperties": false
@@ -279,16 +249,6 @@
                   "runtime": {
                     "type": "string",
                     "minLength": 1
-                  },
-                  "capability": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "tag": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
                   },
                   "optional": {
                     "type": "boolean"
@@ -346,16 +306,6 @@
                           "runtime": {
                             "type": "string",
                             "minLength": 1
-                          },
-                          "capability": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "tag": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 64,
-                            "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
                           }
                         },
                         "additionalProperties": false
@@ -369,16 +319,6 @@
                   "runtime": {
                     "type": "string",
                     "minLength": 1
-                  },
-                  "capability": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "tag": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
                   },
                   "optional": {
                     "type": "boolean"
@@ -436,16 +376,6 @@
                           "runtime": {
                             "type": "string",
                             "minLength": 1
-                          },
-                          "capability": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "tag": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 64,
-                            "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
                           }
                         },
                         "additionalProperties": false
@@ -459,16 +389,6 @@
                   "runtime": {
                     "type": "string",
                     "minLength": 1
-                  },
-                  "capability": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "tag": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
                   },
                   "optional": {
                     "type": "boolean"

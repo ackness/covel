@@ -545,6 +545,37 @@ describe("parsePluginMd", () => {
       expect(caught!.message).not.toContain("begins with `---`");
     });
 
+    // A relation entry is a union (bare string | object), and Zod buries the
+    // real cause one level down inside `invalid_union`. Without unwrapping it,
+    // the hint degrades to "Invalid input" and a plugin author migrating off
+    // the removed `capability` / `tag` targets is told nothing actionable.
+    it("reaches into a failed union to name the removed relation target", () => {
+      const content = md(
+        [
+          "name: legacy-relations",
+          "description: Uses the removed capability relation target",
+          "stage: narrative",
+          "relations:",
+          "  requires:",
+          "    - capability: narrative-engine",
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      let caught: Error | undefined;
+      try {
+        parsePluginMd(content, "plugins/legacy-relations/PLUGIN.md");
+      } catch (err) {
+        caught = err as Error;
+      }
+
+      expect(caught).toBeDefined();
+      expect(caught!.message).toContain("Fix:");
+      expect(caught!.message).toContain("`capability`");
+      expect(caught!.message).toContain("`needs`");
+      expect(caught!.message).not.toContain("Fix: Field");
+    });
+
     it("names a misspelled field instead of blaming the frontmatter", () => {
       const content = md(
         [

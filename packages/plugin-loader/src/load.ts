@@ -162,12 +162,21 @@ export async function loadPluginSummary(
   const isI18n = (v: unknown): v is string | Record<string, string> =>
     typeof v === "string" ||
     (typeof v === "object" && v !== null && !Array.isArray(v));
+  // `name` / `displayName` are gated on the root summary while `description` /
+  // `tags` / `relations` below are not, and that asymmetry is deliberate: the
+  // fallback file is `runtimes/<first>/PLUGIN.md`, where `name` is the runtime
+  // id (`pluginId/subName`) and `displayName` names that one runtime. Either
+  // would be wrong as the PLUGIN's identity, so fall back to the directory id
+  // instead. The other fields degrade gracefully — a sub-runtime's description
+  // beats an empty string, and plugin-catalog re-aggregates tags across every
+  // runtime anyway. Consequence: a multi-runtime plugin with no root PLUGIN.md
+  // cannot declare a friendly plugin name at all (it also loses `entry` /
+  // `wires`), which is why the authoring docs ask for a root PLUGIN.md.
   const name = hasRootSummary
     ? isI18n(data.name)
       ? data.name
       : discovery.id
     : discovery.id;
-  // Friendly display name (I18nText) — only meaningful from the root summary.
   const displayName =
     hasRootSummary && isI18n(data.displayName) ? data.displayName : undefined;
   const description = isI18n(data.description) ? data.description : "";
