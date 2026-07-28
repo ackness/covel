@@ -545,6 +545,41 @@ describe("parsePluginMd", () => {
       expect(caught!.message).not.toContain("begins with `---`");
     });
 
+    // A relation entry is now a plain id string. Every object spelling the
+    // schema used to accept is rejected, and a bare "expected string, received
+    // object" would leave a migrating author guessing what to write instead.
+    it.each([
+      ["capability target", "    - capability: narrative-engine"],
+      ["plugin key", "    - plugin: scene-cast"],
+      ["target object", "    - target: { plugin: scene-cast }"],
+      ["metadata form", "    - { runtime: npc-graph/extractor, reason: why }"],
+    ])("tells an author how to rewrite the removed %s", (_label, entry) => {
+      const content = md(
+        [
+          "name: legacy-relations",
+          "description: Uses a removed relation form",
+          "stage: narrative",
+          "relations:",
+          "  requires:",
+          entry,
+        ].join("\n"),
+        "\nBody.\n",
+      );
+
+      let caught: Error | undefined;
+      try {
+        parsePluginMd(content, "plugins/legacy-relations/PLUGIN.md");
+      } catch (err) {
+        caught = err as Error;
+      }
+
+      expect(caught).toBeDefined();
+      expect(caught!.message).toContain("Fix:");
+      expect(caught!.message).toContain("just the plugin id");
+      // Not the generic type-mismatch fallback.
+      expect(caught!.message).not.toContain("has the wrong type");
+    });
+
     it("names a misspelled field instead of blaming the frontmatter", () => {
       const content = md(
         [

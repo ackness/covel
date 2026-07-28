@@ -306,29 +306,30 @@ export interface PluginEventDecl {
 
 export type PluginTag = string;
 
-export interface PluginRelationTarget {
-  readonly plugin?: string;
-  readonly runtime?: string;
-  readonly capability?: string;
-  readonly tag?: PluginTag;
-}
-
-export interface PluginRelation {
-  readonly type?: "requires" | "recommends" | "conflicts" | "provides";
-  readonly target?: string | PluginRelationTarget;
-  readonly plugin?: string;
-  readonly runtime?: string;
-  readonly capability?: string;
-  readonly tag?: PluginTag;
-  readonly optional?: boolean;
-  readonly reason?: import("./world.js").I18nText;
-}
-
+/**
+ * Plugin catalogue relations. Each entry is a plain string: a plugin id
+ * (`scene-cast`) or `pluginId/runtimeId` — EXCEPT under `provides`, where the
+ * string is an opaque capability label two plugins can share to mark
+ * themselves as interchangeable (`narrator` and `chat-mode-narrator` both
+ * provide `narrative-engine`, which is how one may replace the other).
+ *
+ * An entry is deliberately just a string. Earlier versions also accepted an
+ * object form carrying `target` / `plugin` / `runtime` / `type` / `optional` /
+ * `reason`, i.e. four interchangeable ways to write a plugin id plus three
+ * fields no code ever read — resolution only ever extracted the id
+ * (`relationPluginId`, session-plugins route), the frontend forwards relations
+ * as an opaque blob, and `optional: true` under `requires` was just
+ * `recommends` spelled differently. Explain a dependency with a YAML comment
+ * above it, the way the bundled plugins already do.
+ *
+ * Capability-based *scheduling* dependencies are a separate, working
+ * mechanism — see {@link RuntimeManifest.needs} / `after`.
+ */
 export interface PluginRelations {
-  readonly provides?: readonly (string | PluginRelation)[];
-  readonly requires?: readonly (string | PluginRelation)[];
-  readonly recommends?: readonly (string | PluginRelation)[];
-  readonly conflicts?: readonly (string | PluginRelation)[];
+  readonly provides?: readonly string[];
+  readonly requires?: readonly string[];
+  readonly recommends?: readonly string[];
+  readonly conflicts?: readonly string[];
 }
 
 // ── Tool declarations ────────────────────────────────────────────
@@ -366,11 +367,22 @@ export interface ToolsConfig {
 export interface PluginUserSettingSpec {
   readonly key: string;
   // `integer` is a `number` constrained to whole values; `slider` is a
-  // `number` rendered as a range control (declare `min`/`max`). `secret` is
-  // intentionally not yet supported — its keys.env storage + transport channel
-  // are unresolved (see the configurable-surface spec, Open Question #4).
+  // `number` rendered as a range control (declare `min`/`max`). `slot` is a
+  // `string` naming an `llm.toml` `[covel.<slot>]` section — the framework
+  // renders the configured slots as a picker and auto-binds the declared
+  // default, so a plugin never has to make the player type a slot id.
+  // `secret` is intentionally not yet supported — its keys.env storage +
+  // transport channel are unresolved (see the configurable-surface spec,
+  // Open Question #4).
   readonly type:
-    "text" | "textarea" | "number" | "integer" | "toggle" | "select" | "slider";
+    | "text"
+    | "textarea"
+    | "number"
+    | "integer"
+    | "toggle"
+    | "select"
+    | "slider"
+    | "slot";
   // Optional: a setting may declare no default (e.g. cost-gate). Mirrors the
   // schema's `z.unknown().optional()` so the parsed manifest type-checks.
   readonly default?: unknown;
@@ -424,38 +436,127 @@ export interface UISpec {
 
 // ── Runtime manifest ─────────────────────────────────────────────
 
-export interface RuntimeManifest {
-  readonly name: string;
+// ── Plugin-scoped manifest fields ────────────────────────────────
+
+/**
+ * How a plugin-scoped field behaves when more than one runtime of the same
+ * plugin declares it. See {@link PLUGIN_SCOPED_FIELDS} for the per-field
+ * assignment and {@link PluginScopedManifestFields} for the fields themselves.
+ */
+export type PluginScopedMergeKind =
+  /** Every declaration is loaded; duplicates collapse by value. */
+  | "union"
+  /** Declarations merge on a key; a divergent redeclaration is a conflict. */
+  | "keyed"
+  /** Only the root PLUGIN.md is read; runtime declarations are ignored. */
+  | "root-only";
+
+/**
+ * The plugin-scoped manifest fields and how each one merges across a plugin's
+ * runtimes — the single place that knowledge lives.
+ *
+ * These fields are declared on a *runtime* manifest (PLUGIN.md frontmatter is
+ * one schema) but consumed at *plugin* scope, so a multi-runtime plugin can
+ * declare the same field more than once and the framework has to decide what
+ * that means. It decided differently for every field, in six different files,
+ * and a new field added without noticing this is how `userSettings` shipped
+ * with no conflict handling at all while `dataSchemas` throws.
+ *
+ * Adding a field to {@link PluginScopedManifestFields} without registering it
+ * here is a compile error (see the exhaustiveness check below), which is the
+ * point: you cannot add a plugin-scoped field without stating its merge rule.
+ *
+ * `conflict` documents what happens on a divergent redeclaration; `where`
+ * points at the code that implements it, since none of this lives in one place.
+ */
+export const PLUGIN_SCOPED_FIELDS = {
+  /** Every declared path runs, including the root's; the path set dedupes. */
+  entry: {
+    merge: "union",
+    conflict: "none — distinct paths all execute against the same pluginId",
+    where: "apps/server/src/routes/api/bootstrap/plugin-entry.ts",
+  },
+  /** Every declared module loads; wire ids are namespaced `<pluginId>/`. */
+  wires: {
+    merge: "union",
+    conflict: "none at load; duplicate wire ids resolve in the wire registry",
+    where: "apps/server/src/routes/api/bootstrap/plugin-wires.ts",
+  },
+  /** Merged on `key`; all runtimes share `plugin.<pluginId>.<key>`. */
+  userSettings: {
+    merge: "keyed",
+    conflict: "warn, first declaration wins",
+    where: "apps/server/src/routes/misc-api/plugin-catalog.ts",
+  },
+  /** Merged on namespace — the strictest of the set. */
+  dataSchemas: {
+    merge: "keyed",
+    conflict: "throws — the plugin fails to register",
+    where: "packages/plugin-loader/src/registry.ts",
+  },
+  /** Merged on `label` across ALL plugins, not just this one. */
+  memoryBlocks: {
+    merge: "keyed",
+    conflict: "higher trust tier wins; equal tier is first-wins",
+    where: "apps/server/src/routes/api/bootstrap/memory.ts",
+  },
+  /** Merged on `topic` across all active runtimes of the session. */
+  events: {
+    merge: "keyed",
+    conflict: "first-wins; warns only when the clash is cross-plugin",
+    where: "apps/server/src/routes/api/bootstrap/event-directory.ts",
+  },
+  /** Unioned and sorted for the catalogue. */
+  tags: {
+    merge: "union",
+    conflict: "none — deduped",
+    where: "apps/server/src/routes/misc-api/plugin-catalog.ts",
+  },
   /**
-   * Plugin ID this runtime belongs to.
-   * For single-runtime plugins: same as `name`.
-   * For multi-runtime plugins (name = "plugin/sub-runtime"): the part before `/`.
-   * Set by the plugin loader during manifest parsing — not declared in PLUGIN.md.
+   * Split behaviour: the lightweight summary reads whichever manifest it
+   * loaded, while session dependency resolution unions every runtime's.
    */
-  readonly pluginId: string;
-  readonly description: string;
+  relations: {
+    merge: "union",
+    conflict: "none — resolution unions all runtimes",
+    where: "apps/server/src/routes/api/session/plugins.ts (entryRelations)",
+  },
+  /** Read from the root PLUGIN.md only — see loadPluginSummary's comment. */
+  displayName: {
+    merge: "root-only",
+    conflict:
+      "n/a — a runtime's displayName names that runtime, not the plugin",
+    where: "packages/plugin-loader/src/load.ts",
+  },
+} as const satisfies Record<
+  string,
+  { merge: PluginScopedMergeKind; conflict: string; where: string }
+>;
+
+/**
+ * Fields declared per-runtime but consumed per-plugin. Split out of
+ * {@link RuntimeManifest} so the distinction is visible in the type rather
+ * than only in prose, and so {@link PLUGIN_SCOPED_FIELDS} has something to be
+ * checked against. `RuntimeManifest` extends this, so every existing
+ * `manifest.<field>` access is unaffected.
+ */
+export interface PluginScopedManifestFields {
   /**
    * Friendly, player-facing name (I18nText). Distinct from `name` (the runtime
    * id). Surfaced via `PluginSummary.displayName` for plugin-list UIs so a
    * non-Chinese player sees e.g. "Action Guide" instead of the id "guide".
+   * Only the root PLUGIN.md's value is read.
    */
   readonly displayName?: import("./world.js").I18nText;
-  readonly version?: string;
-  /**
-   * Execution type: 'agent' (default) uses LLM pipeline, 'function' runs a pure handler.
-   * Function runtimes declare `handler` pointing to a JS module with a default export.
-   */
-  readonly runtimeType?: RuntimeType;
-  /** Relative path to handler module (required for runtimeType: 'function'). */
-  readonly handler?: string;
   /**
    * Plugin-root-relative path to a media-wires module (resolved from the
    * plugin root, NOT the runtime dir — same convention as `tools.local`).
    * Default export: `{ image?, speech?, transcription? }` arrays of wire
    * objects, or a factory `(inject: { fetchWithRetry, validateBaseUrl }) =>`
-   * that shape. Loaded once per plugin (trust-gated like local tools);
-   * registered wire ids are prefixed `"<pluginId>/"`. Declare on ONE
-   * runtime per plugin.
+   * that shape. Trust-gated like local tools; registered wire ids are prefixed
+   * `"<pluginId>/"`. Conventionally declared once, on the root PLUGIN.md —
+   * but every declared path is loaded, so two runtimes naming different
+   * modules get both.
    */
   readonly wires?: string;
   /**
@@ -465,12 +566,96 @@ export interface RuntimeManifest {
    * `covel.registerTool()`, `covel.on(event, handler)`,
    * `covel.registerRpc()`, `covel.registerWires()` — replacing the legacy
    * registration fields. `tools.local` is GONE (declaring it fails the load);
-   * `hooks` / `rpc` / `wires` still parse but are deprecated. Declare on ONE
-   * runtime per plugin (root PLUGIN.md by convention); loaded once per plugin,
-   * trust-gated like local tools (builtin/official at boot, community on
-   * activation).
+   * `hooks` / `rpc` / `wires` still parse but are deprecated. Conventionally
+   * declared once, on the root PLUGIN.md — but every declared path executes
+   * (the root's included, and the set dedupes), all against the same
+   * `pluginId`. Trust-gated like local tools (builtin/official at boot,
+   * community on activation).
    */
   readonly entry?: string;
+  /**
+   * User-facing catalogue tags for filtering and scenario matching.
+   * These complement `capabilities`: capabilities are machine-discovery
+   * contracts, tags are faceted metadata for players and pack resolution.
+   * Unioned across the plugin's runtimes.
+   */
+  readonly tags?: readonly PluginTag[];
+  /**
+   * Optional dependency/conflict/provided-feature metadata used by plugin
+   * selection UIs and future resolvers. Runtime execution semantics still
+   * come from triggers, input.inject, and the scheduling declarations below.
+   * Session-level resolution unions every runtime's declaration.
+   */
+  readonly relations?: PluginRelations;
+  /** Plugin-data schemas, merged on namespace — a divergent one throws. */
+  readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
+  /** Domain events this plugin's runtime may emit via `emit-event`. */
+  readonly events?: readonly PluginEventDecl[];
+  /**
+   * User-facing settings the plugin exposes in the Settings UI.
+   * Each entry is auto-registered under `plugin.<pluginId>.<key>` in the
+   * unified SettingsStore and rendered as a form field in the Plugins tab.
+   *
+   * See `PluginUserSettingSpec` for the allowed shape. Plugins read values
+   * through their runtime context; the framework handles persistence. Because
+   * the storage key is plugin-scoped, two runtimes declaring one key share a
+   * single value and must declare it identically.
+   */
+  readonly userSettings?: readonly PluginUserSettingSpec[];
+  /**
+   * Core-memory block definitions contributed by this plugin (or world).
+   *
+   * The framework's memory system (`@covel/memory`) aggregates `memoryBlocks`
+   * across all loaded plugins to drive post-turn extraction and prompt
+   * rendering — block labels and extraction prompts are therefore plain data,
+   * not hardcoded kernel behavior. The builtin `memory` plugin declares the
+   * default narrative blocks (`story_state` / `scene` /
+   * `character_relationships` / `player_profile`); any plugin or world can add
+   * its own (e.g. `clues` / `suspects` / `timeline`).
+   */
+  readonly memoryBlocks?: readonly MemoryBlockSchema[];
+}
+
+/**
+ * Compile-time exhaustiveness: every key of {@link PluginScopedManifestFields}
+ * must appear in {@link PLUGIN_SCOPED_FIELDS}, and vice versa. Adding a
+ * plugin-scoped field without declaring how it merges breaks the build here.
+ *
+ * The assertion has to run through a constrained type parameter — a bare
+ * conditional type alias just evaluates to its false branch and reports
+ * nothing.
+ */
+type AssertTrue<T extends true> = T;
+
+type _EveryScopedFieldDeclaresItsMerge = AssertTrue<
+  keyof PluginScopedManifestFields extends keyof typeof PLUGIN_SCOPED_FIELDS
+    ? true
+    : false
+>;
+type _EveryRegisteredFieldExists = AssertTrue<
+  keyof typeof PLUGIN_SCOPED_FIELDS extends keyof PluginScopedManifestFields
+    ? true
+    : false
+>;
+
+export interface RuntimeManifest extends PluginScopedManifestFields {
+  readonly name: string;
+  /**
+   * Plugin ID this runtime belongs to.
+   * For single-runtime plugins: same as `name`.
+   * For multi-runtime plugins (name = "plugin/sub-runtime"): the part before `/`.
+   * Set by the plugin loader during manifest parsing — not declared in PLUGIN.md.
+   */
+  readonly pluginId: string;
+  readonly description: string;
+  readonly version?: string;
+  /**
+   * Execution type: 'agent' (default) uses LLM pipeline, 'function' runs a pure handler.
+   * Function runtimes declare `handler` pointing to a JS module with a default export.
+   */
+  readonly runtimeType?: RuntimeType;
+  /** Relative path to handler module (required for runtimeType: 'function'). */
+  readonly handler?: string;
   /**
    * Relative path to a guard function module.
    * Runs before agent execution — if it returns `{ skip: true }`, the LLM call is skipped.
@@ -548,18 +733,6 @@ export interface RuntimeManifest {
    * Examples: `['narrative']`, `['world-data-provider']`, `['image-generation']`.
    */
   readonly capabilities?: readonly string[];
-  /**
-   * User-facing catalogue tags for filtering and scenario matching.
-   * These complement `capabilities`: capabilities are machine-discovery
-   * contracts, tags are faceted metadata for players and pack resolution.
-   */
-  readonly tags?: readonly PluginTag[];
-  /**
-   * Optional dependency/conflict/provided-feature metadata used by plugin
-   * selection UIs and future resolvers. Runtime execution semantics still
-   * come from triggers, input.inject, and the scheduling declarations below.
-   */
-  readonly relations?: PluginRelations;
   /**
    * Named scheduling stage. Required for `auto` / `scheduled` runtimes under
    * the strict authoring schema; forbidden for `event` / `manual`. Selects
@@ -643,20 +816,8 @@ export interface RuntimeManifest {
   readonly tools?: ToolsConfig;
   readonly input?: InputConfig;
   readonly output?: OutputConfig;
-  readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
-  /** Domain events this plugin's runtime may emit via `emit-event`. */
-  readonly events?: readonly PluginEventDecl[];
   readonly i18n?: Readonly<Record<string, string>>;
   readonly ui?: UISpec;
-  /**
-   * User-facing settings the plugin exposes in the Settings UI.
-   * Each entry is auto-registered under `plugin.<pluginId>.<key>` in the
-   * unified SettingsStore and rendered as a form field in the Plugins tab.
-   *
-   * See `PluginUserSettingSpec` for the allowed shape. Plugins read values
-   * through their runtime context; the framework handles persistence.
-   */
-  readonly userSettings?: readonly PluginUserSettingSpec[];
   /**
    * Hook declarations for this runtime.
    * Each entry registers a lifecycle handler loaded lazily on first invocation.
@@ -706,18 +867,6 @@ export interface RuntimeManifest {
    * by the loader.
    */
   readonly rpc?: import("./rpc.js").RpcDeclMap;
-  /**
-   * Core-memory block definitions contributed by this plugin (or world).
-   *
-   * The framework's memory system (`@covel/memory`) aggregates `memoryBlocks`
-   * across all loaded plugins to drive post-turn extraction and prompt
-   * rendering — block labels and extraction prompts are therefore plain data,
-   * not hardcoded kernel behavior. The builtin `memory` plugin declares the
-   * default narrative blocks (`story_state` / `scene` /
-   * `character_relationships` / `player_profile`); any plugin or world can add
-   * its own (e.g. `clues` / `suspects` / `timeline`).
-   */
-  readonly memoryBlocks?: readonly MemoryBlockSchema[];
 }
 
 // ── Author's note / Post-history declarations ───────────

@@ -81,8 +81,10 @@ describe("normalize golden (bundled plugin set)", () => {
     // Declared edges carry the whole order now: schema-gen declares
     // `after: [pregame]` and player-init's turn-scoped `needs` orders it
     // after both. Same serial order the legacy priority chain produced.
+    // `scene-stage/seed` declares no edge — it only reads its own plugin_data,
+    // so it joins the first level in parallel (name breaks the tie).
     expect(levelsOf(setup)).toEqual([
-      ["pregame"],
+      ["pregame", "scene-stage/seed"],
       ["world-init/schema-gen"],
       ["char-creator/player-init"],
     ]);

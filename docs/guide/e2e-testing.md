@@ -99,7 +99,7 @@ E2E_BASE_URL=http://localhost:5173 pnpm e2e
 清理数据库容器：
 
 ```bash
-pnpm db:down
+pnpm docker:down
 ```
 
 ## 输出位置

@@ -30,7 +30,7 @@ export function discoverRuntimeSlotIds(
       if (isRuntimeSlotId(slot)) out.add(slot);
     }
     for (const setting of pkg.userSettings ?? []) {
-      if (setting.key !== "modelPresetId") continue;
+      if (setting.type !== "slot") continue;
       if (isSettingsSlotId(setting.default)) out.add(setting.default);
     }
   }

@@ -26,6 +26,7 @@ import type {
   PluginType, // 'core-plugin' | 'plugin'
   PluginManifest, // 完整插件清单
   RuntimeManifest, // 运行时清单（PLUGIN.md frontmatter 的解析结果）
+  PluginScopedManifestFields, // RuntimeManifest 中按“插件”而非按 runtime 消费的 9 个字段
 
   // 触发系统
   TriggerType, // 'auto' | 'manual' | 'scheduled' | 'event'(枚举闭合,其余取值加载失败)
@@ -226,9 +227,31 @@ plugins/my-combat/
 - 通过 `input.inject` 互相传递数据
 - 共享 `tools/` 目录下的工具
 
-`discoverPlugins()` 在检测到 `runtimes/` 子目录后**只**收集 `runtimes/*/PLUGIN.md` 作为 runtime；根目录的 `PLUGIN.md`（如果存在）仅被 `loadPluginSummary()` 读取，用于提供包级 `name`（displayName）和 `description`。**没有**根 PLUGIN.md 时，框架会把展示名强制设为 plugin id（如 `my-combat`），UI 会显得冗长。第三方插件作者建议提供根 PLUGIN.md；详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
+`discoverPlugins()` 在检测到 `runtimes/` 子目录后**只**收集 `runtimes/*/PLUGIN.md` 作为 runtime；根目录的 `PLUGIN.md`（如果存在）由 `loadPluginSummary()` 读取以提供包级 `name`（displayName）和 `description`，其 `entry` 字段另由 `plugin-entry.ts` 直接读取（它不在 runtime 列表里，早期版本因此丢过整个插件的本地工具注册）。**没有**根 PLUGIN.md 时，框架会把展示名强制设为 plugin id（如 `my-combat`），UI 会显得冗长。第三方插件作者建议提供根 PLUGIN.md；详见 [plugins.md 多 runtime 插件](../reference/plugins.md#多-runtime-插件)。
 
 > 注意：单 runtime 插件正好相反 —— 没有 `runtimes/` 时，根目录的 `PLUGIN.md` 本身就是唯一的 runtime（其 frontmatter 同时承担 runtime 字段和包级摘要两种职责）。
+
+### 插件级字段的合并规则
+
+PLUGIN.md 只有一套 frontmatter schema，但其中 9 个字段是**按插件消费**而非按 runtime 消费的。多 runtime 插件重复声明它们时，各字段的处理方式并不统一——单一真相是 `@covel/shared` 的 `PLUGIN_SCOPED_FIELDS` 常量（`packages/shared/src/types/plugin.ts`），类型系统强制每个插件级字段都必须在那里登记合并规则：
+
+| 字段           | 多 runtime 声明时              | 冲突处理                         |
+| -------------- | ------------------------------ | -------------------------------- |
+| `entry`        | 全部执行（路径去重，含根）     | 无——都注册到同一个 pluginId      |
+| `wires`        | 全部加载                       | wire id 冲突由 wire registry 定  |
+| `tags`         | 合并去重                       | 无                               |
+| `relations`    | session 解析时合并所有 runtime | 无                               |
+| `userSettings` | 按 `key` 合并                  | **不一致则 warn，先声明的赢**    |
+| `dataSchemas`  | 按 namespace 合并              | **不一致直接抛错，插件注册失败** |
+| `events`       | 按 `topic` 合并                | 先声明的赢（跨插件冲突才 warn）  |
+| `memoryBlocks` | 按 `label` 跨**所有插件**合并  | 信任级高的赢，同级先声明的赢     |
+| `displayName`  | **只读根 PLUGIN.md**           | 不适用                           |
+
+要点：
+
+- `entry` / `wires` 惯例上写在根 PLUGIN.md，但**不是**只能写一处——两个 runtime 声明不同路径时两个都会加载。
+- `userSettings` 的存储键是 `plugin.<pluginId>.<key>`，两个 runtime 声明同一 key 就共用一个值，所以声明必须逐字相同。`pnpm validate:plugin <插件目录>` 会检查这一条。
+- `displayName` 无法在 runtime 上声明——runtime 的 displayName 描述的是那个 runtime，不是插件。
 
 `PluginManifest` 类型反映了这种结构：
 
@@ -633,10 +656,14 @@ handler: ./handler.js
 - `sync`(默认):HTTP 响应阻塞到 runtime 完成。适合能秒级返回的任务。
 - `background`:立即返回 202 + `jobId`,任务在 `setImmediate` 后台跑。框架在 `plugin_data` 表下 `_jobs/<jobId>` 写入 `{status: 'pending' → 'done' | 'failed', ...}` 三态,每次写入都通过 `plugin-data.changed` SSE 广播,前端通过订阅 `_jobs` 命名空间或你自己的业务命名空间(如 `images`)拿到最终态。
 
-**background 下的两个强约束:**
+**background 下的四个强约束:**
 
 1. 插件**禁止**直接写 `_jobs` 命名空间 —— 框架独占。业务状态请写到自己的命名空间(如 `images/{jobId}` `{status: 'pending'}` → `{status: 'ready', ref: ...}`)。
 2. `setImmediate` 中抛出的异常**不会**映射为 5xx —— 响应已发。失败信息会被框架写入 `_jobs/<jobId>.value.error`,前端通过 SSE 感知。
+3. **handler 不持会话锁**。只有提交阶段进锁——否则一次几分钟的出图会把玩家的下一条消息一起堵住。两个后果要写 handler 时记住:
+   - 同一 runtime 的并发执行由框架按 `<sessionId>::<runtimeId>` 串行,所以"这张图是不是已经生成过"这类 check-then-act **在同一 runtime 内是原子的**,不会重复计费;**跨 runtime 不保证**。
+   - handler 执行期间,并发的玩家回合可能改写会话数据。读-改-写**自己**的命名空间是安全的(读经 writeBuffer overlay、写在同一事务提交);但如果你把别处的状态读出来再写回去,要假设中途它已经变了。
+4. **进程重启不恢复,且框架不自动重跑**。后台任务由进程内队列驱动,没有持久队列。重启后开机扫描会把上个进程留下的 `pending` 行标为 `failed` + `reason: "orphaned"`,并保留 `payload` / `triggerEvent`。不自动重跑是有意的——重跑要再计一次费,且请求级 `userSettings` 没有持久化在任务行上,重跑等于换参数重新扣费。需要"一键重试"就自己读这行的 `triggerEvent` 提供入口。
 
 **事件链 chain:** 无论 sync 还是 background,runtime emit 的 `event.emit` proposal 都会触发同一 turn 内订阅该 topic 的下游 runtime(同一事件的多个订阅者按 `name` 定序),不需要额外协调。这让"按钮 → prompt-generator (agent) → image-generator (function, background)"这种多步 pipeline 完全声明式。
 

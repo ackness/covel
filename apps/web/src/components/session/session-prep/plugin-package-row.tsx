@@ -70,14 +70,19 @@ export function PluginPackageRow({
   );
   const primaryBinding = pluginBindings[0];
   const hasAgentRuntime = pluginBindings.length > 0;
+  // A plugin names the provider slot it runs on with a `type: slot` setting.
+  // Discovered by declared type, never by a key-name convention, so any
+  // plugin gets the inline picker without having to guess a magic key.
   const providerSlotSetting = pkg.userSettings?.find(
-    (spec) => spec.key === "modelPresetId",
+    (spec) => spec.type === "slot",
   );
   const manifestDefaultSlot =
     typeof providerSlotSetting?.default === "string"
       ? providerSlotSetting.default
       : undefined;
-  const providerSlotKey = `plugin.${pkg.name}.modelPresetId`;
+  // Empty when the plugin declares no slot setting — `has()` then misses and
+  // the picker below stays unrendered, same as before.
+  const providerSlotKey = `plugin.${pkg.name}.${providerSlotSetting?.key ?? ""}`;
   const [providerSlotOverride, setProviderSlotOverride] = useState<
     string | undefined
   >(() => {

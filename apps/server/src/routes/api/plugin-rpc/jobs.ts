@@ -45,6 +45,19 @@ function addDefined(
   if (item !== undefined) value[key] = item;
 }
 
+/**
+ * Identity of the process that owns the background jobs written by this
+ * instance. Background jobs run in-process (`setImmediate`), so a `pending`
+ * row whose owner is not the live process has no executor and never will —
+ * the only event that can orphan a job is the death of the process running
+ * it, and that is always followed by a boot.
+ *
+ * This is what lets the boot sweep be exact instead of a timeout guess, and
+ * why no heartbeat is needed: liveness is answered by identity, not by time.
+ * Same pattern as the event bus's `originId`.
+ */
+const PROCESS_ID = crypto.randomUUID();
+
 export function makePendingPluginJobValue(
   args: PendingPluginJobValueArgs,
 ): PluginJobValue {
@@ -53,6 +66,7 @@ export function makePendingPluginJobValue(
     progress: args.progress ?? 5,
     runtimeId: args.runtimeId,
     turnId: args.turnId,
+    owner: PROCESS_ID,
   };
   addDefined(value, "payload", args.payload);
   addDefined(value, "triggerEvent", args.triggerEvent);
@@ -116,28 +130,42 @@ export async function writePluginJob(
 // ── Startup crash-recovery sweep ─────────────────────────────────────
 
 /**
- * Pending jobs older than this are presumed orphaned: background jobs run
- * in-process via setImmediate, so a crash/restart kills the callback while
- * the row stays `pending` forever. The threshold is generous enough that a
- * job legitimately still running on another pod is never reaped.
- */
-const STALE_PENDING_JOB_MS = 15 * 60_000;
-
-/**
- * One-shot boot sweep: mark stale `pending` background-job rows as `failed`
- * so clients polling a job that died with a previous process get a terminal
- * status instead of an eternal spinner. Best-effort — callers fire-and-forget.
+ * One-shot boot sweep: mark `pending` background-job rows owned by a dead
+ * process as `failed`, so clients watching a job that died with a previous
+ * process get a terminal status instead of an eternal spinner. Best-effort —
+ * callers fire-and-forget.
+ *
+ * Ownership, not age, is the test. A pending row belongs to a live executor
+ * only if its `owner` matches this process; the freshly booted process cannot
+ * own any pre-existing row, so a legitimately running job is never reaped —
+ * that holds by construction, not by picking a generous threshold. Rows
+ * written before `owner` existed carry none, which correctly reads as "some
+ * earlier process wrote this".
+ *
+ * **This assumes one server process per store.** It is exact for the single
+ * instance deployments Covel ships today (desktop, self-host), where the only
+ * way to orphan a job is for its process to die. It is NOT safe for multiple
+ * instances sharing a database: a booting instance would read every other
+ * instance's in-flight rows as foreign and fail them immediately. The
+ * threshold this replaced left a 15-minute grace window for that case — still
+ * not correct (it killed anything slower than the threshold), but not instant.
+ * Before running more than one instance, `owner` must be paired with a lease
+ * (`leaseExpiresAt` renewed while the job runs) so the test becomes "foreign
+ * AND expired" rather than merely "foreign".
+ *
+ * Orphans are failed rather than re-driven: re-running costs real money
+ * (image/TTS generation), and the request-scoped `userSettings` a re-run would
+ * need is not persisted on the row — it would silently re-bill with different
+ * parameters. The terminal row keeps `triggerEvent` / `payload` so a plugin UI
+ * or the player can retry deliberately.
  *
  * ponytail: full-session plugin_data scan at boot; move to an indexed
  * namespace query if plugin_data volume ever makes boot noticeably slower.
- * Re-driving (instead of failing) orphaned jobs would need a durable queue
- * with leases/idempotency — deliberately out of scope.
  */
 export async function sweepStalePendingJobs(
   store: DataStore,
-  opts: { readonly staleMs?: number; readonly now?: number } = {},
+  opts: { readonly now?: number } = {},
 ): Promise<number> {
-  const staleMs = opts.staleMs ?? STALE_PENDING_JOB_MS;
   const now = opts.now ?? Date.now();
   let swept = 0;
 
@@ -158,10 +186,13 @@ export async function sweepStalePendingJobs(
         readonly startedAt?: string;
         readonly runtimeId?: string;
         readonly turnId?: string;
+        readonly owner?: string;
+        readonly payload?: unknown;
+        readonly triggerEvent?: PluginJobTriggerEvent;
       };
       if (value?.status !== "pending") continue;
-      const startedAtMs = Date.parse(value.startedAt ?? row.updatedAt);
-      if (Number.isFinite(startedAtMs) && now - startedAtMs < staleMs) continue;
+      // Owned by this process — its executor is alive (or about to be).
+      if (value.owner === PROCESS_ID) continue;
 
       const startedAt = value.startedAt ?? row.createdAt;
       const completedAt = new Date(now).toISOString();
@@ -178,6 +209,13 @@ export async function sweepStalePendingJobs(
             turnId: value.turnId ?? "unknown",
             startedAt,
             completedAt,
+            // Carried over so a plugin UI (or the player) can re-trigger this
+            // exact job; the sweep deliberately does not re-run it itself.
+            ...(value.payload !== undefined ? { payload: value.payload } : {}),
+            ...(value.triggerEvent ? { triggerEvent: value.triggerEvent } : {}),
+            // Distinguishes "the process died" from "the job itself failed",
+            // matching the existing `reason` vocabulary on terminal rows.
+            reason: "orphaned",
             error:
               "orphaned pending job (server restarted before the job completed)",
           }),

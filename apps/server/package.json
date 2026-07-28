@@ -1,6 +1,6 @@
 {
   "name": "@covel/server",
-  "version": "0.0.22",
+  "version": "0.0.23",
   "private": true,
   "type": "module",
   "files": [
@@ -12,8 +12,8 @@
     "tsconfig.json"
   ],
   "scripts": {
-    "dev": "tsx watch --env-file-if-exists=../../.env --env-file-if-exists=../../.env.llm src/index.ts",
-    "dev:pg": "node ../../scripts/run-with-env.mjs STORE_BACKEND=pg pnpm exec tsx watch --env-file-if-exists=../../.env --env-file-if-exists=../../.env.llm src/index.ts",
+    "dev": "tsx watch --include \"../../plugins/**/*.md\" --include \"../../plugins/**/*.js\" --include \"../../plugins/**/*.json\" --env-file-if-exists=../../.env --env-file-if-exists=../../.env.llm src/index.ts",
+    "dev:pg": "node ../../scripts/run-with-env.mjs STORE_BACKEND=pg pnpm exec tsx watch --include \"../../plugins/**/*.md\" --include \"../../plugins/**/*.js\" --include \"../../plugins/**/*.json\" --env-file-if-exists=../../.env --env-file-if-exists=../../.env.llm src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsc -b",

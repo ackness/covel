@@ -88,7 +88,7 @@ image-generator：
 
 | Key             | 类型   | 默认           | 说明                                                                                                |
 | --------------- | ------ | -------------- | --------------------------------------------------------------------------------------------------- |
-| `modelPresetId` | text   | `openai-image` | 对应 `~/.covel/llm.toml` 里的 `[covel.<slot>]` 名字。换第三方 / 换模型 = 加一个新 slot 然后改这个值 |
+| `modelPresetId` | slot   | `openai-image` | 对应 `~/.covel/llm.toml` 里的 `[covel.<slot>]` 名字，UI 渲染成已配置槽的选择器。换第三方 / 换模型 = 加一个新 slot 然后改这个值 |
 | `imageSize`     | text   | `1024x1024`    | OpenAI Images API size 参数（小写 x）                                                               |
 | `n`             | number | `1`            | 一次生成几张图                                                                                      |
 | `quality`       | text   | _(空)_         | 可选；`standard` / `hd`；空 = 不传                                                                  |

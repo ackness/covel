@@ -26,7 +26,10 @@ function makeSegments(
 }
 
 describe("serializeSystemPrompt", () => {
-  it("joins non-empty pre-history segments in segment order", () => {
+  // Working memory is segment 2 by identity but is emitted last: it is the one
+  // pre-history segment that changes every turn, and ahead of the plugin
+  // instructions it invalidated the largest block in the prompt every time.
+  it("emits working memory last so the stable blocks precede it", () => {
     const result = serializeSystemPrompt(
       makeSegments({
         frameworkPreamble: "framework",
@@ -40,7 +43,7 @@ describe("serializeSystemPrompt", () => {
     );
 
     expect(result).toBe(
-      "framework\n\nmemory\n\nplugin\n\nbefore\n\ninjects\n\nafter",
+      "framework\n\nplugin\n\nbefore\n\ninjects\n\nafter\n\nmemory",
     );
   });
 
@@ -71,14 +74,23 @@ describe("serializeSystemPrompt", () => {
     );
 
     const cacheSegments = splitPromptCacheSegments(result);
-    expect(cacheSegments).toHaveLength(3);
+    // Three marked segments plus working memory as an unmarked trailing one.
+    expect(cacheSegments).toHaveLength(4);
     expect(cacheSegments[0]).toBe("framework");
-    expect(cacheSegments[1]).toContain("memory");
+    // The plugin instructions — usually the biggest block — now own a cacheable
+    // segment by themselves. Sharing one with working memory meant a few lines
+    // of per-turn state invalidated the whole thing on every request.
     expect(cacheSegments[1]).toContain("plugin");
+    expect(cacheSegments[1]).not.toContain("memory");
     expect(cacheSegments[1]).not.toContain("before");
     expect(cacheSegments[2]).toContain("before");
     expect(cacheSegments[2]).toContain("injects");
     expect(cacheSegments[2]).toContain("after");
+    // Working memory trails the final marker. The prompt therefore no longer
+    // ends with a sentinel, which is what makes the Anthropic adapter treat it
+    // as an open tail and withhold cache_control from it.
+    expect(cacheSegments[3]).toContain("memory");
+    expect(result.endsWith("memory")).toBe(true);
     expect(result.split(PROMPT_CACHE_BREAKPOINT_MARKER)).toHaveLength(4);
   });
 
@@ -91,7 +103,10 @@ describe("serializeSystemPrompt", () => {
       true,
     );
 
-    expect(splitPromptCacheSegments(result)).toEqual(["memory\n\nplugin"]);
+    // Working memory follows the plugin marker as an unmarked tail. The split
+    // helper only trims each segment's end, so the tail keeps the separator
+    // that preceded it.
+    expect(splitPromptCacheSegments(result)).toEqual(["plugin", "\n\nmemory"]);
   });
 });
 

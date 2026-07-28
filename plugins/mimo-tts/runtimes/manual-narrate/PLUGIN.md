@@ -19,7 +19,7 @@ trigger:
   type: manual
 userSettings:
   - key: modelPresetId
-    type: text
+    type: slot
     default: mimo-tts
     label:
       zh: 服务配置

@@ -1,9 +1,12 @@
 /**
  * Shared plugin_data namespace/key constants and small pure helpers used by
- * both scene-stage runtimes (resolver + background-gen). Kept in one place
- * so the two handlers can't drift on namespace names or the source→label
- * mapping the right-panel spec (`ui/scene-stage-panel.json`) depends on.
+ * the scene-stage runtimes (resolver + background-gen + seed). Kept in one
+ * place so the handlers can't drift on namespace names, on the source→label
+ * mapping, or on the `stage/current` record shape the right-panel spec
+ * (`ui/scene-stage-panel.json`) and the stage view depend on.
  */
+
+import { makeProposal } from "@covel/plugin-handlers-utils";
 
 export const SCENES_NS = "scenes";
 export const REGISTRY_KEY = "scene-registry";
@@ -54,4 +57,51 @@ export function variantLabelFor(variant) {
 export function resolveMedia(variant, day, night) {
   if (variant === "night") return night ?? day ?? null;
   return day ?? null;
+}
+
+/**
+ * Build the `stage/current` record. The single writer-side definition of the
+ * shape — every runtime that publishes a stage goes through here so a new
+ * field can't reach the panel from one handler and not the other.
+ *
+ * @param {{
+ *   sceneId: string,
+ *   name: string,
+ *   variant: "day"|"night",
+ *   source: string,
+ *   day?: unknown,
+ *   night?: unknown,
+ *   turnId?: string,
+ * }} params
+ */
+export function buildStageRecord(params) {
+  const day = params.day ?? null;
+  const night = params.night ?? null;
+  return {
+    sceneId: params.sceneId,
+    name: params.name,
+    variant: params.variant,
+    variantLabel: variantLabelFor(params.variant),
+    source: params.source,
+    day,
+    night,
+    resolved: resolveMedia(params.variant, day, night),
+    sourceLabel: sourceLabelFor(params.source),
+    turnId: params.turnId,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Wrap a stage record in the `plugin.data` proposal that publishes it.
+ *
+ * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @param {ReturnType<typeof buildStageRecord>} stage
+ */
+export function makeStageProposal(ctx, stage) {
+  return makeProposal(ctx, new Date().toISOString(), "plugin.data", {
+    namespace: STAGE_NS,
+    key: STAGE_KEY,
+    value: stage,
+  });
 }

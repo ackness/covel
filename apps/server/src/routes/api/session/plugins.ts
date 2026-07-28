@@ -4,7 +4,7 @@ import {
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import { FrameworkCapability, getRuntimeSpec } from "@covel/shared";
-import type { PluginRelation, PluginRelations, Stage } from "@covel/shared";
+import type { PluginRelations, Stage } from "@covel/shared";
 
 export function isRequiredCorePlugin(entry: PluginRegistryEntry): boolean {
   const trust = getPluginTrustInfo(entry.id, entry.source);
@@ -223,8 +223,7 @@ function relationPluginIds(
   const ids = new Set<string>();
   for (const relations of entryRelations(entry)) {
     for (const relation of relations[kind] ?? []) {
-      const pluginId = relationPluginId(relation);
-      if (pluginId) ids.add(pluginId);
+      ids.add(pluginIdFromRuntimeOrPlugin(relation));
     }
   }
   return [...ids];
@@ -242,24 +241,7 @@ function entryRelations(entry: PluginRegistryEntry): PluginRelations[] {
   return relations;
 }
 
-function relationPluginId(
-  relation: string | PluginRelation,
-): string | undefined {
-  if (typeof relation === "string")
-    return pluginIdFromRuntimeOrPlugin(relation);
-  if (typeof relation.plugin === "string") return relation.plugin;
-  if (typeof relation.runtime === "string") {
-    return pluginIdFromRuntimeOrPlugin(relation.runtime);
-  }
-  const target = relation.target;
-  if (typeof target === "string") return pluginIdFromRuntimeOrPlugin(target);
-  if (target && typeof target.plugin === "string") return target.plugin;
-  if (target && typeof target.runtime === "string") {
-    return pluginIdFromRuntimeOrPlugin(target.runtime);
-  }
-  return undefined;
-}
-
+/** `npc-graph/extractor` → `npc-graph`; a bare id passes through. */
 function pluginIdFromRuntimeOrPlugin(value: string): string {
   return value.includes("/") ? value.split("/")[0]! : value;
 }

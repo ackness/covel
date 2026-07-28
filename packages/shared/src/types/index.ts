@@ -61,9 +61,7 @@ export type {
   PluginEventDecl,
   PluginUserSettingSpec,
   ToolsConfig,
-  PluginRelation,
   PluginRelations,
-  PluginRelationTarget,
   PluginTag,
   UISlotType,
   UISpec,
@@ -71,6 +69,8 @@ export type {
   HookEnforce,
   HookDeclaration,
   RuntimeManifest,
+  PluginScopedManifestFields,
+  PluginScopedMergeKind,
   PluginManifest,
   AuthorsNoteDecl,
   PostHistoryDecl,
@@ -81,6 +81,7 @@ export {
   FrameworkCapability,
   FrameworkRuntimeCapability,
   FRAMEWORK_KNOWN_CAPABILITIES,
+  PLUGIN_SCOPED_FIELDS,
 } from "./plugin.js";
 export { HOOK_EVENTS } from "./plugin.js";
 

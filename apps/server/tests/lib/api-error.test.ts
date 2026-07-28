@@ -9,6 +9,7 @@ import {
   makeErrorHandler,
   redactSensitiveQueryParamsInText,
 } from "../../src/api-error.js";
+import { SessionLockTimeoutError } from "../../src/lib/session-lock.js";
 
 function fakeContext(url: string): Context {
   return {
@@ -52,6 +53,48 @@ describe("makeErrorHandler", () => {
     handler(new Error("boom"), fakeContext("http://localhost/api/health"));
     const logged = spy.mock.calls[0]?.[0] as string;
     expect(logged).toContain("http://localhost/api/health");
+    spy.mockRestore();
+  });
+
+  // A session lock timeout is contention, not a fault. Under PG the acquire
+  // budget is 30s while a background image generation can hold the lock for
+  // minutes, so a player acting during generation hits this on a normal path —
+  // it must not be reported as a server error.
+  it("maps a session lock timeout to a coded, retryable 503", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const handler = makeErrorHandler("test", false);
+
+    const res = handler(
+      new SessionLockTimeoutError(
+        "[pg-session-lock] failed to acquire lock for session world-abc123 within 30000ms",
+      ),
+      fakeContext("http://localhost/api/sessions/world-abc123/actions"),
+    ) as unknown as { body: { error: string; code: string }; status: number };
+
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe("session_busy");
+    // The raw message names the session and internal module — log only.
+    expect(res.body.error).not.toContain("world-abc123");
+    expect(res.body.error).not.toContain("pg-session-lock");
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(spy.mock.calls[0]?.[0]).toContain("world-abc123");
+
+    spy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it("still reports ordinary errors as 500", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const handler = makeErrorHandler("test", false);
+
+    const res = handler(
+      new Error("boom"),
+      fakeContext("http://localhost/api/health"),
+    ) as unknown as { body: { error: string }; status: number };
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe("Internal server error");
     spy.mockRestore();
   });
 });

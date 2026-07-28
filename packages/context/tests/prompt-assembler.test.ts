@@ -808,16 +808,23 @@ describe("prompt-assembler — cache breakpoints", () => {
     const result = buildSegmentedContext(params);
     const segments = splitPromptCacheSegments(result.systemPrompt);
 
-    // Per §A15: framework preamble opens its own cache span; working
-    // memory deliberately sits outside the cache boundary and rides
-    // along with plugin instructions in the next segment.
+    // The framework preamble opens its own cache span, and working memory
+    // anchors no breakpoint. It used to ride along inside the plugin
+    // instructions' segment, which defeated the point: memory changes every
+    // turn, so the instructions it shared a segment with were invalidated
+    // every turn too. It now trails every marker as an unmarked tail.
     const frameworkSegment = segments[0];
     expect(frameworkSegment).toContain("[LANGUAGE]");
     expect(frameworkSegment).not.toContain("goal");
 
     const pluginSegment = segments[1];
-    expect(pluginSegment).toContain("goal");
     expect(pluginSegment).toContain("Plugin body.");
+    expect(pluginSegment).not.toContain("goal");
+
+    expect(segments.at(-1)).toContain("goal");
+    expect(result.systemPrompt.endsWith(PROMPT_CACHE_BREAKPOINT_MARKER)).toBe(
+      false,
+    );
   });
 
   it("does not emit markers for empty optional segments", () => {

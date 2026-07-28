@@ -327,8 +327,8 @@ describe("Session plugin routes (real sessionRoutes)", () => {
             id: "relation-source",
             name: "Relation Source",
             relations: {
-              requires: [{ plugin: "relation-required" }],
-              conflicts: [{ target: { plugin: "relation-conflict" } }],
+              requires: ["relation-required"],
+              conflicts: ["relation-conflict"],
             },
           }),
           source: "official",

@@ -138,361 +138,29 @@
         "provides": {
           "type": "array",
           "items": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["requires", "recommends", "conflicts", "provides"]
-                  },
-                  "target": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "plugin": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "runtime": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "capability": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "tag": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 64,
-                            "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "plugin": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "runtime": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "capability": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "tag": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
-                  },
-                  "optional": {
-                    "type": "boolean"
-                  },
-                  "reason": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object",
-                        "propertyNames": {
-                          "type": "string"
-                        },
-                        "additionalProperties": {
-                          "type": "string"
-                        }
-                      }
-                    ]
-                  }
-                },
-                "additionalProperties": false
-              }
-            ]
+            "type": "string",
+            "minLength": 1
           }
         },
         "requires": {
           "type": "array",
           "items": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["requires", "recommends", "conflicts", "provides"]
-                  },
-                  "target": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "plugin": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "runtime": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "capability": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "tag": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 64,
-                            "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "plugin": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "runtime": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "capability": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "tag": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
-                  },
-                  "optional": {
-                    "type": "boolean"
-                  },
-                  "reason": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object",
-                        "propertyNames": {
-                          "type": "string"
-                        },
-                        "additionalProperties": {
-                          "type": "string"
-                        }
-                      }
-                    ]
-                  }
-                },
-                "additionalProperties": false
-              }
-            ]
+            "type": "string",
+            "minLength": 1
           }
         },
         "recommends": {
           "type": "array",
           "items": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["requires", "recommends", "conflicts", "provides"]
-                  },
-                  "target": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "plugin": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "runtime": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "capability": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "tag": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 64,
-                            "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "plugin": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "runtime": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "capability": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "tag": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
-                  },
-                  "optional": {
-                    "type": "boolean"
-                  },
-                  "reason": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object",
-                        "propertyNames": {
-                          "type": "string"
-                        },
-                        "additionalProperties": {
-                          "type": "string"
-                        }
-                      }
-                    ]
-                  }
-                },
-                "additionalProperties": false
-              }
-            ]
+            "type": "string",
+            "minLength": 1
           }
         },
         "conflicts": {
           "type": "array",
           "items": {
-            "anyOf": [
-              {
-                "type": "string",
-                "minLength": 1
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["requires", "recommends", "conflicts", "provides"]
-                  },
-                  "target": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "plugin": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "runtime": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "capability": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "tag": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 64,
-                            "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
-                          }
-                        },
-                        "additionalProperties": false
-                      }
-                    ]
-                  },
-                  "plugin": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "runtime": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "capability": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "tag": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?$"
-                  },
-                  "optional": {
-                    "type": "boolean"
-                  },
-                  "reason": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "object",
-                        "propertyNames": {
-                          "type": "string"
-                        },
-                        "additionalProperties": {
-                          "type": "string"
-                        }
-                      }
-                    ]
-                  }
-                },
-                "additionalProperties": false
-              }
-            ]
+            "type": "string",
+            "minLength": 1
           }
         }
       },
@@ -1084,7 +752,8 @@
               "integer",
               "toggle",
               "select",
-              "slider"
+              "slider",
+              "slot"
             ]
           },
           "default": {},

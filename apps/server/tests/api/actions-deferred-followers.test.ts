@@ -218,4 +218,146 @@ describe("POST /api/actions — deferred background followers (main path)", () =
     expect(jobs).toHaveLength(1);
     expect(jobs[0]?.value).toMatchObject({ status: "done" });
   });
+
+  // A background follower is typically a media generation: scene-stage's
+  // background-gen declares `timeoutMs: 360000` and one image legitimately
+  // takes 60-300s. While it ran under the session lock, every player message
+  // queued behind the artwork — and under PostgreSQL, where acquiring the lock
+  // is capped at 30s, the player's action did not just wait, it failed.
+  it("leaves the session lock free while the follower executes", async () => {
+    const store: DataStore = createMemoryStore();
+    const pluginRegistry = createPluginRegistry();
+    const eventBus = createEventBus(store);
+    const sessionLock = createInProcessSessionLock();
+
+    const targetManifest = makeManifest({
+      runtimeId: TARGET,
+      stage: "narrative",
+      trigger: { type: "auto" },
+    });
+    const targetHandler: FunctionHandler = async () => ({
+      ok: true,
+      events: [{ topic: "test-deferred.ready", data: { value: "hello" } }],
+    });
+    const targetLoaded: LoadedRuntime = {
+      manifest: targetManifest,
+      promptTemplate: "",
+      handler: targetHandler,
+    };
+
+    const followerManifest = makeManifest({
+      runtimeId: FOLLOWER,
+      execution: "background",
+      trigger: { type: "event", topic: "test-deferred.ready" },
+    });
+
+    // Stands in for the player acting mid-generation. Racing a timeout keeps a
+    // regression from hanging the suite: if execution ever moves back under the
+    // session lock this resolves `false` instead of deadlocking forever.
+    let playerCouldAct = false;
+    const followerHandler: FunctionHandler = async () => {
+      await Promise.race([
+        sessionLock.withLock(SESSION_ID, async () => {
+          playerCouldAct = true;
+        }),
+        new Promise((resolve) => setTimeout(resolve, 250)),
+      ]);
+      return {
+        pluginData: [{ namespace: "seen", key: "last", value: { ok: true } }],
+      };
+    };
+    const followerLoaded: LoadedRuntime = {
+      manifest: followerManifest,
+      promptTemplate: "",
+      handler: followerHandler,
+    };
+
+    const parsedTarget = {
+      manifest: targetManifest,
+      promptTemplate: "",
+      rawFrontmatter: {},
+    };
+    const parsedFollower = {
+      manifest: followerManifest,
+      promptTemplate: "",
+      rawFrontmatter: {},
+    };
+    pluginRegistry.register({
+      id: PLUGIN_ID,
+      summary: makeSummary(PLUGIN_ID),
+      manifest: parsedTarget,
+      manifests: [parsedTarget, parsedFollower],
+      loadedRuntimes: new Map([
+        [TARGET, targetLoaded],
+        [FOLLOWER, followerLoaded],
+      ]),
+      status: "registered",
+      source: "builtin",
+    } as PluginRegistryEntry);
+
+    const loadRuntimeFn = async (m: RuntimeManifest) =>
+      m.name === TARGET
+        ? targetLoaded
+        : m.name === FOLLOWER
+          ? followerLoaded
+          : undefined;
+
+    const app = new Hono();
+    app.use("*", async (c, next) => {
+      c.set("store", store);
+      c.set("pluginRegistry", pluginRegistry);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      c.set("llmAdapter", { generate: async () => ({}) } as any);
+      c.set("loadRuntimeFn", loadRuntimeFn);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      c.set("toolExecutor", undefined as any);
+      c.set("resolveModel", () => undefined);
+      c.set("eventBus", eventBus);
+      c.set("sessionLock", sessionLock);
+      await next();
+    });
+    app.route("/api/actions", actionRoutes);
+
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: SESSION_ID,
+      worldId: null,
+      status: "active",
+      presetId: null,
+      activePlugins: [PLUGIN_ID],
+      turnCount: 1,
+      preGameCompleted: [],
+      createdAt: now,
+    });
+
+    const res = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-lock",
+        type: "send_message",
+        sessionId: SESSION_ID,
+        payload: { content: "go" },
+      }),
+    });
+    const reader = res.body?.getReader();
+    if (reader) {
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
+    }
+
+    await waitFor(async () => {
+      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "seen");
+      return rows.length === 1;
+    });
+
+    expect(playerCouldAct).toBe(true);
+
+    // The commit itself still takes the session lock, so the follower's writes
+    // land exactly as before — freeing the lock must not cost durability.
+    const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
+    expect(jobs[0]?.value).toMatchObject({ status: "done" });
+  });
 });

@@ -10,6 +10,8 @@ export function registerPluginUserSettings(
   store: SettingsStoreApi,
   pluginId: string,
   specs: readonly PluginUserSettingSpec[] | undefined,
+  /** Slot ids offered to `type: slot` settings. */
+  slotIds: readonly string[] = [],
 ): void {
   if (!specs) return;
   for (const spec of specs) {
@@ -22,12 +24,29 @@ export function registerPluginUserSettings(
       widget: widgetFor(spec.type),
       label: spec.label,
       description: spec.description,
-      options: spec.options,
+      options: spec.type === "slot" ? slotOptions(spec, slotIds) : spec.options,
       min: spec.min,
       max: spec.max,
       step: spec.step,
     });
   }
+}
+
+/**
+ * Render a `slot` setting as a picker over the configured slots. The declared
+ * default is included even when it has no `llm.toml` section yet, so the
+ * current value never silently disappears from the list.
+ */
+function slotOptions(
+  spec: PluginUserSettingSpec,
+  slotIds: readonly string[],
+): ReadonlyArray<{ value: string; label: string }> | undefined {
+  const ids = new Set(slotIds);
+  if (typeof spec.default === "string" && spec.default) ids.add(spec.default);
+  if (ids.size === 0) return undefined;
+  return [...ids]
+    .sort((a, b) => a.localeCompare(b))
+    .map((id) => ({ value: id, label: id }));
 }
 
 function widgetFor(type: PluginUserSettingSpec["type"]): WidgetKind {
@@ -44,6 +63,9 @@ function widgetFor(type: PluginUserSettingSpec["type"]): WidgetKind {
     case "toggle":
       return "toggle";
     case "select":
+    // A slot setting is a select over the configured slot ids — the options
+    // are computed at registration time rather than declared in PLUGIN.md.
+    case "slot":
       return "select";
   }
 }
@@ -54,6 +76,9 @@ function schemaFor(spec: PluginUserSettingSpec): z.ZodType {
   switch (spec.type) {
     case "text":
     case "textarea":
+    // Deliberately NOT an enum over the rendered options: a player who adds a
+    // slot to llm.toml after boot must still be able to select it.
+    case "slot":
       return z.string();
     case "number":
     case "integer":

@@ -35,14 +35,8 @@ import {
   buildPluginPanelInitialState,
   flattenStateForPluginPanel,
 } from "@/lib/plugin-panel-state.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog.js";
 import { Button as UIButton } from "@/components/ui/button.js";
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import { X } from "lucide-react";
 
 export type PluginPanelStateCache = Map<string, StateStore>;
@@ -147,35 +141,6 @@ export function PluginPanel({
     });
   }, []);
 
-  // Custom confirm dialog state — replaces `window.confirm` so the approval
-  // prompt is themed, localised, and non-blocking. The promise pattern mirrors
-  // the native API the call site already used so the handler stays linear.
-  interface ConfirmRequest {
-    readonly title: string;
-    readonly message: string;
-    readonly confirmLabel: string;
-    readonly cancelLabel: string;
-    readonly resolve: (value: boolean) => void;
-  }
-  const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(
-    null,
-  );
-  const confirmRequestRef = useRef<ConfirmRequest | null>(null);
-  confirmRequestRef.current = confirmRequest;
-  const confirmAsync = useCallback(
-    (params: Omit<ConfirmRequest, "resolve">) =>
-      new Promise<boolean>((resolve) => {
-        setConfirmRequest({ ...params, resolve });
-      }),
-    [],
-  );
-  const handleConfirmResult = useCallback((value: boolean) => {
-    const current = confirmRequestRef.current;
-    if (!current) return;
-    current.resolve(value);
-    setConfirmRequest(null);
-  }, []);
-
   const stateCacheKey = `${pluginId}:${String(spec.id ?? spec.label ?? "panel")}`;
   const stateStoreRef = useRef<StateStore | null>(null);
   if (!stateStoreRef.current) {
@@ -266,7 +231,7 @@ export function PluginPanel({
             request: req,
             pluginId,
             actionLabel: `runtime ${runtimeId}`,
-            confirm: confirmAsync,
+            confirm: requestConfirm,
             t,
           });
           if (res) {
@@ -306,7 +271,7 @@ export function PluginPanel({
             request: req,
             pluginId,
             actionLabel: `action ${action}`,
-            confirm: confirmAsync,
+            confirm: requestConfirm,
             t,
           });
           if (res) {
@@ -332,7 +297,7 @@ export function PluginPanel({
       };
     }
     return handlers;
-  }, [pluginId, sessionId, onAction, markInvoking, confirmAsync, t]);
+  }, [pluginId, sessionId, onAction, markInvoking, t]);
 
   const handlers = explicitHandlers
     ? { ...defaultHandlers, ...explicitHandlers }
@@ -464,33 +429,6 @@ export function PluginPanel({
           <Renderer spec={flatSpec} registry={covelRegistry} />
         </JSONUIProvider>
       </PluginSurfaceBoundary>
-      <Dialog
-        open={confirmRequest !== null}
-        onOpenChange={(open) => {
-          if (!open) handleConfirmResult(false);
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{confirmRequest?.title}</DialogTitle>
-            <DialogDescription className="whitespace-pre-line pt-1">
-              {confirmRequest?.message}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2 pt-2">
-            <UIButton
-              variant="outline"
-              size="sm"
-              onClick={() => handleConfirmResult(false)}
-            >
-              {confirmRequest?.cancelLabel}
-            </UIButton>
-            <UIButton size="sm" onClick={() => handleConfirmResult(true)}>
-              {confirmRequest?.confirmLabel}
-            </UIButton>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

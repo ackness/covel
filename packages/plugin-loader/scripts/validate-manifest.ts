@@ -58,7 +58,7 @@ function collectManifestFiles(path: string): string[] {
   return files;
 }
 
-function validateFile(filePath: string): boolean {
+function validateFile(filePath: string): Record<string, unknown> | null {
   const content = readFileSync(filePath, "utf-8");
 
   let manifest: Record<string, unknown>;
@@ -72,12 +72,12 @@ function validateFile(filePath: string): boolean {
     console.error(
       `  ${error instanceof Error ? error.message : String(error)}`,
     );
-    return false;
+    return null;
   }
 
   if (compatOnly) {
     console.log(`✓ ${filePath} (compat)`);
-    return true;
+    return manifest;
   }
 
   // parsePluginMd appends the derived pluginId; the strict schema rejects
@@ -91,13 +91,82 @@ function validateFile(filePath: string): boolean {
         `  - ${issue.path.join(".") || "(root)"}: ${issue.message}`,
       );
     }
-    return false;
+    return null;
   }
   console.log(`✓ ${filePath}`);
-  return true;
+  return manifest;
 }
 
-const files = paths.flatMap(collectManifestFiles);
-for (const file of files) {
-  if (!validateFile(file)) process.exitCode = 1;
+// ── Cross-runtime (plugin-scope) checks ───────────────────────────
+
+interface CheckedManifest {
+  readonly file: string;
+  readonly manifest: Record<string, unknown>;
+}
+
+/** Key-order-independent serialisation, so field ordering is not a difference. */
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, val: unknown) =>
+    val && typeof val === "object" && !Array.isArray(val)
+      ? Object.fromEntries(
+          Object.entries(val as Record<string, unknown>).sort(([a], [b]) =>
+            a.localeCompare(b),
+          ),
+        )
+      : val,
+  );
+}
+
+// `entry` / `wires` are deliberately NOT checked here. They look like
+// single-declaration fields — the manifest comments long said "declare on ONE
+// runtime per plugin" — but the loaders collect every declared path into a Set
+// and run all of them, so a second declaration is additive, not dropped. See
+// `PLUGIN_SCOPED_FIELDS` in @covel/shared for each field's real merge rule.
+
+/**
+ * `userSettings` are stored under the plugin-scoped key
+ * `plugin.<pluginId>.<key>`, so two runtimes declaring the same key share one
+ * value. Identical declarations are fine (the server dedupes them); diverging
+ * ones mean only one wins, and which one depends on manifest load order.
+ */
+function checkUserSettingCollisions(
+  checked: readonly CheckedManifest[],
+): boolean {
+  const seen = new Map<string, { file: string; json: string }>();
+  let ok = true;
+  for (const { file, manifest } of checked) {
+    const specs = manifest.userSettings;
+    if (!Array.isArray(specs)) continue;
+    for (const spec of specs as Array<Record<string, unknown>>) {
+      const key = String(spec.key);
+      const json = stableJson(spec);
+      const prior = seen.get(key);
+      if (!prior) {
+        seen.set(key, { file, json });
+        continue;
+      }
+      if (prior.json === json) continue;
+      ok = false;
+      console.error(
+        `✗ userSettings key "${key}" is declared differently by two runtimes — both map to one stored value`,
+      );
+      console.error(`  - ${prior.file}`);
+      console.error(`  - ${file}`);
+      console.error(
+        `  Fix: declare the key on one runtime, or make both declarations identical.`,
+      );
+    }
+  }
+  return ok;
+}
+
+for (const path of paths) {
+  const checked: CheckedManifest[] = [];
+  for (const file of collectManifestFiles(path)) {
+    const manifest = validateFile(file);
+    if (manifest) checked.push({ file, manifest });
+    else process.exitCode = 1;
+  }
+  if (checked.length < 2) continue;
+  if (!checkUserSettingCollisions(checked)) process.exitCode = 1;
 }

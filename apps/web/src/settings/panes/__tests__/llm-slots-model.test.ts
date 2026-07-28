@@ -38,17 +38,27 @@ describe("llm slots model", () => {
           },
         ],
         userSettings: [
+          // Discovery keys off the declared `slot` type, not a key-name
+          // convention — an arbitrarily named slot setting is still found.
           {
-            key: "modelPresetId",
-            type: "select",
+            key: "ttsSlot",
+            type: "slot",
             default: "image-fast",
             label: "Model",
           },
           {
             key: "modelPresetId",
-            type: "select",
+            type: "slot",
             default: "default",
             label: "Default",
+          },
+          // A non-slot setting whose default happens to look like a slot id
+          // must NOT be discovered.
+          {
+            key: "composition",
+            type: "select",
+            default: "comic-strip",
+            label: "Composition",
           },
         ],
       },

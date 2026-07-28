@@ -33,6 +33,11 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 ```
 
 - `error` 字段始终存在。需要前端按错误码分流的端点（如 `plugin-rpc`、`media`）会同时给出 `code`。
+- **会话锁竞争统一为 503**：任何路由等待该 session 的执行锁超时（PG 部署下默认 30s）都返回
+  `503 { "error": "Session is busy, please retry", "code": "session_busy" }`，由全局
+  `app.onError` 集中产生，不是各端点自行处理。这是可重试的竞争，不是服务端故障——一个后台
+  媒体生成合法持锁数分钟期间，玩家的动作就会命中它，因此**不应**记为 5xx 故障。原始错误消息
+  含 sessionId 与内部模块名，只进日志，不过线。
 - **会话 404 统一**：所有以 `:id` 为路由参数的会话作用域端点，当会话不存在时统一返回
   `404 { "error": "Session not found: <id>", "code": "session_not_found" }`
   （由 `routes/api/session/session-guard.ts#resolveSessionParam` 集中产生）。
@@ -1451,6 +1456,7 @@ value         : {
   status: "pending" | "done" | "failed",
   runtimeId: string,
   turnId: string,
+  owner?: string,                             // status=pending：写入该行的进程 id
   startedAt: ISO8601,
   completedAt?: ISO8601,
   durationMs?: number,
@@ -1460,10 +1466,20 @@ value         : {
   message?: string,
   progress?: number,
   error?: string,                             // status=failed
-  reason?: "expected-background-follower-missing" | string, // status=failed 时的细分原因
+  reason?: "expected-background-follower-missing" | "orphaned" | string, // status=failed 时的细分原因
   abortReason?: string
 }
 ```
+
+**崩溃恢复**：后台任务由进程内队列驱动，没有持久队列——进程在任务完成前退出，该行会永远停在
+`pending`。开机扫描按 `owner` 回收：`owner` 不等于当前进程（含老版本写下的、根本没有 `owner`
+的行）即判定为孤儿，立即置为 `status: "failed"` + `reason: "orphaned"`，并保留原 `payload` /
+`triggerEvent` 供插件 UI 或玩家发起重试。框架**不自动重跑**——重跑会二次计费（图像 / 语音生成），
+且请求级 `userSettings` 并未持久化在行上，重跑等于换参数重新扣费。
+
+> 该判定假设**一个 store 对应一个服务进程**，对当前发布的所有部署形态（桌面、自部署）都成立。
+> 多实例共享一个数据库时它并不安全：新启动的实例会把其它实例正在执行的行读成孤儿并立即失败。
+> 上多实例前需要给 `owner` 配上租约（运行期续租的 `leaseExpiresAt`），判定改为"非本进程**且**已过期"。
 
 每次写入都会通过 store-proxy 发出 `plugin-data.changed` SSE 事件(见 [protocol.md](./protocol.md)),前端据此刷新 loading / final UI。
 
