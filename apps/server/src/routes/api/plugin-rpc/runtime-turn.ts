@@ -9,11 +9,33 @@ import type { DataStore, SessionRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 
-import type { SessionLock } from "../../../lib/session-lock.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "../../../lib/session-lock.js";
 import type {
   ManualTurnSummary,
   TurnCommitOutcome,
 } from "./runtime-response.js";
+
+/**
+ * Serialises deferred followers of the SAME runtime within a session, keyed
+ * `<sessionId>::<runtimeId>`.
+ *
+ * A follower's handler typically does check-then-act against its own data
+ * ("has this scene already been generated?", the promptHash dedupe inside
+ * `ctx.images`). Those checks were previously made atomic by the session lock;
+ * once execution moves outside it, two followers for the same runtime could
+ * both see "not generated yet" and both pay for a generation. This lock keeps
+ * that guarantee without blocking the player, who takes a different key.
+ *
+ * In-process on purpose: the background queue driving these followers is
+ * itself per-process (`setImmediate` + a module-level counter), so a
+ * cross-process lock would guard a scope that does not exist — and the PG
+ * implementation would hold a reserved connection for the whole multi-minute
+ * generation.
+ */
+const followerJobLock = createInProcessSessionLock();
 
 export interface PluginRpcRuntimeTurnContext {
   readonly store: DataStore;
@@ -245,13 +267,26 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
-    // Take the per-session lock like runManualTurn / actions / resume. Deferred
-    // followers fire via setImmediate after the originating request's lock has
-    // released, so without this they can interleave turnNumber computation,
-    // state writes, and auto-snapshots with a concurrent player turn on the same
-    // session (audit 2026-04-20 finding 1).
-    const { turnResult, commit } = await ctx.sessionLock.withLock(
-      ctx.sessionId,
+    // Execution runs OUTSIDE the session lock; only the commit takes it.
+    //
+    // A background follower is usually a media generation: `background-gen`
+    // declares `timeoutMs: 360000`, and a single image legitimately takes
+    // 60-300s. Holding the session lock across that made every player message
+    // queue behind the artwork — and under PostgreSQL the 30s acquire budget
+    // meant the player's action did not merely wait, it timed out.
+    //
+    // Executing unlocked is safe because the three reasons the lock was taken
+    // no longer apply to this path: the session clock is untouched (this path
+    // passes no `sessionClock` to `finalizeExecution`, and `completedPlayerTurns`
+    // counts only `origin: "player"` executions), domain writes are buffered and
+    // land in `finalizeExecution`'s single transaction rather than dribbling out
+    // during the run, and a follower appends no turn messages. What genuinely
+    // needs the lock is the commit itself plus the auto-snapshot, which must see
+    // a settled session — so `processTurnResults` keeps it.
+    //
+    // Same-runtime followers are still serialised, by `followerJobLock` above.
+    const { turnResult, commit } = await followerJobLock.withLock(
+      `${ctx.sessionId}::${args.runtimeId}`,
       async () => {
         const result = await executeTurn(turnInput, ctx.activeRuntimes, {
           ...ctx.deps,
@@ -260,7 +295,28 @@ export function createPluginRpcRuntimeTurnRunner(
           emitter,
           ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
         });
-        const outcome = await processTurnResults(result, emitter);
+        const outcome = await ctx.sessionLock.withLock(
+          ctx.sessionId,
+          async () => {
+            // Minutes can pass while the generation runs, so the session state
+            // read before it started is no longer trustworthy. Re-read under
+            // the lock and refuse to commit into a session the player has since
+            // paused or ended — the throw is caught by the background job
+            // runner, which settles the job row as failed.
+            const live = await ctx.store.getSession(ctx.sessionId);
+            if (!live) {
+              throw new Error(
+                "session was deleted while the background job was running",
+              );
+            }
+            if (live.status && live.status !== "active") {
+              throw new Error(
+                `session is ${live.status}; background job results were discarded`,
+              );
+            }
+            return processTurnResults(result, emitter);
+          },
+        );
         return { turnResult: result, commit: outcome };
       },
     );
