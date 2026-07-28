@@ -55,7 +55,7 @@ pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs (check:plugi
 pnpm e2e:verify       # API-driven, real-LLM plugin harness (needs .env.llm); pass --slot e2e_local --turns 3
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
 pnpm validate:plugin  # validate PLUGIN.md manifests; pass file or plugin dir, --compat for legacy
-pnpm build:electron   # production desktop installer → release/ (build:desktop is an alias)
+pnpm build:electron   # production desktop installer → release/
 pnpm release:preflight  # static pre-tag gate: lockfile sync, import resolution, plugin/world/prompt structure
 ```
 
