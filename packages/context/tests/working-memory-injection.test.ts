@@ -110,7 +110,12 @@ describe("Working Memory context injection", () => {
     expect(ctx.systemPrompt).toContain('"warrior"');
   });
 
-  it("WM segment appears before plugin instructions", () => {
+  // Working memory renders AFTER the plugin instructions. It changes every
+  // turn, and ahead of the instructions it invalidated the largest block in
+  // the prompt on every request — for explicit cache_control segments and for
+  // automatic prefix caches alike. Trailing them also places the turn's
+  // freshest state closest to the conversation.
+  it("WM segment appears after plugin instructions", () => {
     const params = makeParams({
       promptTemplate: "You are a narrator.",
       workingMemory: [{ scope: "player", key: "k", value: 1 }],
@@ -120,6 +125,6 @@ describe("Working Memory context injection", () => {
     const wmPos = ctx.systemPrompt.indexOf("[Working Memory]");
     const pluginPos = ctx.systemPrompt.indexOf("You are a narrator.");
     expect(wmPos).toBeGreaterThanOrEqual(0);
-    expect(wmPos).toBeLessThan(pluginPos);
+    expect(wmPos).toBeGreaterThan(pluginPos);
   });
 });

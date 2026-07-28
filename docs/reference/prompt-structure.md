@@ -15,13 +15,13 @@ Covel 用单一路径组装 runtime context：`buildContext()` / `buildContextAs
 ## 2. 段位图
 
 ```text
-system prompt
+system prompt（编号是段的身份，下面是实际渲染顺序）
   [1] Framework Preamble
-  [2] Core Memory + Working Memory
   [3] Plugin Instructions
   [4] WorldInfo: before-plugin
   [5] Injects from upstream
   [6] WorldInfo: after-plugin
+  [2] Core Memory + Working Memory   ← 每回合都变，排在全部稳定块之后
 
 messages
   [7] Message history after summary substitution and pruning
@@ -44,6 +44,8 @@ messages
 | 10  | Post-History Instructions    | 当前执行 runtime 的 `postHistory`                                                                                                                                                   | `messages` 末尾 |
 
 空段会被跳过，非空 system 段用 `\n\n` 拼接成 `AssembledContext.systemPrompt`。运行时仍消费一个 `systemPrompt: string` 与一个 `messages` 数组。
+
+**段 2 按编号排在前面，但渲染在最后**——它是唯一每回合都变的 system 段。夹在段 1 与段 3 之间时，它会让下游的一切每回合失效：段 3 通常是整个 prompt 里最大的块，仅仅因为它前面几行记忆变了就要重新计费。两种缓存模型都吃这个亏——显式 `cache_control` 段必须整段字节不变才可复用，自动前缀缓存则在第一个不同的字节处就断掉。放到最后还有一个附带好处：本回合最新的状态离对话最近，模型对它的权重最高。
 
 段 7 里替换被压缩历史的 compactor summary 以 **`user` 角色的 `<compacted_history>` 数据信封**进入 `messages`，内容做 XML 转义。summary 是模型自己写的、会持久化、之后每回合都重新注入的文本；用 `system` 身份注入等于给一次提示注入开了一条跨回合、自我放大的通道。信封化后它只是"早先回合的故事记录"，与 core memory 的处理方式一致。
 
@@ -105,6 +107,8 @@ Working Memory 与 Core Memory 通过 session context snapshot 进入段 2；插
 3. 段 6：WorldInfo after-plugin
 
 Anthropic adapter 会把 sentinel 转成 `cache_control: { type: "ephemeral" }` 的 text block。OpenAI-compatible providers 不读取 sentinel，依赖 provider 的自动前缀匹配。
+
+段 2（Core/Working Memory）**不锚定断点，并且排在最后一个 sentinel 之后**。因此 systemPrompt 不再以 sentinel 结尾，Anthropic adapter 把这段尾巴视为 open tail 而不给它 `cache_control`（见 `packages/ai-provider/src/adapters/anthropic-messages.ts` 的 `hasOpenTail`）。断点总数仍是 3，未逼近 `MAX_CACHE_BREAKPOINTS`。
 
 ## 6. `prompts/server`
 
