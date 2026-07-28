@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import i18n from "i18next";
 import * as api from "@/services/api";
 import { ignoreError } from "@/lib/ignore-error.js";
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import type { DataService } from "@/services/data-service.js";
 import {
   resetPluginData,
@@ -521,12 +522,15 @@ export function useBuildSessionActions({
         if (enable) {
           let result = await api.enableSessionPlugin(sid, pluginId);
           if ("status" in result && result.status === "approval-required") {
-            const approved = window.confirm(
-              i18n.t("plugin.approval.confirmMessage", {
+            const approved = await requestConfirm({
+              title: i18n.t("plugin.approval.title"),
+              message: i18n.t("plugin.approval.confirmMessage", {
                 pluginId: result.pending.pluginId,
                 action: result.pending.action,
               }),
-            );
+              confirmLabel: i18n.t("plugin.approval.allow"),
+              cancelLabel: i18n.t("plugin.approval.deny"),
+            });
             await api.resolveApproval(
               result.approvalId,
               approved ? "allow" : "deny",
