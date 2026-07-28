@@ -37,6 +37,8 @@ tests/e2e/report
 .env.*
 !.env.example
 !.env.llm.example
+# Local slot config (gitignored — mounted at runtime, never baked in)
+llm.toml
 
 # ── Logs / Debug ───────────────────────────────────────────────
 *.log
