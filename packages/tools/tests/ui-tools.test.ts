@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { normalizeUIRenderInstruction } from "@covel/shared";
-import { createNotificationTool, renderUITool } from "../src/index.js";
+import {
+  createFormTool,
+  createNotificationTool,
+  renderUITool,
+} from "../src/index.js";
 
 const CTX = {
   sessionId: "sess-1",
@@ -88,5 +92,66 @@ describe("builtin ui tools", () => {
         message: "水源已污染。",
       },
     });
+  });
+});
+
+describe("create-form select options", () => {
+  // The submitted value is what `narrativeTemplate` interpolates. An option
+  // written to help the player choose ("旧地重游 —— 与青砾町有过一段旧事") is
+  // exactly the wrong thing to splice into a sentence, so the object form has
+  // to survive the schema intact for a plugin to separate the two.
+  it("accepts { value, label } options and preserves both", async () => {
+    const result = (await createFormTool.execute(
+      {
+        formId: "char-creation",
+        title: "转学生档案",
+        submitLabel: "踏入教室",
+        narrativeTemplate: "你的转学原因——{{transferReason}}——已经写进故事。",
+        fields: [
+          {
+            type: "select",
+            name: "transferReason",
+            label: "转学原因",
+            options: [
+              {
+                value: "旧地重游",
+                label: "旧地重游 —— 与青砾町有过一段旧事，想要回来",
+              },
+            ],
+          },
+        ],
+      },
+      CTX,
+    )) as {
+      interaction: {
+        fields: Array<{ options?: Array<{ value: string; label: string }> }>;
+      };
+    };
+
+    const opt = result.interaction.fields[0]!.options![0]!;
+    expect(opt.value).toBe("旧地重游");
+    expect(opt.label).toContain("与青砾町有过一段旧事");
+  });
+
+  it("still accepts plain string options", async () => {
+    const result = (await createFormTool.execute(
+      {
+        formId: "f",
+        title: "t",
+        submitLabel: "ok",
+        narrativeTemplate: "{{club}}",
+        fields: [
+          {
+            type: "select",
+            name: "club",
+            label: "社团",
+            options: ["文艺部", "轻音部"],
+          },
+        ],
+      },
+      CTX,
+    )) as { interaction: { fields: Array<{ options?: unknown[] }> } };
+
+    expect(result.interaction.fields[0]!.options).toEqual(["文艺部", "轻音部"]);
   });
 });
