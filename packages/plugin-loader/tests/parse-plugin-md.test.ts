@@ -545,19 +545,23 @@ describe("parsePluginMd", () => {
       expect(caught!.message).not.toContain("begins with `---`");
     });
 
-    // A relation entry is a union (bare string | object), and Zod buries the
-    // real cause one level down inside `invalid_union`. Without unwrapping it,
-    // the hint degrades to "Invalid input" and a plugin author migrating off
-    // the removed `capability` / `tag` targets is told nothing actionable.
-    it("reaches into a failed union to name the removed relation target", () => {
+    // A relation entry is now a plain id string. Every object spelling the
+    // schema used to accept is rejected, and a bare "expected string, received
+    // object" would leave a migrating author guessing what to write instead.
+    it.each([
+      ["capability target", "    - capability: narrative-engine"],
+      ["plugin key", "    - plugin: scene-cast"],
+      ["target object", "    - target: { plugin: scene-cast }"],
+      ["metadata form", "    - { runtime: npc-graph/extractor, reason: why }"],
+    ])("tells an author how to rewrite the removed %s", (_label, entry) => {
       const content = md(
         [
           "name: legacy-relations",
-          "description: Uses the removed capability relation target",
+          "description: Uses a removed relation form",
           "stage: narrative",
           "relations:",
           "  requires:",
-          "    - capability: narrative-engine",
+          entry,
         ].join("\n"),
         "\nBody.\n",
       );
@@ -571,9 +575,9 @@ describe("parsePluginMd", () => {
 
       expect(caught).toBeDefined();
       expect(caught!.message).toContain("Fix:");
-      expect(caught!.message).toContain("`capability`");
-      expect(caught!.message).toContain("`needs`");
-      expect(caught!.message).not.toContain("Fix: Field");
+      expect(caught!.message).toContain("just the plugin id");
+      // Not the generic type-mismatch fallback.
+      expect(caught!.message).not.toContain("has the wrong type");
     });
 
     it("names a misspelled field instead of blaming the frontmatter", () => {

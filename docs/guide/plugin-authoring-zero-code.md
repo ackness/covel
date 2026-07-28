@@ -82,7 +82,7 @@ trigger:
 | `outputKind`             | 否   | `story` / `plugin` / `system` | 输出在 UI 中的展示方式。`story` 显示在主聊天流，`plugin`（默认）可能被隐藏，`system` 不展示                                            |
 | `capabilities`           | 否   | string[]                      | 能力标签，框架通过能力发现插件而非 ID。如 `[narrative]`、`[world-data-provider]`、`[image-generation]`                                 |
 | `tags`                   | 否   | string[]                      | 玩家/作者筛选标签，用于准备页搜索、分组和世界 `pluginPolicy` 匹配。如 `[mode:dialogue, role:narrator]`                                 |
-| `relations`              | 否   | object                        | 插件目录关系，可含 `provides`、`requires`、`conflicts`、`recommends`                                                                   |
+| `relations`              | 否   | object                        | 插件目录关系，可含 `provides`、`requires`、`conflicts`、`recommends`；每项是插件 id 字符串                                             |
 | `trigger`                | 否   | object                        | 触发配置（见下方详解）                                                                                                                 |
 | `tools`                  | 否   | object                        | 工具声明（见[进阶指南](./plugin-authoring-agent.md)）                                                                                  |
 | `input`                  | 否   | object                        | 输入注入声明（见[进阶指南](./plugin-authoring-agent.md)）                                                                              |

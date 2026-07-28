@@ -434,57 +434,20 @@ const pluginTagSchema = z
       'tags must be identifiers such as "mode:dialogue", "role:narrator", or "ui-only"',
   });
 
-// A relation names a plugin — as a bare id, or as `runtime` / `plugin` when
-// the author wants to spell it out. `capability` / `tag` targets are NOT
-// accepted: nothing in the framework ever resolved them, so declaring one
-// would parse and then be silently ignored. Capability-based *scheduling*
+// A relation entry is a plugin id (or `pluginId/runtimeId`) — nothing more.
+// The object form that also accepted `target` / `plugin` / `runtime` / `type` /
+// `optional` / `reason` was four ways to spell one id plus three fields no
+// consumer read; `capability` / `tag` targets never resolved at all. Annotate a
+// dependency with a YAML comment instead. Capability-based *scheduling*
 // dependencies are a different field — see `needs` / `after`.
-const relationTargetSchema = z
-  .union([
-    z.string().min(1),
-    z
-      .object({
-        plugin: z.string().min(1).optional(),
-        runtime: z.string().min(1).optional(),
-      })
-      .strict(),
-  ])
-  .optional();
-
-const pluginRelationSchema = z
-  .object({
-    type: z
-      .enum(["requires", "recommends", "conflicts", "provides"])
-      .optional(),
-    target: relationTargetSchema,
-    plugin: z.string().min(1).optional(),
-    runtime: z.string().min(1).optional(),
-    optional: z.boolean().optional(),
-    reason: i18nTextLoose.optional(),
-  })
-  .strict()
-  .refine(
-    (value) =>
-      value.target !== undefined ||
-      value.plugin !== undefined ||
-      value.runtime !== undefined,
-    { message: "relation must declare target, plugin, or runtime" },
-  );
+const relationEntrySchema = z.array(z.string().min(1)).optional();
 
 export const pluginRelationsSchema = z
   .object({
-    provides: z
-      .array(z.union([z.string().min(1), pluginRelationSchema]))
-      .optional(),
-    requires: z
-      .array(z.union([z.string().min(1), pluginRelationSchema]))
-      .optional(),
-    recommends: z
-      .array(z.union([z.string().min(1), pluginRelationSchema]))
-      .optional(),
-    conflicts: z
-      .array(z.union([z.string().min(1), pluginRelationSchema]))
-      .optional(),
+    provides: relationEntrySchema,
+    requires: relationEntrySchema,
+    recommends: relationEntrySchema,
+    conflicts: relationEntrySchema,
   })
   .strict();
 

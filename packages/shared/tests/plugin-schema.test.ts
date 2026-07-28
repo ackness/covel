@@ -94,7 +94,9 @@ describe("plugin manifest dataSchemas", () => {
       tags: ["mode:dialogue", "role:narrator", "cost:llm"],
       relations: {
         provides: ["narrative-engine"],
-        requires: [{ plugin: "scene-cast", reason: "Needs cast state" }],
+        // Needs cast state — the rationale lives in a comment now that a
+        // relation entry is just the id.
+        requires: ["scene-cast"],
         conflicts: ["narrator"],
       },
     });
@@ -197,57 +199,39 @@ describe("plugin manifest relations", () => {
     stage: "narrative" as const,
   };
 
-  it("accepts bare plugin ids, the normal spelling", () => {
+  it("accepts plugin ids and pluginId/runtimeId strings", () => {
     const manifest = runtimeManifestSchema.parse({
       ...base,
       relations: {
         provides: ["narrative-engine"],
-        requires: ["scene-cast"],
+        requires: ["scene-cast", "npc-graph/extractor"],
         conflicts: ["narrator"],
       },
     });
 
-    expect(manifest.relations?.requires).toEqual(["scene-cast"]);
+    expect(manifest.relations?.requires).toEqual([
+      "scene-cast",
+      "npc-graph/extractor",
+    ]);
   });
 
-  it("accepts the long form with plugin/runtime and metadata", () => {
-    const manifest = runtimeManifestSchema.parse({
-      ...base,
-      relations: {
-        recommends: [
-          { plugin: "character-presence", optional: true, reason: "Avatars" },
-          { target: { runtime: "npc-graph/extractor" } },
-        ],
-      },
-    });
-
-    expect(manifest.relations?.recommends).toHaveLength(2);
+  // Every object spelling is gone: they were interchangeable ways to write one
+  // id, and the extra keys (`type` / `optional` / `reason`) had no consumer.
+  it.each([
+    ["plugin", { requires: [{ plugin: "scene-cast" }] }],
+    ["runtime", { requires: [{ runtime: "npc-graph/extractor" }] }],
+    ["target string", { requires: [{ target: "scene-cast" }] }],
+    ["target object", { requires: [{ target: { plugin: "scene-cast" } }] }],
+    ["capability", { requires: [{ capability: "narrative" }] }],
+    ["tag", { recommends: [{ tag: "mode:dialogue" }] }],
+    ["metadata only", { requires: [{ optional: true, reason: "why" }] }],
+  ])("rejects the removed object form: %s", (_label, relations) => {
+    expect(() => runtimeManifestSchema.parse({ ...base, relations })).toThrow();
   });
 
-  it("rejects a capability target — it would parse and never resolve", () => {
+  it("rejects an empty id", () => {
     expect(() =>
-      runtimeManifestSchema.parse({
-        ...base,
-        relations: { requires: [{ capability: "narrative" }] },
-      }),
+      runtimeManifestSchema.parse({ ...base, relations: { requires: [""] } }),
     ).toThrow();
-  });
-
-  it("rejects a tag target", () => {
-    expect(() =>
-      runtimeManifestSchema.parse({
-        ...base,
-        relations: { recommends: [{ tag: "mode:dialogue" }] },
-      }),
-    ).toThrow();
-  });
-
-  it("rejects an entry that names no target at all", () => {
-    expect(() =>
-      runtimeManifestSchema.parse({
-        ...base,
-        relations: { requires: [{ optional: true }] },
-      }),
-    ).toThrow(/must declare target, plugin, or runtime/);
   });
 });

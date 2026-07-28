@@ -143,6 +143,16 @@ function deriveFixHint(error: unknown): string {
   if (path === "description") {
     return 'Add a `description:` field — either a single string or an i18n map like `description: { en-US: "...", zh-CN: "..." }`.';
   }
+  // The object form of a relation entry was removed; the value is now just the
+  // id. Without this the author only sees "expected string, received object".
+  if (path.startsWith("relations.")) {
+    return (
+      `A \`relations\` entry is now just the plugin id — write \`- some-plugin\` ` +
+      `(or \`- some-plugin/its-runtime\`), not an object. The old ` +
+      `\`target\` / \`plugin\` / \`runtime\` / \`type\` / \`optional\` / \`reason\` keys were ` +
+      `removed: only the id was ever read. Explain the dependency in a YAML comment above it.`
+    );
+  }
   if (code === "invalid_type") {
     return `Field "${path}" has the wrong type — ${firstIssue.message}.`;
   }

@@ -306,43 +306,30 @@ export interface PluginEventDecl {
 
 export type PluginTag = string;
 
-export interface PluginRelationTarget {
-  readonly plugin?: string;
-  readonly runtime?: string;
-}
-
 /**
- * Long form of a relation entry. A bare string is the normal spelling and is
- * what every bundled plugin uses; this object form only adds `optional` /
- * `reason` metadata on top of the same target.
+ * Plugin catalogue relations. Each entry is a plain string: a plugin id
+ * (`scene-cast`) or `pluginId/runtimeId` — EXCEPT under `provides`, where the
+ * string is an opaque capability label two plugins can share to mark
+ * themselves as interchangeable (`narrator` and `chat-mode-narrator` both
+ * provide `narrative-engine`, which is how one may replace the other).
  *
- * There is deliberately no `capability` / `tag` target: relations are resolved
- * to a plugin id (`relationPluginId` in the session-plugins route), so a
- * capability target would parse and then never match anything. Capability-based
- * *scheduling* dependencies are a separate, working mechanism — `needs` /
- * `after`, see {@link RuntimeManifest.needs}.
- */
-export interface PluginRelation {
-  readonly type?: "requires" | "recommends" | "conflicts" | "provides";
-  readonly target?: string | PluginRelationTarget;
-  readonly plugin?: string;
-  readonly runtime?: string;
-  readonly optional?: boolean;
-  readonly reason?: import("./world.js").I18nText;
-}
-
-/**
- * Plugin catalogue relations. Entries are plugin ids (`scene-cast`) or
- * `pluginId/runtimeId` — EXCEPT under `provides`, where the string is an
- * opaque capability label two plugins can share to mark themselves as
- * interchangeable (`narrator` and `chat-mode-narrator` both provide
- * `narrative-engine`, which is how one may replace the other).
+ * An entry is deliberately just a string. Earlier versions also accepted an
+ * object form carrying `target` / `plugin` / `runtime` / `type` / `optional` /
+ * `reason`, i.e. four interchangeable ways to write a plugin id plus three
+ * fields no code ever read — resolution only ever extracted the id
+ * (`relationPluginId`, session-plugins route), the frontend forwards relations
+ * as an opaque blob, and `optional: true` under `requires` was just
+ * `recommends` spelled differently. Explain a dependency with a YAML comment
+ * above it, the way the bundled plugins already do.
+ *
+ * Capability-based *scheduling* dependencies are a separate, working
+ * mechanism — see {@link RuntimeManifest.needs} / `after`.
  */
 export interface PluginRelations {
-  readonly provides?: readonly (string | PluginRelation)[];
-  readonly requires?: readonly (string | PluginRelation)[];
-  readonly recommends?: readonly (string | PluginRelation)[];
-  readonly conflicts?: readonly (string | PluginRelation)[];
+  readonly provides?: readonly string[];
+  readonly requires?: readonly string[];
+  readonly recommends?: readonly string[];
+  readonly conflicts?: readonly string[];
 }
 
 // ── Tool declarations ────────────────────────────────────────────

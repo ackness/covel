@@ -1308,11 +1308,11 @@ capabilities: [narrative, world-data-provider]
 
 `tags` 是面向玩家、作者和准备页筛选的目录标签，例如 `mode:dialogue`、`role:narrator`、`cost:llm`。`capabilities` 保持机器能力契约；框架逻辑依赖 `capabilities`，准备页和组合包匹配使用 `tags`。
 
-`relations` 描述插件目录关系，可包含 `provides`、`requires`、`conflicts`、`recommends`。简单写法使用字符串数组；需要附加说明时可使用带 `plugin`、`runtime`、`optional`、`reason` 的对象（`target: <id>` / `target: { plugin | runtime }` 是等价的长写法）。创建或启用 session 时，服务端会执行 `requires` 闭包并移除 `conflicts` 指向的插件；`provides` 和 `recommends` 作为目录/准备页信号保留。
+`relations` 描述插件目录关系，可包含 `provides`、`requires`、`conflicts`、`recommends`。**每项就是一个字符串**——插件 id 或 `pluginId/runtimeId`，没有对象形式。创建或启用 session 时，服务端会执行 `requires` 闭包并移除 `conflicts` 指向的插件；`provides` 和 `recommends` 作为目录/准备页信号保留。
 
-关系条目一律**解析成插件 id**——`requires` / `conflicts` / `recommends` 写插件 id（或 `pluginId/runtimeId`）。`provides` 是唯一例外：它的字符串是一个**不透明的能力标签**，两个插件声明同一个标签即表示彼此可替换（`narrator` 与 `chat-mode-narrator` 都 `provides: narrative-engine`，服务端据此允许其一顶替另一个）。
+`provides` 是唯一语义例外：它的字符串不是插件 id，而是一个**不透明的能力标签**，两个插件声明同一个标签即表示彼此可替换（`narrator` 与 `chat-mode-narrator` 都 `provides: narrative-engine`，服务端据此允许其一顶替另一个）。
 
-> **不支持 `capability` / `tag` 关系目标**（早期文档误列过）。框架从来没有解析过它们——写了会通过校验然后被静默忽略，所以已从 schema 移除，现在会在加载时明确报错并提示改写。需要**按能力声明调度依赖**请用 `needs` / `after`（见[调度声明](#调度声明)），那是另一套、确实生效的机制。
+> **对象形式已移除**（早期文档列过 `target` / `plugin` / `runtime` / `capability` / `tag` / `type` / `optional` / `reason`）。前四个是写同一个 id 的四种等价拼法，后三个从来没有任何代码读过，而 `capability` / `tag` 更是写了就被静默忽略。依赖的理由写成条目上方的 YAML 注释即可（内置插件一直是这么做的）；`requires` 里的 `optional: true` 语义等同于直接写在 `recommends` 下。旧写法现在加载报错并提示改写。需要**按能力声明调度依赖**请用 `needs` / `after`（见[调度声明](#调度声明)），那是另一套、确实生效的机制。
 
 ```yaml
 tags:
