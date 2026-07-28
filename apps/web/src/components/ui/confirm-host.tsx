@@ -6,7 +6,7 @@
  * once would otherwise leave the first promise pending forever.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   subscribeConfirm,
   type PendingConfirm,
@@ -22,18 +22,32 @@ import { Button } from "@/components/ui/button.js";
 
 export function ConfirmHost() {
   const [queue, setQueue] = useState<readonly PendingConfirm[]>([]);
+  const queueRef = useRef<readonly PendingConfirm[]>([]);
+  queueRef.current = queue;
 
-  useEffect(
-    () => subscribeConfirm((pending) => setQueue((prev) => [...prev, pending])),
-    [],
-  );
+  useEffect(() => {
+    const unsubscribe = subscribeConfirm((pending) =>
+      setQueue((prev) => [...prev, pending]),
+    );
+    return () => {
+      unsubscribe();
+      // Every queued caller is awaiting a promise only this host can settle.
+      // Unmounting without answering them would hang each one forever, so
+      // treat a teardown as a decline.
+      for (const pending of queueRef.current) pending.resolve(false);
+    };
+  }, []);
 
   const current = queue[0];
 
   const settle = (approved: boolean) => {
     if (!current) return;
     current.resolve(approved);
-    setQueue((prev) => prev.slice(1));
+    // Remove by id rather than dropping the head: two clicks landing in the
+    // same render both see this `current`, and a second `slice(1)` would evict
+    // the NEXT request unanswered, hanging its caller. Filtering by id makes
+    // the repeat a no-op (resolving a settled promise already is one).
+    setQueue((prev) => prev.filter((entry) => entry.id !== current.id));
   };
 
   return (

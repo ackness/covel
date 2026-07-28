@@ -142,6 +142,17 @@ export async function writePluginJob(
  * written before `owner` existed carry none, which correctly reads as "some
  * earlier process wrote this".
  *
+ * **This assumes one server process per store.** It is exact for the single
+ * instance deployments Covel ships today (desktop, self-host), where the only
+ * way to orphan a job is for its process to die. It is NOT safe for multiple
+ * instances sharing a database: a booting instance would read every other
+ * instance's in-flight rows as foreign and fail them immediately. The
+ * threshold this replaced left a 15-minute grace window for that case — still
+ * not correct (it killed anything slower than the threshold), but not instant.
+ * Before running more than one instance, `owner` must be paired with a lease
+ * (`leaseExpiresAt` renewed while the job runs) so the test becomes "foreign
+ * AND expired" rather than merely "foreign".
+ *
  * Orphans are failed rather than re-driven: re-running costs real money
  * (image/TTS generation), and the request-scoped `userSettings` a re-run would
  * need is not persisted on the row — it would silently re-bill with different

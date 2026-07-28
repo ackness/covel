@@ -55,6 +55,27 @@ describe("confirm-channel", () => {
     unsub();
   });
 
+  // Guards the host's settle path: answering the same request twice (a double
+  // click lands both handlers on the same rendered request) must not consume
+  // the queue entry behind it. Modelled here at the channel level — resolving
+  // an already-settled promise is a no-op, so the queue identity is what has
+  // to survive.
+  it("answering the same request twice does not disturb the one behind it", async () => {
+    const seen: PendingConfirm[] = [];
+    const unsub = subscribeConfirm((pending) => seen.push(pending));
+
+    const first = requestConfirm(REQUEST);
+    const second = requestConfirm({ ...REQUEST, message: "second" });
+
+    seen[0]!.resolve(true);
+    seen[0]!.resolve(false); // repeat — ignored by the settled promise
+    seen[1]!.resolve(true);
+
+    await expect(first).resolves.toBe(true);
+    await expect(second).resolves.toBe(true);
+    unsub();
+  });
+
   it("reverts to the native dialog once the host unsubscribes", async () => {
     const native = vi.spyOn(window, "confirm").mockReturnValue(false);
     const unsub = subscribeConfirm(() => {});
