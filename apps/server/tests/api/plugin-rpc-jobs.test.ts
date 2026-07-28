@@ -26,6 +26,11 @@ describe("plugin-rpc job helpers", () => {
       startedAt: "2026-05-09T00:00:00.000Z",
       phase: "prompt",
       message: "Generating image prompt...",
+      // Stamped with the live process id so the boot sweep can tell a job with
+      // a living executor from one orphaned by a restart.
+      owner: expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      ),
     });
   });
 
