@@ -58,12 +58,35 @@ export const renderUITool = tool({
 
 // ── create-form ──────────────────────────────────────────────────
 
+/**
+ * A select option. The bare string form uses one text for both jobs; the
+ * object form separates them, which matters because the submitted value is
+ * what `narrativeTemplate` interpolates.
+ *
+ * An option written to help the player choose ("旧地重游 —— 与青砾町有过一段旧事")
+ * reads as a dash-inside-a-dash when spliced into a sentence. Giving the
+ * option a short `value` and a descriptive `label` keeps the picker helpful
+ * without dragging its explanation into the prose.
+ */
+const formFieldOptionSchema = z.union([
+  z.string(),
+  z.object({
+    value: z.string().min(1).describe("提交值，也是叙事模板里插入的文本"),
+    label: z.string().min(1).describe("下拉里展示给玩家的完整描述"),
+  }),
+]);
+
 const formFieldSchema = z.object({
   type: z.enum(["text", "textarea", "select", "checkbox", "number"]),
   name: z.string().min(1),
   label: z.string().min(1),
   placeholder: z.string().optional(),
-  options: z.array(z.string()).optional(),
+  options: z
+    .array(formFieldOptionSchema)
+    .optional()
+    .describe(
+      "select 选项。字符串形式下展示文本即提交值；需要「展示详细、叙事简洁」时用 { value, label }",
+    ),
   required: z.boolean().optional(),
   defaultValue: z.string().optional(),
 });
@@ -85,7 +108,10 @@ export const createFormTool = tool({
     narrativeTemplate: z
       .string()
       .describe(
-        "叙事模板，包含 {{fieldName}} 占位符，玩家提交后由框架填充为完整叙事",
+        "叙事模板，包含 {{fieldName}} 占位符，玩家提交后由框架填入该字段的提交值。" +
+          "select 字段填入的是选项的 value（字符串选项即其本身），因此选项若写成" +
+          "「短标签 —— 长解释」，整串都会进正文；这种情况改用 { value, label }，" +
+          "把短标签放 value、解释放 label",
       ),
     submitBehavior: submitBehaviorSchema
       .optional()

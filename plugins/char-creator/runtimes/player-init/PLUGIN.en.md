@@ -48,6 +48,8 @@ The opening summary is provided in the `<pregame-opening>` block at the end of t
 5. Type mapping: `enum` → `select`; `string` → `text`; `number` → generate 3–5 `select` options from a reasonable range; `array` → `text` (comma-separated placeholder)
 6. Apart from `characterName`, every field is `required: false`
 7. **Numeric stats do not enter the form** — the guard auto-fills them from the schema's `defaultValue` when the player submits.
+8. **When a select option needs an explanation, use the two-part `{ value, label }` form**: `value` is a short phrase that reads naturally inside a sentence ("returning home"), `label` is the full description that helps the player choose ("Returning home — you have history in Aoiseki, and you came back for it").
+   The narrative template interpolates the `value`, so an option written as one long string yields prose like "your reason for transferring — returning home — you have history in Aoiseki, and you came back for it — is now part of your story", a dash inside a dash. When the option is already short ("Literature Club"), a plain string is fine.
 
 ### `create-form` parameters
 
