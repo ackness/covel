@@ -1,14 +1,6 @@
 {
   "$schema": "https://v2-9-4.turborepo.dev/schema.json",
   "tasks": {
-    "dev": {
-      "persistent": true,
-      "cache": false
-    },
-    "dev:pg": {
-      "persistent": true,
-      "cache": false
-    },
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
@@ -53,10 +45,6 @@
       "cache": false
     },
     "db:generate": {
-      "cache": false
-    },
-    "db:studio": {
-      "persistent": true,
       "cache": false
     }
   }
