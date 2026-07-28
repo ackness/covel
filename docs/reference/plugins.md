@@ -11,6 +11,7 @@
 - [`pregame`](#pregame) — 游戏初始化 function runtime（`stage: setup`）
 - [`char-creator/player-init`](#char-creatorplayer-init) — 玩家建角 agent runtime（`stage: setup`）
 - [`world-init/schema-gen`](#world-initschema-gen) — 世界维度 agent runtime（guard 门控，`stage: setup` + `after: [pregame]`）
+- [`scene-stage/seed`](#scene-stageseed) — 舞台开场种子 function runtime（`stage: setup`，为叙事不发 `scene.set` 兜底）
 
 ### pre-turn 阶段
 
@@ -111,6 +112,7 @@
 | npc-graph/rag-retriever              | plugin      | `pre-turn`                 | scheduled（interval=1，function runtime）                                  | —         | NPC 图谱结构化检索器，向 narrator 注入相关关系事实                                             |
 | scene-cast                           | plugin      | `pre-turn`                 | scheduled（interval=1，function）                                          | —         | 对话模式当前场景演员，注入 `activeCastContext`                                                 |
 | scene-stage/resolver                 | plugin      | 无（event，不设 stage）    | event（topic: `scene.set`）                                                | —         | 场景/昼夜解析，写 `stage/current`；未命中注册表时向 background-gen 发内部信令                  |
+| scene-stage/seed                     | plugin      | `setup`                    | auto（maxTriggerCount=1）                                                  | —         | 开局把注册表首个场景写入 `stage/current`，为叙事整局不发 `scene.set` 兜底                      |
 | narrator                             | core-plugin | `narrative`                | auto                                                                       | `story`   | 主叙事生成器                                                                                   |
 | chat-mode-narrator                   | plugin      | `narrative`                | auto                                                                       | `story`   | 对话 / 舞台模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）                     |
 | guide                                | plugin      | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | 行动引导 + 聊天内建议面                                                                        |
@@ -603,7 +605,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 **路径**: `plugins/scene-stage/`
 
-多 runtime 插件。根 `PLUGIN.md` 只是插件级元信息（名称/描述/关联），不是可执行 runtime；两个真正被发现、调度的 runtime 都在 `runtimes/` 下（`discoverPlugins` 对声明了 `runtimes/` 的插件只扫描 `runtimes/*/PLUGIN.md`，根 `PLUGIN.md` 不参与调度）。`events[].schema` 与 `dataSchemas.*.schema` 仍按[插件根目录相对路径](#dataschemas)解析，因此两个 runtime 共享插件根的 `schemas/`；只有 `handler` 与 `ui.*` 相对各自 runtime 目录。
+多 runtime 插件。根 `PLUGIN.md` 只是插件级元信息（名称/描述/关联），不是可执行 runtime；三个真正被发现、调度的 runtime 都在 `runtimes/` 下（`discoverPlugins` 对声明了 `runtimes/` 的插件只扫描 `runtimes/*/PLUGIN.md`，根 `PLUGIN.md` 不参与调度）。`events[].schema` 与 `dataSchemas.*.schema` 仍按[插件根目录相对路径](#dataschemas)解析，因此三个 runtime 共享插件根的 `schemas/`；只有 `handler` 与 `ui.*` 相对各自 runtime 目录。`stage/current` 记录的构造集中在 `lib/stage-data.js`（`buildStageRecord` / `makeStageProposal`），resolver 与 seed 共用，避免两个写入方在字段上漂移。
 
 ### scene-stage/resolver
 
@@ -629,6 +631,20 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | `maxGeneratedScenes` | `number` | `10`   | 0–50（step 1）——单会话增量生成场景数上限 |
 
 **职责**：narrator（或对话模式叙事器）经 `emit-event` 发射 `scene.set` 后，同回合触发本 runtime：读自身 `scenes` namespace（世界注册表）与 `stage/current`（上一状态），按精确名 / `locationRef` → 归一化子串 → 会话内已生成场景的顺序匹配 `location`。命中写 `stage/current`（`source: "world" | "session"`）；同 `sceneId` 且同 `variant` 时 no-op（不写不发 SSE，防抖）——但上一状态为 `source: "pending"` 时不视为 no-op：生成失败后重发的 `scene.set` 会重新发内部信令重试（成功场景的重复计费由 background-gen 的已生成检查防住）。未命中按 `autoGenerateScenes` + `maxGeneratedScenes` 门控：放行则 `source: "pending"` 并发内部信令请求 `background-gen`，门控不过或已达会话帽则 `source: "none"`。昼夜变体缺夜图时 `resolved` 回退日图。`stage/current` 额外写 `sourceLabel`（`I18nText`，`source` 对应的展示文案，如 `pending` → "背景生成中…"）与 `variantLabel`（`I18nText`，昼夜文案 `day` → "白天" / `night` → "夜晚"），面板直接渲染，无需按枚举值自行翻译。
+
+### scene-stage/seed
+
+| 字段        | 值                                                     |
+| ----------- | ------------------------------------------------------ |
+| pluginType  | `plugin`                                               |
+| runtimeType | `function`（无 LLM）                                   |
+| handler     | `./runtimes/seed/handler.js`                           |
+| stage       | `setup`                                                |
+| trigger     | `auto`（`maxTriggerCount: 1` 是重试预算）              |
+| outputKind  | `system`                                               |
+| tags        | `mode:dialogue` · `role:scene-state` · `cost:function` |
+
+**职责**：`scene.set` 的唯一发射方是叙事 LLM——事件目录注入的【必做】指示是提示词约束，不是保证。整局不发时 `resolver` 作为 `event` 触发 runtime 永远不跑，舞台恒空。本 runtime 是那条链路的确定性下限：在 `setup` 阶段跑一次，`stage/current` 已存在（恢复会话、setup 重试）或世界没有场景注册表时跳过，否则把注册表第一个场景按白天变体写入 `stage/current`（`source: "world"`）。跑在任何叙事输出之前，因此不与 LLM 的 `scene.set` 竞争——两者若落在同一回合，事件扇出顺序不定，后写的会盖掉正确场景。叙事之后发的 `scene.set` 由 resolver 正常覆盖此记录。
 
 ### scene-stage/background-gen
 
@@ -1252,6 +1268,10 @@ outputKind: story
 - `_jobs` 是框架保留命名空间,插件**禁止**直接写入;框架自动维护 row 生命周期
 - background 模式下,事件链 chain 仍然生效 —— 手动触发的 runtime emit 的 `event.emit` proposals 会在同一后台任务里按 stage/DAG 顺序执行下游 runtime
 - 如果 runtime 通过 `input.inject` 向下游传递结构化数据,background 模式下下游 runtime 会看到最终态(不是增量),就像在 sync 模式下一样
+- **不持会话锁执行**:后台 follower 的 handler 跑在会话锁**外**,只有提交阶段(finalize 事务 + auto-snapshot)进锁——否则一次几分钟的出图会把玩家的下一条消息一起堵住。由此带来两条对插件作者可见的约定:
+  - 同一 runtime 的并发 follower 由框架按 `<sessionId>::<runtimeId>` 串行,所以 handler 里"这张图是不是已经生成过"这类 check-then-act 仍然是原子的,不会重复计费;**跨 runtime 不保证**。
+  - handler 执行期间读到的会话数据可能被并发的玩家回合改写。handler 对**自己**命名空间的读-改-写是安全的(读经 writeBuffer overlay、写在同一事务提交),但如果 handler 把别处的状态读出来再写回去,请假设中途可能已经变了。
+- **进程重启不恢复**:后台任务由进程内队列驱动,没有持久队列。重启后开机扫描会把上一个进程留下的 `pending` 行标为 `failed`(`reason: "orphaned"`,保留 `triggerEvent` 供重试),框架**不自动重跑**——重跑要再计一次费,且请求级 `userSettings` 没有持久化在任务行上。需要"一键重试"的插件自行读这行的 `triggerEvent` 提供入口。
 
 示例:
 
@@ -1334,7 +1354,7 @@ relations:
 
 Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用时长**（`callTimeoutMs` / `firstTokenTimeoutMs`）和**运行总时长**（`timeoutMs`）。框架会自动在 transient 错误、call-timeout、first-token-timeout、tool-call 循环四种情形下重试，并在每次重试时向 prompt 追加一条短 system 提示打破 KV-cache 命中。
 
-**Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。超时后框架会**吊销 handler 的全部副作用能力**——`store`、`pluginData`、`media`、`images`、`speech`、`gateway`、`utils`、`recursiveCall`、`logger`、`assetProgress`——脱离的 handler 再调用会同步抛出 `capability ... is revoked`，避免在 session lock 释放、下一回合开始后仍写入。协作式 handler 应监听 `ctx.signal` 主动取消。
+**Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。超时后框架会**吊销 handler 的全部副作用能力**——`store`、`pluginData`、`media`、`images`、`speech`、`gateway`、`utils`、`recursiveCall`、`logger`、`assetProgress`——脱离的 handler 再调用会同步抛出 `capability ... is revoked`，避免它在本次执行已经收场之后仍然写入。吊销挂在超时本身、不挂在任何锁上，因此对持锁与不持锁的执行路径一样有效。协作式 handler 应监听 `ctx.signal` 主动取消。
 
 | 字段                     | 类型      | 默认                                              | 含义                                                                                                                                                                                                                     |
 | ------------------------ | --------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
