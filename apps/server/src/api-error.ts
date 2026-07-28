@@ -1,4 +1,5 @@
 import type { Context, ErrorHandler } from "hono";
+import { SessionLockTimeoutError } from "./lib/session-lock.js";
 
 /**
  * Standard API error envelope.
@@ -109,6 +110,9 @@ export function redactSensitiveQueryParamsInText(text: string): string {
  * `logPrefix` so any 500 is greppable, then returns the standard envelope —
  * the raw message in dev, a generic string in prod (`isDev` false) so
  * stacks/paths never leak.
+ *
+ * One error is not a server fault and is mapped instead of being bucketed as a
+ * 500: {@link SessionLockTimeoutError}. See below.
  */
 export function makeErrorHandler(
   logPrefix: string,
@@ -116,6 +120,23 @@ export function makeErrorHandler(
 ): ErrorHandler {
   return (err, c) => {
     const message = err instanceof Error ? err.message : String(err);
+
+    // Losing the race for a session lock means another turn on the same
+    // session still holds it — with a background image generation that can be
+    // minutes — not that anything broke. The caller can succeed by retrying,
+    // so it is a coded, retryable 503 rather than a generic 500. The raw
+    // message names the session and internals, so only a fixed string crosses
+    // the wire; the detail stays in the log.
+    if (err instanceof SessionLockTimeoutError) {
+      console.warn(
+        `${logPrefix}: ${c.req.method} ${redactSensitiveQueryParams(c.req.url)} — ${message}`,
+      );
+      return c.json(
+        errorBody("Session is busy, please retry", { code: "session_busy" }),
+        503,
+      );
+    }
+
     console.error(
       `${logPrefix}: ${c.req.method} ${redactSensitiveQueryParams(c.req.url)} — ${message}`,
       err,
