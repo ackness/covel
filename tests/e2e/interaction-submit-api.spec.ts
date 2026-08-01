@@ -28,7 +28,6 @@ async function createSession(
         "guide",
         "codex",
         "npc-graph",
-        "player-identity",
         "living-world-rules",
         "character-blueprint",
       ],
