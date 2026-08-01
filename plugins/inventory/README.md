@@ -19,6 +19,12 @@
 - 每回合的得失摘要写入 `plugin_data[inventory][message]`（key 为 turnId），驱动聊天区 toast。
 - 没有明确变化的回合跳过写入。
 
+## 玩家侧操作（item-op RPC）
+
+- `rpc/item-op.js` 经 entry 注册为 `item-op` action，面板逐物品按钮（`invokePluginAction`）触发：`equip` / `unequip` / `drop`。
+- 刻意只到装备位与丢弃：装备是玩家的配置选择、不经叙事；"使用物品"必须走故事输入，静默扣数量的按钮会绕过叙事引擎。
+- `drop` 写与工具 remove-to-zero 同款墓碑（`quantity: 0, removed: true`），LLM 侧与玩家侧移除共享一个模型，同名再获得复活同一记录。
+
 ## 世界包导入
 
 `items` namespace 声明了 `acceptsWorldData: true`，世界包可以在 `worldData` 里预置开局装备：

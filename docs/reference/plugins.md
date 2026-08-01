@@ -481,12 +481,13 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | outputKind   | `system`                                                                                                                             |
 | entry        | `./server/index.js`                                                                                                                  |
 | tools.plugin | `update-inventory`                                                                                                                   |
+| rpc          | `item-op`（entry 注册）——玩家侧装备/卸下/丢弃，面板逐物品按钮经 `invokePluginAction` 触发；丢弃与工具 remove-to-zero 同款墓碑语义    |
 | input.inject | 双引擎 `narrativeOutput` → `<narrator-output>`；`plugin-data[items]` → `<existing-inventory>`（`format: summary`，`maxEntries: 80`） |
 | dataSchemas  | `items`（schemaVersion 1，acceptsWorldData，schema URI `plugin://inventory/items`）                                                  |
 | ui.right     | `inventory-panel.json` — 行囊面板（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`）                                     |
 | ui.message   | `inventory-message.json` — 得失 toast（"+ 铁剑 ×1 / − 火把 ×2"式）                                                                   |
 
-**职责**：只记录叙事明确的获得/失去/消耗/装备变化——不发明物品，大宗模糊描述（"一堆金币"）合理量化并在 description 注明估算，货币也是物品（tag `currency`）。`update-inventory`（≤8/次）按 name 归一化到稳定短 id：`add` 叠加数量、`remove` 减量至 0 时墓碑化（`quantity: 0, removed: true`——proposal 管线暂无 plugin-data 删除类型，UI 隐藏墓碑，同名再获得复活同一记录）、`set` 局部更新、`equip`/`unequip` 切装备位；对不存在条目的 `remove` 容错 skip。得失摘要写 `message` namespace（key = turnId）。
+**职责**：只记录叙事明确的获得/失去/消耗/装备变化——不发明物品，大宗模糊描述（"一堆金币"）合理量化并在 description 注明估算，货币也是物品（tag `currency`）。**玩家侧操作刻意只到装备位与丢弃**：`item-op` RPC 管 equip/unequip/drop（装备是玩家的配置选择，不经叙事），而"使用物品"必须走故事输入——静默扣数量的"使用"按钮会绕过叙事引擎。`update-inventory`（≤8/次）按 name 归一化到稳定短 id：`add` 叠加数量、`remove` 减量至 0 时墓碑化（`quantity: 0, removed: true`——proposal 管线暂无 plugin-data 删除类型，UI 隐藏墓碑，同名再获得复活同一记录）、`set` 局部更新、`equip`/`unequip` 切装备位；对不存在条目的 `remove` 容错 skip。得失摘要写 `message` namespace（key = turnId）。
 
 **世界导入**：`schema: plugin://inventory/items` + `to: plugin:inventory/items` + `key: id`，记录形状 `{ id, name, quantity, description?, tags?, equipped? }`（参考 `worlds/emberback/data/items.yaml`）。
 
