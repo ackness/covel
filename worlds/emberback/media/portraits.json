@@ -1,0 +1,38 @@
+{
+  "world": "emberback",
+  "note": "Generation manifest for the three main-cast portraits. The script composes each prompt as style.prefix + character.subject + style.suffix. Keep the cast in one restrained, weathered visual language.",
+  "style": {
+    "direction": "Chinese post-apocalyptic survival fantasy, painterly semi-realistic with restrained ink-wash texture",
+    "prefix": "Character portrait for a narrative RPG, Chinese post-apocalyptic survival fantasy, painterly semi-realistic rendering with restrained ink-wash texture, fine weathered detail, half-body bust, three-quarter view, one single character, centered composition, grey-white ash dust, immense turtle-shell plates, forged salt iron, thick rope and descent chains, worn layered East Asian clothing, muted palette of ashen ivory, charcoal, shell umber, oxidized bronze, rust red and sparse ember gold, ",
+    "suffix": ", low-key cinematic lighting, atmospheric ash depth, natural anatomy, culturally coherent pre-industrial East Asian silhouette, consistent art style",
+    "negative": "bright saturated colors, anime, chibi, cartoon, flat vector, generic European medieval armor, luxurious imperial costume, modern clothing, futuristic technology, steampunk goggles or gears, neon cyberpunk, blue ocean, lush greenery, text, caption, signature, watermark, logo, frame, multiple people, crowd, glamour pose, extra limbs, extra fingers, distorted hands, distorted face, nsfw"
+  },
+  "defaults": {
+    "size": "1024x1536",
+    "quality": "medium",
+    "mime": "image/png"
+  },
+  "characters": [
+    {
+      "id": "qin-jiulian",
+      "characterId": "qin-jiulian",
+      "name": "秦九镰",
+      "filename": "qin-jiulian.png",
+      "subject": "a powerfully built Chinese woman in her late forties, veteran scavenger and hard-edged quartermaster of Hanging Hook Hall, charcoal and rust-brown layered work clothes, worn descent harness, soot-stained leather and heavy salt-iron buckles, her left arm missing below the elbow and ending in a rough purely functional forged iron hook prosthesis with no gears, her intact right hand pinning a descent commission sheet beneath an old iron balance-weight paperweight, weathered face, dark hair streaked with grey and tied back, shrewd stern eyes with protective concern held behind a hard assessing expression, Hanging Hook Hall ledgers, chains, hooks and capstan fading into soft ash haze behind her"
+    },
+    {
+      "id": "wen-ci",
+      "characterId": "wen-ci",
+      "name": "温辞",
+      "filename": "wen-ci.png",
+      "subject": "a slender Chinese man around thirty, young vice-minister of the Helm Court and keeper of anchor writs, formally bound dark hair, austere layered ink-blue and ash-grey official robes adapted to a harsh shell-city, a weathered night-watch cloak fastened by a modest oxidized-bronze anchor clasp, holding a compact official seal box with dark red sealing wax, precise upright posture, intelligent critical eyes and a sharply controlled expression concealing exhaustion and fear, high watchtower, warning bells, taut anchor lines and drifting dawn ash behind him, practical overworked bureaucrat rather than royalty"
+    },
+    {
+      "id": "ya-xian",
+      "characterId": "ya-xian",
+      "name": "哑弦",
+      "filename": "ya-xian.png",
+      "subject": "a lean weathered Chinese man in his early forties, silent cold-scale broker, refugee-descendant and underground informant, carefully maintained patched layers in faded indigo, charcoal and bone-grey, closed mouth and watchful unreadable eyes, cradling a traditional sanxian lute wrapped with old pale turtle scales, one hand poised on the strings as if speaking through a warning chord, a tiny scale-testing balance peeking from his sleeve, hidden Eaves Market between massive anchor posts, dull cold scales in shadow with sparse cyan glints, restrained loyalty beneath constant caution, no stage-performer flamboyance"
+    }
+  ]
+}

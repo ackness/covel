@@ -1,0 +1,125 @@
+schemaVersion: "1.0"
+id: emberback
+name:
+  zh: 鳌背孤城・烬海纪
+  en: "Emberback: The Last City on the Turtle's Shell"
+version: "0.1.0"
+summary:
+  zh: 世上最后一头巨鳌驮着最后一座城横渡烬海。鳌在变慢，甲在变冷，而破晓时分，它忽然停在了一座无人标注的沉城尖塔之上。
+  en: The last great turtle carries the last city across the Ember Sea. The turtle is slowing, its shell is cooling — and at dawn it suddenly stops above the spire of an uncharted sunken city.
+defaultLocale: zh-CN
+supportedLocales:
+  - zh-CN
+tags:
+  - post-apocalyptic
+  - exploration
+  - survival
+  - mystery
+pluginPolicy:
+  preset: traditional-story
+  preferTags:
+    - mode:traditional-story
+    - role:codex
+    - role:world-rules
+  avoidTags:
+    - mode:dialogue
+  requiredPlugins:
+    - dice-check
+    - core-quest
+    - inventory
+    - affinity
+  recommendedPlugins:
+    - npc-graph
+    - codex
+    - guide
+    # character-blueprint consumes the worldData `cast` source
+    # (plugin:character-blueprint/blueprints) — main-cast cards + right panel.
+    - character-blueprint
+    # Static portrait assets are imported through worldData and bound to the
+    # three main-cast character ids.
+    - character-presence
+    # living-world-rules consumes the worldData `rules` source
+    # (plugin:living-world-rules/rules+lorebook) — triggered world rules.
+    - living-world-rules
+# 题材化核心记忆块：叠加在框架默认四块之上（标签冲突时基础块优先，世界只新增）。
+memoryBlocks:
+  - label: descent_log
+    displayName:
+      zh-CN: 下潜实录
+      en-US: Descent Log
+    extractionHint:
+      zh-CN: 每次下降与沉城探索的发现、带回之物、未解之谜，以及付出的代价（受伤、失约、暴露行踪、欠下人情）。
+      en-US: Findings from each descent and sunken-city foray, what was brought back, open mysteries, and the costs paid (injuries, broken promises, exposure, debts owed).
+    icon: Anchor
+  - label: turtle_state
+    displayName:
+      zh-CN: 玄负动向
+      en-US: The Turtle's State
+    extractionHint:
+      zh-CN: 玄负的停驻与挪身征兆、寒斑与凉甲的变化、封锚与锚令状态，以及司辰阁官方口径与实际观测的出入。
+      en-US: Xuanfu's halts and shifting signs, changes in the cold patches and cooling shell, anchor-seal and anchor-writ status, and gaps between the Helm Court's official line and what is actually observed.
+    icon: Turtle
+
+# 骰子判定的修正来源：五项小整数底子（0-5）。id 与角色卡 attributes 键一致。
+characterAttributes:
+  - id: sinew
+    name:
+      zh: 筋骨
+      en: Sinew
+    type: number
+    min: 0
+    max: 5
+    defaultValue: 2
+    category: stats
+    description:
+      zh: 攀缒、负重与硬拼的底子。体力类冒险行动的判定修正。
+      en: Raw strength for climbing, hauling, and brawling. Check modifier for physical feats.
+  - id: deft
+    name:
+      zh: 巧手
+      en: Deft Hands
+    type: number
+    min: 0
+    max: 5
+    defaultValue: 2
+    category: stats
+    description:
+      zh: 结链、撬锁、拆解沉城旧物的手上功夫。精细类行动的判定修正。
+      en: Handiwork for knotting chains, picking locks, and stripping sunken-city relics. Check modifier for fine actions.
+  - id: shellSense
+    name:
+      zh: 甲感
+      en: Shell Sense
+    type: number
+    min: 0
+    max: 5
+    defaultValue: 1
+    category: abilities
+    description:
+      zh: 隔着鳌甲听懂玄负震颤的天赋，触纹之根。预判烬潮与鳌身挪动的判定修正，寻常人只有一分。
+      en: The gift of reading the great turtle's tremors through its shell — the root of Touchmark. Check modifier for anticipating ember tides and shell shifts; common folk have but one point.
+  - id: nerve
+    name:
+      zh: 心胆
+      en: Nerve
+    type: number
+    min: 0
+    max: 5
+    defaultValue: 2
+    category: stats
+    description:
+      zh: 悬在百丈缒链上、烬潮扑面时稳住手脚的定力。危境与意志类判定修正。
+      en: Composure that keeps hands and feet steady on a hundred-zhang chain with the ember tide in your face. Check modifier for peril and willpower.
+  - id: tongue
+    name:
+      zh: 谈锋
+      en: Silver Tongue
+    type: number
+    min: 0
+    max: 5
+    defaultValue: 2
+    category: social
+    description:
+      zh: 讨价、套话与说动人心的本事。社交类判定修正，也左右好感涨落。
+      en: The knack for haggling, coaxing secrets, and swaying hearts. Check modifier for social actions; it also sways affinity.
+worldData: data/world.data.yaml
