@@ -40,6 +40,7 @@ import {
   emitLlmRespondedSuccess,
 } from "../llm/llm-telemetry.js";
 import { TurnAbortedError } from "../turn-executor/turn-control.js";
+import { acquireLLMSlot } from "./llm-slots.js";
 import {
   LLMRetryError,
   assertDeadlineNotReached,
@@ -134,14 +135,19 @@ export async function callLLMWithRetry(
   params: CallLLMWithRetryParams,
 ): Promise<LLMResponse> {
   const { llm, model, messages, tools, policy, deadline, onRetry } = params;
+  let effectiveDeadline = deadline;
   let lastError: unknown = new Error("retry loop did not execute");
   let lastReason: RetryReason = "unknown";
 
   for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
     throwIfTurnAborted(params.abortSignal);
-    assertDeadlineNotReached(deadline, attempt, lastError);
+    assertDeadlineNotReached(effectiveDeadline, attempt, lastError);
+    // Queue for a concurrency slot before arming any timers; time spent
+    // queued extends the deadline — it is the gate's cost, not the runtime's.
+    const slot = await acquireLLMSlot();
+    effectiveDeadline += slot.waitedMs;
 
-    const budget = computeAttemptBudget(policy, deadline);
+    const budget = computeAttemptBudget(policy, effectiveDeadline);
     const timeoutSignal = AbortSignal.timeout(budget);
     const signal = params.abortSignal
       ? AbortSignal.any([timeoutSignal, params.abortSignal])
@@ -198,6 +204,8 @@ export async function callLLMWithRetry(
         });
       }
       onRetry?.({ attempt: attempt + 1, reason: lastReason, error: err });
+    } finally {
+      slot.release();
     }
   }
 
@@ -249,6 +257,7 @@ export async function streamLLMWithRetry(
 ): Promise<StreamLLMResult> {
   const { llm, model, messages, tools, policy, deadline, onDelta, onRetry } =
     params;
+  let effectiveDeadline = deadline;
   if (!llm.stream) {
     // No streaming support — fall back to non-streaming retry so callers can
     // use the same entrypoint uniformly.
@@ -261,9 +270,13 @@ export async function streamLLMWithRetry(
 
   for (let attempt = 0; attempt <= policy.maxRetries; attempt++) {
     throwIfTurnAborted(params.abortSignal);
-    assertDeadlineNotReached(deadline, attempt, lastError);
+    assertDeadlineNotReached(effectiveDeadline, attempt, lastError);
+    // Queue for a concurrency slot before arming any timers; time spent
+    // queued extends the deadline — it is the gate's cost, not the runtime's.
+    const slot = await acquireLLMSlot();
+    effectiveDeadline += slot.waitedMs;
 
-    const budget = computeAttemptBudget(policy, deadline);
+    const budget = computeAttemptBudget(policy, effectiveDeadline);
     // Compose three abort sources into one per-attempt signal:
     //   1. overall call budget (per-attempt)
     //   2. first-token (TTFB) guard — armed on attempt start, disarmed on first event
@@ -421,6 +434,8 @@ export async function streamLLMWithRetry(
         });
       }
       onRetry?.({ attempt: attempt + 1, reason: lastReason, error: err });
+    } finally {
+      slot.release();
     }
   }
 
