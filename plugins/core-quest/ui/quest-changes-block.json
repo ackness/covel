@@ -1,0 +1,69 @@
+{
+  "id": "core-quest-changes",
+  "dataSource": { "namespace": "message" },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "sm" },
+    "children": [
+      {
+        "component": "Row",
+        "props": { "gap": "sm", "align": "center" },
+        "children": [
+          {
+            "component": "Icon",
+            "props": { "name": "scroll-text", "size": "xs" }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": { "zh": "任务日志", "en": "Quest log" },
+              "weight": "bold",
+              "size": "sm"
+            }
+          }
+        ]
+      },
+      {
+        "component": "CardList",
+        "repeat": { "statePath": "/changes", "key": "id" },
+        "children": [
+          {
+            "component": "Row",
+            "props": { "gap": "sm", "align": "center" },
+            "children": [
+              {
+                "component": "Badge",
+                "props": {
+                  "label": { "$item": "badge" },
+                  "color": { "$item": "color" }
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "name" },
+                  "weight": "bold",
+                  "size": "sm"
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "detail" },
+                  "size": "xs",
+                  "variant": "muted"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "emptyState": {
+    "message": {
+      "zh": "本回合没有任务变更。",
+      "en": "No quest changes this turn."
+    }
+  }
+}

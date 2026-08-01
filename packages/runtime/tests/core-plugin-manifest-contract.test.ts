@@ -136,6 +136,12 @@ describe("core plugin manifest contract", () => {
         field: "npcContext",
         as: "npc-relationships",
       },
+      {
+        kind: "runtime",
+        from: "dice-check/roller",
+        field: "checkContext",
+        as: "<check-results>",
+      },
     ]);
     expect(narrator.tools?.builtin).toEqual([
       "world-dimension-get",
@@ -175,7 +181,6 @@ describe("core plugin manifest contract", () => {
     const manualUtilityIds = [
       "character-blueprint",
       "character-presence",
-      "player-identity",
       "living-world-rules",
     ];
 

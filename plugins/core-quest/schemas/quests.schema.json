@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugin://core-quest/quests",
+  "type": "object",
+  "required": ["id", "name", "description"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "status": {
+      "enum": ["active", "completed", "failed"]
+    },
+    "objectives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1 },
+          "done": { "type": "boolean" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "giver": { "type": "string" },
+    "reward": { "type": "string" }
+  },
+  "additionalProperties": true
+}

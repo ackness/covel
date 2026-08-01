@@ -55,10 +55,14 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 | 插件/runtime                                                             | 面板 ID             | 图标               | group         | 数据 namespace | 描述                                                                                                |
 | ------------------------------------------------------------------------ | ------------------- | ------------------ | ------------- | -------------- | --------------------------------------------------------------------------------------------------- |
+| affinity                                                                 | affinity            | heart              | affinity      | affinity       | 好感度面板（玩家↔NPC score 双向条 + tier 徽标 + 最近变化原因）                                      |
 | char-creator/player-init                                                 | character           | users              | character     | characters     | 角色列表（player + NPC + companion）                                                                |
 | character-blueprint                                                      | character-blueprint | id-card            | character     | blueprints     | 预设角色（世界作者预置的登场角色模板，只读；作为 `character` 组的子 Tab）                           |
 | character-presence                                                       | character-presence  | image              | character-art | presence       | 角色立绘画廊（`PortraitGallery`，只读展示 + 玩家可上传替换头像）                                    |
 | codex                                                                    | codex               | book-open          | codex         | entries        | 知识图鉴                                                                                            |
+| core-quest                                                               | core-quest          | scroll-text        | core-quest    | quests         | 任务日志（进行中含 objectives 勾选清单 / 已完成 / 已失败 分组）                                     |
+| dice-check/recorder                                                      | dice-check-panel    | dices              | （无）        | checks         | 判定记录（倒序 🎲 回执列表：骰式 / 成败配色 / critical 强调）                                       |
+| inventory                                                                | inventory           | backpack           | inventory     | items          | 行囊（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`）                                 |
 | dashscope-image-gen/image-generator · openai-image-gen/image-generator   | `<plugin>-gallery`  | image              | image-studio  | images         | 剧情插图画廊（`ImageGallery`，`alwaysRender`）；两个图像插件各一套，合并进同一 `image-studio` 组    |
 | dashscope-image-gen/image-generator · openai-image-gen/image-generator   | `<plugin>-jobs`     | loader             | image-studio  | \_jobs         | 生成任务视图（`ImageJobs`，`alwaysRender`）                                                         |
 | dashscope-image-gen/prompt-generator · openai-image-gen/prompt-generator | `<plugin>-trigger`  | wand               | image-studio  | （无）         | 「生成图片」manual 触发入口按钮（`expectsBackgroundFollower`，`alwaysRender`）                      |
@@ -301,10 +305,10 @@ type I18nText = string | Record<LocaleTag, string>;
 
 两条链路都使用同一套 json-render catalog。
 
-| 链路           | 当前承载内容                                                | 实现位置                                                                                              |
-| -------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Turn message   | 叙事文本、玩家输入、`interaction.requested` 表单/选择、通知 | `apps/web/src/components/session/chat-messages.tsx`, `apps/web/src/components/session/chat-messages/` |
-| Plugin message | guide 建议卡、codex 本轮摘要、其他插件自定义消息面          | `apps/web/src/components/session/chat-messages.tsx`（`plugin_message` 分支）                          |
+| 链路           | 当前承载内容                                                                                                                                   | 实现位置                                                                                              |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Turn message   | 叙事文本、玩家输入、`interaction.requested` 表单/选择、通知                                                                                    | `apps/web/src/components/session/chat-messages.tsx`, `apps/web/src/components/session/chat-messages/` |
+| Plugin message | guide 建议卡、codex 本轮摘要、dice-check 🎲 判定结果块、core-quest 任务变更块、affinity 好感 toast、inventory 得失 toast、其他插件自定义消息面 | `apps/web/src/components/session/chat-messages.tsx`（`plugin_message` 分支）                          |
 
 ### 消息 Block 声明
 

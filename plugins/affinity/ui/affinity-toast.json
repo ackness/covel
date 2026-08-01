@@ -1,0 +1,82 @@
+{
+  "id": "affinity-toast",
+  "dataSource": { "namespace": "message" },
+  "view": {
+    "component": "Card",
+    "props": { "variant": "subtle" },
+    "children": [
+      {
+        "component": "Row",
+        "props": { "gap": "sm", "align": "baseline" },
+        "children": [
+          {
+            "component": "Text",
+            "props": {
+              "content": "§ AFFINITY",
+              "variant": "muted",
+              "size": "xs",
+              "className": "ui-meta"
+            }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": { "zh": "好感变化", "en": "Affinity changes" },
+              "weight": "bold",
+              "size": "sm"
+            }
+          }
+        ]
+      },
+      {
+        "component": "Stack",
+        "props": { "gap": "xs" },
+        "repeat": { "statePath": "/changes", "key": "id" },
+        "children": [
+          {
+            "component": "Row",
+            "props": { "gap": "sm", "align": "center" },
+            "children": [
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "name" },
+                  "weight": "bold",
+                  "size": "sm"
+                }
+              },
+              {
+                "component": "Badge",
+                "props": {
+                  "label": { "$item": "deltaText" },
+                  "color": { "$item": "deltaColor" }
+                }
+              },
+              {
+                "component": "Badge",
+                "props": {
+                  "label": { "$item": "tierLabel" },
+                  "color": { "$item": "tierColor" }
+                }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "reason" },
+                  "variant": "muted",
+                  "size": "xs"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "emptyState": {
+    "message": {
+      "zh": "本回合没有好感变化。",
+      "en": "No affinity changes this turn."
+    }
+  }
+}

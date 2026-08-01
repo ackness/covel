@@ -1,0 +1,70 @@
+{
+  "id": "core-quest",
+  "group": "core-quest",
+  "label": { "zh": "任务日志", "en": "Quest Log" },
+  "shortLabel": { "zh": "任务", "en": "Quests" },
+  "icon": "scroll-text",
+  "groupOrder": 720,
+  "dataSource": { "namespace": "quests" },
+  "emptyState": {
+    "message": {
+      "zh": "暂无任务。当叙事中出现明确的委托或目标时会自动登记……",
+      "en": "No quests yet. They will appear when the narrative introduces explicit commissions or goals…"
+    }
+  },
+  "view": {
+    "component": "FilterContainer",
+    "props": {
+      "items": { "$state": "/entries" },
+      "searchPlaceholder": {
+        "zh": "搜索任务…",
+        "en": "Search quests…"
+      },
+      "searchFields": ["value/name", "value/description", "value/giver"],
+      "filterField": "value/status",
+      "showCounts": true,
+      "filterTabs": [
+        { "value": "all", "label": { "zh": "全部", "en": "All" } },
+        {
+          "value": "active",
+          "label": { "zh": "进行中", "en": "Active" },
+          "icon": "compass",
+          "color": "blue"
+        },
+        {
+          "value": "completed",
+          "label": { "zh": "已完成", "en": "Completed" },
+          "icon": "check-circle-2",
+          "color": "green"
+        },
+        {
+          "value": "failed",
+          "label": { "zh": "已失败", "en": "Failed" },
+          "icon": "x-circle",
+          "color": "red"
+        }
+      ],
+      "itemComponent": "EntryCard",
+      "itemKeyField": "key",
+      "itemPropMap": {
+        "title": "value/name",
+        "category": "value/status",
+        "content": "value/description",
+        "tags": "value/chips",
+        "isNew": "value/isNew"
+      },
+      "itemLiteralProps": {
+        "collapsible": true,
+        "defaultExpanded": true
+      },
+      "footer": {
+        "zh": "共 {{count}} 个任务",
+        "en": "{{count}} quests tracked"
+      },
+      "emptyMessage": {
+        "zh": "没有匹配的任务",
+        "en": "No matching quests"
+      }
+    }
+  }
+}

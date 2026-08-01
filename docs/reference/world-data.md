@@ -462,6 +462,18 @@ key: id
 
 创建 session 时，框架会把每条实际提交的 `plugin_data`、`lorebook`、`character`、`media index` 写入 `world_data_import_ledger`，记录 `target`、`pluginId`、`namespace`、`key`、`sourceDigest`、`valueHash`、`schemaRef` 和 `sourceId`。session 创建会用 store transaction 包住 session、plugin-data、lorebook、characters 与 ledger 写入；导入失败时会回滚这些 store row。
 
+#### 内置 RPG 玩法种子（quests / items / affinity）
+
+三个内置 RPG 插件接受世界包预置数据（完整成品示例见 `worlds/emberback/data/`）：
+
+| 插件         | schema URI                   | to                         | 记录形状                                                                                     |
+| ------------ | ---------------------------- | -------------------------- | -------------------------------------------------------------------------------------------- |
+| `core-quest` | `plugin://core-quest/quests` | `plugin:core-quest/quests` | `{ id, name, description, status?, objectives?: [{text, done?}], giver?, reward? }`          |
+| `inventory`  | `plugin://inventory/items`   | `plugin:inventory/items`   | `{ id, name, quantity, description?, tags?: string[], equipped?: boolean }`                  |
+| `affinity`   | `plugin://affinity/affinity` | `plugin:affinity/affinity` | `{ id, name, score (int -100..100), notes? }`（tier/history 等派生字段由工具首次写入时补齐） |
+
+三者都用 `key: id`。任务预置后由 `core-quest` agent 只推进不重建；物品预置即开局行囊；好感预置给关键 NPC 一个非零起点（正负皆可）。
+
 ### Preflight 与 Sync
 
 开始游戏前可以调用：

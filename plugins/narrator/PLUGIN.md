@@ -36,6 +36,10 @@ input:
       from: npc-graph/rag-retriever
       field: npcContext
       as: npc-relationships
+    - kind: runtime
+      from: dice-check/roller
+      field: checkContext
+      as: "<check-results>"
 postHistory:
   role: system
   content: |
@@ -67,6 +71,16 @@ postHistory:
 ## NPC 关系上下文（由图谱检索注入）
 
 > 若 prompt 末尾的 `<npc-relationships>` 块存在，请参考其中已建立的人物关系做出一致的叙事 —— 不可无视已记录的信任、敌意或债务。块为空时按一般叙事逻辑处理。
+
+## 行动判定（由骰子判定注入）
+
+> 若 prompt 末尾存在 `<check-results>` 块，玩家有失败风险的行动必须按其中的骰池与规则判定成败，不可自由心证。块不存在时按一般叙事逻辑处理。
+
+- 只对**有失败风险**的行动判定（撬锁、潜行、说服、攀爬、战斗动作等）；日常无风险行动不判定、不消耗骰子
+- 按顺序消耗未用的预掷骰（先 #1，再 #2、#3）；判定 = 骰值 + 相关属性修正（从玩家角色卡的数值属性换算）vs 难度 DC（轻松 8 / 普通 12 / 困难 16 / 极难 20）
+- 天然 20 为大成功：给出超出预期的收获；天然 1 为大失败：引入有趣的复杂后果，而不是简单的"没成功"
+- 写正文之前，把本回合全部判定装进 `checks` 数组、调用 emit-event 发射**一次** `check.resolved` 回执（该事件同回合去重，绝不发两次）；工具调用不计入正文
+- 成败在叙事中自然呈现，不要在正文里贴"骰值 / DC"等系统数字
 
 ## 叙事规则
 

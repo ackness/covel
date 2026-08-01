@@ -1,0 +1,86 @@
+{
+  "id": "dice-check-panel",
+  "label": { "zh": "判定记录", "en": "Check Log" },
+  "icon": "dices",
+  "dataSource": { "namespace": "checks" },
+  "emptyState": {
+    "message": {
+      "zh": "还没有判定记录。当你尝试有风险的行动时，判定结果会出现在这里。",
+      "en": "No checks resolved yet. Results will appear here when you attempt risky actions."
+    }
+  },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "sm" },
+    "children": [
+      {
+        "component": "CardList",
+        "repeat": { "statePath": "/entries", "key": "key" },
+        "children": [
+          {
+            "component": "Card",
+            "children": [
+              {
+                "component": "Row",
+                "props": { "gap": "sm", "align": "center" },
+                "children": [
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$item": "value/outcomeLabel" },
+                      "color": { "$item": "value/outcomeColor" }
+                    }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/action" },
+                      "weight": "bold",
+                      "size": "sm"
+                    }
+                  },
+                  {
+                    "component": "Icon",
+                    "visible": { "$item": "value/critical" },
+                    "props": { "name": "sparkles", "size": "xs" }
+                  }
+                ]
+              },
+              {
+                "component": "Row",
+                "props": { "gap": "sm", "align": "center" },
+                "children": [
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/rollText" },
+                      "variant": "muted",
+                      "size": "xs"
+                    }
+                  },
+                  {
+                    "component": "Text",
+                    "visible": { "$item": "value/attribute" },
+                    "props": {
+                      "content": { "$item": "value/attribute" },
+                      "variant": "muted",
+                      "size": "xs"
+                    }
+                  }
+                ]
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "value/turnId" },
+                  "variant": "muted",
+                  "size": "xs"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
