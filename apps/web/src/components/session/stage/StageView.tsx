@@ -73,7 +73,10 @@ export interface StageViewProps {
     values: Record<string, unknown>,
     submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
-  readonly onRetryRuntime?: (runtimeId: string | undefined) => void;
+  readonly onRetryRuntime?: (
+    runtimeId: string | undefined,
+    sourceTurnId?: string,
+  ) => void;
   readonly onBeginAdventure: () => void;
   readonly onViewModeChange: (mode: "parsed") => void;
   /** Whether studio rails are collapsed for full-screen immersion. */

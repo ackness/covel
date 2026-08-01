@@ -124,6 +124,13 @@ export interface PluginRpcRuntimeRequest {
    * the target runtime is only a prompt-builder for a background follower.
    */
   readonly expectsBackgroundFollower?: boolean;
+  /**
+   * Retry a runtime that failed in a prior turn: the server loads that turn's
+   * persisted `turn_results` artifact and seeds the execution with its
+   * recorded runtime outputs, so the target's `input.inject` / `needs`
+   * resolve against the original narrative instead of empty context.
+   */
+  readonly retryFromTurnId?: string;
 }
 
 export type PluginRpcRequest = PluginRpcActionRequest | PluginRpcRuntimeRequest;

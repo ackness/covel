@@ -51,6 +51,23 @@ export function validatePluginRpcBody(raw: unknown): PluginRpcBodyValidation {
   if (body.runtimeId !== undefined && typeof body.runtimeId !== "string") {
     return { ok: false, error: "runtimeId must be a string", status: 400 };
   }
+  if (
+    body.retryFromTurnId !== undefined &&
+    (typeof body.retryFromTurnId !== "string" || body.retryFromTurnId === "")
+  ) {
+    return {
+      ok: false,
+      error: "retryFromTurnId must be a non-empty string",
+      status: 400,
+    };
+  }
+  if (body.retryFromTurnId !== undefined && !body.runtimeId) {
+    return {
+      ok: false,
+      error: "retryFromTurnId requires runtimeId",
+      status: 400,
+    };
+  }
 
   return { ok: true, body: body as unknown as ValidPluginRpcBody };
 }

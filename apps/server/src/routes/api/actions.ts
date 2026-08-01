@@ -18,7 +18,11 @@ import {
   finalizeExecution,
   saveAutoSnapshot,
 } from "@covel/runtime";
-import type { CovelEventType, RuntimeManifest } from "@covel/shared";
+import type {
+  CovelEventType,
+  RuntimeManifest,
+  RuntimeResult,
+} from "@covel/shared";
 import { FORWARDED_EVENT_TYPES } from "@covel/shared";
 import { estimateTokens } from "@covel/context";
 import type { CompactorRunner } from "@covel/context";
@@ -535,6 +539,32 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               typeof payload?.runtimeId === "string" &&
               payload.runtimeId.length > 0;
 
+            // Seed a scoped retry with the source turn's recorded outputs so
+            // the retried runtime's `input.inject` / `needs` resolve against
+            // the original narrative instead of empty manual-trigger context
+            // (a bare manual trigger resolves them empty — the retried agent
+            // would see no <narrator-output> and do nothing). Source: explicit
+            // payload.retryFromTurnId (the chip's turn), else the most recent
+            // player-origin artifact.
+            // ponytail: full artifact scan; add a keyed store getter if long
+            // sessions make this show up in traces.
+            let retrySeedResults: readonly RuntimeResult[] | undefined;
+            if (isScopedRetry) {
+              const rows = await store.listTurnResults(sessionId);
+              const explicit =
+                typeof payload?.retryFromTurnId === "string"
+                  ? rows.find((r) => r.turnId === payload.retryFromTurnId)
+                  : undefined;
+              const source =
+                explicit ??
+                [...rows]
+                  .reverse()
+                  .find((r) => (r.origin ?? "player") === "player");
+              retrySeedResults = Array.isArray(source?.runtimeResults)
+                ? (source.runtimeResults as RuntimeResult[])
+                : undefined;
+            }
+
             const turnInput = {
               sessionId,
               turnId: turnArgs.turnId,
@@ -565,7 +595,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               // its historical whole-turn-retry semantics.
               ...(isScopedRetry
                 ? {
-                    manualTrigger: { runtimeId: payload.runtimeId as string },
+                    manualTrigger: {
+                      runtimeId: payload.runtimeId as string,
+                      ...(retrySeedResults && retrySeedResults.length > 0
+                        ? { retrySeedResults }
+                        : {}),
+                    },
                     origin: "manual" as const,
                   }
                 : {}),

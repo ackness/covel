@@ -35,7 +35,7 @@ export interface SessionActions {
     submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
   executeCommand: (command: string) => void;
-  retryRuntime: (runtimeId?: string) => void;
+  retryRuntime: (runtimeId?: string, sourceTurnId?: string) => void;
   resetSession: () => void;
   backToWorldSelect: () => void;
   updateWorldLocal: (world: api.WorldRecord) => void;

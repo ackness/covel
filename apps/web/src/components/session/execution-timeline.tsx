@@ -227,7 +227,7 @@ export function ExecutionTimeline({
   steps: ExecutionStep[];
   executing: boolean;
   packages?: PackageSummary[];
-  onRetryRuntime?: (runtimeId: string) => void;
+  onRetryRuntime?: (runtimeId: string, sourceTurnId?: string) => void;
   onRetryAll?: () => void;
 }) {
   const { i18n, t } = useTranslation();
@@ -322,7 +322,13 @@ export function ExecutionTimeline({
                     key={rt.runtimeId}
                     rt={rt}
                     canRetry={canRetry}
-                    onRetry={onRetryRuntime}
+                    // Carry the chip's turn id so the retry replays THIS
+                    // turn's recorded upstream outputs (server-side seeding).
+                    onRetry={
+                      onRetryRuntime
+                        ? (rid) => onRetryRuntime(rid, group.turnId)
+                        : undefined
+                    }
                     retryFromLabel={t("session.retryFrom", { label: rt.label })}
                   />
                 ))}

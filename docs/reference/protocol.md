@@ -307,7 +307,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 | `turn.start`  | POST | `/api/actions` `type: "start_session"`   | SSE: ProtocolEvent 流 |
 | `turn.retry`  | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
 
-`retry_runtime` 的 `payload.runtimeId`（可选）把重跑收窄到指定 runtime（走 manual-trigger 路径）；缺省时保持整回合重跑语义。
+`retry_runtime` 的 `payload.runtimeId`（可选）把重跑收窄到指定 runtime（走 manual-trigger 路径）；缺省时保持整回合重跑语义。收窄重跑会以源回合（`payload.retryFromTurnId`，缺省取最近的 player-origin 工件）持久化的 runtime 输出**播种**执行，使被重试 runtime 的 `input.inject` / `needs` 按原回合叙事解析——裸 manual 触发这些解析为空，重试型调用因此必须播种。
 
 `start_session` 要求会话已带非空 `activePlugins`（创建会话时选定）。空集合直接 400，不会退化成"激活全部注册插件"——详见 [api.md](./api.md#post-apiactions)。
 
