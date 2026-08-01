@@ -98,6 +98,16 @@ export interface TurnInput {
       readonly topic: string;
       readonly data: Readonly<Record<string, unknown>>;
     };
+    /**
+     * Retry seeding: the recorded runtime results of a PRIOR turn, loaded from
+     * its persisted `turn_results` artifact. The executor pre-populates
+     * `completedResults` with them (minus the target runtime) so the target's
+     * `input.inject` / `needs` resolve against the original turn's outputs —
+     * a plain manual trigger resolves them empty. Seeds are context, not
+     * products: the executor drops any seed that was not re-executed before
+     * finalizing, so the retry turn's artifact records only what actually ran.
+     */
+    readonly retrySeedResults?: readonly RuntimeResult[];
   };
   /**
    * Execution origin, stamped onto the persisted

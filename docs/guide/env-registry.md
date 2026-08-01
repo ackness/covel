@@ -54,6 +54,7 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 - `STORE_BACKEND` 的代码默认值为 `sqlite`。
 - `DEPLOYMENT_TIER=self` 对应本地自部署；localhost 请求可以读取 server 注入的 provider key 元数据。`demo` / `commercial` 会硬性强制 session owner token 鉴权（见 [`docs/reference/api.md`](../reference/api.md) 鉴权章节）。未知值会被规范化并 fail-closed 到最严格的 `commercial`。
 - `COVEL_DESKTOP_REST_TOKEN` 是运维 master / operator 凭证：以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用），并且是 hosted（`demo` / `commercial`）层级创建/列出会话、世界写入与维度导入、AI 世界生成、模型探测/刷新以及 community server-code 激活的必需凭证。`DEPLOYMENT_TIER=demo|commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动（fail-closed）。`self` / 桌面 / dev 层级不要求也不校验它。这是当前单运维方信任模型，不提供多租户身份或代码沙箱（见 [`docs/reference/api.md`](../reference/api.md) 鉴权章节）。
+- `COVEL_LLM_MAX_CONCURRENT` 为 `active`（`packages/runtime/src/retry/llm-slots.ts` 消费）：进程内 LLM 调用并发上限，默认 `4`，`0` 或负数关闭闸门。排队时间顺延 runtime deadline。多会话托管部署（T3）按 provider 吞吐调大。
 - `COVEL_BIND_HOST` 默认 `127.0.0.1`（audit S-02）：本地 / 桌面部署只监听回环接口，网络上不可达。容器或多 pod 部署需显式设置 `COVEL_BIND_HOST=0.0.0.0`（`docker/docker-compose.yml` 已内置）——这是一次显式的部署决策，公开监听前请确认 `DEPLOYMENT_TIER` 与鉴权配置。
 - `COVEL_LLM_REPLAY`、`COVEL_LLM_REPLAY_DIR` 标记为 `documented`：源码中暂无读取方，实现 replay cache 时提升为 `active`。`TRUSTED_PROXY_IPS` 已是 `active`（由 `middleware/rate-limit.ts` 的 X-Forwarded-For 信任检查消费）。SSRF guard 设计上即 open-by-default，因此没有 LLM host 白名单变量。
 - `COVEL_TRACE_TRUNCATE` 标记为 `planned`，对应 debug trace 设计文档中的未来开关。

@@ -1,0 +1,104 @@
+[
+  {
+    "schemaVersion": 1,
+    "id": "qin-jiulian",
+    "name": "秦九镰",
+    "role": "npc",
+    "description": "悬钩堂司单人，断链之年的幸存者——那一夜她把左臂留在了烬海里，如今以铁钩代手。拾荒人的委托单、缒链配额与生死簿都过她的案头。她担保你入行，把你当半个徒弟，也当一枚棋子。",
+    "source": "world:emberback",
+    "locale": "zh-CN",
+    "aliases": ["九镰", "司单人"],
+    "tags": ["hook-guild", "quest-giver", "mentor"],
+    "attributes": {
+      "registry": "行籍",
+      "faction": "钩镰行",
+      "duty": "悬钩堂司单人",
+      "powerTier": "触纹者",
+      "sinew": 4,
+      "deft": 2,
+      "shellSense": 2,
+      "nerve": 5,
+      "tongue": 4,
+      "signature": "左臂铁钩、永远压在委托单上的镇纸秤砣"
+    },
+    "persona": {
+      "summary": "刀子嘴、账房心的老拾荒人，断链之年后不再亲自下降，却比谁都清楚每一根缒链的斤两。",
+      "traits": ["精明", "护短", "不信司辰阁", "恩怨分明"],
+      "goals": [
+        "查清盲索独自下降的真正原因",
+        "在司辰阁的锚令收紧之前保住钩镰行的下降权",
+        "把你练成能独当一面的拾荒人"
+      ],
+      "fears": ["再看一次连链坠海", "悬钩堂的生死簿添上你的名字"],
+      "voice": "短句，行话多，谈钱不绕弯；提到断链之年会突然收声。"
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "wen-ci",
+    "name": "温辞",
+    "role": "npc",
+    "description": "司辰阁少卿，掌锚令与下降许可，听甲者之境。他认定拾荒人的鲁莽迟早惊动玄负，对盲索一脉尤其没有好话——但他比谁都清楚，阁里已经三十年没有共息者了。",
+    "source": "world:emberback",
+    "locale": "zh-CN",
+    "aliases": ["温少卿"],
+    "tags": ["helm-court", "authority", "rival"],
+    "attributes": {
+      "registry": "阁籍",
+      "faction": "司辰阁",
+      "duty": "少卿・掌锚令与下降许可",
+      "powerTier": "听甲者",
+      "sinew": 1,
+      "deft": 2,
+      "shellSense": 4,
+      "nerve": 3,
+      "tongue": 5,
+      "signature": "从不离手的锚令印匣、望角台的值夜披风"
+    },
+    "persona": {
+      "summary": "克己奉公到近乎刻薄的年轻官僚，把「城不能再错一次」挂在嘴边，用规章掩饰司辰阁听不懂玄负的恐慌。",
+      "traits": ["谨慎", "傲慢", "责任感过载", "口才锋利"],
+      "goals": [
+        "在无共息者的情况下维持司辰阁的权威",
+        "查明玄负停驻的原因并抢在钩镰行之前定性",
+        "阻止任何未经许可的下降"
+      ],
+      "fears": ["寒斑不是凉甲", "自己成为历史上失去玄负的那一任"],
+      "voice": "措辞官样而精确，引用锚令条文压人；被戳中「共息者已绝」时会失态。"
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "id": "ya-xian",
+    "name": "哑弦",
+    "role": "npc",
+    "description": "檐下市的冷鳞贩子，嗓子坏了，以三弦代话——弦音急缓即是喜怒。明面上收死鳞做黑市小买卖，暗地里是衔尾会的耳目。自称欠你师父盲索一条命，这笔账他记在弦上，不写在脸上。",
+    "source": "world:emberback",
+    "locale": "zh-CN",
+    "aliases": ["弦爷"],
+    "tags": ["tailbiters", "broker", "informant"],
+    "attributes": {
+      "registry": "客籍",
+      "faction": "衔尾会",
+      "duty": "檐下市冷鳞贩子・会中耳目",
+      "powerTier": "触纹者",
+      "sinew": 2,
+      "deft": 5,
+      "shellSense": 3,
+      "nerve": 4,
+      "tongue": 1,
+      "signature": "缠着旧鳞片的三弦、袖中一杆辨鳞小秤"
+    },
+    "persona": {
+      "summary": "不能说话却消息最灵的白汐遗民之后，用弦音、账目和沉默做买卖；他的善意都以物易物。",
+      "traits": ["寡言（弦音代话）", "重诺", "警觉", "念旧"],
+      "goals": [
+        "替衔尾会盯紧玄负停驻的每一丝风声",
+        "还清欠盲索的那条命",
+        "给客籍留一条真正的后路"
+      ],
+      "fears": ["衔尾会的筏永远造不完", "白汐的旧事被彻底遗忘"],
+      "voice": "不开口；以三弦拨音、手势与写在鳞片上的短句交流，叙事应描写弦音的情绪。"
+    }
+  }
+]

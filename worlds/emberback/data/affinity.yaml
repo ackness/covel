@@ -1,0 +1,13 @@
+# affinity 种子（to: plugin:affinity/affinity，key: id），score 取 -20..20
+- id: qin-jiulian
+  name: 秦九镰
+  score: 12
+  notes: 悬钩堂司单人，断链之年幸存者，用铁钩代左手。她担保你入的行，把你当半个徒弟，也当一枚棋子。
+- id: wen-ci
+  name: 温辞
+  score: -8
+  notes: 司辰阁少卿，掌锚令与下降许可。认定拾荒人的鲁莽迟早惊动玄负，尤其看不惯你师父盲索那一脉。
+- id: ya-xian
+  name: 哑弦
+  score: 5
+  notes: 檐下市的冷鳞贩子，衔尾会的耳目，以三弦代话。自称欠你师父一条命——他替会里做的事，从不写在脸上。

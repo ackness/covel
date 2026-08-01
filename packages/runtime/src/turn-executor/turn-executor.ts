@@ -465,6 +465,18 @@ async function executeTurnImpl(
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
 
+  // Retry seeding (manual retry of a failed runtime): pre-populate the map
+  // with the original turn's recorded outputs so the target's `input.inject`
+  // and `needs` resolve against them. Tracked by object identity so the
+  // pre-finalize cleanup below drops any seed that a real execution did not
+  // overwrite this turn.
+  const retrySeeds = new Map<string, RuntimeResult>();
+  for (const seed of input.manualTrigger?.retrySeedResults ?? []) {
+    if (seed.runtimeId === input.manualTrigger?.runtimeId) continue;
+    completedResults.set(seed.runtimeId, seed);
+    retrySeeds.set(seed.runtimeId, seed);
+  }
+
   // Setup-completion delta accumulated across the (idempotent) completion
   // passes below, handed to the finalizer so the session-clock write (setup
   // mirror + phase flip) lands in the commit transaction. `allSetupDone` tracks
@@ -659,6 +671,15 @@ async function executeTurnImpl(
   // turn on the same request (opening continuation), so the opening narrative
   // still arrives without an extra player message.
   if (isPreGamePending) await recordPreGameCompletion();
+
+  // Drop retry seeds BEFORE the event fan-out and the finalizer: seeds are
+  // inject/needs context for the retried runtime only. runEventChain collects
+  // `output.events` from every completedResults entry — leaving seeds in
+  // would REPLAY the original turn's events (scene.set, receipts, generation
+  // requests) on every retry. Seeds a real execution overwrote stay.
+  for (const [name, seed] of retrySeeds) {
+    if (completedResults.get(name) === seed) completedResults.delete(name);
+  }
 
   const deferredFollowers = playerAborted()
     ? []

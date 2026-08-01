@@ -103,10 +103,13 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(levels).toHaveLength(1);
     // One level, ordered by name (a stable trace order; the level runs parallel).
     expect(levels[0]).toEqual([
+      "affinity",
       "branch-reply",
       "char-creator/character-tracker",
       "codex",
+      "core-quest",
       "guide",
+      "inventory",
       "mimo-tts/auto-narrate",
       "npc-graph/extractor",
       "scene-prompts",
@@ -197,7 +200,6 @@ describe("normalize golden (bundled plugin set)", () => {
     for (const id of [
       "character-blueprint",
       "character-presence",
-      "player-identity",
       "living-world-rules",
     ]) {
       const spec = requireSpec(specs, id);

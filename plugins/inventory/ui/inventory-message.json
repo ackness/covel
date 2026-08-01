@@ -1,0 +1,52 @@
+{
+  "id": "inventory-message",
+  "dataSource": { "namespace": "message" },
+  "view": {
+    "component": "Card",
+    "props": { "variant": "subtle" },
+    "children": [
+      {
+        "component": "Row",
+        "props": { "gap": "sm", "align": "center" },
+        "children": [
+          {
+            "component": "Icon",
+            "props": { "name": "backpack", "size": "xs" }
+          },
+          {
+            "component": "Text",
+            "props": {
+              "content": { "zh": "行囊变化", "en": "Inventory changes" },
+              "size": "xs",
+              "variant": "muted"
+            }
+          }
+        ]
+      },
+      {
+        "component": "Stack",
+        "props": { "gap": "xs" },
+        "repeat": { "statePath": "/changes", "key": "seq" },
+        "children": [
+          {
+            "component": "Row",
+            "props": { "gap": "sm", "align": "center" },
+            "children": [
+              {
+                "component": "Badge",
+                "props": {
+                  "label": { "$item": "badge" },
+                  "color": { "$item": "color" }
+                }
+              },
+              {
+                "component": "Text",
+                "props": { "content": { "$item": "text" }, "size": "sm" }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

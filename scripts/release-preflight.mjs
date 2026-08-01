@@ -325,7 +325,9 @@ function checkEventsSchemas(manifestPath, pluginRoot) {
 
 const pluginDirs = fs
   .readdirSync(path.join(repoRoot, "plugins"), { withFileTypes: true })
-  .filter((e) => e.isDirectory());
+  // `_`-prefixed dirs are non-plugin conventions (plugins/_archive holds
+  // retired plugins; discovery and the workspace glob skip them too).
+  .filter((e) => e.isDirectory() && !e.name.startsWith("_"));
 let pluginIssues = 0;
 let eventSchemaChecks = 0;
 for (const entry of pluginDirs) {

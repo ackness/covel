@@ -198,12 +198,15 @@ describe("world data session importer", () => {
     }
 
     expect(compiled.sort()).toEqual([
+      "affinity/affinity",
       "char-creator/characters",
       "char-creator/characters",
       "character-blueprint/blueprints",
       "character-blueprint/characters",
       "character-presence/assets",
       "character-presence/presence",
+      "core-quest/quests",
+      "inventory/items",
       "living-world-rules/rules",
       "scene-stage/assets",
       "scene-stage/scenes",
@@ -1327,7 +1330,6 @@ sources: {}
       "scene-prompts",
       "character-blueprint",
       "character-presence",
-      "player-identity",
       "living-world-rules",
       "branch-reply",
       "char-creator",

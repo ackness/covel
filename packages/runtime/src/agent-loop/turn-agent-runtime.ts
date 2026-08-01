@@ -304,8 +304,18 @@ export async function executeAgentRuntime({
     eventBus: deps.eventBus,
     emitter: deps.emitter,
   };
-  const finalizeFailure = (result: RuntimeResult): Promise<RuntimeResult> =>
-    runPostRuntimeHook(postRuntimeOpts, result);
+  const finalizeFailure = (result: RuntimeResult): Promise<RuntimeResult> => {
+    // Single terminal-event funnel for RETURNED failures. Every returned
+    // failure path (timeout without content, requireToolUse unmet,
+    // tool-failed, schema/prose short-circuits, retry exhaustion) lands here;
+    // without this emission the execution strip never learns the runtime
+    // failed and its chip spins forever (thrown failures are covered by the
+    // caller's catch in turn-runtime-execution).
+    if (result.status === "failed") {
+      emitRuntimeFailed(deps, input.sessionId, manifest, result);
+    }
+    return runPostRuntimeHook(postRuntimeOpts, result);
+  };
 
   if (!stoppedWithResponse && !finalContent) {
     return finalizeFailure({
@@ -382,12 +392,12 @@ export async function executeAgentRuntime({
               parsedAsJson,
             );
             if (proseFailure) {
-              emitRuntimeFailed(deps, input.sessionId, manifest, proseFailure);
+              // Emission happens in finalizeFailure (the short-circuit result
+              // routes through it) — emitting here too would double-fire.
               return proseFailure;
             }
             const schemaFailure = checkSchemaValidation(ctx, built);
             if (schemaFailure) {
-              emitRuntimeFailed(deps, input.sessionId, manifest, schemaFailure);
               return schemaFailure;
             }
             return undefined;

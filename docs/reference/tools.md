@@ -36,6 +36,9 @@
 | upsert-npc-graph        | local   | npc-graph     | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                  |
 | list-npc-graph          | local   | npc-graph     | auto-allow | 读取现有 NPC 图；图已注入 prompt，仅在需要某关系完整 `fact` 时按需调用              |
 | generate-scene-prompts  | local   | scene-prompts | auto-allow | 写入对话模式的玩家口吻快捷回复                                                      |
+| upsert-quests           | local   | core-quest    | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按 text 匹配勾选/追加）          |
+| update-affinity         | local   | affinity      | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）   |
+| update-inventory        | local   | inventory     | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）         |
 
 ---
 

@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.23-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.23)
+[![Version](https://img.shields.io/badge/version-v0.0.24-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.24)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](<>)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,14 +13,15 @@
 
 Covel 是一款 AI 驱动的 RPG，回合之间世界仍在运转：NPC 记录着对你的态度、世界典籍随游玩积累、记忆贯穿整局。支撑这一切的每个机制都是一个**以插件形式分发的自主 agent** —— 禁用一个、替换一个，或者自己写一个。
 
-> **当前公开版本：v0.0.23**，早期阶段 —— API、数据格式、插件 frontmatter 可能随版本变化。官方预编译包面向 macOS Apple Silicon 与 Windows x64，其余平台从源码构建。
+> **当前公开版本：v0.0.24**，早期阶段 —— API、数据格式、插件 frontmatter 可能随版本变化。官方预编译包面向 macOS Apple Silicon 与 Windows x64，其余平台从源码构建。
 
 ## 亮点
 
 - 🎭 **舞台模式** —— 全屏视觉小说：场景背景、角色立绘、打字机对话框与选择肢浮层。走到没画过的新地点时，背景图会在会话中按需生成。
 - 🤖 **多 agent 回合** —— 叙事 agent 写场景的同时，其他 agent 并行抽取 NPC 关系、扩写世界典籍、决定在场角色、维护长程记忆 —— 每一回合都是如此。
-- 🧩 **一切皆插件** —— 内置 23 个 agent。一个插件就是一份 `PLUGIN.md`：YAML frontmatter 声明触发/工具/事件，Markdown 正文就是 agent 的提示词。
-- 🌍 **两个旗舰世界** —— 一个黑暗奇幻悬疑、一个视觉小说校园恋爱，都是精心手作、可直接 fork 的范例。
+- 🎲 **内置 RPG 玩法** —— 预掷骰判定（可视化回执）、自动跟踪的任务日志、玩家可直接操作的行囊、逐 NPC 好感度。全部是可选插件；世界包可以预置任务、开局装备与初始好感。
+- 🧩 **一切皆插件** —— 内置 26 个 agent。一个插件就是一份 `PLUGIN.md`：YAML frontmatter 声明触发/工具/事件，Markdown 正文就是 agent 的提示词。
+- 🌍 **三个旗舰世界** —— 黑暗奇幻悬疑、视觉小说校园恋爱、末世 RPG 远征，都是精心手作、可直接 fork 的范例。
 - 🔌 **自带模型** —— OpenAI / Anthropic / DeepSeek / Qwen 模型槽位。本地优先：SQLite 落盘，API 密钥绝不在服务端持久化。
 
 ## 两种玩法
@@ -63,6 +64,7 @@ pnpm dev                            # web :5173 + server :3001（SQLite）
 
 - **雾港·裂潮纪（Mistport Chronicles）** —— 传统叙事模式，黑暗奇幻悬疑。被浓雾包裹的港口，每次退潮都露出不同的遗迹；公会长失踪，四方势力争夺一把通往深处之物的钥匙。中英双语，内置种子角色与调查向记忆维度。
 - **遥风学园（Haruka Academy）** —— 舞台模式（stage mode），校园恋爱日常。海边高中的社团、考试、传闻与未说出口的喜欢，由八名角色的群像展开 —— 立绘与场景美术开箱即含。
+- **鳌背孤城·烬海纪（Emberback）** —— 传统叙事模式，末世 RPG 远征。世上最后一头巨鳌驮着最后一座城横渡烬海——破晓时分，它毫无征兆地停在一座图上没有的沉城尖塔之上。RPG 玩法套件的展示世界：预置任务、开局装备、NPC 初始好感与接入骰子系统的五项判定属性，主要角色配有立绘。
 
 ## 创造你自己的
 

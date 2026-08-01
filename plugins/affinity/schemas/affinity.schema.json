@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugin://affinity/affinity",
+  "type": "object",
+  "required": ["id", "name", "score"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Stable record id; also used as the plugin-data key"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Canonical NPC name (the tool de-duplicates by this, case-insensitive)"
+    },
+    "score": {
+      "type": "integer",
+      "minimum": -100,
+      "maximum": 100,
+      "description": "Initial affinity score"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional free-form author notes; preserved by the tool"
+    }
+  },
+  "additionalProperties": true
+}

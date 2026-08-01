@@ -164,12 +164,15 @@ describe("bundled plugin dataSchemas", () => {
     }
 
     expect(seen.sort()).toEqual([
+      "affinity/affinity",
       "char-creator/characters",
       "char-creator/characters",
       "character-blueprint/blueprints",
       "character-blueprint/characters",
       "character-presence/assets",
       "character-presence/presence",
+      "core-quest/quests",
+      "inventory/items",
       "living-world-rules/rules",
       "scene-stage/assets",
       "scene-stage/scenes",

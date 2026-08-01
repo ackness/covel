@@ -1,0 +1,43 @@
+# inventory 种子（to: plugin:inventory/items，key: id）
+- id: scale-coins
+  name: 鳞钱
+  quantity: 40
+  description: 玄负蜕鳞打磨成的小片货币，贴肤微温。凉透的是冷鳞，别收。
+  tags:
+    - currency
+- id: hook-sickle
+  name: 钩镰
+  quantity: 1
+  equipped: true
+  description: 拾荒人的吃饭家伙，一头攀缒钩、一头割取镰。师父盲索的遗物，配重顺手得不像话。
+  tags:
+    - weapon
+    - tool
+- id: descent-harness
+  name: 缒链甲带
+  quantity: 1
+  equipped: false
+  description: 旧式下降甲带，皮革配沉城盐铁扣。卡扣有磨损，吃得住一次全重坠停——大概。
+  tags:
+    - gear
+- id: dew-flasks
+  name: 露水囊
+  quantity: 2
+  description: 露井广场打的配给露水。烬海下面一口都补不着，省着喝。
+  tags:
+    - supply
+    - water
+- id: crack-whistles
+  name: 摔响哨
+  quantity: 3
+  description: 往甲面上一摔就炸响的信号哨。三短一长，绞盘队收链——前提是他们还在上面。
+  tags:
+    - supply
+    - signal
+- id: baixi-map-half
+  name: 半张白汐旧图
+  quantity: 1
+  description: 师父盲索留下的白汐城街巷图下半张，边角焦黑。有人用冷鳞粉在图上标了一个记号。
+  tags:
+    - clue
+    - quest

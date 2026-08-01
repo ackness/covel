@@ -1,0 +1,98 @@
+# living-world-rules 规则（to: plugin:living-world-rules/rules+lorebook，key: id）
+# kind 语义：constant 常驻注入；triggered 按 keys 命中注入（未填 keys 会回退常驻）。
+- schemaVersion: 1
+  id: emberback-scarcity
+  title: 甲上无余物
+  content: 鳌背城的一切都稀缺且有账：净水按露井配额分发，装备与缒链会损耗，鳞钱贴肤微温才是真钱。任何收获都应有对应的代价——时间、配额、人情或风险；叙事不应凭空发放物资，大宗所得要说明来路并惊动相应的势力。
+  kind: constant
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  insertionOrder: 410
+- schemaVersion: 1
+  id: emberback-scale-coins
+  title: 鳞钱与冷鳞
+  content: 鳞钱以贴肤温热验真，凉透的「冷鳞」是死鳞也是伪币——市面拒收，持有过多会被当作衔尾会同路人。唯有檐下市黑市按斤收冷鳞，收购本身即是违禁交易；谈价、验钱、销赃都应体现这层风险与谈锋的作用。
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 鳞钱
+    - 冷鳞
+    - 黑市
+    - 檐下市
+    - 交易
+  insertionOrder: 420
+- schemaVersion: 1
+  id: emberback-descent-protocol
+  title: 缒链下降规程
+  content: 下降必须同时具备司辰阁的锚令许可与钩镰行的绞盘手当值，缺一即是私降——查获者褫夺下降权，客籍甚至会被逐往尾甲滩。封锚期间一切下降许可作废。断链之年后，绞盘手对阁里报的「航向」并不全信，愿不愿为你转盘，取决于交情与价钱。
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 缒链
+    - 下降
+    - 下潜
+    - 锚令
+    - 封锚
+    - 绞盘
+  insertionOrder: 430
+- schemaVersion: 1
+  id: emberback-ember-tide
+  title: 烬潮窗口
+  content: 烬海如真海涨落：退烬是下降窗口，烬潮起时灰烬没顶、缒链之下不留活口。望角台以钟声报潮——常钟报刻，急钟报早潮，乱钟即异常。涉及甲外行动时应点明当前潮时与剩余窗口，让时间压力实际影响路线与判定难度。
+  kind: triggered
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 烬潮
+    - 退烬
+    - 灰烬
+    - 望角台
+    - 钟声
+  insertionOrder: 440
+- schemaVersion: 1
+  id: emberback-shell-listening
+  title: 听甲四境
+  content: 听甲之术四境分明：触纹辨震颤吉凶、听甲断烬潮远近、循脉寻软甲暖脉、共息可与玄负同呼吸——而当世无共息者，任何自称能「劝动玄负」的说法都是僭越或骗局。甲感天赋不问出身，三籍皆可因此擢用；涉及震颤、寻路、预判潮汐的判定应参考角色的甲感。
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 触纹
+    - 听甲
+    - 循脉
+    - 共息
+    - 震颤
+    - 甲感
+  insertionOrder: 450
+- schemaVersion: 1
+  id: emberback-cold-patch-taboo
+  title: 寒斑禁言
+  content: 寒斑是这座城公开的秘密：司辰阁的官方口径是「只是凉甲」，公开质疑等于指控阁里失职，会招来盘查与许可刁难；尾甲滩的住民却日日看着甲鳞在脚下变冷。谈及寒斑时，人物的反应应随籍别与立场分化，而白汐沉没前的记载正是这话题最深的忌讳。
+  kind: triggered
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 寒斑
+    - 凉甲
+    - 白汐
+  insertionOrder: 460

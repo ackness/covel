@@ -36,7 +36,7 @@ description: 创建 Covel 插件。通过对话了解需求，直接生成 PLUGI
 - **同步 / 后台执行**（仅手动触发）：`execution: sync`（默认，阻塞 turn）/ `background`（202 + `jobId`，框架在 `_jobs/<jobId>` 写状态，前端通过 `plugin-data.changed` SSE 感知）。
   - 插件**禁止**主动写 `_jobs/*` / `_logs/*`，框架会覆盖。
 - **事件链**：runtime 在返回里带 `events: [{topic, data}]`，下游 `trigger: {type: event, topic}` runtime 在同 turn 被拉起。
-- **事件契约声明（统一事件层）**：消费方在 frontmatter 用 `events: [{topic, schema, description, advertise?}]` 声明契约（`schema` 为插件根相对 JSON Schema 路径，校验事件 payload；`advertise: false` = 仅插件内部信令，agent 不可发射）。发射方 agent 声明 `advertiseEvents: true` + `tools.builtin: [emit-event]`，prompt 会自动收到当前 session 所有已声明事件的目录，LLM 命中时调 `emit-event`（同 topic 每回合去重）。参考实现：`plugins/scene-stage/runtimes/resolver/PLUGIN.md`（`scene.set` 消费方）。
+- **事件契约声明（统一事件层）**：消费方在 frontmatter 用 `events: [{topic, schema, description, advertise?}]` 声明契约（`schema` 为插件根相对 JSON Schema 路径，校验事件 payload；`advertise: false` = 仅插件内部信令，agent 不可发射）。发射方 agent 声明 `advertiseEvents: true` + `tools.builtin: [emit-event]`，prompt 会自动收到当前 session 所有已声明事件的目录，LLM 命中时调 `emit-event`（同 topic 每回合去重）。参考实现：`plugins/scene-stage/runtimes/resolver/PLUGIN.md`（`scene.set` 消费方）。**去重的设计后果**：预期一回合内多次回执的契约（逐次判定、逐条通知）必须把 payload 批量化成数组、整回合一次发射——逐次 emit 从第二次起会被静默丢弃，这是契约设计问题而非发射方 prompt 问题。批量范例：`plugins/dice-check`（`check.resolved` 的 `{ checks: [1..3] }`）。
 - **`requireToolUse: true`**（仅 agent）：唯一职责就是调某个工具的 runtime 容易漂移成续写正文——开启后零成功工具调用即收场时框架注入一条纠正消息重试一次（如 `scene-prompts`）。
 - **存储**：runtime 返回里带 `pluginData: [{namespace, key, value}, ...]`，框架自动转成 `plugin.data` / `plugin.data.batch` Proposal，写到 `plugin_data` 表 `(sessionId, pluginId, namespace, key)`。也可以用 `ctx.pluginData.set(...)` 立即落库（前端立刻通过 SSE 看到），适合 placeholder。
 - **多媒体（图像 / 音频 / 视频 / 文件）**：用 `ctx.media`（不是 `pluginData` 直接塞 bytes）。`ctx.media.put(bytes, mime, meta) → MediaRef`；`ctx.media.ingestUrl(url, {allowedMimes})` 从 URL 拉取到 MediaStore。把 ref 写进 `pluginData.value.ref`，并在 runtime output 返回 `assetGenerations: [{ref, modality, meta}]` 让框架 emit `asset.generate` proposal（`assets` 仍是兼容 alias）。前端用 `<Media as="auto" ref={…}>` 渲染（自动按 mime 选 `<img>/<audio>/<video>/<a>` 控件）。完整契约见 [`runtime-context.md`](references/runtime-context.md) §`ctx.media`。
@@ -192,6 +192,15 @@ pnpm --filter @covel/plugin-<id> test
 ```
 
 > 仓库外插件（`~/.covel/plugins/`）优先用仓库根目录的 `pnpm test:runtime -- <plugin> --plugins-dir ~/.covel/plugins --pretty` 跑插件自带 `tests/runtime-cases.json`。只有要写独立 Vitest 单测时，才在插件目录补测试依赖。
+
+### Bundled 插件（写进仓库 `plugins/`）的额外集成门禁
+
+第三方插件到 step 5 即完成；bundled 插件还有四道，缺一即是不完整交付：
+
+1. **先 `pnpm install`**——新 workspace 包未链接依赖前 `pnpm --filter` 测试跑不动。
+2. **跑 golden 契约测试**：bundled 集合有仓库级 golden，新增/改动插件后必须 `pnpm --filter @covel/runtime test` + `pnpm --filter @covel/server test` 并更新失败的 golden。常见三处：`packages/runtime/tests/core-plugin-manifest-contract.test.ts`（narrator inject 清单等）、`packages/runtime/tests/normalize-observe-golden.test.ts`（post-turn 并行 runtime 清单）、`apps/server/tests/lib/world-data-session-import.test.ts`（bundled dataSchemas Ajv 清单）。`pnpm lint` 只有 tsc，抓不到 golden。
+3. **`pnpm check:plugins` 必须过**：每个插件目录要 `README.md`；`displayName`/`description` zh+en；UI json / PLUGIN.md / handler 的玩家可见文案不得裸中文（I18nText）。
+4. **文档同步（CLAUDE.md 规则，同 PR）**：`docs/reference/plugins.md`（目录 + 概览表 + 详细章节）、`tools.md`（本地工具概览行）、`ui-panels.md`（面板/消息块登记表）、`world-data.md`（若声明 acceptsWorldData namespace）。
 
 ### 6. 展示结果
 

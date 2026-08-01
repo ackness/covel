@@ -44,6 +44,8 @@ export interface RequestLLMResponseOptions {
   readonly deadline: number;
   readonly useStreaming: boolean;
   readonly reportRetry: (info: RetryInfo) => void;
+  /** Forwards LLM-slot queue waits so the tool loop can extend its deadline. */
+  readonly onQueueWait?: (waitedMs: number) => void;
   /** Called once per forwarded text delta; the DeltaForwarder owns the count. */
   readonly onStreamDelta: (textDelta: string) => Promise<void>;
 }
@@ -67,6 +69,7 @@ export async function requestLLMResponse(
     useStreaming,
     reportRetry,
     onStreamDelta,
+    onQueueWait,
   } = opts;
 
   const callParams = {
@@ -77,6 +80,7 @@ export async function requestLLMResponse(
     responseFormat,
     policy: retryPolicy,
     deadline,
+    onQueueWait,
     onRetry: reportRetry,
     emitter: deps.emitter,
     runtimeId: manifest.name,

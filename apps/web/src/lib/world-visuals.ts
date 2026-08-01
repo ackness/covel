@@ -18,6 +18,11 @@ const VISUALS_BY_ID: Record<string, WorldVisual> = {
     accent: "oklch(72% 0.16 75)",
     label: "Cloudmere",
   },
+  emberback: {
+    image: "/visuals/worlds/emberback.webp",
+    accent: "oklch(72% 0.14 50)",
+    label: "Emberback",
+  },
   "haruka-academy": {
     image: "/visuals/worlds/haruka-academy.webp",
     accent: "oklch(72% 0.15 350)",

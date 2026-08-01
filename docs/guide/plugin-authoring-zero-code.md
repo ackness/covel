@@ -572,7 +572,7 @@ recommendedPlugins:
   - npc-graph
   - living-world-rules
 optionalPlugins:
-  - player-identity
+  - affinity
 excludedPlugins:
   - chat-mode-narrator
   - scene-cast

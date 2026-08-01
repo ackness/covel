@@ -438,17 +438,20 @@ export function useBuildSessionActions({
   );
 
   const retryRuntime = useCallback(
-    (runtimeId?: string) => {
+    (runtimeId?: string, sourceTurnId?: string) => {
       if (!canRunSessionAction(state)) return;
       const sessionId = state.session?.id;
       if (!sessionId) return;
 
+      // Whole-turn retry regenerates the narrative, so the turn's messages
+      // go. A chip-scoped retry (sourceTurnId set) replays ONE auxiliary
+      // runtime against that turn's recorded outputs — the narrative stays.
       const lastTurnId =
         state.messages.length > 0
           ? [...state.messages].reverse().find((message) => message.turnId)
               ?.turnId
           : undefined;
-      if (lastTurnId) {
+      if (lastTurnId && !sourceTurnId) {
         clearStreamingTextsForTurn(lastTurnId);
         dispatch({
           type: "REMOVE_MESSAGES_FROM_TURN",
@@ -463,7 +466,10 @@ export function useBuildSessionActions({
           type: "retry_runtime",
           sessionId,
           locale: i18n.language,
-          payload: runtimeId ? { runtimeId } : {},
+          payload: {
+            ...(runtimeId ? { runtimeId } : {}),
+            ...(sourceTurnId ? { retryFromTurnId: sourceTurnId } : {}),
+          },
         }),
       );
     },

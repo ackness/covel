@@ -1,0 +1,64 @@
+schemaVersion: 1
+sources:
+  dimensions:
+    kind: yaml
+    path: data/dimensions.yaml
+    schema: covel://world/dimensions
+    to: world:metadata.dimensions
+  lore:
+    kind: yaml
+    path: data/lorebook.yaml
+    to: lorebook
+    key: id
+    after: dimensions
+  cast:
+    kind: json
+    path: characters/main-cast.json
+    schema: plugin://character-blueprint/blueprints
+    to: plugin:character-blueprint/blueprints
+    key: id
+    effects:
+      - characters
+    after: dimensions
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+    after: cast
+  presence:
+    kind: json
+    path: media/presence.json
+    schema: plugin://character-presence/presence
+    to: plugin:character-presence/presence
+    key: characterId
+    after: portraits
+  rules:
+    kind: yaml
+    path: data/rules/emberback-rules.yaml
+    schema: plugin://living-world-rules/rules
+    to: plugin:living-world-rules/rules+lorebook
+    key: id
+    after: dimensions
+  quests:
+    kind: yaml
+    path: data/quests.yaml
+    schema: plugin://core-quest/quests
+    to: plugin:core-quest/quests
+    key: id
+    after: dimensions
+  items:
+    kind: yaml
+    path: data/items.yaml
+    schema: plugin://inventory/items
+    to: plugin:inventory/items
+    key: id
+    after: dimensions
+  affinity:
+    kind: yaml
+    path: data/affinity.yaml
+    schema: plugin://affinity/affinity
+    to: plugin:affinity/affinity
+    key: id
+    after: dimensions

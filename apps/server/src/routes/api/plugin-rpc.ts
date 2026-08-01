@@ -41,6 +41,7 @@ import {
   createTrustedHandlerStore,
 } from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
+import type { RuntimeResult } from "@covel/shared";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import {
   decodePluginUserSettingsHeader,
@@ -248,6 +249,31 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // already-activated community plugins (idempotent).
     await c.get("activatePluginServerCode")?.(body.pluginId, sessionId);
 
+    // Retry mode: load the original turn's persisted artifact so the retried
+    // runtime resolves its inject/needs against the recorded outputs
+    // (narrative etc.) instead of empty manual-trigger context.
+    let retrySeedResults: readonly RuntimeResult[] | undefined;
+    if (body.retryFromTurnId) {
+      // ponytail: full artifact scan (listTurnResults sorts ascending, so a
+      // head-limit would miss recent turns) — add a keyed getter to the store
+      // contract if long sessions make this show up in traces.
+      const rows = await store.listTurnResults(sessionId);
+      const row = rows.find((r) => r.turnId === body.retryFromTurnId);
+      if (!row) {
+        return c.json(
+          {
+            status: "error",
+            error: `turn "${body.retryFromTurnId}" has no persisted results in session ${sessionId}`,
+            code: "retry-turn-not-found",
+          },
+          404,
+        );
+      }
+      retrySeedResults = (
+        Array.isArray(row.runtimeResults) ? row.runtimeResults : []
+      ) as RuntimeResult[];
+    }
+
     const turnId = crypto.randomUUID();
 
     const runtimeTurnRunner = createPluginRpcRuntimeTurnRunner({
@@ -296,6 +322,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           : {}),
         ...(body.payload !== undefined ? { payload: body.payload } : {}),
         ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
+        ...(retrySeedResults ? { retrySeedResults } : {}),
       });
 
     const jobRunner = createPluginRpcJobRunner({

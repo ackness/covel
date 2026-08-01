@@ -9,7 +9,10 @@ interface UseMessageGroupingArgs {
   readonly executionSteps: ExecutionStep[];
   readonly executing: boolean;
   readonly packages: PackageSummary[];
-  readonly onRetryRuntime?: (runtimeId: string | undefined) => void;
+  readonly onRetryRuntime?: (
+    runtimeId: string | undefined,
+    sourceTurnId?: string,
+  ) => void;
   readonly renderMessage: (msg: StreamMessage, index: number) => ReactNode;
 }
 
@@ -85,7 +88,7 @@ export function useMessageGrouping({
             packages={packages}
             onRetryRuntime={
               isActiveTurn && onRetryRuntime
-                ? (id) => onRetryRuntime(id)
+                ? (id, sourceTurnId) => onRetryRuntime(id, sourceTurnId)
                 : undefined
             }
             onRetryAll={

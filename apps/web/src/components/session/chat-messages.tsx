@@ -54,7 +54,10 @@ export interface ChatMessagesProps {
     values: Record<string, unknown>,
     submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
-  onRetryRuntime?: (runtimeId: string | undefined) => void;
+  onRetryRuntime?: (
+    runtimeId: string | undefined,
+    sourceTurnId?: string,
+  ) => void;
   onBeginAdventure: () => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -97,7 +100,7 @@ export function ChatMessages({
   const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
   // Autoscroll follows both new messages and the external streaming signal;
   // token arrival does not re-render this history-sized parent component.
-  const { scrollRef, bottomRef, showJumpButton, jumpToBottom } = useAutoScroll(
+  const { scrollRef, showJumpButton, jumpToBottom } = useAutoScroll(
     messages.length,
     {
       subscribeToStreaming: subscribeToStreamingChanges,
@@ -274,12 +277,7 @@ export function ChatMessages({
               </div>
             )}
 
-            <div
-              ref={(node) => {
-                bottomRef.current = node;
-                messagesEndRef.current = node;
-              }}
-            />
+            <div ref={messagesEndRef} />
           </div>
         </ScrollArea>
         {/* 加载更旧消息指示：绝对定位悬浮，不进入滚动内容流，避免扰动 scrollHeight

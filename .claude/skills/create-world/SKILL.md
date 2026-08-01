@@ -42,9 +42,11 @@ lore 解析链是 **`WORLD.<lang>.md` → `WORLD.md` → 空字符串**。`WORLD
 - `openingScenario` 必须呈现即时的选择或紧张感
 - 按玩法选 `pluginPolicy.preset`：传统叙事 `traditional-story`，对话/校园/群像 `dialogue-mode`，省 token `low-cost`
 - **视觉小说世界**（对话模式的增强档）：声明 `defaultViewMode: stage` 进全屏舞台（背景 + 立绘 + 打字机）。资产是**渐进增强**——没有立绘/场景图也能跑（回退世界头图 + 占位卡），后续可用 `scripts/generate-portraits.mjs` / `generate-scenes.mjs` 补。成品参考 `worlds/haruka-academy`
+- **RPG 世界**（判定/任务/背包/好感玩法）：`pluginPolicy.requiredPlugins` 拉起 `dice-check`、`core-quest`、`inventory`、`affinity` 四件套；worldData 预置三类种子——`plugin://core-quest/quests`（任务）、`plugin://inventory/items`（开局物资，货币 tag `currency`）、`plugin://affinity/affinity`（关键 NPC 初始好感），记录形状见 `docs/reference/world-data.md`「内置 RPG 玩法种子」；`characterAttributes` 声明 0-5 小整数属性作判定修正来源（描述里写明各自管哪类判定）。种子的 NPC/giver 必须与 lore 和角色蓝图同名对齐。成品参考 `worlds/emberback`
 - **写任何插件 ID 之前先 `ls plugins/` 确认它存在**——schema 不校验插件 ID，拼错要拖到建会话时才暴露
 - 避免泛化的奇幻套路，追求独特的世界设定
-- 所有 ID 字段（world id、faction id、worldData source id）用 kebab-case 英文；其余内容用用户的语言（默认中文）
+- 所有 ID 字段（world id、faction id、worldData source id）用 kebab-case 英文
+- **world.yaml 的展示字段必须写 I18nText 双语对象**——`name`、`summary`、`characterAttributes[].name`/`.description` 等写 `{ zh: …, en: … }`。schema 虽接受裸 string，但仓库门禁 `check-plugin-i18n` 会扫 `worlds/*/world.yaml`，裸中文直接判违规。WORLD.md、lore、`data/` 种子内容用用户的语言即可（默认中文）
 
 ### 3. 验证
 
@@ -66,12 +68,14 @@ console.log('schema OK');
 
 按需追加：
 
-| 你写了什么                 | 至少要跑哪几层                             |
-| -------------------------- | ------------------------------------------ |
-| 最小 world.yaml + WORLD.md | **L1 schema**（必做）                      |
-| 声明了 `worldData`         | + **L1b descriptor 校验**                  |
-| factions 含 `relations[]`  | + **L2 引用一致性**                        |
-| 准备对外发布               | + **L3 lore 覆盖度** + **L4 真实跑一回合** |
+| 你写了什么                 | 至少要跑哪几层                                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 最小 world.yaml + WORLD.md | **L1 schema**（必做）                                                                                  |
+| 声明了 `worldData`         | + **L1b descriptor 校验**                                                                              |
+| 预置了 `plugin:*` 种子     | + **Ajv 逐条校验**：用目标插件的 `plugins/<id>/schemas/*.json` 校验每条种子记录（L1b 只验 descriptor 形状不验记录；不提前挡，建会话 preflight 才会炸） |
+| factions 含 `relations[]`  | + **L2 引用一致性**                                                                                    |
+| 世界写进仓库 `worlds/`     | + `node scripts/check-plugin-i18n.mjs`（world.yaml 展示字段 I18nText 门禁）                            |
+| 准备对外发布               | + **L3 lore 覆盖度** + **L4 真实跑一回合**                                                             |
 
 校验失败则修复后重新写入。L1b/L2/L3/L4 的现成脚本见 `references/world-validation.md`（必读）。
 

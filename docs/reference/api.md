@@ -1343,13 +1343,14 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 }
 ```
 
-| 字段                        | 类型          | 说明                                                                                                                                                                                                  |
-| --------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pluginId`                  | string        | 插件 ID(框架默认 handler 用 `framework` 占位即可)                                                                                                                                                     |
-| `action`                    | string(可选)  | RPC action 名,kebab-case。与 `runtimeId` 互斥                                                                                                                                                         |
-| `runtimeId`                 | string(可选)  | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` 互斥                                                                                                                                             |
-| `payload`                   | unknown       | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload`                                                                                                         |
-| `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即写入 `_jobs` 占位并返回 202，随后在后台执行入口 runtime 与 follower，避免 UI 等 prompt LLM 完成后才出现任务。 |
+| 字段                        | 类型          | 说明                                                                                                                                                                                                                                                                                                                                 |
+| --------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `pluginId`                  | string        | 插件 ID(框架默认 handler 用 `framework` 占位即可)                                                                                                                                                                                                                                                                                    |
+| `action`                    | string(可选)  | RPC action 名,kebab-case。与 `runtimeId` 互斥                                                                                                                                                                                                                                                                                        |
+| `runtimeId`                 | string(可选)  | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` 互斥                                                                                                                                                                                                                                                                            |
+| `payload`                   | unknown       | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload`                                                                                                                                                                                                                                        |
+| `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即写入 `_jobs` 占位并返回 202，随后在后台执行入口 runtime 与 follower，避免 UI 等 prompt LLM 完成后才出现任务。                                                                                                                                |
+| `retryFromTurnId`           | string(可选)  | 仅 runtime 级。带原回合上下文的重试：服务端加载该 turn 的持久化 `turn_results` 工件，把其中记录的 runtime 输出播种进本次执行的 completedResults——目标 runtime 的 `input.inject` / `needs` 按原回合叙事解析（裸 manual 触发这些解析为空）。种子只作上下文，不会被本次工件重复持久化。找不到该 turn 时 404（`retry-turn-not-found`）。 |
 
 **解析顺序(action 级):**
 
@@ -2590,11 +2591,12 @@ id: evt-002
 
 支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_runtime`。
 
-| `payload` 字段 | 适用 `type`       | 说明                                                                                     |
-| -------------- | ----------------- | ---------------------------------------------------------------------------------------- |
-| `content`      | `send_message`    | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                          |
-| `command`      | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                     |
-| `runtimeId`    | `retry_runtime`   | 可选。收窄重跑到指定 runtime（走 manual-trigger 路径）；缺省保持整回合重跑语义（M-07）。 |
+| `payload` 字段    | 适用 `type`       | 说明                                                                                                                                                                                                                                                                |
+| ----------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `content`         | `send_message`    | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                                                                                                     |
+| `command`         | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                                                                                                |
+| `runtimeId`       | `retry_runtime`   | 可选。收窄重跑到指定 runtime（走 manual-trigger 路径）；缺省保持整回合重跑语义（M-07）。                                                                                                                                                                            |
+| `retryFromTurnId` | `retry_runtime`   | 可选（需与 `runtimeId` 同用）。指定作为上下文种子的源回合：服务端加载该回合的 `turn_results` 工件播种执行，使被重试 runtime 的 `input.inject`/`needs` 按原回合叙事解析。缺省回退到最近一个 player-origin 工件。前端失败 chip 的重试按钮走这条路径（不删叙事消息）。 |
 
 **`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建时决定（显式 `plugins` 数组，或世界 manifest 播种的推荐集），`start_session` 只负责在注册表里激活它们。空集合会被 **400** 拒绝（`Session has no active plugins. …`），而不是回退到"激活全部已注册插件"——那个回退会把玩家从未选择的社区插件、以及互斥的两个叙事引擎同时拉进会话，并持久化到会话生命周期结束。
 

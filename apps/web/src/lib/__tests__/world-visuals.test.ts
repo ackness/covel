@@ -18,6 +18,9 @@ function makeWorld(overrides: Partial<WorldRecord>): WorldRecord {
 
 describe("world visuals", () => {
   it("matches bundled worlds by id", () => {
+    expect(worldVisualForId("emberback")?.image).toBe(
+      "/visuals/worlds/emberback.webp",
+    );
     expect(worldVisualForId("mistport")?.image).toBe(
       "/visuals/worlds/mistport.webp",
     );

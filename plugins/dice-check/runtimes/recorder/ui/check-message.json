@@ -1,0 +1,70 @@
+{
+  "id": "dice-check-results",
+  "dataSource": { "namespace": "message" },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "sm" },
+    "children": [
+      {
+        "component": "Card",
+        "props": { "variant": "subtle" },
+        "repeat": { "statePath": "/checks", "key": "seq" },
+        "children": [
+          {
+            "component": "Row",
+            "props": { "gap": "sm", "align": "center" },
+            "children": [
+              {
+                "component": "Text",
+                "props": { "content": "🎲", "size": "sm" }
+              },
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "action" },
+                  "weight": "bold",
+                  "size": "sm"
+                }
+              },
+              {
+                "component": "Badge",
+                "props": {
+                  "label": { "$item": "outcomeLabel" },
+                  "color": { "$item": "outcomeColor" }
+                }
+              },
+              {
+                "component": "Icon",
+                "visible": { "$item": "critical" },
+                "props": { "name": "sparkles", "size": "xs" }
+              }
+            ]
+          },
+          {
+            "component": "Row",
+            "props": { "gap": "sm", "align": "center" },
+            "children": [
+              {
+                "component": "Text",
+                "props": {
+                  "content": { "$item": "rollText" },
+                  "variant": "muted",
+                  "size": "xs"
+                }
+              },
+              {
+                "component": "Text",
+                "visible": { "$item": "attribute" },
+                "props": {
+                  "content": { "$item": "attribute" },
+                  "variant": "muted",
+                  "size": "xs"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

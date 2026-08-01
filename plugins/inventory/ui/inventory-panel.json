@@ -1,0 +1,336 @@
+{
+  "id": "inventory",
+  "group": "inventory",
+  "label": {
+    "zh": "行囊",
+    "en": "Inventory"
+  },
+  "shortLabel": {
+    "zh": "行囊",
+    "en": "Bag"
+  },
+  "icon": "backpack",
+  "groupOrder": 720,
+  "alwaysRender": true,
+  "dataSource": {
+    "namespace": "items"
+  },
+  "emptyState": {
+    "message": {
+      "zh": "行囊空空如也，故事里明确拿到的东西会自动记进来……",
+      "en": "Your bag is empty. Items you explicitly obtain in the story will appear here…"
+    }
+  },
+  "view": {
+    "component": "Stack",
+    "props": {
+      "gap": "sm"
+    },
+    "children": [
+      {
+        "component": "Accordion",
+        "children": [
+          {
+            "component": "Section",
+            "props": {
+              "title": {
+                "zh": "已装备",
+                "en": "Equipped"
+              },
+              "icon": "shield",
+              "defaultOpen": true
+            },
+            "children": [
+              {
+                "component": "Stack",
+                "props": {
+                  "gap": "xs"
+                },
+                "repeat": {
+                  "statePath": "/entries",
+                  "key": "key"
+                },
+                "children": [
+                  {
+                    "component": "Card",
+                    "visible": [
+                      {
+                        "$item": "value/name"
+                      },
+                      {
+                        "$item": "value/removed",
+                        "not": true
+                      },
+                      {
+                        "$item": "value/equipped"
+                      }
+                    ],
+                    "children": [
+                      {
+                        "component": "Row",
+                        "props": {
+                          "gap": "sm",
+                          "align": "center"
+                        },
+                        "children": [
+                          {
+                            "component": "Text",
+                            "props": {
+                              "content": {
+                                "$item": "value/name"
+                              },
+                              "weight": "bold",
+                              "size": "sm"
+                            }
+                          },
+                          {
+                            "component": "Badge",
+                            "props": {
+                              "label": {
+                                "$item": "value/quantity"
+                              },
+                              "color": "amber"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "component": "TagList",
+                        "props": {
+                          "tags": {
+                            "$item": "value/tags"
+                          }
+                        }
+                      },
+                      {
+                        "component": "Text",
+                        "visible": {
+                          "$item": "value/description"
+                        },
+                        "props": {
+                          "content": {
+                            "$item": "value/description"
+                          },
+                          "size": "xs",
+                          "variant": "muted"
+                        }
+                      },
+                      {
+                        "component": "Row",
+                        "props": {
+                          "gap": "xs"
+                        },
+                        "children": [
+                          {
+                            "component": "Button",
+                            "props": {
+                              "label": {
+                                "zh": "卸下",
+                                "en": "Unequip"
+                              },
+                              "variant": "ghost",
+                              "size": "compact"
+                            },
+                            "on": {
+                              "click": {
+                                "action": "invokePluginAction",
+                                "params": {
+                                  "action": "item-op",
+                                  "payload": {
+                                    "op": "unequip",
+                                    "itemId": {
+                                      "$item": "key"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "component": "Button",
+                            "props": {
+                              "label": {
+                                "zh": "丢弃",
+                                "en": "Drop"
+                              },
+                              "variant": "danger",
+                              "size": "compact"
+                            },
+                            "on": {
+                              "click": {
+                                "action": "invokePluginAction",
+                                "params": {
+                                  "action": "item-op",
+                                  "payload": {
+                                    "op": "drop",
+                                    "itemId": {
+                                      "$item": "key"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "component": "Section",
+            "props": {
+              "title": {
+                "zh": "背包",
+                "en": "Backpack"
+              },
+              "icon": "backpack",
+              "defaultOpen": true
+            },
+            "children": [
+              {
+                "component": "Stack",
+                "props": {
+                  "gap": "xs"
+                },
+                "repeat": {
+                  "statePath": "/entries",
+                  "key": "key"
+                },
+                "children": [
+                  {
+                    "component": "Card",
+                    "visible": [
+                      {
+                        "$item": "value/name"
+                      },
+                      {
+                        "$item": "value/removed",
+                        "not": true
+                      },
+                      {
+                        "$item": "value/equipped",
+                        "not": true
+                      }
+                    ],
+                    "children": [
+                      {
+                        "component": "Row",
+                        "props": {
+                          "gap": "sm",
+                          "align": "center"
+                        },
+                        "children": [
+                          {
+                            "component": "Text",
+                            "props": {
+                              "content": {
+                                "$item": "value/name"
+                              },
+                              "weight": "bold",
+                              "size": "sm"
+                            }
+                          },
+                          {
+                            "component": "Badge",
+                            "props": {
+                              "label": {
+                                "$item": "value/quantity"
+                              },
+                              "color": "amber"
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "component": "TagList",
+                        "props": {
+                          "tags": {
+                            "$item": "value/tags"
+                          }
+                        }
+                      },
+                      {
+                        "component": "Text",
+                        "visible": {
+                          "$item": "value/description"
+                        },
+                        "props": {
+                          "content": {
+                            "$item": "value/description"
+                          },
+                          "size": "xs",
+                          "variant": "muted"
+                        }
+                      },
+                      {
+                        "component": "Row",
+                        "props": {
+                          "gap": "xs"
+                        },
+                        "children": [
+                          {
+                            "component": "Button",
+                            "props": {
+                              "label": {
+                                "zh": "装备",
+                                "en": "Equip"
+                              },
+                              "variant": "ghost",
+                              "size": "compact"
+                            },
+                            "on": {
+                              "click": {
+                                "action": "invokePluginAction",
+                                "params": {
+                                  "action": "item-op",
+                                  "payload": {
+                                    "op": "equip",
+                                    "itemId": {
+                                      "$item": "key"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "component": "Button",
+                            "props": {
+                              "label": {
+                                "zh": "丢弃",
+                                "en": "Drop"
+                              },
+                              "variant": "danger",
+                              "size": "compact"
+                            },
+                            "on": {
+                              "click": {
+                                "action": "invokePluginAction",
+                                "params": {
+                                  "action": "item-op",
+                                  "payload": {
+                                    "op": "drop",
+                                    "itemId": {
+                                      "$item": "key"
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

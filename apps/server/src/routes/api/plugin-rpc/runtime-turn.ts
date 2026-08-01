@@ -7,7 +7,7 @@ import {
 } from "@covel/runtime";
 import type { DataStore, SessionRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 
 import {
   createInProcessSessionLock,
@@ -52,6 +52,12 @@ export interface RunManualTurnArgs {
   readonly turnId: string;
   readonly runtimeId: string;
   readonly payload?: unknown;
+  /**
+   * Retry seeding: recorded runtime results of the original turn, threaded
+   * into `TurnInput.manualTrigger.retrySeedResults` so the executor resolves
+   * the target's inject/needs against them.
+   */
+  readonly retrySeedResults?: readonly RuntimeResult[];
   readonly userSettings?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
@@ -262,6 +268,9 @@ export function createPluginRpcRuntimeTurnRunner(
         runtimeId: args.runtimeId,
         ...(args.payload !== undefined && args.payload !== null
           ? { payload: args.payload as Record<string, unknown> }
+          : {}),
+        ...(args.retrySeedResults && args.retrySeedResults.length > 0
+          ? { retrySeedResults: args.retrySeedResults }
           : {}),
       },
       ...(ctx.session.runtimeModelOverrides

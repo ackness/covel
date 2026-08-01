@@ -1,0 +1,47 @@
+[
+  {
+    "schemaVersion": 1,
+    "characterId": "qin-jiulian",
+    "displayName": "秦九镰",
+    "avatar": {
+      "id": "7befd0b1a718abfe3a726ba9c5a10f699f7a9c335362656369cbc847403e037d",
+      "mime": "image/png",
+      "size": 2586581
+    },
+    "sprite": {
+      "id": "7befd0b1a718abfe3a726ba9c5a10f699f7a9c335362656369cbc847403e037d",
+      "mime": "image/png",
+      "size": 2586581
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "characterId": "wen-ci",
+    "displayName": "温辞",
+    "avatar": {
+      "id": "80d08e55dfaf17bf4e0900c80eebef84f2b4e0fec8d43458889223552945d93c",
+      "mime": "image/png",
+      "size": 2525142
+    },
+    "sprite": {
+      "id": "80d08e55dfaf17bf4e0900c80eebef84f2b4e0fec8d43458889223552945d93c",
+      "mime": "image/png",
+      "size": 2525142
+    }
+  },
+  {
+    "schemaVersion": 1,
+    "characterId": "ya-xian",
+    "displayName": "哑弦",
+    "avatar": {
+      "id": "97fe28710c5798475206aa907ab7c43ef2ef9ae9923d6f3cd4637537e7bd23a3",
+      "mime": "image/png",
+      "size": 2390354
+    },
+    "sprite": {
+      "id": "97fe28710c5798475206aa907ab7c43ef2ef9ae9923d6f3cd4637537e7bd23a3",
+      "mime": "image/png",
+      "size": 2390354
+    }
+  }
+]

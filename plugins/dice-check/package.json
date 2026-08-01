@@ -1,0 +1,13 @@
+{
+  "name": "@covel/plugin-dice-check",
+  "version": "0.0.24",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}

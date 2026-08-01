@@ -1,0 +1,103 @@
+{
+  "id": "affinity",
+  "group": "affinity",
+  "label": { "zh": "好感度", "en": "Affinity" },
+  "shortLabel": { "zh": "好感", "en": "Affinity" },
+  "icon": "heart",
+  "groupOrder": 710,
+  "dataSource": { "namespace": "affinity" },
+  "emptyState": {
+    "message": {
+      "zh": "还没有好感记录，与角色互动后会自动出现……",
+      "en": "No affinity records yet. They will appear as you interact with characters…"
+    }
+  },
+  "view": {
+    "component": "Stack",
+    "props": { "gap": "sm" },
+    "children": [
+      {
+        "component": "Text",
+        "props": {
+          "content": {
+            "zh": "分数范围 -100..100，进度条中点为中立。",
+            "en": "Scores range -100..100; the bar's midpoint is neutral."
+          },
+          "variant": "muted",
+          "size": "xs"
+        }
+      },
+      {
+        "component": "CardList",
+        "repeat": { "statePath": "/entries", "key": "key" },
+        "children": [
+          {
+            "component": "Card",
+            "children": [
+              {
+                "component": "Row",
+                "props": { "gap": "sm", "align": "center" },
+                "children": [
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/name" },
+                      "weight": "bold",
+                      "size": "sm"
+                    }
+                  },
+                  {
+                    "component": "Badge",
+                    "visible": { "$item": "value/tierLabel" },
+                    "props": {
+                      "label": { "$item": "value/tierLabel" },
+                      "color": { "$item": "value/tierColor" }
+                    }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/score" },
+                      "variant": "muted",
+                      "size": "xs"
+                    }
+                  }
+                ]
+              },
+              {
+                "component": "Progress",
+                "visible": { "$item": "value/scoreBar" },
+                "props": {
+                  "value": { "$item": "value/scoreBar" },
+                  "max": 200
+                }
+              },
+              {
+                "component": "Row",
+                "visible": { "$item": "value/lastReason" },
+                "props": { "gap": "xs", "align": "center" },
+                "children": [
+                  {
+                    "component": "Badge",
+                    "props": {
+                      "label": { "$item": "value/lastDelta" },
+                      "color": { "$item": "value/lastDeltaColor" }
+                    }
+                  },
+                  {
+                    "component": "Text",
+                    "props": {
+                      "content": { "$item": "value/lastReason" },
+                      "variant": "muted",
+                      "size": "xs"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

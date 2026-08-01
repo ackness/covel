@@ -1,0 +1,36 @@
+# core-quest 种子（to: plugin:core-quest/quests，key: id）
+- id: unmarked-mooring
+  name: 未标注的泊点
+  description: 玄负为一座图上没有的黑色尖塔垂首停驻。赶在司辰阁封锚之前挂链下降，查明这座尖塔是什么、玄负为何为它停下，并带回能说明真相的证物。委托来自悬钩堂司单人秦九镰。
+  status: active
+  giver: 秦九镰
+  reward: 鳞钱六十，并在悬钩堂正式挂名
+  objectives:
+    - text: 赶在封锚前备齐装具，完成下降准备
+      done: false
+    - text: 缒链下降，进入黑色尖塔
+      done: false
+    - text: 带回能解释玄负停驻的证物
+      done: false
+- id: cold-patch-survey
+  name: 尾甲滩寒斑测绘
+  description: 司辰阁少卿温辞张出告示，悬赏测绘尾甲滩新现寒斑的边界，逐块记录甲温。报酬公道，只是谁都看得出，阁里嘴上的「季节性凉甲」和这份悬赏的急切对不上。
+  status: active
+  giver: 温辞
+  reward: 鳞钱二十五，外加司辰阁的一份人情
+  objectives:
+    - text: 走完尾甲滩三处寒斑，记录边界与甲温
+      done: false
+    - text: 把测绘结果亲手交给温辞
+      done: false
+- id: sealed-parcel
+  name: 一只不过秤的匣子
+  description: 檐下市的哑弦托你把一只封蜡小匣送到尾甲滩冷鳞垛的接头人手里——不过司辰阁的秤，不开封，不问里面是什么。他拨了一声弦，意思是：这算替你师父还的人情。谁信呢。
+  status: active
+  giver: 哑弦
+  reward: 鳞钱三十，或一条关于白汐旧图上记号的线索
+  objectives:
+    - text: 避开锚卡的盘查，把匣子带到冷鳞垛
+      done: false
+    - text: 原封不动交给接头人
+      done: false
