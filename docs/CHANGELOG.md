@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.24] - 2026-08-01
+
+### Added
+
+- **Four RPG gameplay plugins: `dice-check`, `core-quest`, `affinity`, `inventory`.** The bundled set covered knowledge (codex), relationships (npc-graph), and guidance (guide), but nothing made an RPG _play_ like one: success was narrative fiat, goals lived nowhere, items evaporated, and feelings were prose-only. `dice-check` is a zero-LLM pair — a pre-turn roller injects a pre-rolled d20 pool + check rules into the narrative engines, and an event recorder persists the receipts the narration sends back (🎲 message block + right-panel log). The receipt event is **batched by contract** (`check.resolved` carries a `checks[]` array): `emit-event` dedupes by topic per turn, so per-check emissions would silently drop everything after the first. The other three are post-turn extraction agents on the codex template (dual-engine narrative inject + own-state inject, `needs: narrative-engine`), each with a name-first batch tool, world-importable `dataSchemas`, a right panel, and a per-turn message block. Inventory additionally ships a player-side `item-op` RPC — equip / unequip / drop buttons on the panel; _using_ an item deliberately stays in the story loop, where its consequences belong.
+- **Emberback (鳌背孤城·烬海纪), a third flagship world built for the RPG suite.** The last great turtle carries the last city across an ember sea — and halts, without warning, above an uncharted sunken spire. Five 0-5 check attributes feed dice modifiers; worldData seeds 3 quests, 6 items (scale-coin currency included), and 3 NPC affinity records, all schema-validated against the plugins and name-aligned with the lore; plus a portrait-backed 3-NPC main cast, 6 living-world rules, and 2 world memory blocks (`descent_log`, `turtle_state`).
+- **LLM concurrency gate.** A post-turn stage that fans out seven agents used to fire seven simultaneous LLM calls; slower providers congested until every call timed out. A process-wide FIFO semaphore (`COVEL_LLM_MAX_CONCURRENT`, default 4, `0` disables) caps in-flight calls, and queue waits extend deadlines end-to-end — through the retry loop _and_ the agent tool loop — so waiting for a slot is the framework's cost, not the runtime's budget. Observed live: a tracker that burned its whole 2-minute budget queueing now completes in seconds.
+- **Scoped runtime retry replays the original turn's context.** A bare manual trigger resolves `input.inject` / `needs` empty, so retrying a failed post-turn agent used to burn tokens extracting from nothing. `retry_runtime` + `retryFromTurnId` (and the plugin-rpc equivalent) now seed the execution with the source turn's persisted runtime outputs. Seeds are context, not products: dropped before the event fan-out (they would replay the source turn's `scene.set` / receipts / generation requests) and never re-persisted. The execution strip's failed-chip ↻ button uses this path and keeps the turn's narrative intact.
+
+### Fixed
+
+- **Returned agent failures now always emit `runtime.failed`.** Four failure paths (deadline without output, `requireToolUse` unmet, tool-failed, schema short-circuits) returned a failed result without any terminal event — the DB recorded the failure while the execution strip spun forever. Emission now lives in the single funnel every returned failure routes through.
+- **Chat auto-scroll can no longer shove the page off-screen.** `scrollIntoView` on the bottom sentinel scrolls every scrollable ancestor, including the document; any transient page overflow while a session loaded left the whole app shell scrolled out of the viewport with no way back. All follow paths now scroll the tracked chat viewport directly.
+
+### Removed
+
+- **`player-identity` is archived** (`plugins/_archive/`, not loaded). Voice/persona moved to the character card long ago — set at creation via world `characterAttributes`, injected as `{{ player.character }}` — leaving the plugin UI-less, preset-less, and resolving an always-empty persona. The `persona-provider` capability hook and shared types stay for third-party providers.
+
 ## [0.0.23] - 2026-07-28
 
 ### Added
