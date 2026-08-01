@@ -2,6 +2,8 @@
 
 Schema 使用 Zod strict 模式验证，不允许未定义字段。所有文本字段支持 I18nText（`string` 或 `Record<string, string>`）。
 
+> **门禁注意**：I18nText 虽接受裸 `string`，但仓库的 `check-plugin-i18n` 门禁要求 `worlds/*/world.yaml` 的展示字段（`name`/`summary`/`characterAttributes[].name`/`.description` 等）必须是 `{ zh: …, en: … }` 对象——裸中文会挂 `pnpm check:plugins`。
+
 ## 根字段
 
 | 字段                      | 类型                  | 必需 | 约束                                                    |
@@ -79,7 +81,7 @@ pluginPolicy:
   preset: traditional-story
   preferTags: [mode:traditional-story, role:codex, role:retrieval, role:world-rules]
   avoidTags: [mode:dialogue]
-recommendedPlugins: [player-identity] # preset 之外额外想要的
+recommendedPlugins: [affinity] # preset 之外额外想要的
 ```
 
 对话 / 视觉小说模式（参考 `worlds/haruka-academy`）：

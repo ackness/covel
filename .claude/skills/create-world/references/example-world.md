@@ -21,7 +21,7 @@ pluginPolicy:
   preferTags: [mode:traditional-story, role:codex, role:world-rules]
   avoidTags: [mode:dialogue]
 recommendedPlugins:
-  - player-identity
+  - affinity
 
 dimensions:
   geography:
