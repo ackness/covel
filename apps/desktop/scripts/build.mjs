@@ -331,7 +331,14 @@ for (const entry of sideCarResources) {
   }
   fs.cpSync(src, dest, {
     recursive: true,
-    filter: (source) => !EXCLUDE_DIRS.has(path.basename(source)),
+    filter: (source) => {
+      const base = path.basename(source);
+      if (EXCLUDE_DIRS.has(base)) return false;
+      // Top-level `_` dirs are non-content conventions (plugins/_archive,
+      // worlds/_archive): never loaded at runtime, dead weight in the app.
+      if (base.startsWith("_") && path.dirname(source) === src) return false;
+      return true;
+    },
   });
 }
 console.log("  ✓ plugins/prompts/worlds copied (node_modules/dist excluded)");
