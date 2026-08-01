@@ -68,7 +68,9 @@ function mustHaveBundledPlugins(resourcesDir) {
   }
   const pluginDirs = fs
     .readdirSync(pluginsDir, { withFileTypes: true })
-    .filter((e) => e.isDirectory());
+    // `_`-prefixed dirs (plugins/_archive) are excluded from staging; tolerate
+    // one slipping through an older build rather than failing the release.
+    .filter((e) => e.isDirectory() && !e.name.startsWith("_"));
   if (pluginDirs.length === 0) {
     throw new Error(`No bundled plugins present under ${pluginsDir} `);
   }
