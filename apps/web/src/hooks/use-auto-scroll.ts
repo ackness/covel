@@ -8,6 +8,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * pinned. Once the user scrolls up, following stops and `showJumpButton`
  * flips true so the UI can offer a "jump to latest" affordance.
  *
+ * All scrolling is container-scoped (`viewport.scrollTo`), never
+ * `scrollIntoView` — the latter also scrolls the document and can shove the
+ * full-height app shell off-screen.
+ *
  * High-frequency delta updates use `behavior: "auto"` to avoid the jittery
  * smooth-scroll animation; the explicit jump action uses `"smooth"`.
  */
@@ -17,8 +21,6 @@ const DEFAULT_THRESHOLD_PX = 80;
 export interface AutoScrollResult {
   /** Attach to the scrollable viewport element. */
   scrollRef: (node: HTMLElement | null) => void;
-  /** Sentinel placed at the very bottom of the content. */
-  bottomRef: React.RefObject<HTMLDivElement | null>;
   /** True when the user has scrolled away from the bottom. */
   showJumpButton: boolean;
   /** Smoothly scroll to the bottom and re-enable following. */
@@ -35,10 +37,20 @@ export function useAutoScroll(
 ): AutoScrollResult {
   const thresholdPx = options?.thresholdPx ?? DEFAULT_THRESHOLD_PX;
   const viewportRef = useRef<HTMLElement | null>(null);
-  const bottomRef = useRef<HTMLDivElement | null>(null);
   // Default to pinned: a fresh session should follow the stream.
   const isPinnedRef = useRef(true);
   const [showJumpButton, setShowJumpButton] = useState(false);
+
+  // Scroll ONLY the tracked viewport. `scrollIntoView` on a bottom sentinel
+  // scrolls every scrollable ancestor — including the document — so any
+  // transient page overflow (layout settling, a pending interaction form)
+  // shoved the whole 100vh app shell off-screen and nothing ever scrolled it
+  // back. Container-scoped scrolling cannot touch ancestors by construction.
+  const scrollViewportToBottom = useCallback((behavior: ScrollBehavior) => {
+    const el = viewportRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  }, []);
 
   const computeIsAtBottom = useCallback(
     (el: HTMLElement): boolean => {
@@ -77,17 +89,15 @@ export function useAutoScroll(
     const prefersReducedMotion =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    bottomRef.current?.scrollIntoView({
-      behavior: prefersReducedMotion ? "auto" : "smooth",
-    });
-  }, []);
+    scrollViewportToBottom(prefersReducedMotion ? "auto" : "smooth");
+  }, [scrollViewportToBottom]);
 
   // Follow new content only while pinned. Use "auto" during streaming so
   // rapid deltas don't queue competing smooth-scroll animations.
   useEffect(() => {
     if (!isPinnedRef.current) return;
-    bottomRef.current?.scrollIntoView({ behavior: "auto" });
-  }, [dep]);
+    scrollViewportToBottom("auto");
+  }, [dep, scrollViewportToBottom]);
 
   // Streaming text lives outside React session state. Follow it imperatively so
   // token arrival does not re-render and reconcile the complete message history.
@@ -96,10 +106,10 @@ export function useAutoScroll(
     if (!subscribe) return;
     return subscribe(() => {
       if (isPinnedRef.current) {
-        bottomRef.current?.scrollIntoView({ behavior: "auto" });
+        scrollViewportToBottom("auto");
       }
     });
-  }, [options?.subscribeToStreaming]);
+  }, [options?.subscribeToStreaming, scrollViewportToBottom]);
 
-  return { scrollRef, bottomRef, showJumpButton, jumpToBottom };
+  return { scrollRef, showJumpButton, jumpToBottom };
 }
