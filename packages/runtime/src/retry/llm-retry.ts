@@ -101,6 +101,14 @@ export interface CallLLMWithRetryParams {
   readonly responseFormat?: LLMResponseFormat;
   readonly policy: RetryPolicy;
   /**
+   * Called with the queue wait (ms) each time an attempt had to wait for an
+   * LLM concurrency slot. The loop already extends its OWN deadline by the
+   * wait; callers holding an enclosing deadline (the agent tool loop) use
+   * this to extend theirs too — otherwise queue time still burns the loop
+   * budget and a late step dies with its calls never attempted.
+   */
+  readonly onQueueWait?: (waitedMs: number) => void;
+  /**
    * Absolute runtime deadline (ms since epoch). The retry loop aborts once
    * this is reached even if retries remain.
    */
@@ -146,6 +154,7 @@ export async function callLLMWithRetry(
     // queued extends the deadline — it is the gate's cost, not the runtime's.
     const slot = await acquireLLMSlot();
     effectiveDeadline += slot.waitedMs;
+    if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
 
     const budget = computeAttemptBudget(policy, effectiveDeadline);
     const timeoutSignal = AbortSignal.timeout(budget);
@@ -275,6 +284,7 @@ export async function streamLLMWithRetry(
     // queued extends the deadline — it is the gate's cost, not the runtime's.
     const slot = await acquireLLMSlot();
     effectiveDeadline += slot.waitedMs;
+    if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
 
     const budget = computeAttemptBudget(policy, effectiveDeadline);
     // Compose three abort sources into one per-attempt signal:

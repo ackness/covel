@@ -142,7 +142,12 @@ export async function runAgentToolLoop({
   const emittedEvents: EmittedEvent[] = [];
   let steps = 0;
 
-  const deadline = Date.now() + timeoutMs;
+  // Mutable: LLM-slot queue waits extend it (via onQueueWait below) so
+  // waiting for a concurrency slot doesn't burn the loop's own budget.
+  // Without this a multi-step agent that queued for minutes reaches its
+  // final "produce output" step with the loop deadline already spent and
+  // dies with "timed out while waiting for final output".
+  let deadline = Date.now() + timeoutMs;
   let stoppedWithResponse = false;
 
   // All HOW-to-run decisions (tool surface, response format, model override,
@@ -260,6 +265,11 @@ export async function runAgentToolLoop({
       responseFormat,
       retryPolicy,
       deadline,
+      // Queue time at the LLM concurrency gate is the framework's cost:
+      // shift the loop deadline by it so later steps keep their budget.
+      onQueueWait: (waitedMs) => {
+        deadline += waitedMs;
+      },
       useStreaming,
       reportRetry,
       onStreamDelta: delta.forward,

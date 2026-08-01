@@ -278,6 +278,38 @@ describe("perturbMessages", () => {
 // ── callLLMWithRetry ────────────────────────────────────────────────
 
 describe("callLLMWithRetry", () => {
+  it("reports LLM-slot queue waits via onQueueWait", async () => {
+    // Arrange — cap 1 with the slot held, so the call must queue.
+    const { setLLMSlotCapForTests, acquireLLMSlot } =
+      await import("../src/retry/llm-slots.js");
+    setLLMSlotCapForTests(1);
+    const holder = await acquireLLMSlot();
+    setTimeout(() => holder.release(), 40);
+    const llm = createScriptedLLM([
+      { kind: "ok", response: okResponse("hello") },
+    ]);
+    const policy = buildRetryPolicy({ runtimeTimeoutMs: 10_000 });
+    const waits: number[] = [];
+
+    // Act
+    try {
+      const res = await callLLMWithRetry({
+        llm,
+        messages: baseMessages,
+        policy,
+        deadline: Date.now() + 10_000,
+        onQueueWait: (ms) => waits.push(ms),
+      });
+
+      // Assert — the queued call succeeded and reported its wait upward.
+      expect(res.content).toBe("hello");
+      expect(waits).toHaveLength(1);
+      expect(waits[0]).toBeGreaterThanOrEqual(30);
+    } finally {
+      setLLMSlotCapForTests(undefined);
+    }
+  });
+
   it("returns the response on the first successful attempt", async () => {
     const llm = createScriptedLLM([
       { kind: "ok", response: okResponse("hello") },
