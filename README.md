@@ -19,8 +19,9 @@ Covel is an AI RPG where the world keeps running between your turns: NPCs track 
 
 - 🎭 **Stage mode** — a full-screen visual novel: scene backdrops, character sprites, typewriter dialog, and choice overlays. Backdrops for brand-new locations are generated on demand, mid-session.
 - 🤖 **Multi-agent turns** — while the narrator writes the scene, other agents extract NPC relationships, grow the world codex, pick the on-stage cast, and maintain long-range memory — in parallel, every turn.
-- 🧩 **Everything is a plugin** — 23 bundled agents. A plugin is a `PLUGIN.md`: YAML frontmatter for triggers/tools/events, markdown body as the agent's prompt.
-- 🌍 **Two flagship worlds** — a dark-fantasy mystery and a visual-novel school romance, both hand-built and ready to fork.
+- 🎲 **RPG mechanics built in** — pre-rolled dice checks with visible receipts, an auto-tracked quest log, a player-managed inventory, and per-NPC affinity meters. All optional plugins; worlds can seed quests, gear, and starting affinity.
+- 🧩 **Everything is a plugin** — 26 bundled agents. A plugin is a `PLUGIN.md`: YAML frontmatter for triggers/tools/events, markdown body as the agent's prompt.
+- 🌍 **Three flagship worlds** — a dark-fantasy mystery, a visual-novel school romance, and a post-apocalyptic RPG expedition, all hand-built and ready to fork.
 - 🔌 **Bring your own model** — OpenAI / Anthropic / DeepSeek / Qwen model slots. Local-first: SQLite on disk, API keys never persisted server-side.
 
 ## Two ways to play
@@ -63,6 +64,7 @@ Open <http://localhost:5173> — debug tooling lives at `/debug`. PostgreSQL, in
 
 - **Mistport Chronicles** (雾港·裂潮纪) — dark-fantasy mystery in traditional-story mode. A fog-shrouded port where every ebb bares different ruins; a guildmaster vanishes and four powers race for a key to what sleeps in the deep. Bilingual, with a seed cast and investigation-flavored memory.
 - **Haruka Academy** (遥风学园) — school romance in stage mode. Clubs, exams, rumors, and quiet crushes at a seaside high school, told through a cast of eight — portraits and scene art included.
+- **Emberback** (鳌背孤城·烬海纪) — post-apocalyptic RPG expedition in traditional-story mode. The last great turtle carries the last city across an ember sea — and halts, without warning, above an uncharted sunken spire. The showcase for the RPG suite: seeded quests, starting gear, NPC affinity, and five check attributes wired into the dice system, with a portrait-backed main cast.
 
 ## Create your own
 
