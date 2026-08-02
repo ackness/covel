@@ -26,12 +26,18 @@ Covel is an AI RPG where the world keeps running between your turns: NPCs track 
 
 ## Two ways to play
 
-|                                 Stage mode (visual novel)                                  |                                     Story mode (text)                                      |
-| :----------------------------------------------------------------------------------------: | :----------------------------------------------------------------------------------------: |
-|                   ![Stage mode](./.assets/images/readme/stage-mode.png)                    |                    ![Story mode](./.assets/images/readme/text-mode.png)                    |
-| Backdrops, sprites, and typewriter dialog; scene art resolves and generates as you explore | Classic narrated turns with inline choices, forms, and the per-turn agent timeline visible |
+|                                 Stage mode (visual novel)                                  |                                      Story mode (text)                                       |
+| :----------------------------------------------------------------------------------------: | :------------------------------------------------------------------------------------------: |
+|                   ![Stage mode](./.assets/images/readme/stage-mode.png)                    |                     ![Story mode](./.assets/images/readme/text-mode.png)                     |
+| Backdrops, sprites, and typewriter dialog; scene art resolves and generates as you explore | Classic narrated turns with suggested actions, inline forms, and the per-turn agent timeline |
 
 Worlds declare their default (`defaultViewMode: stage`); you can switch any time in-session.
+
+## Every roll leaves a receipt
+
+![A dice check, quest progress, and a gear change posting into the turn, with the quest log open alongside](./.assets/images/readme/rpg-systems.png)
+
+A risky action resolves against dice rolled **before** the narrator writes, so the outcome cannot be retconned to fit the prose — and the arithmetic posts inline: `19 + 2 = 21 vs DC 16`. Quest progress, gear changes, and affinity shifts land in the turn the same way, then accumulate into their own panels. Dice, quests, inventory, and affinity are four separate plugins; a world seeds the opening quests, starting gear, and initial affinity, or ships without any of them.
 
 ## What the agents leave behind
 
