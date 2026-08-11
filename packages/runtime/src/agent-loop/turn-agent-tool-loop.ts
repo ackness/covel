@@ -189,7 +189,7 @@ export async function runAgentToolLoop({
     const cause =
       info.error instanceof Error ? info.error.message : String(info.error);
     console.warn(
-      `[runtime-retry] ${manifest.name} attempt=${info.attempt} reason=${info.reason} cause=${cause.slice(0, 200)}`,
+      `[covel:warn] [runtime-retry] ${manifest.name} attempt=${info.attempt} reason=${info.reason} cause=${cause.slice(0, 200)}`,
     );
   };
 
@@ -609,7 +609,7 @@ export async function runAgentToolLoop({
       if (noToolCallCorrections === 0) {
         noToolCallCorrections++;
         console.warn(
-          `[runtime-retry] ${manifest.name} attempt=${noToolCallCorrections} reason=no-tool-call cause=finished without calling any tool`,
+          `[covel:warn] [runtime-retry] ${manifest.name} attempt=${noToolCallCorrections} reason=no-tool-call cause=finished without calling any tool`,
         );
         messages.push({
           role: "system",
@@ -620,7 +620,7 @@ export async function runAgentToolLoop({
         continue;
       }
       console.warn(
-        `[runtime-retry] ${manifest.name} reason=no-tool-call cause=still no business tool call after correction; releasing`,
+        `[covel:warn] [runtime-retry] ${manifest.name} reason=no-tool-call cause=still no business tool call after correction; releasing`,
       );
       requiredToolUseUnmet = true;
     }

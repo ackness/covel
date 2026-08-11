@@ -172,6 +172,9 @@ describe("world-init guard", () => {
     // Did NOT fall through to cross-session reuse.
     expect(result.reusedFrom).toBeUndefined();
     expect(result.schemaCount).toBe(2);
+    expect(result.worldSchema).toEqual({
+      "character-attributes": { version: 1, attributes: declared },
+    });
 
     const written = await store.listPluginData(
       "sess-new",

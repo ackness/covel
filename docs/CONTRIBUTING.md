@@ -77,7 +77,7 @@ pnpm e2e                                   # Playwright 端到端
 Covel 的发布由 Git tag 驱动。
 
 1. 所有改动合并到 `main` 且 CI 通过
-2. 更新 [`CHANGELOG.md`](./CHANGELOG.md) 顶部的 `[Unreleased]` 段落，迁移到新版本号
+2. 在 [`CHANGELOG.md`](./CHANGELOG.md) 顶部新增 `## [<version>] - YYYY-MM-DD` 版本段落
 3. 统一版本号：
 
    ```bash
@@ -90,8 +90,9 @@ Covel 的发布由 Git tag 驱动。
    ```bash
    pnpm release:preflight
    git commit -am "chore(release): v0.0.4"
-   git tag v0.0.4
-   git push origin main --tags
+   git tag -a v0.0.4 -m "Covel v0.0.4"
+   git push origin main
+   git push origin v0.0.4
    ```
 
 5. [`.github/workflows/release.yml`](../.github/workflows/release.yml) 将在 `v*` tag 推送时自动：

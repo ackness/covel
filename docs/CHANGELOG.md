@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file. Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.25] - 2026-08-11
+
+This release hardens the complete default game flow, from choosing a world and running setup plugins through narrative execution, post-turn plugins, persistence, and client recovery.
+
+### Added
+
+- **Transaction-scoped execution journals.** Runtime messages and domain proposals are buffered until the turn finalizer commits, so a failed commit leaves no partial player message, interaction, or plugin write behind.
+- **Framework audit remediation records and logging self-checks.** The P1/P2 data-flow plans, architecture diagrams, server log-tee coverage, and desktop logging self-check make the new contracts explicit and diagnosable.
+
+### Changed
+
+- **Setup runtimes pass world schemas through explicit same-execution outputs.** Character creation no longer depends on reading uncommitted world-init state from the store; downstream setup runtimes consume the scheduler-visible result instead.
+- **Post-turn memory uses authoritative committed context.** The executor refreshes session context after commit, resolves localized character labels, and applies deterministic merge rules so the current turn's form and character values reach memory intact.
+- **Quest updates preserve stable identities.** `core-quest` assigns durable ids and semantically merges repeated extraction results, preventing duplicate quests and accidental state resets across turns.
+
+### Fixed
+
+- **Local session bootstrap now mirrors the complete server contract.** Active plugins, locale, model overrides, and lore overrides are synchronized before the session becomes active, eliminating first-turn configuration races.
+- **Turn commit and SSE failure handling are atomic end to end.** Interaction-record failures roll back the entire finalize transaction; failed terminal events clear optimistic streamed text and leave the client in a settled state.
+- **Action, form, and plugin-RPC boundaries reject malformed or conflicting input.** Discriminated action parsing validates identifiers, locales, models, submitted field types and options; form submissions are transactional and idempotent; plugin RPC actions serialize on the session lock.
+- **World-init writes follow the runtime proposal contract.** Guards inspect the execution write buffer, batch writes respect schema availability, and setup no longer relies on direct store mutation.
+- **Server and desktop logs retain complete lines reliably.** Log tee writes, shutdown behavior, and desktop log configuration now preserve diagnostics across the supported launch paths.
+
 ## [0.0.24] - 2026-08-01
 
 ### Added

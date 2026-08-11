@@ -78,11 +78,10 @@ async function persistPrepRuntimeBindings(
     await api.updateSession(sessionId, {
       runtimeModelOverrides: overrides,
     });
+    api.clearPrepRuntimeBindings(worldId);
   } catch {
-    // Non-fatal: overrides fall back to manifest defaults when missing.
+    // Non-fatal: keep the Prep bindings so a later retry can persist them.
   }
-
-  api.clearPrepRuntimeBindings(worldId);
 }
 
 export async function startGameSession({
@@ -102,8 +101,17 @@ export async function startGameSession({
       plugins,
       i18n.language,
     );
-    dispatch({ type: "SET_SESSION", session });
+
+    // Local mode creates the browser record first. Establish the authoritative
+    // server mirror before publishing an executable session or issuing any
+    // server-backed hydration / model-binding calls. Remote mode is already
+    // authoritative and implements syncToServer as a no-op.
+    await ds.syncToServer(session.id);
+    api.markServerAck();
+    await persistPrepRuntimeBindings(world.id, session.id);
+
     setActivePluginDataSession(session.id);
+    dispatch({ type: "SET_SESSION", session });
 
     await hydrateInitialSnapshot(session.id, sessionIdRef, dispatch);
 
@@ -112,10 +120,6 @@ export async function startGameSession({
     } catch {
       // Right-panel hydration will retry when its own ui-spec loader runs.
     }
-
-    await persistPrepRuntimeBindings(world.id, session.id);
-    await ds.syncToServer(session.id);
-    api.markServerAck();
   } catch (err) {
     dispatch({
       type: "SET_EXECUTION_ERROR",

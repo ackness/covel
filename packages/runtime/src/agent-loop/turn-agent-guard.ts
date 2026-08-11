@@ -5,6 +5,7 @@ import type {
   NestedTurnResult,
   RecursiveCallDelta,
 } from "@covel/shared";
+import { attachExecutionJournal } from "../execution-journal.js";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { withPendingProposals } from "@covel/tools";
@@ -311,26 +312,6 @@ export async function executeAgentGuard({
         timestamp: new Date().toISOString(),
       };
 
-      if (
-        deps.store &&
-        typeof guardOutput.narrativeOutput === "string" &&
-        guardOutput.narrativeOutput
-      ) {
-        await deps.store.appendTurnMessage({
-          id: crypto.randomUUID(),
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          sourceType: "runtime",
-          sourcePluginId: manifest.pluginId,
-          sourceRuntimeId: manifest.name,
-          role: "assistant",
-          name: manifest.name,
-          content: guardOutput.narrativeOutput as string,
-          order: stageMessageOrder(getRuntimeSpec(manifest).stage),
-          createdAt: new Date().toISOString(),
-        });
-      }
-
       // Guard skipped: emit completed (without ever emitting started) so frontend
       // shows "skipped" instead of an infinite spinner.
       try {
@@ -358,7 +339,7 @@ export async function executeAgentGuard({
       );
 
       // PostRuntime hook — guard-skipped path
-      return runPostRuntimeHook(
+      const postResult = await runPostRuntimeHook(
         {
           pipeline: hookPipeline,
           sessionId: input.sessionId,
@@ -370,6 +351,30 @@ export async function executeAgentGuard({
         },
         result,
       );
+      const postOutput = postResult.output as Record<string, unknown> | null;
+      if (
+        deps.store &&
+        postResult.status === "skipped" &&
+        typeof postOutput?.narrativeOutput === "string" &&
+        postOutput.narrativeOutput
+      ) {
+        attachExecutionJournal(postResult, [
+          {
+            id: crypto.randomUUID(),
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            sourceType: "runtime",
+            sourcePluginId: manifest.pluginId,
+            sourceRuntimeId: manifest.name,
+            role: "assistant",
+            name: manifest.name,
+            content: postOutput.narrativeOutput,
+            order: stageMessageOrder(getRuntimeSpec(manifest).stage),
+            createdAt: new Date().toISOString(),
+          },
+        ]);
+      }
+      return postResult;
     }
   }
   return undefined;

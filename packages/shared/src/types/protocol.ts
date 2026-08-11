@@ -93,6 +93,10 @@ export interface ExecutionCompletedPayload {
   readonly runtimeCount: number;
   readonly resultCount: number;
   readonly durationMs: number;
+  /** Whether every proposal and execution-journal row reached durable storage. */
+  readonly committed: boolean;
+  /** Commit failure detail. Present when `committed` is false. */
+  readonly error?: string;
   /**
    * Set when the turn was aborted before producing results (e.g. a
    * TurnStart-aborting hook such as cost-gate's hard budget cap). The client

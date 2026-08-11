@@ -58,10 +58,18 @@ function makeEntry(loaded: LoadedRuntime): PluginRegistryEntry {
 }
 
 /** Drain the actions SSE stream, returning the parsed envelopes. */
-async function drainActionStream(
-  res: Response,
-): Promise<Array<{ type: string; traceId?: string }>> {
-  const envelopes: Array<{ type: string; traceId?: string }> = [];
+async function drainActionStream(res: Response): Promise<
+  Array<{
+    type: string;
+    traceId?: string;
+    payload?: Record<string, unknown>;
+  }>
+> {
+  const envelopes: Array<{
+    type: string;
+    traceId?: string;
+    payload?: Record<string, unknown>;
+  }> = [];
   if (!res.body) return envelopes;
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -249,9 +257,10 @@ describe("POST /api/actions — turn accounting follows the commit outcome", () 
     // `{ committed: false }` without throwing, which is the proposal-failure
     // path (a thrown store error would instead abort the whole turn as
     // `error.occurred`).
+    let vetoEnabled = true;
     const vetoPipeline = {
       run: async (event: string) =>
-        event === "PreStateCommit"
+        vetoEnabled && event === "PreStateCommit"
           ? { action: "abort", reason: "injected commit veto" }
           : { action: "continue" },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -292,6 +301,9 @@ describe("POST /api/actions — turn accounting follows the commit outcome", () 
     expect(res.status).toBe(200);
     const envelopes = await drainActionStream(res);
     expect(envelopes.map((e) => e.type)).toContain("proposal.failed");
+    const terminal = envelopes.find((e) => e.type === "execution.completed");
+    expect(terminal?.payload?.committed).toBe(false);
+    expect(String(terminal?.payload?.error)).toContain("injected commit veto");
 
     // The failed execution persisted its artifact, settled as failed…
     const failedTurn = (await store.listTurnResults(SESSION_ID)).find(
@@ -304,5 +316,47 @@ describe("POST /api/actions — turn accounting follows the commit outcome", () 
     // stay where it was.
     const session = await store.getSession(SESSION_ID);
     expect(session?.turnCount).toBe(1);
+
+    // Player/runtime conversation messages share the proposal transaction.
+    // This test seeded only a turn-result artifact, so no conversation rows
+    // survive the failed turn.
+    expect(
+      (await store.listTurnMessages(SESSION_ID)).map((message) => message.id),
+    ).toEqual([]);
+    expect(await store.listMessages(SESSION_ID)).toEqual([]);
+    expect(await store.listInteractionRecords(SESSION_ID)).toEqual([]);
+
+    // A non-proposal transaction failure has no proposal.failed frame, so the
+    // terminal envelope itself must carry the generic finalizer error.
+    vetoEnabled = false;
+    Object.defineProperty(store, "withTransaction", {
+      configurable: true,
+      value: async () => {
+        throw new Error("injected transaction failure");
+      },
+    });
+    const genericFailureResponse = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-fail-transaction",
+        type: "send_message",
+        sessionId: SESSION_ID,
+        payload: { content: "hello again" },
+      }),
+    });
+    const genericFailureEnvelopes = await drainActionStream(
+      genericFailureResponse,
+    );
+    expect(genericFailureEnvelopes.map((e) => e.type)).not.toContain(
+      "proposal.failed",
+    );
+    const genericTerminal = genericFailureEnvelopes.find(
+      (e) => e.type === "execution.completed",
+    );
+    expect(genericTerminal?.payload?.committed).toBe(false);
+    expect(String(genericTerminal?.payload?.error)).toContain(
+      "injected transaction failure",
+    );
   });
 });

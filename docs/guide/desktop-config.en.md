@@ -27,6 +27,8 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
   server.port                ← last boot port (diagnostics)
 ```
 
+Sidecar stderr is recorded as `error` by default. Recoverable framework warnings carry a `[covel:warn]` transport marker; collectors remove the marker and persist them at `warn`, so `policy: warn` scheduling diagnostics and automatic retries do not inflate error counts.
+
 ## `~/.covel/config.toml`
 
 Seeded with a commented template on first launch. Fields:

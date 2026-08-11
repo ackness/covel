@@ -59,6 +59,12 @@ describe("world-init local tools", () => {
       success: true,
       attributeCount: 2,
       categories: ["stats", "social"],
+      worldSchema: {
+        "character-attributes": {
+          version: 1,
+          attributes: expect.any(Array),
+        },
+      },
     });
 
     const proposals = getPendingProposals(result);
@@ -92,7 +98,21 @@ describe("world-init local tools", () => {
 
   it("queues plugin-data and lorebook proposals for world entries", async () => {
     const store = createMemoryStore();
+    const schemaTool = setWorldSchema({ tool, z, store });
     const entriesTool = setWorldEntriesBatch({ tool, z, store });
+    const schemaResult = await schemaTool.execute(
+      {
+        attributes: [
+          {
+            id: "hp",
+            name: "生命值",
+            type: "number",
+            category: "stats",
+          },
+        ],
+      },
+      context,
+    );
 
     const result = await entriesTool.execute(
       {
@@ -101,13 +121,20 @@ describe("world-init local tools", () => {
           { key: "factions", value: { groups: ["青萍宗"] } },
         ],
       },
-      context,
+      { ...context, pendingProposals: getPendingProposals(schemaResult) },
     );
 
     expect(result).toMatchObject({
       success: true,
       count: 2,
       keys: ["geography", "factions"],
+      preGameDone: true,
+      worldSchema: {
+        "character-attributes": {
+          version: 1,
+          attributes: [expect.objectContaining({ id: "hp" })],
+        },
+      },
     });
 
     const proposals = getPendingProposals(result);
@@ -151,9 +178,39 @@ describe("world-init local tools", () => {
     });
   });
 
-  it("commits queued world entries atomically through the kernel path", async () => {
+  it("requires the schema proposal before completing world entries", async () => {
     const store = createMemoryStore();
     const entriesTool = setWorldEntriesBatch({ tool, z, store });
+
+    await expect(
+      entriesTool.execute(
+        {
+          entries: [{ key: "geography", value: { regions: ["云梦泽"] } }],
+        },
+        context,
+      ),
+    ).rejects.toThrow(
+      "set-world-schema must succeed before set-world-entries-batch",
+    );
+  });
+
+  it("commits queued world entries atomically through the kernel path", async () => {
+    const store = createMemoryStore();
+    const schemaTool = setWorldSchema({ tool, z, store });
+    const entriesTool = setWorldEntriesBatch({ tool, z, store });
+    const schemaResult = await schemaTool.execute(
+      {
+        attributes: [
+          {
+            id: "hp",
+            name: "生命值",
+            type: "number",
+            category: "stats",
+          },
+        ],
+      },
+      context,
+    );
 
     const result = await entriesTool.execute(
       {
@@ -162,7 +219,7 @@ describe("world-init local tools", () => {
           { key: "factions", value: { groups: ["青萍宗"] } },
         ],
       },
-      context,
+      { ...context, pendingProposals: getPendingProposals(schemaResult) },
     );
 
     const commitResults = await createCommitPipeline(store).commitAll(

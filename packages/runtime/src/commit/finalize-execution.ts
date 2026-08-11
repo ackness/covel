@@ -21,7 +21,11 @@
  * promised, matching what those stores could do before.
  */
 
-import type { DataStore, StoreTransaction } from "@covel/store";
+import type {
+  DataStore,
+  StoreTransaction,
+  TurnMessageRecord,
+} from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type {
   ExecutionContext,
@@ -85,6 +89,8 @@ export interface FinalizeExecutionArgs {
   readonly runtimes: readonly FinalizeManifest[];
   /** Flattened results to commit: top-level plus nested recursiveCall results. */
   readonly results: readonly FinalizableResult[];
+  /** Conversation entries committed atomically with this execution. */
+  readonly journalMessages?: readonly TurnMessageRecord[];
   /**
    * `turn_results` rows to settle. Nested rows reuse the top-level `turnId`,
    * so the top-level id alone settles them all. Empty when the caller persists
@@ -383,6 +389,9 @@ export async function finalizeExecution(
               throw new ProposalCommitFailure(out.failedProposals);
             }
           }
+          for (const message of args.journalMessages ?? []) {
+            await tx.appendTurnMessage(message);
+          }
           await extraInTx?.(tx);
           // Advance the session clock in the same transaction as the domain
           // writes, so a rollback undoes the counter / phase flip too.
@@ -480,6 +489,9 @@ export async function finalizeExecution(
     }
     try {
       // DataStore satisfies StoreTransaction structurally (it has every member).
+      for (const message of args.journalMessages ?? []) {
+        await store.appendTurnMessage(message);
+      }
       await extraInTx?.(store as unknown as StoreTransaction);
       if (shouldWriteClock) {
         await applySessionClockTx(store as unknown as StoreTransaction, {

@@ -3,6 +3,11 @@ import path from "node:path";
 
 export type LogLevel = "info" | "warn" | "error";
 
+// stderr does not carry console.warn/console.error metadata. Server code uses
+// this prefix for recoverable warnings so both desktop and standalone log
+// collectors can preserve the intended level.
+const SERVER_WARNING_PREFIX = "[covel:warn]";
+
 export interface LogRotation {
   readonly maxSizeMb: number;
   readonly maxFiles: number;
@@ -141,7 +146,31 @@ export function writeServerStreamLine(
   line: string,
 ): void {
   if (!line || !line.trim()) return;
-  const level: LogLevel = origin === "stderr" ? "error" : "info";
-  const source = origin === "stderr" ? "server.err" : "server";
-  writeChannel(serverChannel, ndjsonLine(level, source, line));
+  const classified = classifyServerStreamLine(origin, line);
+  writeChannel(
+    serverChannel,
+    ndjsonLine(classified.level, classified.source, classified.message),
+  );
+}
+
+export function classifyServerStreamLine(
+  origin: "stdout" | "stderr",
+  line: string,
+): {
+  readonly level: LogLevel;
+  readonly source: "server" | "server.err";
+  readonly message: string;
+} {
+  if (origin === "stdout") {
+    return { level: "info", source: "server", message: line };
+  }
+  const trimmed = line.trimStart();
+  if (trimmed.startsWith(SERVER_WARNING_PREFIX)) {
+    return {
+      level: "warn",
+      source: "server.err",
+      message: trimmed.slice(SERVER_WARNING_PREFIX.length).trimStart(),
+    };
+  }
+  return { level: "error", source: "server.err", message: line };
 }

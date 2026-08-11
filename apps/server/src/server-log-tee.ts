@@ -34,6 +34,7 @@ interface TeeChannel {
 let activeChannel: TeeChannel | null = null;
 let maxBytes = 10 * 1024 * 1024;
 let maxFiles = 10;
+const SERVER_WARNING_PREFIX = "[covel:warn]";
 
 function openChannel(filePath: string): TeeChannel {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -93,18 +94,15 @@ function stripAnsi(input: string): string {
   return input.replace(ANSI_PATTERN, "");
 }
 
-function appendNdjson(
-  level: "info" | "error",
-  source: "stdout" | "stderr",
-  line: string,
-): void {
+function appendNdjson(source: "stdout" | "stderr", line: string): void {
   if (!activeChannel) return;
   if (!line || !line.trim()) return;
+  const classified = classifyServerStreamLine(source, line);
   const record = JSON.stringify({
     ts: new Date().toISOString(),
-    level,
+    level: classified.level,
     source,
-    msg: stripAnsi(line),
+    msg: stripAnsi(classified.message),
   });
   const buf = record + "\n";
   const byteLen = Buffer.byteLength(buf, "utf8");
@@ -117,13 +115,12 @@ function appendNdjson(
 
 /**
  * Wrap a stream's `write` so every flushed line lands in `server.log`
- * via `appendNdjson(level, source, line)`. Multi-line writes are split
+ * via `appendNdjson(source, line)`. Multi-line writes are split
  * on `\n`; partial lines are buffered until a newline arrives so a JSON
  * record never contains half a console message.
  */
 function wrapStream(
   stream: NodeJS.WriteStream,
-  level: "info" | "error",
   source: "stdout" | "stderr",
 ): void {
   const original = stream.write.bind(stream);
@@ -146,7 +143,7 @@ function wrapStream(
     while ((nl = pending.indexOf("\n")) !== -1) {
       const line = pending.slice(0, nl).replace(/\r$/, "");
       pending = pending.slice(nl + 1);
-      appendNdjson(level, source, line);
+      appendNdjson(source, line);
     }
     if (typeof encodingOrCb === "function") {
       return original(chunk as never, encodingOrCb);
@@ -162,6 +159,24 @@ function wrapStream(
 export interface SetupServerLogFileOptions {
   readonly filePath: string;
   readonly rotation?: Partial<RotationConfig>;
+}
+
+export function classifyServerStreamLine(
+  source: "stdout" | "stderr",
+  line: string,
+): {
+  readonly level: "info" | "warn" | "error";
+  readonly message: string;
+} {
+  if (source === "stdout") return { level: "info", message: line };
+  const trimmed = line.trimStart();
+  if (trimmed.startsWith(SERVER_WARNING_PREFIX)) {
+    return {
+      level: "warn",
+      message: trimmed.slice(SERVER_WARNING_PREFIX.length).trimStart(),
+    };
+  }
+  return { level: "error", message: line };
 }
 
 /**
@@ -185,6 +200,6 @@ export function setupServerLogFile(options: SetupServerLogFileOptions): void {
     );
     return;
   }
-  wrapStream(process.stdout, "info", "stdout");
-  wrapStream(process.stderr, "error", "stderr");
+  wrapStream(process.stdout, "stdout");
+  wrapStream(process.stderr, "stderr");
 }

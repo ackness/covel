@@ -32,6 +32,7 @@
 - `/api/health` 心跳被 Hono logger 显式跳过，不再刷屏；通过 `COVEL_LOG_QUIET_PATHS=/api/foo,/api/bar` 可追加要静默的路径
 - 业务级 trace（LLM 调用、proposal、tool 调用）**不写文件**，留在 DB `trace_events` 表，通过 `/debug` 页面或 JSON 导出查看
 - `pnpm dev:server` 单跑时，server 自身会把 stdout/stderr 同时落到 `server.log`（终端仍可见原文）；`COVEL_SERVER_LOG_FILE=""` 可禁用，`COVEL_SERVER_LOG_FILE=/path/foo.log` 可改路径
+- sidecar 的普通 stderr 记为 `error`；框架对可恢复 warning 使用 `[covel:warn]` 传输标记，日志收集器去掉标记后以 `warn` 持久化，`policy: warn` 调度诊断和自动重试因此不会污染 error 统计
 - 老版本写入的 `electron.log` 会随轮转自然过期，不会被自动迁移
 
 ## `~/.covel/config.toml`

@@ -77,15 +77,16 @@ Common types: `feat` / `fix` / `refactor` / `docs` / `test` / `chore` / `perf` /
 Covel releases are driven by Git tags.
 
 1. All changes merged into `main` with green CI
-2. Update the `[Unreleased]` section at the top of [`CHANGELOG.md`](./CHANGELOG.md) (located under `docs/`) and migrate it to the new version
+2. Add a `## [<version>] - YYYY-MM-DD` section at the top of [`CHANGELOG.md`](./CHANGELOG.md)
 3. Unify version numbers across workspace packages (semver: `0.0.1-beta` / `0.1.0` / `1.0.0` …)
 4. Run release preflight, commit, and tag:
 
    ```bash
    pnpm release:preflight
    git commit -am "chore(release): v0.0.4"
-   git tag v0.0.4
-   git push origin main --tags
+   git tag -a v0.0.4 -m "Covel v0.0.4"
+   git push origin main
+   git push origin v0.0.4
    ```
 
 5. [`.github/workflows/release.yml`](../.github/workflows/release.yml) will, on any `v*` tag push:

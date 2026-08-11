@@ -17,6 +17,7 @@ import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
 import { tool } from "@covel/tools";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { collectExecutionJournal } from "../src/execution-journal.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 import { z } from "zod";
@@ -126,6 +127,40 @@ describe("TurnExecutor E2E", () => {
     expect(
       (narratorResult.output as Record<string, unknown>).narrativeOutput,
     ).toContain("黑暗的森林");
+  });
+
+  it("counts the staged current player message for runtime cooldowns", async () => {
+    const store = await createMainLoopStore("sess-1");
+    await store.appendTurnMessage({
+      id: "prior-runtime-0",
+      sessionId: "sess-1",
+      turnId: "prior-turn",
+      sourceType: "runtime",
+      sourceRuntimeId: narratorManifest.name,
+      role: "assistant",
+      content: "prior narrative",
+      order: 1,
+      createdAt: "2024-01-01T00:00:01Z",
+    });
+    const scheduled = {
+      ...narratorManifest,
+      trigger: { type: "scheduled" as const, interval: 1, cooldownTurns: 1 },
+    };
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => ({ ...narratorLoaded, manifest: scheduled }),
+      llm: mockLLM,
+      store,
+    };
+
+    const result = await executeTurn(makeTurnInput(), [scheduled], deps);
+
+    expect(result.runtimeResults).toHaveLength(1);
+    expect(collectExecutionJournal(result)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sourceType: "player", turnId: "turn-1" }),
+      ]),
+    );
+    expect(await store.listTurnMessages("sess-1")).toHaveLength(2);
   });
 
   it("should trim trailing meta choice prompts from story output", async () => {
@@ -416,7 +451,7 @@ describe("TurnExecutor E2E", () => {
     expect(result.runtimeResults[0].pluginId).toBe("narrator");
   });
 
-  it("should save player and runtime messages to store when store is provided", async () => {
+  it("should stage player and runtime messages until the commit barrier", async () => {
     const store = await createMainLoopStore("sess-msg");
 
     const deps: TurnExecutorDeps = {
@@ -425,16 +460,21 @@ describe("TurnExecutor E2E", () => {
       store,
     };
 
-    await executeTurn(
+    const result = await executeTurn(
       makeTurnInput({ sessionId: "sess-msg", playerMessage: "我走进森林" }),
       [narratorManifest],
       deps,
     );
 
-    const messages = await store.listTurnMessages("sess-msg");
+    const persisted = await store.listTurnMessages("sess-msg");
+    const messages = collectExecutionJournal(result);
 
-    // Should have at least 2 messages: player message + runtime output
-    expect(messages.length).toBeGreaterThanOrEqual(2);
+    // executeTurn only stages this turn's rows; finalizeExecution owns writes.
+    expect(persisted.map((message) => message.id)).toEqual(["prior-player-0"]);
+    expect(messages.map((message) => message.sourceType)).toEqual([
+      "player",
+      "runtime",
+    ]);
 
     // The current turn's player message is the last player message appended.
     const playerMessages = messages.filter((m) => m.sourceType === "player");
@@ -857,9 +897,7 @@ describe("TurnExecutor _interaction protocol", () => {
 
     // MockLLM that calls create-form (which now returns _interaction)
     const mockLLM = new MockLLM();
-    let callCount = 0;
     mockLLM.generate = async (params) => {
-      callCount++;
       const hasToolResult = params.messages.some((m) => m.role === "tool");
       if (hasToolResult) {
         return {
@@ -918,7 +956,6 @@ describe("TurnExecutor _interaction protocol", () => {
     // interaction protocol in isolation and doesn't wire in the setup chain.
     const isolatedManifest = {
       ...charManifest,
-      needs: undefined,
       needs: undefined,
     };
     const result = await executeTurn(makeTurnInput(), [isolatedManifest], deps);

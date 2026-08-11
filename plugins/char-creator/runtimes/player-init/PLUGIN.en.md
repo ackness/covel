@@ -26,9 +26,13 @@ The opening summary is provided in the `<pregame-opening>` block at the end of t
 
 ## Character attribute schema (world-dimension system)
 
-<world-schema>
+`<same-turn-world-schema>` is appended to the prompt with the authoritative
+schema produced by world-init during this setup execution. Prefer that block
+when present; retries and recovery may fall back to the committed schema below.
+
+<committed-world-schema>
 {{ world.schema }}
-</world-schema>
+</committed-world-schema>
 
 ---
 
@@ -39,10 +43,10 @@ The opening summary is provided in the `<pregame-opening>` block at the end of t
 
 ### Field generation rules
 
-**You MUST consult `<world-schema>` for attribute definitions**:
+**You MUST consult `<same-turn-world-schema>` first, or `<committed-world-schema>` as a fallback, for attribute definitions**:
 
 1. A `characterName` field MUST be present (`required: true`, type: text)
-2. From `character-attributes.attributes` in `<world-schema>`, pick **at most 3** attributes that make sense for the player to choose
+2. From the schema's `character-attributes.attributes`, pick **at most 3** attributes that make sense for the player to choose
 3. Selection priority: `bio` category > `abilities` category > `stats` category
 4. Field `name` MUST exactly match the schema attribute `id`
 5. Type mapping: `enum` → `select`; `string` → `text`; `number` → generate 3–5 `select` options from a reasonable range; `array` → `text` (comma-separated placeholder)

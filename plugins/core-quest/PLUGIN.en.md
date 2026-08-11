@@ -69,7 +69,7 @@ The only write channel is the `upsert-quests` tool. For each quest provide:
 - `name` (required): stable quest name, the sole de-duplication key
 - `description`: 1-2 factual sentences on the quest's origin and goal
 - `status`: `active` / `completed` / `failed`; **omit to keep the current status**, new quests default to `active`
-- `objectives`: checklist `[{ text, done }]`; a `text` matching an existing objective verbatim updates its check state, otherwise it appends as a new objective; omit `done` to keep the current state
+- `objectives`: checklist `[{ id?, text, done }]`; copy an existing `id` when advancing it. Normalized text and a conservative semantic match are fallbacks. A match preserves the canonical text and updates its check state; omit `done` to keep the current state
 - `giver` / `reward`: only when the narrative names them explicitly
 
 ## Tool invocation example
@@ -91,7 +91,13 @@ The only write channel is the `upsert-quests` tool. For each quest provide:
     },
     {
       "name": "Investigate the Rear-Mountain Anomaly",
-      "objectives": [{ "text": "Secure Su Wan's assistance", "done": true }]
+      "objectives": [
+        {
+          "id": "secure-su-wan",
+          "text": "Secure Su Wan's assistance",
+          "done": true
+        }
+      ]
     }
   ]
 }
@@ -106,6 +112,6 @@ Do not call any writer tool. End the turn and return the empty string `""`. Exis
 - Up to **3** new quests per turn; beyond that keep only the top 3
 - `name` must be stable and self-explanatory — later turns rely on it to merge progress
 - `description` must be 1-2 **factual sentences**, never mood painting
-- Objective `text` must stay verbatim-stable: when advancing, copy the existing objective text exactly, do not rephrase
+- When advancing an objective, copy its `id` from `<existing-quests>` and keep the existing wording where practical
 - **When the turn produced no quest signal, do not force anything.** A fake quest is worse than a missed one.
 - Emit no additional text after the writer tool call.

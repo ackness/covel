@@ -63,13 +63,13 @@ stateDiagram-v2
         AllSetupDone --> [*]
     }
 
-    Setup --> Playing: Kernel 翻转 phase setup → playing\n completedPlayerTurns 0 → 1
+    Setup --> Playing: setup 提交事务翻转 phase setup → playing\n completedPlayerTurns 保持 0
 
     state Playing {
         direction LR
         [*] --> WaitingForInput
         WaitingForInput --> ExecutingTurn: POST /api/actions
-        ExecutingTurn --> WaitingForInput: execution.completed
+        ExecutingTurn --> WaitingForInput: execution.completed\n committed=true|false
     }
 
     Playing --> Paused: pauseSession()\n status='paused'
@@ -82,9 +82,9 @@ stateDiagram-v2
 **业务真值** = `(status, phase, completedPlayerTurns, setupRuntimes)`：
 
 - **Setup**：`status === 'active' && phase === 'setup'`。调度器只运行 `stage: setup` 的 runtime；每个 runtime 以显式完成信号（输出 `preGameDone: true`，或 guard 返回 `{ skip: true }`）记入 `setupRuntimes` 状态镜像（`pending` / `done` / `blocked`），玩家可以多次提交表单/消息迭代（例如 `char-creator` 的 `framework.submit-form`）。耗尽重试预算（`maxTriggerCount`）不算完成——该 runtime 落到 `blocked`，会话停留在 setup 阶段等待玩家重试或豁免，不再"跳过坏掉的 setup 继续推进"。
-- **phase 翻转**：所有 setup runtime 都报告完成后，Kernel 在提交事务内把 `phase` 从 `'setup'` 翻到 `'playing'`、把 `completedPlayerTurns` 推进到 1，进入主循环；提交失败则计数、phase 翻转和 setup 镜像一并回滚。
-- **Setup completion followup**：角色表单这类最后一个 setup 输入提交后，`/api/actions` 的同一个请求会先完成 setup，再立即补跑本次已触发的主循环 runtime。这样玩家提交表单后能直接看到第一段正式叙事；审计、trace 和 snapshot 里该请求同时包含 setup completion 与 main-loop followup。
-- **会话提交原子边界**：同一 session 的玩家输入、runtime 执行、proposal commit、会话时钟写入（`phase` / `completedPlayerTurns` / `setupRuntimes`）和自动 snapshot 由同一 session lock 串行化。自动 snapshot 在全部 proposal 提交后捕获，确保对话 cursor、角色、state 与 plugin data 属于同一个已提交回合。
+- **phase 翻转**：所有 setup runtime 都报告完成后，Kernel 在 setup 提交事务内把 `phase` 从 `'setup'` 翻到 `'playing'`；该事务的 `completedPlayerTurns` 仍为 0。提交失败时 phase 翻转和 setup 镜像一并回滚。
+- **Setup completion followup**：角色表单这类最后一个 setup 输入提交后，`/api/actions` 的同一个请求会先提交 setup，再以新的 `turnId` 和独立事务立即补跑主循环 runtime。接力事务成功后才把 `completedPlayerTurns` 从 0 推进到 1。玩家可直接看到第一段正式叙事；同一 SSE 流、trace 和 snapshot 会覆盖 setup completion 与 main-loop followup 两次执行。
+- **会话提交原子边界**：同一 session 的玩家输入、runtime 执行、proposal commit、对话 execution journal（玩家/runtime `TurnMessage`）、会话时钟写入（`phase` / `completedPlayerTurns` / `setupRuntimes`）和自动 snapshot 由同一 session lock 串行化；journal、proposal 与时钟在同一 `finalizeExecution` transaction 中提交或回滚。自动 snapshot 在全部 proposal 提交后捕获，确保对话 cursor、角色、state 与 plugin data 属于同一个已提交回合。`execution.completed.committed` 是客户端收敛 optimistic 输出的终态信号。
 - **例外：后台执行只有提交在锁内**。`execution: background` 的 runtime（deferred follower 与 background 模式的 manual 触发）把 handler 跑在 session lock **外**，只有 `processTurnResults`（finalize 事务 + auto-snapshot）进锁。这类 runtime 通常是几分钟的 provider 调用（出图、TTS），持锁执行会让玩家的下一条消息一直排队，PG 部署下更会直接撞上 30s 的锁获取上限。之所以安全：这条路径不写会话时钟（不传 `sessionClock`，且 `completedPlayerTurns` 只数 `origin: "player"`），域写入经 writeBuffer 汇入同一个提交事务而非执行期零散落盘，也不追加对话消息。同一 runtime 的并发执行由 `<sessionId>::<runtimeId>` 作业锁串行，保住 handler 里"是否已生成"这类 check-then-act 的原子性（否则会重复计费）；提交前在锁内重读会话状态，玩家中途暂停/结束会话时结果被丢弃而非写入。
 - **Playing**：`status === 'active' && phase === 'playing'`。每次 `POST /api/actions` 触发一轮完整 Turn pipeline，按 `pre-turn → narrative → post-turn → audit` 四个 stage 依次运行（stage 间严格屏障）。`completedPlayerTurns` 只统计已提交的玩家回合——manual plugin-rpc、后台 follower、嵌套 `recursiveCall` 等非玩家执行各自落 `turn_results` 行（带 `origin` 标记）但不计数；多个执行共享同一 `turnId` 时只计一次。
 - **Paused / Ended**：`status === 'paused' | 'ended'`。调度器直接返回空，`/api/actions` 被服务端拒绝。Paused 可 `resumeSession()` 恢复，Ended 是终态。
@@ -121,7 +121,7 @@ flowchart TB
     Group --> Commit["CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
     Commit --> SSE["发 SessionEvent<br/>narrative.delta / narrative.completed<br/>interaction.requested / state.changed<br/>plugin-data.changed / event.emitted / record.updated"]
     SSE --> PreGameTick{"phase === 'setup' 且<br/>所有 setup runtime<br/>都已报告完成?"}
-    PreGameTick -->|是| Advance["Kernel: phase setup → playing<br/>completedPlayerTurns 0 → 1"]
+    PreGameTick -->|是| Advance["setup 提交: phase setup → playing<br/>completedPlayerTurns 保持 0"]
     PreGameTick -->|否| Keep["保持 phase 不变"]
     Advance --> End["SSE: execution.completed"]
     Keep --> End
@@ -687,9 +687,11 @@ sequenceDiagram
     Web->>Server: POST /api/sessions/:id/plugin-rpc submit-form
     Server-->>Web: 返回 filledNarrative (仅模板填充，不写 turn_messages)
 
-    Note over Server,Plugin: setup 可能多次迭代；<br/>最后一个 setup runtime 报 preGameDone: true 后<br/>Kernel 把 phase 翻到 'playing'（completedPlayerTurns 0 → 1）
+    Note over Server,Plugin: setup 可能多次迭代；<br/>最后一个 setup runtime 报 preGameDone: true 后<br/>setup 事务把 phase 翻到 'playing'，completedPlayerTurns 保持 0
     Web->>Server: POST /api/actions { type: 'send_message', content: filledNarrative }
-    Server-->>Web: SSE: execution.started
+    Server-->>Web: SSE: setup execution.started (turnId A)
+    Note over Server,Plugin: setup 提交成功后，同一请求以 turnId B 自动接力主循环；<br/>接力提交成功才把 completedPlayerTurns 0 → 1
+    Server-->>Web: SSE: main-loop execution.started (turnId B)
 
     rect rgb(245, 255, 240)
     Note over Server,Plugin: Turn 2+ · 主循环 (phase === 'playing'，pre-turn → narrative → post-turn → audit)

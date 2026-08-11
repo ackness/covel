@@ -140,11 +140,34 @@ describe("TurnExecutor EventBus Bridge", () => {
       },
       updater: { updateAfterTurn },
     };
+    const store = await createMainLoopStore("sess-1");
+    await store.upsertCharacter({
+      id: "player-1",
+      sessionId: "sess-1",
+      name: "阿砾",
+      type: "player",
+      description: "玄负上的少年",
+      fields: { carapaceSense: "甲感略强于常人", socialStyle: "会来事" },
+      version: 1,
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
+    });
+    await store.savePlayerInput({
+      id: "input-1",
+      sessionId: "sess-1",
+      turnId: "form-turn",
+      formId: "character-form",
+      values: {
+        carapaceSense: "甲感略强于常人",
+        socialStyle: "会来事",
+      },
+      createdAt: "2024-01-01T00:00:00Z",
+    });
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm: mockLLM,
       eventBus,
-      store: await createMainLoopStore("sess-1"),
+      store,
       memorySystem,
     };
 
@@ -153,12 +176,50 @@ describe("TurnExecutor EventBus Bridge", () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(updateAfterTurn).not.toHaveBeenCalled();
 
-    // Successful commit path: the barrier fires exactly one ingestion.
+    // Simulate character/form writes landing in the commit transaction after
+    // executeTurn captured its initial context snapshot.
+    await store.upsertCharacter({
+      id: "player-1",
+      sessionId: "sess-1",
+      name: "阿砾",
+      type: "player",
+      description: "玄负上的少年",
+      fields: { carapaceSense: "二分", socialStyle: "圆滑" },
+      version: 2,
+      createdAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-02T00:00:00Z",
+    });
+    await store.savePlayerInput({
+      id: "input-2",
+      sessionId: "sess-1",
+      turnId: "turn-1",
+      formId: "character-form",
+      values: { carapaceSense: "二分", socialStyle: "圆滑" },
+      createdAt: "2024-01-02T00:00:00Z",
+    });
+
+    // Successful commit path: the barrier refreshes committed context and
+    // fires exactly one ingestion.
     failed.completeTurn?.();
     failed.completeTurn?.();
     await new Promise((resolve) => setImmediate(resolve));
     expect(updateAfterTurn).toHaveBeenCalledTimes(1);
     expect(updateAfterTurn.mock.calls[0][0].sessionId).toBe("sess-1");
+    expect(updateAfterTurn.mock.calls[0][0].authoritativeFacts).toEqual({
+      playerCharacter: {
+        name: "阿砾",
+        type: "player",
+        description: "玄负上的少年",
+        fields: {
+          carapaceSense: "二分",
+          socialStyle: "圆滑",
+        },
+      },
+      lastFormValues: {
+        carapaceSense: "二分",
+        socialStyle: "圆滑",
+      },
+    });
   });
 
   it("should emit runtime.started and runtime.completed events", async () => {

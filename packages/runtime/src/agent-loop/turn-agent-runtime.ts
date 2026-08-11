@@ -5,6 +5,7 @@ import type {
   RuntimeActivation,
   InputSlot,
 } from "@covel/shared";
+import { attachExecutionJournal } from "../execution-journal.js";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
@@ -471,11 +472,10 @@ export async function executeAgentRuntime({
   const result = await runPostRuntimeHook(postRuntimeOpts, rawResult);
   const finalOutput = (result.output ?? output) as Record<string, unknown>;
 
-  // Save runtime output as an append-only TurnMessage. Manual plugin-rpc
-  // calls return their output to the caller and commit proposals through
-  // plugin-rpc, so they stay out of conversation history. Skipped when a
-  // PostRuntime hook rewrote the status to a non-success — an unsuccessful
-  // result must not enter prompt history as narrative.
+  // Stage the runtime output in the execution journal. finalizeExecution
+  // appends it inside the proposal/session-clock transaction. Manual
+  // plugin-rpc calls stay out of conversation history, matching the existing
+  // contract; a PostRuntime non-success also produces no message.
   if (deps.store && !input.manualTrigger && result.status === "success") {
     // Extract narrative content.
     const narrativeContent =
@@ -495,21 +495,23 @@ export async function executeAgentRuntime({
     // Extract UI render instructions if present
     const ui = finalOutput.ui as unknown[] | undefined;
 
-    await deps.store.appendTurnMessage({
-      id: crypto.randomUUID(),
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      sourceType: "runtime",
-      sourcePluginId: manifest.pluginId,
-      sourceRuntimeId: manifest.name,
-      role: "assistant",
-      name: manifest.name,
-      content: narrativeContent,
-      order: stageMessageOrder(getRuntimeSpec(manifest).stage),
-      pendingInput,
-      ui,
-      createdAt: new Date().toISOString(),
-    });
+    attachExecutionJournal(result, [
+      {
+        id: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        sourceType: "runtime",
+        sourcePluginId: manifest.pluginId,
+        sourceRuntimeId: manifest.name,
+        role: "assistant",
+        name: manifest.name,
+        content: narrativeContent,
+        order: stageMessageOrder(getRuntimeSpec(manifest).stage),
+        pendingInput,
+        ui,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
   }
 
   try {

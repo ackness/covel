@@ -143,6 +143,120 @@ describe("POST /api/actions — action type contract ", () => {
     expect(body.error).toContain("Unsupported action type");
   });
 
+  it.each([
+    {
+      label: "non-string send_message.content",
+      body: {
+        requestId: "req-bad-content",
+        type: "send_message",
+        sessionId,
+        payload: { content: { text: "hello" } },
+      },
+    },
+    {
+      label: "non-string execute_command.command",
+      body: {
+        requestId: "req-bad-command",
+        type: "execute_command",
+        sessionId,
+        payload: { command: 42 },
+      },
+    },
+    {
+      label: "array payload",
+      body: {
+        requestId: "req-array-payload",
+        type: "send_message",
+        sessionId,
+        payload: [],
+      },
+    },
+    {
+      label: "unknown payload field",
+      body: {
+        requestId: "req-extra-field",
+        type: "retry_runtime",
+        sessionId,
+        payload: { runtimeId: SIDE_ID, admin: true },
+      },
+    },
+    {
+      label: "non-string retry runtimeId",
+      body: {
+        requestId: "req-bad-runtime",
+        type: "retry_runtime",
+        sessionId,
+        payload: { runtimeId: { name: SIDE_ID } },
+      },
+    },
+    {
+      label: "invalid locale",
+      body: {
+        requestId: "req-bad-locale",
+        type: "send_message",
+        sessionId,
+        locale: "../zh-CN",
+        payload: { content: "hello" },
+      },
+    },
+    {
+      label: "model containing a control character",
+      body: {
+        requestId: "req-bad-model",
+        type: "send_message",
+        sessionId,
+        model: "story\nadmin",
+        payload: { content: "hello" },
+      },
+    },
+    {
+      label: "empty requestId",
+      body: {
+        requestId: "",
+        type: "send_message",
+        sessionId,
+        payload: { content: "hello" },
+      },
+    },
+    {
+      label: "unknown start_session field",
+      body: {
+        requestId: "req-bad-start",
+        type: "start_session",
+        sessionId,
+        payload: { plugins: ["untrusted"] },
+      },
+    },
+    {
+      label: "unknown top-level field",
+      body: {
+        requestId: "req-extra-top-level",
+        type: "send_message",
+        sessionId,
+        debug: true,
+        payload: { content: "hello" },
+      },
+    },
+    {
+      label: "retry source without a scoped runtime",
+      body: {
+        requestId: "req-bad-retry-source",
+        type: "retry_runtime",
+        sessionId,
+        payload: { retryFromTurnId: "old-turn" },
+      },
+    },
+  ])("rejects $label before any turn write", async ({ body }) => {
+    const res = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    expect(res.status).toBe(400);
+    expect(await store.listTurnResults(sessionId)).toEqual([]);
+    expect(await store.listTurnMessages(sessionId)).toEqual([]);
+  });
+
   it("retry_runtime with runtimeId re-runs only that runtime (manual path)", async () => {
     const res = await app.request("/api/actions", {
       method: "POST",
@@ -230,6 +344,41 @@ describe("POST /api/actions — action type contract ", () => {
     expect(body.error).toContain("no active plugins");
     // No turn ran, so nothing was persisted for the session.
     expect(await store.listTurnResults(emptySessionId)).toHaveLength(0);
+  });
+
+  it("persists start_session loreOverride on the session", async () => {
+    const res = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-start-lore",
+        type: "start_session",
+        sessionId,
+        payload: { loreOverride: "A player-edited world document." },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    await drainStream(res);
+    expect((await store.getSession(sessionId))?.metadata?.loreOverride).toBe(
+      "A player-edited world document.",
+    );
+
+    const clear = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-start-lore-clear",
+        type: "start_session",
+        sessionId,
+        payload: { loreOverride: "" },
+      }),
+    });
+    expect(clear.status).toBe(200);
+    await drainStream(clear);
+    expect((await store.getSession(sessionId))?.metadata?.loreOverride).toBe(
+      "",
+    );
   });
 
   it("retry_runtime without runtimeId keeps whole-turn-retry semantics", async () => {

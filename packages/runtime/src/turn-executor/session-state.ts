@@ -44,6 +44,8 @@ export type CoreMemoryBlock = CoreMemoryBlockView;
 
 export interface LoadedTurnSessionState {
   readonly messageHistory: readonly TurnMessageRecord[];
+  /** Player message waiting for the execution's commit transaction. */
+  readonly journalMessages: readonly TurnMessageRecord[];
   readonly runtimeTriggerCounts: ReadonlyMap<string, number>;
   readonly sessionMeta: TurnSessionMeta;
   readonly sessionStatus: "active" | "paused" | "ended";
@@ -78,6 +80,7 @@ export async function loadTurnSessionState(args: {
   let messageHistory: readonly TurnMessageRecord[] = [];
   let turnNumber = 0;
   let runtimeTriggerCounts: ReadonlyMap<string, number> = new Map();
+  const journalMessages: TurnMessageRecord[] = [];
   if (deps.store) {
     const [uncompacted, stats] = await Promise.all([
       deps.store.listUncompactedTurnMessages(input.sessionId),
@@ -99,18 +102,13 @@ export async function loadTurnSessionState(args: {
       order: 0,
       createdAt: new Date().toISOString(),
     };
-    await deps.store.appendTurnMessage(playerMessage);
-    // The record just appended is the newest row, so concatenating locally is
-    // equivalent to re-reading — and skips a second unbounded history scan on
-    // the per-turn critical path (audit 2026-07-11 R-13).
-    messageHistory = [...messageHistory, playerMessage];
+    journalMessages.push(playerMessage);
   }
 
   if (deps.compactor && deps.store && shouldAppendPlayerMessage) {
-    // Reuse messageHistory (set above after appending the player message) — no
-    // write happens between there and here, so re-reading the full history was
-    // a redundant unbounded scan on the per-turn critical path. The reload
-    // below still runs after the compactor actually mutates history.
+    // Compact committed history only. The current player message remains in
+    // the execution journal until proposals commit, so a rolled-back turn can
+    // never enter a summary.
     const freshMessages = messageHistory;
     const hookOpts = {
       pipeline: deps.hookPipeline,
@@ -141,8 +139,8 @@ export async function loadTurnSessionState(args: {
     }
   }
 
-  // triggerCounts already came from getTurnMessageStats above; the player
-  // message appended this turn is a "player" row, so no runtime count moved.
+  // Trigger counts come only from committed history; this execution's journal
+  // is intentionally invisible until finalize succeeds.
   let sessionStatus: "active" | "paused" | "ended" = "active";
   let preGameCompleted: readonly string[] = [];
   let phase: "setup" | "playing" | undefined;
@@ -187,6 +185,7 @@ export async function loadTurnSessionState(args: {
 
   return {
     messageHistory,
+    journalMessages,
     runtimeTriggerCounts,
     sessionMeta: {
       turnNumber,

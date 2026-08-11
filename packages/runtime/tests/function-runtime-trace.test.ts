@@ -19,6 +19,7 @@ import type { LoadedRuntime, PluginRuntimeGateway } from "@covel/plugin-loader";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { createEventBus, type EventBus } from "@covel/events";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
+import { collectExecutionJournal } from "../src/execution-journal.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import {
   createTurnEmitter,
@@ -141,6 +142,36 @@ describe("function-runtime trace", () => {
     expect(completed).toBeDefined();
     expect(completed!.payload.status).toBe("success");
     expect(typeof completed!.payload.durationMs).toBe("number");
+  });
+
+  it("stages structured interactions on the function runtime journal message", async () => {
+    const interaction = {
+      interactionId: "fn-form",
+      type: "form",
+      narrativeTemplate: "Hello {{name}}",
+      fields: [{ name: "name", type: "text", required: true }],
+    };
+    const loaded: LoadedRuntime = {
+      manifest: makeFunctionManifest(),
+      promptTemplate: "",
+      handler: async () => ({
+        narrativeOutput: "form ready",
+        interactions: [interaction],
+      }),
+    };
+
+    const result = await executeTurn(
+      makeTurnInput(),
+      [loaded.manifest],
+      makeDeps(loaded),
+    );
+
+    expect(collectExecutionJournal(result)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pendingInput: [interaction] }),
+      ]),
+    );
+    expect(await store.listTurnMessages("sess-fn")).toEqual([]);
   });
 
   it("emits function.completed(suspended) when the handler returns a suspended status", async () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   interpolateTemplate,
   buildInjectBlocks,
@@ -170,6 +170,48 @@ describe("buildInjectBlocks", () => {
     expect(result).toBe(
       "<narrator-output>the story</narrator-output>\n<combat-log>hit for 10 damage</combat-log>",
     );
+  });
+
+  it("serializes structured runtime injects as JSON", () => {
+    const params: ContextBuildParams = {
+      promptTemplate: "",
+      manifest: makeManifest({
+        input: {
+          inject: [
+            {
+              kind: "runtime",
+              from: "world-init/schema-gen",
+              field: "worldSchema",
+              as: "<same-turn-world-schema>",
+            },
+          ],
+        },
+      }),
+      turnInput: makeTurnInput(),
+      completedResults: new Map([
+        [
+          "world-init/schema-gen",
+          makeRuntimeResult({
+            output: {
+              worldSchema: {
+                "character-attributes": {
+                  version: 1,
+                  attributes: [{ id: "club", type: "string" }],
+                },
+              },
+            },
+          }),
+        ],
+      ]),
+    };
+
+    const result = buildInjectBlocks(params);
+    expect(result).toContain(
+      '<same-turn-world-schema>{\n  "character-attributes"',
+    );
+    expect(result).toContain('"id": "club"');
+    expect(result).toContain("</same-turn-world-schema>");
+    expect(result).not.toContain("[object Object]");
   });
 
   it("should return empty string when inject references a missing result", () => {

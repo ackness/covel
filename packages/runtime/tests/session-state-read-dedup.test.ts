@@ -9,9 +9,9 @@ import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.
  * loadTurnSessionState used to full-read listTurnMessages twice per turn.
  * Today the per-turn reads are (a) one listUncompactedTurnMessages for the
  * raw suffix, (b) one getTurnMessageStats aggregate for turnNumber / trigger
- * counts — never a full listTurnMessages. The appended player record is
- * concatenated locally; these tests pin the read pattern and that the
- * returned history still includes the player message.
+ * counts — never a full listTurnMessages. The current player record stays in
+ * the execution journal until commit; these tests pin both the read pattern
+ * and that committed history remains isolated from pending input.
  */
 
 async function makeStore(): Promise<DataStore> {
@@ -89,14 +89,13 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
       listUncompactedTurnMessages: 1,
       getTurnMessageStats: 1,
     });
-    // History includes both the pre-existing message and the appended one.
-    expect(state.messageHistory).toHaveLength(2);
-    const appended = state.messageHistory[1]!;
-    expect(appended.content).toBe("hello");
-    expect(appended.turnId).toBe("turn-1");
-    expect(appended.sourceType).toBe("player");
-    // The appended record was actually persisted, not just concatenated.
-    expect(await store.listTurnMessages("sess-dedup")).toHaveLength(2);
+    expect(state.messageHistory).toHaveLength(1);
+    const pending = state.journalMessages[0]!;
+    expect(pending.content).toBe("hello");
+    expect(pending.turnId).toBe("turn-1");
+    expect(pending.sourceType).toBe("player");
+    // Pending input is persisted only by finalizeExecution after proposals pass.
+    expect(await store.listTurnMessages("sess-dedup")).toHaveLength(1);
     // turnNumber counts player messages BEFORE this turn's append.
     expect(state.turnNumber).toBe(1);
   });
@@ -159,12 +158,15 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
       shouldAppendPlayerMessage: true,
     });
 
-    // Compacted rows are absent from the in-memory history…
+    // Compacted rows and the pending player input are absent from committed
+    // in-memory history…
     expect(state.messageHistory.map((m) => m.id)).toEqual(
       state.messageHistory.map((m) => m.id).filter((id) => id !== "tm-0"),
     );
-    expect(state.messageHistory).toHaveLength(1);
-    // …but turnNumber / trigger counts still see the whole log.
+    expect(state.messageHistory).toHaveLength(0);
+    expect(state.journalMessages).toHaveLength(1);
+    expect(state.journalMessages[0]?.content).toBe("hello");
+    // …but turnNumber / trigger counts still see the whole committed log.
     expect(state.turnNumber).toBe(1);
     expect(state.runtimeTriggerCounts.get("demo/narrator")).toBe(1);
   });

@@ -1,6 +1,6 @@
 {
   "name": "@covel/desktop",
-  "version": "0.0.24",
+  "version": "0.0.25",
   "private": true,
   "type": "module",
   "main": "dist/main.mjs",
@@ -12,7 +12,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "lint": "tsc --noEmit",
-    "test": "tsx src/zip-extract.selfcheck.ts && tsx src/trusted-origin.selfcheck.ts",
+    "test": "tsx src/zip-extract.selfcheck.ts && tsx src/trusted-origin.selfcheck.ts && tsx src/logging.selfcheck.ts",
     "pack": "pnpm build && electron-builder --dir",
     "dist": "pnpm build && electron-builder",
     "dist:mac": "pnpm build && electron-builder --mac",

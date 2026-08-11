@@ -441,13 +441,27 @@ export function createSseEventHandler(
         break;
       }
       case "execution.completed": {
+        const committed = payload.committed !== false;
         // A turn aborted before producing output (e.g. cost-gate's hard budget
         // cap) carries an abortReason — surface it so the player isn't left with
         // a silent empty turn. A player-initiated abort is NOT an error: the
         // server never commits the partial narrative, so discard the streaming
         // placeholder instead of showing ghost text + a red retry affordance.
         const abortReason = payload.abortReason as string | undefined;
-        if (abortReason === PLAYER_ABORT_REASON) {
+        if (!committed) {
+          clearNarrativeDeltaBuffer(deps.deltaBufferRef, deps.deltaRafRef);
+          if (turnId) clearStreamingTextsForTurn(turnId);
+          deps.dispatch({
+            type: "DISCARD_TURN_STREAMS",
+            ...(turnId ? { turnId } : {}),
+          });
+          deps.dispatch({
+            type: "SET_EXECUTION_ERROR",
+            error:
+              (payload.error as string | undefined) ??
+              "Execution commit failed",
+          });
+        } else if (abortReason === PLAYER_ABORT_REASON) {
           // Cancel any pending rAF delta flush + drop buffered deltas first:
           // otherwise a fast abort (last narrative.delta + execution.completed
           // in one network flush) lets the queued rAF fire AFTER the discard

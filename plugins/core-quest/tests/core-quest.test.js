@@ -4,7 +4,7 @@
  * Covers:
  *
  * 1. Local tool `upsert-quests` (L2): create with defaults, merge-by-name
- *    semantics, objective checklist matching, status transitions, the
+ *    semantics, stable/semantic objective checklist matching, status transitions, the
  *    5-quest cap, world-pack preseeded records, and the message-namespace
  *    change summary — verified against an in-memory store stub.
  * 2. Plugin manifest: post-turn agent runtime shape, narrative-engine gate,
@@ -162,8 +162,8 @@ describe("upsert-quests", () => {
     expect(stored.value.isNew).toBe(true);
     expect(stored.value.updatedTurn).toBe(3);
     expect(stored.value.objectives).toEqual([
-      { text: "潜入西侧旧药园", done: false },
-      { text: "找到断魂钩", done: false },
+      { id: expect.any(String), text: "潜入西侧旧药园", done: false },
+      { id: expect.any(String), text: "找到断魂钩", done: false },
     ]);
     expect(stored.value.chips).toEqual([
       "☐ 潜入西侧旧药园",
@@ -228,7 +228,7 @@ describe("upsert-quests", () => {
     expect(rows[0].value.isNew).toBe(false);
   });
 
-  it("matches objectives by verbatim text: known text checks done, new text appends", async () => {
+  it("matches objectives by normalized text: known text checks done, new text appends", async () => {
     // Arrange
     await executeAndCommit(
       upsertQuestsTool,
@@ -265,9 +265,9 @@ describe("upsert-quests", () => {
     // Assert
     const stored = await findQuestByName("调查后山异常");
     expect(stored.value.objectives).toEqual([
-      { text: "取得苏婉的协助", done: true },
-      { text: "夜探后山", done: false },
-      { text: "查明灵脉异动来源", done: false },
+      { id: expect.any(String), text: "取得苏婉的协助", done: true },
+      { id: expect.any(String), text: "夜探后山", done: false },
+      { id: expect.any(String), text: "查明灵脉异动来源", done: false },
     ]);
     expect(stored.value.chips).toContain("✓ 取得苏婉的协助");
     expect(stored.value.chips).toContain("☐ 夜探后山");
@@ -304,6 +304,210 @@ describe("upsert-quests", () => {
     // Assert
     const stored = await findQuestByName("调查后山异常");
     expect(stored.value.objectives[0].done).toBe(true);
+  });
+
+  it("uses a stable objective id to merge rewritten text", async () => {
+    await executeAndCommit(
+      upsertQuestsTool,
+      {
+        quests: [
+          {
+            name: "未标注的泊点",
+            objectives: [
+              { id: "enter-black-tower", text: "缒链下降，进入黑色尖塔" },
+            ],
+          },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+
+    await executeAndCommit(
+      upsertQuestsTool,
+      {
+        quests: [
+          {
+            name: "未标注的泊点",
+            objectives: [
+              { id: "enter-black-tower", text: "进入黑塔内部", done: true },
+            ],
+          },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+
+    const stored = await findQuestByName("未标注的泊点");
+    expect(stored.value.objectives).toEqual([
+      {
+        id: "enter-black-tower",
+        text: "缒链下降，进入黑色尖塔",
+        done: true,
+      },
+    ]);
+  });
+
+  it("conservatively merges the observed expanded paraphrase without an id", async () => {
+    await executeAndCommit(
+      upsertQuestsTool,
+      {
+        quests: [
+          {
+            name: "未标注的泊点",
+            objectives: [
+              { text: "赶在封锚前备齐装具，完成下降准备" },
+              { text: "缒链下降，进入黑色尖塔" },
+              { text: "带回能解释玄负停驻的证物" },
+            ],
+          },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+
+    await executeAndCommit(
+      upsertQuestsTool,
+      {
+        quests: [
+          {
+            name: "未标注的泊点",
+            objectives: [{ text: "赶在封锚前挂链下降至沉城尖塔", done: true }],
+          },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+
+    const stored = await findQuestByName("未标注的泊点");
+    expect(stored.value.objectives).toHaveLength(3);
+    expect(stored.value.objectives).toEqual([
+      expect.objectContaining({
+        text: "赶在封锚前备齐装具，完成下降准备",
+        done: false,
+      }),
+      expect.objectContaining({
+        text: "缒链下降，进入黑色尖塔",
+        done: true,
+      }),
+      expect.objectContaining({
+        text: "带回能解释玄负停驻的证物",
+        done: false,
+      }),
+    ]);
+  });
+
+  it("heals semantically duplicated objectives already present in storage", async () => {
+    await mockStore.setPluginData({
+      id: "imported-record",
+      sessionId: "sess-1",
+      pluginId: "core-quest",
+      namespace: "quests",
+      key: "unmarked-mooring",
+      value: {
+        id: "unmarked-mooring",
+        name: "未标注的泊点",
+        description: "世界包预置任务",
+        status: "active",
+        objectives: [
+          {
+            id: "prepare-descent",
+            text: "赶在封锚前备齐装具，完成下降准备",
+            done: false,
+          },
+          {
+            id: "enter-black-tower",
+            text: "缒链下降，进入黑色尖塔",
+            done: false,
+          },
+          {
+            id: "objective-duplicate",
+            text: "赶在封锚前挂链下降至沉城尖塔",
+            done: true,
+          },
+          {
+            id: "return-evidence",
+            text: "带回能解释玄负停驻的证物",
+            done: false,
+          },
+        ],
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await executeAndCommit(
+      upsertQuestsTool,
+      {
+        quests: [
+          {
+            name: "未标注的泊点",
+            objectives: [{ text: "进入黑塔内部", done: true }],
+          },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+
+    const stored = await findQuestByName("未标注的泊点");
+    expect(stored.value.objectives).toEqual([
+      {
+        id: "prepare-descent",
+        text: "赶在封锚前备齐装具，完成下降准备",
+        done: false,
+      },
+      {
+        id: "enter-black-tower",
+        text: "缒链下降，进入黑色尖塔",
+        done: true,
+      },
+      {
+        id: "return-evidence",
+        text: "带回能解释玄负停驻的证物",
+        done: false,
+      },
+    ]);
+  });
+
+  it("keeps similar but distinct objectives separate", async () => {
+    await executeAndCommit(
+      upsertQuestsTool,
+      {
+        quests: [
+          {
+            name: "塔内侦察",
+            objectives: [{ text: "进入黑塔内部" }],
+          },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+
+    await executeAndCommit(
+      upsertQuestsTool,
+      {
+        quests: [
+          {
+            name: "塔内侦察",
+            objectives: [{ text: "进入营地内部", done: true }],
+          },
+        ],
+      },
+      ctx,
+      mockStore,
+    );
+
+    const stored = await findQuestByName("塔内侦察");
+    expect(stored.value.objectives).toHaveLength(2);
+    expect(stored.value.objectives.map((objective) => objective.text)).toEqual([
+      "进入黑塔内部",
+      "进入营地内部",
+    ]);
   });
 
   it("classifies a status transition to completed / failed in the change summary", async () => {
@@ -422,7 +626,7 @@ describe("upsert-quests", () => {
     expect(rows[0].key).toBe("main-quest-01");
     expect(rows[0].value.description).toBe("世界包预置的主线任务。");
     expect(rows[0].value.objectives).toEqual([
-      { text: "夜探后山", done: true },
+      { id: expect.any(String), text: "夜探后山", done: true },
     ]);
   });
 
