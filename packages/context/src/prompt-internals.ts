@@ -139,7 +139,7 @@ function resolveRuntimeInject(
   if (value === undefined || value === null) return null;
 
   const tagName = validateTagName(parseTagName(inject.as));
-  return `<${tagName}>${escapeXmlContent(String(value))}</${tagName}>`;
+  return `<${tagName}>${escapeXmlContent(renderTemplateValue(value))}</${tagName}>`;
 }
 
 /**

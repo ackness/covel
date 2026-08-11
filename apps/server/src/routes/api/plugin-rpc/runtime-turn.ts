@@ -1,5 +1,6 @@
 import {
   createTurnEmitter,
+  collectExecutionJournal,
   executeTurn,
   finalizeExecution,
   saveAutoSnapshot,
@@ -111,6 +112,7 @@ export function createPluginRpcRuntimeTurnRunner(
         ...turnResult.runtimeResults,
         ...(turnResult.nestedRuntimeResults ?? []),
       ],
+      journalMessages: collectExecutionJournal(turnResult),
       turnIds: [turnResult.turnId],
       ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
       eventBus: ctx.eventBus,

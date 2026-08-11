@@ -133,6 +133,78 @@ describe("finalizeExecution", () => {
     expect(emits).toHaveLength(0);
   });
 
+  it("commits execution journal messages with successful proposals", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+
+    const outcome = await finalizeExecution({
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("rt-a")],
+      results: [makeResult("rt-a", statePatch("hp", 10))],
+      turnIds: [TURN_ID],
+      journalMessages: [
+        {
+          id: "msg-player",
+          sessionId: SESSION_ID,
+          turnId: TURN_ID,
+          sourceType: "player",
+          role: "user",
+          content: "advance",
+          order: 0,
+          createdAt: "2026-08-09T00:00:00.000Z",
+        },
+        {
+          id: "msg-runtime",
+          sessionId: SESSION_ID,
+          turnId: TURN_ID,
+          sourceType: "runtime",
+          sourcePluginId: "rt-a",
+          sourceRuntimeId: "rt-a",
+          role: "assistant",
+          content: "done",
+          order: 500,
+          createdAt: "2026-08-09T00:00:01.000Z",
+        },
+      ],
+    });
+
+    expect(outcome.status).toBe("committed");
+    expect(
+      (await store.listTurnMessages(SESSION_ID)).map((message) => message.id),
+    ).toEqual(["msg-player", "msg-runtime"]);
+  });
+
+  it("rolls execution journal messages back with a failed proposal", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+
+    const outcome = await finalizeExecution({
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("rt-a")],
+      results: [makeResult("rt-a", badStatePatch())],
+      turnIds: [TURN_ID],
+      journalMessages: [
+        {
+          id: "msg-rolled-back",
+          sessionId: SESSION_ID,
+          turnId: TURN_ID,
+          sourceType: "runtime",
+          sourcePluginId: "rt-a",
+          sourceRuntimeId: "rt-a",
+          role: "assistant",
+          content: "ghost",
+          order: 500,
+          createdAt: "2026-08-09T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(outcome.status).toBe("failed");
+    expect(await store.listTurnMessages(SESSION_ID)).toEqual([]);
+  });
+
   it("commits the whole execution in one transaction and flushes deferred fan-out in order", async () => {
     const store = createMemoryStore();
     await savePendingTurn(store);

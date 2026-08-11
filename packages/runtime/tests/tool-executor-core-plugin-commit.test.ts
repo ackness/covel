@@ -65,7 +65,12 @@ describe("ToolExecutor + core plugin pending proposals + commit pipeline", () =>
           ],
         }),
       },
-      context,
+      {
+        ...context,
+        // Tool calls in one runtime share the proposals accumulated so far.
+        // world-init uses the schema proposal as its same-turn completion gate.
+        pendingProposals: schemaResult.pendingProposals,
+      },
     );
 
     expect(schemaResult.success).toBe(true);

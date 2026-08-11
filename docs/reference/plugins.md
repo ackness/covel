@@ -92,7 +92,7 @@
 | `narrative` | `narrator` · `chat-mode-narrator`                                                                                                                                                   | 主叙事生成器（互斥，二选一激活）                                                                                                                                                                   |
 | `post-turn` | `guide` · `codex` · `core-quest` · `affinity` · `inventory` · `npc-graph/extractor` · `char-creator/character-tracker` · `scene-prompts` · `mimo-tts/auto-narrate` · `branch-reply` | 除 `branch-reply` 外都以 `{ capability: narrative-engine }` 依赖当前模式的叙事引擎（`branch-reply` 无 `needs`，按 `narrativeOutput` 非空这一契约自行发现叙事）；彼此独立 → **同 stage 内并行执行** |
 
-`setup` stage（会话 `phase === "setup"` 时运行）走：`pregame → world-init/schema-gen → char-creator/player-init`，顺序完全由声明边决定：`world-init/schema-gen` 声明弱排序 `after: [pregame]`（pregame 失败不拦 schema 生成）；`char-creator/player-init` 声明 turn-scoped `needs: [pregame, world-init/schema-gen]`（player-init 读取 schema-gen 写出的 `world.schema`，`needs` 既是同一 pass 内的 DAG 边、也是同回合门控）。三者均为 `stage: setup` + `trigger: auto`（`maxTriggerCount` 为重试预算）。
+`setup` stage（会话 `phase === "setup"` 时运行）走：`pregame → world-init/schema-gen → char-creator/player-init`，顺序完全由声明边决定：`world-init/schema-gen` 声明弱排序 `after: [pregame]`（pregame 失败不拦 schema 生成）；`char-creator/player-init` 声明 turn-scoped `needs: [pregame, world-init/schema-gen]`（`needs` 既是同一 pass 内的 DAG 边、也是同回合门控），并通过 `input.inject` 读取 schema-gen output 的 `worldSchema`。DAG 顺序只保证上游结果可见；未提交的 proposal store write 要到 finalizer transaction 后才可读取，因此同轮数据传递必须使用 runtime output/inputs。三者均为 `stage: setup` + `trigger: auto`（`maxTriggerCount` 为重试预算）。
 
 所有插件单声明 `stage` + `needs`/`after`，无例外；`event` / `manual` runtime 不设 `stage`。
 
@@ -193,6 +193,8 @@
 | tools.plugin  | `set-world-schema`, `set-world-entries-batch`                                                                                           |
 | tools.builtin | 无（setup 期只写世界 schema，不回读自身 plugin-data）                                                                                   |
 | ui.right      | `./ui/world-overview.json`, `./ui/world-schema.json`                                                                                    |
+
+无论 guard 复用已存在 schema、采用世界声明、从 dimensions 派生，还是 agent 生成，成功/完成输出都会携带结构化 `worldSchema`。下游 setup runtime 可在同一 execution 中通过 runtime inject 消费它；持久 `world.schema` 仍在 proposal commit 后成为后续 execution 的 store 真值。
 
 **Guard 门控**: `guard.js` 在 LLM 调用前执行（纯函数，零 LLM 开销），按优先级决定角色属性 schema，命中任一即返回 `{ skip: true }` 跳过 LLM：
 
@@ -428,9 +430,9 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 | ui.right     | `quest-log-panel.json` — 任务面板（进行中含 objectives 勾选清单 / 已完成 / 已失败）                                                                                           |
 | ui.message   | `quest-changes-block.json` — 本回合任务变更块                                                                                                                                 |
 
-**职责**：只记录叙事明确出现的任务信号——不发明任务、每回合新任务 ≤3、目标勾选与完成/失败必须有叙事证据、无信号回合不调工具。`upsert-quests`（≤5/次）按 name 归一化合并：已有任务提供字段覆盖，objectives 按 text 匹配更新勾选、未命中追加；世界预置任务（`<existing-quests>` 已注入）只推进不重建。变更摘要写 `message` namespace 驱动消息块。
+**职责**：只记录叙事明确出现的任务信号——不发明任务、每回合新任务 ≤3、目标勾选与完成/失败必须有叙事证据、无信号回合不调工具。`upsert-quests`（≤5/次）按 name 归一化合并：已有任务提供字段覆盖，objectives 依次按稳定 `id`、规范化 text、保守语义匹配更新勾选，命中后保留已有目标原文，未命中才追加；世界预置任务（`<existing-quests>` 已注入）只推进不重建。变更摘要写 `message` namespace 驱动消息块。
 
-**世界导入**：`world.data.yaml` 用 `schema: plugin://core-quest/quests` + `to: plugin:core-quest/quests` + `key: id` 预置任务，记录形状 `{ id, name, description, status?, objectives?: [{text, done?}], giver?, reward? }`（参考 `worlds/emberback/data/quests.yaml`）。
+**世界导入**：`world.data.yaml` 用 `schema: plugin://core-quest/quests` + `to: plugin:core-quest/quests` + `key: id` 预置任务，记录形状 `{ id, name, description, status?, objectives?: [{id?, text, done?}], giver?, reward? }`；建议世界包为每个 objective 提供任务内稳定的 `id`（参考 `worlds/emberback/data/quests.yaml`）。
 
 ---
 
@@ -505,16 +507,17 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ### char-creator/player-init
 
-| 字段        | 值                                                                                           |
-| ----------- | -------------------------------------------------------------------------------------------- |
-| pluginType  | `core-plugin`（不可禁用）                                                                    |
-| stage       | `setup`                                                                                      |
-| runtimeType | `agent`（默认，LLM 生成开场表单；guard 命中时跳过）                                          |
-| trigger     | `auto`（`guard` 门控）                                                                       |
-| needs       | `[pregame, world-init/schema-gen]`（turn-scoped：既是同 pass 的 DAG 边，也是同回合上游门控） |
-| guard       | `./guard.js` — 若 player 已存在或已收到表单提交则 skip LLM                                   |
-| model       | `plugin`                                                                                     |
-| ui.right    | `../../ui/character-panel.json`                                                              |
+| 字段         | 值                                                                                                                     |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| pluginType   | `core-plugin`（不可禁用）                                                                                              |
+| stage        | `setup`                                                                                                                |
+| runtimeType  | `agent`（默认，LLM 生成开场表单；guard 命中时跳过）                                                                    |
+| trigger      | `auto`（`guard` 门控）                                                                                                 |
+| needs        | `[pregame, world-init/schema-gen]`（turn-scoped：既是同 pass 的 DAG 边，也是同回合上游门控）                           |
+| input.inject | `world-init/schema-gen.worldSchema` → `<same-turn-world-schema>`；同轮结构化 schema 优先，已提交的 `world.schema` 兜底 |
+| guard        | `./guard.js` — 若 player 已存在或已收到表单提交则 skip LLM                                                             |
+| model        | `plugin`                                                                                                               |
+| ui.right     | `../../ui/character-panel.json`                                                                                        |
 
 **两步流程**（第 1 步由 LLM agent 完成，第 2 步由 `guard.js` 确定性完成）：
 
@@ -526,7 +529,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 2. **第 2 步 - 提交创建**（`<player-submission>` 包含表单值时）：
    - 读取最近一次 player input submission
    - 合并 schema `defaultValue`
-   - 直接写入 `characters` 表与 `plugin_data[characters]`
+   - 通过 guard 的 execution write buffer 生成 `character.upsert` 与 `plugin.data` proposals
    - 输出 `preGameDone: true`，标记本 runtime 已完成 setup 初始化（框架将其累加到 `session.setupRuntimes`）
 
 **当前代码状态**: 这一条路径保持在插件包内部，实现位于 `runtimes/player-init/guard.js`（deterministic 提交分支）。schema `defaultValue` 在写入边界合并进存库 `fields`（与 builtin `create-character` 一致），使右栏显示、模型 `get-character` 与 prompt 注入读到同一份字段，schema 通过 well-known namespace/key 发现而非硬编码 world-data 插件 id。如果后续希望统一 deterministic runtime 的 trace 与工具链，可以把这条流程收敛到 builtin character tools。
@@ -1282,6 +1285,8 @@ Guard 适用于"先检查再决定是否需要 LLM"的场景，替代了之前�
 
 builtin `memory` 插件声明默认的四个通用块（`story_state` / `character_relationships` / `scene` / `player_profile`）。任意插件或世界包都可追加自己的块；**标签重复时按信任层级决胜（builtin > official > community）：高信任声明覆盖低信任声明，与发现顺序无关**——因此 community 插件无法靠抢先加载来静默覆盖 builtin 默认块的定义（如改写 `story_state` 的 `extractionHint`）。同一信任层级内取首次声明（稳定）；当同层级的多个插件以**不同定义**声明同一标签时，框架打印一条 dev 警告。信任层级取自插件的发现来源（加载路径，不可伪造），框架不按具体插件 id 决胜。未声明任何 `memoryBlocks` 时，框架回退到 `@covel/memory` 内置的同名通用默认块。
 
+每轮结束后的抽取输入同时包含叙事、工具摘要，以及已提交会话状态中的玩家角色和最近一次表单值。结构化会话事实具有最高事实优先级；`player_profile` 的首行由框架根据角色记录与世界属性显示名确定性生成，LLM 只维护其后的动态状态摘要。这样后续回合无法翻译、改写或覆盖玩家已确认的姓名与属性值。
+
 **世界包**在 `world.yaml` 顶层（而非 `PLUGIN.md`）声明 `memoryBlocks`（字段形状相同）。与插件块的全局聚合不同，世界块**按 session 解析**：记忆系统把该 session 所属世界的块合并到全局插件块之上——基础块（插件 / 框架默认）在标签冲突时优先（builtin 默认受保护），世界只**新增**未占用的标签。因此侦探世界的会话才会出现 `clues` / `suspects`，其它题材会话不受影响。世界侧声明与示例见 [world-data.md #世界记忆块memoryblocks](world-data.md#世界记忆块memoryblocks)。
 
 | 字段             | 类型                     | 说明                                                                   |
@@ -1584,9 +1589,9 @@ rpc:
 
 **框架默认 actions(无需声明,通过 `pluginId: "framework"` sentinel 调用):**
 
-| Action        | 说明                                                 |
-| ------------- | ---------------------------------------------------- |
-| `submit-form` | 持久化玩家表单 / 选择 / 确认提交，填充模板 narrative |
+| Action        | 说明                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------ |
+| `submit-form` | 绑定已提交 interaction，严格校验并幂等持久化表单 / 选择 / 确认，再填充模板 narrative |
 
 详细 API 说明见 [api.md `POST /api/sessions/:id/plugin-rpc`](api.md#post-apisessionsidplugin-rpc),作者指南见 [../guide/plugin-authoring.md §2.3.1](../guide/plugin-authoring.md)。
 
@@ -1605,7 +1610,7 @@ rpc:
 | `field` | `string`（必填）    | 从源 runtime `output` 里取的字段名                         |
 | `as`    | `string`（必填）    | 包裹 XML 标签，如 `"<narrator-output>"`                    |
 
-如果源 runtime 本回合没有执行、失败、或指定字段不存在，该 entry 静默跳过，不会污染其他注入块。
+如果源 runtime 本回合没有执行、失败、或指定字段不存在，该 entry 静默跳过，不会污染其他注入块。字符串按原文注入；数组和对象使用稳定的 JSON 文本渲染，避免出现 `"[object Object]"`。
 
 #### `kind: plugin-data`（本插件自己的 plugin-data 状态注入）
 

@@ -6,11 +6,14 @@
   giver: 秦九镰
   reward: 鳞钱六十，并在悬钩堂正式挂名
   objectives:
-    - text: 赶在封锚前备齐装具，完成下降准备
+    - id: prepare-descent
+      text: 赶在封锚前备齐装具，完成下降准备
       done: false
-    - text: 缒链下降，进入黑色尖塔
+    - id: enter-black-tower
+      text: 缒链下降，进入黑色尖塔
       done: false
-    - text: 带回能解释玄负停驻的证物
+    - id: return-evidence
+      text: 带回能解释玄负停驻的证物
       done: false
 - id: cold-patch-survey
   name: 尾甲滩寒斑测绘
@@ -19,9 +22,11 @@
   giver: 温辞
   reward: 鳞钱二十五，外加司辰阁的一份人情
   objectives:
-    - text: 走完尾甲滩三处寒斑，记录边界与甲温
+    - id: survey-cold-patches
+      text: 走完尾甲滩三处寒斑，记录边界与甲温
       done: false
-    - text: 把测绘结果亲手交给温辞
+    - id: deliver-survey
+      text: 把测绘结果亲手交给温辞
       done: false
 - id: sealed-parcel
   name: 一只不过秤的匣子
@@ -30,7 +35,9 @@
   giver: 哑弦
   reward: 鳞钱三十，或一条关于白汐旧图上记号的线索
   objectives:
-    - text: 避开锚卡的盘查，把匣子带到冷鳞垛
+    - id: evade-inspection
+      text: 避开锚卡的盘查，把匣子带到冷鳞垛
       done: false
-    - text: 原封不动交给接头人
+    - id: deliver-sealed-parcel
+      text: 原封不动交给接头人
       done: false

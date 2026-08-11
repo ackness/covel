@@ -66,16 +66,23 @@ describe("char-creator plugin", () => {
       expect(manifest.tools?.builtin).toEqual(["create-form"]);
     });
 
-    it("injects pregame.narrativeOutput as <pregame-opening>", () => {
+    it("injects the same-turn pregame opening and generated world schema", () => {
       // Pre-Game band: narrator is NOT scheduled on turn 0, so player-init
       // consumes the opening summary produced by pregame (priority 10)
       // rather than the (missing) narrator output. See plugin README / the
       // turn-executor scheduler band gate.
-      expect(manifest.input?.inject).toHaveLength(1);
-      const inject = manifest.input.inject[0];
-      expect(inject.from).toBe("pregame");
-      expect(inject.field).toBe("narrativeOutput");
-      expect(inject.as).toBe("<pregame-opening>");
+      expect(manifest.input?.inject).toEqual([
+        expect.objectContaining({
+          from: "pregame",
+          field: "narrativeOutput",
+          as: "<pregame-opening>",
+        }),
+        expect.objectContaining({
+          from: "world-init/schema-gen",
+          field: "worldSchema",
+          as: "<same-turn-world-schema>",
+        }),
+      ]);
     });
 
     it("declares turn-scoped needs so it waits for pregame and schema init", () => {

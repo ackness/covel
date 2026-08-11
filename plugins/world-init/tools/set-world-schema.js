@@ -2,12 +2,12 @@
  * set-world-schema — Store character attribute schema for this world.
  * Single call to define all character attributes at once.
  *
- * @param {{ tool: Function, z: import('zod'), store: any }} injection
+ * @param {{ tool: Function, z: import('zod') }} injection
  */
 import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 
-export default function ({ tool, z, store }) {
+export default function ({ tool, z }) {
   // A display label is either a plain string or an i18n record
   // (`{ "zh-CN": "门派", "en-US": "Faction" }`). The LLM normally emits a plain
   // string; a world that ships its own schema may declare bilingual labels.
@@ -75,17 +75,24 @@ export default function ({ tool, z, store }) {
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();
+      const worldSchema = {
+        "character-attributes": {
+          version: 1,
+          attributes: params.attributes,
+        },
+      };
       return withPendingProposals(
         {
           success: true,
           attributeCount: params.attributes.length,
           categories: [...new Set(params.attributes.map((a) => a.category))],
+          worldSchema,
         },
         [
           makeProposal(context, now, "plugin.data", {
             namespace: "schema",
             key: "character-attributes",
-            value: { version: 1, attributes: params.attributes },
+            value: worldSchema["character-attributes"],
           }),
         ],
       );

@@ -170,6 +170,26 @@ function deriveSchema(dimensions) {
   return attrs;
 }
 
+/**
+ * Shape consumed by SessionContext's `world.schema` and by player-init's
+ * same-turn runtime injection. Keeping one canonical view prevents the setup
+ * DAG from depending on an uncommitted plugin-data read.
+ *
+ * @param {Array<Record<string, unknown>>} attributes
+ */
+function worldSchemaView(attributes) {
+  return {
+    "character-attributes": { version: 1, attributes },
+  };
+}
+
+/** @param {Array<{key: string, value: unknown}>} records */
+function worldSchemaViewFromRecords(records) {
+  return Object.fromEntries(
+    records.map((record) => [record.key, record.value]),
+  );
+}
+
 export default async function guard(ctx) {
   const { sessionId, store, pluginId, locale } = ctx;
   const s = /** @type {any} */ (store);
@@ -186,6 +206,7 @@ export default async function guard(ctx) {
           initialized: true,
           schemaCount: existing.length,
           entryCount: entries?.length ?? 0,
+          worldSchema: worldSchemaViewFromRecords(existing),
           narrativeOutput: pick(
             locale,
             `[系统] 世界维度数据已加载（${existing.length} 个 schema, ${entries?.length ?? 0} 个词条）`,
@@ -245,6 +266,7 @@ export default async function guard(ctx) {
         importedDimensions: entryRecords.length > 0,
         entryCount: entryRecords.length,
         schemaCount: declaredAttributes.length,
+        worldSchema: worldSchemaView(declaredAttributes),
         narrativeOutput: pick(
           locale,
           `[系统] 从世界包导入角色属性 Schema（${declaredAttributes.length} 个属性${entryRecords.length ? `，${entryRecords.length} 个维度词条` : ""}）`,
@@ -314,6 +336,7 @@ export default async function guard(ctx) {
           importedDimensions: true,
           entryCount: entryRecords.length,
           schemaCount: attributes.length,
+          worldSchema: worldSchemaView(attributes),
           narrativeOutput: pick(
             locale,
             `[系统] 从世界包全量导入：${entryRecords.length} 个维度词条，${attributes.length} 个角色属性`,

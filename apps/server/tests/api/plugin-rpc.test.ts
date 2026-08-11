@@ -27,7 +27,7 @@ import {
   type LoadedRuntime,
   type FunctionHandler,
 } from "@covel/plugin-loader";
-import type { RuntimeManifest } from "@covel/shared";
+import type { InteractionPayload, RuntimeManifest } from "@covel/shared";
 import { createEventBus } from "@covel/events";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
@@ -64,6 +64,7 @@ function setup(): {
   });
   const gate = createRpcApprovalGate();
   const pluginRegistry = createPluginRegistry();
+  const sessionLock = createInProcessSessionLock();
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
     c.set("store", store);
@@ -74,6 +75,7 @@ function setup(): {
     // not found" without 500ing on missing DI. Full executeTurn wiring is
     // covered by the bootstrap integration tests.
     c.set("pluginRegistry", pluginRegistry);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", pluginRpcRoutes);
@@ -102,19 +104,18 @@ async function seedSession(
 async function seedInteractionTemplate(
   store: DataStore,
   sessionId: string,
-  interactionId: string,
-  content: string,
+  interaction: InteractionPayload,
 ): Promise<void> {
   await store.appendTurnMessage({
-    id: `tpl-${interactionId}`,
+    id: `tpl-${interaction.interactionId}`,
     sessionId,
     turnId: "turn-1",
     sourceType: "runtime",
     role: "assistant",
     name: "tpl",
-    content,
+    content: "",
     order: 700,
-    pendingInput: { formId: interactionId },
+    pendingInput: [interaction],
     createdAt: new Date().toISOString(),
   });
 }
@@ -139,10 +140,9 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   let app: Hono;
   let store: DataStore;
   let registry: PluginRpcRegistry;
-  let gate: RpcApprovalGate;
 
   beforeEach(async () => {
-    ({ app, store, registry, gate } = setup());
+    ({ app, store, registry } = setup());
     await seedSession(store);
   });
 
@@ -302,12 +302,13 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("forwards a choice submission and fills the template with selectedLabel", async () => {
-    await seedInteractionTemplate(
-      store,
-      "sess-rpc-1",
-      "ch-1",
-      "You chose {{selectedLabel}}",
-    );
+    await seedInteractionTemplate(store, "sess-rpc-1", {
+      interactionId: "ch-1",
+      type: "choice",
+      prompt: "Choose",
+      choices: [{ id: "a", label: "Attack" }],
+      narrativeTemplate: "You chose {{selectedLabel}}",
+    });
     const res = await submitFormRequest(app, "sess-rpc-1", [
       {
         interactionId: "ch-1",
@@ -321,14 +322,48 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(body.result.results[0].filledNarrative).toBe("You chose Attack");
   });
 
+  it("serializes concurrent identical submissions into one player input", async () => {
+    await seedInteractionTemplate(store, "sess-rpc-1", {
+      interactionId: "form-concurrent",
+      type: "form",
+      title: "Name",
+      submitLabel: "Continue",
+      fields: [{ type: "text", name: "name", label: "Name", required: true }],
+    });
+    const submission = {
+      interactionId: "form-concurrent",
+      type: "form",
+      values: { name: "Aria" },
+    };
+    const [left, right] = await Promise.all([
+      submitFormRequest(app, "sess-rpc-1", [submission]),
+      submitFormRequest(app, "sess-rpc-1", [submission]),
+    ]);
+    expect([left.status, right.status]).toEqual([200, 200]);
+    const leftBody = (await left.json()) as {
+      result: { results: Array<{ submissionId: string }> };
+    };
+    const rightBody = (await right.json()) as {
+      result: { results: Array<{ submissionId: string }> };
+    };
+    expect(rightBody.result.results[0]?.submissionId).toBe(
+      leftBody.result.results[0]?.submissionId,
+    );
+    expect(
+      (await store.listPlayerInputs("sess-rpc-1")).filter(
+        (input) => input.formId === "form-concurrent",
+      ),
+    ).toHaveLength(1);
+  });
+
   it("threads session.locale into the handler: confirmation localizes to en-US", async () => {
     await seedSession(store, "sess-rpc-en", "en-US");
-    await seedInteractionTemplate(
-      store,
-      "sess-rpc-en",
-      "cf-1",
-      "Result: {{confirmed}}",
-    );
+    await seedInteractionTemplate(store, "sess-rpc-en", {
+      interactionId: "cf-1",
+      type: "confirmation",
+      prompt: "Proceed?",
+      narrativeTemplate: "Result: {{confirmed}}",
+    });
     const res = await submitFormRequest(app, "sess-rpc-en", [
       {
         interactionId: "cf-1",
@@ -344,12 +379,12 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("confirmation stays 确认 under the default zh-CN session locale", async () => {
-    await seedInteractionTemplate(
-      store,
-      "sess-rpc-1",
-      "cf-2",
-      "Result: {{confirmed}}",
-    );
+    await seedInteractionTemplate(store, "sess-rpc-1", {
+      interactionId: "cf-2",
+      type: "confirmation",
+      prompt: "Proceed?",
+      narrativeTemplate: "Result: {{confirmed}}",
+    });
     const res = await submitFormRequest(app, "sess-rpc-1", [
       {
         interactionId: "cf-2",
@@ -364,6 +399,19 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   });
 
   it("processes a batch of form+choice submissions in one request", async () => {
+    await seedInteractionTemplate(store, "sess-rpc-1", {
+      interactionId: "b1",
+      type: "form",
+      title: "Name",
+      submitLabel: "Continue",
+      fields: [{ type: "text", name: "name", label: "Name" }],
+    });
+    await seedInteractionTemplate(store, "sess-rpc-1", {
+      interactionId: "b2",
+      type: "choice",
+      prompt: "Choose",
+      choices: [{ id: "x", label: "X" }],
+    });
     const res = await submitFormRequest(app, "sess-rpc-1", [
       { interactionId: "b1", type: "form", values: { name: "A" } },
       { interactionId: "b2", type: "choice", values: { selectedId: "x" } },
@@ -1200,9 +1248,9 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       runtimeId: SYNC_RUNTIME,
       reason: "expected-background-follower-missing",
     });
-    expect(String((jobs[0]?.value as { error?: string }).error)).toContain(
-      "completed without emitting",
-    );
+    expect(
+      String((jobs[0]?.value as { error?: string } | undefined)?.error),
+    ).toContain("completed without emitting");
   });
 
   // ── X-Plugin-User-Settings header → ctx.userSettings ──

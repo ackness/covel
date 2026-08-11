@@ -130,7 +130,7 @@ export function useBuildSessionActions({
           type: "start_session",
           sessionId,
           locale: i18n.language,
-          payload: loreOverride ? { loreOverride } : {},
+          payload: typeof loreOverride === "string" ? { loreOverride } : {},
         },
         handleSseEvent,
         dispatch,
@@ -360,14 +360,11 @@ export function useBuildSessionActions({
 
       // Run the resulting narrative turn, then re-sync the character snapshot.
       //
-      // The character panel reads `gameState.characters` (dataSource
-      // `session.characters`), and that slice is only filled incrementally by
-      // the `character.upserted` SSE event — which fires *solely* from the
-      // `character.upsert` proposal path. The primary character-creation paths
-      // (char-creator's create/update-character tools and player-init's
-      // deterministic guard) write straight to the store and mirror to
-      // plugin_data, emitting only `plugin-data.changed`. They never emit
-      // `character.upserted`. `characterSchema` has no SSE carrier at all.
+      // Proposal-backed character writes (including the builtin
+      // create/update-character tools and player-init guard) emit
+      // `character.upserted`, so characters update incrementally.
+      // `characterSchema` still has no SSE carrier; refresh the snapshot after
+      // setup input so the schema and character slices are reconciled together.
       //
       // So after the turn that may have created/updated the player, we pull a
       // snapshot to refresh both `characters` and `characterSchema`. Done after

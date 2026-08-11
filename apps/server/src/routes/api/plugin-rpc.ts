@@ -670,16 +670,25 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
             sessionId,
             pluginId,
           });
-    const dispatch = await executor.dispatch(
-      {
-        pluginId,
-        action,
-        payload: body.payload,
-      },
-      // session.locale lets framework defaults (submit-form) localize their
-      // produced narrative; resolution order request → session → world → app.
-      { sessionId, store: rpcStore, locale: session.locale },
-    );
+    // Action handlers can perform read-validate-write sequences (the framework
+    // submit-form default is one). Serialize them with turns and sibling RPCs
+    // so the interaction check and idempotent player-input write are atomic at
+    // the session boundary, including across PG-backed server processes.
+    const dispatchAction = () =>
+      executor.dispatch(
+        {
+          pluginId,
+          action,
+          payload: body.payload,
+        },
+        // session.locale lets framework defaults (submit-form) localize their
+        // produced narrative; resolution order request → session → world → app.
+        { sessionId, store: rpcStore, locale: session.locale },
+      );
+    const actionSessionLock = c.get("sessionLock");
+    const dispatch = actionSessionLock
+      ? await actionSessionLock.withLock(sessionId, dispatchAction)
+      : await dispatchAction();
     return c.json({ status: "ok", result: dispatch.result });
   } catch (err) {
     if (err instanceof RpcValidationError) {

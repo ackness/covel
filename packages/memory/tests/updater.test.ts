@@ -83,6 +83,152 @@ describe("MemoryUpdater", () => {
     expect(scene!.content).toBe("百灵沼泽入口，黄昏时分");
   });
 
+  it("injects committed character and form values as authoritative facts", async () => {
+    let captured: Parameters<MemoryLLMAdapter["complete"]>[0] | undefined;
+    const llm: MemoryLLMAdapter = {
+      async complete(request) {
+        captured = request;
+        return { content: "{}" };
+      },
+    };
+    const updater = createMemoryUpdater(manager, llm);
+
+    await updater.updateAfterTurn({
+      sessionId: "sess-authoritative",
+      narrativeText: "叙事没有复述角色创建表单。",
+      authoritativeFacts: {
+        playerCharacter: {
+          name: "阿砾",
+          type: "player",
+          fields: { carapaceSense: "甲感略强于常人", socialStyle: "会来事" },
+        },
+        lastFormValues: {
+          carapaceSense: "甲感略强于常人",
+          socialStyle: "会来事",
+        },
+      },
+      currentBlocks,
+    });
+
+    expect(captured?.systemPrompt).toContain("必须以会话事实为准");
+    const userPrompt = String(captured?.messages[0]?.content ?? "");
+    expect(userPrompt).toContain("## 会话事实（权威）");
+    expect(userPrompt).toContain('"carapaceSense": "甲感略强于常人"');
+    expect(userPrompt).toContain('"socialStyle": "会来事"');
+  });
+
+  it("deterministically preserves confirmed player fields across later turns", async () => {
+    const responses = [
+      {
+        player_profile:
+          "身份：拾荒学徒。姓名：阿砾。壳感二分，谈锋圆滑。当前状态：已进入尖塔。",
+      },
+      {
+        player_profile:
+          "姓名：阿砾；甲觉二分；谈锋圆滑。当前状态：继续沿旋梯下行。",
+      },
+    ];
+    const llm: MemoryLLMAdapter = {
+      async complete() {
+        return { content: JSON.stringify(responses.shift() ?? {}) };
+      },
+    };
+    const updater = createMemoryUpdater(manager, llm);
+    const authoritativeFacts = {
+      playerCharacter: {
+        name: "阿砾",
+        type: "player",
+        fields: { shellSense: "二分", tongue: "圆滑" },
+      },
+      playerFieldLabels: { shellSense: "甲感", tongue: "谈锋" },
+      lastFormValues: { shellSense: "二分", tongue: "圆滑" },
+    } as const;
+
+    await updater.updateAfterTurn({
+      sessionId: "sess-stable-profile",
+      narrativeText: "玩家进入尖塔。",
+      authoritativeFacts,
+      currentBlocks,
+    });
+    const afterFirst = await manager.loadBlocks("sess-stable-profile");
+    const firstProfile = afterFirst.find(
+      (block) => block.label === "player_profile",
+    )?.content;
+    expect(firstProfile).toContain(
+      "角色资料（已确认）：姓名：阿砾；甲感：二分；谈锋：圆滑。",
+    );
+    expect(firstProfile).toContain("当前状态：已进入尖塔。");
+    expect(firstProfile).not.toContain("壳感");
+
+    await updater.updateAfterTurn({
+      sessionId: "sess-stable-profile",
+      narrativeText: "玩家继续下行。",
+      authoritativeFacts,
+      currentBlocks: afterFirst,
+    });
+    const afterSecond = await manager.getBlock(
+      "sess-stable-profile",
+      "player_profile",
+    );
+    expect(afterSecond?.content).toContain(
+      "角色资料（已确认）：姓名：阿砾；甲感：二分；谈锋：圆滑。",
+    );
+    expect(afterSecond?.content).toContain("当前状态：继续沿旋梯下行。");
+    expect(afterSecond?.content).not.toContain("甲觉");
+  });
+
+  it("persists confirmed player fields before a slow summarizer completes", async () => {
+    let releaseLlm!: () => void;
+    let markLlmStarted!: () => void;
+    const llmStarted = new Promise<void>((resolve) => {
+      markLlmStarted = resolve;
+    });
+    const llmReleased = new Promise<void>((resolve) => {
+      releaseLlm = resolve;
+    });
+    const slowLlm: MemoryLLMAdapter = {
+      async complete() {
+        markLlmStarted();
+        await llmReleased;
+        return { content: "{}" };
+      },
+    };
+    const updater = createMemoryUpdater(manager, slowLlm);
+    const update = updater.updateAfterTurn({
+      sessionId: "sess-early-profile",
+      narrativeText: "摘要调用仍在进行。",
+      authoritativeFacts: {
+        playerCharacter: {
+          name: "阿砾",
+          type: "player",
+          fields: { shellSense: "二分" },
+        },
+        playerFieldLabels: { shellSense: "甲感" },
+      },
+      currentBlocks: currentBlocks.map((block) =>
+        block.label === "player_profile"
+          ? { ...block, content: "姓名：阿砾。壳感二分。" }
+          : block,
+      ),
+    });
+
+    await llmStarted;
+    const whileLlmPending = await manager.getBlock(
+      "sess-early-profile",
+      "player_profile",
+    );
+    expect(whileLlmPending?.content).toContain(
+      "角色资料（已确认）：姓名：阿砾；甲感：二分。",
+    );
+    expect(whileLlmPending?.content).not.toContain("壳感");
+
+    releaseLlm();
+    await expect(update).resolves.toMatchObject({
+      updated: true,
+      blocksChanged: ["player_profile"],
+    });
+  });
+
   it("should handle markdown-wrapped JSON", async () => {
     const llm = createMockLLM('```json\n{"scene": "新场景"}\n```');
     const updater = createMemoryUpdater(manager, llm);

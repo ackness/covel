@@ -37,6 +37,13 @@ input:
       from: pregame
       field: narrativeOutput
       as: "<pregame-opening>"
+    # world-init's schema write is a proposal and is intentionally uncommitted
+    # until the setup execution finalizes. Carry the same value explicitly so
+    # this downstream runtime never relies on a cross-runtime Store read.
+    - kind: runtime
+      from: world-init/schema-gen
+      field: worldSchema
+      as: "<same-turn-world-schema>"
 tools:
   builtin:
     - create-form
@@ -72,9 +79,13 @@ postHistory:
 
 ## 角色属性 Schema（世界维度系统定义）
 
-<world-schema>
+`<same-turn-world-schema>` 位于 Prompt 末尾，包含本次 setup 中由 world-init
+刚生成的权威 Schema。该块存在时优先使用；恢复/重试场景可回退到下面已提交的
+`<committed-world-schema>`。
+
+<committed-world-schema>
 {{ world.schema }}
-</world-schema>
+</committed-world-schema>
 
 ---
 
@@ -85,10 +96,10 @@ postHistory:
 
 ### 表单字段生成规则
 
-**必须参考 `<world-schema>` 中的角色属性定义**：
+**必须参考 `<same-turn-world-schema>`（优先）或 `<committed-world-schema>` 中的角色属性定义**：
 
 1. **`characterName` 字段必须存在**（`required: true`，type: text）
-2. 从 `<world-schema>` 的 `character-attributes.attributes` 中选取 **最多 3 个** 适合玩家选择的属性
+2. 从 Schema 的 `character-attributes.attributes` 中选取 **最多 3 个** 适合玩家选择的属性
 3. 选取优先级：`bio` 分类 > `abilities` 分类 > `stats` 分类
 4. 字段 `name` 必须与 schema 属性 `id` **完全一致**
 5. 类型映射：`enum` → `select`；`string` → `text`；`number` → 从合理范围生成 3-5 个 select 选项；`array` → `text`（placeholder 逗号分隔）

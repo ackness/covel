@@ -468,11 +468,11 @@ key: id
 
 | 插件         | schema URI                   | to                         | 记录形状                                                                                     |
 | ------------ | ---------------------------- | -------------------------- | -------------------------------------------------------------------------------------------- |
-| `core-quest` | `plugin://core-quest/quests` | `plugin:core-quest/quests` | `{ id, name, description, status?, objectives?: [{text, done?}], giver?, reward? }`          |
+| `core-quest` | `plugin://core-quest/quests` | `plugin:core-quest/quests` | `{ id, name, description, status?, objectives?: [{id?, text, done?}], giver?, reward? }`     |
 | `inventory`  | `plugin://inventory/items`   | `plugin:inventory/items`   | `{ id, name, quantity, description?, tags?: string[], equipped?: boolean }`                  |
 | `affinity`   | `plugin://affinity/affinity` | `plugin:affinity/affinity` | `{ id, name, score (int -100..100), notes? }`（tier/history 等派生字段由工具首次写入时补齐） |
 
-三者都用 `key: id`。任务预置后由 `core-quest` agent 只推进不重建；物品预置即开局行囊；好感预置给关键 NPC 一个非零起点（正负皆可）。
+三者都用 `key: id`。任务预置后由 `core-quest` agent 只推进不重建；任务目标建议填写任务内稳定的 `id`，让后续推进即使略微改写 `text` 也能勾选同一目标。物品预置即开局行囊；好感预置给关键 NPC 一个非零起点（正负皆可）。
 
 ### Preflight 与 Sync
 

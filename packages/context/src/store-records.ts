@@ -19,6 +19,7 @@ export interface SessionRecord {
   readonly preGameCompleted: readonly string[];
   readonly locale: string;
   readonly activePlugins: readonly string[];
+  readonly metadata?: Readonly<Record<string, unknown>>;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly embeddingModelId?: number | null;

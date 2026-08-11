@@ -44,4 +44,4 @@ memoryBlocks:
       en: "Player character status summary: abilities, possessions, situation, and current objectives."
 ---
 
-纯 UI 插件。本插件声明右侧记忆面板，并通过 `memoryBlocks` 声明默认的四个通用记忆块（剧情状态 / 角色关系 / 当前场景 / 玩家状态）及其抽取提示词。核心记忆的读写由框架 Memory System（@covel/memory）在每轮结束后按这些块定义自动完成。任意插件或世界包都可以声明自己的 `memoryBlocks`（如 `clues` / `suspects` / `timeline`），框架会聚合后驱动抽取与渲染，无需改动框架核心。
+纯 UI 插件。本插件声明右侧记忆面板，并通过 `memoryBlocks` 声明默认的四个通用记忆块（剧情状态 / 角色关系 / 当前场景 / 玩家状态）及其抽取提示词。核心记忆的读写由框架 Memory System（@covel/memory）在每轮结束后按这些块定义自动完成；`player_profile` 的已确认角色资料首行由框架根据已提交字段确定性维护。任意插件或世界包都可以声明自己的 `memoryBlocks`（如 `clues` / `suspects` / `timeline`），框架会聚合后驱动抽取与渲染，无需改动框架核心。

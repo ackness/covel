@@ -27,6 +27,7 @@ export function toFrontendSession(s: StoreSessionRecord): SessionRecord {
     id: s.id,
     worldId: s.worldId ?? "",
     status: s.status,
+    locale: s.locale,
     turnCount: s.turnCount,
     preGameCompleted: s.preGameCompleted,
     activePlugins: s.activePlugins,

@@ -51,12 +51,11 @@ export function toLegacyOrigin(origin: ExecutionOrigin): LegacyOrigin {
  * `executionId`, `origin: "recursive"`, `countPolicy: "none"`) rather than
  * inheriting the parent's.
  *
- * `countPolicy` is recorded but NOT yet consumed this step — the finalizer
- * still gates turn accounting on the projected legacy origin. It is
- * `complete-player-turn` only for a genuine main-loop player turn (player
- * origin, Pre-Game not pending); a setup request or any non-player execution is
- * `none`. `preGamePending` is the transition input the actions route feeds from
- * its pre-turn snapshot.
+ * The finalizer consumes `countPolicy` inside the same transaction as runtime
+ * proposals. It is `complete-player-turn` only for a genuine main-loop player
+ * turn (player origin, setup not pending); a setup request or any non-player
+ * execution is `none`. `preGamePending` is the transition input the actions
+ * route feeds from its pre-turn snapshot.
  */
 export function createExecutionContext(input: TurnInput): ExecutionContext {
   const origin = normalizeOrigin(input.origin);

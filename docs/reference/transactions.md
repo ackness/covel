@@ -209,6 +209,12 @@ Node-only and is never pulled into the IdbStore browser bundle.
 >   失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 state.patch）。
 >   已提交的兄弟 runtime 一并回滚，事务外不留痕迹。这是相对旧行为的**刻意变更**
 >   （旧行为保留已提交兄弟）。
+> - **对话 execution journal 共享提交命运**：当前玩家输入与非 manual runtime 的
+>   `TurnMessage` 在执行期只缓存在内存 journal；所有 proposal 通过后才由
+>   `finalizeExecution` 在同一事务中 append。回滚执行不会进入后续 Prompt、trigger
+>   统计或 compaction。`actions.ts` 同时通过 `extraInTx` 提交 REST messages 镜像与
+>   player InteractionRecord，刷新和观测面也不会保留回滚输入。manual/background 路径
+>   继续遵循各自不追加对话历史的合同。
 > - `turn_results.commit_status` 在同一事务内于成功时结算为 `committed`；回滚时在
 >   事务外幂等结算为 `failed`。嵌套 recursiveCall 复用顶层 `turnId`，因此顶层的
 >   `[turnId]` 一次结算即覆盖所有嵌套行。
@@ -224,10 +230,13 @@ Node-only and is never pulled into the IdbStore browser bundle.
 >   通过 `sessionClock` 参数把逻辑回合计数（`completedPlayerTurns` 的 logical-turn
 >   ledger 幂等推进）与 setup 频段翻转（`phase: setup → playing` + `setupRuntimes`
 >   镜像）折叠进 proposal 提交后、`commit_status` 结算前的同一事务（
->   `commit/session-clock.ts` 的 `applySessionClockTx`）。派生字段 `turnCount` /
->   `preGameCompleted` 由三字段公式算出并同事务写入。任一 proposal 失败即整体回滚——
->   计数、phase、派生字段都不推进，ledger 不写入。manual / background / resume
+>   `commit/session-clock.ts` 的 `applySessionClockTx`）。legacy 字段 `turnCount` /
+>   `preGameCompleted` 保持冻结，在 API / snapshot 读取时由三字段公式派生。任一 proposal 失败即整体回滚——
+>   计数、phase、setup 镜像都不推进，ledger 不写入。manual / background / resume
 >   finalize 不传 `sessionClock`，时钟不动。
+> - **Action 级 plugin-rpc 锁边界**：action handler 在 session lock 内完成读、校验和写入；
+>   `framework.submit-form` 再用 store transaction 原子提交批量 player input。因而同一 session
+>   的 turn 与重复表单提交不会穿插，PG 多进程部署也由同一分布式锁键串行化。
 >
 > **降级**：不暴露 `withTransaction` 的 store（薄测试 mock / 旧后端）退回逐条提交，
 > 不承诺跨 runtime 回滚——与这些 store 一贯的尽力而为语义一致，并 warn 一次。
@@ -244,6 +253,7 @@ if (typeof store.withTransaction === "function") {
       const out = await processRuntimeResult(result, tx, ...);
       if (out.failedProposals.length > 0) throw new ProposalCommitFailure(...); // → 整回合回滚
     }
+    for (const message of journalMessages) await tx.appendTurnMessage(message);
     await extraInTx?.(tx); // caller 专属的事务内追加写（resume）
     for (const turnId of turnIds) await tx.setTurnResultCommitStatus(sessionId, turnId, "committed");
   });

@@ -144,7 +144,6 @@ export async function finalizeTurnResult({
     timestamp: new Date().toISOString(),
     ...(deferredFollowers.length > 0 ? { deferredFollowers } : {}),
   };
-
   await persistTurnResult(
     turnResult,
     deps,

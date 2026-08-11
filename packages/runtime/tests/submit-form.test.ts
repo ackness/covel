@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
-import type { InteractionType } from "@covel/shared";
+import type { InteractionPayload, InteractionType } from "@covel/shared";
 import {
   submitFormHandler,
   RpcValidationError,
@@ -44,6 +44,25 @@ async function seedTemplate(
     content,
     order: 700,
     pendingInput: { formId: interactionId },
+    createdAt: new Date().toISOString(),
+  });
+}
+
+async function seedInteraction(
+  store: DataStore,
+  interaction: InteractionPayload,
+  content = "",
+): Promise<void> {
+  await store.appendTurnMessage({
+    id: crypto.randomUUID(),
+    sessionId: SESSION,
+    turnId: TURN,
+    sourceType: "runtime",
+    role: "assistant",
+    name: "interaction-template",
+    content,
+    order: 700,
+    pendingInput: [interaction],
     createdAt: new Date().toISOString(),
   });
 }
@@ -83,7 +102,13 @@ describe("submitFormHandler (Epic A)", () => {
   });
 
   it("fills a choice template using selectedLabel, falling back to selectedId", async () => {
-    await seedTemplate(store, "ch-1", "You chose {{selectedLabel}}");
+    await seedInteraction(store, {
+      interactionId: "ch-1",
+      type: "choice",
+      prompt: "Choose",
+      choices: [{ id: "a", label: "Attack" }],
+      narrativeTemplate: "You chose {{selectedLabel}}",
+    });
     expect(
       await submitOne(store, {
         interactionId: "ch-1",
@@ -92,7 +117,13 @@ describe("submitFormHandler (Epic A)", () => {
       }),
     ).toBe("You chose Attack");
 
-    await seedTemplate(store, "ch-2", "You chose {{selectedLabel}}");
+    await seedInteraction(store, {
+      interactionId: "ch-2",
+      type: "choice",
+      prompt: "Choose",
+      choices: [{ id: "flee", label: "flee" }],
+      narrativeTemplate: "You chose {{selectedLabel}}",
+    });
     expect(
       await submitOne(store, {
         interactionId: "ch-2",
@@ -104,7 +135,12 @@ describe("submitFormHandler (Epic A)", () => {
 
   // ── i18n confirmation (the core fix) ────────────────────────────
   it("fills confirmation {{confirmed}} with 确认 for zh-CN", async () => {
-    await seedTemplate(store, "cf-1", "Result: {{confirmed}}");
+    await seedInteraction(store, {
+      interactionId: "cf-1",
+      type: "confirmation",
+      prompt: "Proceed?",
+      narrativeTemplate: "Result: {{confirmed}}",
+    });
     expect(
       await submitOne(
         store,
@@ -119,7 +155,12 @@ describe("submitFormHandler (Epic A)", () => {
   });
 
   it("fills confirmation {{confirmed}} with Confirm for en-US (regression for hardcoded 确认/取消)", async () => {
-    await seedTemplate(store, "cf-2", "Result: {{confirmed}}");
+    await seedInteraction(store, {
+      interactionId: "cf-2",
+      type: "confirmation",
+      prompt: "Proceed?",
+      narrativeTemplate: "Result: {{confirmed}}",
+    });
     expect(
       await submitOne(
         store,
@@ -134,7 +175,12 @@ describe("submitFormHandler (Epic A)", () => {
   });
 
   it("fills cancelled confirmation with Cancel for en-US", async () => {
-    await seedTemplate(store, "cf-3", "Result: {{confirmed}}");
+    await seedInteraction(store, {
+      interactionId: "cf-3",
+      type: "confirmation",
+      prompt: "Proceed?",
+      narrativeTemplate: "Result: {{confirmed}}",
+    });
     expect(
       await submitOne(
         store,
@@ -149,7 +195,12 @@ describe("submitFormHandler (Epic A)", () => {
   });
 
   it("defaults to zh-CN confirmation labels when locale is undefined (back-compat)", async () => {
-    await seedTemplate(store, "cf-4", "Result: {{confirmed}}");
+    await seedInteraction(store, {
+      interactionId: "cf-4",
+      type: "confirmation",
+      prompt: "Proceed?",
+      narrativeTemplate: "Result: {{confirmed}}",
+    });
     expect(
       await submitOne(store, {
         interactionId: "cf-4",
@@ -160,7 +211,12 @@ describe("submitFormHandler (Epic A)", () => {
   });
 
   it("falls back to zh-CN labels for an unsupported locale (no undefined deref)", async () => {
-    await seedTemplate(store, "cf-5", "Result: {{confirmed}}");
+    await seedInteraction(store, {
+      interactionId: "cf-5",
+      type: "confirmation",
+      prompt: "Proceed?",
+      narrativeTemplate: "Result: {{confirmed}}",
+    });
     expect(
       await submitOne(
         store,
@@ -176,41 +232,53 @@ describe("submitFormHandler (Epic A)", () => {
 
   // ── fallbackNarrative (no matching template) ────────────────────
   it("localizes the fallback form prefix (zh-CN byte-compat vs en-US)", async () => {
+    await seedTemplate(store, "x-zh", "");
     expect(
       await submitOne(
         store,
-        { interactionId: "x", type: "form", values: { k: "v" } },
+        { interactionId: "x-zh", type: "form", values: { k: "v" } },
         "zh-CN",
       ),
     ).toBe("[玩家输入] k: v");
+    await seedTemplate(store, "x-en", "");
     expect(
       await submitOne(
         store,
-        { interactionId: "x", type: "form", values: { k: "v" } },
+        { interactionId: "x-en", type: "form", values: { k: "v" } },
         "en-US",
       ),
     ).toBe("[Player input] k: v");
   });
 
   it("localizes the fallback confirmation prefix per locale", async () => {
+    await seedInteraction(store, {
+      interactionId: "confirm-zh",
+      type: "confirmation",
+      prompt: "Proceed?",
+    });
     expect(
       await submitOne(
         store,
         {
-          interactionId: "x",
+          interactionId: "confirm-zh",
           type: "confirmation",
-          values: { confirmed: true, prompt: "Proceed?" },
+          values: { confirmed: true },
         },
         "zh-CN",
       ),
     ).toBe("[玩家确认] Proceed?");
+    await seedInteraction(store, {
+      interactionId: "confirm-en",
+      type: "confirmation",
+      prompt: "Proceed?",
+    });
     expect(
       await submitOne(
         store,
         {
-          interactionId: "x",
+          interactionId: "confirm-en",
           type: "confirmation",
-          values: { confirmed: false, prompt: "Proceed?" },
+          values: { confirmed: false },
         },
         "en-US",
       ),
@@ -218,31 +286,50 @@ describe("submitFormHandler (Epic A)", () => {
   });
 
   it("byte-compat: undefined locale matches pre-i18n zh-CN output for all three types", async () => {
+    await seedTemplate(store, "x-form", "");
     expect(
       await submitOne(store, {
-        interactionId: "x",
+        interactionId: "x-form",
         type: "form",
         values: { a: 1 },
       }),
     ).toBe("[玩家输入] a: 1");
+    await seedInteraction(store, {
+      interactionId: "x-choice",
+      type: "choice",
+      prompt: "Choose",
+      choices: [{ id: "s", label: "S" }],
+    });
     expect(
       await submitOne(store, {
-        interactionId: "x",
+        interactionId: "x-choice",
         type: "choice",
         values: { selectedId: "s", selectedLabel: "S" },
       }),
     ).toBe("[玩家选择] S");
+    await seedInteraction(store, {
+      interactionId: "x-confirm",
+      type: "confirmation",
+      prompt: "P",
+    });
     expect(
       await submitOne(store, {
-        interactionId: "x",
+        interactionId: "x-confirm",
         type: "confirmation",
-        values: { confirmed: true, prompt: "P" },
+        values: { confirmed: true },
       }),
     ).toBe("[玩家确认] P");
   });
 
   // ── batch + persistence ─────────────────────────────────────────
   it("processes a batch and returns one result per submission in order", async () => {
+    await seedTemplate(store, "b1", "");
+    await seedInteraction(store, {
+      interactionId: "b2",
+      type: "choice",
+      prompt: "Choose",
+      choices: [{ id: "x", label: "X" }],
+    });
     const result = (await submitFormHandler(
       {
         turnId: TURN,
@@ -257,6 +344,8 @@ describe("submitFormHandler (Epic A)", () => {
   });
 
   it("persists one player input per submission", async () => {
+    await seedTemplate(store, "p1", "");
+    await seedTemplate(store, "p2", "");
     await submitFormHandler(
       {
         turnId: TURN,
@@ -302,6 +391,21 @@ describe("submitFormHandler (Epic A)", () => {
     ).rejects.toThrow(RpcValidationError);
   });
 
+  it("throws when submissions is not an array", async () => {
+    await expect(
+      submitFormHandler(
+        { turnId: TURN, submissions: { interactionId: "x" } },
+        makeCtx(store),
+      ),
+    ).rejects.toThrow(RpcValidationError);
+  });
+
+  it("throws when a submission is not an object", async () => {
+    await expect(
+      submitFormHandler({ turnId: TURN, submissions: [null] }, makeCtx(store)),
+    ).rejects.toThrow(RpcValidationError);
+  });
+
   it("throws when a submission interactionId is missing", async () => {
     await expect(
       submitFormHandler(
@@ -333,6 +437,172 @@ describe("submitFormHandler (Epic A)", () => {
         makeCtx(store),
       ),
     ).rejects.toThrow(RpcValidationError);
+  });
+
+  it("rejects an interaction that was never committed and persists nothing", async () => {
+    await expect(
+      submitOne(store, {
+        interactionId: "forged-form",
+        type: "form",
+        values: { name: "Mallory" },
+      }),
+    ).rejects.toThrow(/committed interaction/i);
+    expect(await store.listPlayerInputs(SESSION)).toEqual([]);
+  });
+
+  it("requires the submitted type to match the committed interaction", async () => {
+    await seedInteraction(store, {
+      interactionId: "choose-path",
+      type: "choice",
+      prompt: "Where?",
+      choices: [{ id: "north", label: "North" }],
+    });
+    await expect(
+      submitOne(store, {
+        interactionId: "choose-path",
+        type: "form",
+        values: { selectedId: "north" },
+      }),
+    ).rejects.toThrow(/type.*choice/i);
+  });
+
+  it("validates required fields, field types, select options, and unknown keys", async () => {
+    await seedInteraction(store, {
+      interactionId: "profile",
+      type: "form",
+      title: "Profile",
+      submitLabel: "Continue",
+      fields: [
+        { type: "text", name: "name", label: "Name", required: true },
+        { type: "number", name: "age", label: "Age" },
+        {
+          type: "select",
+          name: "origin",
+          label: "Origin",
+          options: ["forest", { value: "city", label: "The city" }],
+        },
+      ],
+    });
+
+    await expect(
+      submitOne(store, {
+        interactionId: "profile",
+        type: "form",
+        values: { age: "old" },
+      }),
+    ).rejects.toThrow(/required.*name/i);
+    await expect(
+      submitOne(store, {
+        interactionId: "profile",
+        type: "form",
+        values: { name: "Aria", age: "old" },
+      }),
+    ).rejects.toThrow(/age.*number/i);
+    await expect(
+      submitOne(store, {
+        interactionId: "profile",
+        type: "form",
+        values: { name: "Aria", origin: "moon" },
+      }),
+    ).rejects.toThrow(/origin.*option/i);
+    await expect(
+      submitOne(store, {
+        interactionId: "profile",
+        type: "form",
+        values: { name: "Aria", admin: true },
+      }),
+    ).rejects.toThrow(/unknown field.*admin/i);
+  });
+
+  it("canonicalizes choice labels from the committed option", async () => {
+    await seedInteraction(store, {
+      interactionId: "choose-path",
+      type: "choice",
+      prompt: "Where?",
+      narrativeTemplate: "You chose {{selectedLabel}}",
+      choices: [{ id: "north", label: "North road" }],
+    });
+    expect(
+      await submitOne(store, {
+        interactionId: "choose-path",
+        type: "choice",
+        values: { selectedId: "north", selectedLabel: "Injected label" },
+      }),
+    ).toBe("You chose North road");
+    expect((await store.listPlayerInputs(SESSION))[0]?.values).toEqual({
+      selectedId: "north",
+      selectedLabel: "North road",
+    });
+  });
+
+  it("replays an identical submission idempotently and rejects conflicting values", async () => {
+    await seedInteraction(store, {
+      interactionId: "name-form",
+      type: "form",
+      title: "Name",
+      submitLabel: "Continue",
+      fields: [{ type: "text", name: "name", label: "Name", required: true }],
+      narrativeTemplate: "Hello {{name}}",
+    });
+    const payload = {
+      turnId: TURN,
+      submissions: [
+        {
+          interactionId: "name-form",
+          type: "form" as const,
+          values: { name: "Aria" },
+        },
+      ],
+    };
+    const first = (await submitFormHandler(payload, makeCtx(store))) as {
+      results: Array<{ submissionId: string }>;
+    };
+    const replay = (await submitFormHandler(payload, makeCtx(store))) as {
+      results: Array<{ submissionId: string }>;
+    };
+    expect(replay.results[0]?.submissionId).toBe(
+      first.results[0]?.submissionId,
+    );
+    expect(await store.listPlayerInputs(SESSION)).toHaveLength(1);
+
+    await expect(
+      submitOne(store, {
+        interactionId: "name-form",
+        type: "form",
+        values: { name: "Different" },
+      }),
+    ).rejects.toThrow(/already submitted/i);
+  });
+
+  it("validates the whole batch before writing any player input", async () => {
+    await seedInteraction(store, {
+      interactionId: "valid-form",
+      type: "form",
+      title: "Name",
+      submitLabel: "Continue",
+      fields: [{ type: "text", name: "name", label: "Name", required: true }],
+    });
+    await expect(
+      submitFormHandler(
+        {
+          turnId: TURN,
+          submissions: [
+            {
+              interactionId: "valid-form",
+              type: "form",
+              values: { name: "Aria" },
+            },
+            {
+              interactionId: "forged-form",
+              type: "form",
+              values: { name: "Mallory" },
+            },
+          ],
+        },
+        makeCtx(store),
+      ),
+    ).rejects.toThrow(/committed interaction/i);
+    expect(await store.listPlayerInputs(SESSION)).toEqual([]);
   });
 
   // ── InteractionType alignment (critique: 3 drift points) ────────

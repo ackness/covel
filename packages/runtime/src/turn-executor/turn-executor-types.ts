@@ -183,6 +183,16 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
         sessionId: string;
         narrativeText: string;
         toolCallSummaries?: readonly string[];
+        authoritativeFacts?: {
+          readonly playerCharacter?: {
+            readonly name: string;
+            readonly type: string;
+            readonly description?: string;
+            readonly fields?: Readonly<Record<string, unknown>>;
+          };
+          readonly playerFieldLabels?: Readonly<Record<string, string>>;
+          readonly lastFormValues?: Readonly<Record<string, unknown>>;
+        };
         currentBlocks: readonly CoreMemoryBlockView[];
         locale?: string;
       }): Promise<{

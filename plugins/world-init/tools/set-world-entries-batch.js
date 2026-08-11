@@ -41,6 +41,21 @@ export default function ({ tool, z, store }) {
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();
+      const schemaProposal = [...(context.pendingProposals ?? [])]
+        .reverse()
+        .find(
+          (proposal) =>
+            proposal.type === "plugin.data" &&
+            proposal.payload?.namespace === "schema" &&
+            proposal.payload?.key === "character-attributes",
+        );
+      const schemaValue = schemaProposal?.payload?.value;
+      if (!schemaValue || typeof schemaValue !== "object") {
+        throw new Error(
+          "set-world-schema must succeed before set-world-entries-batch",
+        );
+      }
+      const worldSchema = { "character-attributes": schemaValue };
 
       // 1) Legacy plugin_data write — unchanged read path for old sessions.
       const pluginDataItems = params.entries.map((entry) => ({
@@ -69,6 +84,8 @@ export default function ({ tool, z, store }) {
           success: true,
           count: pluginDataItems.length,
           keys: params.entries.map((e) => e.key),
+          worldSchema,
+          preGameDone: true,
         },
         [
           makeProposal(context, now, "plugin.data.batch", {

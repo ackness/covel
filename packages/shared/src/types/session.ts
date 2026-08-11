@@ -3,6 +3,8 @@
  * DB record `SessionRecord` in `@covel/store` is a superset with backend fields.
  */
 
+import type { SetupRuntimeState } from "./runtime-lifecycle.js";
+
 export type SessionStatus = "active" | "paused" | "ended";
 
 export interface SessionEmbeddingInfo {
@@ -19,16 +21,21 @@ export interface Session {
   /** Lifecycle flag. `active` under normal play; `paused`/`ended` stops scheduling. */
   readonly status: SessionStatus;
   /**
-   * Band selector. `0` = Pre-Game (only priority 0-99 scheduled, may iterate
-   * multiple player submissions). `>=1` = main loop (only priority 100-1000).
-   * Advances from 0 → 1 when all Pre-Game runtimes report done.
+   * Legacy main-loop progress field, derived at read time from `phase` and
+   * `completedPlayerTurns`. The kernel no longer schedules by numeric bands.
    */
   readonly turnCount: number;
   /**
-   * RuntimeIds of Pre-Game band (priority 0-99) runtimes that have already
-   * completed this session. Used to gate the `turnCount: 0 → 1` transition.
+   * Legacy setup completion list, derived from the `done` entries in
+   * `setupRuntimes`.
    */
   readonly preGameCompleted: readonly string[];
+  /** Authoritative setup/main-loop scheduling phase. Optional on legacy rows. */
+  readonly phase?: "setup" | "playing";
+  /** Number of committed main-loop player turns. Optional on legacy rows. */
+  readonly completedPlayerTurns?: number;
+  /** Per-runtime setup lifecycle mirror, keyed by runtimeId. */
+  readonly setupRuntimes?: Readonly<Record<string, SetupRuntimeState>>;
   readonly activePlugins: readonly string[];
   readonly locale: string;
   readonly createdAt: string;

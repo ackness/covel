@@ -23,6 +23,7 @@ import type {
   CoreMemoryBlock,
   CoreMemoryBlockSchema,
   CoreMemoryLabel,
+  MemoryAuthoritativeFacts,
   MemoryLLMAdapter,
   MemoryManager,
   MemoryUpdateResult,
@@ -59,6 +60,7 @@ ${descriptions}
 只输出有变化的块。如果本轮没有值得更新的信息，输出 \`{}\`。
 
 每个块内容控制在 300-500 字以内，使用简洁的事实陈述，不要用文学化的描写。
+如果用户消息中的“会话事实（权威）”与叙事、推断或旧记忆冲突，必须以会话事实为准。
 
 示例输出（用实际的块标签替换）：
 
@@ -85,6 +87,7 @@ Output a single JSON object where keys are block labels that need updating and v
 Only output blocks that changed. If nothing worth updating happened, output \`{}\`.
 
 Keep each block under 300-500 words. Use concise factual statements, not literary descriptions.
+If "Authoritative Session Facts" conflict with the narrative, an inference, or an older memory block, the authoritative facts always win.
 
 Example output (replace with actual block labels):
 
@@ -102,6 +105,7 @@ export function createMemoryUpdater(
     sessionId: string;
     narrativeText: string;
     toolCallSummaries?: readonly string[];
+    authoritativeFacts?: MemoryAuthoritativeFacts;
     currentBlocks: readonly CoreMemoryBlock[];
     locale?: string;
   }): Promise<MemoryUpdateResult>;
@@ -120,6 +124,7 @@ export function createMemoryUpdater(
     sessionId: string;
     narrativeText: string;
     toolCallSummaries?: readonly string[];
+    authoritativeFacts?: MemoryAuthoritativeFacts;
     currentBlocks: readonly CoreMemoryBlock[];
     locale?: string;
   }): Promise<MemoryUpdateResult> {
@@ -127,6 +132,7 @@ export function createMemoryUpdater(
       sessionId,
       narrativeText,
       toolCallSummaries,
+      authoritativeFacts,
       currentBlocks,
       locale,
     } = params;
@@ -139,19 +145,42 @@ export function createMemoryUpdater(
     const schema = (await config?.resolveBlocks?.(sessionId)) ?? staticSchema;
     const validLabels = new Set<string>(schema.map((b) => b.label));
 
-    // Build user prompt with current blocks + new events
-    const blockSection = currentBlocks
-      .filter((b) => b.content.trim())
-      .map((b) => `[${b.label}]\n${b.content}`)
-      .join("\n\n");
-
     const toolSection = toolCallSummaries?.length
       ? `\n\n## 本轮工具调用摘要\n${toolCallSummaries.join("\n")}`
       : "";
 
-    const userPrompt = `## 当前记忆块\n${blockSection || "（全部为空，首次初始化）"}\n\n## 本轮叙事\n${narrativeText}${toolSection}\n\n请输出需要更新的记忆块 JSON。`;
+    const authoritativeSection = buildAuthoritativeFactsSection(
+      authoritativeFacts,
+      lang,
+    );
+
+    let authoritativeBlocksChanged: CoreMemoryLabel[] = [];
 
     try {
+      // Persist confirmed character fields before waiting on the summarizer.
+      // This deterministic correction must survive a slow or failed LLM call.
+      const authoritativeUpdates = new Map<CoreMemoryLabel, string>();
+      enforceAuthoritativePlayerProfile({
+        updates: authoritativeUpdates,
+        currentBlocks,
+        authoritativeFacts,
+        lang,
+      });
+      if (authoritativeUpdates.size > 0) {
+        await manager.updateBlocks(sessionId, authoritativeUpdates);
+        authoritativeBlocksChanged = [...authoritativeUpdates.keys()];
+      }
+
+      const effectiveCurrentBlocks = applyUpdatesToBlockSnapshot(
+        currentBlocks,
+        authoritativeUpdates,
+      );
+      const blockSection = effectiveCurrentBlocks
+        .filter((b) => b.content.trim())
+        .map((b) => `[${b.label}]\n${b.content}`)
+        .join("\n\n");
+      const userPrompt = `## 当前记忆块\n${blockSection || "（全部为空，首次初始化）"}${authoritativeSection}\n\n## 本轮叙事\n${narrativeText}${toolSection}\n\n请输出需要更新的记忆块 JSON。`;
+
       const response = await llm.complete({
         systemPrompt: buildSystemPrompt(schema, lang, effectiveLocale),
         messages: [{ role: "user", content: userPrompt }],
@@ -159,21 +188,33 @@ export function createMemoryUpdater(
       });
 
       const parsed = parseBlockUpdates(response.content, validLabels);
+      enforceAuthoritativePlayerProfile({
+        updates: parsed,
+        currentBlocks: effectiveCurrentBlocks,
+        authoritativeFacts,
+        lang,
+      });
       if (parsed.size === 0) {
-        return { updated: false, blocksChanged: [] };
+        return {
+          updated: authoritativeBlocksChanged.length > 0,
+          blocksChanged: authoritativeBlocksChanged,
+        };
       }
 
       await manager.updateBlocks(sessionId, parsed);
 
       return {
         updated: true,
-        blocksChanged: [...parsed.keys()],
+        blocksChanged: [
+          ...new Set([...authoritativeBlocksChanged, ...parsed.keys()]),
+        ],
       };
     } catch (err) {
-      // Memory update failure is non-fatal — blocks stay unchanged
+      // Dynamic-summary failure is non-fatal. A deterministic authoritative
+      // correction that already landed remains valid and is reported as such.
       return {
-        updated: false,
-        blocksChanged: [],
+        updated: authoritativeBlocksChanged.length > 0,
+        blocksChanged: authoritativeBlocksChanged,
         error: err instanceof Error ? err.message : String(err),
       };
     }
@@ -216,6 +257,181 @@ export function createMemoryUpdater(
       }
     },
   };
+}
+
+function applyUpdatesToBlockSnapshot(
+  blocks: readonly CoreMemoryBlock[],
+  updates: ReadonlyMap<CoreMemoryLabel, string>,
+): readonly CoreMemoryBlock[] {
+  if (updates.size === 0) return blocks;
+  return blocks.map((block) => {
+    const content = updates.get(block.label);
+    return content === undefined ? block : { ...block, content };
+  });
+}
+
+const CONFIRMED_PROFILE_PREFIX = {
+  zh: "角色资料（已确认）：",
+  en: "Confirmed character profile: ",
+} as const;
+
+/**
+ * Keep player-selected identity fields deterministic while leaving the LLM in
+ * charge of the dynamic status prose that follows. Prompt priority alone is
+ * insufficient here: a summarizer can translate or paraphrase an enum label
+ * on a later turn, so the framework owns one canonical first line.
+ */
+function enforceAuthoritativePlayerProfile(args: {
+  updates: Map<CoreMemoryLabel, string>;
+  currentBlocks: readonly CoreMemoryBlock[];
+  authoritativeFacts: MemoryAuthoritativeFacts | undefined;
+  lang: "zh" | "en";
+}): void {
+  const { updates, currentBlocks, authoritativeFacts, lang } = args;
+  const character = authoritativeFacts?.playerCharacter;
+  if (
+    !character ||
+    (!updates.has("player_profile") &&
+      !currentBlocks.some((block) => block.label === "player_profile"))
+  ) {
+    return;
+  }
+
+  const authoritativeLine = formatAuthoritativePlayerProfile(
+    authoritativeFacts,
+    lang,
+  );
+  if (!authoritativeLine) return;
+
+  const currentContent =
+    updates.get("player_profile") ??
+    currentBlocks.find((block) => block.label === "player_profile")?.content ??
+    "";
+  const dynamicContent = stripProfileFactProse(
+    stripManagedProfileLine(currentContent),
+    authoritativeFacts,
+    lang,
+  );
+  const nextContent = [authoritativeLine, dynamicContent]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+
+  const persistedContent =
+    currentBlocks.find((block) => block.label === "player_profile")?.content ??
+    "";
+  if (
+    updates.has("player_profile") ||
+    nextContent !== persistedContent.trim()
+  ) {
+    updates.set("player_profile", nextContent);
+  }
+}
+
+function formatAuthoritativePlayerProfile(
+  facts: MemoryAuthoritativeFacts,
+  lang: "zh" | "en",
+): string | undefined {
+  const character = facts.playerCharacter;
+  if (!character?.name.trim()) return undefined;
+
+  const parts = [
+    lang === "zh"
+      ? `姓名：${character.name.trim()}`
+      : `Name: ${character.name.trim()}`,
+  ];
+  for (const [fieldId, rawValue] of Object.entries(character.fields ?? {})) {
+    const value = formatAuthoritativeValue(rawValue);
+    if (!value) continue;
+    const label = facts.playerFieldLabels?.[fieldId]?.trim() || fieldId;
+    parts.push(lang === "zh" ? `${label}：${value}` : `${label}: ${value}`);
+  }
+
+  const separator = lang === "zh" ? "；" : "; ";
+  const terminator = lang === "zh" ? "。" : ".";
+  return `${CONFIRMED_PROFILE_PREFIX[lang]}${parts.join(separator)}${terminator}`;
+}
+
+function formatAuthoritativeValue(value: unknown): string | undefined {
+  if (typeof value === "string") return value.trim() || undefined;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return String(value);
+  if (
+    Array.isArray(value) &&
+    value.length <= 8 &&
+    value.every((item) => ["string", "number", "boolean"].includes(typeof item))
+  ) {
+    return value.map(String).join(", ");
+  }
+  return undefined;
+}
+
+function stripManagedProfileLine(content: string): string {
+  const prefixes = Object.values(CONFIRMED_PROFILE_PREFIX);
+  return content
+    .split(/\r?\n/)
+    .filter(
+      (line) => !prefixes.some((prefix) => line.trim().startsWith(prefix)),
+    )
+    .join("\n")
+    .trim();
+}
+
+function stripProfileFactProse(
+  content: string,
+  facts: MemoryAuthoritativeFacts,
+  lang: "zh" | "en",
+): string {
+  if (!content) return "";
+
+  const labels = Object.entries(facts.playerCharacter?.fields ?? {}).flatMap(
+    ([fieldId]) =>
+      [fieldId, facts.playerFieldLabels?.[fieldId]].filter(
+        (value): value is string => Boolean(value?.trim()),
+      ),
+  );
+  const values = Object.values(facts.playerCharacter?.fields ?? {})
+    .map(formatAuthoritativeValue)
+    .filter((value): value is string => Boolean(value && value.length >= 2));
+  const identityPattern =
+    lang === "zh" ? /(?:身份|姓名|名字)\s*[:：]/ : /(?:identity|name)\s*:/i;
+
+  return content
+    .split(/(?<=[。！？.!?])\s*|\r?\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => {
+      if (identityPattern.test(part)) return false;
+      const labelMatches = labels.reduce(
+        (count, label) => count + (part.includes(label) ? 1 : 0),
+        0,
+      );
+      const valueMatches = values.reduce(
+        (count, value) => count + (part.includes(value) ? 1 : 0),
+        0,
+      );
+      return !(labelMatches >= 2 || valueMatches >= 1);
+    })
+    .join(lang === "zh" ? "" : " ")
+    .trim();
+}
+
+function buildAuthoritativeFactsSection(
+  facts: MemoryAuthoritativeFacts | undefined,
+  lang: "zh" | "en",
+): string {
+  if (!facts || Object.keys(facts).length === 0) return "";
+
+  try {
+    const serialized = JSON.stringify(facts, null, 2);
+    if (!serialized || serialized === "{}") return "";
+    const bounded = serialized.slice(0, 4_000);
+    return lang === "zh"
+      ? `\n\n## 会话事实（权威）\n以下结构化值来自已提交的会话状态；发生冲突时以这些值为准。\n${bounded}`
+      : `\n\n## Authoritative Session Facts\nThese structured values come from committed session state; use them whenever other context conflicts.\n${bounded}`;
+  } catch {
+    return "";
+  }
 }
 
 /**

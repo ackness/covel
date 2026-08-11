@@ -12,11 +12,11 @@
  *     including world-pack preseeded records imported via `dataSchemas`.
  *  2. De-duplicating by normalized name and assigning stable short IDs to
  *     new quests via `shortIdBatch` (e.g. `quest-寻回断魂钩`).
- *  3. Merging updates into existing quests: provided fields override,
- *     objectives are matched by verbatim text (known text updates `done`,
- *     new text appends), omitted `status`/`done` keep their current state
- *     so a partial update can never regress a completed quest or uncheck
- *     a finished objective.
+ *  3. Merging updates into existing quests: provided fields override;
+ *     objectives match by stable ID, normalized text, then a conservative
+ *     semantic fallback. Omitted `status`/`done` keep their current state so
+ *     a partial update can never regress a completed quest or uncheck a
+ *     finished objective.
  *  4. Deriving `chips` (a checklist/giver/reward string array) on every
  *     write so the right-panel EntryCard can render objectives without a
  *     framework-side lookup.
@@ -40,11 +40,19 @@ const CHANGE_META = {
 
 export default function ({ tool, z, shortIdBatch, store }) {
   const objectiveSchema = z.object({
+    id: z
+      .string()
+      .min(1)
+      .max(128)
+      .optional()
+      .describe(
+        "Stable objective ID from existing quest data; copy it when advancing an objective",
+      ),
     text: z
       .string()
       .min(1)
       .describe(
-        "Objective text, matched verbatim against existing objectives — copy existing text exactly when advancing",
+        "Objective text; existing objectives match by ID first, then normalized or conservatively equivalent text",
       ),
     // Optional on purpose (no zod default): an omitted `done` must stay
     // distinguishable from an explicit `false`, or re-submitting a known
@@ -78,7 +86,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
       .array(objectiveSchema)
       .optional()
       .describe(
-        "Checklist objectives; known text updates its check state, new text appends",
+        "Checklist objectives; copy an existing objective ID when available so wording changes still update the same item",
       ),
     giver: z
       .string()
@@ -90,7 +98,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
   return tool({
     name: "upsert-quests",
     description:
-      "Batch create or advance quests (max 5 per call). Quests are de-duplicated by name: a known name merges the provided fields into the existing record (objectives matched by verbatim text), a new name creates a quest. No need to list existing data first — the tool merges internally.",
+      "Batch create or advance quests (max 5 per call). Quests are de-duplicated by name: a known name merges provided fields into the existing record; objectives match by stable ID, normalized text, or a conservative semantic fallback. A new name creates a quest. No need to list existing data first — the tool merges internally.",
     parameters: z.object({
       quests: z
         .array(questSchema)
@@ -161,6 +169,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
           const objectives = mergeObjectives(
             previous.objectives,
             quest.objectives,
+            previous.id ?? match.key,
           );
           const previousStatus = previous.status ?? "active";
           const status = quest.status ?? previousStatus;
@@ -198,10 +207,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
             name: quest.name,
             description: quest.description ?? "",
             status: quest.status ?? "active",
-            objectives: (quest.objectives ?? []).map((objective) => ({
-              text: objective.text.trim(),
-              done: objective.done ?? false,
-            })),
+            objectives: mergeObjectives([], quest.objectives, id),
             giver: quest.giver,
             reward: quest.reward,
             isNew: true,
@@ -264,29 +270,217 @@ function normalizeName(name) {
 }
 
 /**
- * Merge incoming objectives into the existing list: verbatim text match
- * updates the check state (only when `done` was provided), unknown text
- * appends. Returns a fresh array — the previous list is never mutated.
+ * Merge incoming objectives into the existing list. Stable ID is the primary
+ * identity, normalized text handles punctuation/spacing drift, and a
+ * conservative similarity check catches compact paraphrases without merging
+ * ambiguous candidates. Existing canonical text is preserved on every match.
+ * Returns a fresh array — the previous list is never mutated.
  */
-function mergeObjectives(previous, incoming) {
-  const merged = (previous ?? []).map((objective) => ({
-    text: objective.text,
-    done: objective.done ?? false,
-  }));
+function mergeObjectives(previous, incoming, questId) {
+  const merged = [];
+  for (const objective of previous ?? []) {
+    const text = (objective?.text ?? "").trim();
+    if (!text) continue;
+    const candidate = {
+      ...objective,
+      id:
+        normalizeObjectiveId(objective.id) ?? stableObjectiveId(questId, text),
+      text,
+      done: objective.done ?? false,
+    };
+    const duplicateIndex = findObjectiveIndex(
+      merged,
+      candidate.id,
+      candidate.text,
+    );
+    if (duplicateIndex >= 0) {
+      merged[duplicateIndex] = {
+        ...merged[duplicateIndex],
+        done: merged[duplicateIndex].done || candidate.done,
+      };
+    } else {
+      merged.push(candidate);
+    }
+  }
+
   for (const objective of incoming ?? []) {
     const text = (objective.text ?? "").trim();
     if (!text) continue;
-    const index = merged.findIndex((o) => (o.text ?? "").trim() === text);
+    const incomingId = normalizeObjectiveId(objective.id);
+    const index = findObjectiveIndex(merged, incomingId, text);
+
     if (index >= 0) {
       merged[index] = {
         ...merged[index],
         done: objective.done ?? merged[index].done,
       };
     } else {
-      merged.push({ text, done: objective.done ?? false });
+      merged.push({
+        id: incomingId ?? stableObjectiveId(questId, text),
+        text,
+        done: objective.done ?? false,
+      });
     }
   }
   return merged;
+}
+
+function findObjectiveIndex(existing, objectiveId, text) {
+  let index = objectiveId
+    ? existing.findIndex((candidate) => candidate.id === objectiveId)
+    : -1;
+  if (index < 0) {
+    const normalizedText = normalizeObjectiveText(text);
+    index = existing.findIndex(
+      (candidate) => normalizeObjectiveText(candidate.text) === normalizedText,
+    );
+  }
+  return index >= 0 ? index : findEquivalentObjectiveIndex(existing, text);
+}
+
+function normalizeObjectiveId(id) {
+  return typeof id === "string" && id.trim() ? id.trim() : undefined;
+}
+
+function normalizeObjectiveText(text) {
+  const normalized = (text ?? "")
+    .normalize("NFKC")
+    .trim()
+    .toLowerCase()
+    .replace(/[\p{P}\p{S}\s]+/gu, "");
+  // Leading urgency clauses describe timing rather than objective identity.
+  // Keeping them would make two different objectives under the same deadline
+  // look more similar than the same action expressed with different detail.
+  return normalized
+    .replace(/^赶在.{1,12}?前/u, "")
+    .replace(/^在.{1,12}?之前/u, "")
+    .replace(/^(立即|立刻|尽快|马上)/u, "");
+}
+
+function stableObjectiveId(questId, text) {
+  const input = `${questId}:${normalizeObjectiveText(text)}`;
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `objective-${(hash >>> 0).toString(36)}`;
+}
+
+function findEquivalentObjectiveIndex(existing, incomingText) {
+  const incoming = normalizeObjectiveText(incomingText);
+  const candidates = existing
+    .map((objective, index) => ({
+      index,
+      score: objectiveSimilarity(
+        normalizeObjectiveText(objective.text),
+        incoming,
+      ),
+    }))
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  if (candidates.length === 0) return -1;
+  if (
+    candidates.length > 1 &&
+    candidates[0].score - candidates[1].score < 0.15
+  ) {
+    return -1;
+  }
+  return candidates[0].index;
+}
+
+function objectiveSimilarity(left, right) {
+  if (left.length < 4 || right.length < 4) return 0;
+  if (hasConflictingMovementIntent(left, right)) return 0;
+  const commonSequence = longestCommonSubsequenceLength(left, right);
+  const shorter = Math.min(left.length, right.length);
+  const longer = Math.max(left.length, right.length);
+  const commonBigrams = countCommonBigrams(left, right);
+  const sequenceMatch =
+    commonSequence >= 4 &&
+    commonSequence / shorter >= 0.65 &&
+    commonSequence / longer >= 0.4;
+  const phraseMatch =
+    commonBigrams >= 3 && commonBigrams / Math.max(1, shorter - 1) >= 0.3;
+
+  if (
+    (!sequenceMatch && !phraseMatch) ||
+    (containsHan(left) &&
+      containsHan(right) &&
+      countCommonSalientHanCharacters(left, right) < 2)
+  ) {
+    return 0;
+  }
+
+  return (
+    commonSequence / shorter +
+    commonSequence / longer +
+    commonBigrams / Math.max(1, shorter - 1)
+  );
+}
+
+function hasConflictingMovementIntent(left, right) {
+  const entering = ["进入", "潜入", "抵达", "到达"];
+  const leaving = ["离开", "撤离", "返回", "逃离"];
+  return (
+    (entering.some((term) => left.includes(term)) &&
+      leaving.some((term) => right.includes(term))) ||
+    (leaving.some((term) => left.includes(term)) &&
+      entering.some((term) => right.includes(term)))
+  );
+}
+
+function containsHan(text) {
+  return /\p{Script=Han}/u.test(text);
+}
+
+function countCommonSalientHanCharacters(left, right) {
+  const generic = new Set(
+    "进入内部上下前后完成前往到达抵达离开撤退返回并将把从向的了与和",
+  );
+  const rightCharacters = new Set(
+    [...right].filter(
+      (character) => containsHan(character) && !generic.has(character),
+    ),
+  );
+  return new Set(
+    [...left].filter(
+      (character) =>
+        containsHan(character) &&
+        !generic.has(character) &&
+        rightCharacters.has(character),
+    ),
+  ).size;
+}
+
+function longestCommonSubsequenceLength(left, right) {
+  const row = new Uint16Array(right.length + 1);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    let diagonal = 0;
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const above = row[rightIndex];
+      row[rightIndex] =
+        left[leftIndex - 1] === right[rightIndex - 1]
+          ? diagonal + 1
+          : Math.max(row[rightIndex], row[rightIndex - 1]);
+      diagonal = above;
+    }
+  }
+  return row[right.length];
+}
+
+function countCommonBigrams(left, right) {
+  const rightBigrams = new Set();
+  for (let index = 0; index < right.length - 1; index += 1) {
+    rightBigrams.add(right.slice(index, index + 2));
+  }
+  const common = new Set();
+  for (let index = 0; index < left.length - 1; index += 1) {
+    const bigram = left.slice(index, index + 2);
+    if (rightBigrams.has(bigram)) common.add(bigram);
+  }
+  return common.size;
 }
 
 /**

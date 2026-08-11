@@ -64,15 +64,15 @@
 
 ### 执行生命周期事件
 
-| 事件类型              | 方向 | 描述              | 负载                                                                                                                                                                                            |
-| --------------------- | ---- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execution.started`   | S→C  | 回合执行开始      | `{ runtimeCount }`                                                                                                                                                                              |
-| `runtime.started`     | S→C  | 单个 runtime 开始 | `{ runtimeId, pluginId, label }`                                                                                                                                                                |
-| `runtime.completed`   | S→C  | 单个 runtime 完成 | `{ runtimeId, pluginId, durationMs }`                                                                                                                                                           |
-| `runtime.failed`      | S→C  | 单个 runtime 失败 | `{ runtimeId, pluginId, error }`                                                                                                                                                                |
-| `execution.completed` | S→C  | 回合执行完成      | `{ runtimeCount, resultCount, durationMs, abortReason? }`（`abortReason` 仅在回合被中止时出现：cost-gate 硬预算上限、玩家 abort（值 `"aborted-by-player"`）等——前端据此提示玩家而非静默空回合） |
+| 事件类型              | 方向 | 描述              | 负载                                                                                                                                                                                                                                                                                                                  |
+| --------------------- | ---- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution.started`   | S→C  | 回合执行开始      | `{ runtimeCount }`                                                                                                                                                                                                                                                                                                    |
+| `runtime.started`     | S→C  | 单个 runtime 开始 | `{ runtimeId, pluginId, label }`                                                                                                                                                                                                                                                                                      |
+| `runtime.completed`   | S→C  | 单个 runtime 完成 | `{ runtimeId, pluginId, durationMs }`                                                                                                                                                                                                                                                                                 |
+| `runtime.failed`      | S→C  | 单个 runtime 失败 | `{ runtimeId, pluginId, error }`                                                                                                                                                                                                                                                                                      |
+| `execution.completed` | S→C  | 回合执行终态      | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason? }`。`committed: true` 表示 proposal、execution journal 与会话时钟已落库；`false` 时 `error` 携带 proposal 或通用事务错误，客户端撤销该回合的 optimistic stream。`abortReason` 仅在回合被中止时出现（玩家 abort 值为 `"aborted-by-player"`） |
 
-> **开场接力**：当一次玩家动作完成了最后一个 setup runtime，`POST /api/actions` 的同一条 SSE 流会自动接力一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。此时流内会出现**两轮** `execution.started` / runtime 生命周期事件（信封 `turnId` 不同——setup 回合 + 接力回合），但只有**一个** `execution.completed` 收尾（前端以它复位 executing 状态）。
+> **开场接力**：当一次玩家动作完成了最后一个 setup runtime，`POST /api/actions` 的同一条 SSE 流会自动接力一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。此时流内会出现**两轮** `execution.started` / runtime 生命周期事件（信封 `turnId` 不同——setup 回合 + 接力回合），但只有**一个** `execution.completed` 收尾（前端以它复位 executing 状态并按 `committed` 收敛 optimistic 输出）。setup 提交失败时不会启动接力，终态直接返回 `committed: false`。
 
 ### 回合中控制（W4：steer / abort）
 
@@ -446,7 +446,7 @@ execution.started     → executionSteps
 runtime.started       → executionSteps
 runtime.completed     → executionSteps
 runtime.failed        → executionSteps
-execution.completed   → executing = false
+execution.completed   → committed=true: finalize；committed=false: discard optimistic stream + executionError；两者均 executing=false
 error.occurred        → executionError
 ```
 

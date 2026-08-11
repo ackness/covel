@@ -8,6 +8,7 @@ import type {
   ExecutionContext,
   InputSlot,
 } from "@covel/shared";
+import { attachExecutionJournal } from "../execution-journal.js";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
@@ -657,7 +658,7 @@ export async function executeFunctionRuntime({
 
   const finalOutput = (result.output ?? output) as Record<string, unknown>;
 
-  // Save function output as TurnMessage (same as agent runtimes).
+  // Stage function output in the execution journal (same as agent runtimes).
   // Manual plugin-rpc calls return their output to the caller and commit
   // proposals through plugin-rpc, so they stay out of conversation history.
   // Skipped when a PostRuntime hook rewrote the status to a non-success.
@@ -668,20 +669,28 @@ export async function executeFunctionRuntime({
         : typeof finalOutput.content === "string"
           ? finalOutput.content
           : JSON.stringify(finalOutput);
+    const interactions = Array.isArray(finalOutput.interactions)
+      ? finalOutput.interactions
+      : undefined;
+    const ui = Array.isArray(finalOutput.ui) ? finalOutput.ui : undefined;
 
-    await deps.store.appendTurnMessage({
-      id: crypto.randomUUID(),
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      sourceType: "runtime",
-      sourcePluginId: manifest.pluginId,
-      sourceRuntimeId: manifest.name,
-      role: "assistant",
-      name: manifest.name,
-      content: narrativeContent,
-      order: stageMessageOrder(getRuntimeSpec(manifest).stage),
-      createdAt: new Date().toISOString(),
-    });
+    attachExecutionJournal(result, [
+      {
+        id: crypto.randomUUID(),
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        sourceType: "runtime",
+        sourcePluginId: manifest.pluginId,
+        sourceRuntimeId: manifest.name,
+        role: "assistant",
+        name: manifest.name,
+        content: narrativeContent,
+        order: stageMessageOrder(getRuntimeSpec(manifest).stage),
+        pendingInput: interactions,
+        ui,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
   }
 
   try {

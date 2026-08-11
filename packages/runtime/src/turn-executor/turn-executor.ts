@@ -31,10 +31,7 @@ import {
   runPreScheduleHook,
 } from "../hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
-import {
-  __testOnly_parseFinalOutputEnvelope,
-  looksLikeStructuredRuntimeOutput,
-} from "./turn-output-helpers.js";
+import { __testOnly_parseFinalOutputEnvelope } from "./turn-output-helpers.js";
 import { executeOneRuntime } from "./turn-runtime-execution.js";
 import type { RuntimeInvocation } from "./turn-runtime-execution.js";
 import {
@@ -52,12 +49,12 @@ import {
 import { runWithHookScope } from "../hooks/hook-scope.js";
 import { runEventChain } from "../trigger/turn-event-chain.js";
 import {
-  MaxRecursionExceeded,
   type RecursiveTurnInput,
   type TurnExecutorDeps,
   type TurnExecutorOptions,
 } from "./turn-executor-types.js";
 import { finalizeTurnResult } from "./turn-result-finalizer.js";
+import { attachExecutionJournal } from "../execution-journal.js";
 import { createExecutionContext } from "./execution-context.js";
 import { PLAYER_ABORT_REASON } from "./turn-control.js";
 import { markPreGameCompletion } from "./pre-game-completion.js";
@@ -263,12 +260,25 @@ async function executeTurnImpl(
     deps,
     shouldAppendPlayerMessage,
   });
-  const { messageHistory, runtimeTriggerCounts, sessionStatus, turnNumber } =
-    sessionState;
+  const {
+    messageHistory,
+    journalMessages,
+    runtimeTriggerCounts,
+    sessionStatus,
+    turnNumber,
+  } = sessionState;
   // Logical-turn number for this execution (frozen): the count of committed
   // main-loop player turns plus one. Drives scheduled cadence / startTurn and
   // is independent of the raw player-message count `turnNumber`.
   const logicalTurn = sessionState.completedPlayerTurns + 1;
+  // Scheduling observes the current player action even though its journal row
+  // is still uncommitted. This preserves cooldown semantics from the former
+  // append-before-schedule path without exposing the row to the store,
+  // compaction, or sibling requests before finalize succeeds.
+  const triggerMessageHistory =
+    journalMessages.length > 0
+      ? [...messageHistory, ...journalMessages]
+      : messageHistory;
 
   // Abort early if session is paused or ended — no runtimes should execute.
   if (sessionStatus !== "active") {
@@ -353,7 +363,7 @@ async function executeTurnImpl(
   const { manualTarget, triggered, abortReason } = selectTriggeredRuntimes({
     activeRuntimes,
     manualRuntimeId: input.manualTrigger?.runtimeId,
-    messageHistory,
+    messageHistory: triggerMessageHistory,
     preGameCompleted,
     runtimeTriggerCounts,
     setupRuntimes: setupRuntimesSnapshot,
@@ -427,7 +437,7 @@ async function executeTurnImpl(
     resolveEffectsPolicy(),
   );
   for (const d of hazardDiagnostics) {
-    console.warn(`[turn-executor] ${d.message}`);
+    console.warn(`[covel:warn] [turn-executor] ${d.message}`);
     emitSubEvent(
       deps.eventBus,
       "runtime",
@@ -585,15 +595,11 @@ async function executeTurnImpl(
   // its result surfaces as failed with a turn-aborted message and carries no
   // PROPOSALS, so nothing proposal-shaped is committed.
   //
-  // That is not the same as "nothing was written". A few builtin tools write
-  // straight to the store instead of returning a proposal — the character
-  // tools (create/update-character) and the memory tools (core-memory block
-  // updates). Whatever they wrote before the abort is already durable and is
-  // NOT rolled back, because it never entered the commit pipeline that the
-  // abort short-circuits. The same holds for a runtime that fails after such
-  // a call, and for PreStateCommit: a hook cannot veto those writes because
-  // they never reach it. Routing them through proposals is the fix; until
-  // then this is the honest guarantee.
+  // The builtin character tools and core-memory update tool both return
+  // proposals, so their writes are discarded with the aborted result. Trusted
+  // plugin-data deletion remains a deliberately documented direct-write escape
+  // hatch, but no production runtime uses it; any future caller must add a
+  // delete proposal before relying on rollback semantics.
   const playerAborted = (): boolean =>
     deps.turnControl?.signal?.aborted === true;
 
@@ -700,16 +706,16 @@ async function executeTurnImpl(
         runtimeTurnsSinceLastTrigger: new Map(
           activeRuntimes.map((rt) => [
             rt.name,
-            countPlayerMessagesSinceRuntime(messageHistory, rt.name),
+            countPlayerMessagesSinceRuntime(triggerMessageHistory, rt.name),
           ]),
         ),
       });
 
   // ── Pre-Game completion tracking ────────────────────────────────
   //
-  // The Pre-Game band (priority 0–99) runs while setup is pending and is
-  // responsible for one-off initialisation: welcome text, world schema
-  // generation, opening character form, etc. A Pre-Game runtime is considered
+  // The setup stage runs while the session phase is `setup` and is responsible
+  // for one-off initialisation: welcome text, world schema generation, opening
+  // character form, etc. A setup runtime is considered
   // "done" when ANY of the following hold:
   //
   //   1. Its output reports `preGameDone: true`
@@ -818,14 +824,21 @@ async function executeTurnImpl(
         sessionId: input.sessionId,
         durationMs: baseResult.durationMs,
       });
-      schedulePostTurnMemoryUpdate({
-        input,
-        turnResult: baseResult,
-        deps,
-        coreMemoryBlocks,
+      // The commit owner invokes this callback only after the transaction
+      // lands. Refresh here so authoritative character/form facts include
+      // writes produced by this turn instead of the pre-execution snapshot.
+      void refreshSessionContext().then((committedSessionContext) => {
+        schedulePostTurnMemoryUpdate({
+          input,
+          turnResult: baseResult,
+          deps,
+          coreMemoryBlocks,
+          sessionContext: committedSessionContext,
+        });
       });
     },
   };
+  attachExecutionJournal(turnResult, journalMessages);
 
   // ── TurnStop hook — Post* hooks cannot abort ────────
   await runTurnStopHook(
@@ -842,7 +855,11 @@ async function executeTurnImpl(
     },
   );
 
-  return playerAborted()
-    ? { ...turnResult, abortReason: PLAYER_ABORT_REASON }
-    : turnResult;
+  if (playerAborted()) {
+    return attachExecutionJournal(
+      { ...turnResult, abortReason: PLAYER_ABORT_REASON },
+      journalMessages,
+    );
+  }
+  return turnResult;
 }

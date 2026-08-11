@@ -201,8 +201,10 @@ export class LocalDataService implements DataService {
       id: humanSessionId(),
       worldId,
       status: "active",
+      locale: locale ?? "zh-CN",
       turnCount: 0,
       preGameCompleted: [],
+      activePlugins: _plugins ?? [],
       presetId,
       createdAt: nowIso,
     };
@@ -426,7 +428,13 @@ export class LocalDataService implements DataService {
       await api.getSession(serverSessionId);
     } catch (err) {
       if (!isNotFound(err)) throw err;
-      await api.createSession(serverWorldId, session.presetId, serverSessionId);
+      await api.createSession(
+        serverWorldId,
+        session.presetId,
+        serverSessionId,
+        session.activePlugins ? [...session.activePlugins] : undefined,
+        session.locale,
+      );
     }
 
     // Upload messages so the server kernel can build LLM context. This is NOT

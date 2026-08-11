@@ -1169,7 +1169,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ### 玩家交互
 
-当 Turn 执行后产生 `pendingInputs`（如表单、选择题、确认框），玩家需要通过 `framework.submit-form` 提交响应。框架会将玩家输入转化为自然语言叙事，追加到对话历史中。若该响应完成最后一个 Pre-Game runtime，随后发起的 `/api/actions` `send_message` 会在同一个请求里完成 Pre-Game 并立即补跑已触发的主循环 runtime，因此同一个 `turnId` 可能同时包含 setup completion 和第一段正式叙事。
+当 Turn 执行后产生 `pendingInputs`（如表单、选择题、确认框），玩家需要通过 `framework.submit-form` 提交响应。handler 校验并持久化提交，返回自然语言 `filledNarrative`；Web 再把该文本作为下一次 `/api/actions` 的玩家消息。若该动作完成最后一个 setup runtime，服务端会在同一 SSE 流中以新的 `turnId` 和独立事务自动接力主循环，因此 setup completion 与第一段正式叙事属于两个 turn。
 
 #### `POST /api/sessions/:id/plugin-rpc` (`framework.submit-form`)
 
@@ -1279,10 +1279,13 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 **使用说明:**
 
+- handler 只接受当前 session 对话日志中已经提交的 assistant interaction；`turnId` / `interactionId` / `type` 必须与原交互一致，客户端无法凭空构造表单或改写交互类型
+- `form` 会校验 required、字段集合和字段类型；`choice.selectedId` 必须来自原 options，`selectedLabel` 由服务端按原 option 规范化；`confirmation.confirmed` 必须是 boolean
+- 同一 `(turnId, interactionId)` 重复提交相同值会返回原 `submissionId`；不同值返回 400。批量提交会先全部校验，再在事务内统一写入
 - `filledNarrative` 是将玩家输入填入模板后的**纯自然语言**文本，不含 JSON 结构
-- 该文本作为玩家消息追加到对话历史，供叙事者在下一轮 Turn 中参考（**不再生成合成的 assistant-role 消息**）
+- handler 本身不写 `turn_messages`；Web 把该文本作为下一次 action 的玩家消息，供叙事者参考
 - 模板由插件提供，使用 `{{fieldName}}` 占位符语法
-- 如果找不到模板，会生成一条简单的回退叙事（如 `[玩家输入] name: 艾尔文, class: 战士`）
+- 已提交交互缺少模板时会生成简单的回退叙事（如 `[玩家输入] name: 艾尔文, class: 战士`）
 - **本地化**：`confirmation` 的 `{{confirmed}}` 取值（确认/取消）与回退叙事前缀（`[玩家输入]`/`[玩家选择]`/`[玩家确认]`/`[玩家取消]`）按**会话 locale** 解析——框架据 `session.locale` 把这些文案注入 handler（resolution order：请求 → 会话 → world → app 默认 `zh-CN`）。`en-US` 会产出 `Confirm`/`Cancel` 与 `[Player input]`/`[Player choice]`/`[Player confirmed]`/`[Player cancelled]`；未知 locale 回落 `zh-CN`（与历史输出逐字一致）。
 
 ---
@@ -1359,9 +1362,9 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 **框架默认 action:**
 
-| Action        | 说明                                                   |
-| ------------- | ------------------------------------------------------ |
-| `submit-form` | 持久化玩家输入、找模板消息、按 `{{字段}}` 填充自然语言 |
+| Action        | 说明                                                                           |
+| ------------- | ------------------------------------------------------------------------------ |
+| `submit-form` | 绑定已提交 interaction，校验并幂等持久化玩家输入，再按 `{{字段}}` 填充自然语言 |
 
 **响应 200 — action 级:**
 
@@ -2575,6 +2578,8 @@ id: evt-002
 
 前端主要使用此端点进行游戏交互。将动作请求（发送消息、执行命令等）翻译为 Turn 执行，并通过 SSE 流式返回结果。
 
+请求体按 `type` 作判别联合校验：顶层只接受 `requestId`、`type`、`sessionId`、`locale`、`model`、`payload`；每种 action 的 payload 也拒绝未声明字段。`requestId` / `sessionId` / runtime/turn ID 必须是有界安全标识符，locale 必须符合 BCP-47 风格格式；非法请求在创建 turn 或写入消息前返回 400。
+
 **请求体:**
 
 ```json
@@ -2595,10 +2600,11 @@ id: evt-002
 | ----------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `content`         | `send_message`    | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                                                                                                     |
 | `command`         | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                                                                                                |
+| `loreOverride`    | `start_session`   | 可选。Prep 页编辑后的世界文档；服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空。                                                                                                          |
 | `runtimeId`       | `retry_runtime`   | 可选。收窄重跑到指定 runtime（走 manual-trigger 路径）；缺省保持整回合重跑语义（M-07）。                                                                                                                                                                            |
 | `retryFromTurnId` | `retry_runtime`   | 可选（需与 `runtimeId` 同用）。指定作为上下文种子的源回合：服务端加载该回合的 `turn_results` 工件播种执行，使被重试 runtime 的 `input.inject`/`needs` 按原回合叙事解析。缺省回退到最近一个 player-origin 工件。前端失败 chip 的重试按钮走这条路径（不删叙事消息）。 |
 
-**`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建时决定（显式 `plugins` 数组，或世界 manifest 播种的推荐集），`start_session` 只负责在注册表里激活它们。空集合会被 **400** 拒绝（`Session has no active plugins. …`），而不是回退到"激活全部已注册插件"——那个回退会把玩家从未选择的社区插件、以及互斥的两个叙事引擎同时拉进会话，并持久化到会话生命周期结束。
+**`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建请求的 `plugins` 数组决定；Web Prep 会先按 world `pluginPolicy` 计算默认选择，再把结果显式传给创建接口。服务端创建路由不读取 world policy，只补 builtin core、`requires` 关系并处理 conflicts。`start_session` 只负责在注册表里激活已持久化集合。空集合会被 **400** 拒绝（`Session has no active plugins. …`），不会回退到"激活全部已注册插件"；该回退会把玩家从未选择的社区插件及互斥叙事引擎同时拉进会话，并持久化到会话生命周期结束。
 
 **开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力回合是第一个计数的玩家回合（`completedPlayerTurns` 0 → 1）。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_runtime` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
 

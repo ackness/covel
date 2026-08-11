@@ -16,7 +16,7 @@
 
 import { describe, it, expect } from "vitest";
 import { Hono } from "hono";
-import { createMemoryStore } from "@covel/store";
+import { createMemoryStore, type StoreTransaction } from "@covel/store";
 import { createEventBus, type EventBus } from "@covel/events";
 import {
   createPluginRegistry,
@@ -116,8 +116,9 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
     // Gate the post-lock tail: the recorder's `turn.completed` trace row is
     // written AFTER the session lock releases, so blocking it parks the
     // request in exactly the window where the next action could already own
-    // the session. The player-message write (role "user") happens under the
-    // lock — use it to emit the in-lock control event.
+    // the session. The player-message write (role "user") now happens through
+    // finalizeExecution's transaction under the lock — use it to emit the
+    // in-lock control event.
     let releaseTail!: () => void;
     const tailGate = new Promise<void>((resolve) => (releaseTail = resolve));
     let reachedTail!: () => void;
@@ -133,13 +134,24 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
             return store.addTraceEvent(record as never);
           };
         }
-        if (prop === "addMessage") {
-          return async (record: { role: string }) => {
-            if (record.role === "user") {
-              emitForwardedEvent(eventBus, "in-lock");
-            }
-            return store.addMessage(record as never);
-          };
+        if (prop === "withTransaction") {
+          return async <T>(fn: (tx: StoreTransaction) => Promise<T>) =>
+            store.withTransaction!(async (tx) => {
+              const observedTx = new Proxy(tx, {
+                get(txTarget, txProp, txReceiver) {
+                  if (txProp === "addMessage") {
+                    return async (record: { role: string }) => {
+                      if (record.role === "user") {
+                        emitForwardedEvent(eventBus, "in-lock");
+                      }
+                      return tx.addMessage(record as never);
+                    };
+                  }
+                  return Reflect.get(txTarget, txProp, txReceiver);
+                },
+              });
+              return fn(observedTx);
+            });
         }
         return Reflect.get(target, prop, receiver);
       },

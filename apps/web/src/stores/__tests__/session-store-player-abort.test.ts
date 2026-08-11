@@ -89,6 +89,7 @@ describe("sse-handler execution.completed abort terminal state", () => {
         runtimeCount: 1,
         resultCount: 0,
         durationMs: 5,
+        committed: true,
         abortReason,
       },
     };
@@ -121,6 +122,44 @@ describe("sse-handler execution.completed abort terminal state", () => {
     });
     const types = dispatch.mock.calls.map(([a]) => a.type);
     expect(types).not.toContain("DISCARD_TURN_STREAMS");
+  });
+
+  it("commit failure discards uncommitted streams and surfaces the terminal error", () => {
+    const dispatch = vi.fn();
+    const deps = makeDeps(dispatch);
+    deps.deltaBufferRef.current.set("turn-1:narrator/main", {
+      turnId: "turn-1",
+      runtimeId: "narrator/main",
+      pluginId: "narrator",
+      text: "ghost narrative",
+      flushSessionId: "sess-1",
+    });
+    const handle = createSseEventHandler(deps);
+
+    handle({
+      ...completedEnvelope(""),
+      payload: {
+        runtimeCount: 1,
+        resultCount: 1,
+        durationMs: 5,
+        committed: false,
+        error: "injected commit veto",
+      },
+    });
+
+    expect(deps.deltaBufferRef.current.size).toBe(0);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "DISCARD_TURN_STREAMS",
+      turnId: "turn-1",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTION_ERROR",
+      error: "injected commit veto",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTING",
+      value: false,
+    });
   });
 });
 
@@ -158,6 +197,7 @@ describe("sse-handler abort clears the pending delta rAF (H1 race)", () => {
         runtimeCount: 1,
         resultCount: 0,
         durationMs: 5,
+        committed: true,
         abortReason: PLAYER_ABORT_REASON,
       },
     };

@@ -59,7 +59,6 @@ interface MemoryBlockReader {
     sessionId: string,
     label: string,
   ): Promise<{ label: string; content: string; updatedAt: string } | null>;
-  updateBlock(sessionId: string, label: string, content: string): Promise<void>;
 }
 
 export interface MemoryToolDeps {

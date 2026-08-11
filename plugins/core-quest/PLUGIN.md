@@ -120,7 +120,7 @@ postHistory:
 - `name`（必填）：稳定的任务名，合并去重的唯一依据
 - `description`：1-2 句事实陈述，说明任务由来和目标
 - `status`：`active` / `completed` / `failed`；**省略表示维持现状**，新任务默认 `active`
-- `objectives`：目标清单 `[{ text, done }]`；`text` 与已有目标逐字匹配则更新勾选，否则追加为新目标；`done` 省略表示维持现状
+- `objectives`：目标清单 `[{ id?, text, done }]`；推进时优先照抄已有 `id`，工具会继续以规范化文本和保守语义匹配兜底；命中后保留原始目标文案并更新勾选，`done` 省略表示维持现状
 - `giver` / `reward`：叙事明确给出时才填
 
 ## 工具调用示例
@@ -142,7 +142,9 @@ postHistory:
     },
     {
       "name": "调查后山异常",
-      "objectives": [{ "text": "取得苏婉的协助", "done": true }]
+      "objectives": [
+        { "id": "secure-su-wan", "text": "取得苏婉的协助", "done": true }
+      ]
     }
   ]
 }
@@ -157,6 +159,6 @@ postHistory:
 - 一轮最多登记 **3 个**新任务；超过就只取最重要的 3 个
 - `name` 必须稳定且可独立理解 —— 后续回合要靠它合并推进
 - `description` 必须是 1-2 句**事实陈述**，不能是氛围渲染
-- `objectives` 的 `text` 要逐字稳定：推进时照抄已有目标原文，不要改写措辞
+- 推进已有 objective 时照抄 `<existing-quests>` 中的 `id`；同时尽量保留原文，便于审计
 - **本轮没有任务信号时，千万不要硬凑**。日志里多一条假任务比漏一条真任务更糟糕
 - 调用写入工具后不输出任何额外文本

@@ -90,6 +90,12 @@ describe("core plugin manifest contract", () => {
         field: "narrativeOutput",
         as: "<pregame-opening>",
       },
+      {
+        kind: "runtime",
+        from: "world-init/schema-gen",
+        field: "worldSchema",
+        as: "<same-turn-world-schema>",
+      },
     ]);
 
     // All three resolve to the setup stage. pregame / schema-gen still ride the

@@ -218,6 +218,25 @@ export interface MemoryUpdateResult {
   readonly error?: string;
 }
 
+/**
+ * Structured session facts read from committed framework state.
+ *
+ * The memory updater treats these values as authoritative when narrative text
+ * or an older memory block disagrees with them. Keeping the shape small avoids
+ * turning the updater into a second full context assembler.
+ */
+export interface MemoryAuthoritativeFacts {
+  readonly playerCharacter?: {
+    readonly name: string;
+    readonly type: string;
+    readonly description?: string;
+    readonly fields?: Readonly<Record<string, unknown>>;
+  };
+  /** Localized display labels keyed by character field id. */
+  readonly playerFieldLabels?: Readonly<Record<string, string>>;
+  readonly lastFormValues?: Readonly<Record<string, unknown>>;
+}
+
 export interface MemoryUpdater {
   /**
    * Analyze completed turn results and update core memory blocks.
@@ -234,6 +253,7 @@ export interface MemoryUpdater {
     sessionId: string;
     narrativeText: string;
     toolCallSummaries?: readonly string[];
+    authoritativeFacts?: MemoryAuthoritativeFacts;
     currentBlocks: readonly CoreMemoryBlock[];
     locale?: string;
   }): Promise<MemoryUpdateResult>;

@@ -25,6 +25,7 @@
         "type": "object",
         "required": ["text"],
         "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
           "text": { "type": "string", "minLength": 1 },
           "done": { "type": "boolean" }
         },

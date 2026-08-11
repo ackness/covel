@@ -80,7 +80,7 @@ export async function buildSessionContextSnapshot(
 ): Promise<SessionContextSnapshot> {
   // Session read is for completeness — caller already gates on active status.
   const [
-    ,
+    sessionRecord,
     characters,
     lastFormValues,
     workingMemory,
@@ -95,9 +95,14 @@ export async function buildSessionContextSnapshot(
     loadActivePersona(store, sessionId, opts.personaPluginId),
   ]);
 
-  const worldRecord = opts.worldId
+  const storedWorldRecord = opts.worldId
     ? await safeGetWorld(store, opts.worldId)
     : null;
+  const loreOverride = sessionRecord?.metadata?.loreOverride;
+  const worldRecord =
+    storedWorldRecord && typeof loreOverride === "string"
+      ? { ...storedWorldRecord, lore: loreOverride }
+      : storedWorldRecord;
 
   const worldSchema = await loadWorldSchema(
     store,

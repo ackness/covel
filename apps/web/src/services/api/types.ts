@@ -2,6 +2,7 @@ import type {
   I18nText,
   PluginUserSettingSpec,
   SessionStatus,
+  SetupRuntimeState,
   Stage,
   WorldDimensions,
 } from "@covel/shared";
@@ -10,6 +11,7 @@ export type {
   PluginRpcRequest,
   PluginRpcResponse,
   SessionStatus,
+  SetupRuntimeState,
 } from "@covel/shared";
 
 // -- Shared API types
@@ -36,45 +38,19 @@ export interface WorldRecord {
 export type GeneratedWorldSaveTarget =
   "server-file" | "server-store" | "return-only";
 
-/**
- * Lifecycle state of a single one-time "setup" runtime, as tracked on the
- * session record (keyed by runtimeId, e.g. `"char-creator/player-init"`).
- * A setup runtime that fails repeatedly becomes `blocked`, halting its plugin
- * until the player retries or waives it.
- */
-export type SetupRuntimeState =
-  | {
-      state: "pending";
-      pluginVersion: string;
-      generation: number;
-      attempts: number;
-      lastError?: string;
-    }
-  | {
-      state: "done";
-      resolution: "completed" | "waived";
-      generation: number;
-      attempts: number;
-      completedAt: string;
-      pluginVersion: string;
-      warning?: string;
-    }
-  | {
-      state: "blocked";
-      pluginVersion: string;
-      generation: number;
-      attempts: number;
-      reason: string;
-      blockedAt: string;
-    };
-
 export interface SessionRecord {
   id: string;
   worldId: string;
   status: SessionStatus;
+  /** Locale persisted on the authoritative server session. */
+  locale?: string;
   turnCount: number;
-  /** Runtime IDs whose Pre-Game (band 0-99) runs have completed. */
+  /** Legacy setup completion list, derived from setupRuntimes. */
   preGameCompleted?: readonly string[];
+  /** Authoritative setup/main-loop scheduling phase. */
+  phase?: "setup" | "playing";
+  /** Number of committed main-loop player turns. */
+  completedPlayerTurns?: number;
   activePlugins?: readonly string[];
   presetId?: string;
   taskBindings?: Record<string, string>;
@@ -82,6 +58,7 @@ export interface SessionRecord {
   /** Per-setup-runtime lifecycle state, keyed by runtimeId. */
   setupRuntimes?: Record<string, SetupRuntimeState>;
   createdAt: string;
+  updatedAt?: string;
 }
 
 /**

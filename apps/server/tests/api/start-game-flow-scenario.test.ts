@@ -158,7 +158,10 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
                   type: "form",
                   interactionId: "form-char-creation",
                   narrativeTemplate: "Player {{name}} enters as {{concept}}.",
-                  fields: [{ id: "name", label: "Name", type: "text" }],
+                  fields: [
+                    { id: "name", label: "Name", type: "text" },
+                    { id: "concept", label: "Concept", type: "text" },
+                  ],
                 },
               ],
             };
