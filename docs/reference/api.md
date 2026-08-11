@@ -20,7 +20,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 > **注意**: `@covel/store` 工厂也支持 `idb`，用于浏览器能力调用；常规服务器部署使用 `memory` / `sqlite` / `pg`。
 
-### 错误响应约定（v0.0.5 统一）
+### 错误响应约定（自 v0.0.5 起统一）
 
 所有 JSON 错误响应统一收敛为以下信封（`apps/server/src/api-error.ts`）：
 
@@ -333,14 +333,14 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### 状态查询
 
-| 方法 | 路径                               | 描述                                        |
-| ---- | ---------------------------------- | ------------------------------------------- |
-| GET  | `/api/sessions/:id/state`          | 获取所有状态表                              |
-| GET  | `/api/sessions/:id/state-patches`  | 获取状态变更补丁列表                        |
-| GET  | `/api/sessions/:id/state-snapshot` | 获取完整状态快照                            |
-| PUT  | `/api/sessions/:id/state-snapshot` | **v0.0.5 未实现** —— 返回 `501`，见下方说明 |
+| 方法 | 路径                               | 描述                                     |
+| ---- | ---------------------------------- | ---------------------------------------- |
+| GET  | `/api/sessions/:id/state`          | 获取所有状态表                           |
+| GET  | `/api/sessions/:id/state-patches`  | 获取状态变更补丁列表                     |
+| GET  | `/api/sessions/:id/state-snapshot` | 获取完整状态快照                         |
+| PUT  | `/api/sessions/:id/state-snapshot` | **当前未实现** —— 返回 `501`，见下方说明 |
 
-> **`PUT /api/sessions/:id/state-snapshot`（v0.0.5 未实现）**：恢复状态快照需要 StateManager
+> **`PUT /api/sessions/:id/state-snapshot`（当前未实现；自 v0.0.5 明确返回 501）**：恢复状态快照需要 StateManager
 > 重建状态表，当前状态模型未暴露该能力。路由有意保留（而非删除）以保持契约可见、不丢失排期，
 > 当会话存在时返回
 > `501 { "error": "State snapshot restoration not implemented. State will be rebuilt from turn execution.", "code": "not_implemented" }`
