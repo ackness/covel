@@ -473,6 +473,23 @@
         "outputPerMToken": 1.1
       }
     },
+    "deepseek-v4-flash": {
+      "input": ["text"],
+      "output": ["text"],
+      "features": [
+        "function_calling",
+        "structured_output",
+        "streaming",
+        "reasoning",
+        "prompt_caching"
+      ],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 384000,
+      "pricing": {
+        "inputPerMToken": 0.14,
+        "outputPerMToken": 0.28
+      }
+    },
     "deepseek-reasoner": {
       "input": ["text"],
       "output": ["text"],

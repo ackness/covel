@@ -3,6 +3,7 @@ import type {
   PresetSummary,
   SlotConfigEntry,
 } from "@/services/api.js";
+import { slotBindingId } from "@/services/api.js";
 
 const DEFAULT_LLM_SLOT_IDS = [
   "story",
@@ -17,6 +18,7 @@ const DEFAULT_LLM_SLOT_IDS = [
 export interface LlmSlotPresetCandidate {
   readonly id: string;
   readonly provider: string;
+  readonly isCustom?: boolean;
 }
 
 export function discoverRuntimeSlotIds(
@@ -63,9 +65,13 @@ export function autoBindDiscoveredSlots(
 ): Record<string, SlotConfigEntry> {
   const next = { ...slotConfig };
   for (const slotId of discoveredSlotIds) {
-    if (slotId === "default" || next[slotId]?.presetId) continue;
+    if (slotId === "default" || slotBindingId(next[slotId])) continue;
     const candidate = findAutoBindPreset(slotId, presets);
-    if (candidate) next[slotId] = { presetId: candidate.id };
+    if (candidate) {
+      next[slotId] = candidate.isCustom
+        ? { modelRef: candidate.id }
+        : { presetId: candidate.id };
+    }
   }
   return next;
 }
@@ -73,14 +79,17 @@ export function autoBindDiscoveredSlots(
 export function collectLlmSlotPresetCandidates(
   builtInPresets: readonly Pick<
     PresetSummary,
-    "id" | "name" | "provider" | "model"
+    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol"
   >[],
   customPresets: readonly Pick<
     PresetSummary,
-    "id" | "name" | "provider" | "model"
+    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol"
   >[],
 ): Array<
-  Pick<PresetSummary, "id" | "name" | "provider" | "model"> & {
+  Pick<
+    PresetSummary,
+    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol"
+  > & {
     readonly isCustom: boolean;
   }
 > {
@@ -90,6 +99,8 @@ export function collectLlmSlotPresetCandidates(
       name: p.name,
       provider: p.provider,
       model: p.model,
+      baseUrl: p.baseUrl,
+      protocol: p.protocol,
       isCustom: false,
     })),
     ...customPresets.map((p) => ({
@@ -97,6 +108,8 @@ export function collectLlmSlotPresetCandidates(
       name: p.name,
       provider: p.provider,
       model: p.model,
+      baseUrl: p.baseUrl,
+      protocol: p.protocol,
       isCustom: true,
     })),
   ];

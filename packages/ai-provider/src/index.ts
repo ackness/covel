@@ -1,5 +1,10 @@
 // Types
 export { PROVIDER_PROTOCOLS } from "./types.js";
+export {
+  REASONING_EFFORT_VALUES,
+  resolveReasoningEffortProfile,
+  extractReasoningRequestFields,
+} from "./reasoning-effort.js";
 export type {
   ProviderProtocol,
   OperationMode,
@@ -44,6 +49,12 @@ export type {
   SlotOverridesInput,
   CustomPresetInput,
 } from "./types.js";
+export type {
+  ReasoningEffort,
+  ReasoningProviderFamily,
+  ReasoningEffortOption,
+  ReasoningEffortProfile,
+} from "./reasoning-effort.js";
 
 // Errors
 export { AiProviderError, type AiProviderErrorCode } from "./errors.js";
@@ -124,14 +135,24 @@ export {
 
 // Capability
 export {
+  modelLookupCandidateDetails,
+  modelLookupCandidates,
+  modelNamespace,
+  resolveCapabilityDetails,
   resolveCapability,
   setModelDatabase,
   createModelDatabase,
   fetchLiteLlmModels,
+  type CapabilityPricingKind,
+  type CapabilityResolutionDetails,
+  type CapabilitySource,
   type KnownModelEntry,
   type ManualCapabilityOverride,
   type ModelDatabase,
   type ModelDbEntry,
   type ModelDbFile,
+  type ModelDbMatch,
   type ModelDbPersistence,
+  type ModelLookupCandidate,
+  type ModelMatchKind,
 } from "./capability/index.js";

@@ -14,6 +14,7 @@ import type {
   UsageSummary,
 } from "../types.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
+import { extractReasoningRequestFields } from "../reasoning-effort.js";
 import {
   createMetadataSanitizer,
   extractParameterOverrides,
@@ -59,6 +60,8 @@ const ANTHROPIC_PROTECTED_KEYS = new Set([
   "system",
   "tools",
   "parameterOverrides",
+  "reasoning_effort",
+  "reasoningEffort",
 ]);
 
 /**
@@ -81,8 +84,18 @@ const ANTHROPIC_PARAMETER_FIELD_MAP = {
 
 function extractAnthropicParameterOverrides(
   meta: Record<string, unknown> | undefined,
+  context: ModelRequestContext | undefined,
+  model: string,
 ): Record<string, unknown> {
-  return extractParameterOverrides(meta, ANTHROPIC_PARAMETER_FIELD_MAP);
+  return {
+    ...extractParameterOverrides(meta, ANTHROPIC_PARAMETER_FIELD_MAP),
+    ...extractReasoningRequestFields(
+      meta,
+      context,
+      "anthropic-messages-v1",
+      model,
+    ),
+  };
 }
 
 /**
@@ -246,7 +259,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
           messages,
           ...(anthropicTools ? { tools: anthropicTools } : {}),
           ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
-          ...extractAnthropicParameterOverrides(params.providerRequestMetadata),
+          ...extractAnthropicParameterOverrides(
+            params.providerRequestMetadata,
+            context,
+            params.model,
+          ),
         },
         undefined,
         headers,
@@ -283,7 +300,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
           system: systemField,
           messages,
           ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
-          ...extractAnthropicParameterOverrides(params.providerRequestMetadata),
+          ...extractAnthropicParameterOverrides(
+            params.providerRequestMetadata,
+            context,
+            params.model,
+          ),
         },
         undefined,
         headers,
@@ -328,7 +349,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
           messages,
           ...(anthropicTools ? { tools: anthropicTools } : {}),
           ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
-          ...extractAnthropicParameterOverrides(params.providerRequestMetadata),
+          ...extractAnthropicParameterOverrides(
+            params.providerRequestMetadata,
+            context,
+            params.model,
+          ),
         },
         undefined,
         headers,

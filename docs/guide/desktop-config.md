@@ -67,9 +67,11 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 ## `~/.covel/llm.toml`
 
-见仓库根 [`llm.toml.example`](../../llm.toml.example) 示例；每个 slot 对应一个 provider / 模型组合。app 自带兜底 `story` slot 指向 DeepSeek —— 填好 `keys.env` 的 `DEEPSEEK_API_KEY` 就能跑。
+见仓库根 [`llm.toml.example`](../../llm.toml.example) 示例；每个模型用途对应一个服务商 / 模型组合。应用自带的兜底 `story` 用途指向 `deepseek-v4-flash`，填好 `keys.env` 的 `DEEPSEEK_API_KEY` 即可运行。
 
-**热重载**：改完 `llm.toml` 不必重启 app —— 到 **Settings → LLM** 点「重载配置」即可。后端会重读文件并原地应用到运行中的 gateway（`POST /api/llm-config/reload`），新增/删除的 slot 立即生效。桌面版该接口受一次性 bearer token 保护（同其他写接口），前端自动附带；dev/web tier 无 token 时开放。
+设置界面的模型部分分为“用途分配”“服务商与模型”“生成参数”。“服务商与模型”采用服务商列表 + 详情结构，一个服务商只需配置一次 API 地址、协议、密钥和价格倍率，并可批量添加多个模型 ID；`openai/gpt-5.6-sol` 等带 `/` 的 ID 会按原样发送。随后在“用途分配”中分别选择服务商和模型，无需再创建自定义 Preset。价格倍率默认 `1`，调试成本面板会用模型参考价乘以该倍率估算结算金额。
+
+**热重载**：改完 `llm.toml` 不必重启应用 —— 到 **设置 → 模型 → 用途分配** 点“重新加载配置”即可。后端会重读文件并原地应用到运行中的 gateway（`POST /api/llm-config/reload`），新增/删除的用途立即生效。桌面版该接口受一次性 bearer token 保护（同其他写接口），前端自动附带；dev/web tier 无 token 时开放。
 
 **解析失败可见**：若 `llm.toml` 有语法错误（如某个 key 写了 `=` 却没值），整份文件会解析失败并**回退到内置默认**（只剩一个 `story` slot）。此时 `GET /api/llm-config` 会带 `error` 字段，**Settings → LLM** 顶部显示红色提示（含具体错误），不再静默回退让你摸不着头脑。改好后点「重载配置」即可恢复。
 

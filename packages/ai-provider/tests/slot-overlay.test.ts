@@ -102,6 +102,37 @@ describe("applySlotOverlay", () => {
     expect(__internals.presetRefs.size).toBe(0);
   });
 
+  it("keeps routed model ids opaque while attaching recognized capabilities", () => {
+    const deps = makeDeps();
+    const overrides: SlotOverridesInput = {
+      customPresets: [
+        {
+          id: "custom_openai_deepseek",
+          name: "OpenAI DeepSeek",
+          provider: "openai",
+          baseUrl: "https://openai.example/v1",
+          model: "deepseek/deepseek-v4-flash",
+          protocol: "openai-chat-v1",
+        },
+      ],
+    };
+
+    const cleanup = applySlotOverlay(deps, overrides);
+    const key = scopedId(deps, "custom_openai_deepseek", overrides)!;
+    const preset = deps.presetRegistry.resolvePreset(key);
+
+    expect(preset?.model).toBe("deepseek/deepseek-v4-flash");
+    expect(preset?.capability).toMatchObject({
+      input: ["text"],
+      output: ["text"],
+      contextWindow: 1_000_000,
+      maxOutputTokens: 384_000,
+    });
+    expect(preset?.capability?.features).toContain("reasoning");
+
+    cleanup();
+  });
+
   it("is a no-op when overrides are undefined or empty", () => {
     const deps = makeDeps();
     expect(applySlotOverlay(deps, undefined)).toBeInstanceOf(Function);

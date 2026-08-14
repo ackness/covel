@@ -29,6 +29,9 @@ export {
   getParamOverrides,
   getPrepRuntimeBindings,
   getProviderKeys,
+  getProviderPriceMultiplier,
+  getProviderPriceMultipliers,
+  getProviderProfiles,
   getSlotConfig,
   loadProviderKeysFromStorage,
   removeCustomPreset,
@@ -37,13 +40,25 @@ export {
   setPrepRuntimeBindings,
   setProviderKeys,
   setProviderKeysAsync,
+  setProviderPriceMultipliers,
+  setProviderProfiles,
   setSlotConfig,
+  slotBindingId,
 } from "./api/model-settings.js";
 export type {
   CustomPreset,
   ModelParameterOverrides,
   SlotConfigEntry,
 } from "./api/model-settings.js";
+export {
+  flattenProviderProfiles,
+  profilesFromLegacyPresets,
+  upsertProviderModel,
+} from "./api/provider-model-profiles.js";
+export type {
+  ProviderModelEntry,
+  ProviderModelProfile,
+} from "./api/provider-model-profiles.js";
 export * from "./api/overlay.js";
 export * from "./api/plugin-data.js";
 export * from "./api/plugin-rpc.js";

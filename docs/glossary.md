@@ -38,7 +38,7 @@ See: [docs/reference/plugins.md](./reference/plugins.md), [docs/reference/tools.
 
 ## Preset
 
-A user-facing bundle of slot overrides and parameter tweaks saved in `SettingsStore` (`keys.env` / `localStorage`). Players switch presets to reroute their session through a different model mix without editing `llm.toml`.
+An internal compiled model plan containing a provider, endpoint, protocol, and one opaque model ID. The settings UI exposes the clearer provider/model hierarchy and compiles browser-defined models into presets only at the request boundary; users do not manage presets directly.
 
 See: `packages/settings/src/`.
 
@@ -80,7 +80,7 @@ See: [docs/reference/api.md](./reference/api.md), [docs/reference/transactions.m
 
 ## Slot
 
-A named routing key for LLM model selection (`default`, `fast`, `balance`, `image`, …). Plugin manifests declare a slot by name; `llm.toml` maps the slot to a concrete provider + model; tag-aware fallback picks the nearest slot with the same modality tag.
+A named routing key for model selection (`default`, `fast`, `balance`, `image`, …), labelled **Model Role** in the settings UI. Plugin manifests declare a slot by name; `llm.toml` maps it to a concrete provider and model; tag-aware fallback picks the nearest slot with the same modality tag.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), `llm.toml.example`.
 

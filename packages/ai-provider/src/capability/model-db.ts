@@ -14,6 +14,10 @@ import type {
   ModelCapability,
   ModelPricing,
 } from "../types.js";
+import {
+  modelLookupCandidateDetails,
+  type ModelMatchKind,
+} from "./model-identity.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -47,6 +51,12 @@ export interface ModelDbPersistence {
   save(db: ModelDbFile): Promise<void>;
 }
 
+export interface ModelDbMatch {
+  readonly id: string;
+  readonly entry: ModelDbEntry;
+  readonly kind: ModelMatchKind;
+}
+
 // ── ModelDatabase ────────────────────────────────────────────────
 
 export interface ModelDatabase {
@@ -55,6 +65,9 @@ export interface ModelDatabase {
 
   /** Look up a model by ID. Supports fuzzy matching (prefix, provider/model). */
   lookup(modelId: string, provider?: string): ModelDbEntry | null;
+
+  /** Same lookup with the database key and match strategy for UI diagnostics. */
+  lookupMatch(modelId: string, provider?: string): ModelDbMatch | null;
 
   /** Convert a ModelDbEntry to our ModelCapability format. */
   toCapability(entry: ModelDbEntry): ModelCapability;
@@ -108,39 +121,61 @@ export function createModelDatabase(
   // Eagerly start loading persisted data; callers can await `ready` to avoid races
   const readyPromise = loadPersisted();
 
-  function lookup(modelId: string, provider?: string): ModelDbEntry | null {
-    const normalized = modelId.toLowerCase();
+  function lookupMatch(
+    modelId: string,
+    provider?: string,
+  ): ModelDbMatch | null {
+    const candidates = modelLookupCandidateDetails(modelId, provider);
 
-    // 1. Direct match
-    const direct = data.models[normalized];
-    if (direct) return direct;
-
-    // 2. Provider-prefixed match (e.g. "openai/gpt-4o" in LiteLLM)
-    if (provider) {
-      const prefixed = data.models[`${provider.toLowerCase()}/${normalized}`];
-      if (prefixed) return prefixed;
+    // Exact candidate match. This covers both bare IDs and provider/model IDs
+    // stored verbatim by LiteLLM.
+    for (const candidate of candidates) {
+      const direct = data.models[candidate.id];
+      if (direct)
+        return { id: candidate.id, entry: direct, kind: candidate.kind };
     }
 
-    // 3. Try without provider prefix (e.g. "deepseek/deepseek-chat" → "deepseek-chat")
-    for (const [key, entry] of Object.entries(data.models)) {
-      const parts = key.split("/");
-      const modelPart = parts[parts.length - 1];
-      if (modelPart === normalized) return entry;
+    // Some databases only carry a provider-prefixed key for a bare request ID.
+    const providerId = provider?.trim().toLowerCase();
+    if (providerId) {
+      for (const candidate of candidates) {
+        const key = `${providerId}/${candidate.id}`;
+        const entry = data.models[key];
+        if (entry) return { id: key, entry, kind: candidate.kind };
+      }
     }
 
-    // 4. Prefix match (longest wins)
-    let bestMatch: ModelDbEntry | null = null;
+    // Match a canonical database key by its trailing model name.
+    for (const candidate of candidates) {
+      for (const [key, entry] of Object.entries(data.models)) {
+        const modelPart = key.split("/").at(-1);
+        if (modelPart === candidate.id) {
+          return { id: key, entry, kind: candidate.kind };
+        }
+      }
+    }
+
+    // Versioned IDs may extend a stable database key with a date/snapshot.
+    let bestMatch: ModelDbMatch | null = null;
     let bestLength = 0;
-    for (const [key, entry] of Object.entries(data.models)) {
-      const parts = key.split("/");
-      const modelPart = parts[parts.length - 1];
-      if (normalized.startsWith(modelPart) && modelPart.length > bestLength) {
-        bestMatch = entry;
-        bestLength = modelPart.length;
+    for (const candidate of candidates) {
+      for (const [key, entry] of Object.entries(data.models)) {
+        const modelPart = key.split("/").at(-1) ?? key;
+        if (
+          candidate.id.startsWith(modelPart) &&
+          modelPart.length > bestLength
+        ) {
+          bestMatch = { id: key, entry, kind: "prefix" };
+          bestLength = modelPart.length;
+        }
       }
     }
 
     return bestMatch;
+  }
+
+  function lookup(modelId: string, provider?: string): ModelDbEntry | null {
+    return lookupMatch(modelId, provider)?.entry ?? null;
   }
 
   function toCapability(entry: ModelDbEntry): ModelCapability {
@@ -229,6 +264,7 @@ export function createModelDatabase(
       source: data.source,
     }),
     lookup,
+    lookupMatch,
     toCapability,
     search,
     listAll: () => data.models,

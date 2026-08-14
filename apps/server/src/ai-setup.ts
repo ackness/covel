@@ -37,7 +37,7 @@ import type {
 const DEFAULT_LLM_TOML = `
 [covel.story]
 provider = "deepseek"
-model    = "deepseek-chat"
+model    = "deepseek-v4-flash"
 baseUrl  = "https://api.deepseek.com"
 protocol = "openai-chat-v1"
 `;

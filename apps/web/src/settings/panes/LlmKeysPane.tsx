@@ -1,6 +1,12 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FolderOpen, Info } from "lucide-react";
-import { getCustomPresets, type PresetSummary } from "@/services/api.js";
+import {
+  getCustomPresets,
+  getProviderPriceMultipliers,
+  setProviderPriceMultipliers,
+  type PresetSummary,
+} from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { SettingWidget } from "../widgets/index.js";
@@ -34,14 +40,32 @@ interface PresetRow {
  * `PingButton` shows baseUrl + slot bindings in its tooltip so the operator
  * knows exactly which target was hit.
  */
-export function LlmKeysPane() {
+export function LlmKeysPane({
+  providerId: onlyProviderId,
+  showIntro = true,
+}: {
+  providerId?: string;
+  showIntro?: boolean;
+} = {}) {
   const { t } = useTranslation();
   const store = useSettingsStore();
   const { state } = useSession();
 
   const isConfigured = state.llmConfig?.configured ?? false;
+  const [priceMultipliers, setPriceMultipliersLocal] = useState<
+    Record<string, number>
+  >(() => getProviderPriceMultipliers());
 
-  const keyEntries = store.listEntries().filter((e) => e.backend === "keys");
+  const keyEntries = store
+    .listEntries()
+    .filter((entry) => entry.backend === "keys")
+    .filter((entry) => {
+      if (!onlyProviderId) return true;
+      const providerId = entry.key.startsWith("keys.")
+        ? entry.key.slice(5)
+        : entry.key;
+      return providerId === onlyProviderId;
+    });
 
   const customPresets = getCustomPresets();
   const allPresets: PresetRow[] = [
@@ -109,14 +133,16 @@ export function LlmKeysPane() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Info className="w-3 h-3" />
-        <span>
-          {isConfigured
-            ? t("settings.keysConfiguredDesc")
-            : t("settings.keysLocalDesc")}
-        </span>
-      </div>
+      {showIntro && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Info className="w-3 h-3" />
+          <span>
+            {isConfigured
+              ? t("settings.keysConfiguredDesc")
+              : t("settings.keysLocalDesc")}
+          </span>
+        </div>
+      )}
       {keyEntries.map((entry) => {
         const providerId = entry.key.startsWith("keys.")
           ? entry.key.slice(5)
@@ -145,6 +171,15 @@ export function LlmKeysPane() {
               </span>
             </div>
             <SettingWidget entry={entry} />
+            <ProviderPriceMultiplierField
+              provider={providerId}
+              value={priceMultipliers[providerId] ?? 1}
+              onChange={(value) => {
+                const next = { ...priceMultipliers, [providerId]: value };
+                setPriceMultipliersLocal(next);
+                setProviderPriceMultipliers(next);
+              }}
+            />
             {hasKey && providerPresets.length > 0 && (
               <div className="space-y-2 pt-1">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
@@ -158,6 +193,60 @@ export function LlmKeysPane() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function ProviderPriceMultiplierField({
+  provider,
+  value,
+  onChange,
+}: {
+  provider: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState(String(value));
+  const commit = () => {
+    const parsed = Number(draft);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      onChange(parsed);
+      setDraft(String(parsed));
+      return;
+    }
+    setDraft(String(value));
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2">
+      <div className="min-w-0">
+        <div className="text-[11px] font-medium">
+          {t("settings.priceMultiplier", "Price multiplier")}
+        </div>
+        <div className="text-[10px] leading-relaxed text-muted-foreground">
+          {t(
+            "settings.priceMultiplierHint",
+            "Estimated settlement = official reference price × multiplier.",
+          )}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <span className="text-xs text-muted-foreground">×</span>
+        <input
+          aria-label={`${provider} ${t("settings.priceMultiplier", "Price multiplier")}`}
+          type="number"
+          min="0.0001"
+          step="0.1"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+          }}
+          className="w-20 border border-border bg-background px-2 py-1 text-right font-mono text-xs outline-none focus:ring-1 focus:ring-primary"
+        />
+      </div>
     </div>
   );
 }

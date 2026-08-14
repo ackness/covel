@@ -12,6 +12,7 @@ import {
   readResponsesStreamFunctionCallArgsDone,
 } from "./http.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
+import { extractReasoningRequestFields } from "../reasoning-effort.js";
 import { createOpenAiChatAdapter } from "./openai-chat.js";
 import {
   createMetadataSanitizer,
@@ -19,6 +20,7 @@ import {
   mediaRefFallbackText,
 } from "./common.js";
 import type {
+  ModelRequestContext,
   TextMessage,
   TextMessageContent,
   ToolDefinition,
@@ -33,6 +35,8 @@ const RESPONSES_PROTECTED_KEYS = new Set([
   "tools",
   "tool_choice",
   "parameterOverrides",
+  "reasoning_effort",
+  "reasoningEffort",
 ]);
 
 /** camelCase override key → OpenAI Responses wire field. */
@@ -48,8 +52,18 @@ const sanitizeResponsesMetadata = createMetadataSanitizer(
 
 function extractResponsesParameterOverrides(
   meta: Record<string, unknown> | undefined,
+  context: ModelRequestContext | undefined,
+  model: string,
 ): Record<string, unknown> {
-  return extractParameterOverrides(meta, RESPONSES_PARAMETER_FIELD_MAP);
+  return {
+    ...extractParameterOverrides(meta, RESPONSES_PARAMETER_FIELD_MAP),
+    ...extractReasoningRequestFields(
+      meta,
+      context,
+      "openai-responses-v1",
+      model,
+    ),
+  };
 }
 
 /**
@@ -172,7 +186,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         model: params.model,
         input: serializeResponsesInput(messages),
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
-        ...extractResponsesParameterOverrides(params.providerRequestMetadata),
+        ...extractResponsesParameterOverrides(
+          params.providerRequestMetadata,
+          context,
+          params.model,
+        ),
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
@@ -195,7 +213,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         input: serializeResponsesInput(messages),
         text: { format: { type: "json_schema" } },
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
-        ...extractResponsesParameterOverrides(params.providerRequestMetadata),
+        ...extractResponsesParameterOverrides(
+          params.providerRequestMetadata,
+          context,
+          params.model,
+        ),
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
@@ -229,7 +251,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         input: serializeResponsesInput(messages),
         stream: true,
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
-        ...extractResponsesParameterOverrides(params.providerRequestMetadata),
+        ...extractResponsesParameterOverrides(
+          params.providerRequestMetadata,
+          context,
+          params.model,
+        ),
       };
       if (params.tools && params.tools.length > 0) {
         body.tools = serializeResponsesTools(params.tools);

@@ -62,7 +62,9 @@ The server scans every `*_API_KEY` entry and injects it into the matching provid
 
 ## `~/.covel/llm.toml`
 
-See [`llm.toml.example`](../../llm.toml.example) at repo root. Each slot pairs a provider + model. The app ships a fallback `story` slot pointing at DeepSeek — filling `DEEPSEEK_API_KEY` in `keys.env` is enough to boot.
+See [`llm.toml.example`](../../llm.toml.example) at repo root. Each model role pairs a provider and model. The built-in fallback `story` role uses `deepseek-v4-flash`; filling `DEEPSEEK_API_KEY` in `keys.env` is enough to boot.
+
+The model settings are split into **Model Roles**, **Providers & Models**, and **Generation**. The provider catalogue uses a list-and-detail layout: configure an endpoint, protocol, key, and price multiplier once, then bulk-add any number of opaque model IDs. IDs containing `/`, such as `openai/gpt-5.6-sol`, are sent unchanged. Assign the provider and model separately under Model Roles; creating a custom preset is no longer required. Price multipliers default to `1` and scale reference prices in the debug cost estimate.
 
 ## Frontend entry point
 

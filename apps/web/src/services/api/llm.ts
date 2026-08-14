@@ -38,10 +38,8 @@ export interface ModelCapabilityInfo {
   maxOutputTokens?: number;
   pricing?: ModelPricing;
   /**
-   * Flat per-M-token prices as actually returned by
-   * `GET /api/model-db/lookup` (see routes/model-db.ts) — that endpoint
-   * sends these alongside contextWindow/maxOutputTokens instead of a
-   * nested `pricing` object.
+   * Flat compatibility fields returned alongside the nested `pricing` object
+   * by `GET /api/model-db/lookup`.
    */
   inputPerMToken?: number;
   outputPerMToken?: number;
@@ -108,13 +106,86 @@ export async function lookupModelCapability(
   model: string,
   provider?: string,
 ): Promise<ModelCapabilityInfo | null> {
+  const result = await lookupModelCapabilityDetails(model, provider);
+  return result.found ? result.capability : null;
+}
+
+export type ModelCapabilitySource =
+  "known" | "model-database" | "protocol-default";
+export type ModelMatchKind = "exact" | "namespace" | "model-name" | "prefix";
+export type ModelPricingKind =
+  "provider" | "reference" | "configured" | "unknown";
+
+export interface ModelCapabilityLookupResult {
+  found: boolean;
+  source: ModelCapabilitySource;
+  matchedModelId?: string;
+  matchKind?: ModelMatchKind;
+  pricingKind: ModelPricingKind;
+  candidates: string[];
+  reasoning: ReasoningEffortProfile | null;
+  capability: ModelCapabilityInfo;
+}
+
+import {
+  REASONING_EFFORT_VALUES,
+  type ReasoningEffort,
+} from "./reasoning-effort.js";
+export { REASONING_EFFORT_VALUES };
+export type { ReasoningEffort };
+
+export type ReasoningProviderFamily =
+  | "openai"
+  | "anthropic"
+  | "deepseek"
+  | "google"
+  | "xai"
+  | "qwen"
+  | "compatible";
+
+export interface ReasoningEffortProfile {
+  family: ReasoningProviderFamily;
+  options: Array<{ value: ReasoningEffort }>;
+  defaultValue?: ReasoningEffort;
+}
+
+/**
+ * Module-level lookup cache — capability records don't change within a page
+ * visit (same assumption as the cost panel's price cache). Keyed on
+ * provider + protocol + model so every panel (providers, slots, generation)
+ * shares one request per target.
+ */
+const capabilityCache = new Map<string, Promise<ModelCapabilityLookupResult>>();
+
+/** Drop cached capability lookups; called after a model-db refresh. */
+export function invalidateModelCapabilityCache(): void {
+  capabilityCache.clear();
+}
+
+export async function lookupModelCapabilityDetails(
+  model: string,
+  provider?: string,
+  protocol?: string,
+): Promise<ModelCapabilityLookupResult> {
+  const cacheKey = JSON.stringify([provider ?? null, protocol ?? null, model]);
+  const cached = capabilityCache.get(cacheKey);
+  if (cached) return cached;
+
   const params = new URLSearchParams({ model });
   if (provider) params.set("provider", provider);
-  const res = await request<{
-    found: boolean;
-    capability?: ModelCapabilityInfo;
-  }>(`/api/model-db/lookup?${params.toString()}`);
-  return res.found ? (res.capability ?? null) : null;
+  if (protocol) params.set("protocol", protocol);
+  let promise: Promise<ModelCapabilityLookupResult>;
+  promise = request<ModelCapabilityLookupResult>(
+    `/api/model-db/lookup?${params.toString()}`,
+  ).catch((error: unknown) => {
+    // Failed lookups stay retryable; only settled results are cached.
+    if (capabilityCache.get(cacheKey) === promise) {
+      capabilityCache.delete(cacheKey);
+    }
+    throw error;
+  });
+  capabilityCache.set(cacheKey, promise);
+  return promise;
 }
 
 export async function refreshModelDb(): Promise<{
@@ -122,13 +193,15 @@ export async function refreshModelDb(): Promise<{
   count?: number;
   error?: string;
 }> {
-  return request<{ ok: boolean; count?: number; error?: string }>(
+  const result = await request<{ ok: boolean; count?: number; error?: string }>(
     "/api/model-db/refresh",
     {
       method: "POST",
       operatorAuth: true,
     },
   );
+  invalidateModelCapabilityCache();
+  return result;
 }
 
 // -- Capability Overrides -------------------------------------

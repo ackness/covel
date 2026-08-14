@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { lookupModelCapability } from "@/services/api.js";
+import {
+  getProviderPriceMultiplier,
+  lookupModelCapability,
+} from "@/services/api.js";
 import type * as api from "@/services/api.js";
 import type { VisibleTurn } from "./-debug-page-model.js";
 
@@ -60,6 +63,7 @@ interface TurnAgg {
 
 interface ModelAgg {
   readonly model: string;
+  readonly provider?: string;
   calls: number;
   inputTokens: number;
   outputTokens: number;
@@ -88,26 +92,38 @@ export function aggregate(turns: readonly VisibleTurn[]): CostModel {
     let turnOutput = 0;
     // Sequential pairing: remember the model announced by the latest
     // `llm.calling` per runtime so the next `llm.responded` inherits it.
-    const lastModelByRuntime = new Map<string, string>();
+    const lastTargetByRuntime = new Map<
+      string,
+      { model: string; provider?: string }
+    >();
     for (const event of turn.events) {
       const payload = event.payload as Record<string, unknown>;
       if (event.type === "llm.calling") {
         const rid = payload.runtimeId as string | undefined;
         const mdl = payload.model as string | undefined;
-        if (rid && mdl) lastModelByRuntime.set(rid, mdl);
+        const provider = payload.provider as string | undefined;
+        if (rid && mdl) {
+          lastTargetByRuntime.set(rid, {
+            model: mdl,
+            ...(provider ? { provider } : {}),
+          });
+        }
         continue;
       }
       const usage = readUsage(event);
       if (!usage) continue;
       const runtimeId = (payload.runtimeId as string) || "(unknown)";
       const pluginId = (payload.pluginId as string) || "";
-      const model =
+      const target =
         event.type === "llm.responded"
-          ? (lastModelByRuntime.get(runtimeId) ?? UNKNOWN_MODEL)
-          : UNKNOWN_MODEL;
-      const prevModel = modelMap.get(model);
-      modelMap.set(model, {
+          ? lastTargetByRuntime.get(runtimeId)
+          : undefined;
+      const model = target?.model ?? UNKNOWN_MODEL;
+      const modelKey = `${target?.provider ?? ""}\u0000${model}`;
+      const prevModel = modelMap.get(modelKey);
+      modelMap.set(modelKey, {
         model,
+        ...(target?.provider ? { provider: target.provider } : {}),
         calls: (prevModel?.calls ?? 0) + 1,
         inputTokens: (prevModel?.inputTokens ?? 0) + usage.inputTokens,
         outputTokens: (prevModel?.outputTokens ?? 0) + usage.outputTokens,
@@ -159,10 +175,14 @@ interface ModelPrice {
 /** Module-level lookup cache — model prices don't change within a page visit. */
 const priceCache = new Map<string, Promise<ModelPrice | null>>();
 
-function lookupPrice(model: string): Promise<ModelPrice | null> {
-  const cached = priceCache.get(model);
+function lookupPrice(
+  model: string,
+  provider?: string,
+): Promise<ModelPrice | null> {
+  const key = `${provider ?? ""}\u0000${model}`;
+  const cached = priceCache.get(key);
   if (cached) return cached;
-  const promise = lookupModelCapability(model)
+  const promise = lookupModelCapability(model, provider)
     .then((cap) =>
       cap &&
       (cap.inputPerMToken !== undefined || cap.outputPerMToken !== undefined)
@@ -177,21 +197,27 @@ function lookupPrice(model: string): Promise<ModelPrice | null> {
         : null,
     )
     .catch(() => null);
-  priceCache.set(model, promise);
+  priceCache.set(key, promise);
   return promise;
 }
 
 /** Resolve per-M-token prices for the given models (null = no pricing data). */
 function useModelPrices(
-  models: readonly string[],
+  models: readonly ModelAgg[],
 ): Record<string, ModelPrice | null> {
   const [prices, setPrices] = useState<Record<string, ModelPrice | null>>({});
   useEffect(() => {
     let cancelled = false;
-    const missing = models.filter((m) => m !== UNKNOWN_MODEL && !(m in prices));
+    const missing = models.filter((model) => {
+      const key = `${model.provider ?? ""}\u0000${model.model}`;
+      return model.model !== UNKNOWN_MODEL && !(key in prices);
+    });
     if (missing.length === 0) return;
     void Promise.all(
-      missing.map(async (m) => [m, await lookupPrice(m)] as const),
+      missing.map(async (model) => {
+        const key = `${model.provider ?? ""}\u0000${model.model}`;
+        return [key, await lookupPrice(model.model, model.provider)] as const;
+      }),
     ).then((entries) => {
       if (cancelled) return;
       setPrices((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
@@ -203,10 +229,15 @@ function useModelPrices(
   return prices;
 }
 
-function costUsd(agg: ModelAgg, price: ModelPrice): number {
+export function estimateCostUsd(
+  agg: Pick<ModelAgg, "inputTokens" | "outputTokens">,
+  price: ModelPrice,
+  multiplier = 1,
+): number {
   return (
-    (agg.inputTokens / 1_000_000) * (price.inputPerMToken ?? 0) +
-    (agg.outputTokens / 1_000_000) * (price.outputPerMToken ?? 0)
+    multiplier *
+    ((agg.inputTokens / 1_000_000) * (price.inputPerMToken ?? 0) +
+      (agg.outputTokens / 1_000_000) * (price.outputPerMToken ?? 0))
   );
 }
 
@@ -244,20 +275,21 @@ export function CostPanel({
     1,
     ...model.byRuntime.map((r) => r.inputTokens + r.outputTokens),
   );
-  const modelIds = useMemo(
-    () => model.byModel.map((m) => m.model),
-    [model.byModel],
-  );
-  const prices = useModelPrices(modelIds);
+  const prices = useModelPrices(model.byModel);
   const cost = useMemo(() => {
     let usd = 0;
     let pricedTokens = 0;
     let unpricedTokens = 0;
     for (const agg of model.byModel) {
-      const price = agg.model === UNKNOWN_MODEL ? null : prices[agg.model];
+      const priceKey = `${agg.provider ?? ""}\u0000${agg.model}`;
+      const price = agg.model === UNKNOWN_MODEL ? null : prices[priceKey];
       const tokens = agg.inputTokens + agg.outputTokens;
       if (price) {
-        usd += costUsd(agg, price);
+        usd += estimateCostUsd(
+          agg,
+          price,
+          getProviderPriceMultiplier(agg.provider),
+        );
         pricedTokens += tokens;
       } else {
         unpricedTokens += tokens;
@@ -345,21 +377,23 @@ export function CostPanel({
           </h2>
           <div className="border border-[var(--rule-color)] divide-y divide-[var(--rule-color)]">
             {model.byModel.map((m) => {
-              const price = m.model === UNKNOWN_MODEL ? null : prices[m.model];
+              const priceKey = `${m.provider ?? ""}\u0000${m.model}`;
+              const price = m.model === UNKNOWN_MODEL ? null : prices[priceKey];
+              const multiplier = getProviderPriceMultiplier(m.provider);
               return (
                 <div
-                  key={m.model}
+                  key={priceKey}
                   className="flex items-baseline justify-between gap-3 px-3 py-1.5 text-[11px]"
                 >
                   <span className="font-mono truncate text-foreground">
                     {m.model === UNKNOWN_MODEL
                       ? t("debugger.cost.unknownModel", "(unknown model)")
-                      : m.model}
+                      : `${m.provider ? `${m.provider} · ` : ""}${m.model}`}
                   </span>
                   <span className="font-mono tabular-nums text-muted-foreground shrink-0">
                     {fmt(m.inputTokens)} → {fmt(m.outputTokens)} · {m.calls}× ·{" "}
                     {price
-                      ? `$${costUsd(m, price).toFixed(4)}`
+                      ? `$${estimateCostUsd(m, price, multiplier).toFixed(4)}${multiplier !== 1 ? ` (×${multiplier})` : ""}`
                       : t("debugger.cost.noPrice", "no price")}
                   </span>
                 </div>

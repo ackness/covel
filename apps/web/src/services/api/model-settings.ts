@@ -1,5 +1,10 @@
 import { normalizeProviderKeyMap, providerKeyToId } from "@covel/shared";
 import { getSettings, registerKnownProviders } from "@/settings/store";
+import {
+  flattenProviderProfiles,
+  profilesFromLegacyPresets,
+  type ProviderModelProfile,
+} from "./provider-model-profiles.js";
 
 /** Routes that need the provider API keys header. */
 const AI_ROUTES = ["/api/actions", "/api/ai/", "/api/kernel/"];
@@ -134,11 +139,8 @@ export function buildSlotConfigHeaderInternal(
 
   const slotPresetOverrides = Object.fromEntries(
     Object.entries(slotConfig)
-      .filter(
-        ([, entry]) =>
-          typeof entry?.presetId === "string" && entry.presetId.length > 0,
-      )
-      .map(([slotId, entry]) => [slotId, entry.presetId]),
+      .map(([slotId, entry]) => [slotId, slotBindingId(entry)] as const)
+      .filter((entry): entry is readonly [string, string] => !!entry[1]),
   );
 
   // Only include custom presets the current request can actually resolve.
@@ -146,12 +148,13 @@ export function buildSlotConfigHeaderInternal(
   // consumes (`slotPresetOverrides` + `customPresets`) and lets direct
   // preset probes include an unbound custom preset by id.
   const customPresets = getCustomPresets();
+  const customPresetIds = new Set(customPresets.map((preset) => preset.id));
   const referencedCustomIds = new Set<string>();
   for (const id of Object.values(slotPresetOverrides)) {
-    if (id?.startsWith("custom_")) referencedCustomIds.add(id);
+    if (customPresetIds.has(id)) referencedCustomIds.add(id);
   }
   for (const id of options.includeCustomPresetIds ?? []) {
-    if (id?.startsWith("custom_")) referencedCustomIds.add(id);
+    if (customPresetIds.has(id)) referencedCustomIds.add(id);
   }
   const customPresetDefs = customPresets
     .filter((p) => referencedCustomIds.has(p.id))
@@ -240,7 +243,16 @@ export async function setProviderKeysAsync(
 // is preserved so existing call sites keep compiling.
 
 export interface SlotConfigEntry {
-  presetId: string;
+  /** Legacy/server model plan binding. */
+  presetId?: string;
+  /** Provider-first model reference used by new settings. */
+  modelRef?: string;
+}
+
+export function slotBindingId(
+  entry: SlotConfigEntry | null | undefined,
+): string | undefined {
+  return entry?.modelRef ?? entry?.presetId;
 }
 
 export interface CustomPreset {
@@ -259,12 +271,25 @@ export interface ModelParameterOverrides {
   maxOutputTokens?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
+  reasoningEffort?: import("./llm.js").ReasoningEffort;
 }
 
 export function getSlotConfig(): Record<string, SlotConfigEntry> {
-  return (
-    getSettings().get<Record<string, SlotConfigEntry>>("llm.slotConfig") ?? {}
+  const config =
+    getSettings().get<Record<string, SlotConfigEntry>>("llm.slotConfig") ?? {};
+  const customIds = new Set(getCustomPresets().map((preset) => preset.id));
+  let migrated = false;
+  const next = Object.fromEntries(
+    Object.entries(config).map(([slotId, entry]) => {
+      if (entry.modelRef || !entry.presetId || !customIds.has(entry.presetId)) {
+        return [slotId, entry];
+      }
+      migrated = true;
+      return [slotId, { modelRef: entry.presetId }];
+    }),
   );
+  if (migrated) void getSettings().set("llm.slotConfig", next);
+  return next;
 }
 
 export function setSlotConfig(config: Record<string, SlotConfigEntry>): void {
@@ -281,8 +306,113 @@ function presetSecretKey(id: string): string {
   return `keys.preset:${id}`;
 }
 
+function rawLegacyPresets(): CustomPreset[] {
+  return getSettings().get<CustomPreset[]>("llm.customPresets") ?? [];
+}
+
+export function getProviderProfiles(): ProviderModelProfile[] {
+  const store = getSettings();
+  const stored =
+    store
+      .get<ProviderModelProfile[]>("llm.providers")
+      ?.filter(
+        (profile) => profile && typeof profile === "object" && profile.id,
+      ) ?? [];
+  if (stored.length > 0) {
+    registerKnownProviders(stored.map((profile) => profile.id));
+    return stored;
+  }
+
+  const legacy = rawLegacyPresets();
+  for (const preset of legacy) {
+    if (!preset.apiKey?.trim()) continue;
+    void store.set(presetSecretKey(preset.id), preset.apiKey.trim());
+    persistCustomPresetKeyToProvider(preset, store);
+  }
+  const migrated = profilesFromLegacyPresets(legacy);
+  if (migrated.length > 0) {
+    registerKnownProviders(migrated.map((profile) => profile.id));
+    void store.set("llm.providers", migrated);
+    // Remove any legacy inline secrets while keeping downgrade compatibility.
+    void store.set("llm.customPresets", flattenProviderProfiles(migrated));
+  }
+  return migrated;
+}
+
+export function setProviderProfiles(profiles: ProviderModelProfile[]): void {
+  const normalized = profiles
+    .map((profile) => ({
+      ...profile,
+      id: providerKeyToId(profile.id) ?? profile.id.trim(),
+      name: profile.name.trim() || profile.id.trim(),
+      baseUrl: profile.baseUrl.trim(),
+      models: profile.models
+        .map((model) => ({
+          ...model,
+          ref: model.ref.trim(),
+          modelId: model.modelId.trim(),
+          ...(model.name?.trim() ? { name: model.name.trim() } : {}),
+        }))
+        .filter((model) => model.ref && model.modelId),
+    }))
+    .filter((profile) => profile.id && profile.models.length > 0);
+  registerKnownProviders(normalized.map((profile) => profile.id));
+  const store = getSettings();
+  void store.set("llm.providers", normalized);
+  // Dual-write the old flattened shape for downgrade/export compatibility.
+  void store.set("llm.customPresets", flattenProviderProfiles(normalized));
+
+  const validModelRefs = new Set(
+    normalized.flatMap((profile) => profile.models.map((model) => model.ref)),
+  );
+  const slotConfig =
+    store.get<Record<string, SlotConfigEntry>>("llm.slotConfig") ?? {};
+  const prunedSlotConfig = Object.fromEntries(
+    Object.entries(slotConfig).filter(
+      ([, entry]) => !entry.modelRef || validModelRefs.has(entry.modelRef),
+    ),
+  );
+  if (Object.keys(prunedSlotConfig).length !== Object.keys(slotConfig).length) {
+    void store.set("llm.slotConfig", prunedSlotConfig);
+  }
+}
+
+export function getProviderPriceMultipliers(): Record<string, number> {
+  const raw =
+    getSettings().get<Record<string, number>>("llm.providerPriceMultipliers") ??
+    {};
+  return Object.fromEntries(
+    Object.entries(raw).flatMap(([provider, value]) => {
+      const id = providerKeyToId(provider);
+      return id && Number.isFinite(value) && value > 0 ? [[id, value]] : [];
+    }),
+  );
+}
+
+export function getProviderPriceMultiplier(provider?: string): number {
+  if (!provider) return 1;
+  const id = providerKeyToId(provider);
+  return (id && getProviderPriceMultipliers()[id]) || 1;
+}
+
+export function setProviderPriceMultipliers(
+  multipliers: Record<string, number>,
+): void {
+  const normalized = Object.fromEntries(
+    Object.entries(multipliers).flatMap(([provider, value]) => {
+      const id = providerKeyToId(provider);
+      return id && Number.isFinite(value) && value > 0 ? [[id, value]] : [];
+    }),
+  );
+  void getSettings().set("llm.providerPriceMultipliers", normalized);
+}
+
 export function getCustomPresets(): CustomPreset[] {
-  const raw = getSettings().get<CustomPreset[]>("llm.customPresets") ?? [];
+  const profiles = getProviderProfiles();
+  const raw =
+    profiles.length > 0
+      ? (flattenProviderProfiles(profiles) as CustomPreset[])
+      : rawLegacyPresets();
   const secrets = (
     getSettings() as unknown as { snapshotSecrets(): Record<string, string> }
   ).snapshotSecrets();
@@ -346,7 +476,7 @@ export function setCustomPresets(presets: CustomPreset[]): void {
     return rest;
   });
 
-  void store.set("llm.customPresets", sanitized);
+  setProviderProfiles(profilesFromLegacyPresets(sanitized));
 }
 
 export function addCustomPreset(preset: CustomPreset): void {

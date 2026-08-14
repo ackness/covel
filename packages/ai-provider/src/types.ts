@@ -1,5 +1,6 @@
 import type { MediaRef } from "@covel/shared";
 import type { ZodType } from "zod";
+import type { ReasoningEffort } from "./reasoning-effort.js";
 
 // ── Provider Protocol ──────────────────────────────────────────────
 
@@ -511,6 +512,8 @@ export interface ModelParameterOverrides {
   maxOutputTokens?: number;
   frequencyPenalty?: number;
   presencePenalty?: number;
+  /** Provider-aware reasoning/thinking selection. */
+  reasoningEffort?: ReasoningEffort;
 }
 
 export interface ModelSlotMap {

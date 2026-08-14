@@ -139,4 +139,128 @@ describe("provider parameter overrides", () => {
     expect(body.top_p).toBe(0.7);
     expect(body.max_tokens).toBe(777);
   });
+
+  it("maps a namespaced DeepSeek effort onto its OpenAI-compatible fields", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            choices: [
+              {
+                message: { content: "hi", role: "assistant" },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 5, completion_tokens: 10 },
+          }),
+      }),
+    );
+
+    await createOpenAiChatAdapter().generateText(
+      { baseUrl: "https://api.example.com/v1", apiKey: "sk-test" },
+      {
+        model: "deepseek/deepseek-v4-flash",
+        messages: [{ role: "user", content: "hi" }],
+        providerRequestMetadata: {
+          parameterOverrides: { reasoningEffort: "max" },
+        },
+      },
+      {
+        profile: { provider: "openai" } as never,
+        preset: {
+          provider: "openai",
+          model: "deepseek/deepseek-v4-flash",
+        } as never,
+        mode: "text",
+      },
+    );
+
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(body.thinking).toEqual({ type: "enabled" });
+    expect(body.reasoning_effort).toBe("max");
+  });
+
+  it("maps OpenAI Responses effort into reasoning.effort", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: "completed",
+            output: [{ type: "output_text", text: "hi" }],
+            usage: { input_tokens: 5, output_tokens: 10 },
+          }),
+      }),
+    );
+
+    await createOpenAiResponsesAdapter().generateText(
+      { baseUrl: "https://api.openai.com/v1", apiKey: "sk-test" },
+      {
+        model: "gpt-5.6-sol",
+        messages: [{ role: "user", content: "hi" }],
+        providerRequestMetadata: {
+          parameterOverrides: { reasoningEffort: "high" },
+        },
+      },
+      {
+        profile: { provider: "openai" } as never,
+        preset: { provider: "openai", model: "gpt-5.6-sol" } as never,
+        mode: "text",
+      },
+    );
+
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(body.reasoning).toEqual({ effort: "high" });
+    expect(body).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("maps Anthropic effort into output_config.effort", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            content: [{ type: "text", text: "hello" }],
+            stop_reason: "end_turn",
+            usage: { input_tokens: 5, output_tokens: 10 },
+          }),
+      }),
+    );
+
+    await createAnthropicMessagesAdapter().generateText(
+      { baseUrl: "https://api.anthropic.com/v1", apiKey: "anthropic-key" },
+      {
+        model: "claude-sonnet-4-6",
+        messages: [{ role: "user", content: "hi" }],
+        providerRequestMetadata: {
+          parameterOverrides: { reasoningEffort: "max" },
+        },
+      },
+      {
+        profile: { provider: "anthropic" } as never,
+        preset: {
+          provider: "anthropic",
+          model: "claude-sonnet-4-6",
+        } as never,
+        mode: "text",
+      },
+    );
+
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(body.output_config).toEqual({ effort: "max" });
+    expect(body).not.toHaveProperty("reasoning_effort");
+  });
 });

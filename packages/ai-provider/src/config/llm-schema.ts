@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { REASONING_EFFORT_VALUES } from "../reasoning-effort.js";
 
 const providerProtocolSchema = z.enum([
   "openai-chat-v1",
@@ -120,7 +121,7 @@ export const slotDefinitionSchema = z.object({
    * reasoning_effort = "high"
    * ```
    */
-  reasoning_effort: z.enum(["low", "medium", "high"]).optional(),
+  reasoning_effort: z.enum(REASONING_EFFORT_VALUES).optional(),
   /**
    * Freeform provider request metadata. Merged into every LLM call's
    * body for this slot (with per-call metadata taking precedence). Use

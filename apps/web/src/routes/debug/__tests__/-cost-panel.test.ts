@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type * as api from "@/services/api.js";
-import { aggregate, UNKNOWN_MODEL } from "../-cost-panel.js";
+import { aggregate, estimateCostUsd, UNKNOWN_MODEL } from "../-cost-panel.js";
 import type { VisibleTurn } from "../-debug-page-model.js";
 
 function evt(type: string, payload: Record<string, unknown>): api.TraceEvent {
@@ -131,6 +131,40 @@ describe("cost-panel aggregate", () => {
     const gpt = m.byModel.find((x) => x.model === "gpt-4o")!;
     expect(gpt.inputTokens).toBe(30);
     expect(gpt.calls).toBe(1);
+  });
+
+  it("keeps the provider when the same model id is billed by different providers", () => {
+    const turns = [
+      turn(1, "turn-1", [
+        evt("llm.calling", {
+          runtimeId: "a",
+          provider: "official",
+          model: "shared-model",
+        }),
+        evt("llm.responded", { runtimeId: "a", ...usage(100, 50) }),
+        evt("llm.calling", {
+          runtimeId: "b",
+          provider: "openai",
+          model: "shared-model",
+        }),
+        evt("llm.responded", { runtimeId: "b", ...usage(200, 80) }),
+      ]),
+    ];
+
+    const result = aggregate(turns);
+    expect(result.byModel).toHaveLength(2);
+    expect(result.byModel.map((model) => model.provider).sort()).toEqual([
+      "official",
+      "openai",
+    ]);
+  });
+
+  it("applies a decimal provider multiplier to estimated settlement", () => {
+    const usage = { inputTokens: 1_000_000, outputTokens: 500_000 };
+    const price = { inputPerMToken: 2, outputPerMToken: 4 };
+
+    expect(estimateCostUsd(usage, price, 0.1)).toBeCloseTo(0.4);
+    expect(estimateCostUsd(usage, price, 2.5)).toBeCloseTo(10);
   });
 
   it("groups unattributable usage under the unknown-model bucket", () => {

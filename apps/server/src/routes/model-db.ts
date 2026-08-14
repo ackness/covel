@@ -6,6 +6,10 @@ import { Hono } from "hono";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { readRuntimeEnv } from "@covel/shared";
+import {
+  resolveCapabilityDetails,
+  resolveReasoningEffortProfile,
+} from "@covel/ai-provider";
 import { rateLimiter, singleFlight } from "../middleware/rate-limit.js";
 import type { AiStack } from "../ai-setup.js";
 import { checkHostedOperator } from "./api/session/session-guard.js";
@@ -47,19 +51,36 @@ export function createModelDbRoutes(ai: AiStack): Hono {
   });
 
   app.get("/api/model-db/lookup", (c) => {
-    if (!ai.modelDb) return c.json({ found: false });
     const model = c.req.query("model") ?? "";
     const provider = c.req.query("provider");
-    const entry = ai.modelDb.lookup(model, provider ?? undefined);
-    if (!entry) return c.json({ found: false });
-    const cap = ai.modelDb.toCapability(entry);
+    const protocol = c.req.query("protocol") as
+      | "openai-chat-v1"
+      | "openai-responses-v1"
+      | "anthropic-messages-v1"
+      | undefined;
+    const result = resolveCapabilityDetails(
+      model,
+      provider ?? undefined,
+      protocol,
+    );
+    const found = result.source !== "protocol-default";
     return c.json({
-      found: true,
+      found,
+      source: result.source,
+      matchedModelId: result.matchedModelId,
+      matchKind: result.matchKind,
+      pricingKind: result.pricingKind,
+      candidates: result.candidates,
+      reasoning: resolveReasoningEffortProfile(
+        model,
+        provider,
+        protocol,
+        result.capability.features,
+      ),
       capability: {
-        contextWindow: cap.contextWindow,
-        maxOutputTokens: cap.maxOutputTokens,
-        inputPerMToken: entry.inputPerMToken,
-        outputPerMToken: entry.outputPerMToken,
+        ...result.capability,
+        inputPerMToken: result.capability.pricing?.inputPerMToken,
+        outputPerMToken: result.capability.pricing?.outputPerMToken,
       },
     });
   });

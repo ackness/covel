@@ -26,6 +26,11 @@ import {
   type KnownModelEntry,
 } from "./known-models.js";
 import type { ModelDatabase } from "./model-db.js";
+import {
+  modelLookupCandidateDetails,
+  modelNamespace,
+  type ModelMatchKind,
+} from "./model-identity.js";
 
 // ── Manual Override (from llm.toml) ─────────────────────────────
 
@@ -50,49 +55,60 @@ export interface ManualCapabilityOverride {
  * 3. Provider-prefixed match (e.g. "groq/llama-3.3-70b-versatile")
  * 4. Prefix match — find the longest key that starts with the model ID
  */
+interface KnownModelMatch {
+  readonly id: string;
+  readonly entry: KnownModelEntry;
+  readonly kind: ModelMatchKind;
+}
+
 function lookupKnownModel(
   modelId: string,
   provider?: string,
-): KnownModelEntry | null {
-  const normalized = modelId.toLowerCase();
+): KnownModelMatch | null {
+  const candidates = modelLookupCandidateDetails(modelId, provider);
 
-  // 1. Direct match
-  const direct = KNOWN_MODELS.get(normalized);
-  if (direct) return direct;
-
-  // 2. Alias resolution
-  const aliasTarget = MODEL_ALIASES.get(normalized);
-  if (aliasTarget) {
-    const aliased = KNOWN_MODELS.get(aliasTarget);
-    if (aliased) return aliased;
-  }
-
-  // 3. Provider-prefixed match
-  if (provider) {
-    const prefixed = KNOWN_MODELS.get(
-      `${provider.toLowerCase()}/${normalized}`,
-    );
-    if (prefixed) return prefixed;
-  }
-
-  // 4. Prefix match (e.g. "qwen-plus-2025-01-01" matches "qwen-plus")
-  let bestMatch: KnownModelEntry | null = null;
-  let bestLength = 0;
-  for (const [key, entry] of KNOWN_MODELS) {
-    if (normalized.startsWith(key) && key.length > bestLength) {
-      bestMatch = entry;
-      bestLength = key.length;
+  for (const candidate of candidates) {
+    const direct = KNOWN_MODELS.get(candidate.id);
+    if (direct) {
+      return { id: candidate.id, entry: direct, kind: candidate.kind };
+    }
+    const aliasTarget = MODEL_ALIASES.get(candidate.id);
+    const aliased = aliasTarget ? KNOWN_MODELS.get(aliasTarget) : undefined;
+    if (aliasTarget && aliased) {
+      return { id: aliasTarget, entry: aliased, kind: candidate.kind };
     }
   }
-  if (bestMatch) return bestMatch;
 
-  // 5. Try alias prefix match
-  for (const [alias, target] of MODEL_ALIASES) {
-    if (normalized.startsWith(alias) && alias.length > bestLength) {
-      const entry = KNOWN_MODELS.get(target);
-      if (entry) {
-        bestMatch = entry;
-        bestLength = alias.length;
+  const providerId = provider?.trim().toLowerCase();
+  if (providerId) {
+    for (const candidate of candidates) {
+      const key = `${providerId}/${candidate.id}`;
+      const prefixed = KNOWN_MODELS.get(key);
+      if (prefixed) return { id: key, entry: prefixed, kind: candidate.kind };
+    }
+  }
+
+  // Versioned IDs may extend a stable known key with a date/snapshot suffix.
+  let bestMatch: KnownModelMatch | null = null;
+  let bestLength = 0;
+  for (const candidate of candidates) {
+    for (const [key, entry] of KNOWN_MODELS) {
+      const modelPart = key.split("/").at(-1) ?? key;
+      if (candidate.id.startsWith(modelPart) && modelPart.length > bestLength) {
+        bestMatch = { id: key, entry, kind: "prefix" };
+        bestLength = modelPart.length;
+      }
+    }
+  }
+
+  for (const candidate of candidates) {
+    for (const [alias, target] of MODEL_ALIASES) {
+      if (candidate.id.startsWith(alias) && alias.length > bestLength) {
+        const entry = KNOWN_MODELS.get(target);
+        if (entry) {
+          bestMatch = { id: target, entry, kind: "prefix" };
+          bestLength = alias.length;
+        }
       }
     }
   }
@@ -138,6 +154,119 @@ export function setModelDatabase(db: ModelDatabase | null): void {
   _modelDb = db;
 }
 
+export type CapabilitySource = "known" | "model-database" | "protocol-default";
+
+export type CapabilityPricingKind =
+  "provider" | "reference" | "configured" | "unknown";
+
+export interface CapabilityResolutionDetails {
+  readonly capability: ModelCapability;
+  readonly source: CapabilitySource;
+  readonly matchedModelId?: string;
+  readonly matchKind?: ModelMatchKind;
+  readonly pricingKind: CapabilityPricingKind;
+  readonly candidates: string[];
+}
+
+function pricingKindForMatch(args: {
+  modelId: string;
+  provider?: string;
+  matchedProvider?: string;
+  hasPricing: boolean;
+  manualPricing: boolean;
+}): CapabilityPricingKind {
+  if (args.manualPricing) return "configured";
+  if (!args.hasPricing) return "unknown";
+
+  const providerId = args.provider?.trim().toLowerCase();
+  const namespace = modelNamespace(args.modelId, args.provider);
+  const matchedProvider = args.matchedProvider?.trim().toLowerCase();
+  if (
+    (namespace && providerId && namespace !== providerId) ||
+    (matchedProvider && providerId && matchedProvider !== providerId)
+  ) {
+    return "reference";
+  }
+  return "provider";
+}
+
+/**
+ * Resolve capabilities together with the identity match used to infer them.
+ * The original model ID remains opaque and is never rewritten for requests.
+ */
+export function resolveCapabilityDetails(
+  modelId: string,
+  provider?: string,
+  protocol?: ProviderProtocol,
+  manual?: ManualCapabilityOverride,
+): CapabilityResolutionDetails {
+  const defaults = getProtocolDefaults(protocol);
+  const candidates = modelLookupCandidateDetails(modelId, provider).map(
+    (candidate) => candidate.id,
+  );
+  const known = lookupKnownModel(modelId, provider);
+  const dbMatch = known
+    ? null
+    : (_modelDb?.lookupMatch(modelId, provider) ?? null);
+
+  let base: ModelCapability;
+  let source: CapabilitySource;
+  let matchedModelId: string | undefined;
+  let matchKind: ModelMatchKind | undefined;
+  let matchedProvider: string | undefined;
+
+  if (known) {
+    base = {
+      input: known.entry.input,
+      output: known.entry.output,
+      features: known.entry.features,
+      contextWindow: known.entry.contextWindow,
+      maxOutputTokens: known.entry.maxOutputTokens,
+      pricing: known.entry.pricing,
+    };
+    source = "known";
+    matchedModelId = known.id;
+    matchKind = known.kind;
+  } else if (dbMatch && _modelDb) {
+    base = _modelDb.toCapability(dbMatch.entry);
+    source = "model-database";
+    matchedModelId = dbMatch.id;
+    matchKind = dbMatch.kind;
+    matchedProvider = dbMatch.entry.litellmProvider;
+  } else {
+    base = defaults;
+    source = "protocol-default";
+  }
+
+  const capability = manual
+    ? {
+        input: manual.input ?? base.input,
+        output: manual.output ?? base.output,
+        features: manual.features ?? base.features,
+        contextWindow: manual.contextWindow ?? base.contextWindow,
+        maxOutputTokens: manual.maxOutputTokens ?? base.maxOutputTokens,
+        pricing: manual.pricing
+          ? { ...base.pricing, ...manual.pricing }
+          : base.pricing,
+      }
+    : base;
+
+  return {
+    capability,
+    source,
+    ...(matchedModelId ? { matchedModelId } : {}),
+    ...(matchKind ? { matchKind } : {}),
+    pricingKind: pricingKindForMatch({
+      modelId,
+      provider,
+      matchedProvider,
+      hasPricing: capability.pricing !== undefined,
+      manualPricing: manual?.pricing !== undefined,
+    }),
+    candidates,
+  };
+}
+
 /**
  * Resolve the full ModelCapability for a model.
  *
@@ -158,41 +287,6 @@ export function resolveCapability(
   protocol?: ProviderProtocol,
   manual?: ManualCapabilityOverride,
 ): ModelCapability {
-  // Start with protocol defaults
-  const defaults = getProtocolDefaults(protocol);
-
-  // Try hand-curated known models first (fast, reliable)
-  const known = lookupKnownModel(modelId, provider);
-  let base: ModelCapability;
-
-  if (known) {
-    base = {
-      input: known.input,
-      output: known.output,
-      features: known.features,
-      contextWindow: known.contextWindow,
-      maxOutputTokens: known.maxOutputTokens,
-      pricing: known.pricing,
-    };
-  } else if (_modelDb) {
-    // Fall back to full LiteLLM database
-    const dbEntry = _modelDb.lookup(modelId, provider);
-    base = dbEntry ? _modelDb.toCapability(dbEntry) : defaults;
-  } else {
-    base = defaults;
-  }
-
-  // Apply manual overrides (highest priority)
-  if (!manual) return base;
-
-  return {
-    input: manual.input ?? base.input,
-    output: manual.output ?? base.output,
-    features: manual.features ?? base.features,
-    contextWindow: manual.contextWindow ?? base.contextWindow,
-    maxOutputTokens: manual.maxOutputTokens ?? base.maxOutputTokens,
-    pricing: manual.pricing
-      ? { ...base.pricing, ...manual.pricing }
-      : base.pricing,
-  };
+  return resolveCapabilityDetails(modelId, provider, protocol, manual)
+    .capability;
 }

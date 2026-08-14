@@ -223,6 +223,7 @@ describe("per-request LLM middleware", () => {
         fast: {
           temperature: 0.2,
           maxOutputTokens: 512,
+          reasoningEffort: "high",
         },
       },
       customPresets: [
@@ -257,6 +258,7 @@ describe("per-request LLM middleware", () => {
         fast: {
           temperature: 0.2,
           maxOutputTokens: 512,
+          reasoningEffort: "high",
         },
       },
       customPresets: [
@@ -502,6 +504,7 @@ describe("per-request LLM middleware", () => {
           provider: "vendorX",
           baseUrl: "https://ok.example",
           model: "ok-m",
+          protocol: "unsupported-wire",
         },
         // Missing provider
         { id: "bad1", name: "Bad", provider: "", model: "m" },
@@ -526,6 +529,9 @@ describe("per-request LLM middleware", () => {
       provider: "vendorX",
       model: "ok-m",
     });
+    expect(calls[0].slotOverrides?.customPresets?.[0]).not.toHaveProperty(
+      "protocol",
+    );
   });
 
   it("strips providerRequestMetadata from a browser-supplied preset", async () => {

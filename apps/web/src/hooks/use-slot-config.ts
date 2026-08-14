@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import {
   getSlotConfig,
   getCustomPresets,
+  slotBindingId,
   type SlotConfigEntry,
   type CustomPreset,
   type PresetSummary,
@@ -82,8 +83,9 @@ export function useSlotConfig(
   const resolveSlot = useCallback(
     (slotId: string): PresetSummary | null => {
       const entry = slotConfig[slotId];
-      if (entry?.presetId) {
-        const found = allPresets.find((p) => p.id === entry.presetId);
+      const bindingId = slotBindingId(entry);
+      if (bindingId) {
+        const found = allPresets.find((p) => p.id === bindingId);
         if (found) return found;
       }
       return serverPresets.find((p) => p.isDefault) ?? serverPresets[0] ?? null;
@@ -116,7 +118,7 @@ export function useSlotConfig(
     if (llmConfig?.configured && llmConfig.slots) {
       for (const [slotId, slotInfo] of Object.entries(llmConfig.slots)) {
         const userEntry = slotConfig[slotId];
-        const presetId = userEntry?.presetId ?? "";
+        const presetId = slotBindingId(userEntry) ?? "";
         const preset = presetId
           ? (allPresets.find((p) => p.id === presetId) ?? null)
           : null;
@@ -136,12 +138,13 @@ export function useSlotConfig(
     // Source 2: localStorage-only slots the user defined client-side
     for (const [slotId, entry] of Object.entries(slotConfig)) {
       if (seen.has(slotId)) continue;
-      const preset = entry.presetId
-        ? (allPresets.find((p) => p.id === entry.presetId) ?? null)
+      const presetId = slotBindingId(entry) ?? "";
+      const preset = presetId
+        ? (allPresets.find((p) => p.id === presetId) ?? null)
         : null;
       out.push({
         slotId,
-        presetId: entry.presetId,
+        presetId,
         preset,
         label: slotId,
         tag: inferClientSlotTag(slotId),

@@ -1,11 +1,17 @@
 import { z } from "zod";
 import type { SettingsStoreApi } from "@covel/settings";
+import { REASONING_EFFORT_VALUES } from "@/services/api/reasoning-effort.js";
 
-const slotConfigEntrySchema = z.object({
-  presetId: z.string(),
-});
+const slotConfigEntrySchema = z.union([
+  z.object({ presetId: z.string().min(1) }),
+  z.object({ modelRef: z.string().min(1) }),
+]);
 
 const slotConfigSchema = z.record(z.string(), slotConfigEntrySchema);
+const providerPriceMultipliersSchema = z.record(
+  z.string(),
+  z.number().positive(),
+);
 
 const customPresetSchema = z.object({
   id: z.string(),
@@ -17,12 +23,27 @@ const customPresetSchema = z.object({
   apiKey: z.string().optional(),
 });
 
+const providerModelProfileSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  baseUrl: z.string(),
+  protocol: z.string().optional(),
+  models: z.array(
+    z.object({
+      ref: z.string().min(1),
+      modelId: z.string().min(1),
+      name: z.string().optional(),
+    }),
+  ),
+});
+
 const paramOverrideSchema = z.object({
   temperature: z.number().optional(),
   topP: z.number().optional(),
   maxOutputTokens: z.number().optional(),
   frequencyPenalty: z.number().optional(),
   presencePenalty: z.number().optional(),
+  reasoningEffort: z.enum(REASONING_EFFORT_VALUES).optional(),
 });
 
 const capabilityOverrideSchema = z.object({
@@ -52,11 +73,29 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
     default: {},
     group: "llm",
     widget: "custom",
-    label: { "zh-CN": "Slot 配置", "en-US": "Slot configuration" },
+    label: { "zh-CN": "用途分配", "en-US": "Model role assignments" },
     description: {
-      "zh-CN": "为每个 slot 指定要用的 preset (覆盖 llm.toml 的默认值)",
-      "en-US": "Pick a preset for each slot (overrides llm.toml defaults)",
+      "zh-CN": "为每种模型用途选择服务商和模型",
+      "en-US": "Choose a provider and model for each model role",
     },
+  });
+
+  store.register({
+    key: "llm.providers",
+    schema: z.array(providerModelProfileSchema),
+    default: [],
+    group: "llm",
+    widget: "custom",
+    label: { "zh-CN": "服务商与模型", "en-US": "Providers and models" },
+  });
+
+  store.register({
+    key: "llm.providerPriceMultipliers",
+    schema: providerPriceMultipliersSchema,
+    default: {},
+    group: "llm",
+    widget: "custom",
+    label: { "zh-CN": "服务商价格倍率", "en-US": "Provider price multipliers" },
   });
 
   store.register({
@@ -65,7 +104,7 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
     default: [],
     group: "llm",
     widget: "custom",
-    label: { "zh-CN": "自定义 Preset", "en-US": "Custom presets" },
+    label: { "zh-CN": "旧版模型方案", "en-US": "Legacy model plans" },
   });
 
   store.register({

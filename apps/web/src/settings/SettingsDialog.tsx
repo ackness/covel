@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search, Settings2 } from "lucide-react";
 import {
@@ -22,7 +22,6 @@ import { useSettingsStore } from "./use-settings.js";
 import { DataPane } from "./DataPane.js";
 import { DesktopPane } from "./DesktopPane.js";
 import { LlmSlotsPane } from "./panes/LlmSlotsPane.js";
-import { LlmKeysPane } from "./panes/LlmKeysPane.js";
 import { LlmAdvancedPane } from "./panes/LlmAdvancedPane.js";
 import { LlmPresetsPane } from "./panes/LlmPresetsPane.js";
 import { PackagesPane } from "./panes/PackagesPane.js";
@@ -73,6 +72,11 @@ export function SettingsDialog({
   );
 
   const [selected, setSelected] = useState<string>("");
+  const contentRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, [selected]);
 
   useEffect(() => {
     if (!open) return;
@@ -171,7 +175,10 @@ export function SettingsDialog({
               )}
             </nav>
           </aside>
-          <section className="flex-1 overflow-y-auto p-6 ui-scroll">
+          <section
+            ref={contentRef}
+            className="flex-1 overflow-y-auto p-6 ui-scroll"
+          >
             {renderPane(selectedNode, t)}
           </section>
         </div>
@@ -199,8 +206,13 @@ function renderPane(
     );
   }
   if (node.id === "llm.slots") return <LlmSlotsPane />;
-  if (node.id === "llm.keys") return <LlmKeysPane />;
-  if (node.id === "llm.presets") return <LlmPresetsPane />;
+  if (
+    node.id === "llm.providers" ||
+    node.id === "llm.keys" ||
+    node.id === "llm.presets"
+  ) {
+    return <LlmPresetsPane />;
+  }
   if (node.id === "llm.advanced") return <LlmAdvancedPane />;
   if (node.id === "data") return <DataPane />;
   if (node.id === "desktop") return <DesktopPane />;

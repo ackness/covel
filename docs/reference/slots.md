@@ -1,6 +1,6 @@
-# 模型 Slot 配置
+# 模型用途（Slot）配置
 
-Slot 是 Covel 的模型路由单元：`llm.toml` 里每个 `[covel.<slot>]` 小节定义一个具名 slot，运行时（narrator、插件、图像/语音管线）按 slot 名或 tag 解析到具体 provider + model。开发环境读仓库根 `llm.toml`，桌面端读 `~/.covel/llm.toml`（Settings 内热重载）。`llm.toml` 缺失时服务器回落到内置 DeepSeek `story` slot 照常启动。
+Slot 是 Covel 内部的模型路由单元，设置界面称为“模型用途”。`llm.toml` 里每个 `[covel.<slot>]` 小节定义一个具名用途，插件任务按 slot 名或 tag 解析到具体服务商和模型。开发环境读仓库根 `llm.toml`，桌面端读 `~/.covel/llm.toml`（设置内可热重载）。`llm.toml` 缺失时，服务器使用内置的 DeepSeek `story` 用途和 `deepseek-v4-flash`。
 
 ## Slot 字段（`[covel.<slot>]`）
 
@@ -8,8 +8,8 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
 | 字段                                | 必填 | 说明                                                                                             |
 | ----------------------------------- | ---- | ------------------------------------------------------------------------------------------------ |
-| `provider`                          | ✅   | Provider 标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`                            |
-| `model`                             | ✅   | 传给 provider API 的模型 ID                                                                      |
+| `provider`                          | ✅   | 服务商标识，对应 `.env.llm` / `keys.env` 里的 `{PROVIDER}_API_KEY`                               |
+| `model`                             | ✅   | 原样传给服务商 API 的模型 ID                                                                     |
 | `baseUrl`                           | ✅   | API 端点（受 SSRF 守卫约束：远端必须 https，loopback 允许 http）                                 |
 | `protocol`                          | ✅   | `openai-chat-v1` / `openai-responses-v1` / `anthropic-messages-v1`                               |
 | `tag`                               | —    | 能力标签：`text` / `image` / `embedding` / `speech` / `transcription`。缺省从 output 模态推断    |
@@ -18,7 +18,7 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 | `features`                          | —    | 特性旗标（`function_calling`、`reasoning`、`vision`…）                                           |
 | `contextWindow` / `maxOutputTokens` | —    | token 上限覆盖                                                                                   |
 | `pricing`                           | —    | 计价信息（用于 /debug 成本面板）                                                                 |
-| `thinking` / `reasoning_effort`     | —    | 思考模式控制（DeepSeek `thinking`、`reasoning_effort`）                                          |
+| `thinking` / `reasoning_effort`     | —    | 思考模式与强度；按目标协议转换为对应请求字段                                                     |
 | `embeddingFormat`                   | —    | embed slot 的请求体形态：`openai`（默认）/ `nemotron-multimodal`                                 |
 | `providerRequestMetadata`           | —    | 自由 KV，合入该 slot 每次请求体（per-call metadata 优先）。媒体 wire 路由键也放这里，见下        |
 
@@ -30,7 +30,33 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 4. **Per-runtime 覆盖** — `sessions.runtime_model_overrides`（runtimeId → slot 名）先于 `manifest.model` 与 gateway 默认（`packages/runtime/src/agent-loop/agent-loop-policy.ts`；请求级 `modelOverride` 只对 `outputKind: story` 的 runtime 优先于它）。
 5. **Per-request 覆盖** — 前端经 `X-Slot-Config` / `X-Provider-Keys` header 注入的自定义 preset 与 key 覆盖同名配置（`middleware/per-request-llm.ts`）。
 
-模型能力（模态 / 特性 / 上限 / 计价）自动检测优先级：前端 localStorage 覆盖 → `llm.toml` 手动字段 → `known-models.ts` → LiteLLM DB（`pnpm --filter @covel/ai-provider update-model-db`）→ 协议默认。
+模型能力（模态 / 特性 / 上限 / 计价）自动检测优先级：前端 localStorage 覆盖 → `llm.toml` 手动字段 → 内置模型资料 → LiteLLM DB（`pnpm --filter @covel/ai-provider update-model-db`）→ 协议默认。
+
+## 服务商与模型 ID
+
+设置界面将连接信息和模型 ID 分开保存：一个服务商配置一组 `baseUrl`、协议、API 密钥和价格倍率，并可包含多个模型 ID。用途绑定只引用其中一个模型。请求时前端把该引用编译为兼容服务器的自定义 preset；preset 是内部传输结构，用户无需单独创建。
+
+模型 ID 是不透明字符串，发送请求时不会被裁剪或改写。例如服务商 `openai` 下的 `openai/gpt-5.6-sol` 和 `deepseek/deepseek-v4-flash` 会保持原样。能力查询按以下候选顺序匹配，匹配结果只用于显示能力和价格：
+
+1. 完整 ID；
+2. 去掉与当前服务商相同的最外层路由前缀；
+3. 最后一个 `/` 后的模型名；
+4. 带版本后缀模型的最长已知前缀；
+5. 接口协议的保守默认能力。
+
+通过聚合服务商匹配到上游模型资料时，价格标记为“参考价”，实际费用以当前服务商账单为准。每个服务商的价格倍率默认是 `1`，接受 `0.1`、`2.5` 等正小数；调试成本面板按“模型参考价 × 服务商倍率”计算预估结算价。未精确识别的模型不会被猜成支持图片输入；用户可在“用途分配”中手动覆盖能力。
+
+## 思考强度
+
+“生成参数”页面按原始模型 ID 的上游命名空间识别思考档位。例如服务商为 `openai`、模型 ID 为 `deepseek/deepseek-v4-flash` 时仍使用 DeepSeek 的 `关闭 / high / max` 档位。留空表示沿用服务商默认行为，不发送强度覆盖。
+
+统一的 `reasoningEffort` 设置会按接口协议转换：
+
+- OpenAI Chat 和兼容接口：`reasoning_effort`；DeepSeek 同时发送 `thinking.type`，Qwen 使用 `enable_thinking`。
+- OpenAI Responses：`reasoning: { effort }`。
+- Anthropic Messages：`output_config: { effort }`；DeepSeek 的 Anthropic 兼容接口同时发送 `thinking.type`。
+
+当前识别的主流档位包括 OpenAI 的 `none/minimal/low/medium/high/xhigh`、Anthropic 的 `low/medium/high/xhigh/max`（具体取决于模型）、Gemini 的 `minimal/low/medium/high`、xAI 的 `low/medium/high`、DeepSeek V4 的 `high/max`，以及 Qwen 的关闭/自动模式。界面只列出目标模型已知支持的子集；未识别模型沿用服务商默认行为。
 
 ## 媒体 wire 路由键（`providerRequestMetadata`）
 

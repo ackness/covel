@@ -29,9 +29,12 @@
 
 import type {
   CustomPresetInput,
+  ModelCapability,
+  OperationMode,
   PresetConfig,
   SlotOverridesInput,
 } from "./types.js";
+import { resolveCapability } from "./capability/index.js";
 
 /**
  * Minimal registry surface the overlay needs. Matches the real
@@ -143,6 +146,7 @@ export function applySlotOverlay(
       // request — safe to share, just take a reference.
       presetRefs.set(key, current + 1);
     } else {
+      const capability = resolveCapability(cp.model, cp.provider, cp.protocol);
       addPreset.call(deps.presetRegistry, {
         id: key,
         name: cp.name || cp.id,
@@ -151,9 +155,10 @@ export function applySlotOverlay(
         ...(cp.protocol ? { protocol: cp.protocol } : {}),
         ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
         tier: "medium",
-        supportedModes: ["text", "stream"],
+        supportedModes: supportedModesFor(capability),
         enabled: true,
-        tag: "text",
+        tag: tagFor(capability),
+        capability,
         // Untrusted request origin — env keys must not bind to it, and the
         // provider registry resolves unknown providers ephemerally for it.
         requestScoped: true,
@@ -177,6 +182,31 @@ export function applySlotOverlay(
       );
     }
   };
+}
+
+function supportedModesFor(capability: ModelCapability): OperationMode[] {
+  const modes = new Set<OperationMode>();
+  for (const output of capability.output) {
+    if (output === "text") {
+      modes.add("text");
+      modes.add("object");
+      modes.add("stream");
+    } else if (output === "image") {
+      modes.add("image");
+    } else if (output === "audio") {
+      modes.add("speech");
+    } else if (output === "embedding") {
+      modes.add("embed");
+    }
+  }
+  return modes.size > 0 ? [...modes] : ["text", "object", "stream"];
+}
+
+function tagFor(capability: ModelCapability): string {
+  if (capability.output.includes("image")) return "image";
+  if (capability.output.includes("audio")) return "speech";
+  if (capability.output.includes("embedding")) return "embedding";
+  return "text";
 }
 
 /**

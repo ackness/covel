@@ -17,13 +17,18 @@ import {
   readOpenAiChatStreamToolCallDeltas,
 } from "./http.js";
 import { applyCapabilityFallback } from "./capability-fallback.js";
+import { extractReasoningRequestFields } from "../reasoning-effort.js";
 import {
   createMetadataSanitizer,
   extractParameterOverrides,
   mediaRefFallbackText,
 } from "./common.js";
 
-import type { TextMessage, TextMessageContent } from "../types.js";
+import type {
+  ModelRequestContext,
+  TextMessage,
+  TextMessageContent,
+} from "../types.js";
 
 /** Fields that providerRequestMetadata must never override. */
 const OPENAI_PROTECTED_KEYS = new Set([
@@ -38,6 +43,8 @@ const OPENAI_PROTECTED_KEYS = new Set([
   "embeddingFormat",
   // Slot-level generation params — translated by the adapter.
   "parameterOverrides",
+  "reasoning_effort",
+  "reasoningEffort",
 ]);
 
 /** camelCase override key → OpenAI Chat wire field. */
@@ -53,8 +60,13 @@ const sanitizeOpenAiMetadata = createMetadataSanitizer(OPENAI_PROTECTED_KEYS);
 
 function extractOpenAiParameterOverrides(
   meta: Record<string, unknown> | undefined,
+  context: ModelRequestContext | undefined,
+  model: string,
 ): Record<string, unknown> {
-  return extractParameterOverrides(meta, OPENAI_PARAMETER_FIELD_MAP);
+  return {
+    ...extractParameterOverrides(meta, OPENAI_PARAMETER_FIELD_MAP),
+    ...extractReasoningRequestFields(meta, context, "openai-chat-v1", model),
+  };
 }
 
 /**
@@ -136,7 +148,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         model: params.model,
         messages: serializeMessages(messages),
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
-        ...extractOpenAiParameterOverrides(params.providerRequestMetadata),
+        ...extractOpenAiParameterOverrides(
+          params.providerRequestMetadata,
+          context,
+          params.model,
+        ),
       };
       if (params.tools && params.tools.length > 0) {
         body.tools = params.tools;
@@ -165,7 +181,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         messages: serializeMessages(messages),
         response_format: { type: "json_object" },
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
-        ...extractOpenAiParameterOverrides(params.providerRequestMetadata),
+        ...extractOpenAiParameterOverrides(
+          params.providerRequestMetadata,
+          context,
+          params.model,
+        ),
       });
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-chat");
@@ -195,7 +215,11 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         messages: serializeMessages(messages),
         stream: true,
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
-        ...extractOpenAiParameterOverrides(params.providerRequestMetadata),
+        ...extractOpenAiParameterOverrides(
+          params.providerRequestMetadata,
+          context,
+          params.model,
+        ),
       };
       if (params.tools && params.tools.length > 0) {
         body.tools = params.tools;

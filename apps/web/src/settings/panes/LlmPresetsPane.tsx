@@ -1,118 +1,168 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Download, Eye, EyeOff, Plus, Trash2, Upload } from "lucide-react";
+import { Download, Plus, Search, Server, Upload } from "lucide-react";
 import {
-  getCustomPresets,
-  setCustomPresets,
-  type CustomPreset,
+  getProviderProfiles,
+  profilesFromLegacyPresets,
+  setProviderProfiles,
+  upsertProviderModel,
+  type ProviderModelProfile,
 } from "@/services/api.js";
-import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
+import { useSession } from "@/stores/session-store.js";
+import {
+  buildProviderCatalog,
+  EMPTY_PROVIDER_DRAFT,
+  isLegacyPreset,
+  parseModelIds,
+  sanitizeImportedProfiles,
+  type ProviderCatalogEntry,
+  type ProviderDraft,
+} from "./llm-provider-catalog.js";
+import { ProviderDetails } from "./llm-provider-details.js";
+import { ModelDialog, ProviderDialog } from "./llm-provider-dialogs.js";
 
-/**
- * Custom preset CRUD pane. Presets include free-form provider definitions the
- * user added through the UI, alongside their optional API key (persisted via
- * the settings secrets channel).
- */
+export { buildProviderCatalog } from "./llm-provider-catalog.js";
+
+/** Provider catalogue with connection settings and one-to-many model editing. */
 export function LlmPresetsPane() {
   const { t } = useTranslation();
+  const { state } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const [presets, setPresetsLocal] = useState<CustomPreset[]>(() =>
-    getCustomPresets(),
+  const [profiles, setProfilesLocal] = useState<ProviderModelProfile[]>(() =>
+    getProviderProfiles(),
   );
-  const [newPreset, setNewPreset] = useState<Omit<CustomPreset, "id">>({
-    name: "",
-    provider: "",
-    baseUrl: "",
-    model: "",
-    protocol: "openai-chat-v1",
-    apiKey: "",
-  });
-  const [visibleNew, setVisibleNew] = useState(false);
+  const [selectedProviderId, setSelectedProviderId] = useState("");
+  const [query, setQuery] = useState("");
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  const [providerDraft, setProviderDraft] =
+    useState<ProviderDraft>(EMPTY_PROVIDER_DRAFT);
+  const [modelIdsDraft, setModelIdsDraft] = useState("");
 
-  const commit = (next: CustomPreset[]) => {
-    setPresetsLocal(next);
-    setCustomPresets(next);
+  const catalog = useMemo(
+    () => buildProviderCatalog(state.presets, profiles),
+    [state.presets, profiles],
+  );
+  const filteredCatalog = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return catalog;
+    return catalog.filter(
+      (provider) =>
+        provider.id.toLowerCase().includes(normalized) ||
+        provider.serverModels.some((model) =>
+          model.model.toLowerCase().includes(normalized),
+        ) ||
+        provider.localProfile?.models.some((model) =>
+          model.modelId.toLowerCase().includes(normalized),
+        ),
+    );
+  }, [catalog, query]);
+  const selectedProvider =
+    catalog.find((provider) => provider.id === selectedProviderId) ??
+    catalog[0];
+
+  useEffect(() => {
+    if (!selectedProviderId && catalog[0]) {
+      setSelectedProviderId(catalog[0].id);
+    }
+  }, [catalog, selectedProviderId]);
+
+  const commit = (next: ProviderModelProfile[]) => {
+    setProfilesLocal(next);
+    setProviderProfiles(next);
   };
 
-  const handleAdd = () => {
-    if (!newPreset.name || !newPreset.provider || !newPreset.model) return;
-    const preset: CustomPreset = {
-      ...newPreset,
-      id: `custom_${crypto.randomUUID()}`,
-    };
-    commit([...presets, preset]);
-    setNewPreset({
-      name: "",
-      provider: "",
-      baseUrl: "",
-      model: "",
-      protocol: "openai-chat-v1",
-      apiKey: "",
-    });
+  const addModels = (
+    provider: Pick<ProviderCatalogEntry, "id" | "baseUrl" | "protocol">,
+    rawIds: string,
+  ) => {
+    const modelIds = parseModelIds(rawIds);
+    if (modelIds.length === 0) return;
+    let nextProfiles = profiles;
+    for (const modelId of modelIds) {
+      nextProfiles = upsertProviderModel(nextProfiles, {
+        providerId: provider.id,
+        baseUrl: provider.baseUrl,
+        protocol: provider.protocol,
+        modelId,
+      }).profiles;
+    }
+    commit(nextProfiles);
   };
 
-  const handleRemove = (id: string) => {
-    commit(presets.filter((p) => p.id !== id));
+  const handleAddProvider = () => {
+    const providerId = providerDraft.providerId.trim();
+    if (!providerId || parseModelIds(providerDraft.modelIds).length === 0) {
+      return;
+    }
+    addModels(
+      {
+        id: providerId,
+        baseUrl: providerDraft.baseUrl,
+        protocol: providerDraft.protocol,
+      },
+      providerDraft.modelIds,
+    );
+    setSelectedProviderId(providerId);
+    setProviderDraft(EMPTY_PROVIDER_DRAFT);
+    setProviderDialogOpen(false);
+  };
+
+  const handleAddModels = () => {
+    if (!selectedProvider) return;
+    addModels(selectedProvider, modelIdsDraft);
+    setModelIdsDraft("");
+    setModelDialogOpen(false);
+  };
+
+  const patchLocalProfile = (patch: Partial<ProviderModelProfile>) => {
+    if (!selectedProvider?.localProfile) return;
+    commit(
+      profiles.map((profile) =>
+        profile.id === selectedProvider.id ? { ...profile, ...patch } : profile,
+      ),
+    );
   };
 
   const handleExport = () => {
-    const exportSafe = presets.map(({ apiKey: _apiKey, ...rest }) => rest);
-    const blob = new Blob([JSON.stringify(exportSafe, null, 2)], {
-      type: "application/json",
-    });
+    const blob = new Blob(
+      [JSON.stringify({ version: 2, providers: profiles }, null, 2)],
+      { type: "application/json" },
+    );
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "covel-custom-presets.json";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "covel-model-providers.json";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const imported = JSON.parse(reader.result as string);
-        if (!Array.isArray(imported) || imported.length > 200) return;
-        const valid = imported
-          .filter(
-            (p): p is Record<string, unknown> =>
-              p != null &&
-              typeof p === "object" &&
-              typeof p.id === "string" &&
-              p.id.length > 0 &&
-              p.id.length <= 100 &&
-              typeof p.name === "string" &&
-              p.name.length > 0 &&
-              typeof p.provider === "string" &&
-              p.provider.length > 0 &&
-              typeof p.model === "string" &&
-              p.model.length > 0,
-          )
-          .map((p) => ({
-            ...p,
-            id: (p.id as string).slice(0, 100),
-            name: (p.name as string).slice(0, 100),
-            provider: (p.provider as string).slice(0, 100),
-            model: (p.model as string).slice(0, 200),
-            baseUrl:
-              typeof p.baseUrl === "string" &&
-              (p.baseUrl.startsWith("http://") ||
-                p.baseUrl.startsWith("https://"))
-                ? p.baseUrl.slice(0, 500)
-                : "",
-          })) as CustomPreset[];
-        const existingIds = new Set(presets.map((p) => p.id));
-        const deduped = valid.filter((p) => !existingIds.has(p.id));
-        commit([...presets, ...deduped]);
+        const raw: unknown = JSON.parse(String(reader.result));
+        const candidates =
+          raw && typeof raw === "object" && "providers" in raw
+            ? (raw as { providers?: unknown }).providers
+            : raw;
+        if (!Array.isArray(candidates) || candidates.length > 200) return;
+        const imported = [
+          ...sanitizeImportedProfiles(
+            profilesFromLegacyPresets(candidates.filter(isLegacyPreset)),
+          ),
+          ...sanitizeImportedProfiles(candidates),
+        ];
+        const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+        for (const profile of imported) byId.set(profile.id, profile);
+        commit([...byId.values()]);
       } catch {
-        // ignore malformed
+        // Ignore malformed imports and preserve the current configuration.
       }
     };
     reader.readAsText(file);
@@ -121,141 +171,122 @@ export function LlmPresetsPane() {
 
   return (
     <div className="space-y-3">
-      {presets.length > 0 && (
-        <div className="space-y-2">
-          {presets.map((preset) => (
-            <div
-              key={preset.id}
-              className="border border-border px-3 py-2 text-xs space-y-1"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{preset.name}</span>
-                  {preset.apiKey && (
-                    <Badge variant="default" className="text-[10px]">
-                      {t("settings.hasApiKey")}
-                    </Badge>
-                  )}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={() => handleRemove(preset.id)}
-                  aria-label={t("common.delete", "Delete")}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
-              </div>
-              <div className="text-muted-foreground flex flex-wrap gap-x-3">
-                <span>
-                  {preset.provider}/{preset.model}
-                </span>
-                {preset.protocol && <span>{preset.protocol}</span>}
-                {preset.baseUrl && (
-                  <span className="truncate max-w-[200px]">
-                    {preset.baseUrl}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      {presets.length === 0 && (
-        <p className="text-xs text-muted-foreground text-center py-2">
-          {t("settings.noCustomPresets")}
-        </p>
-      )}
-
-      <div className="border border-dashed border-border p-3 space-y-2">
-        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          {t("settings.addPreset")}
-        </h4>
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            placeholder={t("settings.namePlaceholder")}
-            value={newPreset.name}
-            onChange={(e) =>
-              setNewPreset({ ...newPreset, name: e.target.value })
-            }
-            className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-          />
-          <input
-            placeholder={t("settings.presetProviderPlaceholder")}
-            value={newPreset.provider}
-            onChange={(e) =>
-              setNewPreset({ ...newPreset, provider: e.target.value })
-            }
-            className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-          />
-          <input
-            placeholder={t("settings.presetModelPlaceholder")}
-            value={newPreset.model}
-            onChange={(e) =>
-              setNewPreset({ ...newPreset, model: e.target.value })
-            }
-            className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-          />
-          <select
-            value={newPreset.protocol ?? "openai-chat-v1"}
-            onChange={(e) =>
-              setNewPreset({ ...newPreset, protocol: e.target.value })
-            }
-            className="bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="openai-chat-v1">OpenAI Chat (v1)</option>
-            <option value="openai-responses-v1">OpenAI Responses (v1)</option>
-            <option value="anthropic-messages-v1">
-              Anthropic Messages (v1)
-            </option>
-          </select>
-          <input
-            placeholder={t("settings.baseUrlPlaceholder")}
-            value={newPreset.baseUrl}
-            onChange={(e) =>
-              setNewPreset({ ...newPreset, baseUrl: e.target.value })
-            }
-            className="col-span-2 bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
-          />
-          <div className="col-span-2 flex gap-1">
-            <input
-              type={visibleNew ? "text" : "password"}
-              placeholder={t("settings.apiKeyPlaceholder", "API Key (sk-...)")}
-              value={newPreset.apiKey ?? ""}
-              onChange={(e) =>
-                setNewPreset({ ...newPreset, apiKey: e.target.value })
-              }
-              className="flex-1 bg-background border border-border px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary font-mono"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              className="shrink-0 h-7 w-7"
-              onClick={() => setVisibleNew((v) => !v)}
-              aria-label={
-                visibleNew
-                  ? t("settings.hide", "Hide")
-                  : t("settings.show", "Show")
-              }
-            >
-              {visibleNew ? (
-                <EyeOff className="w-3 h-3" />
-              ) : (
-                <Eye className="w-3 h-3" />
-              )}
-            </Button>
-          </div>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold">
+            {t("settings.providerConnections", "Provider connections")}
+          </h3>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            {t(
+              "settings.providerCatalogHint",
+              "Choose a provider, configure its connection once, then maintain all of its model IDs in one list.",
+            )}
+          </p>
         </div>
         <Button
           variant="outline"
           size="sm"
-          onClick={handleAdd}
-          disabled={!newPreset.name || !newPreset.provider || !newPreset.model}
-          className="w-full text-xs"
+          onClick={() => setProviderDialogOpen(true)}
+          className="shrink-0"
         >
-          <Plus className="w-3 h-3" />
-          {t("settings.add")}
+          <Plus className="h-3.5 w-3.5" />
+          {t("settings.addProvider", "Add provider")}
         </Button>
+      </div>
+
+      <div className="grid min-h-[28rem] grid-cols-[10.5rem_minmax(0,1fr)] border border-border">
+        <aside className="flex min-w-0 flex-col border-r border-border bg-muted/10">
+          <div className="border-b border-border p-2">
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={t("settings.searchProviders", "Search")}
+                className="w-full border border-border bg-background py-1.5 pl-7 pr-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          </div>
+          <div className="flex-1 space-y-0.5 overflow-y-auto p-1.5">
+            {filteredCatalog.map((provider) => {
+              const modelCount =
+                provider.serverModels.length +
+                (provider.localProfile?.models.length ?? 0);
+              const active = provider.id === selectedProvider?.id;
+              return (
+                <button
+                  key={provider.id}
+                  type="button"
+                  onClick={() => setSelectedProviderId(provider.id)}
+                  className={`flex w-full items-center gap-2 px-2 py-2 text-left transition-colors ${
+                    active
+                      ? "bg-primary/10 text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted font-mono text-[10px] uppercase">
+                    {provider.id.slice(0, 2)}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-medium">
+                      {provider.id}
+                    </span>
+                    <span className="block text-[9px] text-muted-foreground">
+                      {t("settings.modelCountShort", {
+                        count: modelCount,
+                        defaultValue: "{{count}} models",
+                      })}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="border-t border-border p-1.5">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start text-xs"
+              onClick={() => setProviderDialogOpen(true)}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t("settings.addProvider", "Add provider")}
+            </Button>
+          </div>
+        </aside>
+
+        <main className="min-w-0 p-3">
+          {selectedProvider ? (
+            <ProviderDetails
+              provider={selectedProvider}
+              onAddModel={() => setModelDialogOpen(true)}
+              onPatchLocalProfile={patchLocalProfile}
+              onDeleteLocalModel={(modelRef) => {
+                const profile = selectedProvider.localProfile;
+                if (!profile) return;
+                patchLocalProfile({
+                  models: profile.models.filter(
+                    (model) => model.ref !== modelRef,
+                  ),
+                });
+              }}
+              onDeleteLocalProvider={() => {
+                commit(
+                  profiles.filter(
+                    (profile) => profile.id !== selectedProvider.id,
+                  ),
+                );
+              }}
+            />
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+              <Server className="h-6 w-6" />
+              <p className="text-xs">
+                {t("settings.noProvidersTitle", "No providers configured")}
+              </p>
+            </div>
+          )}
+        </main>
       </div>
 
       <div className="flex gap-2">
@@ -265,7 +296,7 @@ export function LlmPresetsPane() {
           onClick={handleExport}
           className="flex-1 text-xs"
         >
-          <Download className="w-3 h-3" />
+          <Download className="h-3.5 w-3.5" />
           {t("settings.export")}
         </Button>
         <Button
@@ -274,7 +305,7 @@ export function LlmPresetsPane() {
           onClick={() => fileRef.current?.click()}
           className="flex-1 text-xs"
         >
-          <Upload className="w-3 h-3" />
+          <Upload className="h-3.5 w-3.5" />
           {t("settings.import")}
         </Button>
         <input
@@ -285,6 +316,24 @@ export function LlmPresetsPane() {
           onChange={handleImport}
         />
       </div>
+
+      <ProviderDialog
+        open={providerDialogOpen}
+        draft={providerDraft}
+        onOpenChange={setProviderDialogOpen}
+        onDraftChange={setProviderDraft}
+        onSubmit={handleAddProvider}
+      />
+      {selectedProvider && (
+        <ModelDialog
+          open={modelDialogOpen}
+          providerId={selectedProvider.id}
+          value={modelIdsDraft}
+          onOpenChange={setModelDialogOpen}
+          onChange={setModelIdsDraft}
+          onSubmit={handleAddModels}
+        />
+      )}
     </div>
   );
 }

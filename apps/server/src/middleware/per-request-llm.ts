@@ -35,6 +35,10 @@ import {
 } from "@covel/runtime";
 import type { AiStack } from "../ai-setup.js";
 import type { SlotOverridesInput } from "@covel/ai-provider";
+import {
+  PROVIDER_PROTOCOLS,
+  REASONING_EFFORT_VALUES,
+} from "@covel/ai-provider";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
 import { decodeBase64Json } from "../lib/base64-json.js";
 
@@ -153,7 +157,7 @@ function parseSlotOverrides(
       )) {
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
         const source = raw as Record<string, unknown>;
-        const next: Record<string, number> = {};
+        const next: Record<string, number | string> = {};
         for (const key of [
           "temperature",
           "topP",
@@ -166,6 +170,15 @@ function parseSlotOverrides(
           if (typeof value === "number" && Number.isFinite(value)) {
             next[key] = value;
           }
+        }
+        const reasoningEffort = source.reasoningEffort;
+        if (
+          typeof reasoningEffort === "string" &&
+          (REASONING_EFFORT_VALUES as readonly string[]).includes(
+            reasoningEffort,
+          )
+        ) {
+          next.reasoningEffort = reasoningEffort;
         }
         if (Object.keys(next).length > 0) {
           clean[slotId] = next as NonNullable<
@@ -195,7 +208,8 @@ function parseSlotOverrides(
             provider: r.provider,
             model: r.model,
             ...(typeof r.baseUrl === "string" ? { baseUrl: r.baseUrl } : {}),
-            ...(typeof r.protocol === "string"
+            ...(typeof r.protocol === "string" &&
+            (PROVIDER_PROTOCOLS as readonly string[]).includes(r.protocol)
               ? {
                   protocol:
                     r.protocol as SlotOverridesInput["customPresets"] extends Array<

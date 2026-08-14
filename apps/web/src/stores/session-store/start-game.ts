@@ -30,9 +30,12 @@ function selectPresetId(
     : [];
   const primarySlotId = configuredSlotIds[0];
   const primaryPresetId = primarySlotId
-    ? (slotConfig[primarySlotId]?.presetId ?? `slot-${primarySlotId}`)
+    ? (slotConfig[primarySlotId]?.modelRef ??
+      slotConfig[primarySlotId]?.presetId ??
+      `slot-${primarySlotId}`)
     : undefined;
-  const defaultPresetId = slotConfig.default?.presetId;
+  const defaultPresetId =
+    slotConfig.default?.modelRef ?? slotConfig.default?.presetId;
   return (
     primaryPresetId ??
     defaultPresetId ??

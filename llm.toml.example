@@ -16,11 +16,15 @@
 #
 # Fields:
 #   provider   — provider identifier, maps to {PROVIDER}_API_KEY in .env.llm
-#   model      — model ID passed to the provider API
+#   model      — opaque model ID passed to the provider API unchanged
 #   baseUrl    — API endpoint URL
 #   protocol   — "openai-chat-v1" | "openai-responses-v1" | "anthropic-messages-v1"
 #   fallback   — (optional) slot name to fall back to on failure (same tag only)
 #   tag        — (optional) capability tag, auto-inferred from output modalities
+#
+# One provider can expose multiple IDs, including namespaced forms such as
+# "openai/gpt-5.6-sol" or "deepseek/deepseek-v4-flash". Keep the provider
+# identifier separate; Covel never removes the namespace from outbound calls.
 #
 # You can also use environment variables in values, e.g.:
 #   baseUrl = "${DEEPSEEK_BASE_URL}"
@@ -29,9 +33,12 @@
 
 [covel.story]
 provider = "deepseek"
-model    = "deepseek-chat"
+model    = "deepseek-v4-flash"
 baseUrl  = "https://api.deepseek.com"
 protocol = "openai-chat-v1"
+# 可选：DeepSeek V4 支持 "high" / "max"；留空使用服务商默认值。
+# reasoning_effort = "high"
+# thinking = { type = "enabled" }
 
 [covel.utility]
 provider = "dashscope"

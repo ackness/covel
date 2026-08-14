@@ -37,8 +37,18 @@ Object.defineProperty(globalThis, "localStorage", {
 
 // Late import so the settings store sees the mocked localStorage.
 const { initSettings } = await import("@/settings/store");
-const { getCustomPresets, setCustomPresets, removeCustomPreset } =
-  await import("../api.js");
+const {
+  getCustomPresets,
+  getProviderPriceMultiplier,
+  removeCustomPreset,
+  setCustomPresets,
+  setParamOverrides,
+  setProviderProfiles,
+  setProviderPriceMultipliers,
+  setSlotConfig,
+} = await import("../api.js");
+const { buildSlotConfigHeaderInternal } =
+  await import("../api/model-settings.js");
 
 function readSettingsBlob(): Record<string, unknown> {
   const raw = localStorageMock.getItem(LOCAL_STORAGE_SETTINGS_KEY);
@@ -62,6 +72,56 @@ afterEach(() => {
 });
 
 describe("custom preset secret channel", () => {
+  it("uses a 1x default and persists positive decimal provider multipliers", async () => {
+    expect(getProviderPriceMultiplier("openai")).toBe(1);
+
+    setProviderPriceMultipliers({ openai: 0.1, premium: 2.5, invalid: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(getProviderPriceMultiplier("openai")).toBe(0.1);
+    expect(getProviderPriceMultiplier("premium")).toBe(2.5);
+    expect(getProviderPriceMultiplier("invalid")).toBe(1);
+  });
+
+  it("compiles a provider-first model reference without rewriting its model id", async () => {
+    setProviderProfiles([
+      {
+        id: "openai",
+        name: "OpenAI",
+        baseUrl: "https://openai.example/v1",
+        protocol: "openai-chat-v1",
+        models: [
+          {
+            ref: "model_deepseek",
+            modelId: "deepseek/deepseek-v4-flash",
+          },
+        ],
+      },
+    ]);
+    setSlotConfig({ default: { modelRef: "model_deepseek" } });
+    setParamOverrides({
+      default: { temperature: 0.4, reasoningEffort: "max" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const encoded = buildSlotConfigHeaderInternal()["X-Slot-Config"];
+    expect(encoded).toBeTruthy();
+    const overlay = JSON.parse(atob(encoded!));
+    expect(overlay.slotPresetOverrides).toEqual({
+      default: "model_deepseek",
+    });
+    expect(overlay.parameterOverrides).toEqual({
+      default: { temperature: 0.4, reasoningEffort: "max" },
+    });
+    expect(overlay.customPresets).toEqual([
+      expect.objectContaining({
+        id: "model_deepseek",
+        provider: "openai",
+        model: "deepseek/deepseek-v4-flash",
+      }),
+    ]);
+  });
+
   it("strips apiKey from the settings blob and routes it to covel:keys", async () => {
     setCustomPresets([
       {
