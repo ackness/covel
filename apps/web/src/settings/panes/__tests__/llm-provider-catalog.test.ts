@@ -1,12 +1,83 @@
 import { describe, expect, it } from "vitest";
 import {
   buildProviderCatalog,
+  normalizeProviderId,
+  normalizeProviderProfiles,
   parseModelIds,
   sanitizeImportedProfile,
   sanitizeImportedProfiles,
 } from "../llm-provider-catalog.js";
 
 describe("provider catalogue", () => {
+  it("uses the persisted provider-id normalization for catalogue identity", () => {
+    expect(normalizeProviderId(" OpenAI_API ")).toBe("openai-api");
+
+    const profiles = normalizeProviderProfiles([
+      {
+        id: "openai",
+        name: "OpenAI",
+        baseUrl: "https://api.openai.com/v1",
+        models: [{ ref: "gpt", modelId: "gpt-5" }],
+      },
+      {
+        id: "OpenAI",
+        name: "Duplicate spelling",
+        baseUrl: "https://duplicate.example/v1",
+        models: [{ ref: "mini", modelId: "gpt-5-mini" }],
+      },
+    ]);
+
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0]).toMatchObject({
+      id: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      models: [
+        { ref: "gpt", modelId: "gpt-5" },
+        { ref: "mini", modelId: "gpt-5-mini" },
+      ],
+    });
+    expect(
+      buildProviderCatalog(
+        [
+          {
+            id: "slot-story",
+            name: "Story",
+            provider: "OpenAI",
+            model: "gpt-5",
+            enabled: true,
+            isDefault: true,
+            scope: "server",
+          },
+        ],
+        profiles,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("keeps a migrated connection id separate from its key namespace", () => {
+    const catalog = buildProviderCatalog(
+      [],
+      [
+        {
+          id: "openai-second-connection",
+          provider: "OpenAI",
+          name: "OpenAI proxy",
+          baseUrl: "https://proxy.example/v1",
+          models: [{ ref: "proxy-gpt", modelId: "gpt-5" }],
+        },
+      ],
+    );
+
+    expect(catalog[0]).toMatchObject({
+      id: "openai-second-connection",
+      provider: "openai",
+      localProfile: {
+        id: "openai-second-connection",
+        provider: "openai",
+      },
+    });
+  });
+
   it("merges llm.toml and local models under one provider", () => {
     const catalog = buildProviderCatalog(
       [

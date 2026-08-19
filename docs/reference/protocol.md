@@ -176,14 +176,14 @@ Provider 图片输入矩阵：
 
 所有 `_jobs/<jobId>` 的写入都是普通 `setPluginData` 调用，因此都会通过标准 `plugin-data.changed` 频道广播。插件**禁止**直接写入 `_jobs` —— 框架独占该命名空间。业务数据请使用自定义命名空间（如 `images`、`prompts`）。
 
-### Suspend / Resume 事件（S4-T4）
+### Suspend / Resume 事件
 
 | 事件类型         | 方向 | 描述                                                                            | 负载                                                        |
 | ---------------- | ---- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `turn.suspended` | S→C  | 插件调用 `suspend()` 工具成功序列化 pendingContinuation 后由 turn-executor 发出 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
 | `turn.resumed`   | S→C  | `POST /api/sessions/:id/resume` 成功重新启动 runtime 后由 resume 路由发出       | `{ sessionId, turnId, suspensionId }`                       |
 
-### Snapshot / Fork 事件（S4-T2 / S4-T5）
+### Snapshot / Fork 事件
 
 所有 snapshot 事件由服务端经 eventBus 广播（topic=`session`），SSE 命名事件名来自 payload 的 `_subType`。
 
@@ -200,21 +200,21 @@ Provider 图片输入矩阵：
 | `POST /api/sessions/:id/snapshot` | `state.snapshot.created` (kind=manual)                  | `apps/server/src/routes/api/snapshots.ts`                     |
 | `POST /api/sessions/:id/fork`     | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts`                     |
 
-> 前端若要接收上述事件，需在 `apps/web/src/services/subscription.ts` 的 topic 路由里为 `state.snapshot.created` / `session.forked` 显式分发。当前尚未挂载这两个监听；在 fork / save UI 真正落地前，服务端已经在 SSE 通道上发送，前端订阅即生效。
+> 内置 Web 当前不提供 snapshot / fork 操作界面。外部客户端可从 `session` topic 消费上述事件。
 
 ### Working Memory / 上下文压缩事件
 
-`working_memory.changed` 由 commit chain 在提交 `working_memory.set` proposal 后通过 `makeEvent` 产出，作为 commit event **直接写入 `/api/actions` 流**（与 `narrative.completed` 等同走 commit-direct 路径，不经 `FORWARDED_EVENT_TYPES` 白名单）。因此它**是 `CovelEvent` union 的成员**（`COVEL_EVENT_META` 中 `forwardToActionStream: false`——该 flag 只管 eventBus→action-stream 转发，对 commit-direct 事件无效）。前端 actions handler **显式不渲染**它（UI 通过 `state.changed` 感知 working memory 变化），但因它已在闭合 union 内，新增同类事件会被前端穷尽校验强制做出「处理或忽略」的决定。此前它被发射却缺席 union，每次提交都落到前端 `assertNeverEvent` 并 `console.warn`——已修复。
+`working_memory.changed` 由 commit chain 在提交 `working_memory.set` proposal 后通过 `makeEvent` 产出，作为 commit event **直接写入 `/api/actions` 流**（与 `narrative.completed` 等同走 commit-direct 路径，不经 `FORWARDED_EVENT_TYPES` 白名单）。因此它**是 `CovelEvent` union 的成员**（`COVEL_EVENT_META` 中 `forwardToActionStream: false`——该 flag 只管 eventBus→action-stream 转发，对 commit-direct 事件无效）。前端 actions handler **显式不渲染**它（UI 通过 `state.changed` 感知 working memory 变化）；闭合 union 会强制新增事件在前端选择处理或忽略。
 
-`context.compacted` 仍为 **trace-only by design**：由 Compactor 完成摘要写入后写入 `trace_events` 表，不进入 `CovelEvent` union，也没有 SSE 推送计划，仅可通过 `/api/traces/:sessionId` 离线查询。
+`context.compacted` 是 **trace-only** 事件：由 Compactor 完成摘要写入后写入 `trace_events` 表，不进入 `CovelEvent` union，仅可通过 `/api/traces/:sessionId` 离线查询。
 
 `recursive.calling` / `recursive.completed` / `recursive.failed` 为递归 runtime 的 TurnEmitter trace 事件，**仅经订阅通道（topic `trace`）下发**，`forwardToActionStream: false`，不进入 `/api/actions`。它们现在也是 `CovelEvent` union 成员——使框架所有 `TurnEmitter.emit` / `makeEvent` 的事件名都受闭合 union 约束（发射端 `type` 已收紧为 `CovelEventType`，发射 union 外事件即编译错误）。
 
-| 事件                     | 触发点                                             | 当前出口                                                                | payload                                                         | 备注                                                                                                                                                 |
-| ------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | commit event → `/api/actions`（CovelEvent union）                       | `{ scope, key }`（顶层带有 sessionId/turnId/source）            | union 成员；前端显式忽略，UI 通过 `state.changed` 感知                                                                                               |
-| `proposal.failed`        | proposal 提交失败时（每个失败一条）                | commit-direct → `/api/actions`；manual/background 路径写 `trace_events` | `{ proposalId, proposalType, runtimeId, pluginId, error }`      | 2026-07-20 审计 H-07：失败不再被静默丢弃。任一失败都会扣留完成屏障（`turn.completed` / 记忆摄入 / auto-snapshot 均不触发），前端映射为可见的执行错误 |
-| `context.compacted`      | Compactor 完成摘要写入后                           | `trace_events` 表                                                       | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，不进 union，仅可通过 `/api/traces/:sessionId` 查                                                                               |
+| 事件                     | 触发点                                             | 当前出口                                                                | payload                                                         | 备注                                                                                                       |
+| ------------------------ | -------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `working_memory.changed` | commit chain 提交 `working_memory.set` proposal 后 | commit event → `/api/actions`（CovelEvent union）                       | `{ scope, key }`（顶层带有 sessionId/turnId/source）            | union 成员；前端显式忽略，UI 通过 `state.changed` 感知                                                     |
+| `proposal.failed`        | proposal 提交失败时（每个失败一条）                | commit-direct → `/api/actions`；manual/background 路径写 `trace_events` | `{ proposalId, proposalType, runtimeId, pluginId, error }`      | 任一失败都会扣留完成屏障（`turn.completed` / 记忆摄入 / auto-snapshot 均不触发），前端映射为可见的执行错误 |
+| `context.compacted`      | Compactor 完成摘要写入后                           | `trace_events` 表                                                       | `{ summaryId, messagesCompacted, tokenSavings, focusSections }` | trace-only by design，不进 union，仅可通过 `/api/traces/:sessionId` 查                                     |
 
 ### SSE 帧格式按通道区分
 
@@ -258,31 +258,29 @@ data: {
 
 该帧与 `system.connected` / `system.heartbeat` 一样**不带 `id:` 头**，因此不会污染 `EventSource` 的 `lastEventId`。
 
-`DEPLOYMENT_TIER=demo|commercial` 时该端点强制 session owner token 鉴权（audit S-02）。内置 Web 使用 fetch-based SSE 并提交 `X-Session-Token`；原生 `EventSource` 客户端可用 `?session_token=<ownerToken>`。缺失或错误返回 `401 { code: "session_owner_required" }`。`self`（默认）层级不强制。详见 [`docs/reference/api.md`](./api.md) 鉴权章节。
+`DEPLOYMENT_TIER=demo|commercial` 时该端点强制 session owner token 鉴权。内置 Web 使用 fetch-based SSE 并提交 `X-Session-Token`；原生 `EventSource` 客户端可用 `?session_token=<ownerToken>`。缺失或错误返回 `401 { code: "session_owner_required" }`。`self`（默认）层级不强制。详见 [`docs/reference/api.md`](./api.md) 鉴权章节。
 
 Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot、plugins、全部 active plugin data、未解决 suspensions 与 world，并缓冲期间到达的 live events 后重放。服务端对 SSE write 使用单一有界串行队列（256），连接预算为每 session 8、进程总计 512；超限返回 429，慢客户端溢出时主动断开。
 
-`apps/web/src/services/subscription.ts` 默认订阅 topic `runtime / state / game / plugin / session / system`（不含 `store`），并按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/events/stream` 接受的合法 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 单一真相派生（`subscribe.ts` 的 `VALID_TOPICS` 从中生成）：`runtime / state / game / plugin / session / store / system / trace / hooks`。其中 `trace`（TurnEmitter）与 `hooks`（hook pipeline）为运行时内部可观测性 topic——此前被运行时发出却被 `VALID_TOPICS` 拒绝（`topics=trace` 返回 400），现已纳入 union 并对齐。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `apps/web/src/services/api/actions.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
-
-> S4-T5 注意：`state.snapshot.created` / `session.forked` 服务端已经发出但前端尚未挂载 listener（FU-6 / 等 fork & save UI 落地）。此 follow-up 是已知的，与 framework 实现无关。
+`apps/web/src/services/subscription.ts` 默认订阅 topic `runtime / state / game / plugin / session / system`（不含 `store`），并按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/events/stream` 接受的合法 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 单一真相派生（`subscribe.ts` 的 `VALID_TOPICS` 从中生成）：`runtime / state / game / plugin / session / store / system / trace / hooks`。其中 `trace`（TurnEmitter）与 `hooks`（hook pipeline）为运行时内部可观测性 topic。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `apps/web/src/services/api/actions.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
 
 ### 转发的运行时内部事件（`/api/actions` 转发，已纳入 `CovelEvent`）
 
 下列事件由 server 透过 actions SSE 流转发用于 debug / trace。它们现在**已经是 `CovelEvent` union 的成员**（不再是「未进 enum 的私有事件」），并在 `COVEL_EVENT_META` 中标记 `forwardToActionStream: true`。server 的转发白名单 `FORWARDED_EVENT_TYPES` 完全从该元数据**派生**（不再手写 Set）。web 的 actions handler 对这些类型显式 no-op（它们经订阅通道驱动 `/debug` 时间线），但因已在 union 内，新增同类事件会被前端穷尽校验强制做出「处理或忽略」的决定。
 
-| 事件                                                       | 来源                                                                                          | 用途                                                                           |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过                       |
-| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                                         |
-| `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                             |
-| `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                                 |
-| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                                |
-| `hook.fired` / `hook.rewrote` / `hook.aborted`             | TurnEmitter                                                                                   | Hook 行为 trace                                                                |
-| `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                             | function-runtime `ctx.gateway` provider 调用 trace（与 `llm.*` 对等，A2-P1-5） |
+| 事件                                                       | 来源                                                                                          | 用途                                                                  |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过              |
+| `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                                |
+| `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                    |
+| `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                        |
+| `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                       |
+| `hook.fired` / `hook.rewrote` / `hook.aborted`             | TurnEmitter                                                                                   | Hook 行为 trace                                                       |
+| `gateway.calling` / `gateway.responded` / `gateway.failed` | TurnEmitter（`withGatewayTrace`）                                                             | function-runtime `ctx.gateway` provider 调用 trace（与 `llm.*` 对等） |
 
 > `function.executing` / `function.completed` 为 function-runtime 的 handler 边界 trace 事件（TurnEmitter），`forwardToActionStream: false`——**仅经订阅通道 / trace_events 下发**，与 `recursive.*` 同类，不进入 `/api/actions`。`gateway.*` 则 `forwardToActionStream: true`（对齐 `llm.calling/responded`），故列在上表。两组都已纳入 `CovelEvent` union（发射端受 `CovelEventType` 闭合约束）。
 >
-> `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed`（A2-P1-5 follow-up）trace 插件自带 wire 的 provider HTTP 调用（`ctx.utils.fetchWithRetry`，图像生成插件走的路径，由 `withUtilsTrace` 在 function-runtime / agent-guard 注入处包裹）。`forwardToActionStream: false`——polling 可能高频，故仅经 trace_events + 订阅通道驱动 `/debug`，不进 action 流。负载仅含 host / method / status / durationMs（**绝不含完整 URL、query、api key**，PII 保护）。
+> `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` trace 插件自带 wire 的 provider HTTP 调用（`ctx.utils.fetchWithRetry`，图像生成插件走的路径，由 `withUtilsTrace` 在 function-runtime / agent-guard 注入处包裹）。`forwardToActionStream: false`——polling 可能高频，故仅经 trace_events + 订阅通道驱动 `/debug`，不进 action 流。负载仅含 host / method / status / durationMs（**绝不含完整 URL、query、api key**，PII 保护）。
 >
 > `context.pruned`（TurnEmitter，`packages/runtime/src/agent-loop/turn-agent-runtime.ts`）在某个 runtime 的 prompt 组装触发预算硬裁剪时发出一次，负载为 `{ runtimeId, pluginId, prunedMessageCount }`。`forwardToActionStream: false`——仅进 trace_events / 订阅通道，让 `/debug` 能解释「这一回合掉了历史」，玩家侧的 action 流不受影响。
 
@@ -331,7 +329,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 | `plugin.enable`  | POST | `/api/sessions/:id/plugins/enable`  | JSON: `{ ok, active[] }` |
 | `plugin.disable` | POST | `/api/sessions/:id/plugins/disable` | JSON: `{ ok, active[] }` |
 
-### 插件 RPC(PR-3)
+### 插件 RPC
 
 统一的"结构化插件指令"通道。同时承载 action 级与 runtime 级调用。Action 级单次 JSON,runtime 级按 `manifest.execution` 分 sync / background 两种响应。
 
@@ -373,7 +371,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 **框架默认 action:** 见 [api.md](api.md#post-apisessionsidplugin-rpc) 的"框架默认 action"小节。
 
-### RPC Approval(PR-7)
+### RPC Approval
 
 community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 后,前端通过下述端点拉取 / 提交决定。
 

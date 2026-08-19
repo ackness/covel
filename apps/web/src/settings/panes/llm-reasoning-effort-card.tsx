@@ -3,6 +3,7 @@ import type {
   ReasoningEffort,
   ReasoningEffortProfile,
 } from "@/services/api.js";
+import { isReasoningEffortOverrideValid } from "./llm-reasoning-effort.js";
 
 export function ReasoningEffortCard({
   profile,
@@ -15,7 +16,10 @@ export function ReasoningEffortCard({
 }) {
   const { t } = useTranslation();
   const defaultValue = profile?.defaultValue;
-  const effective = override ?? defaultValue;
+  const validOverride = isReasoningEffortOverrideValid(profile, override)
+    ? override
+    : undefined;
+  const effective = validOverride ?? defaultValue;
   const displayValue = (value: ReasoningEffort | undefined) =>
     value
       ? t(`settings.reasoningLevel.${value}`)
@@ -36,7 +40,7 @@ export function ReasoningEffortCard({
               : t("settings.reasoningUnavailable")}
           </p>
         </div>
-        {override !== undefined && (
+        {validOverride !== undefined && (
           <button
             type="button"
             onClick={() => onChange(undefined)}
@@ -54,12 +58,12 @@ export function ReasoningEffortCard({
         <ReasoningValueCell
           label={t("settings.currentValue")}
           value={displayValue(effective)}
-          active={override !== undefined}
+          active={validOverride !== undefined}
         />
       </div>
       <select
         aria-label={t("settings.reasoningEffort")}
-        value={override ?? ""}
+        value={validOverride ?? ""}
         disabled={!profile}
         onChange={(event) =>
           onChange(

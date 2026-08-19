@@ -47,7 +47,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
   （`/api/actions`、`/api/worlds/:id/sync-data` 等）保持各自既有 404 文案不变。
 - `plugin-rpc` 通道保留其专属信封 `{ status: "error", error, code }`（见下文 plugin-rpc 小节），不并入通用信封。
 
-### 鉴权：Session owner token（audit S-02）
+### 鉴权：Session owner token
 
 `POST /api/sessions` 创建会话时会铸造一个不可猜测的 **owner token**，仅在创建响应中返回一次（响应字段 `ownerToken`）；服务端只保存其 SHA-256 哈希（`session.metadata.ownerTokenHash`），任何读取端点都不会再泄露原始 token。
 
@@ -294,12 +294,12 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### 玩家交互
 
-| 方法   | 路径                                  | 描述                                                                                                        |
-| ------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action 级 / runtime 级，含 `submit-form`)                                                 |
-| GET    | `/api/sessions/:id/approvals`         | **PR-7** 列出该 session 的待批准 RPC 请求                                                                   |
-| DELETE | `/api/sessions/:id/approvals`         | **PR-7** 撤销该 session 的已缓存授权（`?pluginId=` 限定单插件），返回 `{ ok, cleared }`；下次调用重新弹审批 |
-| POST   | `/api/approvals/:approvalId/decision` | **PR-7** 提交玩家批准决定(allow/deny + once/session)                                                        |
+| 方法   | 路径                                  | 描述                                                                                               |
+| ------ | ------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action 级 / runtime 级，含 `submit-form`)                                        |
+| GET    | `/api/sessions/:id/approvals`         | 列出该 session 的待批准 RPC 请求                                                                   |
+| DELETE | `/api/sessions/:id/approvals`         | 撤销该 session 的已缓存授权（`?pluginId=` 限定单插件），返回 `{ ok, cleared }`；下次调用重新弹审批 |
+| POST   | `/api/approvals/:approvalId/decision` | 提交玩家批准决定(allow/deny + once/session)                                                        |
 
 ### 会话插件管理
 
@@ -329,7 +329,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | POST | `/api/install/plugin` | multipart 字段 `file`：接受根级 `PLUGIN.md`+`package.json` 或多 runtime 布局的 `.zip`，解压到用户插件目录，返回 `{ ok, id, restartRequired:true }` |
 | POST | `/api/install/world`  | multipart 字段 `file`：接受根级 `world.yaml`+`WORLD.md` 的 `.zip`，解压到用户世界目录，返回 `{ ok, id, restartRequired:false }`                    |
 
-> **canonical 插件身份（2026-07-20 审计 C-01）**：插件的唯一身份是 manifest 根 `name`（= 运行期 `pluginId`）。`package.json` basename 仅在剥离精确 `plugin-` 前缀后参与一致性校验（`@covel/plugin-foo` ↔ `name: foo`），不一致返回 400。reserved-builtin 检查、安装目录、返回的 `id` 全部使用 canonical ID——`@covel/plugin-narrator` + `name: narrator` 会命中 reserved 返回 409（旧实现只查未剥离的 npm basename，可被 scoped 包绕过冒充 builtin 身份）。启动 discovery 同样硬性校验目录名 == manifest 根 name，不一致的插件注册为 `status: "error"`、不加载任何 runtime/tool/hook/wire。
+> **canonical 插件身份**：插件的唯一身份是 manifest 根 `name`（= 运行期 `pluginId`）。`package.json` basename 仅在剥离精确 `plugin-` 前缀后参与一致性校验（`@covel/plugin-foo` ↔ `name: foo`），不一致返回 400。reserved-builtin 检查、安装目录、返回的 `id` 全部使用 canonical ID；`@covel/plugin-narrator` + `name: narrator` 会命中 reserved 并返回 409。启动 discovery 同样硬性校验目录名 == manifest 根 name，不一致的插件注册为 `status: "error"`、不加载任何 runtime/tool/hook/wire。
 
 ### 状态查询
 
@@ -355,11 +355,11 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | GET  | `/api/sessions/:id/messages/page` | keyset 游标分页消息（最新窗口 + 向上加载更旧）              |
 | POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用）                             |
 
-### 统一翻译层（Runtime Outputs / Interaction Records，PR-1）
+### 统一翻译层（Runtime Outputs / Interaction Records）
 
 为跨 runtime 消费和观测接入而设计的规范记录。每次 runtime 执行产生一条 `RuntimeOutput`，每次外部输入（玩家消息、插件 UI、RPC 调用）产生一条 `InteractionRecord`。两张表与 `trace_events` 并存 —— 翻译层面向"被组件消费"，trace 层面向"调试时钻取细节"。
 
-> **接入状态（2026-04-27）**：服务端写入和查询 API 已实现并有测试覆盖；当前内置 Web UI 暂未直接消费这些 HTTP 查询端点，debug 页面主要使用 `/api/traces/*` 与 `/api/sessions/:id/snapshot`。这些端点保留为 observability / API client 能力，不应因 UI 暂未接入而删除。
+服务端写入并提供查询 API；当前内置 Web UI 不直接消费这些 HTTP 查询端点，debug 页面主要使用 `/api/traces/*` 与 `/api/sessions/:id/snapshot`。这些端点面向 observability 与 API client。
 
 | 方法 | 路径                                                      | 描述                                                                                                                  |
 | ---- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -383,7 +383,6 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
   metaData: {
     turn: number,
     preGameDone?: boolean,                  // Pre-Game runtime 声明自身初始化已完成
-    rawPromptDelta?: [{ role, content }],   // 相对上次调用的 prompt 增量
     outputResponses?: string[],             // 流式输出合并后的裸文本
     toolCallList?: [{ tool, input, output, status, durationMs }],
     modelSlot?: string,
@@ -413,7 +412,6 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 **注意**：
 
 - 翻译层写入是 best-effort。失败只打 warn，不阻塞 turn pipeline
-- `rawPromptDelta` 在 PR-1 首迭代中不会被 turn-executor 自动填充。接入 LLM 调用链的 delta 采集在后续迭代完成
 - full-prompt 重建端点只回放 turn_messages,不含 system prompt 与注入段落,对 compaction 后的 session 也不完全精确 —— 粗略调试够用,精确重建与审计场景走 trace_events
 
 ### 插件数据（Plugin Data）
@@ -438,7 +436,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | DELETE | `/api/sessions/:id/working-memory/:scope/:key` | 删除工作记忆条目                                                                                                       |
 | GET    | `/api/sessions/:id/memory-blocks`              | 只读返回 Letta 风格的 memory blocks（story scope）。2026-04-27 从 `/:id/memory` 重命名以避免与 `memory` 插件 id 冲突。 |
 
-### Lorebook（S3-T6）
+### Lorebook
 
 Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由插件通过 proposal commit 管道写入 store 层的 `lorebook_entries` 表，这些端点提供玩家 UI 与程序化读取视图，**不走提案系统**（单项 toggle/删除为 MVP 级别的直接写入）。
 
@@ -456,7 +454,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 
 404 场景：session 不存在、entryId 不存在。无 feature-flag 开关，始终启用。消费方：当前无内置 UI（右侧面板"世界"Tab 已切换为 WORLD.md 渲染，见 `docs/reference/ui-panels.md`）；插件可通过 `ui.right` JSON spec 自行消费这些端点。
 
-### Suspend / Resume（S4-T4）
+### Suspend / Resume
 
 | 方法   | 路径                                          | 描述                                                   |
 | ------ | --------------------------------------------- | ------------------------------------------------------ |
@@ -464,7 +462,7 @@ Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由�
 | GET    | `/api/sessions/:id/suspensions`               | 列出当前 session 所有未解决的挂起项                    |
 | DELETE | `/api/sessions/:id/suspensions/:suspensionId` | 放弃一个挂起项（删除记录）                             |
 
-### Snapshot / Fork（S4-T2）
+### Snapshot / Fork
 
 > **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
@@ -591,14 +589,6 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 **校验与 `specVersion`**：聚合时对每个 spec 执行 Zod 校验（结构包络 + `specVersion`）。`specVersion` 可省略（按 v1 处理），声明高于服务端支持版本（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。校验失败的 spec **不污染整个响应**——只从对应 slot 中剔除，并在顶层 `diagnostics[]` 中按 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }` 给出具体诊断（哪个插件、哪个字段、什么问题）。带 `sessionId` 时 `diagnostics` 仅包含该会话激活集中的插件。
 
 **缓存**：插件发现 + UI spec 加载/校验结果按插件目录布局缓存，失效信号为 `PLUGIN.md` 与 `ui/*` 文件的 mtime/size 内容签名（仅 `stat`，不读文件）。会话级 `plugin_data` 物化（delete + rewrite）只在签名变化或该会话首次访问时触发，避免每请求扫盘与 DB 重写。spec 文件变更后下次请求会正确重新物化。
-
-### Runtime 调用
-
-| 方法 | 路径                  | 描述                           |
-| ---- | --------------------- | ------------------------------ |
-| POST | `/api/runtime/invoke` | 独立调用单个 Runtime（计划中） |
-
----
 
 ## 详细文档
 
@@ -1114,7 +1104,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 **字段说明:**
 
 - `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。非合法枚举值返回 400。（注：运行频段真相由 `phase` / `completedPlayerTurns` / `setupRuntimes` 三字段承载，`turnCount` / `preGameCompleted` 由其派生——见 `POST /api/sessions` 响应字段说明；PATCH 不直接改写这些字段，它们只在 finalize 事务与惰性回填处写入。）
-- `runtimeModelOverrides`(可选,object) — PR-6 引入。Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`,必须匹配 `/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。插件列表与 Session Prep 会暴露 runtime 的声明 slot；若声明 slot 未配置，UI 会提示补充 `[covel.<slot>]`，不会静默改绑到不相关的文本 slot。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
+- `runtimeModelOverrides`(可选,object) — Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`,必须匹配 `/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。插件列表与 Session Prep 会暴露 runtime 的声明 slot；若声明 slot 未配置，UI 会提示补充 `[covel.<slot>]`，不会静默改绑到不相关的文本 slot。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
 
 **校验规则(runtimeModelOverrides):**
 
@@ -1292,7 +1282,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ---
 
-### 插件 RPC 通道(PR-3)
+### 插件 RPC 通道
 
 #### `POST /api/sessions/:id/plugin-rpc`
 
@@ -1506,7 +1496,7 @@ value         : {
 >
 > **community 插件的声明式 `manifest.rpc` action 同样两阶段**：dispatch 一个声明式 action 会动态 `import()` 该插件的 handler 模块，按同一定义它就是 server code。因此缺少 server-code grant 时，第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试才返回该 action 自身的审批。builtin/official 声明式 action 不受影响（照旧自动放行）。
 >
-> **community 插件 + `runtimeId`（runtime 模式）同样两阶段（2026-07-20 审计 H-01）**：缺少 server-code grant 时第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试返回 `runtime:<runtimeId>` 审批；两个**精确** grant 同时存在 runtime 才会加载执行（runtime loader 要求 AND，不再是任一 grant 即可）。entry import 也只认精确 `covel:plugin-server-code` grant——任意其他 action grant 不再解锁模块加载（`hasGrant` 已改为精确匹配、action 必填）。revoke 按 `(session, plugin)` 前缀清除两类 grant，语义不变。
+> **community 插件 + `runtimeId`（runtime 模式）同样采用两阶段授权**：缺少 server-code grant 时第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试返回 `runtime:<runtimeId>` 审批；两个**精确** grant 同时存在，runtime 才会加载执行。entry import 也只认精确 `covel:plugin-server-code` grant，任意其他 action grant 不会解锁模块加载。revoke 按 `(session, plugin)` 前缀清除两类 grant。
 
 **插件 PLUGIN.md 中声明 RPC action:**
 
@@ -1533,7 +1523,7 @@ rpc:
 
 ---
 
-### RPC Approval 流程(PR-7)
+### RPC Approval 流程
 
 第三方插件(`community` 信任级别)的 RPC action 在执行前需要玩家显式批准,防止未审计的代码自动操作 session。
 
@@ -2206,9 +2196,9 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 ---
 
-### Suspend / Resume（S4-T4）
+### Suspend / Resume
 
-> **过期清理（S4-T4.c）**：`POST /api/sessions/:id/resume` 与 `GET /api/sessions/:id/suspensions` 在处理前会机会式触发一次**时间门控**（最多每小时一次）、**best-effort**、**全局**的过期挂起项清理 —— 删除 `resolvedAt` 未设置且 `createdAt` 早于 `now - COVEL_SUSPENSION_TTL_MS`（默认 7 天）的记录。清理是 fire-and-forget，**不阻塞**本次响应。此外服务**启动时**会执行一次强制 sweep，清掉停机期间堆积的陈旧记录。**claimed（恢复进行中，`resolvedAt = "claimed:<iso>"`）与已成功解决的记录永不被清理。** 设 `COVEL_SUSPENSION_TTL_MS=0` 关闭清理。详见 [`docs/guide/env-registry.md`](../guide/env-registry.md)。
+> **过期清理**：`POST /api/sessions/:id/resume` 与 `GET /api/sessions/:id/suspensions` 在处理前会机会式触发一次**时间门控**（最多每小时一次）、**best-effort**、**全局**的过期挂起项清理 —— 删除 `resolvedAt` 未设置且 `createdAt` 早于 `now - COVEL_SUSPENSION_TTL_MS`（默认 7 天）的记录。清理是 fire-and-forget，**不阻塞**本次响应。此外服务**启动时**会执行一次强制 sweep，清掉停机期间堆积的陈旧记录。**claimed（恢复进行中，`resolvedAt = "claimed:<iso>"`）与已成功解决的记录永不被清理。** 设 `COVEL_SUSPENSION_TTL_MS=0` 关闭清理。详见 [`docs/guide/env-registry.md`](../guide/env-registry.md)。
 
 #### `POST /api/sessions/:id/resume`
 
@@ -2282,7 +2272,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 ---
 
-### Snapshot / Fork（S4-T2）
+### Snapshot / Fork
 
 > **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
@@ -2818,22 +2808,6 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 ```
 
 `nextCursor` 为 `null` 时表示窗口已到 trace 起点。
-
----
-
-### Runtime 调用
-
-#### `POST /api/runtime/invoke` -- 计划中
-
-独立调用单个 Runtime，用于测试和调试。
-
-**当前状态:** 返回 `501 Not Implemented`。
-
-```json
-{
-  "error": "Not implemented"
-}
-```
 
 ---
 

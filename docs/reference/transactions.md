@@ -71,9 +71,8 @@ discards the shadow.
 - File: `packages/store/src/memory/transaction-methods.ts`
 - Invariant: correctness relies on records being treated as **immutable** —
   mutations must replace the record (new object), never mutate in place. This
-  is why an O(row-count) reference copy is safe and why it replaced the previous
-  `structuredClone` deep copy (audit 2026-06-04 finding H3): deep cloning was
-  unnecessary given the never-mutate-in-place contract and far more expensive.
+  is why an O(row-count) reference copy is safe. A deep clone is unnecessary
+  under the never-mutate-in-place contract and is substantially more expensive.
 
 ### SqliteStore
 
@@ -200,15 +199,12 @@ Node-only and is never pulled into the IdbStore browser bundle.
   （`actions.ts` / `plugin-rpc/runtime-turn.ts` / `resume.ts`）现在都经它收口，
   不再手写逐 runtime 的提交循环。
 
-> **回合级单事务（2026-07-22 已实施）**：此前的边界是 **per-runtime**——调用方对
-> 每个 runtimeResult 依次调用 `processRuntimeResult` → `commitAll`，第二个 runtime
-> 的失败**不会**回滚第一个已提交的写入。现在 `finalizeExecution` 把整回合所有
-> runtime（含嵌套 recursiveCall 结果）聚合进单一事务：
+> **回合级单事务**：`finalizeExecution` 把整回合所有 runtime（含嵌套
+> `recursiveCall` 结果）聚合进单一事务：
 >
 > - **任一 proposal 失败即整回合回滚**——无论是抛出的 store 错误，还是 handler 校验
 >   失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 state.patch）。
->   已提交的兄弟 runtime 一并回滚，事务外不留痕迹。这是相对旧行为的**刻意变更**
->   （旧行为保留已提交兄弟）。
+>   已提交的兄弟 runtime 一并回滚，事务外不留痕迹。
 > - **对话 execution journal 共享提交命运**：当前玩家输入与非 manual runtime 的
 >   `TurnMessage` 在执行期只缓存在内存 journal；所有 proposal 通过后才由
 >   `finalizeExecution` 在同一事务中 append。回滚执行不会进入后续 Prompt、trigger
@@ -323,5 +319,5 @@ affected table in the relevant reference doc.
 
 - **`POST /worlds/:id/sync-dimensions`** — 四阶段重写（删除过期 plugin-data 行 → 批量写入 → upsert lorebook → 删除过期 lorebook）在**一个 SessionLock + 一个 store transaction** 内完成。失败整体回滚并返回 500，不会让下一轮 prompt 读到「删了一半」的世界数据。
 - **`POST /worlds/:id/sync-data`** — 冲突扫描在事务外进行（需要读文件系统的世界包），因此 apply transaction 内会对每个待覆盖目标**重读 hash 做 CAS**：扫描后被改动过就整体中止，返回 `409 { code: "world_data_sync_conflict" }`。调用方重跑（新扫描会把该改动报为正常 conflict）或显式 `force`。路由同时持 SessionLock，挡住回合并发写。
-- **媒体副作用仍在 DB 事务内**（`deferMediaFinalize: false`）。DB 回滚无法撤销已写入的 media bytes，因此 materialize 过程使用**增量补偿栈**：每次 `put` 成功立即登记，中途失败也能清理已落盘的资产（此前只有全部成功才返回 refs，第二个文件失败会泄漏第一个）。把媒体副作用移出事务、改为 commit 后 outbox/saga 仍是更彻底的方案，尚未实施。
+- **媒体副作用仍在 DB 事务内**（`deferMediaFinalize: false`）。DB 回滚无法撤销已写入的 media bytes，因此 materialize 过程使用**增量补偿栈**：每次 `put` 成功立即登记，中途失败也能清理已落盘的资产。
 - **Compactor** 的 summary 写入与 message tag 在同一 transaction 内：只写 summary 会产生 orphan——`message-insertion` 会把它当 system message 发出，而未打 tag 的原始历史仍然注入，形成双份上下文。

@@ -90,5 +90,5 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 ## 相关文档
 
 - [README · 快速开始](../../README.zh-CN.md#快速开始) — 下载与首次启动
-- [apps/desktop/PACKAGING.md](../../apps/desktop/PACKAGING.md) — 桌面版本地构建、签名、公证
+- [desktop-packaging.md](./desktop-packaging.md) — 桌面版本地构建、签名、公证
 - [reference/api.md](../reference/api.md) — 后端 API 参考

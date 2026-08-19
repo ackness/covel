@@ -37,11 +37,3 @@
 | `plugin:<pluginId>/<namespace>`   | world data target URI；声明导入结果写到哪个 `plugin_data` namespace。   | `plugin:character-blueprint/blueprints`   |
 | `world:metadata.<path>`           | world data target URI；声明导入结果写入 `WorldRecord.metadata` 子路径。 | `world:metadata.dimensions`               |
 | `covel://...`                     | 框架内置 schema URI。                                                   | `covel://world/dimensions`                |
-
-## Planned Reference Pages
-
-| Page          | Scope                                         |
-| ------------- | --------------------------------------------- |
-| `slots.md`    | 模型 slot 配置、provider 配置、优先级解析链。 |
-| `events.md`   | KernelEvent 类型、topic 命名和订阅模式。      |
-| `approval.md` | 权限规则、审批流程和自定义策略。              |

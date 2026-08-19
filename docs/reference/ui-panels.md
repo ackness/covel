@@ -275,7 +275,7 @@ type I18nText = string | Record<LocaleTag, string>;
 **核心用例**：
 
 - 单插件多 runtime：`char-creator/player-init` + `char-creator/character-tracker` 共享 `character-panel.json`
-- 跨插件组合：`char-creator` 贡献角色列表，未来 `inventory` 贡献背包，都声明 `group: "character"`，自动汇聚到同一个"角色"外层 Tab
+- 跨插件组合：`char-creator` 贡献角色列表，`inventory` 贡献背包；声明相同 `group` 后自动汇聚到同一个外层 Tab
 
 **合并规则**：
 
@@ -292,7 +292,7 @@ type I18nText = string | Record<LocaleTag, string>;
 
 ### 排序
 
-外层 Tab 按 `groupOrder` 排序（稳定排序，相同 order 保持加载顺序）。子 Tab 按贡献顺序展示。未来会支持用户拖拽。
+外层 Tab 按 `groupOrder` 排序（稳定排序，相同 order 保持加载顺序）。子 Tab 按贡献顺序展示。
 
 ## 消息区（Message Area）
 

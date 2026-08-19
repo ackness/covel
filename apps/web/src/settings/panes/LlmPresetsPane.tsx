@@ -14,6 +14,8 @@ import {
   buildProviderCatalog,
   EMPTY_PROVIDER_DRAFT,
   isLegacyPreset,
+  normalizeProviderId,
+  normalizeProviderProfiles,
   parseModelIds,
   sanitizeImportedProfiles,
   type ProviderCatalogEntry,
@@ -30,7 +32,7 @@ export function LlmPresetsPane() {
   const { state } = useSession();
   const fileRef = useRef<HTMLInputElement>(null);
   const [profiles, setProfilesLocal] = useState<ProviderModelProfile[]>(() =>
-    getProviderProfiles(),
+    normalizeProviderProfiles(getProviderProfiles()),
   );
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const [query, setQuery] = useState("");
@@ -69,20 +71,23 @@ export function LlmPresetsPane() {
   }, [catalog, selectedProviderId]);
 
   const commit = (next: ProviderModelProfile[]) => {
-    setProfilesLocal(next);
-    setProviderProfiles(next);
+    const normalized = normalizeProviderProfiles(next);
+    setProfilesLocal(normalized);
+    setProviderProfiles(normalized);
   };
 
   const addModels = (
     provider: Pick<ProviderCatalogEntry, "id" | "baseUrl" | "protocol">,
     rawIds: string,
   ) => {
+    const providerId = normalizeProviderId(provider.id);
+    if (!providerId) return;
     const modelIds = parseModelIds(rawIds);
     if (modelIds.length === 0) return;
     let nextProfiles = profiles;
     for (const modelId of modelIds) {
       nextProfiles = upsertProviderModel(nextProfiles, {
-        providerId: provider.id,
+        providerId,
         baseUrl: provider.baseUrl,
         protocol: provider.protocol,
         modelId,
@@ -92,7 +97,7 @@ export function LlmPresetsPane() {
   };
 
   const handleAddProvider = () => {
-    const providerId = providerDraft.providerId.trim();
+    const providerId = normalizeProviderId(providerDraft.providerId);
     if (!providerId || parseModelIds(providerDraft.modelIds).length === 0) {
       return;
     }
@@ -118,9 +123,12 @@ export function LlmPresetsPane() {
 
   const patchLocalProfile = (patch: Partial<ProviderModelProfile>) => {
     if (!selectedProvider?.localProfile) return;
+    const selectedId = normalizeProviderId(selectedProvider.id);
     commit(
       profiles.map((profile) =>
-        profile.id === selectedProvider.id ? { ...profile, ...patch } : profile,
+        normalizeProviderId(profile.id) === selectedId
+          ? { ...profile, ...patch, id: selectedId }
+          : profile,
       ),
     );
   };
@@ -158,9 +166,14 @@ export function LlmPresetsPane() {
           ),
           ...sanitizeImportedProfiles(candidates),
         ];
-        const byId = new Map(profiles.map((profile) => [profile.id, profile]));
+        const byId = new Map(
+          normalizeProviderProfiles(profiles).map((profile) => [
+            profile.id,
+            profile,
+          ]),
+        );
         for (const profile of imported) byId.set(profile.id, profile);
-        commit([...byId.values()]);
+        commit(normalizeProviderProfiles([...byId.values()]));
       } catch {
         // Ignore malformed imports and preserve the current configuration.
       }
@@ -273,7 +286,9 @@ export function LlmPresetsPane() {
               onDeleteLocalProvider={() => {
                 commit(
                   profiles.filter(
-                    (profile) => profile.id !== selectedProvider.id,
+                    (profile) =>
+                      normalizeProviderId(profile.id) !==
+                      normalizeProviderId(selectedProvider.id),
                   ),
                 );
               }}

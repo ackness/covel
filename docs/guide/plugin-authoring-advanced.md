@@ -343,11 +343,10 @@ const res = await ctx.gateway.generateText({
 
 > 图像生成不走 `generateText` —— 见下方"图像生成:`ctx.images`"小节。
 
-> **结构化 JSON 输出(未在函数 runtime 中可用,审计 F9):** `ctx.gateway.generateObject`
-> 需要宿主向 gateway 注入 JSON Schema → Zod 的转换器,目前组合根未接入。若需要
+> **结构化 JSON 输出当前不适用于 function runtime:** `ctx.gateway.generateObject`
+> 需要宿主向 gateway 注入 JSON Schema → Zod 的转换器，server 组合根目前未接入。若需要
 > 结构化输出,请用 **agent runtime** 的 `output.schema` / `responseFormat` 路径 ——
 > 框架在那里自动处理 schema → provider-specific grammar。
-> 待某个插件真正需要 function-runtime 下的 `generateObject` 时,再引入转换器。
 
 **`ctx.utils`:** 自管 wire(见下方逃生口小节)的插件必须经过这里调用网络,不要直接 `fetch`,以保持 SSRF 守卫和重试策略统一。`fetchWithRetry` 会在每次请求和重试前校验 DNS 的全部解析结果,并将连接固定到本次已验证的公网地址;媒体 URL 的每一跳重定向也会重新执行该流程,阻断私网 IPv4/IPv6 和 DNS rebinding。
 

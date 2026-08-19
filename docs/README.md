@@ -28,6 +28,8 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 | [`reference/`](./reference/)       | 框架开发者、第三方开发者、AI Agent | 权威契约：API、协议、frontmatter、工具、URI、schema、数据形状。字段枚举必须来自代码或测试。 |
 | [`architecture/`](./architecture/) | 框架维护者、深入贡献者             | 运行机制、模块边界、历史决策和慢变设计。                                                    |
 
+任务计划、审查记录、实施日志、临时分析和交接材料属于开发过程资料，统一放在 `devs/docs/`，不进入正式文档树。
+
 ## Search Map
 
 给第三方开发者和 AI Agent 的代码搜索入口：
@@ -54,8 +56,7 @@ docs/
 ├── glossary.md                # 术语表
 ├── guide/                     # how-to 教程
 ├── reference/                 # 权威框架契约
-├── architecture/              # 架构与历史决策
-└── superpowers/plans/         # 内部草案与迁移计划（落地后迁入上面三个目录）
+└── architecture/              # 架构与历史决策
 ```
 
 ## Documentation Rules
@@ -64,4 +65,5 @@ docs/
 - `reference/` 写当前真实契约；`guide/` 写推荐路径；`architecture/` 写设计原因和模块关系。
 - 字段枚举、URI grammar、默认值和错误条件优先从 `packages/shared/src/schemas/**`、`packages/shared/src/types/**`、server route、runtime 实现和测试中提取。
 - 面向 AI Agent 的页面需要保留可搜索的英文标识符，例如 `worldData`, `PLUGIN.md`, `plugin://`, `plugin:`, `RuntimeManifest`, `DataStore`。
+- 任务计划、审查记录、实施日志、临时分析和交接材料放在 `devs/docs/`；其中形成稳定契约的部分再提炼到 `guide/`、`reference/` 或 `architecture/`。
 - 文档站点和仓库拆分策略见 [`DOCS_STRATEGY.md`](./DOCS_STRATEGY.md)。

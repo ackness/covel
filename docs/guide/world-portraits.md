@@ -6,6 +6,8 @@
 - 每张图的最终提示词 = `style.prefix` + 该角色 `subject` + `style.suffix`（共享前后缀保证**整组同风格**），`negative` 作为负向提示。
 - 文件名对应角色卡的 `instantiate.characterId`：文件 `<id>.png` → 角色 `npc-<id>`（见清单 `characterId`）。
 
+场景背景的清单、日/夜变体与生成流程见 [场景背景生成指南](./world-scenes.md)。
+
 ## 两套风格方向
 
 | 世界                        | 题材          | 统一风格                                                                        | 取景 / 画幅                |

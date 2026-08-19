@@ -66,7 +66,7 @@ function parseArgs(argv) {
 // --chroma: providers that reject the background=transparent parameter draw a
 // flat pure-green backdrop instead; strip it locally afterwards, e.g.
 //   magick sprite.png -alpha set -fuzz 12% -fill none \
-//     -draw 'color 0,0 floodfill' ... (see worlds/PORTRAITS.md)
+//     -draw 'color 0,0 floodfill' ... (see docs/guide/world-portraits.md)
 const CHROMA_PROMPT =
   ", standing against a solid uniform flat pure green (#00FF00) chroma-key backdrop filling the entire background, no background scenery, no shadow on the backdrop";
 

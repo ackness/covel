@@ -10,6 +10,7 @@
 | [`flow.md`](./flow.md)                           | 端到端 turn pipeline、状态模型、插件执行、前后端数据流。                        |
 | [`npc-graph.md`](./npc-graph.md)                 | `npc-graph` 插件、Graph-RAG、embedding、图数据与 UI 面板。                      |
 | [`storage.md`](./storage.md)                     | DataStore 后端、事务与持久化边界。                                              |
+| [`technical-debt.md`](./technical-debt.md)       | 当前有意保留的实现上限，以及触发升级的可观测条件。                              |
 
 ## Search Anchors
 
@@ -26,4 +27,4 @@
 
 - 架构页需要说明模块边界、数据流、失败模式和对应 reference 页面。
 - 历史设计可以保留，但当前契约要明确指向 `reference/` 或代码。
-- 草案和迁移计划保持为内部资料；实现落地后把稳定部分迁入本目录或 `reference/`。
+- 草案、审查和迁移计划放在 `devs/docs/`；实现落地后把面向维护者的稳定设计迁入本目录或 `reference/`。

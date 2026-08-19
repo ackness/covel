@@ -1,3 +1,5 @@
+import { providerKeyToId } from "@covel/shared";
+
 export interface ProviderModelEntry {
   /** Stable internal reference used by slot bindings and request overlays. */
   ref: string;
@@ -7,8 +9,10 @@ export interface ProviderModelEntry {
 }
 
 export interface ProviderModelProfile {
-  /** Provider/key namespace, for example `deepseek` or `openai`. */
+  /** Stable connection and API-key namespace used by the settings UI. */
   id: string;
+  /** Provider family used to inherit defaults when `id` is connection-specific. */
+  provider?: string;
   name: string;
   baseUrl: string;
   protocol?: string;
@@ -24,26 +28,84 @@ export interface LegacyCustomPresetShape {
   protocol?: string;
 }
 
+function normalizeProviderId(input: string): string {
+  return providerKeyToId(input) ?? input.trim();
+}
+
 /** Convert old model-per-preset storage into provider-first profiles. */
 export function profilesFromLegacyPresets(
   presets: readonly LegacyCustomPresetShape[],
 ): ProviderModelProfile[] {
   const profiles = new Map<string, ProviderModelProfile>();
+  const usedProfileIds = new Set<string>();
+  const reservedProviderIds = new Set(
+    presets
+      .map((preset) => normalizeProviderId(preset.provider))
+      .filter(Boolean),
+  );
+  const connectionKeysByProvider = new Map<string, Set<string>>();
   for (const preset of presets) {
-    const providerId = preset.provider.trim();
+    const providerId = normalizeProviderId(preset.provider);
+    if (!providerId || !preset.model.trim()) continue;
+    const connectionKey = JSON.stringify([
+      providerId,
+      preset.baseUrl?.trim() ?? "",
+      preset.protocol?.trim() || "",
+    ]);
+    const connectionKeys =
+      connectionKeysByProvider.get(providerId) ?? new Set();
+    connectionKeys.add(connectionKey);
+    connectionKeysByProvider.set(providerId, connectionKeys);
+  }
+  const providerConnectionCounts = new Map<string, number>();
+
+  const allocateProfileId = (providerId: string, presetId: string): string => {
+    const connectionCount = providerConnectionCounts.get(providerId) ?? 0;
+    providerConnectionCounts.set(providerId, connectionCount + 1);
+    if (
+      connectionKeysByProvider.get(providerId)?.size === 1 &&
+      !usedProfileIds.has(providerId)
+    ) {
+      usedProfileIds.add(providerId);
+      return providerId;
+    }
+
+    const suffix = presetId.trim() || String(connectionCount + 1);
+    const rawStem = `${providerId}-${suffix}`;
+    const stem = providerKeyToId(rawStem) ?? rawStem;
+    let candidate = stem;
+    let collision = 2;
+    while (
+      usedProfileIds.has(candidate) ||
+      reservedProviderIds.has(candidate)
+    ) {
+      candidate = `${stem}-${collision}`;
+      collision += 1;
+    }
+    usedProfileIds.add(candidate);
+    return candidate;
+  };
+
+  for (const preset of presets) {
+    const providerId = normalizeProviderId(preset.provider);
     const modelId = preset.model.trim();
     if (!providerId || !modelId) continue;
+    const baseUrl = preset.baseUrl?.trim() ?? "";
+    const protocol = preset.protocol?.trim() || undefined;
+    const connectionKey = JSON.stringify([providerId, baseUrl, protocol ?? ""]);
 
-    let profile = profiles.get(providerId);
+    let profile = profiles.get(connectionKey);
     if (!profile) {
+      const profileId = allocateProfileId(providerId, preset.id);
       profile = {
-        id: providerId,
+        id: profileId,
+        ...(profileId === providerId ? {} : { provider: providerId }),
         name: providerId,
-        baseUrl: preset.baseUrl?.trim() ?? "",
-        ...(preset.protocol ? { protocol: preset.protocol } : {}),
+        baseUrl,
+        ...(protocol ? { protocol } : {}),
         models: [],
       };
-      profiles.set(providerId, profile);
+      profiles.set(connectionKey, profile);
     }
     if (profile.models.some((model) => model.ref === preset.id)) continue;
     profile.models.push({
@@ -87,18 +149,31 @@ export function upsertProviderModel(
   input: UpsertProviderModelInput,
   createRef: () => string = () => `custom_${crypto.randomUUID()}`,
 ): { profiles: ProviderModelProfile[]; modelRef: string } {
-  const providerId = input.providerId.trim();
+  const providerId = normalizeProviderId(input.providerId);
   const modelId = input.modelId.trim();
   if (!providerId || !modelId) {
     throw new Error("providerId and modelId are required");
   }
 
-  const existingProfile = profiles.find((profile) => profile.id === providerId);
+  const canonicalProfiles = profiles.map((profile) => {
+    const id = normalizeProviderId(profile.id);
+    const provider = profile.provider
+      ? normalizeProviderId(profile.provider)
+      : undefined;
+    return {
+      ...profile,
+      id,
+      ...(provider ? { provider } : {}),
+    };
+  });
+  const existingProfile = canonicalProfiles.find(
+    (profile) => profile.id === providerId,
+  );
   const existingModel = existingProfile?.models.find(
     (model) => model.modelId === modelId,
   );
   if (existingModel) {
-    return { profiles: [...profiles], modelRef: existingModel.ref };
+    return { profiles: canonicalProfiles, modelRef: existingModel.ref };
   }
 
   const modelRef = createRef();
@@ -110,7 +185,7 @@ export function upsertProviderModel(
   if (!existingProfile) {
     return {
       profiles: [
-        ...profiles,
+        ...canonicalProfiles,
         {
           id: providerId,
           name: input.providerName?.trim() || providerId,
@@ -124,7 +199,7 @@ export function upsertProviderModel(
   }
 
   return {
-    profiles: profiles.map((profile) =>
+    profiles: canonicalProfiles.map((profile) =>
       profile.id === providerId
         ? { ...profile, models: [...profile.models, model] }
         : profile,

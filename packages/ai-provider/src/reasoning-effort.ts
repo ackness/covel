@@ -42,6 +42,13 @@ export interface ReasoningEffortProfile {
 const options = (...values: ReasoningEffort[]): ReasoningEffortOption[] =>
   values.map((value) => ({ value }));
 
+const ANTHROPIC_EFFORT_MODEL_PATTERN =
+  /claude-(?:(?:fable|mythos|opus|sonnet)-5(?:[-.]|$)|opus-4-[5-8](?:-|$)|sonnet-4-6(?:-|$))/;
+
+function isQwenThinkingOnlyModel(model: string): boolean {
+  return /qwen[^\s]*[-_/]thinking(?:[-_/]|$)/.test(model);
+}
+
 /**
  * Resolve the reasoning control from the opaque model ID first, then fall back
  * to the transport provider. This keeps aggregator IDs such as
@@ -73,10 +80,7 @@ export function resolveReasoningEffortProfile(
   }
 
   if (family === "anthropic") {
-    const supportsEffort =
-      advertisesReasoning ||
-      /claude-(?:opus|sonnet|fable|mythos)-(?:4-[5-9]|5)/.test(model);
-    if (!supportsEffort) return null;
+    if (!ANTHROPIC_EFFORT_MODEL_PATTERN.test(model)) return null;
     const supportsXHigh =
       /(?:claude-(?:opus|sonnet|fable|mythos)-5)|(?:opus-4-[78])/.test(model);
     const supportsMax = supportsXHigh || /(?:opus|sonnet)-4-6/.test(model);
@@ -115,6 +119,13 @@ export function resolveReasoningEffortProfile(
 
   if (family === "qwen") {
     if (!advertisesReasoning && !/qwen3/.test(model)) return null;
+    if (isQwenThinkingOnlyModel(model)) {
+      return {
+        family,
+        defaultValue: "automatic",
+        options: options("automatic"),
+      };
+    }
     return {
       family,
       options: options("disabled", "automatic"),
@@ -127,6 +138,13 @@ export function resolveReasoningEffortProfile(
       /gpt-5/.test(model) ||
       /(?:^|[/_-])o[134](?:-|$)/.test(model);
     if (!isReasoningModel) return null;
+    if (/gpt-5-pro(?:-|$)/.test(model)) {
+      return {
+        family,
+        defaultValue: "high",
+        options: options("high"),
+      };
+    }
     if (/gpt-5\.1/.test(model)) {
       return {
         family,
@@ -182,6 +200,17 @@ export function extractReasoningRequestFields(
     model || requestModel,
     provider,
   );
+  if (family !== "compatible") {
+    const profile = resolveReasoningEffortProfile(model, provider, protocol);
+    const supportsSelection = profile?.options.some(
+      (option) => option.value === selection,
+    );
+    if (!supportsSelection) {
+      return family === "qwen" && isQwenThinkingOnlyModel(model)
+        ? { enable_thinking: true }
+        : {};
+    }
+  }
 
   if (protocol === "anthropic-messages-v1") {
     if (selection === "disabled") {
@@ -221,6 +250,9 @@ export function extractReasoningRequestFields(
   }
 
   if (family === "qwen") {
+    if (isQwenThinkingOnlyModel(model)) {
+      return { enable_thinking: true };
+    }
     return { enable_thinking: selection !== "disabled" };
   }
 

@@ -183,14 +183,12 @@ A: `--plugin guide --turns 2 --slot e2e_local`。其它 runtime 依然会运行�
 | `tools.builtin` / `tools.plugin`            | Tool Calls 表格里能观测实际调用次数和成功率                                 |
 | `runtimeType: function`                     | Tool Calls 表为空（function runtime 不跑 LLM）                              |
 
-## 扩展建议
+## 在 CI 中运行
 
-如果需要在 CI 跑：
+CI 中使用 `llmock` 自身的录制/回放代理控制成本：
 
 1. 用 `llmock` 录制一遍真实响应，落到 `debugs/llm-cache/`
-2. 后续跑 `COVEL_LLM_REPLAY=replay` 确保只读缓存
-3. 退出码 `0` 即通过
+2. 后续运行让 `llmock` 读取该缓存
+3. 以脚本退出码 `0` 作为通过条件
 
-> 第 2 步是**规划中**的形态：`COVEL_LLM_REPLAY` / `COVEL_LLM_REPLAY_DIR` 在
-> [env-registry](./env-registry.md) 里仍标记为 `documented`——源码尚无读取方，replay
-> cache 未实现。当前要在 CI 控成本，靠 `llmock` 自己的录制/回放代理（第 1 步）即可。
+`COVEL_LLM_REPLAY` / `COVEL_LLM_REPLAY_DIR` 当前没有运行时读取方，不要用它们替代 `llmock`。

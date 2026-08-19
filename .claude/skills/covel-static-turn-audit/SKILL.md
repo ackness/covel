@@ -1,6 +1,6 @@
 ---
 name: covel-static-turn-audit
-description: "Static Covel audit for start-game, plugin activation, runtime scheduling, prompt assembly, SSE/commit flow, multi-turn simulation, and dead-code findings under audits/."
+description: "Static Covel audit for start-game, plugin activation, runtime scheduling, prompt assembly, SSE/commit flow, multi-turn simulation, and dead-code findings under devs/docs/audits/."
 ---
 
 # Covel Static Turn Audit
@@ -29,7 +29,7 @@ Confirm these inputs from the user request or infer conservatively:
 - Whether the audit is static-only.
 - Starting user action, usually first `Start Game` in the prep screen.
 - Required simulation depth, usually Turn0 plus at least Turn1/Turn2/Turn3.
-- Output location, normally a new directory under `audits/`.
+- Output location, normally a new directory under `devs/docs/audits/`.
 
 If the user asks for "当前审计流程", create a reusable audit method, not a one-off conclusion list.
 
@@ -39,7 +39,7 @@ Read only the context needed for the audit:
 
 - `AGENTS.md`, `CLAUDE.md`, `RTK.md`.
 - Relevant architecture docs, especially `docs/architecture/flow.md`, `docs/reference/plugins.md`, `docs/reference/api.md`, `docs/reference/protocol.md`.
-- Existing `audits/` folders to avoid duplicate names and learn prior framing.
+- Existing `devs/docs/audits/` folders to avoid duplicate names and learn prior framing.
 - Memory entries for Covel when available, especially world-data, manual-trigger, plugin runtime docs, storage, and prior audit follow-through notes. Treat memory as hints; verify current code when cheap.
 
 ### 3. Map The Start Path
@@ -122,7 +122,7 @@ Classify findings:
 Create a new folder:
 
 ```text
-audits/<YYYY-MM-DD>-<short-slug>/
+devs/docs/audits/<YYYY-MM-DD>-<short-slug>/
 ```
 
 Use these files unless the user requests a different structure:

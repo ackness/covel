@@ -28,6 +28,7 @@ import type {
   ModelRequestContext,
   TextMessage,
   TextMessageContent,
+  ToolDefinition,
 } from "../types.js";
 
 /** Fields that providerRequestMetadata must never override. */
@@ -98,6 +99,48 @@ function serializeOpenAiChatContent(content: TextMessageContent): unknown {
   });
 }
 
+function isDeepSeekV4ThinkingRequest(
+  model: string,
+  context: ModelRequestContext | undefined,
+  body: Record<string, unknown>,
+): boolean {
+  const provider = (
+    context?.preset?.provider ??
+    context?.profile?.provider ??
+    ""
+  ).toLowerCase();
+  const models = [model, context?.preset?.model, context?.profile?.model]
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.toLowerCase());
+  const isDeepSeek =
+    /(?:^|[-_/])deepseek(?:[-_/]|$)/.test(provider) ||
+    models.some((candidate) =>
+      /(?:^|[-_/])deepseek(?:[-_/]|$)/.test(candidate),
+    );
+  const isV4 = models.some((candidate) =>
+    /(?:^|[-_/])v4(?:[-._/]|$)/.test(candidate),
+  );
+  const thinking = body.thinking;
+  const thinkingEnabled =
+    thinking !== null &&
+    typeof thinking === "object" &&
+    (thinking as Record<string, unknown>).type === "enabled";
+  return isDeepSeek && isV4 && thinkingEnabled;
+}
+
+function attachOpenAiTools(
+  body: Record<string, unknown>,
+  tools: ToolDefinition[] | undefined,
+  model: string,
+  context: ModelRequestContext | undefined,
+): void {
+  if (!tools || tools.length === 0) return;
+  body.tools = tools;
+  if (!isDeepSeekV4ThinkingRequest(model, context, body)) {
+    body.tool_choice = "auto";
+  }
+}
+
 /**
  * Serialize TextMessage[] to OpenAI wire format.
  * Handles assistant messages with tool_calls and tool role messages.
@@ -107,7 +150,7 @@ function serializeMessages(messages: TextMessage[]): Record<string, unknown>[] {
     if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
       return {
         role: "assistant",
-        content: serializeOpenAiChatContent(msg.content) || null,
+        content: serializeOpenAiChatContent(msg.content) ?? "",
         ...(msg.reasoningContent
           ? { reasoning_content: msg.reasoningContent }
           : {}),
@@ -154,10 +197,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           params.model,
         ),
       };
-      if (params.tools && params.tools.length > 0) {
-        body.tools = params.tools;
-        body.tool_choice = "auto";
-      }
+      attachOpenAiTools(body, params.tools, params.model, context);
 
       const response = await postJson(config, "/chat/completions", body);
       const payload = await parseJson(response);
@@ -221,10 +261,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           params.model,
         ),
       };
-      if (params.tools && params.tools.length > 0) {
-        body.tools = params.tools;
-        body.tool_choice = "auto";
-      }
+      attachOpenAiTools(body, params.tools, params.model, context);
       const response = await postJson(config, "/chat/completions", body);
 
       // Check HTTP status before parsing SSE — a non-2xx response won't be SSE

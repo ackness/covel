@@ -5,6 +5,7 @@ import {
   fetchModelDbInfo,
   getCapabilityOverrides,
   getCustomPresets,
+  getParamOverrides,
   getProviderPriceMultiplier,
   getSlotConfig,
   lookupModelCapabilityDetails,
@@ -12,6 +13,7 @@ import {
   refreshModelDb,
   reloadLlmConfig,
   setCapabilityOverrides,
+  setParamOverrides,
   setSlotConfig,
   slotBindingId,
   type ModelCapabilityInfo,
@@ -35,6 +37,7 @@ import {
   discoverRuntimeSlotIds,
 } from "./llm-slots-model.js";
 import { ignoreError } from "@/lib/ignore-error.js";
+import { clearChangedSlotReasoningEfforts } from "./llm-reasoning-effort.js";
 
 /**
  * Pane that surfaces the `[covel.<slot>]` sections from llm.toml and lets the
@@ -86,6 +89,15 @@ export function LlmSlotsPane() {
   );
 
   const commitSlot = (next: Record<string, SlotConfigEntry>) => {
+    const currentParamOverrides = getParamOverrides();
+    const nextParamOverrides = clearChangedSlotReasoningEfforts(
+      slotConfig,
+      next,
+      currentParamOverrides,
+    );
+    if (nextParamOverrides !== currentParamOverrides) {
+      setParamOverrides(nextParamOverrides);
+    }
     setSlotConfigLocal(next);
     setSlotConfig(next);
   };

@@ -73,5 +73,5 @@ The model settings are split into **Model Roles**, **Providers & Models**, and *
 ## Related docs
 
 - [README · Quick Start](../../README.md#quick-start) — download & first launch
-- [apps/desktop/PACKAGING.md](../../apps/desktop/PACKAGING.md) — local desktop builds, signing, notarisation
+- [desktop-packaging.md](./desktop-packaging.md) — local desktop builds, signing, notarisation
 - [reference/api.md](../reference/api.md) — backend API reference

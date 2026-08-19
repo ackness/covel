@@ -329,7 +329,7 @@ LLM 直接对照两个块即可判断"这个发现在不在已有条目里"，�
 - **maxEntries**：默认 50，codex 这类条目多的可以调到 100。超过 500 会被 schema 拒绝。
 - **两段式截断**：条目数超过 `maxEntries` 时，前半按 `createdAt` 升序（最早的"锚"永远可见，防止 session 后期误把老条目当成新条目），后半按 `updatedAt` 倒序（最近活跃）。两段互斥。末尾追加 `[总计 N 条，展示 M 条]` 提示。
 - **空 namespace**：返回 `<tag>暂无</tag>`，让 LLM 知道"空"而不是"被截断了"。
-- **错误传播**：`listPluginData` 失败会让 runtime 直接失败，错误走观测通道（trace + `runtime_outputs.error`），不会污染下游 runtime 的 context（由 Phase 0 错误隔离审计保证）。
+- **错误传播**：`listPluginData` 失败会让 runtime 直接失败，错误走观测通道（trace + `runtime_outputs.error`）。失败的 runtime 不进入 `completedResults`，因此不会污染下游 runtime 的 context。
 
 **框架如何识别**：只要 manifest 的 `input.inject` 里出现至少一个 `kind: plugin-data` 条目，`turn-executor` 就会把该 runtime 切到 `buildContextAsync` 路径，调 `store.listPluginData` 拿数据；其他 runtime 继续走原来的同步 `buildContext`，零开销零回归。
 

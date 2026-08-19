@@ -3,9 +3,13 @@ import type {
   PresetSummary,
   ProviderModelProfile,
 } from "@/services/api.js";
+import { providerKeyToId } from "@covel/shared";
 
 export interface ProviderCatalogEntry {
+  /** Stable connection identity shown in the catalogue. */
   id: string;
+  /** Provider family used for capability and default lookups. */
+  provider: string;
   baseUrl: string;
   protocol: string;
   serverModels: PresetSummary[];
@@ -26,30 +30,84 @@ export const EMPTY_PROVIDER_DRAFT: ProviderDraft = {
   modelIds: "",
 };
 
+/** Match the canonical provider namespace used by settings persistence. */
+export function normalizeProviderId(value: string): string {
+  return providerKeyToId(value) ?? "";
+}
+
+/**
+ * Canonicalize provider identity before UI operations and merge legacy
+ * case/punctuation aliases without dropping their model bindings.
+ */
+export function normalizeProviderProfiles(
+  profiles: readonly ProviderModelProfile[],
+): ProviderModelProfile[] {
+  const byId = new Map<string, ProviderModelProfile>();
+  for (const profile of profiles) {
+    const id = normalizeProviderId(profile.id);
+    if (!id) continue;
+    const provider = profile.provider
+      ? normalizeProviderId(profile.provider)
+      : "";
+    const existing = byId.get(id);
+    if (!existing) {
+      const normalizedProfile = {
+        ...profile,
+        id,
+        name: profile.name.trim() || id,
+      };
+      if (provider) normalizedProfile.provider = provider;
+      else delete normalizedProfile.provider;
+      byId.set(id, normalizedProfile);
+      continue;
+    }
+
+    const refs = new Set(existing.models.map((model) => model.ref));
+    const additionalModels = profile.models.filter(
+      (model) => !refs.has(model.ref),
+    );
+    byId.set(id, {
+      ...existing,
+      ...(existing.provider || provider
+        ? { provider: existing.provider || provider }
+        : {}),
+      baseUrl: existing.baseUrl || profile.baseUrl,
+      protocol: existing.protocol ?? profile.protocol,
+      models: [...existing.models, ...additionalModels],
+    });
+  }
+  return [...byId.values()];
+}
+
 export function buildProviderCatalog(
   presets: readonly PresetSummary[],
   profiles: readonly ProviderModelProfile[],
 ): ProviderCatalogEntry[] {
   const byId = new Map<string, ProviderCatalogEntry>();
   for (const preset of presets) {
-    const entry = byId.get(preset.provider) ?? {
-      id: preset.provider,
+    const providerId = normalizeProviderId(preset.provider);
+    if (!providerId) continue;
+    const entry = byId.get(providerId) ?? {
+      id: providerId,
+      provider: providerId,
       baseUrl: preset.baseUrl ?? "",
       protocol: preset.protocol ?? "openai-chat-v1",
       serverModels: [],
     };
     entry.serverModels.push(preset);
     if (!entry.baseUrl && preset.baseUrl) entry.baseUrl = preset.baseUrl;
-    byId.set(preset.provider, entry);
+    byId.set(providerId, entry);
   }
-  for (const profile of profiles) {
+  for (const profile of normalizeProviderProfiles(profiles)) {
     const entry = byId.get(profile.id) ?? {
       id: profile.id,
+      provider: profile.provider ?? profile.id,
       baseUrl: profile.baseUrl,
       protocol: profile.protocol ?? "openai-chat-v1",
       serverModels: [],
     };
     entry.localProfile = profile;
+    entry.provider = profile.provider ?? profile.id;
     if (profile.baseUrl) entry.baseUrl = profile.baseUrl;
     if (profile.protocol) entry.protocol = profile.protocol;
     byId.set(profile.id, entry);
@@ -94,7 +152,9 @@ export function sanitizeImportedProfile(
     return null;
   }
 
-  const id = profile.id.trim().slice(0, MAX_PROVIDER_ID_LENGTH);
+  const id = normalizeProviderId(
+    profile.id.trim().slice(0, MAX_PROVIDER_ID_LENGTH),
+  );
   if (!id) return null;
 
   const seenRefs = new Set<string>();
@@ -127,6 +187,10 @@ export function sanitizeImportedProfile(
     typeof profile.name === "string"
       ? profile.name.trim().slice(0, MAX_PROVIDER_ID_LENGTH)
       : "";
+  const provider =
+    typeof profile.provider === "string"
+      ? normalizeProviderId(profile.provider)
+      : "";
   const rawBaseUrl =
     typeof profile.baseUrl === "string"
       ? profile.baseUrl.trim().slice(0, MAX_BASE_URL_LENGTH)
@@ -148,6 +212,7 @@ export function sanitizeImportedProfile(
 
   return {
     id,
+    ...(provider && provider !== id ? { provider } : {}),
     name: name || id,
     baseUrl,
     ...(protocol ? { protocol } : {}),

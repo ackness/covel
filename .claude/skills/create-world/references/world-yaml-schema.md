@@ -171,7 +171,7 @@ sources:
     after: dimensions
 ```
 
-图片与 JSON 索引不必手写：`scripts/generate-portraits.mjs` / `generate-scenes.mjs` 按世界的 `portraits.json` / `scenes.json` 描述批量出图，`emit-presence.mjs` / `emit-scenes.mjs` 从图片自动生成带 sha256 的索引 JSON（**重生成图片后必须重跑**）。提示词与流程详见 `worlds/PORTRAITS.md` 与 `worlds/SCENES.md`。未命中注册表的场景由 `scene-stage/background-gen` 会话内按需生成（玩家可用 `autoGenerateScenes` / `maxGeneratedScenes` 设置控制）。
+图片与 JSON 索引不必手写：`scripts/generate-portraits.mjs` / `generate-scenes.mjs` 按世界的 `portraits.json` / `scenes.json` 描述批量出图，`emit-presence.mjs` / `emit-scenes.mjs` 从图片自动生成带 sha256 的索引 JSON（**重生成图片后必须重跑**）。提示词与流程详见 `docs/guide/world-portraits.md` 与 `docs/guide/world-scenes.md`。未命中注册表的场景由 `scene-stage/background-gen` 会话内按需生成（玩家可用 `autoGenerateScenes` / `maxGeneratedScenes` 设置控制）。
 
 ## dimensions.geography
 

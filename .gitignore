@@ -16,19 +16,13 @@
 .omx/
 skills-lock.json
 debugs/
-audits/
-plans/
 .backup/
 .playwright-mcp/
 .bg-shell
 .gsd/
 fixtures/
 output/
-progress.md
 .pi/subagents/
-context.md
-meta-prompt.md
-plan.md
 
 # Cursor
 .cursorignore

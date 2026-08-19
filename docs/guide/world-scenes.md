@@ -28,7 +28,7 @@ npx tsx scripts/generate-scenes.mjs haruka-academy
 node scripts/emit-scenes.mjs haruka-academy
 ```
 
-`generate-scenes.mjs` 直接 import 框架 TS 源码（`packages/ai-provider/src/image/wire-registry.ts`），必须用 **tsx** 运行；`emit-scenes.mjs` 是纯 Node 脚本，`node` 直接跑即可。生成方式与 provider 接线（llm.toml slot / keys.env / image wire）与立绘完全同一套机制，不重复展开，见 [PORTRAITS.md](./PORTRAITS.md#生成方式框架统一-image-wire)。
+`generate-scenes.mjs` 直接 import 框架 TS 源码（`packages/ai-provider/src/image/wire-registry.ts`），必须用 **tsx** 运行；`emit-scenes.mjs` 是纯 Node 脚本，`node` 直接跑即可。生成方式与 provider 接线（llm.toml slot / keys.env / image wire）与立绘完全同一套机制，不重复展开，见 [角色立绘生成指南](./world-portraits.md#生成方式框架统一-image-wire)。
 
 ## 日/夜两张与缺图回退
 

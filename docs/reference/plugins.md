@@ -280,7 +280,7 @@
 
 每个主循环回合开始时自动运行：从 `playerMessage` 中匹配 NPC 节点名（含别名，case-insensitive），沿邻接索引做 2-hop BFS，只保留**有效区间仍开放**的边（`invalidAt === undefined`；被新版本取代的旧边保留在库里做溯源，但不进 prompt，否则同一对人物会出现两条互相矛盾的事实），按 `(validAt, |strength|)` 排序后取 top-20，输出 markdown 列表到 `npcContext` 字段。`narrator` 通过 `input.inject` 把这段文本作为 `<npc-relationships>` 块注入 prompt 末尾。
 
-**Phase 3.5 升级路径**：当 framework 层向 function handler 暴露 gateway 后，将升级为"先 embed 查询 → vector search → 子图扩展"的混合检索。当前为纯结构化版本。
+当前检索路径是纯结构化匹配与图遍历，不生成 embedding，也不查询 vector store。
 
 ### npc-graph/extractor
 
@@ -312,7 +312,7 @@
 - 节点类型固定三类：`individual | group | faction`
 - 关系类型推荐 10 种 `TRUSTS / FEARS / RESPECTS / ALLY_OF / OPPOSES / COMPETES_WITH / WORKS_FOR / SUBORDINATE_OF / OWES_DEBT_TO / KNOWS_ABOUT`
 - LLM 使用 `upsert-npc-graph` 时通过 **name** 而非 ID 引用节点，工具内部去重并分配短 ID（`npc-xxxx`、`edge-xxxx`）
-- 每条 edge 的 `fact` 必须是完整自然语言句子 —— 这是 Phase 3 Graph-RAG 的检索单元
+- 每条 edge 的 `fact` 必须是完整自然语言句子，作为 Graph-RAG 的检索单元
 
 **边的版本化（有效区间）**：一条边是「带有效区间的事实版本」，不是唯一行。同一 `(source, target, relation)` 在一个会话里可以有多个版本，其中至多一个是**开放**的（`invalidAt === undefined`）。
 
@@ -331,10 +331,10 @@
 namespace="nodes"  key=npcId      value=NpcNode
 namespace="edges"  key=edgeId     value=NpcEdge
 namespace="index"  key=by-source:{npcId} | by-target:{npcId}  value=string[] (edge IDs)
-namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
+namespace="meta"   key=ontology   value=NpcGraphOntology
 ```
 
-**Phase 进度**: 当前实现已经包含 `ui/npc-graph-panel.json` 与 `GraphCanvas`。后续演进点集中在 Graph-RAG 的向量检索部分。
+当前实现包含 `ui/npc-graph-panel.json` 与 `GraphCanvas`。
 
 ---
 
@@ -666,7 +666,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 **配置（env）**: `STORY_GUARD_REDACT_TERMS`（额外红线词，逗号分隔）· `STORY_GUARD_REDACT_MARK`（替换标记，默认 `[redacted]`）· `STORY_GUARD_BLOCKED_TOOLS`（额外拦截工具名）。
 
-**限制**: 净化是确定性正则，不替代模型层安全；依赖 M1（resume 路径已接 `PostLLMResponse`，本批审计已修）才能覆盖挂起→恢复的输出。详见 `plugins/story-guard/README.md`。
+**限制**: 净化是确定性正则，不替代模型层安全。resume 路径会触发 `PostLLMResponse`，因此挂起后恢复的输出也会经过净化。详见 `plugins/story-guard/README.md`。
 
 ---
 
@@ -1015,14 +1015,6 @@ namespace="meta"   key=ontology   value=NpcGraphOntology (Phase 3 wire-up)
 
 ---
 
-## 规划中插件（待开发）
-
-| 插件   | 预期 stage | 描述                                         |
-| ------ | ---------- | -------------------------------------------- |
-| combat | `pre-turn` | 回合制战斗（判定原语已由 `dice-check` 提供） |
-
-> `inventory` 与 `core-quest` 已落地（见上文注册表）；`dice-check` / `affinity` 一并补齐了 RPG 玩法基座。
-
 当前世界包推荐使用 `pluginPolicy` 表达插件组合意图。内置前端组合包包括：`traditional-story`（传统叙事主线 + 行动建议/图鉴/关系图，玩家口吻设置为可选项）、`dialogue-mode`（对话优先叙事 + 场景演员/短句回复 + 玩家口吻设置）、`low-cost`（保留核心流程并减少下游 LLM 调用，玩家口吻设置为可选项）。世界可以通过 `preset` 引用这些组合包，也可以在 `packs` 中提供自定义组合。
 
 ---
@@ -1333,24 +1325,24 @@ hooks:
 
 同一事件内先按 `enforce` 分组排序；同组内全局 hook 先执行，插件 hook 保持注册顺序。
 
-| Event                 | Semantic     | 行为                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| --------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SessionStart`        | `parallel`   | 会话级（无回合）：会话创建 + 插件激活后触发，payload `{sessionId, worldId}`。观察型,不能否决创建（对齐 pi 的 `session_start`）                                                                                                                                                                                                                                                                                                                  |
-| `TurnStart`           | `sequential` | 回合开始的否决门：任一 handler `abort` 则整回合中止(无 runtime 运行,返回带 `abortReason` 的 TurnResult),用于访问控制 / 限流                                                                                                                                                                                                                                                                                                                     |
-| `PreCompaction`       | `sequential` | 历史压缩前的否决门：任一 handler `abort` 则本回合跳过压缩、保留完整历史（对齐 pi 的 `session_before_compact` 取消路径）                                                                                                                                                                                                                                                                                                                         |
-| `PostCompaction`      | `parallel`   | 并发观察压缩结果（`compacted` / `summaryId`）；返回值只用于日志和 trace（对齐 pi 的 `session_compact`）                                                                                                                                                                                                                                                                                                                                         |
-| `PreSchedule`         | `sequential` | 触发选择之后、调度之前观察 / 收窄本回合要跑的 runtime 集；`replace.triggered` 链式改写（如条件门控 / 成本控制）。**严格 filter-only（2026-07-20 审计 H-03）**：返回列表按稳定 runtime 身份（`manifest.name`）与原集合对账，框架复用原 manifest 对象——不在原集合的注入项被丢弃并 warn，变造副本无法替换原 manifest。**仅能影响主循环 runtime**：`phase === "setup"` 时，框架强制保留被 hook 删掉的 `setup` stage runtime，避免静默中断会话初始化 |
-| `PreRuntime`          | `sequential` | 链式改写 runtime 输入；`replace` 会传给下一个 handler；`abort` 会停止执行                                                                                                                                                                                                                                                                                                                                                                       |
-| `PostContextAssembly` | `sequential` | turn 级（每 runtime 一次，`buildContext` 之后、进 loop 之前）改写已装配的 `systemPrompt` / 投影历史；`replace.{systemPrompt,messages}` 链式累积（对齐 pi 的 `before_agent_start`）                                                                                                                                                                                                                                                              |
-| `PreLLMCall`          | `sequential` | 每次 LLM 调用前非破坏性改写发往模型的请求；`replace.{messages,model,tools}` 链式累积。不改写底层 transcript（对齐 pi 的 `context`）。`abort` 无意义、视为不变                                                                                                                                                                                                                                                                                   |
-| `PostLLMResponse`     | `sequential` | LLM 响应返回后、工具派发前；`replace.response` 链式改写 `content`/`toolCalls`（对齐 pi 的 `after_provider_response`）                                                                                                                                                                                                                                                                                                                           |
-| `PostRuntime`         | `sequential` | 链式改写 runtime 输出：`replace.result` 重写该 runtime 的 `RuntimeResult`(链式累积),不改则原样。**执行身份不可改写**：`pluginId` / `runtimeId` / `runId` / `turnId` 始终被还原为框架实际选中并加载的 manifest 身份——提交阶段按这些字段重绑 proposal,否则已批准的 hook 能把写入重定向到别的插件名下                                                                                                                                              |
-| `PreToolUse`          | `sequential` | 链式改写 tool call；`replace` 会传给下一个 handler；`abort` 会跳过该 tool（不中止回合）                                                                                                                                                                                                                                                                                                                                                         |
-| `PostToolUse`         | `sequential` | 链式 patch tool result：`replace.result` 改写结果、`replace.terminate: true` 在记录该结果后结束工具循环（对齐 pi 的 `tool_result.terminate`）。**结束循环用 `replace.terminate`，不要用 `abort`**（PostToolUse 的 `abort` 不生效，结果原样、循环继续）                                                                                                                                                                                          |
-| `PreStateCommit`      | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit                                                                                                                                                                                                                                                                                                                                                                                  |
-| `PostStateCommit`     | `parallel`   | 并发观察 commit 结果；返回值只用于日志和 trace                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `TurnStop`            | `parallel`   | 并发观察回合结束；返回值只用于日志和 trace                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `SessionEnd`          | `parallel`   | 会话级（无回合）：会话 PATCH 状态→`ended` 或 DELETE 时触发,payload `{sessionId, reason: "ended"｜"deleted"}`。仅在进入 `ended` 的那次触发(不重复),适合清理（对齐 pi 的 `session_shutdown`）                                                                                                                                                                                                                                                     |
+| Event                 | Semantic     | 行为                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SessionStart`        | `parallel`   | 会话级（无回合）：会话创建 + 插件激活后触发，payload `{sessionId, worldId}`。观察型,不能否决创建（对齐 pi 的 `session_start`）                                                                                                                                                                                                                                                                                          |
+| `TurnStart`           | `sequential` | 回合开始的否决门：任一 handler `abort` 则整回合中止(无 runtime 运行,返回带 `abortReason` 的 TurnResult),用于访问控制 / 限流                                                                                                                                                                                                                                                                                             |
+| `PreCompaction`       | `sequential` | 历史压缩前的否决门：任一 handler `abort` 则本回合跳过压缩、保留完整历史（对齐 pi 的 `session_before_compact` 取消路径）                                                                                                                                                                                                                                                                                                 |
+| `PostCompaction`      | `parallel`   | 并发观察压缩结果（`compacted` / `summaryId`）；返回值只用于日志和 trace（对齐 pi 的 `session_compact`）                                                                                                                                                                                                                                                                                                                 |
+| `PreSchedule`         | `sequential` | 触发选择之后、调度之前观察 / 收窄本回合要跑的 runtime 集；`replace.triggered` 链式改写（如条件门控 / 成本控制）。**严格 filter-only**：返回列表按稳定 runtime 身份（`manifest.name`）与原集合对账，框架复用原 manifest 对象——不在原集合的注入项被丢弃并 warn，变造副本无法替换原 manifest。**仅能影响主循环 runtime**：`phase === "setup"` 时，框架强制保留被 hook 删掉的 `setup` stage runtime，避免静默中断会话初始化 |
+| `PreRuntime`          | `sequential` | 链式改写 runtime 输入；`replace` 会传给下一个 handler；`abort` 会停止执行                                                                                                                                                                                                                                                                                                                                               |
+| `PostContextAssembly` | `sequential` | turn 级（每 runtime 一次，`buildContext` 之后、进 loop 之前）改写已装配的 `systemPrompt` / 投影历史；`replace.{systemPrompt,messages}` 链式累积（对齐 pi 的 `before_agent_start`）                                                                                                                                                                                                                                      |
+| `PreLLMCall`          | `sequential` | 每次 LLM 调用前非破坏性改写发往模型的请求；`replace.{messages,model,tools}` 链式累积。不改写底层 transcript（对齐 pi 的 `context`）。`abort` 无意义、视为不变                                                                                                                                                                                                                                                           |
+| `PostLLMResponse`     | `sequential` | LLM 响应返回后、工具派发前；`replace.response` 链式改写 `content`/`toolCalls`（对齐 pi 的 `after_provider_response`）                                                                                                                                                                                                                                                                                                   |
+| `PostRuntime`         | `sequential` | 链式改写 runtime 输出：`replace.result` 重写该 runtime 的 `RuntimeResult`(链式累积),不改则原样。**执行身份不可改写**：`pluginId` / `runtimeId` / `runId` / `turnId` 始终被还原为框架实际选中并加载的 manifest 身份——提交阶段按这些字段重绑 proposal,否则已批准的 hook 能把写入重定向到别的插件名下                                                                                                                      |
+| `PreToolUse`          | `sequential` | 链式改写 tool call；`replace` 会传给下一个 handler；`abort` 会跳过该 tool（不中止回合）                                                                                                                                                                                                                                                                                                                                 |
+| `PostToolUse`         | `sequential` | 链式 patch tool result：`replace.result` 改写结果、`replace.terminate: true` 在记录该结果后结束工具循环（对齐 pi 的 `tool_result.terminate`）。**结束循环用 `replace.terminate`，不要用 `abort`**（PostToolUse 的 `abort` 不生效，结果原样、循环继续）                                                                                                                                                                  |
+| `PreStateCommit`      | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit                                                                                                                                                                                                                                                                                                                                                          |
+| `PostStateCommit`     | `parallel`   | 并发观察 commit 结果；返回值只用于日志和 trace                                                                                                                                                                                                                                                                                                                                                                          |
+| `TurnStop`            | `parallel`   | 并发观察回合结束；返回值只用于日志和 trace                                                                                                                                                                                                                                                                                                                                                                              |
+| `SessionEnd`          | `parallel`   | 会话级（无回合）：会话 PATCH 状态→`ended` 或 DELETE 时触发,payload `{sessionId, reason: "ended"｜"deleted"}`。仅在进入 `ended` 的那次触发(不重复),适合清理（对齐 pi 的 `session_shutdown`）                                                                                                                                                                                                                             |
 
 > `PostToolUse` 为 `sequential`：`parallel` 语义会丢弃 `replace`，因此结果 patch 与 `terminate` 必须在顺序链中累积。
 > `SessionStart` / `SessionEnd` 是会话级 hook（`turnId` 为空）：在 server 的 session 路由触发,不属于 turn pipeline。
@@ -1559,7 +1551,7 @@ postHistory:
   content: Always respond in valid markdown. Never break character.
 ```
 
-### rpc(PR-3 插件 RPC 通道，frontmatter 声明式已弃用 — 改用 entry 的 `covel.registerRpc`)
+### rpc（frontmatter 声明式已弃用 — 改用 entry 的 `covel.registerRpc`）
 
 声明插件暴露给 `POST /api/sessions/:id/plugin-rpc` 的结构化 action,供前端或外部代理用统一通道调用。每个 entry 是一个 RPC handler 模块的相对路径。新代码请在 [entry](#entry统一服务端入口) 模块里用 `covel.registerRpc(action, handler, { description?, trustLevel? })` 内联注册；路由、审批门与信任钳制语义不变。
 
@@ -1636,7 +1628,7 @@ rpc:
 
 **空 namespace**：返回 `<tag>暂无</tag>`，让 LLM 明确知道"空"而不是"被截断了"。
 
-**错误路径**：`store.listPluginData` 失败会让 runtime 直接失败，错误走观测通道（`runtime_outputs.error` + trace），**不污染下游任何 runtime 的 context**（由 Phase 0 审计保证：失败 runtime 不进入 `completedResults`，无路径泄漏到 narrator）。
+**错误路径**：`store.listPluginData` 失败会让 runtime 直接失败，错误走观测通道（`runtime_outputs.error` + trace）。失败的 runtime 不进入 `completedResults`，因此不会污染下游 runtime 的 context。
 
 **框架能力**：当 manifest 声明了任意 `kind: plugin-data` 注入时，`turn-executor` 自动切换到 `buildContextAsync` 路径；其他 runtime 继续走同步 `buildContext`，零开销零回归。
 

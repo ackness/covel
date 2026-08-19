@@ -319,7 +319,12 @@ export function getProviderProfiles(): ProviderModelProfile[] {
         (profile) => profile && typeof profile === "object" && profile.id,
       ) ?? [];
   if (stored.length > 0) {
-    registerKnownProviders(stored.map((profile) => profile.id));
+    registerKnownProviders(
+      stored.flatMap((profile) => [
+        profile.id,
+        profile.provider?.trim() || profile.id,
+      ]),
+    );
     return stored;
   }
 
@@ -331,7 +336,12 @@ export function getProviderProfiles(): ProviderModelProfile[] {
   }
   const migrated = profilesFromLegacyPresets(legacy);
   if (migrated.length > 0) {
-    registerKnownProviders(migrated.map((profile) => profile.id));
+    registerKnownProviders(
+      migrated.flatMap((profile) => [
+        profile.id,
+        profile.provider?.trim() || profile.id,
+      ]),
+    );
     void store.set("llm.providers", migrated);
     // Remove any legacy inline secrets while keeping downgrade compatibility.
     void store.set("llm.customPresets", flattenProviderProfiles(migrated));
@@ -344,6 +354,12 @@ export function setProviderProfiles(profiles: ProviderModelProfile[]): void {
     .map((profile) => ({
       ...profile,
       id: providerKeyToId(profile.id) ?? profile.id.trim(),
+      ...(profile.provider?.trim()
+        ? {
+            provider:
+              providerKeyToId(profile.provider) ?? profile.provider.trim(),
+          }
+        : {}),
       name: profile.name.trim() || profile.id.trim(),
       baseUrl: profile.baseUrl.trim(),
       models: profile.models
@@ -356,7 +372,12 @@ export function setProviderProfiles(profiles: ProviderModelProfile[]): void {
         .filter((model) => model.ref && model.modelId),
     }))
     .filter((profile) => profile.id && profile.models.length > 0);
-  registerKnownProviders(normalized.map((profile) => profile.id));
+  registerKnownProviders(
+    normalized.flatMap((profile) => [
+      profile.id,
+      profile.provider?.trim() || profile.id,
+    ]),
+  );
   const store = getSettings();
   void store.set("llm.providers", normalized);
   // Dual-write the old flattened shape for downgrade/export compatibility.
@@ -365,6 +386,17 @@ export function setProviderProfiles(profiles: ProviderModelProfile[]): void {
   const validModelRefs = new Set(
     normalized.flatMap((profile) => profile.models.map((model) => model.ref)),
   );
+  const secrets = (
+    store as unknown as { snapshotSecrets(): Record<string, string> }
+  ).snapshotSecrets();
+  for (const secretName of Object.keys(secrets)) {
+    if (
+      secretName.startsWith("preset:") &&
+      !validModelRefs.has(secretName.slice("preset:".length))
+    ) {
+      void store.clear(`keys.${secretName}`);
+    }
+  }
   const slotConfig =
     store.get<Record<string, SlotConfigEntry>>("llm.slotConfig") ?? {};
   const prunedSlotConfig = Object.fromEntries(
@@ -416,6 +448,13 @@ export function getCustomPresets(): CustomPreset[] {
   const secrets = (
     getSettings() as unknown as { snapshotSecrets(): Record<string, string> }
   ).snapshotSecrets();
+  const providerFallbackByModelRef = new Map(
+    profiles.flatMap((profile) =>
+      profile.models.map(
+        (model) => [model.ref, profile.provider?.trim() || profile.id] as const,
+      ),
+    ),
+  );
 
   // Legacy migration: any inline `apiKey` left over from an earlier version
   // of this pane gets promoted to the keys channel and stripped from the
@@ -437,11 +476,20 @@ export function getCustomPresets(): CustomPreset[] {
       const provider =
         providerKeyToId(preset.provider) ??
         String(preset.provider ?? "").trim();
+      const secretFromConnection = secrets[provider];
       const secretFromChannel = secrets[`preset:${preset.id}`];
+      const providerFallback = providerFallbackByModelRef.get(preset.id);
+      const secretFromProvider = providerFallback
+        ? secrets[providerFallback]
+        : undefined;
       const apiKey =
-        (secretFromChannel && secretFromChannel.length > 0
-          ? secretFromChannel
-          : preset.apiKey) ?? undefined;
+        (secretFromConnection && secretFromConnection.length > 0
+          ? secretFromConnection
+          : secretFromChannel && secretFromChannel.length > 0
+            ? secretFromChannel
+            : secretFromProvider && secretFromProvider.length > 0
+              ? secretFromProvider
+              : preset.apiKey) ?? undefined;
       return { ...preset, provider, ...(apiKey ? { apiKey } : {}) };
     })
     .filter((preset) => preset.provider.length > 0);

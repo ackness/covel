@@ -107,7 +107,7 @@ Covel 的发布由 Git tag 驱动。
 - macOS：在仓库 Secrets 配置 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`，并在 `apps/desktop/electron-builder.yml` 打开 notarize
 - Windows：在 Secrets 配置 `CSC_LINK`（`.pfx`）、`CSC_KEY_PASSWORD`
 
-无签名产物会被标记为 "unsigned"，首次运行时系统会警告。详见 [`apps/desktop/PACKAGING.md`](../apps/desktop/PACKAGING.md)。
+无签名产物会被标记为 "unsigned"，首次运行时系统会警告。详见 [`guide/desktop-packaging.md`](./guide/desktop-packaging.md)。
 
 ## 报告问题
 

@@ -29,6 +29,17 @@ export function ProviderDetails({
   const { t } = useTranslation();
   const isServerProvider = provider.serverModels.length > 0;
   const localProfile = provider.localProfile;
+  const committedBaseUrl = localProfile?.baseUrl ?? provider.baseUrl;
+  const [baseUrlDraft, setBaseUrlDraft] = useState(committedBaseUrl);
+  useEffect(() => {
+    setBaseUrlDraft(committedBaseUrl);
+  }, [committedBaseUrl, provider.id]);
+
+  const commitBaseUrl = () => {
+    if (localProfile && baseUrlDraft !== committedBaseUrl) {
+      onPatchLocalProfile({ baseUrl: baseUrlDraft });
+    }
+  };
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -71,11 +82,13 @@ export function ProviderDetails({
             {t("settings.baseUrl", "API endpoint")}
           </span>
           <input
-            value={localProfile?.baseUrl ?? provider.baseUrl}
+            value={baseUrlDraft}
             readOnly={!localProfile}
-            onChange={(event) =>
-              onPatchLocalProfile({ baseUrl: event.target.value })
-            }
+            onChange={(event) => setBaseUrlDraft(event.target.value)}
+            onBlur={commitBaseUrl}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
             className="w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none read-only:bg-muted/30 read-only:text-muted-foreground focus:ring-1 focus:ring-primary"
           />
         </label>
@@ -114,7 +127,7 @@ export function ProviderDetails({
           {provider.serverModels.map((model) => (
             <ProviderModelRow
               key={`server:${model.id}`}
-              provider={provider.id}
+              provider={provider.provider}
               modelId={model.model}
               presetId={model.id}
               source="server"
@@ -123,7 +136,7 @@ export function ProviderDetails({
           {localProfile?.models.map((model) => (
             <ProviderModelRow
               key={model.ref}
-              provider={provider.id}
+              provider={provider.provider}
               modelId={model.modelId}
               presetId={model.ref}
               source="local"

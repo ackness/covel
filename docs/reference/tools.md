@@ -680,7 +680,7 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 工具执行统一经过 `ToolExecutor`：通过注入的 `findTool(name, context)` 解析出 `ToolModule` 后直接调用 `module.execute(args, ctx)` —— 内置工具和插件本地工具都走这条内存内路径，审批、trace、结果 envelope 由 `ToolExecutor` 统一处理。
 
-**执行端授权（2026-07-20 审计 H-02）**：工具白名单不再只是 LLM 广告面。agent loop 把当前 runtime 的精确授权集（`tools.*` 声明的全部名字 + 非 schema runtime 的 `runtime-done` 框架合同工具；`defer` 名单包含在内——延迟只影响广告、不影响授权）随 `ToolCallContext.authorizedToolNames` 传给 executor，`execute` 在解析/审批之前先校验最终工具名（session override 与 `PreToolUse` 替换之后的名字）∈ 授权集，越界返回 `UNAUTHORIZED` 结构化错误。`search-tools` 在 loop 内被拦截、不达 executor。另外 `findTool` 对缺失 context 的调用 fail-closed：无 context 只能解析 builtin，local 工具一律拒绝。
+**执行端授权**：工具白名单同时约束 LLM 广告面和执行面。agent loop 把当前 runtime 的精确授权集（`tools.*` 声明的全部名字 + 非 schema runtime 的 `runtime-done` 框架合同工具；`defer` 名单包含在内——延迟只影响广告、不影响授权）随 `ToolCallContext.authorizedToolNames` 传给 executor，`execute` 在解析/审批之前先校验最终工具名（session override 与 `PreToolUse` 替换之后的名字）∈ 授权集，越界返回 `UNAUTHORIZED` 结构化错误。`search-tools` 在 loop 内被拦截、不达 executor。另外 `findTool` 对缺失 context 的调用 fail-closed：无 context 只能解析 builtin，local 工具一律拒绝。
 
 接口位于 `@covel/tools`：
 
@@ -947,7 +947,7 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
 | createdAt      | string  |      | 创建时间，缺省为提交时间                                                        |
 | mirrorPluginId | string  |      | 可选：同时镜像到该插件的 `plugin_data/<plugin>/characters/<id>`，供插件 UI 订阅 |
 
-### `working_memory.set`（S3-T3）
+### `working_memory.set`
 
 写入 session 级工作记忆。commit handler 把 payload 持久化到 `working_memory` 表，并发出一个名为 `working_memory.changed` 的事件。该事件作为 commit event **直接写入 action stream**（不走 eventBus 转发，故 `COVEL_EVENT_META` 里 `forwardToActionStream: false`），前端 SSE handler 收到后**刻意不渲染**——工作记忆的变化经 `state.changed` 反映到 UI。它必须是 `CovelEvent` 联合成员，否则每次 commit 都会撞上前端的 `assertNeverEvent` 穷尽性守卫。详见 [`protocol.md`](protocol.md)。
 

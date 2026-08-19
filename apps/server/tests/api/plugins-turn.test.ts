@@ -270,10 +270,9 @@ describe("Plugin Routes", () => {
     });
   });
 
-  // PATCH /api/plugins/:id/config tests removed 2026-04-12.
-  // The route was deleted because the underlying sessionScopes Map was never
-  // populated by any production code path. See audits/2026-04-12-backend-webv2-framework-audit
-  // Finding 2. Per-session config now lives in runtime/plugin settings.
+  // This route remains intentionally absent: per-session configuration lives
+  // in runtime/plugin settings, so mounting a parallel sessionScopes-backed
+  // endpoint would create a second source of truth.
   describe("PATCH /api/plugins/:id/config (route removed)", () => {
     it("returns 404 because the route is no longer mounted", async () => {
       const res = await app.request("/api/plugins/cfg-plugin/config", {

@@ -13,15 +13,23 @@
 | 写插件 UI                    | [`plugin-ui-runtime-guidelines.md`](./plugin-ui-runtime-guidelines.md) | [`../reference/ui-panels.md`](../reference/ui-panels.md), [`../reference/ui-components.md`](../reference/ui-components.md) |
 | 测试插件                     | [`plugin-testing.md`](./plugin-testing.md)                             | [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)                                                                           |
 
+## World Authoring
+
+| Goal             | Start here                                   | Reference                                                    |
+| ---------------- | -------------------------------------------- | ------------------------------------------------------------ |
+| 生成世界角色立绘 | [`world-portraits.md`](./world-portraits.md) | [`../reference/world-data.md`](../reference/world-data.md)   |
+| 生成世界场景背景 | [`world-scenes.md`](./world-scenes.md)       | [`../reference/media-store.md`](../reference/media-store.md) |
+
 ## App And Runtime
 
-| Goal                       | Start here                                 | Reference                                                          |
-| -------------------------- | ------------------------------------------ | ------------------------------------------------------------------ |
-| 配置桌面版数据目录和 token | [`desktop-config.md`](./desktop-config.md) | [`../reference/api.md`](../reference/api.md)                       |
-| 配置环境变量               | [`env-registry.md`](./env-registry.md)     | `packages/shared/src/env/registry.ts`                              |
-| 做主题包                   | [`themes.md`](./themes.md)                 | [`../reference/theme-packages.md`](../reference/theme-packages.md) |
-| 写外部 Agent skill         | [`skills.md`](./skills.md)                 | `.claude/skills/`                                                  |
-| 做浏览器 E2E               | [`e2e-testing.md`](./e2e-testing.md)       | [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)                   |
+| Goal                       | Start here                                       | Reference                                                          |
+| -------------------------- | ------------------------------------------------ | ------------------------------------------------------------------ |
+| 配置桌面版数据目录和 token | [`desktop-config.md`](./desktop-config.md)       | [`../reference/api.md`](../reference/api.md)                       |
+| 构建、签名和公证桌面版     | [`desktop-packaging.md`](./desktop-packaging.md) | [`../CONTRIBUTING.md`](../CONTRIBUTING.md)                         |
+| 配置环境变量               | [`env-registry.md`](./env-registry.md)           | `packages/shared/src/env/registry.ts`                              |
+| 做主题包                   | [`themes.md`](./themes.md)                       | [`../reference/theme-packages.md`](../reference/theme-packages.md) |
+| 写外部 Agent skill         | [`skills.md`](./skills.md)                       | `.claude/skills/`                                                  |
+| 做浏览器 E2E               | [`e2e-testing.md`](./e2e-testing.md)             | [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)                   |
 
 ## Writing Rules
 

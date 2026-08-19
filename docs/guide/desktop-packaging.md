@@ -5,7 +5,7 @@ This document describes how to build signed, notarized Covel desktop artifacts. 
 ## One-off prep
 
 1. Install the Node toolchain and dependencies at the repo root (`pnpm install`).
-2. Stage resources: `pnpm --filter @covel/desktop build` (produces `dist/`, `staging/`).
+2. Stage resources: `pnpm --filter @covel/desktop build` (produces `apps/desktop/dist/`, `apps/desktop/staging/`).
 
 Running `pnpm --filter @covel/desktop dist` after that invokes electron-builder.
 
@@ -23,7 +23,7 @@ Running `pnpm --filter @covel/desktop dist` after that invokes electron-builder.
 
 ### Enable notarization
 
-Edit `electron-builder.yml`, change:
+Edit `apps/desktop/electron-builder.yml`, change:
 
 ```yaml
 mac:
@@ -53,7 +53,7 @@ Artifacts land in `release/electron/` as `.dmg` and `.zip`. The current release 
 
 ### Entitlements
 
-`resources/entitlements.mac.plist` is required by the hardened runtime. It allows V8 JIT, Node sidecar spawning (`com.apple.security.cs.allow-dyld-environment-variables`), and loopback networking for the bundled API server. Do not strip entries without understanding why they are needed.
+`apps/desktop/resources/entitlements.mac.plist` is required by the hardened runtime. It allows V8 JIT, Node sidecar spawning (`com.apple.security.cs.allow-dyld-environment-variables`), and loopback networking for the bundled API server. Do not strip entries without understanding why they are needed.
 
 ## Windows
 
@@ -107,9 +107,9 @@ for verification during a CI build but the user-facing `pnpm build:electron`
 still lands on two files:
 
 1. **Phase 1** — the `afterAllArtifactBuild` hook
-   (`scripts/cleanup-artifacts.mjs`) drops only the auto-update metadata
+   (`apps/desktop/scripts/cleanup-artifacts.mjs`) drops only the auto-update metadata
    (`*.blockmap`, `latest-*.yml`, `builder-*.yml`). The `mac-arm64/`
-   unpacked dir survives so `verify-release.mjs` (and any local
+   unpacked dir survives so `apps/desktop/scripts/verify-release.mjs` (and any local
    `codesign`) can inspect `Covel.app/Contents/Resources/...`.
 2. **Phase 2** — `node apps/desktop/scripts/cleanup-artifacts.mjs
 --strip-unpacked`, chained onto the root `build:electron` script
@@ -136,30 +136,30 @@ Get-AuthenticodeSignature release\Covel-Setup-*.exe
 
 ## Auto-update publishing
 
-Auto-update is **off** by default. `electron-builder.yml` ships with
-`publish: null` and `cleanup-artifacts.mjs` strips `latest-*.yml` /
+Auto-update is **off** by default. `apps/desktop/electron-builder.yml` ships with
+`publish: null` and `apps/desktop/scripts/cleanup-artifacts.mjs` strips `latest-*.yml` /
 `*.blockmap`. The intentional output is two files only: the `.dmg`
 installer and the `.zip` containing the `.app`.
 
 To enable auto-update later:
 
 1. Remove (or override to a real provider config) `publish: null` in
-   `electron-builder.yml`.
-2. Update `scripts/cleanup-artifacts.mjs` to keep `latest-*.yml` and
+   `apps/desktop/electron-builder.yml`.
+2. Update `apps/desktop/scripts/cleanup-artifacts.mjs` to keep `latest-*.yml` and
    `*.blockmap` (currently part of the drop list).
 3. Pass `GH_TOKEN` (or the matching provider credential) in CI. The Release
    workflow's `--publish=never` flag will need to flip to `--publish=always`.
 
-In-app update checks are not currently wired up (the earlier `auto-updater.ts`
+In-app update checks are not currently wired up (the earlier `apps/desktop/src/auto-updater.ts`
 module was removed as dead scaffolding). Re-adding them requires an
-`electron-updater` dependency, a `main.ts` startup call, and the `publish`
+`electron-updater` dependency, an `apps/desktop/src/main.ts` startup call, and the `publish`
 config above.
 
 ## Release checklist
 
 - [ ] Bump workspace package versions, including root `package.json` and `apps/desktop/package.json`
 - [ ] Update `docs/CHANGELOG.md` with the target version
-- [ ] Bump `ONBOARDING_VERSION` in `onboarding-wizard.tsx` if the tutorial changed
+- [ ] Bump `ONBOARDING_VERSION` in `apps/web/src/components/onboarding-wizard.tsx` if the tutorial changed
 - [ ] Run `pnpm release:preflight`
 - [ ] Run `pnpm lint` and `pnpm test` green
 - [ ] Run `pnpm --filter @covel/desktop build`

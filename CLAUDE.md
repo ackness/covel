@@ -12,6 +12,8 @@ Deployable as Web or Electron (desktop). Production desktop builds should use `p
 
 Before changing anything non-trivial, consult the matching reference doc — they are the source of truth, CLAUDE.md only points at them.
 
+Keep `docs/` for durable documentation written for users or developers: guides, contracts, architecture, contribution instructions, and maintained project references. Put task plans, audits, implementation logs, temporary analysis, and handoff notes under `devs/docs/`; development-process artifacts must not be added to `docs/`. Do not create top-level `audits/`, `plans/`, `context.md`, or `progress.md` artifacts.
+
 | Topic                                                | Authoritative doc                                                                                                       |
 | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | Project intro, quick start, roadmap                  | [README.md](./README.md) · [docs/README.md](./docs/README.md)                                                           |
@@ -36,7 +38,7 @@ Before changing anything non-trivial, consult the matching reference doc — the
 | E2E plugin verify harness                            | [docs/guide/e2e-plugin-verify.md](./docs/guide/e2e-plugin-verify.md)                                                    |
 | Environment variable registry                        | [docs/guide/env-registry.md](./docs/guide/env-registry.md)                                                              |
 | Desktop config (paths, sidecar, safeStorage)         | [docs/guide/desktop-config.md](./docs/guide/desktop-config.md)                                                          |
-| Desktop packaging (Electron), signing, notarisation  | [apps/desktop/PACKAGING.md](./apps/desktop/PACKAGING.md)                                                                |
+| Desktop packaging (Electron), signing, notarisation  | [docs/guide/desktop-packaging.md](./docs/guide/desktop-packaging.md)                                                    |
 | Contributing & release workflow                      | [docs/CONTRIBUTING.md](./docs/CONTRIBUTING.md)                                                                          |
 
 ## Commands

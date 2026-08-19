@@ -36,7 +36,7 @@ Object.defineProperty(globalThis, "localStorage", {
 });
 
 // Late import so the settings store sees the mocked localStorage.
-const { initSettings } = await import("@/settings/store");
+const { getSettings, initSettings } = await import("@/settings/store");
 const {
   getCustomPresets,
   getProviderPriceMultiplier,
@@ -47,7 +47,7 @@ const {
   setProviderPriceMultipliers,
   setSlotConfig,
 } = await import("../api.js");
-const { buildSlotConfigHeaderInternal } =
+const { buildProviderKeysHeader, buildSlotConfigHeaderInternal } =
   await import("../api/model-settings.js");
 
 function readSettingsBlob(): Record<string, unknown> {
@@ -186,6 +186,93 @@ describe("custom preset secret channel", () => {
 
     const keys = readKeysBlob();
     expect(keys["preset:custom_x1"]).toBeUndefined();
+  });
+
+  it("clears only preset secrets no longer referenced by provider profiles", async () => {
+    setCustomPresets([
+      {
+        id: "model_keep",
+        name: "Keep",
+        provider: "openai",
+        baseUrl: "https://openai.example/v1",
+        model: "gpt-5",
+        apiKey: "sk-keep",
+      },
+      {
+        id: "model_remove",
+        name: "Remove Model",
+        provider: "openai",
+        baseUrl: "https://openai.example/v1",
+        model: "gpt-4.1",
+        apiKey: "sk-remove-model",
+      },
+      {
+        id: "provider_remove",
+        name: "Remove Provider",
+        provider: "anthropic",
+        baseUrl: "https://anthropic.example/v1",
+        model: "claude-sonnet-4-6",
+        apiKey: "sk-remove-provider",
+      },
+    ]);
+    await new Promise((r) => setTimeout(r, 0));
+
+    setProviderProfiles([
+      {
+        id: "openai",
+        name: "OpenAI",
+        baseUrl: "https://openai.example/v1",
+        models: [{ ref: "model_keep", modelId: "gpt-5" }],
+      },
+    ]);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const keys = readKeysBlob();
+    expect(keys["preset:model_keep"]).toBe("sk-keep");
+    expect(keys["preset:model_remove"]).toBeUndefined();
+    expect(keys["preset:provider_remove"]).toBeUndefined();
+  });
+
+  it("routes distinct legacy connection keys through distinct provider namespaces", async () => {
+    setCustomPresets([
+      {
+        id: "official_model",
+        name: "Official",
+        provider: "openai",
+        baseUrl: "https://api.openai.com/v1",
+        model: "gpt-5",
+        protocol: "openai-responses-v1",
+        apiKey: "sk-official",
+      },
+      {
+        id: "proxy_model",
+        name: "Proxy",
+        provider: "openai",
+        baseUrl: "https://proxy.example/v1",
+        model: "gpt-4.1",
+        protocol: "openai-chat-v1",
+        apiKey: "sk-proxy",
+      },
+    ]);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const presets = getCustomPresets();
+    expect(new Set(presets.map((preset) => preset.provider)).size).toBe(2);
+
+    const encoded = buildProviderKeysHeader()["X-Provider-Keys"];
+    expect(encoded).toBeTruthy();
+    const providerKeys = JSON.parse(atob(encoded!)) as Record<string, string>;
+    expect(providerKeys[presets[0]!.provider]).toBe("sk-official");
+    expect(providerKeys[presets[1]!.provider]).toBe("sk-proxy");
+
+    await getSettings().set(`keys.${presets[1]!.provider}`, "sk-proxy-new");
+
+    const updatedEncoded = buildProviderKeysHeader()["X-Provider-Keys"];
+    const updatedProviderKeys = JSON.parse(atob(updatedEncoded!)) as Record<
+      string,
+      string
+    >;
+    expect(updatedProviderKeys[presets[1]!.provider]).toBe("sk-proxy-new");
   });
 
   it("migrates legacy inline apiKey to the secrets channel on first read", async () => {

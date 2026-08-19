@@ -321,7 +321,7 @@ sources:
 
 preflight 要求：`character-presence` 的 `assets` / `presence` namespace 已声明 `acceptsWorldData: true`（builtin 默认满足）。要让立绘数据实际生效，把 `character-presence` 放进世界的 `recommendedPlugins`——若玩家取消勾选，presence source 跳过、媒体照常导入但索引写入跳过（warning，不阻断建会话）。媒体受 v1 限制：单文件 ≤ 20 MB、单 source ≤ 100 MB、扩展名 allowlist（含 `.png` / `.webp`）。
 
-实际范例见 `worlds/mistport` 与 `worlds/haruka-academy`（`data/world.data.yaml` + `media/`），提示词与生成流程见 `worlds/PORTRAITS.md`。
+实际范例见 `worlds/mistport` 与 `worlds/haruka-academy`（`data/world.data.yaml` + `media/`），提示词与生成流程见 [角色立绘生成指南](../guide/world-portraits.md)。
 
 ## Scene Backgrounds
 
@@ -363,7 +363,7 @@ sources:
 
 **未出图时的空 registry 兜底**：`media/scenes.registry.json` 不存在会导致 world-data 校验失败（source 引用了不存在的文件）。作者还没准备场景图时，对空的 `media/scenes/` 目录跑一次 `emit-scenes.mjs` 即可产出合法的空 registry（`{schemaVersion: 1, registryId: "scene-registry", style: {...}, scenes: []}`），先提交进世界包占位；scene-stage 侧空 `scenes[]` 时一律走"未命中注册表"分支（`autoGenerateScenes` 门控 → 增量生成或 `source: "none"`），不是错误状态。出图后重跑 `emit-scenes.mjs` 覆盖即可，无需改 world.data.yaml。
 
-清单润色规范、参数表、日/夜缺图回退语义、作者四步工作流见 [worlds/SCENES.md](../../worlds/SCENES.md)。
+清单润色规范、参数表、日/夜缺图回退语义、作者四步工作流见 [场景背景生成指南](../guide/world-scenes.md)。
 
 ## Third-Party Extension
 

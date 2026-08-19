@@ -101,7 +101,7 @@ Covel releases are driven by Git tags.
 - macOS: configure `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` in repository Secrets, and enable notarize in `apps/desktop/electron-builder.yml`
 - Windows: configure `CSC_LINK` (`.pfx`) and `CSC_KEY_PASSWORD` in Secrets
 
-Unsigned artifacts are marked as such, and operating systems will warn on first run. See [`apps/desktop/PACKAGING.md`](../apps/desktop/PACKAGING.md).
+Unsigned artifacts are marked as such, and operating systems will warn on first run. See [`guide/desktop-packaging.md`](./guide/desktop-packaging.md).
 
 ## Reporting issues
 

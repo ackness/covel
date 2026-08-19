@@ -136,6 +136,184 @@ describe("openai-chat adapter — reasoning_content", () => {
     ).toBe(true);
   });
 
+  it.each([
+    ["empty string", ""],
+    ["null", null],
+  ])(
+    "serializes %s assistant content as a non-null value on tool-call turns",
+    async (_label, content) => {
+      const captured = mockOpenAiChatResponse({
+        choices: [
+          {
+            message: { role: "assistant", content: "ok" },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      });
+
+      await createOpenAiChatAdapter().generateText(
+        { baseUrl: "https://api.deepseek.com", apiKey: "k" },
+        {
+          model: "deepseek-v4-flash",
+          messages: [
+            {
+              role: "assistant",
+              content,
+              reasoningContent: "prior chain of thought",
+              toolCalls: [{ id: "call_1", name: "noop", arguments: "{}" }],
+            },
+            { role: "tool", content: "{}", toolCallId: "call_1" },
+          ],
+        },
+        {
+          profile: { provider: "deepseek" } as never,
+          preset: {
+            provider: "deepseek",
+            model: "deepseek-v4-flash",
+          } as never,
+          mode: "text",
+        },
+      );
+
+      const body = captured[0]?.body as {
+        messages: Array<Record<string, unknown>>;
+      };
+      expect(body.messages[0]?.content).toBe("");
+    },
+  );
+
+  it("omits tool_choice for DeepSeek v4 thinking requests", async () => {
+    const captured = mockOpenAiChatResponse({
+      choices: [
+        {
+          message: { role: "assistant", content: "ok" },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    await createOpenAiChatAdapter().generateText(
+      { baseUrl: "https://api.deepseek.com", apiKey: "k" },
+      {
+        model: "deepseek-v4-flash",
+        messages: [{ role: "user", content: "hi" }],
+        tools: [
+          {
+            type: "function",
+            function: { name: "noop", parameters: { type: "object" } },
+          },
+        ],
+        providerRequestMetadata: {
+          parameterOverrides: { reasoningEffort: "high" },
+        },
+      },
+      {
+        profile: { provider: "deepseek" } as never,
+        preset: {
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+        } as never,
+        mode: "text",
+      },
+    );
+
+    const body = captured[0]?.body as Record<string, unknown>;
+    expect(body.tools).toHaveLength(1);
+    expect(body.thinking).toEqual({ type: "enabled" });
+    expect(body).not.toHaveProperty("tool_choice");
+  });
+
+  it("keeps tool_choice for DeepSeek v4 non-thinking requests", async () => {
+    const captured = mockOpenAiChatResponse({
+      choices: [
+        {
+          message: { role: "assistant", content: "ok" },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+
+    await createOpenAiChatAdapter().generateText(
+      { baseUrl: "https://api.deepseek.com", apiKey: "k" },
+      {
+        model: "deepseek-v4-flash",
+        messages: [{ role: "user", content: "hi" }],
+        tools: [
+          {
+            type: "function",
+            function: { name: "noop", parameters: { type: "object" } },
+          },
+        ],
+        providerRequestMetadata: {
+          parameterOverrides: { reasoningEffort: "disabled" },
+        },
+      },
+      {
+        profile: { provider: "deepseek" } as never,
+        preset: {
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+        } as never,
+        mode: "text",
+      },
+    );
+
+    const body = captured[0]?.body as Record<string, unknown>;
+    expect(body.thinking).toEqual({ type: "disabled" });
+    expect(body.tool_choice).toBe("auto");
+  });
+
+  it("omits tool_choice for streaming DeepSeek v4 thinking requests", async () => {
+    let requestBody: Record<string, unknown> = {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init?: RequestInit) => {
+        requestBody = JSON.parse(String(init?.body));
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          headers: new Headers({ "content-type": "text/event-stream" }),
+          body: ssePayload([{ choices: [{ finish_reason: "stop" }] }]),
+        } as Response);
+      }),
+    );
+
+    const events = createOpenAiChatAdapter().streamText(
+      { baseUrl: "https://api.deepseek.com", apiKey: "k" },
+      {
+        model: "deepseek-v4-flash",
+        messages: [{ role: "user", content: "hi" }],
+        tools: [
+          {
+            type: "function",
+            function: { name: "noop", parameters: { type: "object" } },
+          },
+        ],
+        providerRequestMetadata: {
+          parameterOverrides: { reasoningEffort: "max" },
+        },
+      },
+      {
+        profile: { provider: "deepseek" } as never,
+        preset: {
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+        } as never,
+        mode: "stream",
+      },
+    );
+    for await (const _event of events) {
+      // Drain the stream so the request is issued.
+    }
+
+    expect(requestBody.tools).toHaveLength(1);
+    expect(requestBody.thinking).toEqual({ type: "enabled" });
+    expect(requestBody).not.toHaveProperty("tool_choice");
+  });
+
   it("accumulates stream reasoning deltas and emits them on `done`", async () => {
     vi.stubGlobal(
       "fetch",

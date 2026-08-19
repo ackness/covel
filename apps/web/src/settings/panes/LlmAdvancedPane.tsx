@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { useSession } from "@/stores/session-store.js";
 import { ReasoningEffortCard } from "./llm-reasoning-effort-card.js";
+import { pruneInvalidReasoningEffortOverride } from "./llm-reasoning-effort.js";
 
 const DEFAULT_FALLBACK_SLOTS = [
   "story",
@@ -96,6 +97,17 @@ export function effectiveParameterValue(
   defaultValue: number,
 ): number {
   return override ?? defaultValue;
+}
+
+export function parseNumericParameterOverride(
+  rawValue: string,
+  min: number,
+  max: number,
+): number | undefined {
+  if (!rawValue.trim()) return undefined;
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) return undefined;
+  return Math.min(max, Math.max(min, value));
 }
 
 export function LlmAdvancedPane() {
@@ -183,6 +195,15 @@ export function LlmAdvancedPane() {
     else next[selectedSlot] = nextSlot;
     commit(next);
   };
+
+  useEffect(() => {
+    const next = pruneInvalidReasoningEffortOverride(
+      paramOverrides,
+      selectedSlot,
+      reasoningProfile,
+    );
+    if (next !== paramOverrides) commit(next);
+  }, [reasoningProfile, selectedSlot, current.reasoningEffort]);
 
   const resetSlot = () => {
     const next = { ...paramOverrides };
@@ -333,9 +354,13 @@ function ParameterCard({
           step={definition.step}
           value={override ?? effective}
           onChange={(event) => {
-            const value = Number(event.target.value);
-            if (!Number.isFinite(value)) return;
-            onChange(Math.min(definition.max, Math.max(definition.min, value)));
+            onChange(
+              parseNumericParameterOverride(
+                event.target.value,
+                definition.min,
+                definition.max,
+              ),
+            );
           }}
           className="w-20 border border-border bg-background px-2 py-1.5 text-right font-mono text-xs tabular-nums outline-none focus:ring-1 focus:ring-primary"
         />
