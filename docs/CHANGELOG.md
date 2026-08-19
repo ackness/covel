@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file. Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.26] - 2026-08-19
+
+This release rebuilds provider and model configuration around explicit connection profiles, capability-aware reasoning controls, and safer provider-specific request handling.
+
+### Added
+
+- **Provider connections are first-class settings.** Each connection has its own stable id, provider family, protocol, base URL, API-key namespace, and model list. Multiple proxies or accounts for one provider can coexist without sharing credentials, while existing presets migrate automatically.
+- **Reasoning effort follows model capabilities.** Settings expose only the effort values supported by the selected model and translate them into the provider-specific request fields used by OpenAI, Anthropic, DeepSeek, and Qwen-compatible endpoints.
+
+### Changed
+
+- **LLM settings now separate connections, models, slots, and advanced request options.** Provider catalogs normalize ids consistently, slot bindings clear stale reasoning overrides when their model changes, numeric fields can be cleared, and base URLs commit once on blur or Enter.
+- **Project documentation is organized by audience and lifetime.** Stable user and developer guides live under `docs/`; audits, implementation plans, temporary analysis, and handoff notes live under `devs/docs/`. Desktop packaging and world-media generation now have indexed guides, and the architecture section carries the maintained technical-debt ledger.
+
+### Fixed
+
+- **Thinking models no longer emit incompatible tool-call payloads.** DeepSeek V4 thinking requests omit `tool_choice`, tool-call assistant messages retain non-null content, and streaming and non-streaming paths share the same compatibility rules.
+- **Reasoning controls reject unsupported combinations before they reach providers.** Claude 4.0 no longer receives newer Anthropic effort fields, `gpt-5-pro` exposes only `high`, and Qwen thinking-only models cannot be forced into disabled thinking.
+- **Provider migration preserves independent credentials and model references.** Canonical provider ids no longer collapse distinct connections, request routing uses the connection namespace, legacy family-level keys remain available as a fallback, and orphaned preset secrets are cleaned up.
+
 ## [0.0.25] - 2026-08-11
 
 This release hardens the complete default game flow, from choosing a world and running setup plugins through narrative execution, post-turn plugins, persistence, and client recovery.
