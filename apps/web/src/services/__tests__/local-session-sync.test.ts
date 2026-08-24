@@ -8,17 +8,14 @@ const api = vi.hoisted(() => ({
   createSession: vi.fn(),
   deleteSession: vi.fn(),
   syncMessages: vi.fn(),
+  saveStateSnapshot: vi.fn(),
 }));
 
-vi.mock("../api.js", () => api);
-vi.mock("../api/request.js", () => ({
-  isNotFound: () => true,
-}));
-vi.mock("../app-kv-store.js", () => ({
+const appKv = vi.hoisted(() => ({
   getStatePatches: vi.fn(async () => null),
   saveStatePatches: vi.fn(async () => {}),
   removeStatePatches: vi.fn(async () => {}),
-  getStateSnapshot: vi.fn(async () => null),
+  getStateSnapshot: vi.fn(async () => null as Record<string, unknown> | null),
   saveStateSnapshot: vi.fn(async () => {}),
   removeStateSnapshot: vi.fn(async () => {}),
   getSubmittedBlocks: vi.fn(async () => null),
@@ -28,6 +25,12 @@ vi.mock("../app-kv-store.js", () => ({
   saveWorldOverlay: vi.fn(async () => {}),
   migrateLocalStorageToIdb: vi.fn(async () => {}),
 }));
+
+vi.mock("../api.js", () => api);
+vi.mock("../api/request.js", () => ({
+  isNotFound: () => true,
+}));
+vi.mock("../app-kv-store.js", () => appKv);
 
 const { LocalDataService } = await import("../data-service/local.js");
 
@@ -48,6 +51,8 @@ beforeEach(() => {
   api.createSession.mockResolvedValue({ id: "sess-1" });
   api.deleteSession.mockResolvedValue(undefined);
   api.syncMessages.mockResolvedValue(undefined);
+  api.saveStateSnapshot.mockResolvedValue(undefined);
+  appKv.getStateSnapshot.mockResolvedValue(null);
 });
 
 describe("LocalDataService session sync", () => {
@@ -141,6 +146,39 @@ describe("LocalDataService session sync", () => {
       [],
       "en-US",
     );
+  });
+
+  it("keeps legacy snapshots local instead of calling the unsupported server endpoint", async () => {
+    const store = createMemoryStore();
+    const now = new Date().toISOString();
+    await store.upsertWorld({
+      id: "world-1",
+      name: "World",
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.createSession({
+      id: "sess-1",
+      worldId: "world-1",
+      status: "active",
+      turnCount: 0,
+      preGameCompleted: [],
+      activePlugins: [],
+      locale: "en-US",
+      createdAt: now,
+      updatedAt: now,
+    });
+    appKv.getStateSnapshot.mockResolvedValueOnce({ state: { hp: 100 } });
+    const service = withStore(store);
+
+    await service.syncToServer("sess-1");
+
+    expect(api.saveStateSnapshot).not.toHaveBeenCalled();
+    expect(appKv.getStateSnapshot).not.toHaveBeenCalled();
+    await expect(service.loadStateSnapshot("sess-1")).resolves.toEqual({
+      state: { hp: 100 },
+    });
   });
 
   it("deletes both the local session and its server mirror", async () => {

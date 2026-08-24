@@ -466,11 +466,9 @@ export class LocalDataService implements DataService {
       );
     }
 
-    // Upload state snapshot so the server kernel can rehydrate game state
-    const snapshot = await this.loadStateSnapshot(session.id);
-    if (snapshot) {
-      await api.saveStateSnapshot(serverSessionId, snapshot);
-    }
+    // Legacy snapshots stay in IDB for local fallback. The server reconstructs
+    // authoritative state from committed turn/domain records and intentionally
+    // does not implement snapshot upload.
   }
 
   async saveExecutionSteps(sessionId: string, steps: unknown[]): Promise<void> {
