@@ -129,16 +129,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const eventDirectory = c.get("eventDirectory");
     const prepareToolsForSession = c.get("prepareToolsForSession");
 
-    // Activate the session's plugins in the registry — idempotent but
-    // required after a server restart or when this is the first request
-    // for this session.
+    // Reconcile the process-local registry from the persisted session
+    // snapshot. Besides restart recovery, this removes stale activations
+    // after a plugin is disabled through another request or server instance.
     const sessionPlugins = session.activePlugins as
       readonly string[] | undefined;
-    if (sessionPlugins) {
-      for (const pid of sessionPlugins) {
-        pluginRegistry.activate(pid, sessionId);
-      }
-    }
+    pluginRegistry.syncSessionActivations(sessionId, sessionPlugins ?? []);
 
     const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
     const target = activeRuntimes.find((rt) => rt.name === body.runtimeId);

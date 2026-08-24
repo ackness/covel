@@ -81,6 +81,9 @@ export interface PluginRegistry {
   /** Deactivate a plugin for a session. Returns false if pluginId is not registered. */
   deactivate(pluginId: string, sessionId: string): boolean;
 
+  /** Reconcile a session's in-memory activations with a complete persisted snapshot. */
+  syncSessionActivations(sessionId: string, pluginIds: readonly string[]): void;
+
   /** Drop every in-memory activation owned by a deleted session. */
   clearSession(sessionId: string): void;
 
@@ -174,6 +177,36 @@ export function createPluginRegistry(
       emit({ type: "plugin-deactivated", pluginId, sessionId });
       emitToEventBus("plugin.deactivated", sessionId, { pluginId, sessionId });
       return true;
+    },
+
+    syncSessionActivations(
+      sessionId: string,
+      pluginIds: readonly string[],
+    ): void {
+      const current = sessionActivations.get(sessionId) ?? new Set<string>();
+      const desired = new Set(
+        pluginIds.filter((pluginId) => entries.has(pluginId)),
+      );
+
+      for (const pluginId of current) {
+        if (desired.has(pluginId)) continue;
+        emit({ type: "plugin-deactivated", pluginId, sessionId });
+        emitToEventBus("plugin.deactivated", sessionId, {
+          pluginId,
+          sessionId,
+        });
+      }
+      for (const pluginId of desired) {
+        if (current.has(pluginId)) continue;
+        emit({ type: "plugin-activated", pluginId, sessionId });
+        emitToEventBus("plugin.activated", sessionId, { pluginId, sessionId });
+      }
+
+      if (desired.size === 0) {
+        sessionActivations.delete(sessionId);
+      } else {
+        sessionActivations.set(sessionId, desired);
+      }
     },
 
     clearSession(sessionId: string): void {

@@ -260,6 +260,32 @@ describe("PluginRegistry", () => {
     });
   });
 
+  describe("syncSessionActivations", () => {
+    it("replaces stale activations without affecting other sessions", () => {
+      registry.register(
+        makeEntry("alpha", {
+          manifest: makeParsedPluginMd("alpha/runtime", 500),
+        }),
+      );
+      registry.register(
+        makeEntry("beta", {
+          manifest: makeParsedPluginMd("beta/runtime", 600),
+        }),
+      );
+      registry.activate("alpha", "session-1");
+      registry.activate("alpha", "session-2");
+
+      registry.syncSessionActivations("session-1", ["beta", "missing"]);
+
+      expect(
+        registry.getActiveRuntimes("session-1").map((runtime) => runtime.name),
+      ).toEqual(["beta/runtime"]);
+      expect(
+        registry.getActiveRuntimes("session-2").map((runtime) => runtime.name),
+      ).toEqual(["alpha/runtime"]);
+    });
+  });
+
   describe("onChange fires on register", () => {
     it("should notify handler with plugin-registered event", () => {
       const handler = vi.fn<(event: RegistryChangeEvent) => void>();

@@ -35,24 +35,18 @@ export const pluginDataRoutes = new Hono<Env>();
 function validatePluginAccess(
   registry: PluginRegistry,
   pluginId: string,
-  sessionId: string,
   requireActive: boolean,
+  activePluginIds: readonly string[] = [],
 ): { error: string; status: 403 | 404 } | null {
   const entry = registry.get(pluginId);
   if (!entry) {
     return { error: `Unknown plugin: ${pluginId}`, status: 404 };
   }
-  if (requireActive) {
-    const activeRuntimes = registry.getActiveRuntimes(sessionId);
-    const isActive = activeRuntimes.some(
-      (rt) => rt.name === pluginId || rt.name.startsWith(pluginId + "/"),
-    );
-    if (!isActive) {
-      return {
-        error: `Plugin "${pluginId}" is not active in this session`,
-        status: 403,
-      };
-    }
+  if (requireActive && !activePluginIds.includes(pluginId)) {
+    return {
+      error: `Plugin "${pluginId}" is not active in this session`,
+      status: 403,
+    };
   }
   return null;
 }
@@ -87,7 +81,7 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId/_index", async (c) => {
   if (!guard.ok) return guard.response;
   const pluginId = c.req.param("pluginId");
 
-  const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
+  const accessErr = validatePluginAccess(registry, pluginId, false);
   if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
   const records = await store.listPluginData(sessionId, pluginId);
@@ -109,7 +103,7 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId/:namespace", async (c) => {
   const namespace = c.req.param("namespace");
 
   // Read: only require the plugin to be registered (not necessarily active)
-  const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
+  const accessErr = validatePluginAccess(registry, pluginId, false);
   if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
   const records = await store.listPluginData(sessionId, pluginId, namespace);
@@ -136,12 +130,7 @@ pluginDataRoutes.get(
     const namespace = c.req.param("namespace");
     const key = c.req.param("key");
 
-    const accessErr = validatePluginAccess(
-      registry,
-      pluginId,
-      sessionId,
-      false,
-    );
+    const accessErr = validatePluginAccess(registry, pluginId, false);
     if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
     const record = await store.getPluginData(
@@ -176,7 +165,12 @@ pluginDataRoutes.put(
     const key = c.req.param("key");
 
     // Write: require the plugin to be active in this session
-    const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
+    const accessErr = validatePluginAccess(
+      registry,
+      pluginId,
+      true,
+      guard.session.activePlugins ?? [],
+    );
     if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
     const reservedErr = reservedPluginDataNamespaceError(namespace);
@@ -233,7 +227,12 @@ pluginDataRoutes.delete(
     const key = c.req.param("key");
 
     // Write: require the plugin to be active in this session
-    const accessErr = validatePluginAccess(registry, pluginId, sessionId, true);
+    const accessErr = validatePluginAccess(
+      registry,
+      pluginId,
+      true,
+      guard.session.activePlugins ?? [],
+    );
     if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
     const reservedErr = reservedPluginDataNamespaceError(namespace);
@@ -255,7 +254,7 @@ pluginDataRoutes.get("/:id/plugin-data/:pluginId", async (c) => {
   if (!guard.ok) return guard.response;
   const pluginId = c.req.param("pluginId");
 
-  const accessErr = validatePluginAccess(registry, pluginId, sessionId, false);
+  const accessErr = validatePluginAccess(registry, pluginId, false);
   if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
 
   const records = await store.listPluginData(sessionId, pluginId);

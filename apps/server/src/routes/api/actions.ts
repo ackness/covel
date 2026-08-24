@@ -217,8 +217,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     });
   }
 
-  // Ensure session's plugins are activated in the registry (idempotent, needed
-  // after server restart).
+  // Reconcile the process-local registry from the persisted session snapshot.
+  // This is needed after restart and also removes plugins disabled by another
+  // request or server instance.
   //
   // A `start_session` with an empty plugin set used to activate EVERY
   // registered plugin and persist that — including community plugins the
@@ -239,11 +240,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       400,
     );
   }
-  if (sessionPlugins) {
-    for (const pid of sessionPlugins) {
-      pluginRegistry.activate(pid, sessionId);
-    }
-  }
+  pluginRegistry.syncSessionActivations(sessionId, sessionPlugins ?? []);
 
   // Get active runtimes for this session (sorted by priority)
   const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);

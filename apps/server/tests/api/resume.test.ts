@@ -76,6 +76,7 @@ async function createSession(store: DataStore, sessionId = "sess-1") {
     status: "active",
     turnCount: 1,
     preGameCompleted: [],
+    activePlugins: ["test-plugin"],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -218,11 +219,10 @@ describe("Resume Routes", () => {
       expect(body.error).toMatch(/X-Provider-Keys/);
     });
 
-    it("scopes the resumed plugin's own hooks when it was inactive at snapshot time (review M2)", async () => {
-      // The plugin is registered but never activated for the session, so the
-      // resume route activates it on demand (resume.ts ~L189-204). Its own
-      // hooks must therefore be in scope. Before the fix, activePluginIds was
-      // built from the pre-activation snapshot and silently filtered them out.
+    it("restores persisted plugin activations before scoping resume hooks", async () => {
+      // The plugin is persisted on the session but not yet activated in this
+      // fresh process-local registry. Resume must restore it before building
+      // the hook scope.
       const hookPipeline = createHookPipeline();
       const preToolUse = vi.fn().mockResolvedValue({ action: "continue" });
       hookPipeline.register({
@@ -275,6 +275,29 @@ describe("Resume Routes", () => {
       expect(res.status).toBe(200);
       // The resumed plugin's own PreToolUse hook fired — it was in hook scope.
       expect(preToolUse).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not reactivate a plugin disabled after suspension", async () => {
+      await createSuspension(store);
+      await store.updateSession("sess-1", { activePlugins: [] });
+      const deps = makeDefaultDeps(store);
+      deps.pluginRegistry.activate("test-plugin", "sess-1");
+      const app = createTestApp(deps);
+
+      const res = await app.request("/api/sessions/sess-1/resume", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Provider-Keys": "dGVzdA==",
+        },
+        body: JSON.stringify({
+          suspensionId: "susp-1",
+          data: { name: "Alice" },
+        }),
+      });
+
+      expect(res.status).toBe(404);
+      expect(deps.pluginRegistry.getActiveRuntimes("sess-1")).toEqual([]);
     });
 
     it("returns 400 when body is not valid JSON", async () => {

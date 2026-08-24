@@ -124,6 +124,21 @@ describe("Plugin Data REST API routes", () => {
     });
   });
 
+  it("authorizes writes from persisted activations after a server restart", async () => {
+    registry.clearSession(sessionId);
+
+    const res = await app.request(
+      `/api/sessions/${sessionId}/plugin-data/${pluginId}/settings/theme`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: "dark" }),
+      },
+    );
+
+    expect(res.status).toBe(200);
+  });
+
   it("DELETE removes a value", async () => {
     await store.setPluginData({
       id: "pd-1",

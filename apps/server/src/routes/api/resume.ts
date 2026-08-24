@@ -157,6 +157,10 @@ resumeRoutes.post("/:id/resume", async (c) => {
   // Verify session exists
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
+  pluginRegistry.syncSessionActivations(
+    sessionId,
+    guard.session.activePlugins ?? [],
+  );
 
   // Load suspension — first pass is a cheap sanity read; the real claim
   // happens atomically below via `claimSuspension` to prevent double-resume
@@ -185,28 +189,13 @@ resumeRoutes.post("/:id/resume", async (c) => {
     );
   }
 
-  // Find the runtime manifest — first try active runtimes, then global registry
+  // Find the runtime only within the session's persisted active plugin set.
+  // A suspension must not silently reactivate a plugin disabled since the
+  // original turn.
   const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
-  let effectiveManifest: RuntimeManifest | undefined = activeRuntimes.find(
+  const effectiveManifest: RuntimeManifest | undefined = activeRuntimes.find(
     (rt) => rt.name === suspension.runtimeId,
   );
-
-  if (!effectiveManifest) {
-    // The plugin may exist in the registry but not be activated for this session.
-    // Search across all registered entries.
-    for (const [, entry] of pluginRegistry.getAll()) {
-      const manifests =
-        entry.manifests ?? (entry.manifest ? [entry.manifest] : []);
-      const found = manifests.find(
-        (m) => m.manifest.name === suspension.runtimeId,
-      );
-      if (found) {
-        pluginRegistry.activate(entry.id, sessionId);
-        effectiveManifest = found.manifest;
-        break;
-      }
-    }
-  }
 
   if (!effectiveManifest) {
     return c.json(
@@ -258,14 +247,8 @@ resumeRoutes.post("/:id/resume", async (c) => {
 
   // Resume + commit fire hooks outside executeTurn — establish the session
   // hook scope so a plugin's hooks only run for sessions where it is active
-  // (see hooks/hook-scope.ts). Include the resumed runtime's own pluginId:
-  // `activeRuntimes` was snapshotted (L184) before the on-demand `activate()`
-  // above, so a runtime that was inactive at snapshot time — then activated to
-  // be resumed — would otherwise have its own hooks filtered out of scope.
-  const activePluginIds = new Set([
-    ...activeRuntimes.map((r) => r.pluginId),
-    effectiveManifest.pluginId,
-  ]);
+  // (see hooks/hook-scope.ts).
+  const activePluginIds = new Set(activeRuntimes.map((r) => r.pluginId));
 
   // NOTE: the resume path does not currently apply per-plugin userSettings.
   // The resumed runtime continues from a pre-rendered prompt (so `{{ userSettings.* }}`

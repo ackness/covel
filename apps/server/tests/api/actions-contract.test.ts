@@ -279,6 +279,28 @@ describe("POST /api/actions — action type contract ", () => {
     expect(ranRuntimeIds).not.toContain(NARRATOR_ID);
   });
 
+  it("reconciles stale in-memory activations with the persisted session", async () => {
+    registry.activate(NARRATOR_ID, sessionId);
+    await store.updateSession(sessionId, { activePlugins: [SIDE_ID] });
+
+    const res = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-reconcile-plugins",
+        type: "retry_runtime",
+        sessionId,
+        payload: { runtimeId: SIDE_ID },
+      }),
+    });
+    expect(res.status).toBe(200);
+    await drainStream(res);
+
+    expect(
+      registry.getActiveRuntimes(sessionId).map((runtime) => runtime.pluginId),
+    ).toEqual([SIDE_ID]);
+  });
+
   it("scoped retry_runtime does not advance turnCount", async () => {
     // Rerunning one runtime over the same logical turn is not a new player
     // turn. It used to be stamped origin=player and committed, so retrying
