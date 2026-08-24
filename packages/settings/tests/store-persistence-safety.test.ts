@@ -92,6 +92,52 @@ describe("set() rollback on a failed write", () => {
 });
 
 describe("failed hydration", () => {
+  it("refuses writes before init without touching persisted data", async () => {
+    const adapter = createMemoryAdapter({ "ui.locale": "en-US" });
+    const store = new SettingsStore(adapter);
+    store.register(localeEntry);
+
+    expect(store.isHydrated()).toBe(false);
+    await expect(store.set("ui.locale", "zh-CN")).rejects.toThrow(
+      /not initialized/,
+    );
+    await expect(store.clearAll()).rejects.toThrow(/not initialized/);
+    expect(adapter.readEntries()).toEqual({ "ui.locale": "en-US" });
+  });
+
+  it("refuses writes while init is still loading", async () => {
+    let releaseLoad!: () => void;
+    const loadGate = new Promise<void>((resolve) => {
+      releaseLoad = resolve;
+    });
+    let markLoadStarted!: () => void;
+    const loadStarted = new Promise<void>((resolve) => {
+      markLoadStarted = resolve;
+    });
+    const adapter = createMemoryAdapter({ "ui.locale": "en-US" });
+    vi.spyOn(adapter, "load").mockImplementation(async () => {
+      markLoadStarted();
+      await loadGate;
+      return { "ui.locale": "en-US" };
+    });
+    const store = new SettingsStore(adapter);
+    store.register(localeEntry);
+
+    const initializing = store.init();
+    await loadStarted;
+    expect(store.isHydrated()).toBe(false);
+    await expect(store.set("ui.locale", "zh-CN")).rejects.toThrow(
+      /not initialized/,
+    );
+    expect(adapter.readEntries()).toEqual({ "ui.locale": "en-US" });
+
+    releaseLoad();
+    await initializing;
+    expect(store.isHydrated()).toBe(true);
+    await store.set("ui.locale", "zh-CN");
+    expect(adapter.readEntries()).toEqual({ "ui.locale": "zh-CN" });
+  });
+
   it("boots on defaults but refuses to write, leaving storage intact", async () => {
     const adapter = failingLoadAdapter({
       "ui.locale": "en-US",

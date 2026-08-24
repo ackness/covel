@@ -42,6 +42,7 @@ export class SettingsStore implements SettingsStoreApi {
   private readonly persistRevisions = { values: 0, secrets: 0 };
   private loaded: Promise<void>;
   private loadResolve!: () => void;
+  private hydrationState: "pending" | "ready" | "failed" = "pending";
   /** Set when `init()` could not read existing state. See {@link assertHydrated}. */
   private hydrationError: Error | null = null;
 
@@ -52,6 +53,7 @@ export class SettingsStore implements SettingsStoreApi {
   }
 
   async init(): Promise<void> {
+    this.hydrationState = "pending";
     try {
       const [entries, secrets] = await Promise.all([
         this.adapter.load(),
@@ -68,11 +70,13 @@ export class SettingsStore implements SettingsStoreApi {
       this.restore(this.persistedSnapshots.values, this.values);
       this.restore(this.persistedSnapshots.secrets, this.secrets);
       this.hydrationError = null;
+      this.hydrationState = "ready";
     } catch (err) {
       // Boot continues on defaults (read-only) rather than failing hard, but
       // writes are refused: every save is a full snapshot, so writing from a
       // half-empty map would destroy the settings/keys we failed to read.
       this.hydrationError = err instanceof Error ? err : new Error(String(err));
+      this.hydrationState = "failed";
       console.error("[settings] hydration failed — writes disabled", err);
     } finally {
       this.loadResolve();
@@ -81,13 +85,18 @@ export class SettingsStore implements SettingsStoreApi {
 
   /** Whether `init()` successfully read the persisted state. */
   isHydrated(): boolean {
-    return this.hydrationError === null;
+    return this.hydrationState === "ready";
   }
 
   private assertHydrated(): void {
-    if (this.hydrationError) {
+    if (this.hydrationState === "pending") {
       throw new Error(
-        `[settings] refusing to write: state was never loaded (${this.hydrationError.message})`,
+        "[settings] refusing to write: store is not initialized; call and await init() first",
+      );
+    }
+    if (this.hydrationState === "failed") {
+      throw new Error(
+        `[settings] refusing to write: state was never loaded (${this.hydrationError?.message ?? "unknown hydration error"})`,
       );
     }
   }
