@@ -54,6 +54,12 @@ describe("catalog prop guards", () => {
     expect(resolveIcon(42 as unknown as string)).toBeNull();
   });
 
+  it("resolveIcon supports protocol icons without exposing the full library", () => {
+    expect(resolveIcon("book-open")).not.toBeNull();
+    expect(resolveIcon("BookOpen")).toBe(resolveIcon("book-open"));
+    expect(resolveIcon("not-a-protocol-icon")).toBeNull();
+  });
+
   it("TagList survives a non-array `tags`", () => {
     expect(() =>
       renderSpec({ type: "TagList", props: { tags: "not-an-array" } }),

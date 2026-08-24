@@ -1,7 +1,46 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import i18nInstance from "@/i18n";
-import * as Icons from "lucide-react";
+import {
+  Backpack,
+  Anchor,
+  BookMarked,
+  BookOpen,
+  BookUser,
+  Brain,
+  CalendarDays,
+  CheckCircle2,
+  Compass,
+  Dices,
+  Gem,
+  Headphones,
+  Heart,
+  Handshake,
+  IdCard,
+  Image as ImageIcon,
+  Loader,
+  Map as MapIcon,
+  MapPin,
+  Megaphone,
+  Mic,
+  Network,
+  ScrollText,
+  Search,
+  Shield,
+  Skull,
+  SlidersHorizontal,
+  Sparkles,
+  Swords,
+  Turtle,
+  User,
+  UserSearch,
+  Users,
+  UsersRound,
+  Wand,
+  Waves,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 
 export interface FilterTab {
   value: string;
@@ -10,19 +49,53 @@ export interface FilterTab {
   color?: string;
 }
 
-export function resolveIcon(name: string | undefined): Icons.LucideIcon | null {
+/** Icons accepted by the plugin UI protocol. Unknown names render no icon. */
+export const catalogIcons: Readonly<Record<string, LucideIcon>> = {
+  anchor: Anchor,
+  backpack: Backpack,
+  "book-marked": BookMarked,
+  "book-open": BookOpen,
+  "book-user": BookUser,
+  brain: Brain,
+  "calendar-days": CalendarDays,
+  "check-circle-2": CheckCircle2,
+  compass: Compass,
+  dices: Dices,
+  gem: Gem,
+  headphones: Headphones,
+  heart: Heart,
+  handshake: Handshake,
+  "id-card": IdCard,
+  image: ImageIcon,
+  loader: Loader,
+  map: MapIcon,
+  "map-pin": MapPin,
+  megaphone: Megaphone,
+  mic: Mic,
+  network: Network,
+  "scroll-text": ScrollText,
+  search: Search,
+  shield: Shield,
+  skull: Skull,
+  "sliders-horizontal": SlidersHorizontal,
+  sparkles: Sparkles,
+  swords: Swords,
+  turtle: Turtle,
+  user: User,
+  "user-search": UserSearch,
+  users: Users,
+  "users-round": UsersRound,
+  wand: Wand,
+  waves: Waves,
+  "x-circle": XCircle,
+};
+
+export function resolveIcon(name: string | undefined): LucideIcon | null {
   // The declared type is a lie at runtime: `name` comes straight out of a
   // plugin-authored spec, so anything can arrive here and `.split` would throw.
   if (typeof name !== "string" || !name) return null;
-  // Convert kebab-case to PascalCase: "book-open" -> "BookOpen"
-  const pascal = name
-    .split("-")
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join("");
-  return (
-    ((Icons as Record<string, unknown>)[pascal] as
-      Icons.LucideIcon | undefined) ?? null
-  );
+  const normalized = name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+  return catalogIcons[normalized] ?? null;
 }
 
 /**

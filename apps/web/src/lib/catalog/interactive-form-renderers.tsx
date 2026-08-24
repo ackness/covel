@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
-import * as Icons from "lucide-react";
+import { Search } from "lucide-react";
 import {
   asArray,
   asOptionArray,
@@ -208,7 +208,7 @@ export function createFilterContainer(
     const ItemComponent = itemComponent
       ? getRenderer(itemComponent)
       : undefined;
-    const SearchIcon = Icons.Search;
+    const SearchIcon = Search;
 
     const fallbackEmpty =
       filterField || searchQuery ? t("common.noMatch") : t("common.noData");

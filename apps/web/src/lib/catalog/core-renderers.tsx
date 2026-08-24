@@ -16,7 +16,7 @@
 import { useState, type ReactNode } from "react";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
-import * as Icons from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { resolveIcon, toTextArray, useI18nResolver } from "./helpers.js";
 import {
   gapClasses,
@@ -212,7 +212,7 @@ export const Section: ComponentRenderer = ({ element, children }) => {
   const defaultOpen = (element.props?.defaultOpen as boolean) ?? false;
   const [open, setOpen] = useState(defaultOpen);
   const SectionIcon = resolveIcon(iconName);
-  const Chevron = Icons.ChevronRight;
+  const Chevron = ChevronRight;
 
   return (
     <div>

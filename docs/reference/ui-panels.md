@@ -146,7 +146,8 @@ ui:
 - `groupLabel` — 合并后外层 Tab 的显示名（可选，省略时用第一个 spec 的 `label`）
 - `label` — 面板自身名（在子 Tab 上显示）
 - `shortLabel` — activity-bar 垂直 Tab 条上的短标签（可选，见下方「activity-bar 短标签」章节）
-- `icon` — Lucide 图标名（kebab-case）
+- `icon` — 框架允许列表内的 Lucide 图标名（kebab-case）；完整列表见
+  [UI Components / Display](ui-components.md#display)
 - `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据
 - `emptyState.message` — 数据为空时显示的提示文字（见下方"空状态渲染"章节）
 - `view` — json-render nested spec，使用框架 catalog 中的组件（与 `_componentPath` 二选一：`.tsx`/`.js` 自定义组件由 loader 写入 `_componentPath`）

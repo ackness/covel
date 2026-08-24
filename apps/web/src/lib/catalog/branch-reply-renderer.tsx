@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
-import * as Icons from "lucide-react";
+import { Check, Loader2, RefreshCw } from "lucide-react";
 import { postPluginRpc } from "@/services/api.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSession } from "@/stores/session-store.js";
@@ -216,7 +216,7 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
             aria-busy={pendingAction === "createCandidates" || undefined}
             className="inline-flex items-center gap-1 rounded-(--radius-control) border border-border px-2 py-1 text-[11px] text-muted-foreground hover:border-foreground/40 hover:text-foreground transition-colors"
           >
-            <Icons.RefreshCw
+            <RefreshCw
               className={clsx(
                 "w-3 h-3",
                 pendingAction === "createCandidates" && "animate-spin",
@@ -253,7 +253,7 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
                   {candidate.content}
                 </p>
                 {accepted && (
-                  <Icons.Check className="w-3.5 h-3.5 shrink-0 text-primary mt-0.5" />
+                  <Check className="w-3.5 h-3.5 shrink-0 text-primary mt-0.5" />
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-1.5 pl-5">
@@ -291,7 +291,7 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
                   )}
                 >
                   {pendingAction === "acceptCandidate" && (
-                    <Icons.Loader2
+                    <Loader2
                       aria-hidden="true"
                       className="w-3 h-3 animate-spin"
                     />

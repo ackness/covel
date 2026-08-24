@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
-import * as Icons from "lucide-react";
+import { IdCard, UserRound } from "lucide-react";
 import { formatDateTime, isRecordLike, toTextArray } from "./helpers.js";
 
 export { CharacterFieldsView } from "./character-fields-renderer.js";
@@ -125,7 +125,7 @@ export const CharacterBlueprintList: ComponentRenderer = ({ element }) => {
           >
             <div className="flex items-center justify-between gap-2 min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <Icons.IdCard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <IdCard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-semibold leading-tight text-foreground">
                     {name}
@@ -269,7 +269,7 @@ export const SceneCastList: ComponentRenderer = ({ element }) => {
             data-tone="muted"
           >
             <div className="flex min-w-0 items-center gap-2">
-              <Icons.UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate text-[13px] font-semibold text-foreground">
                 {name}
               </span>

@@ -14,7 +14,7 @@ import { useMemo } from "react";
 import type { ComponentRenderer } from "@json-render/react";
 import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
-import * as Icons from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   resolveActionParams,
   matchesPendingDraft,
@@ -89,7 +89,7 @@ export const Button: ComponentRenderer = ({ element, emit }) => {
     return false;
   }, [element.on, invokingMap, getState]);
 
-  const Loader = Icons.Loader2;
+  const Loader = Loader2;
 
   return (
     <button

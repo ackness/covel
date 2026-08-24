@@ -1,6 +1,6 @@
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
-import * as Icons from "lucide-react";
+import { Search } from "lucide-react";
 import { useI18nResolver } from "./helpers.js";
 import { useFormInputBinding } from "./use-form-input-binding.js";
 
@@ -74,7 +74,7 @@ export const SearchInput: ComponentRenderer = ({ element, bindings }) => {
     element.props?.value,
     bindings?.value,
   );
-  const SearchIcon = Icons.Search;
+  const SearchIcon = Search;
 
   return (
     <div className="relative">

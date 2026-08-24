@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Database, BookOpen, HelpCircle, type LucideIcon } from "lucide-react";
-import * as Icons from "lucide-react";
 import {
   Tabs,
   TabsContent,
@@ -33,6 +32,7 @@ import { loadPluginData } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
 import { onNavEvent } from "@/lib/nav-events.js";
 import { ignoreError } from "@/lib/ignore-error.js";
+import { resolveIcon } from "@/lib/catalog/helpers.js";
 
 interface RightPanelTabItem {
   id: string;
@@ -43,20 +43,15 @@ interface RightPanelTabItem {
   title?: string;
 }
 
-function resolvePluginIcon(name: string): Icons.LucideIcon {
-  const pascal = name
-    .split("-")
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join("");
-  const resolved = (Icons as Record<string, unknown>)[pascal] as
-    Icons.LucideIcon | undefined;
+function resolvePluginIcon(name: string): LucideIcon {
+  const resolved = resolveIcon(name);
   if (resolved) return resolved;
   // Surface the mismatch loudly in dev so plugin authors notice mis-typed
   // icons without crashing the panel.
   if (import.meta.env.DEV) {
     // eslint-disable-next-line no-console
     console.warn(
-      `[right-panel] unknown lucide icon "${name}" (looked up as "${pascal}") — falling back to HelpCircle`,
+      `[right-panel] unknown lucide icon "${name}" — falling back to HelpCircle`,
     );
   }
   return HelpCircle;
