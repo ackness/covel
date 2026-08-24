@@ -1,5 +1,5 @@
 import { runStoreContractTests } from "../src/contract/store-contract.js";
-import { describe, it, expect } from "vitest";
+import { afterAll, describe, it, expect } from "vitest";
 
 const DATABASE_URL =
   process.env.DATABASE_URL ??
@@ -19,15 +19,16 @@ try {
 
 if (pgAvailable) {
   const { createPgStore } = await import("../src/postgres/pg-store.js");
-  const { createIsolatedPgUrl } = await import("./pg-test-db.js");
+  const { createIsolatedPgDatabase } = await import("./pg-test-db.js");
   // Own database so this file never races concurrent PG test files on schema DDL.
-  const isolatedUrl = await createIsolatedPgUrl(
+  const isolated = await createIsolatedPgDatabase(
     DATABASE_URL,
     "covel_test_pgstore",
   );
+  afterAll(() => isolated.cleanup());
 
   runStoreContractTests("PgStore", async () => {
-    const store = await createPgStore(isolatedUrl, { freshSchema: true });
+    const store = await createPgStore(isolated.url, { freshSchema: true });
     return store;
   });
 } else {

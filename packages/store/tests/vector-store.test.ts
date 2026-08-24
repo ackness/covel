@@ -2,7 +2,7 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
 
-import { describe, it, expect } from "vitest";
+import { afterAll, describe, it, expect } from "vitest";
 
 import { runVectorStoreContractTests } from "../src/contract/vector-store-contract.js";
 import { createMemoryStore } from "../src/memory/memory-store.js";
@@ -57,15 +57,16 @@ try {
 
 if (pgVectorAvailable) {
   const { createPgStore } = await import("../src/postgres/pg-store.js");
-  const { createIsolatedPgUrl } = await import("./pg-test-db.js");
+  const { createIsolatedPgDatabase } = await import("./pg-test-db.js");
   // Own database so this file never races the other PG test files on schema DDL.
-  const isolatedUrl = await createIsolatedPgUrl(
+  const isolated = await createIsolatedPgDatabase(
     DATABASE_URL,
     "covel_test_vector",
   );
+  afterAll(() => isolated.cleanup());
 
   runVectorStoreContractTests("PgStore (pgvector)", async () => {
-    const store = await createPgStore(isolatedUrl, { freshSchema: true });
+    const store = await createPgStore(isolated.url, { freshSchema: true });
     if (!supportsVector(store)) {
       throw new Error(
         "PgStore does not expose VectorStoreCapability — pgvector extension missing.",

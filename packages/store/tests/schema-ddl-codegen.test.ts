@@ -297,12 +297,12 @@ describe.skipIf(!pgAvailable)(
   () => {
     it("real PG generated DDL yields exactly the Drizzle column shape", async () => {
       const { default: postgres } = await import("postgres");
-      const { createIsolatedPgUrl } = await import("./pg-test-db.js");
-      const url = await createIsolatedPgUrl(
+      const { createIsolatedPgDatabase } = await import("./pg-test-db.js");
+      const isolated = await createIsolatedPgDatabase(
         DATABASE_URL!,
         "covel_test_ddlcodegen",
       );
-      const client = postgres(url, { max: 1 });
+      const client = postgres(isolated.url, { max: 1 });
       try {
         await client.unsafe(PG_DDL);
 
@@ -364,6 +364,7 @@ describe.skipIf(!pgAvailable)(
         expect(problems, problems.join("\n")).toEqual([]);
       } finally {
         await client.end();
+        await isolated.cleanup();
       }
     });
   },

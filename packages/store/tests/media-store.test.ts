@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import "fake-indexeddb/auto";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { runMediaStoreContractTests } from "../src/contract/media-store-contract.js";
 import { createIndexedDbMediaStore } from "../src/indexeddb/idb-media-store.js";
 import {
@@ -38,15 +38,16 @@ try {
 }
 
 if (pgAvailable) {
-  const { createIsolatedPgUrl } = await import("./pg-test-db.js");
+  const { createIsolatedPgDatabase } = await import("./pg-test-db.js");
   // Own database so this file never races concurrent PG test files on schema DDL.
-  const isolatedUrl = await createIsolatedPgUrl(
+  const isolated = await createIsolatedPgDatabase(
     DATABASE_URL,
     "covel_test_media",
   );
+  afterAll(() => isolated.cleanup());
 
   runMediaStoreContractTests("PgMediaStore", () =>
-    createPgMediaStore(isolatedUrl, { freshSchema: true }),
+    createPgMediaStore(isolated.url, { freshSchema: true }),
   );
 } else {
   describe("PgMediaStore (skipped)", () => {
