@@ -23,6 +23,7 @@ import { createIdbWorldStore } from "./idb-world-store.js";
 import { createIdbPlayerStore } from "./idb-player-store.js";
 import { createIdbWorldDataStore } from "./idb-world-data-store.js";
 import { createIdbPersistenceStore } from "./idb-persistence-store.js";
+import { withIdbDatabaseWriteLock } from "./idb-write-lock.js";
 import { STORE_WRITE_METHODS } from "../store-write-methods.js";
 
 export { createIndexedDbMediaStore } from "./idb-media-store.js";
@@ -60,12 +61,15 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
   const scope = data as unknown as StoreTransaction;
 
   // The mutation tracker holds a single snapshot at a time. Transactions and
-  // root writes therefore share one FIFO: a root write cannot enter another
-  // caller's snapshot and disappear when that transaction rolls back. The tx
-  // callback receives the raw scope above, so its own writes run inline.
+  // root writes therefore share one database-scoped lock: a root write from
+  // another handle/tab cannot enter this caller's snapshot and disappear when
+  // the transaction rolls back. The tx callback receives the raw scope above,
+  // so its own writes run inline without reacquiring the non-reentrant lock.
+  // A per-handle FIFO also preserves call ordering before contenders enter the
+  // cross-handle Web Lock queue.
   let chain: Promise<unknown> = Promise.resolve();
   function enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const task = chain.then(fn);
+    const task = chain.then(() => withIdbDatabaseWriteLock(db.name, fn));
     chain = task.then(
       () => undefined,
       () => undefined,
@@ -86,9 +90,8 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
   // Nesting guard. AsyncLocalStorage is unavailable in the browser bundle, so
   // IdbStore uses a coarse synchronous flag: it reliably rejects a nested
   // withTransaction (the deadlock case — the inner call would queue behind the
-  // outer one on `chain`), and may also reject a genuinely concurrent call that
-  // is issued while another transaction's callback is mid-flight. That
-  // false-positive edge is irrelevant for IdbStore's single-user local mode.
+  // outer database lock), and may also reject a genuinely concurrent call on
+  // this same handle while another transaction's callback is mid-flight.
   // The Node backends (Sqlite/Memory/Pg) use the precise AsyncLocalStorage guard.
   let withTxActive = false;
 

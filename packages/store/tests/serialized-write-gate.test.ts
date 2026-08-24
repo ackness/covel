@@ -170,6 +170,58 @@ describe.each(backends)("%s serialized write gate", (_name, makeStore) => {
   });
 });
 
+describe("IdbStore database-scoped write gate", () => {
+  it("preserves a root write from another handle when a transaction rolls back", async () => {
+    const dbName = `write-gate-shared-${++idbCounter}`;
+    const txStore = await createIdbStore(dbName);
+    const rootStore = await createIdbStore(dbName);
+    try {
+      await seedSession(txStore, "sess-tx");
+      await seedSession(txStore, "sess-other");
+
+      let markTxReady!: () => void;
+      const txReady = new Promise<void>((resolve) => {
+        markTxReady = resolve;
+      });
+      let releaseTx!: () => void;
+      const txHeldOpen = new Promise<void>((resolve) => {
+        releaseTx = resolve;
+      });
+
+      const txPromise = txStore.withTransaction!(async (tx) => {
+        await tx.setPluginData(pluginDataRow("sess-tx", "inside"));
+        markTxReady();
+        await txHeldOpen;
+        throw new Error("boom");
+      });
+      await txReady;
+
+      let outsideFinished = false;
+      const outsideWrite = rootStore
+        .setPluginData(pluginDataRow("sess-other", "outside"))
+        .then(() => {
+          outsideFinished = true;
+        });
+      await Promise.resolve();
+      expect(outsideFinished).toBe(false);
+
+      releaseTx();
+      await expect(txPromise).rejects.toThrow("boom");
+      await outsideWrite;
+
+      expect(
+        await txStore.getPluginData("sess-tx", "p", "ns", "inside"),
+      ).toBeFalsy();
+      expect(
+        await txStore.getPluginData("sess-other", "p", "ns", "outside"),
+      ).toMatchObject({ value: { v: "outside" } });
+    } finally {
+      await txStore.close?.();
+      await rootStore.close?.();
+    }
+  });
+});
+
 describe("SqliteStore shared-connection gate covers media writes", () => {
   it("a media write survives a concurrent DataStore transaction's rollback", async () => {
     // The mirror media store reuses the DataStore's better-sqlite3

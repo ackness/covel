@@ -94,8 +94,14 @@ rows 抓进 `idbSnapshot` 并把 name 加进 set，后续 mutation 命中 set �
 clear + refill `touchedStores` 中的 object store，未触碰的 store 完全不动 —— 因此事务
 开启后落入未触碰 store 的并发写入不会被 rollback 覆盖。
 
+- Root writes and `withTransaction` share a database-name-scoped exclusive Web
+  Lock. This coordinates separate store handles, tabs, and workers in the same
+  origin, so a rollback cannot erase a write committed through another handle.
+  Environments without Web Locks use a module-level per-database FIFO, which
+  preserves the invariant for multiple handles in one JavaScript realm.
 - Files: `packages/store/src/indexeddb/idb-store.ts` (wires `withTransaction`),
-  `packages/store/src/indexeddb/idb-transaction.ts` (internal snapshot primitive)
+  `packages/store/src/indexeddb/idb-transaction.ts` (internal snapshot primitive),
+  `packages/store/src/indexeddb/idb-write-lock.ts` (cross-handle write lock)
 - Runtime environment: browser IndexedDB plus `fake-indexeddb` polyfill
   for tests.
 
@@ -119,7 +125,7 @@ nested-call rejection) but differ in concurrency and isolation:
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | **PgStore**                   | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                                                                                                                                                          | Isolated on its own connection; not folded in.                                                                         |
 | **SqliteStore / MemoryStore** | **Single connection / single snapshot.** Concurrent calls are **serialized** through a promise chain — each runs its full BEGIN…COMMIT before the next starts, so neither loses writes. Mutating store methods share that same queue (**serialized write gate**). | **Queued until the transaction settles** — never folded in. Writes issued from _inside_ the callback still run inline. |
-| **IdbStore**                  | **Single snapshot**, serialized like above, but **without** the write gate (browser single-user local mode).                                                                                                                                                      | **Folded into the open transaction** and committed / rolled back with it.                                              |
+| **IdbStore**                  | **Single snapshot**, serialized per database name through Web Locks (cross-tab/worker) or a same-realm fallback FIFO.                                                                                                                                             | Queued until the transaction settles; never folded into another caller's snapshot.                                     |
 
 > **Serialized write gate (SQLite / Memory).** One connection means a
 > transaction cannot isolate: a write issued elsewhere while a transaction is
