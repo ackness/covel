@@ -25,6 +25,7 @@ import type { MemoryStore } from "./memory-types.js";
 import type { StoreTransaction } from "../types.js";
 import { createSerializedWriteGate } from "../serialized-write-gate.js";
 import { STORE_WRITE_METHODS } from "../store-write-methods.js";
+import { withStructuredCloneBoundary } from "./structured-clone-boundary.js";
 
 export function createMemoryStore(): MemoryStore {
   const state = createMemoryState();
@@ -45,6 +46,7 @@ export function createMemoryStore(): MemoryStore {
     ...createExportMethods(state),
     ...createVectorMethods(state),
   };
+  const isolatedData = withStructuredCloneBoundary(data);
 
   // One shared state means a transaction cannot isolate: a write issued
   // elsewhere while a transaction is open can be captured by its snapshot and
@@ -52,13 +54,13 @@ export function createMemoryStore(): MemoryStore {
   // writes on one queue. The transaction scope keeps the UNGATED methods —
   // writes inside the callback belong to that transaction.
   const gate = createSerializedWriteGate();
-  const gatedData = gate.gateWrites(data, STORE_WRITE_METHODS);
+  const gatedData = gate.gateWrites(isolatedData, STORE_WRITE_METHODS);
 
   return {
     ...gatedData,
     ...createTransactionMethods(
       state,
-      () => data as unknown as StoreTransaction,
+      () => isolatedData as unknown as StoreTransaction,
       gate,
     ),
 
