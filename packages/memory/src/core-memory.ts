@@ -163,34 +163,53 @@ export function createMemoryManager(
     ): Promise<void> {
       const h = helpersFor(await resolveSchema(sessionId));
       const now = new Date().toISOString();
-
-      const promises: Promise<void>[] = [];
-      for (const [label, content] of updates) {
+      const writes = [...updates].map(([label, content]) => {
         const maxChars = h.maxCharsFor(label);
         const truncated =
           content.length > maxChars ? content.slice(0, maxChars) : content;
-        promises.push(
-          store.upsertWorkingMemory({
+        return {
+          label,
+          content: truncated,
+          record: {
             id: `memory:${sessionId}:${label}`,
             sessionId,
             key: label,
             scope: SCOPE,
             value: { text: truncated },
             updatedAt: now,
-          }),
-        );
-        if (mirrorPluginId) {
-          promises.push(
-            mirrorToPluginData(store, sessionId, mirrorPluginId, label, {
-              content: truncated,
-              displayName: h.displayNameFor(label),
-              icon: h.iconFor(label),
-              now,
-            }),
+          } satisfies WorkingMemoryRecord,
+        };
+      });
+
+      if (writes.length > 1) {
+        if (!store.withTransaction) {
+          throw new Error(
+            "atomic core-memory batch updates require store.withTransaction",
           );
         }
+        await store.withTransaction(async (tx) => {
+          for (const write of writes) {
+            await tx.upsertWorkingMemory(write.record);
+          }
+        });
+      } else if (writes[0]) {
+        await store.upsertWorkingMemory(writes[0].record);
       }
-      await Promise.all(promises);
+
+      // Mirrors are derived, best-effort UI state. Publish them only after the
+      // authoritative batch commits so a rolled-back batch is never displayed.
+      if (mirrorPluginId) {
+        await Promise.all(
+          writes.map((write) =>
+            mirrorToPluginData(store, sessionId, mirrorPluginId, write.label, {
+              content: write.content,
+              displayName: h.displayNameFor(write.label),
+              icon: h.iconFor(write.label),
+              now,
+            }),
+          ),
+        );
+      }
     },
 
     async initializeDefaults(
