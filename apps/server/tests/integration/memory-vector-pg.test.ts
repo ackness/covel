@@ -19,12 +19,16 @@ import type { DataStore } from "@covel/store";
 import { createPgStore } from "@covel/store";
 import { createMemorySystem } from "@covel/memory";
 import type { MemoryLLMAdapter } from "@covel/memory";
+import {
+  createIsolatedPgDatabase,
+  type IsolatedPgDatabase,
+} from "./pg-test-db.js";
 
 const BASE_URL =
   process.env.DATABASE_URL ??
   "postgresql://covel:covel_dev@localhost:5432/covel";
 const REQUIRE_PG = process.env.COVEL_REQUIRE_PG_TESTS === "1";
-const ISOLATED_DB = "covel_test_memory_vector_pg";
+let isolatedDatabase: IsolatedPgDatabase | undefined;
 
 /** DROP+CREATE an isolated database so this file never clobbers other PG suites. */
 async function createIsolatedPgUrl(): Promise<string | null> {
@@ -34,16 +38,14 @@ async function createIsolatedPgUrl(): Promise<string | null> {
       await admin`SELECT 1`;
       // Require pgvector — the whole point of this suite is the real vector path.
       await admin`CREATE EXTENSION IF NOT EXISTS vector`;
-      await admin.unsafe(
-        `DROP DATABASE IF EXISTS "${ISOLATED_DB}" WITH (FORCE)`,
-      );
-      await admin.unsafe(`CREATE DATABASE "${ISOLATED_DB}"`);
     } finally {
       await admin.end();
     }
-    const url = new URL(BASE_URL);
-    url.pathname = `/${ISOLATED_DB}`;
-    return url.toString();
+    isolatedDatabase = await createIsolatedPgDatabase(
+      BASE_URL,
+      "covel_test_memory_vector_pg",
+    );
+    return isolatedDatabase.url;
   } catch (error) {
     if (REQUIRE_PG) {
       throw new Error("PostgreSQL with pgvector is required for memory tests", {
@@ -124,6 +126,7 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
 
   afterAll(async () => {
     await store?.close?.();
+    await isolatedDatabase?.cleanup();
   });
 
   it("ingests messages and ranks the semantically closest first", async () => {
