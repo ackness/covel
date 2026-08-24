@@ -19,6 +19,7 @@ import type { DataStore } from "@covel/store";
 import { createPgStore } from "@covel/store";
 import { createMemorySystem } from "@covel/memory";
 import type { MemoryLLMAdapter } from "@covel/memory";
+import { createPgAdvisorySessionLock } from "../../src/lib/pg-session-lock.js";
 import {
   createIsolatedPgDatabase,
   type IsolatedPgDatabase,
@@ -149,5 +150,82 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
     const system = createMemorySystem({ store, llm, embed });
     const result = await system.ingest(sessionId);
     expect(result.recall).toBe(0);
+  });
+
+  it("serializes one session's ingestion across independent PG clients", async () => {
+    const secondStore = await createPgStore(isolatedUrl as string);
+    const firstLockSql = postgres(isolatedUrl as string, { max: 1 });
+    const secondLockSql = postgres(isolatedUrl as string, { max: 1 });
+    const firstLock = createPgAdvisorySessionLock(firstLockSql);
+    const secondLock = createPgAdvisorySessionLock(secondLockSql);
+    const distributedSessionId = "sess-pgvec-two-pods";
+    const now = new Date().toISOString();
+    let embedCalls = 0;
+    const countedEmbed = async (
+      texts: readonly string[],
+    ): Promise<Float32Array[]> => {
+      embedCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return texts.map(embedText);
+    };
+    const lockKey = `memory-ingest:${JSON.stringify([distributedSessionId])}`;
+
+    try {
+      await store.createSession({
+        id: distributedSessionId,
+        worldId: "w1",
+        status: "active",
+        turnCount: 1,
+        preGameCompleted: [],
+        locale: "en",
+        activePlugins: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+      const target = await store.ensureVectorModel!({
+        provider: "test",
+        modelName: "fake-embed",
+        dim: DIM,
+        modelId: "test/fake-embed",
+      });
+      await store.lockSessionEmbeddingModel!(distributedSessionId, target);
+      await store.appendTurnMessage({
+        id: "m-two-pods",
+        sessionId: distributedSessionId,
+        turnId: "t-two-pods",
+        sourceType: "runtime",
+        role: "assistant",
+        content: "only one pod should embed this message",
+        order: 1,
+        createdAt: now,
+      });
+
+      const firstPod = createMemorySystem({
+        store,
+        llm,
+        embed: countedEmbed,
+        runIngestExclusive: (_sessionId, task) =>
+          firstLock.withLock(lockKey, task),
+      });
+      const secondPod = createMemorySystem({
+        store: secondStore,
+        llm,
+        embed: countedEmbed,
+        runIngestExclusive: (_sessionId, task) =>
+          secondLock.withLock(lockKey, task),
+      });
+
+      const [first, second] = await Promise.all([
+        firstPod.ingest(distributedSessionId),
+        secondPod.ingest(distributedSessionId),
+      ]);
+
+      expect(first.recall + second.recall).toBe(1);
+      expect(embedCalls).toBe(1);
+    } finally {
+      await secondStore.close();
+      await firstLockSql.end();
+      await secondLockSql.end();
+    }
   });
 });

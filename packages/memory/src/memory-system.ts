@@ -110,7 +110,13 @@ export function createMemorySystem(
       embed,
       fallback: keywordArchival,
     });
-    ingestor = createVectorIngestor({ store, embed });
+    ingestor = createVectorIngestor({
+      store,
+      embed,
+      ...(deps.runIngestExclusive
+        ? { runIngestExclusive: deps.runIngestExclusive }
+        : {}),
+    });
   } else {
     recall = keywordRecall;
     archival = keywordArchival;

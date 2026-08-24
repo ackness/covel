@@ -188,8 +188,10 @@ const mediaStore = await createMediaStoreFromEnv(process.env);
 // the in-process implementation — those topologies are single-process
 // by construction, so the simpler lock is both sufficient and cheaper.
 let sessionLock: SessionLock;
+let memoryIngestLock: SessionLock;
 // Hoisted so the shutdown drain below can close the lock pool.
 let lockSql: Sql | undefined;
+let ingestLockSql: Sql | undefined;
 if (storeBackend === "pg" && env.databaseUrl) {
   const { default: postgres } = await import("postgres");
   // `max` sizes the lock pool. Each in-flight turn holds one reserved
@@ -200,11 +202,18 @@ if (storeBackend === "pg" && env.databaseUrl) {
     max: readEnvInt("COVEL_PG_LOCK_POOL_MAX", 16),
   });
   sessionLock = createPgAdvisorySessionLock(lockSql);
+  // Embedding sweeps hold their lock during provider I/O. Keep them on a
+  // smaller independent pool so background work cannot starve player turns.
+  ingestLockSql = postgres(env.databaseUrl!, {
+    max: readEnvInt("COVEL_PG_INGEST_LOCK_POOL_MAX", 4),
+  });
+  memoryIngestLock = createPgAdvisorySessionLock(ingestLockSql);
   console.log(
     "[server] session lock: pg-advisory (cross-pod mutual exclusion enabled)",
   );
 } else {
   sessionLock = createInProcessSessionLock();
+  memoryIngestLock = createInProcessSessionLock();
   console.log(
     `[server] session lock: in-process (${storeBackend} backend — single-process scope)`,
   );
@@ -312,6 +321,7 @@ const api = await bootstrapApi({
   preferredMemorySlot,
   perRequestMiddleware: [perRequestLlm],
   sessionLock,
+  memoryIngestLock,
   resolveNarrativeBudget,
 });
 
@@ -405,6 +415,11 @@ export const drainServerResources = async (): Promise<void> => {
     // `timeout: 1` (seconds) force-closes connections still held by an
     // in-flight lock; PG auto-releases advisory locks on disconnect.
     await drainPhase("close pg lock pool", () => lockSql!.end({ timeout: 1 }));
+  }
+  if (ingestLockSql) {
+    await drainPhase("close pg ingest lock pool", () =>
+      ingestLockSql!.end({ timeout: 1 }),
+    );
   }
 };
 

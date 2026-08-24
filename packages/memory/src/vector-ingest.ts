@@ -67,6 +67,12 @@ export interface VectorIngestor {
   ingest(sessionId: string): Promise<IngestResult>;
 }
 
+/** Cross-process coordinator injected by the server composition root. */
+export type RunIngestExclusive = <T>(
+  sessionId: string,
+  task: () => Promise<T>,
+) => Promise<T>;
+
 /** A no-op ingestor for keyword-only deployments (no embed fn / no vector store). */
 export function createNoopIngestor(): VectorIngestor {
   return { ingest: async () => SKIPPED };
@@ -75,8 +81,9 @@ export function createNoopIngestor(): VectorIngestor {
 export function createVectorIngestor(deps: {
   readonly store: DataStore;
   readonly embed: EmbedFn;
+  readonly runIngestExclusive?: RunIngestExclusive;
 }): VectorIngestor {
-  const { store, embed } = deps;
+  const { store, embed, runIngestExclusive } = deps;
   interface PendingIngest {
     dirty: boolean;
     promise: Promise<IngestResult>;
@@ -140,11 +147,19 @@ export function createVectorIngestor(deps: {
         } while (state.dirty);
         return { skipped, recall, archival };
       };
-      state.promise = run().finally(() => {
-        if (pendingBySession.get(sessionId) === state) {
-          pendingBySession.delete(sessionId);
-        }
-      });
+      const coordinatedRun = runIngestExclusive
+        ? () => runIngestExclusive(sessionId, run)
+        : run;
+      state.promise = coordinatedRun()
+        .catch((error: unknown) => {
+          warn("coordination", sessionId, error);
+          return { skipped: false, recall: 0, archival: 0 };
+        })
+        .finally(() => {
+          if (pendingBySession.get(sessionId) === state) {
+            pendingBySession.delete(sessionId);
+          }
+        });
       pendingBySession.set(sessionId, state);
       return state.promise;
     },

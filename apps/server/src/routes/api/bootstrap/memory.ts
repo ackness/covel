@@ -23,6 +23,11 @@ export interface CreateBootstrapMemorySystemParams {
    * search and embed-on-write ingestion is wired onto the post-turn path.
    */
   readonly embed?: EmbedFn;
+  /** Serialize a complete vector-ingestion sweep across server processes. */
+  readonly runIngestExclusive?: <T>(
+    sessionId: string,
+    task: () => Promise<T>,
+  ) => Promise<T>;
   readonly preferredMemorySlot?: string;
   readonly resolveModel: (
     manifest: RuntimeManifest,
@@ -50,6 +55,7 @@ export function createBootstrapMemorySystem({
   store,
   llmAdapter,
   embed,
+  runIngestExclusive,
   preferredMemorySlot,
   resolveModel,
   getPluginSource,
@@ -158,6 +164,7 @@ export function createBootstrapMemorySystem({
       store,
       llm: memoryLlm,
       ...(embed ? { embed } : {}),
+      ...(runIngestExclusive ? { runIngestExclusive } : {}),
       resolveSlot: (slot: string) =>
         resolveModel({ name: slot, model: slot } as RuntimeManifest),
     },

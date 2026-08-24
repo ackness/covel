@@ -168,6 +168,12 @@ export interface ApiBootstrapConfig {
    */
   readonly sessionLock?: SessionLock;
   /**
+   * Dedicated serializer for background vector-ingestion sweeps. PostgreSQL
+   * deployments should inject a separate advisory-lock pool so slow embedding
+   * calls cannot exhaust the user-turn lock pool.
+   */
+  readonly memoryIngestLock?: SessionLock;
+  /**
    * Optional content-addressable media store backing `/api/media/:id`
    * and `ctx.media`. Composition roots that do not generate or serve
    * media (e.g. headless test harnesses) may leave this unset; the
@@ -246,6 +252,8 @@ export async function bootstrapApi(
   // via `c.get('sessionLock')` and never import a concrete lock module.
   const sessionLock: SessionLock =
     config.sessionLock ?? createInProcessSessionLock();
+  const memoryIngestLock: SessionLock =
+    config.memoryIngestLock ?? createInProcessSessionLock();
   console.log(
     `[bootstrap] session lock: ${config.sessionLock ? "external (injected)" : "in-process"}`,
   );
@@ -534,6 +542,11 @@ export async function bootstrapApi(
     store,
     llmAdapter: config.llmAdapter,
     ...(config.memoryEmbed ? { embed: config.memoryEmbed } : {}),
+    runIngestExclusive: (sessionId, task) =>
+      memoryIngestLock.withLock(
+        `memory-ingest:${JSON.stringify([sessionId])}`,
+        task,
+      ),
     preferredMemorySlot: config.preferredMemorySlot,
     resolveModel,
     // Break memoryBlocks label collisions by trust tier (builtin > official >

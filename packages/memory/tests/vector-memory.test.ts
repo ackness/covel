@@ -275,6 +275,81 @@ describe("vector recall (semantic)", () => {
     ]);
   });
 
+  it("does not duplicate embeddings across independent ingestors sharing a coordinator", async () => {
+    const { fn, calls } = spyEmbed();
+    let tail = Promise.resolve();
+    const runIngestExclusive = async <T>(
+      _sessionId: string,
+      task: () => Promise<T>,
+    ): Promise<T> => {
+      const previous = tail;
+      let release!: () => void;
+      tail = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await previous;
+      try {
+        return await task();
+      } finally {
+        release();
+      }
+    };
+    const firstPod = createVectorIngestor({
+      store,
+      embed: fn,
+      runIngestExclusive,
+    });
+    const secondPod = createVectorIngestor({
+      store,
+      embed: fn,
+      runIngestExclusive,
+    });
+
+    const [first, second] = await Promise.all([
+      firstPod.ingest(sessionId),
+      secondPod.ingest(sessionId),
+    ]);
+
+    expect(first.recall + second.recall).toBe(3);
+    expect(calls).toEqual([
+      [
+        "the dragon breathed fire",
+        "a merchant sold apples",
+        "rivers flowed through the valley",
+      ],
+    ]);
+  });
+
+  it("fails open for the turn and retries after coordinator errors", async () => {
+    let fail = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ingestor = createVectorIngestor({
+      store,
+      embed,
+      runIngestExclusive: async (_sessionId, task) => {
+        if (fail) {
+          fail = false;
+          throw new Error("lock pool unavailable");
+        }
+        return task();
+      },
+    });
+
+    try {
+      await expect(ingestor.ingest(sessionId)).resolves.toEqual({
+        skipped: false,
+        recall: 0,
+        archival: 0,
+      });
+      await expect(ingestor.ingest(sessionId)).resolves.toMatchObject({
+        skipped: false,
+        recall: 3,
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("still ingests different sessions in parallel", async () => {
     const parallelStore = createMemoryStore();
     const firstSession = "sess-parallel-a";
