@@ -38,6 +38,7 @@ import {
 import { executeAgentRuntime } from "../agent-loop/turn-agent-runtime.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { executeAgentGuard } from "../agent-loop/turn-agent-guard.js";
+import { combineAbortSignals } from "./turn-control.js";
 
 export type ExecuteTurnFn = (
   input: TurnInput,
@@ -158,7 +159,7 @@ export async function executeOneRuntime(
   const startTime = Date.now();
   const runId = crypto.randomUUID();
   const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;
-  const createRecursiveCall = () => {
+  const createRecursiveCall = (parentSignal?: AbortSignal) => {
     return async (
       rawDelta: RecursiveCallDelta,
       opts?: { readonly reason?: string },
@@ -222,10 +223,29 @@ export async function executeOneRuntime(
 
       await deps.emitter?.emit("recursive.calling", tracePayload);
       try {
+        if (parentSignal?.aborted) {
+          throw abortReason(
+            parentSignal,
+            `recursiveCall from runtime "${manifest.name}" was aborted`,
+          );
+        }
+        const nestedExecutionSignal = combineAbortSignals(
+          deps.turnControl?.executionSignal,
+          parentSignal,
+        );
+        const nestedDeps: TurnExecutorDeps = nestedExecutionSignal
+          ? {
+              ...deps,
+              turnControl: {
+                ...deps.turnControl,
+                executionSignal: nestedExecutionSignal,
+              },
+            }
+          : deps;
         const nestedResult = await executeTurnFn(
           nestedInput,
           activeRuntimes,
-          deps,
+          nestedDeps,
           {
             ...turnOptions,
             maxSteps,
@@ -233,6 +253,15 @@ export async function executeOneRuntime(
             recursionDepth: nextDepth,
           },
         );
+        // The nested executor may return a terminal result after the parent
+        // deadline fired. Never publish or collect that late result into the
+        // already-finalized parent execution.
+        if (parentSignal?.aborted) {
+          throw abortReason(
+            parentSignal,
+            `recursiveCall from runtime "${manifest.name}" was aborted`,
+          );
+        }
         // Bubble the nested execution's results (its own + any it
         // collected from deeper levels) up to the top-level turn so the
         // commit-owning caller processes their proposals — a nested
@@ -701,6 +730,10 @@ export async function executeOneRuntime(
       failedResult,
     );
   }
+}
+
+function abortReason(signal: AbortSignal, fallback: string): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error(fallback);
 }
 
 // buildToolDefinitions and makeFailedResult extracted to turn-executor-helpers.ts

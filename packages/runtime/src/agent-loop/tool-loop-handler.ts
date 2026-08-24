@@ -32,6 +32,10 @@ import type {
   LLMToolDefinition,
   LLMResponseFormat,
 } from "../llm/llm-adapter.js";
+import {
+  combineAbortSignals,
+  getTurnExecutionSignal,
+} from "../turn-executor/turn-control.js";
 
 export interface RequestLLMResponseOptions {
   readonly manifest: RuntimeManifest;
@@ -99,8 +103,8 @@ export async function requestLLMResponse(
           provider: resolvedTarget.provider,
         }
       : {}),
-    // Player abort cuts the in-flight call/stream and bypasses salvage.
-    abortSignal: deps.turnControl?.signal,
+    // Player aborts and parent execution deadlines both cut the in-flight call.
+    abortSignal: getTurnExecutionSignal(deps.turnControl),
   } as const;
 
   if (useStreaming) {
@@ -245,10 +249,13 @@ async function malformedToolArgsFallback(args: {
       onTargetAttempt: (target) => {
         actualTarget = target;
       },
-      signal: AbortSignal.timeout(
-        Math.max(
-          1000,
-          Math.min(retryPolicy.callTimeoutMs, deadline - Date.now()),
+      signal: combineAbortSignals(
+        getTurnExecutionSignal(deps.turnControl),
+        AbortSignal.timeout(
+          Math.max(
+            1000,
+            Math.min(retryPolicy.callTimeoutMs, deadline - Date.now()),
+          ),
         ),
       ),
     });

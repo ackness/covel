@@ -39,7 +39,7 @@ import {
   buildToolResultMessage,
 } from "./turn-agent-tool-loop-messages.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
-import { TurnAbortedError } from "../turn-executor/turn-control.js";
+import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
 
 export interface AgentToolLoopCompleted {
   readonly finalContent: string | null;
@@ -228,11 +228,7 @@ export async function runAgentToolLoop({
     // additionally cut by the retry layer via the same signal). Steering:
     // merge queued player interjections into the live transcript so the
     // next LLM step sees them.
-    if (deps.turnControl?.signal?.aborted) {
-      throw new TurnAbortedError(
-        `turn aborted by player during ${manifest.name}`,
-      );
-    }
+    throwIfTurnExecutionAborted(deps.turnControl, manifest.name);
     if (acceptsSteering) {
       for (const steer of deps.turnControl?.drainSteering?.() ?? []) {
         messages.push({ role: "user", content: steer });

@@ -26,6 +26,14 @@ import {
   isTrustedPluginSource,
 } from "../turn-executor/turn-runtime-helpers.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
+import {
+  combineAbortSignals,
+  getTurnExecutionSignal,
+} from "../turn-executor/turn-control.js";
+import {
+  withDefaultGatewaySignal,
+  withDefaultUtilsSignal,
+} from "../function-runtime/runtime-abort-boundaries.js";
 
 export interface ExecuteAgentGuardOptions {
   readonly manifest: RuntimeManifest;
@@ -39,7 +47,9 @@ export interface ExecuteAgentGuardOptions {
         readonly data: Readonly<Record<string, unknown>>;
       }
     | undefined;
-  readonly createRecursiveCall: () => (
+  readonly createRecursiveCall: (
+    parentSignal?: AbortSignal,
+  ) => (
     delta: RecursiveCallDelta,
     opts?: { readonly reason?: string },
   ) => Promise<NestedTurnResult>;
@@ -86,12 +96,6 @@ export async function executeAgentGuard({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
     });
-    // Trace plugin-owned provider HTTP calls from the guard handler too.
-    const guardTracedUtils =
-      deps.utils && deps.emitter
-        ? withUtilsTrace(deps.utils, deps.emitter, guardHelperCtx)
-        : deps.utils;
-
     // Write-capability revocation. The guard gets its OWN abort
     // controller, and every write-capable capability handed to it (store,
     // pluginData, logger, gateway, media, assetProgress, recursiveCall) is
@@ -112,9 +116,12 @@ export async function executeAgentGuard({
       }
     };
     const trackPromise = <T>(promise: Promise<T>): Promise<T> => {
-      const tracked = promise.finally(() => inFlight.delete(tracked));
-      inFlight.add(tracked);
-      return tracked;
+      inFlight.add(promise);
+      void promise.then(
+        () => inFlight.delete(promise),
+        () => inFlight.delete(promise),
+      );
+      return promise;
     };
     const revocable = <T extends object>(target: T): T =>
       new Proxy(target, {
@@ -170,7 +177,24 @@ export async function executeAgentGuard({
             return result instanceof Promise ? trackPromise(result) : result;
           }
         : undefined;
-    const rawRecursiveCall = createRecursiveCall();
+    // Combined signal: the player's turn abort OR the guard's own deadline.
+    // A cooperative guard can observe either and cancel in-flight work.
+    const externalSignal = getTurnExecutionSignal(deps.turnControl);
+    const guardSignal =
+      combineAbortSignals(externalSignal, guardAbort.signal) ??
+      guardAbort.signal;
+    const guardGateway = deps.gateway
+      ? withDefaultGatewaySignal(deps.gateway, guardSignal)
+      : undefined;
+    const guardUtils = deps.utils
+      ? withDefaultUtilsSignal(deps.utils, guardSignal)
+      : undefined;
+    // Trace plugin-owned provider HTTP calls from the guard handler too.
+    const guardTracedUtils =
+      guardUtils && deps.emitter
+        ? withUtilsTrace(guardUtils, deps.emitter, guardHelperCtx)
+        : guardUtils;
+    const rawRecursiveCall = createRecursiveCall(guardSignal);
     const guardRecursiveCall: typeof rawRecursiveCall = (delta, opts) => {
       assertLive();
       if (!trustedGuard) {
@@ -182,12 +206,6 @@ export async function executeAgentGuard({
       }
       return trackPromise(rawRecursiveCall(delta, opts));
     };
-    // Combined signal: the player's turn abort OR the guard's own deadline.
-    // A cooperative guard can observe either and cancel in-flight work.
-    const externalSignal = deps.turnControl?.signal;
-    const guardSignal = externalSignal
-      ? AbortSignal.any([externalSignal, guardAbort.signal])
-      : guardAbort.signal;
     const revokeOnExternalAbort = (): void => {
       const reason = externalSignal?.reason;
       revoke(
@@ -216,8 +234,8 @@ export async function executeAgentGuard({
       store: guardStore,
       recursiveCall: guardRecursiveCall,
       recursionDepth,
-      ...(deps.gateway && trustedGuard
-        ? { gateway: revocable(deps.gateway) }
+      ...(guardGateway && trustedGuard
+        ? { gateway: revocable(guardGateway) }
         : {}),
       ...(guardTracedUtils && trustedGuard
         ? { utils: revocable(guardTracedUtils) }
@@ -225,7 +243,7 @@ export async function executeAgentGuard({
       ...(deps.mediaStore && trustedGuard
         ? {
             media: revocable(
-              createRuntimeMediaContext(deps.mediaStore, deps.utils, {
+              createRuntimeMediaContext(deps.mediaStore, guardUtils, {
                 sessionId: input.sessionId,
                 pluginId: manifest.pluginId,
               }),
@@ -250,11 +268,32 @@ export async function executeAgentGuard({
       return output;
     });
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    let removeAbortListener: (() => void) | undefined;
+    let completedNormally = false;
     let guardOutput: Awaited<typeof guardPromise>;
     try {
+      const aborted = new Promise<never>((_, reject) => {
+        const onAbort = () => {
+          const signalReason = guardSignal.reason;
+          const reason =
+            signalReason instanceof Error
+              ? signalReason
+              : new Error(`agent guard "${manifest.name}" aborted`);
+          revoke(reason);
+          reject(reason);
+        };
+        if (guardSignal.aborted) {
+          onAbort();
+          return;
+        }
+        guardSignal.addEventListener("abort", onAbort, { once: true });
+        removeAbortListener = () =>
+          guardSignal.removeEventListener("abort", onAbort);
+      });
       guardOutput = await Promise.race([
         guardWork,
-        new Promise<never>((_, reject) => {
+        aborted,
+        new Promise<never>(() => {
           deadlineTimer = setTimeout(() => {
             const err = new Error(
               `agent guard "${manifest.name}" timed out after ${timeoutMs}ms`,
@@ -263,16 +302,23 @@ export async function executeAgentGuard({
             // running guard must not be able to mutate state for a later
             // turn, and a cooperative guard sees the abort.
             revoke(err, true);
-            reject(err);
           }, timeoutMs);
         }),
       ]);
+      completedNormally = true;
     } finally {
       clearTimeout(deadlineTimer);
+      removeAbortListener?.();
       externalSignal?.removeEventListener("abort", revokeOnExternalAbort);
       // A guard's capabilities are a lease for this invocation. Revoke
       // retained handles even after successful completion.
-      revoke(new Error(`agent guard "${manifest.name}" completed`));
+      revoke(
+        new Error(`agent guard "${manifest.name}" completed`),
+        !completedNormally,
+      );
+      while (inFlight.size > 0) {
+        await Promise.allSettled(inFlight);
+      }
     }
 
     if (guardOutput.skip === true) {

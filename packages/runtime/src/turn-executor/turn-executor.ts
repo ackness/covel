@@ -56,7 +56,7 @@ import {
 import { finalizeTurnResult } from "./turn-result-finalizer.js";
 import { attachExecutionJournal } from "../execution-journal.js";
 import { createExecutionContext } from "./execution-context.js";
-import { PLAYER_ABORT_REASON } from "./turn-control.js";
+import { isTurnExecutionAborted, PLAYER_ABORT_REASON } from "./turn-control.js";
 import { markPreGameCompletion } from "./pre-game-completion.js";
 import { schedulePostTurnMemoryUpdate } from "./post-turn-memory.js";
 import {
@@ -602,6 +602,8 @@ async function executeTurnImpl(
   // delete proposal before relying on rollback semantics.
   const playerAborted = (): boolean =>
     deps.turnControl?.signal?.aborted === true;
+  const executionAborted = (): boolean =>
+    isTurnExecutionAborted(deps.turnControl);
 
   // Disable a dependency-cycle SCC (and everything downstream of it): mark each
   // member skipped rather than falling back to a plain priority sort. The rest
@@ -631,11 +633,11 @@ async function executeTurnImpl(
   // main runtimes gate on this turn's fresh result. Same declared-edge setup
   // DAG as the setup phase. Blocked / done setup runtimes were already
   // filtered out by selectTriggeredRuntimes.
-  if (!isPreGamePending && !manualTarget && !playerAborted()) {
+  if (!isPreGamePending && !manualTarget && !executionAborted()) {
     const lateSetup = scheduledRuntimes.filter((rt) => isSetupRuntime(rt));
     const lateSetupPlan = scheduleByDag(lateSetup);
     for (const group of lateSetupPlan.groups) {
-      if (playerAborted()) break;
+      if (executionAborted()) break;
       const results = await executeParallel(group.runtimes, (manifest) =>
         invoke(manifest, undefined),
       );
@@ -646,7 +648,7 @@ async function executeTurnImpl(
   }
 
   for (const group of groups) {
-    if (playerAborted()) break;
+    if (executionAborted()) break;
     const results = await executeParallel(group.runtimes, async (manifest) => {
       const triggerEventForRuntime =
         manualTarget &&
@@ -687,7 +689,7 @@ async function executeTurnImpl(
     if (completedResults.get(name) === seed) completedResults.delete(name);
   }
 
-  const deferredFollowers = playerAborted()
+  const deferredFollowers = executionAborted()
     ? []
     : await runEventChain({
         activeRuntimes,

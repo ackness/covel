@@ -43,6 +43,11 @@ import { withGatewayTrace } from "./gateway-trace.js";
 import { withUtilsTrace } from "./utils-trace.js";
 import { enforceHttpPermissions } from "./http-permissions.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
+import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
+import {
+  withDefaultGatewaySignal,
+  withDefaultUtilsSignal,
+} from "./runtime-abort-boundaries.js";
 
 export interface ExecuteFunctionRuntimeOptions {
   readonly manifest: RuntimeManifest;
@@ -64,7 +69,9 @@ export interface ExecuteFunctionRuntimeOptions {
   readonly exports?: Readonly<Record<string, InputSlot>>;
   /** Full execution identity — exposed as `ctx.execution`. */
   readonly executionContext?: ExecutionContext;
-  readonly createRecursiveCall: () => (
+  readonly createRecursiveCall: (
+    parentSignal?: AbortSignal,
+  ) => (
     delta: RecursiveCallDelta,
     opts?: { readonly reason?: string },
   ) => Promise<NestedTurnResult>;
@@ -184,6 +191,25 @@ export async function executeFunctionRuntime({
     manifest,
     input.userSettings,
   );
+  // One signal covers player aborts, inherited parent deadlines, and this
+  // runtime's own deadline. Provider and HTTP facades apply it by default so
+  // plugins do not need to remember to forward ctx.signal themselves.
+  const handlerAbort = new AbortController();
+  const turnExecutionSignal = getTurnExecutionSignal(deps.turnControl);
+  const relayTurnAbort = () => handlerAbort.abort(turnExecutionSignal?.reason);
+  if (turnExecutionSignal?.aborted) {
+    relayTurnAbort();
+  } else if (turnExecutionSignal) {
+    turnExecutionSignal.addEventListener("abort", relayTurnAbort, {
+      once: true,
+    });
+  }
+  const runtimeGateway = deps.gateway
+    ? withDefaultGatewaySignal(deps.gateway, handlerAbort.signal)
+    : undefined;
+  const runtimeUtils = deps.utils
+    ? withDefaultUtilsSignal(deps.utils, handlerAbort.signal)
+    : undefined;
   const assetProgress = createAssetProgressEmitter(deps.emitter, helperCtx);
   const pluginDataHandle = deps.store
     ? createPluginDataWriter(deps.store, helperCtx, writeBuffer)
@@ -207,7 +233,7 @@ export async function executeFunctionRuntime({
       })
     : undefined;
   const mediaHandle = deps.mediaStore
-    ? createRuntimeMediaContext(deps.mediaStore, deps.utils, {
+    ? createRuntimeMediaContext(deps.mediaStore, runtimeUtils, {
         sessionId: input.sessionId,
         pluginId: manifest.pluginId,
       })
@@ -219,9 +245,9 @@ export async function executeFunctionRuntime({
   // imagesHandle so image generation is traced too (withGatewayTrace forwards
   // generateImage only when the source gateway has one).
   const tracedGateway =
-    deps.gateway && deps.emitter
-      ? withGatewayTrace(deps.gateway, deps.emitter, helperCtx)
-      : deps.gateway;
+    runtimeGateway && deps.emitter
+      ? withGatewayTrace(runtimeGateway, deps.emitter, helperCtx)
+      : runtimeGateway;
   // ctx.images only when both halves of the pipeline are wired: a gateway
   // that actually exposes generateImage (older test/embedder gateways don't)
   // and a mediaStore to persist through. Either missing → undefined, so
@@ -265,8 +291,8 @@ export async function executeFunctionRuntime({
   // unchanged (SSRF still enforced inside fetchWithRetry either way). Applied
   // BEFORE the trace wrapper so a denied call never emits a spurious calling
   // event, and independent of the emitter so enforcement is not trace-gated.
-  const permissionedUtils = deps.utils
-    ? enforceHttpPermissions(deps.utils, {
+  const permissionedUtils = runtimeUtils
+    ? enforceHttpPermissions(runtimeUtils, {
         isCommunity: !isTrustedSource,
         httpPermissions: manifest.permissions?.http ?? [],
         runtimeId: manifest.name,
@@ -293,17 +319,22 @@ export async function executeFunctionRuntime({
   // that covers both the player abort and the deadline.
   let capabilitiesRevoked = false;
   const isRevoked = () => capabilitiesRevoked;
-  const handlerAbort = new AbortController();
-  const playerSignal = deps.turnControl?.signal;
-  if (playerSignal?.aborted) {
-    handlerAbort.abort(playerSignal.reason);
-  } else if (playerSignal) {
-    playerSignal.addEventListener(
-      "abort",
-      () => handlerAbort.abort(playerSignal.reason),
-      { once: true },
+  const inFlightRecursiveCalls = new Set<Promise<unknown>>();
+  const rawRecursiveCall = createRecursiveCall(handlerAbort.signal);
+  const trackedRecursiveCall: typeof rawRecursiveCall = (delta, opts) => {
+    const call = rawRecursiveCall(delta, opts);
+    inFlightRecursiveCalls.add(call);
+    void call.then(
+      () => inFlightRecursiveCalls.delete(call),
+      () => inFlightRecursiveCalls.delete(call),
     );
-  }
+    return call;
+  };
+  const drainRecursiveCalls = async (): Promise<void> => {
+    while (inFlightRecursiveCalls.size > 0) {
+      await Promise.allSettled(inFlightRecursiveCalls);
+    }
+  };
 
   const revocable = {
     store: handlerStore
@@ -328,7 +359,7 @@ export async function executeFunctionRuntime({
       ? makeRevocableCapability(tracedUtils, isRevoked, "utils")
       : undefined,
     recursiveCall: makeRevocableFn(
-      createRecursiveCall(),
+      trackedRecursiveCall,
       isRevoked,
       "recursiveCall",
     ),
@@ -356,6 +387,7 @@ export async function executeFunctionRuntime({
 
   let output: Awaited<ReturnType<NonNullable<typeof loaded.handler>>>;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let removeAbortListener: (() => void) | undefined;
   try {
     // Deadline race: without it a hung handler (e.g. a provider call that
     // never resolves) blocks the whole turn forever — timeoutMs only existed
@@ -401,15 +433,41 @@ export async function executeFunctionRuntime({
       ...(revocable.progress ? { progress: revocable.progress } : {}),
       signal: handlerAbort.signal,
     });
+    const handlerWork = handlerPromise.then(async (result) => {
+      // A handler may intentionally launch a recursive call without awaiting
+      // it. Keep the invocation lease until all nested turns have settled.
+      await drainRecursiveCalls();
+      return result;
+    });
+    const aborted = new Promise<never>((_, reject) => {
+      const onAbort = () => {
+        // Revoke synchronously with the abort so no capability call can enter
+        // during the Promise.race rejection microtask window.
+        capabilitiesRevoked = true;
+        const reason = handlerAbort.signal.reason;
+        reject(
+          reason instanceof Error
+            ? reason
+            : new Error(`function runtime "${manifest.name}" was aborted`),
+        );
+      };
+      if (handlerAbort.signal.aborted) {
+        onAbort();
+        return;
+      }
+      handlerAbort.signal.addEventListener("abort", onAbort, { once: true });
+      removeAbortListener = () =>
+        handlerAbort.signal.removeEventListener("abort", onAbort);
+    });
     output = await Promise.race([
-      handlerPromise,
-      new Promise<never>((_, reject) => {
+      handlerWork,
+      aborted,
+      new Promise<never>(() => {
         deadlineTimer = setTimeout(() => {
           const err = new Error(
             `function runtime "${manifest.name}" timed out after ${timeoutMs}ms`,
           );
           handlerAbort.abort(err);
-          reject(err);
         }, timeoutMs);
       }),
     ]);
@@ -425,9 +483,17 @@ export async function executeFunctionRuntime({
     throw err;
   } finally {
     clearTimeout(deadlineTimer);
+    removeAbortListener?.();
+    turnExecutionSignal?.removeEventListener("abort", relayTurnAbort);
     // The race has settled — no further capability use is legitimate,
     // whether the handler won (its output is final) or lost (it is detached).
     capabilitiesRevoked = true;
+    if (!handlerAbort.signal.aborted) {
+      handlerAbort.abort(
+        new Error(`function runtime "${manifest.name}" completed`),
+      );
+    }
+    await drainRecursiveCalls();
   }
 
   await deps.emitter?.emit("function.completed", {
