@@ -121,6 +121,35 @@ if (pgVectorAvailable) {
       ).resolves.toMatchObject({ modelRegistryId: target.modelRegistryId });
     });
 
+    it("invalidates a positive target after another instance recreates the session id", async () => {
+      const target = await storeA.ensureVectorModel({
+        provider: "audit",
+        modelName: "one",
+        dim: 3,
+        modelId: "audit/one",
+      });
+      await storeA.lockSessionEmbeddingModel("shared-session", target);
+      await expect(
+        storeA.resolveSessionVectorTarget("shared-session"),
+      ).resolves.toMatchObject({ modelRegistryId: target.modelRegistryId });
+
+      await storeB.deleteSession("shared-session");
+      const now = new Date().toISOString();
+      await storeB.createSession({
+        id: "shared-session",
+        status: "active",
+        turnCount: 0,
+        preGameCompleted: [],
+        activePlugins: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await expect(
+        storeA.resolveSessionVectorTarget("shared-session"),
+      ).resolves.toBeNull();
+    });
+
     it("allows exactly one concurrent first lock", async () => {
       const [targetA, targetB] = await Promise.all([
         storeA.ensureVectorModel({

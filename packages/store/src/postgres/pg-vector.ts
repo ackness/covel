@@ -76,9 +76,10 @@ function toVectorString(v: Float32Array): string {
 export function createPgVectorCapability(
   client: Sql,
 ): VectorStoreCapability & VectorModelOps {
-  // In-memory caches to avoid redundant DB lookups within a process.
+  // Model rows are immutable and safe to cache. Session bindings are not
+  // cached: another Pod may delete/recreate the same session id, and a stale
+  // positive cache would route the new incarnation into the old model/table.
   const modelCache = new Map<number, VectorTarget>();
-  const sessionTargetCache = new Map<string, VectorTarget | null>();
   const createdTables = new Set<number>();
 
   // NOTE: vector_models table and sessions.embedding_model_id column are
@@ -207,7 +208,6 @@ export function createPgVectorCapability(
        RETURNING id
     `;
     if (updated.length === 1) {
-      sessionTargetCache.set(sessionId, target);
       return;
     }
 
@@ -232,10 +232,6 @@ export function createPgVectorCapability(
   async function resolveSessionVectorTarget(
     sessionId: string,
   ): Promise<VectorTarget | null> {
-    if (sessionTargetCache.has(sessionId)) {
-      return sessionTargetCache.get(sessionId) ?? null;
-    }
-
     const sessionRows = await client<
       Array<{ embedding_model_id: number | null }>
     >`
@@ -255,7 +251,6 @@ export function createPgVectorCapability(
     // Try in-memory model cache first.
     const cached = modelCache.get(modelId);
     if (cached) {
-      sessionTargetCache.set(sessionId, cached);
       return cached;
     }
 
@@ -289,7 +284,6 @@ export function createPgVectorCapability(
     };
 
     modelCache.set(target.modelRegistryId, target);
-    sessionTargetCache.set(sessionId, target);
     await ensurePhysicalTable(target);
 
     return target;

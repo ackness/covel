@@ -115,6 +115,11 @@ disables vector search. `external` is reserved for a future injected adapter;
 without that adapter the vector factory fails fast instead of pretending the
 DataStore owns an external vector service.
 
+Session embedding bindings are resolved from the session row on every vector
+operation. Deleting a session removes its rows from every registered physical
+vector table; recreating the same session id therefore starts with no model
+binding and cannot observe vectors from the deleted incarnation.
+
 ## Session And World Metadata
 
 `WorldRecord.metadata.dimensions` is projected onto `WorldRecord.dimensions`

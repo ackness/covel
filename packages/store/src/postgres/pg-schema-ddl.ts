@@ -169,6 +169,7 @@ export const ALL_TABLE_NAMES: readonly string[] = [
   "worlds",
   SESSIONS_TABLE,
   ...SESSION_SCOPED_TABLE_NAMES,
+  "vector_models",
   "media_refs",
   "media_assets",
 ];

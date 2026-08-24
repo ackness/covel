@@ -9,7 +9,8 @@
  *   - `vector_models` table: registry of known embedding models.
  *   - Each model gets one physical vec0 virtual table: `vec_mem_m{id}`.
  *   - `sessions.embedding_model_id` FK locks a session to one model.
- *   - In-memory caches avoid redundant DB lookups within a process.
+ *   - Immutable model rows are cached; session bindings are read each time so
+ *     delete/recreate of the same session id cannot reuse a stale target.
  *
  * Layer 2 — Physical Table CRUD (VectorStoreCapability):
  *   - `upsertVector`: resolve session → model table → DELETE+INSERT.
@@ -119,8 +120,6 @@ export function createSqliteVectorCapability(
   // ── In-memory caches ────────────────────────────────────────────
   // Keyed by modelRegistryId (number) → VectorTarget
   const modelCache = new Map<number, VectorTarget>();
-  // Keyed by sessionId → VectorTarget | null (null = RAG disabled)
-  const sessionTargetCache = new Map<string, VectorTarget | null>();
   // Physical table IDs that have already been created in this process.
   const createdTables = new Set<number>();
 
@@ -243,18 +242,11 @@ export function createSqliteVectorCapability(
           WHERE id = ?`,
       )
       .run(target.modelRegistryId, now, sessionId);
-
-    // Invalidate session cache so the next resolve hits DB.
-    sessionTargetCache.delete(sessionId);
   }
 
   async function resolveSessionVectorTarget(
     sessionId: string,
   ): Promise<VectorTarget | null> {
-    if (sessionTargetCache.has(sessionId)) {
-      return sessionTargetCache.get(sessionId) ?? null;
-    }
-
     const sessionRow = sqlite
       .prepare(
         `SELECT embedding_model_id, embedding_locked_at FROM sessions WHERE id = ?`,
@@ -262,7 +254,6 @@ export function createSqliteVectorCapability(
       .get(sessionId) as SessionEmbeddingRow | undefined;
 
     if (!sessionRow || sessionRow.embedding_model_id == null) {
-      sessionTargetCache.set(sessionId, null);
       return null;
     }
 
@@ -271,7 +262,6 @@ export function createSqliteVectorCapability(
     // Try in-memory model cache first.
     const cached = modelCache.get(modelId);
     if (cached) {
-      sessionTargetCache.set(sessionId, cached);
       return cached;
     }
 
@@ -291,7 +281,6 @@ export function createSqliteVectorCapability(
 
     const target = rowToTarget(modelRow);
     modelCache.set(target.modelRegistryId, target);
-    sessionTargetCache.set(sessionId, target);
     ensurePhysicalTable(target);
     return target;
   }

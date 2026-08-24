@@ -350,6 +350,44 @@ export function runVectorStoreContractTests(
       ).rejects.toThrow();
     });
 
+    it("does not reuse a vector binding or rows after a session id is recreated", async () => {
+      const sessionId = "s-recreated";
+      const dim = 16;
+      const target = await setupSessionWithModel(store, sessionId, dim);
+      const vector = seededVector(dim, 41);
+      await store.upsertVector({
+        sessionId,
+        pluginId: "p",
+        namespace: "ns",
+        key: "old-incarnation",
+        embedding: vector,
+      });
+      await expect(
+        store.resolveSessionVectorTarget(sessionId),
+      ).resolves.toEqual(target);
+
+      await store.deleteSession(sessionId);
+      const now = new Date().toISOString();
+      await store.createSession({
+        id: sessionId,
+        status: "active",
+        turnCount: 1,
+        preGameCompleted: [],
+        locale: "en",
+        activePlugins: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await expect(
+        store.resolveSessionVectorTarget(sessionId),
+      ).resolves.toBeNull();
+      await store.lockSessionEmbeddingModel(sessionId, target);
+      await expect(
+        store.searchVectors({ sessionId, query: vector, topK: 5 }),
+      ).resolves.toEqual([]);
+    });
+
     // ── ADR-004/005 core scenarios ───────────────────────────────
 
     it("isolates two sessions on different embedding models", async () => {
