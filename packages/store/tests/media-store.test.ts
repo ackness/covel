@@ -49,6 +49,14 @@ if (pgAvailable) {
   runMediaStoreContractTests("PgMediaStore", () =>
     createPgMediaStore(isolated.url, { freshSchema: true }),
   );
+  describe("PgMediaStore lifecycle", () => {
+    it("exposes an idempotent close for its owned client", async () => {
+      const store = await createPgMediaStore(isolated.url);
+      expect(store.close).toEqual(expect.any(Function));
+      await store.close?.();
+      await store.close?.();
+    });
+  });
 } else {
   describe("PgMediaStore (skipped)", () => {
     it("skipped — PostgreSQL not available", () => {

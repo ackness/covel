@@ -220,5 +220,9 @@ export async function createIndexedDbMediaStore(
       if (!record) throw new Error(`Media asset not found: ${ref.id}`);
       return record.blob.stream() as ReadableStream<Uint8Array>;
     },
+
+    close() {
+      db.close();
+    },
   };
 }

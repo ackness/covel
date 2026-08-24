@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { mediaRefSchema } from "@covel/shared";
 import type { MediaStore } from "../media-store.js";
 
@@ -12,9 +12,21 @@ async function toUint8Array(value: Uint8Array | Blob): Promise<Uint8Array> {
 
 export function runMediaStoreContractTests(
   name: string,
-  createStore: () => MediaStore | Promise<MediaStore>,
+  createStoreResource: () => MediaStore | Promise<MediaStore>,
 ): void {
   describe(`MediaStore Contract: ${name}`, () => {
+    const openStores = new Set<MediaStore>();
+    const createStore = async (): Promise<MediaStore> => {
+      const store = await createStoreResource();
+      openStores.add(store);
+      return store;
+    };
+
+    afterEach(async () => {
+      for (const store of openStores) await store.close?.();
+      openStores.clear();
+    });
+
     it("stores bytes as a MediaRef and reads them back", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png", { width: 1, height: 1 });

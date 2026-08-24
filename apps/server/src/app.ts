@@ -365,8 +365,8 @@ const stopWatchers = () => {
 // ── Graceful shutdown drain (audit R-11) ─────────────────────────
 // Ordered resource drain passed to registerGracefulShutdown() by index.ts and
 // run after the HTTP server stops accepting requests: stop watchers (no new
-// world reloads), flush pending eventBus persistence, then close the DataStore
-// and the dedicated PG lock pool. Each phase is time-boxed so one stuck
+// world reloads), flush pending eventBus persistence, then close the MediaStore,
+// DataStore, and dedicated PG lock pool. Each phase is time-boxed so one stuck
 // resource cannot eat the whole force-exit budget — a timed-out phase is
 // logged and skipped.
 const DRAIN_PHASE_TIMEOUT_MS = 2_000;
@@ -397,6 +397,9 @@ async function drainPhase(
 export const drainServerResources = async (): Promise<void> => {
   await drainPhase("stop world watchers", () => stopWatchers());
   await drainPhase("flush event bus", () => api.eventBus.flush());
+  if (mediaStore?.close) {
+    await drainPhase("close media store", () => mediaStore.close!());
+  }
   await drainPhase("close data store", () => store.close());
   if (lockSql) {
     // `timeout: 1` (seconds) force-closes connections still held by an

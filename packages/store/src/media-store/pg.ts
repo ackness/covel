@@ -16,23 +16,35 @@ export async function createPgMediaStore(
   options?: PgMediaStoreOptions,
 ): Promise<MediaStore> {
   const sql = postgres(databaseUrl);
+  try {
+    if (options?.freshSchema) {
+      await sql`DROP TABLE IF EXISTS media_refs CASCADE`;
+      await sql`DROP TABLE IF EXISTS media_assets CASCADE`;
+    }
+    await sql.unsafe(CREATE_MEDIA_TABLES_SQL);
 
-  if (options?.freshSchema) {
-    await sql`DROP TABLE IF EXISTS media_refs CASCADE`;
-    await sql`DROP TABLE IF EXISTS media_assets CASCADE`;
+    const store = createPgMediaStoreFromClient(sql);
+    let closed = false;
+    return {
+      ...store,
+      async close() {
+        if (closed) return;
+        closed = true;
+        await sql.end({ timeout: 1 });
+      },
+    };
+  } catch (error) {
+    await sql.end({ timeout: 1 }).catch(() => undefined);
+    throw error;
   }
-  await sql.unsafe(CREATE_MEDIA_TABLES_SQL);
-
-  return createPgMediaStoreFromClient(sql);
 }
 
 export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
-  async function select(id: string): Promise<{
+  async function selectMetadata(id: string): Promise<{
     id: string;
     mime: string;
     size: number;
     meta: Record<string, unknown> | null;
-    body: Buffer | Uint8Array | null;
     owner_session_id: string | null;
     owner_plugin_id: string | null;
   } | null> {
@@ -42,12 +54,11 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
         mime: string;
         size: number;
         meta: Record<string, unknown> | null;
-        body: Buffer | Uint8Array | null;
         owner_session_id: string | null;
         owner_plugin_id: string | null;
       }[]
     >`
-      SELECT id, mime, size, meta, body, owner_session_id, owner_plugin_id
+      SELECT id, mime, size, meta, owner_session_id, owner_plugin_id
       FROM media_assets
       WHERE id = ${id}
       LIMIT 1
@@ -55,11 +66,31 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
     return rows[0] ?? null;
   }
 
+  async function selectBody(id: string): Promise<Buffer | Uint8Array | null> {
+    const rows = await sql<{ body: Buffer | Uint8Array | null }[]>`
+      SELECT body
+      FROM media_assets
+      WHERE id = ${id}
+      LIMIT 1
+    `;
+    return rows[0]?.body ?? null;
+  }
+
+  async function hasBody(id: string): Promise<boolean> {
+    const rows = await sql<{ has_body: boolean }[]>`
+      SELECT body IS NOT NULL AS has_body
+      FROM media_assets
+      WHERE id = ${id}
+      LIMIT 1
+    `;
+    return rows[0]?.has_body === true;
+  }
+
   return {
     async put(blob, mime, meta) {
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
-      const existing = await select(id);
+      const existing = await selectMetadata(id);
       if (existing) {
         return {
           id: existing.id,
@@ -83,7 +114,7 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
         ON CONFLICT (id) DO NOTHING
       `;
 
-      const inserted = await select(id);
+      const inserted = await selectMetadata(id);
       if (inserted) {
         return {
           id: inserted.id,
@@ -102,19 +133,18 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
     },
 
     async get(ref) {
-      const row = await select(ref.id);
-      if (!row?.body) throw new Error(`Media asset not found: ${ref.id}`);
-      return normalizeBytes(row.body);
+      const body = await selectBody(ref.id);
+      if (!body) throw new Error(`Media asset not found: ${ref.id}`);
+      return normalizeBytes(body);
     },
 
     async exists(id) {
-      const row = await select(id);
-      return row?.body != null;
+      return hasBody(id);
     },
 
     async resolveUrl(ref) {
       if (ref.url) return ref.url;
-      const row = await select(ref.id);
+      const row = await selectMetadata(ref.id);
       if (!row) throw new Error(`Media asset not found: ${ref.id}`);
       return `pg://media/${ref.id}`;
     },
@@ -127,7 +157,7 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
     },
 
     async lookup(id) {
-      const row = await select(id);
+      const row = await selectMetadata(id);
       if (!row) return null;
       return {
         id: row.id,
