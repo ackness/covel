@@ -23,6 +23,7 @@ import { createIdbWorldStore } from "./idb-world-store.js";
 import { createIdbPlayerStore } from "./idb-player-store.js";
 import { createIdbWorldDataStore } from "./idb-world-data-store.js";
 import { createIdbPersistenceStore } from "./idb-persistence-store.js";
+import { STORE_WRITE_METHODS } from "../store-write-methods.js";
 
 export { createIndexedDbMediaStore } from "./idb-media-store.js";
 export type { IndexedDbMediaStoreOptions } from "./idb-media-store.js";
@@ -58,13 +59,29 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
   };
   const scope = data as unknown as StoreTransaction;
 
-  // The mutation tracker holds a single snapshot at a time, so serialize
-  // concurrent withTransaction calls through a promise chain — each runs its
-  // full begin…commit/rollback before the next, so neither loses writes. As with
-  // the other single-connection backends, a concurrent non-tx write made while a
-  // transaction's callback is mid-flight is captured by that snapshot and rolled
-  // back with it.
+  // The mutation tracker holds a single snapshot at a time. Transactions and
+  // root writes therefore share one FIFO: a root write cannot enter another
+  // caller's snapshot and disappear when that transaction rolls back. The tx
+  // callback receives the raw scope above, so its own writes run inline.
   let chain: Promise<unknown> = Promise.resolve();
+  function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const task = chain.then(fn);
+    chain = task.then(
+      () => undefined,
+      () => undefined,
+    );
+    return task;
+  }
+  const gatedData = { ...data } as Record<string, unknown>;
+  for (const name of Object.keys(gatedData)) {
+    const original = gatedData[name];
+    if (typeof original !== "function" || !STORE_WRITE_METHODS.has(name)) {
+      continue;
+    }
+    const fn = original as (...args: unknown[]) => unknown;
+    gatedData[name] = (...args: unknown[]) =>
+      enqueue(async () => fn.apply(data, args));
+  }
 
   // Nesting guard. AsyncLocalStorage is unavailable in the browser bundle, so
   // IdbStore uses a coarse synchronous flag: it reliably rejects a nested
@@ -76,7 +93,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
   let withTxActive = false;
 
   return {
-    ...data,
+    ...gatedData,
 
     withTransaction<T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T> {
       // Checked at CALL time (before chaining) so a nested call rejects instead
@@ -90,7 +107,7 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
           ),
         );
       }
-      const task = chain.then(async () => {
+      return enqueue(async () => {
         withTxActive = true;
         try {
           await mutations.beginTx();
@@ -106,11 +123,6 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
           withTxActive = false;
         }
       });
-      chain = task.then(
-        () => undefined,
-        () => undefined,
-      );
-      return task;
     },
 
     async close(): Promise<void> {

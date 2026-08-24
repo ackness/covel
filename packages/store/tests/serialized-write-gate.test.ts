@@ -10,12 +10,14 @@
  * rollback.
  */
 
+import "fake-indexeddb/auto";
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createMemoryStore } from "../src/memory/memory-store.js";
 import { createSqliteStore } from "../src/sqlite/sqlite-store.js";
+import { createIdbStore } from "../src/indexeddb/idb-store.js";
 import { createSqliteMediaStore } from "../src/media-store/sqlite.js";
 import type { DataStore } from "../src/types.js";
 
@@ -62,14 +64,17 @@ function pluginDataRow(sessionId: string, key: string) {
   };
 }
 
-const backends: ReadonlyArray<[string, () => DataStore]> = [
-  ["MemoryStore", () => createMemoryStore()],
-  ["SqliteStore", makeSqliteStore],
-];
+let idbCounter = 0;
+const backends: ReadonlyArray<[string, () => DataStore | Promise<DataStore>]> =
+  [
+    ["MemoryStore", () => createMemoryStore()],
+    ["SqliteStore", makeSqliteStore],
+    ["IdbStore", () => createIdbStore(`write-gate-${++idbCounter}`)],
+  ];
 
 describe.each(backends)("%s serialized write gate", (_name, makeStore) => {
   it("an outside write survives a concurrent transaction's rollback", async () => {
-    const store = makeStore();
+    const store = await makeStore();
     await seedSession(store, "sess-tx");
     await seedSession(store, "sess-other");
 
@@ -117,7 +122,7 @@ describe.each(backends)("%s serialized write gate", (_name, makeStore) => {
   });
 
   it("writes issued inside the callback still belong to the transaction", async () => {
-    const store = makeStore();
+    const store = await makeStore();
     await seedSession(store, "sess-tx");
 
     await expect(
@@ -135,7 +140,7 @@ describe.each(backends)("%s serialized write gate", (_name, makeStore) => {
   });
 
   it("a committed transaction still persists, and queued writes land after", async () => {
-    const store = makeStore();
+    const store = await makeStore();
     await seedSession(store, "sess-tx");
     await seedSession(store, "sess-other");
 
