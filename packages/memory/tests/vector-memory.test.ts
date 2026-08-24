@@ -202,6 +202,141 @@ describe("vector recall (semantic)", () => {
     const lastBatch = calls[calls.length - 1];
     expect(lastBatch).toEqual(["the dragon returned home"]);
   });
+
+  it("coalesces concurrent sweeps and performs one trailing pass", async () => {
+    const concurrentStore = createMemoryStore();
+    const concurrentSession = "sess-concurrent-ingest";
+    order = 0;
+    await lockModel(concurrentStore, concurrentSession);
+    await addMessage(
+      concurrentStore,
+      concurrentSession,
+      "assistant",
+      "first message",
+    );
+    let markFirstEmbedStarted!: () => void;
+    let releaseFirstEmbed!: () => void;
+    const firstEmbedStarted = new Promise<void>((resolve) => {
+      markFirstEmbedStarted = resolve;
+    });
+    const firstEmbedGate = new Promise<void>((resolve) => {
+      releaseFirstEmbed = resolve;
+    });
+    const calls: string[][] = [];
+    const gatedEmbed: EmbedFn = async (texts) => {
+      calls.push([...texts]);
+      if (calls.length === 1) {
+        markFirstEmbedStarted();
+        await firstEmbedGate;
+      }
+      return texts.map(embedText);
+    };
+    const ingestor = createVectorIngestor({
+      store: concurrentStore,
+      embed: gatedEmbed,
+    });
+
+    const firstRun = ingestor.ingest(concurrentSession);
+    await firstEmbedStarted;
+    await addMessage(
+      concurrentStore,
+      concurrentSession,
+      "assistant",
+      "second message",
+    );
+    const secondRun = ingestor.ingest(concurrentSession);
+    expect(secondRun).toBe(firstRun);
+
+    releaseFirstEmbed();
+    const [firstResult, secondResult] = await Promise.all([
+      firstRun,
+      secondRun,
+    ]);
+    expect(firstResult).toEqual({ skipped: false, recall: 2, archival: 0 });
+    expect(secondResult).toEqual(firstResult);
+    expect(calls).toEqual([["first message"], ["second message"]]);
+  });
+
+  it("does not duplicate one batch across many concurrent callers", async () => {
+    const { fn, calls } = spyEmbed();
+    const ingestor = createVectorIngestor({ store, embed: fn });
+
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => ingestor.ingest(sessionId)),
+    );
+
+    expect(results.every((result) => result.recall === 3)).toBe(true);
+    expect(calls).toEqual([
+      [
+        "the dragon breathed fire",
+        "a merchant sold apples",
+        "rivers flowed through the valley",
+      ],
+    ]);
+  });
+
+  it("still ingests different sessions in parallel", async () => {
+    const parallelStore = createMemoryStore();
+    const firstSession = "sess-parallel-a";
+    const secondSession = "sess-parallel-b";
+    order = 0;
+    await lockModel(parallelStore, firstSession);
+    await lockModel(parallelStore, secondSession);
+    await addMessage(parallelStore, firstSession, "assistant", "session a");
+    await addMessage(parallelStore, secondSession, "assistant", "session b");
+    let activeCalls = 0;
+    let maxActiveCalls = 0;
+    let releaseCalls!: () => void;
+    const callGate = new Promise<void>((resolve) => {
+      releaseCalls = resolve;
+    });
+    let markBothStarted!: () => void;
+    const bothStarted = new Promise<void>((resolve) => {
+      markBothStarted = resolve;
+    });
+    const parallelEmbed: EmbedFn = async (texts) => {
+      activeCalls += 1;
+      maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+      if (activeCalls === 2) markBothStarted();
+      await callGate;
+      activeCalls -= 1;
+      return texts.map(embedText);
+    };
+    const ingestor = createVectorIngestor({
+      store: parallelStore,
+      embed: parallelEmbed,
+    });
+
+    const firstRun = ingestor.ingest(firstSession);
+    const secondRun = ingestor.ingest(secondSession);
+    await bothStarted;
+    expect(maxActiveCalls).toBe(2);
+
+    releaseCalls();
+    await expect(Promise.all([firstRun, secondRun])).resolves.toEqual([
+      { skipped: false, recall: 1, archival: 0 },
+      { skipped: false, recall: 1, archival: 0 },
+    ]);
+  });
+
+  it("clears coalescing state after an embedding failure", async () => {
+    let attempts = 0;
+    const flaky: EmbedFn = async (texts) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("embedding unavailable");
+      return texts.map(embedText);
+    };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ingestor = createVectorIngestor({ store, embed: flaky });
+
+    try {
+      expect((await ingestor.ingest(sessionId)).recall).toBe(0);
+      expect((await ingestor.ingest(sessionId)).recall).toBe(3);
+      expect(attempts).toBe(2);
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe("vector archival (semantic over lorebook + characters)", () => {
