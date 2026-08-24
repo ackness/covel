@@ -81,6 +81,9 @@ export interface PluginRegistry {
   /** Deactivate a plugin for a session. Returns false if pluginId is not registered. */
   deactivate(pluginId: string, sessionId: string): boolean;
 
+  /** Drop every in-memory activation owned by a deleted session. */
+  clearSession(sessionId: string): void;
+
   /**
    * Find the plugin package ID of an active plugin that declares a given capability.
    * Searches all runtimes (including multi-runtime sub-entries) of active plugins.
@@ -166,10 +169,15 @@ export function createPluginRegistry(
       const sessionSet = sessionActivations.get(sessionId);
       if (sessionSet !== undefined) {
         sessionSet.delete(pluginId);
+        if (sessionSet.size === 0) sessionActivations.delete(sessionId);
       }
       emit({ type: "plugin-deactivated", pluginId, sessionId });
       emitToEventBus("plugin.deactivated", sessionId, { pluginId, sessionId });
       return true;
+    },
+
+    clearSession(sessionId: string): void {
+      sessionActivations.delete(sessionId);
     },
 
     onChange(handler: (event: RegistryChangeEvent) => void): () => void {

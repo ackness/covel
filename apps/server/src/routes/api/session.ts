@@ -567,17 +567,23 @@ sessionRoutes.delete("/:id", async (c) => {
     const session = lockedGuard.session;
 
     await store.deleteSession(id);
-    // Drop the per-session character-tool override cache entry (audit R-19).
-    c.get("clearSessionToolOverrides")?.(id);
-
-    if (session.status !== "ended") {
-      await fireSessionEnd(
-        c.get("hookPipeline"),
-        c.get("eventBus"),
-        id,
-        session.activePlugins ?? [],
-        "deleted",
-      );
+    try {
+      if (session.status !== "ended") {
+        await fireSessionEnd(
+          c.get("hookPipeline"),
+          c.get("eventBus"),
+          id,
+          session.activePlugins ?? [],
+          "deleted",
+        );
+      }
+    } finally {
+      // The database row is gone, so every process-local capability lease for
+      // this session must go too. Do this after delete succeeds; a failed
+      // delete leaves the live session's registry and grants intact.
+      c.get("pluginRegistry").clearSession(id);
+      c.get("rpcApprovalGate")?.revoke(id);
+      c.get("clearSessionToolOverrides")?.(id);
     }
 
     return c.json({ deleted: true });

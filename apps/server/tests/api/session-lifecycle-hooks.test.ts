@@ -10,6 +10,7 @@ import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
 import { createStateManager } from "@covel/state";
 import { createPluginRegistry } from "@covel/plugin-loader";
+import { createRpcApprovalGate } from "@covel/approval";
 import { createMemoryStore } from "@covel/store";
 import { createHookPipeline } from "@covel/runtime";
 import { sessionRoutes } from "../../src/routes/api/session.js";
@@ -19,17 +20,30 @@ function build() {
   const store = createMemoryStore();
   const hookPipeline = createHookPipeline();
   const sessionLock = createInProcessSessionLock();
+  const pluginRegistry = createPluginRegistry();
+  const rpcApprovalGate = createRpcApprovalGate();
+  const clearSessionToolOverrides = vi.fn();
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("stateManager", createStateManager(store));
-    c.set("pluginRegistry", createPluginRegistry());
+    c.set("pluginRegistry", pluginRegistry);
+    c.set("rpcApprovalGate", rpcApprovalGate);
+    c.set("clearSessionToolOverrides", clearSessionToolOverrides);
     c.set("hookPipeline", hookPipeline);
     c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", sessionRoutes);
-  return { app, hookPipeline, sessionLock, store };
+  return {
+    app,
+    hookPipeline,
+    sessionLock,
+    store,
+    pluginRegistry,
+    rpcApprovalGate,
+    clearSessionToolOverrides,
+  };
 }
 
 async function createSession(app: Hono): Promise<string> {
@@ -41,6 +55,54 @@ async function createSession(app: Hono): Promise<string> {
   expect(res.status).toBe(200);
   const body = (await res.json()) as { id: string };
   return body.id;
+}
+
+function registerCommunityPlugin(
+  pluginRegistry: ReturnType<typeof createPluginRegistry>,
+): void {
+  pluginRegistry.register({
+    id: "community-plugin",
+    summary: {
+      id: "community-plugin",
+      name: "Community Plugin",
+      description: "test",
+      pluginType: "plugin",
+      runtimeCount: 1,
+    },
+    manifest: {
+      manifest: {
+        name: "community-plugin/runtime",
+        pluginId: "community-plugin",
+        description: "test",
+        runtimeType: "function",
+        stage: "narrative",
+      },
+      promptTemplate: "",
+      rawFrontmatter: {},
+    },
+    loadedRuntimes: new Map(),
+    status: "registered",
+  });
+}
+
+function grantSessionApproval(
+  gate: ReturnType<typeof createRpcApprovalGate>,
+  sessionId: string,
+): void {
+  const grant = gate.evaluate({
+    sessionId,
+    pluginId: "community-plugin",
+    action: "write",
+    payload: {},
+    trustLevel: "community",
+  });
+  if (grant.status !== "pending") throw new Error("expected approval");
+  gate.decide({
+    approvalId: grant.approvalId,
+    decision: "allow",
+    scope: "session",
+    decidedAt: new Date().toISOString(),
+  });
 }
 
 describe("Session lifecycle hooks", () => {
@@ -112,6 +174,66 @@ describe("Session lifecycle hooks", () => {
       sessionId: id,
       reason: "deleted",
     });
+  });
+
+  it("purges process-local activations, approvals, and tool overrides after DELETE", async () => {
+    const { app, pluginRegistry, rpcApprovalGate, clearSessionToolOverrides } =
+      build();
+    registerCommunityPlugin(pluginRegistry);
+    const id = await createSession(app);
+    pluginRegistry.activate("community-plugin", id);
+    grantSessionApproval(rpcApprovalGate, id);
+    const pending = rpcApprovalGate.evaluate({
+      sessionId: id,
+      pluginId: "community-plugin",
+      action: "delete",
+      payload: {},
+      trustLevel: "community",
+    });
+    expect(pending.status).toBe("pending");
+
+    expect(
+      (await app.request(`/api/sessions/${id}`, { method: "DELETE" })).status,
+    ).toBe(200);
+
+    expect(pluginRegistry.getActiveRuntimes(id)).toEqual([]);
+    expect(rpcApprovalGate.hasGrant(id, "community-plugin", "write")).toBe(
+      false,
+    );
+    expect(rpcApprovalGate.listPending(id)).toEqual([]);
+    expect(clearSessionToolOverrides).toHaveBeenCalledWith(id);
+  });
+
+  it("keeps process-local state when the database delete fails", async () => {
+    const {
+      app,
+      store,
+      pluginRegistry,
+      rpcApprovalGate,
+      clearSessionToolOverrides,
+    } = build();
+    registerCommunityPlugin(pluginRegistry);
+    const id = await createSession(app);
+    pluginRegistry.activate("community-plugin", id);
+    grantSessionApproval(rpcApprovalGate, id);
+    vi.spyOn(store, "deleteSession").mockRejectedValueOnce(
+      new Error("database unavailable"),
+    );
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      expect(
+        (await app.request(`/api/sessions/${id}`, { method: "DELETE" })).status,
+      ).toBe(500);
+    } finally {
+      errorLog.mockRestore();
+    }
+
+    expect(pluginRegistry.getActiveRuntimes(id)).toHaveLength(1);
+    expect(rpcApprovalGate.hasGrant(id, "community-plugin", "write")).toBe(
+      true,
+    );
+    expect(clearSessionToolOverrides).not.toHaveBeenCalled();
   });
 
   it("waits for an active session writer before cascading delete", async () => {
