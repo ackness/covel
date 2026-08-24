@@ -826,6 +826,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 | needs        | `[{ capability: narrative-engine }]` — 引擎无关，按 capability 发现当前模式的叙事引擎；两种模式下都可用 |
 | tools.plugin | `generate-scene-prompts`                                                                                |
 | ui.message   | `scene-prompts-block.json`                                                                              |
+| effects      | `parallelSafe: true`；仅写本插件数据，message block 是声明式投影，可与同层独立 block 并行               |
 
 ---
 
@@ -902,13 +903,14 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 **路径**: `plugins/branch-reply/`
 
-| 字段         | 值                                              |
-| ------------ | ----------------------------------------------- |
-| pluginType   | `plugin`                                        |
-| runtimeType  | `function`，`trigger: auto`，`stage: post-turn` |
-| outputKind   | `system`                                        |
-| capabilities | `[branch-reply, prompt-history-rewriter]`       |
-| ui.message   | `branch-reply-block.json`                       |
+| 字段         | 值                                                               |
+| ------------ | ---------------------------------------------------------------- |
+| pluginType   | `plugin`                                                         |
+| runtimeType  | `function`，`trigger: auto`，`stage: post-turn`                  |
+| outputKind   | `system`                                                         |
+| capabilities | `[branch-reply, prompt-history-rewriter]`                        |
+| ui.message   | `branch-reply-block.json`                                        |
+| effects      | `parallelSafe: true`；仅写本插件数据，message block 是声明式投影 |
 
 **生命周期（两条路径，按 `manualPayload` 是否存在区分）**：
 

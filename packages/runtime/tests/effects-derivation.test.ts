@@ -174,6 +174,23 @@ describe("deriveEffects — builtin tool mapping table", () => {
     expect(effectsHazard(block, otherBlock)).toBe(true);
   });
 
+  it("allows independent message projections to opt out of the UI W/W false positive", () => {
+    const first = deriveEffects(
+      manifest({
+        ui: { message: "./first.json" } as never,
+        effects: { parallelSafe: true },
+      }),
+    );
+    const second = deriveEffects(
+      manifest({
+        ui: { message: "./second.json" } as never,
+        effects: { parallelSafe: true },
+      }),
+    );
+
+    expect(effectsHazard(first, second)).toBe(false);
+  });
+
   it("an explicit ui:* declaration still covers every slot", () => {
     const wildcard = deriveEffects(
       manifest({ effects: { writes: ["ui:*"] } } as never),

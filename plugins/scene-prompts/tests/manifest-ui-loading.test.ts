@@ -38,6 +38,7 @@ describe("scene-prompts manifest and UI loading", () => {
       tools: {
         plugin: ["generate-scene-prompts"],
       },
+      effects: { parallelSafe: true },
       ui: {
         message: ["./ui/scene-prompts-block.json"],
       },

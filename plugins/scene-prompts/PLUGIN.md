@@ -54,6 +54,10 @@ tools:
 ui:
   message:
     - ./ui/scene-prompts-block.json
+# The tool writes scene-prompts-owned plugin data; ui.message is a declarative
+# projection and does not mutate another message-block plugin's state.
+effects:
+  parallelSafe: true
 postHistory:
   role: system
   content: |
