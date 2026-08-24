@@ -188,20 +188,27 @@ describe("TurnExecutor stream recovery", () => {
 
   it("stream throws AND fallback generate() also throws: runtime returns failed result", async () => {
     const llm = new BothFailLLM();
+    const input = makeTurnInput();
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => narratorLoaded,
       llm,
       store: await createMainLoopStore("sess-1"),
+      onRuntimeComplete: async () => {
+        throw new Error("observer failed");
+      },
       onDelta: async () => {
         /* no deltas expected */
       },
     };
 
-    const result = await executeTurn(makeTurnInput(), [noToolManifest], deps);
+    const result = await executeTurn(input, [noToolManifest], deps);
 
     expect(result.runtimeResults).toHaveLength(1);
     const rr = result.runtimeResults[0]!;
     expect(rr.status).toBe("failed");
+    expect(rr.pluginId).toBe(noToolManifest.pluginId);
+    expect(rr.turnId).toBe(input.turnId);
+    expect(rr.runId).not.toBe("");
     expect(rr.error).toBeTruthy();
     expect(typeof rr.error).toBe("string");
     // The outer catch surfaces the fallback's error message.

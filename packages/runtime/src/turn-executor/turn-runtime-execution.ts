@@ -705,13 +705,17 @@ export async function executeOneRuntime(
       startTime,
       message,
     );
-    await deps.onRuntimeComplete?.({
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      status: failedResult.status,
-      durationMs: failedResult.durationMs,
-      error: message,
-    });
+    try {
+      await deps.onRuntimeComplete?.({
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        status: failedResult.status,
+        durationMs: failedResult.durationMs,
+        error: message,
+      });
+    } catch {
+      /* callback error must not replace the runtime failure */
+    }
 
     emitSubEvent(deps.eventBus, "runtime", "runtime.failed", input.sessionId, {
       runtimeId: manifest.name,
