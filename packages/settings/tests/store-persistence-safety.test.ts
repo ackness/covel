@@ -92,6 +92,45 @@ describe("set() rollback on a failed write", () => {
 });
 
 describe("failed hydration", () => {
+  it("coalesces concurrent and repeated init calls into one hydration", async () => {
+    let markLoadStarted!: () => void;
+    const loadStarted = new Promise<void>((resolve) => {
+      markLoadStarted = resolve;
+    });
+    let releaseLoad!: () => void;
+    const loadGate = new Promise<void>((resolve) => {
+      releaseLoad = resolve;
+    });
+    const adapter = createMemoryAdapter({ "ui.locale": "en-US" });
+    const load = vi.spyOn(adapter, "load").mockImplementation(async () => {
+      markLoadStarted();
+      await loadGate;
+      return { "ui.locale": "en-US" };
+    });
+    const loadSecrets = vi.spyOn(adapter, "loadSecrets");
+    const store = new SettingsStore(adapter);
+    store.register(localeEntry);
+
+    const first = store.init();
+    const second = store.init();
+    expect(second).toBe(first);
+    await loadStarted;
+    expect(store.isHydrated()).toBe(false);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(loadSecrets).toHaveBeenCalledTimes(1);
+
+    releaseLoad();
+    await Promise.all([first, second, store.ready()]);
+    expect(store.isHydrated()).toBe(true);
+    expect(store.get("ui.locale")).toBe("en-US");
+
+    const repeated = store.init();
+    expect(repeated).toBe(first);
+    await repeated;
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(loadSecrets).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses writes before init without touching persisted data", async () => {
     const adapter = createMemoryAdapter({ "ui.locale": "en-US" });
     const store = new SettingsStore(adapter);

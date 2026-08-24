@@ -42,6 +42,8 @@ export class SettingsStore implements SettingsStoreApi {
   private readonly persistRevisions = { values: 0, secrets: 0 };
   private loaded: Promise<void>;
   private loadResolve!: () => void;
+  /** One hydration generation per store instance; concurrent callers share it. */
+  private initPromise: Promise<void> | null = null;
   private hydrationState: "pending" | "ready" | "failed" = "pending";
   /** Set when `init()` could not read existing state. See {@link assertHydrated}. */
   private hydrationError: Error | null = null;
@@ -52,8 +54,12 @@ export class SettingsStore implements SettingsStoreApi {
     });
   }
 
-  async init(): Promise<void> {
-    this.hydrationState = "pending";
+  init(): Promise<void> {
+    if (!this.initPromise) this.initPromise = this.hydrate();
+    return this.initPromise;
+  }
+
+  private async hydrate(): Promise<void> {
     try {
       const [entries, secrets] = await Promise.all([
         this.adapter.load(),
