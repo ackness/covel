@@ -83,7 +83,8 @@ export function createSqliteMediaStore(
   `);
   const insertRef = sqlite.prepare(`
     INSERT OR IGNORE INTO media_refs (session_id, media_id, plugin_id, created_at)
-    VALUES (@sessionId, @mediaId, @pluginId, @createdAt)
+    SELECT @sessionId, @mediaId, @pluginId, @createdAt
+    WHERE EXISTS (SELECT 1 FROM media_assets WHERE id = @mediaId)
   `);
   const removeRef = sqlite.prepare(`
     DELETE FROM media_refs

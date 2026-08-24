@@ -156,6 +156,20 @@ export function runMediaStoreContractTests(
       expect(await store.isReferencedBy(ref.id, "sess-C")).toBe(false);
     });
 
+    it("does not create a ref for an unknown asset", async () => {
+      const store = await createStore();
+
+      await store.addRef("missing-asset", "sess-A", "plugin-A");
+
+      expect(await store.isReferencedBy("missing-asset", "sess-A")).toBe(false);
+      expect(
+        (await store.listRefs()).filter(
+          (row) =>
+            row.mediaId === "missing-asset" && row.sessionId === "sess-A",
+        ),
+      ).toEqual([]);
+    });
+
     it("addRef is idempotent on (sessionId, mediaId) regardless of pluginId", async () => {
       // The UNIQUE constraint on media_refs is (session_id, media_id) only —
       // plugin_id is "first-source metadata", not part of the key. SQL UNIQUE
