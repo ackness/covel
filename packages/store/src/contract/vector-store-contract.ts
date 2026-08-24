@@ -137,6 +137,38 @@ export function runVectorStoreContractTests(
       expect(results[0].key).toBe("k0"); // exact match lands first
     });
 
+    it("returns no results when topK is zero or negative", async () => {
+      const dim = 16;
+      await setupSessionWithModel(store, "s1", dim);
+      const query = seededVector(dim, 1);
+      await store.upsertVector({
+        sessionId: "s1",
+        pluginId: "p",
+        namespace: "ns",
+        key: "k1",
+        embedding: query,
+      });
+
+      await expect(
+        store.searchVectors({ sessionId: "s1", query, topK: 0 }),
+      ).resolves.toEqual([]);
+      await expect(
+        store.searchVectors({ sessionId: "s1", query, topK: -1 }),
+      ).resolves.toEqual([]);
+    });
+
+    it("rejects non-safe-integer topK values", async () => {
+      const dim = 16;
+      await setupSessionWithModel(store, "s1", dim);
+      const query = seededVector(dim, 1);
+
+      for (const topK of [1.5, Number.NaN, Infinity, 2 ** 53]) {
+        await expect(
+          store.searchVectors({ sessionId: "s1", query, topK }),
+        ).rejects.toBeInstanceOf(RangeError);
+      }
+    });
+
     it("narrows by pluginId and namespace filters", async () => {
       const dim = 16;
       await setupSessionWithModel(store, "s1", dim);

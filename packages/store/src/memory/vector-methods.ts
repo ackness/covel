@@ -7,6 +7,7 @@ import type {
   VectorSearchResult,
   VectorTarget,
 } from "../vector-store.js";
+import { normalizeVectorTopK } from "../vector-store.js";
 import type {
   MemoryState,
   MemoryStoreMethods,
@@ -56,6 +57,8 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
     async searchVectors(
       input: SearchVectorsInput,
     ): Promise<VectorSearchResult[]> {
+      const topK = normalizeVectorTopK(input.topK);
+      if (topK === 0) return [];
       const target = state.sessionVectorTargets.get(input.sessionId) ?? null;
       if (!target) {
         return [];
@@ -65,7 +68,6 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
           `Memory vector search: query length ${input.query.length} does not match model dim ${target.dim}`,
         );
       }
-      const topK = input.topK ?? 8;
       const scored: Array<{ row: MemoryVectorRow; distance: number }> = [];
       for (const row of state.vectorRows.values()) {
         if (row.sessionId !== input.sessionId) continue;
@@ -81,7 +83,7 @@ export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
         scored.push({ row, distance: squaredL2(input.query, row.embedding) });
       }
       scored.sort((a, b) => a.distance - b.distance);
-      return scored.slice(0, Math.max(0, topK)).map(({ row, distance }) => ({
+      return scored.slice(0, topK).map(({ row, distance }) => ({
         sessionId: row.sessionId,
         pluginId: row.pluginId,
         namespace: row.namespace,

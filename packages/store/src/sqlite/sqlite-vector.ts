@@ -52,6 +52,7 @@ import type {
   VectorSearchResult,
   DeleteVectorsInput,
 } from "../vector-store.js";
+import { normalizeVectorTopK } from "../vector-store.js";
 
 // ── Safety helpers ───────────────────────────────────────────────
 
@@ -371,6 +372,8 @@ export function createSqliteVectorCapability(
   async function searchVectors(
     input: SearchVectorsInput,
   ): Promise<VectorSearchResult[]> {
+    const topK = normalizeVectorTopK(input.topK);
+    if (topK === 0) return [];
     const target = await resolveSessionVectorTarget(input.sessionId);
     if (!target) {
       // No embedding model locked → return empty results (RAG disabled).
@@ -385,13 +388,12 @@ export function createSqliteVectorCapability(
 
     ensurePhysicalTable(target);
     const tname = physicalTableName(target.modelRegistryId);
-    const topK = input.topK ?? 8;
 
     // Build WHERE dynamically. `k` must appear in WHERE for sqlite-vec.
     const conditions = ["embedding MATCH ?", "k = ?", "session_id = ?"];
     const params: Array<string | number> = [
       toJsonVector(input.query),
-      Math.max(1, topK),
+      topK,
       input.sessionId,
     ];
 

@@ -82,6 +82,15 @@ export interface SearchVectorsInput {
   readonly namespace?: string;
 }
 
+/** Normalize the backend-independent top-k contract before issuing a query. */
+export function normalizeVectorTopK(topK: number | undefined): number {
+  const value = topK ?? 8;
+  if (!Number.isSafeInteger(value)) {
+    throw new RangeError("vector search topK must be a safe integer");
+  }
+  return value <= 0 ? 0 : value;
+}
+
 /**
  * One KNN result row. `distance` is backend-specific (L2 for sqlite-vec,
  * cosine/L2/dot for pgvector — callers should treat "lower is more

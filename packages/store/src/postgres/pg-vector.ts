@@ -47,6 +47,7 @@ import type {
   VectorSearchResult,
   DeleteVectorsInput,
 } from "../vector-store.js";
+import { normalizeVectorTopK } from "../vector-store.js";
 
 // ── Safety helpers ───────────────────────────────────────────────
 
@@ -371,6 +372,8 @@ export function createPgVectorCapability(
   async function searchVectors(
     input: SearchVectorsInput,
   ): Promise<VectorSearchResult[]> {
+    const topK = normalizeVectorTopK(input.topK);
+    if (topK === 0) return [];
     const target = await resolveSessionVectorTarget(input.sessionId);
     if (!target) {
       // No embedding model locked → return empty results.
@@ -385,7 +388,6 @@ export function createPgVectorCapability(
 
     await ensurePhysicalTable(target);
     const tname = physicalTableName(target.modelRegistryId);
-    const topK = input.topK ?? 8;
     const vecStr = toVectorString(input.query);
 
     // Build conditional WHERE clauses.
