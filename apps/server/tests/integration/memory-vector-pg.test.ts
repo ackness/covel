@@ -23,6 +23,7 @@ import type { MemoryLLMAdapter } from "@covel/memory";
 const BASE_URL =
   process.env.DATABASE_URL ??
   "postgresql://covel:covel_dev@localhost:5432/covel";
+const REQUIRE_PG = process.env.COVEL_REQUIRE_PG_TESTS === "1";
 const ISOLATED_DB = "covel_test_memory_vector_pg";
 
 /** DROP+CREATE an isolated database so this file never clobbers other PG suites. */
@@ -43,7 +44,12 @@ async function createIsolatedPgUrl(): Promise<string | null> {
     const url = new URL(BASE_URL);
     url.pathname = `/${ISOLATED_DB}`;
     return url.toString();
-  } catch {
+  } catch (error) {
+    if (REQUIRE_PG) {
+      throw new Error("PostgreSQL with pgvector is required for memory tests", {
+        cause: error,
+      });
+    }
     return null;
   }
 }

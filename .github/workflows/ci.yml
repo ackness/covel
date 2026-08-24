@@ -75,3 +75,46 @@ jobs:
 
       - name: Check plugin/world i18n coverage + READMEs
         run: pnpm check:i18n
+
+  postgres:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
+        env:
+          POSTGRES_USER: covel
+          POSTGRES_PASSWORD: covel_ci
+          POSTGRES_DB: covel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U covel -d covel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://covel:covel_ci@localhost:5432/covel
+      COVEL_REQUIRE_PG_TESTS: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 26.7.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test PostgreSQL stores
+        run: pnpm --filter @covel/store test
+
+      - name: Test PostgreSQL server integration
+        run: pnpm --filter @covel/server exec vitest run tests/integration

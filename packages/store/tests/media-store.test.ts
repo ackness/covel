@@ -25,6 +25,7 @@ runMediaStoreContractTests("SqliteMediaStore", () => {
 const DATABASE_URL =
   process.env.DATABASE_URL ??
   "postgresql://covel:covel_dev@localhost:5432/covel";
+const REQUIRE_PG = process.env.COVEL_REQUIRE_PG_TESTS === "1";
 
 let pgAvailable = false;
 try {
@@ -33,7 +34,12 @@ try {
   await client`SELECT 1`;
   await client.end();
   pgAvailable = true;
-} catch {
+} catch (error) {
+  if (REQUIRE_PG) {
+    throw new Error("PostgreSQL is required for PgMediaStore tests", {
+      cause: error,
+    });
+  }
   console.warn("PostgreSQL not available, skipping PgMediaStore tests");
 }
 

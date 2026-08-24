@@ -269,6 +269,7 @@ describe("DDL codegen ↔ Drizzle parity", () => {
 // ── PostgreSQL column parity (gated on a real PG) ───────────────
 
 const DATABASE_URL = process.env.DATABASE_URL;
+const REQUIRE_PG = process.env.COVEL_REQUIRE_PG_TESTS === "1";
 let pgAvailable = false;
 if (DATABASE_URL) {
   try {
@@ -277,9 +278,16 @@ if (DATABASE_URL) {
     await client`SELECT 1`;
     await client.end();
     pgAvailable = true;
-  } catch {
+  } catch (error) {
+    if (REQUIRE_PG) {
+      throw new Error("PostgreSQL is required for DDL parity tests", {
+        cause: error,
+      });
+    }
     pgAvailable = false;
   }
+} else if (REQUIRE_PG) {
+  throw new Error("DATABASE_URL is required when COVEL_REQUIRE_PG_TESTS=1");
 }
 
 /** Normalize a Drizzle PG SQL type to its information_schema.data_type. */
