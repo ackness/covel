@@ -2,7 +2,7 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
 
-import { afterAll, describe, it, expect } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, it, expect } from "vitest";
 
 import { runVectorStoreContractTests } from "../src/contract/vector-store-contract.js";
 import { createMemoryStore } from "../src/memory/memory-store.js";
@@ -73,6 +73,81 @@ if (pgVectorAvailable) {
       );
     }
     return store;
+  });
+
+  describe("PgStore vector model locking across instances", () => {
+    let storeA: Awaited<ReturnType<typeof createPgStore>>;
+    let storeB: Awaited<ReturnType<typeof createPgStore>>;
+
+    beforeEach(async () => {
+      storeA = await createPgStore(isolated.url, { freshSchema: true });
+      storeB = await createPgStore(isolated.url);
+      const now = new Date().toISOString();
+      await storeA.createSession({
+        id: "shared-session",
+        status: "active",
+        turnCount: 0,
+        preGameCompleted: [],
+        activePlugins: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    afterEach(async () => {
+      await Promise.all([storeA.close(), storeB.close()]);
+    });
+
+    it("refreshes an unlocked result after another instance locks the session", async () => {
+      await expect(
+        storeA.resolveSessionVectorTarget("shared-session"),
+      ).resolves.toBeNull();
+      const target = await storeB.ensureVectorModel({
+        provider: "audit",
+        modelName: "one",
+        dim: 3,
+        modelId: "audit/one",
+      });
+      await storeB.lockSessionEmbeddingModel("shared-session", target);
+
+      await expect(
+        storeA.resolveSessionVectorTarget("shared-session"),
+      ).resolves.toMatchObject({ modelRegistryId: target.modelRegistryId });
+    });
+
+    it("allows exactly one concurrent first lock", async () => {
+      const [targetA, targetB] = await Promise.all([
+        storeA.ensureVectorModel({
+          provider: "audit",
+          modelName: "one",
+          dim: 3,
+          modelId: "audit/one",
+        }),
+        storeB.ensureVectorModel({
+          provider: "audit",
+          modelName: "two",
+          dim: 4,
+          modelId: "audit/two",
+        }),
+      ]);
+
+      const outcomes = await Promise.allSettled([
+        storeA.lockSessionEmbeddingModel("shared-session", targetA),
+        storeB.lockSessionEmbeddingModel("shared-session", targetB),
+      ]);
+      expect(
+        outcomes.filter((result) => result.status === "fulfilled"),
+      ).toHaveLength(1);
+      expect(
+        outcomes.filter((result) => result.status === "rejected"),
+      ).toHaveLength(1);
+
+      const [resolvedA, resolvedB] = await Promise.all([
+        storeA.resolveSessionVectorTarget("shared-session"),
+        storeB.resolveSessionVectorTarget("shared-session"),
+      ]);
+      expect(resolvedA?.modelRegistryId).toBe(resolvedB?.modelRegistryId);
+    });
   });
 } else {
   describe("PgStore (pgvector) — skipped", () => {

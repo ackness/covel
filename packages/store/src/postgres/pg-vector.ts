@@ -196,43 +196,36 @@ export function createPgVectorCapability(
     sessionId: string,
     target: VectorTarget,
   ): Promise<void> {
-    const rows = await client<
-      Array<{
-        embedding_model_id: number | null;
-        embedding_locked_at: string | null;
-      }>
-    >`
-      SELECT embedding_model_id, embedding_locked_at
+    const now = new Date().toISOString();
+    const updated = await client<Array<{ id: string }>>`
+      UPDATE sessions
+         SET embedding_model_id = ${target.modelRegistryId},
+             embedding_locked_at = ${now}
+       WHERE id = ${sessionId}
+         AND embedding_model_id IS NULL
+       RETURNING id
+    `;
+    if (updated.length === 1) {
+      sessionTargetCache.set(sessionId, target);
+      return;
+    }
+
+    // The conditional update distinguishes a missing session from a lock that
+    // another connection won. PostgreSQL re-checks the WHERE predicate after
+    // waiting on a concurrent row lock, so exactly one first writer succeeds.
+    const rows = await client<Array<{ embedding_model_id: number | null }>>`
+      SELECT embedding_model_id
         FROM sessions
        WHERE id = ${sessionId}
     `;
-
     if (rows.length === 0) {
       throw new Error(
         `pg-vector lockSessionEmbeddingModel: session ${sessionId} not found`,
       );
     }
-
-    const existing = rows[0];
-    if (
-      existing.embedding_model_id !== null &&
-      existing.embedding_model_id !== undefined
-    ) {
-      throw new Error(
-        `pg-vector lockSessionEmbeddingModel: session ${sessionId} is already locked to model ${existing.embedding_model_id}`,
-      );
-    }
-
-    const now = new Date().toISOString();
-    await client`
-      UPDATE sessions
-         SET embedding_model_id = ${target.modelRegistryId},
-             embedding_locked_at = ${now}
-       WHERE id = ${sessionId}
-    `;
-
-    // Invalidate session cache.
-    sessionTargetCache.delete(sessionId);
+    throw new Error(
+      `pg-vector lockSessionEmbeddingModel: session ${sessionId} is already locked to model ${rows[0].embedding_model_id}`,
+    );
   }
 
   async function resolveSessionVectorTarget(
@@ -249,7 +242,10 @@ export function createPgVectorCapability(
     `;
 
     if (sessionRows.length === 0 || sessionRows[0].embedding_model_id == null) {
-      sessionTargetCache.set(sessionId, null);
+      // An unlocked session can be locked by another server instance at any
+      // time. Caching null would make this process permanently miss that
+      // immutable transition because only the winning instance can invalidate
+      // its local cache.
       return null;
     }
 
