@@ -294,4 +294,69 @@ describe("executeTurn: capability-based needs", () => {
     const byId = new Map(result.runtimeResults.map((r) => [r.runtimeId, r]));
     expect(byId.get("guide")?.status).toBe("skipped");
   });
+
+  it('requires every provider for cardinality "all"', async () => {
+    const first = manifest("engine-a", {
+      stage: "narrative",
+      capabilities: ["narrative-engine"],
+    });
+    const second = manifest("engine-b", {
+      stage: "narrative",
+      capabilities: ["narrative-engine"],
+    });
+    const downstream = manifest("guide", {
+      stage: "post-turn",
+      needs: [{ capability: "narrative-engine", cardinality: "all" }],
+    });
+    let downstreamRan = false;
+
+    const result = await runTurn([first, second, downstream], {
+      "engine-a": async () => ({ narrativeOutput: "ok" }),
+      "engine-b": async () => {
+        throw new Error("second engine failed");
+      },
+      guide: async () => {
+        downstreamRan = true;
+        return { ok: true };
+      },
+    });
+
+    const byId = new Map(result.runtimeResults.map((r) => [r.runtimeId, r]));
+    expect(downstreamRan).toBe(false);
+    expect(byId.get("guide")).toMatchObject({
+      status: "skipped",
+      output: {
+        missingUpstreams: ["capability:narrative-engine"],
+      },
+    });
+  });
+
+  it('runs when every provider for cardinality "all" succeeds', async () => {
+    const first = manifest("engine-a", {
+      stage: "narrative",
+      capabilities: ["narrative-engine"],
+    });
+    const second = manifest("engine-b", {
+      stage: "narrative",
+      capabilities: ["narrative-engine"],
+    });
+    const downstream = manifest("guide", {
+      stage: "post-turn",
+      needs: [{ capability: "narrative-engine", cardinality: "all" }],
+    });
+    let downstreamRan = false;
+
+    const result = await runTurn([first, second, downstream], {
+      "engine-a": async () => ({ narrativeOutput: "a" }),
+      "engine-b": async () => ({ narrativeOutput: "b" }),
+      guide: async () => {
+        downstreamRan = true;
+        return { ok: true };
+      },
+    });
+
+    const byId = new Map(result.runtimeResults.map((r) => [r.runtimeId, r]));
+    expect(downstreamRan).toBe(true);
+    expect(byId.get("guide")?.status).toBe("success");
+  });
 });

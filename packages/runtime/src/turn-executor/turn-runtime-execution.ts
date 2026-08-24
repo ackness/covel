@@ -381,10 +381,9 @@ export async function executeOneRuntime(
       //    a successful result this turn (or be done from an earlier setup
       //    execution, via the preGameCompleted fallback). An absent (disabled)
       //    upstream stays a skip, never treated as success.
-      //  • {capability} — at least one in-scope runtime providing that
-      //    capability must have succeeded. Lets a guidance plugin depend on "the
-      //    active narrative engine" without naming narrator / chat-mode-narrator;
-      //    zero in-scope providers ⇒ unsatisfied (skip, not run blind).
+      //  • {capability} — `cardinality: "all"` requires every in-scope
+      //    provider; the default requires at least one. Zero providers is always
+      //    unsatisfied, so a consumer never runs blind.
       const missing: string[] = [];
       for (const entry of required) {
         if (typeof entry === "string" || "runtime" in entry) {
@@ -397,9 +396,15 @@ export async function executeOneRuntime(
         const providers = activeRuntimes
           .filter((r) => r.capabilities?.includes(entry.capability))
           .map((r) => r.name);
-        const satisfied = providers.some((name) =>
-          isRequiredUpstreamSatisfied(completedResults.get(name)),
-        );
+        const satisfied =
+          providers.length > 0 &&
+          (entry.cardinality === "all"
+            ? providers.every((name) =>
+                isRequiredUpstreamSatisfied(completedResults.get(name)),
+              )
+            : providers.some((name) =>
+                isRequiredUpstreamSatisfied(completedResults.get(name)),
+              ));
         if (!satisfied) missing.push(`capability:${entry.capability}`);
       }
       if (missing.length > 0) {
