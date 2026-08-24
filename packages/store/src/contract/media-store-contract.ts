@@ -102,11 +102,15 @@ export function runMediaStoreContractTests(
     it("deletes stored media by id", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png");
+      await store.addRef(ref.id, "sess-delete", "plugin-delete");
 
       await store.delete(ref.id);
 
       expect(await store.exists(ref.id)).toBe(false);
       await expect(store.get(ref)).rejects.toThrow(ref.id);
+      expect(
+        (await store.listRefs()).filter((row) => row.mediaId === ref.id),
+      ).toEqual([]);
     });
 
     // ── Ownership / refs / streaming (P0-a §5.1 g/h) ───────────────

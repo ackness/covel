@@ -10,6 +10,10 @@ import {
   createPgMediaStore,
   createSqliteMediaStore,
 } from "../src/media-store.js";
+import {
+  acquireSqliteConnection,
+  releaseSqliteConnection,
+} from "../src/sqlite/shared-connection.js";
 
 runMediaStoreContractTests("MemoryMediaStore", () => createMemoryMediaStore());
 
@@ -19,6 +23,46 @@ runMediaStoreContractTests("SqliteMediaStore", () => {
   );
   return createSqliteMediaStore(path.join(tmpDir, "test.db"), {
     mediaRoot: path.join(tmpDir, "media"),
+  });
+});
+
+describe("SqliteMediaStore transaction boundaries", () => {
+  it("removes refs and the asset inside one SQLite transaction", async () => {
+    const tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "covel-media-delete-tx-"),
+    );
+    const dbPath = path.join(tmpDir, "test.db");
+    const store = createSqliteMediaStore(dbPath, {
+      mediaRoot: path.join(tmpDir, "media"),
+    });
+    const sqlite = acquireSqliteConnection(dbPath);
+    let deleteObservedInTransaction = false;
+    sqlite.function("covel_observe_media_delete_tx", () => {
+      deleteObservedInTransaction = sqlite.inTransaction;
+      return null;
+    });
+    sqlite.exec(`
+      CREATE TEMP TRIGGER observe_media_delete_tx
+      AFTER DELETE ON media_refs
+      BEGIN
+        SELECT covel_observe_media_delete_tx();
+      END
+    `);
+
+    try {
+      const ref = await store.put(new Uint8Array([1, 2, 3]), "image/png");
+      await store.addRef(ref.id, "sess-delete", "plugin-delete");
+      await store.delete(ref.id);
+
+      expect(deleteObservedInTransaction).toBe(true);
+      expect(await store.exists(ref.id)).toBe(false);
+      expect(await store.listRefs()).toEqual([]);
+    } finally {
+      sqlite.exec("DROP TRIGGER IF EXISTS observe_media_delete_tx");
+      releaseSqliteConnection(sqlite);
+      await store.close?.();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 

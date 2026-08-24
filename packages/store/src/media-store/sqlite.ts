@@ -71,6 +71,10 @@ export function createSqliteMediaStore(
   const removeRefs = sqlite.prepare(
     "DELETE FROM media_refs WHERE media_id = ?",
   );
+  const deleteAsset = sqlite.transaction((id: string) => {
+    removeRefs.run(id);
+    remove.run(id);
+  });
 
   // First-writer wins guard: only set owner when row has no owner yet, or
   // when the caller already owns it (idempotent re-record). Prevents a
@@ -171,9 +175,10 @@ export function createSqliteMediaStore(
     async delete(id) {
       const row = select.get(id) as { path: string } | undefined;
       // Clean up the inbound refs first so a foreign-key-style invariant holds
-      // even though the schema has no explicit FK between the two tables.
-      removeRefs.run(id);
-      remove.run(id);
+      // even though the schema has no explicit FK between the two tables. The
+      // transaction also excludes a writer in another OS process from adding a
+      // ref between the two statements and leaving it dangling.
+      deleteAsset(id);
       if (row?.path) {
         rmSync(row.path, { force: true });
       }

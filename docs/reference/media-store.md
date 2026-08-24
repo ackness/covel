@@ -99,6 +99,10 @@ Returns assets owned by `sessionId` whose `meta` contains every key/value in `fi
 
 `recordOwnership()` sets the first owner for an asset (first-writer-wins; a second call with a different `sessionId` does not overwrite it). `addRef()` grants another session read access for fork and snapshot flows; `removeRef()` idempotently removes one session's explicit ref (does not delete bytes or ownership metadata). `isReferencedBy()` returns true for the owner session and for sessions with an explicit reference row.
 
+`delete()` removes every inbound ref before the asset. SQL backends perform both
+steps in one transaction; in particular, a second SQLite process cannot insert
+a ref between the ref cleanup and asset deletion.
+
 `addRef()` is **idempotent on `(sessionId, mediaId)`** — the `media_refs` UNIQUE constraint ignores `plugin_id` (which is recorded as first-source metadata only). This is the safe behaviour because SQL `UNIQUE` treats every `NULL` as distinct, so a constraint that includes a nullable `plugin_id` would silently allow unbounded duplicate rows when callers passed `undefined`. The new key shape matches Memory and IndexedDB, which use `(sessionId, mediaId)` as their map key.
 
 > **Existing databases.** Fresh installs get the new constraint immediately. Existing PG/SQLite databases keep any pre-existing UNIQUE on `(session_id, media_id, plugin_id)` — that older index is strictly looser than the new one, so the stricter constraint wins and addRef stays safe. **Sites with legacy duplicate rows** (same `session_id` + `media_id` with different `plugin_id`) MUST run a one-off migration before the new index can be created. Templates:
