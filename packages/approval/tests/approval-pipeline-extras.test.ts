@@ -4,12 +4,12 @@
  *  - rule-list ordering: first match wins (deny before allow swap)
  *  - exact tool-name rules apply regardless of source category
  *  - `deny` action surfaces `needsApproval: true, reason: 'rule-deny'`
- *    (different from `ask` in semantics — UI must distinguish)
  */
 
 import { describe, it, expect } from "vitest";
 import type { ApprovalRequest } from "@covel/shared";
 import { createApprovalPipeline } from "../src/approval-pipeline.js";
+import type { PermissionRule } from "../src/approval-pipeline.js";
 
 function makeRequest(overrides?: Partial<ApprovalRequest>): ApprovalRequest {
   return {
@@ -52,31 +52,31 @@ describe("approval rule ordering", () => {
     expect(result.reason).toBe("rule-allow");
   });
 
-  it("deny vs ask are surfaced distinctly so the UI can tell prompts from blocks", () => {
-    const askPipeline = createApprovalPipeline(undefined, [
-      { pattern: "third-party:*", action: "ask" },
-    ]);
+  it("unsupported actions fail closed during configuration", () => {
     const denyPipeline = createApprovalPipeline(undefined, [
       { pattern: "third-party:*", action: "deny" },
     ]);
 
-    const askRes = askPipeline.check(makeRequest(), "third-party");
     const denyRes = denyPipeline.check(makeRequest(), "third-party");
 
-    expect(askRes).toEqual({ needsApproval: true, reason: "rule-ask" });
     expect(denyRes).toEqual({ needsApproval: true, reason: "rule-deny" });
+    expect(() =>
+      createApprovalPipeline(undefined, [
+        { pattern: "third-party:*", action: "prompt" },
+      ] as unknown as readonly PermissionRule[]),
+    ).toThrow(/not supported/i);
   });
 });
 
 describe("approval rule wildcards vs exact match", () => {
   it("exact match still works when a permissive wildcard sits below it", () => {
     const pipeline = createApprovalPipeline(undefined, [
-      { pattern: "covel_special_tool", action: "ask" },
+      { pattern: "covel_special_tool", action: "deny" },
       { pattern: "local:*", action: "allow" },
     ]);
     expect(
       pipeline.check(makeRequest({ toolName: "covel_special_tool" }), "local"),
-    ).toEqual({ needsApproval: true, reason: "rule-ask" });
+    ).toEqual({ needsApproval: true, reason: "rule-deny" });
     // A different tool flows through the wildcard.
     expect(
       pipeline.check(makeRequest({ toolName: "covel_normal_tool" }), "local"),

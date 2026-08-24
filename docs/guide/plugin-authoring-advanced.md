@@ -126,7 +126,7 @@ import type { PermissionRule } from "@covel/approval";
 const rules: PermissionRule[] = [
   { pattern: "builtin:*", action: "allow" },
   { pattern: "local:*", action: "allow" },
-  { pattern: "dangerous-tool", action: "ask" }, // 需要玩家确认
+  { pattern: "dangerous-tool", action: "deny" },
   { pattern: "third-party:*", action: "deny" },
 ];
 
@@ -137,8 +137,11 @@ const result = pipeline.check(
   { toolName: "dangerous-tool", sessionId: "sess-1", turnId: "turn-1" },
   "local",
 );
-// result: { needsApproval: true, reason: 'rule-ask' }
+// result: { needsApproval: true, reason: 'rule-deny' }
 ```
+
+`ask` 动作目前不可用；它需要可持久化的审批决策与任务恢复机制。传入任何非
+`allow` / `deny` 动作都会在创建审批管线时抛错，不会在执行时静默降级。
 
 **审批规则匹配逻辑：**
 

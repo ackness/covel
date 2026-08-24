@@ -23,7 +23,7 @@ export interface ApprovalCheckResult {
 export interface PermissionRule {
   /** Pattern: 'builtin:*', 'local:*', 'third-party:*', or specific tool name. */
   readonly pattern: string;
-  readonly action: "allow" | "deny" | "ask";
+  readonly action: "allow" | "deny";
 }
 
 export interface ApprovalPipeline {
@@ -85,7 +85,7 @@ export function matchPermissionRule(
  * @param _store - Reserved for the future decision-persistence path (community
  *   plugin approvals). Currently unused — accepted so callers need not change
  *   when persistence lands.
- * @param rules - Optional permission rules (e.g., `[{ pattern: 'third-party:*', action: 'ask' }]`). Defaults to allow-all.
+ * @param rules - Optional permission rules (e.g., `[{ pattern: 'third-party:*', action: 'deny' }]`). Defaults to allow-all.
  * @returns An `ApprovalPipeline` with `check` and `hasSessionAllow` methods.
  *
  * @example
@@ -97,10 +97,10 @@ export function matchPermissionRule(
  * const result = pipeline.check({ toolName: 'get-weather', sessionId: 's1', turnId: 't1' });
  * // => { needsApproval: false, autoDecision: 'allow', reason: 'default-allow-all' }
  *
- * // With rules: require approval for third-party tools
+ * // With rules: deny third-party tools
  * const gated = createApprovalPipeline(store, [
  *   { pattern: 'builtin:*', action: 'allow' },
- *   { pattern: 'third-party:*', action: 'ask' },
+ *   { pattern: 'third-party:*', action: 'deny' },
  * ]);
  * ```
  */
@@ -108,6 +108,15 @@ export function createApprovalPipeline(
   _store?: DataStore,
   rules?: readonly PermissionRule[],
 ): ApprovalPipeline {
+  for (const rule of rules ?? []) {
+    const action: unknown = (rule as { readonly action?: unknown }).action;
+    if (action !== "allow" && action !== "deny") {
+      throw new Error(
+        `Approval action ${JSON.stringify(action)} is not supported. Use "allow" or "deny" until durable approval decisions are implemented.`,
+      );
+    }
+  }
+
   function check(
     request: ApprovalRequest,
     toolSource?: "builtin" | "local" | "third-party",
@@ -140,8 +149,6 @@ export function createApprovalPipeline(
           autoDecision: "allow",
           reason: "rule-allow",
         };
-      case "ask":
-        return { needsApproval: true, reason: "rule-ask" };
       case "deny":
         return { needsApproval: true, reason: "rule-deny" };
     }
