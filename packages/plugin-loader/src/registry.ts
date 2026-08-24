@@ -159,6 +159,7 @@ export function createPluginRegistry(
         sessionSet = new Set();
         sessionActivations.set(sessionId, sessionSet);
       }
+      if (sessionSet.has(pluginId)) return true;
       sessionSet.add(pluginId);
       emit({ type: "plugin-activated", pluginId, sessionId });
       emitToEventBus("plugin.activated", sessionId, { pluginId, sessionId });
@@ -170,10 +171,8 @@ export function createPluginRegistry(
         return false;
       }
       const sessionSet = sessionActivations.get(sessionId);
-      if (sessionSet !== undefined) {
-        sessionSet.delete(pluginId);
-        if (sessionSet.size === 0) sessionActivations.delete(sessionId);
-      }
+      if (sessionSet === undefined || !sessionSet.delete(pluginId)) return true;
+      if (sessionSet.size === 0) sessionActivations.delete(sessionId);
       emit({ type: "plugin-deactivated", pluginId, sessionId });
       emitToEventBus("plugin.deactivated", sessionId, { pluginId, sessionId });
       return true;

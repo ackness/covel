@@ -70,6 +70,22 @@ describe("PluginRegistry EventBus Bridge", () => {
     );
   });
 
+  it("emits lifecycle events only for actual activation changes", () => {
+    const events: SubscriptionEvent[] = [];
+    eventBus.onEmit((event) => events.push(event));
+    registry.register(makeEntry("alpha"));
+
+    registry.activate("alpha", "session-1");
+    registry.activate("alpha", "session-1");
+    registry.deactivate("alpha", "session-1");
+    registry.deactivate("alpha", "session-1");
+
+    expect(events.map((event) => event.type)).toEqual([
+      "plugin.activated",
+      "plugin.deactivated",
+    ]);
+  });
+
   it("should work without eventBus (backward compat)", () => {
     const noEventBusRegistry = createPluginRegistry();
     noEventBusRegistry.register(makeEntry("beta"));
