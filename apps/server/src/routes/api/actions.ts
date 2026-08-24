@@ -32,7 +32,10 @@ import { rateLimiter } from "../../middleware/rate-limit.js";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
-import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
+import {
+  resolveTurnCapabilityPluginIds,
+  type TurnCapabilityPluginIds,
+} from "./turn-capabilities.js";
 import {
   ensureSessionClockBackfilled,
   isPreGamePending,
@@ -44,7 +47,11 @@ import {
 } from "./plugin-user-settings.js";
 import { getCachedWorld } from "../../world-cache.js";
 import { registerActiveTurn } from "./turn-control.js";
-import { checkSessionOwner } from "./session/session-guard.js";
+import {
+  checkSessionOwner,
+  sessionIncarnationIdentity,
+  sessionApprovalScope,
+} from "./session/session-guard.js";
 import { validateActionRequest } from "./actions/request.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
@@ -160,6 +167,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // on the session's behalf.
   const ownerDenied = checkSessionOwner(c, session);
   if (ownerDenied) return ownerDenied;
+  const expectedIncarnation = sessionIncarnationIdentity(session);
 
   // Fast path: a paused/ended session takes no actions. The
   // authoritative re-check happens under the session lock below (this read is
@@ -206,17 +214,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // session.locale still acts as the fallback when the client omits it.
   const effectiveLocale = locale ?? session.locale ?? "zh-CN";
 
-  // Persist the live locale so server-initiated turns — plugin-rpc manual
-  // triggers and deferred background followers, which build TurnInput.locale
-  // from the stored session.locale — inherit the player's current UI language
-  // instead of a stale value. Only write when it actually changed.
-  if (effectiveLocale !== session.locale) {
-    await store.updateSession(sessionId, {
-      locale: effectiveLocale,
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
   // Reconcile the process-local registry from the persisted session snapshot.
   // This is needed after restart and also removes plugins disabled by another
   // request or server instance.
@@ -240,14 +237,15 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       400,
     );
   }
-  pluginRegistry.syncSessionActivations(sessionId, sessionPlugins ?? []);
-
-  // Get active runtimes for this session (sorted by priority)
-  const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
+  // Populated from the authoritative live session after taking the lock. Do
+  // not reconcile process-local activations from the stale pre-lock snapshot:
+  // a queued request from incarnation A must not overwrite incarnation B's
+  // registry before its ABA check rejects.
+  let activeRuntimes: readonly RuntimeManifest[] = [];
 
   // Resolve runtime display kind from manifest declarations for progress SSE.
   // The commit path creates its own processor once the per-turn emitter exists.
-  const outputKindResolver = createRuntimeResultProcessor({
+  let outputKindResolver = createRuntimeResultProcessor({
     store,
     sessionId,
     runtimes: activeRuntimes,
@@ -255,10 +253,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
   // Framework-capability plugin ids discovered by capability — never by id.
   // Single source of truth in resolveTurnCapabilityPluginIds.
-  const capabilityPluginIds = resolveTurnCapabilityPluginIds(
-    pluginRegistry,
-    sessionId,
-  );
+  let capabilityPluginIds: TurnCapabilityPluginIds = {
+    worldDataPluginId: undefined,
+    personaPluginId: undefined,
+    promptHistoryRewriterPluginId: undefined,
+  };
 
   return streamSSE(c, async (stream) => {
     let seq = 0;
@@ -370,6 +369,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         committed,
         commitError,
         wasPreGamePending,
+        followerSession,
+        approvalScopes,
       } = await sessionLock.withLock(sessionId, async () => {
         // This execution now owns the session — events on the bus
         // from here on belong to this turn.
@@ -384,6 +385,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           if (!liveSession) {
             throw new Error("session was deleted while the action was queued");
           }
+          if (sessionIncarnationIdentity(liveSession) !== expectedIncarnation) {
+            throw new Error("session was replaced while the action was queued");
+          }
           if (liveSession.status && liveSession.status !== "active") {
             throw new Error(
               `session is ${liveSession.status}; it must be active to accept actions`,
@@ -394,20 +398,47 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // start action. Persist its value on the session so setup, opening
           // continuation, later turns, reconnects, and other server workers
           // all build context from the same lore.
+          pluginRegistry.syncSessionActivations(
+            sessionId,
+            liveSession.activePlugins ?? [],
+          );
+          activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
+          outputKindResolver = createRuntimeResultProcessor({
+            store,
+            sessionId,
+            runtimes: activeRuntimes,
+          });
+          capabilityPluginIds = resolveTurnCapabilityPluginIds(
+            pluginRegistry,
+            sessionId,
+          );
+
           let effectiveSession = liveSession;
+          if (effectiveLocale !== liveSession.locale) {
+            const updatedAt = new Date().toISOString();
+            await store.updateSession(sessionId, {
+              locale: effectiveLocale,
+              updatedAt,
+            });
+            effectiveSession = {
+              ...effectiveSession,
+              locale: effectiveLocale,
+              updatedAt,
+            };
+          }
           if (
             type === "start_session" &&
             payload.loreOverride !== undefined &&
-            liveSession.metadata?.loreOverride !== payload.loreOverride
+            effectiveSession.metadata?.loreOverride !== payload.loreOverride
           ) {
             const updatedAt = new Date().toISOString();
             const metadata = {
-              ...liveSession.metadata,
+              ...effectiveSession.metadata,
               loreOverride: payload.loreOverride,
             };
             await store.updateSession(sessionId, { metadata, updatedAt });
             effectiveSession = {
-              ...liveSession,
+              ...effectiveSession,
               metadata,
               updatedAt,
             };
@@ -838,6 +869,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             committed,
             commitError,
             wasPreGamePending,
+            followerSession: effectiveSession,
+            approvalScopes: new Map(
+              activeRuntimes.map((runtime) => [
+                runtime.pluginId,
+                sessionApprovalScope(effectiveSession, runtime.pluginId),
+              ]),
+            ),
           };
         } finally {
           // Torn down while the lock is still held: after release the next
@@ -873,8 +911,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // effectiveLocale, not session.locale — the in-memory `session` may
           // still hold the pre-update value even though the store write above
           // already persisted the live locale.
-          session: { ...session, locale: effectiveLocale },
+          session: { ...followerSession, locale: effectiveLocale },
           activeRuntimes,
+          approvalScopes,
           deps: {
             loadRuntime: loadRuntimeFn,
             llm: llmAdapter,
@@ -896,6 +935,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         const jobRunner = createPluginRpcJobRunner({
           store,
           sessionId,
+          sessionLock,
+          approvalScopes,
           ...(userSettings ? { userSettings } : {}),
           // The main turn path has no manual-trigger concept —
           // `scheduleDeferredFollowers` is the only method this route calls.

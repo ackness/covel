@@ -134,6 +134,19 @@ describe("Character REST API routes", () => {
     });
   });
 
+  it("refuses writes after the session is paused", async () => {
+    await store.updateSession(sessionId, { status: "paused" });
+    const res = await app.request(`/api/sessions/${sessionId}/characters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "char-paused", name: "Too late" }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "session_not_active" });
+    expect(await store.listCharacters(sessionId)).toEqual([]);
+  });
+
   it("returns 404 for unknown sessions", async () => {
     const getRes = await app.request("/api/sessions/missing/characters");
     expect(getRes.status).toBe(404);

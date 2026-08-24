@@ -176,6 +176,8 @@ Provider 图片输入矩阵：
 
 所有 `_jobs/<jobId>` 的写入都是普通 `setPluginData` 调用，因此都会通过标准 `plugin-data.changed` 频道广播。插件**禁止**直接写入 `_jobs` —— 框架独占该命名空间。业务数据请使用自定义命名空间（如 `images`、`prompts`）。
 
+`pending` 行也作为跨 Pod 删除 drain 的权威索引：入队会在 session lock 内先持久化 runtimeId，再启动 detached work。Memory/SQLite 启动时可按进程 owner 将孤儿标为 failed；PostgreSQL 多 Pod 不做不安全的 owner 扫描，崩溃遗留 pending 的自动回收需等待可续租 job lease/持久队列。
+
 ### Suspend / Resume 事件
 
 | 事件类型         | 方向 | 描述                                                                            | 负载                                                        |
@@ -357,15 +359,16 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 **响应分支:**
 
-| 状态码 | status                                                                       | 触发                                                                                                                |
-| ------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 200    | `ok`                                                                         | action 级成功 / runtime 级 sync 模式成功                                                                            |
-| 202    | `approval-required`                                                          | community-trust 首次调用(action 或 runtime 级)                                                                      |
-| 202    | `accepted`                                                                   | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
-| 400    | `error`                                                                      | 缺字段 / action+runtimeId 互斥违反 / payload 校验失败 / `plugin-mismatch`                                           |
-| 404    | `error` (`code: "unknown-action"` / `"runtime-not-active"`)                  | action 未注册 / runtimeId 未加载到该 session                                                                        |
-| 429    | `error` (`code: "queue-full"`)                                               | pending approvals 超过 cap                                                                                          |
-| 500    | `error` (`code: "runtime-execution-failed"` / `"background-enqueue-failed"`) | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
+| 状态码 | status                                                                                                                       | 触发                                                                                                                |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 200    | `ok`                                                                                                                         | action 级成功 / runtime 级 sync 模式成功                                                                            |
+| 202    | `approval-required`                                                                                                          | community-trust 首次调用(action 或 runtime 级)                                                                      |
+| 202    | `accepted`                                                                                                                   | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
+| 400    | `error`                                                                                                                      | 缺字段 / action+runtimeId 互斥违反 / payload 校验失败 / `plugin-mismatch`                                           |
+| 404    | `error` (`code: "unknown-action"` / `"runtime-not-active"`)                                                                  | action 未注册 / runtimeId 未加载到该 session                                                                        |
+| 409    | `error` (`code: "approval-scope-changed"` / `"session-not-active"` / `"session-deleting"` / `"session-incarnation-changed"`) | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                  |
+| 429    | `error` (`code: "queue-full"`)                                                                                               | pending approvals 超过 cap                                                                                          |
+| 500    | `error` (`code: "runtime-execution-failed"` / `"background-enqueue-failed"`)                                                 | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
 
 带延迟 `entry` 的 community action 会连续返回两次 `approval-required`：先授权 `covel:plugin-server-code`，重试后再授权真实 action。客户端逐阶段展示审批并重试原请求，最多处理两个阶段，超过上限即终止以避免异常审批循环。
 
@@ -390,6 +393,8 @@ community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 
 ```
 
 详细流程图见 [api.md](api.md#rpc-approval-流程pr-7)。
+
+每个 pending/grant 都绑定服务端持久化的 session incarnation 与 plugin revocation generation。撤销、禁用、删除或同 ID 重建后，旧 decision 返回 `409 approval_scope_changed`；旧 Pod 的内存 grant 也不能命中新代次。
 
 ## 三、查询端点
 

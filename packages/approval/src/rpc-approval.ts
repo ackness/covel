@@ -13,9 +13,10 @@
  *     frontend can surface a dialog and POST a decision back.
  *
  * The gate is intentionally in-process and ephemeral. Pending approvals do
- * not survive a server restart; session-level pre-authorizations are
- * scoped to the gate instance. A future enhancement can persist them to
- * `plugin_data` if cross-restart resilience matters.
+ * not survive a server restart; session-level pre-authorizations are scoped
+ * to both the gate instance and a caller-provided session incarnation. This
+ * prevents a stale gate on another process from authorizing a deleted and
+ * recreated session that happens to reuse the same public sessionId.
  */
 
 import type {
@@ -26,6 +27,12 @@ import type {
 
 export interface EvaluateInput {
   readonly sessionId: string;
+  /**
+   * Stable identifier for this incarnation of the session. Production callers
+   * derive it from framework-owned session metadata so grants cannot survive a
+   * delete/recreate that reuses the same public sessionId.
+   */
+  readonly sessionScope: string;
   readonly pluginId: string;
   readonly action: string;
   readonly payload: unknown;
@@ -56,9 +63,23 @@ export interface RpcApprovalGate {
   /** Record a player decision against a previously issued approvalId. */
   decide(
     decision: RpcApprovalDecision,
-  ): { ok: true; pending: RpcApprovalPending } | { ok: false; error: string };
+    sessionScope: string,
+  ):
+    | { ok: true; pending: RpcApprovalPending }
+    | {
+        ok: false;
+        error: string;
+        reason: "unknown-approval" | "scope-changed";
+      };
   /** List all pending approvals for a session. */
-  listPending(sessionId: string): readonly RpcApprovalPending[];
+  listPending(
+    sessionId: string,
+    sessionScope: string,
+  ): readonly RpcApprovalPending[];
+  /** Enumerate every incarnation for local cleanup/compatibility surfaces. */
+  listAllPendingForSession(sessionId: string): readonly RpcApprovalPending[];
+  /** Test whether one pending request belongs to the supplied incarnation. */
+  pendingMatchesScope(approvalId: string, sessionScope: string): boolean;
   /**
    * Look up a pending approval without consuming it. Lets the HTTP layer
    * resolve an approvalId to its sessionId for owner-guard checks BEFORE
@@ -73,7 +94,12 @@ export interface RpcApprovalGate {
    * community approval into "any grant unlocks everything" (2026-07-20
    * audit).
    */
-  hasGrant(sessionId: string, pluginId: string, action: string): boolean;
+  hasGrant(
+    sessionId: string,
+    pluginId: string,
+    action: string,
+    sessionScope: string,
+  ): boolean;
   /**
    * Revoke cached session grants + fresh one-time grants for a session,
    * optionally scoped to one plugin. Returns the number of grants cleared.
@@ -83,11 +109,24 @@ export interface RpcApprovalGate {
 }
 
 interface InternalState {
-  readonly pending: Map<string, RpcApprovalPending>;
-  /** Key = `${sessionId}::${pluginId}::${action}` */
-  readonly sessionCache: Set<string>;
-  /** Key = same shape as sessionCache, value = creation timestamp ms. */
-  readonly oneTimeGrants: Map<string, number>;
+  readonly pending: Map<string, ScopedPending>;
+  readonly sessionCache: Map<string, ScopedGrant>;
+  readonly oneTimeGrants: Map<
+    string,
+    { readonly grant: ScopedGrant; readonly issuedAt: number }
+  >;
+}
+
+interface ScopedGrant {
+  readonly sessionId: string;
+  readonly sessionScope: string;
+  readonly pluginId: string;
+  readonly action: string;
+}
+
+interface ScopedPending {
+  readonly sessionScope: string;
+  readonly record: RpcApprovalPending;
 }
 
 const ONE_TIME_GRANT_TTL_MS = 60_000;
@@ -119,16 +158,24 @@ const STALE_PENDING_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 function tripleKey(
   sessionId: string,
+  sessionScope: string,
   pluginId: string,
   action: string,
 ): string {
-  return `${sessionId}::${pluginId}::${action}`;
+  return JSON.stringify([sessionId, sessionScope, pluginId, action]);
+}
+
+function resolveSessionScope(sessionScope: string): string {
+  if (!sessionScope) {
+    throw new Error("sessionScope is required for RPC approval decisions");
+  }
+  return sessionScope;
 }
 
 export function createRpcApprovalGate(): RpcApprovalGate {
   const state: InternalState = {
     pending: new Map(),
-    sessionCache: new Set(),
+    sessionCache: new Map(),
     oneTimeGrants: new Map(),
   };
 
@@ -140,11 +187,12 @@ export function createRpcApprovalGate(): RpcApprovalGate {
     sessionId: string,
     pluginId: string,
     action: string,
+    sessionScope: string,
   ): boolean {
-    const key = tripleKey(sessionId, pluginId, action);
-    const issued = state.oneTimeGrants.get(key);
-    if (issued === undefined) return false;
-    if (Date.now() - issued > ONE_TIME_GRANT_TTL_MS) {
+    const key = tripleKey(sessionId, sessionScope, pluginId, action);
+    const entry = state.oneTimeGrants.get(key);
+    if (entry === undefined) return false;
+    if (Date.now() - entry.issuedAt > ONE_TIME_GRANT_TTL_MS) {
       state.oneTimeGrants.delete(key);
       return false;
     }
@@ -160,37 +208,56 @@ export function createRpcApprovalGate(): RpcApprovalGate {
   function sweepStalePending(): void {
     const cutoff = Date.now() - STALE_PENDING_TTL_MS;
     for (const [id, entry] of state.pending) {
-      const ts = Date.parse(entry.requestedAt);
+      const ts = Date.parse(entry.record.requestedAt);
       if (Number.isFinite(ts) && ts < cutoff) {
         state.pending.delete(id);
       }
     }
   }
 
-  function countSessionPending(sessionId: string): number {
+  function countSessionPending(
+    sessionId: string,
+    sessionScope: string,
+  ): number {
     let n = 0;
     for (const entry of state.pending.values()) {
-      if (entry.sessionId === sessionId) n++;
+      if (
+        entry.record.sessionId === sessionId &&
+        entry.sessionScope === sessionScope
+      ) {
+        n++;
+      }
     }
     return n;
   }
 
   return {
     evaluate(input) {
+      const sessionScope = resolveSessionScope(input.sessionScope);
       // 1. Builtin/official → always allowed, no dialog.
       if (isAutoTrusted(input.trustLevel)) {
         return { status: "allow", reason: "trusted" };
       }
 
       // 2. Session-level pre-authorization → always allowed.
-      const key = tripleKey(input.sessionId, input.pluginId, input.action);
+      const key = tripleKey(
+        input.sessionId,
+        sessionScope,
+        input.pluginId,
+        input.action,
+      );
       if (state.sessionCache.has(key)) {
         return { status: "allow", reason: "session-cached" };
       }
 
       // 3. One-time grant issued moments ago → consume and allow once.
       if (
-        consumeOneTimeIfFresh(input.sessionId, input.pluginId, input.action)
+        consumeOneTimeIfFresh(
+          input.sessionId,
+          input.pluginId,
+          input.action,
+          sessionScope,
+        )
       ) {
         return { status: "allow", reason: "one-time-grant" };
       }
@@ -203,14 +270,15 @@ export function createRpcApprovalGate(): RpcApprovalGate {
       // duplicate clicks and lets revoke/disable cancel one stable approval.
       for (const pending of state.pending.values()) {
         if (
-          pending.sessionId === input.sessionId &&
-          pending.pluginId === input.pluginId &&
-          pending.action === input.action
+          pending.sessionScope === sessionScope &&
+          pending.record.sessionId === input.sessionId &&
+          pending.record.pluginId === input.pluginId &&
+          pending.record.action === input.action
         ) {
           return {
             status: "pending",
-            approvalId: pending.approvalId,
-            pending,
+            approvalId: pending.record.approvalId,
+            pending: pending.record,
           };
         }
       }
@@ -223,7 +291,10 @@ export function createRpcApprovalGate(): RpcApprovalGate {
           limit: MAX_PENDING_GLOBAL,
         };
       }
-      if (countSessionPending(input.sessionId) >= MAX_PENDING_PER_SESSION) {
+      if (
+        countSessionPending(input.sessionId, sessionScope) >=
+        MAX_PENDING_PER_SESSION
+      ) {
         return {
           status: "rejected",
           reason: "queue-full",
@@ -242,18 +313,31 @@ export function createRpcApprovalGate(): RpcApprovalGate {
         requestedAt: new Date().toISOString(),
         ...(input.description ? { description: input.description } : {}),
       };
-      state.pending.set(approvalId, pending);
+      state.pending.set(approvalId, { sessionScope, record: pending });
       return { status: "pending", approvalId, pending };
     },
 
-    decide(decision) {
-      const pending = state.pending.get(decision.approvalId);
-      if (!pending) {
+    decide(decision, expectedSessionScope) {
+      const scopedPending = state.pending.get(decision.approvalId);
+      if (!scopedPending) {
         return {
           ok: false,
           error: `unknown approvalId: ${decision.approvalId}`,
+          reason: "unknown-approval",
         };
       }
+
+      if (
+        scopedPending.sessionScope !== resolveSessionScope(expectedSessionScope)
+      ) {
+        return {
+          ok: false,
+          error: `approval scope changed for ${decision.approvalId}`,
+          reason: "scope-changed",
+        };
+      }
+
+      const pending = scopedPending.record;
 
       // Pending entry consumed regardless of decision.
       state.pending.delete(decision.approvalId);
@@ -265,40 +349,70 @@ export function createRpcApprovalGate(): RpcApprovalGate {
       // Allow path: cache or one-time grant depending on scope.
       const key = tripleKey(
         pending.sessionId,
+        scopedPending.sessionScope,
         pending.pluginId,
         pending.action,
       );
+      const grant: ScopedGrant = {
+        sessionId: pending.sessionId,
+        sessionScope: scopedPending.sessionScope,
+        pluginId: pending.pluginId,
+        action: pending.action,
+      };
       if (decision.scope === "session") {
-        state.sessionCache.add(key);
+        state.sessionCache.set(key, grant);
       } else {
         // Default scope is `once` — the next dispatch can use the grant
         // exactly once, then it is consumed. The TTL guards against stale
         // grants from a player that approved 10 minutes ago.
-        state.oneTimeGrants.set(key, Date.now());
+        state.oneTimeGrants.set(key, { grant, issuedAt: Date.now() });
       }
 
       return { ok: true, pending };
     },
 
-    listPending(sessionId) {
-      return [...state.pending.values()].filter(
-        (p) => p.sessionId === sessionId,
-      );
+    listPending(sessionId, expectedSessionScope) {
+      const resolvedScope = resolveSessionScope(expectedSessionScope);
+      return [...state.pending.values()]
+        .filter(
+          (pending) =>
+            pending.record.sessionId === sessionId &&
+            pending.sessionScope === resolvedScope,
+        )
+        .map((pending) => pending.record);
+    },
+
+    listAllPendingForSession(sessionId) {
+      return [...state.pending.values()]
+        .filter((pending) => pending.record.sessionId === sessionId)
+        .map((pending) => pending.record);
     },
 
     getPending(approvalId) {
-      return state.pending.get(approvalId);
+      return state.pending.get(approvalId)?.record;
     },
 
-    hasGrant(sessionId, pluginId, action) {
-      const exactKey = tripleKey(sessionId, pluginId, action);
+    pendingMatchesScope(approvalId, expectedSessionScope) {
+      return (
+        state.pending.get(approvalId)?.sessionScope ===
+        resolveSessionScope(expectedSessionScope)
+      );
+    },
+
+    hasGrant(sessionId, pluginId, action, expectedSessionScope) {
+      const exactKey = tripleKey(
+        sessionId,
+        resolveSessionScope(expectedSessionScope),
+        pluginId,
+        action,
+      );
       if (state.sessionCache.has(exactKey)) {
         return true;
       }
 
       const now = Date.now();
-      for (const [key, issued] of state.oneTimeGrants) {
-        if (now - issued > ONE_TIME_GRANT_TTL_MS) {
+      for (const [key, entry] of state.oneTimeGrants) {
+        if (now - entry.issuedAt > ONE_TIME_GRANT_TTL_MS) {
           state.oneTimeGrants.delete(key);
           continue;
         }
@@ -308,28 +422,29 @@ export function createRpcApprovalGate(): RpcApprovalGate {
     },
 
     revoke(sessionId, pluginId) {
-      // Keys are `${sessionId}::${pluginId}::${action}`; the `::` delimiter and
-      // the enumeration-resistant session id make this prefix match exact.
-      const prefix = pluginId
-        ? `${sessionId}::${pluginId}::`
-        : `${sessionId}::`;
       let cleared = 0;
-      for (const key of [...state.sessionCache]) {
-        if (key.startsWith(prefix)) {
+      for (const [key, grant] of state.sessionCache) {
+        if (
+          grant.sessionId === sessionId &&
+          (!pluginId || grant.pluginId === pluginId)
+        ) {
           state.sessionCache.delete(key);
           cleared += 1;
         }
       }
-      for (const key of [...state.oneTimeGrants.keys()]) {
-        if (key.startsWith(prefix)) {
+      for (const [key, entry] of state.oneTimeGrants) {
+        if (
+          entry.grant.sessionId === sessionId &&
+          (!pluginId || entry.grant.pluginId === pluginId)
+        ) {
           state.oneTimeGrants.delete(key);
           cleared += 1;
         }
       }
       for (const [approvalId, pending] of state.pending) {
         if (
-          pending.sessionId === sessionId &&
-          (!pluginId || pending.pluginId === pluginId)
+          pending.record.sessionId === sessionId &&
+          (!pluginId || pending.record.pluginId === pluginId)
         ) {
           state.pending.delete(approvalId);
           cleared += 1;

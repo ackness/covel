@@ -76,7 +76,7 @@ export interface RegisterPluginHooksOptions {
   readonly isDeferredAuthorized?: (
     sessionId: string,
     pluginId: string,
-  ) => boolean;
+  ) => boolean | Promise<boolean>;
 }
 
 /**
@@ -152,7 +152,7 @@ export function registerPluginHooks(
         if (
           deferred &&
           (!opts.isDeferredAuthorized ||
-            !opts.isDeferredAuthorized(ctx.sessionId, pluginId))
+            !(await opts.isDeferredAuthorized(ctx.sessionId, pluginId)))
         ) {
           return { action: "continue" };
         }

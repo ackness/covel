@@ -16,7 +16,7 @@ export interface CreateBootstrapHookPipelineParams {
   readonly isCommunityServerCodeApproved?: (
     sessionId: string,
     pluginId: string,
-  ) => boolean;
+  ) => boolean | Promise<boolean>;
 }
 
 export function createBootstrapHookPipeline({

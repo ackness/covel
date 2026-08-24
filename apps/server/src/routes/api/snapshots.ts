@@ -52,8 +52,12 @@ import { SAFE_SESSION_ID_RE } from "../../lib/validators.js";
 import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
 import {
   mintSessionOwnerToken,
+  mintSessionApprovalScope,
   resolveSessionParam,
+  SESSION_APPROVAL_SCOPE_KEY,
+  SESSION_INCARNATION_KEY,
   SESSION_OWNER_TOKEN_HASH_KEY,
+  withLockedSessionMutation,
 } from "./session/session-guard.js";
 
 type Env = {
@@ -112,13 +116,17 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
   const sessionLock = c.get("sessionLock");
+  const resolved = await resolveSessionParam(c);
+  if (!resolved.ok) return resolved.response;
 
-  return sessionLock
-    .withLock(sessionId, async () => {
-      const resolved = await resolveSessionParam(c);
-      if (!resolved.ok) return resolved.response;
-      const session = resolved.session;
-
+  return withLockedSessionMutation({
+    c,
+    store,
+    sessionLock,
+    sessionId,
+    expectedSession: resolved.session,
+    allowedStatuses: "any",
+    mutate: async (session) => {
       // Derive a turnId for the snapshot — use the latest turn_result we can
       // find, or fall back to the session's turnCount so fresh sessions still
       // produce a usable label.
@@ -174,8 +182,8 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
       }
 
       return c.json({ snapshot }, 201);
-    })
-    .catch(rethrowUnlessLockBusy(c));
+    },
+  }).catch(rethrowUnlessLockBusy(c));
 });
 
 // ── GET /api/sessions/:id/snapshots — list snapshot metadata ──────
@@ -262,12 +270,17 @@ snapshotRoutes.post("/:id/fork", async (c) => {
     );
   }
 
-  return sessionLock
-    .withLock(parentSessionId, async () => {
-      const resolved = await resolveSessionParam(c);
-      if (!resolved.ok) return resolved.response;
-      const parentSession = resolved.session;
+  const resolved = await resolveSessionParam(c);
+  if (!resolved.ok) return resolved.response;
 
+  return withLockedSessionMutation({
+    c,
+    store,
+    sessionLock,
+    sessionId: parentSessionId,
+    expectedSession: resolved.session,
+    allowedStatuses: "any",
+    mutate: async (parentSession) => {
       const snapshot = await store.getSnapshot(fromSnapshotId);
       if (!snapshot || snapshot.sessionId !== parentSessionId) {
         return c.json(
@@ -348,380 +361,388 @@ snapshotRoutes.post("/:id/fork", async (c) => {
           500,
         );
       }
-      const childOwner = mintSessionOwnerToken();
-      const pluginRegistry = c.get("pluginRegistry");
-      const childActivePlugins = snapshotSession.activePlugins.filter(
-        (pluginId) => {
-          const entry = pluginRegistry?.get(pluginId);
-          if (!pluginRegistry) return true;
-          if (!entry) return true;
-          return getPluginTrustInfo(pluginId, entry?.source).autoLoad;
-        },
-      );
-
-      const now = nowIso;
-
-      // Scoped transaction: the entire child rebuild (session + characters + state
-      // + plugin data + working memory + suspensions + messages + fork snapshot)
-      // commits atomically through the tx-bound view. A thrown error auto-rolls-
-      // back, so a partial fork can never persist. The out-of-band SSE emits and
-      // the 201 response are deferred until after the transaction commits.
-      let forkSnapshot: SnapshotRecord;
-      // MediaRefs reachable from the child's copied state + exports, collected
-      // inside the fork transaction and referenced for the child AFTER it
-      // commits (see the post-commit block). Stays empty when no MediaStore is
-      // wired (tests) — the media gate is then a no-op.
-      let forkMediaIds: readonly string[] = [];
-      try {
-        forkSnapshot = await store.withTransaction!(async (tx) => {
-          // V2 forks restore lifecycle and runtime selection from the captured
-          // point; V1 forks degrade to the parent's current state (see the
-          // upgrade-on-read above). `ended` is terminal with no un-end API — a
-          // fork exists to keep playing, so clamp it to resumable 'paused'.
-          await tx.createSession({
-            id: childSessionId,
-            worldId: parentSession.worldId,
-            status:
-              snapshotSession.status === "ended"
-                ? "paused"
-                : snapshotSession.status,
-            // Legacy band/gate fields derived from the restored clock so both
-            // models agree on the child from its first row.
-            turnCount: forkLegacyClock.turnCount,
-            preGameCompleted: forkLegacyClock.preGameCompleted,
-            phase: forkClock.phase,
-            completedPlayerTurns: forkClock.completedPlayerTurns,
-            setupRuntimes: forkClock.setupRuntimes,
-            locale: snapshotSession.locale,
-            activePlugins: childActivePlugins,
-            presetId: snapshotSession.presetId,
-            runtimeModelOverrides: snapshotSession.runtimeModelOverrides,
-            metadata: {
-              [SESSION_OWNER_TOKEN_HASH_KEY]: childOwner.tokenHash,
-              ...(forkClockMigration
-                ? {
-                    runtimeMigration: {
-                      completedPlayerTurns: forkClockMigration,
-                    },
-                  }
-                : {}),
-            },
-            createdAt: now,
-            updatedAt: now,
-          });
-
-          // Copy characters. Mint fresh ids because several store backends key
-          // characters by `id` alone — reusing the parent's id would overwrite
-          // the parent's row in those backends. Track old→new so the character
-          // mirror plugin-data (keyed by character id) can be remapped below.
-          const characterIdMap = new Map<string, string>();
-          for (const ch of snapshot.payload.characters) {
-            const newId = randomUUID();
-            characterIdMap.set(ch.id, newId);
-            const record: CharacterRecord = {
-              ...ch,
-              id: newId,
-              sessionId: childSessionId,
-            };
-            await tx.upsertCharacter(record);
-          }
-
-          // Copy state schemas (needed so stateEntries can be listed by the child)
-          const parentSchemas = await tx.listStateSchemas(parentSessionId);
-          for (const s of parentSchemas) {
-            await tx.saveStateSchema({
-              ...s,
-              id: randomUUID(),
-              sessionId: childSessionId,
-              createdAt: now,
-            });
-          }
-
-          // Copy state entries
-          for (const se of snapshot.payload.stateEntries) {
-            const record: StateEntryRecord = {
-              ...se,
-              id: randomUUID(),
-              sessionId: childSessionId,
-            };
-            await tx.upsertStateEntry(record);
-          }
-
-          // Copy plugin data. The character-mirror namespace keys each row by the
-          // character id and stores the character (value.id = same id). Characters
-          // were re-minted above, so remap those rows' key + value.id to the child
-          // ids — otherwise the mirror references characters that don't exist in
-          // the child, desyncing UI panels and duplicating on the next update.
-          const pluginDataBatch: PluginDataRecord[] =
-            snapshot.payload.pluginData.map((pd) => {
-              const base: PluginDataRecord = {
-                ...pd,
-                id: randomUUID(),
-                sessionId: childSessionId,
-              };
-              if (pd.namespace !== CHARACTER_NAMESPACE) return base;
-              const newId = characterIdMap.get(pd.key);
-              if (!newId) return base;
-              const value =
-                base.value && typeof base.value === "object"
-                  ? { ...(base.value as Record<string, unknown>), id: newId }
-                  : base.value;
-              return { ...base, key: newId, value };
-            });
-          if (pluginDataBatch.length > 0) {
-            await tx.setPluginDataBatch(pluginDataBatch);
-          }
-
-          // Copy working memory
-          for (const wm of snapshot.payload.workingMemory) {
-            const record: WorkingMemoryRecord = {
-              ...wm,
-              id: randomUUID(),
-              sessionId: childSessionId,
-            };
-            await tx.upsertWorkingMemory(record);
-          }
-
-          // Copy unresolved suspensions (audit 2026-04-20 finding 7.3). Each
-          // record is rebound to the child session with a fresh id so the parent
-          // copy remains untouched. `pendingContinuation` is preserved verbatim —
-          // POST /resume on the child uses the new id to re-enter the tool loop.
-          for (const susp of snapshot.payload.suspensions) {
-            const record: SuspensionRecord = {
-              ...susp,
-              id: randomUUID(),
-              sessionId: childSessionId,
-            };
-            await tx.saveSuspension(record);
-          }
-
-          // Copy session-scoped lorebook entries. Missing before, so a fork lost
-          // every lore/world entry the parent accumulated during play, and the
-          // child's world-entries prompt injection came back empty.
-          // (sessionId, id) is the composite key, so keeping the original id
-          // is safe.
-          if (snapshot.payload.lorebookEntries.length > 0) {
-            await tx.upsertLorebookEntries(
-              snapshot.payload.lorebookEntries.map((lb) => ({
-                ...lb,
-                sessionId: childSessionId,
-              })),
-            );
-          }
-
-          // Copy persistent recordAs exports visible at the snapshot instant
-          // (docs 02 §3.4.5). The snapshot payload carries no export field, so
-          // its createdAt is the visibility cutoff: for each (producerRuntimeId,
-          // recordAs) series, take the latest revision committed at or before it.
-          // The revision number is preserved so parent and child share history up
-          // to the fork, then diverge on their own subsequent publishes.
-          const parentExports = await tx.listRuntimeExports(parentSessionId);
-          const visibleLatest = new Map<
-            string,
-            (typeof parentExports)[number]
-          >();
-          for (const exp of parentExports) {
-            if (exp.committedAt > snapshot.createdAt) continue;
-            const key = `${exp.producerRuntimeId} ${exp.recordAs}`;
-            const prev = visibleLatest.get(key);
-            if (!prev || exp.revision > prev.revision) {
-              visibleLatest.set(key, exp);
-            }
-          }
-          for (const exp of visibleLatest.values()) {
-            await tx.appendRuntimeExport({
-              ...exp,
-              sessionId: childSessionId,
-            });
-          }
-
-          // Fork media gate (docs 02 §2.1.5): recursively scan the snapshot's
-          // visible state AND the copied export revisions for MediaRefs, and
-          // verify every referenced asset still exists. A missing asset throws
-          // to roll the whole fork back, so the child is never created with a
-          // dangling reference. The child's references themselves are added
-          // AFTER commit (MediaStore is a separate store the DataStore
-          // transaction cannot enrol; see the post-commit block for the
-          // atomicity trade-off). Skipped without a MediaStore.
-          if (mediaStore) {
-            const ids = collectMediaRefIds(snapshot.payload);
-            for (const exp of visibleLatest.values()) {
-              collectMediaRefIds(exp.value, ids);
-            }
-            for (const mediaId of ids) {
-              const asset = await mediaStore.lookup(mediaId);
-              if (!asset) throw new MediaReferenceMissingError(mediaId);
-            }
-            forkMediaIds = [...ids];
-          }
-
-          // Copy turn messages up to and including the snapshot's cursor.
-          // Strategy: read all parent messages in order, verify the cursor still
-          // exists (was not compacted away / deleted), then copy 0..cursorIdx
-          // inclusive with fresh ids to the child. Empty cursor = no messages.
-          //
-          // Audit 2026-04-20 finding 7.1: previously the loop copied ALL parent
-          // messages silently when the cursor id could not be found. Now the
-          // missing cursor surfaces as a 409 so callers can decide how to recover
-          // rather than inheriting an unbounded prefix.
-          if (snapshot.payload.messagesCursor !== "") {
-            const parentMessages = await tx.listTurnMessages(parentSessionId);
-            const cursorIdx = parentMessages.findIndex(
-              (m) => m.id === snapshot.payload.messagesCursor,
-            );
-            if (cursorIdx === -1) {
-              // Roll back the partial fork; translated to a 409 by the caller.
-              throw new ForkCursorMissingError();
-            }
-            for (let i = 0; i <= cursorIdx; i++) {
-              const m = parentMessages[i]!;
-              const copy: TurnMessageRecord = {
-                ...m,
-                id: randomUUID(),
-                sessionId: childSessionId,
-              };
-              await tx.appendTurnMessage(copy);
-            }
-          }
-
-          // Record a 'fork' snapshot on the child so the provenance graph is
-          // traversable from either direction.
-          const built: SnapshotRecord = {
-            id: randomUUID(),
-            sessionId: childSessionId,
-            turnId: snapshot.turnId,
-            kind: "fork",
-            parentId: snapshot.id,
-            payload: snapshot.payload,
-            createdAt: now,
-          };
-          await tx.saveSnapshot(built);
-          return built;
-        });
-      } catch (err) {
-        if (err instanceof ForkCursorMissingError) {
-          return c.json(
-            errorBody("Snapshot cursor no longer exists in parent session", {
-              code: "cursor_missing",
-            }),
-            409,
-          );
-        }
-        if (err instanceof MediaReferenceMissingError) {
-          return c.json(
-            errorBody(
-              `Fork references a media asset that no longer exists: ${err.mediaId}`,
-              { code: "media_reference_missing" },
-            ),
-            409,
-          );
-        }
-        const message = err instanceof Error ? err.message : String(err);
-        return c.json(
-          errorBody(`Fork failed: ${message}`, { code: "fork_failed" }),
-          500,
+      // Hold the child's lifecycle lock from its first durable row through
+      // post-commit media references and events. Otherwise DELETE on the newly
+      // visible child could release no refs, then be followed by this fork
+      // adding stale refs for a session that no longer exists.
+      return sessionLock.withLock(childSessionId, async () => {
+        const childOwner = mintSessionOwnerToken();
+        const pluginRegistry = c.get("pluginRegistry");
+        const childActivePlugins = snapshotSession.activePlugins.filter(
+          (pluginId) => {
+            const entry = pluginRegistry?.get(pluginId);
+            if (!pluginRegistry) return true;
+            if (!entry) return true;
+            return getPluginTrustInfo(pluginId, entry?.source).autoLoad;
+          },
         );
-      }
 
-      // Post-commit side effects: the fork is durable, so the following run OUT of
-      // the DataStore transaction.
-      //
-      // Conservative-fork diagnostic: a legacy (V1/V2) snapshot could not carry
-      // completedPlayerTurns, so the child's count was backfilled from turnCount.
-      // Surface it as a trace event alongside the durable metadata note so the
-      // /debug timeline shows why the child's count may differ from the parent's.
-      // Best-effort — a diagnostic must never fail an already-durable fork.
-      if (forkClockMigration) {
+        const now = nowIso;
+
+        // Scoped transaction: the entire child rebuild (session + characters + state
+        // + plugin data + working memory + suspensions + messages + fork snapshot)
+        // commits atomically through the tx-bound view. A thrown error auto-rolls-
+        // back, so a partial fork can never persist. The out-of-band SSE emits and
+        // the 201 response are deferred until after the transaction commits.
+        let forkSnapshot: SnapshotRecord;
+        // MediaRefs reachable from the child's copied state + exports, collected
+        // inside the fork transaction and referenced for the child AFTER it
+        // commits (see the post-commit block). Stays empty when no MediaStore is
+        // wired (tests) — the media gate is then a no-op.
+        let forkMediaIds: readonly string[] = [];
         try {
-          await store.addTraceEvent({
-            id: randomUUID(),
-            sessionId: childSessionId,
-            type: "runtime.migration.fork-conservative",
-            traceId: forkSnapshot.id,
-            turnId: "",
-            payload: forkClockMigration,
-            createdAt: now,
+          forkSnapshot = await store.withTransaction!(async (tx) => {
+            // V2 forks restore lifecycle and runtime selection from the captured
+            // point; V1 forks degrade to the parent's current state (see the
+            // upgrade-on-read above). `ended` is terminal with no un-end API — a
+            // fork exists to keep playing, so clamp it to resumable 'paused'.
+            await tx.createSession({
+              id: childSessionId,
+              worldId: parentSession.worldId,
+              status:
+                snapshotSession.status === "ended"
+                  ? "paused"
+                  : snapshotSession.status,
+              // Legacy band/gate fields derived from the restored clock so both
+              // models agree on the child from its first row.
+              turnCount: forkLegacyClock.turnCount,
+              preGameCompleted: forkLegacyClock.preGameCompleted,
+              phase: forkClock.phase,
+              completedPlayerTurns: forkClock.completedPlayerTurns,
+              setupRuntimes: forkClock.setupRuntimes,
+              locale: snapshotSession.locale,
+              activePlugins: childActivePlugins,
+              presetId: snapshotSession.presetId,
+              runtimeModelOverrides: snapshotSession.runtimeModelOverrides,
+              metadata: {
+                [SESSION_OWNER_TOKEN_HASH_KEY]: childOwner.tokenHash,
+                [SESSION_APPROVAL_SCOPE_KEY]: mintSessionApprovalScope(),
+                [SESSION_INCARNATION_KEY]: randomUUID(),
+                ...(forkClockMigration
+                  ? {
+                      runtimeMigration: {
+                        completedPlayerTurns: forkClockMigration,
+                      },
+                    }
+                  : {}),
+              },
+              createdAt: now,
+              updatedAt: now,
+            });
+
+            // Copy characters. Mint fresh ids because several store backends key
+            // characters by `id` alone — reusing the parent's id would overwrite
+            // the parent's row in those backends. Track old→new so the character
+            // mirror plugin-data (keyed by character id) can be remapped below.
+            const characterIdMap = new Map<string, string>();
+            for (const ch of snapshot.payload.characters) {
+              const newId = randomUUID();
+              characterIdMap.set(ch.id, newId);
+              const record: CharacterRecord = {
+                ...ch,
+                id: newId,
+                sessionId: childSessionId,
+              };
+              await tx.upsertCharacter(record);
+            }
+
+            // Copy state schemas (needed so stateEntries can be listed by the child)
+            const parentSchemas = await tx.listStateSchemas(parentSessionId);
+            for (const s of parentSchemas) {
+              await tx.saveStateSchema({
+                ...s,
+                id: randomUUID(),
+                sessionId: childSessionId,
+                createdAt: now,
+              });
+            }
+
+            // Copy state entries
+            for (const se of snapshot.payload.stateEntries) {
+              const record: StateEntryRecord = {
+                ...se,
+                id: randomUUID(),
+                sessionId: childSessionId,
+              };
+              await tx.upsertStateEntry(record);
+            }
+
+            // Copy plugin data. The character-mirror namespace keys each row by the
+            // character id and stores the character (value.id = same id). Characters
+            // were re-minted above, so remap those rows' key + value.id to the child
+            // ids — otherwise the mirror references characters that don't exist in
+            // the child, desyncing UI panels and duplicating on the next update.
+            const pluginDataBatch: PluginDataRecord[] =
+              snapshot.payload.pluginData.map((pd) => {
+                const base: PluginDataRecord = {
+                  ...pd,
+                  id: randomUUID(),
+                  sessionId: childSessionId,
+                };
+                if (pd.namespace !== CHARACTER_NAMESPACE) return base;
+                const newId = characterIdMap.get(pd.key);
+                if (!newId) return base;
+                const value =
+                  base.value && typeof base.value === "object"
+                    ? { ...(base.value as Record<string, unknown>), id: newId }
+                    : base.value;
+                return { ...base, key: newId, value };
+              });
+            if (pluginDataBatch.length > 0) {
+              await tx.setPluginDataBatch(pluginDataBatch);
+            }
+
+            // Copy working memory
+            for (const wm of snapshot.payload.workingMemory) {
+              const record: WorkingMemoryRecord = {
+                ...wm,
+                id: randomUUID(),
+                sessionId: childSessionId,
+              };
+              await tx.upsertWorkingMemory(record);
+            }
+
+            // Copy unresolved suspensions (audit 2026-04-20 finding 7.3). Each
+            // record is rebound to the child session with a fresh id so the parent
+            // copy remains untouched. `pendingContinuation` is preserved verbatim —
+            // POST /resume on the child uses the new id to re-enter the tool loop.
+            for (const susp of snapshot.payload.suspensions) {
+              const record: SuspensionRecord = {
+                ...susp,
+                id: randomUUID(),
+                sessionId: childSessionId,
+              };
+              await tx.saveSuspension(record);
+            }
+
+            // Copy session-scoped lorebook entries. Missing before, so a fork lost
+            // every lore/world entry the parent accumulated during play, and the
+            // child's world-entries prompt injection came back empty.
+            // (sessionId, id) is the composite key, so keeping the original id
+            // is safe.
+            if (snapshot.payload.lorebookEntries.length > 0) {
+              await tx.upsertLorebookEntries(
+                snapshot.payload.lorebookEntries.map((lb) => ({
+                  ...lb,
+                  sessionId: childSessionId,
+                })),
+              );
+            }
+
+            // Copy persistent recordAs exports visible at the snapshot instant
+            // (docs 02 §3.4.5). The snapshot payload carries no export field, so
+            // its createdAt is the visibility cutoff: for each (producerRuntimeId,
+            // recordAs) series, take the latest revision committed at or before it.
+            // The revision number is preserved so parent and child share history up
+            // to the fork, then diverge on their own subsequent publishes.
+            const parentExports = await tx.listRuntimeExports(parentSessionId);
+            const visibleLatest = new Map<
+              string,
+              (typeof parentExports)[number]
+            >();
+            for (const exp of parentExports) {
+              if (exp.committedAt > snapshot.createdAt) continue;
+              const key = `${exp.producerRuntimeId} ${exp.recordAs}`;
+              const prev = visibleLatest.get(key);
+              if (!prev || exp.revision > prev.revision) {
+                visibleLatest.set(key, exp);
+              }
+            }
+            for (const exp of visibleLatest.values()) {
+              await tx.appendRuntimeExport({
+                ...exp,
+                sessionId: childSessionId,
+              });
+            }
+
+            // Fork media gate (docs 02 §2.1.5): recursively scan the snapshot's
+            // visible state AND the copied export revisions for MediaRefs, and
+            // verify every referenced asset still exists. A missing asset throws
+            // to roll the whole fork back, so the child is never created with a
+            // dangling reference. The child's references themselves are added
+            // AFTER commit (MediaStore is a separate store the DataStore
+            // transaction cannot enrol; see the post-commit block for the
+            // atomicity trade-off). Skipped without a MediaStore.
+            if (mediaStore) {
+              const ids = collectMediaRefIds(snapshot.payload);
+              for (const exp of visibleLatest.values()) {
+                collectMediaRefIds(exp.value, ids);
+              }
+              for (const mediaId of ids) {
+                const asset = await mediaStore.lookup(mediaId);
+                if (!asset) throw new MediaReferenceMissingError(mediaId);
+              }
+              forkMediaIds = [...ids];
+            }
+
+            // Copy turn messages up to and including the snapshot's cursor.
+            // Strategy: read all parent messages in order, verify the cursor still
+            // exists (was not compacted away / deleted), then copy 0..cursorIdx
+            // inclusive with fresh ids to the child. Empty cursor = no messages.
+            //
+            // Audit 2026-04-20 finding 7.1: previously the loop copied ALL parent
+            // messages silently when the cursor id could not be found. Now the
+            // missing cursor surfaces as a 409 so callers can decide how to recover
+            // rather than inheriting an unbounded prefix.
+            if (snapshot.payload.messagesCursor !== "") {
+              const parentMessages = await tx.listTurnMessages(parentSessionId);
+              const cursorIdx = parentMessages.findIndex(
+                (m) => m.id === snapshot.payload.messagesCursor,
+              );
+              if (cursorIdx === -1) {
+                // Roll back the partial fork; translated to a 409 by the caller.
+                throw new ForkCursorMissingError();
+              }
+              for (let i = 0; i <= cursorIdx; i++) {
+                const m = parentMessages[i]!;
+                const copy: TurnMessageRecord = {
+                  ...m,
+                  id: randomUUID(),
+                  sessionId: childSessionId,
+                };
+                await tx.appendTurnMessage(copy);
+              }
+            }
+
+            // Record a 'fork' snapshot on the child so the provenance graph is
+            // traversable from either direction.
+            const built: SnapshotRecord = {
+              id: randomUUID(),
+              sessionId: childSessionId,
+              turnId: snapshot.turnId,
+              kind: "fork",
+              parentId: snapshot.id,
+              payload: snapshot.payload,
+              createdAt: now,
+            };
+            await tx.saveSnapshot(built);
+            return built;
           });
         } catch (err) {
-          console.warn(
-            `[fork] migration diagnostic failed for ${childSessionId}: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
+          if (err instanceof ForkCursorMissingError) {
+            return c.json(
+              errorBody("Snapshot cursor no longer exists in parent session", {
+                code: "cursor_missing",
+              }),
+              409,
+            );
+          }
+          if (err instanceof MediaReferenceMissingError) {
+            return c.json(
+              errorBody(
+                `Fork references a media asset that no longer exists: ${err.mediaId}`,
+                { code: "media_reference_missing" },
+              ),
+              409,
+            );
+          }
+          const message = err instanceof Error ? err.message : String(err);
+          return c.json(
+            errorBody(`Fork failed: ${message}`, { code: "fork_failed" }),
+            500,
           );
         }
-      }
 
-      // Media refs first — MediaStore is a separate store whose writes a rollback
-      // could not undo, so adding them only after the fork commits guarantees we
-      // never leave an orphaned media ref pointing at a child session that was
-      // rolled back (e.g. the cursor-missing 409 path). The set (`forkMediaIds`)
-      // was collected and existence-checked INSIDE the transaction, so a fork
-      // that reaches here has already proven every asset exists — this loop only
-      // establishes the child's references. addRef is idempotent; a failure here
-      // is logged but does not fail an already-durable fork.
-      if (mediaStore) {
-        for (const mediaId of forkMediaIds) {
+        // Post-commit side effects: the fork is durable, so the following run OUT of
+        // the DataStore transaction.
+        //
+        // Conservative-fork diagnostic: a legacy (V1/V2) snapshot could not carry
+        // completedPlayerTurns, so the child's count was backfilled from turnCount.
+        // Surface it as a trace event alongside the durable metadata note so the
+        // /debug timeline shows why the child's count may differ from the parent's.
+        // Best-effort — a diagnostic must never fail an already-durable fork.
+        if (forkClockMigration) {
           try {
-            await mediaStore.addRef(mediaId, childSessionId);
+            await store.addTraceEvent({
+              id: randomUUID(),
+              sessionId: childSessionId,
+              type: "runtime.migration.fork-conservative",
+              traceId: forkSnapshot.id,
+              turnId: "",
+              payload: forkClockMigration,
+              createdAt: now,
+            });
           } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
             console.warn(
-              `[fork] media addRef failed for ${mediaId} -> ${childSessionId}: ${message}`,
+              `[fork] migration diagnostic failed for ${childSessionId}: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
             );
           }
         }
-      }
 
-      // Then emit session.forked on the event bus (out-of-band SSE listeners pick
-      // it up and update any session lists they show). Kernel-only when eventBus is
-      // absent in tests.
-      const eventBus = c.get("eventBus");
-      if (eventBus) {
-        // Also publish state.snapshot.created (kind='fork') so a
-        // forked session's snapshot list reacts immediately.
-        eventBus.emit({
-          id: randomUUID(),
-          type: "event",
-          topic: "session",
-          sessionId: childSessionId,
-          timestamp: now,
-          payload: {
-            _subTopic: "session",
-            _subType: "state.snapshot.created",
-            turnId: snapshot.turnId,
-            snapshotId: forkSnapshot.id,
-            kind: "fork",
-            parentSnapshotId: snapshot.id,
-          },
-        });
+        // Media refs first — MediaStore is a separate store whose writes a rollback
+        // could not undo, so adding them only after the fork commits guarantees we
+        // never leave an orphaned media ref pointing at a child session that was
+        // rolled back (e.g. the cursor-missing 409 path). The set (`forkMediaIds`)
+        // was collected and existence-checked INSIDE the transaction, so a fork
+        // that reaches here has already proven every asset exists — this loop only
+        // establishes the child's references. addRef is idempotent; a failure here
+        // is logged but does not fail an already-durable fork.
+        if (mediaStore) {
+          for (const mediaId of forkMediaIds) {
+            try {
+              await mediaStore.addRef(mediaId, childSessionId);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              console.warn(
+                `[fork] media addRef failed for ${mediaId} -> ${childSessionId}: ${message}`,
+              );
+            }
+          }
+        }
 
-        eventBus.emit({
-          id: randomUUID(),
-          type: "event",
-          topic: "session",
-          sessionId: childSessionId,
-          timestamp: now,
-          payload: {
-            _subTopic: "session",
-            _subType: "session.forked",
+        // Then emit session.forked on the event bus (out-of-band SSE listeners pick
+        // it up and update any session lists they show). Kernel-only when eventBus is
+        // absent in tests.
+        const eventBus = c.get("eventBus");
+        if (eventBus) {
+          // Also publish state.snapshot.created (kind='fork') so a
+          // forked session's snapshot list reacts immediately.
+          eventBus.emit({
+            id: randomUUID(),
+            type: "event",
+            topic: "session",
+            sessionId: childSessionId,
+            timestamp: now,
+            payload: {
+              _subTopic: "session",
+              _subType: "state.snapshot.created",
+              turnId: snapshot.turnId,
+              snapshotId: forkSnapshot.id,
+              kind: "fork",
+              parentSnapshotId: snapshot.id,
+            },
+          });
+
+          eventBus.emit({
+            id: randomUUID(),
+            type: "event",
+            topic: "session",
+            sessionId: childSessionId,
+            timestamp: now,
+            payload: {
+              _subTopic: "session",
+              _subType: "session.forked",
+              parentSessionId,
+              childSessionId,
+              fromSnapshotId: snapshot.id,
+              forkSnapshotId: forkSnapshot.id,
+            },
+          });
+        }
+
+        return c.json(
+          {
+            sessionId: childSessionId,
             parentSessionId,
-            childSessionId,
             fromSnapshotId: snapshot.id,
             forkSnapshotId: forkSnapshot.id,
+            ownerToken: childOwner.token,
           },
-        });
-      }
-
-      return c.json(
-        {
-          sessionId: childSessionId,
-          parentSessionId,
-          fromSnapshotId: snapshot.id,
-          forkSnapshotId: forkSnapshot.id,
-          ownerToken: childOwner.token,
-        },
-        201,
-      );
-    })
-    .catch(rethrowUnlessLockBusy(c));
+          201,
+        );
+      });
+    },
+  }).catch(rethrowUnlessLockBusy(c));
 });

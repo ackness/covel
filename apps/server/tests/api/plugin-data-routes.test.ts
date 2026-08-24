@@ -16,12 +16,15 @@ import {
 import type { RuntimeManifest } from "@covel/shared";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { pluginDataRoutes } from "../../src/routes/api/plugin-data.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 function buildApp(store: DataStore, pluginRegistry: PluginRegistry): Hono {
   const app = new Hono();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("pluginRegistry", pluginRegistry);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", pluginDataRoutes);

@@ -17,11 +17,14 @@ import {
   type LorebookEntryRecord,
 } from "@covel/store";
 import { lorebookRoutes } from "../../src/routes/api/lorebook.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 function createTestApp(store: DataStore): Hono {
   const app = new Hono();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", lorebookRoutes);

@@ -31,6 +31,8 @@
  *     paths, including if the acquire itself times out.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
+
 /**
  * Thrown by lock implementations with a bounded acquire (PG advisory lock)
  * when the session stays busy past the acquire timeout. Routes translate it
@@ -46,6 +48,12 @@ export interface SessionLock {
    * error propagates.
    */
   withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T>;
+  /**
+   * Acquire several lock keys in the supplied order and release them after
+   * `fn`. Callers must provide one consistent global order; implementations
+   * must not consume one pool connection per key.
+   */
+  withLocks<T>(keys: readonly string[], fn: () => Promise<T>): Promise<T>;
 }
 
 type ChainTail = Promise<unknown>;
@@ -67,9 +75,14 @@ export function createInProcessSessionLock(): SessionLock & {
   readonly _sizeForTests: () => number;
 } {
   const locks = new Map<string, ChainTail>();
+  const lockContext = new AsyncLocalStorage<
+    ReadonlyMap<string, { active: boolean }>
+  >();
 
-  return {
+  const api: SessionLock & { readonly _sizeForTests: () => number } = {
     async withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+      const parentOwners = lockContext.getStore();
+      if (parentOwners?.get(sessionId)?.active) return fn();
       const previousTail: ChainTail = locks.get(sessionId) ?? Promise.resolve();
 
       let release: () => void = () => {};
@@ -85,6 +98,7 @@ export function createInProcessSessionLock(): SessionLock & {
         () => slot,
       );
       locks.set(sessionId, chain);
+      const owner = { active: true };
 
       try {
         // Wait for our predecessor to finish (swallow their errors — they
@@ -92,8 +106,12 @@ export function createInProcessSessionLock(): SessionLock & {
         await previousTail.catch(() => {
           /* isolate */
         });
-        return await fn();
+        return await lockContext.run(
+          new Map([...(parentOwners ?? []), [sessionId, owner] as const]),
+          fn,
+        );
       } finally {
+        owner.active = false;
         release();
         // If no one queued behind us, drop the map entry to prevent
         // unbounded growth on cold sessions. Guard against racing inserts.
@@ -102,6 +120,15 @@ export function createInProcessSessionLock(): SessionLock & {
         }
       }
     },
+    async withLocks<T>(keys: readonly string[], fn: () => Promise<T>) {
+      const ordered = [...new Set(keys)];
+      const acquire = (index: number): Promise<T> => {
+        const key = ordered[index];
+        return key ? api.withLock(key, () => acquire(index + 1)) : fn();
+      };
+      return acquire(0);
+    },
     _sizeForTests: () => locks.size,
   };
+  return api;
 }

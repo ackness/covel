@@ -91,6 +91,14 @@ export function createSqliteMediaStore(
     WHERE media_id = @mediaId
       AND session_id = @sessionId
   `);
+  const removeSessionRefs = sqlite.prepare(
+    "DELETE FROM media_refs WHERE session_id = ?",
+  );
+  const clearSessionOwnership = sqlite.prepare(`
+    UPDATE media_assets
+    SET owner_session_id = NULL, owner_plugin_id = NULL
+    WHERE owner_session_id = ?
+  `);
   const checkOwner = sqlite.prepare(
     "SELECT owner_session_id AS ownerSessionId FROM media_assets WHERE id = ?",
   );
@@ -213,6 +221,13 @@ export function createSqliteMediaStore(
 
     async removeRef(id, sessionId) {
       removeRef.run({ mediaId: id, sessionId });
+    },
+
+    async releaseSession(sessionId) {
+      sqlite.transaction(() => {
+        removeSessionRefs.run(sessionId);
+        clearSessionOwnership.run(sessionId);
+      })();
     },
 
     async isReferencedBy(id, sessionId) {

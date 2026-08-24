@@ -12,6 +12,10 @@ import {
   type SessionLock,
 } from "../../src/lib/session-lock.js";
 import { createPluginRpcRuntimeTurnRunner } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
+import {
+  rotateSessionApprovalScope,
+  sessionApprovalScope,
+} from "../../src/routes/api/session/session-guard.js";
 
 const SESSION_ID = "sess-background-lock";
 const PLUGIN_ID = "image-plugin";
@@ -51,6 +55,10 @@ function trackingLock(): {
         requestedKeys.push(key);
         return inner.withLock(key, fn);
       },
+      withLocks<T>(keys: readonly string[], fn: () => Promise<T>): Promise<T> {
+        requestedKeys.push(...keys);
+        return inner.withLocks(keys, fn);
+      },
     },
   };
 }
@@ -77,6 +85,8 @@ describe("detached runtime cross-process lock boundary", () => {
       updatedAt: now,
     });
     const { lock, requestedKeys } = trackingLock();
+    const session = await store.getSession(SESSION_ID);
+    if (!session) throw new Error("expected session");
     const runner = createPluginRpcRuntimeTurnRunner({
       store,
       eventBus: createEventBus(store),
@@ -84,6 +94,9 @@ describe("detached runtime cross-process lock boundary", () => {
       sessionId: SESSION_ID,
       session: { locale: "en" },
       activeRuntimes: runtimes,
+      approvalScopes: new Map([
+        [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
+      ]),
       deps: {
         loadRuntime: async (runtime): Promise<LoadedRuntime> => ({
           manifest: runtime,
@@ -95,7 +108,7 @@ describe("detached runtime cross-process lock boundary", () => {
         typeof createPluginRpcRuntimeTurnRunner
       >[0]["deps"],
     });
-    return { runner, lock, requestedKeys };
+    return { runner, lock, requestedKeys, store, session };
   }
 
   const triggerEvent = {
@@ -146,6 +159,50 @@ describe("detached runtime cross-process lock boundary", () => {
     expect(backgroundKeys).toHaveLength(2);
     expect(new Set(backgroundKeys).size).toBe(1);
     expect(backgroundKeys[0]).not.toBe(SESSION_ID);
+  });
+
+  it("rejects detached work before execution when approval was revoked", async () => {
+    const handler = vi.fn<FunctionHandler>(async () => ({ ok: true }));
+    const { runner, store, session } = await setup(handler);
+    await store.updateSession(SESSION_ID, {
+      metadata: rotateSessionApprovalScope(session, PLUGIN_ID),
+      updatedAt: new Date().toISOString(),
+    });
+
+    await expect(
+      runner.runManualTurn({
+        turnId: "turn-revoked-before-run",
+        runtimeId: RUNTIME_A,
+        detached: true,
+      }),
+    ).rejects.toMatchObject({ name: "SessionApprovalScopeChangedError" });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("discards detached results when approval changes during execution", async () => {
+    const started = deferred();
+    const finish = deferred();
+    const handler: FunctionHandler = async () => {
+      started.resolve();
+      await finish.promise;
+      return { ok: true };
+    };
+    const { runner, store, session } = await setup(handler);
+    const running = runner.runManualTurn({
+      turnId: "turn-revoked-before-commit",
+      runtimeId: RUNTIME_A,
+      detached: true,
+    });
+    await started.promise;
+    await store.updateSession(SESSION_ID, {
+      metadata: rotateSessionApprovalScope(session, PLUGIN_ID),
+      updatedAt: new Date().toISOString(),
+    });
+    finish.resolve();
+
+    await expect(running).rejects.toMatchObject({
+      name: "SessionApprovalScopeChangedError",
+    });
   });
 
   it("serializes different activations of one runtime while allowing other runtimes", async () => {

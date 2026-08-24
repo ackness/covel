@@ -20,7 +20,10 @@ import type { DataStore } from "@covel/store";
 import { retrySetup, waiveSetup, type SetupControlResult } from "@covel/shared";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
-import { resolveSessionParam } from "./session/session-guard.js";
+import {
+  resolveSessionParam,
+  withLockedSessionMutation,
+} from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -54,7 +57,7 @@ async function applyTransition(args: {
   if (result.noop) return; // idempotent: nothing to persist
   const now = new Date().toISOString();
   const setupRuntimes = {
-    ...(session.setupRuntimes ?? {}),
+    ...session.setupRuntimes,
     [runtimeId]: result.next,
   };
   // Setup mirror is the sole write surface; `preGameCompleted` derives from it
@@ -73,17 +76,26 @@ setupRuntimeControlRoutes.post(
     if (!guard.ok) return guard.response;
     const store = c.get("store");
     const runtimeId = c.req.param("runtimeId");
-    const current = guard.session.setupRuntimes?.[runtimeId];
-    const result = retrySetup(current);
-    if (!result.ok) return c.json(errorBody(result.reason), 409);
-    await applyTransition({
+    return withLockedSessionMutation({
+      c,
       store,
+      sessionLock: c.get("sessionLock"),
       sessionId: guard.session.id,
-      runtimeId,
-      session: guard.session,
-      result,
+      expectedSession: guard.session,
+      allowedStatuses: ["active"],
+      mutate: async (live) => {
+        const result = retrySetup(live.setupRuntimes?.[runtimeId]);
+        if (!result.ok) return c.json(errorBody(result.reason), 409);
+        await applyTransition({
+          store,
+          sessionId: live.id,
+          runtimeId,
+          session: live,
+          result,
+        });
+        return c.json({ ok: true, runtimeId, state: result.next });
+      },
     });
-    return c.json({ ok: true, runtimeId, state: result.next });
   },
 );
 
@@ -105,16 +117,29 @@ setupRuntimeControlRoutes.post(
         400,
       );
     }
-    const current = guard.session.setupRuntimes?.[runtimeId];
-    const result = waiveSetup(current, new Date().toISOString(), WAIVE_WARNING);
-    if (!result.ok) return c.json(errorBody(result.reason), 409);
-    await applyTransition({
+    return withLockedSessionMutation({
+      c,
       store,
+      sessionLock: c.get("sessionLock"),
       sessionId: guard.session.id,
-      runtimeId,
-      session: guard.session,
-      result,
+      expectedSession: guard.session,
+      allowedStatuses: ["active"],
+      mutate: async (live) => {
+        const result = waiveSetup(
+          live.setupRuntimes?.[runtimeId],
+          new Date().toISOString(),
+          WAIVE_WARNING,
+        );
+        if (!result.ok) return c.json(errorBody(result.reason), 409);
+        await applyTransition({
+          store,
+          sessionId: live.id,
+          runtimeId,
+          session: live,
+          result,
+        });
+        return c.json({ ok: true, runtimeId, state: result.next });
+      },
     });
-    return c.json({ ok: true, runtimeId, state: result.next });
   },
 );

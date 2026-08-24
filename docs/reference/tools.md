@@ -727,7 +727,7 @@ Bootstrap 时自动分类：
 - **approved**：首次 deferred entry 调用先审批固定的 `covel:plugin-server-code`，加载并验证真实 action 后再做 action 审批。server-code 与 `runtime:*` 只接受 session scope；普通 action 支持 once/session。hosted 环境还要求 operator token，因为 community ESM 在服务端进程内执行。
 - **import**：approve 后经 `activatePluginServerCode` JIT 懒加载该插件的服务端代码——执行 `entry` 工厂（`ensurePluginEntry`，allow 决定时 + RPC 派发时各触发一次）。
 - **active**：运行期工具调用受真实审批规则门控（builtin allow / local allow / third-party deny）。
-- **revoked**：`DELETE /api/sessions/:id/approvals[?pluginId=]` 与 plugin disable 会同时清除 session grant、one-time grant 和 pending approval。community grant 不跨 create/fork/进程重启恢复。
+- **revoked**：`DELETE /api/sessions/:id/approvals[?pluginId=]` 与 plugin disable 会在 session lock 内轮换持久化的 plugin/session 授权代次，并清除本进程的 session grant、one-time grant 和 pending approval。其他 Pod 的旧 grant 因代次不匹配同步失效；community grant 不跨 create/fork/进程重启恢复。
 - **uninstalled**：`DELETE /api/plugins/:id` 删除 `~/.covel/plugins/<id>` 目录（拒绝内置 ID，返回 `restartRequired:true`）；前端 Settings → Packages 面板列出已安装第三方插件并提供卸载按钮。
 
 实际影响：

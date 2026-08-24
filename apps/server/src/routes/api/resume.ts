@@ -43,7 +43,13 @@ import type { RuntimeManifest } from "@covel/shared";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import { errorBody } from "../../api-error.js";
-import { resolveSessionParam } from "./session/session-guard.js";
+import {
+  checkSessionOwner,
+  resolveSessionParam,
+  SESSION_DELETION_PENDING_KEY,
+  sessionIncarnationIdentity,
+  withLockedSessionMutation,
+} from "./session/session-guard.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
 
 type Env = {
@@ -121,6 +127,7 @@ function validateAgainstJsonSchema(
 resumeRoutes.post("/:id/resume", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
+  const sessionLock = c.get("sessionLock");
   // Opportunistic, time-gated, best-effort: never blocks the resume.
   void maybeSweepExpiredSuspensions(store);
   const pluginRegistry = c.get("pluginRegistry");
@@ -157,10 +164,6 @@ resumeRoutes.post("/:id/resume", async (c) => {
   // Verify session exists
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
-  pluginRegistry.syncSessionActivations(
-    sessionId,
-    guard.session.activePlugins ?? [],
-  );
 
   // Load suspension — first pass is a cheap sanity read; the real claim
   // happens atomically below via `claimSuspension` to prevent double-resume
@@ -189,38 +192,9 @@ resumeRoutes.post("/:id/resume", async (c) => {
     );
   }
 
-  // Find the runtime only within the session's persisted active plugin set.
-  // A suspension must not silently reactivate a plugin disabled since the
-  // original turn.
-  const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
-  const effectiveManifest: RuntimeManifest | undefined = activeRuntimes.find(
-    (rt) => rt.name === suspension.runtimeId,
-  );
-
-  if (!effectiveManifest) {
-    return c.json(
-      errorBody(`Runtime "${suspension.runtimeId}" not found in registry`),
-      404,
-    );
-  }
-
-  // Atomic compare-and-swap: only the winner proceeds. Losers receive 409.
-  // This must happen AFTER the cheap rejections above so that e.g. a
-  // validation-failed request doesn't consume the claim slot.
-  const claimed = await store.claimSuspension(suspensionId);
-  if (!claimed) {
-    return c.json(errorBody("Suspension already resolved"), 409);
-  }
-
   const hookPipeline = c.get("hookPipeline");
   const eventBus = c.get("eventBus");
-  const sessionLock = c.get("sessionLock");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
-
-  // Same Phase 2 hook used by /actions and /turn — refresh per-session
-  // character-tool overrides before the resumed runtime can call any tools.
-  // Optional-chain keeps tests with hand-built DI middleware working.
-  await prepareToolsForSession?.(sessionId);
 
   // Per-turn trace emitter — mirrors the actions.ts wiring so resume flows
   // also populate the /debug timeline with tool / llm / message / block /
@@ -233,9 +207,31 @@ resumeRoutes.post("/:id/resume", async (c) => {
     turnId: suspension.turnId,
   });
 
+  let claimAcquired = false;
   const releaseClaim = async (): Promise<void> => {
+    if (!claimAcquired) return;
     try {
-      await store.saveSuspension({ ...suspension, resolvedAt: undefined });
+      await sessionLock.withLock(sessionId, async () => {
+        const liveSession = await store.getSession(sessionId);
+        if (
+          !liveSession ||
+          sessionIncarnationIdentity(liveSession) !==
+            sessionIncarnationIdentity(guard.session) ||
+          liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]
+        ) {
+          return;
+        }
+        const current = await store.getSuspension(suspensionId);
+        if (
+          !current ||
+          current.sessionId !== sessionId ||
+          !current.resolvedAt
+        ) {
+          return;
+        }
+        await store.saveSuspension({ ...current, resolvedAt: undefined });
+      });
+      claimAcquired = false;
     } catch (releaseErr) {
       // eslint-disable-next-line no-console
       console.warn(
@@ -248,7 +244,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
   // Resume + commit fire hooks outside executeTurn — establish the session
   // hook scope so a plugin's hooks only run for sessions where it is active
   // (see hooks/hook-scope.ts).
-  const activePluginIds = new Set(activeRuntimes.map((r) => r.pluginId));
+  const activePluginIds = new Set<string>();
 
   // NOTE: the resume path does not currently apply per-plugin userSettings.
   // The resumed runtime continues from a pre-rendered prompt (so `{{ userSettings.* }}`
@@ -262,21 +258,100 @@ resumeRoutes.post("/:id/resume", async (c) => {
         // Active gate under the lock — a paused/ended session must
         // not accept a resume (it would commit state and write history).
         const liveSession = await store.getSession(sessionId);
+        if (!liveSession) {
+          return c.json(
+            errorBody(`Session not found: ${sessionId}`, {
+              code: "session_not_found",
+            }),
+            404,
+          );
+        }
+        const ownerDenied = checkSessionOwner(c, liveSession);
+        if (ownerDenied) return ownerDenied;
         if (
-          !liveSession ||
-          (liveSession.status && liveSession.status !== "active")
+          sessionIncarnationIdentity(liveSession) !==
+          sessionIncarnationIdentity(guard.session)
         ) {
-          await releaseClaim();
+          return c.json(
+            errorBody("Session was replaced while resume was waiting", {
+              code: "session_incarnation_changed",
+            }),
+            409,
+          );
+        }
+        if (liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]) {
+          return c.json(
+            errorBody("Session deletion is in progress; retry DELETE", {
+              code: "session_deleting",
+            }),
+            409,
+          );
+        }
+        if (liveSession.status !== "active") {
           return c.json(
             errorBody(
-              `session is ${liveSession?.status ?? "missing"}; it must be active to resume`,
+              `session is ${liveSession.status}; it must be active to resume`,
+              { code: "session_not_active" },
             ),
             409,
           );
         }
 
+        const liveSuspension = await store.getSuspension(suspensionId);
+        if (!liveSuspension || liveSuspension.sessionId !== sessionId) {
+          return c.json(errorBody("Suspension not found"), 404);
+        }
+        if (liveSuspension.resolvedAt) {
+          return c.json(errorBody("Suspension already resolved"), 409);
+        }
+        const liveValidationError = validateAgainstJsonSchema(
+          data,
+          liveSuspension.resumeSchema,
+        );
+        if (liveValidationError !== null) {
+          return c.json(
+            errorBody(`Resume data validation failed: ${liveValidationError}`),
+            400,
+          );
+        }
+
+        // Rebuild the process-local activation view from persisted truth only
+        // after the lifecycle checks above. A disabled runtime cannot be
+        // resumed from a stale registry snapshot.
+        pluginRegistry.syncSessionActivations(
+          sessionId,
+          liveSession.activePlugins ?? [],
+        );
+        const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
+        const effectiveManifest: RuntimeManifest | undefined =
+          activeRuntimes.find((rt) => rt.name === liveSuspension.runtimeId);
+        if (!effectiveManifest) {
+          return c.json(
+            errorBody(
+              `Runtime "${liveSuspension.runtimeId}" not found in registry`,
+            ),
+            404,
+          );
+        }
+        activePluginIds.clear();
+        for (const runtime of activeRuntimes) {
+          activePluginIds.add(runtime.pluginId);
+        }
+
+        // Claim while holding the same lifecycle lock as resume execution and
+        // suspension abandonment. This closes the delete/claim race.
+        const claimed = await store.claimSuspension(suspensionId);
+        if (!claimed) {
+          return c.json(errorBody("Suspension already resolved"), 409);
+        }
+        claimAcquired = true;
+
+        // Refresh per-session character-tool overrides only after the live
+        // incarnation and activation set have been accepted.
+        await prepareToolsForSession?.(sessionId);
+
         const result = await resumeSuspendedRuntime(
-          suspension,
+          liveSuspension,
           data,
           effectiveManifest!,
           {
@@ -377,6 +452,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
             500,
           );
         }
+        claimAcquired = false;
         const events = outcome.events;
 
         // Announce the resume only after the transaction landed — an event
@@ -443,13 +519,23 @@ resumeRoutes.delete("/:id/suspensions/:suspensionId", async (c) => {
   const suspensionId = c.req.param("suspensionId");
   const store = c.get("store");
 
-  const suspension = await store.getSuspension(suspensionId);
-  if (!suspension || suspension.sessionId !== sessionId) {
-    return c.json(errorBody("Suspension not found"), 404);
-  }
+  return withLockedSessionMutation({
+    c,
+    store,
+    sessionLock: c.get("sessionLock"),
+    sessionId,
+    expectedSession: guard.session,
+    allowedStatuses: "any",
+    mutate: async () => {
+      const suspension = await store.getSuspension(suspensionId);
+      if (!suspension || suspension.sessionId !== sessionId) {
+        return c.json(errorBody("Suspension not found"), 404);
+      }
 
-  await store.deleteSuspension(suspensionId);
-  return c.json({ deleted: true, suspensionId });
+      await store.deleteSuspension(suspensionId);
+      return c.json({ deleted: true, suspensionId });
+    },
+  });
 });
 
 // ── GET list ─────────────────────────────────────────────────────

@@ -74,12 +74,12 @@ export interface BootstrapPluginEntriesParams {
   readonly isCommunityServerCodeApproved?: (
     sessionId: string | undefined,
     pluginId: string,
-  ) => boolean;
+  ) => boolean | Promise<boolean>;
   /** Narrower grant used for lifecycle hook execution after import. */
   readonly isCommunityHookApproved?: (
     sessionId: string,
     pluginId: string,
-  ) => boolean;
+  ) => boolean | Promise<boolean>;
 }
 
 export interface BootstrapPluginEntries {
@@ -198,7 +198,7 @@ export async function createBootstrapPluginEntries({
         const sessionGuardedHandler: typeof handler = async (ctx, payload) => {
           if (
             pluginTrust === "community" &&
-            !isCommunityHookApproved?.(ctx.sessionId, pluginId)
+            !(await isCommunityHookApproved?.(ctx.sessionId, pluginId))
           ) {
             return { action: "continue" };
           }
@@ -371,7 +371,7 @@ export async function createBootstrapPluginEntries({
       invokedPluginIds.add(pluginId);
       return;
     }
-    if (!isCommunityServerCodeApproved?.(sessionId, pluginId)) {
+    if (!(await isCommunityServerCodeApproved?.(sessionId, pluginId))) {
       throw new Error(
         `[plugin-entry] ${pluginId}: community server code requires explicit approval for session ${sessionId ?? "<missing>"}`,
       );

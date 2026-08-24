@@ -14,7 +14,10 @@ import { deriveLegacyClockForSession } from "@covel/shared";
 import type { StateManager } from "@covel/state";
 import type { DataStore } from "@covel/store";
 import { errorBody } from "../../api-error.js";
-import { resolveSessionParam } from "./session/session-guard.js";
+import {
+  publicSessionMetadata,
+  resolveSessionParam,
+} from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -69,6 +72,9 @@ stateRoutes.get("/:id/state", async (c) => {
   // no longer writes them, so the raw columns are frozen.
   const sessionData = {
     ...session,
+    ...(session.metadata
+      ? { metadata: publicSessionMetadata(session.metadata) }
+      : {}),
     ...deriveLegacyClockForSession(session),
   } as Record<string, unknown>;
   tables.session = {
@@ -161,7 +167,6 @@ function typeOf(v: unknown): string {
 
 // GET /sessions/:id/state-patches — aggregated state change patches
 stateRoutes.get("/:id/state-patches", async (c) => {
-  const store = c.get("store");
   const stateManager = c.get("stateManager");
   const id = c.req.param("id");
 
@@ -209,7 +214,6 @@ stateRoutes.get("/:id/state-patches", async (c) => {
 
 // GET /sessions/:id/state-snapshot — full state snapshot for persistence
 stateRoutes.get("/:id/state-snapshot", async (c) => {
-  const store = c.get("store");
   const stateManager = c.get("stateManager");
   const id = c.req.param("id");
 

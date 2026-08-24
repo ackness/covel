@@ -122,6 +122,11 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
     async removeRef() {
       // No-op: the test fixture seeds references via the `references` set.
     },
+    async releaseSession(sessionId) {
+      for (const asset of assets.values()) {
+        asset.references.delete(sessionId);
+      }
+    },
     async isReferencedBy(id, sessionId) {
       const a = assets.get(id);
       return a ? a.references.has(sessionId) : false;

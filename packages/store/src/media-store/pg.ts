@@ -196,6 +196,20 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
       `;
     },
 
+    async releaseSession(sessionId) {
+      await sql.begin(async (tx) => {
+        await tx`
+          DELETE FROM media_refs
+          WHERE session_id = ${sessionId}
+        `;
+        await tx`
+          UPDATE media_assets
+          SET owner_session_id = NULL, owner_plugin_id = NULL
+          WHERE owner_session_id = ${sessionId}
+        `;
+      });
+    },
+
     async isReferencedBy(id, sessionId) {
       const rows = await sql<{ one: number }[]>`
         SELECT 1 AS one

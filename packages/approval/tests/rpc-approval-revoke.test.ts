@@ -1,8 +1,27 @@
 import { describe, expect, it } from "vitest";
 import {
-  createRpcApprovalGate,
+  createRpcApprovalGate as createStrictRpcApprovalGate,
+  type EvaluateInput,
   type RpcApprovalGate,
 } from "../src/rpc-approval.js";
+
+const TEST_SCOPE = "test-session-incarnation";
+type TestEvaluateInput = Omit<EvaluateInput, "sessionScope"> &
+  Partial<Pick<EvaluateInput, "sessionScope">>;
+
+function createRpcApprovalGate(): RpcApprovalGate {
+  const gate = createStrictRpcApprovalGate();
+  return {
+    ...gate,
+    evaluate: (input: TestEvaluateInput) =>
+      gate.evaluate({ sessionScope: TEST_SCOPE, ...input }),
+    decide: (decision, scope = TEST_SCOPE) => gate.decide(decision, scope),
+    listPending: (sessionId, scope = TEST_SCOPE) =>
+      gate.listPending(sessionId, scope),
+    hasGrant: (sessionId, pluginId, action, scope = TEST_SCOPE) =>
+      gate.hasGrant(sessionId, pluginId, action, scope),
+  };
+}
 
 function grantSession(
   gate: RpcApprovalGate,

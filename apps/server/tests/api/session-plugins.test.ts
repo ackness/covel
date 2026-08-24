@@ -28,6 +28,7 @@ import {
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -411,8 +412,17 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         activePlugins: ["default-engine"],
         createdAt: new Date().toISOString(),
       });
+      const reverseConflictSession = await store.getSession(
+        "sess-reverse-conflict",
+      );
+      if (!reverseConflictSession) throw new Error("expected session");
+      const reverseScope = sessionApprovalScope(
+        reverseConflictSession,
+        "alternate-engine",
+      );
       const approval = rpcApprovalGate.evaluate({
         sessionId: "sess-reverse-conflict",
+        sessionScope: reverseScope,
         pluginId: "alternate-engine",
         action: "covel:plugin-server-code",
         payload: {},
@@ -421,12 +431,15 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       if (approval.status !== "pending") {
         throw new Error("expected community enable approval");
       }
-      rpcApprovalGate.decide({
-        approvalId: approval.approvalId,
-        decision: "allow",
-        scope: "session",
-        decidedAt: new Date().toISOString(),
-      });
+      rpcApprovalGate.decide(
+        {
+          approvalId: approval.approvalId,
+          decision: "allow",
+          scope: "session",
+          decidedAt: new Date().toISOString(),
+        },
+        reverseScope,
+      );
 
       const res = await app.request(
         "/api/sessions/sess-reverse-conflict/plugins/enable",
@@ -784,12 +797,21 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       const pending = (await pendingResponse.json()) as {
         approvalId: string;
       };
-      rpcApprovalGate.decide({
-        approvalId: pending.approvalId,
-        decision: "allow",
-        scope: "session",
-        decidedAt: new Date().toISOString(),
-      });
+      const pendingSession = await store.getSession(SESSION_ID);
+      if (!pendingSession) throw new Error("expected session");
+      const pendingScope = sessionApprovalScope(
+        pendingSession,
+        "optional-plugin",
+      );
+      rpcApprovalGate.decide(
+        {
+          approvalId: pending.approvalId,
+          decision: "allow",
+          scope: "session",
+          decidedAt: new Date().toISOString(),
+        },
+        pendingScope,
+      );
 
       const allowedResponse = await requestEnable();
       expect(allowedResponse.status).toBe(200);
@@ -800,6 +822,10 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           SESSION_ID,
           "optional-plugin",
           COMMUNITY_SERVER_CODE_ACTION,
+          sessionApprovalScope(
+            (await store.getSession(SESSION_ID))!,
+            "optional-plugin",
+          ),
         ),
       ).toBe(true);
     });

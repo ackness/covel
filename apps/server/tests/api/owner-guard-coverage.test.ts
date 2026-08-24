@@ -35,6 +35,8 @@ import {
 import { mediaRoutes } from "../../src/routes/api/media.js";
 import { worldDataSyncRoutes } from "../../src/routes/api/worlds/data-sync.js";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 
 const ENV_KEYS = ["DEPLOYMENT_TIER", "COVEL_DESKTOP_REST_TOKEN"] as const;
 const ORIGINAL_ENV = Object.fromEntries(
@@ -71,6 +73,7 @@ function createHarness(): Harness {
   const mediaStore = createMemoryMediaStore();
   const gate = createRpcApprovalGate();
   const eventBus = createEventBus(store);
+  const sessionLock = createInProcessSessionLock();
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", store);
@@ -78,6 +81,7 @@ function createHarness(): Harness {
     c.set("mediaStore", mediaStore);
     c.set("eventBus", eventBus);
     c.set("rpcApprovalGate", gate);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", sessionRoutes);
@@ -116,9 +120,16 @@ function bearer(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
 }
 
-function seedPendingApproval(gate: RpcApprovalGate, sessionId: string): string {
+async function seedPendingApproval(
+  gate: RpcApprovalGate,
+  store: DataStore,
+  sessionId: string,
+): Promise<string> {
+  const session = await store.getSession(sessionId);
+  if (!session) throw new Error("expected session");
   const ev = gate.evaluate({
     sessionId,
+    sessionScope: sessionApprovalScope(session, "untrusted"),
     pluginId: "untrusted",
     action: "do-thing",
     payload: { foo: "bar" },
@@ -181,7 +192,7 @@ describe("commercial tier — owner guard on indirect session-scoped routes", ()
     });
 
     it("resolves approvalId → session and denies non-owner decisions without consuming the pending entry", async () => {
-      const approvalId = seedPendingApproval(h.gate, victim.id);
+      const approvalId = await seedPendingApproval(h.gate, h.store, victim.id);
       const decide = (headers: Record<string, string> = {}) =>
         h.app.request(`/api/approvals/${approvalId}/decision`, {
           method: "POST",
@@ -311,13 +322,23 @@ describe("self tier (default) — guards are strict no-ops", () => {
     expect(res.status).toBe(200);
   });
 
-  it("keeps media upload token-free with no session-existence requirement", async () => {
-    const res = await h.app.request("/api/media?sessionId=s1", {
+  it("keeps media upload token-free for an existing session", async () => {
+    const created = await createSession(h.app);
+    const res = await h.app.request(`/api/media?sessionId=${created.id}`, {
       method: "POST",
       headers: { "content-type": "image/png" },
       body: IMG,
     });
     expect(res.status).toBe(200);
+  });
+
+  it("rejects media upload for a missing session", async () => {
+    const res = await h.app.request("/api/media?sessionId=missing", {
+      method: "POST",
+      headers: { "content-type": "image/png" },
+      body: IMG,
+    });
+    expect(res.status).toBe(404);
   });
 
   it("keeps ui-specs token-free", async () => {

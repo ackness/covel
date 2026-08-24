@@ -1,5 +1,11 @@
 import type { DataStore } from "@covel/store";
-import type { RuntimeResult, TurnResult } from "@covel/shared";
+import type { TurnResult } from "@covel/shared";
+import type { SessionLock } from "../../../lib/session-lock.js";
+import { sessionApprovalScope } from "../session/session-guard.js";
+import {
+  SessionApprovalScopeChangedError,
+  SessionNotActiveError,
+} from "./runtime-turn.js";
 import {
   commitFailureMessage,
   deriveBackgroundJobCompletion,
@@ -28,6 +34,8 @@ export interface DeferredFollower {
 interface PluginRpcJobRunnerOptions {
   readonly store: DataStore;
   readonly sessionId: string;
+  readonly sessionLock: SessionLock;
+  readonly approvalScopes: ReadonlyMap<string, string>;
   readonly userSettings?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
@@ -101,13 +109,27 @@ export function createPluginRpcJobRunner(
     readonly updatedAt?: string;
     readonly value: Parameters<typeof writePluginJob>[1]["value"];
   }): Promise<void> => {
-    await writePluginJob(options.store, {
-      sessionId: options.sessionId,
-      pluginId: args.pluginId,
-      jobId: args.jobId,
-      startedAt: args.startedAt,
-      updatedAt: args.updatedAt ?? args.startedAt,
-      value: args.value,
+    await options.sessionLock.withLock(options.sessionId, async () => {
+      const session = await options.store.getSession(options.sessionId);
+      const expected = options.approvalScopes.get(args.pluginId);
+      if (!session) throw new SessionNotActiveError("deleted");
+      if (session.status !== "active") {
+        throw new SessionNotActiveError(session.status);
+      }
+      if (
+        !expected ||
+        sessionApprovalScope(session, args.pluginId) !== expected
+      ) {
+        throw new SessionApprovalScopeChangedError();
+      }
+      await writePluginJob(options.store, {
+        sessionId: options.sessionId,
+        pluginId: args.pluginId,
+        jobId: args.jobId,
+        startedAt: args.startedAt,
+        updatedAt: args.updatedAt ?? args.startedAt,
+        value: args.value,
+      });
     });
   };
 

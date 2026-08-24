@@ -13,7 +13,10 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
-import { resolveSessionParam } from "./session/session-guard.js";
+import {
+  resolveSessionParam,
+  withLockedSessionMutation,
+} from "./session/session-guard.js";
 import { errorBody } from "../../api-error.js";
 
 type Env = {
@@ -68,8 +71,18 @@ lorebookRoutes.post("/:id/lorebook", async (c) => {
 
   const now = new Date().toISOString();
   const entry = toLorebookRecord(sessionId, parsed.data, now, now);
-  await store.upsertLorebookEntries([entry]);
-  return c.json({ entry }, 201);
+  return withLockedSessionMutation({
+    c,
+    store,
+    sessionLock: c.get("sessionLock"),
+    sessionId,
+    expectedSession: guard.session,
+    allowedStatuses: ["active"],
+    mutate: async () => {
+      await store.upsertLorebookEntries([entry]);
+      return c.json({ entry }, 201);
+    },
+  });
 });
 
 // PUT /sessions/:id/lorebook/:entryId
@@ -89,19 +102,29 @@ lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
     return c.json(errorBody("Invalid lorebook entry body"), 400);
   }
 
-  const existing = (await store.listSessionLorebookEntries(sessionId)).find(
-    (e) => e.id === entryId,
-  );
-  const now = new Date().toISOString();
-  const entry = toLorebookRecord(
+  return withLockedSessionMutation({
+    c,
+    store,
+    sessionLock: c.get("sessionLock"),
     sessionId,
-    parsed.data,
-    existing?.createdAt ?? now,
-    now,
-    existing,
-  );
-  await store.upsertLorebookEntries([entry]);
-  return c.json({ entry });
+    expectedSession: guard.session,
+    allowedStatuses: ["active"],
+    mutate: async () => {
+      const existing = (await store.listSessionLorebookEntries(sessionId)).find(
+        (e) => e.id === entryId,
+      );
+      const now = new Date().toISOString();
+      const entry = toLorebookRecord(
+        sessionId,
+        parsed.data,
+        existing?.createdAt ?? now,
+        now,
+        existing,
+      );
+      await store.upsertLorebookEntries([entry]);
+      return c.json({ entry });
+    },
+  });
 });
 
 // PATCH /sessions/:id/lorebook/:entryId
@@ -124,23 +147,28 @@ lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
     );
   }
 
-  const existing = (await store.listSessionLorebookEntries(sessionId)).find(
-    (e) => e.id === entryId,
-  );
-  if (!existing) {
-    return c.json(errorBody("Lorebook entry not found"), 404);
-  }
-
-  const now = new Date().toISOString();
-  await store.upsertLorebookEntries([
-    {
-      ...existing,
-      enabled: parsed.data.enabled,
-      updatedAt: now,
+  return withLockedSessionMutation({
+    c,
+    store,
+    sessionLock: c.get("sessionLock"),
+    sessionId,
+    expectedSession: guard.session,
+    allowedStatuses: ["active"],
+    mutate: async () => {
+      const existing = (await store.listSessionLorebookEntries(sessionId)).find(
+        (e) => e.id === entryId,
+      );
+      if (!existing) return c.json(errorBody("Lorebook entry not found"), 404);
+      await store.upsertLorebookEntries([
+        {
+          ...existing,
+          enabled: parsed.data.enabled,
+          updatedAt: new Date().toISOString(),
+        },
+      ]);
+      return c.json({ success: true, entryId, enabled: parsed.data.enabled });
     },
-  ]);
-
-  return c.json({ success: true, entryId, enabled: parsed.data.enabled });
+  });
 });
 
 // DELETE /sessions/:id/lorebook/:entryId
@@ -151,15 +179,22 @@ lorebookRoutes.delete("/:id/lorebook/:entryId", async (c) => {
   if (!guard.ok) return guard.response;
 
   const entryId = c.req.param("entryId");
-  const existing = (await store.listSessionLorebookEntries(sessionId)).find(
-    (e) => e.id === entryId,
-  );
-  if (!existing) {
-    return c.json(errorBody("Lorebook entry not found"), 404);
-  }
-
-  await store.deleteLorebookEntry(sessionId, entryId);
-  return c.json({ success: true });
+  return withLockedSessionMutation({
+    c,
+    store,
+    sessionLock: c.get("sessionLock"),
+    sessionId,
+    expectedSession: guard.session,
+    allowedStatuses: ["active"],
+    mutate: async () => {
+      const existing = (await store.listSessionLorebookEntries(sessionId)).find(
+        (e) => e.id === entryId,
+      );
+      if (!existing) return c.json(errorBody("Lorebook entry not found"), 404);
+      await store.deleteLorebookEntry(sessionId, entryId);
+      return c.json({ success: true });
+    },
+  });
 });
 
 function toLorebookRecord(

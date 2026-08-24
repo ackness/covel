@@ -100,4 +100,42 @@ describe("createInProcessSessionLock", () => {
     const result = await lock.withLock("sess-ret", async () => 42);
     expect(result).toBe(42);
   });
+
+  it("does not let a detached child inherit a released reentrant lease", async () => {
+    const lock = createInProcessSessionLock();
+    let releaseChild!: () => void;
+    let markChildReady!: () => void;
+    const childReady = new Promise<void>((resolve) => {
+      markChildReady = resolve;
+    });
+    const childGate = new Promise<void>((resolve) => {
+      releaseChild = resolve;
+    });
+    let child: Promise<void> | undefined;
+
+    await lock.withLock("session", async () => {
+      child = new Promise<void>((resolve, reject) => {
+        setImmediate(() => {
+          markChildReady();
+          void lock
+            .withLock("session", async () => {
+              await childGate;
+            })
+            .then(resolve, reject);
+        });
+      });
+    });
+    await childReady;
+
+    let contenderEntered = false;
+    const contender = lock.withLock("session", async () => {
+      contenderEntered = true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(contenderEntered).toBe(false);
+
+    releaseChild();
+    await Promise.all([child, contender]);
+    expect(contenderEntered).toBe(true);
+  });
 });

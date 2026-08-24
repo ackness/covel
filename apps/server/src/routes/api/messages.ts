@@ -6,7 +6,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import { rateLimiter } from "../../middleware/rate-limit.js";
-import { resolveSessionParam } from "./session/session-guard.js";
+import {
+  resolveSessionParam,
+  withLockedSessionMutation,
+} from "./session/session-guard.js";
 import { errorBody } from "../../api-error.js";
 import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
 
@@ -111,20 +114,35 @@ messageRoutes.post(
         400,
       );
     }
-    for (const msg of parsed.data.messages) {
-      await store.addMessage({
-        id: msg.id ?? crypto.randomUUID(),
-        sessionId,
-        role: msg.role,
-        content: msg.content,
-        metadata: {
-          turnId: msg.turnId,
-          runtimeId: msg.runtimeId,
-          block: msg.block,
-        },
-        createdAt: msg.createdAt ?? new Date().toISOString(),
-      });
-    }
-    return c.json({ ok: true });
+    return withLockedSessionMutation({
+      c,
+      store,
+      sessionLock: c.get("sessionLock"),
+      sessionId,
+      expectedSession: guard.session,
+      allowedStatuses: ["active"],
+      mutate: async () => {
+        if (!store.withTransaction) {
+          throw new Error("Message sync requires transactional store support");
+        }
+        await store.withTransaction(async (tx) => {
+          for (const msg of parsed.data.messages) {
+            await tx.addMessage({
+              id: msg.id ?? crypto.randomUUID(),
+              sessionId,
+              role: msg.role,
+              content: msg.content,
+              metadata: {
+                turnId: msg.turnId,
+                runtimeId: msg.runtimeId,
+                block: msg.block,
+              },
+              createdAt: msg.createdAt ?? new Date().toISOString(),
+            });
+          }
+        });
+        return c.json({ ok: true });
+      },
+    });
   },
 );

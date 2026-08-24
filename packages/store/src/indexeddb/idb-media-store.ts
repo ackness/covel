@@ -167,6 +167,30 @@ export async function createIndexedDbMediaStore(
       await db.delete(STORE_REFS, refKey(id, sessionId));
     },
 
+    async releaseSession(sessionId) {
+      const tx = db.transaction([STORE_ASSETS, STORE_REFS], "readwrite");
+      let refCursor = await tx
+        .objectStore(STORE_REFS)
+        .index("sessionId")
+        .openCursor(sessionId);
+      while (refCursor) {
+        await refCursor.delete();
+        refCursor = await refCursor.continue();
+      }
+      let assetCursor = await tx.objectStore(STORE_ASSETS).openCursor();
+      while (assetCursor) {
+        if (assetCursor.value.ownerSessionId === sessionId) {
+          await assetCursor.update({
+            ...assetCursor.value,
+            ownerSessionId: null,
+            ownerPluginId: null,
+          });
+        }
+        assetCursor = await assetCursor.continue();
+      }
+      await tx.done;
+    },
+
     async isReferencedBy(id, sessionId) {
       const record = await db.get(STORE_ASSETS, id);
       if (record?.ownerSessionId === sessionId) return true;

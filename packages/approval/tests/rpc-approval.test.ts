@@ -1,7 +1,46 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRpcApprovalGate } from "../src/rpc-approval.js";
+import {
+  createRpcApprovalGate as createStrictRpcApprovalGate,
+  type EvaluateInput,
+} from "../src/rpc-approval.js";
+
+const TEST_SCOPE = "test-session-incarnation";
+type TestEvaluateInput = Omit<EvaluateInput, "sessionScope"> &
+  Partial<Pick<EvaluateInput, "sessionScope">>;
+
+function createRpcApprovalGate() {
+  const gate = createStrictRpcApprovalGate();
+  return {
+    ...gate,
+    evaluate: (input: TestEvaluateInput) =>
+      gate.evaluate({ sessionScope: TEST_SCOPE, ...input }),
+    decide: (decision: Parameters<typeof gate.decide>[0], scope = TEST_SCOPE) =>
+      gate.decide(decision, scope),
+    listPending: (sessionId: string, scope = TEST_SCOPE) =>
+      gate.listPending(sessionId, scope),
+    hasGrant: (
+      sessionId: string,
+      pluginId: string,
+      action: string,
+      scope = TEST_SCOPE,
+    ) => gate.hasGrant(sessionId, pluginId, action, scope),
+  };
+}
 
 describe("createRpcApprovalGate", () => {
+  it("fails closed when an untyped caller omits sessionScope", () => {
+    const gate = createStrictRpcApprovalGate();
+    expect(() =>
+      gate.evaluate({
+        sessionId: "sess-1",
+        pluginId: "p",
+        action: "a",
+        payload: null,
+        trustLevel: "community",
+      } as EvaluateInput),
+    ).toThrow(/sessionScope is required/);
+  });
+
   it("auto-allows builtin trust level", () => {
     const gate = createRpcApprovalGate();
     const result = gate.evaluate({
@@ -230,6 +269,67 @@ describe("createRpcApprovalGate", () => {
     expect(gate.listPending("sess-missing")).toHaveLength(0);
   });
 
+  it("isolates pending requests and grants by session incarnation", () => {
+    const gate = createRpcApprovalGate();
+    const oldPending = gate.evaluate({
+      sessionId: "reused-id",
+      sessionScope: "incarnation-old",
+      pluginId: "p",
+      action: "a",
+      payload: { incarnation: "old" },
+      trustLevel: "community",
+    });
+    if (oldPending.status !== "pending") throw new Error("unreachable");
+
+    const newPending = gate.evaluate({
+      sessionId: "reused-id",
+      sessionScope: "incarnation-new",
+      pluginId: "p",
+      action: "a",
+      payload: { incarnation: "new" },
+      trustLevel: "community",
+    });
+    if (newPending.status !== "pending") throw new Error("unreachable");
+
+    expect(newPending.approvalId).not.toBe(oldPending.approvalId);
+    expect(gate.listPending("reused-id", "incarnation-old")).toEqual([
+      oldPending.pending,
+    ]);
+    expect(gate.listPending("reused-id", "incarnation-new")).toEqual([
+      newPending.pending,
+    ]);
+
+    expect(
+      gate.decide(
+        {
+          approvalId: oldPending.approvalId,
+          decision: "allow",
+          scope: "session",
+          decidedAt: new Date().toISOString(),
+        },
+        "incarnation-new",
+      ),
+    ).toEqual({
+      ok: false,
+      error: `approval scope changed for ${oldPending.approvalId}`,
+      reason: "scope-changed",
+    });
+
+    expect(
+      gate.decide(
+        {
+          approvalId: oldPending.approvalId,
+          decision: "allow",
+          scope: "session",
+          decidedAt: new Date().toISOString(),
+        },
+        "incarnation-old",
+      ).ok,
+    ).toBe(true);
+    expect(gate.hasGrant("reused-id", "p", "a", "incarnation-old")).toBe(true);
+    expect(gate.hasGrant("reused-id", "p", "a", "incarnation-new")).toBe(false);
+  });
+
   it("session cache is per-(plugin, action), not per-plugin", () => {
     const gate = createRpcApprovalGate();
     const first = gate.evaluate({
@@ -293,6 +393,33 @@ describe("createRpcApprovalGate", () => {
       trustLevel: "community",
     });
     expect(otherSession.status).toBe("pending");
+  });
+
+  it("does not let an old incarnation's pending cap block a recreated session", () => {
+    const gate = createRpcApprovalGate();
+    for (let i = 0; i < 64; i++) {
+      expect(
+        gate.evaluate({
+          sessionId: "reused-id",
+          sessionScope: "old-incarnation",
+          pluginId: "p",
+          action: `old-${i}`,
+          payload: null,
+          trustLevel: "community",
+        }).status,
+      ).toBe("pending");
+    }
+
+    expect(
+      gate.evaluate({
+        sessionId: "reused-id",
+        sessionScope: "new-incarnation",
+        pluginId: "p",
+        action: "new-request",
+        payload: null,
+        trustLevel: "community",
+      }).status,
+    ).toBe("pending");
   });
 
   it("cap recovers after deciding pending entries", () => {

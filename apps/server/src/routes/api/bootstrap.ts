@@ -29,7 +29,6 @@ import type { DataStore, StoreBackend } from "@covel/store";
 import type { LLMAdapter } from "@covel/runtime";
 import { createModelResolver } from "@covel/runtime";
 import type { CompactorRunner } from "@covel/context";
-import type { ToolModule } from "@covel/tools";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 
 import {
@@ -82,6 +81,7 @@ import { createEventDirectory } from "./bootstrap/event-directory.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
+import { sessionApprovalScope } from "./session/session-guard.js";
 
 // ── Bootstrap config ─────────────────────────────────────────────
 
@@ -273,14 +273,18 @@ export async function bootstrapApi(
   );
 
   // One-time startup sweep of background-job rows orphaned by a crash/restart
-  // (audit R-10): jobs run in-process via setImmediate, so a `pending` row
-  // older than the staleness threshold can never complete. Fire-and-forget.
-  void sweepStalePendingJobs(store).catch((err: unknown) =>
-    console.warn(
-      "[job-sweep] startup sweep failed:",
-      err instanceof Error ? err.message : String(err),
-    ),
-  );
+  // (audit R-10). Ownership is process-local, so it is exact only for the
+  // single-process memory/sqlite deployments. A PG deployment may have other
+  // live Pods; sweeping their foreign owner ids would falsely fail live work.
+  // Leave PG orphans pending until the job model gains a renewable lease.
+  if (config.storeBackend !== "pg") {
+    void sweepStalePendingJobs(store).catch((err: unknown) =>
+      console.warn(
+        "[job-sweep] startup sweep failed:",
+        err instanceof Error ? err.message : String(err),
+      ),
+    );
+  }
 
   const { registry, discoveryMap, manifestCache } =
     await discoverAndRegisterPlugins({
@@ -368,23 +372,34 @@ export async function bootstrapApi(
         // exact `runtime:<name>` grant. The old OR let a single runtime
         // approval unlock the whole plugin's server code (and vice versa),
         // collapsing the two-phase consent the UI presents.
-        if (
-          !trust.autoLoad &&
-          (!sessionId ||
+        if (!trust.autoLoad) {
+          const approvalSession = sessionId
+            ? await store.getSession(sessionId)
+            : undefined;
+          if (!sessionId || !approvalSession) {
+            throw new Error(
+              `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires a live session approval scope`,
+            );
+          }
+          const approvalScope = sessionApprovalScope(approvalSession, pluginId);
+          if (
             !rpcApprovalGate.hasGrant(
               sessionId,
               pluginId,
               COMMUNITY_SERVER_CODE_ACTION,
+              approvalScope,
             ) ||
             !rpcApprovalGate.hasGrant(
               sessionId,
               pluginId,
               `runtime:${manifest.name}`,
-            ))
-        ) {
-          throw new Error(
-            `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires explicit session approval (server-code AND runtime grants)`,
-          );
+              approvalScope,
+            )
+          ) {
+            throw new Error(
+              `[runtime-loader] ${pluginId}/${manifest.name}: community runtime requires explicit session approval (server-code AND runtime grants)`,
+            );
+          }
         }
         // Community wires register at the same moment we'd import the
         // plugin's handler.js — before any gateway call the handler makes.
@@ -472,20 +487,37 @@ export async function bootstrapApi(
   const isCommunityServerCodeApproved = (
     sessionId: string | undefined,
     pluginId: string,
-  ): boolean =>
-    Boolean(
-      sessionId &&
+  ): Promise<boolean> => {
+    if (!sessionId) return Promise.resolve(false);
+    return store
+      .getSession(sessionId)
+      .then((session) =>
+        Boolean(
+          session &&
+          rpcApprovalGate.hasGrant(
+            sessionId,
+            pluginId,
+            COMMUNITY_SERVER_CODE_ACTION,
+            sessionApprovalScope(session, pluginId),
+          ),
+        ),
+      );
+  };
+  const isCommunityHookApproved = async (
+    sessionId: string,
+    pluginId: string,
+  ): Promise<boolean> => {
+    const session = await store.getSession(sessionId);
+    return Boolean(
+      session &&
       rpcApprovalGate.hasGrant(
         sessionId,
         pluginId,
         COMMUNITY_SERVER_CODE_ACTION,
+        sessionApprovalScope(session, pluginId),
       ),
     );
-  const isCommunityHookApproved = (
-    sessionId: string,
-    pluginId: string,
-  ): boolean =>
-    rpcApprovalGate.hasGrant(sessionId, pluginId, COMMUNITY_SERVER_CODE_ACTION);
+  };
 
   const hookPipeline = createBootstrapHookPipeline({
     discoveryMap,

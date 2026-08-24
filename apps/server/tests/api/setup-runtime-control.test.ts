@@ -9,6 +9,7 @@ import type { DataStore } from "@covel/store";
 import type { SetupRuntimeState } from "@covel/shared";
 import { deriveLegacyClockForSession } from "@covel/shared";
 import { setupRuntimeControlRoutes } from "../../src/routes/api/setup-runtime-control.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 const BLOCKED: SetupRuntimeState = {
   state: "blocked",
@@ -37,8 +38,10 @@ async function makeApp(
     updatedAt: new Date().toISOString(),
   });
   const app = new Hono();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store" as never, store as never);
+    c.set("sessionLock" as never, sessionLock as never);
     await next();
   });
   app.route("/api/sessions", setupRuntimeControlRoutes);
@@ -99,6 +102,18 @@ describe("POST /setup/:runtimeId/retry", () => {
     const { app } = await makeApp({ "plug/setup": BLOCKED });
     const res = await post(app, "/api/sessions/nope/setup/plug%2Fsetup/retry");
     expect(res.status).toBe(404);
+  });
+
+  it("refuses to mutate a paused session", async () => {
+    const { app, store } = await makeApp({ "plug/setup": BLOCKED });
+    await store.updateSession("s", { status: "paused" });
+
+    const res = await post(app, "/api/sessions/s/setup/plug%2Fsetup/retry");
+
+    expect(res.status).toBe(409);
+    expect(
+      (await store.getSession("s"))?.setupRuntimes?.["plug/setup"],
+    ).toEqual(BLOCKED);
   });
 });
 

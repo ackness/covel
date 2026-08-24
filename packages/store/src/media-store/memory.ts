@@ -132,6 +132,16 @@ export function createMemoryMediaStore(): MediaStore {
       refRows.delete(`${sessionId}\u0000${id}`);
     },
 
+    async releaseSession(sessionId) {
+      refs.delete(sessionId);
+      for (const [key, row] of refRows) {
+        if (row.sessionId === sessionId) refRows.delete(key);
+      }
+      for (const [id, owner] of owners) {
+        if (owner.sessionId === sessionId) owners.delete(id);
+      }
+    },
+
     async isReferencedBy(id, sessionId) {
       const owner = owners.get(id);
       if (owner?.sessionId === sessionId) return true;

@@ -53,13 +53,20 @@ import {
 } from "./plugin-user-settings.js";
 import { getCachedWorld } from "../../world-cache.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
-import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
+import {
+  createPluginRpcRuntimeTurnRunner,
+  SessionApprovalScopeChangedError,
+  SessionNotActiveError,
+} from "./plugin-rpc/runtime-turn.js";
 import { commitFailureMessage } from "./plugin-rpc/runtime-response.js";
 import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
 import {
   checkHostedOperator,
   checkSessionOwner,
+  sessionIncarnationIdentity,
+  sessionApprovalScope,
+  SESSION_DELETION_PENDING_KEY,
 } from "./session/session-guard.js";
 
 export const pluginRpcRoutes = new Hono();
@@ -82,6 +89,17 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // (full turn pipeline) and mutate plugin data.
   const ownerDenied = checkSessionOwner(c, session);
   if (ownerDenied) return ownerDenied;
+  const expectedIncarnation = sessionIncarnationIdentity(session);
+  if (session.status !== "active") {
+    return c.json(
+      {
+        status: "error",
+        error: `session is ${session.status}; plugin RPC execution refused`,
+        code: "session-not-active",
+      },
+      409,
+    );
+  }
 
   let rawBody: unknown;
   try {
@@ -173,6 +191,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       if (operatorDenied) return operatorDenied;
     }
     const gate = c.get("rpcApprovalGate");
+    const approvalScope = sessionApprovalScope(session, body.pluginId);
     // Two-phase approval: executing a community runtime imports the
     // plugin's server code AND runs the specific runtime, and the runtime
     // loader now requires BOTH exact grants. Ask for the server-code grant
@@ -180,9 +199,15 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // the `runtime:<name>` grant; the renderer's retry walks the phases.
     const needsServerCodeGrant =
       trustInfo.source === "community" &&
-      !gate.hasGrant(sessionId, body.pluginId, COMMUNITY_SERVER_CODE_ACTION);
+      !gate.hasGrant(
+        sessionId,
+        body.pluginId,
+        COMMUNITY_SERVER_CODE_ACTION,
+        approvalScope,
+      );
     const verdict = gate.evaluate({
       sessionId,
+      sessionScope: approvalScope,
       pluginId: body.pluginId,
       action: needsServerCodeGrant
         ? COMMUNITY_SERVER_CODE_ACTION
@@ -279,6 +304,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       sessionId,
       session,
       activeRuntimes,
+      approvalScopes: new Map(
+        activeRuntimes.map((runtime) => [
+          runtime.pluginId,
+          sessionApprovalScope(session, runtime.pluginId),
+        ]),
+      ),
       deps: {
         loadRuntime: loadRuntimeFn,
         llm: llmAdapter,
@@ -324,6 +355,13 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const jobRunner = createPluginRpcJobRunner({
       store,
       sessionId,
+      sessionLock,
+      approvalScopes: new Map(
+        activeRuntimes.map((runtime) => [
+          runtime.pluginId,
+          sessionApprovalScope(session, runtime.pluginId),
+        ]),
+      ),
       ...(userSettingsMap ? { userSettings: userSettingsMap } : {}),
       runManualTurn,
       runDeferredFollowerTurn: (args) =>
@@ -357,6 +395,22 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           payload: body.payload,
         });
       } catch (err) {
+        if (err instanceof SessionNotActiveError) {
+          return c.json(
+            { status: "error", error: err.message, code: "session-not-active" },
+            409,
+          );
+        }
+        if (err instanceof SessionApprovalScopeChangedError) {
+          return c.json(
+            {
+              status: "error",
+              error: err.message,
+              code: "approval-scope-changed",
+            },
+            409,
+          );
+        }
         return c.json(
           {
             status: "error",
@@ -406,6 +460,22 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           turnId,
         });
       } catch (err) {
+        if (err instanceof SessionNotActiveError) {
+          return c.json(
+            { status: "error", error: err.message, code: "session-not-active" },
+            409,
+          );
+        }
+        if (err instanceof SessionApprovalScopeChangedError) {
+          return c.json(
+            {
+              status: "error",
+              error: err.message,
+              code: "approval-scope-changed",
+            },
+            409,
+          );
+        }
         return c.json(
           {
             status: "error",
@@ -462,6 +532,22 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
       });
     } catch (err) {
+      if (err instanceof SessionNotActiveError) {
+        return c.json(
+          { status: "error", error: err.message, code: "session-not-active" },
+          409,
+        );
+      }
+      if (err instanceof SessionApprovalScopeChangedError) {
+        return c.json(
+          {
+            status: "error",
+            error: err.message,
+            code: "approval-scope-changed",
+          },
+          409,
+        );
+      }
       return c.json(
         {
           status: "error",
@@ -500,6 +586,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   const pluginId = body.pluginId;
   const registry = c.get("rpcRegistry");
   const gate = c.get("rpcApprovalGate");
+  const approvalScope = sessionApprovalScope(session, pluginId);
   const hasPendingPluginEntry = c.get("hasPendingPluginEntry");
   let entryTrust: "builtin" | "official" | "community" = "community";
   let entryDescription: string | undefined;
@@ -561,7 +648,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // first when it is missing, then the precise action grant below.
   const needsServerCodeGrant =
     entryTrust === "community" &&
-    !gate.hasGrant(sessionId, pluginId, COMMUNITY_SERVER_CODE_ACTION);
+    !gate.hasGrant(
+      sessionId,
+      pluginId,
+      COMMUNITY_SERVER_CODE_ACTION,
+      approvalScope,
+    );
   // A deferred entry always takes the server-code phase first: we cannot know
   // whether `action` even exists until the (untrusted) entry has run.
   const approvalAction =
@@ -570,6 +662,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       : action;
   const verdict = gate.evaluate({
     sessionId,
+    sessionScope: approvalScope,
     pluginId,
     action: approvalAction,
     payload: body.payload,
@@ -626,6 +719,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     }
     const actionVerdict = gate.evaluate({
       sessionId,
+      sessionScope: approvalScope,
       pluginId,
       action,
       payload: body.payload,
@@ -670,8 +764,62 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // submit-form default is one). Serialize them with turns and sibling RPCs
     // so the interaction check and idempotent player-input write are atomic at
     // the session boundary, including across PG-backed server processes.
-    const dispatchAction = () =>
-      executor.dispatch(
+    const dispatchAction = async () => {
+      // Approval was evaluated before taking the session lock so a dialog can
+      // return promptly. Re-read the incarnation under the lock before running
+      // community code: disable/revoke/delete+recreate may have rotated it
+      // while this request waited. Do not evaluate twice on the normal path —
+      // that would consume a one-time grant twice.
+      const liveSession = await store.getSession(sessionId);
+      if (!liveSession) {
+        return c.json(
+          {
+            status: "error",
+            error: `Session "${sessionId}" not found`,
+            code: "session-not-found",
+          },
+          404,
+        );
+      }
+      if (sessionIncarnationIdentity(liveSession) !== expectedIncarnation) {
+        return c.json(
+          {
+            status: "error",
+            error: "session was replaced while the request was waiting",
+            code: "session-incarnation-changed",
+          },
+          409,
+        );
+      }
+      if (
+        liveSession.status !== "active" ||
+        liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]
+      ) {
+        return c.json(
+          {
+            status: "error",
+            error: `session is ${liveSession.status}; plugin RPC execution refused`,
+            code: liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]
+              ? "session-deleting"
+              : "session-not-active",
+          },
+          409,
+        );
+      }
+      if (
+        entryTrust === "community" &&
+        sessionApprovalScope(liveSession, pluginId) !== approvalScope
+      ) {
+        return c.json(
+          {
+            status: "error",
+            error: "approval scope changed while the request was waiting",
+            code: "approval-scope-changed",
+          },
+          409,
+        );
+      }
+      return executor.dispatch(
         {
           pluginId,
           action,
@@ -679,12 +827,14 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         },
         // session.locale lets framework defaults (submit-form) localize their
         // produced narrative; resolution order request → session → world → app.
-        { sessionId, store: rpcStore, locale: session.locale },
+        { sessionId, store: rpcStore, locale: liveSession.locale },
       );
+    };
     const actionSessionLock = c.get("sessionLock");
     const dispatch = actionSessionLock
       ? await actionSessionLock.withLock(sessionId, dispatchAction)
       : await dispatchAction();
+    if (dispatch instanceof Response) return dispatch;
     return c.json({ status: "ok", result: dispatch.result });
   } catch (err) {
     if (err instanceof RpcValidationError) {

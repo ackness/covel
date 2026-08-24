@@ -24,6 +24,7 @@ import {
 } from "../../src/lib/session-lock.js";
 import {
   hashSessionOwnerToken,
+  SESSION_DELETION_PENDING_KEY,
   SESSION_OWNER_TOKEN_HASH_KEY,
 } from "../../src/routes/api/session/session-guard.js";
 
@@ -200,6 +201,20 @@ describe("Snapshot routes", () => {
       const list = await store.listSnapshots("sess-1");
       expect(list).toHaveLength(1);
       expect(list[0].kind).toBe("manual");
+    });
+
+    it("refuses a manual snapshot while session deletion is pending", async () => {
+      await store.updateSession("sess-1", {
+        metadata: { [SESSION_DELETION_PENDING_KEY]: "delete-1" },
+      });
+      const app = createTestApp(store);
+      const res = await app.request("/api/sessions/sess-1/snapshot", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ code: "session_deleting" });
+      expect(await store.listSnapshots("sess-1")).toEqual([]);
     });
 
     it("waits for the session lock before reading and saving the snapshot", async () => {

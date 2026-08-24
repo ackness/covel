@@ -82,6 +82,41 @@ describe("GET /api/sessions/:id/state — database view", () => {
     );
   });
 
+  it("omits framework-private session metadata from data and schema", async () => {
+    await store.updateSession(sessionId, {
+      metadata: {
+        publicLabel: "visible",
+        ownerTokenHash: "secret-owner-hash",
+        approvalScopeNonce: "secret-incarnation",
+        approvalScopeRevisions: { plugin: "secret-revision" },
+      },
+    });
+
+    const res = await app.request(`/api/sessions/${sessionId}/state`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      tables: {
+        session: {
+          data: Record<string, unknown>;
+          schema: { fields: { name: string }[] };
+        };
+      };
+    };
+    expect(body.tables.session.data.metadata).toEqual(
+      expect.objectContaining({ publicLabel: "visible" }),
+    );
+    expect(JSON.stringify(body.tables.session)).not.toContain("secret-");
+    expect(
+      body.tables.session.schema.fields.map((field) => field.name),
+    ).not.toEqual(
+      expect.arrayContaining([
+        "ownerTokenHash",
+        "approvalScopeNonce",
+        "approvalScopeRevisions",
+      ]),
+    );
+  });
+
   it("groups plugin_data rows by pluginId+namespace into virtual tables", async () => {
     const now = new Date().toISOString();
     await store.setPluginDataBatch([

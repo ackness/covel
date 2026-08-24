@@ -15,6 +15,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { createPluginRpcRuntimeTurnRunner } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
+import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 
 const SESSION_ID = "sess-snap-nonfatal";
 const PLUGIN_ID = "demo";
@@ -59,6 +60,8 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
       promptTemplate: "",
       handler: async () => ({ ok: true }),
     };
+    const session = await store.getSession(SESSION_ID);
+    if (!session) throw new Error("expected session");
 
     const runner = createPluginRpcRuntimeTurnRunner({
       store,
@@ -67,6 +70,9 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
       sessionId: SESSION_ID,
       session: { locale: "en" },
       activeRuntimes: [manifest()],
+      approvalScopes: new Map([
+        [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
+      ]),
       deps: {
         loadRuntime: async (m) => (m.name === RUNTIME_ID ? loaded : undefined),
         llm: { generate: vi.fn() },

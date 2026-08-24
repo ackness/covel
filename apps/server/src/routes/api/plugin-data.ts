@@ -17,7 +17,10 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import { reservedPluginDataNamespaceError } from "@covel/shared";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { buildPluginDataIndex } from "./discovery.js";
-import { resolveSessionParam } from "./session/session-guard.js";
+import {
+  resolveSessionParam,
+  withLockedSessionMutation,
+} from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -164,15 +167,6 @@ pluginDataRoutes.put(
     const namespace = c.req.param("namespace");
     const key = c.req.param("key");
 
-    // Write: require the plugin to be active in this session
-    const accessErr = validatePluginAccess(
-      registry,
-      pluginId,
-      true,
-      guard.session.activePlugins ?? [],
-    );
-    if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
-
     const reservedErr = reservedPluginDataNamespaceError(namespace);
     if (reservedErr) return c.json(errorBody(reservedErr), 403);
     const coreErr = corePluginWriteError(registry, pluginId);
@@ -198,18 +192,35 @@ pluginDataRoutes.put(
     const body = parsed.data;
     const now = new Date().toISOString();
 
-    await store.setPluginData({
-      id: crypto.randomUUID(),
+    return withLockedSessionMutation({
+      c,
+      store,
+      sessionLock: c.get("sessionLock"),
       sessionId,
-      pluginId,
-      namespace,
-      key,
-      value: body.value,
-      createdAt: now,
-      updatedAt: now,
+      expectedSession: guard.session,
+      allowedStatuses: ["active"],
+      mutate: async (live) => {
+        const accessErr = validatePluginAccess(
+          registry,
+          pluginId,
+          true,
+          live.activePlugins ?? [],
+        );
+        if (accessErr)
+          return c.json(errorBody(accessErr.error), accessErr.status);
+        await store.setPluginData({
+          id: crypto.randomUUID(),
+          sessionId,
+          pluginId,
+          namespace,
+          key,
+          value: body.value,
+          createdAt: now,
+          updatedAt: now,
+        });
+        return c.json({ success: true, namespace, key });
+      },
     });
-
-    return c.json({ success: true, namespace, key });
   },
 );
 
@@ -226,22 +237,31 @@ pluginDataRoutes.delete(
     const namespace = c.req.param("namespace");
     const key = c.req.param("key");
 
-    // Write: require the plugin to be active in this session
-    const accessErr = validatePluginAccess(
-      registry,
-      pluginId,
-      true,
-      guard.session.activePlugins ?? [],
-    );
-    if (accessErr) return c.json(errorBody(accessErr.error), accessErr.status);
-
     const reservedErr = reservedPluginDataNamespaceError(namespace);
     if (reservedErr) return c.json(errorBody(reservedErr), 403);
     const coreErr = corePluginWriteError(registry, pluginId);
     if (coreErr) return c.json(errorBody(coreErr), 403);
 
-    await store.deletePluginData(sessionId, pluginId, namespace, key);
-    return c.json({ success: true });
+    return withLockedSessionMutation({
+      c,
+      store,
+      sessionLock: c.get("sessionLock"),
+      sessionId,
+      expectedSession: guard.session,
+      allowedStatuses: ["active"],
+      mutate: async (live) => {
+        const accessErr = validatePluginAccess(
+          registry,
+          pluginId,
+          true,
+          live.activePlugins ?? [],
+        );
+        if (accessErr)
+          return c.json(errorBody(accessErr.error), accessErr.status);
+        await store.deletePluginData(sessionId, pluginId, namespace, key);
+        return c.json({ success: true });
+      },
+    });
   },
 );
 

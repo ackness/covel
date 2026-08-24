@@ -17,7 +17,11 @@ import {
 import type { RuntimeManifest } from "@covel/shared";
 import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 import { resumeRoutes } from "../../src/routes/api/resume.js";
-import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "../../src/lib/session-lock.js";
+import { SESSION_INCARNATION_KEY } from "../../src/routes/api/session/session-guard.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -32,9 +36,13 @@ type Deps = {
   };
   resolveModel: () => undefined;
   hookPipeline?: HookPipeline;
+  prepareToolsForSession?: (sessionId: string) => Promise<void>;
 };
 
-function createTestApp(deps: Deps) {
+function createTestApp(
+  deps: Deps,
+  sessionLock: SessionLock = createInProcessSessionLock(),
+) {
   const app = new Hono<{
     Variables: {
       store: DataStore;
@@ -46,7 +54,6 @@ function createTestApp(deps: Deps) {
     };
   }>();
 
-  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", deps.store);
     c.set("pluginRegistry", deps.pluginRegistry);
@@ -59,6 +66,9 @@ function createTestApp(deps: Deps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     c.set("resolveModel", deps.resolveModel as any);
     c.set("sessionLock", sessionLock);
+    if (deps.prepareToolsForSession) {
+      c.set("prepareToolsForSession", deps.prepareToolsForSession);
+    }
     if (deps.hookPipeline) {
       c.set("hookPipeline", deps.hookPipeline);
     }
@@ -554,6 +564,73 @@ describe("Resume Routes", () => {
       expect(messages.map((m) => m.content)).not.toContain("Resume complete.");
       // …and no hook ever observed a "committed" state for it.
       expect(postStateCommit).not.toHaveBeenCalled();
+    });
+
+    it("does not restore a claimed suspension into a recreated session after failure", async () => {
+      await store.updateSession("sess-1", {
+        metadata: { [SESSION_INCARNATION_KEY]: "old-incarnation" },
+      });
+      await createSuspension(store);
+      const sessionLock = createInProcessSessionLock();
+      let enteredPrepare!: () => void;
+      const prepareStarted = new Promise<void>((resolve) => {
+        enteredPrepare = resolve;
+      });
+      let failPrepare!: () => void;
+      const continuePrepare = new Promise<void>((resolve) => {
+        failPrepare = resolve;
+      });
+      const app = createTestApp(
+        makeDefaultDeps(store, {
+          prepareToolsForSession: async () => {
+            enteredPrepare();
+            await continuePrepare;
+            throw new Error("forced preparation failure");
+          },
+        }),
+        sessionLock,
+      );
+
+      const request = app.request("/api/sessions/sess-1/resume", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Provider-Keys": "dGVzdA==",
+        },
+        body: JSON.stringify({
+          suspensionId: "susp-1",
+          data: { name: "Alice" },
+        }),
+      });
+      await prepareStarted;
+
+      // Queue delete/recreate behind the in-flight resume. Its slot is ahead
+      // of the catch-path claim release, reproducing the ABA ordering that
+      // previously restored the old suspension into the new incarnation.
+      const replace = sessionLock.withLock("sess-1", async () => {
+        await store.deleteSession("sess-1");
+        const now = new Date().toISOString();
+        await store.createSession({
+          id: "sess-1",
+          worldId: "test-world",
+          status: "active",
+          turnCount: 0,
+          preGameCompleted: [],
+          activePlugins: [],
+          metadata: { [SESSION_INCARNATION_KEY]: "new-incarnation" },
+          createdAt: now,
+          updatedAt: now,
+        });
+      });
+      failPrepare();
+
+      await replace;
+      const res = await request;
+      expect(res.status).toBe(500);
+      expect(await store.getSuspension("susp-1")).toBeNull();
+      expect(
+        (await store.getSession("sess-1"))?.metadata?.[SESSION_INCARNATION_KEY],
+      ).toBe("new-incarnation");
     });
 
     it("commits resumed runtime output to the store before returning", async () => {

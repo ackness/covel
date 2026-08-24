@@ -12,6 +12,10 @@ import {
 } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "../../src/lib/session-lock.js";
 
 type Env = {
   Variables: {
@@ -21,6 +25,7 @@ type Env = {
     mediaStore?: MediaStore;
     worldsDirs?: readonly string[];
     covelHome?: string;
+    sessionLock: SessionLock;
   };
 };
 
@@ -34,11 +39,13 @@ function createTestApp(
   } = {},
 ): Hono<Env> {
   const eventBus = createEventBus();
+  const sessionLock = createInProcessSessionLock();
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("eventBus", eventBus);
     c.set("pluginRegistry", pluginRegistry);
+    c.set("sessionLock", sessionLock);
     if (options.mediaStore) c.set("mediaStore", options.mediaStore);
     if (options.worldsDirs) c.set("worldsDirs", options.worldsDirs);
     if (options.covelHome) c.set("covelHome", options.covelHome);

@@ -49,7 +49,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 ### 鉴权：Session owner token
 
-`POST /api/sessions` 创建会话时会铸造一个不可猜测的 **owner token**，仅在创建响应中返回一次（响应字段 `ownerToken`）；服务端只保存其 SHA-256 哈希（`session.metadata.ownerTokenHash`），任何读取端点都不会再泄露原始 token。
+`POST /api/sessions` 创建会话时会铸造一个不可猜测的 **owner token**，仅在创建响应中返回一次（响应字段 `ownerToken`）；服务端只保存其 SHA-256 哈希。owner hash、approval/session incarnation、lifecycle/delete lease 等框架私有 metadata 在 session CRUD、snapshot 与 `/state` 虚拟表响应中都会被剥离。
 
 **分层强制（tiered enforcement）**：
 
@@ -70,7 +70,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 **community server-code grant 是 session 授权、进程级生效**：
 
-审批本身按 `(sessionId, pluginId, action)` 记录，但它授权的动作是把插件的 server code `import()` 进 Node 进程。ESM 模块只加载一次，entry factory 也只跑一次（按 pluginId 记忆），所以第一个批准该插件的会话就把它注册的 tool / RPC handler / media wire 装进了**进程级**注册表——之后其他会话不必再批准即可看到这些注册项存在。
+审批本身按 `(sessionId, session incarnation, pluginId, action)` 记录；`session incarnation` 来自服务端私有的随机 metadata nonce（历史会话回退 owner-token hash），不会出现在 API 响应中。它授权的动作是把插件的 server code `import()` 进 Node 进程。ESM 模块只加载一次，entry factory 也只跑一次（按 pluginId 记忆），所以第一个批准该插件的会话就把它注册的 tool / RPC handler / media wire 装进了**进程级**注册表——之后其他会话不必再批准即可看到这些注册项存在。
 
 因此实际的边界分两层：
 
@@ -79,7 +79,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 | **代码加载 / 能力注册**                             | 进程级、一次性、不可撤销。任一会话批准即完成。                                                                                       |
 | **调用（RPC dispatch / runtime 加载 / hook 执行）** | 每次仍按发起会话查 grant。未批准的会话拿不到 `covel:plugin-server-code`、`runtime:<name>` 校验，hook 也会被跳过（返回 `continue`）。 |
 
-**revoke 边界**：`DELETE /api/sessions/:id/approvals`（以及禁用插件）按 `(session, plugin)` 前缀清除 session-cached 与一次性 grant，并取消待决审批。它**不会**卸载已导入的模块，也不会注销已注册的 tool / RPC handler / wire——JS 没有可靠的模块卸载。撤销之后该会话的后续 dispatch、runtime 加载和 hook 执行会重新被拒，但已经在进程内的代码要到重启才消失。进程重启则清空全部易失 grant（见 Snapshot / Fork 一节）。
+**revoke 边界**：`DELETE /api/sessions/:id/approvals`（以及禁用插件）在 session lock 内轮换持久化的 session/plugin 授权代次，再清除当前进程的 session-cached、一次性 grant 与待决审批。其他 Pod 即使仍持有旧内存 grant，也会因代次不匹配而拒绝；旧 approvalId 决策返回 `409 approval_scope_changed`。撤销**不会**卸载已导入模块，也不会注销已注册的 tool / RPC handler / wire——JS 没有可靠的模块卸载。已经在进程内的代码要到重启才消失；进程重启也会清空全部易失 grant（见 Snapshot / Fork 一节）。
 
 单运维方模型下这是可接受的：批准 community 代码等同于信任它在本进程内运行。多租户隔离需要真正的代码沙箱，尚未实现。
 
@@ -1029,7 +1029,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
   "activePlugins": ["pregame", "narrator", "codex"],
   "createdAt": "2025-01-15T10:00:00.000Z",
   "updatedAt": "2025-01-15T10:00:00.000Z",
-  "metadata": { "ownerTokenHash": "<sha256-hex>" },
+  "metadata": {},
   "ownerToken": "e7b2c4d1-…"
 }
 ```
@@ -1125,9 +1125,11 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 #### `DELETE /api/sessions/:id`
 
-删除一个游戏会话。删除与同一 session 的 turn、插件管理写入共用 session
-lock；请求会等待已取得锁的回合完成，再在锁内级联删除，因此完成中的回合
-无法在删除后写回孤儿记录。
+删除一个游戏会话。删除先在 session lock 内暂停准入、写入删除代次并轮换授权作用域，再从持久化 `_jobs` 行枚举 `pending` runtime、等待对应 detached runtime lock 排空；随后在不持 advisory lock 的情况下运行 observe-only `SessionEnd`，最后短持 session lock 清理 MediaStore 的 owner/ref 并级联删除 DataStore。旧后台任务的最终 scope/status 检查会失败，不能在删除后写回孤儿记录。
+
+`SessionStart` / `SessionEnd` 运行期间 lifecycle mutation 返回 `409 session_lifecycle_busy`，调用方应在 hook 完成后重试；普通同 session API 不被 hook lease 阻塞。删除进行中返回 `409 session_deleting`。若 drain、媒体或数据库删除失败，会话保持 `paused`、授权代次保持轮换、删除 marker 保持有效，普通 mutation 继续 fail-closed；服务端记录一次性 retry nonce，下一次 `DELETE` 可接管且不会重复触发已完成的 `SessionEnd`。进程在错误恢复前崩溃时，10 分钟 deletion lease 到期后允许新 `DELETE` 接管。
+
+显式复用同一 ID 只有在旧行完全删除后才会成功；删除尚在 hook/drain 阶段时创建返回重复 ID 的 `409`，调用方应在 DELETE 成功后重试。MediaStore 的 session ownership/ref 会随删除清除，新 incarnation 不会继承旧媒体访问权。
 
 **参数:**
 
@@ -1477,15 +1479,9 @@ value         : {
 }
 ```
 
-**崩溃恢复**：后台任务由进程内队列驱动，没有持久队列——进程在任务完成前退出，该行会永远停在
-`pending`。开机扫描按 `owner` 回收：`owner` 不等于当前进程（含老版本写下的、根本没有 `owner`
-的行）即判定为孤儿，立即置为 `status: "failed"` + `reason: "orphaned"`，并保留原 `payload` /
-`triggerEvent` 供插件 UI 或玩家发起重试。框架**不自动重跑**——重跑会二次计费（图像 / 语音生成），
-且请求级 `userSettings` 并未持久化在行上，重跑等于换参数重新扣费。
+**崩溃恢复**：后台任务由进程内队列驱动，没有持久队列。Memory / SQLite 单进程部署会在开机时按 `owner` 回收旧 `pending` 行，写为 `failed` + `reason: "orphaned"`，并保留 payload/triggerEvent 供 UI 或玩家重试；框架不会自动重跑，避免图像/语音二次计费。
 
-> 该判定假设**一个 store 对应一个服务进程**，对当前发布的所有部署形态（桌面、自部署）都成立。
-> 多实例共享一个数据库时它并不安全：新启动的实例会把其它实例正在执行的行读成孤儿并立即失败。
-> 上多实例前需要给 `owner` 配上租约（运行期续租的 `leaseExpiresAt`），判定改为"非本进程**且**已过期"。
+PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租约，新 Pod 无法区分“另一个 Pod 正在执行”和“旧 Pod 已崩溃”，贸然回收会把活任务误判失败。因此 Pod 崩溃留下的 PG `pending` 行目前会保留，直到玩家显式重试/清理；完整自动恢复仍需要持久队列或可续租的 `leaseExpiresAt`。
 
 每次写入都会通过 store-proxy 发出 `plugin-data.changed` SSE 事件(见 [protocol.md](./protocol.md)),前端据此刷新 loading / final UI。
 
@@ -1495,6 +1491,7 @@ value         : {
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | 400    | `pluginId` 缺失 / `action` 与 `runtimeId` 同时设置或同时缺失 / `RpcValidationError` / `plugin-mismatch`(runtimeId 不属于 pluginId) |
 | 404    | 会话不存在 / `unknown-action`(action 未注册) / `runtime-not-active`(runtimeId 未加载到该 session)                                  |
+| 409    | `session-not-active` / `session-deleting` / `session-incarnation-changed` / `approval-scope-changed`                               |
 | 429    | `queue-full`(community trust 的待批准队列满)                                                                                       |
 | 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime-execution-failed` / `background-enqueue-failed` / `turn-commit-failed`    |
 
@@ -1641,10 +1638,11 @@ rpc:
 | ------ | ------------------------------------------------------------------------------------------------------- |
 | 400    | `decision` 字段缺失 / 非 `allow` 或 `deny` / `scope` 非法 / server-code 或 runtime 使用非 session scope |
 | 404    | `approvalId` 不存在或已被消费                                                                           |
+| 409    | approval 所属 session incarnation 已被 revoke、disable、delete 或同 ID 重建（`approval_scope_changed`） |
 
 #### `DELETE /api/sessions/:id/approvals`
 
-撤销该 session 已缓存、一次性和未决的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只撤销该插件的授权；省略则撤销整个 session 的全部授权。pending approval 按 `(session, plugin, action)` 去重；disable/冲突移除插件时也会撤销，旧 approvalId 无法在之后重新激活代码。
+撤销该 session 已缓存、一次性和未决的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只轮换并撤销该插件的授权；省略则轮换整个 session 的授权 incarnation。pending approval 按 `(session incarnation, plugin, action)` 去重；disable/冲突移除插件时也会撤销，旧 approvalId 无法在之后重新激活代码。持久化代次使撤销对共享 PostgreSQL 的其他 Pod 同样生效。
 
 **查询参数:**
 
@@ -1670,7 +1668,7 @@ rpc:
 
 > One-time grant 的 TTL 为 60 秒。如果玩家批准后 60 秒内没有发起对应的 dispatch,grant 会过期,需要重新走 dialog 流程。
 
-> Approval 状态是**进程内 + 内存**,服务器重启后所有 pending / cache 全部清空。如果跨重启的持久化变得必要,可以把 gate 的状态写入 `plugin_data`(见 `packages/approval/src/rpc-approval.ts` 内联说明)。
+> Approval 的 pending / grant 内容仍是**进程内 + 内存**：服务器重启后全部清空，且一个 Pod 上批准的 grant 不会自动复制到另一个 Pod。持久化的是 session/plugin 的撤销代次，用于保证跨 Pod 的旧 grant 只能失效、绝不能误授权删除后同 ID 重建的会话。需要负载均衡下无重复弹窗时，仍需实现共享的 durable approval store。
 
 ---
 
@@ -3046,7 +3044,7 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 | 适用场景 | 测试 / 一次性 demo     | 单机部署（默认）                           | 生产环境                                                 |
 | 配置     | `STORE_BACKEND=memory` | 默认（`STORE_BACKEND=sqlite`，可显式指定） | `STORE_BACKEND=pg` + `DATABASE_URL`                      |
 
-> **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。每次 `/api/actions` / `/api/sessions/:id/resume` 都会在专用 PG 连接上拿到 `pg_advisory_lock(hash(sessionId))`，确保同一 session 在任意时刻只有一个 Node 进程执行 turn。Memory / SQLite 后端使用进程内 `Map` 锁，足以覆盖单进程场景。
+> **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。session 作用域 mutation、turn、resume、detached commit 等在专用 PG 连接上取得 advisory lock，确保同一 key 跨 Pod 串行；同一 async 分支的嵌套/批量 key 共用一条 reserved connection，避免 `max=1` 或多 key drain 耗尽连接池。Memory / SQLite 后端使用进程内 Promise-chain 锁，覆盖单进程场景。
 
 ### 关键环境变量
 

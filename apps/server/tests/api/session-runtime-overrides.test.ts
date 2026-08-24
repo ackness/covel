@@ -16,6 +16,7 @@ import {
   type PluginRegistry,
 } from "@covel/plugin-loader";
 import { sessionRoutes } from "../../src/routes/api/session.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 type Env = {
   Variables: {
@@ -26,9 +27,11 @@ type Env = {
 
 function setupApp(store: DataStore, pluginRegistry: PluginRegistry): Hono {
   const app = new Hono<Env>();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("pluginRegistry", pluginRegistry);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", sessionRoutes);

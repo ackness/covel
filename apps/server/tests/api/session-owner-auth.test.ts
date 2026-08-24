@@ -95,9 +95,16 @@ describe("self tier (default) — no enforcement, no breakage", () => {
     const stored = await store.getSession(created.id);
     expect(JSON.stringify(stored)).not.toContain(created.ownerToken);
     expect(stored?.metadata?.ownerTokenHash).toBeTypeOf("string");
+    expect(stored?.metadata?.approvalScopeNonce).toBeTypeOf("string");
+    expect(created.metadata?.ownerTokenHash).toBeUndefined();
+    expect(created.metadata?.approvalScopeNonce).toBeUndefined();
 
     // Token-free access works everywhere (existing local clients unchanged).
-    expect((await app.request(`/api/sessions/${created.id}`)).status).toBe(200);
+    const getSession = await app.request(`/api/sessions/${created.id}`);
+    expect(getSession.status).toBe(200);
+    const sessionBody = (await getSession.json()) as CreatedSession;
+    expect(sessionBody.metadata?.ownerTokenHash).toBeUndefined();
+    expect(sessionBody.metadata?.approvalScopeNonce).toBeUndefined();
     expect(
       (await app.request(`/api/sessions/${created.id}/messages`)).status,
     ).toBe(200);

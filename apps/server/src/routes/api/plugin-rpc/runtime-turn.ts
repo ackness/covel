@@ -15,6 +15,21 @@ import type {
   ManualTurnSummary,
   TurnCommitOutcome,
 } from "./runtime-response.js";
+import { sessionApprovalScope } from "../session/session-guard.js";
+
+export class SessionApprovalScopeChangedError extends Error {
+  constructor() {
+    super("approval scope changed while the runtime request was waiting");
+    this.name = "SessionApprovalScopeChangedError";
+  }
+}
+
+export class SessionNotActiveError extends Error {
+  constructor(readonly status: string) {
+    super(`session is ${status}; runtime execution refused`);
+    this.name = "SessionNotActiveError";
+  }
+}
 
 export interface PluginRpcRuntimeTurnContext {
   readonly store: DataStore;
@@ -23,6 +38,8 @@ export interface PluginRpcRuntimeTurnContext {
   readonly sessionId: string;
   readonly session: Pick<SessionRecord, "locale" | "runtimeModelOverrides">;
   readonly activeRuntimes: readonly RuntimeManifest[];
+  /** Capability incarnation captured for every runtime plugin in this graph. */
+  readonly approvalScopes: ReadonlyMap<string, string>;
   readonly deps: Omit<TurnExecutorDeps, "store" | "eventBus" | "emitter">;
   readonly hookPipeline?: TurnExecutorDeps["hookPipeline"];
 }
@@ -70,7 +87,10 @@ export interface RunDeferredFollowerArgs {
  * different payloads can still target the same record and overwrite each
  * other after both have paid for provider work.
  */
-function backgroundRuntimeLockId(sessionId: string, runtimeId: string): string {
+export function backgroundRuntimeLockId(
+  sessionId: string,
+  runtimeId: string,
+): string {
   return `background-runtime:${JSON.stringify([sessionId, runtimeId])}`;
 }
 
@@ -83,6 +103,37 @@ export function createPluginRpcRuntimeTurnRunner(
     readonly commit: TurnCommitOutcome;
   }>;
 } {
+  function assertApprovalScope(
+    session: SessionRecord,
+    runtimeId: string,
+  ): void {
+    const pluginId = ctx.activeRuntimes.find(
+      (runtime) => runtime.name === runtimeId,
+    )?.pluginId;
+    const expected = pluginId ? ctx.approvalScopes.get(pluginId) : undefined;
+    if (
+      !pluginId ||
+      !expected ||
+      sessionApprovalScope(session, pluginId) !== expected
+    ) {
+      throw new SessionApprovalScopeChangedError();
+    }
+  }
+
+  async function requireLiveApprovedSession(
+    runtimeId: string,
+  ): Promise<SessionRecord> {
+    const live = await ctx.store.getSession(ctx.sessionId);
+    if (!live) {
+      throw new SessionNotActiveError("deleted");
+    }
+    if (live.status !== "active") {
+      throw new SessionNotActiveError(live.status);
+    }
+    assertApprovalScope(live, runtimeId);
+    return live;
+  }
+
   async function processTurnResults(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
@@ -209,6 +260,12 @@ export function createPluginRpcRuntimeTurnRunner(
   }> {
     const jobLockId = backgroundRuntimeLockId(ctx.sessionId, runtimeId);
     return ctx.sessionLock.withLock(jobLockId, async () => {
+      // Detached work does not hold the main session lock during provider
+      // execution. Take it briefly to linearize authorization against a
+      // concurrent revoke/disable/delete before spending external work.
+      await ctx.sessionLock.withLock(ctx.sessionId, () =>
+        requireLiveApprovedSession(runtimeId).then(() => undefined),
+      );
       const result = await executeTurn(turnInput, ctx.activeRuntimes, {
         ...ctx.deps,
         store: ctx.store,
@@ -226,15 +283,12 @@ export function createPluginRpcRuntimeTurnRunner(
           // runner, which settles the job row as failed.
           const live = await ctx.store.getSession(ctx.sessionId);
           if (!live) {
-            throw new Error(
-              "session was deleted while the background job was running",
-            );
+            throw new SessionNotActiveError("deleted");
           }
           if (live.status && live.status !== "active") {
-            throw new Error(
-              `session is ${live.status}; background job results were discarded`,
-            );
+            throw new SessionNotActiveError(live.status);
           }
+          assertApprovalScope(live, runtimeId);
           return processTurnResults(result, emitter);
         },
       );
@@ -286,6 +340,7 @@ export function createPluginRpcRuntimeTurnRunner(
           commit: r.commit,
         }))
       : await ctx.sessionLock.withLock(ctx.sessionId, async () => {
+          await requireLiveApprovedSession(args.runtimeId);
           const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
             ...ctx.deps,
             store: ctx.store,

@@ -37,6 +37,7 @@ import type { Context } from "hono";
 import type { DataStore, SessionRecord } from "@covel/store";
 import { readRuntimeEnv } from "@covel/shared";
 import { errorBody } from "../../../api-error.js";
+import type { SessionLock } from "../../../lib/session-lock.js";
 
 export const SESSION_NOT_FOUND_CODE = "session_not_found";
 export const SESSION_OWNER_REQUIRED_CODE = "session_owner_required";
@@ -44,6 +45,42 @@ export const OPERATOR_TOKEN_REQUIRED_CODE = "operator_token_required";
 
 /** Metadata key holding the SHA-256 hex hash of the session owner token. */
 export const SESSION_OWNER_TOKEN_HASH_KEY = "ownerTokenHash";
+/** Private metadata key that identifies one persisted session incarnation. */
+export const SESSION_APPROVAL_SCOPE_KEY = "approvalScopeNonce";
+/** Private per-plugin revocation generations within the session scope. */
+export const SESSION_APPROVAL_REVISIONS_KEY = "approvalScopeRevisions";
+/** Private immutable identity for sessions that do not carry an owner hash. */
+export const SESSION_INCARNATION_KEY = "sessionIncarnationNonce";
+/** Private marker that keeps a failed/in-progress delete fail-closed. */
+export const SESSION_DELETION_PENDING_KEY = "deletionPendingNonce";
+/** Private lease timestamp for crash-safe deletion takeover. */
+export const SESSION_DELETION_STARTED_AT_KEY = "deletionStartedAt";
+/** Private marker that lets one later DELETE retry a failed cleanup. */
+export const SESSION_DELETION_RETRY_KEY = "deletionRetryNonce";
+/** Private generation recording that SessionEnd already ran for a delete. */
+export const SESSION_DELETION_END_FIRED_KEY = "deletionEndHookFiredNonce";
+/** Private lease for an observe-only SessionStart/SessionEnd callback. */
+export const SESSION_LIFECYCLE_PENDING_KEY = "sessionLifecyclePending";
+
+/** Remove framework-private credentials/capability generations from metadata. */
+export function publicSessionMetadata(
+  metadata: SessionRecord["metadata"],
+): Record<string, unknown> | undefined {
+  if (!metadata) return undefined;
+  const {
+    [SESSION_OWNER_TOKEN_HASH_KEY]: _ownerHash,
+    [SESSION_APPROVAL_SCOPE_KEY]: _approvalScope,
+    [SESSION_APPROVAL_REVISIONS_KEY]: _approvalRevisions,
+    [SESSION_INCARNATION_KEY]: _incarnation,
+    [SESSION_DELETION_PENDING_KEY]: _deletionPending,
+    [SESSION_DELETION_STARTED_AT_KEY]: _deletionStartedAt,
+    [SESSION_DELETION_RETRY_KEY]: _deletionRetry,
+    [SESSION_DELETION_END_FIRED_KEY]: _deletionEndFired,
+    [SESSION_LIFECYCLE_PENDING_KEY]: _lifecyclePending,
+    ...rest
+  } = metadata;
+  return rest;
+}
 
 type ResolveResult =
   | { readonly ok: true; readonly session: SessionRecord }
@@ -60,6 +97,153 @@ export function mintSessionOwnerToken(): {
 } {
   const token = randomUUID();
   return { token, tokenHash: hashSessionOwnerToken(token) };
+}
+
+/** Mint a private, persisted capability scope for a newly created session. */
+export function mintSessionApprovalScope(): string {
+  return randomUUID();
+}
+
+/** Stable identity used to reject stale mutations after same-id recreation. */
+export function sessionIncarnationIdentity(session: SessionRecord): string {
+  const ownerHash = session.metadata?.[SESSION_OWNER_TOKEN_HASH_KEY];
+  if (typeof ownerHash === "string" && ownerHash.length > 0) {
+    return `owner:${ownerHash}`;
+  }
+  const nonce = session.metadata?.[SESSION_INCARNATION_KEY];
+  if (typeof nonce === "string" && nonce.length > 0) {
+    return `incarnation:${nonce}`;
+  }
+  return `created:${session.createdAt}`;
+}
+
+/**
+ * Short commit barrier for session-scoped mutations.
+ *
+ * Callers parse/validate bodies and perform non-mutating expensive work before
+ * entering. The callback runs under the cross-Pod session lock only after the
+ * owner, immutable incarnation, deletion marker and explicit status policy are
+ * revalidated against the live row.
+ */
+export async function withLockedSessionMutation<T>(options: {
+  readonly c: Context;
+  readonly store: DataStore;
+  readonly sessionLock: SessionLock;
+  readonly sessionId: string;
+  readonly expectedSession: SessionRecord;
+  readonly allowedStatuses: "any" | readonly string[];
+  readonly allowDeletionPending?: boolean;
+  readonly mutate: (session: SessionRecord) => Promise<T>;
+}): Promise<T | Response> {
+  return options.sessionLock.withLock(options.sessionId, async () => {
+    const live = await options.store.getSession(options.sessionId);
+    if (!live) {
+      return options.c.json(
+        errorBody(`Session not found: ${options.sessionId}`, {
+          code: SESSION_NOT_FOUND_CODE,
+        }),
+        404,
+      );
+    }
+    const ownerDenied = checkSessionOwner(options.c, live);
+    if (ownerDenied) return ownerDenied;
+    if (
+      sessionIncarnationIdentity(live) !==
+      sessionIncarnationIdentity(options.expectedSession)
+    ) {
+      return options.c.json(
+        errorBody("Session was replaced while the request was waiting", {
+          code: "session_incarnation_changed",
+        }),
+        409,
+      );
+    }
+    if (
+      !options.allowDeletionPending &&
+      live.metadata?.[SESSION_DELETION_PENDING_KEY]
+    ) {
+      return options.c.json(
+        errorBody("Session deletion is in progress; retry DELETE", {
+          code: "session_deleting",
+        }),
+        409,
+      );
+    }
+    if (
+      options.allowedStatuses !== "any" &&
+      !options.allowedStatuses.includes(live.status)
+    ) {
+      return options.c.json(
+        errorBody(`Session is ${live.status}; mutation refused`, {
+          code: "session_not_active",
+        }),
+        409,
+      );
+    }
+    return options.mutate(live);
+  });
+}
+
+/**
+ * Resolve the stable scope used by process-local approval gates.
+ *
+ * New sessions carry a dedicated random nonce. The owner-token hash is a safe
+ * compatibility fallback for sessions created before the nonce was added: it
+ * is already random, private, persisted, and changes when an id is recreated.
+ * The timestamp fallback is only for legacy/test rows that have neither key.
+ */
+export function sessionApprovalScope(
+  session: SessionRecord,
+  pluginId: string,
+): string {
+  const nonce = session.metadata?.[SESSION_APPROVAL_SCOPE_KEY];
+  const ownerHash = session.metadata?.[SESSION_OWNER_TOKEN_HASH_KEY];
+  const incarnation =
+    typeof nonce === "string" && nonce.length > 0
+      ? `nonce:${nonce}`
+      : typeof ownerHash === "string" && ownerHash.length > 0
+        ? `owner:${ownerHash}`
+        : `created:${session.createdAt}`;
+  const revisions = session.metadata?.[SESSION_APPROVAL_REVISIONS_KEY];
+  const revision =
+    revisions && typeof revisions === "object" && !Array.isArray(revisions)
+      ? (revisions as Record<string, unknown>)[pluginId]
+      : undefined;
+  return JSON.stringify([
+    incarnation,
+    typeof revision === "string" && revision.length > 0 ? revision : "0",
+  ]);
+}
+
+/**
+ * Build a metadata patch that invalidates one plugin or every plugin without
+ * relying on process-local cache eviction or cross-Pod broadcasts.
+ */
+export function rotateSessionApprovalScope(
+  session: SessionRecord,
+  pluginId?: string,
+): Record<string, unknown> {
+  const metadata = { ...session.metadata };
+  if (!pluginId) {
+    metadata[SESSION_APPROVAL_SCOPE_KEY] = mintSessionApprovalScope();
+    // Session metadata patches merge with the existing object. `undefined`
+    // is the deletion tombstone (and disappears when SQL JSON is serialised);
+    // `delete` here would let old plugin revisions merge back in.
+    metadata[SESSION_APPROVAL_REVISIONS_KEY] = undefined;
+    return metadata;
+  }
+  const rawRevisions = metadata[SESSION_APPROVAL_REVISIONS_KEY];
+  const revisions: Record<string, unknown> =
+    rawRevisions &&
+    typeof rawRevisions === "object" &&
+    !Array.isArray(rawRevisions)
+      ? {
+          ...(rawRevisions as Record<string, unknown>),
+          [pluginId]: randomUUID(),
+        }
+      : { [pluginId]: randomUUID() };
+  metadata[SESSION_APPROVAL_REVISIONS_KEY] = revisions;
+  return metadata;
 }
 
 /**

@@ -247,6 +247,33 @@ export function runMediaStoreContractTests(
       );
     });
 
+    it("releaseSession removes only the deleted session's authorization edges", async () => {
+      const store = await createStore();
+      const owned = await store.put(PNG, "image/png");
+      const shared = await store.put(OTHER, "application/octet-stream");
+      await store.recordOwnership(owned.id, "sess-delete", "plugin-owner");
+      await store.addRef(owned.id, "sess-keep", "plugin-keep");
+      await store.recordOwnership(shared.id, "sess-keep", "plugin-keep");
+      await store.addRef(shared.id, "sess-delete", "plugin-delete");
+
+      await store.releaseSession("sess-delete");
+
+      expect(await store.exists(owned.id)).toBe(true);
+      expect(await store.lookup(owned.id)).toMatchObject({
+        ownerSessionId: null,
+        ownerPluginId: null,
+      });
+      expect(await store.isReferencedBy(owned.id, "sess-delete")).toBe(false);
+      expect(await store.isReferencedBy(owned.id, "sess-keep")).toBe(true);
+      expect(await store.isReferencedBy(shared.id, "sess-delete")).toBe(false);
+      expect(await store.isReferencedBy(shared.id, "sess-keep")).toBe(true);
+      expect(await store.listRefs()).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ sessionId: "sess-delete" }),
+        ]),
+      );
+    });
+
     it("can delete an owned asset after its last explicit ref is removed", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png");
