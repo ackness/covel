@@ -128,7 +128,7 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
   afterAll(async () => {
     await store?.close?.();
     await isolatedDatabase?.cleanup();
-  });
+  }, 30_000);
 
   it("ingests messages and ranks the semantically closest first", async () => {
     const system = createMemorySystem({ store, llm, embed });

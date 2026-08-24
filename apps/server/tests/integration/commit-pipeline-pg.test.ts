@@ -100,7 +100,7 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
   afterAll(async () => {
     await store?.close();
     await isolatedDatabase?.cleanup();
-  });
+  }, 30_000);
 
   it("commits a multi-proposal chain atomically", async () => {
     const sessionId = "pg-commit-ok";
