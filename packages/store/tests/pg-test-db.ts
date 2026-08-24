@@ -7,9 +7,8 @@
  * — and clobber each other's rows mid-test. Giving each file its own database removes the
  * race entirely.
  *
- * Falls back to the shared base URL when the connecting role cannot CREATE DATABASE (e.g.
- * a locked-down CI role), so restricted environments behave exactly as before instead of
- * failing outright.
+ * Isolation is fail-closed: falling back to the shared base database would let a
+ * subsequent `freshSchema` destroy another worker's schema.
  */
 import { randomUUID } from "node:crypto";
 
@@ -40,12 +39,10 @@ export async function createIsolatedPgDatabase(
     // other's database.
     await admin.unsafe(`CREATE DATABASE "${dbName}"`);
   } catch (err) {
-    console.warn(
-      `[pg-test-db] could not create isolated database "${dbName}" ` +
-        `(${err instanceof Error ? err.message : String(err)}); ` +
-        `falling back to the shared database — PG tests may be flaky under parallel runs.`,
+    throw new Error(
+      `[pg-test-db] could not create isolated database "${dbName}"; refusing to run destructive schema tests against the shared database`,
+      { cause: err },
     );
-    return { url: baseUrl, cleanup: async () => undefined };
   } finally {
     await admin.end();
   }
