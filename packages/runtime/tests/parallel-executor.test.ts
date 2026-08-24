@@ -5,6 +5,7 @@ import { executeParallel } from "../src/schedule/parallel-executor.js";
 function makeManifest(overrides?: Partial<RuntimeManifest>): RuntimeManifest {
   return {
     name: "test-rt",
+    pluginId: "test",
     description: "test",
     stage: "narrative",
     ...overrides,
@@ -35,7 +36,7 @@ describe("executeParallel", () => {
     const result = makeResult({ runtimeId: "alpha" });
     const executeFn = vi.fn().mockResolvedValue(result);
 
-    const map = await executeParallel([rt], executeFn);
+    const map = await executeParallel([rt], executeFn, "turn-1");
 
     expect(map.size).toBe(1);
     expect(map.get("alpha")).toEqual(result);
@@ -54,7 +55,7 @@ describe("executeParallel", () => {
         Promise.resolve(makeResult({ runtimeId: rt.name })),
       );
 
-    const map = await executeParallel(runtimes, executeFn);
+    const map = await executeParallel(runtimes, executeFn, "turn-1");
 
     expect(map.size).toBe(3);
     expect(map.get("a")?.status).toBe("success");
@@ -76,12 +77,15 @@ describe("executeParallel", () => {
       return Promise.resolve(makeResult({ runtimeId: rt.name }));
     });
 
-    const map = await executeParallel(runtimes, executeFn);
+    const map = await executeParallel(runtimes, executeFn, "turn-1");
 
     expect(map.size).toBe(3);
     expect(map.get("a")?.status).toBe("success");
     expect(map.get("b")?.status).toBe("failed");
     expect(map.get("b")?.error).toBe("boom");
+    expect(map.get("b")?.pluginId).toBe("test");
+    expect(map.get("b")?.runId).not.toBe("");
+    expect(map.get("b")?.turnId).not.toBe("");
     expect(map.get("c")?.status).toBe("success");
   });
 
@@ -97,7 +101,7 @@ describe("executeParallel", () => {
         Promise.resolve(makeResult({ runtimeId: rt.name })),
       );
 
-    const map = await executeParallel(runtimes, executeFn);
+    const map = await executeParallel(runtimes, executeFn, "turn-1");
 
     expect([...map.keys()]).toEqual(["narrator", "combat"]);
   });
@@ -115,11 +119,32 @@ describe("executeParallel", () => {
         Promise.resolve(makeResult({ runtimeId: rt.name })),
       );
 
-    await executeParallel(runtimes, executeFn);
+    await executeParallel(runtimes, executeFn, "turn-1");
 
     expect(executeFn).toHaveBeenCalledTimes(3);
-    expect(executeFn).toHaveBeenCalledWith(runtimes[0]);
-    expect(executeFn).toHaveBeenCalledWith(runtimes[1]);
-    expect(executeFn).toHaveBeenCalledWith(runtimes[2]);
+    expect(executeFn).toHaveBeenCalledWith(
+      runtimes[0],
+      expect.objectContaining({
+        pluginId: "test",
+        runtimeId: "x",
+        turnId: "turn-1",
+      }),
+    );
+    expect(executeFn).toHaveBeenCalledWith(
+      runtimes[1],
+      expect.objectContaining({
+        pluginId: "test",
+        runtimeId: "y",
+        turnId: "turn-1",
+      }),
+    );
+    expect(executeFn).toHaveBeenCalledWith(
+      runtimes[2],
+      expect.objectContaining({
+        pluginId: "test",
+        runtimeId: "z",
+        turnId: "turn-1",
+      }),
+    );
   });
 });

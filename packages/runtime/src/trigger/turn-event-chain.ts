@@ -1,6 +1,7 @@
 import type { RuntimeManifest, RuntimeResult, TurnResult } from "@covel/shared";
 import { getRuntimeSpec } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
+import type { ParallelRuntimeIdentity } from "../schedule/parallel-executor.js";
 import { shouldTrigger } from "./trigger.js";
 import type { TriggerContext } from "../types.js";
 
@@ -12,6 +13,7 @@ export type EventChainRuntimeExecutor = (
   manifest: RuntimeManifest,
   triggerEvent:
     { topic: string; data: Readonly<Record<string, unknown>> } | undefined,
+  identity: ParallelRuntimeIdentity,
 ) => Promise<RuntimeResult>;
 
 export interface RunEventChainParams {
@@ -22,6 +24,8 @@ export interface RunEventChainParams {
   /** Current session id — threaded into the `TriggerContext` fed to
    *  `shouldTrigger` when re-evaluating event subscribers. */
   readonly sessionId: string;
+  /** Current turn identity used when a parallel invocation rejects. */
+  readonly turnId: string;
   /** Current main-loop turn number — same purpose as `sessionId`. */
   readonly turnNumber: number;
   /** Logical-turn number (completedPlayerTurns + 1), frozen for this execution. */
@@ -119,6 +123,7 @@ export async function runEventChain({
   executeRuntime,
   maxDepth = 8,
   sessionId,
+  turnId,
   turnNumber,
   logicalTurn,
   runtimeTriggerCounts,
@@ -207,16 +212,20 @@ export async function runEventChain({
 
     if (syncBatch.length === 0) break;
 
-    const results = await executeParallel(syncBatch, async (manifest) => {
-      const topic = manifest.trigger?.topic;
-      const matchedEvent =
-        topic !== undefined ? currentDepthEvents.get(topic) : undefined;
-      const triggerEvent =
-        topic !== undefined && matchedEvent !== undefined
-          ? { topic, data: matchedEvent }
-          : undefined;
-      return executeRuntime(manifest, triggerEvent);
-    });
+    const results = await executeParallel(
+      syncBatch,
+      async (manifest, identity) => {
+        const topic = manifest.trigger?.topic;
+        const matchedEvent =
+          topic !== undefined ? currentDepthEvents.get(topic) : undefined;
+        const triggerEvent =
+          topic !== undefined && matchedEvent !== undefined
+            ? { topic, data: matchedEvent }
+            : undefined;
+        return executeRuntime(manifest, triggerEvent, identity);
+      },
+      turnId,
+    );
     for (const [name, result] of results) {
       completedResults.set(name, result);
       collectEventsFrom(result, newEvents);

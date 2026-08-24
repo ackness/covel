@@ -99,6 +99,8 @@ export interface RuntimeInvocation {
   readonly recursionDepth?: number;
   /** Execution identity — forwarded to the function-runtime `ctx.progress` scope. */
   readonly executionId?: string;
+  /** Framework-owned runtime attempt identity, allocated before scheduling. */
+  readonly runId?: string;
   /**
    * Full execution identity for this scheduling run — exposed to function
    * handlers as `ctx.execution` and to the agent activation segment. Absent
@@ -157,7 +159,7 @@ export async function executeOneRuntime(
     executionContext,
   } = inv;
   const startTime = Date.now();
-  const runId = crypto.randomUUID();
+  const runId = inv.runId ?? crypto.randomUUID();
   const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;
   const createRecursiveCall = (parentSignal?: AbortSignal) => {
     return async (

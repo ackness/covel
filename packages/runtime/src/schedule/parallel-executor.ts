@@ -4,9 +4,15 @@
 
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
 
+export type ParallelRuntimeIdentity = Pick<
+  RuntimeResult,
+  "pluginId" | "runtimeId" | "runId" | "turnId"
+>;
+
 /** A function that executes a single runtime and returns its result. */
 export type RuntimeExecuteFn = (
   manifest: RuntimeManifest,
+  identity: ParallelRuntimeIdentity,
 ) => Promise<RuntimeResult>;
 
 /**
@@ -16,8 +22,17 @@ export type RuntimeExecuteFn = (
 export async function executeParallel(
   runtimes: readonly RuntimeManifest[],
   executeFn: RuntimeExecuteFn,
+  turnId: string,
 ): Promise<ReadonlyMap<string, RuntimeResult>> {
-  const settled = await Promise.allSettled(runtimes.map((rt) => executeFn(rt)));
+  const identities = runtimes.map((runtime): ParallelRuntimeIdentity => ({
+    pluginId: runtime.pluginId ?? runtime.name.split("/")[0]!,
+    runtimeId: runtime.name,
+    runId: crypto.randomUUID(),
+    turnId,
+  }));
+  const settled = await Promise.allSettled(
+    runtimes.map((runtime, index) => executeFn(runtime, identities[index]!)),
+  );
 
   const entries: Array<[string, RuntimeResult]> = runtimes.map((rt, i) => {
     const outcome = settled[i];
@@ -29,10 +44,7 @@ export async function executeParallel(
         ? outcome.reason.message
         : String(outcome.reason);
     const failedResult: RuntimeResult = {
-      pluginId: "",
-      runtimeId: rt.name,
-      runId: "",
-      turnId: "",
+      ...identities[i]!,
       status: "failed",
       output: null,
       toolCalls: [],

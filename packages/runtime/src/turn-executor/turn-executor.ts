@@ -20,6 +20,7 @@ import {
   resolveSetupGeneration,
 } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
+import type { ParallelRuntimeIdentity } from "../schedule/parallel-executor.js";
 import { scheduleByDag } from "../schedule/dag-scheduler.js";
 import {
   applyHazardPolicy,
@@ -553,6 +554,7 @@ async function executeTurnImpl(
   const invoke = (
     manifest: RuntimeManifest,
     triggerEvent: RuntimeInvocation["triggerEvent"],
+    identity?: ParallelRuntimeIdentity,
   ): Promise<RuntimeResult> =>
     executeOneRuntime({
       manifest,
@@ -575,6 +577,7 @@ async function executeTurnImpl(
       recursionDepth,
       executionId: executionContext.executionId,
       executionContext,
+      ...(identity ? { runId: identity.runId } : {}),
       executionStartedAt,
       pluginSetupReady,
       ...(isSetupRuntime(manifest)
@@ -638,8 +641,10 @@ async function executeTurnImpl(
     const lateSetupPlan = scheduleByDag(lateSetup);
     for (const group of lateSetupPlan.groups) {
       if (executionAborted()) break;
-      const results = await executeParallel(group.runtimes, (manifest) =>
-        invoke(manifest, undefined),
+      const results = await executeParallel(
+        group.runtimes,
+        (manifest, identity) => invoke(manifest, undefined, identity),
+        input.turnId,
       );
       for (const [name, result] of results) completedResults.set(name, result);
     }
@@ -649,15 +654,19 @@ async function executeTurnImpl(
 
   for (const group of groups) {
     if (executionAborted()) break;
-    const results = await executeParallel(group.runtimes, async (manifest) => {
-      const triggerEventForRuntime =
-        manualTarget &&
-        manualTriggerEventPayload &&
-        manifest.name === manualTarget.name
-          ? manualTriggerEventPayload
-          : undefined;
-      return invoke(manifest, triggerEventForRuntime);
-    });
+    const results = await executeParallel(
+      group.runtimes,
+      async (manifest, identity) => {
+        const triggerEventForRuntime =
+          manualTarget &&
+          manualTriggerEventPayload &&
+          manifest.name === manualTarget.name
+            ? manualTriggerEventPayload
+            : undefined;
+        return invoke(manifest, triggerEventForRuntime, identity);
+      },
+      input.turnId,
+    );
 
     // Merge results
     for (const [name, result] of results) {
@@ -694,9 +703,10 @@ async function executeTurnImpl(
     : await runEventChain({
         activeRuntimes,
         completedResults,
-        executeRuntime: (manifest, triggerEvent) =>
-          invoke(manifest, triggerEvent),
+        executeRuntime: (manifest, triggerEvent, identity) =>
+          invoke(manifest, triggerEvent, identity),
         sessionId: input.sessionId,
+        turnId: input.turnId,
         turnNumber,
         logicalTurn,
         // Fan-out is the only place an `event` runtime can trigger, so its

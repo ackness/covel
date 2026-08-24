@@ -69,6 +69,7 @@ describe("runEventChain deferred-follower dedup", () => {
           ? resultEmitting("relay/main", "topic-x", { n: 1 })
           : resultEmitting(manifest.name, "noop", {}),
       sessionId: "sess-1",
+      turnId: "turn-1",
       turnNumber: 1,
     });
 
@@ -124,6 +125,7 @@ describe("runEventChain honours event-runtime throttling", () => {
         return resultEmitting(manifest.name, "noop", {});
       },
       sessionId: "sess-1",
+      turnId: "turn-1",
       turnNumber: 3,
       runtimeTriggerCounts: new Map([["once/follower", 1]]),
     });
@@ -140,6 +142,7 @@ describe("runEventChain honours event-runtime throttling", () => {
         return resultEmitting(manifest.name, "noop", {});
       },
       sessionId: "sess-1",
+      turnId: "turn-1",
       turnNumber: 3,
       runtimeTriggerCounts: new Map([["once/follower", 0]]),
     });
@@ -156,6 +159,7 @@ describe("runEventChain honours event-runtime throttling", () => {
         return resultEmitting(manifest.name, "noop", {});
       },
       sessionId: "sess-1",
+      turnId: "turn-1",
       turnNumber: 3,
       runtimeTurnsSinceLastTrigger: new Map([["cool/follower", 2]]),
     });
@@ -172,6 +176,7 @@ describe("runEventChain honours event-runtime throttling", () => {
         return resultEmitting(manifest.name, "noop", {});
       },
       sessionId: "sess-1",
+      turnId: "turn-1",
       turnNumber: 9,
       runtimeTurnsSinceLastTrigger: new Map([["cool/follower", 6]]),
     });
@@ -201,6 +206,7 @@ describe("runEventChain honours event-runtime throttling", () => {
         return resultEmitting(manifest.name, "noop", {});
       },
       sessionId: "sess-1",
+      turnId: "turn-1",
       turnNumber: 4,
       preGameCompleted: ["setup/follower"],
     });
@@ -217,6 +223,7 @@ describe("runEventChain honours event-runtime throttling", () => {
         return resultEmitting(manifest.name, "noop", {});
       },
       sessionId: "sess-1",
+      turnId: "turn-1",
       turnNumber: 0,
       preGameCompleted: [],
     });
