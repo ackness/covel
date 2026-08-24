@@ -184,6 +184,7 @@ export type {
   AssetGeneratePayload,
   PluginDataPayload,
   PluginDataBatchPayload,
+  PluginDataDeletePayload,
   CharacterUpsertPayload,
   WorkingMemorySetPayload,
   LorebookUpsertPayload,

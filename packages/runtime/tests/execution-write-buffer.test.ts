@@ -41,7 +41,7 @@ function pluginDataProposal(): Proposal {
 }
 
 describe("createTrustedHandlerStore with a write buffer", () => {
-  it("buffers setPluginData / setPluginDataBatch / upsertCharacter instead of writing", async () => {
+  it("buffers plugin-data writes, deletes, and character upserts", async () => {
     const store = createMemoryStore();
     const buffer = createExecutionWriteBuffer();
     const trusted = createTrustedHandlerStore(store, CTX, buffer);
@@ -78,6 +78,12 @@ describe("createTrustedHandlerStore with a write buffer", () => {
       createdAt: now,
       updatedAt: now,
     });
+    await trusted.deletePluginData(
+      "other-session",
+      "other-plugin",
+      "schema",
+      "obsolete",
+    );
 
     // Nothing landed in the store.
     expect(
@@ -90,13 +96,16 @@ describe("createTrustedHandlerStore with a write buffer", () => {
     ).toBeNull();
     expect(await store.listCharacters(CTX.sessionId)).toHaveLength(0);
 
-    // The buffer holds three proposals, source-bound to the runtime.
+    // The buffer holds four proposals, source-bound to the runtime. The delete
+    // cannot use the caller-supplied session/plugin ids to escape its scope.
     expect(buffer.map((p) => p.type)).toEqual([
       "plugin.data",
       "plugin.data.batch",
       "character.upsert",
+      "plugin.data.delete",
     ]);
     expect(buffer.every((p) => p.source.pluginId === CTX.pluginId)).toBe(true);
+    expect(buffer.every((p) => p.sessionId === CTX.sessionId)).toBe(true);
   });
 
   it("overlays buffered writes on getPluginData / listPluginData / listCharacters", async () => {
@@ -165,7 +174,7 @@ describe("createTrustedHandlerStore with a write buffer", () => {
 });
 
 describe("createPluginDataWriter with a write buffer", () => {
-  it("set buffers, get/list overlay, delete stays direct", async () => {
+  it("buffers writes and deletes with a read-through overlay", async () => {
     const store = createMemoryStore();
     const buffer = createExecutionWriteBuffer();
     const writer = createPluginDataWriter(store, CTX, buffer);
@@ -185,8 +194,7 @@ describe("createPluginDataWriter with a write buffer", () => {
     const list = await writer.list("generated");
     expect(list).toEqual([{ key: "img-1", value: { url: "a" } }]);
 
-    // delete is a direct write (no delete proposal exists) — it must not
-    // buffer, and it clears any committed row.
+    // Deletes must stay inside the execution transaction too.
     const now = new Date().toISOString();
     await store.setPluginData({
       id: "committed",
@@ -199,7 +207,10 @@ describe("createPluginDataWriter with a write buffer", () => {
       updatedAt: now,
     });
     await writer.delete("generated", "img-2");
-    expect(buffer).toHaveLength(1); // unchanged
+    expect(buffer.map((proposal) => proposal.type)).toEqual([
+      "plugin.data",
+      "plugin.data.delete",
+    ]);
     expect(
       await store.getPluginData(
         CTX.sessionId,
@@ -207,7 +218,27 @@ describe("createPluginDataWriter with a write buffer", () => {
         "generated",
         "img-2",
       ),
-    ).toBeNull();
+    ).not.toBeNull();
+    expect(await writer.get("generated", "img-2")).toBeNull();
+    expect(await writer.list("generated")).toEqual([
+      { key: "img-1", value: { url: "a" } },
+    ]);
+
+    await writer.delete("generated", "img-1");
+    expect(await writer.get("generated", "img-1")).toBeNull();
+    expect(await writer.list("generated")).toEqual([]);
+
+    await writer.set("generated", "img-2", { restored: true });
+    expect(await writer.get("generated", "img-2")).toEqual({
+      restored: true,
+    });
+    expect(await writer.list("generated")).toEqual([
+      { key: "img-2", value: { restored: true } },
+    ]);
+
+    await writer.set("generated", "img-2", null);
+    expect(await writer.get("generated", "img-2")).toBeNull();
+    expect(await writer.list("generated")).toEqual([]);
   });
 });
 

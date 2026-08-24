@@ -58,6 +58,14 @@ describe("reserved plugin-data namespaces", () => {
     expect(batch.committed).toBe(false);
     expect(batch.error).toContain("reserved");
 
+    const deletion = await pipeline.commit({
+      ...makePluginDataProposal("_jobs"),
+      type: "plugin.data.delete",
+      payload: { namespace: "_jobs", key: "job-1" },
+    } as Proposal);
+    expect(deletion.committed).toBe(false);
+    expect(deletion.error).toContain("reserved");
+
     const writer = createPluginDataWriter(store, CTX);
     await expect(
       writer.set("_jobs", "job-1", { status: "ok" }),

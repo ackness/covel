@@ -549,6 +549,7 @@ describe("createCommitPipeline", () => {
       upsertCharacter: vi.fn(),
       setPluginData: vi.fn(),
       setPluginDataBatch: vi.fn(),
+      deletePluginData: vi.fn(),
       addTraceEvent: vi.fn(),
       addStateChange: vi.fn(),
       upsertStateEntry: vi.fn(),
@@ -842,6 +843,25 @@ describe("createCommitPipeline", () => {
       expect(result.committed).toBe(true);
       expect(store.setPluginDataBatch).toHaveBeenCalledOnce();
       expect(store.setPluginDataBatch.mock.calls[0][0]).toHaveLength(2);
+    });
+
+    it("should delete plugin data through the proposal source scope", async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const proposal = makeProposal("plugin.data.delete", {
+        namespace: "entries",
+        key: "obsolete",
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      expect(store.deletePluginData).toHaveBeenCalledWith(
+        SESSION_ID,
+        SOURCE.pluginId,
+        "entries",
+        "obsolete",
+      );
     });
   });
 

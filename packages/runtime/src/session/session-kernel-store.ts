@@ -94,6 +94,12 @@ export interface KernelStore {
       updatedAt: string;
     }[],
   ): Promise<void>;
+  deletePluginData?(
+    sessionId: string,
+    pluginId: string,
+    namespace: string,
+    key: string,
+  ): Promise<void>;
   /**
    * Working Memory upsert. Optional so the kernel stays compatible
    * with thin mock stores in existing tests that don't need WM.

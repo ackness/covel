@@ -74,6 +74,11 @@ export interface PluginDataBatchPayload {
   readonly items: readonly PluginDataPayload[];
 }
 
+export interface PluginDataDeletePayload {
+  readonly namespace: string;
+  readonly key: string;
+}
+
 export interface CharacterUpsertPayload {
   readonly id: string;
   readonly name: string;
@@ -156,6 +161,7 @@ export interface ProposalPayloadMap {
   "asset.generate": AssetGeneratePayload;
   "plugin.data": PluginDataPayload;
   "plugin.data.batch": PluginDataBatchPayload;
+  "plugin.data.delete": PluginDataDeletePayload;
   "character.upsert": CharacterUpsertPayload;
   "working_memory.set": WorkingMemorySetPayload;
   "lorebook.upsert": LorebookUpsertPayload;
@@ -202,6 +208,7 @@ export const PROPOSAL_TYPES = [
   "asset.generate",
   "plugin.data",
   "plugin.data.batch",
+  "plugin.data.delete",
   "character.upsert",
   "working_memory.set",
   "lorebook.upsert",

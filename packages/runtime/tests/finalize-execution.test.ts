@@ -11,6 +11,8 @@
 
 import { describe, it, expect } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
+import type { Proposal } from "@covel/shared";
+import { withPendingProposals } from "@covel/tools";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 
@@ -268,6 +270,50 @@ describe("finalizeExecution", () => {
     expect(outcome.status).toBe("failed");
     expect(await store.listMessages(SESSION_ID)).toHaveLength(0);
     expect(await commitStatusOf(store)).toBe("failed");
+  });
+
+  it("rolls back a buffered plugin-data delete when a sibling fails", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    const now = new Date().toISOString();
+    await store.setPluginData({
+      id: "plugin-row",
+      sessionId: SESSION_ID,
+      pluginId: "rt-a",
+      namespace: "entries",
+      key: "keep-me",
+      value: { intact: true },
+      createdAt: now,
+      updatedAt: now,
+    });
+    const output: ResultOutput = {};
+    withPendingProposals(output, [
+      {
+        id: "delete-proposal",
+        type: "plugin.data.delete",
+        source: { pluginId: "rt-a", runtimeId: "rt-a" },
+        turnId: TURN_ID,
+        sessionId: SESSION_ID,
+        payload: { namespace: "entries", key: "keep-me" },
+        timestamp: now,
+      } satisfies Proposal,
+    ]);
+
+    const outcome = await finalizeExecution({
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("rt-a"), makeRuntime("rt-b")],
+      results: [
+        makeResult("rt-a", output),
+        makeResult("rt-b", badStatePatch()),
+      ],
+      turnIds: [TURN_ID],
+    });
+
+    expect(outcome.status).toBe("failed");
+    expect(
+      await store.getPluginData(SESSION_ID, "rt-a", "entries", "keep-me"),
+    ).not.toBeNull();
   });
 
   it("rolls back the whole execution when extraInTx throws", async () => {

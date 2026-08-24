@@ -22,6 +22,7 @@ import {
   bufferCharacterUpsert,
   bufferPluginData,
   bufferPluginDataBatch,
+  bufferPluginDataDelete,
   mergeCharacterRecords,
   mergePluginDataRows,
   type ExecutionWriteBuffer,
@@ -160,13 +161,10 @@ export function createTrustedHandlerStore(
             bufferCharacterUpsert(buffer, ctx, record);
             return Promise.resolve();
           },
-          // No proposal type expresses plugin-data deletion, so a delete stays
-          // a direct (non-rolled-back) write. No production guard deletes via
-          // the trusted store. ponytail: direct delete, add a delete proposal
-          // when a buffered caller needs rollback-safe clears.
-          deletePluginData(sessionId, pluginId, namespace, key) {
+          deletePluginData(_sessionId, _pluginId, namespace, key) {
             assertWritableNamespace(namespace);
-            return store.deletePluginData(sessionId, pluginId, namespace, key);
+            bufferPluginDataDelete(buffer, ctx, namespace, key);
+            return Promise.resolve();
           },
           async getPluginData(sessionId, pluginId, namespace, key) {
             const hit = overlayPluginDataValue(
@@ -231,10 +229,8 @@ export function createTrustedHandlerStore(
  * When `buffer` is supplied (the function-runtime execution path), `set`
  * routes through a `plugin.data` proposal so the write commits — and rolls
  * back — with the rest of the execution, and `get`/`list` overlay the buffer
- * so the handler reads its own not-yet-committed writes. `delete` (and the
- * `set(null)` clear) stay direct: no proposal type expresses plugin-data
- * deletion, and the only production caller (scene-stage/background-gen) never
- * clears through this writer.
+ * so the handler reads its own not-yet-committed writes. Deletes (including
+ * `set(null)`) use their own proposal and share the same transaction.
  *
  * Without a buffer the writer keeps its legacy direct-to-store behaviour, used
  * by bare test harnesses.
@@ -249,9 +245,11 @@ export function createPluginDataWriter(
     async set(namespace: string, key: string, value: unknown) {
       assertWritableNamespace(namespace);
       if (value === null) {
-        // ponytail: direct delete, add a delete proposal if a buffered caller
-        // needs rollback-safe clears (none does today).
-        await store.deletePluginData(sessionId, pluginId, namespace, key);
+        if (buffer) {
+          bufferPluginDataDelete(buffer, ctx, namespace, key);
+        } else {
+          await store.deletePluginData(sessionId, pluginId, namespace, key);
+        }
         return;
       }
       if (buffer) {
@@ -292,7 +290,11 @@ export function createPluginDataWriter(
     },
     async delete(namespace: string, key: string) {
       assertWritableNamespace(namespace);
-      await store.deletePluginData(sessionId, pluginId, namespace, key);
+      if (buffer) {
+        bufferPluginDataDelete(buffer, ctx, namespace, key);
+      } else {
+        await store.deletePluginData(sessionId, pluginId, namespace, key);
+      }
     },
   };
 }
