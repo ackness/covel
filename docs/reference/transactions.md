@@ -51,6 +51,7 @@ backend must pass:
 - `returns the callback result`
 - `does not swallow writes across concurrent transactions`
 - `rolls back only the failing concurrent transaction`
+- `does not expose writes through the root store before the transaction settles`
 - `rejects a nested withTransaction with a clear error instead of deadlocking`
 - `recovers and accepts a fresh withTransaction after a nested rejection`
 
@@ -99,20 +100,20 @@ run on independent connections — true parallel transactions.
 The three backends honor the same observable contract (atomic commit / rollback,
 nested-call rejection) but differ in concurrency and isolation:
 
-| Backend                       | Concurrency model                                                                                                                                                                                                                                                 | Concurrent non-tx write during a callback                                                                              |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| **PgStore**                   | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                                                                                                                                                          | Isolated on its own connection; not folded in.                                                                         |
-| **SqliteStore / MemoryStore** | **Single connection / single snapshot.** Concurrent calls are **serialized** through a promise chain — each runs its full BEGIN…COMMIT before the next starts, so neither loses writes. Mutating store methods share that same queue (**serialized write gate**). | **Queued until the transaction settles** — never folded in. Writes issued from _inside_ the callback still run inline. |
+| Backend                       | Concurrency model                                                                                                                   | Concurrent root operation during a callback                                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **PgStore**                   | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                            | Reads observe their database snapshot; writes stay on their own connection and are not folded in.                              |
+| **SqliteStore / MemoryStore** | **Single connection / live state.** Transactions and every root read/write share one promise queue (**serialized operation gate**). | **Queued until the transaction settles** — no dirty read and no folded write. Operations issued through `tx` still run inline. |
 
-> **Serialized write gate (SQLite / Memory).** One connection means a
-> transaction cannot isolate: a write issued elsewhere while a transaction is
-> open used to land inside it — harmless on COMMIT, silently **lost** on
-> ROLLBACK. The session lock orders writes belonging to one session's turn, but
+> **Serialized operation gate (SQLite / Memory).** One connection/live state
+> means a transaction cannot isolate by itself: a write issued elsewhere while
+> a transaction is open used to land inside it, while an outside read could see
+> data that was later rolled back. The session lock orders writes belonging to one session's turn, but
 > it is per-session and some routes hold no session lock at all (world imports,
 > character edits, settings), so a write from another session could vanish.
-> `packages/store/src/serialized-write-gate.ts` puts transactions and
-> outside-of-transaction writes on **one queue**: an outside write waits for the
-> transaction instead of joining it; a write from inside the callback runs
+> `packages/store/src/serialized-write-gate.ts` puts transactions and all root
+> store operations on **one queue**: outside reads/writes wait for the
+> transaction; operations through the `tx` scope run
 > inline (it belongs to that transaction, and queueing it would deadlock).
 > Inside vs outside is decided by `AsyncLocalStorage`, so a genuinely concurrent
 > caller that starts while a transaction is suspended at an `await` is not
@@ -132,6 +133,23 @@ nested-call rejection) but differ in concurrency and isolation:
 > the long-term answer for real concurrency**; the gate closes the correctness
 > gap without a store-connection rearchitecture. Regression coverage:
 > `packages/store/tests/serialized-write-gate.test.ts`.
+
+### MediaStore transaction and concurrency fixes
+
+Media lifecycle mutations use per-resource atomicity alongside the DataStore
+transactions:
+
+- SQLite/local-fs cleanup performs its final owner/reference check and asset
+  deletion inside `BEGIN IMMEDIATE`. Its MediaStore shares the DataStore
+  connection gate, so a concurrent transaction cannot absorb or lose a media
+  write on rollback. Cleanup reports only assets actually deleted.
+- PostgreSQL `put`, ownership, reference, deletion, and cleanup operations use
+  a transaction-scoped advisory lock keyed by content id. This serializes
+  first-writer-wins and reference/deletion races across processes; cleanup also
+  uses `NOT EXISTS` in the guarded delete.
+- IndexedDB MediaStore keeps ownership and reference updates atomic in its
+  object-store transactions. It is a media backend only; browser game-state
+  persistence is handled by BrowserVault below, not by an IndexedDB DataStore.
 
 ### Nesting is rejected on every backend
 

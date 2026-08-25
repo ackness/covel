@@ -26,6 +26,20 @@ function squaredL2(a: Float32Array, b: Float32Array): number {
 export function createVectorMethods(state: MemoryState): MemoryStoreMethods {
   return {
     async upsertVector(input: UpsertVectorInput) {
+      const session = state.sessions.get(input.sessionId);
+      if (!session) {
+        throw new Error(
+          `Memory vector upsert: session ${input.sessionId} not found`,
+        );
+      }
+      if (
+        input.expectedSessionCreatedAt !== undefined &&
+        session.createdAt !== input.expectedSessionCreatedAt
+      ) {
+        throw new Error(
+          `Memory vector upsert: session ${input.sessionId} incarnation changed`,
+        );
+      }
       const target = state.sessionVectorTargets.get(input.sessionId) ?? null;
       if (!target) {
         throw new Error(

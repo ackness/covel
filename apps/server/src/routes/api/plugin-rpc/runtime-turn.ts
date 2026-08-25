@@ -16,6 +16,7 @@ import type {
   TurnCommitOutcome,
 } from "./runtime-response.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
+import { stageExecutionSuspensions } from "../execution-suspensions.js";
 
 export class SessionApprovalScopeChangedError extends Error {
   constructor() {
@@ -137,6 +138,7 @@ export function createPluginRpcRuntimeTurnRunner(
   async function processTurnResults(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
+    stagedSuspensions: ReturnType<typeof stageExecutionSuspensions>,
   ): Promise<TurnCommitOutcome> {
     // Commit the whole execution (top-level + nested recursiveCall results) in
     // ONE transaction via the shared finalize primitive. Any proposal failure
@@ -155,6 +157,7 @@ export function createPluginRpcRuntimeTurnRunner(
         ...(turnResult.nestedRuntimeResults ?? []),
       ],
       journalMessages: collectExecutionJournal(turnResult),
+      suspensions: stagedSuspensions.records,
       turnIds: [turnResult.turnId],
       ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
       eventBus: ctx.eventBus,
@@ -222,7 +225,7 @@ export function createPluginRpcRuntimeTurnRunner(
     // So `committed` tracks proposal commit alone, matching commit_status;
     // `snapshotFailed` stays on the outcome for observability.
     if (committed) {
-      turnResult.completeTurn?.();
+      await turnResult.completeTurn?.();
     }
     return {
       committed,
@@ -266,9 +269,10 @@ export function createPluginRpcRuntimeTurnRunner(
       await ctx.sessionLock.withLock(ctx.sessionId, () =>
         requireLiveApprovedSession(runtimeId).then(() => undefined),
       );
+      const stagedSuspensions = stageExecutionSuspensions(ctx.store);
       const result = await executeTurn(turnInput, ctx.activeRuntimes, {
         ...ctx.deps,
-        store: ctx.store,
+        store: stagedSuspensions.store,
         eventBus: ctx.eventBus,
         emitter,
         ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
@@ -289,7 +293,7 @@ export function createPluginRpcRuntimeTurnRunner(
             throw new SessionNotActiveError(live.status);
           }
           assertApprovalScope(live, runtimeId);
-          return processTurnResults(result, emitter);
+          return processTurnResults(result, emitter, stagedSuspensions);
         },
       );
       return { turnResult: result, commit: outcome };
@@ -341,14 +345,19 @@ export function createPluginRpcRuntimeTurnRunner(
         }))
       : await ctx.sessionLock.withLock(ctx.sessionId, async () => {
           await requireLiveApprovedSession(args.runtimeId);
+          const stagedSuspensions = stageExecutionSuspensions(ctx.store);
           const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
             ...ctx.deps,
-            store: ctx.store,
+            store: stagedSuspensions.store,
             eventBus: ctx.eventBus,
             emitter,
             ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
           });
-          const outcome = await processTurnResults(turnResult, emitter);
+          const outcome = await processTurnResults(
+            turnResult,
+            emitter,
+            stagedSuspensions,
+          );
           return { result: turnResult, commit: outcome };
         });
 

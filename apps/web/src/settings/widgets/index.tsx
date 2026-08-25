@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff } from "lucide-react";
-import type { SettingEntry, WidgetKind } from "@covel/settings";
+import {
+  isServerManagedSecret,
+  type SettingEntry,
+  type WidgetKind,
+} from "@covel/settings";
 import { resolveI18nText } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
@@ -185,16 +189,33 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
   const { t } = useTranslation();
   const [value, setValue] = useSetting<string>(entry.key);
   const [visible, setVisible] = useState(false);
+  const serverManaged = isServerManagedSecret(value);
   return (
     <FieldShell entry={entry}>
       <div className="flex gap-1">
         <input
           type={visible ? "text" : "password"}
-          value={value ?? ""}
+          value={serverManaged ? "" : (value ?? "")}
           onChange={(e) => void setValue(e.target.value)}
-          placeholder="sk-..."
+          placeholder={
+            serverManaged
+              ? t(
+                  "settings.serverManagedKeyPlaceholder",
+                  "Configured on this device; enter a value to replace",
+                )
+              : "sk-..."
+          }
           className="flex-1 bg-background border border-border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary font-mono"
         />
+        {serverManaged && (
+          <Button
+            variant="outline"
+            onClick={() => void setValue("")}
+            className="shrink-0"
+          >
+            {t("settings.clear", "Clear")}
+          </Button>
+        )}
         <Button
           variant="outline"
           size="icon"

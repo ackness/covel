@@ -114,6 +114,34 @@ describe("LocalDataService browser-authoritative sync", () => {
     );
   });
 
+  it("preserves stable message identity in retry-safe checkpoint uploads", async () => {
+    const service = await serviceWithWorld();
+    const now = "2026-01-01T00:00:00.000Z";
+    await service.createSession("world-1", undefined, "sess-1", [], "en-US");
+    await service.addMessage({
+      id: "local-message-1",
+      sessionId: "sess-1",
+      role: "user",
+      content: "hello",
+      createdAt: now,
+    });
+
+    await service.syncToServer("sess-1");
+
+    expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
+      "sess-1",
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({
+            id: "local-message-1",
+            content: "hello",
+            createdAt: now,
+          }),
+        ],
+      }),
+    );
+  });
+
   it("preserves underscore ids across the checkpoint boundary", async () => {
     const service = await serviceWithWorld("world_underscore");
     await service.createSession(

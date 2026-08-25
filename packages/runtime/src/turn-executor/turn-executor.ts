@@ -828,7 +828,7 @@ async function executeTurnImpl(
     // outside the commit transaction. The commit-owning caller forwards this to
     // finalizeExecution.
     ...(setupRan.length > 0 ? { setupRan } : {}),
-    completeTurn: () => {
+    completeTurn: async () => {
       if (completionFired) return;
       completionFired = true;
       emitSubEvent(deps.eventBus, "game", "turn.completed", input.sessionId, {
@@ -839,14 +839,13 @@ async function executeTurnImpl(
       // The commit owner invokes this callback only after the transaction
       // lands. Refresh here so authoritative character/form facts include
       // writes produced by this turn instead of the pre-execution snapshot.
-      void refreshSessionContext().then((committedSessionContext) => {
-        schedulePostTurnMemoryUpdate({
-          input,
-          turnResult: baseResult,
-          deps,
-          coreMemoryBlocks,
-          sessionContext: committedSessionContext,
-        });
+      const committedSessionContext = await refreshSessionContext();
+      schedulePostTurnMemoryUpdate({
+        input,
+        turnResult: baseResult,
+        deps,
+        coreMemoryBlocks,
+        sessionContext: committedSessionContext,
       });
     },
   };

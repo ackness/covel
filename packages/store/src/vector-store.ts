@@ -58,6 +58,14 @@ export interface VectorTarget {
  */
 export interface UpsertVectorInput {
   readonly sessionId: string;
+  /**
+   * Optional session-incarnation guard. When present, the backend rejects the
+   * write unless the current session row has this exact `createdAt` value.
+   * Callers that perform embedding work asynchronously should capture the
+   * value before starting that work so a delete/recreate of the same session
+   * id cannot receive a stale result.
+   */
+  readonly expectedSessionCreatedAt?: string;
   readonly pluginId: string;
   readonly namespace: string;
   readonly key: string;

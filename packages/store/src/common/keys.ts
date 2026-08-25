@@ -3,7 +3,7 @@ export function stateEntryKey(
   tableName: string,
   fieldName: string,
 ): string {
-  return `${sessionId}:${tableName}:${fieldName}`;
+  return JSON.stringify([sessionId, tableName, fieldName]);
 }
 
 export function pluginDataKey(
@@ -12,7 +12,7 @@ export function pluginDataKey(
   namespace: string,
   key: string,
 ): string {
-  return `${sessionId}:${pluginId}:${namespace}:${key}`;
+  return JSON.stringify([sessionId, pluginId, namespace, key]);
 }
 
 export function workingMemoryKey(
@@ -20,15 +20,15 @@ export function workingMemoryKey(
   scope: string,
   key: string,
 ): string {
-  return `${sessionId}:${scope}:${key}`;
+  return JSON.stringify([sessionId, scope, key]);
 }
 
 export function lorebookEntryKey(sessionId: string, id: string): string {
-  return `${sessionId}:${id}`;
+  return JSON.stringify([sessionId, id]);
 }
 
 export function characterKey(sessionId: string, id: string): string {
-  return `${sessionId}:${id}`;
+  return JSON.stringify([sessionId, id]);
 }
 
 export function vectorRowKey(
@@ -37,5 +37,5 @@ export function vectorRowKey(
   namespace: string,
   key: string,
 ): string {
-  return `${sessionId}:${pluginId}:${namespace}:${key}`;
+  return JSON.stringify([sessionId, pluginId, namespace, key]);
 }

@@ -93,6 +93,13 @@ export function createVectorIngestor(deps: {
   const runSweep = async (sessionId: string): Promise<IngestResult> => {
     if (!supportsVector(store)) return SKIPPED;
 
+    const session = await store.getSession(sessionId);
+    if (!session) return SKIPPED;
+    // Bind every delayed embedding write to the session incarnation whose
+    // source rows were read. A delete + same-id recreate during provider work
+    // must not let the old sweep populate the new session's vector namespace.
+    const expectedSessionCreatedAt = session.createdAt;
+
     let target;
     try {
       // No embedding model locked → RAG disabled for this session. Skip cleanly
@@ -107,12 +114,22 @@ export function createVectorIngestor(deps: {
     let recall = 0;
     let archival = 0;
     try {
-      recall = await ingestRecall(store, embed, sessionId);
+      recall = await ingestRecall(
+        store,
+        embed,
+        sessionId,
+        expectedSessionCreatedAt,
+      );
     } catch (err) {
       warn("recall", sessionId, err);
     }
     try {
-      archival = await ingestArchival(store, embed, sessionId);
+      archival = await ingestArchival(
+        store,
+        embed,
+        sessionId,
+        expectedSessionCreatedAt,
+      );
     } catch (err) {
       warn("archival", sessionId, err);
     }
@@ -172,6 +189,7 @@ async function ingestRecall(
   store: VectorStore,
   embed: EmbedFn,
   sessionId: string,
+  expectedSessionCreatedAt: string,
 ): Promise<number> {
   const cursor = await readPluginJson<RecallCursor>(
     store,
@@ -220,6 +238,7 @@ async function ingestRecall(
       namespace: RECALL_NAMESPACE,
       key: msg.id,
       embedding,
+      expectedSessionCreatedAt,
       payload: JSON.stringify({
         turnId: msg.turnId ?? "",
         role: msg.role,
@@ -257,6 +276,7 @@ async function ingestArchival(
   store: VectorStore,
   embed: EmbedFn,
   sessionId: string,
+  expectedSessionCreatedAt: string,
 ): Promise<number> {
   const items = await collectArchivalItems(store, sessionId);
 
@@ -320,6 +340,7 @@ async function ingestArchival(
       namespace: ARCHIVAL_NAMESPACE,
       key: it.vecKey,
       embedding,
+      expectedSessionCreatedAt,
       payload: JSON.stringify({
         source: it.source,
         key: it.displayKey,

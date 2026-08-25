@@ -695,6 +695,7 @@ export async function executeOneRuntime(
       activation,
       inputs: inputSlots,
       exports: exportSlots,
+      ...(executionContext ? { executionContext } : {}),
       startTime,
       runId,
     });

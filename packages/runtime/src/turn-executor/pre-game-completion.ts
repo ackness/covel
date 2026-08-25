@@ -125,7 +125,8 @@ function collectNewlyDoneRuntimes(args: {
   for (const [name, result] of completedResults) {
     if (preGameCompleted.includes(name)) continue;
     const output = result.output as Record<string, unknown> | undefined;
-    const preGameDone = output?.preGameDone === true;
+    const preGameDone =
+      result.status === "success" && output?.preGameDone === true;
     const guardSkipped = result.status === "skipped" && output?.skip === true;
     if (preGameDone || guardSkipped) {
       newlyDone.push(name);

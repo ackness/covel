@@ -137,6 +137,66 @@ describe("scheduleByDag", () => {
     expect(groups[1]!.runtimes.map((r) => r.name)).toEqual(["b"]);
   });
 
+  it("does not pull a cardinality-one consumer into an alternative provider cycle", () => {
+    const available = mk("engine-a", 500, {
+      capabilities: ["narrative-engine"],
+    });
+    const cyclicProvider = mk("engine-b", 500, {
+      capabilities: ["narrative-engine"],
+      needs: ["cycle-peer"],
+    });
+    const cyclePeer = mk("cycle-peer", 500, { needs: ["engine-b"] });
+    const consumer = mk("guide", 500, {
+      needs: [{ capability: "narrative-engine", cardinality: "one" }],
+    });
+
+    const { groups, cyclic } = scheduleByDag([
+      available,
+      cyclicProvider,
+      cyclePeer,
+      consumer,
+    ]);
+
+    expect(groups.map((group) => group.runtimes.map((rt) => rt.name))).toEqual([
+      ["engine-a"],
+      ["guide"],
+    ]);
+    expect(cyclic?.map((rt) => rt.name).sort()).toEqual([
+      "cycle-peer",
+      "engine-b",
+    ]);
+  });
+
+  it("keeps cardinality-all consumers downstream of every provider cycle", () => {
+    const available = mk("engine-a", 500, {
+      capabilities: ["narrative-engine"],
+    });
+    const cyclicProvider = mk("engine-b", 500, {
+      capabilities: ["narrative-engine"],
+      needs: ["cycle-peer"],
+    });
+    const cyclePeer = mk("cycle-peer", 500, { needs: ["engine-b"] });
+    const consumer = mk("guide", 500, {
+      needs: [{ capability: "narrative-engine", cardinality: "all" }],
+    });
+
+    const { groups, cyclic } = scheduleByDag([
+      available,
+      cyclicProvider,
+      cyclePeer,
+      consumer,
+    ]);
+
+    expect(groups.map((group) => group.runtimes.map((rt) => rt.name))).toEqual([
+      ["engine-a"],
+    ]);
+    expect(cyclic?.map((rt) => rt.name).sort()).toEqual([
+      "cycle-peer",
+      "engine-b",
+      "guide",
+    ]);
+  });
+
   it("ignores plugin-data kind injects (not runtime deps)", () => {
     const input = [
       mk("codex", 650, {

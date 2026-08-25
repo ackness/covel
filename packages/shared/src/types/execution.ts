@@ -251,7 +251,7 @@ export interface TurnResult {
    * commit fails or the process crashes: no ghost completion event, no memory
    * derived from uncommitted state.
    */
-  readonly completeTurn?: () => void;
+  readonly completeTurn?: () => void | Promise<void>;
 }
 
 // ── Interaction protocol ────────────────────────────────────────

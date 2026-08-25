@@ -42,13 +42,12 @@ export function createVectorArchivalSearcher(deps: {
       if (!supportsVector(store)) {
         return fallback.search(sessionId, query, limit);
       }
-      const target = await store.resolveSessionVectorTarget(sessionId);
-      if (!target) {
-        return fallback.search(sessionId, query, limit);
-      }
-
       let results;
       try {
+        const target = await store.resolveSessionVectorTarget(sessionId);
+        if (!target) {
+          return fallback.search(sessionId, query, limit);
+        }
         const [queryVec] = await embed([query]);
         if (!queryVec || queryVec.length === 0) {
           return fallback.search(sessionId, query, limit);

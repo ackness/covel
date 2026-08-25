@@ -262,7 +262,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
       eventBus,
     };
 
-    await executeTurn(
+    const turn = await executeTurn(
       makeTurnInput({ sessionId: "sess-42", turnId: "turn-7" }),
       [agentManifest],
       deps,
@@ -280,6 +280,9 @@ describe("TurnExecutor — agent runtime suspend", () => {
     expect(s.resolvedAt).toBeUndefined();
     // pendingContinuation must include the suspendToolCallId
     expect(s.pendingContinuation.suspendToolCallId).toBe("tc-s1");
+    expect(s.pendingContinuation.executionContext).toEqual(
+      turn.executionContext,
+    );
   });
 
   it("should capture partialContent and toolCallsSoFar in pendingContinuation", async () => {
@@ -439,6 +442,112 @@ describe("TurnExecutor — agent runtime suspend", () => {
     ]);
   });
 
+  it("persists a provider-valid multi-tool transcript and emitted events across resume", async () => {
+    agentManifest = makeManifest({
+      tools: { builtin: ["emit-event", "suspend", "some-tool"] },
+    });
+    agentLoaded = {
+      manifest: agentManifest,
+      promptTemplate: "Suspend in a tool batch.",
+    };
+    mockLLM.setResponses([
+      {
+        content: null,
+        toolCalls: [
+          {
+            id: "tc-event",
+            name: "emit-event",
+            arguments: '{"topic":"clue.found","data":{"id":1}}',
+          },
+          { id: "tc-suspend", name: "suspend", arguments: "{}" },
+          { id: "tc-after", name: "some-tool", arguments: "{}" },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      },
+    ]);
+    mockToolExecutor.setToolResult("emit-event", {
+      toolCallId: "tc-event",
+      name: "emit-event",
+      result: '{"emitted":true}',
+      parsedResult: { emitted: true },
+      emittedEvents: [{ topic: "clue.found", data: { id: 1 } }],
+      success: true,
+    });
+    mockToolExecutor.setToolResult("suspend", {
+      toolCallId: "tc-suspend",
+      name: "suspend",
+      result: JSON.stringify(SUSPEND_SENTINEL),
+      parsedResult: SUSPEND_SENTINEL,
+      success: true,
+    });
+    const executeSpy = vi.spyOn(mockToolExecutor, "execute");
+
+    await executeTurn(makeTurnInput(), [agentManifest], {
+      loadRuntime: async () => agentLoaded,
+      llm: mockLLM,
+      store,
+      toolExecutor: mockToolExecutor,
+      eventBus,
+    });
+
+    expect(executeSpy.mock.calls.map(([call]) => call.name)).toEqual([
+      "emit-event",
+      "suspend",
+    ]);
+    const [saved] = await store.listSuspensions("sess-1");
+    expect(saved?.pendingContinuation.emittedEvents).toEqual([
+      { topic: "clue.found", data: { id: 1 } },
+    ]);
+    const savedToolMessages = (
+      saved?.pendingContinuation.messages as Array<Record<string, unknown>>
+    ).filter((message) => message.role === "tool");
+    expect(savedToolMessages.map((message) => message.toolCallId)).toEqual([
+      "tc-event",
+      "tc-suspend",
+      "tc-after",
+    ]);
+
+    const resumedMessages: Array<Record<string, unknown>> = [];
+    const resumed = await resumeSuspendedRuntime(
+      saved!,
+      { answer: "continue" },
+      agentManifest,
+      {
+        loadRuntime: async () => agentLoaded,
+        llm: {
+          async generate(params) {
+            resumedMessages.push(
+              ...(params.messages as Array<Record<string, unknown>>),
+            );
+            return {
+              content: '{"narrativeOutput":"continued"}',
+              toolCalls: [],
+              finishReason: "stop",
+              usage: { inputTokens: 5, outputTokens: 5 },
+            };
+          },
+        },
+        store,
+        toolExecutor: mockToolExecutor,
+        eventBus,
+      },
+    );
+
+    expect(
+      resumedMessages.find((message) => message.toolCallId === "tc-suspend"),
+    ).toMatchObject({
+      role: "tool",
+      content: JSON.stringify({ resumeData: { answer: "continue" } }),
+    });
+    expect(
+      resumedMessages.find((message) => message.toolCallId === "tc-after"),
+    ).toMatchObject({ role: "tool" });
+    expect((resumed.output as Record<string, unknown>).events).toEqual([
+      { topic: "clue.found", data: { id: 1 } },
+    ]);
+  });
+
   it("should emit turn.suspended SSE event", async () => {
     const events: SubscriptionEvent[] = [];
     eventBus.onEmit((e) => events.push(e));
@@ -565,6 +674,54 @@ describe("TurnExecutor — function runtime suspend", () => {
     expect(
       suspensions[0]!.pendingContinuation.suspendToolCallId,
     ).toBeUndefined();
+    expect(suspensions[0]!.pendingContinuation.executionContext).toEqual(
+      result.executionContext,
+    );
+  });
+
+  it("persists a canonical envelope-v1 suspended outcome before success schema validation", async () => {
+    const manifest = makeManifest({
+      runtimeType: "function",
+      resultFormat: "envelope-v1",
+    });
+    const loaded: LoadedRuntime = {
+      manifest,
+      promptTemplate: "",
+      // This schema applies to a later success value. The suspended envelope
+      // deliberately has no value and must not fail this gate.
+      outputSchema: {
+        type: "object",
+        required: ["answer"],
+        properties: { answer: { type: "string" } },
+      },
+      handler: async () => ({
+        outcome: "suspended",
+        reason: "Need canonical input",
+        resumeSchema: { type: "string" },
+      }),
+    };
+
+    const result = await executeTurn(
+      makeTurnInput({ sessionId: "sess-fn", turnId: "turn-envelope" }),
+      [manifest],
+      {
+        loadRuntime: async () => loaded,
+        llm: {
+          generate: vi.fn(async () => {
+            throw new Error("function runtime must not call the LLM");
+          }),
+        },
+        store,
+        eventBus,
+      },
+    );
+
+    expect(result.runtimeResults[0]).toMatchObject({
+      status: "suspended",
+      output: { suspended: true, reason: "Need canonical input" },
+    });
+    const [saved] = await store.listSuspensions("sess-fn");
+    expect(saved?.resumeSchema).toEqual({ type: "string" });
   });
 
   it("community function handler with forged core-plugin manifest gets a scoped store", async () => {
@@ -1081,7 +1238,7 @@ describe("resumeSuspendedRuntime", () => {
     expect(content.resumeData).toEqual({ name: "Dave" });
   });
 
-  it("should append user message for function runtime (no suspendToolCallId)", async () => {
+  it("resumes a function runtime through its handler with inherited execution responsibility", async () => {
     const id = "suspension-fn-1";
     await store.saveSuspension({
       id,
@@ -1095,28 +1252,54 @@ describe("resumeSuspendedRuntime", () => {
         messages: [{ role: "system", content: "system prompt" }],
         toolCallsSoFar: [],
         pendingProposals: [],
-        // No suspendToolCallId — function runtime path
+        executionContext: {
+          executionId: "original-execution",
+          origin: "player",
+          logicalTurnId: "logical-turn-1",
+          countPolicy: "complete-player-turn",
+        },
       },
       createdAt: new Date().toISOString(),
     });
 
-    const capturedMessages: unknown[] = [];
+    const llmGenerate = vi.fn(async () => {
+      throw new Error("function resume must not call the LLM");
+    });
+    let receivedContext:
+      | {
+          resumeData?: unknown;
+          resumedFromSuspensionId?: string;
+          execution?: {
+            executionId: string;
+            origin: string;
+            logicalTurnId?: string;
+            countPolicy: string;
+          };
+        }
+      | undefined;
     const llm: LLMAdapter = {
-      async generate(params) {
-        capturedMessages.push(...params.messages);
-        return {
-          content: "Resumed function.",
-          toolCalls: [],
-          finishReason: "stop",
-          usage: { inputTokens: 5, outputTokens: 5 },
-        };
-      },
+      generate: llmGenerate,
     };
 
-    const manifest = makeManifest();
+    const manifest = makeManifest({
+      runtimeType: "function",
+      resultFormat: "envelope-v1",
+    });
     const loaded: LoadedRuntime = {
       manifest,
       promptTemplate: "",
+      outputSchema: {
+        type: "object",
+        required: ["narrativeOutput"],
+        properties: { narrativeOutput: { type: "string" } },
+      },
+      handler: async (ctx) => {
+        receivedContext = ctx;
+        return {
+          outcome: "success",
+          value: { narrativeOutput: "Resumed function." },
+        };
+      },
     };
     const suspension = await store.getSuspension(id);
 
@@ -1127,21 +1310,28 @@ describe("resumeSuspendedRuntime", () => {
       eventBus,
     };
 
-    await resumeSuspendedRuntime(
+    const result = await resumeSuspendedRuntime(
       suspension!,
       { answer: "yes" },
       manifest,
       deps,
     );
 
-    // There should be a user message carrying the resume data
-    const userMsg = capturedMessages.find(
-      (m) =>
-        (m as Record<string, unknown>).role === "user" &&
-        typeof (m as Record<string, unknown>).content === "string" &&
-        ((m as Record<string, unknown>).content as string).includes("answer"),
-    );
-    expect(userMsg).toBeDefined();
+    expect(llmGenerate).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      status: "success",
+      output: { narrativeOutput: "Resumed function." },
+    });
+    expect(receivedContext).toMatchObject({
+      resumeData: { answer: "yes" },
+      resumedFromSuspensionId: id,
+      execution: {
+        executionId: result.runId,
+        origin: "resume",
+        logicalTurnId: "logical-turn-1",
+        countPolicy: "complete-player-turn",
+      },
+    });
   });
 
   it("should return failed result if runtime cannot be loaded", async () => {

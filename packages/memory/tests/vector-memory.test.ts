@@ -50,6 +50,18 @@ const llm: MemoryLLMAdapter = {
 // ── Store seeding helpers ────────────────────────────────────────
 
 async function lockModel(store: DataStore, sessionId: string): Promise<void> {
+  if (!(await store.getSession(sessionId))) {
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: sessionId,
+      status: "active",
+      turnCount: 1,
+      preGameCompleted: [],
+      activePlugins: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
   // supportsVector(store) is true for MemoryStore.
   const s = store as DataStore & {
     ensureVectorModel: NonNullable<DataStore["ensureVectorModel"]>;
@@ -273,6 +285,50 @@ describe("vector recall (semantic)", () => {
         "rivers flowed through the valley",
       ],
     ]);
+  });
+
+  it("does not write an old embedding into a recreated session with the same id", async () => {
+    let releaseEmbedding!: () => void;
+    let markEmbeddingStarted!: () => void;
+    const embeddingStarted = new Promise<void>((resolve) => {
+      markEmbeddingStarted = resolve;
+    });
+    const embeddingGate = new Promise<void>((resolve) => {
+      releaseEmbedding = resolve;
+    });
+    const delayedEmbed: EmbedFn = async (texts) => {
+      markEmbeddingStarted();
+      await embeddingGate;
+      return texts.map(embedText);
+    };
+    const ingestor = createVectorIngestor({ store, embed: delayedEmbed });
+
+    const staleSweep = ingestor.ingest(sessionId);
+    await embeddingStarted;
+    await store.deleteSession(sessionId);
+    await store.createSession({
+      id: sessionId,
+      status: "active",
+      turnCount: 1,
+      preGameCompleted: [],
+      activePlugins: [],
+      createdAt: "2099-01-01T00:00:00.000Z",
+      updatedAt: "2099-01-01T00:00:00.000Z",
+    });
+    await lockModel(store, sessionId);
+    releaseEmbedding();
+
+    expect((await staleSweep).recall).toBe(0);
+    const vectorStore = store as DataStore & {
+      searchVectors: NonNullable<DataStore["searchVectors"]>;
+    };
+    await expect(
+      vectorStore.searchVectors({
+        sessionId,
+        query: embedText("dragon"),
+        topK: 5,
+      }),
+    ).resolves.toEqual([]);
   });
 
   it("does not duplicate embeddings across independent ingestors sharing a coordinator", async () => {
@@ -524,6 +580,48 @@ describe("graceful degradation", () => {
     // Query embed throws → must degrade to keyword, not reject.
     const results = await system.recall.search(sessionId, "dragon", 5);
     expect(results.some((r) => r.content.includes("dragon"))).toBe(true);
+  });
+
+  it("falls back to keyword when vector-target resolution throws", async () => {
+    const store = createMemoryStore();
+    const sessionId = "sess-target-fail";
+    order = 0;
+    await addMessage(
+      store,
+      sessionId,
+      "assistant",
+      "the dragon guarded a forge",
+    );
+    await addLorebook(
+      store,
+      sessionId,
+      "forge-entry",
+      "forge",
+      "the ancient forge is guarded by a dragon",
+    );
+
+    const failingStore = new Proxy(store, {
+      get(target, property, receiver) {
+        if (property === "resolveSessionVectorTarget") {
+          return async () => {
+            throw new Error("vector metadata unavailable");
+          };
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const system = createMemorySystem({
+      store: failingStore,
+      llm,
+      embed,
+    });
+
+    const recall = await system.recall.search(sessionId, "dragon", 5);
+    const archival = await system.archival.search(sessionId, "forge", 5);
+    expect(recall.some((result) => result.content.includes("dragon"))).toBe(
+      true,
+    );
+    expect(archival.some((result) => result.key === "forge")).toBe(true);
   });
 
   it("stays keyword-only (ingest no-op) when no embed function is injected", async () => {

@@ -19,6 +19,7 @@ import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
 import type { HookPipeline } from "../src/hooks/pipeline.js";
+import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
 // Prime a store with one prior player message so turnNumber >= 1 and
 // main-loop priority runtimes survive the Pre-Game band filter.
@@ -257,6 +258,8 @@ describe("Turn executor hook wire-in", () => {
     it("rewrites the RuntimeResult when PostRuntime returns replace (sequential)", async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();
+      const emitter = makeEmitterSpy();
+      const manifest = makeManifest({ outputKind: "story" });
 
       const rewrittenOutput = {
         narrativeOutput: "rewritten by hook",
@@ -281,13 +284,25 @@ describe("Turn executor hook wire-in", () => {
           ),
       });
 
-      const deps = await makeDeps(llm, pipeline);
-      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+      const baseDeps = await makeDeps(llm, pipeline);
+      const deps: TurnExecutorDeps = {
+        ...baseDeps,
+        loadRuntime: async () => ({
+          manifest,
+          promptTemplate: "Say something.",
+        }),
+        emitter,
+      };
+      const result = await executeTurn(makeTurnInput(), [manifest], deps);
 
       expect(result.runtimeResults[0].output).toMatchObject({
         narrativeOutput: "rewritten by hook",
         _hookModified: true,
       });
+      expect(
+        emitter.events.find((event) => event.type === "message.completed")
+          ?.payload,
+      ).toMatchObject({ content: "rewritten by hook" });
     });
 
     it("refuses to let a replace rewrite execution identity", async () => {

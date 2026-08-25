@@ -38,4 +38,5 @@ export const MEDIA_WRITE_METHODS: ReadonlySet<string> = new Set([
   "addRef",
   "removeRef",
   "releaseSession",
+  "cleanup",
 ]);

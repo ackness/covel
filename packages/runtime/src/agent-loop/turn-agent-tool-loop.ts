@@ -1,5 +1,6 @@
 import type {
   Proposal,
+  ExecutionContext,
   RuntimeManifest,
   RuntimeResult,
   ToolCallRecord,
@@ -74,6 +75,7 @@ export interface AgentToolLoopInitialState {
   readonly finalContent?: string | null;
   readonly collectedToolCalls?: readonly ToolCallRecord[];
   readonly pendingProposals?: readonly Proposal[];
+  readonly emittedEvents?: readonly EmittedEvent[];
 }
 
 export interface RunAgentToolLoopOptions {
@@ -89,6 +91,8 @@ export interface RunAgentToolLoopOptions {
   readonly hookPipeline: HookPipeline | undefined;
   readonly startTime: number;
   readonly runId: string;
+  /** Original scheduling identity, persisted if this loop suspends. */
+  readonly executionContext?: ExecutionContext;
   /** Seed mid-turn state — used by the resume path. Omitted = fresh loop. */
   readonly initialState?: AgentToolLoopInitialState;
   /**
@@ -111,6 +115,7 @@ export async function runAgentToolLoop({
   hookPipeline,
   startTime,
   runId,
+  executionContext,
   initialState,
   allowSuspend = true,
 }: RunAgentToolLoopOptions): Promise<AgentToolLoopResult> {
@@ -136,10 +141,9 @@ export async function runAgentToolLoop({
   const pendingProposals: Proposal[] = [
     ...(initialState?.pendingProposals ?? []),
   ];
-  // Fresh per loop run — not seeded from initialState. A suspend mid-round
-  // that follows an emit-event call in the same LLM response would lose that
-  // event on resume; narrow edge case, not covered by SuspensionRecord today.
-  const emittedEvents: EmittedEvent[] = [];
+  const emittedEvents: EmittedEvent[] = [
+    ...(initialState?.emittedEvents ?? []),
+  ];
   let steps = 0;
 
   // Mutable: LLM-slot queue waits extend it (via onQueueWait below) so
@@ -289,7 +293,12 @@ export async function runAgentToolLoop({
       // providers (DashScope Qwen, DeepSeek v4) accept the follow-up turn.
       messages.push(buildAssistantToolCallMessage(response));
 
-      for (const tc of response.toolCalls) {
+      for (
+        let toolCallIndex = 0;
+        toolCallIndex < response.toolCalls.length;
+        toolCallIndex += 1
+      ) {
+        const tc = response.toolCalls[toolCallIndex]!;
         if (deps.toolExecutor) {
           const tcStart = Date.now();
 
@@ -444,6 +453,30 @@ export async function runAgentToolLoop({
               continue;
             }
             if (deps.store) {
+              // The persisted assistant message contains the whole tool-call
+              // batch. Provider protocols require a tool-role result for every
+              // call before the next LLM request. Persist a placeholder for the
+              // suspender (resume replaces its content) and explicitly cancel
+              // later calls rather than leaving dangling ids in the transcript.
+              messages.push(
+                buildToolResultMessage({
+                  toolCallId: effectiveTc.id,
+                  content: JSON.stringify({ suspended: true }),
+                }),
+              );
+              for (const skipped of response.toolCalls.slice(
+                toolCallIndex + 1,
+              )) {
+                messages.push(
+                  buildToolResultMessage({
+                    toolCallId: skipped.id,
+                    content: JSON.stringify({
+                      error:
+                        "Tool call skipped because an earlier call suspended the runtime",
+                    }),
+                  }),
+                );
+              }
               return handleSuspension({
                 sentinel: toolResult.parsedResult,
                 manifest,
@@ -454,6 +487,8 @@ export async function runAgentToolLoop({
                 finalContent,
                 collectedToolCalls,
                 pendingProposals,
+                emittedEvents,
+                ...(executionContext ? { executionContext } : {}),
                 suspendToolCallId: effectiveTc.id,
                 startTime,
                 runId,

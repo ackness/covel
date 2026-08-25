@@ -47,6 +47,15 @@ declare module "hono" {
   interface ContextVariableMap {
     store: DataStore;
     /**
+     * Incarnation captured by `resolveSessionParam()` for GET/HEAD requests.
+     * The bootstrap response barrier rechecks it after the route has finished
+     * reading so delete + same-id recreate cannot cross the owner check.
+     */
+    sessionReadIncarnation?: {
+      readonly sessionId: string;
+      readonly identity: string;
+    };
+    /**
      * Backend of the DataStore actually instantiated by `bootstrapApi()`.
      * `memory` signals a local-mode deployment (frontend persists to browser
      * IndexedDB; server-side sessions are transient sync copies).

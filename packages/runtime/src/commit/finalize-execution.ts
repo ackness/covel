@@ -24,6 +24,7 @@
 import type {
   DataStore,
   StoreTransaction,
+  SuspensionRecord,
   TurnMessageRecord,
 } from "@covel/store";
 import type { EventBus } from "@covel/events";
@@ -91,6 +92,12 @@ export interface FinalizeExecutionArgs {
   readonly results: readonly FinalizableResult[];
   /** Conversation entries committed atomically with this execution. */
   readonly journalMessages?: readonly TurnMessageRecord[];
+  /**
+   * Continuations created while the runtimes executed. Callers stage these
+   * instead of publishing them immediately; finalize persists them inside the
+   * same transaction as every sibling proposal.
+   */
+  readonly suspensions?: readonly SuspensionRecord[];
   /**
    * `turn_results` rows to settle. Nested rows reuse the top-level `turnId`,
    * so the top-level id alone settles them all. Empty when the caller persists
@@ -324,6 +331,19 @@ export async function finalizeExecution(
     });
   };
 
+  const saveSuspensions = async (
+    sink: Pick<StoreTransaction, "saveSuspension">,
+  ): Promise<void> => {
+    for (const suspension of args.suspensions ?? []) {
+      if (suspension.sessionId !== sessionId) {
+        throw new Error(
+          `suspension ${suspension.id} belongs to session ${suspension.sessionId}, expected ${sessionId}`,
+        );
+      }
+      await sink.saveSuspension(suspension);
+    }
+  };
+
   const processOpts = (
     result: FinalizableResult,
     deferPostCommit?: (fn: () => Promise<void>) => void,
@@ -393,6 +413,9 @@ export async function finalizeExecution(
             await tx.appendTurnMessage(message);
           }
           await extraInTx?.(tx);
+          // Continuations become visible only at the proposal commit point.
+          // A later clock/export/status failure rolls them back as well.
+          await saveSuspensions(tx);
           // Advance the session clock in the same transaction as the domain
           // writes, so a rollback undoes the counter / phase flip too.
           if (shouldWriteClock) {
@@ -493,6 +516,7 @@ export async function finalizeExecution(
         await store.appendTurnMessage(message);
       }
       await extraInTx?.(store as unknown as StoreTransaction);
+      await saveSuspensions(store);
       if (shouldWriteClock) {
         await applySessionClockTx(store as unknown as StoreTransaction, {
           sessionId,

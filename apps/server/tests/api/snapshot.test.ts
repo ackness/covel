@@ -840,6 +840,50 @@ describe("Snapshot routes", () => {
       expect(await mediaStore.isReferencedBy(ref.id, childId)).toBe(true);
     });
 
+    it("rolls back the fork when MediaStore.addRef fails", async () => {
+      const baseMediaStore = createMemoryMediaStore();
+      const ref = await baseMediaStore.put(
+        new Uint8Array([1, 2, 3]),
+        "image/png",
+      );
+      await baseMediaStore.recordOwnership(ref.id, "sess-1", "test-plugin");
+      await store.setPluginData({
+        id: "sess-1-pd-media-failure",
+        sessionId: "sess-1",
+        pluginId: "test-plugin",
+        namespace: "images",
+        key: "img-failure",
+        value: { ref },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      const failingMediaStore = new Proxy(baseMediaStore, {
+        get(target, property, receiver) {
+          if (property === "addRef") {
+            return async () => {
+              throw new Error("injected addRef failure");
+            };
+          }
+          return Reflect.get(target, property, receiver);
+        },
+      }) as MediaStore;
+      const app = createTestApp(store, undefined, failingMediaStore);
+      const snapId = await createParentSnapshot(store, app);
+      const before = (await store.listSessions()).length;
+
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+
+      expect(res.status).toBe(500);
+      await expect(res.json()).resolves.toMatchObject({
+        code: "fork_media_reference_failed",
+      });
+      expect(await store.listSessions()).toHaveLength(before);
+    });
+
     it("references media embedded in a copied export atomically on fork (docs 02 §2.1.5)", async () => {
       // A MediaRef that lives ONLY inside a recordAs export value (never in the
       // snapshot payload). The fork scan must reach it too, so the child ends up

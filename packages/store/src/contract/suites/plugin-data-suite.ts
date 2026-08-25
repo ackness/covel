@@ -360,6 +360,40 @@ export function registerPluginDataStoreSuite(getStore: () => DataStore): void {
       expect(b!.value).toBe("from-b");
     });
 
+    it("keeps delimiter-bearing namespace/key tuples distinct", async () => {
+      const now = new Date().toISOString();
+      await store.setPluginData({
+        id: "pd-delimiter-a",
+        sessionId: "sess-delimiter",
+        pluginId: "plugin-delimiter",
+        namespace: "a:b",
+        key: "c",
+        value: "first",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await store.setPluginData({
+        id: "pd-delimiter-b",
+        sessionId: "sess-delimiter",
+        pluginId: "plugin-delimiter",
+        namespace: "a",
+        key: "b:c",
+        value: "second",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await expect(
+        store.getPluginData("sess-delimiter", "plugin-delimiter", "a:b", "c"),
+      ).resolves.toMatchObject({ value: "first" });
+      await expect(
+        store.getPluginData("sess-delimiter", "plugin-delimiter", "a", "b:c"),
+      ).resolves.toMatchObject({ value: "second" });
+      await expect(
+        store.listPluginDataSessionScope("sess-delimiter"),
+      ).resolves.toHaveLength(2);
+    });
+
     // Audit 2026-04-20 finding 7.2 — snapshot payload builder relies on
     // listPluginDataSessionScope to pick up plugins that wrote plugin_data
     // without producing a runtime result.

@@ -67,6 +67,24 @@ export function runMediaStoreContractTests(
       expect(lookup?.ownerPluginId).toBe("plugin-A");
     });
 
+    it("isolates persisted metadata from caller-owned references", async () => {
+      const store = await createStore();
+      const meta = { nested: { value: 1 } };
+      const ref = await store.put(OTHER, "application/original", meta);
+
+      meta.nested.value = 7;
+      (ref as { mime: string }).mime = "application/corrupt";
+      (ref.meta as { nested: { value: number } }).nested.value = 9;
+
+      expect(await store.lookup(ref.id)).toMatchObject({
+        mime: "application/original",
+      });
+      const persisted = (await store.listAssets()).find(
+        (asset) => asset.id === ref.id,
+      );
+      expect(persisted?.meta).toEqual({ nested: { value: 1 } });
+    });
+
     it("resolves a readable URL for stored media", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png");
@@ -224,6 +242,24 @@ export function runMediaStoreContractTests(
       expect(yRefs[0]?.pluginId).toBe("plugin-A");
     });
 
+    it("does not leave a dangling ref when addRef races delete", async () => {
+      const store = await createStore();
+      const ref = await store.put(OTHER, "application/octet-stream");
+
+      // Start addRef first so the legacy IDB implementation completed its
+      // asset-exists read before delete, then issued the ref put afterwards.
+      const adding = store.addRef(ref.id, "sess-race", "plugin-race");
+      const deleting = store.delete(ref.id);
+      await Promise.all([adding, deleting]);
+
+      expect(
+        (await store.listRefs()).filter((row) => row.mediaId === ref.id),
+      ).toEqual([]);
+      const recreated = await store.put(OTHER, "application/octet-stream");
+      expect(recreated.id).toBe(ref.id);
+      expect(await store.isReferencedBy(ref.id, "sess-race")).toBe(false);
+    });
+
     it("removeRef only removes the specified session ref and preserves shared assets", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png");
@@ -350,6 +386,19 @@ export function runMediaStoreContractTests(
       expect(result.protectedIds).toEqual([keep.id]);
       expect(await store.exists(keep.id)).toBe(true);
       expect(await store.exists(remove.id)).toBe(false);
+    });
+
+    it("cleanup rechecks current refs instead of trusting a stale protected set", async () => {
+      const store = await createStore();
+      const ref = await store.put(OTHER, "application/octet-stream");
+      await store.addRef(ref.id, "sess-new-ref", "plugin-new-ref");
+
+      const result = await store.cleanup(new Set(), { maxAgeMs: 0 });
+
+      expect(result.deletedIds).not.toContain(ref.id);
+      expect(result.deleted).toBe(0);
+      expect(await store.exists(ref.id)).toBe(true);
+      expect(await store.isReferencedBy(ref.id, "sess-new-ref")).toBe(true);
     });
 
     it("isReferencedBy returns true purely from ownership when no addRef ran", async () => {

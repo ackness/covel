@@ -96,6 +96,12 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 桌面版 sidecar 会在每次启动时生成一个一次性 bearer token，并以 `COVEL_DESKTOP_REST_TOKEN` 注入子进程环境。所有写接口（`PUT /api/config/keys`、`PUT /api/config/settings`、`PUT /api/config/proxy`、`PUT /api/config/data-root`、`POST /api/config/open-folder`）以及会返回本地配置的 `GET /api/config/settings` / `GET /api/config/proxy` 都会校验请求头 `Authorization: Bearer <token>`，缺失或不匹配返回 `401`。真正开放的只有 `GET /api/config/info` 和 `GET /api/config/keys`（仅返回 provider 列表，不含 key 值）。
 
+REST Settings backend 会把 `GET /api/config/keys` 返回的 provider 列表 hydration 为仅存在于内存的“server-managed”标记；该标记不会显示为 key 明文，也不会进入 `X-Provider-Keys`。保存全量 SettingsStore secret snapshot 时，backend 会保留未编辑的 server-managed key、把新输入转换成 PUT patch，并把从快照移除的 provider 转换成显式删除，因此不会把 provider 列表误当成 secret map，也不会因编辑一个 key 覆盖其他 key。
+
+若 `keys.env` 无法读取，GET 返回 `500 keys_file_unreadable`，PUT 返回 `409 keys_file_unreadable` 并保留原路径；写入同样使用同目录临时文件 + rename 原子替换。
+
+`settings.json` 使用同目录临时文件 + rename 原子替换。若现有文件无法读取或 JSON/`entries` 结构损坏，GET 返回 `500 settings_file_invalid`，PUT 返回 `409 settings_file_invalid` 并保留原文件；SettingsStore 会保持只读的 hydration-failed 状态，避免下一次单字段编辑用不完整快照覆盖可恢复数据。
+
 `GET /api/config/info` 的响应里增加了 `requiresAuth` 字段，前端据此决定是否需要附带 Authorization 头。Electron 渲染进程通过 `covel:get-info` IPC 拿到 `restToken` 字段，自动注入到所有写请求。开发模式下若未设置该 env，token 门不启用，纯 web tier 与 `pnpm dev:web` 流程保持原样。
 
 ## 相关文档

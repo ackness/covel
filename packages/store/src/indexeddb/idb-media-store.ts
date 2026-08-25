@@ -1,6 +1,7 @@
 import type { MediaStore } from "@covel/shared";
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import { filterAssetsByMetadata } from "../media-store/filter.js";
+import { finalizeMediaCleanupResult } from "../media-store/cleanup-result.js";
 import {
   cloneMeta,
   type IdbMediaAssetRecord,
@@ -81,12 +82,39 @@ export async function createIndexedDbMediaStore(
     await tx.done;
   }
 
+  async function deleteAssetIfUnreferenced(id: string): Promise<boolean> {
+    const tx = db.transaction([STORE_ASSETS, STORE_REFS], "readwrite");
+    const assets = tx.objectStore(STORE_ASSETS);
+    const refs = tx.objectStore(STORE_REFS);
+    const asset = await assets.get(id);
+    if (!asset || asset.ownerSessionId !== null) {
+      await tx.done;
+      return false;
+    }
+    const ref = await refs.index("mediaId").getKey(id);
+    if (ref !== undefined) {
+      await tx.done;
+      return false;
+    }
+    await assets.delete(id);
+    await tx.done;
+    return true;
+  }
+
   return {
     async put(value, mime, meta) {
       const { blob, bytes } = await toBlobAndBytes(value, mime);
       const id = await sha256(bytes);
-      const existing = await db.get(STORE_ASSETS, id);
-      if (existing) return toMediaRef(existing);
+      // Keep the first-writer check and insert in one native transaction.
+      // Readwrite transactions touching this store are serialized by IDB, so a
+      // concurrent put of the same digest observes the committed first record
+      // instead of overwriting its MIME/metadata.
+      const tx = db.transaction(STORE_ASSETS, "readwrite");
+      const existing = await tx.store.get(id);
+      if (existing) {
+        await tx.done;
+        return toMediaRef(existing);
+      }
 
       const record: IdbMediaAssetRecord = {
         id,
@@ -98,7 +126,8 @@ export async function createIndexedDbMediaStore(
         ownerPluginId: null,
         createdAt: new Date().toISOString(),
       };
-      await db.put(STORE_ASSETS, record);
+      await tx.store.put(record);
+      await tx.done;
       return toMediaRef(record);
     },
 
@@ -129,34 +158,56 @@ export async function createIndexedDbMediaStore(
     },
 
     async recordOwnership(id, ownerSessionId, ownerPluginId) {
-      const record = await db.get(STORE_ASSETS, id);
-      if (!record) return;
+      // A single readwrite transaction makes the first-owner guard atomic
+      // across tabs/handles.
+      const tx = db.transaction(STORE_ASSETS, "readwrite");
+      const record = await tx.store.get(id);
+      if (!record) {
+        await tx.done;
+        return;
+      }
       if (
         record.ownerSessionId !== null &&
         record.ownerSessionId !== ownerSessionId
-      )
+      ) {
+        await tx.done;
         return;
-      await db.put(STORE_ASSETS, {
+      }
+      await tx.store.put({
         ...record,
         ownerSessionId,
         ownerPluginId: ownerPluginId ?? null,
       });
+      await tx.done;
     },
 
     async addRef(id, sessionId, pluginId) {
-      const exists = await db.getKey(STORE_ASSETS, id);
-      if (exists === undefined) return;
+      // Share the exact two-store transaction scope used by deleteAsset(). IDB
+      // serializes overlapping readwrite transactions, so addRef either lands
+      // before delete (and is removed by it) or observes the missing asset after
+      // delete; it can never leave a dangling ref.
+      const tx = db.transaction([STORE_ASSETS, STORE_REFS], "readwrite");
+      const exists = await tx.objectStore(STORE_ASSETS).getKey(id);
+      if (exists === undefined) {
+        await tx.done;
+        return;
+      }
       const key = refKey(id, sessionId);
       // First-writer wins on plugin_id: skip the put if a row already exists.
-      const existingRef = await db.get(STORE_REFS, key);
-      if (existingRef) return;
-      await db.put(STORE_REFS, {
+      const refs = tx.objectStore(STORE_REFS);
+      const existingRef = await refs.get(key);
+      if (existingRef) {
+        await tx.done;
+        return;
+      }
+      await refs.put({
         key,
         mediaId: id,
         sessionId,
         pluginId: pluginId ?? null,
         createdAt: new Date().toISOString(),
       });
+      await tx.done;
     },
 
     async removeRef(id, sessionId) {
@@ -227,9 +278,13 @@ export async function createIndexedDbMediaStore(
       );
 
       if (!policy.dryRun) {
+        const deletedIds: string[] = [];
         for (const id of idsToDelete) {
-          await deleteAsset(id);
+          // The ownership/ref check and delete share the same native transaction
+          // as addRef/recordOwnership, closing the inventory-to-delete window.
+          if (await deleteAssetIfUnreferenced(id)) deletedIds.push(id);
         }
+        return finalizeMediaCleanupResult(result, assets, deletedIds);
       }
 
       return result;

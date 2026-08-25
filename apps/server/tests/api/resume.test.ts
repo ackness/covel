@@ -14,7 +14,7 @@ import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@covel/plugin-loader";
-import type { RuntimeManifest } from "@covel/shared";
+import type { ExecutionContext, RuntimeManifest } from "@covel/shared";
 import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 import { resumeRoutes } from "../../src/routes/api/resume.js";
 import {
@@ -100,6 +100,7 @@ async function createSuspension(
     resolvedAt: string;
     resumeSchema: unknown;
     createdAt: string;
+    executionContext: ExecutionContext;
   }>,
 ) {
   const suspension = {
@@ -118,6 +119,9 @@ async function createSuspension(
       messages: [{ role: "system", content: "You are a test agent." }],
       toolCallsSoFar: [],
       pendingProposals: [],
+      ...(overrides?.executionContext
+        ? { executionContext: overrides.executionContext }
+        : {}),
       suspendToolCallId: "tc-suspend-1",
     },
     createdAt: overrides?.createdAt ?? new Date().toISOString(),
@@ -211,7 +215,7 @@ describe("Resume Routes", () => {
   });
 
   describe("POST /api/sessions/:id/resume", () => {
-    it("returns 400 when X-Provider-Keys header is missing", async () => {
+    it("uses the server-configured adapter when X-Provider-Keys is missing", async () => {
       const app = createTestApp(makeDefaultDeps(store));
       await createSuspension(store);
 
@@ -224,9 +228,7 @@ describe("Resume Routes", () => {
         }),
       });
 
-      expect(res.status).toBe(400);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body.error).toMatch(/X-Provider-Keys/);
+      expect(res.status).toBe(200);
     });
 
     it("restores persisted plugin activations before scoping resume hooks", async () => {
@@ -502,6 +504,76 @@ describe("Resume Routes", () => {
           expect.objectContaining({ type: "narrative.completed" }),
         ]),
       );
+    });
+
+    it("completes the inherited logical player turn exactly once on resume", async () => {
+      await store.updateSession("sess-1", {
+        phase: "playing",
+        completedPlayerTurns: 1,
+      });
+      await createSuspension(store, {
+        executionContext: {
+          executionId: "execution-before-suspend",
+          origin: "player",
+          logicalTurnId: "logical-suspended-turn",
+          countPolicy: "complete-player-turn",
+        },
+      });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      const resume = () =>
+        app.request("/api/sessions/sess-1/resume", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            suspensionId: "susp-1",
+            data: { name: "Alice" },
+          }),
+        });
+
+      expect((await resume()).status).toBe(200);
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
+      expect((await resume()).status).toBe(409);
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
+    });
+
+    it("waits for the final sibling suspension before completing the logical turn", async () => {
+      await store.updateSession("sess-1", {
+        phase: "playing",
+        completedPlayerTurns: 1,
+      });
+      const executionContext: ExecutionContext = {
+        executionId: "parallel-execution",
+        origin: "player",
+        logicalTurnId: "logical-parallel-suspensions",
+        countPolicy: "complete-player-turn",
+      };
+      await createSuspension(store, {
+        id: "susp-a",
+        executionContext,
+      });
+      await createSuspension(store, {
+        id: "susp-b",
+        executionContext,
+      });
+      const app = createTestApp(makeDefaultDeps(store));
+      const resume = (suspensionId: string) =>
+        app.request("/api/sessions/sess-1/resume", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({ suspensionId, data: { name: "Alice" } }),
+        });
+
+      expect((await resume("susp-a")).status).toBe(200);
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(1);
+      expect((await resume("susp-b")).status).toBe(200);
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
     });
 
     it("buffers post-commit fan-out until the finalize transaction commits: a rollback leaves hooks unobserved", async () => {
@@ -853,15 +925,14 @@ describe("Resume Routes", () => {
       await createSuspension(store, { id: "susp-fresh-post" });
       const app = createTestApp(makeDefaultDeps(store));
 
-      // The sweep fires at the very top of the POST handler, before the
-      // X-Provider-Keys guard — so even a 400 (missing keys) request still
-      // exercises the wiring. We assert the sweep, not the resume outcome.
+      // The sweep fires at the very top of the POST handler. The requested
+      // suspension does not exist, but the opportunistic sweep still runs.
       const res = await app.request("/api/sessions/sess-1/resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ suspensionId: "irrelevant" }),
       });
-      expect(res.status).toBe(400); // missing X-Provider-Keys
+      expect(res.status).toBe(404);
       await flush();
 
       expect(await store.getSuspension("susp-old-post")).toBeNull();

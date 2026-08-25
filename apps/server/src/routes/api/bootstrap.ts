@@ -79,7 +79,10 @@ import { createEventDirectory } from "./bootstrap/event-directory.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
-import { sessionApprovalScope } from "./session/session-guard.js";
+import {
+  sessionApprovalScope,
+  verifyResolvedSessionRead,
+} from "./session/session-guard.js";
 
 // ── Bootstrap config ─────────────────────────────────────────────
 
@@ -614,6 +617,8 @@ export async function bootstrapApi(
     }
     c.set("builtinToolNames", [...builtinToolNames].sort());
     await next();
+    const staleRead = await verifyResolvedSessionRead(c);
+    if (staleRead) c.res = staleRead;
   });
 
   // Optional request-scoped middleware (e.g. per-request llmAdapter swap

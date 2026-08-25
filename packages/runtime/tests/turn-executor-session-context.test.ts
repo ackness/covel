@@ -304,7 +304,11 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
                 createdAt: now,
                 updatedAt: now,
               });
-              return { narrativeOutput: "player ready", preGameDone: true };
+              return {
+                outcome: "success",
+                value: { narrativeOutput: "player ready" },
+                completion: "done",
+              };
             },
           };
         }
@@ -331,6 +335,7 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
     expect(
       setupResult.runtimeResults.map((runtime) => runtime.runtimeId),
     ).toEqual(["char-creator/player-init"]);
+    expect(setupResult.runtimeResults[0]?.status).toBe("success");
     // The narrator never ran this turn, so no system prompt was captured.
     expect(llm.captured.systemPrompts).toHaveLength(0);
     // Setup completed this turn (player created) → the finalize session-clock

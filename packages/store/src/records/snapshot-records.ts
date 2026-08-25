@@ -11,6 +11,7 @@ import type {
 } from "./memory-records.js";
 import type { PluginDataRecord } from "./plugin-records.js";
 import type { SessionRecord } from "./session-records.js";
+import type { ExecutionContext } from "@covel/shared";
 
 /**
  * Materialized state snapshot.
@@ -190,6 +191,14 @@ export interface SuspensionRecord {
      * final runtime output.
      */
     readonly pendingProposals: readonly unknown[];
+    /**
+     * Framework-owned execution identity from the suspended scheduling run.
+     * Resume inherits its logical turn and count policy while allocating a new
+     * execution id, so suspension itself never completes a player turn.
+     */
+    readonly executionContext?: ExecutionContext;
+    /** Events buffered before suspension; resume must not silently drop them. */
+    readonly emittedEvents?: readonly unknown[];
     /** tool_call_id of the suspend tool call (agent runtime only). Used to append synthetic tool result. */
     readonly suspendToolCallId?: string;
   };

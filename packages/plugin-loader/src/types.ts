@@ -459,6 +459,14 @@ export interface FunctionHandlerContext {
    */
   readonly manualPayload?: Readonly<Record<string, unknown>>;
   /**
+   * Data supplied to the resume API for a suspended function runtime. Unlike
+   * `manualPayload`, this may be any JSON-schema-valid value (including a
+   * primitive), and is present only while re-entering the suspended handler.
+   */
+  readonly resumeData?: unknown;
+  /** Suspension identity associated with `resumeData`, for correlation only. */
+  readonly resumedFromSuspensionId?: string;
+  /**
    * Optional trigger-event descriptor — only populated when this runtime
    * was activated by the in-turn event chain (an earlier runtime in the
    * same turn emitted `output.events: [{ topic, data }]` matching this

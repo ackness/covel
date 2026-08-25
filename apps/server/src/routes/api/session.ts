@@ -756,6 +756,18 @@ sessionRoutes.patch("/:id", async (c) => {
         409,
       );
     }
+    if (
+      session.status === "ended" &&
+      updates.status !== undefined &&
+      updates.status !== "ended"
+    ) {
+      return c.json(
+        errorBody("Ended sessions cannot be reactivated", {
+          code: "session_ended",
+        }),
+        409,
+      );
+    }
 
     const fireEnd = updates.status === "ended" && session.status !== "ended";
     const existingLifecycle = readSessionLifecyclePending(session);

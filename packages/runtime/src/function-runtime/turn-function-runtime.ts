@@ -91,6 +91,12 @@ export interface ExecuteFunctionRuntimeOptions {
    * turnId scope in that case.
    */
   readonly executionId?: string;
+  /** Resume payload for a previously suspended function runtime. */
+  readonly resumeData?: unknown;
+  /** Identifies a resume invocation even when `resumeData` is undefined. */
+  readonly resumedFromSuspensionId?: string;
+  /** Resume forbids creating a second nested suspension. Defaults to true. */
+  readonly allowSuspend?: boolean;
 }
 
 export async function executeFunctionRuntime({
@@ -110,6 +116,9 @@ export async function executeFunctionRuntime({
   runId,
   timeoutMs,
   executionId,
+  resumeData,
+  resumedFromSuspensionId,
+  allowSuspend = true,
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
   // Emit start for function runtimes (no guard to check)
   const stage = getRuntimeSpec(manifest).stage;
@@ -411,6 +420,9 @@ export async function executeFunctionRuntime({
         : {}),
       ...(activation ? { activation } : {}),
       ...(executionContext ? { execution: executionContext } : {}),
+      ...(resumedFromSuspensionId !== undefined
+        ? { resumeData, resumedFromSuspensionId }
+        : {}),
       recursiveCall: revocable.recursiveCall,
       recursionDepth,
       ...(revocable.gateway ? { gateway: revocable.gateway } : {}),
@@ -512,7 +524,8 @@ export async function executeFunctionRuntime({
   });
 
   // ── Suspend detection for function runtimes ────────────
-  if (handlerOutcome.outcome === "suspended" && deps.store) {
+  // A resume invocation must not create a second suspension record.
+  if (handlerOutcome.outcome === "suspended" && deps.store && allowSuspend) {
     const suspensionId = crypto.randomUUID();
     // Function runtimes have no tool loop, so suspend records carry an
     // empty pendingProposals array and no partial content.
@@ -528,6 +541,8 @@ export async function executeFunctionRuntime({
         messages: [],
         toolCallsSoFar: [],
         pendingProposals: [],
+        emittedEvents: [],
+        ...(executionContext ? { executionContext } : {}),
       },
       createdAt: new Date().toISOString(),
     };

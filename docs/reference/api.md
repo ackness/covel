@@ -1127,7 +1127,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 **字段说明:**
 
-- `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。非合法枚举值返回 400。（注：运行频段真相由 `phase` / `completedPlayerTurns` / `setupRuntimes` 三字段承载，`turnCount` / `preGameCompleted` 由其派生——见 `POST /api/sessions` 响应字段说明；PATCH 不直接改写这些字段，它们只在 finalize 事务与惰性回填处写入。）
+- `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。非合法枚举值返回 400；`ended` 是终态，不能再 PATCH 回 `active` / `paused`（返回 `409 session_ended`）。（注：运行频段真相由 `phase` / `completedPlayerTurns` / `setupRuntimes` 三字段承载，`turnCount` / `preGameCompleted` 由其派生——见 `POST /api/sessions` 响应字段说明；PATCH 不直接改写这些字段，它们只在 finalize 事务与惰性回填处写入。）
 - `runtimeModelOverrides`(可选,object) — Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`,必须匹配 `/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。插件列表与 Session Prep 会暴露 runtime 的声明 slot；若声明 slot 未配置，UI 会提示补充 `[covel.<slot>]`，不会静默改绑到不相关的文本 slot。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
 
 **校验规则(runtimeModelOverrides):**
@@ -1633,7 +1633,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 
 #### `DELETE /api/sessions/:id/approvals`
 
-撤销该 session 已缓存、一次性和未决的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只轮换并撤销该插件的授权；省略则轮换整个 session 的授权 incarnation。pending approval 按 `(session incarnation, plugin, action)` 去重；disable/冲突移除插件时也会撤销，旧 approvalId 无法在之后重新激活代码。持久化代次使撤销对共享 PostgreSQL 的其他 Pod 同样生效。
+撤销该 session 已缓存、一次性和未决的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只轮换并撤销该插件的授权；省略则轮换整个 session 的授权 incarnation。pending approval 按 `(session incarnation, plugin, action, payload)` 去重；同一 action 的不同参数是不同的待决请求。disable/冲突移除插件时也会撤销，旧 approvalId 无法在之后重新激活代码。持久化代次使撤销对共享 PostgreSQL 的其他 Pod 同样生效。
 
 **查询参数:**
 
@@ -1656,7 +1656,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 | `builtin`   | 框架自带 / 框架默认 handler | 永远直接执行                               |
 | `community` | 第三方,默认级别             | 每次都需要玩家批准,除非 session-cache 命中 |
 
-> One-time grant 的 TTL 为 60 秒。如果玩家批准后 60 秒内没有发起对应的 dispatch,grant 会过期,需要重新走 dialog 流程。
+> One-time grant 的 TTL 为 60 秒，且只能被与批准时**结构完全相同的 payload** 消费一次（对象 key 顺序不影响比较）。改参数重试不会复用旧 grant，而会重新走 approval 流程。如果玩家批准后 60 秒内没有发起对应的 dispatch，grant 会过期。
 
 > Approval 的 pending / grant 内容仍是**进程内 + 内存**：服务器重启后全部清空，且一个 Pod 上批准的 grant 不会自动复制到另一个 Pod。持久化的是 session/plugin 的撤销代次，用于保证跨 Pod 的旧 grant 只能失效、绝不能误授权删除后同 ID 重建的会话。需要负载均衡下无重复弹窗时，仍需实现共享的 durable approval store。
 
@@ -2039,6 +2039,10 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 `nextCursor` 指向本页最旧一条的位置，作为下一页（更旧）的 `before_*`；当返回条数少于 `limit`（已到历史开头）时为 `null`。
 
+#### `POST /api/sessions/:id/messages/sync`
+
+LocalDataService 将浏览器本地消息镜像到临时 server session。每条消息可带本地稳定的 `id` 与 `createdAt`；同一 session 内重复提交相同 `id` 会跳过，因此 restore / 网络重试不会重复追加整段历史。省略 `id` 的旧客户端仍会由服务端生成新 ID，不具备跨请求幂等性。整批写入在 session lock 与 DataStore transaction 内执行，任一新消息写入失败会回滚整批。
+
 ---
 
 ### 插件数据（Plugin Data）
@@ -2204,8 +2208,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `POST /api/sessions/:id/resume`
 
-用玩家提交的数据重新启动一个被 `suspend` 工具暂停的 runtime。
-请求**必须**带 `X-Provider-Keys` header（API key 不在服务端持久化，每次 resume 都要重新提供）。
+用玩家提交的数据重新启动一个暂停的 runtime。Agent runtime 从持久化的 tool-loop transcript 续跑；function runtime 直接重新调用 handler，并通过 `ctx.resumeData` / `ctx.resumedFromSuspensionId` 接收本次数据，不会误进入 agent LLM loop。浏览器客户端可带 `X-Provider-Keys` header 提供请求级 key 覆盖；desktop/self-host 客户端可省略该 header，沿用服务端启动时配置的 provider key。服务端不会通过此 API 回传密钥。
 
 **请求体:**
 
@@ -2218,6 +2221,8 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 服务器会用 `suspension.resumeSchema` 对 `data` 做完整 JSON Schema 校验（经 Ajv：enum、嵌套对象、min/max、minLength/maxLength、pattern、array items、oneOf/anyOf 等）；不匹配返回 `400`。
 
+暂停本身不完成逻辑玩家回合。原 execution 的 `logicalTurnId` / `countPolicy` 会随 continuation 持久化，成功 resume 在提交 proposal 的同一事务内计数一次。同一 logical turn 若有多个并行 suspension，等最后一个未解决 continuation 恢复后才计数；逻辑回合 ledger 保证重试不重复计数。原 execution 的 sibling proposal 若回滚，其本次新建的 suspension 也会被清理，不留可恢复的孤儿 continuation。
+
 **响应:**
 
 ```json
@@ -2226,12 +2231,12 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 **错误码:**
 
-| 状态  | 触发条件                                                                      |
-| ----- | ----------------------------------------------------------------------------- |
-| `400` | 缺少 `X-Provider-Keys`、JSON body 错误、`suspensionId` 缺失或 schema 校验失败 |
-| `404` | session、suspension 不存在，或 runtime manifest 找不到                        |
-| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）                           |
-| `500` | `resumeSuspendedRuntime()` 抛出错误                                           |
+| 状态  | 触发条件                                               |
+| ----- | ------------------------------------------------------ |
+| `400` | JSON body 错误、`suspensionId` 缺失或 schema 校验失败  |
+| `404` | session、suspension 不存在，或 runtime manifest 找不到 |
+| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）    |
+| `500` | `resumeSuspendedRuntime()` 抛出错误                    |
 
 #### `GET /api/sessions/:id/suspensions`
 

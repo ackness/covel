@@ -25,6 +25,10 @@ import { messageRoutes } from "../../src/routes/api/messages.js";
 import { traceRoutes } from "../../src/routes/api/traces.js";
 import { subscribeRoutes } from "../../src/routes/api/subscribe.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import {
+  hashSessionOwnerToken,
+  verifyResolvedSessionRead,
+} from "../../src/routes/api/session/session-guard.js";
 
 const ENV_KEYS = [
   "DEPLOYMENT_TIER",
@@ -54,6 +58,8 @@ function createTestApp(store: DataStore, registry: PluginRegistry): Hono {
     c.set("eventBus", eventBus);
     c.set("sessionLock", sessionLock);
     await next();
+    const staleRead = await verifyResolvedSessionRead(c);
+    if (staleRead) c.res = staleRead;
   });
   app.route("/api/sessions", sessionRoutes);
   app.route("/api/sessions", messageRoutes);
@@ -248,6 +254,62 @@ describe("commercial tier — owner token hard-required", () => {
         })
       ).status,
     ).toBe(200);
+  });
+
+  it("rejects data read from a same-id replacement after owner authorization", async () => {
+    let markReadStarted = (): void => undefined;
+    const readStarted = new Promise<void>((resolve) => {
+      markReadStarted = resolve;
+    });
+    let releaseRead = (): void => undefined;
+    const readReleased = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const racingStore = new Proxy(store, {
+      get(target, property, receiver) {
+        if (property !== "listMessages") {
+          return Reflect.get(target, property, receiver);
+        }
+        return async (sessionId: string) => {
+          markReadStarted();
+          await readReleased;
+          return store.listMessages(sessionId);
+        };
+      },
+    }) as DataStore;
+    const racingApp = createTestApp(racingStore, createPluginRegistry());
+
+    const responsePromise = racingApp.request(
+      `/api/sessions/${created.id}/messages`,
+      { headers: { authorization: `Bearer ${created.ownerToken}` } },
+    );
+    await readStarted;
+    await store.deleteSession(created.id);
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: created.id,
+      status: "active",
+      turnCount: 0,
+      preGameCompleted: [],
+      activePlugins: [],
+      metadata: { ownerTokenHash: hashSessionOwnerToken("new-owner") },
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.addMessage({
+      id: "new-incarnation-secret",
+      sessionId: created.id,
+      role: "assistant",
+      content: "must not cross the old owner check",
+      createdAt: now,
+    });
+    releaseRead();
+
+    const response = await responsePromise;
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "session_incarnation_changed",
+    });
   });
 
   it("gates trace reads (and keeps 404 for unknown sessions)", async () => {

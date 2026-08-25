@@ -24,6 +24,8 @@ import type { DataStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { HookPipeline } from "../src/hooks/pipeline.js";
+import { createHookPipeline } from "../src/hooks/pipeline.js";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -76,6 +78,7 @@ async function runPregameTurn(
   handlers: Record<string, (ctx: unknown) => Promise<Record<string, unknown>>>,
   options?: {
     guards?: Record<string, (ctx: unknown) => Promise<Record<string, unknown>>>;
+    hookPipeline?: HookPipeline;
   },
 ): Promise<{
   store: DataStore;
@@ -101,6 +104,7 @@ async function runPregameTurn(
     }),
     llm: new NoopLLM(),
     store,
+    ...(options?.hookPipeline ? { hookPipeline: options.hookPipeline } : {}),
   };
   const result = await executeTurn(input, manifests, deps);
   return { store, result };
@@ -124,6 +128,35 @@ describe("Pre-Game completion contract", () => {
     expect(newlyDone(result)).toEqual(["pregame"]);
     // Only Pre-Game runtime present, so everyone's done → band flips to playing.
     expect(result.setupCompletion?.allSetupDone).toBe(true);
+  });
+
+  it("does not mark a failed runtime done even when its output says preGameDone", async () => {
+    const pipeline = createHookPipeline();
+    pipeline.register({
+      id: "fail-after-runtime",
+      event: "PostRuntime",
+      handler: async (_ctx, payload) => ({
+        action: "continue",
+        replace: {
+          result: {
+            ...(payload as { result: Record<string, unknown> }).result,
+            status: "failed",
+            error: "post-runtime rejection",
+          },
+        },
+      }),
+    });
+    const manifest = pregameManifest("pregame");
+    const { result } = await runPregameTurn(
+      "sess-failed-done",
+      [manifest],
+      { pregame: async () => ({ preGameDone: true }) },
+      { hookPipeline: pipeline },
+    );
+
+    expect(result.runtimeResults[0]?.status).toBe("failed");
+    expect(newlyDone(result)).toEqual([]);
+    expect(result.setupCompletion?.allSetupDone).toBe(false);
   });
 
   it("marks an AGENT runtime done when its guard returns skip:true", async () => {

@@ -182,25 +182,9 @@ export function createPluginRegistry(
       sessionId: string,
       pluginIds: readonly string[],
     ): void {
-      const current = sessionActivations.get(sessionId) ?? new Set<string>();
       const desired = new Set(
         pluginIds.filter((pluginId) => entries.has(pluginId)),
       );
-
-      for (const pluginId of current) {
-        if (desired.has(pluginId)) continue;
-        emit({ type: "plugin-deactivated", pluginId, sessionId });
-        emitToEventBus("plugin.deactivated", sessionId, {
-          pluginId,
-          sessionId,
-        });
-      }
-      for (const pluginId of desired) {
-        if (current.has(pluginId)) continue;
-        emit({ type: "plugin-activated", pluginId, sessionId });
-        emitToEventBus("plugin.activated", sessionId, { pluginId, sessionId });
-      }
-
       if (desired.size === 0) {
         sessionActivations.delete(sessionId);
       } else {

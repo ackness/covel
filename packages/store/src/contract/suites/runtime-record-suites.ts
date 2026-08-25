@@ -991,6 +991,41 @@ export function registerRuntimeRecordStoreSuites(
       expect(list1[0].id).toBe(s1.id);
     });
 
+    it("lists summaries chronologically with id as the tie-break", async () => {
+      const sessionId = "sess-sum-order";
+      await store.saveSessionSummary(
+        makeSessionSummary({
+          id: "z-earlier",
+          sessionId,
+          content: "earlier",
+          createdAt: "2026-01-01T00:00:00.000Z",
+        }),
+      );
+      await store.saveSessionSummary(
+        makeSessionSummary({
+          id: "a-later",
+          sessionId,
+          content: "later",
+          createdAt: "2026-01-02T00:00:00.000Z",
+        }),
+      );
+      await store.saveSessionSummary(
+        makeSessionSummary({
+          id: "b-same-time",
+          sessionId,
+          content: "same-time-b",
+          createdAt: "2026-01-02T00:00:00.000Z",
+        }),
+      );
+
+      const list = await store.listSessionSummaries(sessionId);
+      expect(list.map((summary) => summary.id)).toEqual([
+        "z-earlier",
+        "a-later",
+        "b-same-time",
+      ]);
+    });
+
     it("should deleteSessionSummaries by sessionId", async () => {
       const s1 = makeSessionSummary({ sessionId: "sess-sum-del" });
       const s2 = makeSessionSummary({ sessionId: "sess-sum-del" });

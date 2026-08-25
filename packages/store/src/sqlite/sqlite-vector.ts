@@ -91,6 +91,11 @@ interface SessionEmbeddingRow {
   embedding_locked_at: string | null;
 }
 
+interface UpsertSessionRow {
+  embedding_model_id: number | null;
+  created_at: string;
+}
+
 // ── Factory ──────────────────────────────────────────────────────
 
 /**
@@ -334,7 +339,9 @@ export function createSqliteVectorCapability(
     const tname = physicalTableName(target.modelRegistryId);
 
     // vec0 has no native primary key on user columns. Emulate upsert via
-    // DELETE-then-INSERT in a transaction.
+    // DELETE-then-INSERT in an IMMEDIATE transaction. The session check is in
+    // that same write critical section so another connection cannot
+    // delete/recreate the id between the incarnation check and the insert.
     const del = sqlite.prepare(
       `DELETE FROM ${tname}
         WHERE session_id = ? AND plugin_id = ? AND namespace = ? AND data_key = ?`,
@@ -345,6 +352,31 @@ export function createSqliteVectorCapability(
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
     const txn = sqlite.transaction(() => {
+      const session = sqlite
+        .prepare(
+          `SELECT embedding_model_id, created_at
+             FROM sessions
+            WHERE id = ?`,
+        )
+        .get(input.sessionId) as UpsertSessionRow | undefined;
+      if (!session) {
+        throw new Error(
+          `sqlite-vec upsertVector: session ${input.sessionId} not found`,
+        );
+      }
+      if (session.embedding_model_id !== target.modelRegistryId) {
+        throw new Error(
+          `sqlite-vec upsertVector: session ${input.sessionId} changed embedding model`,
+        );
+      }
+      if (
+        input.expectedSessionCreatedAt !== undefined &&
+        session.created_at !== input.expectedSessionCreatedAt
+      ) {
+        throw new Error(
+          `sqlite-vec upsertVector: session ${input.sessionId} incarnation changed`,
+        );
+      }
       del.run(input.sessionId, input.pluginId, input.namespace, input.key);
       ins.run(
         input.sessionId,
@@ -355,7 +387,7 @@ export function createSqliteVectorCapability(
         toJsonVector(input.embedding),
       );
     });
-    txn();
+    txn.immediate();
   }
 
   async function searchVectors(

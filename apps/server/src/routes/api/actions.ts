@@ -53,6 +53,7 @@ import {
   sessionApprovalScope,
 } from "./session/session-guard.js";
 import { validateActionRequest } from "./actions/request.js";
+import { stageExecutionSuspensions } from "./execution-suspensions.js";
 
 // SSE uses ProtocolEventType names directly — no legacy mapping.
 // Frontend handleSseEvent handles these standard types.
@@ -640,6 +641,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // lock through proposal commit, lifecycle sync, and snapshot capture.
           const registeredTurn = registerActiveTurn(sessionId, turnArgs.turnId);
           releaseTurnControl = registeredTurn.release;
+          const stagedSuspensions = stageExecutionSuspensions(store);
           let result;
           try {
             result = await executeTurn(turnInput, activeRuntimes, {
@@ -655,7 +657,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ...(pluginGateway ? { gateway: pluginGateway } : {}),
               ...(pluginUtils ? { utils: pluginUtils } : {}),
               ...(getPluginSource ? { getPluginSource } : {}),
-              store,
+              store: stagedSuspensions.store,
               ...(mediaStore ? { mediaStore } : {}),
               toolExecutor,
               resolveModel,
@@ -737,18 +739,25 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // `PostStateCommit` hooks declared by plugins fire on the production
           // write path (previously they only ran in tests).
           const hookPipeline = c.get("hookPipeline");
+          const finalizableResults = [
+            ...result.runtimeResults,
+            ...(result.nestedRuntimeResults ?? []),
+          ];
+          const hasSuspendedRuntime = finalizableResults.some(
+            (runtimeResult) => runtimeResult.status === "suspended",
+          );
           const outcome = await finalizeExecution({
             store,
             sessionId,
-            ...(result.executionContext
+            // A suspension persists the original counting responsibility for
+            // resume; this partial execution must not complete it yet.
+            ...(result.executionContext && !hasSuspendedRuntime
               ? { executionContext: result.executionContext }
               : {}),
             runtimes: activeRuntimes,
-            results: [
-              ...result.runtimeResults,
-              ...(result.nestedRuntimeResults ?? []),
-            ],
+            results: finalizableResults,
             journalMessages: collectExecutionJournal(result),
+            suspensions: stagedSuspensions.records,
             ...(playerInputWrites
               ? {
                   extraInTx: async (tx) => {
@@ -858,8 +867,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // proposal-only condition), only the best-effort checkpoint is
           // missing and the next turn snapshots again. Gating completion on
           // the snapshot would strand a fully-committed turn as "incomplete".
-          if (committed) {
-            result.completeTurn?.();
+          if (committed && !hasSuspendedRuntime) {
+            await result.completeTurn?.();
           }
 
           return {

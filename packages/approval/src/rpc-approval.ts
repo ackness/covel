@@ -113,7 +113,12 @@ interface InternalState {
   readonly sessionCache: Map<string, ScopedGrant>;
   readonly oneTimeGrants: Map<
     string,
-    { readonly grant: ScopedGrant; readonly issuedAt: number }
+    {
+      readonly grant: ScopedGrant;
+      readonly issuedAt: number;
+      /** Payload the player actually approved for this single dispatch. */
+      readonly payload: unknown;
+    }
   >;
 }
 
@@ -172,6 +177,37 @@ function resolveSessionScope(sessionScope: string): string {
   return sessionScope;
 }
 
+/**
+ * Compare JSON-shaped RPC payloads structurally. HTTP JSON object key order is
+ * not semantically meaningful, so a stringify comparison would incorrectly
+ * reject an honest retry whose keys were serialized in a different order.
+ */
+function samePayload(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  if (left === null || right === null) return false;
+  if (typeof left !== "object" || typeof right !== "object") return false;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => samePayload(value, right[index]))
+    );
+  }
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  const rightKeys = Object.keys(rightRecord);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key) =>
+        Object.prototype.hasOwnProperty.call(rightRecord, key) &&
+        samePayload(leftRecord[key], rightRecord[key]),
+    )
+  );
+}
+
 export function createRpcApprovalGate(): RpcApprovalGate {
   const state: InternalState = {
     pending: new Map(),
@@ -188,6 +224,7 @@ export function createRpcApprovalGate(): RpcApprovalGate {
     pluginId: string,
     action: string,
     sessionScope: string,
+    payload: unknown,
   ): boolean {
     const key = tripleKey(sessionId, sessionScope, pluginId, action);
     const entry = state.oneTimeGrants.get(key);
@@ -196,6 +233,9 @@ export function createRpcApprovalGate(): RpcApprovalGate {
       state.oneTimeGrants.delete(key);
       return false;
     }
+    // `once` authorizes the exact dispatch shown in the approval dialog, not
+    // an arbitrary later invocation that happens to share the action name.
+    if (!samePayload(entry.payload, payload)) return false;
     state.oneTimeGrants.delete(key);
     return true;
   }
@@ -257,6 +297,7 @@ export function createRpcApprovalGate(): RpcApprovalGate {
           input.pluginId,
           input.action,
           sessionScope,
+          input.payload,
         )
       ) {
         return { status: "allow", reason: "one-time-grant" };
@@ -273,7 +314,8 @@ export function createRpcApprovalGate(): RpcApprovalGate {
           pending.sessionScope === sessionScope &&
           pending.record.sessionId === input.sessionId &&
           pending.record.pluginId === input.pluginId &&
-          pending.record.action === input.action
+          pending.record.action === input.action &&
+          samePayload(pending.record.payload, input.payload)
         ) {
           return {
             status: "pending",
@@ -365,7 +407,11 @@ export function createRpcApprovalGate(): RpcApprovalGate {
         // Default scope is `once` — the next dispatch can use the grant
         // exactly once, then it is consumed. The TTL guards against stale
         // grants from a player that approved 10 minutes ago.
-        state.oneTimeGrants.set(key, { grant, issuedAt: Date.now() });
+        state.oneTimeGrants.set(key, {
+          grant,
+          issuedAt: Date.now(),
+          payload: pending.payload,
+        });
       }
 
       return { ok: true, pending };

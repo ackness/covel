@@ -125,6 +125,14 @@ a ref between the ref cleanup and asset deletion.
 
 The framework exposes `POST /api/media/cleanup` for manual cleanup and scheduler integration. The route scans live sessions, messages, plugin data, runtime outputs, trace events, snapshots, turn results, `MediaStore.listAssets()`, and `MediaStore.listRefs()` with the shared `collectMediaRefIds()` scanner, then passes the protected id set into `MediaStore.cleanup()`.
 
+`protectedIds` is a planning snapshot, not the final deletion authority. Every
+backend rechecks the asset's current owner and reference rows in the same
+critical section/transaction as deletion (PG advisory transaction lock +
+`NOT EXISTS`, SQLite `BEGIN IMMEDIATE`, IndexedDB two-store `readwrite`, Memory
+synchronous map check). A reference or owner created after the route scan
+therefore retains the asset; the returned cleanup counters/ids are reconciled
+to what was actually deleted rather than the stale plan.
+
 The endpoint is unavailable in `commercial` deployments. In `demo`, it
 requires the configured operator bearer token before feature-flag or policy
 evaluation; `self` keeps the local single-user behavior.

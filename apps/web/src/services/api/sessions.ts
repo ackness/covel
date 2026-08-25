@@ -409,11 +409,13 @@ export async function listMessagesPage(
 export async function syncMessages(
   sessionId: string,
   messages: Array<{
+    id?: string;
     role: string;
     content: string;
     turnId?: string;
     runtimeId?: string;
     block?: Record<string, unknown>;
+    createdAt?: string;
   }>,
 ): Promise<void> {
   await request<{ ok: boolean }>(

@@ -126,9 +126,14 @@ messageRoutes.post(
           throw new Error("Message sync requires transactional store support");
         }
         await store.withTransaction(async (tx) => {
+          const existingIds = new Set(
+            (await tx.listMessages(sessionId)).map((message) => message.id),
+          );
           for (const msg of parsed.data.messages) {
+            if (msg.id && existingIds.has(msg.id)) continue;
+            const id = msg.id ?? crypto.randomUUID();
             await tx.addMessage({
-              id: msg.id ?? crypto.randomUUID(),
+              id,
               sessionId,
               role: msg.role,
               content: msg.content,
@@ -139,6 +144,7 @@ messageRoutes.post(
               },
               createdAt: msg.createdAt ?? new Date().toISOString(),
             });
+            existingIds.add(id);
           }
         });
         return c.json({ ok: true });

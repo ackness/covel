@@ -26,7 +26,10 @@ import {
   existsSync,
   mkdirSync,
   chmodSync,
+  renameSync,
+  unlinkSync,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir, platform } from "node:os";
 import { spawn } from "node:child_process";
 import {
@@ -114,7 +117,17 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     if (!covelHome) return c.json({ providers: [] });
 
     const file = join(covelHome, "keys.env");
-    const entries = readKeysEnv(file);
+    let entries: Record<string, string>;
+    try {
+      entries = readKeysEnv(file);
+    } catch {
+      return c.json(
+        errorBody("keys.env could not be read safely", {
+          code: "keys_file_unreadable",
+        }),
+        500,
+      );
+    }
     const providers: string[] = [];
     for (const key of Object.keys(entries)) {
       if (entries[key]) {
@@ -150,7 +163,18 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     }
 
     const file = join(covelHome, "keys.env");
-    const entries = readKeysEnv(file);
+    let entries: Record<string, string>;
+    try {
+      entries = readKeysEnv(file);
+    } catch {
+      return c.json(
+        errorBody(
+          "Refusing to overwrite an unreadable keys.env; repair or back it up first",
+          { code: "keys_file_unreadable" },
+        ),
+        409,
+      );
+    }
 
     for (const [provider, raw] of Object.entries(
       body as Record<string, unknown>,
@@ -180,23 +204,22 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       return c.json({ schemaVersion: 1, savedAt: "", entries: {} });
     }
     const file = join(covelHome, "settings.json");
-    try {
-      if (!existsSync(file)) {
-        return c.json({ schemaVersion: 1, savedAt: "", entries: {} });
-      }
-      const raw = readFileSync(file, "utf-8");
-      const parsed = JSON.parse(raw) as {
-        schemaVersion?: number;
-        savedAt?: string;
-        entries?: Record<string, unknown>;
-      };
-      return c.json({
-        schemaVersion: parsed.schemaVersion ?? 1,
-        savedAt: parsed.savedAt ?? "",
-        entries: parsed.entries ?? {},
-      });
-    } catch {
+    if (!existsSync(file)) {
       return c.json({ schemaVersion: 1, savedAt: "", entries: {} });
+    }
+    try {
+      return c.json(readSettingsBundle(file));
+    } catch {
+      // `save()` writes a full snapshot. Reporting corrupt/unreadable data as
+      // an empty success would let the next one-field edit destroy the only
+      // recoverable copy, so make SettingsStore enter its read-only failed
+      // hydration state instead.
+      return c.json(
+        errorBody("settings.json could not be read safely", {
+          code: "settings_file_invalid",
+        }),
+        500,
+      );
     }
   });
 
@@ -225,11 +248,20 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         400,
       );
     }
-    const entries =
-      (body as { entries?: unknown }).entries &&
-      typeof (body as { entries?: unknown }).entries === "object"
-        ? ((body as { entries?: Record<string, unknown> }).entries ?? {})
-        : {};
+    const rawEntries = (body as { entries?: unknown }).entries;
+    if (
+      !rawEntries ||
+      typeof rawEntries !== "object" ||
+      Array.isArray(rawEntries)
+    ) {
+      return c.json(
+        errorBody("Body must be { entries: object }", {
+          code: "invalid_settings_body",
+        }),
+        400,
+      );
+    }
+    const entries = rawEntries as Record<string, unknown>;
 
     const payload = {
       schemaVersion: 1,
@@ -237,13 +269,20 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       entries,
     };
     const file = join(covelHome, "settings.json");
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify(payload, null, 2) + "\n", {
-      mode: 0o600,
-    });
-    // settings.json may carry secrets via `includeSecrets`; re-assert 0600
-    // so an existing looser-permission file gets tightened (audit M1).
-    chmodSync(file, 0o600);
+    if (existsSync(file)) {
+      try {
+        readSettingsBundle(file);
+      } catch {
+        return c.json(
+          errorBody(
+            "Refusing to overwrite an unreadable settings.json; repair or back it up first",
+            { code: "settings_file_invalid" },
+          ),
+          409,
+        );
+      }
+    }
+    writePrivateFileAtomic(file, JSON.stringify(payload, null, 2) + "\n");
     return c.json({ ok: true });
   });
 
@@ -515,14 +554,54 @@ function resolveCovelHome(): string | null {
 function readKeysEnv(file: string): Record<string, string> {
   const result: Record<string, string> = {};
   if (!existsSync(file)) return result;
-  try {
-    for (const [key, val] of parseEnvLines(readFileSync(file, "utf-8"))) {
-      result[key] = val;
-    }
-  } catch (err) {
-    console.warn(`[config-api] Could not read ${file}:`, err);
+  for (const [key, val] of parseEnvLines(readFileSync(file, "utf-8"))) {
+    result[key] = val;
   }
   return normalizeProviderKeyMap(result);
+}
+
+function readSettingsBundle(file: string): {
+  schemaVersion: number;
+  savedAt: string;
+  entries: Record<string, unknown>;
+} {
+  const parsed = JSON.parse(readFileSync(file, "utf-8")) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("settings bundle must be an object");
+  }
+  const bundle = parsed as Record<string, unknown>;
+  if (
+    bundle.entries !== undefined &&
+    (!bundle.entries ||
+      typeof bundle.entries !== "object" ||
+      Array.isArray(bundle.entries))
+  ) {
+    throw new Error("settings entries must be an object");
+  }
+  return {
+    schemaVersion:
+      typeof bundle.schemaVersion === "number" ? bundle.schemaVersion : 1,
+    savedAt: typeof bundle.savedAt === "string" ? bundle.savedAt : "",
+    entries: (bundle.entries as Record<string, unknown> | undefined) ?? {},
+  };
+}
+
+function writePrivateFileAtomic(file: string, contents: string): void {
+  mkdirSync(dirname(file), { recursive: true });
+  const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temp, contents, { mode: 0o600 });
+    chmodSync(temp, 0o600);
+    renameSync(temp, file);
+    chmodSync(file, 0o600);
+  } catch (err) {
+    try {
+      if (existsSync(temp)) unlinkSync(temp);
+    } catch {
+      // Preserve the original write error.
+    }
+    throw err;
+  }
 }
 
 function writeKeysEnv(file: string, entries: Record<string, string>): void {
@@ -546,10 +625,5 @@ function writeKeysEnv(file: string, entries: Record<string, string>): void {
     })
     .map(([k, v]) => `${k}=${v.trim()}`)
     .join("\n");
-  mkdirSync(dirname(file), { recursive: true });
-  // mode in writeFileSync only applies when creating a new file. Re-assert
-  // 0600 after every write so an existing file with looser permissions gets
-  // tightened (audit M1). chmod is a no-op on Windows but does not throw.
-  writeFileSync(file, header + body + "\n", { mode: 0o600 });
-  chmodSync(file, 0o600);
+  writePrivateFileAtomic(file, header + body + "\n");
 }

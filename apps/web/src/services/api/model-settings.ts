@@ -1,4 +1,5 @@
 import { normalizeProviderKeyMap, providerKeyToId } from "@covel/shared";
+import { isServerManagedSecret } from "@covel/settings";
 import { getSettings, registerKnownProviders } from "@/settings/store";
 import {
   flattenProviderProfiles,
@@ -9,8 +10,8 @@ import {
 /** Routes that need the provider API keys header. */
 const AI_ROUTES = ["/api/actions", "/api/ai/", "/api/kernel/"];
 
-/** `POST /api/sessions/:id/resume` re-enters the LLM tool loop, so it
- * requires provider API keys just like a regular turn (see resume.ts). */
+/** `POST /api/sessions/:id/resume` re-enters the LLM tool loop. Browser
+ * callers attach their request-scoped keys; desktop may use server keys. */
 const RESUME_ROUTE_REGEX = /^\/api\/sessions\/[^/]+\/resume(?:\?|$)/;
 
 /** `POST /api/sessions/:id/plugin-rpc` runs the manual-trigger pipeline,
@@ -52,7 +53,9 @@ export function buildProviderKeysHeader(): Record<string, string> {
   ).snapshotSecrets();
   const keys: Record<string, string> = {};
   for (const [name, value] of Object.entries(allSecrets)) {
-    if (!name.startsWith("preset:")) keys[name] = value;
+    if (!name.startsWith("preset:") && !isServerManagedSecret(value)) {
+      keys[name] = value;
+    }
   }
   // Custom preset keys override globals for the same provider.
   for (const preset of getCustomPresets()) {

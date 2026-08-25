@@ -606,6 +606,8 @@
     "customWidgetUnavailable": "This setting uses a dedicated panel — edit it in the matching LLM / Plugin section.",
     "show": "Show",
     "hide": "Hide",
+    "clear": "Clear",
+    "serverManagedKeyPlaceholder": "Configured on this device; enter a value to replace",
     "exportHeader": "Export",
     "exportDownload": "Export settings",
     "exportIncludeKeys": "Include API keys (sensitive)",
