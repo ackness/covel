@@ -124,6 +124,20 @@ describe("PATCH /api/sessions/:id runtimeModelOverrides", () => {
     expect(res.status).toBe(400);
   });
 
+  it("keeps ended as a terminal session status", async () => {
+    await store.updateSession("sess-overrides-1", { status: "ended" });
+
+    const res = await app.request("/api/sessions/sess-overrides-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "active" }),
+    });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({ code: "session_ended" });
+    expect((await store.getSession("sess-overrides-1"))?.status).toBe("ended");
+  });
+
   it("rejects more than 64 entries", async () => {
     const big: Record<string, string> = {};
     for (let i = 0; i < 65; i++) big[`runtime-${i}`] = "fast";

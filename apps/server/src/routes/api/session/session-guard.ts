@@ -42,6 +42,7 @@ import type { SessionLock } from "../../../lib/session-lock.js";
 export const SESSION_NOT_FOUND_CODE = "session_not_found";
 export const SESSION_OWNER_REQUIRED_CODE = "session_owner_required";
 export const OPERATOR_TOKEN_REQUIRED_CODE = "operator_token_required";
+export const SESSION_INCARNATION_CHANGED_CODE = "session_incarnation_changed";
 
 /** Metadata key holding the SHA-256 hex hash of the session owner token. */
 export const SESSION_OWNER_TOKEN_HASH_KEY = "ownerTokenHash";
@@ -370,7 +371,15 @@ export async function checkSessionOwnerById(
       404,
     );
   }
-  return checkSessionOwner(c, session);
+  const denied = checkSessionOwner(c, session);
+  if (denied) return denied;
+  if (c.req.method === "GET" || c.req.method === "HEAD") {
+    c.set("sessionReadIncarnation", {
+      sessionId,
+      identity: sessionIncarnationIdentity(session),
+    });
+  }
+  return undefined;
 }
 
 /**
@@ -401,5 +410,36 @@ export async function resolveSessionParam(
   if (denied) {
     return { ok: false, response: denied };
   }
+  if (c.req.method === "GET" || c.req.method === "HEAD") {
+    c.set("sessionReadIncarnation", {
+      sessionId,
+      identity: sessionIncarnationIdentity(session),
+    });
+  }
   return { ok: true, session };
+}
+
+/**
+ * Response-side half of the session read barrier.
+ *
+ * A route may authorize an old session row, yield during its data lookup, and
+ * then read a newly-created session with the same public id. Rechecking after
+ * the handler finishes turns that interleaving into a 409 instead of returning
+ * data from an incarnation the caller never authorized.
+ */
+export async function verifyResolvedSessionRead(
+  c: Context,
+): Promise<Response | undefined> {
+  const expected = c.get("sessionReadIncarnation");
+  if (!expected) return undefined;
+  const live = await c.get("store").getSession(expected.sessionId);
+  if (live && sessionIncarnationIdentity(live) === expected.identity) {
+    return undefined;
+  }
+  return c.json(
+    errorBody("Session was replaced while the request was reading", {
+      code: SESSION_INCARNATION_CHANGED_CODE,
+    }),
+    409,
+  );
 }

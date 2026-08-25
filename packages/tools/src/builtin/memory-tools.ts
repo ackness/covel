@@ -158,16 +158,9 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
     tool({
       name: "memory-get-block",
       description:
-        "读取一个核心记忆块的内容。可用的块：story_state（剧情状态）、scene（当前场景）、character_relationships（角色关系）、player_profile（玩家状态）。",
+        "按标签读取一个核心记忆块。标签由当前世界和插件的 memoryBlocks 声明决定。",
       parameters: z.object({
-        label: z
-          .enum([
-            "story_state",
-            "scene",
-            "character_relationships",
-            "player_profile",
-          ])
-          .describe("记忆块标签"),
+        label: z.string().min(1).describe("当前世界声明的记忆块标签"),
       }),
       execute: async (params, context) => {
         const block = await deps.blocks.getBlock(
@@ -197,16 +190,9 @@ export function createMemoryTools(deps: MemoryToolDeps): ToolModule[] {
     tool({
       name: "memory-update-block",
       description:
-        "更新一个核心记忆块。使用此工具记录重要的剧情进展、场景变化或角色关系变化。内容应是完整的替换文本（不是增量），300-500 字以内。",
+        "更新当前世界声明的一个核心记忆块。内容应是完整的替换文本（不是增量），300-500 字以内。",
       parameters: z.object({
-        label: z
-          .enum([
-            "story_state",
-            "scene",
-            "character_relationships",
-            "player_profile",
-          ])
-          .describe("要更新的记忆块标签"),
+        label: z.string().min(1).describe("当前世界声明的记忆块标签"),
         content: z
           .string()
           .min(1)

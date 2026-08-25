@@ -38,6 +38,16 @@ interface JsonFileBackendOptions {
 }
 
 /**
+ * In-memory marker for a desktop key that exists in the sidecar but is never
+ * returned across REST. It must neither be rendered nor sent as provider key.
+ */
+export const SERVER_MANAGED_SECRET = "__covel_server_managed_secret__";
+
+export function isServerManagedSecret(value: unknown): boolean {
+  return value === SERVER_MANAGED_SECRET;
+}
+
+/**
  * Desktop backend. Writes to `<covelHome>/settings.json` via one of:
  *  1. Electron IPC (`covel:settings:*` channels) when the preload bridge is
  *     present (`window.covelIpc`).
@@ -52,6 +62,7 @@ export function createJsonFileBackend(
   const fetchImpl = opts.fetchImpl ?? fetch;
   const authHeaders = (): Record<string, string> =>
     opts.getAuthHeaders?.() ?? {};
+  let restConfiguredProviders = new Set<string>();
 
   return {
     async load(): Promise<Record<SettingKey, unknown>> {
@@ -107,15 +118,31 @@ export function createJsonFileBackend(
       const res = await fetchImpl(secretsEndpoint, { headers: authHeaders() });
       // Same contract as `load()` — a swallowed failure here would let the
       // next key edit wipe every other provider key out of keys.env.
-      if (res.status === 404) return {};
+      if (res.status === 404) {
+        restConfiguredProviders.clear();
+        return {};
+      }
       if (!res.ok) {
         throw new Error(`[settings] secrets load failed: HTTP ${res.status}`);
       }
-      const body = (await res.json().catch(() => ({}))) as Record<
-        string,
-        string
-      >;
-      return body ?? {};
+      const body = (await res.json().catch(() => ({}))) as {
+        providers?: unknown;
+      };
+      if (!Array.isArray(body.providers)) {
+        throw new Error("[settings] secrets load returned an invalid body");
+      }
+      restConfiguredProviders = new Set(
+        body.providers.filter(
+          (provider): provider is string =>
+            typeof provider === "string" && provider.length > 0,
+        ),
+      );
+      return Object.fromEntries(
+        [...restConfiguredProviders].map((provider) => [
+          provider,
+          SERVER_MANAGED_SECRET,
+        ]),
+      );
     },
     async saveSecrets(keys): Promise<void> {
       const ipc = getIpc();
@@ -124,14 +151,29 @@ export function createJsonFileBackend(
         assertIpcWriteSucceeded("covel:keys:save", result);
         return;
       }
+      // SettingsStore persists a full secret snapshot, while the REST API is a
+      // non-disclosing patch surface. Preserve opaque server-managed entries,
+      // send newly-entered values, and translate omissions into deletions.
+      const patch: Record<string, string | null> = {};
+      for (const [provider, value] of Object.entries(keys)) {
+        if (!isServerManagedSecret(value)) patch[provider] = value;
+      }
+      for (const provider of restConfiguredProviders) {
+        if (!(provider in keys)) patch[provider] = null;
+      }
       const res = await fetchImpl(secretsEndpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify(keys),
+        body: JSON.stringify(patch),
       });
       if (!res.ok) {
         throw new Error(`[settings] secrets save failed: HTTP ${res.status}`);
       }
+      restConfiguredProviders = new Set(
+        Object.entries(keys)
+          .filter(([, value]) => value.length > 0)
+          .map(([provider]) => provider),
+      );
     },
   };
 }

@@ -309,14 +309,14 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
     await commitStarted;
     expect(llmCalls).toHaveLength(1);
 
-    const secondResponse = await post("commit-lock-2");
-    const secondDrain = drainActionStream(secondResponse);
+    const secondResponse = post("commit-lock-2");
     for (let i = 0; i < 20; i += 1) {
       await new Promise((resolve) => setImmediate(resolve));
     }
     expect(llmCalls).toHaveLength(1);
 
     releaseCommit();
+    const secondDrain = drainActionStream(await secondResponse);
     await Promise.all([firstDrain, secondDrain]);
     expect(llmCalls).toHaveLength(2);
   });

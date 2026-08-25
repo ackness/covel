@@ -16,7 +16,10 @@ import {
 } from "@covel/shared";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
-import { checkSessionOwner } from "./session/session-guard.js";
+import {
+  checkSessionOwner,
+  sessionIncarnationIdentity,
+} from "./session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -185,6 +188,7 @@ subscribeRoutes.get(
     // clients pass `?session_token=` — see extractSessionOwnerToken.
     const denied = checkSessionOwner(c, session);
     if (denied) return denied;
+    const expectedIncarnation = sessionIncarnationIdentity(session);
 
     const topicsParam = c.req.query("topics");
     // M2: Validate topics parameter against known SubscriptionTopic values.
@@ -256,18 +260,40 @@ subscribeRoutes.get(
           resolveDone();
         };
 
+        const stillOwnsIncarnation = async (): Promise<boolean> => {
+          try {
+            const live = await store.getSession(sessionId);
+            if (
+              live &&
+              sessionIncarnationIdentity(live) === expectedIncarnation
+            ) {
+              return true;
+            }
+          } catch {
+            // A failed identity read cannot safely authorize another frame.
+          }
+          closeStream();
+          return false;
+        };
+
         const writes = createBoundedSerialQueue({
           capacity: SSE_WRITE_QUEUE_MAX,
           onOverflow: closeStream,
           onError: closeStream,
         });
 
-        const writeEvent = (event: SubscriptionEvent): Promise<void> => {
-          sentIds.add(event.id);
-          return stream.writeSSE({
-            id: event.id,
-            event: deriveSseEventName(event),
-            data: JSON.stringify(event),
+        const writeEvent = (
+          event: SubscriptionEvent,
+          trackReplay = true,
+        ): Promise<void> => {
+          return stillOwnsIncarnation().then(async (current) => {
+            if (!current) return;
+            if (trackReplay) sentIds.add(event.id);
+            await stream.writeSSE({
+              id: event.id,
+              event: deriveSseEventName(event),
+              data: JSON.stringify(event),
+            });
           });
         };
 
@@ -300,13 +326,7 @@ subscribeRoutes.get(
             }
             // No sentIds bookkeeping on the live path — dedupe only
             // covers the replay→live cutover window; live ids are epoch-unique.
-            writes.enqueue(() =>
-              stream.writeSSE({
-                id: event.id,
-                event: deriveSseEventName(event),
-                data: JSON.stringify(event),
-              }),
-            );
+            writes.enqueue(() => writeEvent(event, false));
           });
           unsubscribeReset = eventBus.onReset?.((reset) => {
             if (reset.sessionId !== sessionId || resetScheduled) return;
@@ -318,6 +338,7 @@ subscribeRoutes.get(
               return;
             }
             writes.enqueue(async () => {
+              if (!(await stillOwnsIncarnation())) return;
               await stream.writeSSE({
                 event: "system.reset",
                 data: resetPayload(reset.reason),
@@ -338,6 +359,7 @@ subscribeRoutes.get(
           // R-01 Bug B (cursor reset): the connected frame carries NO id, so the
           // frontend never clobbers its lastEventId back to "0" on reconnect
           // (mirrors the id-less heartbeat frame below).
+          if (!(await stillOwnsIncarnation())) return;
           await stream.writeSSE({
             event: "system.connected",
             data: JSON.stringify({
@@ -358,6 +380,7 @@ subscribeRoutes.get(
             const epoch = replay.epoch ?? pinned.epoch;
             const epochChanged = !cursor || cursor.epoch !== epoch;
             if (epochChanged || replay.gap) {
+              if (!(await stillOwnsIncarnation())) return;
               await stream.writeSSE({
                 event: "system.reset",
                 data: JSON.stringify({
@@ -396,12 +419,13 @@ subscribeRoutes.get(
           // Heartbeats share the same serial queue as live events, preventing
           // concurrent writes when a client is applying backpressure.
           heartbeatInterval = setInterval(() => {
-            writes.enqueue(() =>
-              stream.writeSSE({
+            writes.enqueue(async () => {
+              if (!(await stillOwnsIncarnation())) return;
+              await stream.writeSSE({
                 event: "system.heartbeat",
                 data: JSON.stringify({ timestamp: new Date().toISOString() }),
-              }),
-            );
+              });
+            });
           }, 30000);
 
           await done;

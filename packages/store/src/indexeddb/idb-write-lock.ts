@@ -7,20 +7,20 @@
  * should use the Web Locks path.
  */
 
-type WriteLockManager = {
+type DatabaseLockManager = {
   request<T>(
     name: string,
-    options: { mode: "exclusive" },
+    options: { mode: "exclusive" | "shared" },
     callback: () => Promise<T>,
   ): Promise<T>;
 };
 
 const fallbackChains = new Map<string, Promise<void>>();
 
-function resolveLockManager(): WriteLockManager | undefined {
+function resolveLockManager(): DatabaseLockManager | undefined {
   const browserNavigator = (
     globalThis as typeof globalThis & {
-      navigator?: { locks?: WriteLockManager };
+      navigator?: { locks?: DatabaseLockManager };
     }
   ).navigator;
   return browserNavigator?.locks;
@@ -48,5 +48,23 @@ export function withIdbDatabaseWriteLock<T>(
   const manager = resolveLockManager();
   return manager
     ? manager.request(lockName, { mode: "exclusive" }, fn)
+    : enqueueFallback(lockName, fn);
+}
+
+/**
+ * Run a root read under the same database lock used by snapshot-backed writes.
+ * Shared mode preserves concurrency between readers while an exclusive
+ * `withTransaction` blocks them from observing its already-flushed mutations.
+ * The fallback queue is exclusive because a single realm has no shared-lock
+ * primitive, but it preserves the same visibility guarantee.
+ */
+export function withIdbDatabaseReadLock<T>(
+  dbName: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const lockName = `covel:idb-write:${dbName}`;
+  const manager = resolveLockManager();
+  return manager
+    ? manager.request(lockName, { mode: "shared" }, fn)
     : enqueueFallback(lockName, fn);
 }

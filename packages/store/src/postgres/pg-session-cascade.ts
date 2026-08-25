@@ -23,6 +23,13 @@ export async function deletePgSessionCascade(
   tx: PgTx,
   sessionId: string,
 ): Promise<void> {
+  // Lock the parent before touching any physical vector table. Vector upserts
+  // hold FOR KEY SHARE on this row through their INSERT, so the two possible
+  // orders are both safe: an earlier upsert commits before this cascade and is
+  // deleted below, while a later upsert waits and then observes no session.
+  await tx.execute(
+    sql`SELECT id FROM ${sql.identifier(SESSIONS_TABLE)} WHERE id = ${sessionId} FOR UPDATE`,
+  );
   const vectorModels = await tx
     .select({
       id: schema.vectorModels.id,

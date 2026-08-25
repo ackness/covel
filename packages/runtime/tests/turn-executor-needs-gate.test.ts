@@ -227,6 +227,44 @@ describe("executeTurn: manifest.needs", () => {
 });
 
 describe("executeTurn: capability-based needs", () => {
+  it("runs cardinality one when one provider succeeds and an alternative is cyclic", async () => {
+    const available = manifest("engine-a", {
+      capabilities: ["narrative-engine"],
+    });
+    const cyclicProvider = manifest("engine-b", {
+      capabilities: ["narrative-engine"],
+      needs: ["cycle-peer"],
+    });
+    const cyclePeer = manifest("cycle-peer", { needs: ["engine-b"] });
+    const consumer = manifest("guide", {
+      needs: [{ capability: "narrative-engine", cardinality: "one" }],
+    });
+    let consumerRan = false;
+
+    const result = await runTurn(
+      [available, cyclicProvider, cyclePeer, consumer],
+      {
+        "engine-a": async () => ({ narrativeOutput: "ok" }),
+        "engine-b": async () => {
+          throw new Error("cyclic provider must not execute");
+        },
+        "cycle-peer": async () => {
+          throw new Error("cycle peer must not execute");
+        },
+        guide: async () => {
+          consumerRan = true;
+          return { ok: true };
+        },
+      },
+    );
+
+    const byId = new Map(result.runtimeResults.map((r) => [r.runtimeId, r]));
+    expect(consumerRan).toBe(true);
+    expect(byId.get("guide")?.status).toBe("success");
+    expect(byId.get("engine-b")?.status).toBe("skipped");
+    expect(byId.get("cycle-peer")?.status).toBe("skipped");
+  });
+
   it("runs when an in-scope capability provider succeeded — discovered by capability, not name", async () => {
     // The downstream never names chat-mode-narrator; it gates on the
     // `narrative-engine` capability, which chat-mode-narrator declares. This is

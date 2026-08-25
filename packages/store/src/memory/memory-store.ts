@@ -48,13 +48,16 @@ export function createMemoryStore(): MemoryStore {
   };
   const isolatedData = withStructuredCloneBoundary(data);
 
-  // One shared state means a transaction cannot isolate: a write issued
-  // elsewhere while a transaction is open can be captured by its snapshot and
-  // rolled back with it. The gate puts transactions and outside-of-transaction
-  // writes on one queue. The transaction scope keeps the UNGATED methods —
-  // writes inside the callback belong to that transaction.
+  // One shared state means a transaction cannot isolate on its own: writes are
+  // applied to the live collections before the callback settles. Queue every
+  // root operation (reads included) behind an open transaction so callers can
+  // never observe a value that is subsequently rolled back. The transaction
+  // scope keeps the UNGATED methods, so reads/writes through `tx` run inline.
   const gate = createSerializedWriteGate();
-  const gatedData = gate.gateWrites(isolatedData, STORE_WRITE_METHODS);
+  const gatedData = gate.gateWrites(
+    isolatedData,
+    new Set([...Object.keys(isolatedData), ...STORE_WRITE_METHODS]),
+  );
 
   return {
     ...gatedData,

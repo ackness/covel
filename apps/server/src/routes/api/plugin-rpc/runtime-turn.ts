@@ -222,7 +222,7 @@ export function createPluginRpcRuntimeTurnRunner(
     // So `committed` tracks proposal commit alone, matching commit_status;
     // `snapshotFailed` stays on the outcome for observability.
     if (committed) {
-      turnResult.completeTurn?.();
+      await turnResult.completeTurn?.();
     }
     return {
       committed,

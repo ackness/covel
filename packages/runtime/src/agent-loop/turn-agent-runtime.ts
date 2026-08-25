@@ -3,6 +3,7 @@ import type {
   RuntimeResult,
   TurnInput,
   RuntimeActivation,
+  ExecutionContext,
   InputSlot,
 } from "@covel/shared";
 import { attachExecutionJournal } from "../execution-journal.js";
@@ -75,6 +76,8 @@ export interface ExecuteAgentRuntimeOptions {
   readonly activation?: RuntimeActivation;
   /** Resolved input bindings — rendered into the reserved inputs prompt block. */
   readonly inputs?: Readonly<Record<string, InputSlot>>;
+  /** Execution identity persisted if this agent suspends mid-turn. */
+  readonly executionContext?: ExecutionContext;
   /** Frozen cross-execution `recordAs` exports — rendered into the reserved exports block. */
   readonly exports?: Readonly<Record<string, InputSlot>>;
   readonly startTime: number;
@@ -98,6 +101,7 @@ export async function executeAgentRuntime({
   sessionContext,
   activation,
   inputs,
+  executionContext,
   exports: exportSlots,
   startTime,
   runId,
@@ -278,6 +282,7 @@ export async function executeAgentRuntime({
     hookPipeline,
     startTime,
     runId,
+    executionContext,
   });
   if ("status" in toolLoop) return toolLoop;
 
@@ -525,13 +530,24 @@ export async function executeAgentRuntime({
     /* callback error must not kill runtime */
   }
 
-  // Emit a compact `message.completed` trace event for story runtimes that
-  // produced non-empty narrative content.
-  if (finalContent && manifest.outputKind === "story") {
+  // Emit the finalized (PostRuntime-rewritten) story content. A hook may redact
+  // or replace the narrative, or downgrade the result to failed; the trace must
+  // describe the same committed result as the journal above.
+  const completedContent =
+    typeof finalOutput.narrativeOutput === "string"
+      ? finalOutput.narrativeOutput
+      : typeof finalOutput.content === "string"
+        ? finalOutput.content
+        : "";
+  if (
+    result.status === "success" &&
+    completedContent.length > 0 &&
+    manifest.outputKind === "story"
+  ) {
     await emitMessageCompleted(
       deps.emitter,
       manifest,
-      finalContent,
+      completedContent,
       streamDeltaCount,
     );
   }

@@ -1,6 +1,7 @@
 import type { MediaStore } from "@covel/shared";
 import postgres, { type JSONValue, type Sql } from "postgres";
 import { CREATE_MEDIA_TABLES_SQL } from "../postgres/pg-store-mappers.js";
+import { finalizeMediaCleanupResult } from "./cleanup-result.js";
 import type { PgMediaStoreOptions } from "./types.js";
 import {
   cleanupCandidates,
@@ -90,46 +91,51 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
     async put(blob, mime, meta) {
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
-      const existing = await selectMetadata(id);
-      if (existing) {
+      return sql.begin(async (tx) => {
+        await tx`SELECT pg_advisory_xact_lock(1129270860, hashtext(${id}))`;
+        const existing = await tx<
+          Array<{
+            id: string;
+            mime: string;
+            size: number;
+            meta: Record<string, unknown> | null;
+          }>
+        >`
+          SELECT id, mime, size, meta
+          FROM media_assets
+          WHERE id = ${id}
+          LIMIT 1
+        `;
+        if (existing[0]) {
+          return {
+            id: existing[0].id,
+            mime: existing[0].mime,
+            size: existing[0].size,
+            ...(existing[0].meta == null ? {} : { meta: existing[0].meta }),
+          };
+        }
+
+        await tx`
+          INSERT INTO media_assets (id, sha256, mime, size, body, meta, created_at)
+          VALUES (
+            ${id},
+            ${id},
+            ${mime},
+            ${bytes.byteLength},
+            ${Buffer.from(bytes)},
+            ${meta === undefined ? null : tx.json(meta as JSONValue)},
+            ${new Date().toISOString()}
+          )
+          ON CONFLICT (id) DO NOTHING
+        `;
+
         return {
-          id: existing.id,
-          mime: existing.mime,
-          size: existing.size,
-          ...(existing.meta == null ? {} : { meta: existing.meta }),
+          id,
+          mime,
+          size: bytes.byteLength,
+          ...(meta === undefined ? {} : { meta: toMeta(meta) }),
         };
-      }
-
-      await sql`
-        INSERT INTO media_assets (id, sha256, mime, size, body, meta, created_at)
-        VALUES (
-          ${id},
-          ${id},
-          ${mime},
-          ${bytes.byteLength},
-          ${Buffer.from(bytes)},
-          ${meta === undefined ? null : sql.json(meta as JSONValue)},
-          ${new Date().toISOString()}
-        )
-        ON CONFLICT (id) DO NOTHING
-      `;
-
-      const inserted = await selectMetadata(id);
-      if (inserted) {
-        return {
-          id: inserted.id,
-          mime: inserted.mime,
-          size: inserted.size,
-          ...(inserted.meta == null ? {} : { meta: inserted.meta }),
-        };
-      }
-
-      return {
-        id,
-        mime,
-        size: bytes.byteLength,
-        ...(meta === undefined ? {} : { meta: toMeta(meta) }),
-      };
+      });
     },
 
     async get(ref) {
@@ -151,6 +157,10 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
 
     async delete(id) {
       await sql.begin(async (tx) => {
+        // Serialize lifecycle changes for one content id across processes. With
+        // no FK on media_refs, the transaction alone cannot prevent addRef from
+        // inserting after the ref DELETE but before this transaction commits.
+        await tx`SELECT pg_advisory_xact_lock(1129270860, hashtext(${id}))`;
         await tx`DELETE FROM media_refs WHERE media_id = ${id}`;
         await tx`DELETE FROM media_assets WHERE id = ${id}`;
       });
@@ -169,23 +179,29 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
     },
 
     async recordOwnership(id, ownerSessionId, ownerPluginId) {
-      await sql`
-        UPDATE media_assets
-        SET owner_session_id = ${ownerSessionId}, owner_plugin_id = ${ownerPluginId ?? null}
-        WHERE id = ${id}
-          AND (owner_session_id IS NULL OR owner_session_id = ${ownerSessionId})
-      `;
+      await sql.begin(async (tx) => {
+        await tx`SELECT pg_advisory_xact_lock(1129270860, hashtext(${id}))`;
+        await tx`
+          UPDATE media_assets
+          SET owner_session_id = ${ownerSessionId}, owner_plugin_id = ${ownerPluginId ?? null}
+          WHERE id = ${id}
+            AND (owner_session_id IS NULL OR owner_session_id = ${ownerSessionId})
+        `;
+      });
     },
 
     async addRef(id, sessionId, pluginId) {
       // UNIQUE key is (session_id, media_id) only — first writer wins for
       // plugin_id. A subsequent addRef with a different pluginId is a no-op.
-      await sql`
-        INSERT INTO media_refs (session_id, media_id, plugin_id, created_at)
-        SELECT ${sessionId}, ${id}, ${pluginId ?? null}, ${new Date().toISOString()}
-        WHERE EXISTS (SELECT 1 FROM media_assets WHERE id = ${id})
-        ON CONFLICT (session_id, media_id) DO NOTHING
-      `;
+      await sql.begin(async (tx) => {
+        await tx`SELECT pg_advisory_xact_lock(1129270860, hashtext(${id}))`;
+        await tx`
+          INSERT INTO media_refs (session_id, media_id, plugin_id, created_at)
+          SELECT ${sessionId}, ${id}, ${pluginId ?? null}, ${new Date().toISOString()}
+          WHERE EXISTS (SELECT 1 FROM media_assets WHERE id = ${id})
+          ON CONFLICT (session_id, media_id) DO NOTHING
+        `;
+      });
     },
 
     async removeRef(id, sessionId) {
@@ -283,15 +299,31 @@ export function createPgMediaStoreFromClient(sql: Sql): MediaStore {
     },
 
     async cleanup(protectedIds, policy) {
+      const inventory = await this.listAssets();
       const { result, idsToDelete } = cleanupCandidates(
-        await this.listAssets(),
+        inventory,
         protectedIds,
         policy,
       );
       if (!policy?.dryRun) {
+        const deletedIds: string[] = [];
         for (const id of idsToDelete) {
-          await this.delete(id);
+          const deleted = await sql.begin(async (tx) => {
+            await tx`SELECT pg_advisory_xact_lock(1129270860, hashtext(${id}))`;
+            const rows = await tx<{ id: string }[]>`
+              DELETE FROM media_assets AS asset
+              WHERE asset.id = ${id}
+                AND asset.owner_session_id IS NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM media_refs AS ref WHERE ref.media_id = asset.id
+                )
+              RETURNING asset.id
+            `;
+            return rows.length === 1;
+          });
+          if (deleted) deletedIds.push(id);
         }
+        return finalizeMediaCleanupResult(result, inventory, deletedIds);
       }
       return result;
     },

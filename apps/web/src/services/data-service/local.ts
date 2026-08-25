@@ -457,11 +457,13 @@ export class LocalDataService implements DataService {
       await api.syncMessages(
         serverSessionId,
         messages.map((m) => ({
+          id: m.id,
           role: m.role,
           content: m.content,
           turnId: m.turnId,
           runtimeId: m.runtimeId,
           block: m.block,
+          createdAt: m.createdAt,
         })),
       );
     }

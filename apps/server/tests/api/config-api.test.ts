@@ -168,7 +168,29 @@ describe("config API env and file contracts", () => {
     ).not.toContain("_API_KEY=");
   });
 
-  it("round-trips settings.json and recovers from malformed settings", async () => {
+  it("refuses to replace an unreadable keys.env", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    const keysPath = path.join(tmpHome, "keys.env");
+    fs.mkdirSync(keysPath);
+    const app = buildApp(apiKeys);
+
+    const getRes = await app.request("/api/config/keys");
+    expect(getRes.status).toBe(500);
+    await expect(getRes.json()).resolves.toMatchObject({
+      code: "keys_file_unreadable",
+    });
+
+    const putRes = await app.request("/api/config/keys", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deepseek: "new-secret" }),
+    });
+    expect(putRes.status).toBe(409);
+    expect(fs.statSync(keysPath).isDirectory()).toBe(true);
+    expect(apiKeys).toEqual({});
+  });
+
+  it("round-trips settings.json and refuses to overwrite malformed settings", async () => {
     process.env.COVEL_HOME = tmpHome;
     const app = buildApp(apiKeys);
 
@@ -189,13 +211,21 @@ describe("config API env and file contracts", () => {
     expect(typeof getBody.savedAt).toBe("string");
 
     fs.writeFileSync(path.join(tmpHome, "settings.json"), "{bad json");
-    await expect(
-      (await app.request("/api/config/settings")).json(),
-    ).resolves.toEqual({
-      schemaVersion: 1,
-      savedAt: "",
-      entries: {},
+    const malformedGet = await app.request("/api/config/settings");
+    expect(malformedGet.status).toBe(500);
+    await expect(malformedGet.json()).resolves.toMatchObject({
+      code: "settings_file_invalid",
     });
+
+    const overwrite = await app.request("/api/config/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries: { theme: "light" } }),
+    });
+    expect(overwrite.status).toBe(409);
+    expect(fs.readFileSync(path.join(tmpHome, "settings.json"), "utf-8")).toBe(
+      "{bad json",
+    );
   });
 
   it("rewrites data_root only for absolute paths", async () => {
@@ -371,6 +401,22 @@ describe("config API env and file contracts", () => {
       expect(res.status).toBe(401);
       expect(apiKeys).toEqual({});
       expect(fs.existsSync(path.join(tmpHome, "keys.env"))).toBe(false);
+    });
+
+    it("keeps the non-secret provider list readable without Authorization", async () => {
+      process.env.COVEL_HOME = tmpHome;
+      process.env.COVEL_DESKTOP_REST_TOKEN = TOKEN;
+      fs.writeFileSync(
+        path.join(tmpHome, "keys.env"),
+        "DEEPSEEK_API_KEY=secret\n",
+      );
+      const app = buildApp(apiKeys);
+
+      const response = await app.request("/api/config/keys");
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        providers: ["deepseek"],
+      });
     });
 
     it("rejects PUT /api/config/keys with a wrong token", async () => {

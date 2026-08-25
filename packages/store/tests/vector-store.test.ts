@@ -183,6 +183,76 @@ if (pgVectorAvailable) {
       ]);
       expect(resolvedA?.modelRegistryId).toBe(resolvedB?.modelRegistryId);
     });
+
+    it("does not insert a vector after session cascade has passed its table", async () => {
+      const target = await storeA.ensureVectorModel({
+        provider: "audit",
+        modelName: "delete-race",
+        dim: 3,
+        modelId: "audit/delete-race",
+      });
+      await storeA.lockSessionEmbeddingModel("shared-session", target);
+
+      const { default: postgres } = await import("postgres");
+      const blocker = postgres(isolated.url, { max: 1 });
+      let release!: () => void;
+      let markLocked!: () => void;
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const locked = new Promise<void>((resolve) => {
+        markLocked = resolve;
+      });
+      const blockingTx = blocker.begin(async (tx) => {
+        await tx`SELECT id FROM sessions WHERE id = 'shared-session' FOR UPDATE`;
+        markLocked();
+        await hold;
+      });
+
+      try {
+        await locked;
+        // The fixed cascade blocks on its parent lock before deleting vectors.
+        // The legacy cascade passed the vector table and blocked only at the
+        // final session DELETE, allowing the following upsert to become orphaned.
+        const deleting = storeB.deleteSession("shared-session");
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        const upserting = storeA.upsertVector({
+          sessionId: "shared-session",
+          pluginId: "race",
+          namespace: "race",
+          key: "late",
+          embedding: new Float32Array([1, 0, 0]),
+        });
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        release();
+        await blockingTx;
+        await deleting;
+        await Promise.allSettled([upserting]);
+
+        const now = new Date().toISOString();
+        await storeB.createSession({
+          id: "shared-session",
+          status: "active",
+          turnCount: 0,
+          preGameCompleted: [],
+          activePlugins: [],
+          createdAt: now,
+          updatedAt: now,
+        });
+        await storeB.lockSessionEmbeddingModel("shared-session", target);
+        await expect(
+          storeB.searchVectors({
+            sessionId: "shared-session",
+            query: new Float32Array([1, 0, 0]),
+            topK: 5,
+          }),
+        ).resolves.toEqual([]);
+      } finally {
+        release();
+        await blockingTx.catch(() => undefined);
+        await blocker.end();
+      }
+    });
   });
 } else {
   describe("PgStore (pgvector) — skipped", () => {

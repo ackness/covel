@@ -4,8 +4,8 @@
  * POST /api/sessions/:id/resume
  *   Body: { suspensionId: string, data: unknown }
  *
- * API keys are NEVER stored server-side; they must be supplied again via
- * the `X-Provider-Keys` header on this request (same as any turn call).
+ * Browser callers may supply `X-Provider-Keys` for request-scoped overrides.
+ * Desktop callers may omit it and use the server's configured provider keys.
  *
  * Concurrency (audit 2026-04-20 findings 1 + 2):
  *   - The suspension is atomically claimed via `store.claimSuspension(id)`
@@ -39,7 +39,7 @@ import {
   runWithHookScope,
   saveAutoSnapshot,
 } from "@covel/runtime";
-import type { RuntimeManifest } from "@covel/shared";
+import type { ExecutionContext, RuntimeManifest } from "@covel/shared";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import { errorBody } from "../../api-error.js";
@@ -137,17 +137,6 @@ resumeRoutes.post("/:id/resume", async (c) => {
   const loadRuntimeFn = c.get("loadRuntimeFn");
   const toolExecutor = c.get("toolExecutor");
   const resolveModel = c.get("resolveModel");
-
-  // Require provider keys header — API keys are never stored
-  const providerKeysHeader = c.req.header("X-Provider-Keys");
-  if (!providerKeysHeader) {
-    return c.json(
-      errorBody(
-        "Missing X-Provider-Keys header (provider API keys are not stored server-side)",
-      ),
-      400,
-    );
-  }
 
   let body: { suspensionId?: unknown; data?: unknown };
   try {
@@ -381,6 +370,30 @@ resumeRoutes.post("/:id/resume", async (c) => {
           );
         }
 
+        const inheritedExecution =
+          liveSuspension.pendingContinuation.executionContext;
+        const hasUnresolvedSibling = inheritedExecution?.logicalTurnId
+          ? (await store.listSuspensions(sessionId)).some(
+              (candidate) =>
+                candidate.id !== liveSuspension.id &&
+                candidate.resolvedAt === undefined &&
+                candidate.pendingContinuation.executionContext
+                  ?.logicalTurnId === inheritedExecution.logicalTurnId,
+            )
+          : false;
+        const resumeExecutionContext: ExecutionContext | undefined =
+          inheritedExecution
+            ? {
+                ...inheritedExecution,
+                executionId: result.runId,
+                origin: "resume",
+                // Parallel runtimes may suspend under the same logical turn.
+                // Only the final unresolved continuation owns completion; the
+                // ledger then makes later duplicate requests idempotent.
+                ...(hasUnresolvedSibling ? { countPolicy: "none" } : {}),
+              }
+            : undefined;
+
         // Atomic finalize: proposal commit + assistant turn message + resolved
         // marker land in ONE transaction via the shared finalize primitive (the
         // runtime no longer writes them — see turn-resume.ts). Any proposal
@@ -428,6 +441,15 @@ resumeRoutes.post("/:id/resume", async (c) => {
         const outcome = await finalizeExecution({
           store,
           sessionId,
+          ...(resumeExecutionContext
+            ? {
+                executionContext: resumeExecutionContext,
+                // The original suspended execution deliberately did not
+                // complete its logical player turn. The final sibling resume
+                // counts it in the same transaction as its proposals.
+                sessionClock: { now: new Date().toISOString() },
+              }
+            : {}),
           runtimes: [effectiveManifest!],
           results: [result],
           turnIds: [],

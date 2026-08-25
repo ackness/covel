@@ -198,6 +198,73 @@ describe("createRpcApprovalGate", () => {
     expect(third.status).toBe("pending");
   });
 
+  it("binds a one-time grant to the exact approved payload", () => {
+    const gate = createRpcApprovalGate();
+    const first = gate.evaluate({
+      sessionId: "sess-1",
+      pluginId: "p",
+      action: "transfer",
+      payload: { amount: 1, target: "merchant" },
+      trustLevel: "community",
+    });
+    if (first.status !== "pending") throw new Error("unreachable");
+
+    gate.decide({
+      approvalId: first.approvalId,
+      decision: "allow",
+      scope: "once",
+      decidedAt: new Date().toISOString(),
+    });
+
+    // A changed payload is a different dispatch and must prompt independently.
+    const changed = gate.evaluate({
+      sessionId: "sess-1",
+      pluginId: "p",
+      action: "transfer",
+      payload: { amount: 10_000, target: "merchant" },
+      trustLevel: "community",
+    });
+    expect(changed.status).toBe("pending");
+
+    // The rejected substitution must not consume the honest one-time retry.
+    const approved = gate.evaluate({
+      sessionId: "sess-1",
+      pluginId: "p",
+      action: "transfer",
+      // Object key order is not part of JSON value identity.
+      payload: { target: "merchant", amount: 1 },
+      trustLevel: "community",
+    });
+    expect(approved).toMatchObject({
+      status: "allow",
+      reason: "one-time-grant",
+    });
+  });
+
+  it("does not reuse a pending approval for a different payload", () => {
+    const gate = createRpcApprovalGate();
+    const first = gate.evaluate({
+      sessionId: "sess-1",
+      pluginId: "p",
+      action: "transfer",
+      payload: { amount: 1 },
+      trustLevel: "community",
+    });
+    const second = gate.evaluate({
+      sessionId: "sess-1",
+      pluginId: "p",
+      action: "transfer",
+      payload: { amount: 2 },
+      trustLevel: "community",
+    });
+    expect(first.status).toBe("pending");
+    expect(second.status).toBe("pending");
+    if (first.status === "pending" && second.status === "pending") {
+      expect(second.approvalId).not.toBe(first.approvalId);
+      expect(second.pending.payload).toEqual({ amount: 2 });
+    }
+  });
+
   it("decide(deny) does not cache anything; next call goes pending again", () => {
     const gate = createRpcApprovalGate();
     const first = gate.evaluate({

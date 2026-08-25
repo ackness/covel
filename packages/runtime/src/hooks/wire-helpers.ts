@@ -275,8 +275,29 @@ export async function runPostRuntimeHook(
   // A hook may rewrite output/status, never execution identity: the proposal
   // rebinder downstream keys writes on these fields, so an approved hook could
   // otherwise redirect another plugin's writes under a forged identity.
+  // Suspension control fields are framework-owned too: the continuation has
+  // already been persisted before PostRuntime runs, so rewriting its status or
+  // id would make turn accounting/rollback cleanup lose that record.
+  const suspensionOutput =
+    result.status === "suspended" && result.output
+      ? {
+          suspended: result.output.suspended,
+          suspensionId: result.output.suspensionId,
+          reason: result.output.reason,
+          resumeSchema: result.output.resumeSchema,
+        }
+      : undefined;
   return {
     ...replaced,
+    ...(result.status === "suspended"
+      ? {
+          status: "suspended" as const,
+          output: {
+            ...replaced.output,
+            ...suspensionOutput,
+          },
+        }
+      : {}),
     pluginId: result.pluginId,
     runtimeId: result.runtimeId,
     runId: result.runId,
@@ -459,7 +480,14 @@ export async function runPreToolUseHook(
   // Accumulate any toolCall replacement from the hook result.
   const replace = hookReplace(hookResult);
   const effectiveToolCall = replace?.toolCall
-    ? { ...toolCall, ...(replace.toolCall as Partial<typeof toolCall>) }
+    ? {
+        ...toolCall,
+        ...(replace.toolCall as Partial<typeof toolCall>),
+        // The assistant transcript already contains the provider-issued id.
+        // Hooks may rewrite the dispatched name/arguments, but changing the id
+        // would make the following tool-role message reference no call.
+        id: toolCall.id,
+      }
     : toolCall;
   return { skipped: false, toolCall: effectiveToolCall };
 }

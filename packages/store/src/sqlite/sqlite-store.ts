@@ -82,15 +82,17 @@ export function createSqliteStore(
     ...createSqliteExportRecords(db),
   };
 
-  // One connection means a transaction cannot isolate: a write issued
-  // elsewhere while a transaction is open would land inside it and be lost on
-  // its rollback. The gate puts transactions and outside-of-transaction
-  // writes on one queue. The transaction scope keeps the UNGATED methods —
-  // writes inside the callback belong to that transaction and must run
-  // inline, not queue behind it.
+  // One connection exposes its own uncommitted rows to every statement issued
+  // through that handle. Queue every root operation (reads included) behind an
+  // open transaction so a concurrent caller cannot observe a row that is later
+  // rolled back. The transaction scope keeps the UNGATED methods — operations
+  // through `tx` belong to that transaction and run inline.
   // Shared per-connection so the mirror media store queues on the same gate.
   const gate = getConnectionWriteGate(sqlite);
-  const gatedData = gate.gateWrites(data, STORE_WRITE_METHODS);
+  const gatedData = gate.gateWrites(
+    data,
+    new Set([...Object.keys(data), ...STORE_WRITE_METHODS]),
+  );
 
   const baseStore: DataStore = {
     ...gatedData,
@@ -114,7 +116,10 @@ export function createSqliteStore(
     // transaction is open would join it and vanish on its rollback.
     return Object.assign(
       baseStore,
-      gate.gateWrites(vectorCapability, VECTOR_WRITE_METHODS),
+      gate.gateWrites(
+        vectorCapability,
+        new Set([...Object.keys(vectorCapability), ...VECTOR_WRITE_METHODS]),
+      ),
     );
   }
   return baseStore;

@@ -18,6 +18,7 @@ import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { createTables } from "../sqlite/sqlite-store-mappers.js";
 import type { SqliteMediaStoreOptions } from "./types.js";
+import { finalizeMediaCleanupResult } from "./cleanup-result.js";
 import {
   cleanupCandidates,
   filterAssetsByMetadata,
@@ -74,6 +75,17 @@ export function createSqliteMediaStore(
   const deleteAsset = sqlite.transaction((id: string) => {
     removeRefs.run(id);
     remove.run(id);
+  });
+  const selectAnyRef = sqlite.prepare(
+    "SELECT 1 AS one FROM media_refs WHERE media_id = ? LIMIT 1",
+  );
+  const deleteUnreferencedAsset = sqlite.transaction((id: string) => {
+    const row = select.get(id) as
+      { path: string; ownerSessionId: string | null } | undefined;
+    if (!row || row.ownerSessionId !== null) return null;
+    if (selectAnyRef.get(id)) return null;
+    remove.run(id);
+    return row.path;
   });
 
   // First-writer wins guard: only set owner when row has no owner yet, or
@@ -275,15 +287,23 @@ export function createSqliteMediaStore(
     },
 
     async cleanup(protectedIds, policy) {
+      const inventory = await this.listAssets();
       const { result, idsToDelete } = cleanupCandidates(
-        await this.listAssets(),
+        inventory,
         protectedIds,
         policy,
       );
       if (!policy?.dryRun) {
+        const deletedIds: string[] = [];
         for (const id of idsToDelete) {
-          await this.delete(id);
+          // BEGIN IMMEDIATE excludes another process's addRef/ownership write
+          // across the final check and asset deletion.
+          const path = deleteUnreferencedAsset.immediate(id);
+          if (path === null) continue;
+          rmSync(path, { force: true });
+          deletedIds.push(id);
         }
+        return finalizeMediaCleanupResult(result, inventory, deletedIds);
       }
       return result;
     },
@@ -301,12 +321,10 @@ export function createSqliteMediaStore(
     },
   };
 
-  // Same connection as the DataStore ⇒ same write gate. Without this a media
-  // write issued while another caller's transaction is open joins that
-  // transaction and is silently lost when it rolls back.
-  // `cleanup` is deliberately NOT in MEDIA_WRITE_METHODS: it is not gated, so
-  // each `this.delete` it calls takes the queue on its own. Gating cleanup
-  // itself would deadlock — its inner deletes would wait on the chain slot
-  // cleanup is still holding.
+  // Same connection as the DataStore ⇒ same operation gate. Without this a
+  // media write issued while another caller's transaction is open joins that
+  // transaction and is silently lost when it rolls back. Cleanup now performs
+  // its conditional DB deletion inline (rather than recursively calling the
+  // wrapped `delete`), so it can safely hold the gate for its complete sweep.
   return getConnectionWriteGate(sqlite).gateWrites(store, MEDIA_WRITE_METHODS);
 }

@@ -5,7 +5,10 @@
  * keys.env". Only a genuine 404 (nothing written yet) may read as empty.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createJsonFileBackend } from "../src/backends/json-file.js";
+import {
+  createJsonFileBackend,
+  SERVER_MANAGED_SECRET,
+} from "../src/backends/json-file.js";
 
 function res(status: number, body: unknown): Response {
   return {
@@ -74,5 +77,40 @@ describe("json-file backend IPC write contract", () => {
     await expect(backend.saveSecrets({ openai: "sk-test" })).rejects.toThrow(
       /keys:save.*failed/i,
     );
+  });
+});
+
+describe("json-file backend REST secrets contract", () => {
+  it("preserves opaque configured providers and translates omissions to deletes", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        res(200, { providers: ["deepseek", "open-router"] }),
+      )
+      .mockResolvedValueOnce(res(200, { ok: true }));
+    const backend = createJsonFileBackend({ fetchImpl });
+
+    await expect(backend.loadSecrets()).resolves.toEqual({
+      deepseek: SERVER_MANAGED_SECRET,
+      "open-router": SERVER_MANAGED_SECRET,
+    });
+    await backend.saveSecrets({
+      deepseek: SERVER_MANAGED_SECRET,
+      qwen: "new-qwen-key",
+    });
+
+    const init = fetchImpl.mock.calls[1]?.[1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      qwen: "new-qwen-key",
+      "open-router": null,
+    });
+  });
+
+  it("rejects the old raw-record response instead of silently losing keys", async () => {
+    const backend = createJsonFileBackend({
+      fetchImpl: vi.fn().mockResolvedValue(res(200, { deepseek: "secret" })),
+    });
+
+    await expect(backend.loadSecrets()).rejects.toThrow(/invalid body/);
   });
 });

@@ -302,7 +302,9 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     async listSessionSummaries(
       sessionId: string,
     ): Promise<readonly SessionSummaryRecord[]> {
-      return state.sessionSummaries.filter((r) => r.sessionId === sessionId);
+      return sortByCursorAsc(
+        state.sessionSummaries.filter((r) => r.sessionId === sessionId),
+      );
     },
 
     async deleteSessionSummaries(sessionId: string): Promise<void> {

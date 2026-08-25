@@ -89,6 +89,18 @@ class MediaReferenceMissingError extends Error {
   }
 }
 
+class ForkMediaReferenceWriteError extends Error {
+  constructor(
+    readonly mediaId: string,
+    cause: unknown,
+  ) {
+    super(
+      `failed to reference media ${mediaId}: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+    this.name = "ForkMediaReferenceWriteError";
+  }
+}
+
 /**
  * Translate a bounded lock-acquire timeout (PG advisory lock, 30s) into a
  * coded 503 — a turn can legitimately hold the session lock longer than the
@@ -385,11 +397,11 @@ snapshotRoutes.post("/:id/fork", async (c) => {
         // back, so a partial fork can never persist. The out-of-band SSE emits and
         // the 201 response are deferred until after the transaction commits.
         let forkSnapshot: SnapshotRecord;
-        // MediaRefs reachable from the child's copied state + exports, collected
-        // inside the fork transaction and referenced for the child AFTER it
-        // commits (see the post-commit block). Stays empty when no MediaStore is
-        // wired (tests) — the media gate is then a no-op.
-        let forkMediaIds: readonly string[] = [];
+        // MediaStore cannot enlist in the DataStore transaction. Establish the
+        // child's refs before the DataStore commit so an addRef failure cannot
+        // produce a successful fork response. Any later rollback compensates the
+        // successfully-added refs below.
+        const forkMediaIds: string[] = [];
         try {
           forkSnapshot = await store.withTransaction!(async (tx) => {
             // V2 forks restore lifecycle and runtime selection from the captured
@@ -559,10 +571,9 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             // visible state AND the copied export revisions for MediaRefs, and
             // verify every referenced asset still exists. A missing asset throws
             // to roll the whole fork back, so the child is never created with a
-            // dangling reference. The child's references themselves are added
-            // AFTER commit (MediaStore is a separate store the DataStore
-            // transaction cannot enrol; see the post-commit block for the
-            // atomicity trade-off). Skipped without a MediaStore.
+            // dangling reference. MediaStore is a separate store, so references
+            // are established here before the DataStore commit and compensated
+            // if any later operation rolls the transaction back.
             if (mediaStore) {
               const ids = collectMediaRefIds(snapshot.payload);
               for (const exp of visibleLatest.values()) {
@@ -572,7 +583,23 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 const asset = await mediaStore.lookup(mediaId);
                 if (!asset) throw new MediaReferenceMissingError(mediaId);
               }
-              forkMediaIds = [...ids];
+              for (const mediaId of ids) {
+                try {
+                  await mediaStore.addRef(mediaId, childSessionId);
+                  // addRef is intentionally a no-op when the asset disappeared
+                  // between inventory and reference creation. Recheck so that
+                  // race cannot turn into a successful fork with a dangling
+                  // MediaRef.
+                  if (!(await mediaStore.lookup(mediaId))) {
+                    throw new Error(
+                      "asset disappeared before reference commit",
+                    );
+                  }
+                  forkMediaIds.push(mediaId);
+                } catch (err) {
+                  throw new ForkMediaReferenceWriteError(mediaId, err);
+                }
+              }
             }
 
             // Copy turn messages up to and including the snapshot's cursor.
@@ -619,12 +646,25 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             return built;
           });
         } catch (err) {
+          if (mediaStore && forkMediaIds.length > 0) {
+            await Promise.allSettled(
+              forkMediaIds.map((mediaId) =>
+                mediaStore.removeRef(mediaId, childSessionId),
+              ),
+            );
+          }
           if (err instanceof ForkCursorMissingError) {
             return c.json(
               errorBody("Snapshot cursor no longer exists in parent session", {
                 code: "cursor_missing",
               }),
               409,
+            );
+          }
+          if (err instanceof ForkMediaReferenceWriteError) {
+            return c.json(
+              errorBody(err.message, { code: "fork_media_reference_failed" }),
+              500,
             );
           }
           if (err instanceof MediaReferenceMissingError) {
@@ -668,27 +708,6 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 err instanceof Error ? err.message : String(err)
               }`,
             );
-          }
-        }
-
-        // Media refs first — MediaStore is a separate store whose writes a rollback
-        // could not undo, so adding them only after the fork commits guarantees we
-        // never leave an orphaned media ref pointing at a child session that was
-        // rolled back (e.g. the cursor-missing 409 path). The set (`forkMediaIds`)
-        // was collected and existence-checked INSIDE the transaction, so a fork
-        // that reaches here has already proven every asset exists — this loop only
-        // establishes the child's references. addRef is idempotent; a failure here
-        // is logged but does not fail an already-durable fork.
-        if (mediaStore) {
-          for (const mediaId of forkMediaIds) {
-            try {
-              await mediaStore.addRef(mediaId, childSessionId);
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
-              console.warn(
-                `[fork] media addRef failed for ${mediaId} -> ${childSessionId}: ${message}`,
-              );
-            }
           }
         }
 

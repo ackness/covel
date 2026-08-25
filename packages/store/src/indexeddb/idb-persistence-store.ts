@@ -7,6 +7,7 @@ import type {
   TurnMessageRecord,
 } from "../types.js";
 import type { IdbStoreContext, IdbStoreSlice } from "./idb-context.js";
+import { sortByCursorAsc } from "../common/pagination.js";
 
 export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
   const { db, mutations } = ctx;
@@ -19,7 +20,9 @@ export function createIdbPersistenceStore(ctx: IdbStoreContext): IdbStoreSlice {
     async listSessionSummaries(
       sessionId: string,
     ): Promise<readonly SessionSummaryRecord[]> {
-      return db.getAllFromIndex("sessionSummaries", "sessionId", sessionId);
+      return sortByCursorAsc(
+        await db.getAllFromIndex("sessionSummaries", "sessionId", sessionId),
+      );
     },
 
     async deleteSessionSummaries(sessionId: string): Promise<void> {

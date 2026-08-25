@@ -6,39 +6,39 @@
 
 ## 概览
 
-| 工具名                  | 来源    | 所属插件      | 审批策略   | 描述                                                                                |
-| ----------------------- | ------- | ------------- | ---------- | ----------------------------------------------------------------------------------- |
-| create-form             | builtin | —             | auto-allow | 创建玩家表单                                                                        |
-| create-choices          | builtin | —             | auto-allow | 创建选项列表                                                                        |
-| create-notification     | builtin | —             | auto-allow | 显示通知消息                                                                        |
-| render-ui               | builtin | —             | auto-allow | 渲染带独立 part 状态的 UI 块                                                        |
-| plugin-data-set         | builtin | —             | auto-allow | 写入插件持久化数据（单条）                                                          |
-| plugin-data-set-batch   | builtin | —             | auto-allow | 批量写入插件持久化数据                                                              |
-| plugin-data-get         | builtin | —             | auto-allow | 读取当前插件持久化数据                                                              |
-| plugin-data-list        | builtin | —             | auto-allow | 列出当前插件持久化数据                                                              |
-| **create-character**    | builtin | —             | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data             |
-| **update-character**    | builtin | —             | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                            |
-| **list-characters**     | builtin | —             | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                               |
-| **get-character**       | builtin | —             | auto-allow | 按 id 或 name 查找单个角色                                                          |
-| **world-dimension-get** | builtin | —             | auto-allow | 按需读取当前 session 世界的结构化维度字段                                           |
-| **emit-event**          | builtin | —             | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema    |
-| **suspend**             | builtin | —             | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复          |
-| **runtime-done**        | builtin | —             | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                    |
-| **search-tools**        | 注入    | —             | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 |
-| **memory-search**       | builtin | —             | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)           |
-| **memory-get-block**    | builtin | —             | auto-allow | 读取一个核心记忆块的当前内容                                                        |
-| **memory-update-block** | builtin | —             | auto-allow | 更新（完整替换）一个核心记忆块。无 capability 门控——列入 tools.builtin 即可用       |
-| set-world-schema        | local   | world-init    | auto-allow | 定义世界角色属性 Schema                                                             |
-| set-world-entries-batch | local   | world-init    | auto-allow | 批量写入世界词条                                                                    |
-| unlock-codex-entries    | local   | codex         | auto-allow | 批量解锁图鉴条目                                                                    |
-| update-codex-entry      | local   | codex         | auto-allow | 更新已有图鉴条目                                                                    |
-| generate-guide          | local   | guide         | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`      |
-| upsert-npc-graph        | local   | npc-graph     | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                  |
-| list-npc-graph          | local   | npc-graph     | auto-allow | 读取现有 NPC 图；图已注入 prompt，仅在需要某关系完整 `fact` 时按需调用              |
-| generate-scene-prompts  | local   | scene-prompts | auto-allow | 写入对话模式的玩家口吻快捷回复                                                      |
-| upsert-quests           | local   | core-quest    | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）       |
-| update-affinity         | local   | affinity      | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）   |
-| update-inventory        | local   | inventory     | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）         |
+| 工具名                  | 来源    | 所属插件      | 审批策略   | 描述                                                                                      |
+| ----------------------- | ------- | ------------- | ---------- | ----------------------------------------------------------------------------------------- |
+| create-form             | builtin | —             | auto-allow | 创建玩家表单                                                                              |
+| create-choices          | builtin | —             | auto-allow | 创建选项列表                                                                              |
+| create-notification     | builtin | —             | auto-allow | 显示通知消息                                                                              |
+| render-ui               | builtin | —             | auto-allow | 渲染带独立 part 状态的 UI 块                                                              |
+| plugin-data-set         | builtin | —             | auto-allow | 写入插件持久化数据（单条）                                                                |
+| plugin-data-set-batch   | builtin | —             | auto-allow | 批量写入插件持久化数据                                                                    |
+| plugin-data-get         | builtin | —             | auto-allow | 读取当前插件持久化数据                                                                    |
+| plugin-data-list        | builtin | —             | auto-allow | 列出当前插件持久化数据                                                                    |
+| **create-character**    | builtin | —             | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data                   |
+| **update-character**    | builtin | —             | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                                  |
+| **list-characters**     | builtin | —             | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                                     |
+| **get-character**       | builtin | —             | auto-allow | 按 id 或 name 查找单个角色                                                                |
+| **world-dimension-get** | builtin | —             | auto-allow | 按需读取当前 session 世界的结构化维度字段                                                 |
+| **emit-event**          | builtin | —             | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema          |
+| **suspend**             | builtin | —             | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复                |
+| **runtime-done**        | builtin | —             | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                          |
+| **search-tools**        | 注入    | —             | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具       |
+| **memory-search**       | builtin | —             | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)                 |
+| **memory-get-block**    | builtin | —             | auto-allow | 按标签读取核心记忆块；接受世界/插件 `memoryBlocks` 声明的自定义标签                       |
+| **memory-update-block** | builtin | —             | auto-allow | 按标签完整替换核心记忆块；支持自定义标签，无 capability 门控——列入 `tools.builtin` 即可用 |
+| set-world-schema        | local   | world-init    | auto-allow | 定义世界角色属性 Schema                                                                   |
+| set-world-entries-batch | local   | world-init    | auto-allow | 批量写入世界词条                                                                          |
+| unlock-codex-entries    | local   | codex         | auto-allow | 批量解锁图鉴条目                                                                          |
+| update-codex-entry      | local   | codex         | auto-allow | 更新已有图鉴条目                                                                          |
+| generate-guide          | local   | guide         | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`            |
+| upsert-npc-graph        | local   | npc-graph     | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                        |
+| list-npc-graph          | local   | npc-graph     | auto-allow | 读取现有 NPC 图；图已注入 prompt，仅在需要某关系完整 `fact` 时按需调用                    |
+| generate-scene-prompts  | local   | scene-prompts | auto-allow | 写入对话模式的玩家口吻快捷回复                                                            |
+| upsert-quests           | local   | core-quest    | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）             |
+| update-affinity         | local   | affinity      | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）         |
+| update-inventory        | local   | inventory     | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）               |
 
 ---
 
@@ -344,7 +344,7 @@ interface UIRenderPart {
 
 ### suspend
 
-声明在 `packages/tools/src/builtin/suspend.ts`。Agent runtime 调用 `suspend({ reason, resumeSchema })` 时，工具直接返回一个 sentinel 对象 `{ _covelSuspend: true, reason, resumeSchema }`。turn-executor 在每次 tool 执行后通过 `isSuspendSentinel()` 检测：识别到 sentinel 后会序列化当前 pendingContinuation 写入 `suspensions` 表，并发出 `turn.suspended` 事件，整个 tool loop 立即停止。后续可通过 `POST /api/sessions/:id/resume` 提交匹配 `resumeSchema` 的数据重新启动该 runtime（详见 `docs/reference/api.md`）。
+声明在 `packages/tools/src/builtin/suspend.ts`。Agent runtime 调用 `suspend({ reason, resumeSchema })` 时，工具直接返回一个 sentinel 对象 `{ _covelSuspend: true, reason, resumeSchema }`。turn-executor 在每次 tool 执行后通过 `isSuspendSentinel()` 检测：识别到 sentinel 后会序列化当前 pendingContinuation（含 execution identity、已缓冲 proposal/event 和完整 provider transcript）写入 `suspensions` 表，并发出 `turn.suspended` 事件，整个 tool loop 立即停止。同一 assistant 消息含多个 tool call 时，suspend call 保留可替换的 tool result placeholder，其后未执行 call 写入 cancellation result，因此 resume 后 transcript 仍符合 provider 的 tool-call 成对要求。后续可通过 `POST /api/sessions/:id/resume` 提交匹配 `resumeSchema` 的数据重新启动该 runtime（详见 `docs/reference/api.md`）。
 
 | 参数         | 类型   | 必需 | 描述                                                                                                                                             |
 | ------------ | ------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ |

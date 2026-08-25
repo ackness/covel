@@ -112,6 +112,47 @@ describe("LocalDataService session sync", () => {
     );
   });
 
+  it("sends stable local message identity for retry-safe server sync", async () => {
+    const store = createMemoryStore();
+    const now = "2026-01-01T00:00:00.000Z";
+    await store.upsertWorld({
+      id: "world-1",
+      name: "World",
+      description: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.createSession({
+      id: "sess-1",
+      worldId: "world-1",
+      status: "active",
+      turnCount: 0,
+      preGameCompleted: [],
+      activePlugins: [],
+      locale: "en-US",
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.addMessage({
+      id: "local-message-1",
+      sessionId: "sess-1",
+      role: "user",
+      content: "hello",
+      createdAt: now,
+    });
+    const service = withStore(store);
+
+    await service.syncToServer("sess-1");
+
+    expect(api.syncMessages).toHaveBeenCalledWith("sess-1", [
+      expect.objectContaining({
+        id: "local-message-1",
+        content: "hello",
+        createdAt: now,
+      }),
+    ]);
+  });
+
   it("preserves legacy underscore IDs when creating the server mirror", async () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();

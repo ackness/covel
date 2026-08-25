@@ -9,6 +9,64 @@ import { messageRoutes } from "../../src/routes/api/messages.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 describe("POST /api/sessions/:id/messages/sync", () => {
+  it("is idempotent when the local client retries stable message ids", async () => {
+    const store = createMemoryStore();
+    await store.createSession({
+      id: "s",
+      worldId: "w",
+      status: "active",
+      turnCount: 0,
+      preGameCompleted: [],
+      activePlugins: [],
+      createdAt: new Date().toISOString(),
+    });
+    const app = new Hono();
+    const sessionLock = createInProcessSessionLock();
+    app.use("*", async (c, next) => {
+      c.set("store", store);
+      c.set("sessionLock", sessionLock);
+      await next();
+    });
+    app.route("/api/sessions", messageRoutes);
+    const request = {
+      method: "POST" as const,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [
+          {
+            id: "local-m1",
+            role: "user",
+            content: "one",
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "local-m2",
+            role: "assistant",
+            content: "two",
+            createdAt: "2026-01-01T00:00:01.000Z",
+          },
+        ],
+      }),
+    };
+
+    expect(
+      (await app.request("/api/sessions/s/messages/sync", request)).status,
+    ).toBe(200);
+    expect(
+      (await app.request("/api/sessions/s/messages/sync", request)).status,
+    ).toBe(200);
+
+    const messages = await store.listMessages("s");
+    expect(messages.map((message) => message.id)).toEqual([
+      "local-m1",
+      "local-m2",
+    ]);
+    expect(messages.map((message) => message.createdAt)).toEqual([
+      "2026-01-01T00:00:00.000Z",
+      "2026-01-01T00:00:01.000Z",
+    ]);
+  });
+
   it("rolls back the whole batch when one message write fails", async () => {
     const base = createMemoryStore();
     await base.createSession({

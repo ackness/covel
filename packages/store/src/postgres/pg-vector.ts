@@ -331,36 +331,97 @@ export function createPgVectorCapability(
   // ── VectorStoreCapability ────────────────────────────────────────
 
   async function upsertVector(input: UpsertVectorInput): Promise<void> {
-    const target = await resolveSessionVectorTarget(input.sessionId);
-    if (!target) {
-      throw new Error(
-        `pg-vector upsertVector: session ${input.sessionId} has no embedding model locked`,
-      );
-    }
-    if (input.embedding.length !== target.dim) {
-      throw new Error(
-        `pg-vector upsertVector: embedding length ${input.embedding.length} does not match model dim ${target.dim}`,
-      );
-    }
-
-    await ensurePhysicalTable(target);
-    const tname = physicalTableName(target.modelRegistryId);
+    // The extension and physical tables are created by ensureVectorModel. Do
+    // not resolve a session binding here: the binding, model row, incarnation
+    // guard, and INSERT must all be observed under one parent-row lock.
+    await ensureVectorExtension();
     const vecStr = toVectorString(input.embedding);
 
-    await client.unsafe(
-      `INSERT INTO ${tname} (session_id, plugin_id, namespace, key, embedding, payload)
-       VALUES ($1, $2, $3, $4, $5::vector, $6)
-       ON CONFLICT (session_id, plugin_id, namespace, key)
-       DO UPDATE SET embedding = EXCLUDED.embedding, payload = EXCLUDED.payload`,
-      [
-        input.sessionId,
-        input.pluginId,
-        input.namespace,
-        input.key,
-        vecStr,
-        input.payload ?? null,
-      ],
-    );
+    await client.begin(async (tx) => {
+      // Pair with deletePgSessionCascade's parent FOR UPDATE lock. Resolving
+      // the target only after this lock removes the resolve/delete/recreate
+      // ABA window, while expectedSessionCreatedAt rejects results produced
+      // for an older incarnation of the same id.
+      const sessionRows = await tx<
+        Array<{ embedding_model_id: number | null; created_at: string }>
+      >`
+        SELECT embedding_model_id, created_at
+          FROM sessions
+         WHERE id = ${input.sessionId}
+         FOR KEY SHARE
+      `;
+      if (sessionRows.length === 0) {
+        throw new Error(
+          `pg-vector upsertVector: session ${input.sessionId} not found`,
+        );
+      }
+      const session = sessionRows[0];
+      if (
+        input.expectedSessionCreatedAt !== undefined &&
+        session.created_at !== input.expectedSessionCreatedAt
+      ) {
+        throw new Error(
+          `pg-vector upsertVector: session ${input.sessionId} incarnation changed`,
+        );
+      }
+      if (session.embedding_model_id == null) {
+        throw new Error(
+          `pg-vector upsertVector: session ${input.sessionId} has no embedding model locked`,
+        );
+      }
+
+      const modelRows = await tx<
+        Array<{
+          id: number;
+          model_id: string;
+          dim: number;
+          table_name: string;
+        }>
+      >`
+        SELECT id, model_id, dim, table_name
+          FROM vector_models
+         WHERE id = ${session.embedding_model_id}
+      `;
+      if (modelRows.length === 0) {
+        throw new Error(
+          `pg-vector: session ${input.sessionId} references unknown vector_models.id ${session.embedding_model_id}`,
+        );
+      }
+      const model = modelRows[0];
+      const tname = physicalTableName(model.id);
+      if (model.table_name !== tname) {
+        throw new Error(
+          `pg-vector: unsafe vector table name ${JSON.stringify(model.table_name)} for model ${model.id}`,
+        );
+      }
+      if (input.embedding.length !== model.dim) {
+        throw new Error(
+          `pg-vector upsertVector: embedding length ${input.embedding.length} does not match model dim ${model.dim}`,
+        );
+      }
+
+      modelCache.set(model.id, {
+        modelRegistryId: model.id,
+        modelId: model.model_id,
+        dim: model.dim,
+        tableName: model.table_name,
+      });
+
+      await tx.unsafe(
+        `INSERT INTO ${tname} (session_id, plugin_id, namespace, key, embedding, payload)
+         VALUES ($1, $2, $3, $4, $5::vector, $6)
+         ON CONFLICT (session_id, plugin_id, namespace, key)
+         DO UPDATE SET embedding = EXCLUDED.embedding, payload = EXCLUDED.payload`,
+        [
+          input.sessionId,
+          input.pluginId,
+          input.namespace,
+          input.key,
+          vecStr,
+          input.payload ?? null,
+        ],
+      );
+    });
   }
 
   async function searchVectors(

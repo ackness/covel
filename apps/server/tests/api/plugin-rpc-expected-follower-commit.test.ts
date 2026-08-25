@@ -50,6 +50,24 @@ function summaryWithFailedCommit(): ManualTurnSummary {
   };
 }
 
+function successfulSummary(turnId = "turn-success"): ManualTurnSummary {
+  return {
+    commit: { committed: true, failedProposalCount: 0, snapshotFailed: false },
+    turnId,
+    durationMs: 5,
+    runtimeResults: [
+      {
+        runtimeId: RUNTIME_ID,
+        pluginId: PLUGIN_ID,
+        status: "success",
+        durationMs: 5,
+        output: { ok: true },
+      },
+    ],
+    deferredFollowers: [],
+  };
+}
+
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve = (): void => undefined;
   const promise = new Promise<void>((done) => {
@@ -59,6 +77,130 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 describe("expected-background-follower commit gate", () => {
+  it("reserves concurrency slots before yielding to a burst of jobs", async () => {
+    const store: DataStore = createMemoryStore();
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: SESSION_ID,
+      worldId: null,
+      status: "active",
+      turnCount: 1,
+      preGameCompleted: [],
+      activePlugins: [PLUGIN_ID],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const session = await store.getSession(SESSION_ID);
+    if (!session) throw new Error("expected session");
+    const release = deferred();
+    let active = 0;
+    let maximum = 0;
+    let started = 0;
+    const runner = createPluginRpcJobRunner({
+      store,
+      sessionId: SESSION_ID,
+      sessionLock: createInProcessSessionLock(),
+      approvalScopes: new Map([
+        [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
+      ]),
+      runManualTurn: async () => {
+        started++;
+        active++;
+        maximum = Math.max(maximum, active);
+        await release.promise;
+        active--;
+        return successfulSummary(`turn-${started}`);
+      },
+      runDeferredFollowerTurn: async () => {
+        throw new Error("unused");
+      },
+      hasActiveRuntime: () => true,
+    });
+
+    const jobs = [];
+    for (let i = 0; i < 5; i++) {
+      jobs.push(
+        await runner.enqueueBackgroundRuntime({
+          pluginId: PLUGIN_ID,
+          runtimeId: RUNTIME_ID,
+          turnId: `turn-${i}`,
+        }),
+      );
+    }
+    await waitFor(async () => started === 4);
+    expect(started).toBe(4);
+    expect(maximum).toBe(4);
+
+    release.resolve();
+    await waitFor(async () => {
+      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
+      return (
+        rows.length === jobs.length &&
+        rows.every(
+          (row) => (row.value as { status?: string }).status !== "pending",
+        )
+      );
+    });
+    expect(maximum).toBeLessThanOrEqual(4);
+  });
+
+  it("terminalizes a running job when the session becomes paused", async () => {
+    const store: DataStore = createMemoryStore();
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: SESSION_ID,
+      worldId: null,
+      status: "active",
+      turnCount: 1,
+      preGameCompleted: [],
+      activePlugins: [PLUGIN_ID],
+      createdAt: now,
+      updatedAt: now,
+    });
+    const session = await store.getSession(SESSION_ID);
+    if (!session) throw new Error("expected session");
+    const started = deferred();
+    const finish = deferred();
+    const runner = createPluginRpcJobRunner({
+      store,
+      sessionId: SESSION_ID,
+      sessionLock: createInProcessSessionLock(),
+      approvalScopes: new Map([
+        [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
+      ]),
+      runManualTurn: async () => {
+        started.resolve();
+        await finish.promise;
+        throw new Error("session is paused");
+      },
+      runDeferredFollowerTurn: async () => {
+        throw new Error("unused");
+      },
+      hasActiveRuntime: () => true,
+    });
+    const { jobId } = await runner.enqueueBackgroundRuntime({
+      pluginId: PLUGIN_ID,
+      runtimeId: RUNTIME_ID,
+      turnId: "turn-paused",
+    });
+    await started.promise;
+    await store.updateSession(SESSION_ID, { status: "paused" });
+    finish.resolve();
+
+    await waitFor(async () => {
+      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
+      const job = rows.find((row) => row.key === jobId);
+      return (
+        (job?.value as { status?: string } | undefined)?.status === "failed"
+      );
+    });
+    const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
+    expect(rows.find((row) => row.key === jobId)?.value).toMatchObject({
+      status: "failed",
+      error: "session is paused",
+    });
+  });
+
   it("fails the job and schedules no follower when the runtime's proposals did not commit", async () => {
     const store: DataStore = createMemoryStore();
     const now = new Date().toISOString();

@@ -23,7 +23,10 @@ import { createIdbWorldStore } from "./idb-world-store.js";
 import { createIdbPlayerStore } from "./idb-player-store.js";
 import { createIdbWorldDataStore } from "./idb-world-data-store.js";
 import { createIdbPersistenceStore } from "./idb-persistence-store.js";
-import { withIdbDatabaseWriteLock } from "./idb-write-lock.js";
+import {
+  withIdbDatabaseReadLock,
+  withIdbDatabaseWriteLock,
+} from "./idb-write-lock.js";
 import { STORE_WRITE_METHODS } from "../store-write-methods.js";
 
 export { createIndexedDbMediaStore } from "./idb-media-store.js";
@@ -68,8 +71,15 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
   // A per-handle FIFO also preserves call ordering before contenders enter the
   // cross-handle Web Lock queue.
   let chain: Promise<unknown> = Promise.resolve();
-  function enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const task = chain.then(() => withIdbDatabaseWriteLock(db.name, fn));
+  function enqueue<T>(
+    fn: () => Promise<T>,
+    mode: "read" | "write" = "write",
+  ): Promise<T> {
+    const task = chain.then(() =>
+      mode === "write"
+        ? withIdbDatabaseWriteLock(db.name, fn)
+        : withIdbDatabaseReadLock(db.name, fn),
+    );
     chain = task.then(
       () => undefined,
       () => undefined,
@@ -79,12 +89,13 @@ export async function createIdbStore(dbName?: string): Promise<DataStore> {
   const gatedData = { ...data } as Record<string, unknown>;
   for (const name of Object.keys(gatedData)) {
     const original = gatedData[name];
-    if (typeof original !== "function" || !STORE_WRITE_METHODS.has(name)) {
-      continue;
-    }
+    if (typeof original !== "function") continue;
     const fn = original as (...args: unknown[]) => unknown;
     gatedData[name] = (...args: unknown[]) =>
-      enqueue(async () => fn.apply(data, args));
+      enqueue(
+        async () => fn.apply(data, args),
+        STORE_WRITE_METHODS.has(name) ? "write" : "read",
+      );
   }
 
   // Nesting guard. AsyncLocalStorage is unavailable in the browser bundle, so

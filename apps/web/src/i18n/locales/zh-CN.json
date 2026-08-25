@@ -606,6 +606,8 @@
     "customWidgetUnavailable": "此设置使用专属页面，请在对应的模型或插件分区中编辑。",
     "show": "显示",
     "hide": "隐藏",
+    "clear": "清除",
+    "serverManagedKeyPlaceholder": "已在此设备配置；输入新值可替换",
     "exportHeader": "导出",
     "exportDownload": "导出设置",
     "exportIncludeKeys": "包含 API 密钥（敏感）",

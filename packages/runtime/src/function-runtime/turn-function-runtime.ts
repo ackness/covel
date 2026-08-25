@@ -91,6 +91,12 @@ export interface ExecuteFunctionRuntimeOptions {
    * turnId scope in that case.
    */
   readonly executionId?: string;
+  /** Resume payload for a previously suspended function runtime. */
+  readonly resumeData?: unknown;
+  /** Identifies a resume invocation even when `resumeData` is undefined. */
+  readonly resumedFromSuspensionId?: string;
+  /** Resume forbids creating a second nested suspension. Defaults to true. */
+  readonly allowSuspend?: boolean;
 }
 
 export async function executeFunctionRuntime({
@@ -110,6 +116,9 @@ export async function executeFunctionRuntime({
   runId,
   timeoutMs,
   executionId,
+  resumeData,
+  resumedFromSuspensionId,
+  allowSuspend = true,
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
   // Emit start for function runtimes (no guard to check)
   const stage = getRuntimeSpec(manifest).stage;
@@ -411,6 +420,9 @@ export async function executeFunctionRuntime({
         : {}),
       ...(activation ? { activation } : {}),
       ...(executionContext ? { execution: executionContext } : {}),
+      ...(resumedFromSuspensionId !== undefined
+        ? { resumeData, resumedFromSuspensionId }
+        : {}),
       recursiveCall: revocable.recursiveCall,
       recursionDepth,
       ...(revocable.gateway ? { gateway: revocable.gateway } : {}),
@@ -496,21 +508,27 @@ export async function executeFunctionRuntime({
     await drainRecursiveCalls();
   }
 
+  const resultFormat = manifest.resultFormat ?? "legacy";
+  const { outcome: handlerOutcome, diagnostics } = normalizeHandlerResult(
+    output,
+    { resultFormat, runtimeType: "function" },
+  );
+  for (const d of diagnostics) {
+    console.warn(`[runtime] ${manifest.name}: ${d.code} — ${d.message}`);
+  }
+
   await deps.emitter?.emit("function.completed", {
     ...helperCtx,
-    status: output.status === "suspended" ? "suspended" : "success",
+    status: handlerOutcome.outcome === "suspended" ? "suspended" : "success",
     durationMs: Date.now() - startTime,
   });
 
   // ── Suspend detection for function runtimes ────────────
-  // If the handler returns { status: 'suspended', reason, resumeSchema },
-  // persist a suspension and return status: 'suspended'.
-  if (
-    typeof output.status === "string" &&
-    output.status === "suspended" &&
-    typeof output.reason === "string" &&
-    deps.store
-  ) {
+  // Both the canonical envelope-v1 `{ outcome: "suspended" }` and the legacy
+  // `{ status: "suspended" }` normalize to the same branch. Handle it before
+  // the success-only output schema gate: a suspended envelope has no `value`
+  // to validate until its eventual resume succeeds.
+  if (handlerOutcome.outcome === "suspended" && deps.store && allowSuspend) {
     const suspensionId = crypto.randomUUID();
     // Function runtimes have no tool loop, so suspend records carry an
     // empty pendingProposals array and no partial content.
@@ -520,12 +538,14 @@ export async function executeFunctionRuntime({
       turnId: input.turnId,
       runtimeId: manifest.name,
       pluginId: manifest.pluginId,
-      reason: output.reason as string,
-      resumeSchema: output.resumeSchema ?? {},
+      reason: handlerOutcome.reason,
+      resumeSchema: handlerOutcome.resumeSchema ?? {},
       pendingContinuation: {
         messages: [],
         toolCallsSoFar: [],
         pendingProposals: [],
+        emittedEvents: [],
+        ...(executionContext ? { executionContext } : {}),
       },
       createdAt: new Date().toISOString(),
     };
@@ -604,7 +624,6 @@ export async function executeFunctionRuntime({
   //     domain effects (a failed status drops all buffered writes downstream).
   //   - legacy: observe-only warn on the whole preserved object (a minor
   //     compat cycle before Step 6 removes the legacy face).
-  const resultFormat = manifest.resultFormat ?? "legacy";
   let envelopeSchemaError: string | undefined;
   if (loaded.outputSchema && output !== null && typeof output === "object") {
     const validationTarget =
@@ -626,18 +645,9 @@ export async function executeFunctionRuntime({
     }
   }
 
-  // Classify the handler return through the unified normalizer and map its
-  // outcome onto the persisted RuntimeResult.status. Legacy success keeps the
-  // whole object as `output`, so the commit path's proposals/effects stay
-  // byte-identical; a business failed / skipped demotes the status so the
-  // commit path skips it (no domain writes on a non-success outcome).
-  const { outcome: handlerOutcome, diagnostics } = normalizeHandlerResult(
-    output,
-    { resultFormat, runtimeType: "function" },
-  );
-  for (const d of diagnostics) {
-    console.warn(`[runtime] ${manifest.name}: ${d.code} — ${d.message}`);
-  }
+  // The handler return was classified above so suspension could branch before
+  // the success-only schema gate. Legacy success still keeps the whole object
+  // byte-identical for downstream bindings and proposal derivation.
   // Compat guard: a legacy handler that buffered domain writes before returning
   // a non-success status is relying on the pre-redesign commit-on-non-success
   // behaviour. Keep it as `success` during the compat window so those writes
@@ -646,9 +656,7 @@ export async function executeFunctionRuntime({
   // buffers via ctx.pluginData, never inline control keys. Upgrade to also scan
   // output control keys if a producer emits them on a non-success return.
   const demote =
-    (handlerOutcome.outcome === "failed" ||
-      handlerOutcome.outcome === "skipped") &&
-    writeBuffer.length === 0;
+    handlerOutcome.outcome !== "success" && writeBuffer.length === 0;
   if (!demote && handlerOutcome.outcome !== "success") {
     console.warn(
       `[runtime] ${manifest.name}: legacy ${handlerOutcome.outcome} return with buffered writes kept as success (compat)`,

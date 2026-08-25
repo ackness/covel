@@ -30,6 +30,17 @@ interface UseSessionSubscriptionOptions {
   sessionIdRef: MutableRef<string | null>;
 }
 
+export function isCurrentSubscriptionEvent(
+  event: SubscriptionEvent,
+  subscribedSessionId: string,
+  activeSessionId: string | null,
+): boolean {
+  return (
+    activeSessionId === subscribedSessionId &&
+    event.sessionId === subscribedSessionId
+  );
+}
+
 function createSubscriptionEventHandler(
   options: Pick<UseSessionSubscriptionOptions, "dispatch" | "sessionIdRef"> & {
     onReset: () => void;
@@ -224,6 +235,13 @@ export function useSessionSubscription({
     };
 
     const handleSubscriptionEvent = (event: SubscriptionEvent): void => {
+      // React updates the subscription effect after commit. During a session
+      // switch, the old stream can therefore deliver one last event after
+      // restoreSession has already rebound the shared stores to the new id.
+      // Reject both stale connections and malformed/cross-session envelopes.
+      if (!isCurrentSubscriptionEvent(event, sessionId, sessionIdRef.current)) {
+        return;
+      }
       if (event.type === "system.reset") {
         startRecovery();
       } else if (recovering) {

@@ -284,6 +284,31 @@ describe("PluginRegistry", () => {
         registry.getActiveRuntimes("session-2").map((runtime) => runtime.name),
       ).toEqual(["alpha/runtime"]);
     });
+
+    it("hydrates persisted activation state without emitting lifecycle events", () => {
+      registry.register(
+        makeEntry("alpha", {
+          manifest: makeParsedPluginMd("alpha/runtime", 500),
+        }),
+      );
+      registry.register(
+        makeEntry("beta", {
+          manifest: makeParsedPluginMd("beta/runtime", 600),
+        }),
+      );
+      const handler = vi.fn<(event: RegistryChangeEvent) => void>();
+      registry.onChange(handler);
+
+      registry.syncSessionActivations("cold-process", ["alpha"]);
+      registry.syncSessionActivations("cold-process", ["beta"]);
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(
+        registry
+          .getActiveRuntimes("cold-process")
+          .map((runtime) => runtime.name),
+      ).toEqual(["beta/runtime"]);
+    });
   });
 
   describe("onChange fires on register", () => {

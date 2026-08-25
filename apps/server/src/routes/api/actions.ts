@@ -124,6 +124,20 @@ type Env = {
 
 export const actionRoutes = new Hono<Env>();
 
+function suspensionIdsFrom(
+  results: readonly RuntimeResult[],
+): readonly string[] {
+  const ids = new Set<string>();
+  for (const result of results) {
+    if (result.status !== "suspended" || !result.output) continue;
+    const suspensionId = result.output.suspensionId;
+    if (typeof suspensionId === "string" && suspensionId.length > 0) {
+      ids.add(suspensionId);
+    }
+  }
+  return [...ids];
+}
+
 // Module-level memory system reference, set by bootstrap via setMemorySystem().
 // Using a module variable instead of Hono context because Hono's typed
 // c.set/c.get doesn't support optional cross-module types cleanly.
@@ -737,17 +751,24 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // `PostStateCommit` hooks declared by plugins fire on the production
           // write path (previously they only ran in tests).
           const hookPipeline = c.get("hookPipeline");
+          const finalizableResults = [
+            ...result.runtimeResults,
+            ...(result.nestedRuntimeResults ?? []),
+          ];
+          const suspensionIds = suspensionIdsFrom(finalizableResults);
+          const hasSuspendedRuntime = finalizableResults.some(
+            (runtimeResult) => runtimeResult.status === "suspended",
+          );
           const outcome = await finalizeExecution({
             store,
             sessionId,
-            ...(result.executionContext
+            // A suspension persists the original counting responsibility for
+            // resume; this partial execution must not complete it yet.
+            ...(result.executionContext && !hasSuspendedRuntime
               ? { executionContext: result.executionContext }
               : {}),
             runtimes: activeRuntimes,
-            results: [
-              ...result.runtimeResults,
-              ...(result.nestedRuntimeResults ?? []),
-            ],
+            results: finalizableResults,
             journalMessages: collectExecutionJournal(result),
             ...(playerInputWrites
               ? {
@@ -813,6 +834,22 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             });
           }
           const committed = outcome.status === "committed";
+          if (!committed && suspensionIds.length > 0) {
+            // Runtime execution creates the continuation before the shared
+            // proposal transaction starts. If a sibling proposal later rolls
+            // that transaction back, remove those execution-scoped records so
+            // clients cannot resume an execution whose journal/state vanished.
+            for (const suspensionId of suspensionIds) {
+              try {
+                await store.deleteSuspension(suspensionId);
+              } catch (err) {
+                console.warn(
+                  `[actions] failed to clean rolled-back suspension ${suspensionId}:`,
+                  err instanceof Error ? err.message : String(err),
+                );
+              }
+            }
+          }
           const proposalErrors = outcome.failedProposals
             .map((failure) => failure.error)
             .filter(Boolean)
@@ -858,8 +895,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // proposal-only condition), only the best-effort checkpoint is
           // missing and the next turn snapshots again. Gating completion on
           // the snapshot would strand a fully-committed turn as "incomplete".
-          if (committed) {
-            result.completeTurn?.();
+          if (committed && !hasSuspendedRuntime) {
+            await result.completeTurn?.();
           }
 
           return {

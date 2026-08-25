@@ -69,7 +69,11 @@ type TurnMessagesTable = Table & {
   compactedAtTurnId: Column;
 };
 type PlayerInputsTable = Table & { sessionId: Column; formId: Column };
-type SessionSummariesTable = Table & { sessionId: Column };
+type SessionSummariesTable = Table & {
+  id: Column;
+  sessionId: Column;
+  createdAt: Column;
+};
 
 export interface SqlSessionJournalTables {
   readonly traceEvents: TraceEventsTable;
@@ -282,6 +286,7 @@ export function createSqlSessionJournalRecords(
     ): Promise<readonly SessionSummaryRecord[]> {
       const rows = await runner.select<SessionSummaryRow>(sessionSummaries, {
         where: eq(sessionSummaries.sessionId, sessionId),
+        orderBy: [asc(sessionSummaries.createdAt), asc(sessionSummaries.id)],
       });
       return rows.map((row) => toSessionSummaryRecord(row, json));
     },

@@ -308,6 +308,48 @@ export function runVectorStoreContractTests(
       ).rejects.toThrow(/dim/i);
     });
 
+    it("rejects a vector produced for a deleted session incarnation", async () => {
+      const dim = 16;
+      const target = await setupSessionWithModel(store, "reused-id", dim);
+      const originalSession = await store.getSession("reused-id");
+      expect(originalSession).not.toBeNull();
+
+      await store.deleteSession("reused-id");
+      const recreatedAt = new Date(
+        Date.parse(originalSession!.createdAt) + 1_000,
+      ).toISOString();
+      await store.createSession({
+        id: "reused-id",
+        status: "active",
+        turnCount: 1,
+        preGameCompleted: [],
+        locale: "en",
+        activePlugins: [],
+        createdAt: recreatedAt,
+        updatedAt: recreatedAt,
+      });
+      await store.lockSessionEmbeddingModel("reused-id", target);
+
+      await expect(
+        store.upsertVector({
+          sessionId: "reused-id",
+          expectedSessionCreatedAt: originalSession!.createdAt,
+          pluginId: "p",
+          namespace: "ns",
+          key: "stale",
+          embedding: seededVector(dim, 1),
+        }),
+      ).rejects.toThrow(/incarnation/i);
+
+      await expect(
+        store.searchVectors({
+          sessionId: "reused-id",
+          query: seededVector(dim, 1),
+          topK: 5,
+        }),
+      ).resolves.toEqual([]);
+    });
+
     it("returns empty array for session without locked model", async () => {
       // Create session but do NOT lock an embedding model
       await store.createSession({
