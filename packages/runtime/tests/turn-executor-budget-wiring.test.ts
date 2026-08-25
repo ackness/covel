@@ -182,14 +182,14 @@ describe("turn-executor → context budget wiring", () => {
     expect(estimator).toHaveBeenCalled();
   });
 
-  it("applies the budget even when the manifest declares tools.local", async () => {
+  it("applies the budget even when the manifest declares plugin tools", async () => {
     const estimator: TokenEstimator = vi.fn((text: string) => text.length);
     const llm: LLMAdapter = {
       generate: vi.fn(async () => makeResponse('{"narrativeOutput":"ok"}')),
     };
 
-    // Declare a local tool path — buildToolDefinitions would register it, so
-    // budget injection must be skipped.
+    // Declare a plugin tool name. Tool availability must not bypass context
+    // budget injection.
     const manifest = makeManifest({
       tools: {
         plugin: ["dummy"],

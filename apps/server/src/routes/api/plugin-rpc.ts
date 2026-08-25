@@ -262,10 +262,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     );
 
     await prepareToolsForSession?.(sessionId);
-    // Just-in-time activation: community plugins skip eager tool import in
-    // bootstrap. Now that the approval gate has cleared this RPC, ensure the
-    // plugin's `tools.local` are registered before the runtime executes —
-    // otherwise tool calls would resolve to `undefined` in the executor.
+    // Just-in-time activation: community plugins skip eager entry execution in
+    // bootstrap. Now that the approval gate has cleared this RPC, run the
+    // plugin entry before the runtime executes so its tools and other server
+    // registrations are available.
     // No-op for builtin plugins (already loaded at boot) and for
     // already-activated community plugins (idempotent).
     await c.get("activatePluginServerCode")?.(body.pluginId, sessionId);

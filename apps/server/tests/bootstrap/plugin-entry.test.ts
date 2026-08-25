@@ -465,8 +465,8 @@ export default async function (covel) {
       sessionId: "s1",
       pluginId: "entry-deny-a",
     } as never)) as Record<string, string>;
-    // Shared with the legacy tools.local path, so the wording is "plugin"
-    // rather than "entry"; the `[plugin-entry]` prefix names the caller.
+    // The denial names the plugin-facing toolkit; the `[plugin-entry]` prefix
+    // identifies the activation path that supplied it.
     const DENIED = "not available to a community plugin toolkit";
     for (const method of [
       "upsertCharacter",
@@ -492,7 +492,7 @@ export default async function (covel) {
     expect(await params.store.getSession("other-session")).toBeNull();
   });
 
-  it("leaves a builtin entry's toolkit.store unscoped (parity with tools.local)", async () => {
+  it("leaves a builtin entry's toolkit.store unscoped", async () => {
     const p = writePlugin(
       "entry-raw-a",
       `

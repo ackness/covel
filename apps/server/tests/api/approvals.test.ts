@@ -357,7 +357,7 @@ describe("Plugin RPC approval flow", () => {
   // Stage 4 regression: when bootstrap wires the activator, an `allow`
   // decision must invoke it for the approved pluginId. `deny` must not.
   // We stub the activator into the context and assert call shape.
-  describe("community plugin tools.local activation hook", () => {
+  describe("community plugin entry activation hook", () => {
     function setupWithActivator(options?: {
       sessionLock?: SessionLock;
       activate?: (pluginId: string) => Promise<void>;

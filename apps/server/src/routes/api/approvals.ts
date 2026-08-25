@@ -42,8 +42,8 @@ type Env = {
     sessionLock: SessionLock;
     rpcApprovalGate: RpcApprovalGate;
     /**
-     * Lazy activator for community plugins' `tools.local` modules. Wired
-     * by bootstrap; absent in narrow test harnesses (use optional chaining).
+     * Lazy activator for community plugin `entry` modules. Wired by bootstrap;
+     * absent in narrow test harnesses (use optional chaining).
      */
     activatePluginServerCode?: (
       pluginId: string,
@@ -266,7 +266,7 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
       // Activation failure does not roll back the user's approval; the next
       // plugin-rpc call retries activation against the live scope.
       console.warn(
-        `[approvals] tools.local activation failed for ${accepted.pluginId}:`,
+        `[approvals] plugin entry activation failed for ${accepted.pluginId}:`,
         err instanceof Error ? err.message : err,
       );
     }

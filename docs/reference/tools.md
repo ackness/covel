@@ -521,7 +521,7 @@ Attributes:
 ### Local 工具的推荐使用方式
 
 - 文件放在插件自己的 `tools/` 或 runtime 子目录下
-- 在 `entry` 模块（`server/index.js`）里 `covel.registerTool(makeMyTool(covel.toolkit))` 注册；使用工具的 runtime 在 `PLUGIN.md` 里用 `tools.plugin` 按名字声明（旧 `tools.local` 路径声明已弃用）
+- 在 `entry` 模块（`server/index.js`）里 `covel.registerTool(makeMyTool(covel.toolkit))` 注册；使用工具的 runtime 在 `PLUGIN.md` 里用 `tools.plugin` 按名字声明（旧 `tools.local` 路径字段已移除，声明会导致加载失败）
 - 为每个 local tool 提供独立测试
 - 持久化写入优先返回 `withPendingProposals(...)`，让 commit chain 接管落盘
 - 通过 local tool 封装插件自己的数据 schema 和批量写入逻辑

@@ -33,10 +33,9 @@ type EnsureEmbeddingLockFn = (sessionId: string) => Promise<void>;
 type PrepareToolsForSessionFn = (sessionId: string) => Promise<void>;
 type GetPluginSourceFn = (pluginId: string) => PluginSource | undefined;
 /**
- * Activate a community plugin's server code — its `entry` module first, then
- * any legacy `tools.local` modules, so both registration styles are live once
- * this resolves. Only runs after approval. Idempotent: returns immediately on
- * the second call. No-op for builtin plugins (loaded at boot).
+ * Activate a community plugin's server `entry` module after approval.
+ * Idempotent: returns immediately on the second call. No-op for builtin
+ * plugins, whose entries are loaded at boot.
  */
 type ActivatePluginServerCodeFn = (
   pluginId: string,
@@ -138,11 +137,10 @@ declare module "hono" {
      */
     reservedPluginIds?: ReadonlySet<string>;
     /**
-     * Activates a community plugin's server code (`entry` + legacy
-     * `tools.local`). Called from the plugin-rpc executor right before a
-     * runtime runs (so its registrations resolve) and from the approvals
-     * decision route after `allow` (so they are pre-loaded before the
-     * renderer retries the original RPC).
+     * Activates a community plugin's server `entry` module. Called from the
+     * plugin-rpc executor right before a runtime runs (so its registrations
+     * resolve) and from the approvals decision route after `allow` (so they
+     * are pre-loaded before the renderer retries the original RPC).
      *
      * Optional so tests with hand-built DI middleware don't have to wire it.
      */

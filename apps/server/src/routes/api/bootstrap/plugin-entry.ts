@@ -12,10 +12,9 @@
  *     covel.registerWires({ image: [myWire] });
  *   }
  *
- * Trust gating mirrors runtime handlers: builtin
- * entries run at bootstrap; community entries run on `ensurePluginEntry()`
- * (memoized, in-flight-deduped) — wired into the same activation seams as
- * local tools and wires.
+ * Trust gating mirrors runtime handlers: builtin entries run at bootstrap;
+ * community entries run on `ensurePluginEntry()` (memoized and
+ * in-flight-deduped) after the server-code approval gate clears.
  */
 
 import fsSync from "node:fs";
@@ -59,8 +58,7 @@ export interface BootstrapPluginEntriesParams {
   readonly store: DataStore;
   readonly toolMap: Map<string, ToolModule>;
   readonly localToolNames: Set<string>;
-  /** Mutable — entry-registered tool names are added at invocation time
-   *  (unlike legacy `tools.local`, names aren't derivable from the manifest). */
+  /** Mutable: entry-registered tool names are discovered at invocation time. */
   readonly pluginToolAccess: Map<string, Set<string>>;
   readonly hookPipeline: HookPipeline;
   readonly rpcRegistry: PluginRpcRegistry;
