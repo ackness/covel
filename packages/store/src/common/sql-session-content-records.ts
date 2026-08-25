@@ -1,5 +1,5 @@
 /**
- * Backend-agnostic session-content queries (events / approvals / messages /
+ * Backend-agnostic session-content queries (events / messages /
  * characters), shared by the PostgreSQL and SQLite backends.
  *
  * Previously the event/approval/message/character methods inside
@@ -18,20 +18,17 @@ import { cursorPageOrder, cursorPageWhere } from "./cursor.js";
 import type { InsertValueBuilders } from "./insert-values.js";
 import type { JsonReader } from "./mappers.js";
 import {
-  toApprovalRecord,
   toCharacterRecord,
   toEventRecord,
   toMessageRecord,
 } from "./mappers.js";
 import type {
-  ApprovalRow,
   CharacterRow,
   EventRow,
   MessageRow,
 } from "./mappers/state-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
 import type {
-  ApprovalRecord,
   CharacterRecord,
   CursorPageOpts,
   DataStore,
@@ -46,7 +43,6 @@ type EventsTable = Table & {
   topic: Column;
   createdAt: Column;
 };
-type ApprovalsTable = Table & { sessionId: Column };
 type MessagesTable = Table & {
   id: Column;
   sessionId: Column;
@@ -56,7 +52,6 @@ type CharactersTable = Table & { id: Column; sessionId: Column };
 
 export interface SqlSessionContentTables {
   readonly events: EventsTable;
-  readonly approvals: ApprovalsTable;
   readonly messages: MessagesTable;
   readonly characters: CharactersTable;
 }
@@ -67,11 +62,7 @@ export interface SqlSessionContentDeps {
   readonly json: JsonReader;
   readonly values: Pick<
     InsertValueBuilders,
-    | "eventInsert"
-    | "approvalInsert"
-    | "messageInsert"
-    | "characterInsert"
-    | "characterUpdate"
+    "eventInsert" | "messageInsert" | "characterInsert" | "characterUpdate"
   >;
 }
 
@@ -80,8 +71,6 @@ export type SqlSessionContentRecords = Pick<
   | "saveEvent"
   | "listEvents"
   | "getEventById"
-  | "saveApproval"
-  | "listApprovals"
   | "addMessage"
   | "listMessages"
   | "listMessagesPage"
@@ -94,7 +83,7 @@ export function createSqlSessionContentRecords(
   deps: SqlSessionContentDeps,
 ): SqlSessionContentRecords {
   const { runner, tables, json, values } = deps;
-  const { events, approvals, messages, characters } = tables;
+  const { events, messages, characters } = tables;
 
   return {
     async saveEvent(record: EventRecord): Promise<void> {
@@ -127,17 +116,6 @@ export function createSqlSessionContentRecords(
       });
       const row = rows[0];
       return row ? toEventRecord(row, json) : null;
-    },
-
-    async saveApproval(record: ApprovalRecord): Promise<void> {
-      await runner.insert(approvals, values.approvalInsert(record));
-    },
-
-    async listApprovals(sessionId: string): Promise<ApprovalRecord[]> {
-      const rows = await runner.select<ApprovalRow>(approvals, {
-        where: eq(approvals.sessionId, sessionId),
-      });
-      return rows.map((row) => toApprovalRecord(row));
     },
 
     async addMessage(record: MessageRecord): Promise<void> {

@@ -133,7 +133,7 @@ describe("executeTurn recursiveCall", () => {
           handler: async (ctx) => {
             seen.sessionId = ctx.sessionId;
             seen.turnId = ctx.turnId;
-            return { ok: true };
+            return { outcome: "success", value: { ok: true } };
           },
         },
       ],
@@ -230,7 +230,7 @@ describe("executeTurn recursiveCall", () => {
           promptTemplate: "",
           handler: async (ctx) => {
             void ctx.recursiveCall({ manualTrigger: { runtimeId: "leaf" } });
-            return { ok: true };
+            return { outcome: "success", value: { ok: true } };
           },
         },
       ],
@@ -242,7 +242,7 @@ describe("executeTurn recursiveCall", () => {
           handler: async () => {
             markLeafStarted();
             await leafGate;
-            return { child: true };
+            return { outcome: "success", value: { child: true } };
           },
         },
       ],

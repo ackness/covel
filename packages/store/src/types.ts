@@ -2,8 +2,8 @@
  * Unified DataStore interface and record types.
  *
  * All data is session-scoped. Server deployments switch backends through
- * STORE_BACKEND (memory | sqlite | pg). Browser callers can request idb
- * directly through createStore({ backend: "idb" }).
+ * STORE_BACKEND (memory | sqlite | pg). Browser-private persistence uses the
+ * dedicated Dexie BrowserVault contract rather than implementing DataStore.
  *
  * Record type definitions are organised by domain under `./records/*`; this
  * module re-exports them all so existing `../types.js` imports keep working,
@@ -36,7 +36,6 @@ export type {
   StateEntryRecord,
   StateChangeRecord,
   EventRecord,
-  ApprovalRecord,
   MessageRecord,
   CharacterRecord,
 } from "./records/state-records.js";
@@ -104,7 +103,6 @@ import type {
   StateEntryRecord,
   StateChangeRecord,
   EventRecord,
-  ApprovalRecord,
   MessageRecord,
   CharacterRecord,
 } from "./records/state-records.js";
@@ -283,12 +281,6 @@ export interface EventStore {
    * `listEvents` scan.
    */
   getEventById(sessionId: string, id: string): Promise<EventRecord | null>;
-}
-
-/** Tool-approval records. Part of `sql-session-content-records`. */
-export interface ApprovalStore {
-  saveApproval(record: ApprovalRecord): Promise<void>;
-  listApprovals(sessionId: string): Promise<ApprovalRecord[]>;
 }
 
 /** Chat/narrative message log. Part of `sql-session-content-records`. */
@@ -593,6 +585,10 @@ export interface LifecycleStore {
     sessionId: string,
     logicalTurnId: string,
   ): Promise<LogicalTurnLedgerRecord | null>;
+  /** List every completed logical turn for checkpoint/export workflows. */
+  listLogicalTurnCompletions(
+    sessionId: string,
+  ): Promise<readonly LogicalTurnLedgerRecord[]>;
 
   /**
    * Insert a setup-runtime attempt. Idempotent on
@@ -766,7 +762,6 @@ export interface DataStore
     RuntimeRecordStore,
     StateStore,
     EventStore,
-    ApprovalStore,
     MessageStore,
     CharacterStore,
     PluginDataStore,
@@ -796,8 +791,8 @@ export type StoreTransaction = Omit<DataStore, "withTransaction" | "close">;
 
 // ── Store config ─────────────────────────────────────────────────
 
-export type StoreBackend = "memory" | "sqlite" | "pg" | "idb";
-export type RuntimeStoreBackend = Exclude<StoreBackend, "idb">;
+export type StoreBackend = "memory" | "sqlite" | "pg";
+export type RuntimeStoreBackend = StoreBackend;
 
 export interface StoreConfig {
   readonly backend: StoreBackend;
@@ -805,6 +800,4 @@ export interface StoreConfig {
   readonly sqlitePath?: string;
   /** PostgreSQL connection URL */
   readonly databaseUrl?: string;
-  /** IndexedDB database name (default: covel-browser) */
-  readonly idbDbName?: string;
 }

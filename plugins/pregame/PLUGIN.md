@@ -9,7 +9,6 @@ description:
 pluginType: core-plugin
 stage: setup
 runtimeType: function
-resultFormat: envelope-v1
 outputKind: system
 handler: ./handler.js
 tags:
@@ -32,7 +31,7 @@ trigger:
 
 1. 读取世界信息构建欢迎通知
 2. 返回 narrativeOutput 给后续插件作为上下文
-3. 报告 preGameDone: true（envelope-v1 下即 `completion: "done"`），全部 setup 完成后内核把 `phase` 翻到 playing
+3. 报告 `completion: "done"`，全部 setup 完成后内核把 `phase` 翻到 playing
 
 ## 输出
 

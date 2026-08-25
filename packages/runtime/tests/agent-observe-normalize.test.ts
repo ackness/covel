@@ -1,11 +1,8 @@
 /**
- * Agent-path observe-only normalization cross-check (docs 02 §4).
+ * Agent structured output remains independent from function HandlerResult.
  *
- * The agent path keeps producing its result unchanged; W4b only runs the same
- * `normalizeHandlerResult` alongside and warns on divergence. Here an agent
- * whose LLM returns a legacy `{ status: "failed" }` envelope must:
- *   - still land as `status: "success"` (behaviour unchanged), and
- *   - emit one observe warn noting the normalizer would classify it differently.
+ * Agent output is interpreted through its own structured-output path; business
+ * fields named `status` do not change the kernel execution status.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -41,14 +38,14 @@ function input(sessionId: string): TurnInput {
   return { sessionId, turnId: `${sessionId}-t`, playerMessage: "hi" };
 }
 
-describe("agent observe-only normalization cross-check", () => {
+describe("agent structured output", () => {
   let warnSpy: ReturnType<typeof vi.spyOn>;
   beforeEach(() => {
     warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
   afterEach(() => warnSpy.mockRestore());
 
-  it("keeps status success but warns when the normalizer would classify non-success", async () => {
+  it("does not treat a business status field as function outcome", async () => {
     const loaded: LoadedRuntime = {
       manifest: agentManifest,
       promptTemplate: "respond",
@@ -65,13 +62,9 @@ describe("agent observe-only normalization cross-check", () => {
       deps,
     );
 
-    // Behaviour unchanged: the agent result is still success.
     expect(result.runtimeResults[0]?.status).toBe("success");
-    // Observe divergence surfaced.
     const messages = warnSpy.mock.calls.map((c) => String(c[0]));
-    expect(
-      messages.some((m) => m.includes("agent-obs/rt") && m.includes("observe")),
-    ).toBe(true);
+    expect(messages.some((m) => m.includes("observe"))).toBe(false);
   });
 
   it("does not warn for a plain success agent output", async () => {

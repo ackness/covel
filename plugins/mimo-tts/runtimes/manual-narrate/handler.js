@@ -46,7 +46,7 @@ export default async function manualNarrateHandler(ctx) {
 
   if (!speech || typeof speech.generate !== "function") {
     return {
-      status: "failed",
+      outcome: "failed",
       error:
         "ctx.speech is unavailable. Upgrade @covel/server / @covel/runtime to a build with the unified speech pipeline.",
     };
@@ -55,8 +55,8 @@ export default async function manualNarrateHandler(ctx) {
   const text = typeof payload.text === "string" ? payload.text.trim() : "";
   if (!text) {
     return {
-      status: "skipped",
-      reason:
+      outcome: "skipped",
+      skipReason:
         "payload.text is required — the Speak button passes the paragraph " +
         "text via its $state binding (manual activations carry no inputs)",
     };
@@ -146,13 +146,14 @@ export default async function manualNarrateHandler(ctx) {
     });
 
     return {
-      trackId,
-      status: "done",
-      ref: record.ref,
-      pluginData: [
-        { namespace: TRACKS_NAMESPACE, key: trackId, value: record },
-      ],
-      assetGenerations: [asset],
+      outcome: "success",
+      value: { trackId, status: "done", ref: record.ref },
+      effects: {
+        pluginData: [
+          { namespace: TRACKS_NAMESPACE, key: trackId, value: record },
+        ],
+        assetGenerations: [asset],
+      },
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

@@ -16,7 +16,7 @@ function ctx(manualPayload) {
   };
 }
 
-// Deliberate change: handler migrated to envelope-v1, so the business return
+// Deliberate change: handler returns the canonical HandlerResult, so the business return
 // is under `result.value`; pending proposals stay on the envelope (result).
 describe("living-world-rules handler", () => {
   it("saves a constant rule and emits lorebook.upsert", async () => {

@@ -46,7 +46,7 @@ function effectiveMediaBackend(
 }
 
 function isDurableDataBackend(backend: StoreBackend): boolean {
-  return backend === "sqlite" || backend === "pg" || backend === "idb";
+  return backend === "sqlite" || backend === "pg";
 }
 
 function isDurableMediaBackend(

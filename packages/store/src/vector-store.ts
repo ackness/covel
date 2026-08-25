@@ -2,8 +2,9 @@
  * Optional vector-search capability for stores that support it.
  *
  * This is intentionally NOT part of the core DataStore contract — not every
- * backend can implement ANN/brute-force vector search (IdbStore can't, for
- * example). Stores declare support by implementing this interface on top of
+ * backend needs to implement ANN/brute-force vector search; BrowserVault is
+ * intentionally outside this server-side capability. Stores declare support
+ * by implementing this interface on top of
  * DataStore; consumers check via `supportsVector()` before using it.
  *
  * Design notes

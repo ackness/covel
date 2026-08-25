@@ -8,7 +8,6 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { Hono } from "hono";
-import { createStateManager } from "@covel/state";
 import { createPluginRegistry } from "@covel/plugin-loader";
 import { createRpcApprovalGate } from "@covel/approval";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store";
@@ -30,7 +29,6 @@ function build() {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", store);
-    c.set("stateManager", createStateManager(store));
     c.set("pluginRegistry", pluginRegistry);
     c.set("rpcApprovalGate", rpcApprovalGate);
     c.set("mediaStore", mediaStore);

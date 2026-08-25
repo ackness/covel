@@ -22,6 +22,7 @@ import type {
   LoadedRuntime,
   ParsedPluginMd,
   FunctionHandler,
+  AgentGuard,
 } from "./types.js";
 import { parsePluginMd } from "./parse-plugin-md.js";
 import { reconcileLocalizedManifest } from "./localized-manifest.js";
@@ -490,7 +491,7 @@ export async function loadRuntime(
   }
 
   // Load guard function for agent runtimes with pre-execution gate
-  let guard: FunctionHandler | undefined;
+  let guard: AgentGuard | undefined;
   if (parsed.manifest.guard) {
     const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
     await assertInsideRoot(discovery.rootPath, guardPath, "Guard");
@@ -500,7 +501,7 @@ export async function loadRuntime(
         `Guard module "${parsed.manifest.guard}" does not export a default function (got ${typeof mod.default})`,
       );
     }
-    guard = mod.default as FunctionHandler;
+    guard = mod.default as AgentGuard;
   }
 
   // Load UI spec files from ui/ directory

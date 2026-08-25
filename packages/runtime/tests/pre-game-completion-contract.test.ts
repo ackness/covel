@@ -87,7 +87,16 @@ async function runPregameTurn(
     loadRuntime: async (m) => ({
       manifest: m,
       promptTemplate: "",
-      handler: handlers[m.name],
+      handler: async (ctx) => {
+        const value = await handlers[m.name]!(ctx);
+        const done = value.preGameDone === true;
+        const { preGameDone: _preGameDone, ...rest } = value;
+        return {
+          outcome: "success",
+          value: rest as never,
+          ...(done ? { completion: "done" as const } : {}),
+        };
+      },
       guard: options?.guards?.[m.name],
     }),
     llm: new NoopLLM(),
@@ -185,8 +194,11 @@ describe("Pre-Game completion contract", () => {
         promptTemplate: "",
         handler: async () =>
           m.name === "pregame"
-            ? { preGameDone: true }
-            : { form: { formId: "character-form" } },
+            ? { outcome: "success", value: {}, completion: "done" }
+            : {
+                outcome: "success",
+                value: { form: { formId: "character-form" } },
+              },
       }),
       llm: new NoopLLM(),
       store,
@@ -231,9 +243,12 @@ describe("Pre-Game completion contract", () => {
         promptTemplate: "",
         handler: async () => {
           if (m.name === "narrator") {
-            return { narrativeOutput: "main loop started" };
+            return {
+              outcome: "success",
+              value: { narrativeOutput: "main loop started" },
+            };
           }
-          return { preGameDone: true };
+          return { outcome: "success", value: {}, completion: "done" };
         },
       }),
       llm: new NoopLLM(),
@@ -386,7 +401,7 @@ describe("Pre-Game completion contract", () => {
         // Runs but does not report done → stays pending, never marked done.
         handler: async () => {
           invoked += 1;
-          return {};
+          return { outcome: "success", value: {} };
         },
       }),
       llm: new NoopLLM(),

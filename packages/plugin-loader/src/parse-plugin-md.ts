@@ -3,14 +3,11 @@
  */
 
 import matter from "gray-matter";
-import { z } from "zod";
 import {
   authorsNoteDeclSchema,
-  HOOK_EVENTS,
   postHistoryDeclSchema,
   resolveI18nText,
-  rpcDeclMapSchema,
-  runtimeManifestSchema,
+  runtimeManifestInputSchema,
 } from "@covel/shared";
 import type { ParsedPluginMd } from "./types.js";
 
@@ -236,9 +233,8 @@ function parseLenientField(
 
 /**
  * Optional decorative / structural metadata fields validated leniently in
- * declaration order. Mirrors the per-entry lenient handling used for `hooks`:
- * one bad field drops itself with a warning, the rest of the plugin still
- * loads. Adding a new lenient field is a one-line entry here, not a new block.
+ * declaration order. One bad field drops itself with a warning while the rest
+ * of the plugin still loads.
  */
 const LENIENT_FIELDS: readonly LenientFieldSpec[] = [
   {
@@ -255,34 +251,7 @@ const LENIENT_FIELDS: readonly LenientFieldSpec[] = [
     problem: "malformed postHistory skipped",
     fix: 'A postHistory entry must have `content: string` and optional `role: "system" | "user" | "assistant"`.',
   },
-  {
-    // rpc declarations — drop the whole rpc block on structural error so
-    // a typo in one action doesn't crash the load.
-    key: "rpc",
-    schema: rpcDeclMapSchema,
-    problem: "malformed rpc declaration skipped",
-    fix: "Each rpc action needs a lowercase kebab-case name and a `handler` path ending in .js/.mjs/.cjs, relative to the plugin root.",
-  },
 ];
-
-// ── Valid hook event names ────────────────────────────────────────
-
-// Built from the single source of truth (@covel/shared HOOK_EVENTS) so the
-// loader's accept-list can never drift from the framework's hook contract.
-const VALID_HOOK_EVENTS = new Set<string>(HOOK_EVENTS);
-
-/**
- * Lenient hook schema that accepts any string for `event`, used to
- * pre-validate hooks before filtering out unknown event names with a warning.
- * Built from scratch (not extending hookDeclarationSchema) to avoid .strict() incompatibility.
- */
-const lenientHookDeclarationSchema = z.object({
-  event: z.string().min(1),
-  handler: z.string().min(1),
-  match: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  enforce: z.enum(["pre", "normal", "post"]).optional(),
-});
 
 /**
  * Parse a PLUGIN.md file content into structured data.
@@ -300,94 +269,20 @@ export function parsePluginMd(
 
   let manifest;
   try {
-    // Parse hooks leniently (accept any string for event) so we can warn
-    // on unknown event names instead of throwing. All other fields remain
-    // strictly validated. Non-hook fields are validated by runtimeManifestSchema.
     let dataToValidate = data;
 
-    const rawHooks: Array<{
-      event: string;
-      handler: string;
-      [k: string]: unknown;
-    }> = [];
-
-    if (Array.isArray(data.hooks)) {
-      // Validate per-entry (not per-array) so a single malformed entry only drops
-      // itself with a warning, instead of silently dropping the entire hooks
-      // list when one entry has e.g. `handler: 123`.
-      const hooksLine = findYamlKeyLine(content, "hooks");
-      for (const rawEntry of data.hooks) {
-        const parsed = lenientHookDeclarationSchema.safeParse(rawEntry);
-        if (!parsed.success) {
-          console.warn(
-            formatLoaderError(
-              filePath,
-              hooksLine,
-              `malformed hook entry skipped — ${parsed.error.issues.map((i) => i.message).join("; ")}`,
-              "Each hook needs a string `event` and string `handler`. See docs/reference/plugins.md#hooks.",
-            ),
-          );
-          continue;
-        }
-        const entry = parsed.data;
-        if (!VALID_HOOK_EVENTS.has(entry.event)) {
-          console.warn(
-            formatLoaderError(
-              filePath,
-              hooksLine,
-              `unknown hook event "${entry.event}" — skipping`,
-              `Use one of the valid events: ${[...VALID_HOOK_EVENTS].join(", ")}.`,
-            ),
-          );
-          continue;
-        }
-        rawHooks.push(
-          entry as { event: string; handler: string; [k: string]: unknown },
-        );
-      }
-      // Replace hooks with the filtered valid ones for strict schema
-      // validation. Spread from `dataToValidate` (not the raw `data`) so any
-      // earlier normalization stays applied (authorsNote/postHistory/rpc
-      // below already chain off `dataToValidate`).
-      const { hooks: _omitted, ...dataWithoutHooks } = dataToValidate as Record<
-        string,
-        unknown
-      >;
-      dataToValidate =
-        rawHooks.length > 0
-          ? { ...dataWithoutHooks, hooks: rawHooks }
-          : dataWithoutHooks;
-    }
-
     // Optional decorative / structural metadata fields parsed leniently in
-    // declaration order. A single malformed declaration drops only that field
-    // with a warning instead of crashing the whole plugin load, mirroring the
-    // per-entry lenient handling used for `hooks` above. See LENIENT_FIELDS.
+    // declaration order. A malformed decorative declaration drops only that
+    // field with a warning instead of crashing the whole plugin load.
     if (dataToValidate && typeof dataToValidate === "object") {
       let lenientData = dataToValidate as Record<string, unknown>;
       for (const spec of LENIENT_FIELDS) {
         lenientData = parseLenientField(lenientData, spec, content, filePath);
       }
-      // Deprecated field: `config` was removed in favour of `userSettings`.
-      // Strip it with a warning instead of crashing the (strict) load, so a
-      // third-party plugin written against the old docs gets a deprecation
-      // cycle rather than a hard load failure.
-      if ("config" in lenientData) {
-        console.warn(
-          formatLoaderError(
-            filePath,
-            findYamlKeyLine(content, "config"),
-            "`config` is deprecated and ignored — it was removed in favour of `userSettings`.",
-            "Declare player-tunable settings with `userSettings` (see docs/guide/plugin-authoring-zero-code.md §7).",
-          ),
-        );
-        const { config: _deprecatedConfig, ...rest } = lenientData;
-        lenientData = rest;
-      }
       dataToValidate = lenientData;
     }
 
-    const parsed = runtimeManifestSchema.parse(dataToValidate);
+    const parsed = runtimeManifestInputSchema.parse(dataToValidate);
     // Derive pluginId from name: "world-init/schema-gen" → "world-init"
     // Single-runtime plugins: pluginId === name
     const slashIdx = parsed.name.indexOf("/");

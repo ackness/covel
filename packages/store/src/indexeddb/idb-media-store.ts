@@ -19,7 +19,6 @@ import {
 import {
   BROWSER_IDB_DATABASE_NAME,
   BROWSER_IDB_SCHEMA_VERSION,
-  backfillSnapshotMetadata,
   upgradeBrowserIdbSchema,
 } from "./idb-schema.js";
 
@@ -55,9 +54,6 @@ async function openMediaDb(dbName: string): Promise<IDBPDatabase<IdbMediaDb>> {
   return openDB<IdbMediaDb>(dbName, DB_VERSION, {
     async upgrade(db, oldVersion, _newVersion, transaction) {
       await upgradeBrowserIdbSchema(db, oldVersion, transaction);
-      if (oldVersion > 0 && oldVersion < 12) {
-        await backfillSnapshotMetadata(transaction);
-      }
     },
   });
 }

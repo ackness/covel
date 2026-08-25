@@ -5,10 +5,7 @@
  * state snapshots, world overlays, submitted block UI state, etc.
  */
 
-// Backend-free schema module (constants + pure upgrade fn). A static import of
-// these runtime values from "@covel/store/idb" would pull the entire IDB
-// DataStore backend into the main chunk and defeat the dynamic import() in
-// services/storage/data-store.ts (rollup: INEFFECTIVE_DYNAMIC_IMPORT). See R-18.
+// Backend-free schema module: constants plus the cache/media upgrade function.
 import {
   APP_KV_STORE_EXECUTION_STEPS,
   APP_KV_STORE_STATE_PATCHES,
@@ -18,12 +15,6 @@ import {
   BROWSER_IDB_SCHEMA_VERSION,
   upgradeBrowserIdbSchema,
 } from "@covel/store/idb-schema";
-import {
-  BROWSER_STORAGE_RESET_KEY,
-  LEGACY_BROWSER_DATABASES,
-  LEGACY_LOCAL_STORAGE_KEYS,
-  LEGACY_LOCAL_STORAGE_PREFIXES,
-} from "./storage/legacy-keys.js";
 import { BROWSER_STORAGE_DB_NAME } from "./storage/data-store.js";
 
 const DB_NAME = BROWSER_STORAGE_DB_NAME;
@@ -221,88 +212,4 @@ export async function saveExecutionSteps(
   steps: unknown[],
 ): Promise<void> {
   return idbPut(STORE_EXECUTION_STEPS, sessionId, steps);
-}
-
-// ── Legacy reset ──────────────────────────────────────────────────
-
-function deleteDatabase(name: string): Promise<boolean> {
-  if (typeof indexedDB === "undefined") return Promise.resolve(true);
-  return new Promise((resolve) => {
-    let req: IDBOpenDBRequest;
-    try {
-      req = indexedDB.deleteDatabase(name);
-    } catch {
-      resolve(false);
-      return;
-    }
-    req.onsuccess = () => resolve(true);
-    req.onerror = () => resolve(false);
-    req.onblocked = () => resolve(false);
-  });
-}
-
-function removeLegacyLocalStorageData(): void {
-  if (typeof localStorage === "undefined") return;
-  const keysToRemove: string[] = [];
-
-  for (const key of LEGACY_LOCAL_STORAGE_KEYS) {
-    keysToRemove.push(key);
-  }
-
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (!key) continue;
-    if (
-      LEGACY_LOCAL_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
-    ) {
-      keysToRemove.push(key);
-    }
-  }
-
-  for (const key of keysToRemove) {
-    localStorage.removeItem(key);
-  }
-}
-
-/**
- * One-time browser storage reset for early local data.
- *
- * The reset only touches the current browser/WebView origin: legacy
- * IndexedDB database names plus old frontend localStorage data keys. Desktop
- * SQLite files and media directories live outside this origin and are not
- * affected.
- */
-export async function resetLegacyBrowserStorage(): Promise<void> {
-  if (typeof localStorage !== "undefined") {
-    try {
-      if (localStorage.getItem(BROWSER_STORAGE_RESET_KEY) === "1") return;
-    } catch {
-      return;
-    }
-  }
-
-  const deleted = await Promise.all(
-    LEGACY_BROWSER_DATABASES.map((name) => deleteDatabase(name)),
-  );
-
-  try {
-    removeLegacyLocalStorageData();
-    if (deleted.every(Boolean)) {
-      localStorage.setItem(BROWSER_STORAGE_RESET_KEY, "1");
-    }
-  } catch {
-    // localStorage unavailable (private mode, quota) — reset remains best-effort.
-  }
-}
-
-/**
- * Backward-compatible boot hook name. The early project reset deliberately
- * clears legacy browser data instead of migrating it.
- */
-export async function migrateLocalStorageToIdb(): Promise<void> {
-  try {
-    await resetLegacyBrowserStorage();
-  } catch {
-    // IDB not available (e.g. private browsing) — keep boot non-fatal.
-  }
 }

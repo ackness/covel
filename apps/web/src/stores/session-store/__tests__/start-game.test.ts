@@ -47,6 +47,9 @@ function makeDataService(order: string[]): DataService {
     syncToServer: vi.fn(async () => {
       order.push("sync");
     }),
+    updateSession: vi.fn((sessionId, updates) =>
+      api.updateSession(sessionId, updates),
+    ),
     deleteSession: vi.fn(async () => {
       order.push("delete");
     }),

@@ -1,7 +1,7 @@
 /**
  * IndexedDB blob cache for MediaRef-addressed assets.
  *
- * - DB name:    `covel-browser`
+ * - DB name:    `covel-browser-cache`
  * - Store:      `media_cache_blobs` (keyPath `id`, content-addressable SHA-256)
  * - Schema:     `MediaCacheRecord`
  *
@@ -16,10 +16,8 @@
  */
 
 // Import from the backend-free schema module (constants + the pure upgrade
-// function only). Importing these runtime values from "@covel/store/idb"
-// statically would drag the whole IDB DataStore backend into the main chunk
-// and defeat the dynamic import() in services/storage/data-store.ts
-// (rollup: INEFFECTIVE_DYNAMIC_IMPORT). See R-18.
+// function only). Business checkpoints live in the separate Dexie
+// BrowserVault and never share this cache schema.
 import {
   BROWSER_IDB_SCHEMA_VERSION,
   MEDIA_CACHE_STORE_BLOBS,

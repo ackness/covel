@@ -10,8 +10,11 @@
  */
 
 import { Hono } from "hono";
-import { deriveLegacyClockForSession } from "@covel/shared";
-import type { StateManager } from "@covel/state";
+import {
+  deriveLegacyClockForSession,
+  type StateChangeEntry,
+  type StateTableSchema,
+} from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { errorBody } from "../../api-error.js";
 import {
@@ -22,7 +25,6 @@ import {
 type Env = {
   Variables: {
     store: DataStore;
-    stateManager: StateManager;
   };
 };
 
@@ -37,8 +39,7 @@ export const stateRoutes = new Hono<Env>();
 //     keyed by character id.
 //   - `plugin_data/<pluginId>:<namespace>`: one virtual table per plugin
 //     namespace — keyed by the record's `key`, value is the full JSON.
-//   - Any `stateManager`-registered state tables (legacy path; currently
-//     no production plugin uses this but kept for future compatibility).
+//   - Any state tables registered in the canonical DataStore.
 //
 // The front-end DatabasePanel renders the map as a list of collapsible
 // tables; the `schema.fields` array is derived from the data keys so the
@@ -46,7 +47,6 @@ export const stateRoutes = new Hono<Env>();
 // with no registered schema.
 stateRoutes.get("/:id/state", async (c) => {
   const store = c.get("store");
-  const stateManager = c.get("stateManager");
   const id = c.req.param("id");
 
   const guard = await resolveSessionParam(c);
@@ -58,11 +58,11 @@ stateRoutes.get("/:id/state", async (c) => {
     { schema: unknown; data: Record<string, unknown> }
   > = {};
 
-  // ── Legacy stateManager tables (typically empty today) ────────────
-  const schemas = await stateManager.getTableSchemas(id);
+  // ── State tables ──────────────────────────────────────────────────
+  const schemas = await getTableSchemas(store, id);
   await Promise.all(
     schemas.map(async (schema) => {
-      const data = await stateManager.getTableSnapshot(id, schema.name);
+      const data = await getTableSnapshot(store, id, schema.name);
       tables[schema.name] = { schema, data: { ...data } };
     }),
   );
@@ -167,14 +167,14 @@ function typeOf(v: unknown): string {
 
 // GET /sessions/:id/state-patches — aggregated state change patches
 stateRoutes.get("/:id/state-patches", async (c) => {
-  const stateManager = c.get("stateManager");
+  const store = c.get("store");
   const id = c.req.param("id");
 
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
 
   // Collect all change logs across all tables into a flat patch list (parallel per field)
-  const schemas = await stateManager.getTableSchemas(id);
+  const schemas = await getTableSchemas(store, id);
   type Patch = {
     id: string;
     summary: string;
@@ -187,7 +187,7 @@ stateRoutes.get("/:id/state-patches", async (c) => {
   for (const schema of schemas) {
     for (const field of schema.fields) {
       fieldQueries.push(
-        stateManager.getChangeLog(id, schema.name, field.name).then((changes) =>
+        getChangeLog(store, id, schema.name, field.name).then((changes) =>
           changes.map((change) => {
             const ts = change.timestamp ?? new Date().toISOString();
             return {
@@ -214,21 +214,18 @@ stateRoutes.get("/:id/state-patches", async (c) => {
 
 // GET /sessions/:id/state-snapshot — full state snapshot for persistence
 stateRoutes.get("/:id/state-snapshot", async (c) => {
-  const stateManager = c.get("stateManager");
+  const store = c.get("store");
   const id = c.req.param("id");
 
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
 
-  const schemas = await stateManager.getTableSchemas(id);
+  const schemas = await getTableSchemas(store, id);
   const snapshot: Record<string, Record<string, unknown>> = {};
 
   await Promise.all(
     schemas.map(async (schema) => {
-      snapshot[schema.name] = await stateManager.getTableSnapshot(
-        id,
-        schema.name,
-      );
+      snapshot[schema.name] = await getTableSnapshot(store, id, schema.name);
     }),
   );
 
@@ -237,9 +234,9 @@ stateRoutes.get("/:id/state-snapshot", async (c) => {
 
 // PUT /sessions/:id/state-snapshot
 //
-// NOT IMPLEMENTED (v0.0.5). State restoration requires table re-creation in
-// StateManager, which the current state model does not expose. The route is
-// intentionally retained (rather than removed) so the contract stays visible
+// NOT IMPLEMENTED. State restoration requires a transaction spanning schema,
+// entry, and change records. The route is intentionally retained so the
+// contract stays visible
 // and scheduling for a real implementation is not lost. It returns 501 so
 // callers know the snapshot was NOT applied — returning 200 here would
 // silently discard the posted state. State is instead rebuilt from turn
@@ -256,3 +253,40 @@ stateRoutes.put("/:id/state-snapshot", async (c) => {
     501,
   );
 });
+
+async function getTableSchemas(
+  store: DataStore,
+  sessionId: string,
+): Promise<readonly StateTableSchema[]> {
+  const records = await store.listStateSchemas(sessionId);
+  return records.map((record) => record.schema as StateTableSchema);
+}
+
+async function getTableSnapshot(
+  store: DataStore,
+  sessionId: string,
+  tableName: string,
+): Promise<Readonly<Record<string, unknown>>> {
+  const entries = await store.listStateEntries(sessionId, tableName);
+  return Object.fromEntries(
+    entries.map((entry) => [entry.fieldName, entry.value]),
+  );
+}
+
+async function getChangeLog(
+  store: DataStore,
+  sessionId: string,
+  tableName: string,
+  fieldName: string,
+): Promise<readonly StateChangeEntry[]> {
+  const changes = await store.listStateChanges(sessionId, tableName, fieldName);
+  return changes
+    .filter((change) => change.turnId !== "__init__")
+    .map((change) => ({
+      value: change.value,
+      changedBy: change.changedBy,
+      turnId: change.turnId,
+      reason: change.reason,
+      timestamp: change.createdAt,
+    }));
+}

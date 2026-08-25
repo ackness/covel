@@ -144,7 +144,7 @@ export interface PackageSummary {
   displayName?: string | Record<string, string>;
   description?: string | Record<string, string>;
   pluginType?: string;
-  source?: "builtin" | "official" | "community";
+  source?: "builtin" | "community";
   enabled: boolean;
   runtimes?: RuntimeSummary[];
   tools?: ToolSummary[];

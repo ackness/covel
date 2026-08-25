@@ -29,6 +29,10 @@
  *   - `demo` / `commercial`: hard-required on every session-scoped route that
  *     goes through this guard. Sessions without a stored hash fail closed.
  *     The operator token (COVEL_DESKTOP_REST_TOKEN) acts as a master key.
+ *   - production + MemoryStore: hard-required as well. This is the anonymous
+ *     browser-private profile: durable data lives in each browser, while the
+ *     shared server only holds transient execution mirrors. Anonymous session
+ *     creation stays open, but one player cannot read another player's mirror.
  *
  * CORS remains a browser policy only — it is never relied on for authz.
  */
@@ -279,6 +283,13 @@ export function isOwnerAuthEnforced(
   return tier === "demo" || tier === "commercial";
 }
 
+/** Request-aware owner guard, including the anonymous browser-private tier. */
+export function isSessionOwnerAuthEnforced(c: Context): boolean {
+  if (isOwnerAuthEnforced()) return true;
+  const env = readRuntimeEnv();
+  return c.get("storeBackend") === "memory" && env.nodeEnv === "production";
+}
+
 /**
  * True when the caller presented the operator master token
  * (COVEL_DESKTOP_REST_TOKEN) — used to admit privileged tooling to
@@ -315,7 +326,7 @@ export function checkSessionOwner(
   session: SessionRecord,
 ): Response | undefined {
   const env = readRuntimeEnv();
-  if (!isOwnerAuthEnforced(env.deploymentTier)) return undefined;
+  if (!isSessionOwnerAuthEnforced(c)) return undefined;
 
   const provided = extractSessionOwnerToken(c);
   if (provided) {
@@ -360,7 +371,7 @@ export async function checkSessionOwnerById(
   store: DataStore,
   sessionId: string,
 ): Promise<Response | undefined> {
-  if (!isOwnerAuthEnforced()) return undefined;
+  if (!isSessionOwnerAuthEnforced(c)) return undefined;
   const session = await store.getSession(sessionId);
   if (!session) {
     return c.json(

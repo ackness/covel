@@ -37,7 +37,7 @@ function narrativeSlot(value, runtimeId = "narrator") {
   };
 }
 
-// Deliberate change: handler migrated to envelope-v1, so the business return
+// Deliberate change: handler returns the canonical HandlerResult, so the business return
 // (action / turnId / seeded / candidateCount / accepted*) is under
 // `result.value`; pending proposals stay on the envelope (result).
 describe("branch-reply seed path (auto, no manualPayload)", () => {

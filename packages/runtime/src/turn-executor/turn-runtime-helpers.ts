@@ -51,7 +51,7 @@ export function isTrustedPluginSource(
   manifest: RuntimeManifest,
 ): boolean {
   const source = deps.getPluginSource?.(manifest.pluginId);
-  return source === "builtin" || source === "official";
+  return source === "builtin";
 }
 
 export function createAssetProgressEmitter(

@@ -311,24 +311,8 @@ export const postHistoryDeclSchema = z
   })
   .strict();
 
-// ── Plugin RPC declarations ───────────────────────────────
+// ── Plugin entry path ─────────────────────────────────────
 
-/**
- * RPC action declaration for `RuntimeManifest.rpc[actionName]`. Validates
- * the per-action shape declared in PLUGIN.md frontmatter.
- *
- * `handler` and `input` are constrained to plugin-relative paths to block
- * path-traversal at the schema level:
- *
- *   - Must NOT start with `/` (absolute paths reset `path.resolve` base).
- *   - Must NOT contain `..` segments (would escape the plugin root).
- *   - Must end with `.js`, `.mjs`, or `.cjs` (handler) /
- *     `.json`, `.yaml`, `.yml` (input schema).
- *
- * The runtime loader applies a defence-in-depth check that the resolved
- * absolute path stays inside the plugin's discovery root — see
- * `apps/server/src/routes/api/bootstrap.ts` `loadHandler`.
- */
 const pluginRelativeJsPath = z
   .string()
   .min(1)
@@ -336,41 +320,6 @@ const pluginRelativeJsPath = z
     message:
       "handler must be a plugin-relative .js/.mjs/.cjs path (no leading `/`, no `..` segments)",
   });
-
-const pluginRelativeSchemaPath = z
-  .string()
-  .min(1)
-  .regex(/^(?!\/)(?!.*\/\.\.\/)(?!\.\.\/)[a-z0-9_./-]+\.(json|ya?ml)$/i, {
-    message:
-      "input schema must be a plugin-relative .json/.yaml path (no leading `/`, no `..` segments)",
-  });
-
-export const rpcActionDeclSchema = z
-  .object({
-    handler: pluginRelativeJsPath,
-    input: pluginRelativeSchemaPath.optional(),
-    trustLevel: z.enum(["builtin", "official", "community"]).optional(),
-    description: z.string().optional(),
-  })
-  .strict();
-
-/**
- * Map of action name → declaration. Action names must be kebab-case and
- * may not start with `framework-` (reserved for framework default handlers).
- */
-export const rpcDeclMapSchema = z.record(
-  z
-    .string()
-    .min(1)
-    .regex(/^[a-z][a-z0-9-]*$/, {
-      message:
-        "rpc action name must be kebab-case (lowercase letters, digits, hyphens)",
-    })
-    .refine((name) => !name.startsWith("framework-"), {
-      message: 'rpc action names starting with "framework-" are reserved',
-    }),
-  rpcActionDeclSchema,
-);
 
 const i18nTextLoose = z.union([z.string(), z.record(z.string(), z.string())]);
 
@@ -552,8 +501,6 @@ export const inputsBindingMapSchema = z.record(
 );
 
 // ── Result format ────────────────────────────────────────────────
-
-export const resultFormatSchema = z.enum(["legacy", "envelope-v1"]);
 
 // ── Effects declaration ──────────────────────────────────────────
 
@@ -802,12 +749,6 @@ const runtimeManifestCommonShape = {
   handler: z.string().optional(),
   guard: z.string().optional(),
   /**
-   * Plugin-root-relative path to a media-wires module (image / speech /
-   * transcription vendor wires). Declare on ONE runtime per plugin.
-   * Constrained like rpc handlers to block path traversal at schema level.
-   */
-  wires: pluginRelativeJsPath.optional(),
-  /**
    * Plugin-root-relative path to a unified server entry module
    * (`export default function (covel) { ... }`). Declare on ONE runtime
    * per plugin. Same traversal constraint as `wires` / rpc handlers.
@@ -855,8 +796,6 @@ const runtimeManifestCommonShape = {
   needs: z.array(needsRefSchema).optional(),
   /** Typed same-execution data bindings, keyed by local binding name. */
   inputs: inputsBindingMapSchema.optional(),
-  /** How the normalizer parses this runtime's handler return value. */
-  resultFormat: resultFormatSchema.optional(),
   /** Explicit read/write-set override for parallel hazard detection. */
   effects: effectsDeclSchema.optional(),
   /** Declared permission upper bounds (currently HTTP origins + methods). */
@@ -883,11 +822,9 @@ const runtimeManifestCommonShape = {
   i18n: z.record(z.string(), z.string()).optional(),
   ui: uiSpecSchema.optional(),
   userSettings: z.array(pluginUserSettingSpecSchema).optional(),
-  hooks: z.array(hookDeclarationSchema).optional(),
   summaryFocus: z.array(z.string()).optional(),
   authorsNote: authorsNoteDeclSchema.optional(),
   postHistory: postHistoryDeclSchema.optional(),
-  rpc: rpcDeclMapSchema.optional(),
   memoryBlocks: z.array(memoryBlockDeclSchema).optional(),
 } as const;
 
@@ -913,13 +850,6 @@ export const runtimeManifestInputSchema = z
       });
     }
   });
-
-/**
- * Compat alias. The plugin loader and `validate.ts` import this name; it is the
- * exact same schema object as {@link runtimeManifestInputSchema}, so the loader
- * needs no change.
- */
-export const runtimeManifestSchema = runtimeManifestInputSchema;
 
 /**
  * Strict authoring target — the shape new plugins should be written against.

@@ -1,9 +1,11 @@
 import type { CursorPage } from "@covel/shared";
 import type {
-  DataStore,
+  BrowserCheckpoint,
+  MessageRecord as StoreMessageRecord,
   SessionRecord as StoreSessionRecord,
   WorldRecord as StoreWorldRecord,
-} from "@covel/store";
+} from "@covel/store/browser-sync";
+import { BROWSER_CHECKPOINT_SCHEMA_VERSION } from "@covel/store/browser-sync";
 import type { SessionStatus } from "../api.js";
 import type {
   MessageRecord,
@@ -16,7 +18,7 @@ import { resolveI18nText } from "@covel/shared";
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
-import { createBrowserDataStore } from "../storage/index.js";
+import { BrowserVault } from "../storage/index.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import {
   toFrontendMessage,
@@ -24,9 +26,7 @@ import {
   toFrontendWorld,
 } from "./mappers.js";
 import { LOCAL_SEED_WORLDS } from "./seed-worlds.js";
-import type { DataService, WorldPatch } from "./types.js";
-
-type Writable<T> = { -readonly [K in keyof T]: T[K] };
+import type { DataService, SessionPatch, WorldPatch } from "./types.js";
 
 /** Default keyset page size when a caller omits `limit` (mirrors the API default). */
 const DEFAULT_MESSAGES_PAGE_LIMIT = 80;
@@ -73,25 +73,70 @@ function humanSessionId(): string {
     "glow",
   ];
   const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
-  const hex = Math.random().toString(16).slice(2, 6);
+  const hex = crypto.randomUUID().slice(0, 8);
   return `${pick(words)}-${pick(nouns)}-${pick(words)}-${hex}`;
 }
 
+function jsonCheckpoint(checkpoint: BrowserCheckpoint): BrowserCheckpoint {
+  return JSON.parse(JSON.stringify(checkpoint)) as BrowserCheckpoint;
+}
+
+function initialCheckpoint(
+  session: StoreSessionRecord,
+  world: StoreWorldRecord | null,
+): BrowserCheckpoint {
+  const committedAt = new Date().toISOString();
+  return jsonCheckpoint({
+    schemaVersion: BROWSER_CHECKPOINT_SCHEMA_VERSION,
+    sessionId: session.id,
+    profile: "browser-private",
+    session,
+    world,
+    messages: [],
+    turnMessages: [],
+    turnResults: [],
+    runtimeResults: [],
+    toolCalls: [],
+    runtimeOutputs: [],
+    interactions: [],
+    events: [],
+    traceEvents: [],
+    characters: [],
+    pluginData: [],
+    workingMemory: [],
+    lorebookEntries: [],
+    sessionSummaries: [],
+    playerInputs: [],
+    suspensions: [],
+    snapshots: [],
+    worldDataLedger: [],
+    logicalTurnLedger: [],
+    setupAttempts: [],
+    jobStatus: [],
+    runtimeExports: [],
+    revision: 1,
+    actionId: `local:create:${session.id}`,
+    committedAt,
+  });
+}
+
 export class LocalDataService implements DataService {
-  private idbStore: DataStore | null = null;
+  private readonly vault: BrowserVault;
   private statePatches = new Map<string, StatePatchRecord[]>();
   private initPromise: Promise<void> | null = null;
+  private workspaceTail: Promise<void> = Promise.resolve();
 
-  private async getStore(): Promise<DataStore> {
-    if (this.idbStore) return this.idbStore;
+  constructor(vault?: BrowserVault) {
+    this.vault = vault ?? new BrowserVault();
+  }
+
+  private async ready(): Promise<BrowserVault> {
     if (!this.initPromise) {
       this.initPromise = (async () => {
-        this.idbStore = await createBrowserDataStore();
-        // Seed minimal worlds for offline/no-server scenarios
-        const existing = await this.idbStore.listWorlds();
+        const existing = await this.vault.listWorlds();
         if (existing.length === 0) {
           for (const seed of LOCAL_SEED_WORLDS) {
-            await this.idbStore.upsertWorld({
+            await this.vault.upsertWorld({
               id: uid("world"),
               name: seed.name as StoreWorldRecord["name"],
               description: seed.description as StoreWorldRecord["description"],
@@ -103,39 +148,74 @@ export class LocalDataService implements DataService {
       })();
     }
     await this.initPromise;
-    return this.idbStore!;
+    return this.vault;
+  }
+
+  private async mutateCheckpoint(
+    sessionId: string,
+    domain: string,
+    mutate: (checkpoint: BrowserCheckpoint) => BrowserCheckpoint,
+  ): Promise<BrowserCheckpoint> {
+    const vault = await this.ready();
+    const current = await vault.getLatestCheckpoint(sessionId);
+    if (!current) throw new Error(`Session not found: ${sessionId}`);
+    const actionId = `local:${domain}:${crypto.randomUUID()}`;
+    const committedAt = new Date().toISOString();
+    const checkpoint = jsonCheckpoint({
+      ...mutate(current),
+      schemaVersion: BROWSER_CHECKPOINT_SCHEMA_VERSION,
+      sessionId,
+      profile: "browser-private",
+      revision: current.revision + 1,
+      actionId,
+      committedAt,
+    });
+    const result = await vault.applySessionCommit({
+      baseRevision: current.revision,
+      revision: checkpoint.revision,
+      actionId,
+      checkpoint,
+    });
+    return result.checkpoint;
+  }
+
+  private enqueueWorkspace<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.workspaceTail.then(operation, operation);
+    this.workspaceTail = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   // Worlds
 
   async listWorlds(): Promise<WorldRecord[]> {
-    const store = await this.getStore();
-    const worlds = await store.listWorlds();
+    const worlds = await (await this.ready()).listWorlds();
     return worlds
       .map(toFrontendWorld)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async getWorld(id: string): Promise<WorldRecord | null> {
-    const store = await this.getStore();
-    const w = await store.getWorld(id);
+    const w = await (await this.ready()).getWorld(id);
     return w ? toFrontendWorld(w) : null;
   }
 
   async createWorld(name: string, description: string): Promise<WorldRecord> {
-    const store = await this.getStore();
+    const vault = await this.ready();
     const world: WorldRecord = {
       id: uid("world"),
       name,
       description,
       createdAt: new Date().toISOString(),
     };
-    await store.upsertWorld(world as StoreWorldRecord);
+    await vault.upsertWorld(world as StoreWorldRecord);
     return world;
   }
 
   async saveGeneratedWorld(world: WorldRecord): Promise<WorldRecord> {
-    const store = await this.getStore();
+    const vault = await this.ready();
     const now = new Date().toISOString();
     const metadata: Record<string, unknown> = {
       ...world.metadata,
@@ -154,37 +234,43 @@ export class LocalDataService implements DataService {
       updatedAt: now,
       createdAt: world.createdAt ?? now,
     };
-    await store.upsertWorld(record as StoreWorldRecord);
+    await vault.upsertWorld(record as StoreWorldRecord);
     return record;
   }
 
   async updateWorld(id: string, patch: WorldPatch): Promise<WorldRecord> {
-    const store = await this.getStore();
-    const existing = await store.getWorld(id);
+    const vault = await this.ready();
+    const existing = await vault.getWorld(id);
     if (!existing) throw new Error("World not found: " + id);
     const updated: StoreWorldRecord = {
       ...existing,
       ...patch,
       updatedAt: new Date().toISOString(),
     } as StoreWorldRecord;
-    await store.upsertWorld(updated);
+    await vault.upsertWorld(updated);
     return toFrontendWorld(updated);
   }
 
   // Sessions
 
   async listSessions(worldId: string): Promise<SessionRecord[]> {
-    const store = await this.getStore();
-    const sessions = await store.listSessions();
+    const vault = await this.ready();
+    const sessions = await Promise.all(
+      (await vault.listSessions()).map((head) =>
+        vault.getLatestCheckpoint(head.sessionId),
+      ),
+    );
     return sessions
+      .filter((checkpoint): checkpoint is BrowserCheckpoint => !!checkpoint)
+      .map((checkpoint) => checkpoint.session)
       .filter((s) => !worldId || s.worldId === worldId)
       .map(toFrontendSession)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async getSession(sessionId: string): Promise<SessionRecord | null> {
-    const store = await this.getStore();
-    const s = await store.getSession(sessionId);
+    const s = (await (await this.ready()).getLatestCheckpoint(sessionId))
+      ?.session;
     return s ? toFrontendSession(s) : null;
   }
 
@@ -195,10 +281,10 @@ export class LocalDataService implements DataService {
     _plugins?: string[],
     locale?: string,
   ): Promise<SessionRecord> {
-    const store = await this.getStore();
+    const vault = await this.ready();
     const nowIso = new Date().toISOString();
     const session: SessionRecord = {
-      id: humanSessionId(),
+      id: _id ?? humanSessionId(),
       worldId,
       status: "active",
       locale: locale ?? "zh-CN",
@@ -208,7 +294,7 @@ export class LocalDataService implements DataService {
       presetId,
       createdAt: nowIso,
     };
-    await store.createSession({
+    const storeSession: StoreSessionRecord = {
       id: session.id,
       worldId,
       status: "active",
@@ -220,36 +306,39 @@ export class LocalDataService implements DataService {
       metadata: presetId ? { presetId } : undefined,
       createdAt: nowIso,
       updatedAt: nowIso,
-    });
+    };
+    const world = await vault.getWorld(worldId);
+    await vault.saveCheckpoint(initialCheckpoint(storeSession, world));
     return session;
   }
 
   async updateSession(
     sessionId: string,
-    updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
+    updates: SessionPatch,
   ): Promise<SessionRecord> {
-    const store = await this.getStore();
-    const existing = await store.getSession(sessionId);
+    const existing = (await (await this.ready()).getLatestCheckpoint(sessionId))
+      ?.session;
     if (!existing) throw new Error("Session not found: " + sessionId);
     const nextStatus = (updates.status ??
       existing.status ??
       "active") as SessionStatus;
-    const updated: SessionRecord = {
-      id: existing.id,
-      worldId: existing.worldId ?? "",
-      status: nextStatus,
-      turnCount: existing.turnCount ?? 0,
-      preGameCompleted: existing.preGameCompleted ?? [],
-      presetId: updates.presetId ?? existing.presetId,
-      createdAt: existing.createdAt,
-    };
-    const patch: Writable<Partial<StoreSessionRecord>> = {
-      updatedAt: new Date().toISOString(),
-    };
-    if (updates.status !== undefined) patch.status = nextStatus;
-    if ("presetId" in updates) patch.presetId = updates.presetId;
-    await store.updateSession(sessionId, patch);
-    return updated;
+    const updated = await this.mutateCheckpoint(
+      sessionId,
+      "session",
+      (checkpoint) => ({
+        ...checkpoint,
+        session: {
+          ...checkpoint.session,
+          ...(updates.status !== undefined ? { status: nextStatus } : {}),
+          ...("presetId" in updates ? { presetId: updates.presetId } : {}),
+          ...(updates.runtimeModelOverrides !== undefined
+            ? { runtimeModelOverrides: updates.runtimeModelOverrides }
+            : {}),
+          updatedAt: new Date().toISOString(),
+        },
+      }),
+    );
+    return toFrontendSession(updated.session);
   }
 
   async deleteSession(sessionId: string): Promise<void> {
@@ -257,9 +346,9 @@ export class LocalDataService implements DataService {
     // authoritative once hydrated, so it must not survive a delete that failed
     // partway through.
     this.statePatches.delete(sessionId);
-    const store = await this.getStore();
+    const vault = await this.ready();
     await Promise.all([
-      store.deleteSession(sessionId),
+      vault.deleteSession(sessionId),
       // A local session may already have an authoritative server mirror from
       // syncToServer. Its cleanup is best-effort so offline users can still
       // delete their browser data, but always attempt it to avoid orphaned
@@ -284,8 +373,9 @@ export class LocalDataService implements DataService {
   // Messages
 
   async listMessages(sessionId: string): Promise<MessageRecord[]> {
-    const store = await this.getStore();
-    const messages = await store.listMessages(sessionId);
+    const messages =
+      (await (await this.ready()).getLatestCheckpoint(sessionId))?.messages ??
+      [];
     return messages
       .map(toFrontendMessage)
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -295,13 +385,23 @@ export class LocalDataService implements DataService {
     sessionId: string,
     opts: { limit?: number; before?: { createdAt: string; id: string } },
   ): Promise<CursorPage<MessageRecord>> {
-    const store = await this.getStore();
     const limit = opts.limit ?? DEFAULT_MESSAGES_PAGE_LIMIT;
-    // 直连 IDB 拿到 oldest-first 的一页（store 已按 (createdAt, id) 键集切片）。
-    const rows = await store.listMessagesPage(sessionId, {
-      limit,
-      before: opts.before,
-    });
+    const all = [
+      ...((await (await this.ready()).getLatestCheckpoint(sessionId))
+        ?.messages ?? []),
+    ].sort(
+      (a, b) =>
+        a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+    );
+    const eligible = opts.before
+      ? all.filter(
+          (row) =>
+            row.createdAt < opts.before!.createdAt ||
+            (row.createdAt === opts.before!.createdAt &&
+              row.id < opts.before!.id),
+        )
+      : all;
+    const rows = eligible.slice(-limit);
     const items = rows.map(toFrontendMessage);
     // 按契约：拿满一页（可能还有更旧）时游标指向最旧一条，否则到历史开头 → null。
     const nextCursor =
@@ -312,8 +412,7 @@ export class LocalDataService implements DataService {
   }
 
   async addMessage(msg: MessageRecord): Promise<void> {
-    const store = await this.getStore();
-    await store.addMessage({
+    const record: StoreMessageRecord = {
       id: msg.id,
       sessionId: msg.sessionId,
       role: msg.role,
@@ -325,7 +424,14 @@ export class LocalDataService implements DataService {
         ...(msg.block ? { block: msg.block } : {}),
       },
       createdAt: msg.createdAt,
-    });
+    };
+    await this.mutateCheckpoint(record.sessionId, "message", (checkpoint) => ({
+      ...checkpoint,
+      messages: [
+        ...checkpoint.messages.filter((item) => item.id !== record.id),
+        record,
+      ],
+    }));
   }
 
   // State patches
@@ -405,15 +511,25 @@ export class LocalDataService implements DataService {
   // Sync to server
 
   async syncToServer(sessionId: string): Promise<void> {
-    const [session, world, messages] = await Promise.all([
-      this.getSession(sessionId),
-      this.getSession(sessionId).then(async (s) =>
-        s ? this.getWorld(s.worldId) : null,
-      ),
-      this.listMessages(sessionId),
-    ]);
+    return this.enqueueWorkspace(() => this.syncToServerNow(sessionId));
+  }
 
-    if (!session || !world) return;
+  private async syncToServerNow(sessionId: string): Promise<void> {
+    const vault = await this.ready();
+    let checkpoint = await vault.getLatestCheckpoint(sessionId);
+    if (!checkpoint) return;
+    const world = checkpoint.session.worldId
+      ? await vault.getWorld(checkpoint.session.worldId)
+      : null;
+    if (!world) return;
+    if (JSON.stringify(checkpoint.world) !== JSON.stringify(world)) {
+      checkpoint = await this.mutateCheckpoint(
+        sessionId,
+        "world",
+        (current) => ({ ...current, world }),
+      );
+    }
+    const session = toFrontendSession(checkpoint.session);
 
     // Server and browser validators both accept underscores. Preserve legacy
     // IDs exactly: actions continue to address the local SessionRecord id, so
@@ -449,26 +565,28 @@ export class LocalDataService implements DataService {
       );
     }
 
-    // Upload messages so the server kernel can build LLM context. This is NOT
-    // optional: silently skipping it means the next turn runs with empty
-    // history and the narrator visibly loses the whole story, with no error
-    // shown. Let it reject — `start-game` already has an error path.
-    if (messages.length > 0) {
-      await api.syncMessages(
-        serverSessionId,
-        messages.map((m) => ({
-          role: m.role,
-          content: m.content,
-          turnId: m.turnId,
-          runtimeId: m.runtimeId,
-          block: m.block,
-        })),
-      );
-    }
+    await api.uploadBrowserCheckpoint(serverSessionId, checkpoint);
+  }
 
-    // Legacy snapshots stay in IDB for local fallback. The server reconstructs
-    // authoritative state from committed turn/domain records and intentionally
-    // does not implement snapshot upload.
+  async commitFromServer(sessionId: string, actionId: string): Promise<void> {
+    return this.enqueueWorkspace(() =>
+      this.commitFromServerNow(sessionId, actionId),
+    );
+  }
+
+  private async commitFromServerNow(
+    sessionId: string,
+    actionId: string,
+  ): Promise<void> {
+    const vault = await this.ready();
+    const current = await vault.getLatestCheckpoint(sessionId);
+    if (!current) throw new Error(`Session not found: ${sessionId}`);
+    const commit = await api.fetchBrowserCommit(
+      sessionId,
+      actionId,
+      current.revision,
+    );
+    await vault.applySessionCommit(commit);
   }
 
   async saveExecutionSteps(sessionId: string, steps: unknown[]): Promise<void> {

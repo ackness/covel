@@ -251,6 +251,22 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | PATCH  | `/api/sessions/:id` | 更新会话字段（`status` / `runtimeModelOverrides`） |
 | DELETE | `/api/sessions/:id` | 删除会话                                           |
 
+### 浏览器私有工作区
+
+以下端点仅在 `STORE_BACKEND=memory` 的 browser-private profile 可用，并沿用
+session owner-token 鉴权。它们是 Web `LocalDataService` 的内部同步协议，不是
+通用远程存储 API。
+
+| 方法 | 路径                                   | 描述                                                                                                    |
+| ---- | -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| PUT  | `/api/sessions/:id/browser-checkpoint` | body `{ checkpoint }`；事务性替换临时 MemoryStore 工作区。拒绝过期 revision 与同 revision 的分叉 head。 |
+| POST | `/api/sessions/:id/browser-commit`     | body `{ actionId, baseRevision }`；导出下一版完整 checkpoint，重复 actionId 幂等返回同一 commit。       |
+
+`SessionCommit` 形状为
+`{ baseRevision, revision, actionId, checkpoint }`。非 MemoryStore 调用返回
+`409 browser_private_profile_required`；未先上传 checkpoint、revision 冲突也返回
+`409`。checkpoint 不允许携带 provider key、owner token 或其他凭据。
+
 ### 会话快照
 
 | 方法 | 路径                         | 描述                                                                                                                           |
@@ -340,7 +356,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | GET  | `/api/sessions/:id/state-snapshot` | 获取完整状态快照                         |
 | PUT  | `/api/sessions/:id/state-snapshot` | **当前未实现** —— 返回 `501`，见下方说明 |
 
-> **`PUT /api/sessions/:id/state-snapshot`（当前未实现；自 v0.0.5 明确返回 501）**：恢复状态快照需要 StateManager
+> **`PUT /api/sessions/:id/state-snapshot`（当前未实现；自 v0.0.5 明确返回 501）**：恢复状态快照需要 DataStore
 > 重建状态表，当前状态模型未暴露该能力。路由有意保留（而非删除）以保持契约可见、不丢失排期，
 > 当会话存在时返回
 > `501 { "error": "State snapshot restoration not implemented. State will be rebuilt from turn execution.", "code": "not_implemented" }`
@@ -631,12 +647,12 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
     },
     "migrations": [
       {
-        "id": "browser:idb:unified-storage",
+        "id": "browser:idb:cache-media",
         "domain": "browser",
         "backend": "idb",
-        "version": 11,
+        "version": 1,
         "status": "managed-by-backend",
-        "description": "Browser-local data, media, app-KV, and render cache share the covel-browser IndexedDB schema."
+        "description": "Browser UI state and media caches use a lightweight IndexedDB schema; durable game data lives in the separate Dexie BrowserVault."
       }
     ]
   },
@@ -649,16 +665,16 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 }
 ```
 
-| 字段                                      | 说明                                                                                                   |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `bootId`                                  | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启                                              |
-| `storage.data.backend`                    | 当前服务端 DataStore 后端（`memory` / `sqlite` / `pg`）。默认 `sqlite`。                               |
-| `storage.data.frontendMode`               | 前端数据模式：`local` 使用浏览器 IndexedDB；`remote` 使用服务端 API，由服务端 `STORE_BACKEND` 持久化。 |
-| `storage.media`                           | 当前 MediaStore 的配置值、实际后端、启用状态和持久化状态。                                             |
-| `storage.migrations`                      | 已注册迁移域、版本和状态；SQL 迁移由服务端迁移流程执行，IDB 迁移由浏览器数据库升级回调执行。           |
-| `vector.capable`                          | 当前后端是否支持向量检索（受 store 类型 + 编译时 vector 扩展可用性影响）                               |
-| `vector.driver`                           | `sqlite-vec` / `pgvector` / `in-memory` / `external` / `none`                                          |
-| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量及对应物理表数量（每个模型一张表）                                          |
+| 字段                                      | 说明                                                                                                                 |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `bootId`                                  | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启                                                            |
+| `storage.data.backend`                    | 当前服务端 DataStore 后端（`memory` / `sqlite` / `pg`）。默认 `sqlite`。                                             |
+| `storage.data.frontendMode`               | 前端数据模式：`local` 使用 Dexie BrowserVault checkpoint；`remote` 使用服务端 API，由服务端 `STORE_BACKEND` 持久化。 |
+| `storage.media`                           | 当前 MediaStore 的配置值、实际后端、启用状态和持久化状态。                                                           |
+| `storage.migrations`                      | 已注册迁移域、版本和状态；SQL 迁移由服务端迁移流程执行，IDB 迁移由浏览器数据库升级回调执行。                         |
+| `vector.capable`                          | 当前后端是否支持向量检索（受 store 类型 + 编译时 vector 扩展可用性影响）                                             |
+| `vector.driver`                           | `sqlite-vec` / `pgvector` / `in-memory` / `external` / `none`                                                        |
+| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量及对应物理表数量（每个模型一张表）                                                        |
 
 ---
 
@@ -1300,7 +1316,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 统一的"结构化插件指令"通道。同时支持:
 
-1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 PLUGIN.md `rpc` 字段中声明的 RPC handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
+1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 `entry` 中通过 `covel.registerRpc` 注册的 handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
 2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
    - `'background'`: 立即返回 202 + `jobId`,后台通过 `setImmediate` 继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。
@@ -1361,7 +1377,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 **解析顺序(action 级):**
 
-1. 插件声明的 action(`manifest.rpc[action]`,通过 `pluginId` 命名空间隔离)
+1. 插件在 `entry` 中注册的 action(通过 `pluginId` 命名空间隔离)
 2. 框架默认 action(全局)——当前只注册了 `submit-form` 一个(`bootstrap/plugin-rpc-wiring.ts` 的 `registerFrameworkDefault`)
 
 **框架默认 action:**
@@ -1391,7 +1407,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
       "pluginId": "dashscope-image-gen",
       "status": "ok",
       "durationMs": 3421,
-      "output": {/* runtime final output (parsed envelope) */}
+      "output": {/* materialized runtime output */}
     }
   ],
   "durationMs": 3480
@@ -1400,7 +1416,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 **图像/媒体生成输出:**
 
-Function runtime 的完成态可返回 `assetGenerations[]`。每一项会被提交为 `asset.generate` proposal,并以 MediaRef 形式进入 trace / SSE / 视图层。
+Function handler 以 `HandlerResult.success.effects.assetGenerations[]` 返回媒体产出；API 的 runtime `output` 会物化该数组。每一项会被提交为 `asset.generate` proposal,并以 MediaRef 形式进入 trace / SSE / 视图层。
 
 ```json
 {
@@ -1434,7 +1450,7 @@ Function runtime 的完成态可返回 `assetGenerations[]`。每一项会被提
 
 Provider-specific wire responses such as OpenAI `b64_json`, SDK `base64`, or expiring remote image URLs are transient handler inputs. The handler must call `ctx.media.put()` for bytes/base64 or `ctx.media.ingestUrl()` for remote URLs before returning, then expose the generated media through `assetGenerations[].ref` and ref-only business records.
 
-For plugins with `capabilities: ["image-generation"]`, a successful completed runtime must return at least one valid `assetGenerations[]` entry. `pluginData` records in the `images` namespace must store `ref` records; completed outputs with old `url`, `base64`, or `dataUrl` image fields are reported as runtime errors.
+For plugins with `capabilities: ["image-generation"]`, a successful completed runtime must return at least one valid `assetGenerations[]` entry in `HandlerResult.success.effects`. `pluginData` records in the `images` namespace must store `ref` records; completed outputs with old `url`, `base64`, or `dataUrl` image fields are reported as runtime errors.
 
 **响应 202 — runtime 级,background 模式:**
 
@@ -1492,47 +1508,22 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 | 400    | `pluginId` 缺失 / `action` 与 `runtimeId` 同时设置或同时缺失 / `RpcValidationError` / `plugin-mismatch`(runtimeId 不属于 pluginId) |
 | 404    | 会话不存在 / `unknown-action`(action 未注册) / `runtime-not-active`(runtimeId 未加载到该 session)                                  |
 | 409    | `session-not-active` / `session-deleting` / `session-incarnation-changed` / `approval-scope-changed`                               |
-| 429    | `queue-full`(community trust 的待批准队列满)                                                                                       |
+| 429    | `queue-full`(community 来源的待批准队列满)                                                                                         |
 | 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime-execution-failed` / `background-enqueue-failed` / `turn-commit-failed`    |
 
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
 > **提交结果是权威判据**：runtime 可能返回 `success` 而其 proposal 提交失败。此时同步 RPC 返回 `500 turn-commit-failed`，background job 标记 `failed`（`error` 说明失败的 proposal 数量），且**不会**调度该回合的 deferred follower —— 后续 follower 不应建立在已回滚的状态上。主回合路径（`POST /api/actions`）遵循同一规则。
 
-> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 声明尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin/official 的 entry 在 boot 时已运行，其未知 action 直接 404。
->
-> **community 插件的声明式 `manifest.rpc` action 同样两阶段**：dispatch 一个声明式 action 会动态 `import()` 该插件的 handler 模块，按同一定义它就是 server code。因此缺少 server-code grant 时，第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试才返回该 action 自身的审批。builtin/official 声明式 action 不受影响（照旧自动放行）。
+> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin 的 entry 在 boot 时已运行，其未知 action 直接 404。
 >
 > **community 插件 + `runtimeId`（runtime 模式）同样采用两阶段授权**：缺少 server-code grant 时第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试返回 `runtime:<runtimeId>` 审批；两个**精确** grant 同时存在，runtime 才会加载执行。entry import 也只认精确 `covel:plugin-server-code` grant，任意其他 action grant 不会解锁模块加载。revoke 按 `(session, plugin)` 前缀清除两类 grant。
-
-**插件 PLUGIN.md 中声明 RPC action:**
-
-```yaml
----
-name: my-plugin
-description: ...
-rpc:
-  regenerate:
-    handler: ./rpc/regenerate.js
-    input: ./rpc/regenerate.schema.json # 可选
-    description: 重新生成上一次叙事
-  cancel:
-    handler: ./rpc/cancel.js
-    trustLevel: builtin # 强制 builtin 信任
----
-```
-
-> Action 名不能以 `framework-` 开头(保留给框架默认 handler)。所有 action 名必须是 kebab-case。
-
-> Handler 是 `default export` 函数,签名 `(payload, context) => Promise<unknown>`。`context` 至少包含 `{ sessionId, pluginId, action, store }`。模块在首次调用时按需 `import()`。
-
-> RPC 分发一律同步返回。耗时工作走后台 job,进度经 `plugin-data.changed` SSE 推给前端(见 plugin-rpc 的 `mode: background`),没有流式 RPC 协议。
 
 ---
 
 ### RPC Approval 流程
 
-第三方插件(`community` 信任级别)的 RPC action 在执行前需要玩家显式批准,防止未审计的代码自动操作 session。
+第三方插件(`community` 来源)的 RPC action 在执行前需要玩家显式批准,防止未审计的代码自动操作 session。
 
 #### 流程
 
@@ -1546,7 +1537,7 @@ rpc:
                                                        │
                        ┌───────────────────────────────┤
                        │                               │
-              builtin/official                  community
+              builtin                         community
               + 不在 cache                        + 不在 cache
                        │                               │
                        ▼                               ▼
@@ -1658,12 +1649,11 @@ rpc:
 
 `cleared` 为清除的授权条目数（session-cached 与 one-time 授权合计）。
 
-#### 信任等级与 approval 行为
+#### 插件来源与 approval 行为
 
-| 信任等级    | 来源                        | Approval 行为                              |
+| 插件来源    | 来源                        | Approval 行为                              |
 | ----------- | --------------------------- | ------------------------------------------ |
 | `builtin`   | 框架自带 / 框架默认 handler | 永远直接执行                               |
-| `official`  | 维护团队白名单              | 永远直接执行                               |
 | `community` | 第三方,默认级别             | 每次都需要玩家批准,除非 session-cache 命中 |
 
 > One-time grant 的 TTL 为 60 秒。如果玩家批准后 60 秒内没有发起对应的 dispatch,grant 会过期,需要重新走 dialog 流程。
@@ -1725,7 +1715,7 @@ rpc:
 
 #### `GET /api/plugins`
 
-列出所有已加载的插件。`name` 与 `description` 是 `I18nText`（可能是字符串或 `{ "<locale>": "..." }` 字典）。`capabilities` 为该插件所有 runtime 声明的 capability 并集；`tags` 是玩家/作者筛选标签；`relations` 是目录关系元数据；`outputKind` 取首个 runtime 的输出类别（`story` / `plugin` / `system`）；`source` 是框架根据加载路径派定的信任层级（`builtin` / `official` / `community`）。
+列出所有已加载的插件。`name` 与 `description` 是 `I18nText`（可能是字符串或 `{ "<locale>": "..." }` 字典）。`capabilities` 为该插件所有 runtime 声明的 capability 并集；`tags` 是玩家/作者筛选标签；`relations` 是目录关系元数据；`outputKind` 取首个 runtime 的输出类别（`story` / `plugin` / `system`）；`source` 是框架根据加载路径派定的插件来源（`builtin` / `community`）。
 
 UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` 派发，**不要**根据 `id` 字符串硬编码（违反框架/插件隔离规则）。
 
@@ -1932,7 +1922,7 @@ enable/disable 与同一 session 的其他写入共用 session lock，并在持�
 
 ### 状态查询
 
-状态系统以结构化表格形式存储游戏世界的各类事实（如角色属性、世界状态、任务进度）。每个表由插件通过 StateManager 注册。
+状态系统以结构化表格形式存储游戏世界的各类事实（如角色属性、世界状态、任务进度）。服务端通过 `DataStore` 的状态表接口读取 schema、条目和变更记录；插件通过 `state.patch` proposal 提交状态变更。
 
 #### `GET /api/sessions/:id/state`
 
@@ -2705,7 +2695,7 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 }
 ```
 
-Web 前端根据 `/api/health.storage.data.frontendMode` 选择生成世界保存目标。`local` 模式使用 `saveTarget: "return-only"`，然后通过 `packages/store` 的 IndexedDB `DataStore.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。`remote` 模式使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。缺少 `frontendMode` 时使用 `server-file`。
+Web 前端根据 `/api/health.storage.data.frontendMode` 选择生成世界保存目标。`local` 模式使用 `saveTarget: "return-only"`，然后通过 Dexie `BrowserVault.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。`remote` 模式使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。缺少 `frontendMode` 时使用 `server-file`。
 
 **响应 200:** SSE 帧。
 
@@ -3006,7 +2996,7 @@ Covel 支持三种部署层级 (Deployment Tier)，每种层级使用不同的�
 
 - **服务器存储**: SQLite（默认，`./data/covel.db`）；可显式切换 Memory（仅用于一次性测试）
 - **前端存储**: 默认 remote 使用服务端 SQLite；local 模式使用浏览器 IndexedDB
-- **数据流**: remote 模式下前端通过 API 读写服务端 store；local 模式下业务记录持久保存在浏览器 `covel-browser` IndexedDB 中，并在执行 turn 前通过 `syncToServer()` 向本地服务器补齐临时执行上下文；生成世界等服务器能力通过 `return-only` 响应交给前端保存
+- **数据流**: remote 模式下前端通过 API 读写服务端 store；local 模式下业务记录以版本化 checkpoint 持久保存在 Dexie `covel-browser-vault` 中，执行前上传到临时 MemoryStore，执行后原子应用 `SessionCommit`；生成世界等服务器能力通过 `return-only` 响应交给前端保存
 - **API 密钥**: 用户自行管理，存储在浏览器 localStorage
 - **认证**: 无
 

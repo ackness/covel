@@ -64,6 +64,16 @@ export function createLifecycleMethods(state: MemoryState): MemoryStoreMethods {
       );
     },
 
+    async listLogicalTurnCompletions(sessionId: string) {
+      return [...state.logicalTurnLedger.values()]
+        .filter((record) => record.sessionId === sessionId)
+        .sort(
+          (a, b) =>
+            a.completedAt.localeCompare(b.completedAt) ||
+            a.logicalTurnId.localeCompare(b.logicalTurnId),
+        );
+    },
+
     async insertSetupAttempt(record: SetupAttemptRecord) {
       const key = attemptKey(
         record.sessionId,

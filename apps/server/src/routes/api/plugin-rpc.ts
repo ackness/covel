@@ -12,8 +12,8 @@
  *
  * Two dispatch modes:
  *
- *   1. Action-level (`action` set) — delegates to an RpcActionDecl handler
- *      declared in `manifest.rpc[action]` or a framework default. Returns a
+ *   1. Action-level (`action` set) — delegates to an inline handler registered
+ *      by the plugin entry or a framework default. Returns a
  *      single JSON response.
  *
  *   2. Runtime-level (`runtimeId` set) — invokes `executeTurn` with
@@ -29,7 +29,7 @@
  *          reserved `_jobs` namespace.
  *
  * Resolution order for action dispatch:
- *   1. Plugin-declared action (manifest.rpc[action])
+ *   1. Plugin entry-registered action
  *   2. Framework default (registry.getFrameworkDefault)
  */
 
@@ -266,7 +266,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // bootstrap. Now that the approval gate has cleared this RPC, ensure the
     // plugin's `tools.local` are registered before the runtime executes —
     // otherwise tool calls would resolve to `undefined` in the executor.
-    // No-op for builtin/official plugins (already loaded at boot) and for
+    // No-op for builtin plugins (already loaded at boot) and for
     // already-activated community plugins (idempotent).
     await c.get("activatePluginServerCode")?.(body.pluginId, sessionId);
 
@@ -562,7 +562,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
 
   // Approval gate. Look up the resolved entry first so we know its
   // trust level, then ask the gate whether the call can proceed. Builtin
-  // and official trust auto-allow; community trust either re-uses a cached
+  // Builtin trust auto-allows; community trust either re-uses a cached
   // session approval or returns approval-required for the dialog flow.
   //
   // We deliberately resolve the entry BEFORE invoking the gate so that
@@ -574,7 +574,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // entry code must not run before the approval gate clears. So on a miss
   // for a plugin with a pending entry we route through the gate at community
   // trust; once the gate allows we activate the entry and let the dispatcher
-  // re-resolve. Builtin/official entries ran at boot, so their misses stay
+  // re-resolve. Builtin entries ran at boot, so their misses stay
   // hard 404s.
   //
   // Framework default actions are namespace-less but still need a
@@ -588,7 +588,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   const gate = c.get("rpcApprovalGate");
   const approvalScope = sessionApprovalScope(session, pluginId);
   const hasPendingPluginEntry = c.get("hasPendingPluginEntry");
-  let entryTrust: "builtin" | "official" | "community" = "community";
+  let entryTrust: "builtin" | "community" = "community";
   let entryDescription: string | undefined;
   // When true, the action belongs to a not-yet-activated community entry —
   // activate the entry after the gate allows, then dispatch (which re-resolves).
@@ -641,11 +641,8 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     if (operatorDenied) return operatorDenied;
   }
 
-  // Two-phase approval for every community server module, not just deferred
-  // entries: dispatching a declarative `manifest.rpc` action dynamically
-  // imports the plugin's handler JS, which is server code by the same
-  // definition as an entry/runtime module. Ask for the server-code grant
-  // first when it is missing, then the precise action grant below.
+  // Two-phase approval for every community server module. Ask for the
+  // server-code grant first when it is missing, then the precise action grant.
   const needsServerCodeGrant =
     entryTrust === "community" &&
     !gate.hasGrant(
@@ -754,7 +751,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // framework-reserved `_` namespaces (the job runner and other framework
     // writers use the raw store, not this handle).
     const rpcStore =
-      entryTrust === "builtin" || entryTrust === "official"
+      entryTrust === "builtin"
         ? createTrustedHandlerStore(store)
         : createRpcHandlerStoreView(store, {
             sessionId,

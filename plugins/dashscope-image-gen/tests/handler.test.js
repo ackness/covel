@@ -36,7 +36,7 @@ describe("image-generator handler", () => {
     const ctx = makeCtx({ images: undefined });
     const result = await handler(ctx);
 
-    expect(result.status).toBe("failed");
+    expect(result.outcome).toBe("failed");
     expect(result.error).toMatch(/ctx\.images is unavailable/);
     expect(ctx.pluginData.set).not.toHaveBeenCalled();
   });
@@ -45,8 +45,8 @@ describe("image-generator handler", () => {
     const ctx = makeCtx({ triggerEvent: undefined });
     const result = await handler(ctx);
 
-    expect(result.status).toBe("skipped");
-    expect(result.reason).toBe("no-prompt-found");
+    expect(result.outcome).toBe("skipped");
+    expect(result.skipReason).toMatch(/No image prompt/);
     expect(ctx.images.generate).not.toHaveBeenCalled();
   });
 
@@ -101,11 +101,11 @@ describe("image-generator handler", () => {
 
     const result = await handler(ctx);
 
-    expect(result.status).toBe("done");
-    expect(result.warnings).toEqual(warnings);
+    expect(result.outcome).toBe("success");
+    expect(result.value.warnings).toEqual(warnings);
     // warnings land on the plugin-data record so the gallery can show them,
     // and on the completed _logs entry for debug-page visibility
-    expect(result.pluginData[0].value.warnings).toEqual(warnings);
+    expect(result.effects.pluginData[0].value.warnings).toEqual(warnings);
     expect(ctx.logger.info).toHaveBeenCalledWith(
       "image.generate.completed",
       expect.objectContaining({ warnings }),
@@ -125,9 +125,9 @@ describe("image-generator handler", () => {
 
     const result = await handler(ctx);
 
-    expect(result.cached).toBe(true);
-    expect(result.pluginData[0].value.cached).toBe(true);
-    expect(result.pluginData[0].key).toBe(result.imageId); // single ref keeps the bare imageId key
+    expect(result.value.cached).toBe(true);
+    expect(result.effects.pluginData[0].value.cached).toBe(true);
+    expect(result.effects.pluginData[0].key).toBe(result.value.imageId); // single ref keeps the bare imageId key
   });
 
   it("keys multi-ref results as <imageId>-1, <imageId>-2 and exposes refs[]", async () => {
@@ -143,12 +143,12 @@ describe("image-generator handler", () => {
 
     const result = await handler(ctx);
 
-    expect(result.refs).toHaveLength(2);
-    expect(result.pluginData.map((entry) => entry.key)).toEqual([
-      `${result.imageId}-1`,
-      `${result.imageId}-2`,
+    expect(result.value.refs).toHaveLength(2);
+    expect(result.effects.pluginData.map((entry) => entry.key)).toEqual([
+      `${result.value.imageId}-1`,
+      `${result.value.imageId}-2`,
     ]);
-    expect(result.assetGenerations).toHaveLength(2);
+    expect(result.effects.assetGenerations).toHaveLength(2);
   });
 
   it("returns a failed record when the provider resolves with zero images", async () => {
@@ -164,8 +164,8 @@ describe("image-generator handler", () => {
 
     const result = await handler(ctx);
 
-    expect(result.status).toBe("failed");
-    expect(result.error).toMatch(/no images/i);
+    expect(result.value.status).toBe("failed");
+    expect(result.value.error).toMatch(/no images/i);
     expect(ctx.pluginData.set).toHaveBeenLastCalledWith(
       "images",
       expect.any(String),
@@ -186,7 +186,7 @@ describe("image-generator handler", () => {
 
     const result = await handler(ctx);
 
-    expect(result.status).toBe("failed");
-    expect(result.error).toBe("DashScope WAN generation FAILED: boom");
+    expect(result.value.status).toBe("failed");
+    expect(result.value.error).toBe("DashScope WAN generation FAILED: boom");
   });
 });

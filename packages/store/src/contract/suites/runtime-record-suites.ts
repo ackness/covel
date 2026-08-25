@@ -6,7 +6,6 @@ import type {
 } from "../../types.js";
 import {
   id,
-  makeApproval,
   makeCharacter,
   makeEvent,
   makeInteractionRecord,

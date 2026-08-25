@@ -19,7 +19,6 @@ import {
   type PluginRuntimeGateway,
   type PluginRuntimeUtils,
 } from "@covel/plugin-loader";
-import { createStateManager, type StateManager } from "@covel/state";
 import {
   createEventBus,
   type EventBus,
@@ -27,7 +26,7 @@ import {
 } from "@covel/events";
 import type { DataStore, StoreBackend } from "@covel/store";
 import type { LLMAdapter } from "@covel/runtime";
-import { createModelResolver } from "@covel/runtime";
+import { createHookPipeline, createModelResolver } from "@covel/runtime";
 import type { CompactorRunner } from "@covel/context";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 
@@ -66,6 +65,7 @@ import { lorebookRoutes } from "./lorebook.js";
 import { runtimeOutputRoutes } from "./runtime-outputs.js";
 import { pluginRpcRoutes } from "./plugin-rpc.js";
 import { approvalRoutes, sessionApprovalRoutes } from "./approvals.js";
+import { createBrowserWorkspaceRoutes } from "./browser-workspace.js";
 export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 import {
   createBootstrapCompactorRunner,
@@ -73,9 +73,7 @@ import {
   type ResolveNarrativeBudgetFn,
 } from "./bootstrap/compactor.js";
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
-import { createBootstrapHookPipeline } from "./bootstrap/plugin-hooks.js";
 import { setupPluginTools } from "./bootstrap/tools.js";
-import { createBootstrapPluginWires } from "./bootstrap/plugin-wires.js";
 import { createBootstrapPluginEntries } from "./bootstrap/plugin-entry.js";
 import { createEventDirectory } from "./bootstrap/event-directory.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
@@ -140,8 +138,6 @@ export interface ApiBootstrapConfig {
    * `createAiStack().gateway.embed`. Absent → keyword-only memory (unchanged).
    */
   readonly memoryEmbed?: (texts: readonly string[]) => Promise<Float32Array[]>;
-  /** Optional pre-created state manager. */
-  readonly stateManager?: StateManager;
   /**
    * Preferred slot name for internal memory LLM work.
    *
@@ -194,7 +190,6 @@ export interface ApiBootstrapConfig {
 export interface ApiBootstrapResult {
   readonly app: Hono;
   readonly registry: PluginRegistry;
-  readonly stateManager: StateManager;
   readonly store: DataStore;
   readonly eventBus: EventBus;
   readonly compactorRunner: CompactorRunner;
@@ -213,7 +208,7 @@ export interface ApiBootstrapResult {
  * Create a fully wired API Hono app.
  *
  * 1. Discover and register all plugins
- * 2. Create shared state (session store, state manager, etc.)
+ * 2. Create shared state (session store, event bus, etc.)
  * 3. Inject all dependencies into routes via middleware
  * 4. Mount all route groups
  */
@@ -221,12 +216,10 @@ export async function bootstrapApi(
   config: ApiBootstrapConfig,
 ): Promise<ApiBootstrapResult> {
   // 1. Create shared infrastructure first (eventBus needed by registry)
-  const stateManager = config.stateManager ?? createStateManager(config.store);
-
   // Cross-pod EventBus fan-out (audit): multi-pod PG deployments need
   // events emitted on one pod to reach SSE subscribers on another. PG
   // LISTEN/NOTIFY is the lowest-dependency shared transport (the deployment
-  // already runs on PG). Single-process backends (memory/sqlite/idb) pass no
+  // already runs on PG). Single-process backends (memory/sqlite) pass no
   // transport — pure in-process behavior, unchanged. A boot-time transport
   // failure propagates: with a PG store backend, an unreachable PG is fatal
   // anyway, and silently degrading to single-pod fan-out would be incorrect.
@@ -332,14 +325,6 @@ export async function bootstrapApi(
 
   const resolveModel = createModelResolver({ pluginLlmConfigs });
 
-  // Plugin media wires (image/speech/transcription vendor wires declared via
-  // the `wires` frontmatter field). builtin/official register here at boot;
-  // community register lazily in loadRuntimeFn below.
-  const pluginWires = await createBootstrapPluginWires({
-    discoveryMap,
-    manifestCache,
-  });
-
   // Unified plugin entries are created after the tool/hook/rpc registries
   // exist (below); loadRuntimeFn needs the activation seam earlier, so it
   // late-binds through this holder.
@@ -401,17 +386,9 @@ export async function bootstrapApi(
             );
           }
         }
-        // Community wires register at the same moment we'd import the
-        // plugin's handler.js — before any gateway call the handler makes.
-        // ponytail: a community *wire-only* plugin (wires consumed by other
-        // plugins' slots without its own runtime ever loading) would need
-        // ensurePluginWires added to the activatePluginServerCode call
-        // sites too; no such plugin exists yet.
         // The entry check is the fail-closed approval boundary. Keep it ahead
-        // of every other community import, including wire registration and
-        // the runtime handler itself.
+        // of every other community import, including the runtime handler.
         await ensurePluginEntry(pluginId, sessionId);
-        await pluginWires.ensurePluginWires(pluginId);
         return loadRuntimeFromDisk(discovery, manifest.name, locale);
       }
     }
@@ -475,10 +452,7 @@ export async function bootstrapApi(
   const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
 
   const { rpcRegistry, rpcExecutor, rpcApprovalGate } =
-    createBootstrapPluginRpc({
-      discoveryMap,
-      manifestCache,
-    });
+    createBootstrapPluginRpc();
 
   // Entry import only honors the EXACT server-code grant. The old
   // no-action `hasGrant` matched any live grant for the plugin, so approving
@@ -519,14 +493,10 @@ export async function bootstrapApi(
     );
   };
 
-  const hookPipeline = createBootstrapHookPipeline({
-    discoveryMap,
-    manifestCache,
-    isCommunityServerCodeApproved: isCommunityHookApproved,
-  });
+  const hookPipeline = createHookPipeline();
 
   // Unified plugin server entries (`entry` frontmatter field) — needs the
-  // tool map, hook pipeline, and rpc registry above. builtin/official
+  // tool map, hook pipeline, and rpc registry above. Builtin
   // entries run here; community entries defer to ensurePluginEntry.
   const pluginEntries = await createBootstrapPluginEntries({
     discoveryMap,
@@ -581,8 +551,8 @@ export async function bootstrapApi(
       ),
     preferredMemorySlot: config.preferredMemorySlot,
     resolveModel,
-    // Break memoryBlocks label collisions by trust tier (builtin > official >
-    // community), using the non-forgeable discovery source rather than load
+    // Break memoryBlocks label collisions by trust tier (builtin > community),
+    // using the non-forgeable discovery source rather than load
     // order — keeps a community plugin from shadowing a builtin default block.
     getPluginSource,
   });
@@ -603,7 +573,6 @@ export async function bootstrapApi(
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("storeBackend", config.storeBackend);
-    c.set("stateManager", stateManager);
     c.set("eventBus", eventBus);
     c.set("pluginRegistry", registry);
     c.set("llmAdapter", config.llmAdapter);
@@ -674,6 +643,7 @@ export async function bootstrapApi(
   app.route("/api/sessions", sessionTurnRoutes); // turn_results artifact listing
   app.route("/api/sessions", setupRuntimeControlRoutes); // setup retry / waive
   app.route("/api/sessions", sessionApprovalRoutes); // per-session approvals listing
+  app.route("/api/sessions", createBrowserWorkspaceRoutes());
   app.route("/api/approvals", approvalRoutes); // approval lookup + decision
   app.route("/api/plugins", pluginRoutes);
   app.route("/api/framework", frameworkRoutes);
@@ -697,7 +667,6 @@ export async function bootstrapApi(
   return {
     app,
     registry,
-    stateManager,
     store,
     eventBus,
     compactorRunner,

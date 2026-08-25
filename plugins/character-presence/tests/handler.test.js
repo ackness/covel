@@ -18,7 +18,7 @@ const avatar = {
   size: 1234,
 };
 
-// Deliberate change: handler migrated to envelope-v1, so the business return
+// Deliberate change: handler returns the canonical HandlerResult, so the business return
 // is under `result.value`; pending proposals stay on the envelope (result).
 describe("character-presence handler", () => {
   it("saves presence refs by character id", async () => {

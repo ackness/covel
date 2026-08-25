@@ -96,9 +96,9 @@ describe("auto-narrate handler", () => {
       userSettings: { enabled: false },
     });
     const result = await autoHandler(ctx);
-    expect(result.status).toBeUndefined(); // success (proposal path)
-    expect(result.autoSynthesis).toBe("disabled-by-user-setting");
-    expect(result.pluginData).toEqual([
+    expect(result.outcome).toBe("success");
+    expect(result.value.autoSynthesis).toBe("disabled-by-user-setting");
+    expect(result.effects.pluginData).toEqual([
       {
         namespace: "message",
         key: "turn-7",
@@ -111,7 +111,7 @@ describe("auto-narrate handler", () => {
   it("skips when the narrative engine produced no narrativeOutput", async () => {
     const ctx = makeBaseCtx();
     const result = await autoHandler(ctx);
-    expect(result.status).toBe("skipped");
+    expect(result.outcome).toBe("skipped");
     expect(ctx.speech.generate).not.toHaveBeenCalled();
   });
 
@@ -121,7 +121,7 @@ describe("auto-narrate handler", () => {
     const ctx = makeBaseCtx({ narrative: "夜风掠过山岗。" });
     ctx.speech = undefined;
     const result = await autoHandler(ctx);
-    expect(result.status).toBe("failed");
+    expect(result.outcome).toBe("failed");
     expect(result.error).toMatch(/ctx\.speech is unavailable/);
   });
 
@@ -130,32 +130,32 @@ describe("auto-narrate handler", () => {
 
     const result = await autoHandler(ctx);
 
-    expect(result.status).toBe("done");
-    expect(result.trackId).toBe("tts-auto-turn-7");
-    expect(result.ref.id).toBe("sha256-fake");
+    expect(result.outcome).toBe("success");
+    expect(result.value.trackId).toBe("tts-auto-turn-7");
+    expect(result.value.ref.id).toBe("sha256-fake");
     // assetGenerations is the key normalizeOutput collects into
     // asset.generate proposals (a returned `assets` key is silently ignored).
-    expect(result.assetGenerations).toHaveLength(1);
-    expect(result.assetGenerations[0].modality).toBe("audio");
+    expect(result.effects.assetGenerations).toHaveLength(1);
+    expect(result.effects.assetGenerations[0].modality).toBe("audio");
     // Speak-button surface rides the same proposal batch as the track.
-    expect(result.pluginData).toContainEqual({
+    expect(result.effects.pluginData).toContainEqual({
       namespace: "message",
       key: "turn-7",
       value: { turnId: "turn-7", text: "夜风掠过山岗，月色洒在湖面。" },
     });
-    expect(result.pluginData[0].namespace).toBe("tracks");
-    expect(result.pluginData[0].value.triggeredBy).toBe("auto");
-    expect(result.pluginData[0].value.autoPlay).toBe(true);
-    expect(result.pluginData[0].value.cached).toBe(false);
-    expect(result.pluginData[0].value.model).toBe("mimo-v2.5-tts");
+    expect(result.effects.pluginData[0].namespace).toBe("tracks");
+    expect(result.effects.pluginData[0].value.triggeredBy).toBe("auto");
+    expect(result.effects.pluginData[0].value.autoPlay).toBe(true);
+    expect(result.effects.pluginData[0].value.cached).toBe(false);
+    expect(result.effects.pluginData[0].value.model).toBe("mimo-v2.5-tts");
 
     // Display fields the right-panel spec binds against
-    expect(result.pluginData[0].value.turnLabel).toBe("Turn 7");
-    expect(result.pluginData[0].value.triggerLabel).toBe("AUTO");
-    expect(result.pluginData[0].value.textPreview).toBe(
+    expect(result.effects.pluginData[0].value.turnLabel).toBe("Turn 7");
+    expect(result.effects.pluginData[0].value.triggerLabel).toBe("AUTO");
+    expect(result.effects.pluginData[0].value.textPreview).toBe(
       "夜风掠过山岗，月色洒在湖面。",
     );
-    expect(result.pluginData[0].value.sizeLabel).toBe("4 B");
+    expect(result.effects.pluginData[0].value.sizeLabel).toBe("4 B");
 
     // Pending state is logged but NOT written to plugin-data — Tab only
     // ever shows done/failed so the <Media> placeholder never appears.
@@ -180,9 +180,9 @@ describe("auto-narrate handler", () => {
 
     const result = await autoHandler(ctx);
 
-    expect(result.status).toBe("done");
-    expect(result.pluginData[0].value.cached).toBe(true);
-    expect(result.pluginData[0].value.autoPlay).toBe(false);
+    expect(result.outcome).toBe("success");
+    expect(result.effects.pluginData[0].value.cached).toBe(true);
+    expect(result.effects.pluginData[0].value.autoPlay).toBe(false);
   });
 
   it("returns a failure record when the pipeline throws", async () => {
@@ -194,8 +194,8 @@ describe("auto-narrate handler", () => {
     );
 
     const result = await autoHandler(ctx);
-    expect(result.status).toBe("failed");
-    expect(result.error).toMatch(/unknown speech wire/);
+    expect(result.value.status).toBe("failed");
+    expect(result.value.error).toMatch(/unknown speech wire/);
     expect(ctx.pluginData.set.mock.calls[0][2].status).toBe("failed");
     // The Speak button still appears for the turn: the message-surface
     // record is written directly (a failed result commits no proposals).
@@ -226,8 +226,8 @@ describe("manual-narrate handler", () => {
     // text source.
     const ctx = makeBaseCtx({ narrative: "不可达的兜底", manualPayload: {} });
     const result = await manualHandler(ctx);
-    expect(result.status).toBe("skipped");
-    expect(result.reason).toMatch(/payload\.text is required/);
+    expect(result.outcome).toBe("skipped");
+    expect(result.skipReason).toMatch(/payload\.text is required/);
     expect(ctx.speech.generate).not.toHaveBeenCalled();
   });
 
@@ -236,14 +236,16 @@ describe("manual-narrate handler", () => {
       manualPayload: { text: "请只朗读这一段", turnId: "turn-7" },
     });
     const result = await manualHandler(ctx);
-    expect(result.assetGenerations).toHaveLength(1);
-    expect(result.assetGenerations[0].modality).toBe("audio");
+    expect(result.effects.assetGenerations).toHaveLength(1);
+    expect(result.effects.assetGenerations[0].modality).toBe("audio");
 
-    expect(result.status).toBe("done");
-    expect(result.pluginData[0].value.triggeredBy).toBe("manual");
-    expect(result.pluginData[0].value.autoPlay).toBe(false);
-    expect(result.pluginData[0].value.triggerLabel).toBe("MANUAL");
-    expect(result.pluginData[0].value.textPreview).toBe("请只朗读这一段");
+    expect(result.outcome).toBe("success");
+    expect(result.effects.pluginData[0].value.triggeredBy).toBe("manual");
+    expect(result.effects.pluginData[0].value.autoPlay).toBe(false);
+    expect(result.effects.pluginData[0].value.triggerLabel).toBe("MANUAL");
+    expect(result.effects.pluginData[0].value.textPreview).toBe(
+      "请只朗读这一段",
+    );
 
     expect(ctx.speech.generate).toHaveBeenCalledWith(
       expect.objectContaining({ text: "请只朗读这一段" }),
@@ -255,12 +257,12 @@ describe("manual-narrate handler", () => {
       manualPayload: { text: "hello", voice: "voice-clone-42", format: "wav" },
     });
     const result = await manualHandler(ctx);
-    expect(result.status).toBe("done");
+    expect(result.outcome).toBe("success");
 
     expect(ctx.speech.generate).toHaveBeenCalledWith(
       expect.objectContaining({ voice: "voice-clone-42", format: "wav" }),
     );
-    expect(result.ref.mime).toBe("audio/wav");
+    expect(result.value.ref.mime).toBe("audio/wav");
   });
 
   it("aborts manual synthesis when the player stops the turn", async () => {

@@ -9,7 +9,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Hono } from "hono";
-import { createStateManager, type StateManager } from "@covel/state";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -30,7 +29,6 @@ import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 function createTestApp(deps: {
   store: DataStore;
-  stateManager: StateManager;
   pluginRegistry: PluginRegistry;
   mediaStore?: MediaStore;
   worldsDirs?: readonly string[];
@@ -40,7 +38,6 @@ function createTestApp(deps: {
   const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", deps.store);
-    c.set("stateManager", deps.stateManager);
     c.set("pluginRegistry", deps.pluginRegistry);
     c.set("sessionLock", sessionLock);
     if (deps.mediaStore) c.set("mediaStore", deps.mediaStore);
@@ -75,7 +72,6 @@ describe("[HIGH] Client-supplied session ID validation", () => {
     const store = createMemoryStore();
     app = createTestApp({
       store,
-      stateManager: createStateManager(store),
       pluginRegistry: createPluginRegistry(),
     });
   });
@@ -144,7 +140,6 @@ describe("[CRITICAL] PUT /state-snapshot returns 501", () => {
     const store = createMemoryStore();
     app = createTestApp({
       store,
-      stateManager: createStateManager(store),
       pluginRegistry: createPluginRegistry(),
     });
   });
@@ -388,7 +383,7 @@ function registerPresenceAssetsPlugin(pluginRegistry: PluginRegistry): void {
     },
     loadedRuntimes: new Map(),
     status: "registered",
-    source: "official",
+    source: "builtin",
   });
 }
 
@@ -401,7 +396,6 @@ describe("[HIGH] plugins/disable validates pluginId", () => {
     const store = createMemoryStore();
     app = createTestApp({
       store,
-      stateManager: createStateManager(store),
       pluginRegistry: createPluginRegistry(),
     });
   });
@@ -431,14 +425,12 @@ describe("[HIGH] plugins/disable validates pluginId", () => {
 
 describe("[HIGH] state-patches returns stable IDs", () => {
   let app: Hono;
-  let stateManager: StateManager;
+  let store: DataStore;
 
   beforeEach(async () => {
-    const store = createMemoryStore();
-    stateManager = createStateManager(store);
+    store = createMemoryStore();
     app = createTestApp({
       store,
-      stateManager,
       pluginRegistry: createPluginRegistry(),
     });
   });
@@ -446,14 +438,36 @@ describe("[HIGH] state-patches returns stable IDs", () => {
   it("generates unique IDs with timestamp, not array index", async () => {
     const { id } = await createSession(app);
 
-    await stateManager.createTable(id, {
+    const schema = {
       name: "character",
       fields: [{ name: "hp", type: "integer", default: 100 }],
+    } as const;
+    const now = new Date().toISOString();
+    await store.saveStateSchema({
+      id: "character-schema",
+      sessionId: id,
+      tableName: schema.name,
+      schema,
+      createdAt: now,
     });
-    await stateManager.setValue(id, "character", "hp", 80, {
+    await store.upsertStateEntry({
+      id: "character-hp",
+      sessionId: id,
+      tableName: schema.name,
+      fieldName: "hp",
+      value: 80,
+      updatedAt: now,
+    });
+    await store.addStateChange({
+      id: "character-hp-change",
+      sessionId: id,
+      tableName: schema.name,
+      fieldName: "hp",
+      value: 80,
       changedBy: "test",
       turnId: "turn-1",
       reason: "damage",
+      createdAt: now,
     });
 
     const res = await app.request(`/api/sessions/${id}/state-patches`);
@@ -482,7 +496,6 @@ describe("[HIGH] Plugin activation happens after session persist", () => {
     pluginRegistry = createPluginRegistry();
     app = createTestApp({
       store,
-      stateManager: createStateManager(store),
       pluginRegistry,
     });
   });
@@ -500,7 +513,7 @@ describe("[HIGH] Plugin activation happens after session persist", () => {
       },
       loadedRuntimes: new Map(),
       status: "registered",
-      source: "official",
+      source: "builtin",
     });
 
     const res = await app.request("/api/sessions", {
@@ -528,7 +541,6 @@ describe("[HIGH] Session creation rolls back when world-data import fails", () =
     pluginRegistry = createPluginRegistry();
     app = createTestApp({
       store,
-      stateManager: createStateManager(store),
       pluginRegistry,
     });
   });
@@ -568,7 +580,6 @@ describe("[HIGH] Session creation rolls back when world-data import fails", () =
 
     app = createTestApp({
       store: failingStore,
-      stateManager: createStateManager(failingStore),
       pluginRegistry,
     });
 
@@ -634,7 +645,6 @@ sources:
 
     app = createTestApp({
       store,
-      stateManager: createStateManager(store),
       pluginRegistry,
       mediaStore: failingMediaStore,
       worldsDirs: [world.worldsDir],

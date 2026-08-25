@@ -63,10 +63,7 @@ function setup(): {
   registry.registerFrameworkDefault("echo", async (payload) => ({
     echoed: payload,
   }));
-  const executor = createRpcExecutor({
-    registry,
-    loadHandler: async () => async (payload) => ({ pluginEcho: payload }),
-  });
+  const executor = createRpcExecutor({ registry });
   const gate = createRpcApprovalGate();
   const pluginRegistry = createPluginRegistry();
   const sessionLock = createInProcessSessionLock();
@@ -296,12 +293,13 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(await res.json()).toMatchObject({ code: "session-not-active" });
   });
 
-  it("dispatches a plugin-declared action via lazy loader", async () => {
-    registry.registerPluginAction(
+  it("dispatches an entry-registered plugin action", async () => {
+    registry.registerPluginHandler(
       "codex",
       "regenerate",
-      { handler: "./rpc/regenerate.js" },
-      "official",
+      async (payload) => ({ pluginEcho: payload }),
+      {},
+      "builtin",
     );
 
     const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
@@ -573,10 +571,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
   } {
     const store = createMemoryStore();
     const registry = createPluginRpcRegistry();
-    const executor = createRpcExecutor({
-      registry,
-      loadHandler: async () => async (payload) => ({ echoed: payload }),
-    });
+    const executor = createRpcExecutor({ registry });
     const gate = createRpcApprovalGate();
     let activated = false;
     let activateCount = 0;
@@ -779,7 +774,48 @@ function makeFunctionEntry(args: {
   const loaded: LoadedRuntime = {
     manifest,
     promptTemplate: "",
-    handler: args.handler,
+    handler: async (ctx) => {
+      const raw = (await args.handler(ctx)) as unknown as Record<
+        string,
+        unknown
+      >;
+      if (
+        raw.outcome === "success" ||
+        raw.outcome === "failed" ||
+        raw.outcome === "skipped" ||
+        raw.outcome === "suspended"
+      ) {
+        return raw as never;
+      }
+      const {
+        events,
+        interactions,
+        pluginData,
+        assetGenerations,
+        notifications,
+        ui,
+        statePatches,
+        preGameDone,
+        ...value
+      } = raw;
+      const effects = {
+        ...(events ? { events } : {}),
+        ...(interactions ? { interactions } : {}),
+        ...(pluginData ? { pluginData } : {}),
+        ...(assetGenerations ? { assetGenerations } : {}),
+        ...(notifications ? { notifications } : {}),
+        ...(ui ? { ui } : {}),
+        ...(statePatches ? { statePatches } : {}),
+      };
+      return {
+        outcome: "success",
+        value: value as never,
+        ...(Object.keys(effects).length > 0
+          ? { effects: effects as never }
+          : {}),
+        ...(preGameDone === true ? { completion: "done" as const } : {}),
+      };
+    },
   };
 
   const parsed = {
@@ -872,10 +908,7 @@ function setupRuntimeTestEnv(args: {
   pluginRegistry.register(entry);
 
   const rpcRegistry = createPluginRpcRegistry();
-  const rpcExecutor = createRpcExecutor({
-    registry: rpcRegistry,
-    loadHandler: async () => async () => ({}),
-  });
+  const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
   const gate = createRpcApprovalGate();
   const eventBus = createEventBus(store);
   const sessionLock = createInProcessSessionLock();
@@ -1125,10 +1158,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     pluginRegistry.register(narratorEntry);
 
     const rpcRegistry = createPluginRpcRegistry();
-    const rpcExecutor = createRpcExecutor({
-      registry: rpcRegistry,
-      loadHandler: async () => async () => ({}),
-    });
+    const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
     const gate = createRpcApprovalGate();
     const eventBus = createEventBus(store);
     const sessionLock = createInProcessSessionLock();
@@ -1953,10 +1983,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     pluginRegistry.register(entry);
 
     const rpcRegistry = createPluginRpcRegistry();
-    const rpcExecutor = createRpcExecutor({
-      registry: rpcRegistry,
-      loadHandler: async () => async () => ({}),
-    });
+    const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
     const gate = createRpcApprovalGate();
     const eventBus = createEventBus(store);
     const sessionLock = createInProcessSessionLock();
@@ -2103,10 +2130,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     } as PluginRegistryEntry);
 
     const rpcRegistry = createPluginRpcRegistry();
-    const rpcExecutor = createRpcExecutor({
-      registry: rpcRegistry,
-      loadHandler: async () => async () => ({}),
-    });
+    const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
     const gate = createRpcApprovalGate();
     const eventBus = createEventBus(store);
     const sessionLock = createInProcessSessionLock();
@@ -2292,10 +2316,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     } as PluginRegistryEntry);
 
     const rpcRegistry = createPluginRpcRegistry();
-    const rpcExecutor = createRpcExecutor({
-      registry: rpcRegistry,
-      loadHandler: async () => async () => ({}),
-    });
+    const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
     const gate = createRpcApprovalGate();
     const eventBus = createEventBus(store);
     const sessionLock = createInProcessSessionLock();

@@ -2,8 +2,8 @@
  * `HandlerResult` — the plugin-facing return contract, plus the effect types
  * it carries.
  *
- * A function handler returns it directly (`resultFormat: envelope-v1`) or
- * through the legacy adapter; an agent's finalizer normalizes into it. Four
+ * Every function handler returns this contract directly. Agent runtimes use
+ * their own structured-output path and are materialized by the kernel. Four
  * discriminated outcomes on `outcome`.
  *
  * The persisted shape is `RuntimeResult` (`execution.ts`) — a parallel
@@ -53,10 +53,8 @@ export interface ObservabilityEffects {
 
 /**
  * Effects a `success` outcome may carry: the observation channels plus domain
- * writes. During the legacy compat period the domain keys mirror the known
- * control keys the runtime output normalizer already understands (docs 02
- * §4.3); the legacy adapter copies present keys here for observability, while
- * the actual commit still re-derives proposals from the preserved `value`.
+ * writes. The kernel materializes these keys onto its internal runtime output
+ * before proposal normalization.
  */
 export interface RuntimeEffects extends ObservabilityEffects {
   readonly statePatches?: readonly JsonValue[];

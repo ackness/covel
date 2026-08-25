@@ -38,8 +38,8 @@ export default async function autoNarrateHandler(ctx) {
   const text = pickNarratorText(ctx);
   if (!text) {
     return {
-      status: "skipped",
-      reason: "narrator produced no narrativeOutput",
+      outcome: "skipped",
+      skipReason: "narrator produced no narrativeOutput",
     };
   }
 
@@ -57,14 +57,15 @@ export default async function autoNarrateHandler(ctx) {
     // committing the surface record IS this run's (successful) work. Checked
     // before the speech-pipeline probe: the surface needs no speech at all.
     return {
-      autoSynthesis: "disabled-by-user-setting",
-      pluginData: [messageEntry],
+      outcome: "success",
+      value: { autoSynthesis: "disabled-by-user-setting" },
+      effects: { pluginData: [messageEntry] },
     };
   }
 
   if (!speech || typeof speech.generate !== "function") {
     return {
-      status: "failed",
+      outcome: "failed",
       error:
         "ctx.speech is unavailable. Upgrade @covel/server / @covel/runtime to a build with the unified speech pipeline.",
     };
@@ -150,14 +151,15 @@ export default async function autoNarrateHandler(ctx) {
     });
 
     return {
-      trackId,
-      status: "done",
-      ref: record.ref,
-      pluginData: [
-        { namespace: TRACKS_NAMESPACE, key: trackId, value: record },
-        messageEntry,
-      ],
-      assetGenerations: [asset],
+      outcome: "success",
+      value: { trackId, status: "done", ref: record.ref },
+      effects: {
+        pluginData: [
+          { namespace: TRACKS_NAMESPACE, key: trackId, value: record },
+          messageEntry,
+        ],
+        assetGenerations: [asset],
+      },
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

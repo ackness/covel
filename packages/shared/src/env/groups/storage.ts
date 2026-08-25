@@ -10,7 +10,7 @@ export const STORAGE_ENV_VARS = [
     defaultValue: "sqlite",
     example: "sqlite",
     description:
-      "Server DataStore backend. Browser callers can use idb through @covel/store createStore().",
+      "Server DataStore backend. Browser-private persistence uses the web BrowserVault and is not a DataStore backend.",
   },
   {
     name: "SQLITE_PATH",

@@ -15,6 +15,7 @@ import type {
   InputSlot,
   RuntimeActivation,
   ExecutionContext,
+  HandlerResult,
 } from "@covel/shared";
 
 // ── Parsed PLUGIN.md ─────────────────────────────────────────────
@@ -546,7 +547,7 @@ export interface FunctionHandlerContext {
  * plugins bypass proposal/tool governance and write into any other
  * plugin's data through `setPluginData(...)`.
  *
- * Builtin / official plugins keep the full `DataStore` because they
+ * Builtin plugins keep the full `DataStore` because they
  * implement framework primitives that need it
  * (e.g. `world-init`'s guard imports historic sessions,
  * `char-creator`'s guard upserts the player Character record). The
@@ -636,7 +637,16 @@ export interface ProgressReporter {
 /** Function handler signature for `runtimeType: 'function'` runtimes. */
 export type FunctionHandler = (
   ctx: FunctionHandlerContext,
-) => Promise<Record<string, unknown>>;
+) => Promise<HandlerResult>;
+
+/** Agent pre-execution guard result. Guards are gates, not function runtimes. */
+export type AgentGuardResult = Readonly<Record<string, unknown>> & {
+  readonly skip: boolean;
+};
+
+export type AgentGuard = (
+  ctx: FunctionHandlerContext,
+) => Promise<AgentGuardResult>;
 
 /** Level 2: fully loaded runtime ready for execution. */
 export interface LoadedRuntime {
@@ -667,7 +677,7 @@ export interface LoadedRuntime {
   /** Handler function for `runtimeType: 'function'` runtimes. */
   readonly handler?: FunctionHandler;
   /** Guard function — runs before agent execution, returns `{ skip: true }` to bypass LLM. */
-  readonly guard?: FunctionHandler;
+  readonly guard?: AgentGuard;
   /** Loaded UI specs from ui/ directory, grouped by slot. */
   readonly uiSpecs?: {
     readonly right?: readonly Readonly<Record<string, unknown>>[];
@@ -729,7 +739,7 @@ export type RegistryChangeEvent =
 
 // ── Plugin trust ─────────────────────────────────────────────────
 
-export type PluginSource = "builtin" | "official" | "community";
+export type PluginSource = "builtin" | "community";
 
 export interface PluginTrustInfo {
   readonly source: PluginSource;

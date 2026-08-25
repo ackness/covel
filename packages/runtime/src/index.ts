@@ -150,6 +150,8 @@ export type {
   ProcessRuntimeResultOutput,
 } from "./session/session-kernel.js";
 export { finalizeExecution } from "./commit/finalize-execution.js";
+export { normalizeHandlerResult } from "./commit/normalize-handler-result.js";
+export { materializeHandlerSuccess } from "./commit/materialize-handler-output.js";
 export type {
   FinalizeExecutionArgs,
   FinalizeExecutionOutcome,
@@ -176,18 +178,12 @@ export type { TriggerContext, ScheduledGroup } from "./types.js";
 export {
   HookPipeline,
   createHookPipeline,
-  registerPluginHooks,
-  activateDeferredPluginHooks,
   runSessionStartHook,
   runSessionEndHook,
   runWithHookScope,
 } from "./hooks/index.js";
 export type { SessionStartPayload, SessionEndPayload } from "./hooks/index.js";
 export { HOOK_SEMANTICS } from "./hooks/index.js";
-export type {
-  PluginHookSource,
-  RegisterPluginHooksOptions,
-} from "./hooks/index.js";
 export type {
   HookEvent,
   HookSemantic,

@@ -67,6 +67,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useSessionSubscription({
     sessionId,
     dispatch,
+    ds,
     sessionIdRef: refs.sessionIdRef,
   });
 

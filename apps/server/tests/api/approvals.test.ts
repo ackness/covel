@@ -57,16 +57,14 @@ function setup(
 } {
   const registry = createPluginRpcRegistry();
   // Community-trust action that just echoes payload.
-  registry.registerPluginAction(
+  registry.registerPluginHandler(
     "untrusted",
     "do-thing",
-    { handler: "./rpc/do-thing.js", description: "Run the thing" },
+    async (payload) => ({ ranWith: payload }),
+    { description: "Run the thing" },
     "community",
   );
-  const executor = createRpcExecutor({
-    registry,
-    loadHandler: async () => async (payload) => ({ ranWith: payload }),
-  });
+  const executor = createRpcExecutor({ registry });
   const sessionLock = createInProcessSessionLock();
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
@@ -371,16 +369,14 @@ describe("Plugin RPC approval flow", () => {
     } {
       const store = createMemoryStore();
       const registry = createPluginRpcRegistry();
-      registry.registerPluginAction(
+      registry.registerPluginHandler(
         "untrusted",
         "do-thing",
-        { handler: "./rpc/do-thing.js", description: "Run the thing" },
+        async () => ({ ok: true }),
+        { description: "Run the thing" },
         "community",
       );
-      const executor = createRpcExecutor({
-        registry,
-        loadHandler: async () => async () => ({ ok: true }),
-      });
+      const executor = createRpcExecutor({ registry });
       const gate = createRpcApprovalGate();
       const sessionLock = options?.sessionLock ?? createInProcessSessionLock();
       const activatorCalls: string[] = [];
@@ -482,16 +478,14 @@ describe("Plugin RPC approval flow", () => {
     it("survives activator throwing — decision still committed", async () => {
       const store = createMemoryStore();
       const registry = createPluginRpcRegistry();
-      registry.registerPluginAction(
+      registry.registerPluginHandler(
         "untrusted",
         "do-thing",
-        { handler: "./rpc/do-thing.js", description: "Run the thing" },
+        async () => ({ ok: true }),
+        { description: "Run the thing" },
         "community",
       );
-      const executor = createRpcExecutor({
-        registry,
-        loadHandler: async () => async () => ({ ok: true }),
-      });
+      const executor = createRpcExecutor({ registry });
       const gate = createRpcApprovalGate();
       const sessionLock = createInProcessSessionLock();
       const app = new Hono<

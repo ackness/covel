@@ -1,6 +1,5 @@
 import type { DataStore } from "../types.js";
 import type {
-  ApprovalRecord,
   CharacterRecord,
   EventRecord,
   InteractionRecordRow,
@@ -55,7 +54,6 @@ export interface MemoryState {
   readonly stateEntries: Map<string, StateEntryRecord>;
   readonly stateChanges: StateChangeRecord[];
   readonly events: EventRecord[];
-  readonly approvals: ApprovalRecord[];
   readonly messages: MessageRecord[];
   readonly characters: Map<string, CharacterRecord>;
   readonly pluginData: Map<string, PluginDataRecord>;

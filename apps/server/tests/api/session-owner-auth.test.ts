@@ -2,8 +2,9 @@
  * Session owner-token authorization.
  *
  * Tiered model:
- *   - self (default): owner tokens are minted but NOT enforced — local play
- *     stays token-free (the network boundary is the loopback bind).
+ *   - self (default): owner tokens are minted but NOT enforced in dev/desktop.
+ *   - self + production MemoryStore: browser-private mode enforces owner tokens
+ *     while keeping anonymous session creation open.
  *   - demo / commercial: every session-scoped route behind
  *     `resolveSessionParam` / `checkSessionOwner` hard-requires the token;
  *     COVEL_DESKTOP_REST_TOKEN acts as an operator master key.
@@ -25,7 +26,11 @@ import { traceRoutes } from "../../src/routes/api/traces.js";
 import { subscribeRoutes } from "../../src/routes/api/subscribe.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
-const ENV_KEYS = ["DEPLOYMENT_TIER", "COVEL_DESKTOP_REST_TOKEN"] as const;
+const ENV_KEYS = [
+  "DEPLOYMENT_TIER",
+  "COVEL_DESKTOP_REST_TOKEN",
+  "NODE_ENV",
+] as const;
 const ORIGINAL_ENV = Object.fromEntries(
   ENV_KEYS.map((k) => [k, process.env[k]]),
 );
@@ -44,6 +49,7 @@ function createTestApp(store: DataStore, registry: PluginRegistry): Hono {
   const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("storeBackend", "memory");
     c.set("pluginRegistry", registry);
     c.set("eventBus", eventBus);
     c.set("sessionLock", sessionLock);
@@ -115,6 +121,23 @@ describe("self tier (default) — no enforcement, no breakage", () => {
       body: JSON.stringify({ status: "paused" }),
     });
     expect(patch.status).toBe(200);
+  });
+});
+
+describe("browser-private tier — anonymous create, owner-only access", () => {
+  it("enforces owner tokens for production MemoryStore mirrors", async () => {
+    delete process.env.DEPLOYMENT_TIER;
+    process.env.NODE_ENV = "production";
+
+    const created = await createSession(app);
+    expect((await app.request(`/api/sessions/${created.id}`)).status).toBe(401);
+    expect(
+      (
+        await app.request(`/api/sessions/${created.id}`, {
+          headers: { "x-session-token": created.ownerToken },
+        })
+      ).status,
+    ).toBe(200);
   });
 });
 

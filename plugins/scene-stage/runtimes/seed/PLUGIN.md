@@ -6,7 +6,6 @@ description:
 pluginType: plugin
 stage: setup
 runtimeType: function
-resultFormat: envelope-v1
 handler: ./handler.js
 outputKind: system
 tags:

@@ -599,22 +599,4 @@ export default async function (covel) {
     await ensurePluginEntry("entry-pending-a");
     expect(hasPendingEntry("entry-pending-a")).toBe(false);
   });
-
-  it("warns once per plugin still using legacy registration fields", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const legacy = writePlugin("entry-legacy-a", null);
-    (legacy.parsed.manifest as { hooks?: unknown[] }).hooks = [
-      { event: "TurnStart", handler: "./h.js" },
-    ];
-    delete (legacy.parsed.manifest as { entry?: string }).entry;
-
-    await createBootstrapPluginEntries(makeParams([legacy]));
-
-    const legacyWarns = warn.mock.calls.filter((c) =>
-      String(c[0]).includes("deprecated"),
-    );
-    expect(legacyWarns).toHaveLength(1);
-    expect(String(legacyWarns[0][0])).toContain("entry-legacy-a");
-    warn.mockRestore();
-  });
 });

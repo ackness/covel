@@ -34,7 +34,6 @@ export function createSqliteSessionRecords(db: SqliteDb): SqliteSessionRecords {
       values,
       tables: {
         events: schema.events,
-        approvals: schema.approvals,
         messages: schema.messages,
         characters: schema.characters,
       },

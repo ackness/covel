@@ -209,9 +209,8 @@ export async function recordFailure({
   await pluginData?.set?.(namespace, trackId, value);
   await logger?.error?.("mimo-tts.failed", { trackId, error: message });
   return {
-    trackId,
-    status: "failed",
-    error: message,
-    pluginData: [{ namespace, key: trackId, value }],
+    outcome: "success",
+    value: { trackId, status: "failed", error: message },
+    effects: { pluginData: [{ namespace, key: trackId, value }] },
   };
 }

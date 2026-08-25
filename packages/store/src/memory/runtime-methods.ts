@@ -188,14 +188,6 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       );
     },
 
-    async saveApproval(record) {
-      state.approvals.push(record);
-    },
-
-    async listApprovals(sessionId) {
-      return state.approvals.filter((r) => r.sessionId === sessionId);
-    },
-
     async addMessage(record) {
       state.messages.push(record);
     },

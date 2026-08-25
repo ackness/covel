@@ -37,9 +37,9 @@ export interface RpcApprovalPending {
   readonly pluginId: string;
   readonly action: string;
   readonly payload: unknown;
-  readonly trustLevel: "builtin" | "official" | "community";
+  readonly trustLevel: "builtin" | "community";
   readonly requestedAt: string;
-  /** One-line description from `RpcActionDecl.description`, surfaced to the user. */
+  /** One-line description supplied by the entry registration. */
   readonly description?: string;
 }
 

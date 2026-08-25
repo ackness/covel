@@ -95,7 +95,7 @@ function assertWritableNamespace(namespace: string): void {
 
 /**
  * Wrap a full DataStore so plugin-data writes into framework-reserved
- * (`_`-prefixed) namespaces throw. Trusted (builtin/official) handlers keep
+ * (`_`-prefixed) namespaces throw. Trusted builtin handlers keep
  * the full store surface because their logic implements framework primitives,
  * but they are still plugin code — a stray write into `_jobs`/`_logs` would
  * corrupt background-job or log-ring bookkeeping. Reads (including of
@@ -394,7 +394,7 @@ export function createPluginLogger(
  * misuse loudly instead of letting third-party code silently bypass
  * proposal/tool governance.
  *
- * Builtin / official plugins keep the full DataStore because their guard /
+ * Builtin plugins keep the full DataStore because their guard /
  * handler logic implements framework primitives — e.g. importing a world
  * package's declared character schema into the session, or a deterministic
  * player-character upsert. The runtime decides which to inject.

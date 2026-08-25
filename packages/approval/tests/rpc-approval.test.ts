@@ -54,18 +54,6 @@ describe("createRpcApprovalGate", () => {
     if (result.status === "allow") expect(result.reason).toBe("trusted");
   });
 
-  it("auto-allows official trust level", () => {
-    const gate = createRpcApprovalGate();
-    const result = gate.evaluate({
-      sessionId: "sess-1",
-      pluginId: "codex",
-      action: "regenerate",
-      payload: {},
-      trustLevel: "official",
-    });
-    expect(result.status).toBe("allow");
-  });
-
   it("puts community-trust calls into pending", () => {
     const gate = createRpcApprovalGate();
     const result = gate.evaluate({

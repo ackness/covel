@@ -7,7 +7,6 @@
 import { createRequire } from "node:module";
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
-import { createStateManager, type StateManager } from "@covel/state";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -22,7 +21,6 @@ import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 function createTestApp(deps: {
   store: DataStore;
-  stateManager: StateManager;
   pluginRegistry: PluginRegistry;
 }) {
   const app = new Hono();
@@ -30,7 +28,6 @@ function createTestApp(deps: {
 
   app.use("*", async (c, next) => {
     c.set("store", deps.store);
-    c.set("stateManager", deps.stateManager);
     c.set("pluginRegistry", deps.pluginRegistry);
     c.set("sessionLock", sessionLock);
     await next();
@@ -54,7 +51,6 @@ describe("Health Route", () => {
     const memStore = createMemoryStore();
     const app = createTestApp({
       store: memStore,
-      stateManager: createStateManager(memStore),
       pluginRegistry: createPluginRegistry(),
     });
 
@@ -77,7 +73,6 @@ describe("Health Route", () => {
     const memStore = createMemoryStore();
     const app = createTestApp({
       store: memStore,
-      stateManager: createStateManager(memStore),
       pluginRegistry: createPluginRegistry(),
     });
 
@@ -103,14 +98,12 @@ describe("Health Route", () => {
 describe("Session Routes", () => {
   let app: ReturnType<typeof createTestApp>;
   let store: DataStore;
-  let stateManager: StateManager;
   let pluginRegistry: PluginRegistry;
 
   beforeEach(() => {
     store = createMemoryStore();
-    stateManager = createStateManager(store);
     pluginRegistry = createPluginRegistry();
-    app = createTestApp({ store, stateManager, pluginRegistry });
+    app = createTestApp({ store, pluginRegistry });
   });
 
   describe("POST /api/sessions", () => {
@@ -290,15 +283,13 @@ describe("Session Routes", () => {
 describe("State Routes", () => {
   let app: ReturnType<typeof createTestApp>;
   let store: DataStore;
-  let stateManager: StateManager;
   let pluginRegistry: PluginRegistry;
   let sessionId: string;
 
   beforeEach(async () => {
     store = createMemoryStore();
-    stateManager = createStateManager(store);
     pluginRegistry = createPluginRegistry();
-    app = createTestApp({ store, stateManager, pluginRegistry });
+    app = createTestApp({ store, pluginRegistry });
 
     // Create a session for state tests
     const res = await app.request("/api/sessions", {
@@ -327,13 +318,33 @@ describe("State Routes", () => {
     });
 
     it("returns table data after creating a table", async () => {
-      await stateManager.createTable(sessionId, {
+      const schema = {
         name: "character",
         fields: [
           { name: "hp", type: "integer", default: 100 },
           { name: "name", type: "string", default: "Hero" },
         ],
+      } as const;
+      const now = new Date().toISOString();
+      await store.saveStateSchema({
+        id: "character-schema",
+        sessionId,
+        tableName: schema.name,
+        schema,
+        createdAt: now,
       });
+      await Promise.all(
+        schema.fields.map((field) =>
+          store.upsertStateEntry({
+            id: `character-${field.name}`,
+            sessionId,
+            tableName: schema.name,
+            fieldName: field.name,
+            value: field.default,
+            updatedAt: now,
+          }),
+        ),
+      );
 
       const res = await app.request(`/api/sessions/${sessionId}/state`);
       expect(res.status).toBe(200);

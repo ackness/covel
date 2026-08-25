@@ -8,7 +8,6 @@ description:
   en: Offers several reply options so you can choose the one that fits best.
 pluginType: plugin
 runtimeType: function
-resultFormat: envelope-v1
 outputKind: system
 stage: post-turn
 handler: ./handler.js

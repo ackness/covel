@@ -13,6 +13,7 @@ import type { GeneratedWorldSaveTarget } from "./api.js";
 import { LocalDataService } from "./data-service/local.js";
 import { RemoteDataService } from "./data-service/remote.js";
 import type { DataService } from "./data-service/types.js";
+import { configureWorkspaceRunner } from "./workspace-coordinator.js";
 import {
   getStorageMode as getStorageModeFromFacade,
   setStorageMode as setStorageModeFromFacade,
@@ -57,3 +58,11 @@ export function getDataService(): DataService {
     mode === "local" ? new LocalDataService() : new RemoteDataService();
   return cachedService;
 }
+
+configureWorkspaceRunner(async (sessionId, actionId, mutate) => {
+  const service = getDataService();
+  await service.syncToServer(sessionId);
+  const result = await mutate();
+  await service.commitFromServer(sessionId, actionId);
+  return result;
+});

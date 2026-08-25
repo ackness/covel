@@ -101,7 +101,10 @@ async function runTurn(
       handler: async (ctx) => {
         const recorded = ctx as unknown as Record<string, unknown>;
         (handlerCalls[m.name] ??= []).push(recorded);
-        return handlers[m.name]!(recorded);
+        return {
+          outcome: "success",
+          value: (await handlers[m.name]!(recorded)) as never,
+        };
       },
     }),
     llm: new NoopLLM(),

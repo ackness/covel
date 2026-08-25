@@ -522,7 +522,7 @@ describe("TurnExecutor — function runtime suspend", () => {
       manifest,
       promptTemplate: "",
       handler: async () => ({
-        status: "suspended",
+        outcome: "suspended",
         reason: "Need user to fill out form",
         resumeSchema: {
           type: "object",

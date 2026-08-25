@@ -14,7 +14,6 @@
  */
 
 import type {
-  ApprovalRecord,
   CharacterRecord,
   EventRecord,
   InteractionRecordRow,
@@ -113,7 +112,6 @@ export interface InsertValueBuilders {
   worldInsert(record: WorldRecord): Record<string, unknown>;
   worldUpdate(record: WorldRecord): Record<string, unknown>;
   eventInsert(record: EventRecord): Record<string, unknown>;
-  approvalInsert(record: ApprovalRecord): Record<string, unknown>;
   messageInsert(record: MessageRecord): Record<string, unknown>;
   characterInsert(record: CharacterRecord): Record<string, unknown>;
   characterUpdate(record: CharacterRecord): Record<string, unknown>;
@@ -418,18 +416,6 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         payload: json.writeNullableJson(record.payload),
         targetRuntime: record.targetRuntime ?? null,
         turnId: record.turnId ?? null,
-        createdAt: record.createdAt,
-      };
-    },
-
-    approvalInsert(record) {
-      return {
-        id: record.id,
-        sessionId: record.sessionId,
-        toolName: record.toolName,
-        pluginId: record.pluginId,
-        decision: record.decision,
-        turnId: record.turnId,
         createdAt: record.createdAt,
       };
     },

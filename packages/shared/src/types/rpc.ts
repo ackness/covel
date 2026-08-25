@@ -4,8 +4,8 @@
  * Two RPC modes flow through the same channel:
  *
  *   - **Action level** (`{ pluginId, action, payload }`):
- *     Looks up `manifest.rpc[action]` for the named plugin and runs the
- *     declared handler. Used for high-level structured commands like
+ *     Looks up the action registered by the plugin entry module and runs its
+ *     handler. Used for high-level structured commands like
  *     "submit-form", "regenerate", "cancel".
  *
  *   - **Runtime level** (`{ pluginId, runtimeId, payload }`):
@@ -15,11 +15,10 @@
  *
  * Trust levels mirror the plugin source taxonomy:
  *   - `builtin`: shipped with the framework, auto-allowed
- *   - `official`: in the maintained whitelist, auto-allowed
  *   - `community`: third-party, requires explicit per-action approval
  */
 
-export type RpcTrustLevel = "builtin" | "official" | "community";
+export type RpcTrustLevel = "builtin" | "community";
 
 /**
  * Narrow structural store interface exposed to RPC handlers.
@@ -76,30 +75,6 @@ export interface RpcHandlerStore {
     namespace: string,
   ): Promise<ReadonlyArray<{ key: string; value: unknown }>>;
 }
-
-/**
- * Declaration for a single RPC action on a plugin manifest. Lives under
- * `RuntimeManifest.rpc[actionName]`. Handlers are loaded lazily on first
- * dispatch — there is no eager import at parse time.
- */
-export interface RpcActionDecl {
-  /** Relative path to the handler module (default export of `RpcHandler`). */
-  readonly handler: string;
-  /** Optional path to a JSON Schema describing the payload shape. */
-  readonly input?: string;
-  /** Trust level for approval gating. Defaults to the plugin's source trust. */
-  readonly trustLevel?: RpcTrustLevel;
-  /** One-line human-readable description for UI / approval dialogs. */
-  readonly description?: string;
-}
-
-/**
- * `RuntimeManifest.rpc` is a map of action names → declarations.
- *
- * Action names should be kebab-case (`submit-form`, `regenerate`,
- * `cancel-turn`). They are looked up case-sensitively at dispatch.
- */
-export type RpcDeclMap = Readonly<Record<string, RpcActionDecl>>;
 
 // ── Wire format ──────────────────────────────────────────────────
 

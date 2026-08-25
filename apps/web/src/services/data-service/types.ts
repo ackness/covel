@@ -13,6 +13,10 @@ export type WorldPatch = Partial<
   >
 >;
 
+export type SessionPatch = Partial<
+  Pick<SessionRecord, "status" | "presetId" | "runtimeModelOverrides">
+>;
+
 export interface DataService {
   // Worlds
   listWorlds(): Promise<WorldRecord[]>;
@@ -33,7 +37,7 @@ export interface DataService {
   ): Promise<SessionRecord>;
   updateSession(
     sessionId: string,
-    updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
+    updates: SessionPatch,
   ): Promise<SessionRecord>;
   deleteSession(sessionId: string): Promise<void>;
 
@@ -50,6 +54,7 @@ export interface DataService {
     sessionId: string,
     opts: { limit?: number; before?: { createdAt: string; id: string } },
   ): Promise<CursorPage<MessageRecord>>;
+  /** Persist a browser-authored input before its action is dispatched. */
   addMessage(msg: MessageRecord): Promise<void>;
 
   // State patches
@@ -95,9 +100,12 @@ export interface DataService {
   /**
    * Sync session context to server MemoryStore before sending actions.
    * In remote mode this is a no-op. In local mode it pushes
-   * world + session + messages so the stateless server can process the turn.
+   * the complete browser checkpoint so the transient server can process work.
    */
   syncToServer(sessionId: string): Promise<void>;
+
+  /** Persist the transient server result as the next browser checkpoint. */
+  commitFromServer(sessionId: string, actionId: string): Promise<void>;
 
   /** Persist accumulated execution timeline steps for a session. */
   saveExecutionSteps(sessionId: string, steps: unknown[]): Promise<void>;

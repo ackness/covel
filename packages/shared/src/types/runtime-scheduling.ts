@@ -188,10 +188,8 @@ export interface HttpPermissionDecl {
 /** Declared trigger after normalization (e.g. setup scheduled→auto folding). */
 export type TriggerSpec = TriggerConfig;
 
-export type RuntimeResultFormat = "legacy" | "envelope-v1";
-
 /**
- * Loader product: one per manifest, compat-normalized but not
+ * Loader product: one per manifest, normalized but not
  * session-resolved. Does NOT carry an activation source — how a runtime is
  * activated is a run-time property (`RuntimeActivation`).
  */
@@ -201,8 +199,6 @@ export interface NormalizedRuntimeSpec {
   readonly declaredTrigger: TriggerSpec;
   /** Normalized from the legacy `execution: background` manifest field. */
   readonly backgroundWhenDetached: boolean;
-  /** Guides result parsing before normalization. Defaults to `legacy`. */
-  readonly resultFormat: RuntimeResultFormat;
   /** Absent for event/manual runtimes and for UI-only registration surfaces. */
   readonly stage?: Stage;
   /** capability refs unresolved at this level. */

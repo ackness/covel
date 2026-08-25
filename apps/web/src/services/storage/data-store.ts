@@ -1,10 +1,4 @@
-import type { DataStore } from "@covel/store";
+import { BROWSER_IDB_DATABASE_NAME } from "@covel/store/idb-schema";
 
-export const BROWSER_STORAGE_DB_NAME = "covel-browser";
-
-export async function createBrowserDataStore(
-  dbName = BROWSER_STORAGE_DB_NAME,
-): Promise<DataStore> {
-  const { createIdbStore } = await import("@covel/store/idb");
-  return createIdbStore(dbName);
-}
+/** Frontend-only KV/media cache database; game data lives in BrowserVault. */
+export const BROWSER_STORAGE_DB_NAME = BROWSER_IDB_DATABASE_NAME;

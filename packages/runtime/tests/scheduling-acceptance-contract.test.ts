@@ -38,6 +38,7 @@ import {
   triggerConfigSchema,
   waiveSetup,
   type ExecutionContext,
+  type HandlerResult,
   type RanSetupRuntime,
   type RuntimeActivation,
   type RuntimeManifest,
@@ -122,7 +123,7 @@ async function scheduledRuntimeTriggers(
       promptTemplate: "",
       handler: async () => {
         ran = true;
-        return {};
+        return { outcome: "success", value: {} };
       },
     }),
     llm: new NoopLLM(),
@@ -249,9 +250,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        handler: async (ctx: {
-          store: DataStore;
-        }): Promise<Record<string, unknown>> => {
+        handler: async (ctx: { store: DataStore }) => {
           if (m.name === "p/schema-gen") {
             // Buffered domain write → flushed onto the result as a plugin.data
             // proposal (NOT a direct store write), committed by finalize below.
@@ -265,7 +264,11 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             });
-            return { preGameDone: true };
+            return {
+              outcome: "success",
+              value: {},
+              completion: "done",
+            } as const;
           }
           // player-init reads the committed schema from the frozen snapshot.
           const row = await ctx.store.getPluginData(
@@ -275,7 +278,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
             "schema",
           );
           playerInitRead = row?.value;
-          return {};
+          return { outcome: "success", value: {} } as const;
         },
       }),
       llm: new NoopLLM(),
@@ -406,7 +409,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         promptTemplate: "",
         handler: async () => {
           ran.push(m.name);
-          return {};
+          return { outcome: "success", value: {} };
         },
       }),
       llm: new NoopLLM(),
@@ -468,7 +471,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
           inputSchema: INPUT_SCHEMA,
           handler: async (ctx) => {
             activation = ctx.activation;
-            return {};
+            return { outcome: "success", value: {} };
           },
         }),
         llm: new NoopLLM(),
@@ -502,7 +505,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
           manifest: m,
           promptTemplate: "",
           inputSchema: INPUT_SCHEMA,
-          handler: async () => ({}),
+          handler: async () => ({ outcome: "success", value: {} }),
         }),
         llm: new NoopLLM(),
         store,
@@ -721,9 +724,12 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
         handler: async (ctx) => {
           if (m.name === "c/main") {
             captured = ctx.inputs?.data;
-            return {};
+            return { outcome: "success", value: {} };
           }
-          return { payload: { from: m.name } };
+          return {
+            outcome: "success",
+            value: { payload: { from: m.name } },
+          };
         },
       }),
       llm: new NoopLLM(),
@@ -1006,12 +1012,12 @@ describe("MediaRef canonicalization boundaries", () => {
   );
 });
 
-describe("legacy handler compat (mixed return shape)", () => {
+describe("function handler result contract", () => {
   const fnManifest = (name: string): RuntimeManifest =>
     ({
       name,
       pluginId: name.split("/")[0],
-      description: "legacy mixed-shape function runtime",
+      description: "canonical function runtime",
       stage: "narrative",
       outputKind: "plugin",
       runtimeType: "function",
@@ -1021,7 +1027,7 @@ describe("legacy handler compat (mixed return shape)", () => {
   const runFn = async (
     sessionId: string,
     manifest: RuntimeManifest,
-    ret: Record<string, unknown>,
+    ret: HandlerResult,
   ) => {
     const store = createMemoryStore();
     const loaded: LoadedRuntime = {
@@ -1041,39 +1047,35 @@ describe("legacy handler compat (mixed return shape)", () => {
     return { store, rr: result.runtimeResults[0]! };
   };
 
-  it("scenario 11: legacy mixed success return — value preserved, control keys committed", async () => {
-    const manifest = fnManifest("legacy-mixed/ok");
-    // A mixed shape: a public field a downstream binding would read (`ref`) plus
-    // a `pluginData` control key that must still commit.
+  it("scenario 11: success value is materialized and effects are committed", async () => {
+    const manifest = fnManifest("canonical-handler/ok");
     const ref = { id: "r".repeat(64), mime: "image/png", size: 42 };
     const ret = {
-      ref,
-      note: "public field",
-      pluginData: [{ namespace: "gallery", key: "latest", value: { ref } }],
-    };
-    const { store, rr } = await runFn("sess-legacy-ok", manifest, ret);
+      outcome: "success",
+      value: { ref, note: "public field" },
+      effects: {
+        pluginData: [{ namespace: "gallery", key: "latest", value: { ref } }],
+      },
+    } as const;
+    const { store, rr } = await runFn("sess-canonical-ok", manifest, ret);
 
-    // Business success stays success; the whole object is preserved so a
-    // downstream consumer can still read `ref` / `note` (the adapter does not
-    // strip fields it does not recognise).
     expect(rr.status).toBe("success");
     expect(rr.output).toMatchObject({ ref, note: "public field" });
 
-    // Control keys are copied + executed: the plugin.data proposal commits.
-    await processRuntimeResult(rr, store, "sess-legacy-ok", "plugin", {});
+    await processRuntimeResult(rr, store, "sess-canonical-ok", "plugin", {});
     const stored = await store.getPluginData(
-      "sess-legacy-ok",
-      "legacy-mixed",
+      "sess-canonical-ok",
+      "canonical-handler",
       "gallery",
       "latest",
     );
     expect(stored?.value).toEqual({ ref });
   });
 
-  it("scenario 11: business status: failed maps to RuntimeResult.status failed", async () => {
-    const manifest = fnManifest("legacy-mixed/bad");
-    const { rr } = await runFn("sess-legacy-bad", manifest, {
-      status: "failed",
+  it("scenario 11: failed outcome maps to RuntimeResult.status failed", async () => {
+    const manifest = fnManifest("canonical-handler/bad");
+    const { rr } = await runFn("sess-canonical-bad", manifest, {
+      outcome: "failed",
       error: "provider down",
     });
     expect(rr.status).toBe("failed");
@@ -1339,7 +1341,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
         inputSchema: INPUT_SCHEMA,
         handler: async (ctx) => {
           fnActivation = ctx.activation;
-          return {};
+          return { outcome: "success", value: {} };
         },
       }),
       llm: new NoopLLM(),
@@ -1589,7 +1591,7 @@ describe("recordAs export (persistent export revision)", () => {
           handler: async (ctx) => {
             captured = (ctx as { exports?: Record<string, unknown> }).exports
               ?.cfg;
-            return {};
+            return { outcome: "success", value: {} };
           },
         }),
         llm: new NoopLLM(),
@@ -1625,7 +1627,7 @@ describe("recordAs export (persistent export revision)", () => {
         loadRuntime: async (m): Promise<LoadedRuntime> => ({
           manifest: m,
           promptTemplate: "",
-          handler: async () => ({}),
+          handler: async () => ({ outcome: "success", value: {} }),
         }),
         llm: new NoopLLM(),
         store,
@@ -1664,7 +1666,7 @@ describe("recordAs export (persistent export revision)", () => {
           ...(m.name === "c/main"
             ? { exportAcceptsSchemas: { cfg: CONSUMER_ACCEPTS } }
             : {}),
-          handler: async () => ({}),
+          handler: async () => ({ outcome: "success", value: {} }),
         }),
         llm: new NoopLLM(),
         store,

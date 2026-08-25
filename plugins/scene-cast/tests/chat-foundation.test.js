@@ -112,7 +112,7 @@ describe("chat foundation manifests", () => {
   });
 });
 
-// Deliberate change: handler migrated to envelope-v1, so the business value
+// Deliberate change: handler returns the canonical HandlerResult, so the business value
 // (speakers / activeCastContext) is under `result.value`; pending proposals
 // stay on the envelope (result).
 describe("scene-cast handler", () => {

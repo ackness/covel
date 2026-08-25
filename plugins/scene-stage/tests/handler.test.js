@@ -77,7 +77,7 @@ function makeCtx({
   };
 }
 
-// Deliberate change: handler migrated to envelope-v1. The business value
+// Deliberate change: handler returns the canonical HandlerResult. The business value
 // (stage / skipped marker) is under `result.value`; the generate-requested
 // event is under `result.effects.events`.
 describe("scene-stage resolver handler", () => {

@@ -19,6 +19,10 @@ vi.mock("@/services/api.js", async (importOriginal) => ({
   updateSession: api.updateSession,
 }));
 
+vi.mock("@/services/data-service.js", () => ({
+  getDataService: () => ({ updateSession: api.updateSession }),
+}));
+
 const session = {
   id: "sess-a",
   worldId: "world-a",

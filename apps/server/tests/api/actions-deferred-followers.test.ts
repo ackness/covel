@@ -82,8 +82,11 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       trigger: { type: "auto" },
     });
     const targetHandler: FunctionHandler = async () => ({
-      ok: true,
-      events: [{ topic: "test-deferred.ready", data: { value: "hello" } }],
+      outcome: "success",
+      value: { ok: true },
+      effects: {
+        events: [{ topic: "test-deferred.ready", data: { value: "hello" } }],
+      },
     });
     const targetLoaded: LoadedRuntime = {
       manifest: targetManifest,
@@ -102,13 +105,17 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       const event = ctx.triggerEvent as
         { data?: { value?: string } } | undefined;
       return {
-        pluginData: [
-          {
-            namespace: "seen",
-            key: "last",
-            value: { value: event?.data?.value },
-          },
-        ],
+        outcome: "success",
+        value: {},
+        effects: {
+          pluginData: [
+            {
+              namespace: "seen",
+              key: "last",
+              value: { value: event?.data?.value },
+            },
+          ],
+        },
       };
     };
     const followerLoaded: LoadedRuntime = {
@@ -236,8 +243,11 @@ describe("POST /api/actions — deferred background followers (main path)", () =
       trigger: { type: "auto" },
     });
     const targetHandler: FunctionHandler = async () => ({
-      ok: true,
-      events: [{ topic: "test-deferred.ready", data: { value: "hello" } }],
+      outcome: "success",
+      value: { ok: true },
+      effects: {
+        events: [{ topic: "test-deferred.ready", data: { value: "hello" } }],
+      },
     });
     const targetLoaded: LoadedRuntime = {
       manifest: targetManifest,
@@ -263,7 +273,11 @@ describe("POST /api/actions — deferred background followers (main path)", () =
         new Promise((resolve) => setTimeout(resolve, 250)),
       ]);
       return {
-        pluginData: [{ namespace: "seen", key: "last", value: { ok: true } }],
+        outcome: "success",
+        value: {},
+        effects: {
+          pluginData: [{ namespace: "seen", key: "last", value: { ok: true } }],
+        },
       };
     };
     const followerLoaded: LoadedRuntime = {

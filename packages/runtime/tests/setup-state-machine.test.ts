@@ -293,7 +293,7 @@ describe("main-loop dependency-cycle SCC", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        handler: async () => ({}),
+        handler: async () => ({ outcome: "success", value: {} }),
       }),
       llm: new NoopLLM(),
       store,

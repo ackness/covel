@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
 import { Check, Loader2, RefreshCw } from "lucide-react";
-import { postPluginRpc } from "@/services/api.js";
+import { postPluginRpc } from "@/services/session-workspace.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSession } from "@/stores/session-store.js";
 import { asRecord, useI18nResolver } from "./helpers.js";

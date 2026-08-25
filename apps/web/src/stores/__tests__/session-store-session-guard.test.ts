@@ -78,7 +78,7 @@ describe("sse-handler — foreign-session envelopes", () => {
     expect(addMessage).not.toHaveBeenCalled();
   });
 
-  it("still applies and persists an envelope for the loaded session", () => {
+  it("applies a loaded-session envelope without creating a local revision", () => {
     const dispatch = vi.fn();
     const addMessage = vi.fn().mockResolvedValue(undefined);
 
@@ -89,9 +89,7 @@ describe("sse-handler — foreign-session envelopes", () => {
     expect(dispatch.mock.calls.map(([a]) => a.type)).toContain(
       "COMPLETE_MESSAGE",
     );
-    expect(addMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: "sess-a", id: "msg-1" }),
-    );
+    expect(addMessage).not.toHaveBeenCalled();
   });
 
   it("does not drop events before a session is loaded", () => {
@@ -181,19 +179,25 @@ describe("runtime RPC — originating session", () => {
 
   it("does not fire a delayed action after the player switches sessions", async () => {
     let resolveEnsure!: () => void;
-    vi.spyOn(api, "ensureServerSession").mockReturnValueOnce(
-      new Promise<void>((resolve) => {
-        resolveEnsure = resolve;
-      }),
+    const syncToServer = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveEnsure = resolve;
+        }),
     );
     const fireAction = vi.fn();
     const onAborted = vi.fn();
     const sessionIdRef = { current: "sess-a" as string | null };
 
-    ensureServerThenRun({} as SseEventHandlerDeps["ds"], "sess-a", fireAction, {
-      onAborted,
-      sessionIdRef,
-    });
+    ensureServerThenRun(
+      { syncToServer } as unknown as SseEventHandlerDeps["ds"],
+      "sess-a",
+      fireAction,
+      {
+        onAborted,
+        sessionIdRef,
+      },
+    );
     sessionIdRef.current = "sess-b";
     resolveEnsure();
     await Promise.resolve();

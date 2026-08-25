@@ -160,6 +160,9 @@ export function registerLifecycleStoreSuites(getStore: () => DataStore): void {
 
       const read = await store.getLogicalTurnCompletion("sess-ltl", "lt-1");
       expect(read?.completedByExecutionId).toBe("exec-1");
+      expect(await store.listLogicalTurnCompletions("sess-ltl")).toEqual([
+        first,
+      ]);
     });
 
     it("returns null for an unrecorded logical turn", async () => {

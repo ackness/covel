@@ -43,6 +43,7 @@ export function runActionStream(
   opts?: {
     toastOnError?: boolean;
     sessionIdRef?: MutableRef<string | null>;
+    dataService?: DataService;
   },
 ): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -76,7 +77,25 @@ export function runActionStream(
         resolve();
       },
       () => {
-        resolve();
+        const persist = opts?.dataService
+          ? opts.dataService.commitFromServer(
+              request.sessionId,
+              request.requestId,
+            )
+          : Promise.resolve();
+        persist
+          .catch((err: unknown) => {
+            const detail = err instanceof Error ? err.message : String(err);
+            dispatch({ type: "SET_EXECUTION_ERROR", error: detail });
+            emitToast(
+              "error",
+              i18n.t("toast.syncFailed", {
+                defaultValue: "Could not persist this turn in the browser",
+              }) as string,
+              detail,
+            );
+          })
+          .finally(resolve);
       },
     );
   });
@@ -99,8 +118,7 @@ export function ensureServerThenRun(
     sessionIdRef?: MutableRef<string | null>;
   },
 ): void {
-  api
-    .ensureServerSession(sessionId, (sid) => ds.syncToServer(sid))
+  ds.syncToServer(sessionId)
     .then(() => {
       if (opts?.sessionIdRef && opts.sessionIdRef.current !== sessionId) {
         opts.onAborted?.();
@@ -124,4 +142,22 @@ export function ensureServerThenRun(
       );
       opts?.onAborted?.();
     });
+}
+
+/**
+ * Run a non-streaming session mutation against the transient browser-private
+ * workspace and immediately checkpoint its result. Remote mode implements the
+ * surrounding sync/commit calls as no-ops, so callers use one path in both
+ * deployment profiles.
+ */
+export async function runWorkspaceMutation<T>(
+  ds: DataService,
+  sessionId: string,
+  actionId: string,
+  mutate: () => Promise<T>,
+): Promise<T> {
+  await ds.syncToServer(sessionId);
+  const result = await mutate();
+  await ds.commitFromServer(sessionId, actionId);
+  return result;
 }

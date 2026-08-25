@@ -17,7 +17,7 @@ function ctx(manualPayload, store = {}, pluginData) {
   };
 }
 
-// Deliberate change: handler migrated to envelope-v1, so the business return
+// Deliberate change: handler returns the canonical HandlerResult, so the business return
 // is under `result.value`; pending proposals stay on the envelope (result).
 describe("player-identity handler", () => {
   it("saves and activates a profile", async () => {

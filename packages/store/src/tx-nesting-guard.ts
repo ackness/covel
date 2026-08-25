@@ -14,10 +14,8 @@
  * running callback, so `isNested()` returns `true` exclusively for re-entrant
  * (nested) calls and `false` for independent concurrent ones.
  *
- * Node-only: this module imports `node:async_hooks` and must never be pulled
- * into the browser `IdbStore` bundle. IdbStore uses a coarser synchronous
- * boolean flag instead (its single-user local mode makes the concurrent
- * false-positive edge irrelevant, and AsyncLocalStorage is unavailable there).
+ * Node-only: this module imports `node:async_hooks`; browser-private storage
+ * uses BrowserVault and does not implement the DataStore transaction contract.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";

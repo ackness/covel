@@ -76,7 +76,6 @@ const newShapeFields = {
       accepts: "./schemas/prose.json",
     },
   },
-  resultFormat: "envelope-v1",
   effects: {
     reads: ["narrative:*", "plugin-data:self:codex"],
     writes: ["state:*", "event:codex.updated"],

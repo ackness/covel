@@ -57,7 +57,7 @@ pnpm deps:check       # knip — flag unused / undeclared workspace deps
 pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs (check:plugins is a subset)
 pnpm e2e:verify       # API-driven, real-LLM plugin harness (needs .env.llm); pass --slot e2e_local --turns 3
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
-pnpm validate:plugin  # validate PLUGIN.md manifests; pass file or plugin dir, --compat for legacy
+pnpm validate:plugin  # validate PLUGIN.md manifests; pass file or plugin dir
                       # a plugin DIR also gets cross-runtime checks (userSettings key collisions)
 pnpm build:electron   # production desktop installer → release/
 pnpm release:preflight  # static pre-tag gate: lockfile sync, import resolution, plugin/world/prompt structure
@@ -137,7 +137,7 @@ Session lifecycle tracked on `SessionRecord`:
 
 - **Layout**: `PLUGIN.md` (frontmatter + agent skill prompt) + `package.json` is the minimum. Optional: `prompts/`, `schemas/`, `server/`, `client/`, `ui/`.
 - **Session scope**: Global plugin pool loaded at startup; each session's `SessionRecord.activePlugins` (string[]) is the active set. Runtime selection, tool lookup, and hooks all filter against it (hooks see it as `activePluginIds` via `AsyncLocalStorage`, see `packages/runtime/src/hooks/hook-scope.ts`). World manifest seeds initial set; enable/disable mid-session applies next turn.
-- **Trust tiers**: `builtin` (auto-load) · `official` (whitelist) · `community` (deferred `import()` until user approves).
+- **Plugin sources**: `builtin` (auto-load) · `community` (deferred `import()` until user approves).
 - **Plugin data**: session-scoped KV storage keyed by `(sessionId, pluginId, namespace, key)` in `plugin_data` table. Builtin tools: `plugin-data-{set,get,list,set-batch}`, `create-character` / `update-character` / `list-characters` / `get-character`, `emit-event`.
 - **Plugin-data inject** (agent runtimes): `input.inject` with `kind: plugin-data` reads the runtime's own namespace and inlines a summary into the system prompt (avoids tool-call round-trips). Switches that runtime to the async context path.
 
@@ -154,7 +154,7 @@ All panels/blocks render through [json-render](https://github.com/vercel-labs/js
 - **Tag-aware fallback**: an unconfigured slot falls back to the first slot with the same tag (`text`/`image`/`embedding`/`speech`/`transcription`). Cross-tag fallback is forbidden (an image request never silently routes to text).
 - Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope).
 - **Model capabilities** (multimodal, features, token limits, pricing) auto-detected via: frontend localStorage override → `llm.toml` manual → `known-models.ts` (~60 common) → committed LiteLLM snapshot (`pnpm --filter @covel/ai-provider update-model-db`) → protocol defaults. Directional modality: `input: InputModality[]` = accepts, `output: OutputModality[]` = produces.
-- **Media generation (image / TTS / STT)**: `ctx.images.generate()` and `ctx.speech.generate()`/`.transcribe()` (function-runtime plugins, preferred) route through pluggable per-modality wire registries — builtin `openai-images` (default) + `dashscope-wan` for image, `openai-speech` / `openai-transcription` for speech — selectable per-slot via `llm.toml` `providerRequestMetadata.imageWire|speechWire|transcriptionWire`. Both `generate` paths dedupe on promptHash and persist to MediaStore. Plugins register vendor wires via the PLUGIN.md `wires` frontmatter field (ids namespaced `<pluginId>/<wireId>`, trust-gated loading in `bootstrap/plugin-wires.ts`); bundled code may call `register{Image,Speech,Transcription}Wire()` directly. See [docs/reference/slots.md](./docs/reference/slots.md), [docs/reference/media-store.md](./docs/reference/media-store.md) and [docs/guide/plugin-authoring-advanced.md](./docs/guide/plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行).
+- **Media generation (image / TTS / STT)**: `ctx.images.generate()` and `ctx.speech.generate()`/`.transcribe()` (function-runtime plugins, preferred) route through pluggable per-modality wire registries — builtin `openai-images` (default) + `dashscope-wan` for image, `openai-speech` / `openai-transcription` for speech — selectable per-slot via `llm.toml` `providerRequestMetadata.imageWire|speechWire|transcriptionWire`. Both `generate` paths dedupe on promptHash and persist to MediaStore. Plugins register vendor wires from their `entry` module via `covel.registerWires` (ids namespaced `<pluginId>/<wireId>`, source-gated loading in `bootstrap/plugin-wires.ts`); bundled code may call `register{Image,Speech,Transcription}Wire()` directly. See [docs/reference/slots.md](./docs/reference/slots.md), [docs/reference/media-store.md](./docs/reference/media-store.md) and [docs/guide/plugin-authoring-advanced.md](./docs/guide/plugin-authoring-advanced.md#注册自定义-wireentry-里的-covelregisterwires).
 
 ## Critical Conventions (Read These)
 
@@ -196,24 +196,24 @@ All store writes key on `pluginId`; all trace logs key on `runtimeId`.
 
 **Any code change that touches framework-visible surface area MUST update the matching doc in the same PR.** Missing sync = incomplete PR.
 
-| Change                                    | Doc to update                                                                                    |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Add/modify/remove plugin                  | `docs/reference/plugins.md`                                                                      |
-| Add/modify/remove tool (builtin or local) | `docs/reference/tools.md`                                                                        |
-| Change approval policy / tool trust tier  | `docs/reference/tools.md`                                                                        |
-| Add/change model slot                     | `docs/reference/slots.md` (create if missing)                                                    |
-| Change SSE event type / protocol          | `docs/reference/protocol.md`                                                                     |
-| Change right-panel tab / data source      | `docs/reference/ui-panels.md`                                                                    |
-| Add/change API endpoint                   | `docs/reference/api.md`                                                                          |
-| Change package structure / deps           | `CLAUDE.md` (Workspace + Dependency Flow)                                                        |
-| Add/change PLUGIN.md frontmatter field    | `docs/reference/plugins.md` + `docs/guide/plugin-authoring.md`                                   |
-| Add/change `PLUGIN.md dataSchemas`        | `docs/reference/plugins.md` + `docs/guide/plugin-authoring*.md` + `docs/reference/world-data.md` |
-| Add/change world package `worldData`      | `docs/reference/world-data.md` + relevant guide docs                                             |
-| Add/change world-data import/sync rules   | `docs/reference/world-data.md` + `docs/reference/api.md` + `docs/reference/transactions.md`      |
-| Add/change RPC action / framework default | `docs/reference/api.md` (plugin-rpc) + `docs/reference/protocol.md`                              |
-| Add/change approval flow / trust level    | `docs/reference/api.md` + `docs/reference/protocol.md`                                           |
-| Modify `README.md` (English, primary)     | `README.zh-CN.md` (must sync in same PR)                                                         |
-| Modify `README.zh-CN.md`                  | `README.md` (must sync in same PR)                                                               |
+| Change                                      | Doc to update                                                                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Add/modify/remove plugin                    | `docs/reference/plugins.md`                                                                      |
+| Add/modify/remove tool (builtin or local)   | `docs/reference/tools.md`                                                                        |
+| Change approval policy / plugin source gate | `docs/reference/tools.md`                                                                        |
+| Add/change model slot                       | `docs/reference/slots.md` (create if missing)                                                    |
+| Change SSE event type / protocol            | `docs/reference/protocol.md`                                                                     |
+| Change right-panel tab / data source        | `docs/reference/ui-panels.md`                                                                    |
+| Add/change API endpoint                     | `docs/reference/api.md`                                                                          |
+| Change package structure / deps             | `CLAUDE.md` (Workspace + Dependency Flow)                                                        |
+| Add/change PLUGIN.md frontmatter field      | `docs/reference/plugins.md` + `docs/guide/plugin-authoring.md`                                   |
+| Add/change `PLUGIN.md dataSchemas`          | `docs/reference/plugins.md` + `docs/guide/plugin-authoring*.md` + `docs/reference/world-data.md` |
+| Add/change world package `worldData`        | `docs/reference/world-data.md` + relevant guide docs                                             |
+| Add/change world-data import/sync rules     | `docs/reference/world-data.md` + `docs/reference/api.md` + `docs/reference/transactions.md`      |
+| Add/change RPC action / framework default   | `docs/reference/api.md` (plugin-rpc) + `docs/reference/protocol.md`                              |
+| Add/change approval flow / trust level      | `docs/reference/api.md` + `docs/reference/protocol.md`                                           |
+| Modify `README.md` (English, primary)       | `README.zh-CN.md` (must sync in same PR)                                                         |
+| Modify `README.zh-CN.md`                    | `README.md` (must sync in same PR)                                                               |
 
 ### Plugin authoring contract
 
@@ -233,7 +233,7 @@ Locale enters the execution chain via `KernelInput.locale` → `RuntimeContextVi
 
 Core objects (never collapse into a single JSON blob): **Run, Branch, Snapshot, State, Event, Record, Character, PluginData**.
 
-Store backends (`@covel/store`): `MemoryStore` (dev/test), `SqliteStore` (desktop/default), `IdbStore` (browser IDB), `PgStore` (production PG via Drizzle). Selection at server startup uses `STORE_BACKEND=memory|sqlite|pg` with default `sqlite`; `STORE_BACKEND=pg` requires `DATABASE_URL`. Browser `local` mode uses IDB through `createStore({ backend: "idb" })`; browser `remote` mode uses the server API and the server's configured backend. `MEDIA_BACKEND=mirror` follows the server data backend by default. `VECTOR_BACKEND=embedded` uses the active DataStore vector capability. World seeds load from `COVEL_WORLDS_DIR` (default `worlds/`). Desktop shells additionally pass `COVEL_USER_WORLDS_DIR=<data_root>/worlds` so user-authored worlds move together with SQLite and logs when `data_root` is redirected.
+Server store backends (`@covel/store`): `MemoryStore` (dev/test and browser-private execution), `SqliteStore` (desktop/default), and `PgStore` (hosted PostgreSQL via Drizzle). Selection uses `STORE_BACKEND=memory|sqlite|pg` with default `sqlite`; `STORE_BACKEND=pg` requires `DATABASE_URL`. Browser `local` mode persists versioned checkpoints in the Dexie `BrowserVault` and hydrates an ephemeral MemoryStore for execution; it is not a DataStore backend. Browser `remote` mode uses the server API and the configured SQLite/PostgreSQL store. `MEDIA_BACKEND=mirror` follows the server data backend by default. `VECTOR_BACKEND=embedded` uses the active DataStore vector capability. World seeds load from `COVEL_WORLDS_DIR` (default `worlds/`). Desktop shells additionally pass `COVEL_USER_WORLDS_DIR=<data_root>/worlds` so user-authored worlds move together with SQLite and logs when `data_root` is redirected.
 
 Each SQL backend keeps a thin public factory plus focused method modules:
 
@@ -242,7 +242,7 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 - `*-store-mappers.ts` / `*-store-values.ts` — row conversion and JSON helpers.
 - `*-data-crud.ts`, `*-runtime-records.ts`, `*-session-*`, `*-snapshot*`, `*-state*`, `*-world*` — focused persistence surfaces.
 
-31 tables via Drizzle; authoritative list in `packages/store/src/{sqlite,postgres}/schema.ts`, transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md).
+30 tables via Drizzle; authoritative list in `packages/store/src/{sqlite,postgres}/schema.ts`, transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md), and browser synchronization contract in [docs/architecture/storage.md](./docs/architecture/storage.md).
 
 - **`sessions.runtime_model_overrides`** — JSONB map of `runtimeId → slot name`, snapshotted into `TurnInput` each turn and read by `agent-loop-policy` (a request-scoped `modelOverride` wins for `story` runtimes) before `manifest.model` / gateway default. Keys still flow via `X-Provider-Keys` + localStorage.
 - **`turn_results.commit_status`** — `pending` when the execution artifact is persisted (before proposals commit), settled to `committed` / `failed` by the commit-owning caller. A row still `pending` is a crash signature, not a successful turn.

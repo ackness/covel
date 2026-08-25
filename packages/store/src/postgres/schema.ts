@@ -229,22 +229,6 @@ export const events = pgTable(
   ],
 );
 
-// ── Approvals ───────────────────────────────────────────────────
-
-export const approvals = pgTable(
-  "approvals",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id").notNull(),
-    toolName: text("tool_name").notNull(),
-    pluginId: text("plugin_id").notNull().default(""),
-    decision: text("decision").notNull(),
-    turnId: text("turn_id").notNull(),
-    createdAt: text("created_at").notNull(),
-  },
-  (table) => [index("pg_approvals_session_id_idx").on(table.sessionId)],
-);
-
 // ── Messages ────────────────────────────────────────────────────
 
 export const messages = pgTable(

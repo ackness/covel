@@ -59,6 +59,7 @@ async function hydrateInitialSnapshot(
 }
 
 async function persistPrepRuntimeBindings(
+  ds: DataService,
   worldId: string,
   sessionId: string,
 ): Promise<void> {
@@ -73,7 +74,7 @@ async function persistPrepRuntimeBindings(
   }
 
   try {
-    await api.updateSession(sessionId, {
+    await ds.updateSession(sessionId, {
       runtimeModelOverrides: overrides,
     });
     api.clearPrepRuntimeBindings(worldId);
@@ -110,7 +111,7 @@ export async function startGameSession({
     // authoritative and implements syncToServer as a no-op.
     await ds.syncToServer(session.id);
     api.markServerAck();
-    await persistPrepRuntimeBindings(world.id, session.id);
+    await persistPrepRuntimeBindings(ds, world.id, session.id);
 
     setActivePluginDataSession(session.id);
     sessionIdRef.current = session.id;

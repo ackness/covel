@@ -3,7 +3,8 @@ import type {
   PluginRpcRequest,
   PluginRpcResponse,
 } from "@covel/shared";
-import { postPluginRpc, resolveApproval } from "@/services/api.js";
+import { resolveApproval } from "@/services/api.js";
+import { postPluginRpc } from "@/services/session-workspace.js";
 import { emitToast } from "@/lib/toast-channel.js";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;

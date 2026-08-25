@@ -14,7 +14,6 @@ tags:
   - cost:function
 outputKind: plugin
 runtimeType: function
-resultFormat: envelope-v1
 handler: ./handler.js
 trigger:
   type: scheduled

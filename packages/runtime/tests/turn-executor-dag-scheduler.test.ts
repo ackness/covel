@@ -129,7 +129,7 @@ describe("executeTurn main-loop DAG scheduler", () => {
       const start = Date.now();
       await new Promise((r) => setTimeout(r, DELAY));
       timings[name] = { start, end: Date.now() };
-      return { narrativeOutput: "x" };
+      return { outcome: "success", value: { narrativeOutput: "x" } } as const;
     };
 
     const input: TurnInput = {

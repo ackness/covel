@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { getPendingProposals, withPendingProposals } from "@covel/tools";
 import type { Proposal } from "@covel/shared";
-import { projectEnvelopeSuccessToLegacyOutput } from "../src/commit/project-envelope-result.js";
+import { materializeHandlerSuccess } from "../src/commit/materialize-handler-output.js";
 
-describe("projectEnvelopeSuccessToLegacyOutput", () => {
+describe("materializeHandlerSuccess", () => {
   it("flattens a plain-object value to the top level", () => {
-    const out = projectEnvelopeSuccessToLegacyOutput(
+    const out = materializeHandlerSuccess(
       { outcome: "success", value: { saved: true, id: "x" } },
       {},
     );
@@ -14,21 +14,15 @@ describe("projectEnvelopeSuccessToLegacyOutput", () => {
 
   it("keeps a non-object value under a `value` key", () => {
     expect(
-      projectEnvelopeSuccessToLegacyOutput(
-        { outcome: "success", value: 42 },
-        {},
-      ),
+      materializeHandlerSuccess({ outcome: "success", value: 42 }, {}),
     ).toEqual({ value: 42 });
     expect(
-      projectEnvelopeSuccessToLegacyOutput(
-        { outcome: "success", value: ["a", "b"] },
-        {},
-      ),
+      materializeHandlerSuccess({ outcome: "success", value: ["a", "b"] }, {}),
     ).toEqual({ value: ["a", "b"] });
   });
 
   it("hoists effects domain keys to the top level, not obs channels", () => {
-    const out = projectEnvelopeSuccessToLegacyOutput(
+    const out = materializeHandlerSuccess(
       {
         outcome: "success",
         value: { stage: "s" },
@@ -51,7 +45,7 @@ describe("projectEnvelopeSuccessToLegacyOutput", () => {
 
   it("lets effects win a value key clash and warns", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const out = projectEnvelopeSuccessToLegacyOutput(
+    const out = materializeHandlerSuccess(
       {
         outcome: "success",
         value: { events: "from-value" },
@@ -66,9 +60,9 @@ describe("projectEnvelopeSuccessToLegacyOutput", () => {
     warn.mockRestore();
   });
 
-  it('maps completion:"done" to the legacy preGameDone signal', () => {
+  it('maps completion:"done" to the internal preGameDone signal', () => {
     expect(
-      projectEnvelopeSuccessToLegacyOutput(
+      materializeHandlerSuccess(
         {
           outcome: "success",
           value: { initialized: true },
@@ -79,7 +73,7 @@ describe("projectEnvelopeSuccessToLegacyOutput", () => {
     ).toEqual({ initialized: true, preGameDone: true });
 
     // completion:"pending" is not the done signal.
-    const pending = projectEnvelopeSuccessToLegacyOutput(
+    const pending = materializeHandlerSuccess(
       { outcome: "success", value: {}, completion: "pending" },
       {},
     );
@@ -89,7 +83,7 @@ describe("projectEnvelopeSuccessToLegacyOutput", () => {
   it("carries the raw return's pending-proposals Symbol onto the new object", () => {
     const proposal = { id: "p1", type: "plugin.data" } as unknown as Proposal;
     const raw = withPendingProposals({ x: 1 }, [proposal]);
-    const out = projectEnvelopeSuccessToLegacyOutput(
+    const out = materializeHandlerSuccess(
       { outcome: "success", value: { saved: true } },
       raw,
     );
@@ -100,7 +94,7 @@ describe("projectEnvelopeSuccessToLegacyOutput", () => {
   });
 
   it("returns a bare object when the raw carries no pending proposals", () => {
-    const out = projectEnvelopeSuccessToLegacyOutput(
+    const out = materializeHandlerSuccess(
       { outcome: "success", value: { a: 1 } },
       {},
     );

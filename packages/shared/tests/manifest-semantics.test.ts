@@ -42,12 +42,6 @@ describe("schedulable-missing-stage", () => {
     ).toEqual([]);
   });
 
-  it("does not warn for a pure hook-carrier declaration", () => {
-    expect(codes({ name: "x/hooks", hooks: [{ event: "TurnStart" }] })).toEqual(
-      [],
-    );
-  });
-
   it("does not warn for an entry-only server module (cost-gate shape)", () => {
     expect(codes({ name: "cost-gate", entry: "./server/index.js" })).toEqual(
       [],

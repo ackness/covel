@@ -88,10 +88,18 @@ function makeRuntimeHarness(store: DataStore): {
         calls[manifest.name] = (calls[manifest.name] ?? 0) + 1;
 
         if (manifest.name === "pregame") {
-          return { narrativeOutput: "pregame ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "pregame ready" },
+            completion: "done",
+          };
         }
         if (manifest.name === "world-init/schema-gen") {
-          return { narrativeOutput: "world ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "world ready" },
+            completion: "done",
+          };
         }
         if (manifest.name === "char-creator/player-init") {
           const inputs = await store.listPlayerInputs("sess-start-flow");
@@ -103,15 +111,18 @@ function makeRuntimeHarness(store: DataStore): {
 
           if (!values) {
             return {
-              narrativeOutput: "character form ready",
-              interactions: [
-                {
-                  type: "form",
-                  interactionId: "form-char-creation",
-                  narrativeTemplate: "Player {{name}} enters as {{concept}}.",
-                  fields: [{ id: "name", label: "Name", type: "text" }],
-                },
-              ],
+              outcome: "success",
+              value: { narrativeOutput: "character form ready" },
+              effects: {
+                interactions: [
+                  {
+                    type: "form",
+                    interactionId: "form-char-creation",
+                    narrativeTemplate: "Player {{name}} enters as {{concept}}.",
+                    fields: [{ id: "name", label: "Name", type: "text" }],
+                  },
+                ],
+              },
             };
           }
 
@@ -140,10 +151,17 @@ function makeRuntimeHarness(store: DataStore): {
             createdAt: now,
             updatedAt: now,
           });
-          return { narrativeOutput: "player ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "player ready" },
+            completion: "done",
+          };
         }
 
-        return { narrativeOutput: "main loop started" };
+        return {
+          outcome: "success",
+          value: { narrativeOutput: "main loop started" },
+        };
       },
     });
   }

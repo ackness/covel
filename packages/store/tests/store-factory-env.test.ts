@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  BROWSER_IDB_DATABASE_NAME,
   createMediaStoreFromEnv,
-  createStore,
   createStoreFromEnv,
   resolveBackendFromEnv,
   STORAGE_MIGRATIONS,
@@ -84,55 +82,6 @@ describe("store factory env wiring", () => {
     });
   });
 
-  it("creates an IndexedDB store through the generic factory", async () => {
-    await import("fake-indexeddb/auto");
-
-    const store = await createStore({
-      backend: "idb",
-      idbDbName: "factory-idb-store",
-    });
-    await store.createSession({
-      id: "factory-idb-session",
-      status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
-      locale: "en",
-      activePlugins: [],
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    });
-
-    expect(await store.getSession("factory-idb-session")).toMatchObject({
-      id: "factory-idb-session",
-      status: "active",
-    });
-  });
-
-  it("uses the unified browser IndexedDB name by default", async () => {
-    await import("fake-indexeddb/auto");
-
-    const store = await createStore({ backend: "idb" });
-    await store.createSession({
-      id: "factory-default-idb-session",
-      status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
-      locale: "en",
-      activePlugins: [],
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    });
-    await store.close?.();
-
-    const req = indexedDB.open(BROWSER_IDB_DATABASE_NAME);
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    expect(db.objectStoreNames.contains("sessions")).toBe(true);
-    db.close();
-  });
-
   it("fails fast for pg backend when DATABASE_URL is missing", async () => {
     withEnv({
       STORE_BACKEND: "pg",
@@ -208,14 +157,8 @@ describe("store factory env wiring", () => {
     expect(summary).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "browser:idb:unified-storage",
+          id: "browser:idb:cache-media",
           domain: "browser",
-          backend: "idb",
-          version: BROWSER_IDB_SCHEMA_VERSION,
-        }),
-        expect.objectContaining({
-          id: "data:idb:store",
-          domain: "data",
           backend: "idb",
           version: BROWSER_IDB_SCHEMA_VERSION,
         }),

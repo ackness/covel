@@ -59,7 +59,9 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    const checksRow = result.pluginData.find((r) => r.namespace === "checks");
+    const checksRow = result.effects.pluginData.find(
+      (r) => r.namespace === "checks",
+    );
     expect(checksRow.key).toBe("turn-7-1");
     expect(checksRow.value).toMatchObject({
       action: "撬开地窖的铜锁",
@@ -95,9 +97,13 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    const checkRows = result.pluginData.filter((r) => r.namespace === "checks");
+    const checkRows = result.effects.pluginData.filter(
+      (r) => r.namespace === "checks",
+    );
     expect(checkRows.map((r) => r.key)).toEqual(["turn-7-1", "turn-7-2"]);
-    const messageRow = result.pluginData.find((r) => r.namespace === "message");
+    const messageRow = result.effects.pluginData.find(
+      (r) => r.namespace === "message",
+    );
     expect(messageRow.value.checks).toHaveLength(2);
     expect(messageRow.value.checks[1].outcomeColor).toBe("red");
   });
@@ -110,7 +116,9 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    const messageRow = result.pluginData.find((r) => r.namespace === "message");
+    const messageRow = result.effects.pluginData.find(
+      (r) => r.namespace === "message",
+    );
     expect(messageRow.key).toBe("turn-7");
     expect(messageRow.value.__turnId).toBe("turn-7");
     expect(messageRow.value.checks).toHaveLength(1);
@@ -141,9 +149,13 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    const checksRow = result.pluginData.find((r) => r.namespace === "checks");
+    const checksRow = result.effects.pluginData.find(
+      (r) => r.namespace === "checks",
+    );
     expect(checksRow.key).toBe("turn-7-2");
-    const messageRow = result.pluginData.find((r) => r.namespace === "message");
+    const messageRow = result.effects.pluginData.find(
+      (r) => r.namespace === "message",
+    );
     expect(messageRow.value.checks).toHaveLength(2);
     expect(messageRow.value.checks[1].outcomeColor).toBe("red");
   });
@@ -163,7 +175,9 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    const checksRow = result.pluginData.find((r) => r.namespace === "checks");
+    const checksRow = result.effects.pluginData.find(
+      (r) => r.namespace === "checks",
+    );
     expect(checksRow.value.critical).toBe(true);
     expect(checksRow.value.outcomeColor).toBe("purple");
   });
@@ -177,7 +191,9 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    const checkRows = result.pluginData.filter((r) => r.namespace === "checks");
+    const checkRows = result.effects.pluginData.filter(
+      (r) => r.namespace === "checks",
+    );
     expect(checkRows).toHaveLength(1);
     expect(checkRows[0].value.action).toBe("撬开地窖的铜锁");
   });
@@ -191,8 +207,8 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    expect(result.status).toBe("skipped");
-    expect(result.pluginData).toBeUndefined();
+    expect(result.outcome).toBe("skipped");
+    expect(result.effects?.pluginData).toBeUndefined();
   });
 
   it("skips gracefully when outcome is not a known value", async () => {
@@ -205,8 +221,8 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    expect(result.status).toBe("skipped");
-    expect(result.pluginData).toBeUndefined();
+    expect(result.outcome).toBe("skipped");
+    expect(result.effects?.pluginData).toBeUndefined();
   });
 
   it("skips gracefully when there is no trigger event at all", async () => {
@@ -217,8 +233,8 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    expect(result.status).toBe("skipped");
-    expect(result.pluginData).toBeUndefined();
+    expect(result.outcome).toBe("skipped");
+    expect(result.effects?.pluginData).toBeUndefined();
   });
 
   it("tolerates a bare single-check payload without the checks wrapper", async () => {
@@ -230,7 +246,9 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    const checksRow = result.pluginData.find((r) => r.namespace === "checks");
+    const checksRow = result.effects.pluginData.find(
+      (r) => r.namespace === "checks",
+    );
     expect(checksRow.key).toBe("turn-7-1");
     expect(checksRow.value.outcome).toBe("success");
   });
@@ -256,8 +274,8 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    expect(result.status).toBe("skipped");
-    expect(result.pluginData).toBeUndefined();
+    expect(result.outcome).toBe("skipped");
+    expect(result.effects?.pluginData).toBeUndefined();
   });
 
   it.each([
@@ -271,14 +289,14 @@ describe("dice-check recorder handler", () => {
     });
 
     const result = await handler(ctx);
-    expect(result.status).toBe("skipped");
-    expect(result.pluginData).toBeUndefined();
+    expect(result.outcome).toBe("skipped");
+    expect(result.effects?.pluginData).toBeUndefined();
   });
 
   it("fails closed when the pre-rolled audit row is missing", async () => {
     const ctx = makeCtx({ data: { checks: [VALID_CHECK] }, dice: null });
     const result = await handler(ctx);
-    expect(result.status).toBe("skipped");
+    expect(result.outcome).toBe("skipped");
   });
 
   it("fails closed without shifting positions when the dice pool is malformed", async () => {
@@ -287,7 +305,7 @@ describe("dice-check recorder handler", () => {
       dice: [99, VALID_CHECK.roll],
     });
     const result = await handler(ctx);
-    expect(result.status).toBe("skipped");
+    expect(result.outcome).toBe("skipped");
   });
 
   it("uses the same-execution roller output before pluginData commits", async () => {
@@ -295,7 +313,7 @@ describe("dice-check recorder handler", () => {
 
     const result = await handler(ctx);
 
-    expect(result.status).toBe("done");
+    expect(result.outcome).toBe("success");
     expect(ctx.pluginData.get).not.toHaveBeenCalledWith("rolls", "turn-7");
   });
 });

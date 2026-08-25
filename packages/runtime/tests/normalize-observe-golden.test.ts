@@ -223,11 +223,10 @@ describe("normalize golden (bundled plugin set)", () => {
     }
   });
 
-  it("defaults new contract fields for every legacy manifest", async () => {
+  it("defaults normalized contract fields for every manifest", async () => {
     const manifests = await loadAllManifests();
     for (const manifest of manifests) {
       const spec = normalizeRuntimeManifest(manifest);
-      expect(spec.resultFormat).toBe(manifest.resultFormat ?? "legacy");
       expect(spec.bindings).toEqual(manifest.inputs ?? {});
       expect(spec.exportBindings).toEqual({});
       expect(spec.httpPermissions).toEqual([]);

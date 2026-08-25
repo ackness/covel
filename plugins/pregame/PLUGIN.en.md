@@ -20,7 +20,7 @@ This is a `runtimeType: function` plugin. It does NOT call the LLM — it runs t
 
 1. Read world metadata and build a welcome notification
 2. Return `narrativeOutput` so later plugins have context
-3. Report `preGameDone: true` (`completion: "done"` under envelope-v1); once every setup runtime is done the kernel flips `phase` to playing
+3. Report `completion: "done"`; once every setup runtime is done the kernel flips `phase` to playing
 
 ## Output
 

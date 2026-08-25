@@ -476,12 +476,6 @@ export const PLUGIN_SCOPED_FIELDS = {
     conflict: "none — distinct paths all execute against the same pluginId",
     where: "apps/server/src/routes/api/bootstrap/plugin-entry.ts",
   },
-  /** Every declared module loads; wire ids are namespaced `<pluginId>/`. */
-  wires: {
-    merge: "union",
-    conflict: "none at load; duplicate wire ids resolve in the wire registry",
-    where: "apps/server/src/routes/api/bootstrap/plugin-wires.ts",
-  },
   /** Merged on `key`; all runtimes share `plugin.<pluginId>.<key>`. */
   userSettings: {
     merge: "keyed",
@@ -549,27 +543,14 @@ export interface PluginScopedManifestFields {
    */
   readonly displayName?: import("./world.js").I18nText;
   /**
-   * Plugin-root-relative path to a media-wires module (resolved from the
-   * plugin root, NOT the runtime dir — same convention as `tools.local`).
-   * Default export: `{ image?, speech?, transcription? }` arrays of wire
-   * objects, or a factory `(inject: { fetchWithRetry, validateBaseUrl }) =>`
-   * that shape. Trust-gated like local tools; registered wire ids are prefixed
-   * `"<pluginId>/"`. Conventionally declared once, on the root PLUGIN.md —
-   * but every declared path is loaded, so two runtimes naming different
-   * modules get both.
-   */
-  readonly wires?: string;
-  /**
    * Plugin-root-relative path to a unified server entry module. Default
    * export: `function (covel: PluginAPI) { ... }` (sync or async) that
    * registers the plugin's server-side capabilities imperatively —
    * `covel.registerTool()`, `covel.on(event, handler)`,
-   * `covel.registerRpc()`, `covel.registerWires()` — replacing the legacy
-   * registration fields. `tools.local` is GONE (declaring it fails the load);
-   * `hooks` / `rpc` / `wires` still parse but are deprecated. Conventionally
+   * `covel.registerRpc()`, `covel.registerWires()`. Conventionally
    * declared once, on the root PLUGIN.md — but every declared path executes
    * (the root's included, and the set dedupes), all against the same
-   * `pluginId`. Trust-gated like local tools (builtin/official at boot,
+   * `pluginId`. Trust-gated like local tools (builtin at boot,
    * community on activation).
    */
   readonly entry?: string;
@@ -766,14 +747,6 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
     Record<string, import("./runtime-scheduling.js").RuntimeBinding>
   >;
   /**
-   * How the normalizer parses this runtime's handler return value.
-   * `legacy` (default): whole return object preserved as the value with
-   * known control keys copied to effects. `envelope-v1`: explicit
-   * HandlerResult discriminated union with value validation (observe-only
-   * for function runtimes until the I/O-contract step enforces it).
-   */
-  readonly resultFormat?: import("./runtime-scheduling.js").RuntimeResultFormat;
-  /**
    * Explicit read/write-set override for parallel hazard detection. Defaults
    * are derived from declared builtin tools / events / dataSchemas / ui /
    * outputKind; an explicit declaration is UNIONed with that derivation (it can
@@ -786,7 +759,7 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    * Declared permission upper bounds. `http` lists canonical HTTPS origins
    * (+ methods) this plugin may call through the Public Plugin API. Enforced
    * fail-closed for **community**-tier plugins by
-   * `runtime/function-runtime/http-permissions.ts`; builtin / official are
+   * `runtime/function-runtime/http-permissions.ts`; builtin plugins are
    * trusted and pass through unchecked.
    */
   readonly permissions?: {
@@ -819,12 +792,6 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
   readonly i18n?: Readonly<Record<string, string>>;
   readonly ui?: UISpec;
   /**
-   * Hook declarations for this runtime.
-   * Each entry registers a lifecycle handler loaded lazily on first invocation.
-   * See HookDeclaration for the full contract.
-   */
-  readonly hooks?: readonly HookDeclaration[];
-  /**
    * Sections of the narrative/output this runtime considers important for
    * history compaction (the Compactor). The compactor collects these
    * across all active runtimes and asks the LLM to preserve those topics
@@ -850,23 +817,6 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    * hard rules that should survive long histories.
    */
   readonly postHistory?: PostHistoryDecl;
-  /**
-   * Plugin RPC action declarations.
-   *
-   * Maps action name → `RpcActionDecl`. Each entry registers a structured
-   * command the plugin exposes through `POST /api/sessions/:id/plugin-rpc`,
-   * dispatched as `{ pluginId, action, payload }`.
-   *
-   * Handlers are loaded lazily on first dispatch — there is no eager
-   * import at parse time. Trust level defaults to the plugin's source
-   * trust (builtin/official auto-allowed; community gated by the RPC
-   * approval flow).
-   *
-   * Action names must be kebab-case. Names starting with `framework-`
-   * are reserved for framework default handlers and will be rejected
-   * by the loader.
-   */
-  readonly rpc?: import("./rpc.js").RpcDeclMap;
 }
 
 // ── Author's note / Post-history declarations ───────────

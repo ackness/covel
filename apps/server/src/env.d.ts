@@ -6,7 +6,6 @@ import type {
   PluginRuntimeUtils,
   PluginSource,
 } from "@covel/plugin-loader";
-import type { StateManager } from "@covel/state";
 import type { EventBus } from "@covel/events";
 import type {
   LLMAdapter,
@@ -37,7 +36,7 @@ type GetPluginSourceFn = (pluginId: string) => PluginSource | undefined;
  * Activate a community plugin's server code — its `entry` module first, then
  * any legacy `tools.local` modules, so both registration styles are live once
  * this resolves. Only runs after approval. Idempotent: returns immediately on
- * the second call. No-op for builtin/official plugins (loaded at boot).
+ * the second call. No-op for builtin plugins (loaded at boot).
  */
 type ActivatePluginServerCodeFn = (
   pluginId: string,
@@ -53,7 +52,6 @@ declare module "hono" {
      * IndexedDB; server-side sessions are transient sync copies).
      */
     storeBackend?: StoreBackend;
-    stateManager: StateManager;
     eventBus: EventBus;
     pluginRegistry: PluginRegistry;
     llmAdapter: LLMAdapter;

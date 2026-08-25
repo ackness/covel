@@ -8,7 +8,6 @@ description:
   en: Saves character portraits, images, and voices so characters feel more present.
 pluginType: plugin
 runtimeType: function
-resultFormat: envelope-v1
 outputKind: system
 handler: ./handler.js
 trigger:

@@ -23,7 +23,7 @@ import {
 } from "./plugin-handler-helpers.js";
 import { createExecutionWriteBuffer } from "./execution-write-buffer.js";
 import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
-import { projectEnvelopeSuccessToLegacyOutput } from "../commit/project-envelope-result.js";
+import { materializeHandlerSuccess } from "../commit/materialize-handler-output.js";
 import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
@@ -496,21 +496,23 @@ export async function executeFunctionRuntime({
     await drainRecursiveCalls();
   }
 
+  const { outcome: handlerOutcome, diagnostics } =
+    normalizeHandlerResult(output);
+  for (const diagnostic of diagnostics) {
+    console.warn(
+      `[runtime] ${manifest.name}: ${diagnostic.code} — ${diagnostic.message}`,
+    );
+  }
+
   await deps.emitter?.emit("function.completed", {
     ...helperCtx,
-    status: output.status === "suspended" ? "suspended" : "success",
+    status:
+      handlerOutcome.outcome === "success" ? "success" : handlerOutcome.outcome,
     durationMs: Date.now() - startTime,
   });
 
   // ── Suspend detection for function runtimes ────────────
-  // If the handler returns { status: 'suspended', reason, resumeSchema },
-  // persist a suspension and return status: 'suspended'.
-  if (
-    typeof output.status === "string" &&
-    output.status === "suspended" &&
-    typeof output.reason === "string" &&
-    deps.store
-  ) {
+  if (handlerOutcome.outcome === "suspended" && deps.store) {
     const suspensionId = crypto.randomUUID();
     // Function runtimes have no tool loop, so suspend records carry an
     // empty pendingProposals array and no partial content.
@@ -520,8 +522,8 @@ export async function executeFunctionRuntime({
       turnId: input.turnId,
       runtimeId: manifest.name,
       pluginId: manifest.pluginId,
-      reason: output.reason as string,
-      resumeSchema: output.resumeSchema ?? {},
+      reason: handlerOutcome.reason,
+      resumeSchema: handlerOutcome.resumeSchema ?? {},
       pendingContinuation: {
         messages: [],
         toolCallsSoFar: [],
@@ -597,77 +599,28 @@ export async function executeFunctionRuntime({
     );
   }
 
-  // `output.schema` gate. Reuses the same ajv-backed `validateOutput` as the
-  // agent schema gate. Missing schemas and non-object returns skip entirely.
-  //   - envelope-v1: ENFORCE the envelope `value` (docs 02 §4.3, Step 3). A
-  //     mismatch fails the runtime with `output-schema-invalid` and commits no
-  //     domain effects (a failed status drops all buffered writes downstream).
-  //   - legacy: observe-only warn on the whole preserved object (a minor
-  //     compat cycle before Step 6 removes the legacy face).
-  const resultFormat = manifest.resultFormat ?? "legacy";
+  // `output.schema` validates the canonical success value. A mismatch fails
+  // the runtime and commits no domain effects.
   let envelopeSchemaError: string | undefined;
-  if (loaded.outputSchema && output !== null && typeof output === "object") {
-    const validationTarget =
-      resultFormat === "envelope-v1"
-        ? (output as Record<string, unknown>).value
-        : output;
-    const validation = validateOutput(validationTarget, loaded.outputSchema);
+  if (loaded.outputSchema && handlerOutcome.outcome === "success") {
+    const validation = validateOutput(
+      handlerOutcome.value,
+      loaded.outputSchema,
+    );
     if (!validation.valid) {
       const detail = (validation.errors ?? ["unknown schema validation error"])
         .slice(0, 5)
         .join("; ");
-      if (resultFormat === "envelope-v1") {
-        envelopeSchemaError = `output-schema-invalid: ${detail}`;
-      } else {
-        console.warn(
-          `[runtime] ${manifest.name} ${resultFormat} output did not match output.schema: ${detail}`,
-        );
-      }
+      envelopeSchemaError = `output-schema-invalid: ${detail}`;
     }
   }
 
-  // Classify the handler return through the unified normalizer and map its
-  // outcome onto the persisted RuntimeResult.status. Legacy success keeps the
-  // whole object as `output`, so the commit path's proposals/effects stay
-  // byte-identical; a business failed / skipped demotes the status so the
-  // commit path skips it (no domain writes on a non-success outcome).
-  const { outcome: handlerOutcome, diagnostics } = normalizeHandlerResult(
-    output,
-    { resultFormat, runtimeType: "function" },
-  );
-  for (const d of diagnostics) {
-    console.warn(`[runtime] ${manifest.name}: ${d.code} — ${d.message}`);
-  }
-  // Compat guard: a legacy handler that buffered domain writes before returning
-  // a non-success status is relying on the pre-redesign commit-on-non-success
-  // behaviour. Keep it as `success` during the compat window so those writes
-  // still commit byte-identically; a pure non-success (empty buffer) demotes.
-  // ponytail: writeBuffer-only check — the sole legacy non-success producer
-  // buffers via ctx.pluginData, never inline control keys. Upgrade to also scan
-  // output control keys if a producer emits them on a non-success return.
-  const demote =
-    (handlerOutcome.outcome === "failed" ||
-      handlerOutcome.outcome === "skipped") &&
-    writeBuffer.length === 0;
-  if (!demote && handlerOutcome.outcome !== "success") {
-    console.warn(
-      `[runtime] ${manifest.name}: legacy ${handlerOutcome.outcome} return with buffered writes kept as success (compat)`,
-    );
-  }
+  const runtimeOutput =
+    !envelopeSchemaError && handlerOutcome.outcome === "success"
+      ? materializeHandlerSuccess(handlerOutcome, output)
+      : (output as Record<string, unknown>);
 
-  // envelope-v1 → legacy output projection (compat-era; removed in Step 6). The
-  // kernel's consumers read business / domain / completion fields from the top
-  // level of RuntimeResult.output, so a SUCCESS envelope is flattened here at
-  // the single construction point. Non-success stores its raw return (effects
-  // already stripped in normalize), and legacy stays byte-identical.
-  const projectedOutput =
-    resultFormat === "envelope-v1" &&
-    !envelopeSchemaError &&
-    handlerOutcome.outcome === "success"
-      ? projectEnvelopeSuccessToLegacyOutput(handlerOutcome, output)
-      : output;
-
-  // A failed envelope-v1 schema gate overrides the handler outcome: the runtime
+  // A failed schema gate overrides the handler outcome: the runtime
   // fails with `output-schema-invalid` and no domain effects are committed.
   const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
@@ -676,15 +629,15 @@ export async function executeFunctionRuntime({
     turnId: input.turnId,
     status: envelopeSchemaError
       ? "failed"
-      : demote
-        ? handlerOutcome.outcome
-        : "success",
-    output: projectedOutput,
+      : handlerOutcome.outcome === "success"
+        ? "success"
+        : handlerOutcome.outcome,
+    output: runtimeOutput,
     toolCalls: [],
     durationMs: Date.now() - startTime,
     ...(envelopeSchemaError
       ? { error: envelopeSchemaError }
-      : demote && handlerOutcome.outcome === "failed"
+      : handlerOutcome.outcome === "failed"
         ? { error: handlerOutcome.error }
         : {}),
     timestamp: new Date().toISOString(),
@@ -714,7 +667,7 @@ export async function executeFunctionRuntime({
   // direct-write path). Suspends return earlier and intentionally drop the
   // buffer too — a suspended runtime is not done.
   if (
-    !envelopeSchemaError &&
+    result.status === "success" &&
     writeBuffer.length > 0 &&
     result.output &&
     typeof result.output === "object"

@@ -12,6 +12,7 @@
  */
 
 import { abortSignalWithTimeout, optionalString } from "./index.js";
+import type { HandlerResult, JsonValue } from "@covel/shared";
 
 /** The slice of FunctionHandlerContext this trunk reads. */
 export interface ImageGenerationHandlerContext {
@@ -55,7 +56,7 @@ export interface ImageGenerationRequestPlan {
   readonly quality?: string;
   readonly negativePrompt?: string;
   /** Extra fields persisted onto every gallery record (e.g. quality copy). */
-  readonly recordFields?: Readonly<Record<string, unknown>>;
+  readonly recordFields?: Readonly<Record<string, JsonValue>>;
 }
 
 export interface ImageGenerationPluginConfig {
@@ -139,9 +140,9 @@ function errorMessage(err: unknown): string {
  */
 async function failureRecord(
   ctx: ImageGenerationHandlerContext,
-  baseRecord: Record<string, unknown> & { imageId: string },
+  baseRecord: Record<string, JsonValue> & { imageId: string },
   message: string,
-): Promise<Record<string, unknown>> {
+): Promise<HandlerResult> {
   const record = {
     ...baseRecord,
     status: "failed",
@@ -154,14 +155,19 @@ async function failureRecord(
     error: message,
   });
   return {
-    imageId: baseRecord.imageId,
-    status: "failed",
-    error: message,
-    prompt: baseRecord.prompt,
-    promptMode: baseRecord.promptMode,
-    pluginData: [
-      { namespace: IMAGES_NAMESPACE, key: baseRecord.imageId, value: record },
-    ],
+    outcome: "success",
+    value: {
+      imageId: baseRecord.imageId,
+      status: "failed",
+      error: message,
+      prompt: baseRecord.prompt,
+      promptMode: baseRecord.promptMode,
+    },
+    effects: {
+      pluginData: [
+        { namespace: IMAGES_NAMESPACE, key: baseRecord.imageId, value: record },
+      ],
+    },
   };
 }
 
@@ -173,10 +179,10 @@ async function failureRecord(
 export async function runImageGeneration(
   ctx: ImageGenerationHandlerContext,
   config: ImageGenerationPluginConfig,
-): Promise<Record<string, unknown>> {
+): Promise<HandlerResult> {
   if (!ctx.images) {
     return {
-      status: "failed",
+      outcome: "failed",
       error:
         "ctx.images is unavailable. This plugin requires the framework image pipeline: " +
         "an image-tagged slot in llm.toml plus a configured MediaStore. Upgrade " +
@@ -190,9 +196,8 @@ export async function runImageGeneration(
       hasTriggerEvent: !!ctx.triggerEvent,
     });
     return {
-      status: "skipped",
-      reason: "no-prompt-found",
-      message: `No image prompt found in ctx.triggerEvent or ctx.manualPayload. Did prompt-generator emit events[0].data.prompt with topic ${config.triggerTopic}?`,
+      outcome: "skipped",
+      skipReason: `No image prompt found in ctx.triggerEvent or ctx.manualPayload. Did prompt-generator emit events[0].data.prompt with topic ${config.triggerTopic}?`,
     };
   }
 
@@ -203,12 +208,12 @@ export async function runImageGeneration(
 
   const imageId = `img-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const startedAt = new Date().toISOString();
-  const baseRecord = {
+  const baseRecord: Record<string, JsonValue> & { imageId: string } = {
     imageId,
     prompt,
     promptMode,
     ...extras,
-    turnId: ctx.turnId,
+    ...(ctx.turnId ? { turnId: ctx.turnId } : {}),
     presetId: plan.presetId,
     imageSize: plan.size,
     n: plan.n,
@@ -290,24 +295,26 @@ export async function runImageGeneration(
     });
 
     return {
-      imageId,
-      status: "done",
-      ref: refs[0],
-      ...(refs.length > 1 ? { refs } : {}),
-      ...(warnings.length > 0 ? { warnings } : {}),
-      ...(cached ? { cached: true } : {}),
-      prompt,
-      promptMode,
-      ...extras,
-      pluginData: imageRecords.map((entry) => ({
-        namespace: IMAGES_NAMESPACE,
-        key: entry.key,
-        value: entry.value,
-      })),
-      // Kernel `normalizeOutput()` collects `output.assetGenerations[]` and
-      // turns each into a `Proposal{ type: 'asset.generate' }`. Per-image
-      // entry so the gallery / SSE renders each image independently.
-      assetGenerations: assets,
+      outcome: "success",
+      value: {
+        imageId,
+        status: "done",
+        ref: refs[0],
+        ...(refs.length > 1 ? { refs } : {}),
+        ...(warnings.length > 0 ? { warnings } : {}),
+        ...(cached ? { cached: true } : {}),
+        prompt,
+        promptMode,
+        ...extras,
+      },
+      effects: {
+        pluginData: imageRecords.map((entry) => ({
+          namespace: IMAGES_NAMESPACE,
+          key: entry.key,
+          value: entry.value,
+        })),
+        assetGenerations: assets,
+      },
     };
   } catch (err) {
     return failureRecord(ctx, baseRecord, errorMessage(err));

@@ -8,9 +8,9 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
-    "./idb": {
-      "types": "./src/indexeddb/idb-store.ts",
-      "import": "./src/indexeddb/idb-store.ts"
+    "./browser-sync": {
+      "types": "./src/browser-sync/index.ts",
+      "import": "./src/browser-sync/index.ts"
     },
     "./idb-schema": {
       "types": "./src/indexeddb/idb-schema.ts",

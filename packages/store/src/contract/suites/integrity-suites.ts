@@ -6,7 +6,6 @@ import type {
 } from "../../types.js";
 import {
   id,
-  makeApproval,
   makeCharacter,
   makeEvent,
   makeInteractionRecord,
@@ -56,7 +55,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       await store.upsertStateEntry(makeStateEntry({ sessionId }));
       await store.addStateChange(makeStateChange({ sessionId }));
       await store.saveEvent(makeEvent({ sessionId }));
-      await store.saveApproval(makeApproval({ sessionId }));
       await store.addMessage(makeMessage({ sessionId }));
       await store.upsertCharacter(makeCharacter({ sessionId }));
       await store.addTraceEvent(makeTraceEvent({ sessionId }));
@@ -109,7 +107,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
         await store.listStateChanges(sessionId, "stats", "hp"),
       ).toHaveLength(0);
       expect(await store.listEvents(sessionId)).toHaveLength(0);
-      expect(await store.listApprovals(sessionId)).toHaveLength(0);
       expect(await store.listMessages(sessionId)).toHaveLength(0);
       expect(await store.listCharacters(sessionId)).toHaveLength(0);
       expect(await store.listTraceEvents(sessionId)).toHaveLength(0);

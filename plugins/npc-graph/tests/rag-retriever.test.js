@@ -258,7 +258,7 @@ function makeCtx(store, playerMessage) {
   };
 }
 
-// Deliberate change: handler migrated to envelope-v1, so the business return
+// Deliberate change: handler returns the canonical HandlerResult, so the business return
 // (npcContext / matchedNodes / edgeCount) is under `result.value`.
 describe("rag-retriever handler", () => {
   let store;

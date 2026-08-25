@@ -1,48 +1,98 @@
 # Storage Architecture
 
-Covel storage has four separate contracts:
+Covel uses deployment profiles, not one oversized storage adapter across every
+runtime. Domain records keep one wire contract, while each environment uses the
+database SDK that matches its constraints.
 
-| Category                  | Contract                    | Main implementations                           | Owner                                                |
-| ------------------------- | --------------------------- | ---------------------------------------------- | ---------------------------------------------------- |
-| Business records          | `DataStore`                 | memory, sqlite, pg, idb                        | `@covel/store`                                       |
-| Binary assets             | `MediaStore`                | memory, sqlite, pg, idb                        | `@covel/store`                                       |
-| User preferences and keys | `SettingsStore`, `keys.env` | localStorage, Electron IPC, desktop REST files | `@covel/settings`, desktop shells, server config API |
-| Frontend caches           | app KV, media cache         | browser IndexedDB databases                    | `apps/web` storage facade                            |
+| Profile           | Durable authority                              | Execution store                | Intended deployment                                |
+| ----------------- | ---------------------------------------------- | ------------------------------ | -------------------------------------------------- |
+| `browser-private` | Dexie `BrowserVault` in the player's IndexedDB | Ephemeral server `MemoryStore` | Public demo pages and browser-only self deployment |
+| `desktop`         | Server `SqliteStore`                           | Same SQLite store              | Electron and single-user local installs            |
+| `cloud`           | Server `PgStore`                               | Same PostgreSQL store          | Hosted and multi-process deployments               |
 
-## Backend Selection
+The shared contracts are intentionally narrower than the old four-backend
+`DataStore` abstraction:
 
-`STORE_BACKEND` selects the server primary `DataStore`. The default is `sqlite`.
-When `SQLITE_PATH` is omitted and `COVEL_DATA_ROOT` is set, SQLite resolves to
-`<COVEL_DATA_ROOT>/covel.db`; otherwise the legacy default is `./data/covel.db`.
+| Category                         | Contract                              | Implementations                                         |
+| -------------------------------- | ------------------------------------- | ------------------------------------------------------- |
+| Server business records          | `DataStore`                           | memory, SQLite, PostgreSQL                              |
+| Browser-private business records | `BrowserCheckpoint` / `SessionCommit` | Dexie `BrowserVault`                                    |
+| Binary assets                    | `MediaStore`                          | memory, SQLite, PostgreSQL, explicit browser IDB cache  |
+| Frontend UI/cache data           | app KV and media cache                | lightweight native IndexedDB                            |
+| Preferences and credentials      | settings/config contracts             | localStorage, Electron IPC, desktop/server config files |
 
-| Value    | Tier                                      | Notes                                                                                                                                        |
-| -------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `memory` | tests, ephemeral demos                    | Process-local and lost on restart. The web frontend switches to local IDB mode when `/api/health.storage.data.frontendMode` reports `local`. |
-| `sqlite` | local dev, desktop, single-node self-host | Uses `SQLITE_PATH`, default `./data/covel.db`.                                                                                               |
-| `pg`     | multi-process/server deployment           | Requires `DATABASE_URL`; server session locks use PostgreSQL advisory locks.                                                                 |
-| `idb`    | browser-capable callers                   | Available through `createStore({ backend: "idb" })`; it is a package factory backend, not a server env backend.                              |
+`IdbStore` was removed. Browser code no longer implements every server CRUD and
+transaction method a second time. `@covel/store` owns the domain record and
+checkpoint contracts; `apps/web` owns the browser persistence mechanism.
 
-The browser still has a user-visible mode switch. `local` means business
-records are saved in the user's browser IndexedDB. `remote` means the frontend
-uses the HTTP API and the server persists through its configured
-`STORE_BACKEND` (`memory`, `sqlite`, or `pg`). `/api/health.storage.data`
-publishes the resolved `backend` and `frontendMode`.
+## Server Backend Selection
 
-`MEDIA_BACKEND` selects the `MediaStore`. The default is `mirror`, which follows
-`STORE_BACKEND`.
+`STORE_BACKEND` selects only the server `DataStore`:
 
-| Value    | Behavior                                                                           |
-| -------- | ---------------------------------------------------------------------------------- |
-| `mirror` | `memory -> memory`, `sqlite -> sqlite`, `pg -> pg` on the server env path.         |
-| `memory` | Process-local media, useful for tests.                                             |
-| `sqlite` | File blobs under `MEDIA_ROOT`, or a `media/` directory beside `SQLITE_PATH`.       |
-| `pg`     | Media records and bytes in PostgreSQL; unavailable when `DATABASE_URL` is missing. |
-| `idb`    | Browser IndexedDB media store through explicit factory calls.                      |
-| `none`   | Disables media routes through the existing `mediaStore` absent path.               |
+| Value    | Use                                               | Notes                                                                      |
+| -------- | ------------------------------------------------- | -------------------------------------------------------------------------- |
+| `memory` | tests and browser-private execution               | Process-local and lost on restart. Health reports `frontendMode: "local"`. |
+| `sqlite` | desktop, local development, single-node self-host | Uses `SQLITE_PATH`; default `./data/covel.db`.                             |
+| `pg`     | hosted and multi-process deployment               | Requires `DATABASE_URL`; session locks use PostgreSQL advisory locks.      |
+
+`STORE_BACKEND=idb` and `createStore({ backend: "idb" })` do not exist.
+
+`MEDIA_BACKEND` remains independent. `mirror` follows the selected server data
+backend; explicit browser IDB is a media/cache implementation, not a business
+`DataStore`.
+
+## Browser-Private Protocol
+
+The browser is authoritative in local mode. The server may read API keys from
+request headers and execute a turn, but it must not durably persist the player's
+checkpoint or credentials.
+
+One action follows this sequence:
+
+1. The web app atomically writes browser-authored input to `BrowserVault`.
+2. `PUT /api/sessions/:id/browser-checkpoint` hydrates an ephemeral
+   `MemoryStore` workspace with the latest full checkpoint.
+3. The normal action or plugin-RPC endpoint executes against that workspace.
+4. `POST /api/sessions/:id/browser-commit` exports the resulting workspace as a
+   revision-checked `SessionCommit`.
+5. Dexie applies the commit atomically. Replaying the same `actionId` is a
+   no-op; stale revisions and same-revision divergent heads are rejected.
+
+The client serializes checkpoint uploads and commit downloads. SSE messages are
+rendered immediately but are not persisted one by one; the post-action
+checkpoint is the single durable write. Terminal background-job events request
+an additional checkpoint so detached work is not lost.
+
+`BrowserCheckpoint` includes every domain needed to resume a session: session
+and world records, message/execution journals, events/traces, characters,
+plugin data, memory/lorebook data, interactions, suspensions, snapshots, and
+lifecycle ledgers. The envelope is JSON-safe, versioned, and independent from
+Dexie table shapes.
+
+## Browser Databases
+
+The web app uses two databases with separate lifecycles:
+
+- `covel-browser-vault` (Dexie schema v2): latest session checkpoints, compact
+  action-idempotency records, and browser-authored worlds.
+- `covel-browser-cache` (native IDB schema v1): UI state, submitted blocks,
+  execution-display cache, media metadata, and render blobs.
+
+Only the latest full checkpoint is retained. Snapshot history already exists
+inside the checkpoint; retaining a full checkpoint for every action would grow
+quadratically. The compact `commits` table stores only revision/action metadata.
+
+`BrowserVault` recursively rejects credential-shaped fields such as `apiKey`,
+access/refresh tokens, passwords, private keys, and client secrets before any
+transaction writes. Provider keys continue to travel only in request headers.
+
+This development-version redesign does not import the removed `covel-browser`
+business schema. Old implementations remain recoverable from Git history.
 
 ## Desktop Paths
 
-Electron uses this desktop path contract:
+Electron uses the web UI in remote mode and persists business records through
+the local server's SQLite store:
 
 ```text
 ~/.covel/
@@ -59,79 +109,28 @@ Electron uses this desktop path contract:
   server.port
 ```
 
-`[paths] data_root` in `config.toml` moves SQLite, logs, server port state, and
-user-authored worlds together. Small config and secrets remain under
-`~/.covel/`.
-
-## Browser Storage
-
-The web tier now has a storage facade under `apps/web/src/services/storage/`:
-
-- `data-store.ts` owns browser `DataStore` creation (`covel-browser`) and exports `BROWSER_STORAGE_DB_NAME`.
-- `mode.ts` owns `covel:storageMode`.
-- `legacy-keys.ts` registers storage-related localStorage keys and prefixes.
-
-The browser `MediaStore` factory is no longer part of this facade — media on the
-web tier goes through the read-through render cache in
-`apps/web/src/lib/media-cache.ts` (same `covel-browser` database), and durable
-media stays server-side.
-
-The unified browser database is `covel-browser`. It contains local-mode
-business records, the browser `MediaStore`, frontend app-KV records, and the
-read-through media render cache under one IndexedDB schema version. On first
-boot of this early pre-release storage layout, the web app deletes legacy
-browser-origin databases (`covel-game`, `covel-app`, `covel-media`,
-`covel-media-store`, and `covel-store`) and removes old frontend data
-localStorage keys. The reset does not touch desktop SQLite files, media
-directories, `settings.json`, `keys.env`, or other files outside the
-browser/WebView origin.
-
-IndexedDB schema v15 rebuilds `characters` and `lorebook_entries` with the
-composite key `("sessionId", "id")`. Every opener of the shared database must
-pass its active `versionchange` transaction to `upgradeBrowserIdbSchema()` so
-the existing rows can be copied into the rebuilt stores before the upgrade
-commits.
-
-Desktop uses the same web bundle, so its WebView can still create
-`covel-browser` for frontend-only UI state and media render cache. Desktop
-business records and durable media continue to use `remote` mode by default:
-the web layer calls the local server API, and the sidecar persists through
-SQLite under `<data_root>`.
+`[paths] data_root` moves SQLite, logs, server port state, and user-authored
+worlds together. Config and secrets remain under `~/.covel/`. The Electron
+WebView may still create `covel-browser-cache`, but never stores authoritative
+game records there.
 
 ## Capabilities And Migrations
 
-`/api/health` exposes a structured `storage` descriptor:
+`/api/health.storage` reports:
 
-- `storage.data` reports the server DataStore backend, durability, and browser
-  `frontendMode`.
-- `storage.media` reports the configured and effective MediaStore backend.
-- `storage.vector` reports `VECTOR_BACKEND`, whether vector search is available,
-  and the concrete driver (`in-memory`, `sqlite-vec`, `pgvector`, `external`,
-  or `none`).
-- `storage.migrations` lists registered migration domains and current versions.
+- `data`: the server backend, durability, and frontend mode;
+- `media`: configured and effective media backend;
+- `vector`: configured vector mode and concrete driver;
+- `migrations`: server schemas plus the lightweight browser cache/media schema.
 
-`VECTOR_BACKEND=embedded` uses the active DataStore vector capability. `none`
-disables vector search. `external` is reserved for a future injected adapter;
-without that adapter the vector factory fails fast instead of pretending the
-DataStore owns an external vector service.
+The Dexie BrowserVault schema is owned by `apps/web` and is not advertised as a
+server `DataStore` migration. `VECTOR_BACKEND=embedded` uses the active server
+store capability; BrowserVault intentionally does not implement vector search.
 
-Session embedding bindings are resolved from the session row on every vector
-operation. Deleting a session removes its rows from every registered physical
-vector table; recreating the same session id therefore starts with no model
-binding and cannot observe vectors from the deleted incarnation.
+## Record Identity
 
-## Session And World Metadata
-
-`WorldRecord.metadata.dimensions` is projected onto `WorldRecord.dimensions`
-by the store layer so server and web records expose the same shape.
-
-`SessionRecord.presetId` is stored through `SessionRecord.metadata.presetId`.
-This keeps SQL schemas forward-compatible while allowing local browser mode,
-memory, SQLite, PostgreSQL, and IndexedDB to share one typed contract.
-
-Character and lorebook IDs are session-local. Their durable identity is
-`(sessionId, id)` in all four DataStore backends, so separate sessions may use
-the same logical ID without moving or overwriting each other's rows. SQLite
-rebuilds legacy global-ID tables atomically on boot, PostgreSQL replaces the
-legacy primary key in place, and IndexedDB performs the v15 versionchange
-migration described above.
+World dimensions and session preset/model fields are normalized at the shared
+record boundary. Character and lorebook IDs are session-local, with durable
+identity `(sessionId, id)` in MemoryStore, SQLite, PostgreSQL, and browser
+checkpoints. Browser persistence therefore shares domain shapes without sharing
+server table layouts or backend-specific CRUD implementations.

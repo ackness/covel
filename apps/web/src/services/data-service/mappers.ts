@@ -3,7 +3,7 @@ import type {
   MessageRecord as StoreMessageRecord,
   SessionRecord as StoreSessionRecord,
   WorldRecord as StoreWorldRecord,
-} from "@covel/store";
+} from "@covel/store/browser-sync";
 import type { MessageRecord, SessionRecord, WorldRecord } from "../api.js";
 
 export function toFrontendWorld(w: StoreWorldRecord): WorldRecord {

@@ -127,7 +127,7 @@ describe("function-runtime trace", () => {
         executingSeenBeforeHandler = events.some(
           (e) => e.type === "function.executing",
         );
-        return { narrativeOutput: "done" };
+        return { outcome: "success", value: { narrativeOutput: "done" } };
       },
     };
 
@@ -155,8 +155,9 @@ describe("function-runtime trace", () => {
       manifest: makeFunctionManifest(),
       promptTemplate: "",
       handler: async () => ({
-        narrativeOutput: "form ready",
-        interactions: [interaction],
+        outcome: "success",
+        value: { narrativeOutput: "form ready" },
+        effects: { interactions: [interaction] },
       }),
     };
 
@@ -180,7 +181,7 @@ describe("function-runtime trace", () => {
       manifest: makeFunctionManifest(),
       promptTemplate: "",
       handler: async () => ({
-        status: "suspended",
+        outcome: "suspended",
         reason: "need input",
         resumeSchema: {},
       }),

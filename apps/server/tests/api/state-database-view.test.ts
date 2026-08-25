@@ -1,7 +1,7 @@
 /**
  * GET /api/sessions/:id/state "database view" aggregation —
  * locks the right-panel Database tab contract. Before this change the
- * endpoint only returned `stateManager`-registered tables (currently zero)
+ * endpoint only returned registered state tables (currently zero)
  * so the Database tab was always empty even for sessions full of data.
  *
  * The endpoint now additionally surfaces:
@@ -13,15 +13,13 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
-import { createStateManager, type StateManager } from "@covel/state";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { stateRoutes } from "../../src/routes/api/state.js";
 
-function buildApp(store: DataStore, stateManager: StateManager): Hono {
+function buildApp(store: DataStore): Hono {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", store);
-    c.set("stateManager", stateManager);
     await next();
   });
   app.route("/api/sessions", stateRoutes);
@@ -35,7 +33,7 @@ describe("GET /api/sessions/:id/state — database view", () => {
 
   beforeEach(async () => {
     store = createMemoryStore();
-    app = buildApp(store, createStateManager(store));
+    app = buildApp(store);
     await store.createSession({
       id: sessionId,
       worldId: "cloudmere",

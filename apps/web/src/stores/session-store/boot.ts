@@ -1,6 +1,5 @@
 import i18n from "i18next";
 import { emitToast } from "@/lib/toast-channel.js";
-import { migrateLocalStorageToIdb } from "@/services/app-kv-store.js";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
 import { registerPluginUserSettings } from "@/settings/registry/plugin.js";
@@ -44,8 +43,6 @@ export async function bootSessionStore({
   dispatch,
   ds,
 }: BootSessionStoreOptions): Promise<void> {
-  await migrateLocalStorageToIdb();
-
   try {
     const [presets, packagesRes, worlds, llmConfig] = await Promise.all([
       api.listPresets(),

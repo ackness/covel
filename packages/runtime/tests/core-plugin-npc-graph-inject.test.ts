@@ -128,9 +128,8 @@ describe("npc-graph core plugin write-read-inject path", () => {
       pluginId: "npc-graph",
       stage: "pre-turn",
       runtimeType: "function",
-      // Matches the real PLUGIN.md so the envelope→legacy projection fires and
-      // the injected `npcContext` field resolves from the flattened output.
-      resultFormat: "envelope-v1",
+      // Matches the real PLUGIN.md so the injected `npcContext` field resolves
+      // from the materialized handler value.
       handler: "./handler.js",
       trigger: { type: "scheduled", interval: 1 },
     });

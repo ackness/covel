@@ -338,7 +338,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
               conflicts: ["relation-conflict"],
             },
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
       registry.register(
@@ -348,7 +348,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
             id: "relation-required",
             name: "Relation Required",
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
       registry.register(
@@ -358,7 +358,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
             id: "relation-conflict",
             name: "Relation Conflict",
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
 
@@ -498,7 +498,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
               requires: ["required-plugin"],
             },
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
       registry.register(
@@ -508,7 +508,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
             id: "required-plugin",
             name: "Required Plugin",
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
       registry.register(
@@ -521,7 +521,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
               conflicts: ["required-plugin"],
             },
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
 

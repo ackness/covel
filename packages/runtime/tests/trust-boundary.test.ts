@@ -325,13 +325,13 @@ describe("isTrustedPluginSource ignores manifest claims", () => {
     ).toBe(false);
   });
 
-  it("trusts only builtin/official registry sources", () => {
+  it("trusts only builtin registry sources", () => {
     const manifest = makeManifest({});
     expect(
       isTrustedPluginSource({ getPluginSource: () => "builtin" }, manifest),
     ).toBe(true);
     expect(
-      isTrustedPluginSource({ getPluginSource: () => "official" }, manifest),
+      isTrustedPluginSource({ getPluginSource: () => "builtin" }, manifest),
     ).toBe(true);
   });
 });

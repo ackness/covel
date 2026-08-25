@@ -32,7 +32,7 @@ See: `apps/web/src/lib/session-plugin-selection.ts`, [docs/reference/plugins.md]
 
 ## PluginType
 
-Two separate axes describe a plugin's provenance. `pluginType` is a manifest field with two values — `core-plugin` (bundled, non-disableable) or `plugin` (optional, disableable) — and only gates core-vs-third-party dispatch. Trust tier (`builtin`, `official`, or `community`, derived from load path, not the name) is the field that governs auto-load and tool-approval policy.
+Two separate axes describe a plugin's provenance. `pluginType` is a manifest field with two values — `core-plugin` (bundled, non-disableable) or `plugin` (optional, disableable) — and only gates core-vs-third-party dispatch. Plugin source (`builtin` or `community`, derived from load path, not the name) governs auto-load and tool-approval policy.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), [docs/reference/tools.md](./reference/tools.md).
 
@@ -105,5 +105,5 @@ See: [docs/reference/world-data.md](./reference/world-data.md).
 ## Related
 
 - **pluginId vs runtimeId** — see CLAUDE.md "Identity model".
-- **Trust tiers** — see `pluginType` above and [docs/reference/tools.md](./reference/tools.md).
+- **Plugin sources** — see `pluginType` above and [docs/reference/tools.md](./reference/tools.md).
 - **Outside scope here**: `Branch`, `Snapshot`, `PluginData`, `CharacterRecord`, `Lorebook` — see [docs/reference/transactions.md](./reference/transactions.md).

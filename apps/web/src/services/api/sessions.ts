@@ -6,6 +6,10 @@ import type {
   SessionEvent,
   Stage,
 } from "@covel/shared";
+import type {
+  BrowserCheckpoint,
+  SessionCommit,
+} from "@covel/store/browser-sync";
 import { request } from "./request.js";
 import {
   clearSessionToken,
@@ -31,14 +35,14 @@ export interface SessionPluginInfo {
   pluginType?: string;
   /**
    * Authoritative trust tier resolved by the kernel from the plugin's
-   * discovery path: `builtin` (shipped under `plugins/`), `official`
-   * (whitelisted), or `community` (everything else, e.g. user-installed
+   * discovery path: `builtin` (shipped under `plugins/`) or `community`
+   * (everything else, e.g. user-installed
    * under `~/.covel/plugins/`). Use this - not `pluginType` - when the UI
    * needs to mark "core" vs "third-party"; plugin authors can forge
    * `pluginType` but cannot forge the directory the framework loaded them
    * from.
    */
-  source?: "builtin" | "official" | "community";
+  source?: "builtin" | "community";
   /** Plugin load status: 'registered' = ok, 'error' = failed to load. */
   status?: string;
   /** Error message when status is 'error'. */
@@ -417,6 +421,35 @@ export async function syncMessages(
     {
       method: "POST",
       body: JSON.stringify({ messages }),
+    },
+  );
+}
+
+/** Hydrate the server's transient MemoryStore from the browser authority. */
+export async function uploadBrowserCheckpoint(
+  sessionId: string,
+  checkpoint: BrowserCheckpoint,
+): Promise<{ ok: true; revision: number; unchanged?: boolean }> {
+  return request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/browser-checkpoint`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ checkpoint }),
+    },
+  );
+}
+
+/** Export one idempotent post-action commit from the transient server mirror. */
+export async function fetchBrowserCommit(
+  sessionId: string,
+  actionId: string,
+  baseRevision: number,
+): Promise<SessionCommit> {
+  return request(
+    `/api/sessions/${encodeURIComponent(sessionId)}/browser-commit`,
+    {
+      method: "POST",
+      body: JSON.stringify({ actionId, baseRevision }),
     },
   );
 }

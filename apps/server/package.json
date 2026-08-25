@@ -34,7 +34,6 @@
     "@covel/plugin-loader": "workspace:*",
     "@covel/runtime": "workspace:*",
     "@covel/shared": "workspace:*",
-    "@covel/state": "workspace:*",
     "@covel/store": "workspace:*",
     "@covel/tools": "workspace:*",
     "@hono/node-server": "^2.0.8",

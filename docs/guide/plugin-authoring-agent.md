@@ -321,8 +321,6 @@ export default async function regenerate(payload, ctx) {
 }
 ```
 
-> 旧的 frontmatter `rpc:` 声明式写法（`handler` 路径 + lazy import）已弃用（保留一个发布周期），迁移对照见 [高级指南的迁移附录](./plugin-authoring-advanced.md#附录旧注册字段迁移)。
-
 调用方:
 
 ```bash
@@ -335,7 +333,7 @@ curl -X POST http://localhost:3001/api/sessions/$SESSION_ID/plugin-rpc \
 
 - action 名必须是 kebab-case
 - 不能以 `framework-` 开头(保留命名空间)
-- builtin/official 插件的 entry 在启动时执行,action 立即可用;community 插件延迟到审批通过 / 首次激活时执行 entry。handler 抛错由框架捕获并返回 500
+- builtin 插件的 entry 在启动时执行,action 立即可用;community 插件延迟到审批通过 / 首次激活时执行 entry。handler 抛错由框架捕获并返回 500
 - payload 可以是任意 JSON,推荐在 handler 内自己用 zod 校验
 - handler 的 `store` 是 raw `DataStore`,可以读写,但**不要绕过 commit 链做大型状态变更**——那是 turn pipeline 的职责。RPC 适合小范围读 / 通知 / 重新触发的场景
 

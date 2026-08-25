@@ -78,7 +78,7 @@ interface RegistryPlugin {
   name?: unknown;
   description?: unknown;
   capabilities?: string[];
-  source?: "builtin" | "official" | "community";
+  source?: "builtin" | "community";
 }
 
 interface PluginMatch {
@@ -89,13 +89,12 @@ interface PluginMatch {
 
 const SOURCE_RANK: Record<NonNullable<RegistryPlugin["source"]>, number> = {
   builtin: 0,
-  official: 1,
-  community: 2,
+  community: 1,
 };
 
 /**
  * Resolve `capability → first matching plugin`, preferring builtin over
- * official over community when multiple plugins claim the same capability.
+ * community when multiple plugins claim the same capability.
  */
 function indexByCapability(
   plugins: readonly RegistryPlugin[],

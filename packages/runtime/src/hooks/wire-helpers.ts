@@ -1,9 +1,8 @@
 /**
  * Helpers that wire the HookPipeline into turn-executor.ts call sites.
  *
- * Plugin hook handlers are registered at bootstrap — see
- * `registerPluginHooks()` in `./register-plugin-hooks.ts`. The pipeline
- * itself is the on/off gate: when callers pass `pipeline: undefined`
+ * Plugin hook handlers are registered by plugin entries. The pipeline itself
+ * is the on/off gate: when callers pass `pipeline: undefined`
  * (e.g. CLI tools that don't want hooks), all helpers short-circuit
  * to a no-op continue so the non-hook path stays byte-for-byte identical.
  *

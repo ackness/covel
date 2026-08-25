@@ -7,7 +7,7 @@ import type {
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
-import type { DataService, WorldPatch } from "./types.js";
+import type { DataService, SessionPatch, WorldPatch } from "./types.js";
 
 /**
  * `null` means "no such record" — nothing else. An auth failure, a 500, or a
@@ -61,10 +61,7 @@ export class RemoteDataService implements DataService {
   ) {
     return api.createSession(worldId, presetId, id, plugins, locale);
   }
-  async updateSession(
-    sessionId: string,
-    updates: Partial<Pick<SessionRecord, "status" | "presetId">>,
-  ) {
+  async updateSession(sessionId: string, updates: SessionPatch) {
     return api.updateSession(sessionId, updates);
   }
   async deleteSession(sessionId: string) {
@@ -120,6 +117,10 @@ export class RemoteDataService implements DataService {
 
   async syncToServer() {
     // No-op: server already has the data
+  }
+
+  async commitFromServer() {
+    // No-op: remote mode commits directly to the authoritative server store.
   }
 
   async saveExecutionSteps(sessionId: string, steps: unknown[]) {

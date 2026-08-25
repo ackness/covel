@@ -273,8 +273,6 @@ export type {
 
 export type {
   RpcTrustLevel,
-  RpcActionDecl,
-  RpcDeclMap,
   RpcHandlerStore,
   PluginRpcActionRequest,
   PluginRpcRequest,
@@ -341,7 +339,6 @@ export type {
   HttpMethod,
   HttpPermissionDecl,
   TriggerSpec,
-  RuntimeResultFormat,
   NormalizedRuntimeSpec,
   ExecutionOrigin,
   CountPolicy,

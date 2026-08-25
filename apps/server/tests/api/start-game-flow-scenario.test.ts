@@ -137,10 +137,18 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
       promptTemplate: "",
       handler: async () => {
         if (manifest.name === "pregame") {
-          return { narrativeOutput: "pregame ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "pregame ready" },
+            completion: "done",
+          };
         }
         if (manifest.name === "world-init/schema-gen") {
-          return { narrativeOutput: "world ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "world ready" },
+            completion: "done",
+          };
         }
         if (manifest.name === "char-creator/player-init") {
           const inputs = await store.listPlayerInputs("sess-start-flow-api");
@@ -152,18 +160,21 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
 
           if (!values) {
             return {
-              narrativeOutput: "character form ready",
-              interactions: [
-                {
-                  type: "form",
-                  interactionId: "form-char-creation",
-                  narrativeTemplate: "Player {{name}} enters as {{concept}}.",
-                  fields: [
-                    { id: "name", label: "Name", type: "text" },
-                    { id: "concept", label: "Concept", type: "text" },
-                  ],
-                },
-              ],
+              outcome: "success",
+              value: { narrativeOutput: "character form ready" },
+              effects: {
+                interactions: [
+                  {
+                    type: "form",
+                    interactionId: "form-char-creation",
+                    narrativeTemplate: "Player {{name}} enters as {{concept}}.",
+                    fields: [
+                      { id: "name", label: "Name", type: "text" },
+                      { id: "concept", label: "Concept", type: "text" },
+                    ],
+                  },
+                ],
+              },
             };
           }
 
@@ -192,10 +203,17 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
             createdAt: now,
             updatedAt: now,
           });
-          return { narrativeOutput: "player ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "player ready" },
+            completion: "done",
+          };
         }
 
-        return { narrativeOutput: "main loop started" };
+        return {
+          outcome: "success",
+          value: { narrativeOutput: "main loop started" },
+        };
       },
     });
   }
@@ -213,12 +231,7 @@ function makeApp(
   const sessionLock = createInProcessSessionLock();
   const rpcRegistry = createPluginRpcRegistry();
   rpcRegistry.registerFrameworkDefault("submit-form", submitFormHandler);
-  const rpcExecutor = createRpcExecutor({
-    registry: rpcRegistry,
-    loadHandler: async () => {
-      throw new Error("plugin handler lookup skipped in scenario tests");
-    },
-  });
+  const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
   const rpcApprovalGate = createRpcApprovalGate();
 
   app.use("*", async (c, next) => {

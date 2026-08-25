@@ -10,14 +10,12 @@
  * rollback.
  */
 
-import "fake-indexeddb/auto";
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createMemoryStore } from "../src/memory/memory-store.js";
 import { createSqliteStore } from "../src/sqlite/sqlite-store.js";
-import { createIdbStore } from "../src/indexeddb/idb-store.js";
 import { createSqliteMediaStore } from "../src/media-store/sqlite.js";
 import type { DataStore } from "../src/types.js";
 
@@ -64,12 +62,10 @@ function pluginDataRow(sessionId: string, key: string) {
   };
 }
 
-let idbCounter = 0;
 const backends: ReadonlyArray<[string, () => DataStore | Promise<DataStore>]> =
   [
     ["MemoryStore", () => createMemoryStore()],
     ["SqliteStore", makeSqliteStore],
-    ["IdbStore", () => createIdbStore(`write-gate-${++idbCounter}`)],
   ];
 
 describe.each(backends)("%s serialized write gate", (_name, makeStore) => {
@@ -167,58 +163,6 @@ describe.each(backends)("%s serialized write gate", (_name, makeStore) => {
     ).toBeDefined();
 
     await store.close?.();
-  });
-});
-
-describe("IdbStore database-scoped write gate", () => {
-  it("preserves a root write from another handle when a transaction rolls back", async () => {
-    const dbName = `write-gate-shared-${++idbCounter}`;
-    const txStore = await createIdbStore(dbName);
-    const rootStore = await createIdbStore(dbName);
-    try {
-      await seedSession(txStore, "sess-tx");
-      await seedSession(txStore, "sess-other");
-
-      let markTxReady!: () => void;
-      const txReady = new Promise<void>((resolve) => {
-        markTxReady = resolve;
-      });
-      let releaseTx!: () => void;
-      const txHeldOpen = new Promise<void>((resolve) => {
-        releaseTx = resolve;
-      });
-
-      const txPromise = txStore.withTransaction!(async (tx) => {
-        await tx.setPluginData(pluginDataRow("sess-tx", "inside"));
-        markTxReady();
-        await txHeldOpen;
-        throw new Error("boom");
-      });
-      await txReady;
-
-      let outsideFinished = false;
-      const outsideWrite = rootStore
-        .setPluginData(pluginDataRow("sess-other", "outside"))
-        .then(() => {
-          outsideFinished = true;
-        });
-      await Promise.resolve();
-      expect(outsideFinished).toBe(false);
-
-      releaseTx();
-      await expect(txPromise).rejects.toThrow("boom");
-      await outsideWrite;
-
-      expect(
-        await txStore.getPluginData("sess-tx", "p", "ns", "inside"),
-      ).toBeFalsy();
-      expect(
-        await txStore.getPluginData("sess-other", "p", "ns", "outside"),
-      ).toMatchObject({ value: { v: "outside" } });
-    } finally {
-      await txStore.close?.();
-      await rootStore.close?.();
-    }
   });
 });
 

@@ -133,7 +133,7 @@ describe("scenario 10: MediaRef canonicalization shared across boundaries", () =
         promptTemplate: "",
         handler: async (ctx) => {
           seen = ctx.activation;
-          return {};
+          return { outcome: "success", value: {} };
         },
       }),
       llm: new NoopLLM(),
@@ -356,10 +356,7 @@ describe("scenario 9: media pipeline & job-status boundaries", () => {
         statePatches: [{ table: "s", field: "f", value: 1 }],
       },
     };
-    const n = normalizeHandlerResult(raw, {
-      resultFormat: "envelope-v1",
-      runtimeType: "function",
-    });
+    const n = normalizeHandlerResult(raw);
     expect(n.outcome.outcome).toBe("failed");
     const effects = (n.outcome as { effects?: Record<string, unknown> })
       .effects;

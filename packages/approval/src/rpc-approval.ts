@@ -5,7 +5,7 @@
  * action-level dispatch the route asks the gate `evaluate({ pluginId,
  * action, trustLevel, ... })`. The gate either:
  *
- *   - **allows** the call to proceed (builtin/official, or session-cached
+ *   - **allows** the call to proceed (builtin, or session-cached
  *     approval, or one-time approval that was issued moments ago)
  *   - **demands** explicit player approval — returns
  *     `{ status: 'approval-required', approvalId }`. The caller (HTTP layer)
@@ -180,7 +180,7 @@ export function createRpcApprovalGate(): RpcApprovalGate {
   };
 
   function isAutoTrusted(level: RpcTrustLevel): boolean {
-    return level === "builtin" || level === "official";
+    return level === "builtin";
   }
 
   function consumeOneTimeIfFresh(
@@ -234,7 +234,7 @@ export function createRpcApprovalGate(): RpcApprovalGate {
   return {
     evaluate(input) {
       const sessionScope = resolveSessionScope(input.sessionScope);
-      // 1. Builtin/official → always allowed, no dialog.
+      // 1. Builtin → always allowed, no dialog.
       if (isAutoTrusted(input.trustLevel)) {
         return { status: "allow", reason: "trusted" };
       }

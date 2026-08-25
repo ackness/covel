@@ -74,7 +74,10 @@ async function runTurn(
     loadRuntime: async (m) => ({
       manifest: m,
       promptTemplate: "",
-      handler: handlers[m.name],
+      handler: async (ctx) => ({
+        outcome: "success",
+        value: (await handlers[m.name]!(ctx)) as never,
+      }),
     }),
     llm: new NoopLLM(),
     store: await mainLoopStore("sess-1"),
@@ -167,7 +170,7 @@ describe("executeTurn: manifest.needs", () => {
           ? {
               handler: async () => {
                 downstreamRan = true;
-                return { ok: true };
+                return { outcome: "success", value: { ok: true } };
               },
             }
           : {}),

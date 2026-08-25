@@ -13,7 +13,7 @@ function makeStore(overrides = {}) {
   };
 }
 
-// Deliberate change: handler migrated to envelope-v1. Business value (narrative
+// Deliberate change: handler returns the canonical HandlerResult. Business value (narrative
 // / initialized) is under `result.value`, notifications under `result.effects`,
 // and the pre-game completion signal is `result.completion === "done"` (the
 // kernel projects it to the legacy top-level preGameDone).

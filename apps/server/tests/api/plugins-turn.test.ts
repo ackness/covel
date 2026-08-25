@@ -189,12 +189,6 @@ describe("Plugin Routes", () => {
           },
         },
         ui: { right: ["./ui/panel.json"], message: ["./ui/message.json"] },
-        rpc: {
-          regenerate: {
-            handler: "./rpc/regenerate.js",
-            description: "Regenerate an image.",
-          },
-        },
       });
       registry.register(
         makeEntry({
@@ -230,14 +224,6 @@ describe("Plugin Routes", () => {
         readablePluginDataNamespaces: ["images"],
         writablePluginDataNamespaces: ["images"],
       });
-      expect(body.rpc).toEqual([
-        {
-          runtimeId: "my-plugin/runner",
-          action: "regenerate",
-          handler: "./rpc/regenerate.js",
-          description: "Regenerate an image.",
-        },
-      ]);
     });
 
     it("keeps missing plugin contract requests as 404", async () => {

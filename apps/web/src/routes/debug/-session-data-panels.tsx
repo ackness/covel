@@ -133,10 +133,6 @@ export function PluginContractsPanel({
               <DiscoveryMetric
                 label={t("debugger.discovery.extension", "extension")}
                 values={[
-                  t("debugger.discovery.rpc", {
-                    count: plugin.rpc?.length ?? 0,
-                    defaultValue: "{{count}} rpc",
-                  }),
                   t("debugger.discovery.ui", {
                     count: uiCount,
                     defaultValue: "{{count}} ui",

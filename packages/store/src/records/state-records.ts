@@ -1,5 +1,5 @@
 /**
- * State, event, approval, message and character record types.
+ * State, event, message and character record types.
  *
  * Split out of `../types.ts` by domain; re-exported there for compatibility.
  */
@@ -41,16 +41,6 @@ export interface EventRecord {
   readonly payload: unknown; // JSON
   readonly targetRuntime?: string;
   readonly turnId?: string;
-  readonly createdAt: string;
-}
-
-export interface ApprovalRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly toolName: string;
-  readonly pluginId: string;
-  readonly decision: string;
-  readonly turnId: string;
   readonly createdAt: string;
 }
 

@@ -68,8 +68,8 @@ export default async function handler(ctx) {
   }
   if (records.length === 0) {
     return {
-      status: "skipped",
-      reason:
+      outcome: "skipped",
+      skipReason:
         "check.resolved payload carried no auditable check (roll must consume this turn's pre-rolled pool; modifier, total, difficulty, DC, and outcome must agree)",
     };
   }
@@ -88,25 +88,27 @@ export default async function handler(ctx) {
     };
   });
   return {
-    status: "done",
-    pluginData: [
-      ...entries.map((entry) => ({
-        namespace: CHECKS_NAMESPACE,
-        key: `${ctx.turnId}-${entry.seq}`,
-        value: entry,
-      })),
-      {
-        // Message-slot data source: `__turnId` binds the block to this
-        // turn's message; `checks` is the array the block iterates.
-        namespace: MESSAGE_NAMESPACE,
-        key: ctx.turnId,
-        value: {
-          __turnId: ctx.turnId,
-          turnId: ctx.turnId,
-          checks: [...previousChecks, ...entries],
+    outcome: "success",
+    effects: {
+      pluginData: [
+        ...entries.map((entry) => ({
+          namespace: CHECKS_NAMESPACE,
+          key: `${ctx.turnId}-${entry.seq}`,
+          value: entry,
+        })),
+        {
+          // Message-slot data source: `__turnId` binds the block to this
+          // turn's message; `checks` is the array the block iterates.
+          namespace: MESSAGE_NAMESPACE,
+          key: ctx.turnId,
+          value: {
+            __turnId: ctx.turnId,
+            turnId: ctx.turnId,
+            checks: [...previousChecks, ...entries],
+          },
         },
-      },
-    ],
+      ],
+    },
   };
 }
 

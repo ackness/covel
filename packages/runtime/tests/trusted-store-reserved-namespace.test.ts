@@ -1,5 +1,5 @@
 /**
- * Trusted (builtin/official) function-runtime handlers receive the full
+ * Trusted (builtin) function-runtime handlers receive the full
  * DataStore because their logic implements framework primitives — but they
  * are still plugin code. `_`-prefixed plugin-data namespaces (`_jobs`,
  * `_logs`) are framework bookkeeping, and a stray trusted-handler write into
@@ -22,8 +22,8 @@ const SESSION_ID = "sess-trusted-ns";
 
 function makeManifest(): RuntimeManifest {
   return {
-    name: "official-plugin/worker",
-    pluginId: "official-plugin",
+    name: "builtin-plugin/worker",
+    pluginId: "builtin-plugin",
     description: "trusted function runtime",
     stage: "narrative",
     trigger: { type: "auto" },
@@ -48,7 +48,7 @@ async function runTrustedHandler(
     completedResults: new Map(),
     deps: {
       store,
-      getPluginSource: () => "official",
+      getPluginSource: () => "builtin",
     } as unknown as TurnExecutorDeps,
     hookPipeline: undefined,
     triggerEvent: undefined,
@@ -70,9 +70,9 @@ describe("trusted function-runtime store handle", () => {
       const handlerStore = ctx.store as DataStore;
       try {
         await handlerStore.setPluginData({
-          id: `${SESSION_ID}:official-plugin:_jobs:forged`,
+          id: `${SESSION_ID}:builtin-plugin:_jobs:forged`,
           sessionId: SESSION_ID,
-          pluginId: "official-plugin",
+          pluginId: "builtin-plugin",
           namespace: "_jobs",
           key: "forged",
           value: { status: "done" },
@@ -82,14 +82,14 @@ describe("trusted function-runtime store handle", () => {
       } catch (err) {
         writeError = err;
       }
-      return { proposals: [] };
+      return { outcome: "success", value: { proposals: [] } };
     });
 
     expect(writeError).toBeInstanceOf(Error);
     expect((writeError as Error).message).toContain("reserved");
     const rows = await store.listPluginData(
       SESSION_ID,
-      "official-plugin",
+      "builtin-plugin",
       "_jobs",
     );
     expect(rows).toHaveLength(0);
@@ -99,9 +99,9 @@ describe("trusted function-runtime store handle", () => {
     const store = createMemoryStore();
     // Framework-owned row written through the raw store (job-runner style).
     await store.setPluginData({
-      id: `${SESSION_ID}:official-plugin:_jobs:job-1`,
+      id: `${SESSION_ID}:builtin-plugin:_jobs:job-1`,
       sessionId: SESSION_ID,
-      pluginId: "official-plugin",
+      pluginId: "builtin-plugin",
       namespace: "_jobs",
       key: "job-1",
       value: { status: "pending" },
@@ -114,22 +114,22 @@ describe("trusted function-runtime store handle", () => {
       const handlerStore = ctx.store as DataStore;
       const row = await handlerStore.getPluginData(
         SESSION_ID,
-        "official-plugin",
+        "builtin-plugin",
         "_jobs",
         "job-1",
       );
       observedJob = row?.value;
       await handlerStore.setPluginData({
-        id: `${SESSION_ID}:official-plugin:state:progress`,
+        id: `${SESSION_ID}:builtin-plugin:state:progress`,
         sessionId: SESSION_ID,
-        pluginId: "official-plugin",
+        pluginId: "builtin-plugin",
         namespace: "state",
         key: "progress",
         value: { step: 1 },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
-      return { proposals: [] };
+      return { outcome: "success", value: { proposals: [] } };
     });
 
     // Reserved-namespace read passes through to the store unchanged.
@@ -141,7 +141,7 @@ describe("trusted function-runtime store handle", () => {
     expect(
       await store.getPluginData(
         SESSION_ID,
-        "official-plugin",
+        "builtin-plugin",
         "state",
         "progress",
       ),
@@ -149,8 +149,8 @@ describe("trusted function-runtime store handle", () => {
 
     await processRuntimeResult(
       {
-        pluginId: "official-plugin",
-        runtimeId: "official-plugin/worker",
+        pluginId: "builtin-plugin",
+        runtimeId: "builtin-plugin/worker",
         turnId: "turn-1",
         status: result.status,
         output: result.output,
@@ -162,7 +162,7 @@ describe("trusted function-runtime store handle", () => {
 
     const row = await store.getPluginData(
       SESSION_ID,
-      "official-plugin",
+      "builtin-plugin",
       "state",
       "progress",
     );

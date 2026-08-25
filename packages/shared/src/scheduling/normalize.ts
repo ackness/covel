@@ -104,7 +104,6 @@ export function normalizeRuntimeManifest(
     pluginId: manifest.pluginId,
     declaredTrigger,
     backgroundWhenDetached: manifest.execution === "background",
-    resultFormat: manifest.resultFormat ?? "legacy",
     ...(stage !== undefined ? { stage } : {}),
     deps: {
       after: manifest.after ?? [],

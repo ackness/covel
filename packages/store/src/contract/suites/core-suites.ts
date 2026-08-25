@@ -6,7 +6,6 @@ import type {
 } from "../../types.js";
 import {
   id,
-  makeApproval,
   makeCharacter,
   makeEvent,
   makeInteractionRecord,
@@ -472,16 +471,6 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       // Wrong session scope and unknown id both miss.
       expect(await store.getEventById("sess-other", event.id)).toBeNull();
       expect(await store.getEventById("sess-1", "missing-id")).toBeNull();
-    });
-  });
-
-  describe("Approvals", () => {
-    it("should save and list approvals", async () => {
-      const approval = makeApproval({ sessionId: "sess-1" });
-      await store.saveApproval(approval);
-      const list = await store.listApprovals("sess-1");
-      expect(list).toHaveLength(1);
-      expect(list[0]).toEqual(approval);
     });
   });
 

@@ -7,15 +7,9 @@
  * observe-only (compare against their own result, record divergence) while the
  * function path uses its classification to set `RuntimeResult.status`.
  *
- * Two formats (docs 02 §4.3):
- *  - `legacy` (default): the whole object is preserved as `value`; known control
- *    keys are copied to `effects` for observability (the commit path still
- *    re-derives proposals from `value`, so this copy is informational); a
- *    business `status: "failed" | "skipped" | "suspended"` maps to the matching
- *    outcome, everything else is `success`.
- *  - `envelope-v1`: the explicit `{ outcome, value, effects, ... }` union is
- *    parsed; a malformed shape becomes `failed: output-schema-invalid`; a
- *    success `value` is checked against the JSON wire boundary.
+ * The explicit `{ outcome, value, effects, ... }` union is parsed; a malformed
+ * shape becomes `failed: output-schema-invalid`; a success `value` is checked
+ * against the JSON wire boundary.
  *
  * Non-success isolation (docs 02 §4.1): a `skipped` / `failed` envelope may only
  * carry observability effects (`jobStatus` / `diagnostics`); any domain write is
@@ -30,13 +24,7 @@ import type {
   ObservabilityEffects,
   RuntimeDiagnostic,
   RuntimeEffects,
-  RuntimeResultFormat,
 } from "@covel/shared";
-
-export interface NormalizeHandlerResultSpec {
-  readonly resultFormat: RuntimeResultFormat;
-  readonly runtimeType: "agent" | "function";
-}
 
 export interface NormalizedHandlerResult {
   readonly outcome: HandlerResult;
@@ -112,89 +100,7 @@ function stripNonSuccessEffects(
   return hasKeys(obs) ? obs : undefined;
 }
 
-/** Copy the known legacy control keys into a success `effects` bag. */
-function collectLegacyEffects(
-  obj: Record<string, unknown>,
-): RuntimeEffects | undefined {
-  const out: Record<string, unknown> = {};
-  for (const key of DOMAIN_EFFECT_KEYS) {
-    const v = obj[key];
-    if (v !== undefined && v !== null) out[key] = v;
-  }
-  const obs = pickObservability(obj);
-  Object.assign(out, obs);
-  return hasKeys(out) ? (out as RuntimeEffects) : undefined;
-}
-
-function normalizeLegacy(raw: unknown): NormalizedHandlerResult {
-  const diagnostics: RuntimeDiagnostic[] = [];
-
-  // A non-object legacy return is preserved verbatim as a success value.
-  if (!isPlainObject(raw)) {
-    return {
-      outcome: { outcome: "success", value: raw as JsonValue },
-      diagnostics,
-    };
-  }
-
-  const status = typeof raw.status === "string" ? raw.status : undefined;
-
-  if (status === "suspended" && typeof raw.reason === "string") {
-    const schema = asJsonSchema(raw.resumeSchema);
-    return {
-      outcome: {
-        outcome: "suspended",
-        reason: raw.reason,
-        ...(schema ? { resumeSchema: schema } : {}),
-      },
-      diagnostics,
-    };
-  }
-
-  if (status === "failed") {
-    const effects = stripNonSuccessEffects(raw, diagnostics);
-    return {
-      outcome: {
-        outcome: "failed",
-        error:
-          typeof raw.error === "string"
-            ? raw.error
-            : "handler reported failure",
-        ...(effects ? { effects } : {}),
-      },
-      diagnostics,
-    };
-  }
-
-  if (status === "skipped") {
-    const effects = stripNonSuccessEffects(raw, diagnostics);
-    return {
-      outcome: {
-        outcome: "skipped",
-        skipReason:
-          typeof raw.reason === "string" ? raw.reason : "handler reported skip",
-        ...(effects ? { effects } : {}),
-      },
-      diagnostics,
-    };
-  }
-
-  // Success (including `status: "done"` and any other / absent status): the
-  // whole object is preserved as `value` so downstream binding reads and the
-  // commit-path normalizer see every field; control keys are copied to effects
-  // for observability only.
-  const effects = collectLegacyEffects(raw);
-  return {
-    outcome: {
-      outcome: "success",
-      value: raw as JsonValue,
-      ...(effects ? { effects } : {}),
-    },
-    diagnostics,
-  };
-}
-
-function normalizeEnvelopeV1(raw: unknown): NormalizedHandlerResult {
+function normalizeEnvelope(raw: unknown): NormalizedHandlerResult {
   const diagnostics: RuntimeDiagnostic[] = [];
 
   const invalid = (message: string): NormalizedHandlerResult => ({
@@ -203,7 +109,7 @@ function normalizeEnvelopeV1(raw: unknown): NormalizedHandlerResult {
   });
 
   if (!isPlainObject(raw)) {
-    return invalid("envelope-v1 return is not an object");
+    return invalid("handler return is not an object");
   }
 
   const effects = isPlainObject(raw.effects) ? raw.effects : undefined;
@@ -213,7 +119,7 @@ function normalizeEnvelopeV1(raw: unknown): NormalizedHandlerResult {
       if (raw.value !== undefined && !isJsonValue(raw.value)) {
         diagnostics.push({
           code: "value-not-json-serialisable",
-          message: "envelope-v1 value is not a JSON wire value",
+          message: "handler result value is not a JSON wire value",
         });
         return invalid("value is not JSON-serialisable");
       }
@@ -283,11 +189,6 @@ function normalizeEnvelopeV1(raw: unknown): NormalizedHandlerResult {
  * Classify a raw handler return into a `HandlerResult` + diagnostics. Pure:
  * no store access, no commits — safe to call observe-only.
  */
-export function normalizeHandlerResult(
-  raw: unknown,
-  spec: NormalizeHandlerResultSpec,
-): NormalizedHandlerResult {
-  return spec.resultFormat === "envelope-v1"
-    ? normalizeEnvelopeV1(raw)
-    : normalizeLegacy(raw);
+export function normalizeHandlerResult(raw: unknown): NormalizedHandlerResult {
+  return normalizeEnvelope(raw);
 }

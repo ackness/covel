@@ -83,28 +83,6 @@ starts, so neither loses writes.
 
 - File: `packages/store/src/sqlite/sqlite-transactions.ts`
 
-### IdbStore
-
-Lazy first-touch snapshot. `withTransaction` wraps an internal snapshot primitive
-that does not pre-`getAll()` every object store —— 那样会和并发的 SSE / interval /
-其他 tab 写入冲突。它只初始化两个跟踪结构：`idbSnapshot: Map<storeName, rows[]>` 与
-`touchedStores: Set<storeName>`。每次 `put` / `delete` 通过 `ensureStoreSnapshot(name)`
-检查 `touchedStores`：首次 mutation 时调用 `db.getAll(name)` + `structuredClone` 把当前
-rows 抓进 `idbSnapshot` 并把 name 加进 set，后续 mutation 命中 set 直接跳过。回滚只
-clear + refill `touchedStores` 中的 object store，未触碰的 store 完全不动 —— 因此事务
-开启后落入未触碰 store 的并发写入不会被 rollback 覆盖。
-
-- Root writes and `withTransaction` share a database-name-scoped exclusive Web
-  Lock. This coordinates separate store handles, tabs, and workers in the same
-  origin, so a rollback cannot erase a write committed through another handle.
-  Environments without Web Locks use a module-level per-database FIFO, which
-  preserves the invariant for multiple handles in one JavaScript realm.
-- Files: `packages/store/src/indexeddb/idb-store.ts` (wires `withTransaction`),
-  `packages/store/src/indexeddb/idb-transaction.ts` (internal snapshot primitive),
-  `packages/store/src/indexeddb/idb-write-lock.ts` (cross-handle write lock)
-- Runtime environment: browser IndexedDB plus `fake-indexeddb` polyfill
-  for tests.
-
 ### PgStore
 
 `postgres.js` is a connection pool, so a bare `unsafe('BEGIN')` does not bind to a
@@ -118,14 +96,13 @@ run on independent connections — true parallel transactions.
 
 ### Cross-backend semantics (read before adopting)
 
-The four backends honor the same observable contract (atomic commit / rollback,
+The three backends honor the same observable contract (atomic commit / rollback,
 nested-call rejection) but differ in concurrency and isolation:
 
 | Backend                       | Concurrency model                                                                                                                                                                                                                                                 | Concurrent non-tx write during a callback                                                                              |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | **PgStore**                   | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                                                                                                                                                          | Isolated on its own connection; not folded in.                                                                         |
 | **SqliteStore / MemoryStore** | **Single connection / single snapshot.** Concurrent calls are **serialized** through a promise chain — each runs its full BEGIN…COMMIT before the next starts, so neither loses writes. Mutating store methods share that same queue (**serialized write gate**). | **Queued until the transaction settles** — never folded in. Writes issued from _inside_ the callback still run inline. |
-| **IdbStore**                  | **Single snapshot**, serialized per database name through Web Locks (cross-tab/worker) or a same-realm fallback FIFO.                                                                                                                                             | Queued until the transaction settles; never folded into another caller's snapshot.                                     |
 
 > **Serialized write gate (SQLite / Memory).** One connection means a
 > transaction cannot isolate: a write issued elsewhere while a transaction is
@@ -160,9 +137,9 @@ nested-call rejection) but differ in concurrency and isolation:
 
 Calling `withTransaction` from inside another `withTransaction` callback is a
 programming error and is **rejected synchronously with a clear error** on all
-four backends:
+three backends:
 
-- **Serialized backends (SQLite / Memory / IndexedDB):** the inner call would
+- **Serialized backends (SQLite / Memory):** the inner call would
   queue behind the outer transaction _on the serialization chain_ — and the
   outer call is awaiting the inner — a permanent **deadlock**. The guard turns
   that silent hang into an immediate rejection.
@@ -182,15 +159,27 @@ writes directly through the outer callback's tx scope."`
   context. `isNested()` — checked synchronously when a new `withTransaction` is
   entered — returns `true` only for a re-entrant (nested) call and `false` for an
   independent concurrent caller, so legitimate concurrency is never misflagged.
-- **IdbStore (browser):** `AsyncLocalStorage` is unavailable in the browser
-  bundle, so it uses a coarser synchronous boolean. It reliably rejects nesting
-  (the deadlock case) but may also reject a genuinely concurrent call issued
-  while another callback is mid-flight — an edge that is irrelevant for IdbStore's
-  single-user local mode.
+  The shared error builder lives in `packages/store/src/tx-nesting-error.ts`.
+  The AsyncLocalStorage guard is Node-only because all `DataStore` backends run
+  on the server.
 
-The shared error builder lives in `packages/store/src/tx-nesting-error.ts`
-(browser-safe; imported by every backend). The AsyncLocalStorage guard is
-Node-only and is never pulled into the IdbStore browser bundle.
+## BrowserVault transactions
+
+Browser-private persistence is deliberately outside `DataStore`. Dexie owns
+the IndexedDB transaction and schema lifecycle in
+`apps/web/src/services/storage/browser-vault.ts`:
+
+- a checkpoint and its compact action-idempotency row commit in one `rw`
+  transaction;
+- only the latest full checkpoint is retained;
+- `baseRevision`, `revision`, and `actionId` reject stale or divergent writes;
+- browser checkpoint upload/download operations are serialized by
+  `LocalDataService`;
+- the transient server workspace uses `MemoryStore.withTransaction` when a
+  checkpoint replaces a session.
+
+This is a synchronization contract, not an attempt to reproduce the full
+server transaction API in the browser.
 
 ## Kernel integration
 

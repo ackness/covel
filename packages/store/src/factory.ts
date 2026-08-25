@@ -5,7 +5,6 @@
  *   const store = await createStore({ backend: 'sqlite' });
  *   const store = await createStore({ backend: 'pg', databaseUrl: '...' });
  *   const store = await createStore({ backend: 'memory' });
- *   const store = await createStore({ backend: 'idb', idbDbName: 'covel-browser' });
  *
  * Environment variable shortcut:
  *   const store = await createStoreFromEnv();
@@ -20,7 +19,7 @@ import { readRuntimeEnv } from "@covel/shared";
  *
  * Lazily imports the backend module so unused backends are not bundled.
  *
- * @param config - Store configuration specifying the backend (`memory`, `sqlite`, `pg`, or `idb`) and connection details.
+ * @param config - Store configuration specifying the backend (`memory`, `sqlite`, or `pg`) and connection details.
  * @returns A `DataStore` instance ready for use.
  * @throws When `backend` is `pg` and `databaseUrl` is missing, or when `backend` is unknown.
  *
@@ -47,10 +46,6 @@ export async function createStore(config: StoreConfig): Promise<DataStore> {
       if (!config.databaseUrl)
         throw new Error("DATABASE_URL required for pg backend");
       return createPgStore(config.databaseUrl);
-    }
-    case "idb": {
-      const { createIdbStore } = await import("./indexeddb/idb-store.js");
-      return createIdbStore(config.idbDbName);
     }
     default:
       throw new Error(`Unknown store backend: ${String(config.backend)}`);

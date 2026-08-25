@@ -62,7 +62,7 @@ function makeCtx({
   };
 }
 
-// Deliberate change: handler migrated to envelope-v1. On success the asset is
+// Deliberate change: handler returns the canonical HandlerResult. On success the asset is
 // under `result.effects.assetGenerations`; a skip/failure is `result.outcome`
 // ("skipped"/"failed") with the failed error still top-level.
 describe("scene-stage background-gen handler", () => {

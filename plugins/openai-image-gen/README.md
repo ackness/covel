@@ -86,13 +86,13 @@ prompt-generator（与 dashscope 同构，便于熟悉的玩家无缝切换）�
 
 image-generator：
 
-| Key             | 类型   | 默认           | 说明                                                                                                |
-| --------------- | ------ | -------------- | --------------------------------------------------------------------------------------------------- |
+| Key             | 类型   | 默认           | 说明                                                                                                                           |
+| --------------- | ------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `modelPresetId` | slot   | `openai-image` | 对应 `~/.covel/llm.toml` 里的 `[covel.<slot>]` 名字，UI 渲染成已配置槽的选择器。换第三方 / 换模型 = 加一个新 slot 然后改这个值 |
-| `imageSize`     | text   | `1024x1024`    | OpenAI Images API size 参数（小写 x）                                                               |
-| `n`             | number | `1`            | 一次生成几张图                                                                                      |
-| `quality`       | text   | _(空)_         | 可选；`standard` / `hd`；空 = 不传                                                                  |
-| `style`         | text   | _(空)_         | 可选；没有独立的 wire 参数，会拼进 prompt 文案末尾（`<prompt>, style: <style>`）                    |
+| `imageSize`     | text   | `1024x1024`    | OpenAI Images API size 参数（小写 x）                                                                                          |
+| `n`             | number | `1`            | 一次生成几张图                                                                                                                 |
+| `quality`       | text   | _(空)_         | 可选；`standard` / `hd`；空 = 不传                                                                                             |
+| `style`         | text   | _(空)_         | 可选；没有独立的 wire 参数，会拼进 prompt 文案末尾（`<prompt>, style: <style>`）                                               |
 
 > **画质保证**：4K / ultra detailed / masterpiece 等关键词写在 prompt-generator 的 PLUGIN.md 系统提示里，模型在每条 prompt 末尾或 `quality` 字段强制带上。漫画模式额外追加 `crisp ink lines, clean panel borders, professional manga / comic page composition`。
 

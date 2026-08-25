@@ -7,7 +7,8 @@ import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
 import { useActiveSessionId } from "@/lib/catalog/session-context.js";
-import { postPluginRpc, uploadSessionMedia } from "@/services/api.js";
+import { uploadSessionMedia } from "@/services/api.js";
+import { postPluginRpc } from "@/services/session-workspace.js";
 import { emitToast } from "@/lib/toast-channel.js";
 
 interface PresenceRecord {

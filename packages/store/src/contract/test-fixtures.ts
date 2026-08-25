@@ -1,5 +1,4 @@
 import type {
-  ApprovalRecord,
   CharacterRecord,
   EventRecord,
   InteractionRecordRow,
@@ -161,21 +160,6 @@ export function makeEvent(overrides?: Partial<EventRecord>): EventRecord {
     type: "domain",
     topic: "combat",
     payload: { damage: 20 },
-    createdAt: ts(),
-    ...overrides,
-  };
-}
-
-export function makeApproval(
-  overrides?: Partial<ApprovalRecord>,
-): ApprovalRecord {
-  return {
-    id: id(),
-    sessionId: "sess-1",
-    toolName: "dangerous-tool",
-    pluginId: "test-plugin",
-    decision: "approved",
-    turnId: "turn-1",
     createdAt: ts(),
     ...overrides,
   };

@@ -22,13 +22,13 @@ export interface StorageMigrationSummary {
 
 const REGISTRY: readonly StorageMigrationSummary[] = [
   {
-    id: "browser:idb:unified-storage",
+    id: "browser:idb:cache-media",
     domain: "browser",
     backend: "idb",
     version: BROWSER_IDB_SCHEMA_VERSION,
     status: "managed-by-backend",
     description:
-      "Browser-local data, media, app-KV, and render cache share the covel-browser IndexedDB schema.",
+      "Browser UI state and media caches use a lightweight IndexedDB schema; durable game data lives in the separate Dexie BrowserVault.",
   },
   {
     id: "data:sqlite:schema",
@@ -47,15 +47,6 @@ const REGISTRY: readonly StorageMigrationSummary[] = [
     status: "managed-by-backend",
     description:
       "PostgreSQL boot migration preserves legacy rows while re-keying characters and lorebook entries by session.",
-  },
-  {
-    id: "data:idb:store",
-    domain: "data",
-    backend: "idb",
-    version: BROWSER_IDB_SCHEMA_VERSION,
-    status: "managed-by-backend",
-    description:
-      "IndexedDB DataStore upgrades through the idb openDB upgrade callback.",
   },
   {
     id: "media:idb:store",

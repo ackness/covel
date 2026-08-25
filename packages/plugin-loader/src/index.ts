@@ -38,6 +38,8 @@ export type {
   PluginSource,
   PluginTrustInfo,
   FunctionHandler,
+  AgentGuard,
+  AgentGuardResult,
   FunctionHandlerContext,
   PluginRuntimeGateway,
   PluginRuntimeUtils,

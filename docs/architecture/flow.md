@@ -550,14 +550,15 @@ plugins/my-plugin/
 │  │                                                              │
 │  世界级                                                         │
 │  ├── worlds            世界包记录 (name, lore, dimensions)       │
-│  └── approvals         审批记录                                  │
 │                                                                 │
 │  后端实现:                                                      │
 │  ├── MemoryStore      → 内存（开发/测试）                        │
 │  ├── PgStore          → PostgreSQL（生产）                       │
-│  ├── IdbStore         → IndexedDB（浏览器端 T1/T2）              │
 │  └── SqliteStore      → SQLite（轻量部署）                       │
 └─────────────────────────────────────────────────────────────────┘
+
+浏览器私有模式不实现 DataStore：Dexie BrowserVault 保存完整版本化
+checkpoint，服务端 MemoryStore 只作为单次执行的临时工作区。
 ```
 
 ### 6.2 plugin_data 隔离模型
@@ -747,9 +748,11 @@ sequenceDiagram
                              ├── createPluginDataTools()      plugin-data CRUD + 事件发射
                              └── shortId/shortIdBatch()       LLM 友好的语义 ID 生成
 
-启动 → 状态管理              @covel/state                     动态表 + 变更追踪
+启动 → 状态管理              @covel/store                     DataStore 接口 + 4 个后端实现
+                             ├── listStateSchemas()            动态表 schema
+                             ├── listStateEntries()            状态表数据
+                             └── listStateChanges()            变更追踪
                              @covel/events                    EventBus pub/sub + SSE 基础
-                             @covel/store                     DataStore 接口 + 4 个后端实现
                              @covel/approval                  工具审批管线
 
 Turn 执行                    @covel/runtime                   核心执行引擎
@@ -799,8 +802,6 @@ Turn 执行                    @covel/runtime                   核心执行引�
        │         │
        ├──► @covel/store           (DataStore 接口 + 实现)
        │         │
-       ├──► @covel/state           (动态状态管理)
-       │         │
        ├──► @covel/events          (事件总线 + SSE 订阅)
        │         │
        ├──► @covel/tools           (工具定义 + 内置工具)
@@ -818,19 +819,18 @@ Turn 执行                    @covel/runtime                   核心执行引�
 
 ### 8.3 各包核心接口
 
-| 包                    | 核心导出                                                            | 调用方                    |
-| --------------------- | ------------------------------------------------------------------- | ------------------------- |
-| **shared**            | `RuntimeManifest`, `UISpec`, `ProtocolEventType`, Zod schemas       | 所有包                    |
-| **plugin-loader**     | `discoverPlugins()`, `loadRuntime()`, `PluginRegistry`              | server bootstrap          |
-| **ai-provider**       | `createGateway()`, `createPresetRegistry()`, `createSlotRegistry()` | server bootstrap, runtime |
-| **context**           | `buildContext()`, `interpolateTemplate()`                           | runtime (per-runtime)     |
-| **runtime**           | `executeTurn()`, `createToolExecutor()`, `shouldTrigger()`          | server actions route      |
-| **store**             | `DataStore` interface, `createMemoryStore()`, `createPgStore()`     | server, tools, runtime    |
-| **events**            | `createEventBus()`, `EventBus.emit()`, `EventBus.onEmit()`          | server, plugin-data-tools |
-| **tools**             | `tool()`, `createPluginDataTools()`, `shortIdBatch()`               | bootstrap, plugin tools   |
-| **state**             | `createStateManager()`, `StateManager`                              | server, runtime           |
-| **approval**          | `createApprovalPipeline()`, `ApprovalPipeline.check()`              | tool executor             |
-| **plugin-test-utils** | `MockLLM`, `makeManualFunctionContext()`, `expectAssetGenerated()`  | plugin tests only         |
+| 包                    | 核心导出                                                                                                                | 调用方                    |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| **shared**            | `RuntimeManifest`, `UISpec`, `ProtocolEventType`, Zod schemas                                                           | 所有包                    |
+| **plugin-loader**     | `discoverPlugins()`, `loadRuntime()`, `PluginRegistry`                                                                  | server bootstrap          |
+| **ai-provider**       | `createGateway()`, `createPresetRegistry()`, `createSlotRegistry()`                                                     | server bootstrap, runtime |
+| **context**           | `buildContext()`, `interpolateTemplate()`                                                                               | runtime (per-runtime)     |
+| **runtime**           | `executeTurn()`, `createToolExecutor()`, `shouldTrigger()`                                                              | server actions route      |
+| **store**             | `DataStore`, `listStateSchemas()`, `listStateEntries()`, `listStateChanges()`, `createMemoryStore()`, `createPgStore()` | server, tools, runtime    |
+| **events**            | `createEventBus()`, `EventBus.emit()`, `EventBus.onEmit()`                                                              | server, plugin-data-tools |
+| **tools**             | `tool()`, `createPluginDataTools()`, `shortIdBatch()`                                                                   | bootstrap, plugin tools   |
+| **approval**          | `createApprovalPipeline()`, `ApprovalPipeline.check()`                                                                  | tool executor             |
+| **plugin-test-utils** | `MockLLM`, `makeManualFunctionContext()`, `expectAssetGenerated()`                                                      | plugin tests only         |
 
 ## 九、设计约束与原则
 

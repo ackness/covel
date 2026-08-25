@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
+import type { DataService } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import {
   createSessionSubscription,
@@ -27,11 +28,31 @@ interface MutableRef<T> {
 interface UseSessionSubscriptionOptions {
   sessionId: string | null | undefined;
   dispatch: (action: SessionAction) => void;
+  ds: DataService;
   sessionIdRef: MutableRef<string | null>;
 }
 
+function containsTerminalBackgroundJob(
+  payload: Readonly<Record<string, unknown>>,
+): boolean {
+  const changes = payload.changes;
+  if (!Array.isArray(changes)) return false;
+  return changes.some((change) => {
+    if (!change || typeof change !== "object") return false;
+    const row = change as Record<string, unknown>;
+    if (row.namespace !== "_jobs") return false;
+    const value = row.value;
+    if (!value || typeof value !== "object") return false;
+    const status = (value as Record<string, unknown>).status;
+    return status === "done" || status === "failed";
+  });
+}
+
 function createSubscriptionEventHandler(
-  options: Pick<UseSessionSubscriptionOptions, "dispatch" | "sessionIdRef"> & {
+  options: Pick<
+    UseSessionSubscriptionOptions,
+    "dispatch" | "ds" | "sessionIdRef"
+  > & {
     onReset: () => void;
   },
 ) {
@@ -80,6 +101,14 @@ function createSubscriptionEventHandler(
       }
       case "plugin-data.changed": {
         reducePluginDataChanged(options.dispatch, event.payload ?? {});
+        if (containsTerminalBackgroundJob(event.payload ?? {})) {
+          const actionId = event.id
+            ? `background:${event.id}`
+            : `background:${crypto.randomUUID()}`;
+          options.ds
+            .commitFromServer(event.sessionId, actionId)
+            .catch(ignoreError("checkpoint terminal background job"));
+        }
         break;
       }
       case "turn.suspended": {
@@ -170,6 +199,7 @@ export async function rehydrateSessionSideState(
 export function useSessionSubscription({
   sessionId,
   dispatch,
+  ds,
   sessionIdRef,
 }: UseSessionSubscriptionOptions): void {
   const subscriptionRef = useRef<SessionSubscription | null>(null);
@@ -196,6 +226,7 @@ export function useSessionSubscription({
     let startRecovery: () => void = () => undefined;
     const applySubscriptionEvent = createSubscriptionEventHandler({
       dispatch,
+      ds,
       sessionIdRef,
       onReset: () => startRecovery(),
     });
@@ -263,5 +294,5 @@ export function useSessionSubscription({
       subscriptionRef.current = null;
       setConnectionState("closed");
     };
-  }, [sessionId, dispatch, sessionIdRef]);
+  }, [sessionId, dispatch, ds, sessionIdRef]);
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { stageRank } from "@covel/shared";
 import * as api from "@/services/api.js";
+import { getDataService } from "@/services/data-service.js";
 import type { SessionPluginInfo } from "@/services/api.js";
 import { PluginErrorItem } from "./plugin-list-panel/plugin-error-item.js";
 import { PluginItem } from "./plugin-list-panel/plugin-item.js";
@@ -56,7 +57,9 @@ export function PluginListPanel({
       const operation = saveTailRef.current
         .catch(() => undefined)
         .then(() =>
-          api.updateSession(sessionId, { runtimeModelOverrides: next }),
+          getDataService().updateSession(sessionId, {
+            runtimeModelOverrides: next,
+          }),
         );
       saveTailRef.current = operation.then(
         () => undefined,
