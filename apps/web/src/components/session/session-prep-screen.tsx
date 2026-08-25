@@ -225,6 +225,9 @@ export function SessionPrepScreen({
       setResumingId(session.id);
       try {
         await onResume(session);
+      } catch {
+        // restoreSessionState reports the actionable error through session
+        // state (and transport failures already emit a global toast).
       } finally {
         setResumingId(null);
       }

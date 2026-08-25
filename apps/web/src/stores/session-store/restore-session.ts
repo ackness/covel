@@ -208,7 +208,6 @@ async function restorePersistedExecutionSteps(
 }
 
 function refreshSessionSideData(
-  ds: DataService,
   sessionId: string,
   targetSessionId: string,
   sessionIdRef: MutableRef<string | null>,
@@ -231,16 +230,6 @@ function refreshSessionSideData(
       }
     })
     .catch(ignoreError("list suspensions on restore"));
-
-  ds.syncToServer(sessionId)
-    .then(() => {
-      if (sessionIdRef.current === targetSessionId) {
-        api.markServerAck();
-      }
-    })
-    .catch((err: unknown) => {
-      console.warn("[session] syncToServer failed:", err);
-    });
 }
 
 export async function restoreSessionState({
@@ -252,16 +241,39 @@ export async function restoreSessionState({
 }: RestoreSessionOptions): Promise<void> {
   clearAllStreamingText();
   dispatch({ type: "RESET_SESSION" });
+  setActivePluginDataSession(null);
 
   const world = worlds.find((candidate) => candidate.id === session.worldId);
   if (world) {
     dispatch({ type: "SET_WORLD", world });
   }
-  dispatch({ type: "SET_SESSION", session });
 
   const targetSessionId = session.id;
   sessionIdRef.current = targetSessionId;
+
+  // Browser-private sessions only become executable after their durable
+  // checkpoint has rebuilt the ephemeral server workspace. Publishing the
+  // session first starts snapshot/plugin/SSE effects against an empty
+  // MemoryStore after every server restart, producing a burst of expected
+  // 404s and a transient broken UI. Remote mode implements this as a no-op.
+  try {
+    await ds.syncToServer(targetSessionId);
+  } catch (error) {
+    if (sessionIdRef.current === targetSessionId) {
+      sessionIdRef.current = null;
+      setActivePluginDataSession(null);
+      dispatch({
+        type: "SET_EXECUTION_ERROR",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
+  }
+  if (sessionIdRef.current !== targetSessionId) return;
+
+  api.markServerAck();
   setActivePluginDataSession(targetSessionId);
+  dispatch({ type: "SET_SESSION", session });
 
   const snapshotLoaded = await restoreServerSnapshot(session.id, dispatch);
   if (sessionIdRef.current !== targetSessionId) return;
@@ -277,11 +289,5 @@ export async function restoreSessionState({
   await restorePersistedExecutionSteps(ds, session.id, dispatch);
   if (sessionIdRef.current !== targetSessionId) return;
 
-  refreshSessionSideData(
-    ds,
-    session.id,
-    targetSessionId,
-    sessionIdRef,
-    dispatch,
-  );
+  refreshSessionSideData(session.id, targetSessionId, sessionIdRef, dispatch);
 }

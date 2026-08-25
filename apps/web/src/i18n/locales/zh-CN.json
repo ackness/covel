@@ -334,6 +334,8 @@
     "assistant": "助手",
     "storage": {
       "browserIndexedDb": "浏览器 IndexedDB",
+      "browserIndexedDbAuthority": "浏览器 IndexedDB（权威存储）",
+      "memoryExecutionMirror": "Memory 执行镜像",
       "serverFile": "服务端文件",
       "serverBackend": "服务端 {{backend}}",
       "builtIn": "内置",

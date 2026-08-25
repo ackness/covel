@@ -334,6 +334,8 @@
     "assistant": "Assistant",
     "storage": {
       "browserIndexedDb": "Browser IndexedDB",
+      "browserIndexedDbAuthority": "Browser IndexedDB (authoritative)",
+      "memoryExecutionMirror": "Memory execution mirror",
       "serverFile": "Server file",
       "serverBackend": "Server {{backend}}",
       "builtIn": "Built-in",

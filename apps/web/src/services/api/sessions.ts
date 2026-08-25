@@ -241,9 +241,13 @@ export async function listSessions(worldId: string): Promise<SessionRecord[]> {
   return res.items;
 }
 
-export async function getSession(sessionId: string): Promise<SessionRecord> {
+export async function getSession(
+  sessionId: string,
+  options?: { silentErrors?: boolean },
+): Promise<SessionRecord> {
   return request<SessionRecord>(
     `/api/sessions/${encodeURIComponent(sessionId)}`,
+    options,
   );
 }
 

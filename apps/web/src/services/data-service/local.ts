@@ -541,7 +541,7 @@ export class LocalDataService implements DataService {
     // Only a 404 means "not there yet" — a transient 500 must not be answered
     // by creating a second, empty world over the top of the real one.
     try {
-      await api.getWorld(serverWorldId);
+      await api.getWorld(serverWorldId, { silentErrors: true });
     } catch (err) {
       if (!isNotFound(err)) throw err;
       await api.createWorld(
@@ -553,7 +553,7 @@ export class LocalDataService implements DataService {
 
     // Ensure session exists on server (pass local ID so server uses the same ID)
     try {
-      await api.getSession(serverSessionId);
+      await api.getSession(serverSessionId, { silentErrors: true });
     } catch (err) {
       if (!isNotFound(err)) throw err;
       await api.createSession(

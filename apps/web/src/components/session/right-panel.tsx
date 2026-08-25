@@ -34,6 +34,28 @@ import { onNavEvent } from "@/lib/nav-events.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { resolveIcon } from "@/lib/catalog/helpers.js";
 
+export interface StorageStatusData {
+  readonly backend?: ServerStoreBackend;
+  readonly frontendMode?: "local" | "remote";
+}
+
+export interface StorageStatus {
+  readonly browserAuthority: boolean;
+  readonly backend: ServerStoreBackend | null;
+}
+
+/** Resolve the durable authority before choosing the execution-store label. */
+export function resolveStorageStatus(
+  data: StorageStatusData | null | undefined,
+): StorageStatus | null {
+  const browserAuthority = data?.frontendMode === "local";
+  if (!browserAuthority && !data?.backend) return null;
+  return {
+    browserAuthority,
+    backend: data?.backend ?? null,
+  };
+}
+
 interface RightPanelTabItem {
   id: string;
   value: string;
@@ -86,7 +108,7 @@ export function RightPanel({
 }: RightPanelProps) {
   const { t, i18n } = useTranslation();
   const pluginPanelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
-  const [storeBackend, setStoreBackend] = useState<ServerStoreBackend | null>(
+  const [storageData, setStorageData] = useState<StorageStatusData | null>(
     null,
   );
   const [pluginTabGroups, setPluginTabGroups] = useState<PluginPanelTabGroup[]>(
@@ -134,9 +156,11 @@ export function RightPanel({
 
   useEffect(() => {
     fetchServerHealth()
-      .then((h) => setStoreBackend(h.storage?.data?.backend ?? null))
+      .then((h) => setStorageData(h.storage?.data ?? null))
       .catch(ignoreError("fetch server health"));
   }, []);
+
+  const storageStatus = resolveStorageStatus(storageData);
 
   // Topbar nav → controlled tab switch. Previously this dispatched synthetic
   // mouse events at the trigger DOM node matched by aria-label, which silently
@@ -401,7 +425,7 @@ export function RightPanel({
           })}
         </ScrollArea>
       </Tabs>
-      {storeBackend && (
+      {storageStatus && (
         <div className="border-t border-border px-3 py-2 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0 bg-[color-mix(in_oklab,var(--surface-rail)_82%,var(--surface-page))]">
           <Database className="w-3 h-3" />
           <span className="ui-meta text-[9px]">
@@ -410,22 +434,32 @@ export function RightPanel({
           <Badge
             variant="outline"
             className={`text-[9px] rounded-none ${
-              storeBackend === "pg" || storeBackend === "sqlite"
+              storageStatus.browserAuthority ||
+              storageStatus.backend === "pg" ||
+              storageStatus.backend === "sqlite"
                 ? "border-green-500/40 text-green-600 dark:text-green-400"
                 : "border-amber-500/40 text-amber-600 dark:text-amber-400"
             }`}
           >
-            {storeBackend === "pg"
-              ? "PostgreSQL"
-              : storeBackend === "sqlite"
-                ? "SQLite"
-                : "Memory"}
+            {storageStatus.browserAuthority
+              ? t("session.storage.browserIndexedDbAuthority")
+              : storageStatus.backend === "pg"
+                ? "PostgreSQL"
+                : storageStatus.backend === "sqlite"
+                  ? "SQLite"
+                  : "Memory"}
           </Badge>
-          {storeBackend === "memory" && (
-            <span className="text-amber-600 dark:text-amber-400">
-              {t("session.memoryStoreWarning", "Data lost on restart")}
+          {storageStatus.browserAuthority && (
+            <span className="text-muted-foreground">
+              {t("session.storage.memoryExecutionMirror")}
             </span>
           )}
+          {!storageStatus.browserAuthority &&
+            storageStatus.backend === "memory" && (
+              <span className="text-amber-600 dark:text-amber-400">
+                {t("session.memoryStoreWarning", "Data lost on restart")}
+              </span>
+            )}
         </div>
       )}
     </div>

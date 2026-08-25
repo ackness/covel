@@ -28,7 +28,8 @@ const appKv = vi.hoisted(() => ({
 }));
 
 vi.mock("../api.js", () => api);
-vi.mock("../api/request.js", () => ({ isNotFound: () => true }));
+const isNotFound = vi.hoisted(() => vi.fn(() => true));
+vi.mock("../api/request.js", () => ({ isNotFound }));
 vi.mock("../app-kv-store.js", () => appKv);
 
 const { LocalDataService } = await import("../data-service/local.js");
@@ -51,6 +52,7 @@ async function serviceWithWorld(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  isNotFound.mockReturnValue(true);
   api.getWorld.mockResolvedValue({ id: "world-1" });
   api.getSession.mockRejectedValue(new Error("404"));
   api.createSession.mockResolvedValue({ id: "sess-1" });
@@ -154,12 +156,27 @@ describe("LocalDataService browser-authoritative sync", () => {
 
     await service.syncToServer("session_underscore");
 
-    expect(api.getWorld).toHaveBeenCalledWith("world_underscore");
-    expect(api.getSession).toHaveBeenCalledWith("session_underscore");
+    expect(api.getWorld).toHaveBeenCalledWith("world_underscore", {
+      silentErrors: true,
+    });
+    expect(api.getSession).toHaveBeenCalledWith("session_underscore", {
+      silentErrors: true,
+    });
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
       "session_underscore",
       expect.objectContaining({ sessionId: "session_underscore" }),
     );
+  });
+
+  it("does not turn a real sync error into a create probe", async () => {
+    const service = await serviceWithWorld();
+    await service.createSession("world-1", undefined, "sess-1", [], "en-US");
+    isNotFound.mockReturnValue(false);
+    const error = new Error("server unavailable");
+    api.getWorld.mockRejectedValue(error);
+
+    await expect(service.syncToServer("sess-1")).rejects.toBe(error);
+    expect(api.createWorld).not.toHaveBeenCalled();
   });
 
   it("keeps UI snapshots in the browser-only KV channel", async () => {
