@@ -2,14 +2,13 @@
  * App-level IndexedDB key-value store for frontend-only data.
  *
  * Stores frontend-only records that are keyed by session/world ids:
- * state snapshots, world overlays, submitted block UI state, etc.
+ * state patches, world overlays, submitted block UI state, etc.
  */
 
 // Backend-free schema module: constants plus the cache/media upgrade function.
 import {
   APP_KV_STORE_EXECUTION_STEPS,
   APP_KV_STORE_STATE_PATCHES,
-  APP_KV_STORE_STATE_SNAPSHOTS,
   APP_KV_STORE_SUBMITTED_BLOCKS,
   APP_KV_STORE_WORLD_OVERLAYS,
   BROWSER_IDB_SCHEMA_VERSION,
@@ -20,14 +19,12 @@ import { BROWSER_STORAGE_DB_NAME } from "./storage/data-store.js";
 const DB_NAME = BROWSER_STORAGE_DB_NAME;
 const DB_VERSION = BROWSER_IDB_SCHEMA_VERSION;
 
-const STORE_STATE_SNAPSHOTS = APP_KV_STORE_STATE_SNAPSHOTS; // key: sessionId
 const STORE_WORLD_OVERLAYS = APP_KV_STORE_WORLD_OVERLAYS; // key: worldId
 const STORE_STATE_PATCHES = APP_KV_STORE_STATE_PATCHES; // key: sessionId
 const STORE_SUBMITTED_BLOCKS = APP_KV_STORE_SUBMITTED_BLOCKS; // key: sessionId
 const STORE_EXECUTION_STEPS = APP_KV_STORE_EXECUTION_STEPS; // key: sessionId
 
 type StoreNames =
-  | typeof STORE_STATE_SNAPSHOTS
   | typeof STORE_WORLD_OVERLAYS
   | typeof STORE_STATE_PATCHES
   | typeof STORE_SUBMITTED_BLOCKS
@@ -101,25 +98,6 @@ async function idbDelete(storeName: StoreNames, key: string): Promise<void> {
   });
 }
 
-// ── State Snapshots ──────────────────────────────────────────────
-
-export async function getStateSnapshot(
-  sessionId: string,
-): Promise<Record<string, unknown> | null> {
-  return idbGet<Record<string, unknown>>(STORE_STATE_SNAPSHOTS, sessionId);
-}
-
-export async function saveStateSnapshot(
-  sessionId: string,
-  snapshot: Record<string, unknown>,
-): Promise<void> {
-  return idbPut(STORE_STATE_SNAPSHOTS, sessionId, snapshot);
-}
-
-export async function removeStateSnapshot(sessionId: string): Promise<void> {
-  return idbDelete(STORE_STATE_SNAPSHOTS, sessionId);
-}
-
 // ── State Patches ───────────────────────────────────────────────
 
 export async function getStatePatches(
@@ -169,7 +147,7 @@ export async function removeWorldOverlay(worldId: string): Promise<void> {
 // ── Submitted Blocks ────────────────────────────────────────────
 
 export interface SubmittedBlocksRecord {
-  /** Ordered list of submitted block IDs (kept for backward compat with old code paths). */
+  /** Ordered list of submitted block IDs. */
   ids: string[];
   /** Form values keyed by blockId — used to repopulate disabled forms after submission. */
   values: Record<string, Record<string, unknown>>;
@@ -178,12 +156,12 @@ export interface SubmittedBlocksRecord {
 export async function getSubmittedBlocks(
   sessionId: string,
 ): Promise<SubmittedBlocksRecord> {
-  const raw = await idbGet<unknown>(STORE_SUBMITTED_BLOCKS, sessionId);
+  const raw = await idbGet<SubmittedBlocksRecord>(
+    STORE_SUBMITTED_BLOCKS,
+    sessionId,
+  );
   if (!raw) return { ids: [], values: {} };
-  // Legacy shape: plain string[]. Migrate by treating values as empty.
-  if (Array.isArray(raw)) return { ids: raw as string[], values: {} };
-  const obj = raw as Partial<SubmittedBlocksRecord>;
-  return { ids: obj.ids ?? [], values: obj.values ?? {} };
+  return raw;
 }
 
 export async function saveSubmittedBlocks(

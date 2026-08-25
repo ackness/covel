@@ -37,17 +37,14 @@ const WAIVE_WARNING =
   "Setup was skipped by the player after repeated failures; this plugin is running in a degraded state.";
 
 /**
- * Apply a resolved control transition to `session.setupRuntimes[runtimeId]`. The
- * setup mirror is the sole write surface; the legacy `preGameCompleted` set is
- * derived from it at read time, so a waived runtime enters it (and a retried one
- * leaves it) without a separate column write.
+ * Apply a resolved control transition to `session.setupRuntimes[runtimeId]`.
  */
 async function applyTransition(args: {
   readonly store: DataStore;
   readonly sessionId: string;
   readonly runtimeId: string;
   readonly session: {
-    readonly setupRuntimes?: Readonly<
+    readonly setupRuntimes: Readonly<
       Record<string, import("@covel/shared").SetupRuntimeState>
     >;
   };
@@ -60,8 +57,6 @@ async function applyTransition(args: {
     ...session.setupRuntimes,
     [runtimeId]: result.next,
   };
-  // Setup mirror is the sole write surface; `preGameCompleted` derives from it
-  // at read time.
   await store.updateSession(sessionId, {
     setupRuntimes,
     updatedAt: now,
@@ -84,7 +79,7 @@ setupRuntimeControlRoutes.post(
       expectedSession: guard.session,
       allowedStatuses: ["active"],
       mutate: async (live) => {
-        const result = retrySetup(live.setupRuntimes?.[runtimeId]);
+        const result = retrySetup(live.setupRuntimes[runtimeId]);
         if (!result.ok) return c.json(errorBody(result.reason), 409);
         await applyTransition({
           store,
@@ -126,7 +121,7 @@ setupRuntimeControlRoutes.post(
       allowedStatuses: ["active"],
       mutate: async (live) => {
         const result = waiveSetup(
-          live.setupRuntimes?.[runtimeId],
+          live.setupRuntimes[runtimeId],
           new Date().toISOString(),
           WAIVE_WARNING,
         );

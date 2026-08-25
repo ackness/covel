@@ -55,8 +55,6 @@ export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   worldId: text("world_id"),
   status: text("status").notNull().default("active"),
-  turnCount: integer("turn_count").notNull().default(0),
-  preGameCompleted: jsonb("pre_game_completed").notNull().default([]), // JSON string[] — runtimeIds that have finished pre-game band
   locale: text("locale").notNull().default("zh-CN"),
   activePlugins: jsonb("active_plugins").notNull().default([]), // JSON array
   metadata: jsonb("metadata"), // JSON
@@ -65,10 +63,9 @@ export const sessions = pgTable("sessions", {
   embeddingModelId: integer("embedding_model_id"), // FK → vector_models.id; NULL = RAG disabled
   embeddingLockedAt: text("embedding_locked_at"), // ISO 8601 timestamp
   runtimeModelOverrides: jsonb("runtime_model_overrides").default({}), // per-runtime slot overrides
-  // Scheduling-redesign lifecycle fields (nullable; absent on legacy rows).
-  phase: text("phase"), // 'setup' | 'playing'
-  completedPlayerTurns: integer("completed_player_turns"),
-  setupRuntimes: jsonb("setup_runtimes"), // Record<runtimeId, SetupRuntimeState>
+  phase: text("phase").notNull().default("setup"),
+  completedPlayerTurns: integer("completed_player_turns").notNull().default(0),
+  setupRuntimes: jsonb("setup_runtimes").notNull().default({}),
 });
 
 // ── Turn Results ────────────────────────────────────────────────
@@ -82,11 +79,10 @@ export const turnResults = pgTable(
     runtimeResults: jsonb("runtime_results").notNull(), // JSON
     conflicts: jsonb("conflicts"), // JSON
     auditResult: jsonb("audit_result"), // JSON
-    // Execution origin (player/manual/follower/recursive) + parent
-    // turn for recursive executions. NULL on legacy rows (= player).
-    origin: text("origin"),
+    // Execution origin + parent turn for recursive executions.
+    origin: text("origin").notNull(),
     parentTurnId: text("parent_turn_id"),
-    commitStatus: text("commit_status"),
+    commitStatus: text("commit_status").notNull(),
     durationMs: integer("duration_ms").notNull(),
     createdAt: text("created_at").notNull(),
   },

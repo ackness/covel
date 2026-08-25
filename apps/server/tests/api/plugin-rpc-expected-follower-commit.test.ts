@@ -81,11 +81,17 @@ describe("expected-background-follower commit gate", () => {
     const store: DataStore = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       activePlugins: [PLUGIN_ID],
       createdAt: now,
       updatedAt: now,
@@ -148,11 +154,17 @@ describe("expected-background-follower commit gate", () => {
     const store: DataStore = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       activePlugins: [PLUGIN_ID],
       createdAt: now,
       updatedAt: now,
@@ -205,11 +217,17 @@ describe("expected-background-follower commit gate", () => {
     const store: DataStore = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       activePlugins: [PLUGIN_ID],
       createdAt: now,
       updatedAt: now,
@@ -259,13 +277,18 @@ describe("expected-background-follower commit gate", () => {
     const store: DataStore = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       activePlugins: [PLUGIN_ID],
-      metadata: { approvalScopeNonce: "old-incarnation" },
+      metadata: {
+        approvalScopeNonce: "old-approval-scope",
+        sessionIncarnationNonce: "old-incarnation",
+      },
       createdAt: now,
       updatedAt: now,
     });
@@ -299,13 +322,18 @@ describe("expected-background-follower commit gate", () => {
     await started.promise;
     await store.deleteSession(SESSION_ID);
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       activePlugins: [PLUGIN_ID],
-      metadata: { approvalScopeNonce: "new-incarnation" },
+      metadata: {
+        approvalScopeNonce: "new-approval-scope",
+        sessionIncarnationNonce: "new-incarnation",
+      },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });

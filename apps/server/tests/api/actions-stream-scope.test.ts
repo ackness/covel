@@ -24,7 +24,7 @@ import {
   type PluginSummary,
   type LoadedRuntime,
 } from "@covel/plugin-loader";
-import { actionRoutes, setMemorySystem } from "../../src/routes/api/actions.js";
+import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { makeFakeLLM, makeFakeLoadedRuntime } from "./__helpers/fake-llm.js";
 
@@ -98,16 +98,20 @@ describe("POST /api/actions — event forwarding is scoped to the lock tenure", 
     const registry = createPluginRegistry();
     const loaded = makeFakeLoadedRuntime({ name: RUNTIME_ID });
     registry.register(makeEntry(loaded));
-    setMemorySystem(undefined);
-
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [RUNTIME_ID],
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       createdAt: new Date().toISOString(),
     });
 

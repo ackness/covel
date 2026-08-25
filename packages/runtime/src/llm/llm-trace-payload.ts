@@ -23,10 +23,9 @@ export interface LlmCallingPayloadInput {
   readonly model: string | undefined;
   /**
    * Provider identity resolved from the requested slot. `undefined` is kept
-   * for lightweight adapters that do not expose slot resolution; explicit
-   * `null` remains accepted for legacy/direct emitters with an unknown target.
+   * for lightweight adapters that do not expose slot resolution.
    */
-  readonly provider: string | undefined | null;
+  readonly provider: string | undefined;
   readonly messages: readonly LLMMessage[];
   readonly tools: readonly LLMToolDefinition[] | undefined;
   readonly attempt: number;

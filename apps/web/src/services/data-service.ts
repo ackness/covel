@@ -13,7 +13,10 @@ import type { GeneratedWorldSaveTarget } from "./api.js";
 import { LocalDataService } from "./data-service/local.js";
 import { RemoteDataService } from "./data-service/remote.js";
 import type { DataService } from "./data-service/types.js";
-import { configureWorkspaceRunner } from "./workspace-coordinator.js";
+import {
+  createSessionWorkspace,
+  type SessionWorkspace,
+} from "./data-service/workspace.js";
 import {
   getStorageMode as getStorageModeFromFacade,
   setStorageMode as setStorageModeFromFacade,
@@ -23,6 +26,10 @@ import {
 } from "./storage/index.js";
 
 export type { DataService } from "./data-service/types.js";
+export {
+  SessionWorkspaceSyncError,
+  type SessionWorkspace,
+} from "./data-service/workspace.js";
 export type { ServerStoreBackend, StorageMode } from "./storage/index.js";
 
 export function storageModeForServerStorage(
@@ -49,6 +56,7 @@ export function setStorageMode(mode: StorageMode): void {
 
 let cachedService: DataService | null = null;
 let cachedMode: StorageMode | null = null;
+let cachedWorkspace: SessionWorkspace | null = null;
 
 export function getDataService(): DataService {
   const mode = getStorageMode();
@@ -56,13 +64,13 @@ export function getDataService(): DataService {
   cachedMode = mode;
   cachedService =
     mode === "local" ? new LocalDataService() : new RemoteDataService();
+  cachedWorkspace = null;
   return cachedService;
 }
 
-configureWorkspaceRunner(async (sessionId, actionId, mutate) => {
+export function getSessionWorkspace(): SessionWorkspace {
   const service = getDataService();
-  await service.syncToServer(sessionId);
-  const result = await mutate();
-  await service.commitFromServer(sessionId, actionId);
-  return result;
-});
+  if (cachedWorkspace) return cachedWorkspace;
+  cachedWorkspace = createSessionWorkspace(service, getStorageMode());
+  return cachedWorkspace;
+}

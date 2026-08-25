@@ -128,11 +128,9 @@ export function createBrowserWorkspaceRoutes(): Hono<Env> {
       await replaceSessionFromCheckpoint(c.get("store"), checkpoint, {
         session: {
           ...checkpoint.session,
-          phase: checkpoint.session.phase ?? live.phase,
-          completedPlayerTurns:
-            checkpoint.session.completedPlayerTurns ??
-            live.completedPlayerTurns,
-          setupRuntimes: checkpoint.session.setupRuntimes ?? live.setupRuntimes,
+          phase: checkpoint.session.phase,
+          completedPlayerTurns: checkpoint.session.completedPlayerTurns,
+          setupRuntimes: checkpoint.session.setupRuntimes,
           metadata: {
             ...checkpoint.session.metadata,
             ...live.metadata,

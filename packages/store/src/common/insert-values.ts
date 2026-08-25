@@ -51,8 +51,6 @@ export type SessionUpdatePatch = Partial<
   Pick<
     SessionRecord,
     | "status"
-    | "turnCount"
-    | "preGameCompleted"
     | "activePlugins"
     | "presetId"
     | "locale"
@@ -216,9 +214,9 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         runtimeResults: json.writeJson(record.runtimeResults),
         conflicts: json.writeNullableJson(record.conflicts),
         auditResult: json.writeNullableJson(record.auditResult),
-        origin: record.origin ?? null,
+        origin: record.origin,
         parentTurnId: record.parentTurnId ?? null,
-        commitStatus: record.commitStatus ?? null,
+        commitStatus: record.commitStatus,
         durationMs: record.durationMs,
         createdAt: record.createdAt,
       };
@@ -515,8 +513,7 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
     },
 
     // ── Sessions ──────────────────────────────────────────────────
-    // `preGameCompleted`/`activePlugins` are required JSON arrays → `writeJson`
-    // (no `?? []`/`?? {}` coercion — the field is always present). `metadata`
+    // `activePlugins` and `setupRuntimes` are required JSON values. `metadata`
     // and `runtimeModelOverrides` are optional → `writeNullableJson`, so an
     // absent override map is stored as SQL NULL on every backend rather than an
     // empty-object literal.
@@ -526,8 +523,6 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         id: record.id,
         worldId: record.worldId ?? null,
         status: record.status,
-        turnCount: record.turnCount,
-        preGameCompleted: json.writeJson(record.preGameCompleted),
         locale: record.locale,
         activePlugins: json.writeJson(record.activePlugins),
         metadata: json.writeNullableJson(record.metadata),
@@ -536,19 +531,15 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
         runtimeModelOverrides: json.writeNullableJson(
           record.runtimeModelOverrides,
         ),
-        phase: record.phase ?? null,
-        completedPlayerTurns: record.completedPlayerTurns ?? null,
-        setupRuntimes: json.writeNullableJson(record.setupRuntimes),
+        phase: record.phase,
+        completedPlayerTurns: record.completedPlayerTurns,
+        setupRuntimes: json.writeJson(record.setupRuntimes),
       };
     },
 
     sessionUpdate(patch, merged) {
       const values: Record<string, unknown> = {};
       if (patch.status !== undefined) values.status = patch.status;
-      if (patch.turnCount !== undefined) values.turnCount = patch.turnCount;
-      if (patch.preGameCompleted !== undefined) {
-        values.preGameCompleted = json.writeJson(patch.preGameCompleted);
-      }
       if (patch.activePlugins !== undefined) {
         values.activePlugins = json.writeJson(patch.activePlugins);
       }
@@ -568,12 +559,12 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
           patch.runtimeModelOverrides,
         );
       }
-      if ("phase" in patch) values.phase = patch.phase ?? null;
+      if ("phase" in patch) values.phase = patch.phase;
       if ("completedPlayerTurns" in patch) {
-        values.completedPlayerTurns = patch.completedPlayerTurns ?? null;
+        values.completedPlayerTurns = patch.completedPlayerTurns;
       }
       if ("setupRuntimes" in patch) {
-        values.setupRuntimes = json.writeNullableJson(patch.setupRuntimes);
+        values.setupRuntimes = json.writeJson(patch.setupRuntimes);
       }
       return values;
     },

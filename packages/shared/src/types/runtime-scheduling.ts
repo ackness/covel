@@ -181,11 +181,9 @@ export interface HttpPermissionDecl {
   readonly methods?: readonly HttpMethod[];
 }
 
-// ── Legacy job view projection (compat only) ─────────────────────
-
 // ── Normalized runtime spec (loader-level IR) ────────────────────
 
-/** Declared trigger after normalization (e.g. setup scheduled→auto folding). */
+/** Declared trigger after applying current defaults. */
 export type TriggerSpec = TriggerConfig;
 
 /**
@@ -197,7 +195,7 @@ export interface NormalizedRuntimeSpec {
   readonly id: string;
   readonly pluginId: string;
   readonly declaredTrigger: TriggerSpec;
-  /** Normalized from the legacy `execution: background` manifest field. */
+  /** Derived from the manifest's `execution: background` declaration. */
   readonly backgroundWhenDetached: boolean;
   /** Absent for event/manual runtimes and for UI-only registration surfaces. */
   readonly stage?: Stage;

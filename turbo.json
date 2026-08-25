@@ -26,6 +26,48 @@
         "src/**",
         "tests/**",
         "vitest.config.ts",
+        "$TURBO_ROOT$/vitest.base.ts"
+      ]
+    },
+    "@covel/plugin-loader#test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/plugins/*/*.md",
+        "$TURBO_ROOT$/plugins/*/*.js",
+        "$TURBO_ROOT$/plugins/*/package.json",
+        "$TURBO_ROOT$/plugins/*/{hooks,lib,runtimes,schemas,server,tests,tools,ui}/**"
+      ]
+    },
+    "@covel/runtime#test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/plugins/*/*.md",
+        "$TURBO_ROOT$/plugins/*/*.js",
+        "$TURBO_ROOT$/plugins/*/package.json",
+        "$TURBO_ROOT$/plugins/*/{hooks,lib,runtimes,schemas,server,tests,tools,ui}/**"
+      ]
+    },
+    "@covel/server#test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**",
+        "tests/**",
+        "vitest.config.ts",
+        "$TURBO_ROOT$/vitest.base.ts",
         "$TURBO_ROOT$/plugins/*/*.md",
         "$TURBO_ROOT$/plugins/*/*.js",
         "$TURBO_ROOT$/plugins/*/package.json",

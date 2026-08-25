@@ -22,16 +22,11 @@
 
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
-import {
-  collectMediaRefIds,
-  deriveLegacyClockFields,
-  mirrorSetupCompleted,
-} from "@covel/shared";
+import { collectMediaRefIds } from "@covel/shared";
 import type {
   DataStore,
   MediaStore,
   SnapshotRecord,
-  SnapshotSessionState,
   CharacterRecord,
   StateEntryRecord,
   PluginDataRecord,
@@ -139,14 +134,13 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
     expectedSession: resolved.session,
     allowedStatuses: "any",
     mutate: async (session) => {
-      // Derive a turnId for the snapshot — use the latest turn_result we can
-      // find, or fall back to the session's turnCount so fresh sessions still
-      // produce a usable label.
+      // Derive a turnId for the snapshot from the latest execution artifact,
+      // or the authoritative completed-player-turn count for a fresh session.
       const turnResults = await store.listTurnResults(sessionId);
       const latestTurnId =
         turnResults.length > 0
           ? turnResults[turnResults.length - 1]!.turnId
-          : `turn-${session.turnCount}`;
+          : `turn-${session.completedPlayerTurns}`;
 
       let payload;
       try {
@@ -302,61 +296,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
       }
       const nowIso = new Date().toISOString();
 
-      // Upgrade-on-read for legacy V1 payloads: they predate lifecycle capture,
-      // so fall back to the parent session's CURRENT lifecycle fields — the
-      // pre-V2 fork behavior. That mixes two points in time, but it keeps every
-      // historical save forkable; V2/V3 snapshots restore the exact captured state.
-      const snapshotSession: SnapshotSessionState =
-        snapshot.payload.schemaVersion === 2 ||
-        snapshot.payload.schemaVersion === 3
-          ? snapshot.payload.session
-          : {
-              status: parentSession.status,
-              turnCount: parentSession.turnCount,
-              preGameCompleted: parentSession.preGameCompleted,
-              locale: parentSession.locale,
-              activePlugins: parentSession.activePlugins,
-              presetId: parentSession.presetId,
-              runtimeModelOverrides: parentSession.runtimeModelOverrides,
-            };
-
-      // Scheduling-redesign clock. A V3 snapshot restores it verbatim. V1/V2
-      // (and a V3 written before the kernel populated the clock) conservatively
-      // backfill it from the legacy turnCount — NEVER parsing turnIds or
-      // scanning child turn_results — and record a migration diagnostic. The
-      // legacy turnCount / preGameCompleted are re-derived from the clock so
-      // both models stay consistent on the child.
-      const v3Clock =
-        snapshot.payload.schemaVersion === 3 &&
-        snapshot.payload.session.phase !== undefined
-          ? {
-              phase: snapshot.payload.session.phase,
-              completedPlayerTurns:
-                snapshot.payload.session.completedPlayerTurns ?? 0,
-              setupRuntimes: snapshot.payload.session.setupRuntimes ?? {},
-            }
-          : undefined;
-      let forkClockMigration: Record<string, unknown> | undefined;
-      const forkClock = v3Clock ?? {
-        phase:
-          snapshotSession.turnCount === 0
-            ? ("setup" as const)
-            : ("playing" as const),
-        completedPlayerTurns:
-          snapshotSession.turnCount === 0 ? 0 : snapshotSession.turnCount,
-        setupRuntimes: mirrorSetupCompleted(
-          snapshotSession.preGameCompleted,
-          nowIso,
-        ),
-      };
-      if (v3Clock === undefined) {
-        forkClockMigration = {
-          source: "legacy-fork-conservative",
-          legacyTurnCount: snapshotSession.turnCount,
-          snapshotId: snapshot.id,
-        };
-      }
-      const forkLegacyClock = deriveLegacyClockFields(forkClock);
+      const snapshotSession = snapshot.payload.session;
 
       // Mint the child session id. Format `{worldId}-{uuid8}` matches
       // POST /api/sessions (session.ts). worldId falls back to 'fork' for
@@ -404,10 +344,8 @@ snapshotRoutes.post("/:id/fork", async (c) => {
         const forkMediaIds: string[] = [];
         try {
           forkSnapshot = await store.withTransaction!(async (tx) => {
-            // V2 forks restore lifecycle and runtime selection from the captured
-            // point; V1 forks degrade to the parent's current state (see the
-            // upgrade-on-read above). `ended` is terminal with no un-end API — a
-            // fork exists to keep playing, so clamp it to resumable 'paused'.
+            // Restore lifecycle and runtime selection from the captured point.
+            // `ended` is terminal with no un-end API, so a fork is resumable.
             await tx.createSession({
               id: childSessionId,
               worldId: parentSession.worldId,
@@ -415,13 +353,9 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 snapshotSession.status === "ended"
                   ? "paused"
                   : snapshotSession.status,
-              // Legacy band/gate fields derived from the restored clock so both
-              // models agree on the child from its first row.
-              turnCount: forkLegacyClock.turnCount,
-              preGameCompleted: forkLegacyClock.preGameCompleted,
-              phase: forkClock.phase,
-              completedPlayerTurns: forkClock.completedPlayerTurns,
-              setupRuntimes: forkClock.setupRuntimes,
+              phase: snapshotSession.phase,
+              completedPlayerTurns: snapshotSession.completedPlayerTurns,
+              setupRuntimes: snapshotSession.setupRuntimes,
               locale: snapshotSession.locale,
               activePlugins: childActivePlugins,
               presetId: snapshotSession.presetId,
@@ -430,13 +364,6 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 [SESSION_OWNER_TOKEN_HASH_KEY]: childOwner.tokenHash,
                 [SESSION_APPROVAL_SCOPE_KEY]: mintSessionApprovalScope(),
                 [SESSION_INCARNATION_KEY]: randomUUID(),
-                ...(forkClockMigration
-                  ? {
-                      runtimeMigration: {
-                        completedPlayerTurns: forkClockMigration,
-                      },
-                    }
-                  : {}),
               },
               createdAt: now,
               updatedAt: now,
@@ -686,31 +613,6 @@ snapshotRoutes.post("/:id/fork", async (c) => {
         // Post-commit side effects: the fork is durable, so the following run OUT of
         // the DataStore transaction.
         //
-        // Conservative-fork diagnostic: a legacy (V1/V2) snapshot could not carry
-        // completedPlayerTurns, so the child's count was backfilled from turnCount.
-        // Surface it as a trace event alongside the durable metadata note so the
-        // /debug timeline shows why the child's count may differ from the parent's.
-        // Best-effort — a diagnostic must never fail an already-durable fork.
-        if (forkClockMigration) {
-          try {
-            await store.addTraceEvent({
-              id: randomUUID(),
-              sessionId: childSessionId,
-              type: "runtime.migration.fork-conservative",
-              traceId: forkSnapshot.id,
-              turnId: "",
-              payload: forkClockMigration,
-              createdAt: now,
-            });
-          } catch (err) {
-            console.warn(
-              `[fork] migration diagnostic failed for ${childSessionId}: ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-            );
-          }
-        }
-
         // Then emit session.forked on the event bus (out-of-band SSE listeners pick
         // it up and update any session lists they show). Kernel-only when eventBus is
         // absent in tests.

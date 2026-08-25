@@ -8,20 +8,19 @@ import {
 
 /**
  * Audit 2026-07-11 R-04: auto snapshots are checkpoint-cadenced instead of
- * per-turn. These tests pin the cadence gate: turnCount <= 1 and multiples of
- * the interval snapshot; everything else skips (returns null, writes nothing,
- * emits nothing); `force` bypasses the gate (resume path).
+ * per-turn. These tests pin the cadence gate on completed player turns.
  */
 
-async function makeStore(turnCount: number) {
+async function makeStore(completedPlayerTurns: number) {
   const store = createMemoryStore();
   const now = new Date().toISOString();
   await store.createSession({
     id: "sess-throttle",
     worldId: "w1",
     status: "active",
-    turnCount,
-    preGameCompleted: [],
+    phase: completedPlayerTurns === 0 ? "setup" : "playing",
+    completedPlayerTurns,
+    setupRuntimes: {},
     locale: "zh-CN",
     activePlugins: [],
     createdAt: now,
@@ -41,13 +40,13 @@ function makeEventBus(): { bus: EventBus; emitted: unknown[] } {
 }
 
 describe("saveAutoSnapshot throttling", () => {
-  it("snapshots pre-game (turnCount 0) and the first post-pre-game turn (turnCount 1)", async () => {
-    for (const turnCount of [0, 1]) {
-      const store = await makeStore(turnCount);
+  it("snapshots setup and the first completed player turn", async () => {
+    for (const completedPlayerTurns of [0, 1]) {
+      const store = await makeStore(completedPlayerTurns);
       const saved = await saveAutoSnapshot({
         store,
         sessionId: "sess-throttle",
-        turnId: `turn-${turnCount}`,
+        turnId: `turn-${completedPlayerTurns}`,
         intervalTurns: 5,
       });
       expect(saved).not.toBeNull();
@@ -142,7 +141,7 @@ describe("saveAutoSnapshot throttling", () => {
 
     expect(saved).not.toBeNull();
     expect(saved!.payload.messagesCursor).toBe("tm-2");
-    expect(saved!.payload.session.turnCount).toBe(
+    expect(saved!.payload.session.completedPlayerTurns).toBe(
       DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS,
     );
   });

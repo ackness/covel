@@ -29,8 +29,9 @@ function checkpoint(
     session: {
       id: sessionId,
       status: "active",
-      turnCount: revision,
-      preGameCompleted: [],
+      phase: "playing",
+      completedPlayerTurns: revision,
+      setupRuntimes: {},
       locale: "zh-CN",
       activePlugins: [],
       createdAt: now,

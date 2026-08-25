@@ -7,7 +7,6 @@ import { Hono } from "hono";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import type { SetupRuntimeState } from "@covel/shared";
-import { deriveLegacyClockForSession } from "@covel/shared";
 import { setupRuntimeControlRoutes } from "../../src/routes/api/setup-runtime-control.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
@@ -25,12 +24,15 @@ async function makeApp(
 ): Promise<{ app: Hono; store: DataStore }> {
   const store = createMemoryStore();
   await store.createSession({
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id: "s",
     worldId: "w",
     status: "active",
-    turnCount: 0,
     activePlugins: ["plug"],
-    preGameCompleted: [],
+
     phase: "setup",
     completedPlayerTurns: 0,
     setupRuntimes,
@@ -129,10 +131,10 @@ describe("POST /setup/:runtimeId/waive", () => {
     const session = (await store.getSession("s"))!;
     const mirror = session.setupRuntimes!["plug/setup"];
     expect(mirror.state).toBe("done");
-    // The waived runtime enters the derived preGameCompleted set (gate satisfied).
-    expect(deriveLegacyClockForSession(session).preGameCompleted).toContain(
-      "plug/setup",
-    );
+    expect(session.setupRuntimes["plug/setup"]).toMatchObject({
+      state: "done",
+      resolution: "waived",
+    });
   });
 
   it("400s without { confirm: true }", async () => {

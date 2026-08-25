@@ -206,24 +206,20 @@ export async function setupPluginTools(
     { pattern: "local:*", action: "allow" },
     { pattern: "third-party:*", action: "deny" },
   ];
-  const approval = createApprovalPipeline(store, approvalRules);
+  const approval = createApprovalPipeline(approvalRules);
 
   const toolExecutor = createToolExecutor({
     findTool: (name, context) => {
       // Per-session override (Phase 2): when the active session has a
       // CharacterAttributeSchema, return the schema-aware variant so both the
       // LLM-facing JSON schema and the Zod validation reflect typed fields.
-      if (context && SESSION_OVERRIDABLE_TOOLS.has(name)) {
+      if (SESSION_OVERRIDABLE_TOOLS.has(name)) {
         const override = sessionToolOverrides.get(context.sessionId)?.get(name);
         if (override) return override;
       }
       // Builtin tools are always accessible
       if (builtinToolNames.has(name)) return toolMap.get(name);
-      // Local tools require a calling-plugin context to authorize against.
-      // a missing context used to skip the whitelist entirely — any
-      // caller without a context could resolve any plugin's local tool.
-      // Fail closed instead.
-      if (!context) return undefined;
+      // Local tools require the calling plugin to be authorized.
       const allowed = pluginToolAccess.get(context.pluginId);
       if (!allowed?.has(name)) return undefined; // Cross-plugin call blocked
       return toolMap.get(name);

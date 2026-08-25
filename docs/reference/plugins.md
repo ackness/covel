@@ -168,7 +168,7 @@ Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填
 
 **职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。
 
-**setup 契约**: 位于 `setup` stage（`phase === "setup"` 期间运行），`maxTriggerCount: 1` 保证仅在 session 首轮执行。完成后可在 `RuntimeOutput` 中声明 `preGameDone: true`，框架据此在 `session.setupRuntimes` 集合中记录本 runtime 已完成 setup 初始化（API 响应仍会派生出兼容字段 `preGameCompleted`）。
+**setup 契约**: 位于 `setup` stage（`phase === "setup"` 期间运行），`maxTriggerCount: 1` 保证仅在 session 首轮执行。完成后可在 `RuntimeOutput` 中声明 `preGameDone: true`，框架据此在 `session.setupRuntimes` 中记录本 runtime 的解析状态。
 
 ---
 
@@ -252,7 +252,7 @@ Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填
 - `{{ world.tone }}` — 叙事风格设定
 - `{{ player.message }}` — 玩家当前输入
 - `{{ player.character }}` — 玩家角色数据（CharacterSummary）
-- `{{ session.turnNumber }}` — 当前回合数（全局 turnCount）
+- `{{ session.turnNumber }}` — 当前已完成玩家回合数（`completedPlayerTurns`）
 - `{{ session.status }}` — 会话状态（`active` / `paused` / `ended`）
 
 **调度说明**: Narrator 位于 `narrative` stage，每个主循环轮次（`phase !== "setup"`）都会执行。是否在首轮发声由 `setup` stage 的插件流水线决定（例如 char-creator/player-init 处理玩家建角），Narrator 不再通过 `phases` 自我门控。
@@ -1585,12 +1585,12 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 ### trigger 类型
 
-| 类型        | 状态        | 说明                                                                                                                                                                                                                                                                                  |
-| ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `auto`      | ✅ 生产可用 | 每个 Turn 自动触发                                                                                                                                                                                                                                                                    |
-| `manual`    | ✅ 生产可用 | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度                                                                                                                                                                                                                        |
-| `scheduled` | ✅ 生产可用 | 每 N 个**逻辑玩家回合**触发一次（配合 `interval` + `maxTriggerCount`）。基数是逻辑回合号 `completedPlayerTurns + 1`（`interval: 2` 在第 2、4、6 个玩家回合触发）；manual / follower / recursive 执行不推进 `completedPlayerTurns`，因此不影响 cadence，setup 阶段的交互轮次同样不占号 |
-| `event`     | ✅ 生产可用 | 监听特定事件触发（在 Turn 内的事件 fan-out 中由 `shouldTrigger` 判定）                                                                                                                                                                                                                |
+| 类型        | 状态        | 说明                                                                                                                                                                                                                                                                                             |
+| ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `auto`      | ✅ 生产可用 | 每个 Turn 自动触发                                                                                                                                                                                                                                                                               |
+| `manual`    | ✅ 生产可用 | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度                                                                                                                                                                                                                                   |
+| `scheduled` | ✅ 生产可用 | 每 N 个**逻辑玩家回合**触发一次（配合 `interval` + `maxTriggerCount`）。基数是逻辑回合号 `completedPlayerTurns + 1`（`interval: 2` 在第 2、4、6 个玩家回合触发）；manual / background / recursive / resume 执行不推进 `completedPlayerTurns`，因此不影响 cadence，setup 阶段的交互轮次同样不占号 |
+| `event`     | ✅ 生产可用 | 监听特定事件触发（在 Turn 内的事件 fan-out 中由 `shouldTrigger` 判定）                                                                                                                                                                                                                           |
 
 > trigger 枚举就是上面四种。manifest 输入 schema 对 `trigger.type` 做闭集校验，任何其他取值在**加载时**被拒绝，不会进入运行时。
 
@@ -1600,7 +1600,7 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 扇出仍然受这些约束：
 
-- **`session.setupRuntimes`**：已经报告完成的 `setup` stage runtime 不会被后续同名 topic 复活——这是「一次性 setup」契约真正的守卫，也是扇出唯一继承的 stage 相关语义（API 响应仍会派生出兼容字段 `session.preGameCompleted`）。
+- **`session.setupRuntimes`**：已经报告完成的 `setup` stage runtime 不会被后续同名 topic 复活——这是「一次性 setup」契约真正的守卫，也是扇出唯一继承的 stage 相关语义。
 - **`maxDepth`**（默认 8）：限制事件链在单回合内的递归深度。
 - **回合内去重**：本回合已产出结果的 runtime 不会被再次执行；`execution: background` 的订阅者每回合最多被 defer 一次。
 
@@ -1608,12 +1608,12 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 ### trigger 字段速查
 
-| 字段              | 默认 | 含义                                                                                                                                                                   |
-| ----------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `interval`        | 1    | `scheduled` 类型每隔 N 轮触发一次                                                                                                                                      |
-| `cooldownTurns`   | —    | 上一次触发后多少轮内不可再次触发                                                                                                                                       |
-| `maxTriggerCount` | —    | 整个 session 内最多触发次数（达到后不再触发）                                                                                                                          |
-| `startTurn`       | —    | 从第几个主循环轮次起开始介入。基于 `completedPlayerTurns`（0-based，legacy `turnCount` 的派生源），与 `setup` 首轮自动跳过互不冲突。适合"让玩家先熟悉环境再介入"的场景 |
+| 字段              | 默认 | 含义                                                                                                                                      |
+| ----------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `interval`        | 1    | `scheduled` 类型每隔 N 轮触发一次                                                                                                         |
+| `cooldownTurns`   | —    | 上一次触发后多少轮内不可再次触发                                                                                                          |
+| `maxTriggerCount` | —    | 整个 session 内最多触发次数（达到后不再触发）                                                                                             |
+| `startTurn`       | —    | 从第几个主循环轮次起开始介入。基于 `completedPlayerTurns`（0-based），与 `setup` 首轮自动跳过互不冲突。适合"让玩家先熟悉环境再介入"的场景 |
 
 **`startTurn` 用例**：
 
@@ -1674,4 +1674,4 @@ tools:
 { "preGameDone": true }
 ```
 
-框架在 commit 链上看到该字段为 `true` 时，会将该 `runtimeId` 追加到 `session.setupRuntimes`（API 响应仍会派生出兼容字段 `session.preGameCompleted`，响应形状不变）；后续轮次的调度器会跳过已完成的 `setup` stage runtime。这是 runtime 粒度的闸门；顶层 `session.phase`（`setup` / `playing`）只是粗粒度的 stage-band 选择器，不下放到单插件的触发条件里，两者互不冲突。
+框架在 commit 链上看到该字段为 `true` 时，会把该 `runtimeId` 标为 `session.setupRuntimes` 的 `done` 状态；后续轮次的调度器会跳过已完成的 `setup` stage runtime。这是 runtime 粒度的闸门；顶层 `session.phase`（`setup` / `playing`）只是粗粒度的 stage-band 选择器，不下放到单插件的触发条件里，两者互不冲突。

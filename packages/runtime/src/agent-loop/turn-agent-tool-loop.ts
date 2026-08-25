@@ -92,7 +92,7 @@ export interface RunAgentToolLoopOptions {
   readonly startTime: number;
   readonly runId: string;
   /** Original scheduling identity, persisted if this loop suspends. */
-  readonly executionContext?: ExecutionContext;
+  readonly executionContext: ExecutionContext;
   /** Seed mid-turn state — used by the resume path. Omitted = fresh loop. */
   readonly initialState?: AgentToolLoopInitialState;
   /**
@@ -433,8 +433,8 @@ export async function runAgentToolLoop({
           }
 
           // ── Suspend detection ────────────────────────
-          // When the suspend tool is called, capture the current loop state and
-          // persist a SuspensionRecord. The tool result is not pushed back to
+          // When the suspend tool is called, capture the current loop state as
+          // an execution-local artifact. The tool result is not pushed back to
           // the LLM; instead we exit the loop with status 'suspended'.
           //
           // The resume path runs the same loop with `allowSuspend: false`: a
@@ -452,10 +452,10 @@ export async function runAgentToolLoop({
               );
               continue;
             }
-            if (deps.store) {
-              // The persisted assistant message contains the whole tool-call
+            {
+              // The captured assistant message contains the whole tool-call
               // batch. Provider protocols require a tool-role result for every
-              // call before the next LLM request. Persist a placeholder for the
+              // call before the next LLM request. Capture a placeholder for the
               // suspender (resume replaces its content) and explicitly cancel
               // later calls rather than leaving dangling ids in the transcript.
               messages.push(
@@ -488,14 +488,12 @@ export async function runAgentToolLoop({
                 collectedToolCalls,
                 pendingProposals,
                 emittedEvents,
-                ...(executionContext ? { executionContext } : {}),
+                executionContext,
                 suspendToolCallId: effectiveTc.id,
                 startTime,
                 runId,
               });
             }
-            // allowSuspend but no store: fall through and treat the sentinel as
-            // an ordinary tool result (unchanged pre-suspend-feature behaviour).
           }
 
           executedToolCalls.push({

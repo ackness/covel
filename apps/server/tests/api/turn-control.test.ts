@@ -54,12 +54,18 @@ describe("steer/abort routes", () => {
   }> {
     const store = createMemoryStore();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sess-r",
       worldId: "w",
       status: "active",
-      turnCount: 1,
+      completedPlayerTurns: 1,
       activePlugins: [],
-      preGameCompleted: [],
+
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });

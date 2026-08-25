@@ -62,22 +62,6 @@ export interface DataService {
   addStatePatch(sessionId: string, patch: StatePatchRecord): Promise<void>;
 
   /**
-   * Persist post-commit state snapshot from the kernel.
-   * T1/T2 (local): writes to IndexedDB.
-   * T3 (remote): no-op (server handles persistence).
-   */
-  persistStateSnapshot(
-    sessionId: string,
-    snapshot: Record<string, unknown>,
-  ): Promise<void>;
-
-  /**
-   * Load the most recent state snapshot for a session.
-   * Returns null if no snapshot exists (fresh session).
-   */
-  loadStateSnapshot(sessionId: string): Promise<Record<string, unknown> | null>;
-
-  /**
    * Persist submitted block IDs and their submitted form values for a session.
    * Tracks which interactive blocks have been submitted (locks their UI) and
    * keeps the values around so disabled forms can re-display the input.
@@ -90,7 +74,6 @@ export interface DataService {
 
   /**
    * Load submitted block IDs + values for a session. Both default to empty.
-   * Legacy storage that holds only `string[]` is migrated transparently.
    */
   loadSubmittedBlocks(sessionId: string): Promise<{
     ids: string[];
@@ -103,6 +86,9 @@ export interface DataService {
    * the complete browser checkpoint so the transient server can process work.
    */
   syncToServer(sessionId: string): Promise<void>;
+
+  /** Durably remember which server mutation must become the next checkpoint. */
+  stageServerCommit(sessionId: string, actionId: string): Promise<void>;
 
   /** Persist the transient server result as the next browser checkpoint. */
   commitFromServer(sessionId: string, actionId: string): Promise<void>;

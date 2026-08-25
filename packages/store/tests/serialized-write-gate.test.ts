@@ -41,8 +41,9 @@ async function seedSession(store: DataStore, id: string): Promise<void> {
     status: "active",
     presetId: null,
     activePlugins: [],
-    turnCount: 0,
-    preGameCompleted: [],
+    phase: "setup",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     createdAt: now,
     updatedAt: now,
   });

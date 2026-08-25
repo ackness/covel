@@ -22,7 +22,6 @@ function makeContext(overrides?: Partial<TriggerContext>): TriggerContext {
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
     isManualTrigger: false,
-    preGameCompleted: [],
     ...overrides,
   };
   // scheduled / startTurn gate on `logicalTurn`; these cases express the turn
@@ -153,67 +152,5 @@ describe("shouldTrigger", () => {
     const manifest = makeManifest({ trigger: { type: "auto" } });
     const ctx = makeContext({ turnNumber: 0 });
     expect(shouldTrigger(manifest, ctx)).toBe(true);
-  });
-});
-
-describe("shouldTrigger — preGameCompleted gate", () => {
-  it("skips runtime whose name is in preGameCompleted", () => {
-    const rt = {
-      name: "pregame",
-      pluginId: "pregame",
-      description: "pre-game",
-      stage: "setup",
-      trigger: { type: "auto" },
-    } as RuntimeManifest;
-    const ctx: TriggerContext = {
-      sessionId: "sess-1",
-      turnNumber: 0,
-      triggerCount: 0,
-      turnsSinceLastTrigger: 999,
-      pendingEventTopics: [],
-      isManualTrigger: false,
-      preGameCompleted: ["pregame"],
-    };
-    expect(shouldTrigger(rt, ctx)).toBe(false);
-  });
-
-  it("passes runtime whose name is NOT in preGameCompleted", () => {
-    const rt = {
-      name: "pregame",
-      pluginId: "pregame",
-      description: "pre-game",
-      stage: "setup",
-      trigger: { type: "auto" },
-    } as RuntimeManifest;
-    const ctx: TriggerContext = {
-      sessionId: "sess-1",
-      turnNumber: 0,
-      triggerCount: 0,
-      turnsSinceLastTrigger: 999,
-      pendingEventTopics: [],
-      isManualTrigger: false,
-      preGameCompleted: [],
-    };
-    expect(shouldTrigger(rt, ctx)).toBe(true);
-  });
-
-  it("does not affect runtimes not in the preGameCompleted list", () => {
-    const rt = {
-      name: "narrator",
-      pluginId: "narrator",
-      description: "narrator",
-      stage: "narrative",
-      trigger: { type: "auto" },
-    } as RuntimeManifest;
-    const ctx: TriggerContext = {
-      sessionId: "sess-1",
-      turnNumber: 5,
-      triggerCount: 0,
-      turnsSinceLastTrigger: 999,
-      pendingEventTopics: [],
-      isManualTrigger: false,
-      preGameCompleted: ["pregame", "world-init/schema-gen"],
-    };
-    expect(shouldTrigger(rt, ctx)).toBe(true);
   });
 });

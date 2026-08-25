@@ -38,6 +38,7 @@ function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
     sessionId: "sess-1",
     turnId: "turn-2",
     playerMessage: "continue",
+    origin: "player",
     ...overrides,
   };
 }

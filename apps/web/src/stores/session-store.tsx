@@ -1,5 +1,5 @@
 import { useMemo, useReducer, type ReactNode } from "react";
-import { getDataService } from "@/services/data-service";
+import { getDataService, getSessionWorkspace } from "@/services/data-service";
 import { useBuildSessionActions } from "./session-store/actions.js";
 import {
   SessionActionsContext,
@@ -35,6 +35,7 @@ export { useSession, useSessionActions, useSessionState };
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const ds = useMemo(() => getDataService(), []);
+  const workspace = useMemo(() => getSessionWorkspace(), []);
   const refs = useSessionRuntimeRefs(state);
   const sessionId = selectSessionId(state);
 
@@ -57,6 +58,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     state,
     dispatch,
     ds,
+    workspace,
     refs,
     handleSseEvent,
   });
@@ -67,7 +69,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useSessionSubscription({
     sessionId,
     dispatch,
-    ds,
+    workspace,
     sessionIdRef: refs.sessionIdRef,
   });
 

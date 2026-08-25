@@ -34,19 +34,19 @@ const REGISTRY: readonly StorageMigrationSummary[] = [
     id: "data:sqlite:schema",
     domain: "data",
     backend: "sqlite",
-    version: 2,
+    version: 3,
     status: "managed-by-backend",
     description:
-      "SQLite boot migration preserves legacy rows while re-keying characters and lorebook entries by session.",
+      "SQLite creates the current data schema directly; development builds do not upgrade prior schemas.",
   },
   {
     id: "data:pg:schema",
     domain: "data",
     backend: "pg",
-    version: 2,
+    version: 3,
     status: "managed-by-backend",
     description:
-      "PostgreSQL boot migration preserves legacy rows while re-keying characters and lorebook entries by session.",
+      "PostgreSQL creates the current data schema directly; development builds do not upgrade prior schemas.",
   },
   {
     id: "media:idb:store",

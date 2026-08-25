@@ -1,4 +1,5 @@
 import type { DataService } from "@/services/data-service.js";
+import type { SessionWorkspace } from "@/services/data-service.js";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -24,9 +25,13 @@ const session: SessionRecord = {
   id: "sess-1",
   worldId: "world-1",
   status: "active",
-  turnCount: 0,
+  phase: "setup",
+  completedPlayerTurns: 0,
+  setupRuntimes: {},
   activePlugins: [],
+  locale: "en-US",
   createdAt: "2026-08-25T00:00:00.000Z",
+  updatedAt: "2026-08-25T00:00:00.000Z",
 };
 const world = {
   id: "world-1",
@@ -54,10 +59,17 @@ function makeDataService(order: string[]): DataService {
     }),
     listMessages: vi.fn(async () => []),
     listStatePatches: vi.fn(async () => []),
-    loadStateSnapshot: vi.fn(async () => null),
     loadSubmittedBlocks: vi.fn(async () => ({ ids: [], values: {} })),
     loadExecutionSteps: vi.fn(async () => []),
   } as unknown as DataService;
+}
+
+function makeWorkspace(ds: DataService): SessionWorkspace {
+  return {
+    hydrate: (sessionId) => ds.syncToServer(sessionId),
+    run: (_sessionId, _actionId, mutate) => mutate(),
+    checkpoint: () => Promise.resolve(),
+  };
 }
 
 beforeEach(() => {
@@ -90,6 +102,7 @@ describe("restoreSessionState workspace ordering", () => {
 
     await restoreSessionState({
       ds,
+      workspace: makeWorkspace(ds),
       dispatch,
       sessionIdRef,
       worlds: [world],
@@ -117,6 +130,7 @@ describe("restoreSessionState workspace ordering", () => {
     await expect(
       restoreSessionState({
         ds,
+        workspace: makeWorkspace(ds),
         dispatch,
         sessionIdRef,
         worlds: [world],
@@ -151,6 +165,7 @@ describe("restoreSessionState workspace ordering", () => {
 
     await restoreSessionState({
       ds,
+      workspace: makeWorkspace(ds),
       dispatch: vi.fn(),
       sessionIdRef: { current: null },
       worlds: [world],

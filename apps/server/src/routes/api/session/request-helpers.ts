@@ -60,12 +60,7 @@ export type SessionPatchUpdates = Partial<
   Writable<
     Pick<
       SessionRecord,
-      | "status"
-      | "turnCount"
-      | "preGameCompleted"
-      | "activePlugins"
-      | "updatedAt"
-      | "runtimeModelOverrides"
+      "status" | "activePlugins" | "updatedAt" | "runtimeModelOverrides"
     >
   >
 >;

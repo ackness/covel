@@ -11,21 +11,6 @@ export interface SessionRecord {
   readonly worldId?: string;
   /** Lifecycle flag — `active` / `paused` / `ended`. */
   readonly status: SessionStatus;
-  /**
-   * LEGACY band selector. The kernel no longer writes it — API responses and
-   * snapshots derive it at read time from {@link phase} /
-   * {@link completedPlayerTurns} via `deriveLegacyClockForSession`. The column
-   * is frozen for old-kernel / rollback reads. (The numeric priority bands it
-   * once selected — 0-99 vs 100-1000 — no longer exist; scheduling is by named
-   * stage plus a dependency DAG.)
-   */
-  readonly turnCount: number;
-  /**
-   * LEGACY completion list, likewise derived at read time (the `done` entries
-   * of {@link setupRuntimes}, sorted). {@link setupRuntimes} is the business
-   * truth; this column is frozen for rollback reads.
-   */
-  readonly preGameCompleted: readonly string[];
   readonly locale: string;
   readonly activePlugins: readonly string[];
   readonly presetId?: string;
@@ -43,25 +28,16 @@ export interface SessionRecord {
    * `manifest.model` then `"default"`.
    */
   readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
-  /**
-   * Setup/main-loop band selector for the scheduling redesign. `setup` while
-   * any setup-band runtime is unresolved, `playing` once the barrier is
-   * crossed. Optional — absent on rows written before this field existed.
-   */
-  readonly phase?: "setup" | "playing";
-  /**
-   * Count of completed player turns in the main loop. Distinct from
-   * {@link turnCount} (the legacy band selector); populated by the kernel
-   * wiring wave. Optional — absent on legacy rows.
-   */
-  readonly completedPlayerTurns?: number;
+  /** `setup` while setup runtimes are unresolved, then `playing`. */
+  readonly phase: "setup" | "playing";
+  /** Count of completed player turns in the main loop. */
+  readonly completedPlayerTurns: number;
   /**
    * Per-runtime setup-band resolution state, keyed by runtimeId. Mirrors the
    * `SetupAttemptRecord` log into a compact map the scheduler can read without
-   * scanning attempts. Replaced wholesale on write (no deep merge). Optional —
-   * absent on legacy rows.
+   * scanning attempts. Replaced wholesale on write (no deep merge).
    */
-  readonly setupRuntimes?: Readonly<Record<string, SetupRuntimeState>>;
+  readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
 }
 
 export function normalizeSessionRecord(session: SessionRecord): SessionRecord {
@@ -86,8 +62,6 @@ export function mergeSessionPatch(
     Pick<
       SessionRecord,
       | "status"
-      | "turnCount"
-      | "preGameCompleted"
       | "activePlugins"
       | "presetId"
       | "locale"

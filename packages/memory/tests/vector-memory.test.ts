@@ -55,8 +55,9 @@ async function lockModel(store: DataStore, sessionId: string): Promise<void> {
     await store.createSession({
       id: sessionId,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
       activePlugins: [],
       createdAt: now,
       updatedAt: now,
@@ -309,8 +310,9 @@ describe("vector recall (semantic)", () => {
     await store.createSession({
       id: sessionId,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
       activePlugins: [],
       createdAt: "2099-01-01T00:00:00.000Z",
       updatedAt: "2099-01-01T00:00:00.000Z",

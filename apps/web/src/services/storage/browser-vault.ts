@@ -25,7 +25,7 @@ export interface BrowserVaultOptions {
 }
 
 export const BROWSER_VAULT_DB_NAME = "covel-browser-vault";
-export const BROWSER_VAULT_SCHEMA_VERSION = 2;
+export const BROWSER_VAULT_SCHEMA_VERSION = 3;
 
 export class BrowserVaultError extends Error {
   constructor(message: string) {
@@ -65,9 +65,16 @@ interface CommitRecord {
   committedAt: string;
 }
 
+interface PendingCommitRecord {
+  sessionId: string;
+  actionId: string;
+  stagedAt: string;
+}
+
 class BrowserVaultDatabase extends Dexie {
   checkpoints!: Table<CheckpointRecord, string>;
   commits!: Table<CommitRecord, string>;
+  pendingCommits!: Table<PendingCommitRecord, string>;
   worlds!: Table<WorldRecord, string>;
 
   constructor(name: string) {
@@ -75,6 +82,7 @@ class BrowserVaultDatabase extends Dexie {
     this.version(BROWSER_VAULT_SCHEMA_VERSION).stores({
       checkpoints: "sessionId, revision, committedAt",
       commits: "id, sessionId, actionId, revision, [sessionId+actionId]",
+      pendingCommits: "sessionId, actionId, stagedAt",
       worlds: "id, createdAt, updatedAt",
     });
   }
@@ -272,9 +280,32 @@ export class BrowserVault {
     );
   }
 
+  async stagePendingCommit(sessionId: string, actionId: string): Promise<void> {
+    await this.db.pendingCommits.put({
+      sessionId,
+      actionId,
+      stagedAt: new Date().toISOString(),
+    });
+  }
+
+  async getPendingCommit(sessionId: string): Promise<string | null> {
+    return (await this.db.pendingCommits.get(sessionId))?.actionId ?? null;
+  }
+
+  async clearPendingCommit(sessionId: string, actionId: string): Promise<void> {
+    await this.db.transaction("rw", this.db.pendingCommits, async () => {
+      const pending = await this.db.pendingCommits.get(sessionId);
+      if (pending?.actionId === actionId) {
+        await this.db.pendingCommits.delete(sessionId);
+      }
+    });
+  }
+
   async getCheckpoint(sessionId: string): Promise<BrowserCheckpoint | null> {
     const record = await this.db.checkpoints.get(sessionId);
-    return record ? cloneCheckpoint(record.checkpoint) : null;
+    return record
+      ? cloneCheckpoint(validateBrowserCheckpoint(record.checkpoint))
+      : null;
   }
 
   async getLatestCheckpoint(
@@ -334,10 +365,12 @@ export class BrowserVault {
       "rw",
       this.db.checkpoints,
       this.db.commits,
+      this.db.pendingCommits,
       async () => {
         await Promise.all([
           this.db.checkpoints.delete(sessionId),
           this.db.commits.where("sessionId").equals(sessionId).delete(),
+          this.db.pendingCommits.delete(sessionId),
         ]);
       },
     );
@@ -348,11 +381,13 @@ export class BrowserVault {
       "rw",
       this.db.checkpoints,
       this.db.commits,
+      this.db.pendingCommits,
       this.db.worlds,
       async () => {
         await Promise.all([
           this.db.checkpoints.clear(),
           this.db.commits.clear(),
+          this.db.pendingCommits.clear(),
           this.db.worlds.clear(),
         ]);
       },

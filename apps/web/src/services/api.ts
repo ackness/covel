@@ -33,7 +33,6 @@ export {
   getProviderPriceMultipliers,
   getProviderProfiles,
   getSlotConfig,
-  loadProviderKeysFromStorage,
   removeCustomPreset,
   setCustomPresets,
   setParamOverrides,

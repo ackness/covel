@@ -31,7 +31,7 @@ export function MessageComposer({
   onAbort,
   onKeyDown,
 }: MessageComposerProps) {
-  const isPlaying = session.status === "active" && session.turnCount > 0;
+  const isPlaying = session.status === "active" && session.phase === "playing";
   const isEnded = session.status === "ended";
 
   return (

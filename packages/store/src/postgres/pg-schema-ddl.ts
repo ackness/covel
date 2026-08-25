@@ -6,9 +6,8 @@
  * a hand-maintained copy of the column/index definitions here.
  *
  * Only the things Drizzle cannot model stay hand-written below, because they are
- * operational, not a second copy of the schema:
- *   - idempotent `sessions` column migrations for pre-existing databases;
- *   - the `vector_models` table-name backfill function + trigger.
+ * operational, not a second copy of the schema: the `vector_models` table-name
+ * backfill function + trigger.
  *
  * Media tables are emitted into their own constant ({@link CREATE_MEDIA_TABLES_SQL})
  * because the MediaStore boots them standalone (`media-store/pg.ts`).
@@ -57,79 +56,6 @@ export const CREATE_MEDIA_TABLES_SQL = buildCreateTablesSql(mediaTables, "pg");
 const CREATE_CORE_TABLES_SQL = buildCreateTablesSql(coreTables, "pg");
 
 /**
- * T3 (turn-band refactor) + later additions: bring databases created by an
- * earlier schema up to date. Every statement is idempotent (`IF [NOT] EXISTS`),
- * so this is safe to run on every boot, fresh or legacy.
- */
-const SESSIONS_MIGRATIONS_SQL = `
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pre_game_completed JSONB NOT NULL DEFAULT '[]'::jsonb;
-  ALTER TABLE sessions DROP COLUMN IF EXISTS playing_turn_offset;
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS runtime_model_overrides JSONB DEFAULT '{}'::jsonb;
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS metadata JSONB;
-  -- Scheduling-redesign lifecycle fields (nullable; safe on legacy rows). NOTE:
-  -- an earlier iteration dropped 'phase'; it is re-added here (ADD, not DROP —
-  -- a DROP would wipe live phase data on every boot).
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS phase TEXT;
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS completed_player_turns INTEGER;
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS setup_runtimes JSONB;
-  ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS origin TEXT;
-  ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS parent_turn_id TEXT;
-  ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS commit_status TEXT;
-`;
-
-/**
- * Legacy databases used a global `id` primary key for these session-owned
- * records. Re-key in place; existing rows are already unique by `id`, so the
- * stronger `(session_id, id)` identity is lossless and enables future reuse in
- * another session. The catalog check avoids taking an ALTER lock on every boot.
- */
-const SESSION_SCOPED_IDENTITY_MIGRATIONS_SQL = `
-  DO $migration$
-  DECLARE
-    table_name TEXT;
-    current_constraint TEXT;
-    current_columns TEXT[];
-  BEGIN
-    -- Serialize concurrent server boots without taking a table lock once the
-    -- migration is current. The ALTER statements below still acquire their
-    -- normal PostgreSQL DDL locks only when a legacy key is detected.
-    PERFORM pg_advisory_xact_lock(
-      hashtext('covel:data:session-scoped-identity:v2')
-    );
-    FOREACH table_name IN ARRAY ARRAY['characters', 'lorebook_entries'] LOOP
-      SELECT constraint_row.conname,
-             array_agg(attribute_row.attname::TEXT ORDER BY key_column.ordinality)
-        INTO current_constraint, current_columns
-        FROM pg_constraint AS constraint_row
-        CROSS JOIN LATERAL unnest(constraint_row.conkey)
-          WITH ORDINALITY AS key_column(attnum, ordinality)
-        JOIN pg_attribute AS attribute_row
-          ON attribute_row.attrelid = constraint_row.conrelid
-         AND attribute_row.attnum = key_column.attnum
-       WHERE constraint_row.contype = 'p'
-         AND constraint_row.conrelid = table_name::regclass
-       GROUP BY constraint_row.conname;
-
-      IF current_columns IS DISTINCT FROM ARRAY['session_id', 'id']::TEXT[] THEN
-        IF current_constraint IS NOT NULL THEN
-          EXECUTE format(
-            'ALTER TABLE %I DROP CONSTRAINT %I',
-            table_name,
-            current_constraint
-          );
-        END IF;
-        EXECUTE format(
-          'ALTER TABLE %I ADD PRIMARY KEY (session_id, id)',
-          table_name
-        );
-      END IF;
-    END LOOP;
-  END
-  $migration$;
-`;
-
-/**
  * BEFORE INSERT trigger: PG evaluates SERIAL defaults before BEFORE INSERT
  * triggers fire, so NEW.id is already populated. We mutate NEW.table_name in
  * place — no separate UPDATE statement needed. Drizzle does not model triggers,
@@ -154,8 +80,6 @@ const VECTOR_MODELS_TRIGGER_SQL = `
 
 export const CREATE_TABLES_SQL = [
   CREATE_CORE_TABLES_SQL,
-  SESSIONS_MIGRATIONS_SQL,
-  SESSION_SCOPED_IDENTITY_MIGRATIONS_SQL,
   VECTOR_MODELS_TRIGGER_SQL,
   CREATE_MEDIA_TABLES_SQL,
 ].join("\n\n");

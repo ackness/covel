@@ -42,6 +42,11 @@ async function runTrustedHandler(
     playerMessage: "hello",
   };
   return executeFunctionRuntime({
+    executionContext: {
+      executionId: crypto.randomUUID(),
+      origin: "manual",
+      countPolicy: "none",
+    },
     manifest,
     input,
     loaded: { manifest, promptTemplate: "", handler },

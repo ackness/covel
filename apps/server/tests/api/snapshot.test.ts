@@ -13,7 +13,6 @@ import {
   createMemoryStore,
   type DataStore,
   type MediaStore,
-  type SnapshotPayloadV1,
 } from "@covel/store";
 import { createEventBus, type EventBus } from "@covel/events";
 import type { SubscriptionEvent } from "@covel/shared";
@@ -70,11 +69,17 @@ async function createSession(
   worldId = "test-world",
 ) {
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id,
     worldId,
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    completedPlayerTurns: 1,
+
     locale: "zh-CN",
     activePlugins: [],
     createdAt: new Date().toISOString(),
@@ -175,16 +180,14 @@ describe("Snapshot routes", () => {
       expect(snapshot.id).toMatch(/./); // non-empty string
 
       const payload = snapshot.payload as Record<string, unknown>;
-      // Builder now emits V3 (adds the scheduling-redesign clock fields when the
-      // session carries them; omitted here as this legacy-seeded session has no
-      // phase, so `session` keeps the V2 base shape).
       expect(payload.schemaVersion).toBe(3);
       expect(payload.session).toEqual({
         status: "active",
-        turnCount: 1,
-        preGameCompleted: [],
         locale: "zh-CN",
         activePlugins: [],
+        phase: "playing",
+        completedPlayerTurns: 1,
+        setupRuntimes: {},
       });
       // Characters / plugin data / working memory were seeded — must appear in payload.
       expect((payload.characters as unknown[]).length).toBe(1);
@@ -205,7 +208,11 @@ describe("Snapshot routes", () => {
 
     it("refuses a manual snapshot while session deletion is pending", async () => {
       await store.updateSession("sess-1", {
-        metadata: { [SESSION_DELETION_PENDING_KEY]: "delete-1" },
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+          [SESSION_DELETION_PENDING_KEY]: "delete-1",
+        },
       });
       const app = createTestApp(store);
       const res = await app.request("/api/sessions/sess-1/snapshot", {
@@ -539,8 +546,18 @@ describe("Snapshot routes", () => {
     it("restores lifecycle and runtime configuration from the snapshot", async () => {
       await store.updateSession("sess-1", {
         status: "paused",
-        turnCount: 0,
-        preGameCompleted: ["setup/schema"],
+        phase: "setup",
+        completedPlayerTurns: 0,
+        setupRuntimes: {
+          "setup/schema": {
+            state: "done",
+            resolution: "completed",
+            generation: 2,
+            attempts: 3,
+            completedAt: "2026-01-01T00:00:00.000Z",
+            pluginVersion: "2.0.0",
+          },
+        },
         locale: "en-US",
         activePlugins: ["setup", "narrator"],
         presetId: "slow-burn",
@@ -551,8 +568,9 @@ describe("Snapshot routes", () => {
 
       await store.updateSession("sess-1", {
         status: "ended",
-        turnCount: 42,
-        preGameCompleted: ["other/runtime"],
+        phase: "playing",
+        completedPlayerTurns: 42,
+        setupRuntimes: {},
         locale: "ja-JP",
         activePlugins: ["other"],
         presetId: "action",
@@ -568,56 +586,20 @@ describe("Snapshot routes", () => {
       const childId = ((await res.json()) as { sessionId: string }).sessionId;
       expect(await store.getSession(childId)).toMatchObject({
         status: "paused",
-        turnCount: 0,
-        preGameCompleted: ["setup/schema"],
+        phase: "setup",
+        completedPlayerTurns: 0,
+        setupRuntimes: {
+          "setup/schema": {
+            state: "done",
+            generation: 2,
+            attempts: 3,
+            pluginVersion: "2.0.0",
+          },
+        },
         locale: "en-US",
         activePlugins: ["setup", "narrator"],
         presetId: "slow-burn",
         runtimeModelOverrides: { narrator: "balance" },
-      });
-    });
-
-    it("upgrades legacy V1 snapshots on read using the parent's current lifecycle", async () => {
-      const app = createTestApp(store);
-      const snapId = await createParentSnapshot(store, app);
-      const stored = await store.getSnapshot(snapId);
-      expect(stored?.payload.schemaVersion).toBe(3);
-      const { session: _session, ...legacyPayload } = stored!
-        .payload as Extract<typeof stored.payload, { schemaVersion: 3 }>;
-      await store.saveSnapshot({
-        ...stored!,
-        payload: {
-          ...legacyPayload,
-          schemaVersion: 1,
-        } satisfies SnapshotPayloadV1,
-      });
-      await store.updateSession("sess-1", {
-        status: "paused",
-        turnCount: 9,
-        preGameCompleted: ["legacy/current"],
-        locale: "en-US",
-        activePlugins: ["legacy-plugin"],
-        presetId: "legacy-current",
-        runtimeModelOverrides: { narrator: "fast" },
-      });
-
-      const res = await app.request("/api/sessions/sess-1/fork", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromSnapshotId: snapId }),
-      });
-      expect(res.status).toBe(201);
-      const childId = ((await res.json()) as { sessionId: string }).sessionId;
-      // V1 payloads predate lifecycle capture, so the fork degrades to the
-      // parent session's CURRENT lifecycle fields (the pre-V2 behavior).
-      expect(await store.getSession(childId)).toMatchObject({
-        status: "paused",
-        turnCount: 9,
-        preGameCompleted: ["legacy/current"],
-        locale: "en-US",
-        activePlugins: ["legacy-plugin"],
-        presetId: "legacy-current",
-        runtimeModelOverrides: { narrator: "fast" },
       });
     });
 
@@ -1081,7 +1063,20 @@ describe("Snapshot routes", () => {
           required: ["answer"],
         },
         pendingContinuation: {
-          messages: [{ role: "system", content: "sys" }],
+          executionContext: {
+            executionId: "exec-snapshot-unresolved",
+            origin: "player",
+            countPolicy: "complete-player-turn",
+            logicalTurnId: "logical-snapshot-unresolved",
+          },
+          messages: [
+            { role: "system", content: "sys" },
+            {
+              role: "tool",
+              content: JSON.stringify({ suspended: true }),
+              toolCallId: "tc-1",
+            },
+          ],
           toolCallsSoFar: [],
           pendingProposals: [],
           suspendToolCallId: "tc-1",
@@ -1127,6 +1122,12 @@ describe("Snapshot routes", () => {
         reason: "Already handled",
         resumeSchema: {},
         pendingContinuation: {
+          executionContext: {
+            executionId: "exec-snapshot-resolved",
+            origin: "player",
+            countPolicy: "complete-player-turn",
+            logicalTurnId: "logical-snapshot-resolved",
+          },
           messages: [],
           toolCallsSoFar: [],
           pendingProposals: [],
@@ -1161,6 +1162,8 @@ describe("Snapshot routes", () => {
       const parentToken = "parent-owner-token";
       await store.updateSession("sess-1", {
         metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
           [SESSION_OWNER_TOKEN_HASH_KEY]: hashSessionOwnerToken(parentToken),
         },
       });

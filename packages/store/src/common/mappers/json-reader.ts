@@ -13,9 +13,10 @@
  * to supply that thin serialization gateway. The mappers are otherwise a
  * single canonical definition shared across both SQL backends.
  *
- * `read` mirrors the legacy "optional JSON" behaviour (PG `?? undefined`,
- * SQLite `fromJson`) and `readRequired` mirrors the "required JSON" behaviour
- * (PG `?? null`, SQLite `fromJsonRequired`).
+ * `read` handles nullable JSON columns (PG `?? undefined`, SQLite `fromJson`)
+ * and `readRequired` handles NOT NULL JSON columns (PG `?? null`, SQLite
+ * `fromJsonRequired`). Canonical mappers validate required values after this
+ * backend-specific decoding boundary.
  */
 
 /**

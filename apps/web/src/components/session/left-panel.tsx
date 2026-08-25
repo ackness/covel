@@ -96,7 +96,7 @@ export function LeftPanel({
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${session ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`}
                 />
                 <Badge variant="secondary" className="ui-chip text-[10px]">
-                  {session.status} · turn {session.turnCount}
+                  {session.status} · turn {session.completedPlayerTurns}
                 </Badge>
               </div>
               <Button
@@ -140,7 +140,7 @@ export function LeftPanel({
                       >
                         <span className="block truncate">{s.id}</span>
                         <span className="text-[10px] text-muted-foreground">
-                          {s.status} · turn {s.turnCount} ·{" "}
+                          {s.status} · turn {s.completedPlayerTurns} ·{" "}
                           {new Date(s.createdAt).toLocaleString()}
                         </span>
                       </button>

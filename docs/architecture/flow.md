@@ -3,7 +3,7 @@
 > 从设置、游玩前、游玩中、游玩后到状态存储，完整描述框架运行机制。
 > 包含玩家 ↔ LLM Agent 之间的翻译层、消息流动、插件设计和前端交互。
 >
-> **状态模型（业务真值）**：会话的权威状态由 `status`（`active` / `paused` / `ended`）加上会话时钟三字段组成——`phase`（`'setup' | 'playing'`，stage 分带选择器）、`completedPlayerTurns`（已完成的玩家回合数）、`setupRuntimes`（setup 阶段各 runtime 的解析状态镜像）。`phase === 'setup'` 时只运行 `setup` stage；所有 setup runtime 报告完成后，Kernel 把 `phase` 翻到 `'playing'` 进入主循环。`turnCount` / `preGameCompleted` 是内核不再写入的 legacy 字段：DB 列冻结保留（供旧内核 / 回滚读取），API 响应与 snapshot 在读取时经 `deriveLegacyClockForSession`（`packages/shared/src/scheduling/session-clock.ts`）从会话时钟派生，响应形状不变。
+> **状态模型（业务真值）**：会话的权威状态由 `status`（`active` / `paused` / `ended`）加上会话时钟三字段组成——必填的 `phase`（`'setup' | 'playing'`，stage 分带选择器）、`completedPlayerTurns`（已完成的玩家回合数）、`setupRuntimes`（setup 阶段各 runtime 的解析状态镜像）。`phase === 'setup'` 时只运行 `setup` stage；所有 setup runtime 报告完成后，Kernel 把 `phase` 翻到 `'playing'` 进入主循环。客户端和存档直接消费这三个字段；开发版不保留旧时钟字段或回填路径。
 
 ## 一、系统全景
 
@@ -84,12 +84,12 @@ stateDiagram-v2
 - **Setup**：`status === 'active' && phase === 'setup'`。调度器只运行 `stage: setup` 的 runtime；每个 runtime 以显式完成信号（输出 `preGameDone: true`，或 guard 返回 `{ skip: true }`）记入 `setupRuntimes` 状态镜像（`pending` / `done` / `blocked`），玩家可以多次提交表单/消息迭代（例如 `char-creator` 的 `framework.submit-form`）。耗尽重试预算（`maxTriggerCount`）不算完成——该 runtime 落到 `blocked`，会话停留在 setup 阶段等待玩家重试或豁免，不再"跳过坏掉的 setup 继续推进"。
 - **phase 翻转**：所有 setup runtime 都报告完成后，Kernel 在 setup 提交事务内把 `phase` 从 `'setup'` 翻到 `'playing'`；该事务的 `completedPlayerTurns` 仍为 0。提交失败时 phase 翻转和 setup 镜像一并回滚。
 - **Setup completion followup**：角色表单这类最后一个 setup 输入提交后，`/api/actions` 的同一个请求会先提交 setup，再以新的 `turnId` 和独立事务立即补跑主循环 runtime。接力事务成功后才把 `completedPlayerTurns` 从 0 推进到 1。玩家可直接看到第一段正式叙事；同一 SSE 流、trace 和 snapshot 会覆盖 setup completion 与 main-loop followup 两次执行。
-- **会话提交原子边界**：同一 session 的玩家输入、runtime 执行、proposal commit、对话 execution journal（玩家/runtime `TurnMessage`）、会话时钟写入（`phase` / `completedPlayerTurns` / `setupRuntimes`）和自动 snapshot 由同一 session lock 串行化；journal、proposal 与时钟在同一 `finalizeExecution` transaction 中提交或回滚。自动 snapshot 在全部 proposal 提交后捕获，确保对话 cursor、角色、state 与 plugin data 属于同一个已提交回合。`execution.completed.committed` 是客户端收敛 optimistic 输出的终态信号。
+- **会话提交原子边界**：同一 session 的玩家输入、runtime 执行、proposal commit、对话 execution journal（玩家/runtime `TurnMessage`）、会话时钟写入（`phase` / `completedPlayerTurns` / `setupRuntimes`）、suspension artifact 和自动 snapshot 由同一 session lock 串行化；journal、proposal、时钟与 suspension 在同一 `finalizeExecution` transaction 中提交或回滚。`turn.suspended` 只在 commit 后发出。自动 snapshot 在全部 proposal 提交后捕获，确保对话 cursor、角色、state 与 plugin data 属于同一个已提交回合。`execution.completed.committed` 是客户端收敛 optimistic 输出的终态信号。
 - **例外：后台执行只有提交在锁内**。`execution: background` 的 runtime（deferred follower 与 background 模式的 manual 触发）把 handler 跑在 session lock **外**，只有 `processTurnResults`（finalize 事务 + auto-snapshot）进锁。这类 runtime 通常是几分钟的 provider 调用（出图、TTS），持锁执行会让玩家的下一条消息一直排队，PG 部署下更会直接撞上 30s 的锁获取上限。之所以安全：这条路径不写会话时钟（不传 `sessionClock`，且 `completedPlayerTurns` 只数 `origin: "player"`），域写入经 writeBuffer 汇入同一个提交事务而非执行期零散落盘，也不追加对话消息。同一 runtime 的并发执行由 `<sessionId>::<runtimeId>` 作业锁串行，保住 handler 里"是否已生成"这类 check-then-act 的原子性（否则会重复计费）；提交前在锁内重读会话状态，玩家中途暂停/结束会话时结果被丢弃而非写入。
-- **Playing**：`status === 'active' && phase === 'playing'`。每次 `POST /api/actions` 触发一轮完整 Turn pipeline，按 `pre-turn → narrative → post-turn → audit` 四个 stage 依次运行（stage 间严格屏障）。`completedPlayerTurns` 只统计已提交的玩家回合——manual plugin-rpc、后台 follower、嵌套 `recursiveCall` 等非玩家执行各自落 `turn_results` 行（带 `origin` 标记）但不计数；多个执行共享同一 `turnId` 时只计一次。
+- **Playing**：`status === 'active' && phase === 'playing'`。每次 `POST /api/actions` 触发一轮完整 Turn pipeline，按 `pre-turn → narrative → post-turn → audit` 四个 stage 依次运行（stage 间严格屏障）。`completedPlayerTurns` 只统计已提交的玩家回合——manual plugin-rpc、后台 follower、嵌套 `recursiveCall` 等非玩家执行各自落 `turn_results` 行，`origin` 为 `player` / `continuation` / `manual` / `background` / `recursive` / `resume` 之一，且不计数；多个执行共享一个 logical turn 时只计一次。
 - **Paused / Ended**：`status === 'paused' | 'ended'`。调度器直接返回空，`/api/actions` 被服务端拒绝。Paused 可 `resumeSession()` 恢复，Ended 是终态。
 
-`turnCount` / `preGameCompleted` 是内核不再写入的 legacy 字段：API 响应与 `SessionSnapshot.session` 仍暴露 `turnCount` 等字段，但其值在读取时经 `deriveLegacyClockForSession` 从会话时钟派生（`phase === 'setup'` → `turnCount = 0`；`'playing'` 且有进展 → `max(1, completedPlayerTurns)`），DB 列冻结保留供回滚读取，未带 `phase` 的存量会话在下次执行时做一次性懒回填。phase 翻转不推送任何 SSE 事件，也没有对应的 proposal 类型——客户端从会话响应里读 `phase`。
+`phase` 翻转不推送独立 SSE 事件，也没有对应的 proposal 类型——客户端从会话响应或快照读出当前的 `phase`、`completedPlayerTurns` 与 `setupRuntimes`。
 
 ### 2.2 单轮 Turn Pipeline
 
@@ -402,7 +402,7 @@ plugins/my-plugin/
 │  execution.started  ──►  executionSteps[]  ──►  进度条           │
 │  runtime.completed  ──►                                          │
 │  (无 phase.changed 事件) ── 状态标签由前端基于会话字段            │
-│           (status + phase / 派生 turnCount) 计算，无服务端推送    │
+│           (status + phase + completedPlayerTurns) 计算，无服务端推送 │
 │                                                                  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -526,9 +526,7 @@ plugins/my-plugin/
 │  会话级                                                         │
 │  ├── sessions          会话记录 (id, worldId, status, phase,    │
 │  │                                 completedPlayerTurns,        │
-│  │                                 setupRuntimes, plugins；     │
-│  │                                 legacy 列 turnCount /        │
-│  │                                 preGameCompleted 冻结保留)    │
+│  │                                 setupRuntimes, plugins)      │
 │  ├── turn_results      每轮聚合结果                              │
 │  ├── runtime_results   每个 runtime 的执行结果                   │
 │  ├── tool_calls        工具调用审计日志                          │
@@ -777,7 +775,7 @@ Turn 执行                    @covel/runtime                   核心执行引�
 
 类型共享                      @covel/shared                   跨包类型定义
                              ├── types/plugin.ts              RuntimeManifest, UISpec, etc.
-                             ├── types/protocol.ts            ProtocolEventType, SessionCommand
+                             ├── types/protocol.ts            CovelEventType, SessionCommand
                              ├── types/execution.ts           TurnResult, RuntimeResult
                              ├── schemas/plugin.ts            Zod 校验 (runtimeManifestSchema)
                              └── schemas/world.ts             世界包校验
@@ -821,7 +819,7 @@ Turn 执行                    @covel/runtime                   核心执行引�
 
 | 包                    | 核心导出                                                                                                                | 调用方                    |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| **shared**            | `RuntimeManifest`, `UISpec`, `ProtocolEventType`, Zod schemas                                                           | 所有包                    |
+| **shared**            | `RuntimeManifest`, `UISpec`, `CovelEventType`, Zod schemas                                                              | 所有包                    |
 | **plugin-loader**     | `discoverPlugins()`, `loadRuntime()`, `PluginRegistry`                                                                  | server bootstrap          |
 | **ai-provider**       | `createGateway()`, `createPresetRegistry()`, `createSlotRegistry()`                                                     | server bootstrap, runtime |
 | **context**           | `buildContext()`, `interpolateTemplate()`                                                                               | runtime (per-runtime)     |

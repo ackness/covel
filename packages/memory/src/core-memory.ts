@@ -182,11 +182,6 @@ export function createMemoryManager(
       });
 
       if (writes.length > 1) {
-        if (!store.withTransaction) {
-          throw new Error(
-            "atomic core-memory batch updates require store.withTransaction",
-          );
-        }
         await store.withTransaction(async (tx) => {
           for (const write of writes) {
             await tx.upsertWorkingMemory(write.record);

@@ -28,14 +28,16 @@ export function toFrontendSession(s: StoreSessionRecord): SessionRecord {
     worldId: s.worldId ?? "",
     status: s.status,
     locale: s.locale,
-    turnCount: s.turnCount,
-    preGameCompleted: s.preGameCompleted,
+    phase: s.phase,
+    completedPlayerTurns: s.completedPlayerTurns,
+    setupRuntimes: { ...s.setupRuntimes },
     activePlugins: s.activePlugins,
     presetId: s.presetId,
     runtimeModelOverrides: s.runtimeModelOverrides
       ? { ...s.runtimeModelOverrides }
       : undefined,
     createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
   };
 }
 

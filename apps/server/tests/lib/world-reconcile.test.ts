@@ -36,11 +36,17 @@ async function addSession(
   worldId: string,
 ): Promise<void> {
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id,
     worldId,
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
+    completedPlayerTurns: 0,
+
     locale: "zh-CN",
     activePlugins: [],
     createdAt: NOW,

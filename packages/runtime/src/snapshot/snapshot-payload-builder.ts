@@ -28,7 +28,6 @@ import type {
   LorebookEntryRecord,
   SuspensionRecord,
 } from "@covel/store";
-import { deriveLegacyClockForSession } from "@covel/shared";
 
 /**
  * Build a full snapshot payload for a session at a given turn.
@@ -87,9 +86,7 @@ export async function buildSnapshotPayload(
   // travel with the snapshot; world/plugin-level entries are re-resolved
   // from the package registry on the forked session.
   const lorebookEntries: readonly LorebookEntryRecord[] =
-    typeof store.listSessionLorebookEntries === "function"
-      ? await store.listSessionLorebookEntries(sessionId)
-      : [];
+    await store.listSessionLorebookEntries(sessionId);
 
   // Suspensions — capture only unresolved records (audit 2026-04-20
   // finding 7.3). Resolved / claimed (`resolvedAt` set) suspensions are
@@ -104,29 +101,18 @@ export async function buildSnapshotPayload(
   );
 
   return {
-    // V3 captures the scheduling-redesign lifecycle fields
-    // (`phase` / `completedPlayerTurns` / `setupRuntimes`) alongside the V2
-    // state so a fork resumes in the correct band with its setup mirror intact.
-    // All three are optional — a session written before the kernel populated
-    // them simply omits them, and fork upgrades legacy payloads on read.
+    // Version 3 is the sole supported snapshot schema.
     schemaVersion: 3,
     turnId,
     session: {
       status: session.status,
-      // Legacy clock fields derived from the phase/setup mirror (the kernel no
-      // longer writes the columns) so a fork restores consistent values.
-      ...deriveLegacyClockForSession(session),
       locale: session.locale,
       activePlugins: session.activePlugins,
       presetId: session.presetId,
       runtimeModelOverrides: session.runtimeModelOverrides,
-      ...(session.phase !== undefined ? { phase: session.phase } : {}),
-      ...(session.completedPlayerTurns !== undefined
-        ? { completedPlayerTurns: session.completedPlayerTurns }
-        : {}),
-      ...(session.setupRuntimes !== undefined
-        ? { setupRuntimes: session.setupRuntimes }
-        : {}),
+      phase: session.phase,
+      completedPlayerTurns: session.completedPlayerTurns,
+      setupRuntimes: session.setupRuntimes,
     },
     characters,
     stateEntries,

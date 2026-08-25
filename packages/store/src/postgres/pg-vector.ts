@@ -62,6 +62,16 @@ function physicalTableName(id: number): string {
   return `vec_mem_m${id}`;
 }
 
+function requireCurrentTableName(id: number, tableName: string): string {
+  const expected = physicalTableName(id);
+  if (tableName !== expected) {
+    throw new Error(
+      `pg-vector: vector_models.id ${id} violates the current table_name invariant`,
+    );
+  }
+  return expected;
+}
+
 /** Serialize a Float32Array for pgvector: "[v1,v2,...,vn]" */
 function toVectorString(v: Float32Array): string {
   return `[${Array.from(v).join(",")}]`;
@@ -171,21 +181,11 @@ export function createPgVectorCapability(
 
     const row = rows[0];
 
-    // Defensive: repair legacy rows from older module versions that used
-    // the old "__pending__" placeholder scheme.
-    if (!row.table_name || row.table_name === "__pending__") {
-      const tname = physicalTableName(row.id);
-      await client`
-        UPDATE vector_models SET table_name = ${tname} WHERE id = ${row.id}
-      `;
-      row.table_name = tname;
-    }
-
     const target: VectorTarget = {
       modelRegistryId: row.id,
       modelId: row.model_id,
       dim: row.dim,
-      tableName: row.table_name,
+      tableName: requireCurrentTableName(row.id, row.table_name),
     };
 
     modelCache.set(target.modelRegistryId, target);
@@ -280,7 +280,7 @@ export function createPgVectorCapability(
       modelRegistryId: row.id,
       modelId: row.model_id,
       dim: row.dim,
-      tableName: row.table_name,
+      tableName: requireCurrentTableName(row.id, row.table_name),
     };
 
     modelCache.set(target.modelRegistryId, target);
@@ -322,7 +322,7 @@ export function createPgVectorCapability(
       provider: r.provider,
       modelName: r.model_name,
       dim: r.dim,
-      tableName: r.table_name,
+      tableName: requireCurrentTableName(r.id, r.table_name),
       createdAt: Number(r.created_at),
       lastUsedAt: r.last_used_at !== null ? Number(r.last_used_at) : null,
     }));

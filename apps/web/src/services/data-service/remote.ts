@@ -88,19 +88,6 @@ export class RemoteDataService implements DataService {
     // Remote mode: server stores patches during action SSE flow
   }
 
-  async persistStateSnapshot() {
-    // No-op: T3 server handles persistence directly
-  }
-
-  async loadStateSnapshot(sessionId: string) {
-    // T3: load from server API
-    try {
-      return await api.loadStateSnapshot(sessionId);
-    } catch (err) {
-      return nullIfMissing(err);
-    }
-  }
-
   async saveSubmittedBlocks(
     sessionId: string,
     blockIds: string[],
@@ -117,6 +104,10 @@ export class RemoteDataService implements DataService {
 
   async syncToServer() {
     // No-op: server already has the data
+  }
+
+  async stageServerCommit() {
+    // No-op: remote mode commits directly to the authoritative server store.
   }
 
   async commitFromServer() {

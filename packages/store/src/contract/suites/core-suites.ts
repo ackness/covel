@@ -76,22 +76,22 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect(list.map((s) => s.id)).toContain(s2.id);
     });
 
-    it("should update session status and turnCount", async () => {
+    it("should update session status and completed player turns", async () => {
       const session = makeSession({
         status: "active",
-        turnCount: 0,
-        preGameCompleted: [],
+        phase: "setup",
+        completedPlayerTurns: 0,
       });
       await store.createSession(session);
       const now = ts();
       await store.updateSession(session.id, {
         status: "ended",
-        turnCount: 5,
+        completedPlayerTurns: 5,
         updatedAt: now,
       });
       const result = await store.getSession(session.id);
       expect(result?.status).toBe("ended");
-      expect(result?.turnCount).toBe(5);
+      expect(result?.completedPlayerTurns).toBe(5);
       expect(result?.updatedAt).toBe(now);
     });
 

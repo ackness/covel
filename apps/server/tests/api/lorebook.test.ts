@@ -61,11 +61,17 @@ describe("Lorebook API routes", () => {
   beforeEach(async () => {
     store = createMemoryStore();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: "world-1",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "en",
       activePlugins: [],
       createdAt: new Date().toISOString(),

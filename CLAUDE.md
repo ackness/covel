@@ -122,16 +122,16 @@ Input/Event → Trigger Router → Stage Scheduler → [per stage:]
 | `post-turn` | main loop, 3rd                       | Post-narrative bookkeeping, state updates, follow-up event emission |
 | `audit`     | main loop, 4th                       | Conflict/consistency audit (reserved slot)                          |
 
-Band selection is by **`phase`**, not `turnCount`: the session runs the `setup` stage while `phase === "setup"`; once `phase` flips to the main loop it runs `pre-turn → narrative → post-turn → audit` in strict order with a **barrier between stages** (a stage fully drains — every runtime settles success/failure/skip — before the next stage starts). Within a stage, a **DAG** derived from `needs` / `after` / typed `inputs` bindings (plus legacy `input.inject`) orders runtimes; independent runtimes in the same stage run in parallel, `name` breaks ties. There is no more numeric priority scheduler.
+Band selection is by **`phase`**: the session runs the `setup` stage while `phase === "setup"`; once `phase` flips to the main loop it runs `pre-turn → narrative → post-turn → audit` in strict order with a **barrier between stages** (a stage fully drains — every runtime settles success/failure/skip — before the next stage starts). Within a stage, a **DAG** derived from `needs` / `after` / typed `inputs` bindings (plus `input.inject`) orders runtimes; independent runtimes in the same stage run in parallel, `name` breaks ties. There is no more numeric priority scheduler.
 
 Session lifecycle tracked on `SessionRecord`:
 
 - `status: 'active' | 'paused' | 'ended'` — `paused`/`ended` halts scheduling.
-- `phase: 'setup' | 'playing'` — the stage-band selector (business truth; replaces the old `preGameCompleted`-derived band check).
-- `completedPlayerTurns: number` — business-truth count of completed **player** turns. Kernel auto-advances 0 → 1 once all setup runtimes report done. Non-player executions (manual plugin-rpc trigger, deferred background follower, nested `recursiveCall`) each persist their own `turn_results` row stamped with `origin` and are excluded from the count; several executions sharing one `turnId` count once.
+- `phase: 'setup' | 'playing'` — required stage-band selector.
+- `completedPlayerTurns: number` — business-truth count of completed **player** turns. The opening continuation advances 0 → 1 only after its player execution commits. Non-player executions (manual plugin-rpc trigger, deferred background follower, nested `recursiveCall`) each persist their own `turn_results` row stamped with `origin` and are excluded from the count; several executions sharing one logical turn count once.
 - `setupRuntimes: Record<runtimeId, SetupRuntimeState>` — business-truth per-runtime resolution mirror for the `setup` stage. `SetupRuntimeState` is a three-state union: `pending` / `done{resolution: "completed" | "waived"}` / `blocked` (retry budget exhausted — pins the session in setup until the `retry` / `waive` endpoints unblock it). Not a plain id list.
 
-`turnCount` and `preGameCompleted` are **legacy fields the kernel no longer writes** — API responses and snapshots derive them at read time from `phase` / `completedPlayerTurns` / `setupRuntimes` via a shared `deriveLegacyClockForSession` helper (response shape is unchanged). `turnCount` (now a derived value) still drives the UI turn display, auto-snapshot cadence, and snapshot numbering downstream of that derivation. The DB columns are retained (frozen) for old-kernel/rollback reads, and the one-time lazy backfill for pre-`phase` sessions is retained.
+The session clock is current-only: API responses, snapshots, UI turn display, and auto-snapshot cadence use the required `phase` / `completedPlayerTurns` / `setupRuntimes` fields directly. Development builds do not accept or reconstruct deprecated session-clock fields.
 
 ### Plugin system
 

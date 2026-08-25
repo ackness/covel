@@ -115,7 +115,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
       deferMediaFinalize: false,
       locale: liveSession.locale,
       preflight: {
-        activePlugins: liveSession.activePlugins ?? [],
+        activePlugins: liveSession.activePlugins,
         registry: pluginRegistry,
       },
     });
@@ -298,7 +298,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
     if (typeof pluginRegistry.syncSessionActivations === "function") {
       pluginRegistry.syncSessionActivations(
         sessionId,
-        liveSession.activePlugins ?? [],
+        liveSession.activePlugins,
       );
     }
     // Discover world-data-provider plugin by capability (not hardcoded ID)
@@ -313,13 +313,9 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
         422,
       );
     }
-    const apply = (s: import("@covel/store").StoreTransaction | typeof store) =>
-      applyDimensionSync(s, worldDataPluginId);
-    if (typeof store.withTransaction === "function") {
-      await store.withTransaction(apply);
-      return undefined;
-    }
-    await apply(store);
+    await store.withTransaction((tx) =>
+      applyDimensionSync(tx, worldDataPluginId),
+    );
     return undefined;
   };
 

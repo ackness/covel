@@ -32,11 +32,17 @@ function buildApp(store: DataStore, backend?: StoreBackend): Hono {
 
 async function seedSession(store: DataStore): Promise<void> {
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id: "sess-privacy",
     worldId: "cloudmere",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    completedPlayerTurns: 1,
+
     locale: "zh-CN",
     activePlugins: [],
     createdAt: new Date().toISOString(),

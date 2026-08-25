@@ -35,7 +35,7 @@
 
 ## 一、事件类型（CovelEvent）
 
-所有 server→client 事件现在收口为 `packages/shared/src/types/protocol.ts` 中的**单一 discriminated union** `CovelEvent`（`{ type; payload }`），它是事件名、转发白名单、前端穷尽校验的唯一真相。`ProtocolEventType` 是 `CovelEvent['type']` 的导出别名。
+所有 server→client 事件收口为 `packages/shared/src/types/protocol.ts` 中的**单一 discriminated union** `CovelEvent`（`{ type; payload }`），它是事件名、转发白名单、前端穷尽校验的唯一真相；事件名类型直接使用 `CovelEventType`。
 
 新增一个 SSE 事件 = 在 `CovelEvent` 加一个成员 + 在 `COVEL_EVENT_META` 加一条元数据，二者由 `satisfies Record<CovelEventType, CovelEventMeta>` 互相约束——漏改任一处即编译失败。
 
@@ -83,7 +83,7 @@
 
 ### 会话生命周期事件
 
-（没有 `phase.changed` 事件：`SessionRecord.phase`（`'setup' | 'playing'`）与 `completedPlayerTurns` / `setupRuntimes` 是会话进度的业务真值，但 phase 翻转不单独推送 SSE——客户端从会话响应里读 `phase`（以及由它派生的 legacy `turnCount` / `preGameCompleted`）。未来若需要推送 `status` 变化，将以 `status.changed` 形式引入，届时在此补记。）
+（没有 `phase.changed` 事件：`SessionRecord.phase`（`'setup' | 'playing'`）与 `completedPlayerTurns` / `setupRuntimes` 是会话进度的业务真值，但 phase 翻转不单独推送 SSE——客户端从会话响应或快照读取这三个字段。未来若需要推送 `status` 变化，将以 `status.changed` 形式引入，届时在此补记。）
 
 ### 系统事件
 
@@ -180,10 +180,10 @@ Provider 图片输入矩阵：
 
 ### Suspend / Resume 事件
 
-| 事件类型         | 方向 | 描述                                                                            | 负载                                                        |
-| ---------------- | ---- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `turn.suspended` | S→C  | 插件调用 `suspend()` 工具成功序列化 pendingContinuation 后由 turn-executor 发出 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
-| `turn.resumed`   | S→C  | `POST /api/sessions/:id/resume` 成功重新启动 runtime 后由 resume 路由发出       | `{ sessionId, turnId, suspensionId }`                       |
+| 事件类型         | 方向 | 描述                                                                                                                          | 负载                                                        |
+| ---------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `turn.suspended` | S→C  | runtime 创建 suspension artifact；`finalizeExecution` 将记录与同一 execution 的写入提交成功后才发出。回滚不保留记录也不发事件 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
+| `turn.resumed`   | S→C  | `POST /api/sessions/:id/resume` 成功重新启动 runtime 后由 resume 路由发出                                                     | `{ sessionId, turnId, suspensionId }`                       |
 
 ### Snapshot / Fork 事件
 
@@ -298,20 +298,21 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ### 回合执行（SSE 流式响应）
 
-`/api/actions` 接受的 `type` 字段（实际由 `apps/server/src/routes/api/actions.ts` 的 `SUPPORTED_ACTIONS` 数组定义）：
+`/api/actions` 接受的 `type` 字段由 `apps/server/src/routes/api/actions/request.ts` 的闭合请求联合定义：
 
-| 命令          | 方法 | 端点                                     | 响应                  |
-| ------------- | ---- | ---------------------------------------- | --------------------- |
-| `turn.submit` | POST | `/api/actions` `type: "send_message"`    | SSE: ProtocolEvent 流 |
-| `turn.cmd`    | POST | `/api/actions` `type: "execute_command"` | SSE: ProtocolEvent 流 |
-| `turn.start`  | POST | `/api/actions` `type: "start_session"`   | SSE: ProtocolEvent 流 |
-| `turn.retry`  | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
+| 命令            | 方法 | 端点                                     | 响应                  |
+| --------------- | ---- | ---------------------------------------- | --------------------- |
+| `turn.submit`   | POST | `/api/actions` `type: "send_message"`    | SSE: ProtocolEvent 流 |
+| `turn.cmd`      | POST | `/api/actions` `type: "execute_command"` | SSE: ProtocolEvent 流 |
+| `turn.start`    | POST | `/api/actions` `type: "start_session"`   | SSE: ProtocolEvent 流 |
+| `turn.retry`    | POST | `/api/actions` `type: "retry_turn"`      | SSE: ProtocolEvent 流 |
+| `runtime.retry` | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
 
-`retry_runtime` 的 `payload.runtimeId`（可选）把重跑收窄到指定 runtime（走 manual-trigger 路径）；缺省时保持整回合重跑语义。收窄重跑会以源回合（`payload.retryFromTurnId`，缺省取最近的 player-origin 工件）持久化的 runtime 输出**播种**执行，使被重试 runtime 的 `input.inject` / `needs` 按原回合叙事解析——裸 manual 触发这些解析为空，重试型调用因此必须播种。
+`retry_turn` 显式重跑整回合，payload 必须为空。`retry_runtime` 必须提供 `payload.runtimeId`，并通过 manual-trigger 路径只重跑该 runtime；它会以源回合（`payload.retryFromTurnId`，缺省取最近的 player-origin 工件）持久化的 runtime 输出**播种**执行，使被重试 runtime 的 `input.inject` / `needs` 按原回合叙事解析——裸 manual 触发这些解析为空，重试型调用因此必须播种。
 
 `start_session` 要求会话已带非空 `activePlugins`（创建会话时选定）。空集合直接 400，不会退化成"激活全部注册插件"——详见 [api.md](./api.md#post-apiactions)。
 
-> `type` 是闭集，上面四种之外的取值一律返回 400 `Unsupported action type`。插件侧发事件请用 builtin `emit-event` 工具。
+> `type` 是闭集，上面五种之外的取值一律返回 400 `Unsupported action type`。插件侧发事件请用 builtin `emit-event` 工具。
 >
 > 区分 chat turn 与 plugin runtime 调用：
 >
@@ -423,7 +424,7 @@ community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 
 
 ```typescript
 interface SseEnvelope {
-  type: ProtocolEventType; // 事件类型（标准协议名）
+  type: CovelEventType; // 事件类型（标准协议名）
   requestId: string; // 请求关联 ID
   traceId: string; // 追踪 ID
   sessionId: string; // 会话 ID

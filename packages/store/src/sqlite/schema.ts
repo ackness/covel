@@ -44,8 +44,6 @@ export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(),
   worldId: text("world_id"),
   status: text("status").notNull().default("active"),
-  turnCount: integer("turn_count").notNull().default(0),
-  preGameCompleted: text("pre_game_completed").notNull().default("[]"), // JSON
   locale: text("locale").notNull().default("zh-CN"),
   activePlugins: text("active_plugins").notNull().default("[]"),
   metadata: text("metadata"), // JSON
@@ -54,10 +52,9 @@ export const sessions = sqliteTable("sessions", {
   embeddingModelId: integer("embedding_model_id"),
   embeddingLockedAt: text("embedding_locked_at"),
   runtimeModelOverrides: text("runtime_model_overrides").default("{}"),
-  // Scheduling-redesign lifecycle fields (nullable; absent on legacy rows).
-  phase: text("phase"), // 'setup' | 'playing'
-  completedPlayerTurns: integer("completed_player_turns"),
-  setupRuntimes: text("setup_runtimes"), // JSON Record<runtimeId, SetupRuntimeState>
+  phase: text("phase").notNull().default("setup"),
+  completedPlayerTurns: integer("completed_player_turns").notNull().default(0),
+  setupRuntimes: text("setup_runtimes").notNull().default("{}"), // JSON Record<runtimeId, SetupRuntimeState>
 });
 
 // ── Turn Results ────────────────────────────────────────────────
@@ -71,11 +68,10 @@ export const turnResults = sqliteTable(
     runtimeResults: text("runtime_results").notNull(), // JSON
     conflicts: text("conflicts"), // JSON
     auditResult: text("audit_result"), // JSON
-    // Execution origin (player/manual/follower/recursive) + parent
-    // turn for recursive executions. NULL on legacy rows (= player).
-    origin: text("origin"),
+    // Execution origin + parent turn for recursive executions.
+    origin: text("origin").notNull(),
     parentTurnId: text("parent_turn_id"),
-    commitStatus: text("commit_status"),
+    commitStatus: text("commit_status").notNull(),
     durationMs: integer("duration_ms").notNull(),
     createdAt: text("created_at").notNull(),
   },

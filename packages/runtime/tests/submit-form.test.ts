@@ -33,6 +33,7 @@ async function seedTemplate(
   store: DataStore,
   interactionId: string,
   content: string,
+  fields: Extract<InteractionPayload, { readonly type: "form" }>["fields"],
 ): Promise<void> {
   await store.appendTurnMessage({
     id: crypto.randomUUID(),
@@ -43,7 +44,15 @@ async function seedTemplate(
     name: "tpl",
     content,
     order: 700,
-    pendingInput: { formId: interactionId },
+    pendingInput: [
+      {
+        interactionId,
+        type: "form",
+        title: "Test form",
+        fields,
+        submitLabel: "Submit",
+      },
+    ],
     createdAt: new Date().toISOString(),
   });
 }
@@ -92,7 +101,9 @@ describe("submitFormHandler (Epic A)", () => {
 
   // ── Template filling ────────────────────────────────────────────
   it("fills a form template with submitted values", async () => {
-    await seedTemplate(store, "form-1", "Player name is {{name}}");
+    await seedTemplate(store, "form-1", "Player name is {{name}}", [
+      { type: "text", name: "name", label: "Name" },
+    ]);
     const out = await submitOne(store, {
       interactionId: "form-1",
       type: "form",
@@ -232,7 +243,9 @@ describe("submitFormHandler (Epic A)", () => {
 
   // ── fallbackNarrative (no matching template) ────────────────────
   it("localizes the fallback form prefix (zh-CN byte-compat vs en-US)", async () => {
-    await seedTemplate(store, "x-zh", "");
+    await seedTemplate(store, "x-zh", "", [
+      { type: "text", name: "k", label: "K" },
+    ]);
     expect(
       await submitOne(
         store,
@@ -240,7 +253,9 @@ describe("submitFormHandler (Epic A)", () => {
         "zh-CN",
       ),
     ).toBe("[玩家输入] k: v");
-    await seedTemplate(store, "x-en", "");
+    await seedTemplate(store, "x-en", "", [
+      { type: "text", name: "k", label: "K" },
+    ]);
     expect(
       await submitOne(
         store,
@@ -286,7 +301,9 @@ describe("submitFormHandler (Epic A)", () => {
   });
 
   it("byte-compat: undefined locale matches pre-i18n zh-CN output for all three types", async () => {
-    await seedTemplate(store, "x-form", "");
+    await seedTemplate(store, "x-form", "", [
+      { type: "number", name: "a", label: "A" },
+    ]);
     expect(
       await submitOne(store, {
         interactionId: "x-form",
@@ -323,7 +340,9 @@ describe("submitFormHandler (Epic A)", () => {
 
   // ── batch + persistence ─────────────────────────────────────────
   it("processes a batch and returns one result per submission in order", async () => {
-    await seedTemplate(store, "b1", "");
+    await seedTemplate(store, "b1", "", [
+      { type: "number", name: "a", label: "A" },
+    ]);
     await seedInteraction(store, {
       interactionId: "b2",
       type: "choice",
@@ -344,8 +363,12 @@ describe("submitFormHandler (Epic A)", () => {
   });
 
   it("persists one player input per submission", async () => {
-    await seedTemplate(store, "p1", "");
-    await seedTemplate(store, "p2", "");
+    await seedTemplate(store, "p1", "", [
+      { type: "number", name: "a", label: "A" },
+    ]);
+    await seedTemplate(store, "p2", "", [
+      { type: "number", name: "b", label: "B" },
+    ]);
     await submitFormHandler(
       {
         turnId: TURN,
@@ -362,7 +385,9 @@ describe("submitFormHandler (Epic A)", () => {
   });
 
   it("leaves an unknown {{placeholder}} replaced with empty string", async () => {
-    await seedTemplate(store, "tpl-x", "Hi {{name}} {{missing}}");
+    await seedTemplate(store, "tpl-x", "Hi {{name}} {{missing}}", [
+      { type: "text", name: "name", label: "Name" },
+    ]);
     expect(
       await submitOne(store, {
         interactionId: "tpl-x",

@@ -17,9 +17,6 @@ const appKv = vi.hoisted(() => ({
   getStatePatches: vi.fn(async () => null),
   saveStatePatches: vi.fn(async () => {}),
   removeStatePatches: vi.fn(async () => {}),
-  getStateSnapshot: vi.fn(async () => null as Record<string, unknown> | null),
-  saveStateSnapshot: vi.fn(async () => {}),
-  removeStateSnapshot: vi.fn(async () => {}),
   getSubmittedBlocks: vi.fn(async () => null),
   saveSubmittedBlocks: vi.fn(async () => {}),
   removeSubmittedBlocks: vi.fn(async () => {}),
@@ -55,10 +52,14 @@ beforeEach(() => {
   isNotFound.mockReturnValue(true);
   api.getWorld.mockResolvedValue({ id: "world-1" });
   api.getSession.mockRejectedValue(new Error("404"));
-  api.createSession.mockResolvedValue({ id: "sess-1" });
+  api.createSession.mockResolvedValue({
+    id: "sess-1",
+    phase: "setup",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
+  });
   api.deleteSession.mockResolvedValue(undefined);
   api.uploadBrowserCheckpoint.mockResolvedValue({ ok: true, revision: 1 });
-  appKv.getStateSnapshot.mockResolvedValue(null);
 });
 
 afterEach(async () => {
@@ -111,7 +112,49 @@ describe("LocalDataService browser-authoritative sync", () => {
       expect.objectContaining({
         sessionId: "sess-1",
         profile: "browser-private",
-        revision: 1,
+        revision: 2,
+        session: expect.objectContaining({
+          phase: "setup",
+          completedPlayerTurns: 0,
+          setupRuntimes: {},
+        }),
+      }),
+    );
+  });
+
+  it("preserves an established browser clock when rebuilding a missing mirror", async () => {
+    const service = await serviceWithWorld();
+    await service.createSession("world-1", undefined, "sess-1", [], "en-US");
+    const current = await vault.getLatestCheckpoint("sess-1");
+    if (!current) throw new Error("missing checkpoint");
+    await vault.applySessionCommit({
+      baseRevision: current.revision,
+      revision: current.revision + 1,
+      actionId: "turn:established",
+      checkpoint: {
+        ...current,
+        session: {
+          ...current.session,
+          phase: "playing",
+          completedPlayerTurns: 4,
+          setupRuntimes: {},
+        },
+        revision: current.revision + 1,
+        actionId: "turn:established",
+        committedAt: "2026-08-26T00:00:00.000Z",
+      },
+    });
+
+    await service.syncToServer("sess-1");
+
+    expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
+      "sess-1",
+      expect.objectContaining({
+        revision: 2,
+        session: expect.objectContaining({
+          phase: "playing",
+          completedPlayerTurns: 4,
+        }),
       }),
     );
   });
@@ -179,19 +222,6 @@ describe("LocalDataService browser-authoritative sync", () => {
     expect(api.createWorld).not.toHaveBeenCalled();
   });
 
-  it("keeps UI snapshots in the browser-only KV channel", async () => {
-    const service = await serviceWithWorld();
-    await service.createSession("world-1", undefined, "sess-1", [], "en-US");
-    appKv.getStateSnapshot.mockResolvedValueOnce({ state: { hp: 100 } });
-
-    await service.syncToServer("sess-1");
-
-    expect(appKv.getStateSnapshot).not.toHaveBeenCalled();
-    await expect(service.loadStateSnapshot("sess-1")).resolves.toEqual({
-      state: { hp: 100 },
-    });
-  });
-
   it("deletes both the local authority and transient mirror", async () => {
     const service = await serviceWithWorld();
     await service.createSession("world-1", undefined, "sess-1", [], "en-US");
@@ -234,6 +264,92 @@ describe("LocalDataService browser-authoritative sync", () => {
     await expect(vault.getLatestCheckpoint("sess-1")).resolves.toMatchObject({
       revision: 3,
       actionId: "turn-b",
+    });
+  });
+
+  it("recovers a durably staged commit after the data service is recreated", async () => {
+    const service = await serviceWithWorld();
+    await service.createSession("world-1", undefined, "sess-1", [], "en-US");
+    await service.syncToServer("sess-1");
+    await service.stageServerCommit("sess-1", "turn-pending");
+
+    const downloadError = new Error("connection reset");
+    isNotFound.mockReturnValue(false);
+    api.fetchBrowserCommit.mockRejectedValueOnce(downloadError);
+    await expect(
+      service.commitFromServer("sess-1", "turn-pending"),
+    ).rejects.toBe(downloadError);
+
+    api.getWorld.mockResolvedValue({ id: "world-1" });
+    api.getSession.mockResolvedValue({ id: "sess-1" });
+    api.fetchBrowserCommit.mockImplementation(
+      async (_sessionId: string, actionId: string, baseRevision: number) => {
+        const current = await vault.getLatestCheckpoint("sess-1");
+        if (!current) throw new Error("missing checkpoint");
+        return {
+          baseRevision,
+          revision: baseRevision + 1,
+          actionId,
+          checkpoint: {
+            ...current,
+            revision: baseRevision + 1,
+            actionId,
+            committedAt: "2026-08-26T00:00:00.000Z",
+          },
+        };
+      },
+    );
+
+    const reloadedService = new LocalDataService(vault);
+    await reloadedService.syncToServer("sess-1");
+
+    expect(api.fetchBrowserCommit).toHaveBeenCalledTimes(2);
+    expect(api.uploadBrowserCheckpoint).toHaveBeenLastCalledWith(
+      "sess-1",
+      expect.objectContaining({
+        revision: 3,
+        actionId: "turn-pending",
+      }),
+    );
+    await expect(vault.getPendingCommit("sess-1")).resolves.toBeNull();
+  });
+
+  it("serializes a browser message before a concurrent server checkpoint", async () => {
+    const service = await serviceWithWorld();
+    await service.createSession("world-1", undefined, "sess-1", [], "en-US");
+    api.fetchBrowserCommit.mockImplementation(
+      async (_sessionId: string, actionId: string, baseRevision: number) => {
+        const current = await vault.getLatestCheckpoint("sess-1");
+        if (!current) throw new Error("missing checkpoint");
+        return {
+          baseRevision,
+          revision: baseRevision + 1,
+          actionId,
+          checkpoint: {
+            ...current,
+            revision: baseRevision + 1,
+            actionId,
+            committedAt: new Date().toISOString(),
+          },
+        };
+      },
+    );
+
+    await Promise.all([
+      service.addMessage({
+        id: "message-1",
+        sessionId: "sess-1",
+        role: "user",
+        content: "hello",
+        createdAt: "2026-08-26T00:00:00.000Z",
+      }),
+      service.commitFromServer("sess-1", "background-1"),
+    ]);
+
+    await expect(vault.getLatestCheckpoint("sess-1")).resolves.toMatchObject({
+      revision: 3,
+      actionId: "background-1",
+      messages: [expect.objectContaining({ id: "message-1" })],
     });
   });
 });

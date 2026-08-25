@@ -14,8 +14,9 @@ describe("buildSessionSnapshot", () => {
         id: "sess-1",
         worldId: "neonridge",
         status: "active",
-        turnCount: 3,
-        preGameCompleted: [],
+        phase: "playing" as const,
+        completedPlayerTurns: 3,
+        setupRuntimes: {},
         locale: "zh-CN",
       }),
       listMessagesPage: vi.fn().mockResolvedValue([
@@ -84,7 +85,8 @@ describe("buildSessionSnapshot", () => {
     // Session metadata
     expect(snapshot.session.id).toBe("sess-1");
     expect(snapshot.session.worldId).toBe("neonridge");
-    expect(snapshot.session.turnCount).toBe(3);
+    expect(snapshot.session.phase).toBe("playing");
+    expect(snapshot.session.completedPlayerTurns).toBe(3);
 
     // Messages flattened from metadata
     expect(snapshot.messages).toHaveLength(2);

@@ -7,10 +7,8 @@
  *
  * Scheduling redesign: the completion write moved out of `executeTurn` and into
  * the finalize transaction (session-clock write), so the observable contract at
- * the executeTurn boundary is now `TurnResult.setupCompletion` — the delta the
- * executor hands the finalizer — rather than the persisted `turnCount` /
- * `preGameCompleted`. The derivation of those legacy fields from the delta is
- * pinned by the session-clock / acceptance tests instead.
+ * the executeTurn boundary is `TurnResult.setupCompletion`, the delta the
+ * executor hands the finalizer.
  *
  * This is subtle enough that drift here silently breaks opening flows
  * (player stuck on character form, main-loop never starts), so we pin
@@ -18,6 +16,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { mirrorSetupDone } from "@covel/shared";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
@@ -62,10 +61,12 @@ async function freshStore(
   await store.createSession({
     id: sessionId,
     worldId,
-    turnCount: 0,
     status: "active",
     activePlugins: [],
-    preGameCompleted: [],
+    phase: "setup",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
+    locale: "zh-CN",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -85,7 +86,12 @@ async function runPregameTurn(
   result: Awaited<ReturnType<typeof executeTurn>>;
 }> {
   const store = await freshStore(sessionId);
-  const input: TurnInput = { sessionId, turnId: "turn-0", playerMessage: "" };
+  const input: TurnInput = {
+    sessionId,
+    turnId: "turn-0",
+    playerMessage: "",
+    origin: "player",
+  };
   const deps: TurnExecutorDeps = {
     loadRuntime: async (m) => ({
       manifest: m,
@@ -184,7 +190,7 @@ describe("Pre-Game completion contract", () => {
     expect(result.setupCompletion?.allSetupDone).toBe(true);
   });
 
-  it("does NOT advance turnCount when any Pre-Game runtime is unfinished", async () => {
+  it("keeps setup incomplete when any setup runtime is unfinished", async () => {
     const pregame = pregameManifest("pregame", { stage: "setup" });
     // player-init simulates "form shown, waiting for submission": handler
     // returns without preGameDone so the framework keeps it open across turns.
@@ -220,6 +226,7 @@ describe("Pre-Game completion contract", () => {
       turnId: "turn-0",
       playerMessage: "",
       suppressPlayerMessage: true,
+      origin: "player" as const,
     };
     const deps: TurnExecutorDeps = {
       loadRuntime: async (m) => ({
@@ -256,7 +263,9 @@ describe("Pre-Game completion contract", () => {
     const narrator = pregameManifest("narrator", { stage: "narrative" });
     const store = await freshStore("sess-resume");
     await store.updateSession("sess-resume", {
-      preGameCompleted: ["pregame"],
+      setupRuntimes: {
+        pregame: mirrorSetupDone("0.0.0", new Date().toISOString(), 1, 1),
+      },
       updatedAt: new Date().toISOString(),
     });
     await store.appendTurnMessage({
@@ -293,6 +302,7 @@ describe("Pre-Game completion contract", () => {
         sessionId: "sess-resume",
         turnId: "turn-1",
         playerMessage: "continue setup",
+        origin: "player",
       },
       [pregame, playerInit, narrator],
       deps,
@@ -370,10 +380,10 @@ describe("Pre-Game completion contract", () => {
     expect(result.setupCompletion?.allSetupDone).toBe(true);
   });
 
-  it("advances turnCount when EVERY Pre-Game runtime reports done in the same turn", async () => {
+  it("resolves setup when every setup runtime reports done in the same turn", async () => {
     // When both plugins complete in turn 0 (e.g. pregame completes on first
     // hit, schema-gen guard skips because schema already exists), the kernel
-    // must atomically record both in preGameCompleted AND bump turnCount to 1.
+    // must atomically mirror both and flip the phase in the finalizer.
     const pregame = pregameManifest("pregame", { stage: "setup" });
     const playerInit = pregameManifest("char-creator/player-init", {
       stage: "setup",
@@ -441,7 +451,12 @@ describe("Pre-Game completion contract", () => {
       store,
     };
     const result = await executeTurn(
-      { sessionId: "sess-exh", turnId: "turn-0", playerMessage: "" },
+      {
+        sessionId: "sess-exh",
+        turnId: "turn-0",
+        playerMessage: "",
+        origin: "player",
+      },
       [pregame],
       deps,
     );

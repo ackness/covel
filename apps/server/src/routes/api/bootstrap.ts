@@ -44,7 +44,7 @@ import { createHealthRoutes } from "./health.js";
 import { worldRoutes } from "./worlds.js";
 import { messageRoutes } from "./messages.js";
 import { characterRoutes } from "./characters.js";
-import { actionRoutes, setMemorySystem } from "./actions.js";
+import { actionRoutes } from "./actions.js";
 import { turnControlRoutes } from "./turn-control-routes.js";
 import { sessionTurnRoutes } from "./session-turns.js";
 import { setupRuntimeControlRoutes } from "./setup-runtime-control.js";
@@ -564,7 +564,6 @@ export async function bootstrapApi(
       toolMap.set(t.name, t);
       builtinToolNames.add(t.name);
     }
-    setMemorySystem(bootstrapMemory.memorySystem);
   }
 
   // 9. Create app with dependency injection middleware
@@ -592,7 +591,9 @@ export async function bootstrapApi(
     c.set("turnContextBudget", turnContextBudget);
     c.set("hookPipeline", hookPipeline);
     c.set("eventDirectory", eventDirectory);
-    // memorySystem injected via module-level setter, not Hono context
+    if (bootstrapMemory) {
+      c.set("memorySystem", bootstrapMemory.memorySystem);
+    }
     c.set("rpcExecutor", rpcExecutor);
     c.set("rpcRegistry", rpcRegistry);
     c.set("rpcApprovalGate", rpcApprovalGate);

@@ -28,7 +28,6 @@ import { describe, it, expect } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import {
   authoringTriggerConfigSchema,
-  deriveLegacyClockFields,
   getRuntimeSpec,
   isSetupSatisfied,
   mirrorSetupDone,
@@ -88,18 +87,11 @@ async function scheduledRuntimeTriggers(
   interval: number,
 ): Promise<boolean> {
   const store = createMemoryStore();
-  const legacy = deriveLegacyClockFields({
-    phase: "playing",
-    completedPlayerTurns,
-    setupRuntimes: {},
-  });
   const now = new Date().toISOString();
   await store.createSession({
     id: "s",
     worldId: "w",
     status: "active",
-    turnCount: legacy.turnCount,
-    preGameCompleted: [],
     phase: "playing",
     completedPlayerTurns,
     setupRuntimes: {},
@@ -130,7 +122,12 @@ async function scheduledRuntimeTriggers(
     store,
   };
   await executeTurn(
-    { sessionId: "s", turnId: "t", playerMessage: "go" },
+    {
+      sessionId: "s",
+      turnId: "t",
+      playerMessage: "go",
+      origin: "player",
+    },
     [ticker],
     deps,
   );
@@ -174,18 +171,11 @@ async function seedPlaying(
   store: DataStore,
   completedPlayerTurns: number,
 ): Promise<void> {
-  const legacy = deriveLegacyClockFields({
-    phase: "playing",
-    completedPlayerTurns,
-    setupRuntimes: {},
-  });
   const now = new Date().toISOString();
   await store.createSession({
     id: "s",
     worldId: "w",
     status: "active",
-    turnCount: legacy.turnCount,
-    preGameCompleted: [],
     phase: "playing",
     completedPlayerTurns,
     setupRuntimes: {},
@@ -208,8 +198,6 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
       id: sessionId,
       worldId: "w",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
       phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
@@ -293,7 +281,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
         sessionId,
         turnId: "t1",
         playerMessage: "go",
-        preGamePending: true,
+        origin: "player",
       },
       [schemaGen, playerInit],
       deps,
@@ -310,6 +298,11 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
     // Commit execution 1 — the buffered proposal lands and the setup-completion
     // delta flips the band to playing (frozen for the next execution).
     const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId,
       ...(setupTurn.executionContext
@@ -360,8 +353,6 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
       id: "s2",
       worldId: "w",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
       phase: "playing",
       completedPlayerTurns: 1,
       setupRuntimes: {},
@@ -533,8 +524,6 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         id: "s",
         worldId: "w",
         status: "active",
-        turnCount: 1,
-        preGameCompleted: [],
         phase: "playing",
         completedPlayerTurns: 1,
         setupRuntimes: {},
@@ -795,80 +784,28 @@ describe("commit transaction & rollback", () => {
   );
 });
 
-describe("legacy backfill & dual-write formula", () => {
-  // needs: SnapshotPayloadV3 completedPlayerTurns field + backfill formula + turnCount/preGameCompleted dual-write (release step 2)
-  //
-  // This lights the two claims testable at the runtime layer: the dual-write
-  // formula boundaries and the V3 snapshot round-trip. The server-side halves —
-  // the lazy backfill three-branch (turnCount 0/1/>1) and the conservative fork
-  // completedPlayerTurns = turnCount === 0 ? 0 : turnCount + diagnostic — are
-  // pinned in apps/server/tests/api/turn-count.test.ts (ensureSessionClockBackfilled)
-  // and apps/server/tests/api/snapshot.test.ts (fork). None of these paths parse
-  // a turnId or scan child turn_results.
-  it("scenario 7: 双写公式在 0/floor/首回合/多回合边界均可回滚旧内核读取；新 snapshot 原样携带 completedPlayerTurns（backfill/fork 保守回填见 server 套件）", async () => {
-    // Dual-write formula boundaries — the legacy kernel keeps reading turnCount.
-    expect(
-      deriveLegacyClockFields({
-        phase: "setup",
-        completedPlayerTurns: 0,
-        setupRuntimes: {},
-      }),
-    ).toEqual({ turnCount: 0, preGameCompleted: [] }); // 0
-    expect(
-      deriveLegacyClockFields({
-        phase: "playing",
-        completedPlayerTurns: 0,
-        setupRuntimes: {},
-      }).turnCount,
-    ).toBe(0); // bare session: playing with no setup + no turns → 0
-    expect(
-      deriveLegacyClockFields({
-        phase: "playing",
-        completedPlayerTurns: 0,
-        setupRuntimes: { "p/setup": mirrorSetupDone("1.0.0", "t") },
-      }).turnCount,
-    ).toBe(1); // Pre-Game floor: setup completed, no counted turn yet
-    expect(
-      deriveLegacyClockFields({
-        phase: "playing",
-        completedPlayerTurns: 1,
-        setupRuntimes: {},
-      }).turnCount,
-    ).toBe(1); // first main-loop turn
-    expect(
-      deriveLegacyClockFields({
-        phase: "playing",
-        completedPlayerTurns: 6,
-        setupRuntimes: {},
-      }).turnCount,
-    ).toBe(6); // many turns
-
-    // V3 snapshot round-trip: the builder carries the clock fields verbatim so a
-    // fork restores completedPlayerTurns / phase / setupRuntimes as-is.
+describe("current snapshot clock", () => {
+  it("scenario 7: snapshot carries the authoritative clock verbatim", async () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
       id: "s",
       worldId: "w",
       status: "active",
-      turnCount: 3,
-      preGameCompleted: ["pregame"],
       phase: "playing",
       completedPlayerTurns: 3,
-      setupRuntimes: { pregame: mirrorSetupDone("1.0.0", now) },
+      setupRuntimes: { pregame: mirrorSetupDone("1.0.0", now, 1, 1) },
       activePlugins: [],
       createdAt: now,
       updatedAt: now,
     });
     const payload = await buildSnapshotPayload(store, "s", "turn-3");
     expect(payload.schemaVersion).toBe(3);
-    if (payload.schemaVersion === 3) {
-      expect(payload.session.completedPlayerTurns).toBe(3);
-      expect(payload.session.phase).toBe("playing");
-      expect(payload.session.setupRuntimes).toMatchObject({
-        pregame: { state: "done" },
-      });
-    }
+    expect(payload.session.completedPlayerTurns).toBe(3);
+    expect(payload.session.phase).toBe("playing");
+    expect(payload.session.setupRuntimes).toMatchObject({
+      pregame: { state: "done" },
+    });
   });
 });
 
@@ -882,8 +819,6 @@ describe("blocked control (maxTriggerCount / retry / waive)", () => {
       id: "s8",
       worldId: "w",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
       phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
@@ -911,6 +846,11 @@ describe("blocked control (maxTriggerCount / retry / waive)", () => {
 
     const settle = (setupRan: readonly RanSetupRuntime[]) =>
       finalizeExecution({
+        executionContext: {
+          executionId: crypto.randomUUID(),
+          origin: "manual",
+          countPolicy: "none",
+        },
         store,
         sessionId: "s8",
         runtimes: [makeRuntime(runtimeId)],
@@ -1486,6 +1426,11 @@ describe("recordAs export (persistent export revision)", () => {
     committedAt: string,
   ) =>
     finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId,
       runtimes: [producer("cfg")],
@@ -1528,6 +1473,11 @@ describe("recordAs export (persistent export revision)", () => {
       // export append is in the same tx, so it is discarded with the domain
       // writes. Revision stays at 2.
       const rolled = await finalizeExecution({
+        executionContext: {
+          executionId: crypto.randomUUID(),
+          origin: "manual",
+          countPolicy: "none",
+        },
         store,
         sessionId: "s",
         runtimes: [producer("cfg")],

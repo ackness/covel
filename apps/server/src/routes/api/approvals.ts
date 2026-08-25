@@ -64,15 +64,17 @@ export const sessionApprovalRoutes = new Hono<Env>();
 sessionApprovalRoutes.get("/:id/approvals", async (c) => {
   const gate = c.get("rpcApprovalGate");
   const sessionId = c.req.param("id");
-  // Preserve the local/self-tier compatibility behavior for callers that
-  // list before the transient server-side session row has been synced. Hosted
-  // tiers still require a live owned session through this guard.
   const store = c.get("store");
   const denied = await checkSessionOwnerById(c, store, sessionId);
   if (denied) return denied;
   const session = await store.getSession(sessionId);
   if (!session) {
-    return c.json({ pending: gate.listAllPendingForSession(sessionId) });
+    return c.json(
+      errorBody(`Session not found: ${sessionId}`, {
+        code: "session_not_found",
+      }),
+      404,
+    );
   }
   const current = gate
     .listAllPendingForSession(sessionId)

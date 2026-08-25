@@ -106,7 +106,6 @@ traceRoutes.get("/:sessionId/turns", async (c) => {
 
   return c.json({
     sessionId,
-    turnCount: turns.length,
     discovery,
     turns,
   });

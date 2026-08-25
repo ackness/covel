@@ -57,11 +57,7 @@ export type {
 export type {
   SnapshotKind,
   SnapshotPayload,
-  SnapshotPayloadV1,
-  SnapshotPayloadV2,
-  SnapshotPayloadV3,
   SnapshotSessionState,
-  SnapshotSessionStateV3,
   SnapshotRecord,
   SnapshotMetadata,
   SuspensionRecord,
@@ -159,8 +155,6 @@ export interface SessionStore {
       Pick<
         SessionRecord,
         | "status"
-        | "turnCount"
-        | "preGameCompleted"
         | "activePlugins"
         | "presetId"
         | "locale"
@@ -203,7 +197,7 @@ export interface RuntimeRecordStore {
   setTurnResultCommitStatus(
     sessionId: string,
     turnId: string,
-    status: NonNullable<TurnResultRecord["commitStatus"]>,
+    status: TurnResultRecord["commitStatus"],
   ): Promise<void>;
 
   // ── Runtime Results ──
@@ -737,10 +731,10 @@ export interface TransactionalStore {
    * per-handle flag and can conservatively reject a genuinely concurrent call
    * on that same handle while a transaction callback is active.
    *
-   * Optional so partial mock stores remain assignable; all bundled backends
-   * implement it.
+   * Every store implements this boundary. Test doubles should use a bundled
+   * in-memory store or provide the same transactional contract explicitly.
    */
-  withTransaction?: <T>(fn: (tx: StoreTransaction) => Promise<T>) => Promise<T>;
+  withTransaction<T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T>;
 }
 
 /** Store lifecycle. Omitted from {@link StoreTransaction}. */

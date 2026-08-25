@@ -317,9 +317,9 @@ describe("self tier (default) — guards are strict no-ops", () => {
     expect(typeof created.ownerToken).toBe("string");
   });
 
-  it("keeps approvals listing token-free, even for ids with no session row", async () => {
+  it("returns not-found for approvals on a missing session", async () => {
     const res = await h.app.request("/api/sessions/s1/approvals");
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
   });
 
   it("keeps media upload token-free for an existing session", async () => {

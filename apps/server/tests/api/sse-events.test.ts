@@ -33,11 +33,17 @@ describe("SSE Events", () => {
     eventBus = createEventBus(busStore);
     app = createTestApp(eventBus, busStore);
     await busStore.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sess-1",
       worldId: null,
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       activePlugins: [],
       createdAt: new Date().toISOString(),
     });
@@ -133,11 +139,17 @@ describe("SSE Events", () => {
       const store = createMemoryStore();
       // Create a session so the route can find it
       await store.createSession({
+        phase: "playing",
+        setupRuntimes: {},
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
         id: "sess-topic",
         worldId: null,
         status: "active",
-        turnCount: 1,
-        preGameCompleted: [],
+        completedPlayerTurns: 1,
+
         presetId: null,
         activePlugins: [],
         createdAt: new Date().toISOString(),

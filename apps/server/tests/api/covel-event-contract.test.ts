@@ -2,7 +2,7 @@
  * CovelEvent contract (S/T7) — locks the single-source-of-truth event union.
  *
  * The `/api/actions` forwarding whitelist used to be a hand-written `Set` in
- * actions.ts that drifted from `ProtocolEventType` (e.g. `runtime.skipped` was
+ * actions.ts that drifted from `CovelEventType` (e.g. `runtime.skipped` was
  * emitted but absent from the union). These tests assert that the server's
  * forwarding whitelist is DERIVED from `COVEL_EVENT_META` and that the known
  * drift cases are now fixed inside the union itself.

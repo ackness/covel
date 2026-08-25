@@ -53,7 +53,7 @@ export function SessionSidebar({
               </div>
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                 <Badge variant="secondary" className="text-[9px] h-4 px-1">
-                  {session.status} · t{session.turnCount}
+                  {session.status} · t{session.completedPlayerTurns}
                 </Badge>
                 <span title={session.createdAt}>
                   {fmtTime(session.createdAt, {

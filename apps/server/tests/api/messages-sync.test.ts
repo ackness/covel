@@ -12,11 +12,17 @@ describe("POST /api/sessions/:id/messages/sync", () => {
   it("is idempotent when the local client retries stable message ids", async () => {
     const store = createMemoryStore();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "s",
       worldId: "w",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       activePlugins: [],
       createdAt: new Date().toISOString(),
     });
@@ -70,11 +76,17 @@ describe("POST /api/sessions/:id/messages/sync", () => {
   it("rolls back the whole batch when one message write fails", async () => {
     const base = createMemoryStore();
     await base.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "s",
       worldId: "w",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       activePlugins: [],
       createdAt: new Date().toISOString(),
     });

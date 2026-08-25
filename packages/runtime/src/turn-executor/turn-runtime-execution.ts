@@ -77,7 +77,6 @@ export interface RuntimeInvocation {
           fields?: Record<string, unknown>;
         }[];
         lastFormValues?: Record<string, unknown>;
-        preGameCompleted?: readonly string[];
       }
     | undefined;
   readonly hookPipeline: HookPipeline | undefined;
@@ -106,7 +105,7 @@ export interface RuntimeInvocation {
    * handlers as `ctx.execution` and to the agent activation segment. Absent
    * for thin direct callers / tests.
    */
-  readonly executionContext?: ExecutionContext;
+  readonly executionContext: ExecutionContext;
   /**
    * Execution-start instant (ISO), frozen once per turn. Pins `atOrBefore` on
    * every `recordAs` export read so a consumer sees the revision that was live
@@ -124,6 +123,8 @@ export interface RuntimeInvocation {
    * Absent (direct callers / tests) means "no gate — always ready".
    */
   readonly pluginSetupReady?: (pluginId: string) => boolean;
+  /** Whether a setup runtime is satisfied in the execution's live mirror. */
+  readonly setupRuntimeDone: (runtimeId: string) => boolean;
   /**
    *  sink for runtime results produced by nested `ctx.recursiveCall`
    * executions. The top-level executeTurn wires this to a collector so the
@@ -157,6 +158,7 @@ export async function executeOneRuntime(
     recursionDepth = 0,
     executionId,
     executionContext,
+    setupRuntimeDone,
   } = inv;
   const startTime = Date.now();
   const runId = inv.runId ?? crypto.randomUUID();
@@ -194,7 +196,7 @@ export async function executeOneRuntime(
         playerMessage: delta.playerMessage ?? input.playerMessage,
         suppressPlayerMessage: true,
         // A nested execution is never a player turn — stamp its origin
-        // and parent so turn accounting excludes it from `turnCount`.
+        // and parent so it is excluded from player-turn accounting.
         origin: "recursive",
         parentTurnId: input.turnId,
       };
@@ -380,9 +382,8 @@ export async function executeOneRuntime(
     if (required.length > 0) {
       // Two entry shapes:
       //  • runtime (string / {runtime}) — that exact runtime must have produced
-      //    a successful result this turn (or be done from an earlier setup
-      //    execution, via the preGameCompleted fallback). An absent (disabled)
-      //    upstream stays a skip, never treated as success.
+      //    a successful result this turn. An absent (disabled) upstream stays
+      //    a skip, never treated as success.
       //  • {capability} — `cardinality: "all"` requires every in-scope
       //    provider; the default requires at least one. Zero providers is always
       //    unsatisfied, so a consumer never runs blind.
@@ -391,7 +392,7 @@ export async function executeOneRuntime(
         if (typeof entry === "string" || "runtime" in entry) {
           const name = typeof entry === "string" ? entry : entry.runtime;
           const up = completedResults.get(name);
-          if (!up && sessionMeta?.preGameCompleted?.includes(name)) continue;
+          if (!up && setupRuntimeDone(name)) continue;
           if (!isRequiredUpstreamSatisfied(up)) missing.push(name);
           continue;
         }
@@ -652,7 +653,7 @@ export async function executeOneRuntime(
         activation,
         inputs: inputSlots,
         exports: exportSlots,
-        ...(executionContext ? { executionContext } : {}),
+        executionContext,
         createRecursiveCall,
         recursionDepth,
         startTime,
@@ -695,7 +696,7 @@ export async function executeOneRuntime(
       activation,
       inputs: inputSlots,
       exports: exportSlots,
-      ...(executionContext ? { executionContext } : {}),
+      executionContext,
       startTime,
       runId,
     });

@@ -122,9 +122,6 @@ messageRoutes.post(
       expectedSession: guard.session,
       allowedStatuses: ["active"],
       mutate: async () => {
-        if (!store.withTransaction) {
-          throw new Error("Message sync requires transactional store support");
-        }
         await store.withTransaction(async (tx) => {
           const existingIds = new Set(
             (await tx.listMessages(sessionId)).map((message) => message.id),

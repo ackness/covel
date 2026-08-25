@@ -13,6 +13,7 @@ import type {
   RpcExecutor,
   PluginRpcRegistry,
   HookPipeline,
+  TurnExecutorDeps,
 } from "@covel/runtime";
 import type { RpcApprovalGate } from "@covel/approval";
 import type { RuntimeManifest } from "@covel/shared";
@@ -80,6 +81,8 @@ declare module "hono" {
     toolExecutor: ToolExecutor;
     resolveModel: ResolveModelFn;
     compactorRunner: CompactorRunner;
+    /** Request-visible memory system wired by the bootstrap composition root. */
+    memorySystem?: NonNullable<TurnExecutorDeps["memorySystem"]>;
     /**
      * Prompt-assembly hard-prune budget (`applyBudget`), derived from the
      * narrative slot's model capability. Optional so hand-built test DI

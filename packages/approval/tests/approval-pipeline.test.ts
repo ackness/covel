@@ -90,8 +90,7 @@ describe("createApprovalPipeline", () => {
     it("check: default allow-all", () => {
       const result = pipeline.check(makeRequest());
       expect(result).toEqual({
-        needsApproval: false,
-        autoDecision: "allow",
+        decision: "allow",
         reason: "default-allow-all",
       });
     });
@@ -100,44 +99,34 @@ describe("createApprovalPipeline", () => {
   describe("with custom rules", () => {
     it("rejects unsupported ask rules during configuration", () => {
       expect(() =>
-        createApprovalPipeline(undefined, [
+        createApprovalPipeline([
           { pattern: "third-party:*", action: "ask" },
         ] as unknown as readonly PermissionRule[]),
       ).toThrow(/ask.*not supported/i);
     });
 
     it("check: builtin allowed — no approval needed", () => {
-      const pipeline = createApprovalPipeline(undefined, [
+      const pipeline = createApprovalPipeline([
         { pattern: "builtin:*", action: "allow" },
         { pattern: "third-party:*", action: "deny" },
       ]);
       const result = pipeline.check(makeRequest(), "builtin");
       expect(result).toEqual({
-        needsApproval: false,
-        autoDecision: "allow",
+        decision: "allow",
         reason: "rule-allow",
       });
     });
 
     it("check: third-party denied — execution is blocked", () => {
-      const pipeline = createApprovalPipeline(undefined, [
+      const pipeline = createApprovalPipeline([
         { pattern: "builtin:*", action: "allow" },
         { pattern: "third-party:*", action: "deny" },
       ]);
       const result = pipeline.check(makeRequest(), "third-party");
       expect(result).toEqual({
-        needsApproval: true,
+        decision: "deny",
         reason: "rule-deny",
       });
-    });
-  });
-
-  describe("hasSessionAllow", () => {
-    it("returns false — community session approvals are not wired to persistence", () => {
-      const pipeline = createApprovalPipeline();
-      expect(
-        pipeline.hasSessionAllow("sess-1", "covel_test_rt_my_tool", "test"),
-      ).toBe(false);
     });
   });
 });

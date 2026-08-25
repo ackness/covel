@@ -13,8 +13,9 @@ describe("SessionStatus", () => {
     const s: Session = {
       id: "s-1",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
       activePlugins: [],
       locale: "zh-CN",
       createdAt: "now",

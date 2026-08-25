@@ -52,8 +52,8 @@ export function createCommitPipeline(
 
   /**
    * Commit a single proposal through `handlerMap`, recording the trace event
-   * via `writeStore`. The non-transactional path passes the outer `store`; the
-   * transactional path passes the `tx`-scoped store view (and tx-bound
+   * via `writeStore`. An already transaction-bound path passes its current
+   * view; a root-store path opens and passes a new `tx`-scoped view (and tx-bound
    * handlers) so every write lands inside the open transaction — critical on
    * PostgreSQL, where `withTransaction` runs on an isolated connection and a
    * write through the outer store would escape the transaction.
@@ -225,8 +225,7 @@ export function createCommitPipeline(
     // rolls back every write in the chain. NOTE this is not proposal-level
     // atomicity: a handler validation failure returns { committed: false }
     // without throwing, the transaction still commits, and committed siblings
-    // stay — same best-effort semantics as the fallback below (kept identical
-    // deliberately so all store backends behave the same). On PostgreSQL each
+    // stay. On PostgreSQL each
     // `withTransaction` runs on its own pooled connection, so concurrent turns
     // no longer serialize behind a shared begin/commit window.
     if (typeof store.withTransaction === "function") {
@@ -268,18 +267,18 @@ export function createCommitPipeline(
       return results;
     }
 
-    // Fallback: stores without scoped transactions commit one proposal at a
-    // time — thin mocks / legacy backends, but ALSO a tx-bound store view from
-    // a caller-owned enclosing transaction (tx views strip `withTransaction` —
-    // nesting is rejected). In that case the caller passes `deferPostCommit`
+    // A tx-bound store view from a caller-owned enclosing transaction omits
+    // `withTransaction` because nesting is rejected. Commit directly through
+    // that view; the caller passes `deferPostCommit`
     // so fan-out waits behind its commit instead of firing while the outer
     // transaction is still open (and could still roll these writes back).
-    // A mid-chain failure can leave a partial commit, so surface it loudly.
+    // The outer transaction still owns rollback; surface handler-level partial
+    // results so the caller can decide whether to abort that transaction.
     const results: CommitResult[] = [];
     for (const p of proposals) {
       results.push(await commitWith(handlers, store, p, deferPostCommit));
     }
-    warnPartialCommit(proposals, results, "non-transactional mode");
+    warnPartialCommit(proposals, results, "enclosing transaction");
     return results;
   }
 

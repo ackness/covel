@@ -1,4 +1,5 @@
 import type { DataService } from "@/services/data-service.js";
+import type { SessionWorkspace } from "@/services/data-service.js";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,10 +27,13 @@ const session: SessionRecord = {
   id: "sess-1",
   worldId: "world-1",
   status: "active",
-  turnCount: 0,
+  phase: "setup",
+  completedPlayerTurns: 0,
+  setupRuntimes: {},
   activePlugins: ["pregame", "world-init"],
   locale: "en-US",
   createdAt: "2026-08-09T00:00:00.000Z",
+  updatedAt: "2026-08-09T00:00:00.000Z",
 };
 const world = {
   id: "world-1",
@@ -44,6 +48,7 @@ function makeDataService(order: string[]): DataService {
       order.push("create");
       return session;
     }),
+    getSession: vi.fn(async () => session),
     syncToServer: vi.fn(async () => {
       order.push("sync");
     }),
@@ -54,6 +59,14 @@ function makeDataService(order: string[]): DataService {
       order.push("delete");
     }),
   } as unknown as DataService;
+}
+
+function makeWorkspace(ds: DataService): SessionWorkspace {
+  return {
+    hydrate: (sessionId) => ds.syncToServer(sessionId),
+    run: (_sessionId, _actionId, mutate) => mutate(),
+    checkpoint: () => Promise.resolve(),
+  };
 }
 
 beforeEach(() => {
@@ -79,8 +92,10 @@ describe("startGameSession bootstrap order", () => {
       if (action.type === "SET_SESSION") order.push("dispatch-session");
     });
 
+    const ds = makeDataService(order);
     await startGameSession({
-      ds: makeDataService(order),
+      ds,
+      workspace: makeWorkspace(ds),
       dispatch,
       sessionIdRef: { current: null },
       world,
@@ -102,9 +117,11 @@ describe("startGameSession bootstrap order", () => {
   it("keeps prep bindings when the server patch fails", async () => {
     api.updateSession.mockRejectedValue(new Error("patch failed"));
     const dispatch = vi.fn();
+    const ds = makeDataService([]);
 
     await startGameSession({
-      ds: makeDataService([]),
+      ds,
+      workspace: makeWorkspace(ds),
       dispatch,
       sessionIdRef: { current: null },
       world,
@@ -126,6 +143,7 @@ describe("startGameSession bootstrap order", () => {
     await expect(
       startGameSession({
         ds,
+        workspace: makeWorkspace(ds),
         dispatch,
         sessionIdRef: { current: null },
         world,
@@ -154,6 +172,7 @@ describe("startGameSession bootstrap order", () => {
     await expect(
       startGameSession({
         ds,
+        workspace: makeWorkspace(ds),
         dispatch,
         sessionIdRef,
         world,
@@ -185,6 +204,7 @@ describe("startGameSession bootstrap order", () => {
 
     const starting = startGameSession({
       ds,
+      workspace: makeWorkspace(ds),
       dispatch,
       sessionIdRef,
       world,

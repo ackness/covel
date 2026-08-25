@@ -17,7 +17,7 @@ export const FEATURE_ENV_VARS = [
     status: "active",
     defaultValue: "5",
     description:
-      "Auto-snapshot checkpoint cadence: save a kind=auto snapshot every N turns (turnCount <= 1 always snapshots). 1 = every turn.",
+      "Auto-snapshot checkpoint cadence: save a kind=auto snapshot every N completed player turns (the first one always snapshots). 1 = every turn.",
   },
   {
     name: "COVEL_TRACE_TRUNCATE",

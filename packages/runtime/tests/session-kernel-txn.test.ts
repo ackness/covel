@@ -2,9 +2,9 @@
  * Session kernel commit-atomicity tests.
  *
  * Verifies that `commitAll()` wraps the proposal chain in a single scoped
- * `withTransaction` callback by default (writes flow through the tx-bound store
- * view), and falls back to the legacy non-transactional loop when the store
- * does not expose `withTransaction`. The begin/commit/rollback counters track
+ * `withTransaction` callback for a root store (writes flow through the tx-bound
+ * view), and writes directly when it receives an already transaction-bound
+ * view. The begin/commit/rollback counters track
  * the transaction lifecycle: entry → begin, clean return → commit, thrown
  * error → rollback (auto-restore).
  */
@@ -375,7 +375,7 @@ describe("session-kernel commitAll atomicity", () => {
     expect(committedRows[0].turnId).toBe(TURN_ID);
   });
 
-  it("store missing tx hooks: falls back to non-transactional path", async () => {
+  it("writes through an already transaction-bound store view", async () => {
     const store: KernelStore = {
       addMessage: vi.fn().mockResolvedValue(undefined),
       updateSession: vi.fn().mockResolvedValue(undefined),
@@ -389,7 +389,7 @@ describe("session-kernel commitAll atomicity", () => {
     const proposals: Proposal[] = [
       makeProposal(
         "narrative.append",
-        { content: "legacy", kind: "story" },
+        { content: "inside outer transaction", kind: "story" },
         "a",
       ),
     ];

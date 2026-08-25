@@ -8,12 +8,11 @@ import {
   setStorageMode,
   storageModeForServerStorage,
 } from "@/services/data-service";
-import { fetchServerHealth, loadProviderKeysFromStorage } from "@/services/api";
+import { fetchServerHealth } from "@/services/api";
 import { probeDesktopMode } from "@/lib/desktop-bridge";
 import {
   applyAppearance,
   applyColorScheme,
-  DEFAULT_COLOR_SCHEME,
   type Appearance,
   type ColorScheme,
 } from "@/lib/appearance";
@@ -64,26 +63,6 @@ async function syncStorageMode(): Promise<void> {
   }
 }
 
-async function migrateLegacyThemeScheme(store: ReturnType<typeof getSettings>) {
-  if (store.has(THEME_SCHEME_KEY) || typeof window === "undefined") return;
-  const legacyTheme =
-    window.localStorage.getItem("covel:scheme") ??
-    window.localStorage.getItem("theme");
-  const scheme =
-    legacyTheme === "light" || legacyTheme === "dark"
-      ? legacyTheme
-      : DEFAULT_COLOR_SCHEME;
-  try {
-    await store.set(THEME_SCHEME_KEY, scheme);
-    window.localStorage.removeItem("theme");
-  } catch (err) {
-    // A read-only store (failed hydration) must not stop the app from booting;
-    // the migration retries on the next launch. Keep the legacy key so nothing
-    // is lost while writes are refused.
-    console.warn("[boot] theme-scheme migration skipped:", err);
-  }
-}
-
 function syncNextThemesStorage(scheme: ColorScheme): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem("covel:scheme", scheme);
@@ -98,7 +77,6 @@ probeDesktopMode()
   .then(() => initSettings())
   .then(async () => {
     const store = getSettings();
-    await migrateLegacyThemeScheme(store);
     syncThemeRegistry(store);
     // Apply initial appearance / locale ASAP so the first paint matches.
     applyAppearance(store.get<Appearance>("ui.appearance"));
@@ -138,7 +116,7 @@ probeDesktopMode()
     store.subscribe<number>("ui.chatMessageWindow", (next) => {
       configureMessagesWindowCap(next);
     });
-    return Promise.all([syncStorageMode(), loadProviderKeysFromStorage()]);
+    return syncStorageMode();
   })
   // Nothing in the bootstrap is allowed to stop the app from mounting. Every
   // step above is a preference/hydration concern; a rejection here used to

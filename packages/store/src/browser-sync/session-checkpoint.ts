@@ -219,8 +219,5 @@ export async function replaceSessionFromCheckpoint(
   options: ReplaceSessionCheckpointOptions = {},
 ): Promise<void> {
   const checkpoint = validateBrowserCheckpoint(value);
-  if (typeof store.withTransaction !== "function") {
-    throw new Error("Browser checkpoint import requires store transactions");
-  }
   await store.withTransaction((tx) => writeCheckpoint(tx, checkpoint, options));
 }

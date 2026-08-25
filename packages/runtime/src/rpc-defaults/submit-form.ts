@@ -130,15 +130,6 @@ function findCommittedInteraction(
           interaction: interaction as LocatedInteraction["interaction"],
         };
       }
-      continue;
-    }
-    if (typeof pi !== "object") continue;
-    const legacy = pi as Record<string, unknown>;
-    if (legacy.formId === interactionId) {
-      return {
-        message: m,
-        interaction: { ...legacy, interactionId, type: "form" },
-      };
     }
   }
   return undefined;
@@ -178,9 +169,11 @@ function validateFormValues(
   interaction: LocatedInteraction["interaction"],
   values: Readonly<Record<string, unknown>>,
 ): Record<string, unknown> {
-  // Historical PlayerInputForm rows may carry only `formId`. Keep those rows
-  // submittable; current InteractionPayload rows always carry the schema below.
-  if (!Array.isArray(interaction.fields)) return { ...values };
+  if (!Array.isArray(interaction.fields)) {
+    throw new RpcValidationError(
+      `Committed form ${interaction.interactionId} is missing fields`,
+    );
+  }
 
   const fields = interaction.fields as Array<Record<string, unknown>>;
   const declared = new Map<string, Record<string, unknown>>();
@@ -514,11 +507,7 @@ export const submitFormHandler: RpcHandler = async (
     }
   };
   if (writes.length > 0) {
-    if (typeof frameworkStore.withTransaction === "function") {
-      await frameworkStore.withTransaction(async (tx) => persist(tx));
-    } else {
-      await persist(frameworkStore);
-    }
+    await frameworkStore.withTransaction(async (tx) => persist(tx));
   }
 
   return {

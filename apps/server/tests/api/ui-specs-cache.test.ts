@@ -126,15 +126,20 @@ describe("GET /api/ui-specs — materialisation cache", () => {
     registry = createPluginRegistry();
 
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
       id: sessionId,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       presetId: null,
       activePlugins: ["panel-plugin"],
       createdAt: new Date().toISOString(),
-      metadata: { [SESSION_INCARNATION_KEY]: "first" },
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        [SESSION_INCARNATION_KEY]: "first",
+      },
     });
 
     app = createMiscApiRoutes(stubAi, registry, store);
@@ -175,15 +180,20 @@ describe("GET /api/ui-specs — materialisation cache", () => {
 
     await store.deleteSession(sessionId);
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
       id: sessionId,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       presetId: null,
       activePlugins: ["panel-plugin"],
       createdAt: new Date().toISOString(),
-      metadata: { [SESSION_INCARNATION_KEY]: "second" },
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        [SESSION_INCARNATION_KEY]: "second",
+      },
     });
 
     const recreated = await app.request(`/api/ui-specs?sessionId=${sessionId}`);

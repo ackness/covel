@@ -15,8 +15,9 @@ export interface SessionRecord {
   readonly id: string;
   readonly worldId?: string;
   readonly status: string;
-  readonly turnCount: number;
-  readonly preGameCompleted: readonly string[];
+  readonly phase: "setup" | "playing";
+  readonly completedPlayerTurns: number;
+  readonly setupRuntimes: Readonly<Record<string, unknown>>;
   readonly locale: string;
   readonly activePlugins: readonly string[];
   readonly metadata?: Readonly<Record<string, unknown>>;

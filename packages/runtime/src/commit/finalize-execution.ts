@@ -16,9 +16,8 @@
  * the execution's `turn_results` rows is settled inside that same transaction
  * on success, and best-effort to `failed` outside it on rollback.
  *
- * Stores without `withTransaction` (thin test mocks / legacy backends) degrade
- * to the previous one-at-a-time behaviour: no cross-runtime rollback is
- * promised, matching what those stores could do before.
+ * `DataStore.withTransaction` is mandatory, so every execution has this same
+ * atomic boundary in production and tests.
  */
 
 import type {
@@ -56,6 +55,7 @@ import {
   canonicalizeMediaRefs,
   type MediaOwnershipStore,
 } from "../media/canonicalize-media-refs.js";
+import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 
 /**
  * The subset of a manifest needed to resolve output kind, capabilities, scope
@@ -80,8 +80,8 @@ interface FailedProposal {
 export interface FinalizeExecutionArgs {
   readonly store: DataStore;
   readonly sessionId: string;
-  /** Run identity — used only for diagnostics on rollback. */
-  readonly executionContext?: ExecutionContext;
+  /** Canonical identity of the execution being finalized. */
+  readonly executionContext: ExecutionContext;
   /**
    * Manifests for every runtime that may appear in `results`, used to resolve
    * each result's `outputKind` / `capabilities` and (by default) the hook
@@ -169,8 +169,6 @@ class ProposalCommitFailure extends Error {
   }
 }
 
-let degradedWarned = false;
-
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -205,6 +203,22 @@ function jobOutcomeForResult(status: string | undefined): ExecutionJobOutcome {
     default:
       return "success";
   }
+}
+
+function emitCommittedSuspension(
+  eventBus: EventBus | undefined,
+  suspension: SuspensionRecord,
+): void {
+  emitSubEvent(eventBus, "game", "turn.suspended", suspension.sessionId, {
+    sessionId: suspension.sessionId,
+    turnId: suspension.turnId,
+    suspensionId: suspension.id,
+    pluginId: suspension.pluginId,
+    runtimeId: suspension.runtimeId,
+    suspendedAt: suspension.createdAt,
+    reason: suspension.reason,
+    resumeSchema: suspension.resumeSchema,
+  });
 }
 
 /**
@@ -333,6 +347,7 @@ export async function finalizeExecution(
 
   const saveSuspensions = async (
     sink: Pick<StoreTransaction, "saveSuspension">,
+    deferPostCommit?: (fn: () => Promise<void>) => void,
   ): Promise<void> => {
     for (const suspension of args.suspensions ?? []) {
       if (suspension.sessionId !== sessionId) {
@@ -341,6 +356,9 @@ export async function finalizeExecution(
         );
       }
       await sink.saveSuspension(suspension);
+      deferPostCommit?.(async () => {
+        emitCommittedSuspension(eventBus, suspension);
+      });
     }
   };
 
@@ -385,147 +403,58 @@ export async function finalizeExecution(
   // Commit (Pre/PostStateCommit) fires outside executeTurn's own hook scope, so
   // re-establish it here — session-scoped like every other commit site.
   return runWithHookScope({ activePluginIds }, async () => {
-    // ── Preferred path: one transaction for the whole execution ──
-    if (typeof store.withTransaction === "function") {
-      // Externally-visible fan-out is buffered while the transaction is open
-      // and flushed only after it COMMITs; a rollback discards the buffer, so
-      // clients never see "committed" events for undone writes.
-      const postCommit: Array<() => Promise<void>> = [];
-      let committedEvents: readonly SessionEvent[] = [];
-      try {
-        committedEvents = await store.withTransaction(async (tx) => {
-          const events: SessionEvent[] = [];
-          for (const result of results) {
-            const out = await processRuntimeResult(
-              result,
-              tx,
-              sessionId,
-              kindOf(result),
-              processOpts(result, (fn) => postCommit.push(fn)),
-            );
-            events.push(...out.events);
-            if (out.failedProposals.length > 0) {
-              // Any proposal failure rolls back the whole execution.
-              throw new ProposalCommitFailure(out.failedProposals);
-            }
+    // Externally-visible fan-out is buffered while the transaction is open and
+    // flushed only after it commits. A rollback discards the buffer.
+    const postCommit: Array<() => Promise<void>> = [];
+    let committedEvents: readonly SessionEvent[] = [];
+    try {
+      committedEvents = await store.withTransaction(async (tx) => {
+        const events: SessionEvent[] = [];
+        for (const result of results) {
+          const out = await processRuntimeResult(
+            result,
+            tx,
+            sessionId,
+            kindOf(result),
+            processOpts(result, (fn) => postCommit.push(fn)),
+          );
+          events.push(...out.events);
+          if (out.failedProposals.length > 0) {
+            throw new ProposalCommitFailure(out.failedProposals);
           }
-          for (const message of args.journalMessages ?? []) {
-            await tx.appendTurnMessage(message);
-          }
-          await extraInTx?.(tx);
-          // Continuations become visible only at the proposal commit point.
-          // A later clock/export/status failure rolls them back as well.
-          await saveSuspensions(tx);
-          // Advance the session clock in the same transaction as the domain
-          // writes, so a rollback undoes the counter / phase flip too.
-          if (shouldWriteClock) {
-            await applySessionClockTx(tx, {
-              sessionId,
-              ...(executionContext ? { executionContext } : {}),
-              update: sessionClock!,
-            });
-          }
-          // Publish `recordAs` exports in the SAME transaction as the domain
-          // writes: a rollback (a throw above) discards them, a commit lands
-          // each export revision atomically with the state it summarises.
-          await publishExports(tx);
-          for (const turnId of turnIds) {
-            await tx.setTurnResultCommitStatus(sessionId, turnId, "committed");
-          }
-          return events;
-        });
-      } catch (err) {
-        // Rolled back. Drop the buffered fan-out; settle the rows to failed
-        // outside the (now aborted) transaction.
-        postCommit.length = 0;
-        await settleTurnResults(store, sessionId, turnIds, "failed");
-        if (err instanceof ProposalCommitFailure) {
-          return conclude({
-            status: "failed",
-            events: [],
-            failedProposals: err.failedProposals,
+        }
+        for (const message of args.journalMessages ?? []) {
+          await tx.appendTurnMessage(message);
+        }
+        await extraInTx?.(tx);
+        await saveSuspensions(tx, (fn) => postCommit.push(fn));
+        if (shouldWriteClock) {
+          await applySessionClockTx(tx, {
+            sessionId,
+            executionContext,
+            update: sessionClock!,
           });
         }
-        console.warn(
-          `[finalize-execution] execution rolled back for session ${sessionId}` +
-            (args.executionContext
-              ? ` (execution ${args.executionContext.executionId})`
-              : "") +
-            `: ${errorMessage(err)}`,
-        );
+        await publishExports(tx);
+        for (const turnId of turnIds) {
+          await tx.setTurnResultCommitStatus(sessionId, turnId, "committed");
+        }
+        return events;
+      });
+    } catch (err) {
+      postCommit.length = 0;
+      await settleTurnResults(store, sessionId, turnIds, "failed");
+      if (err instanceof ProposalCommitFailure) {
         return conclude({
           status: "failed",
           events: [],
-          failedProposals: [],
-          error: errorMessage(err),
+          failedProposals: err.failedProposals,
         });
       }
-
-      // Committed. Flush deferred fan-out in order; a failing emit/hook must not
-      // masquerade as a commit failure (the data IS committed).
-      for (const fn of postCommit) {
-        try {
-          await fn();
-        } catch (err) {
-          console.warn(
-            "[finalize-execution] post-commit fan-out failed:",
-            errorMessage(err),
-          );
-        }
-      }
-      return conclude({
-        status: "committed",
-        events: committedEvents,
-        failedProposals: [],
-      });
-    }
-
-    // ── Degraded path: no scoped transaction (thin mocks / legacy) ──
-    // Commit one result at a time with inline fan-out — no cross-runtime
-    // rollback is possible, so this matches the pre-existing best-effort
-    // semantics on such stores.
-    if (!degradedWarned) {
-      degradedWarned = true;
       console.warn(
-        "[finalize-execution] store has no withTransaction — committing without " +
-          "whole-execution atomicity (no cross-runtime rollback).",
+        `[finalize-execution] execution rolled back for session ${sessionId}` +
+          ` (execution ${args.executionContext.executionId}): ${errorMessage(err)}`,
       );
-    }
-    const events: SessionEvent[] = [];
-    const failedProposals: FailedProposal[] = [];
-    for (const result of results) {
-      const out = await processRuntimeResult(
-        result,
-        store,
-        sessionId,
-        kindOf(result),
-        processOpts(result),
-      );
-      events.push(...out.events);
-      failedProposals.push(...out.failedProposals);
-    }
-    if (failedProposals.length > 0) {
-      // Cannot roll back the committed siblings; settle failed and skip
-      // extraInTx (mirrors resume's "proposal failure precedes history writes").
-      await settleTurnResults(store, sessionId, turnIds, "failed");
-      return conclude({ status: "failed", events, failedProposals });
-    }
-    try {
-      // DataStore satisfies StoreTransaction structurally (it has every member).
-      for (const message of args.journalMessages ?? []) {
-        await store.appendTurnMessage(message);
-      }
-      await extraInTx?.(store as unknown as StoreTransaction);
-      await saveSuspensions(store);
-      if (shouldWriteClock) {
-        await applySessionClockTx(store as unknown as StoreTransaction, {
-          sessionId,
-          ...(executionContext ? { executionContext } : {}),
-          update: sessionClock!,
-        });
-      }
-    } catch (err) {
-      await settleTurnResults(store, sessionId, turnIds, "failed");
       return conclude({
         status: "failed",
         events: [],
@@ -533,10 +462,21 @@ export async function finalizeExecution(
         error: errorMessage(err),
       });
     }
-    // Degraded (no scoped transaction): publish after the domain writes landed,
-    // matching the best-effort semantics such stores already give.
-    await publishExports(store);
-    await settleTurnResults(store, sessionId, turnIds, "committed");
-    return conclude({ status: "committed", events, failedProposals: [] });
+
+    for (const fn of postCommit) {
+      try {
+        await fn();
+      } catch (err) {
+        console.warn(
+          "[finalize-execution] post-commit fan-out failed:",
+          errorMessage(err),
+        );
+      }
+    }
+    return conclude({
+      status: "committed",
+      events: committedEvents,
+      failedProposals: [],
+    });
   });
 }

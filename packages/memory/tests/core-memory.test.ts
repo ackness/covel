@@ -256,26 +256,6 @@ describe("CoreMemoryManager", () => {
         atomicStore.pluginData.get("sess-1:memory:blocks:scene")?.value,
       ).toMatchObject({ content: "old scene" });
     });
-
-    it("fails before writing when a multi-block store has no transaction", async () => {
-      const nonTransactionalStore = createMockStore();
-      delete (nonTransactionalStore as { withTransaction?: unknown })
-        .withTransaction;
-      const nonTransactionalManager = createMemoryManager(
-        nonTransactionalStore as any,
-      );
-
-      await expect(
-        nonTransactionalManager.updateBlocks(
-          "sess-1",
-          new Map<CoreMemoryLabel, string>([
-            ["story_state", "new story"],
-            ["scene", "new scene"],
-          ]),
-        ),
-      ).rejects.toThrow("require store.withTransaction");
-      expect(nonTransactionalStore.records.size).toBe(0);
-    });
   });
 
   describe("loadBlocks", () => {

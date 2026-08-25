@@ -68,6 +68,16 @@ function physicalTableName(id: number): string {
   return `vec_mem_m${id}`;
 }
 
+function requireCurrentTableName(id: number, tableName: string): string {
+  const expected = physicalTableName(id);
+  if (tableName !== expected) {
+    throw new Error(
+      `sqlite-vec: vector_models.id ${id} violates the current table_name invariant`,
+    );
+  }
+  return expected;
+}
+
 /** Convert a Float32Array to the JSON string form sqlite-vec expects. */
 function toJsonVector(v: Float32Array): string {
   return `[${Array.from(v).join(",")}]`;
@@ -151,7 +161,7 @@ export function createSqliteVectorCapability(
       modelRegistryId: row.id,
       modelId: row.model_id,
       dim: row.dim,
-      tableName: row.table_name,
+      tableName: requireCurrentTableName(row.id, row.table_name),
     };
   }
 
@@ -195,16 +205,6 @@ export function createSqliteVectorCapability(
       throw new Error(
         `sqlite-vec: failed to find or create vector_models entry for ${identity.modelId}`,
       );
-    }
-
-    // Defensive: if a legacy row still carries a placeholder (e.g. the
-    // database was created by an older version of this module), repair it.
-    if (!row.table_name || row.table_name === "__pending__") {
-      const tname = physicalTableName(row.id);
-      sqlite
-        .prepare(`UPDATE vector_models SET table_name = ? WHERE id = ?`)
-        .run(tname, row.id);
-      row.table_name = tname;
     }
 
     const target = rowToTarget(row);
@@ -314,7 +314,7 @@ export function createSqliteVectorCapability(
       provider: r.provider,
       modelName: r.model_name,
       dim: r.dim,
-      tableName: r.table_name,
+      tableName: requireCurrentTableName(r.id, r.table_name),
       createdAt: r.created_at,
       lastUsedAt: r.last_used_at,
     }));

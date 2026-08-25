@@ -137,11 +137,6 @@ export type PluginRpcResponse =
       readonly durationMs?: number;
       readonly abortReason?: string;
       readonly deferredJobs?: readonly PluginRpcDeferredJob[];
-      /**
-       * @deprecated Server writes expected-background-follower failures to
-       * `_jobs/<jobId>` and returns `accepted`.
-       */
-      readonly failedJobs?: readonly PluginRpcDeferredJob[];
     }
   | {
       readonly status: "accepted";

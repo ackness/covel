@@ -189,14 +189,6 @@ export function buildSlotConfigHeaderInternal(
 // REST) secrets go to `keys.env` with mode 600; on pure web they live in
 // `covel:keys` localStorage. Callers see a flat `{ provider -> key }` map.
 
-/**
- * Kept for backwards compatibility with `main.tsx`. The real hydration now
- * happens in `initSettings()`; this awaits the store's ready promise.
- */
-export async function loadProviderKeysFromStorage(): Promise<void> {
-  await (getSettings() as unknown as { ready(): Promise<void> }).ready();
-}
-
 function providerKeysSnapshot(): Record<string, string> {
   const store = getSettings() as unknown as {
     snapshotSecrets(): Record<string, string>;

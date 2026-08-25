@@ -226,11 +226,17 @@ describe("world routes", () => {
       updatedAt: now,
     });
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sess-1",
       worldId: "world-2",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "zh-CN",
       activePlugins: [],
       createdAt: now,
@@ -405,11 +411,17 @@ describe("world routes", () => {
     } as PluginRegistry;
     app = createTestApp(store, pluginRegistry, { worldsDirs: [worldsDir] });
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sync-session",
       worldId: "preflight-world",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       locale: "zh-CN",
       activePlugins: ["world-notes"],
       createdAt: now,
@@ -473,11 +485,17 @@ describe("world routes", () => {
     } as PluginRegistry;
     app = createTestApp(store, pluginRegistry, { worldsDirs: [worldsDir] });
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sync-conflict",
       worldId: "preflight-world",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       locale: "zh-CN",
       activePlugins: ["world-notes"],
       createdAt: now,
@@ -550,11 +568,17 @@ describe("world routes", () => {
     });
     for (const sessionId of ["media-a", "media-b"]) {
       await store.createSession({
+        phase: "playing",
+        setupRuntimes: {},
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
         id: sessionId,
         worldId: "media-world",
         status: "active",
-        turnCount: 0,
-        preGameCompleted: [],
+        completedPlayerTurns: 0,
+
         locale: "zh-CN",
         activePlugins: ["character-presence"],
         createdAt: now,

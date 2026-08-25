@@ -7,8 +7,6 @@
  *  - event without a configured topic
  *  - reserved modes (error-retry / conditional) never fire
  *  - conditional emits exactly one console.warn per (sessionId, runtimeId)
- *  - preGameCompleted gate runs BEFORE startTurn (so a Pre-Game runtime
- *    that already finished isn't re-evaluated)
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -35,7 +33,6 @@ function ctx(overrides?: Partial<TriggerContext>): TriggerContext {
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
     isManualTrigger: false,
-    preGameCompleted: [],
     ...overrides,
   };
   // scheduled / startTurn gate on `logicalTurn`; these cases express the turn
@@ -47,17 +44,6 @@ function ctx(overrides?: Partial<TriggerContext>): TriggerContext {
 }
 
 describe("shouldTrigger — gate ordering", () => {
-  it("preGameCompleted is checked BEFORE startTurn, so a re-run of a done Pre-Game runtime is silent", () => {
-    // Runtime is done (preGameCompleted) AND turnNumber < startTurn. Both
-    // conditions block, but we must not pay the cost of evaluating startTurn.
-    // The contract here is "preGameCompleted short-circuits first" — keeps
-    // scheduler logs from filling with "blocked by startTurn" noise for
-    // already-finished Pre-Game plugins.
-    const m = manifest({ trigger: { type: "auto", startTurn: 10 } });
-    const c = ctx({ preGameCompleted: [m.name], turnNumber: 0 });
-    expect(shouldTrigger(m, c)).toBe(false);
-  });
-
   it("cooldown takes precedence over the trigger-type branch (auto)", () => {
     const m = manifest({ trigger: { type: "auto", cooldownTurns: 5 } });
     const c = ctx({ turnsSinceLastTrigger: 2 });

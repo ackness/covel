@@ -20,7 +20,13 @@ import {
 } from "../session-store/subscription.js";
 
 const snapshot = {
-  session: { id: "s1", worldId: "w1", turnCount: 2 },
+  session: {
+    id: "s1",
+    worldId: "w1",
+    phase: "playing" as const,
+    completedPlayerTurns: 2,
+    setupRuntimes: {},
+  },
   messages: [],
   characters: [],
   gameState: { hp: 7 },

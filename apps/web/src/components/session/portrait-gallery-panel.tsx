@@ -7,8 +7,11 @@ import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
 import { useActiveSessionId } from "@/lib/catalog/session-context.js";
-import { uploadSessionMedia } from "@/services/api.js";
-import { postPluginRpc } from "@/services/session-workspace.js";
+import {
+  postPluginRpc as requestPluginRpc,
+  uploadSessionMedia,
+} from "@/services/api.js";
+import { getSessionWorkspace } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 
 interface PresenceRecord {
@@ -58,21 +61,26 @@ export function PortraitGalleryPanel({ pluginId }: { pluginId: string }) {
     setUploadingKey(entry.key);
     try {
       const ref = await uploadSessionMedia(sessionId, file);
-      await postPluginRpc(sessionId, {
-        pluginId,
-        runtimeId: pluginId,
-        payload: {
-          presence: {
-            schemaVersion: 1,
-            characterId,
-            ...(entry.value.displayName
-              ? { displayName: entry.value.displayName }
-              : {}),
-            avatar: { id: ref.id, mime: ref.mime, size: ref.size },
-            sprite: { id: ref.id, mime: ref.mime, size: ref.size },
-          },
-        },
-      });
+      await getSessionWorkspace().run(
+        sessionId,
+        `plugin-rpc:${crypto.randomUUID()}`,
+        () =>
+          requestPluginRpc(sessionId, {
+            pluginId,
+            runtimeId: pluginId,
+            payload: {
+              presence: {
+                schemaVersion: 1,
+                characterId,
+                ...(entry.value.displayName
+                  ? { displayName: entry.value.displayName }
+                  : {}),
+                avatar: { id: ref.id, mime: ref.mime, size: ref.size },
+                sprite: { id: ref.id, mime: ref.mime, size: ref.size },
+              },
+            },
+          }),
+      );
       // The plugin.data commit emits `plugin-data.changed`, which refreshes the
       // presence store and re-renders this gallery with the new portrait.
     } catch (err) {

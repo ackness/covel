@@ -1,6 +1,7 @@
 import {
   createTurnEmitter,
   collectExecutionJournal,
+  collectExecutionSuspensions,
   executeTurn,
   finalizeExecution,
   saveAutoSnapshot,
@@ -16,7 +17,6 @@ import type {
   TurnCommitOutcome,
 } from "./runtime-response.js";
 import { sessionApprovalScope } from "../session/session-guard.js";
-import { stageExecutionSuspensions } from "../execution-suspensions.js";
 
 export class SessionApprovalScopeChangedError extends Error {
   constructor() {
@@ -138,7 +138,6 @@ export function createPluginRpcRuntimeTurnRunner(
   async function processTurnResults(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
-    stagedSuspensions: ReturnType<typeof stageExecutionSuspensions>,
   ): Promise<TurnCommitOutcome> {
     // Commit the whole execution (top-level + nested recursiveCall results) in
     // ONE transaction via the shared finalize primitive. Any proposal failure
@@ -148,16 +147,14 @@ export function createPluginRpcRuntimeTurnRunner(
     const outcome = await finalizeExecution({
       store: ctx.store,
       sessionId: ctx.sessionId,
-      ...(turnResult.executionContext
-        ? { executionContext: turnResult.executionContext }
-        : {}),
+      executionContext: turnResult.executionContext,
       runtimes: ctx.activeRuntimes,
       results: [
         ...turnResult.runtimeResults,
         ...(turnResult.nestedRuntimeResults ?? []),
       ],
       journalMessages: collectExecutionJournal(turnResult),
-      suspensions: stagedSuspensions.records,
+      suspensions: collectExecutionSuspensions(turnResult),
       turnIds: [turnResult.turnId],
       ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
       eventBus: ctx.eventBus,
@@ -170,8 +167,7 @@ export function createPluginRpcRuntimeTurnRunner(
       loadOutputSchema: async (runtimeId) => {
         const rt = ctx.activeRuntimes.find((r) => r.name === runtimeId);
         return rt
-          ? (await ctx.deps.loadRuntime(rt, ctx.session.locale ?? undefined))
-              ?.outputSchema
+          ? (await ctx.deps.loadRuntime(rt, ctx.session.locale))?.outputSchema
           : undefined;
       },
       // MediaRef canonicalization / ownership for published export values.
@@ -224,7 +220,11 @@ export function createPluginRpcRuntimeTurnRunner(
     // sync RPC return 500 and the client retry, replaying committed proposals.
     // So `committed` tracks proposal commit alone, matching commit_status;
     // `snapshotFailed` stays on the outcome for observability.
-    if (committed) {
+    const hasSuspendedRuntime = [
+      ...turnResult.runtimeResults,
+      ...(turnResult.nestedRuntimeResults ?? []),
+    ].some((result) => result.status === "suspended");
+    if (committed && !hasSuspendedRuntime) {
       await turnResult.completeTurn?.();
     }
     return {
@@ -269,10 +269,9 @@ export function createPluginRpcRuntimeTurnRunner(
       await ctx.sessionLock.withLock(ctx.sessionId, () =>
         requireLiveApprovedSession(runtimeId).then(() => undefined),
       );
-      const stagedSuspensions = stageExecutionSuspensions(ctx.store);
       const result = await executeTurn(turnInput, ctx.activeRuntimes, {
         ...ctx.deps,
-        store: stagedSuspensions.store,
+        store: ctx.store,
         eventBus: ctx.eventBus,
         emitter,
         ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
@@ -289,11 +288,11 @@ export function createPluginRpcRuntimeTurnRunner(
           if (!live) {
             throw new SessionNotActiveError("deleted");
           }
-          if (live.status && live.status !== "active") {
+          if (live.status !== "active") {
             throw new SessionNotActiveError(live.status);
           }
           assertApprovalScope(live, runtimeId);
-          return processTurnResults(result, emitter, stagedSuspensions);
+          return processTurnResults(result, emitter);
         },
       );
       return { turnResult: result, commit: outcome };
@@ -313,7 +312,7 @@ export function createPluginRpcRuntimeTurnRunner(
       sessionId: ctx.sessionId,
       turnId: args.turnId,
       playerMessage: "",
-      locale: ctx.session.locale ?? "zh-CN",
+      locale: ctx.session.locale,
       // A manual RPC trigger is not a player turn.
       origin: "manual",
       manualTrigger: {
@@ -345,19 +344,14 @@ export function createPluginRpcRuntimeTurnRunner(
         }))
       : await ctx.sessionLock.withLock(ctx.sessionId, async () => {
           await requireLiveApprovedSession(args.runtimeId);
-          const stagedSuspensions = stageExecutionSuspensions(ctx.store);
           const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
             ...ctx.deps,
-            store: stagedSuspensions.store,
+            store: ctx.store,
             eventBus: ctx.eventBus,
             emitter,
             ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
           });
-          const outcome = await processTurnResults(
-            turnResult,
-            emitter,
-            stagedSuspensions,
-          );
+          const outcome = await processTurnResults(turnResult, emitter);
           return { result: turnResult, commit: outcome };
         });
 
@@ -394,9 +388,9 @@ export function createPluginRpcRuntimeTurnRunner(
       sessionId: ctx.sessionId,
       turnId: args.followerTurnId,
       playerMessage: "",
-      locale: ctx.session.locale ?? "zh-CN",
+      locale: ctx.session.locale,
       // A deferred background follower is not a player turn.
-      origin: "follower",
+      origin: "background",
       manualTrigger: {
         runtimeId: args.runtimeId,
         triggerEvent: args.triggerEvent,

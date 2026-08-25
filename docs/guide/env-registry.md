@@ -59,7 +59,7 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 - `COVEL_BIND_HOST` 默认 `127.0.0.1`：本地 / 桌面部署只监听回环接口，网络上不可达。容器或多 pod 部署需显式设置 `COVEL_BIND_HOST=0.0.0.0`（`docker/docker-compose.yml` 已内置）——这是一次显式的部署决策，公开监听前请确认 `DEPLOYMENT_TIER` 与鉴权配置。
 - `COVEL_LLM_REPLAY`、`COVEL_LLM_REPLAY_DIR` 标记为 `documented`，源码不读取这两个变量，当前部署不得依赖 replay cache。`TRUSTED_PROXY_IPS` 已是 `active`（由 `middleware/rate-limit.ts` 的 X-Forwarded-For 信任检查消费）。SSRF guard 设计上即 open-by-default，因此没有 LLM host 白名单变量。
 - `COVEL_COMPACTOR_CONTEXT_WINDOW` 为**可选的显式覆盖**：未设置时，压缩阈值与 prompt 硬裁剪预算按当前叙事 slot（`default`，缺省为 llm.toml 首个 slot）的模型 capability `contextWindow` 动态解析（llm.toml 热重载即时生效），capability 也缺失时回退 `32768`。设置后固定使用该值，不再查 capability。
-- `COVEL_SNAPSHOT_INTERVAL_TURNS` 默认 `5`，控制 `kind=auto` 快照的 checkpoint 节奏：`turnCount <= 1`（pre-game 与首个正式回合）总是写入，其后每 N 回合写一份；`1` 表示每回合。resume 路径无视该节流强制写入。构建快照 payload 需要全量读取消息历史与全部 session-scoped 集合，逐回合写入会导致 O(T²) 成本与存储膨胀。
+- `COVEL_SNAPSHOT_INTERVAL_TURNS` 默认 `5`，控制 `kind=auto` 快照的 checkpoint 节奏：`completedPlayerTurns <= 1` 时总是写入，其后每 N 个已完成玩家回合写一份；`1` 表示每回合。resume 路径无视该节流强制写入。构建快照 payload 需要全量读取消息历史与全部 session-scoped 集合，逐回合写入会导致 O(T²) 成本与存储膨胀。
 - `COVEL_MEDIA_CLEANUP_ENABLED` 默认 `false`，控制 `POST /api/media/cleanup` 的可用性。即使设为 `true`，`DEPLOYMENT_TIER=commercial` 时该端点也固定返回 503。详见 [`docs/reference/api.md`](../reference/api.md) 媒体管理章节。
 - `COVEL_PG_LOCK_POOL_MAX` 默认 `16`，控制 PG advisory session-lock 专用连接池的 `max`。每个进行中的 turn 占用一条 reserved 连接；多并发 pod 可按峰值并发会话数调大。锁获取超时（30s）覆盖连接池排队 + advisory lock 轮询全程。
 - `COVEL_PG_INGEST_LOCK_POOL_MAX` 默认 `4`，控制语义记忆摄取的独立 PG advisory-lock 连接池。完整的 cursor/hash 读取、embedding 与向量写入都在 `memory-ingest` 命名空间锁内，同 session 跨 pod 串行、不同 session 仍可并行；独立小池避免后台 provider I/O 占满玩家 turn 的锁连接。

@@ -93,11 +93,17 @@ export async function seedSession(
   sessionId: string,
 ): Promise<void> {
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id: sessionId,
     worldId: null,
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    completedPlayerTurns: 1,
+
     presetId: null,
     activePlugins: [],
     createdAt: new Date().toISOString(),

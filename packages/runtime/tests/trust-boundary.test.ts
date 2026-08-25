@@ -115,8 +115,9 @@ describe("tool-carried proposal rebinding", () => {
       status: "active",
       presetId: null,
       activePlugins: ["p"],
-      turnCount: 1,
-      preGameCompleted: [],
+      phase: "playing",
+      completedPlayerTurns: 1,
+      setupRuntimes: {},
       createdAt: new Date().toISOString(),
     });
 
@@ -175,8 +176,9 @@ describe("PreStateCommit replacement is payload-only", () => {
       status: "active",
       presetId: null,
       activePlugins: ["p"],
-      turnCount: 1,
-      preGameCompleted: [],
+      phase: "playing",
+      completedPlayerTurns: 1,
+      setupRuntimes: {},
       createdAt: new Date().toISOString(),
     });
 

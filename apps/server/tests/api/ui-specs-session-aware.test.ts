@@ -123,11 +123,17 @@ describe("GET /api/ui-specs session-aware filter", () => {
     );
 
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       presetId: null,
       activePlugins: ["codex"], // only codex active in this session
       createdAt: new Date().toISOString(),

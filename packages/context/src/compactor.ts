@@ -368,11 +368,7 @@ export async function maybeCompact(
     await store.tagTurnMessagesCompacted(sessionId, messageIds, summaryId);
   };
 
-  if (typeof deps.store.withTransaction === "function") {
-    await deps.store.withTransaction(persistCompaction);
-  } else {
-    await persistCompaction(deps.store);
-  }
+  await deps.store.withTransaction(persistCompaction);
 
   // 6. Emit trace event
   try {

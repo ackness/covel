@@ -64,7 +64,7 @@ export function SessionHistoryCard({
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">
                     <Badge variant="outline" className="text-[10px]">
-                      {session.status} · t{session.turnCount}
+                      {session.status} · t{session.completedPlayerTurns}
                     </Badge>
                     <span className="text-[10px] text-muted-foreground">
                       {new Date(session.createdAt).toLocaleString("zh-CN")}

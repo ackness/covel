@@ -29,9 +29,13 @@ export type ActionRequest =
   | (ActionRequestBase & {
       readonly type: "retry_runtime";
       readonly payload: {
-        readonly runtimeId?: string;
+        readonly runtimeId: string;
         readonly retryFromTurnId?: string;
       };
+    })
+  | (ActionRequestBase & {
+      readonly type: "retry_turn";
+      readonly payload: Readonly<Record<never, never>>;
     });
 
 export type ActionRequestValidation =
@@ -205,7 +209,7 @@ export function validateActionRequest(raw: unknown): ActionRequestValidation {
       const unknown = hasOnlyKeys(payload, ["runtimeId", "retryFromTurnId"]);
       const error =
         (unknown ? `Unknown retry_runtime payload field: ${unknown}` : null) ??
-        validateOptionalString(
+        validateString(
           payload.runtimeId,
           "retry_runtime.runtimeId",
           200,
@@ -216,11 +220,7 @@ export function validateActionRequest(raw: unknown): ActionRequestValidation {
           "retry_runtime.retryFromTurnId",
           256,
           ACTION_ID_PATTERN,
-        ) ??
-        (payload.retryFromTurnId !== undefined &&
-        payload.runtimeId === undefined
-          ? "retry_runtime.retryFromTurnId requires runtimeId"
-          : undefined);
+        );
       return error
         ? { ok: false, error }
         : {
@@ -229,15 +229,22 @@ export function validateActionRequest(raw: unknown): ActionRequestValidation {
               ...base,
               type: "retry_runtime",
               payload: {
-                ...(payload.runtimeId !== undefined
-                  ? { runtimeId: payload.runtimeId as string }
-                  : {}),
+                runtimeId: payload.runtimeId as string,
                 ...(payload.retryFromTurnId !== undefined
                   ? { retryFromTurnId: payload.retryFromTurnId as string }
                   : {}),
               },
             },
           };
+    }
+    case "retry_turn": {
+      const unknown = hasOnlyKeys(payload, []);
+      return unknown
+        ? {
+            ok: false,
+            error: `Unknown retry_turn payload field: ${unknown}`,
+          }
+        : { ok: true, value: { ...base, type: "retry_turn", payload: {} } };
     }
     default:
       return {

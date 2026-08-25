@@ -77,15 +77,19 @@ export interface SessionContextStore {
   addTraceEvent(record: TraceEventRecord): Promise<void>;
 
   /**
-   * Scoped transaction, when the backing store provides one.
-   *
-   * Optional so the many partial mock stores in tests stay assignable; the
-   * compactor falls back to sequential writes when it is absent. Used to keep
-   * the summary record and its message tags in one commit — an orphan summary
-   * renders as a system message while the untagged history is still injected.
+   * Mandatory scoped transaction. It keeps the summary record and its message
+   * tags in one commit; an orphan summary would render alongside untagged raw
+   * history. The transaction view omits this method to reject nesting.
    */
-  withTransaction?<T>(fn: (tx: SessionContextStore) => Promise<T>): Promise<T>;
+  withTransaction<T>(
+    fn: (tx: SessionContextTransaction) => Promise<T>,
+  ): Promise<T>;
 }
+
+export type SessionContextTransaction = Omit<
+  SessionContextStore,
+  "withTransaction"
+>;
 
 // Re-export the local record shapes so existing imports inside
 // `@covel/context` keep working without a bare `@covel/store` reference.

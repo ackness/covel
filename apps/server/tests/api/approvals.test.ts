@@ -87,11 +87,17 @@ async function seedSession(
 ): Promise<void> {
   const now = new Date().toISOString();
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id,
     worldId: "cloudmere",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    completedPlayerTurns: 1,
+
     locale: "zh-CN",
     activePlugins: [],
     createdAt: now,
@@ -604,7 +610,11 @@ describe("Plugin RPC approval flow", () => {
       const { app, gate, store } = setup();
       await seedSession(store, "s1");
       await store.updateSession("s1", {
-        metadata: { [SESSION_DELETION_PENDING_KEY]: "delete-1" },
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+          [SESSION_DELETION_PENDING_KEY]: "delete-1",
+        },
       });
       grant(gate, "s1", "untrusted");
 

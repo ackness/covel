@@ -343,9 +343,6 @@ importers:
       '@covel/shared':
         specifier: workspace:*
         version: link:../shared
-      '@covel/store':
-        specifier: workspace:*
-        version: link:../store
     devDependencies:
       typescript:
         specifier: ^7.0.2

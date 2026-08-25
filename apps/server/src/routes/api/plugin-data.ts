@@ -204,7 +204,7 @@ pluginDataRoutes.put(
           registry,
           pluginId,
           true,
-          live.activePlugins ?? [],
+          live.activePlugins,
         );
         if (accessErr)
           return c.json(errorBody(accessErr.error), accessErr.status);
@@ -254,7 +254,7 @@ pluginDataRoutes.delete(
           registry,
           pluginId,
           true,
-          live.activePlugins ?? [],
+          live.activePlugins,
         );
         if (accessErr)
           return c.json(errorBody(accessErr.error), accessErr.status);

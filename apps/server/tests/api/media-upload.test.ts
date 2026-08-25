@@ -27,6 +27,13 @@ async function makeApp(withStore = true): Promise<{
   const store = createMemoryStore();
   const now = new Date().toISOString();
   await store.createSession({
+    phase: "playing",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id: "s1",
     worldId: null,
     status: "active",
@@ -95,6 +102,13 @@ describe("POST /api/media (upload)", () => {
     await store.deleteSession("s1");
     const recreatedAt = new Date(Date.now() + 1_000).toISOString();
     await store.createSession({
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "s1",
       worldId: null,
       status: "active",

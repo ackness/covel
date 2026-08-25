@@ -66,15 +66,15 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 脚本把一次运行拆成 7 个阶段，每个 Phase 都会写出小节标题和带固定列宽的表格：
 
-| #   | Phase                      | 做了什么                                                                                                                                      |
-| --- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Health Check**           | `GET /api/health`，确认 store backend 在线                                                                                                    |
-| 2   | **Plugin Flow Discovery**  | `GET /api/plugin-flows`，自动发现所有 plugin/runtime 及其 trigger 元数据                                                                      |
-| 3   | **World Selection**        | 挑选 `--world` 或第一个可用世界包                                                                                                             |
-| 4   | **Session Creation**       | `POST /api/sessions` 建新会话，激活所有可用插件                                                                                               |
-| 5   | **Turn Execution**         | 按 `setup → character_creation → playing×N` 顺序触发每一轮，逐轮对照 stage 调度期望                                                           |
-| 6   | **Final Session Snapshot** | `GET /api/sessions/:id/snapshot`（+ `GET /api/sessions/:id` 取权威 status）；断言 setup 运行时的 `preGameCompleted` 完成；校验 trace 类型覆盖 |
-| 7   | **Summary**                | 汇总 runtime/tool/assertion 成败 + scheduled 运行时的「≥1 次」断言，计算 `PASS`/`FAIL` 总结果                                                 |
+| #   | Phase                      | 做了什么                                                                                                                                          |
+| --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Health Check**           | `GET /api/health`，确认 store backend 在线                                                                                                        |
+| 2   | **Plugin Flow Discovery**  | `GET /api/plugin-flows`，自动发现所有 plugin/runtime 及其 trigger 元数据                                                                          |
+| 3   | **World Selection**        | 挑选 `--world` 或第一个可用世界包                                                                                                                 |
+| 4   | **Session Creation**       | `POST /api/sessions` 建新会话，激活所有可用插件                                                                                                   |
+| 5   | **Turn Execution**         | 按 `setup → character_creation → playing×N` 顺序触发每一轮，逐轮对照 stage 调度期望                                                               |
+| 6   | **Final Session Snapshot** | `GET /api/sessions/:id/snapshot`（+ `GET /api/sessions/:id` 取权威 status）；断言 setup 运行时在 `setupRuntimes` 中为 `done`；校验 trace 类型覆盖 |
+| 7   | **Summary**                | 汇总 runtime/tool/assertion 成败 + scheduled 运行时的「≥1 次」断言，计算 `PASS`/`FAIL` 总结果                                                     |
 
 ### Phase 5 每轮产出
 
@@ -87,14 +87,14 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 Trigger Verification 的裁决列：
 
-| 裁决   | 含义                                                                                                     |
-| ------ | -------------------------------------------------------------------------------------------------------- |
-| `PASS` | 期望触发（auto/setup）且成功运行                                                                         |
-| `FAIL` | in-band `auto` 运行时未触发，或任一期望运行时以 `failed` 状态运行                                        |
-| `WAIT` | scheduled 运行时本轮空转（interval/cooldown 可能门控），或 setup 未落 `preGameCompleted`（Phase 6 裁决） |
-| `SKIP` | 本轮不期望（未激活 / 无 stage / 越 band / 已到达但 `skipped` 空转）                                      |
-| `FIRE` | 无 stage 的 event/manual 运行时触发了（仅信息）                                                          |
-| `WARN` | 未激活 / 越 band 的运行时意外运行了（软异常，不判 FAIL）                                                 |
+| 裁决   | 含义                                                                                                                  |
+| ------ | --------------------------------------------------------------------------------------------------------------------- |
+| `PASS` | 期望触发（auto/setup）且成功运行                                                                                      |
+| `FAIL` | in-band `auto` 运行时未触发，或任一期望运行时以 `failed` 状态运行                                                     |
+| `WAIT` | scheduled 运行时本轮空转（interval/cooldown 可能门控），或 setup 尚未在 `setupRuntimes` 中落为 `done`（Phase 6 裁决） |
+| `SKIP` | 本轮不期望（未激活 / 无 stage / 越 band / 已到达但 `skipped` 空转）                                                   |
+| `FIRE` | 无 stage 的 event/manual 运行时触发了（仅信息）                                                                       |
+| `WARN` | 未激活 / 越 band 的运行时意外运行了（软异常，不判 FAIL）                                                              |
 
 ## 自动发现 & 触发断言
 
@@ -114,7 +114,7 @@ Trigger Verification 的裁决列：
 
 - `auto`：每个 in-band 回合都期望触发（严格 `PASS`/`FAIL`）。
 - `scheduled`：只断言在整个窗口内**至少触发 1 次**（`interval` / `cooldownTurns` / `startTurn` / `maxTriggerCount` **不再逐轮复刻**）；本轮空转记 `WAIT`，run 级的「≥1 次」断言在 Phase 7 兜底。
-- `setup` stage：完成信号取自会话的 `preGameCompleted`（由 `setupRuntimes` mirror 派生的 runtimeId 列表），在 Phase 6 权威裁决——因为 setup 工作可能落在 `submit-form` 子执行里，逐轮 timeline 未必看得到。
+- `setup` stage：完成信号直接取自会话 `setupRuntimes[runtimeId].state === "done"`，在 Phase 6 权威裁决——因为 setup 工作可能落在 `submit-form` 子执行里，逐轮 timeline 未必看得到。
 - `skipped` 状态**不是失败**：表示调度器已到达但运行时 guard/空转，计入「已触发」。只有 `failed` 才判 FAIL。
 
 这意味着：**新增插件只要声明 PLUGIN.md frontmatter 完整、并被会话激活，就会自动进入测试矩阵**，不需要改脚本。
@@ -171,7 +171,7 @@ A: `--plugin guide --turns 2 --slot e2e_local`。其它 runtime 依然会运行�
 
 | PLUGIN.md 字段                              | e2e 如何验证                                                                |
 | ------------------------------------------- | --------------------------------------------------------------------------- |
-| `stage: setup`                              | 只在开场跑；Phase 6 断言 runtimeId 落入 `preGameCompleted`                  |
+| `stage: setup`                              | 只在开场跑；Phase 6 断言 `setupRuntimes[runtimeId].state === "done"`        |
 | `stage: pre-turn/narrative/post-turn/audit` | 只在 playing 回合跑；越 band 期望 `SKIP`                                    |
 | `trigger.type: auto`（有 stage）            | 每个 in-band 回合都期望触发（严格 PASS/FAIL）                               |
 | `trigger.type: scheduled`（有 stage）       | 窗口内至少触发 1 次（Phase 7 「≥1」断言；不逐轮复刻 interval/cooldown）     |

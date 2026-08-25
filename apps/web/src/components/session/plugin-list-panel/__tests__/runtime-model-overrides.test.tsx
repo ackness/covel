@@ -27,10 +27,13 @@ const session = {
   id: "sess-a",
   worldId: "world-a",
   status: "active",
-  turnCount: 0,
+  phase: "setup",
+  completedPlayerTurns: 0,
+  setupRuntimes: {},
   activePlugins: ["fixture"],
   locale: "en-US",
   createdAt: "2026-08-24T00:00:00.000Z",
+  updatedAt: "2026-08-24T00:00:00.000Z",
 } satisfies SessionRecord;
 
 beforeEach(async () => {

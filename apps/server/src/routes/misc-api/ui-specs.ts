@@ -295,11 +295,6 @@ export async function buildUiSpecsResponse(params: {
         .sort()
         .join(",")}`;
       if (sessionSyncSignature.get(sessionId) !== syncKey) {
-        if (!store.withTransaction) {
-          throw new Error(
-            "UI spec materialisation requires DataStore.withTransaction",
-          );
-        }
         await store.withTransaction((tx) =>
           syncUiSpecsToStore(sessionId, activeFilter!, tx, loaded),
         );

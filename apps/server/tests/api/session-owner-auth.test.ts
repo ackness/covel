@@ -287,12 +287,18 @@ describe("commercial tier — owner token hard-required", () => {
     await store.deleteSession(created.id);
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
       id: created.id,
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       activePlugins: [],
-      metadata: { ownerTokenHash: hashSessionOwnerToken("new-owner") },
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        ownerTokenHash: hashSessionOwnerToken("new-owner"),
+      },
       createdAt: now,
       updatedAt: now,
     });
@@ -342,10 +348,16 @@ describe("commercial tier — owner token hard-required", () => {
 
   it("fails closed for legacy sessions without a stored hash", async () => {
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "legacy-1",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       locale: "zh-CN",
       activePlugins: [],
       createdAt: new Date().toISOString(),

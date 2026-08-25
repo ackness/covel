@@ -232,8 +232,8 @@ export function createTrustedHandlerStore(
  * so the handler reads its own not-yet-committed writes. Deletes (including
  * `set(null)`) use their own proposal and share the same transaction.
  *
- * Without a buffer the writer keeps its legacy direct-to-store behaviour, used
- * by bare test harnesses.
+ * Without a buffer the writer applies changes directly for the explicit
+ * standalone test-runtime API, which has no execution commit pipeline.
  */
 export function createPluginDataWriter(
   store: DataStore,

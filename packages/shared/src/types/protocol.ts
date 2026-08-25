@@ -12,7 +12,10 @@
  * command/capability abstraction was never implemented and has been removed.
  */
 
-import type { JobStatusRecord } from "./runtime-lifecycle.js";
+import type {
+  JobStatusRecord,
+  SetupRuntimeState,
+} from "./runtime-lifecycle.js";
 
 // ── Covel Event Union (server → client) — single source of truth ─
 //
@@ -379,12 +382,6 @@ export type CovelEvent =
 /** The closed vocabulary of every server→client event name. */
 export type CovelEventType = CovelEvent["type"];
 
-/**
- * Historical alias retained so existing imports keep working. New code should
- * prefer `CovelEventType`; both resolve to the same closed union.
- */
-export type ProtocolEventType = CovelEventType;
-
 export interface CovelEventMeta {
   /**
    * When true, an out-of-band EventBus event of this type is forwarded onto
@@ -488,7 +485,7 @@ export const FORWARDED_EVENT_TYPES: ReadonlySet<CovelEventType> = new Set(
 
 export interface ProtocolEvent {
   readonly id: string;
-  readonly type: ProtocolEventType;
+  readonly type: CovelEventType;
   readonly sessionId: string;
   readonly turnId?: string;
   readonly source?: { readonly pluginId: string; readonly runtimeId: string };
@@ -523,7 +520,9 @@ export interface SessionSnapshot {
   readonly session: {
     readonly id: string;
     readonly worldId?: string;
-    readonly turnCount: number;
+    readonly phase: "setup" | "playing";
+    readonly completedPlayerTurns: number;
+    readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
     readonly locale?: string;
   };
   readonly messages: readonly SnapshotMessage[];

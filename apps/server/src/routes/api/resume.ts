@@ -309,7 +309,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
         // resumed from a stale registry snapshot.
         pluginRegistry.syncSessionActivations(
           sessionId,
-          liveSession.activePlugins ?? [],
+          liveSession.activePlugins,
         );
         const activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
         const effectiveManifest: RuntimeManifest | undefined =
@@ -372,35 +372,29 @@ resumeRoutes.post("/:id/resume", async (c) => {
 
         const inheritedExecution =
           liveSuspension.pendingContinuation.executionContext;
-        const hasUnresolvedSibling = inheritedExecution?.logicalTurnId
+        const hasUnresolvedSibling = inheritedExecution.logicalTurnId
           ? (await store.listSuspensions(sessionId)).some(
               (candidate) =>
                 candidate.id !== liveSuspension.id &&
                 candidate.resolvedAt === undefined &&
-                candidate.pendingContinuation.executionContext
-                  ?.logicalTurnId === inheritedExecution.logicalTurnId,
+                candidate.pendingContinuation.executionContext.logicalTurnId ===
+                  inheritedExecution.logicalTurnId,
             )
           : false;
-        const resumeExecutionContext: ExecutionContext | undefined =
-          inheritedExecution
-            ? {
-                ...inheritedExecution,
-                executionId: result.runId,
-                origin: "resume",
-                // Parallel runtimes may suspend under the same logical turn.
-                // Only the final unresolved continuation owns completion; the
-                // ledger then makes later duplicate requests idempotent.
-                ...(hasUnresolvedSibling ? { countPolicy: "none" } : {}),
-              }
-            : undefined;
+        const resumeExecutionContext: ExecutionContext = {
+          ...inheritedExecution,
+          executionId: result.runId,
+          origin: "resume",
+          // Parallel runtimes may suspend under the same logical turn. Only
+          // the final unresolved continuation owns completion.
+          ...(hasUnresolvedSibling ? { countPolicy: "none" } : {}),
+        };
 
         // Atomic finalize: proposal commit + assistant turn message + resolved
         // marker land in ONE transaction via the shared finalize primitive (the
         // runtime no longer writes them — see turn-resume.ts). Any proposal
         // failure or store error rolls back ALL of it; the claim is released so
-        // the suspension stays retryable. On stores without transactions the
-        // same sequence runs unwrapped (proposal failure still precedes the
-        // history/resolved writes, preserving retryability). Resume persists no
+        // the suspension stays retryable. Resume persists no
         // turn_results row of its own, so `turnIds` is empty (nothing to settle).
         const finalizeResume = async (
           s: import("@covel/store").StoreTransaction,
@@ -441,15 +435,11 @@ resumeRoutes.post("/:id/resume", async (c) => {
         const outcome = await finalizeExecution({
           store,
           sessionId,
-          ...(resumeExecutionContext
-            ? {
-                executionContext: resumeExecutionContext,
-                // The original suspended execution deliberately did not
-                // complete its logical player turn. The final sibling resume
-                // counts it in the same transaction as its proposals.
-                sessionClock: { now: new Date().toISOString() },
-              }
-            : {}),
+          executionContext: resumeExecutionContext,
+          // The original suspended execution deliberately did not complete
+          // its logical player turn. The final sibling resume counts it in the
+          // same transaction as its proposals.
+          sessionClock: { now: new Date().toISOString() },
           runtimes: [effectiveManifest!],
           results: [result],
           turnIds: [],

@@ -239,8 +239,8 @@ server transaction API in the browser.
 >   通过 `sessionClock` 参数把逻辑回合计数（`completedPlayerTurns` 的 logical-turn
 >   ledger 幂等推进）与 setup 频段翻转（`phase: setup → playing` + `setupRuntimes`
 >   镜像）折叠进 proposal 提交后、`commit_status` 结算前的同一事务（
->   `commit/session-clock.ts` 的 `applySessionClockTx`）。legacy 字段 `turnCount` /
->   `preGameCompleted` 保持冻结，在 API / snapshot 读取时由三字段公式派生。任一 proposal 失败即整体回滚——
+>   `commit/session-clock.ts` 的 `applySessionClockTx`）。API 与 snapshot 直接保存
+>   current-only 时钟字段。任一 proposal 失败即整体回滚——
 >   计数、phase、setup 镜像都不推进，ledger 不写入。manual / background / resume
 >   finalize 不传 `sessionClock`，时钟不动。
 > - **Action 级 plugin-rpc 锁边界**：action handler 在 session lock 内完成读、校验和写入；

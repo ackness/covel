@@ -44,9 +44,14 @@ function makeSession(
     id,
     worldId: "world-1",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    phase: "playing",
+    completedPlayerTurns: 1,
+    setupRuntimes: {},
     activePlugins: [],
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -232,7 +237,6 @@ describe("traceRoutes", () => {
     const app = makeApp(store);
     const res = await app.request("/api/traces/sess-turns/turns");
     const body = (await res.json()) as {
-      turnCount: number;
       turns: Array<{
         turnId: string;
         flowId: string;
@@ -242,7 +246,6 @@ describe("traceRoutes", () => {
       }>;
     };
 
-    expect(body.turnCount).toBe(1);
     expect(body.turns[0]).toMatchObject({
       turnId: "turn-1",
       flowId: "flow-1",

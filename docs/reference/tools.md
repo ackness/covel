@@ -431,7 +431,7 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 > **提交语义（缓冲提交）**：`create-character` / `update-character` 在执行阶段**不再直写** `characters` 表，而是把写入缓冲成一条 [`character.upsert`](#characterupsert) proposal。同一 tool loop 内的读取走**读穿透 overlay**——先 create 再 update 时，update 能读到自己刚缓冲的 create。真正的 `characters` 表写入 + plugin-data 镜像（`characters` namespace）由 commit handler 在回合结束时随该执行的**单一事务**一起落库：`success` / `skipped` 结果会提交其缓冲 proposal，`failed` / `suspended` 则不提交。
 
-> **Turn-band 重构注记**：`create-character` 原本接受 `transitionPhase` 参数并通过 `CharacterToolHooks.onPhaseTransition` 驱动 SSE `phase.changed` 广播。该路径在 turn-band 重构中被移除——setup 段落的完成改由 runtime 输出 `preGameDone: true`，框架据此写入 `session.setupRuntimes`（per-runtime 解析状态 map，见 `SetupRuntimeState`）；`session.phase`（`setup` / `playing`）仍是 stage-band 选择器，但由框架自己推进，工具无从触碰。legacy 的 `session.preGameCompleted` 现为读时派生的兼容字段。该工具不再触发任何 phase / status 副作用。
+> **Turn-band 重构注记**：`create-character` 原本接受 `transitionPhase` 参数并通过 `CharacterToolHooks.onPhaseTransition` 驱动 SSE `phase.changed` 广播。该路径已移除——setup 段落的完成改由 runtime 输出 `preGameDone: true`，框架据此写入 `session.setupRuntimes`（per-runtime 解析状态 map，见 `SetupRuntimeState`）；`session.phase`（`setup` / `playing`）仍是 stage-band 选择器，但由框架自己推进，工具无从触碰。该工具不再触发任何 phase / status 副作用。
 
 ---
 

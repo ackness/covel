@@ -56,11 +56,17 @@ worldData: data/world.data.yaml
 async function makeStore(activePlugins: readonly string[]): Promise<DataStore> {
   const store = createMemoryStore();
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id: "sess-1",
     worldId: "demo-world",
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
+    completedPlayerTurns: 0,
+
     locale: "zh-CN",
     activePlugins,
     createdAt: NOW,
@@ -76,11 +82,17 @@ async function addSession(
   worldId = "demo-world",
 ): Promise<void> {
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id,
     worldId,
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
+    completedPlayerTurns: 0,
+
     locale: "zh-CN",
     activePlugins,
     createdAt: NOW,
@@ -1336,11 +1348,17 @@ sources: {}
     ];
     const store = createMemoryStore();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sess-haruka",
       worldId,
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       locale: "zh-CN",
       activePlugins,
       createdAt: NOW,
@@ -1396,11 +1414,17 @@ sources: {}
     const sessionId = `sess-${worldId}`;
     const store = createMemoryStore();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId,
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       locale: "zh-CN",
       activePlugins,
       createdAt: NOW,
@@ -1453,11 +1477,17 @@ sources: {}
       const store = createMemoryStore();
       const mediaStore = createMemoryMediaStore();
       await store.createSession({
+        phase: "playing",
+        setupRuntimes: {},
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
         id: sessionId,
         worldId,
         status: "active",
-        turnCount: 0,
-        preGameCompleted: [],
+        completedPlayerTurns: 0,
+
         locale: "zh-CN",
         activePlugins,
         createdAt: NOW,

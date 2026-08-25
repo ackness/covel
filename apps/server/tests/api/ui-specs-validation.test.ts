@@ -98,11 +98,17 @@ describe("GET /api/ui-specs — per-spec validation", () => {
     registry = createPluginRegistry();
 
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       presetId: null,
       activePlugins: ["good-panel", "bad-panel", "future-panel"],
       createdAt: new Date().toISOString(),

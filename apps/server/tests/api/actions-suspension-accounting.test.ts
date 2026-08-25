@@ -9,7 +9,7 @@ import {
 import { createHookPipeline } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
-import { actionRoutes, setMemorySystem } from "../../src/routes/api/actions.js";
+import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 const SESSION_ID = "session-suspension-accounting";
@@ -34,6 +34,10 @@ function manifest(
 async function runScenario(options: { readonly failCommit: boolean }) {
   const store = createMemoryStore();
   await store.createSession({
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id: SESSION_ID,
     worldId: null,
     status: "active",
@@ -41,8 +45,8 @@ async function runScenario(options: { readonly failCommit: boolean }) {
     phase: "playing",
     completedPlayerTurns: 3,
     setupRuntimes: {},
-    turnCount: 3,
-    preGameCompleted: [],
+    completedPlayerTurns: 3,
+
     createdAt: "2026-08-25T00:00:00.000Z",
     updatedAt: "2026-08-25T00:00:00.000Z",
   });
@@ -130,8 +134,6 @@ async function runScenario(options: { readonly failCommit: boolean }) {
     await next();
   });
   app.route("/api/actions", actionRoutes);
-  setMemorySystem(undefined);
-
   const response = await app.request("/api/actions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -143,22 +145,24 @@ async function runScenario(options: { readonly failCommit: boolean }) {
     }),
   });
   expect(response.status).toBe(200);
-  await response.text();
-  return { store };
+  const body = await response.text();
+  return { store, body };
 }
 
 describe("POST /api/actions suspension accounting", () => {
   it("does not complete the logical player turn at the suspension boundary", async () => {
-    const { store } = await runScenario({ failCommit: false });
+    const { store, body } = await runScenario({ failCommit: false });
 
     expect((await store.getSession(SESSION_ID))?.completedPlayerTurns).toBe(3);
     expect(await store.listSuspensions(SESSION_ID)).toHaveLength(1);
+    expect(body).toContain('"type":"turn.suspended"');
   });
 
   it("removes a continuation when a sibling proposal rolls back", async () => {
-    const { store } = await runScenario({ failCommit: true });
+    const { store, body } = await runScenario({ failCommit: true });
 
     expect((await store.getSession(SESSION_ID))?.completedPlayerTurns).toBe(3);
     expect(await store.listSuspensions(SESSION_ID)).toHaveLength(0);
+    expect(body).not.toContain('"type":"turn.suspended"');
   });
 });

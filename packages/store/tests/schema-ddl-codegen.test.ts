@@ -84,7 +84,7 @@ describe("DDL codegen ↔ Drizzle parity", () => {
     const b = buildCreateTablesSql(Object.values(pgSchema), "pg");
     expect(a).toBe(b);
     // Every generated CREATE TABLE statement must appear in the composed boot
-    // DDL (which also carries the hand-written migrations + trigger).
+    // DDL (which also carries the hand-written trigger).
     // Identifiers are quoted in the generated DDL (`"sessions"`); the boot DDL
     // is the same derived string, so the quoted statement is matched verbatim.
     const createStmts = a.match(/CREATE TABLE IF NOT EXISTS "?\w+"?/g) ?? [];
@@ -92,7 +92,6 @@ describe("DDL codegen ↔ Drizzle parity", () => {
     for (const stmt of createStmts) {
       expect(PG_DDL.includes(stmt), `boot DDL missing: ${stmt}`).toBe(true);
     }
-    expect(PG_DDL).toContain("ALTER TABLE %I ADD PRIMARY KEY (session_id, id)");
   });
 
   it("SQLite generated DDL yields exactly the Drizzle column shape", () => {
@@ -156,110 +155,6 @@ describe("DDL codegen ↔ Drizzle parity", () => {
         }
       }
       expect(problems, problems.join("\n")).toEqual([]);
-    } finally {
-      db.close();
-    }
-  });
-
-  it("migrates legacy global character/lorebook ids without losing rows", () => {
-    const db = new Database(":memory:");
-    try {
-      db.exec(`
-        CREATE TABLE characters (
-          id TEXT PRIMARY KEY,
-          session_id TEXT NOT NULL,
-          name TEXT NOT NULL,
-          type TEXT NOT NULL,
-          description TEXT,
-          fields TEXT,
-          version INTEGER NOT NULL DEFAULT 1,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-        CREATE INDEX characters_session_id_idx ON characters(session_id);
-        INSERT INTO characters VALUES
-          ('shared', 'legacy-session', 'Legacy', 'npc', NULL, NULL, 1, 't0', 't0');
-
-        CREATE TABLE lorebook_entries (
-          id TEXT PRIMARY KEY,
-          session_id TEXT NOT NULL,
-          plugin_id TEXT NOT NULL,
-          keys TEXT NOT NULL,
-          content TEXT NOT NULL,
-          strategy TEXT NOT NULL,
-          position TEXT NOT NULL,
-          insertion_order INTEGER NOT NULL DEFAULT 100,
-          enabled INTEGER NOT NULL DEFAULT 1,
-          extra TEXT,
-          created_at TEXT NOT NULL,
-          updated_at TEXT NOT NULL
-        );
-        CREATE INDEX lorebook_entries_session_id_idx
-          ON lorebook_entries(session_id);
-        CREATE INDEX lorebook_entries_plugin_id_idx
-          ON lorebook_entries(session_id, plugin_id);
-        INSERT INTO lorebook_entries VALUES
-          ('shared', 'legacy-session', 'plugin', '[]', 'Legacy lore',
-           'constant', 'after_plugin', 100, 1, NULL, 't0', 't0');
-      `);
-
-      createTables(db);
-
-      const primaryKey = (table: string) =>
-        (
-          db.prepare(`PRAGMA table_info("${table}")`).all() as Array<{
-            name: string;
-            pk: number;
-          }>
-        )
-          .filter((column) => column.pk > 0)
-          .sort((a, b) => a.pk - b.pk)
-          .map((column) => column.name);
-      expect(primaryKey("characters")).toEqual(["session_id", "id"]);
-      expect(primaryKey("lorebook_entries")).toEqual(["session_id", "id"]);
-
-      expect(db.prepare("SELECT name FROM characters").get()).toMatchObject({
-        name: "Legacy",
-      });
-      expect(
-        db.prepare("SELECT content FROM lorebook_entries").get(),
-      ).toMatchObject({ content: "Legacy lore" });
-
-      expect(() =>
-        db
-          .prepare("INSERT INTO characters VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-          .run(
-            "shared",
-            "new-session",
-            "New",
-            "npc",
-            null,
-            null,
-            1,
-            "t1",
-            "t1",
-          ),
-      ).not.toThrow();
-      expect(() =>
-        db
-          .prepare(
-            "INSERT INTO lorebook_entries VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-          )
-          .run(
-            "shared",
-            "new-session",
-            "plugin",
-            "[]",
-            "New lore",
-            "constant",
-            "after_plugin",
-            100,
-            1,
-            null,
-            "t1",
-            "t1",
-          ),
-      ).not.toThrow();
     } finally {
       db.close();
     }

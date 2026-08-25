@@ -68,8 +68,9 @@ describe("store factory env wiring", () => {
     await store.createSession({
       id: "factory-memory-session",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
       locale: "en",
       activePlugins: [],
       createdAt: "2026-01-01T00:00:00.000Z",

@@ -3,8 +3,11 @@ import type {
   PluginRpcRequest,
   PluginRpcResponse,
 } from "@covel/shared";
-import { resolveApproval } from "@/services/api.js";
-import { postPluginRpc } from "@/services/session-workspace.js";
+import {
+  postPluginRpc as requestPluginRpc,
+  resolveApproval,
+} from "@/services/api.js";
+import { getSessionWorkspace } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
@@ -98,18 +101,6 @@ export function emitPluginRpcRuntimeResponse(params: {
     );
     return;
   }
-  if ((response.failedJobs ?? []).length > 0) {
-    emitToast(
-      "error",
-      t("plugin.invokeRuntime.failedJobs", {
-        count: response.failedJobs?.length ?? 0,
-        defaultValue:
-          "{{count}} background job(s) failed. Check the job panel for details.",
-      }),
-    );
-    return;
-  }
-
   const deferredJobs = response.deferredJobs ?? [];
   if (params.expectsBackgroundFollower === true && deferredJobs.length === 0) {
     emitToast(
@@ -135,11 +126,17 @@ export async function postPluginRpcWithApproval(params: {
   readonly confirm: ConfirmPluginRpcApproval;
   readonly t: Translate;
 }): Promise<PluginRpcResponse | null> {
-  const first = await postPluginRpc(params.sessionId, params.request);
+  const postPluginRpc = () =>
+    getSessionWorkspace().run(
+      params.sessionId,
+      `plugin-rpc:${crypto.randomUUID()}`,
+      () => requestPluginRpc(params.sessionId, params.request),
+    );
+  const first = await postPluginRpc();
   return resolvePluginRpcApprovalResponse({
     response: first,
     sessionId: params.sessionId,
-    retry: () => postPluginRpc(params.sessionId, params.request),
+    retry: postPluginRpc,
     pluginId: params.pluginId,
     actionLabel: params.actionLabel,
     confirm: params.confirm,

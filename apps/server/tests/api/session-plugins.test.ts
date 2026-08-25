@@ -255,11 +255,17 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 
     // Create a session with both plugins active
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       presetId: null,
       activePlugins: ["narrator", "optional-plugin"],
       createdAt: new Date().toISOString(),
@@ -403,11 +409,17 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       );
       await store.createSession({
+        phase: "playing",
+        setupRuntimes: {},
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
         id: "sess-reverse-conflict",
         worldId: null,
         status: "active",
-        turnCount: 1,
-        preGameCompleted: [],
+        completedPlayerTurns: 1,
+
         presetId: null,
         activePlugins: ["default-engine"],
         createdAt: new Date().toISOString(),

@@ -9,7 +9,6 @@ import {
   registerLlmSettings,
   registerProviderKeys,
 } from "./registry/index.js";
-import { cleanupLegacyLocalStorage } from "./legacy-cleanup.js";
 import { getDesktopRestAuthHeaders, isDesktopApp } from "@/lib/desktop-bridge";
 
 let singleton: SettingsStore | null = null;
@@ -45,7 +44,6 @@ export function getSettings(): SettingsStoreApi {
  */
 export function initSettings(): Promise<void> {
   if (!readyPromise) {
-    cleanupLegacyLocalStorage();
     const store = getSettings() as SettingsStore;
     readyPromise = store.init();
   }

@@ -21,7 +21,10 @@ import type { DataStore } from "@covel/store";
 import { createEventBus } from "@covel/events";
 import type { EventBus } from "@covel/events";
 import { getPendingProposals } from "@covel/tools";
-import { createHookPipeline } from "../src/index.js";
+import {
+  collectExecutionSuspensions,
+  createHookPipeline,
+} from "../src/index.js";
 import {
   executeTurn,
   resumeSuspendedRuntime,
@@ -119,7 +122,7 @@ class MockToolExecutor implements ToolExecutor {
     };
   }
 
-  getToolInfo(name: string) {
+  getToolInfo(name: string, _context: ToolCallContext) {
     return {
       name,
       description: `Mock tool ${name}`,
@@ -168,7 +171,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
     };
   });
 
-  it("should persist suspension and return status: suspended when suspend sentinel detected", async () => {
+  it("should create a suspension artifact and return status: suspended when suspend sentinel detected", async () => {
     // LLM calls suspend tool, then (never reached) would return narrative
     mockLLM.setResponses([
       {
@@ -219,7 +222,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
     );
   });
 
-  it("should save suspension to store with correct fields", async () => {
+  it("should expose a suspension artifact with correct fields", async () => {
     mockLLM.setResponses([
       {
         content: "partial text",
@@ -268,7 +271,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
       deps,
     );
 
-    const suspensions = await store.listSuspensions("sess-42");
+    const suspensions = collectExecutionSuspensions(turn);
     expect(suspensions).toHaveLength(1);
 
     const s = suspensions[0]!;
@@ -335,9 +338,9 @@ describe("TurnExecutor — agent runtime suspend", () => {
       eventBus,
     };
 
-    await executeTurn(makeTurnInput(), [agentManifest], deps);
+    const turn = await executeTurn(makeTurnInput(), [agentManifest], deps);
 
-    const suspensions = await store.listSuspensions("sess-1");
+    const suspensions = collectExecutionSuspensions(turn);
     expect(suspensions).toHaveLength(1);
     const s = suspensions[0]!;
 
@@ -426,9 +429,9 @@ describe("TurnExecutor — agent runtime suspend", () => {
       eventBus,
     };
 
-    await executeTurn(makeTurnInput(), [agentManifest], deps);
+    const turn = await executeTurn(makeTurnInput(), [agentManifest], deps);
 
-    const suspensions = await store.listSuspensions("sess-1");
+    const suspensions = collectExecutionSuspensions(turn);
     expect(suspensions).toHaveLength(1);
     expect(suspensions[0]!.pendingContinuation.pendingProposals).toEqual([
       expect.objectContaining({
@@ -483,7 +486,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
     });
     const executeSpy = vi.spyOn(mockToolExecutor, "execute");
 
-    await executeTurn(makeTurnInput(), [agentManifest], {
+    const turn = await executeTurn(makeTurnInput(), [agentManifest], {
       loadRuntime: async () => agentLoaded,
       llm: mockLLM,
       store,
@@ -495,7 +498,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
       "emit-event",
       "suspend",
     ]);
-    const [saved] = await store.listSuspensions("sess-1");
+    const [saved] = collectExecutionSuspensions(turn);
     expect(saved?.pendingContinuation.emittedEvents).toEqual([
       { topic: "clue.found", data: { id: 1 } },
     ]);
@@ -508,6 +511,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
       "tc-after",
     ]);
 
+    await store.saveSuspension(saved!);
     const resumedMessages: Array<Record<string, unknown>> = [];
     const resumed = await resumeSuspendedRuntime(
       saved!,
@@ -548,7 +552,7 @@ describe("TurnExecutor — agent runtime suspend", () => {
     ]);
   });
 
-  it("should emit turn.suspended SSE event", async () => {
+  it("should defer turn.suspended SSE until the artifact is committed", async () => {
     const events: SubscriptionEvent[] = [];
     eventBus.onEmit((e) => events.push(e));
 
@@ -591,13 +595,11 @@ describe("TurnExecutor — agent runtime suspend", () => {
       eventBus,
     };
 
-    await executeTurn(makeTurnInput(), [agentManifest], deps);
+    const turn = await executeTurn(makeTurnInput(), [agentManifest], deps);
 
     const suspendedEvent = events.find((e) => e.type === "turn.suspended");
-    expect(suspendedEvent).toBeDefined();
-    const payload = suspendedEvent!.payload as Record<string, unknown>;
-    expect(payload.reason).toBe("SSE test");
-    expect(typeof payload.suspensionId).toBe("string");
+    expect(suspendedEvent).toBeUndefined();
+    expect(collectExecutionSuspensions(turn)).toHaveLength(1);
   });
 });
 
@@ -625,7 +627,7 @@ describe("TurnExecutor — function runtime suspend", () => {
     eventBus = createEventBus();
   });
 
-  it("should persist suspension and return status: suspended when function handler returns suspended status", async () => {
+  it("should create a suspension artifact and return status: suspended when function handler returns suspended status", async () => {
     const manifest = makeFunctionManifest();
     const loaded: LoadedRuntime = {
       manifest,
@@ -666,7 +668,7 @@ describe("TurnExecutor — function runtime suspend", () => {
     expect(rr.status).toBe("suspended");
     expect((rr.output as Record<string, unknown>).suspended).toBe(true);
 
-    const suspensions = await store.listSuspensions("sess-fn");
+    const suspensions = collectExecutionSuspensions(result);
     expect(suspensions).toHaveLength(1);
     expect(suspensions[0]!.reason).toBe("Need user to fill out form");
     expect(suspensions[0]!.runtimeId).toBe("test-plugin");
@@ -679,7 +681,7 @@ describe("TurnExecutor — function runtime suspend", () => {
     );
   });
 
-  it("persists a canonical envelope-v1 suspended outcome before success schema validation", async () => {
+  it("captures a canonical envelope-v1 suspended outcome before success schema validation", async () => {
     const manifest = makeManifest({
       runtimeType: "function",
       resultFormat: "envelope-v1",
@@ -720,7 +722,7 @@ describe("TurnExecutor — function runtime suspend", () => {
       status: "suspended",
       output: { suspended: true, reason: "Need canonical input" },
     });
-    const [saved] = await store.listSuspensions("sess-fn");
+    const [saved] = collectExecutionSuspensions(result);
     expect(saved?.resumeSchema).toEqual({ type: "string" });
   });
 
@@ -850,9 +852,24 @@ describe("resumeSuspendedRuntime", () => {
         required: ["name"],
       },
       pendingContinuation: {
+        executionContext: {
+          executionId: crypto.randomUUID(),
+          origin: "player",
+          countPolicy: "complete-player-turn",
+          logicalTurnId: crypto.randomUUID(),
+        },
         messages: [
           { role: "system", content: "You are a test agent." },
           { role: "user", content: "Begin" },
+          ...(suspendToolCallId
+            ? [
+                {
+                  role: "tool",
+                  content: "",
+                  toolCallId: suspendToolCallId,
+                },
+              ]
+            : []),
         ],
         partialContent: "Starting to...",
         toolCallsSoFar: [],
@@ -1045,6 +1062,12 @@ describe("resumeSuspendedRuntime", () => {
     await store.saveSuspension({
       ...suspension!,
       pendingContinuation: {
+        executionContext: {
+          executionId: crypto.randomUUID(),
+          origin: "player",
+          countPolicy: "complete-player-turn",
+          logicalTurnId: crypto.randomUUID(),
+        },
         ...suspension!.pendingContinuation,
         pendingProposals: [
           {

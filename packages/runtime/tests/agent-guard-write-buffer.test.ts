@@ -57,8 +57,9 @@ async function seedSetupSession(): Promise<DataStore> {
     id: SESSION_ID,
     worldId: "w",
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
+    phase: "setup",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     phase: "setup",
     completedPlayerTurns: 0,
     setupRuntimes: {},
@@ -109,7 +110,7 @@ async function runGuardTurn(): Promise<{
     sessionId: SESSION_ID,
     turnId: "t1",
     playerMessage: "go",
-    preGamePending: true,
+    origin: "player",
   };
   const result = await executeTurn(input, [guardRuntime], deps);
   const guardResult = result.runtimeResults[0]!;
@@ -141,6 +142,11 @@ describe("agent guard write buffer — whole-execution atomicity", () => {
     const { store, guardResult } = await runGuardTurn();
 
     const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId: SESSION_ID,
       runtimes: [guardRuntime, siblingRuntime],
@@ -160,6 +166,11 @@ describe("agent guard write buffer — whole-execution atomicity", () => {
     const { store, guardResult } = await runGuardTurn();
 
     const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId: SESSION_ID,
       runtimes: [guardRuntime],

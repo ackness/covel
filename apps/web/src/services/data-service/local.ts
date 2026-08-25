@@ -120,6 +120,13 @@ function initialCheckpoint(
   });
 }
 
+function isFreshLocalCheckpoint(checkpoint: BrowserCheckpoint): boolean {
+  return (
+    checkpoint.revision === 1 &&
+    checkpoint.actionId === `local:create:${checkpoint.sessionId}`
+  );
+}
+
 export class LocalDataService implements DataService {
   private readonly vault: BrowserVault;
   private statePatches = new Map<string, StatePatchRecord[]>();
@@ -151,7 +158,7 @@ export class LocalDataService implements DataService {
     return this.vault;
   }
 
-  private async mutateCheckpoint(
+  private async mutateCheckpointNow(
     sessionId: string,
     domain: string,
     mutate: (checkpoint: BrowserCheckpoint) => BrowserCheckpoint,
@@ -186,6 +193,16 @@ export class LocalDataService implements DataService {
       () => undefined,
     );
     return result;
+  }
+
+  private mutateCheckpoint(
+    sessionId: string,
+    domain: string,
+    mutate: (checkpoint: BrowserCheckpoint) => BrowserCheckpoint,
+  ): Promise<BrowserCheckpoint> {
+    return this.enqueueWorkspace(() =>
+      this.mutateCheckpointNow(sessionId, domain, mutate),
+    );
   }
 
   // Worlds
@@ -288,18 +305,21 @@ export class LocalDataService implements DataService {
       worldId,
       status: "active",
       locale: locale ?? "zh-CN",
-      turnCount: 0,
-      preGameCompleted: [],
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
       activePlugins: _plugins ?? [],
       presetId,
       createdAt: nowIso,
+      updatedAt: nowIso,
     };
     const storeSession: StoreSessionRecord = {
       id: session.id,
       worldId,
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
       locale: locale ?? "zh-CN",
       activePlugins: _plugins ?? [],
       presetId,
@@ -359,9 +379,6 @@ export class LocalDataService implements DataService {
         }
       }),
     ]);
-    appKv
-      .removeStateSnapshot(sessionId)
-      .catch(ignoreError("remove state snapshot on delete"));
     appKv
       .removeStatePatches(sessionId)
       .catch(ignoreError("remove state patches on delete"));
@@ -479,21 +496,6 @@ export class LocalDataService implements DataService {
       .catch(ignoreError("save state patches"));
   }
 
-  // State snapshot persistence (IndexedDB)
-
-  async persistStateSnapshot(
-    sessionId: string,
-    snapshot: Record<string, unknown>,
-  ): Promise<void> {
-    await appKv.saveStateSnapshot(sessionId, snapshot);
-  }
-
-  async loadStateSnapshot(
-    sessionId: string,
-  ): Promise<Record<string, unknown> | null> {
-    return appKv.getStateSnapshot(sessionId);
-  }
-
   // Submitted blocks
 
   async saveSubmittedBlocks(
@@ -510,12 +512,28 @@ export class LocalDataService implements DataService {
 
   // Sync to server
 
+  async stageServerCommit(sessionId: string, actionId: string): Promise<void> {
+    await (await this.ready()).stagePendingCommit(sessionId, actionId);
+  }
+
   async syncToServer(sessionId: string): Promise<void> {
     return this.enqueueWorkspace(() => this.syncToServerNow(sessionId));
   }
 
   private async syncToServerNow(sessionId: string): Promise<void> {
     const vault = await this.ready();
+    const pendingActionId = await vault.getPendingCommit(sessionId);
+    if (pendingActionId) {
+      try {
+        await this.commitFromServerNow(sessionId, pendingActionId);
+      } catch (error) {
+        // A missing transient session means the MemoryStore restarted and the
+        // pending result no longer exists. The browser checkpoint remains the
+        // only durable authority and can safely rebuild a fresh mirror.
+        if (!isNotFound(error)) throw error;
+        await vault.clearPendingCommit(sessionId, pendingActionId);
+      }
+    }
     let checkpoint = await vault.getLatestCheckpoint(sessionId);
     if (!checkpoint) return;
     const world = checkpoint.session.worldId
@@ -523,7 +541,7 @@ export class LocalDataService implements DataService {
       : null;
     if (!world) return;
     if (JSON.stringify(checkpoint.world) !== JSON.stringify(world)) {
-      checkpoint = await this.mutateCheckpoint(
+      checkpoint = await this.mutateCheckpointNow(
         sessionId,
         "world",
         (current) => ({ ...current, world }),
@@ -531,8 +549,8 @@ export class LocalDataService implements DataService {
     }
     const session = toFrontendSession(checkpoint.session);
 
-    // Server and browser validators both accept underscores. Preserve legacy
-    // IDs exactly: actions continue to address the local SessionRecord id, so
+    // Server and browser validators both accept underscores. Preserve IDs
+    // exactly: actions continue to address the local SessionRecord id, so
     // creating a differently named server mirror would make every turn 404.
     const serverWorldId = world.id;
     const serverSessionId = session.id;
@@ -556,13 +574,32 @@ export class LocalDataService implements DataService {
       await api.getSession(serverSessionId, { silentErrors: true });
     } catch (err) {
       if (!isNotFound(err)) throw err;
-      await api.createSession(
+      const created = await api.createSession(
         serverWorldId,
         session.presetId,
         serverSessionId,
-        session.activePlugins ? [...session.activePlugins] : undefined,
+        [...session.activePlugins],
         session.locale,
       );
+      // Only a never-hydrated local session needs the server to resolve its
+      // initial setup band. When rebuilding an ephemeral mirror after a server
+      // restart, the browser checkpoint is already authoritative and must not
+      // be reset to the newly created server session's empty clock.
+      if (isFreshLocalCheckpoint(checkpoint)) {
+        checkpoint = await this.mutateCheckpointNow(
+          sessionId,
+          "server-clock",
+          (current) => ({
+            ...current,
+            session: {
+              ...current.session,
+              phase: created.phase,
+              completedPlayerTurns: created.completedPlayerTurns,
+              setupRuntimes: created.setupRuntimes,
+            },
+          }),
+        );
+      }
     }
 
     await api.uploadBrowserCheckpoint(serverSessionId, checkpoint);
@@ -587,6 +624,7 @@ export class LocalDataService implements DataService {
       current.revision,
     );
     await vault.applySessionCommit(commit);
+    await vault.clearPendingCommit(sessionId, actionId);
   }
 
   async saveExecutionSteps(sessionId: string, steps: unknown[]): Promise<void> {

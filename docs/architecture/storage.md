@@ -50,31 +50,37 @@ checkpoint or credentials.
 One action follows this sequence:
 
 1. The web app atomically writes browser-authored input to `BrowserVault`.
-2. `PUT /api/sessions/:id/browser-checkpoint` hydrates an ephemeral
+2. It records the pending `actionId` in `BrowserVault`, then
+   `PUT /api/sessions/:id/browser-checkpoint` hydrates an ephemeral
    `MemoryStore` workspace with the latest full checkpoint.
 3. The normal action or plugin-RPC endpoint executes against that workspace.
 4. `POST /api/sessions/:id/browser-commit` exports the resulting workspace as a
    revision-checked `SessionCommit`.
-5. Dexie applies the commit atomically. Replaying the same `actionId` is a
-   no-op; stale revisions and same-revision divergent heads are rejected.
+5. Dexie applies the commit atomically and clears the pending action. Replaying
+   the same `actionId` is a no-op; stale revisions and same-revision divergent
+   heads are rejected.
 
 The client serializes checkpoint uploads and commit downloads. SSE messages are
 rendered immediately but are not persisted one by one; the post-action
 checkpoint is the single durable write. Terminal background-job events request
-an additional checkpoint so detached work is not lost.
+an additional checkpoint so detached work is not lost. If a commit download
+fails, the pending action survives a page reload and must be recovered before
+the browser is allowed to upload an older checkpoint.
 
 `BrowserCheckpoint` includes every domain needed to resume a session: session
 and world records, message/execution journals, events/traces, characters,
 plugin data, memory/lorebook data, interactions, suspensions, snapshots, and
-lifecycle ledgers. The envelope is JSON-safe, versioned, and independent from
-Dexie table shapes.
+lifecycle ledgers. The current-only envelope is schema v2; it rejects missing
+session clock fields, non-canonical execution origins/statuses, old snapshot
+payloads, and schema v1 checkpoints at the storage boundary.
 
 ## Browser Databases
 
 The web app uses two databases with separate lifecycles:
 
-- `covel-browser-vault` (Dexie schema v2): latest session checkpoints, compact
-  action-idempotency records, and browser-authored worlds.
+- `covel-browser-vault` (Dexie schema v3): latest session checkpoints, compact
+  action-idempotency records, pending server commits, and browser-authored
+  worlds.
 - `covel-browser-cache` (native IDB schema v1): UI state, submitted blocks,
   execution-display cache, media metadata, and render blobs.
 

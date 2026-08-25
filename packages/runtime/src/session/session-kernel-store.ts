@@ -145,7 +145,7 @@ export interface KernelStore {
     }>,
   ): Promise<void>;
   /**
-   * Scoped transaction API (preferred). When present, `commitAll()` runs the
+   * Scoped transaction API. When present, `commitAll()` runs the
    * whole proposal chain inside a single `withTransaction` callback so a
    * mid-chain failure auto-rolls-back and leaves no partial state. The callback
    * receives a transaction-bound store view — commit handlers write through
@@ -153,9 +153,9 @@ export interface KernelStore {
    * isolated pooled connection instead of serializing the whole store behind a
    * shared begin/commit window.
    *
-   * Optional so thin mock stores (and any backend without scoped transactions)
-   * remain assignable; `commitAll()` falls back to a non-transactional loop
-   * when it is absent.
+   * A transaction-bound `StoreTransaction` view intentionally omits this
+   * method to reject nesting. In that case `commitAll()` writes directly into
+   * the already-open transaction and defers fan-out to its owner.
    */
   withTransaction?<T>(fn: (tx: KernelStore) => Promise<T>): Promise<T>;
 }

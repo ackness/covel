@@ -2,7 +2,6 @@
 export const BROWSER_IDB_SCHEMA_VERSION = 1;
 export const BROWSER_IDB_DATABASE_NAME = "covel-browser-cache";
 
-export const APP_KV_STORE_STATE_SNAPSHOTS = "stateSnapshots";
 export const APP_KV_STORE_WORLD_OVERLAYS = "worldOverlays";
 export const APP_KV_STORE_STATE_PATCHES = "statePatches";
 export const APP_KV_STORE_SUBMITTED_BLOCKS = "submittedBlocks";
@@ -47,7 +46,6 @@ export function upgradeBrowserIdbSchema(
   mediaRefs?.createIndex("mediaId", "mediaId");
   mediaRefs?.createIndex("session_media", ["sessionId", "mediaId"]);
 
-  ensureStore(db, APP_KV_STORE_STATE_SNAPSHOTS);
   ensureStore(db, APP_KV_STORE_WORLD_OVERLAYS);
   ensureStore(db, APP_KV_STORE_STATE_PATCHES);
   ensureStore(db, APP_KV_STORE_SUBMITTED_BLOCKS);

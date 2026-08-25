@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
-import type { DataService } from "@/services/data-service.js";
+import type { SessionWorkspace } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import {
   createSessionSubscription,
@@ -28,7 +28,7 @@ interface MutableRef<T> {
 interface UseSessionSubscriptionOptions {
   sessionId: string | null | undefined;
   dispatch: (action: SessionAction) => void;
-  ds: DataService;
+  workspace: SessionWorkspace;
   sessionIdRef: MutableRef<string | null>;
 }
 
@@ -62,7 +62,7 @@ export function isCurrentSubscriptionEvent(
 function createSubscriptionEventHandler(
   options: Pick<
     UseSessionSubscriptionOptions,
-    "dispatch" | "ds" | "sessionIdRef"
+    "dispatch" | "workspace" | "sessionIdRef"
   > & {
     onReset: () => void;
   },
@@ -116,8 +116,8 @@ function createSubscriptionEventHandler(
           const actionId = event.id
             ? `background:${event.id}`
             : `background:${crypto.randomUUID()}`;
-          options.ds
-            .commitFromServer(event.sessionId, actionId)
+          options.workspace
+            .checkpoint(event.sessionId, actionId)
             .catch(ignoreError("checkpoint terminal background job"));
         }
         break;
@@ -210,7 +210,7 @@ export async function rehydrateSessionSideState(
 export function useSessionSubscription({
   sessionId,
   dispatch,
-  ds,
+  workspace,
   sessionIdRef,
 }: UseSessionSubscriptionOptions): void {
   const subscriptionRef = useRef<SessionSubscription | null>(null);
@@ -237,7 +237,7 @@ export function useSessionSubscription({
     let startRecovery: () => void = () => undefined;
     const applySubscriptionEvent = createSubscriptionEventHandler({
       dispatch,
-      ds,
+      workspace,
       sessionIdRef,
       onReset: () => startRecovery(),
     });
@@ -312,5 +312,5 @@ export function useSessionSubscription({
       subscriptionRef.current = null;
       setConnectionState("closed");
     };
-  }, [sessionId, dispatch, ds, sessionIdRef]);
+  }, [sessionId, dispatch, workspace, sessionIdRef]);
 }

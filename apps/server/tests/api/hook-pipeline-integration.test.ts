@@ -110,13 +110,19 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
     registry.register(makeEntry({ id: RUNTIME_ID, loaded }));
 
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [RUNTIME_ID],
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       createdAt: new Date().toISOString(),
     });
 

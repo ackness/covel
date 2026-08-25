@@ -113,7 +113,7 @@ characterRoutes.post("/:id/characters", async (c) => {
     allowedStatuses: ["active"],
     mutate: (liveSession) =>
       runWithHookScope(
-        { activePluginIds: new Set(liveSession.activePlugins ?? []) },
+        { activePluginIds: new Set(liveSession.activePlugins) },
         () => pipeline.commit(proposal),
       ),
   });

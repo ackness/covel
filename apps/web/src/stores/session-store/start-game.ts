@@ -1,6 +1,6 @@
 import i18n from "i18next";
 import * as api from "@/services/api";
-import type { DataService } from "@/services/data-service.js";
+import type { DataService, SessionWorkspace } from "@/services/data-service.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
 import { hydratePluginDataForUiSpecs } from "./plugin-data-hydration.js";
@@ -12,6 +12,7 @@ interface MutableRef<T> {
 
 interface StartGameOptions {
   ds: DataService;
+  workspace: SessionWorkspace;
   dispatch: SessionDispatch;
   sessionIdRef: MutableRef<string | null>;
   world: api.WorldRecord;
@@ -85,6 +86,7 @@ async function persistPrepRuntimeBindings(
 
 export async function startGameSession({
   ds,
+  workspace,
   dispatch,
   sessionIdRef,
   world,
@@ -109,14 +111,15 @@ export async function startGameSession({
     // server mirror before publishing an executable session or issuing any
     // server-backed hydration / model-binding calls. Remote mode is already
     // authoritative and implements syncToServer as a no-op.
-    await ds.syncToServer(session.id);
+    await workspace.hydrate(session.id);
     api.markServerAck();
     await persistPrepRuntimeBindings(ds, world.id, session.id);
+    const hydratedSession = (await ds.getSession(session.id)) ?? session;
 
     setActivePluginDataSession(session.id);
     sessionIdRef.current = session.id;
     published = true;
-    dispatch({ type: "SET_SESSION", session });
+    dispatch({ type: "SET_SESSION", session: hydratedSession });
 
     await hydrateInitialSnapshot(session.id, sessionIdRef, dispatch);
 

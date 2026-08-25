@@ -430,7 +430,7 @@ export async function syncWorldDataForSession(
     // throw auto-rolls-back the DB. `mediaRefs` is collected on the outer array
     // so the catch below can still clean up media written before the failure
     // (media files live outside the DB transaction).
-    await options.store.withTransaction!(async (tx) => {
+    await options.store.withTransaction(async (tx) => {
       // Compare-and-swap. The conflict scan above ran BEFORE this transaction
       // opened, so anything it declared unmodified could have been edited in
       // between — by a turn, or by another HTTP writer — and a `force: false`

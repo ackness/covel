@@ -25,7 +25,7 @@ trigger:
 
 ## 执行时机
 
-`stage: setup`——仅在 `session.phase === "setup"` 时调度，报告完成后不再运行（maxTriggerCount: 1 是重试预算）。完成状态记录在 `session.setupRuntimes` 镜像（API 仍派生兼容的 preGameCompleted 字段）。
+`stage: setup`——仅在 `session.phase === "setup"` 时调度，报告完成后不再运行（maxTriggerCount: 1 是重试预算）。完成状态记录在 `session.setupRuntimes` 镜像。
 
 ## 职责
 

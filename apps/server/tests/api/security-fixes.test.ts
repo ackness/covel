@@ -131,33 +131,6 @@ describe("[HIGH] Client-supplied session ID validation", () => {
   });
 });
 
-// ── CRITICAL #2: PUT /state-snapshot must not silently discard ───
-
-describe("[CRITICAL] PUT /state-snapshot returns 501", () => {
-  let app: Hono;
-
-  beforeEach(() => {
-    const store = createMemoryStore();
-    app = createTestApp({
-      store,
-      pluginRegistry: createPluginRegistry(),
-    });
-  });
-
-  it("returns 501 Not Implemented instead of silent 200", async () => {
-    const { id } = await createSession(app);
-    const res = await app.request(`/api/sessions/${id}/state-snapshot`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ character: { hp: 100 } }),
-    });
-    // Must NOT return 200 ok: true (silent discard)
-    expect(res.status).toBe(501);
-    const body = (await json(res)) as Record<string, unknown>;
-    expect(body.error).toBeDefined();
-  });
-});
-
 describe("[P2] rate limiter proxy trust", () => {
   let savedTrustedProxyIps: string | undefined;
 

@@ -15,8 +15,7 @@ function makeStore(overrides = {}) {
 
 // Deliberate change: handler returns the canonical HandlerResult. Business value (narrative
 // / initialized) is under `result.value`, notifications under `result.effects`,
-// and the pre-game completion signal is `result.completion === "done"` (the
-// kernel projects it to the legacy top-level preGameDone).
+// and the setup completion signal is `result.completion === "done"`.
 describe("pregame handler", () => {
   it("builds a localized welcome from world data and reports preGameDone", async () => {
     const result = await handler({

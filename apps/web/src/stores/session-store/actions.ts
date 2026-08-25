@@ -3,7 +3,11 @@ import i18n from "i18next";
 import * as api from "@/services/api";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
-import type { DataService } from "@/services/data-service.js";
+import {
+  SessionWorkspaceSyncError,
+  type DataService,
+  type SessionWorkspace,
+} from "@/services/data-service.js";
 import {
   resetPluginData,
   setActiveSession as setActivePluginDataSession,
@@ -15,10 +19,9 @@ import { toExecutionStepStatus } from "./execution-steps.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
 import { restoreSessionState, toStreamMessages } from "./restore-session.js";
 import {
-  ensureServerThenRun,
   finalizeActionExecution,
+  reportWorkspaceSyncError,
   runActionStream,
-  runWorkspaceMutation,
 } from "./runtime-rpc.js";
 import type { MutableRef, SessionRuntimeRefs } from "./runtime-refs.js";
 import { canRunSessionAction } from "./selectors.js";
@@ -35,6 +38,7 @@ interface UseSessionActionsOptions {
   state: SessionState;
   dispatch: SessionDispatch;
   ds: DataService;
+  workspace: SessionWorkspace;
   refs: SessionRuntimeRefs;
   handleSseEvent: SseEventHandler;
 }
@@ -43,9 +47,9 @@ interface UseSessionActionsOptions {
 const OLDER_MESSAGES_PAGE_SIZE = 40;
 
 /**
- * The server evolves SessionRecord during a turn (turnCount advances,
+ * The server evolves SessionRecord during a turn (the phase/clock advances,
  * pre-game completion, status) but the SSE stream carries none of it —
- * without a resync the stage view's turnCount gate stays stale until a
+ * without a resync the stage view's phase gate stays stale until a
  * full page reload.
  */
 export async function resyncSessionRecord(
@@ -68,6 +72,7 @@ export function useBuildSessionActions({
   state,
   dispatch,
   ds,
+  workspace,
   refs,
   handleSseEvent,
 }: UseSessionActionsOptions): SessionActions {
@@ -98,6 +103,7 @@ export function useBuildSessionActions({
       if (!state.world) return;
       await startGameSession({
         ds,
+        workspace,
         dispatch,
         sessionIdRef,
         world: state.world,
@@ -106,7 +112,15 @@ export function useBuildSessionActions({
         plugins,
       });
     },
-    [ds, dispatch, sessionIdRef, state.world, state.presets, state.llmConfig],
+    [
+      ds,
+      workspace,
+      dispatch,
+      sessionIdRef,
+      state.world,
+      state.presets,
+      state.llmConfig,
+    ],
   );
 
   const resyncSession = useCallback(
@@ -126,13 +140,17 @@ export function useBuildSessionActions({
       if (sessionIdRef.current !== sessionId) return;
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-      ensureServerThenRun(
-        ds,
-        sessionId,
-        () => {
-          runActionStream(
+      const requestId = crypto.randomUUID();
+      void workspace
+        .run(sessionId, requestId, () => {
+          if (sessionIdRef.current !== sessionId) {
+            return Promise.reject(
+              new Error("Session changed before action start"),
+            );
+          }
+          return runActionStream(
             {
-              requestId: crypto.randomUUID(),
+              requestId,
               type: "start_session",
               sessionId,
               locale: i18n.language,
@@ -140,37 +158,36 @@ export function useBuildSessionActions({
             },
             handleSseEvent,
             dispatch,
-            { sessionIdRef, dataService: ds },
-          ).finally(() => {
-            finalizeActionExecution(dispatch, sessionId, sessionIdRef);
-            resyncSession(sessionId);
-          });
-        },
-        {
-          sessionIdRef,
-          onAborted: () =>
-            finalizeActionExecution(dispatch, sessionId, sessionIdRef),
-        },
-      );
+            { sessionIdRef },
+          );
+        })
+        .catch((error: unknown) => {
+          reportWorkspaceSyncError(error, dispatch);
+        })
+        .finally(() => {
+          finalizeActionExecution(dispatch, sessionId, sessionIdRef);
+          resyncSession(sessionId);
+        });
     };
 
     void api
       .getWorldOverlay(worldId)
       .then((overlay) => postStart(overlay?.lore))
       .catch(() => postStart());
-  }, [ds, state, handleSseEvent, dispatch, resyncSession, sessionIdRef]);
+  }, [workspace, state, handleSseEvent, dispatch, resyncSession, sessionIdRef]);
 
   const resumeSession = useCallback(
     async (session: api.SessionRecord) => {
       await restoreSessionState({
         ds,
+        workspace,
         dispatch,
         sessionIdRef,
         worlds: state.worlds,
         session,
       });
     },
-    [ds, dispatch, sessionIdRef, state.worlds],
+    [ds, workspace, dispatch, sessionIdRef, state.worlds],
   );
 
   const resumeSessionById = useCallback(
@@ -231,18 +248,26 @@ export function useBuildSessionActions({
       return new Promise<void>((resolve) => {
         const fireAction = () => {
           const isCommand = content.startsWith("/");
-          runActionStream(
-            {
-              requestId: crypto.randomUUID(),
-              type: isCommand ? "execute_command" : "send_message",
-              sessionId,
-              locale: i18n.language,
-              payload: isCommand ? { command: content } : { content },
-            },
-            handleSseEvent,
-            dispatch,
-            { toastOnError: true, sessionIdRef, dataService: ds },
-          ).then(resolve);
+          const requestId = crypto.randomUUID();
+          return workspace.run(sessionId, requestId, () => {
+            if (sessionIdRef.current !== sessionId) {
+              return Promise.reject(
+                new Error("Session changed before action start"),
+              );
+            }
+            return runActionStream(
+              {
+                requestId,
+                type: isCommand ? "execute_command" : "send_message",
+                sessionId,
+                locale: i18n.language,
+                payload: isCommand ? { command: content } : { content },
+              },
+              handleSseEvent,
+              dispatch,
+              { toastOnError: true, sessionIdRef },
+            );
+          });
         };
 
         // Settle the promise on an aborted sync too, or `sendMessage`'s
@@ -250,9 +275,9 @@ export function useBuildSessionActions({
         // stuck on "executing".
         persistInput.then(
           () =>
-            ensureServerThenRun(ds, sessionId, fireAction, {
-              onAborted: resolve,
-              sessionIdRef,
+            fireAction().then(resolve, (error: unknown) => {
+              reportWorkspaceSyncError(error, dispatch);
+              resolve();
             }),
           (error: unknown) => {
             ignoreError("persist user message")(error);
@@ -261,7 +286,7 @@ export function useBuildSessionActions({
         );
       });
     },
-    [ds, dispatch, state.session, handleSseEvent],
+    [workspace, ds, dispatch, state.session, handleSseEvent],
   );
 
   const sendMessage = useCallback(
@@ -366,8 +391,7 @@ export function useBuildSessionActions({
       let filled: string;
       try {
         submitBlock(blockId, values);
-        const result = await runWorkspaceMutation(
-          ds,
+        const result = await workspace.run(
           sid,
           `interaction:${crypto.randomUUID()}`,
           () =>
@@ -379,6 +403,7 @@ export function useBuildSessionActions({
         filled = result.results?.[0]?.filledNarrative ?? "";
       } catch (err) {
         if (sessionIdRef.current !== sid) return;
+        if (reportWorkspaceSyncError(err, dispatch)) return;
         console.error("[submitInteraction] submit-form failed:", err);
         sendMessage(Object.values(values).join(", "));
         return;
@@ -435,15 +460,26 @@ export function useBuildSessionActions({
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-      runActionStream(request, handleSseEvent, dispatch, {
-        sessionIdRef,
-        dataService: ds,
-      }).finally(() => {
-        finalizeActionExecution(dispatch, request.sessionId, sessionIdRef);
-        if (request.sessionId) resyncSession(request.sessionId);
-      });
+      void workspace
+        .run(request.sessionId, request.requestId, () => {
+          if (sessionIdRef.current !== request.sessionId) {
+            return Promise.reject(
+              new Error("Session changed before action start"),
+            );
+          }
+          return runActionStream(request, handleSseEvent, dispatch, {
+            sessionIdRef,
+          });
+        })
+        .catch((error: unknown) => {
+          reportWorkspaceSyncError(error, dispatch);
+        })
+        .finally(() => {
+          finalizeActionExecution(dispatch, request.sessionId, sessionIdRef);
+          if (request.sessionId) resyncSession(request.sessionId);
+        });
     },
-    [dispatch, ds, handleSseEvent, resyncSession, sessionIdRef],
+    [dispatch, workspace, handleSseEvent, resyncSession, sessionIdRef],
   );
 
   const executeCommand = useCallback(
@@ -452,21 +488,15 @@ export function useBuildSessionActions({
       const sessionId = state.session?.id;
       if (!sessionId) return;
 
-      ensureServerThenRun(
-        ds,
+      runKernelAction({
+        requestId: crypto.randomUUID(),
+        type: "execute_command",
         sessionId,
-        () =>
-          runKernelAction({
-            requestId: crypto.randomUUID(),
-            type: "execute_command",
-            sessionId,
-            locale: i18n.language,
-            payload: { command },
-          }),
-        { sessionIdRef },
-      );
+        locale: i18n.language,
+        payload: { command },
+      });
     },
-    [ds, state, runKernelAction],
+    [state, runKernelAction],
   );
 
   const retryRuntime = useCallback(
@@ -492,24 +522,18 @@ export function useBuildSessionActions({
         });
       }
 
-      ensureServerThenRun(
-        ds,
+      runKernelAction({
+        requestId: crypto.randomUUID(),
+        type: runtimeId ? "retry_runtime" : "retry_turn",
         sessionId,
-        () =>
-          runKernelAction({
-            requestId: crypto.randomUUID(),
-            type: "retry_runtime",
-            sessionId,
-            locale: i18n.language,
-            payload: {
-              ...(runtimeId ? { runtimeId } : {}),
-              ...(sourceTurnId ? { retryFromTurnId: sourceTurnId } : {}),
-            },
-          }),
-        { sessionIdRef },
-      );
+        locale: i18n.language,
+        payload: {
+          ...(runtimeId ? { runtimeId } : {}),
+          ...(sourceTurnId ? { retryFromTurnId: sourceTurnId } : {}),
+        },
+      });
     },
-    [ds, dispatch, state, runKernelAction],
+    [dispatch, state, runKernelAction],
   );
 
   const resetSession = useCallback(() => {
@@ -561,51 +585,74 @@ export function useBuildSessionActions({
       if (!sid) return;
       dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, isActive: enable });
       try {
-        const applied = await runWorkspaceMutation(
-          ds,
+        if (!enable) {
+          await workspace.run(
+            sid,
+            `plugin-disable:${crypto.randomUUID()}`,
+            () => api.disableSessionPlugin(sid, pluginId),
+          );
+          return;
+        }
+
+        const firstResult = await workspace.run(
           sid,
-          `plugin-toggle:${crypto.randomUUID()}`,
-          async () => {
-            if (!enable) {
-              await api.disableSessionPlugin(sid, pluginId);
-              return true;
-            }
-            let result = await api.enableSessionPlugin(sid, pluginId);
-            if (!("status" in result)) return true;
-            if (result.status !== "approval-required") {
-              throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
-            }
-            const approved = await requestConfirm({
-              title: i18n.t("plugin.approval.title"),
-              message: i18n.t("plugin.approval.confirmMessage", {
-                pluginId: result.pending.pluginId,
-                action: result.pending.action,
-              }),
-              confirmLabel: i18n.t("plugin.approval.allow"),
-              cancelLabel: i18n.t("plugin.approval.deny"),
-            });
-            await api.resolveApproval(
-              result.approvalId,
-              approved ? "allow" : "deny",
-              "session",
-              sid,
-            );
-            if (!approved) return false;
-            result = await api.enableSessionPlugin(sid, pluginId);
-            if ("status" in result) {
-              throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
-            }
-            return true;
-          },
+          `plugin-enable:${crypto.randomUUID()}`,
+          () => api.enableSessionPlugin(sid, pluginId),
         );
-        if (!applied) {
+        if (!("status" in firstResult)) return;
+        if (firstResult.status !== "approval-required") {
+          throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
+        }
+
+        // The confirmation dialog must not hold the session workspace FIFO;
+        // background checkpoints and other actions remain free to settle while
+        // the player decides.
+        const approved = await requestConfirm({
+          title: i18n.t("plugin.approval.title"),
+          message: i18n.t("plugin.approval.confirmMessage", {
+            pluginId: firstResult.pending.pluginId,
+            action: firstResult.pending.action,
+          }),
+          confirmLabel: i18n.t("plugin.approval.allow"),
+          cancelLabel: i18n.t("plugin.approval.deny"),
+        });
+        if (!approved) {
           dispatch({
             type: "TOGGLE_SESSION_PLUGIN",
             pluginId,
             isActive: false,
           });
+          await workspace.run(sid, `plugin-deny:${crypto.randomUUID()}`, () =>
+            api.resolveApproval(firstResult.approvalId, "deny", "session", sid),
+          );
+          return;
         }
-      } catch {
+
+        await workspace.run(
+          sid,
+          `plugin-approve:${crypto.randomUUID()}`,
+          async () => {
+            await api.resolveApproval(
+              firstResult.approvalId,
+              "allow",
+              "session",
+              sid,
+            );
+            const enabled = await api.enableSessionPlugin(sid, pluginId);
+            if ("status" in enabled) {
+              throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
+            }
+          },
+        );
+      } catch (error) {
+        if (
+          error instanceof SessionWorkspaceSyncError &&
+          error.stage === "checkpoint"
+        ) {
+          reportWorkspaceSyncError(error, dispatch);
+          return;
+        }
+        reportWorkspaceSyncError(error, dispatch);
         dispatch({
           type: "TOGGLE_SESSION_PLUGIN",
           pluginId,
@@ -613,7 +660,7 @@ export function useBuildSessionActions({
         });
       }
     },
-    [dispatch, ds, sessionIdRef],
+    [dispatch, workspace, sessionIdRef],
   );
 
   const upsertInteractionDraft = useCallback(
@@ -638,8 +685,7 @@ export function useBuildSessionActions({
     async (suspensionId: string, data: unknown) => {
       const sid = sessionIdRef.current;
       if (!sid) return;
-      const { result, events } = await runWorkspaceMutation(
-        ds,
+      const { result, events } = await workspace.run(
         sid,
         `resume:${crypto.randomUUID()}`,
         () => api.resumeSuspension(sid, suspensionId, data),
@@ -660,22 +706,19 @@ export function useBuildSessionActions({
       });
       dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
     },
-    [dispatch, ds, sessionIdRef, applyResumeEvents],
+    [dispatch, workspace, sessionIdRef, applyResumeEvents],
   );
 
   const cancelSuspension = useCallback(
     async (suspensionId: string) => {
       const sid = sessionIdRef.current;
       if (!sid) return;
-      await runWorkspaceMutation(
-        ds,
-        sid,
-        `cancel-suspension:${crypto.randomUUID()}`,
-        () => api.cancelSuspension(sid, suspensionId),
+      await workspace.run(sid, `cancel-suspension:${crypto.randomUUID()}`, () =>
+        api.cancelSuspension(sid, suspensionId),
       );
       dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
     },
-    [dispatch, ds, sessionIdRef],
+    [dispatch, workspace, sessionIdRef],
   );
 
   const refreshSuspensions = useCallback(async () => {

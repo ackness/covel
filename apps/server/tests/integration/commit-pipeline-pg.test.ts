@@ -80,10 +80,15 @@ async function seedSession(store: DataStore, id: string): Promise<void> {
     id,
     worldId: "pg-test",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    phase: "playing",
+    completedPlayerTurns: 1,
+    setupRuntimes: {},
     locale: "en",
     activePlugins: [],
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     createdAt: now,
     updatedAt: now,
   };

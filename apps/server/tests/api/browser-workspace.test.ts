@@ -23,11 +23,13 @@ async function seed(target: DataStore, metadata?: Record<string, unknown>) {
     createdAt: "2026-08-25T00:00:00.000Z",
   });
   await target.createSession({
+    phase: "playing",
+    setupRuntimes: {},
     id: SESSION_ID,
     worldId: WORLD_ID,
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
+    completedPlayerTurns: 0,
+
     activePlugins: [],
     locale: "zh-CN",
     metadata,

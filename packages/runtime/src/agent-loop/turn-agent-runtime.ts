@@ -61,7 +61,6 @@ export interface ExecuteAgentRuntimeOptions {
           fields?: Record<string, unknown>;
         }[];
         lastFormValues?: Record<string, unknown>;
-        preGameCompleted?: readonly string[];
       }
     | undefined;
   readonly hookPipeline: HookPipeline | undefined;
@@ -76,7 +75,7 @@ export interface ExecuteAgentRuntimeOptions {
   /** Resolved input bindings — rendered into the reserved inputs prompt block. */
   readonly inputs?: Readonly<Record<string, InputSlot>>;
   /** Execution identity persisted if this agent suspends mid-turn. */
-  readonly executionContext?: ExecutionContext;
+  readonly executionContext: ExecutionContext;
   /** Frozen cross-execution `recordAs` exports — rendered into the reserved exports block. */
   readonly exports?: Readonly<Record<string, InputSlot>>;
   readonly startTime: number;

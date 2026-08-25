@@ -99,11 +99,17 @@ async function seedSession(
 ): Promise<void> {
   const now = new Date().toISOString();
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id,
     worldId: "cloudmere",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    completedPlayerTurns: 1,
+
     locale,
     activePlugins: [],
     createdAt: now,
@@ -344,7 +350,17 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       name: "form-template",
       content: "Player name is {{name}}",
       order: 700,
-      pendingInput: { formId: "form-char-creation" },
+      pendingInput: [
+        {
+          interactionId: "form-char-creation",
+          type: "form",
+          title: "Character name",
+          fields: [
+            { type: "text", name: "name", label: "Name", required: true },
+          ],
+          submitLabel: "Continue",
+        },
+      ],
       createdAt: new Date().toISOString(),
     });
 
@@ -968,11 +984,17 @@ async function seedRuntimeSession(
 ): Promise<void> {
   const now = new Date().toISOString();
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id: sessionId,
     worldId: "cloudmere",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    completedPlayerTurns: 1,
+
     locale: "zh-CN",
     activePlugins: [pluginId],
     createdAt: now,
@@ -1286,12 +1308,11 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       acceptedText: "Accepted branch text.",
     });
 
-    // Advance out of the Pre-Game band so a send_message schedules the
-    // main-loop narrator (stage narrative). /api/actions enforces band gating;
-    // without this the narrator would not run and no LLM call would be made.
+    // Advance to the playing band so send_message schedules the main-loop
+    // narrator (stage narrative).
     await store.updateSession(session.id, {
-      turnCount: 1,
-      preGameCompleted: ["pregame"],
+      phase: "playing",
+      completedPlayerTurns: 0,
       updatedAt: new Date().toISOString(),
     });
 
@@ -2177,11 +2198,17 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
 
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: "cloudmere",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "zh-CN",
       activePlugins: [PLUGIN_ID],
       createdAt: now,
@@ -2371,11 +2398,17 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
   ): Promise<{ jobId: string }> {
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: "cloudmere",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "zh-CN",
       activePlugins: [PLUGIN_ID],
       createdAt: now,

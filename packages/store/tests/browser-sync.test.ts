@@ -20,7 +20,18 @@ const firstCheckpoint: BrowserCheckpoint = {
   schemaVersion: BROWSER_CHECKPOINT_SCHEMA_VERSION,
   sessionId: "session-1",
   profile: "browser-private",
-  session: { id: "session-1" } as BrowserCheckpoint["session"],
+  session: {
+    id: "session-1",
+    worldId: "world-1",
+    status: "active",
+    locale: "en-US",
+    activePlugins: [],
+    createdAt: "2026-08-25T00:00:00.000Z",
+    updatedAt: "2026-08-25T00:00:00.000Z",
+    phase: "playing",
+    completedPlayerTurns: 1,
+    setupRuntimes: {},
+  },
   world: null,
   messages: [],
   turnMessages: [],
@@ -79,11 +90,23 @@ describe("browser-authoritative persistence contract", () => {
 
   it("rejects malformed checkpoint versions and domains", () => {
     expect(() =>
-      validateBrowserCheckpoint({ ...firstCheckpoint, schemaVersion: 2 }),
+      validateBrowserCheckpoint({ ...firstCheckpoint, schemaVersion: 1 }),
     ).toThrow(BrowserSyncValidationError);
     expect(() =>
       validateBrowserCheckpoint({ ...firstCheckpoint, messages: undefined }),
     ).toThrow(BrowserSyncValidationError);
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...firstCheckpoint,
+        session: { ...firstCheckpoint.session, phase: undefined },
+      }),
+    ).toThrow("session.phase must be one of");
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...firstCheckpoint,
+        turnResults: [{ origin: "follower", commitStatus: "committed" }],
+      }),
+    ).toThrow("turnResults[0].origin must be one of");
   });
 
   it("accepts the first commit and advances revisions without mutation", () => {

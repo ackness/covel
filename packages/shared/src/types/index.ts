@@ -195,7 +195,6 @@ export type {
 export { PROPOSAL_TYPES } from "./proposal.js";
 
 export type {
-  ProtocolEventType,
   ProtocolEvent,
   SessionSnapshot,
   SnapshotMessage,

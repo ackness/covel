@@ -1,6 +1,7 @@
 import type {
   I18nText,
   PluginUserSettingSpec,
+  Session as SharedSession,
   SessionStatus,
   SetupRuntimeState,
   Stage,
@@ -38,27 +39,9 @@ export interface WorldRecord {
 export type GeneratedWorldSaveTarget =
   "server-file" | "server-store" | "return-only";
 
-export interface SessionRecord {
-  id: string;
-  worldId: string;
-  status: SessionStatus;
-  /** Locale persisted on the authoritative server session. */
-  locale?: string;
-  turnCount: number;
-  /** Legacy setup completion list, derived from setupRuntimes. */
-  preGameCompleted?: readonly string[];
-  /** Authoritative setup/main-loop scheduling phase. */
-  phase?: "setup" | "playing";
-  /** Number of committed main-loop player turns. */
-  completedPlayerTurns?: number;
-  activePlugins?: readonly string[];
+export interface SessionRecord extends Omit<SharedSession, "worldId"> {
+  readonly worldId: string;
   presetId?: string;
-  taskBindings?: Record<string, string>;
-  runtimeModelOverrides?: Record<string, string>;
-  /** Per-setup-runtime lifecycle state, keyed by runtimeId. */
-  setupRuntimes?: Record<string, SetupRuntimeState>;
-  createdAt: string;
-  updatedAt?: string;
 }
 
 /**

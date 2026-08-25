@@ -111,15 +111,11 @@ export function mintSessionApprovalScope(): string {
 
 /** Stable identity used to reject stale mutations after same-id recreation. */
 export function sessionIncarnationIdentity(session: SessionRecord): string {
-  const ownerHash = session.metadata?.[SESSION_OWNER_TOKEN_HASH_KEY];
-  if (typeof ownerHash === "string" && ownerHash.length > 0) {
-    return `owner:${ownerHash}`;
-  }
   const nonce = session.metadata?.[SESSION_INCARNATION_KEY];
   if (typeof nonce === "string" && nonce.length > 0) {
     return `incarnation:${nonce}`;
   }
-  return `created:${session.createdAt}`;
+  throw new Error(`Session ${session.id} is missing incarnation metadata`);
 }
 
 /**
@@ -192,30 +188,24 @@ export async function withLockedSessionMutation<T>(options: {
 /**
  * Resolve the stable scope used by process-local approval gates.
  *
- * New sessions carry a dedicated random nonce. The owner-token hash is a safe
- * compatibility fallback for sessions created before the nonce was added: it
- * is already random, private, persisted, and changes when an id is recreated.
- * The timestamp fallback is only for legacy/test rows that have neither key.
+ * Every session carries a dedicated random nonce. Missing scope metadata is a
+ * corrupt current session and fails explicitly instead of weakening isolation.
  */
 export function sessionApprovalScope(
   session: SessionRecord,
   pluginId: string,
 ): string {
   const nonce = session.metadata?.[SESSION_APPROVAL_SCOPE_KEY];
-  const ownerHash = session.metadata?.[SESSION_OWNER_TOKEN_HASH_KEY];
-  const incarnation =
-    typeof nonce === "string" && nonce.length > 0
-      ? `nonce:${nonce}`
-      : typeof ownerHash === "string" && ownerHash.length > 0
-        ? `owner:${ownerHash}`
-        : `created:${session.createdAt}`;
+  if (typeof nonce !== "string" || nonce.length === 0) {
+    throw new Error(`Session ${session.id} is missing approval scope metadata`);
+  }
   const revisions = session.metadata?.[SESSION_APPROVAL_REVISIONS_KEY];
   const revision =
     revisions && typeof revisions === "object" && !Array.isArray(revisions)
       ? (revisions as Record<string, unknown>)[pluginId]
       : undefined;
   return JSON.stringify([
-    incarnation,
+    `nonce:${nonce}`,
     typeof revision === "string" && revision.length > 0 ? revision : "0",
   ]);
 }

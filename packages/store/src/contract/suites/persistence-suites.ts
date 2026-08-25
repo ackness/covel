@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type {
   CharacterRecord,
   DataStore,
-  SnapshotPayloadV2,
+  SnapshotPayload,
   StateEntryRecord,
 } from "../../types.js";
 import {
@@ -19,7 +19,6 @@ import {
   makeSessionSummary,
   makeSnapshot,
   makeSnapshotPayload,
-  makeSnapshotPayloadV2,
   makeStateChange,
   makeStateEntry,
   makeStateSchema,
@@ -437,34 +436,35 @@ export function registerPersistenceStoreSuites(
       expect(result!.payload.messagesCursor).toBe("tm-last-abc");
     });
 
-    it("should round-trip a V2 payload's session lifecycle state", async () => {
-      const payload = makeSnapshotPayloadV2();
-      const snap = makeSnapshot({ sessionId: "sess-snap-v2", payload });
+    it("round-trips the current snapshot session lifecycle state", async () => {
+      const payload = makeSnapshotPayload();
+      const snap = makeSnapshot({ sessionId: "sess-snap-current", payload });
       await store.saveSnapshot(snap);
 
       const result = (await store.getSnapshot(snap.id))!
-        .payload as SnapshotPayloadV2;
-      expect(result.schemaVersion).toBe(2);
+        .payload as SnapshotPayload;
+      expect(result.schemaVersion).toBe(3);
       expect(result.session).toEqual(payload.session);
     });
 
-    it("should keep optional V2 session fields absent after round-trip", async () => {
+    it("keeps optional session fields absent after round-trip", async () => {
       // presetId / runtimeModelOverrides are optional — JSON serialisation
       // must not resurrect them as null (store-backend parity contract).
-      const payload = makeSnapshotPayloadV2({
+      const payload = makeSnapshotPayload({
         session: {
           status: "paused",
-          turnCount: 0,
-          preGameCompleted: [],
           locale: "en-US",
           activePlugins: [],
+          phase: "setup",
+          completedPlayerTurns: 0,
+          setupRuntimes: {},
         },
       });
-      const snap = makeSnapshot({ sessionId: "sess-snap-v2", payload });
+      const snap = makeSnapshot({ sessionId: "sess-snap-current", payload });
       await store.saveSnapshot(snap);
 
       const result = (await store.getSnapshot(snap.id))!
-        .payload as SnapshotPayloadV2;
+        .payload as SnapshotPayload;
       expect(result.session.presetId).toBeUndefined();
       expect(result.session.runtimeModelOverrides).toBeUndefined();
       expect(result.session.status).toBe("paused");

@@ -12,7 +12,7 @@ import type { SessionState } from "./types.js";
 export function isPreGameSession(
   session: SessionRecord | null | undefined,
 ): boolean {
-  return session?.status === "active" && session.turnCount === 0;
+  return session?.status === "active" && session.phase === "setup";
 }
 
 export function selectSessionId(state: SessionState): string | null {

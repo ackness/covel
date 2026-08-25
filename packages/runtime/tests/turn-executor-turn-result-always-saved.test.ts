@@ -1,9 +1,8 @@
 /**
  * Invariant: `executeTurn` always calls `store.saveTurnResult` before it
  * returns — even when zero runtimes ran, when the session is paused, or when
- * all runtimes failed. `actions.ts` derives `session.turnCount` from
- * `listTurnResults().length`, so skipping this write silently desyncs the
- * UI turn counter from the actual number of runs.
+ * all runtimes failed. Skipping this write would lose the execution artifact
+ * required by commit settlement and observability.
  *
  * Exception: when `session.status !== 'active'` (paused/ended) executeTurn
  * returns early *before* saving — that's intentional because no runtimes
@@ -35,10 +34,11 @@ async function freshActiveStore(sessionId: string): Promise<DataStore> {
   await store.createSession({
     id: sessionId,
     worldId: "w",
-    turnCount: 0,
     status: "active",
     activePlugins: [],
-    preGameCompleted: [],
+    phase: "setup",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });

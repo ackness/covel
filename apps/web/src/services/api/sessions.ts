@@ -259,14 +259,6 @@ export async function listStatePatches(
   );
 }
 
-export async function loadStateSnapshot(
-  sessionId: string,
-): Promise<Record<string, unknown> | null> {
-  return request<Record<string, unknown> | null>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/state-snapshot`,
-  );
-}
-
 export interface StateTableEntry {
   name: string;
   fields: Array<{ name: string; type?: string; description?: string }>;
@@ -301,19 +293,6 @@ export async function listStateTables(
     fields: row.schema?.fields ?? [],
     data: row.data ?? {},
   }));
-}
-
-export async function saveStateSnapshot(
-  sessionId: string,
-  snapshot: Record<string, unknown>,
-): Promise<void> {
-  await request<{ ok: boolean }>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/state-snapshot`,
-    {
-      method: "PUT",
-      body: JSON.stringify(snapshot),
-    },
-  );
 }
 
 export async function createSession(

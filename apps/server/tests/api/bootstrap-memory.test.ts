@@ -239,13 +239,19 @@ describe("createBootstrapMemorySystem", () => {
     const sessionId = "session-ingest";
 
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [],
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       createdAt: new Date().toISOString(),
     });
 

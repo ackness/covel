@@ -88,11 +88,17 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
     store = await createPgStore(isolatedUrl as string, { freshSchema: true });
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: "w1",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "en",
       activePlugins: [],
       createdAt: now,
@@ -172,11 +178,17 @@ maybe("memory vector recall over real PgStore (pgvector)", () => {
 
     try {
       await store.createSession({
+        phase: "playing",
+        setupRuntimes: {},
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
         id: distributedSessionId,
         worldId: "w1",
         status: "active",
-        turnCount: 1,
-        preGameCompleted: [],
+        completedPlayerTurns: 1,
+
         locale: "en",
         activePlugins: [],
         createdAt: now,

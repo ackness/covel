@@ -9,13 +9,19 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { DataStore, MediaStore } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
-import type { LLMAdapter, ToolExecutor, HookPipeline } from "@covel/runtime";
+import type {
+  LLMAdapter,
+  ToolExecutor,
+  HookPipeline,
+  TurnExecutorDeps,
+} from "@covel/runtime";
 import type { EventBus } from "@covel/events";
 import {
   executeTurn,
   createTraceRecorder,
   createTurnEmitter,
   collectExecutionJournal,
+  collectExecutionSuspensions,
   finalizeExecution,
   saveAutoSnapshot,
 } from "@covel/runtime";
@@ -36,10 +42,6 @@ import {
   resolveTurnCapabilityPluginIds,
   type TurnCapabilityPluginIds,
 } from "./turn-capabilities.js";
-import {
-  ensureSessionClockBackfilled,
-  isPreGamePending,
-} from "./turn-count.js";
 import { decodePluginUserSettingsHeader } from "./plugin-rpc/body.js";
 import {
   mergePluginUserSettings,
@@ -53,53 +55,9 @@ import {
   sessionApprovalScope,
 } from "./session/session-guard.js";
 import { validateActionRequest } from "./actions/request.js";
-import { stageExecutionSuspensions } from "./execution-suspensions.js";
 
-// SSE uses ProtocolEventType names directly — no legacy mapping.
+// SSE uses CovelEventType names directly.
 // Frontend handleSseEvent handles these standard types.
-
-/**
- * Memory-system facade injected by bootstrap via `setMemorySystem()`. Kept
- * out of `Env["Variables"]` because it never flows through Hono's
- * `c.set`/`c.get` — see the module-level reference below.
- */
-interface MemorySystemFacade {
-  readonly manager: {
-    loadBlocks(
-      sid: string,
-    ): Promise<
-      readonly { label: string; content: string; updatedAt: string }[]
-    >;
-    initializeDefaults(sid: string): Promise<void>;
-  };
-  readonly updater: {
-    updateAfterTurn(p: {
-      sessionId: string;
-      narrativeText: string;
-      toolCallSummaries?: readonly string[];
-      authoritativeFacts?: {
-        readonly playerCharacter?: {
-          readonly name: string;
-          readonly type: string;
-          readonly description?: string;
-          readonly fields?: Readonly<Record<string, unknown>>;
-        };
-        readonly playerFieldLabels?: Readonly<Record<string, string>>;
-        readonly lastFormValues?: Readonly<Record<string, unknown>>;
-      };
-      currentBlocks: readonly {
-        label: string;
-        content: string;
-        updatedAt: string;
-      }[];
-      locale?: string;
-    }): Promise<{
-      updated: boolean;
-      blocksChanged: readonly string[];
-      error?: string;
-    }>;
-  };
-}
 
 type Env = {
   Variables: {
@@ -120,18 +78,11 @@ type Env = {
     mediaStore?: MediaStore;
     hookPipeline?: HookPipeline;
     ensureEmbeddingLock?: (sessionId: string) => Promise<void>;
+    memorySystem?: NonNullable<TurnExecutorDeps["memorySystem"]>;
   };
 };
 
 export const actionRoutes = new Hono<Env>();
-
-// Module-level memory system reference, set by bootstrap via setMemorySystem().
-// Using a module variable instead of Hono context because Hono's typed
-// c.set/c.get doesn't support optional cross-module types cleanly.
-let _memorySystem: MemorySystemFacade | undefined;
-export function setMemorySystem(ms: MemorySystemFacade | undefined) {
-  _memorySystem = ms;
-}
 
 actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const store = c.get("store");
@@ -149,6 +100,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const sessionLock = c.get("sessionLock");
   const mediaStore = c.get("mediaStore");
   const eventDirectory = c.get("eventDirectory");
+  const memorySystem = c.get("memorySystem");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
 
   const rawBody = await c.req.json<unknown>().catch(() => null);
@@ -173,7 +125,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // Fast path: a paused/ended session takes no actions. The
   // authoritative re-check happens under the session lock below (this read is
   // racy), but rejecting here returns a clean 409 before the SSE stream opens.
-  if (session.status && session.status !== "active") {
+  if (session.status !== "active") {
     return c.json(
       errorBody(
         `session is ${session.status}; it must be active to accept actions`,
@@ -213,7 +165,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // based on the live UI language) wins over the session's stored locale so
   // users who toggle language mid-session see matching LLM output. The
   // session.locale still acts as the fallback when the client omits it.
-  const effectiveLocale = locale ?? session.locale ?? "zh-CN";
+  const effectiveLocale = locale ?? session.locale;
 
   // Reconcile the process-local registry from the persisted session snapshot.
   // This is needed after restart and also removes plugins disabled by another
@@ -360,6 +312,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       readonly turnId: string;
       readonly playerMessage: string;
       readonly suppressPlayerMessage: boolean;
+      readonly origin: "player" | "continuation";
     }) => {
       currentTurnId = turnArgs.turnId;
       commitStatusSettled = false;
@@ -389,7 +342,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           if (sessionIncarnationIdentity(liveSession) !== expectedIncarnation) {
             throw new Error("session was replaced while the action was queued");
           }
-          if (liveSession.status && liveSession.status !== "active") {
+          if (liveSession.status !== "active") {
             throw new Error(
               `session is ${liveSession.status}; it must be active to accept actions`,
             );
@@ -401,7 +354,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // all build context from the same lore.
           pluginRegistry.syncSessionActivations(
             sessionId,
-            liveSession.activePlugins ?? [],
+            liveSession.activePlugins,
           );
           activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
           outputKindResolver = createRuntimeResultProcessor({
@@ -445,22 +398,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             };
           }
 
-          // Lazily backfill the scheduling-redesign clock on legacy sessions
-          // before any band / count read, so `phase` is authoritative for the
-          // rest of the turn (and executeTurn's own session read).
-          const clockSession = await ensureSessionClockBackfilled({
-            store,
-            session: effectiveSession,
-            activeRuntimes,
-          });
-
-          // Captured BEFORE the turn runs: the execution may complete setup
-          // itself, and the execution's countPolicy must be fixed from the
-          // pre-turn band (a setup request never counts a player turn).
-          const wasPreGamePending = isPreGamePending(
-            clockSession,
-            activeRuntimes,
-          );
+          const wasPreGamePending = effectiveSession.phase === "setup";
 
           // Stage the REST message mirror and normalized interaction row.
           // They land through finalizeExecution.extraInTx with the runtime
@@ -563,12 +501,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             ),
           );
 
-          // A scoped retry_runtime (payload.runtimeId set) reruns ONE
+          // retry_runtime reruns ONE
           // runtime, not a new player turn. Stamp it non-player origin and
-          // keep it out of turnCount so retrying doesn't advance the counter
+          // keep it out of player-turn accounting so retrying doesn't advance
+          // the session clock
           // a second time over the same logical turn.
-          const isScopedRetry =
-            type === "retry_runtime" && typeof payload.runtimeId === "string";
+          const isRuntimeRetry = type === "retry_runtime";
 
           // Seed a scoped retry with the source turn's recorded outputs so
           // the retried runtime's `input.inject` / `needs` resolve against
@@ -580,7 +518,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // ponytail: full artifact scan; add a keyed store getter if long
           // sessions make this show up in traces.
           let retrySeedResults: readonly RuntimeResult[] | undefined;
-          if (isScopedRetry) {
+          if (isRuntimeRetry) {
             const rows = await store.listTurnResults(sessionId);
             const explicit =
               typeof payload.retryFromTurnId === "string"
@@ -588,9 +526,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 : undefined;
             const source =
               explicit ??
-              [...rows]
-                .reverse()
-                .find((r) => (r.origin ?? "player") === "player");
+              [...rows].reverse().find((r) => r.origin === "player");
             retrySeedResults = Array.isArray(source?.runtimeResults)
               ? (source.runtimeResults as RuntimeResult[])
               : undefined;
@@ -602,14 +538,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             playerMessage: turnArgs.playerMessage,
             locale: effectiveLocale,
             modelOverride: model,
-            // Feed the pre-turn Pre-Game snapshot so the executor can fix the
-            // execution's countPolicy at creation.
-            preGamePending: wasPreGamePending,
-            // Identity of the player's logical turn — the finalizer keys the
-            // completion ledger on it so this turn is counted at most once.
-            // A scoped retry (origin: manual below) never counts, so a stray
-            // id there is inert.
-            logicalTurnId: crypto.randomUUID(),
+            origin: isRuntimeRetry ? ("manual" as const) : turnArgs.origin,
+            ...(turnArgs.origin === "player" && !isRuntimeRetry
+              ? { logicalTurnId: crypto.randomUUID() }
+              : {}),
             ...(userSettings ? { userSettings } : {}),
             // Snapshot session-level per-runtime slot overrides so the
             // turn executor can consult them when resolving each runtime's
@@ -620,19 +552,16 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             ...(turnArgs.suppressPlayerMessage
               ? { suppressPlayerMessage: true }
               : {}),
-            // retry_runtime honors payload.runtimeId: scope the rerun to
-            // that runtime via the manual-trigger path instead of silently
-            // re-running the whole turn. Without a runtimeId the action keeps
-            // its historical whole-turn-retry semantics.
-            ...(isScopedRetry
+            // retry_runtime always scopes the rerun to its required runtimeId;
+            // retry_turn is the explicit whole-turn action.
+            ...(isRuntimeRetry
               ? {
                   manualTrigger: {
-                    runtimeId: payload.runtimeId!,
+                    runtimeId: payload.runtimeId,
                     ...(retrySeedResults && retrySeedResults.length > 0
                       ? { retrySeedResults }
                       : {}),
                   },
-                  origin: "manual" as const,
                 }
               : {}),
           };
@@ -641,7 +570,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // lock through proposal commit, lifecycle sync, and snapshot capture.
           const registeredTurn = registerActiveTurn(sessionId, turnArgs.turnId);
           releaseTurnControl = registeredTurn.release;
-          const stagedSuspensions = stageExecutionSuspensions(store);
           let result;
           try {
             result = await executeTurn(turnInput, activeRuntimes, {
@@ -657,7 +585,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               ...(pluginGateway ? { gateway: pluginGateway } : {}),
               ...(pluginUtils ? { utils: pluginUtils } : {}),
               ...(getPluginSource ? { getPluginSource } : {}),
-              store: stagedSuspensions.store,
+              store,
               ...(mediaStore ? { mediaStore } : {}),
               toolExecutor,
               resolveModel,
@@ -717,7 +645,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                     contextBudget: turnContextBudget,
                   }
                 : {}),
-              memorySystem: _memorySystem,
+              ...(memorySystem ? { memorySystem } : {}),
               // Let the turn executor construct a unified SessionContextSnapshot.
               capabilityPluginIds,
               ...(eventDirectory ? { eventDirectory } : {}),
@@ -751,13 +679,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             sessionId,
             // A suspension persists the original counting responsibility for
             // resume; this partial execution must not complete it yet.
-            ...(result.executionContext && !hasSuspendedRuntime
-              ? { executionContext: result.executionContext }
-              : {}),
+            executionContext: hasSuspendedRuntime
+              ? { ...result.executionContext, countPolicy: "none" }
+              : result.executionContext,
             runtimes: activeRuntimes,
             results: finalizableResults,
             journalMessages: collectExecutionJournal(result),
-            suspensions: stagedSuspensions.records,
+            suspensions: collectExecutionSuspensions(result),
             ...(playerInputWrites
               ? {
                   extraInTx: async (tx) => {
@@ -802,7 +730,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           commitStatusSettled = true;
 
           for (const evt of outcome.events) {
-            // Emit using ProtocolEventType directly — no legacy mapping.
+            // Emit using CovelEventType directly.
             await writeEvent(evt.type, {
               ...evt.payload,
               runtimeId: evt.source.runtimeId,
@@ -830,12 +758,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             ? undefined
             : outcome.error || proposalErrors || "Execution commit failed";
 
-          // Turn accounting now happens INSIDE the finalize transaction (the
-          // session-clock write above): a committed player turn advances
-          // completedPlayerTurns via the logical-turn ledger, and the legacy
-          // turnCount / preGameCompleted are re-derived from the clock. The
+          // Turn accounting happens inside the finalize transaction. The
           // automatic snapshot stays outside, captured last so it contains
-          // every committed proposal AND the turn number it belongs to.
+          // every committed proposal and the authoritative session clock.
           if (committed) {
             try {
               await saveAutoSnapshot({
@@ -863,7 +788,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // Commit barrier: the authoritative turn.completed event and
           // post-turn memory ingestion fire once every proposal committed.
           // A failed auto-snapshot does NOT hold them back — the business
-          // state is already durable (turnCount advanced above on the same
+          // state is already durable (the session clock advanced on the same
           // proposal-only condition), only the best-effort checkpoint is
           // missing and the next turn snapshots again. Gating completion on
           // the snapshot would strand a fully-committed turn as "incomplete".
@@ -974,6 +899,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         turnId,
         playerMessage,
         suppressPlayerMessage: type === "start_session",
+        origin: "player",
       });
       let finalRun = first;
 
@@ -982,25 +908,27 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       // never ran for this request. Chain exactly one main-loop turn — a
       // second transaction reading the just-committed setup state — so the
       // player gets the opening narrative without having to send another
-      // message. Guarded to player actions (retry_runtime keeps its rerun-only
+      // message. Guarded to player actions (both retry actions keep rerun-only
       // semantics) and skipped when the turn aborted or setup is still pending
       // (more setup interactions to come).
       if (
         first.committed &&
         first.wasPreGamePending &&
         !first.result.abortReason &&
-        type !== "retry_runtime"
+        type !== "retry_runtime" &&
+        type !== "retry_turn"
       ) {
         const settled = await store.getSession(sessionId);
         if (
           settled &&
-          (!settled.status || settled.status === "active") &&
-          !isPreGamePending(settled, activeRuntimes)
+          settled.status === "active" &&
+          settled.phase === "playing"
         ) {
           finalRun = await runTurnOnce({
             turnId: crypto.randomUUID(),
             playerMessage: "",
             suppressPlayerMessage: true,
+            origin: "continuation",
           });
         }
       }

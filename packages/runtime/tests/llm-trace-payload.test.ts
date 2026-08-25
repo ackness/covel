@@ -60,7 +60,7 @@ describe("buildLlmCallingPayload", () => {
       ...baseIdentity,
       slot: "x",
       model: "x",
-      provider: null,
+      provider: undefined,
       messages,
       tools: undefined,
       attempt: 0,
@@ -71,7 +71,7 @@ describe("buildLlmCallingPayload", () => {
       ...baseIdentity,
       slot: "x",
       model: "x",
-      provider: null,
+      provider: undefined,
       messages,
       tools: undefined,
       attempt: 0,
@@ -80,31 +80,12 @@ describe("buildLlmCallingPayload", () => {
     expect(streaming.streaming).toBe(true);
   });
 
-  it("accepts provider: null for direct-generate sites (survives JSON serialisation)", () => {
-    const payload = buildLlmCallingPayload({
-      ...baseIdentity,
-      slot: "x",
-      model: "x",
-      provider: null,
-      messages,
-      tools: undefined,
-      attempt: 0,
-    });
-    // Round-trip to JSON — `null` key survives, `undefined` key would be dropped.
-    const roundtripped = JSON.parse(JSON.stringify(payload)) as Record<
-      string,
-      unknown
-    >;
-    expect("provider" in roundtripped).toBe(true);
-    expect(roundtripped.provider).toBeNull();
-  });
-
   it("normalises missing tools to empty array", () => {
     const payload = buildLlmCallingPayload({
       ...baseIdentity,
       slot: "x",
       model: "x",
-      provider: null,
+      provider: undefined,
       messages,
       tools: undefined,
       attempt: 1,

@@ -76,7 +76,6 @@ export interface TraceDiscovery {
 
 export async function fetchTraceTurns(sessionId: string): Promise<{
   sessionId: string;
-  turnCount: number;
   discovery?: TraceDiscovery;
   turns: TurnTrace[];
 }> {

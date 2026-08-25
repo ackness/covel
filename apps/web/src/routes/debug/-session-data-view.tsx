@@ -53,7 +53,8 @@ export function SessionDataView({
                 data={{
                   id: snapshotData.session.id,
                   worldId: snapshotData.session.worldId,
-                  turnCount: snapshotData.session.turnCount,
+                  completedPlayerTurns:
+                    snapshotData.session.completedPlayerTurns,
                   locale: snapshotData.session.locale,
                 }}
               />

@@ -13,9 +13,7 @@ import type {
   SessionRecord,
   SessionSummaryRecord,
   SetupAttemptRecord,
-  SnapshotPayloadV1,
-  SnapshotPayloadV2,
-  SnapshotPayloadV3,
+  SnapshotPayload,
   SnapshotRecord,
   StateChangeRecord,
   StateEntryRecord,
@@ -49,8 +47,9 @@ export function makeSession(overrides?: Partial<SessionRecord>): SessionRecord {
     id: id(),
     worldId: "world-1",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    phase: "setup",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     locale: "zh-CN",
     activePlugins: [],
     createdAt: ts(),
@@ -67,6 +66,8 @@ export function makeTurnResult(
     sessionId: "sess-1",
     turnId: id(),
     runtimeResults: [],
+    origin: "player",
+    commitStatus: "pending",
     durationMs: 100,
     createdAt: ts(),
     ...overrides,
@@ -357,6 +358,12 @@ export function makeSuspension(
       partialContent: undefined,
       toolCallsSoFar: [],
       pendingProposals: [],
+      executionContext: {
+        executionId: "execution-1",
+        origin: "player",
+        logicalTurnId: "logical-turn-1",
+        countPolicy: "complete-player-turn",
+      },
       suspendToolCallId: "tc-suspend-1",
     },
     createdAt: ts(),
@@ -386,10 +393,10 @@ export function makeLorebookEntry(
 }
 
 export function makeSnapshotPayload(
-  overrides?: Partial<SnapshotPayloadV1>,
-): SnapshotPayloadV1 {
+  overrides?: Partial<SnapshotPayload>,
+): SnapshotPayload {
   return {
-    schemaVersion: 1,
+    schemaVersion: 3,
     turnId: "turn-1",
     characters: [],
     stateEntries: [],
@@ -398,39 +405,8 @@ export function makeSnapshotPayload(
     lorebookEntries: [],
     suspensions: [],
     messagesCursor: "",
-    ...overrides,
-  };
-}
-
-export function makeSnapshotPayloadV2(
-  overrides?: Partial<SnapshotPayloadV2>,
-): SnapshotPayloadV2 {
-  return {
-    ...makeSnapshotPayload(),
-    schemaVersion: 2,
     session: {
       status: "active",
-      turnCount: 3,
-      preGameCompleted: ["setup/schema"],
-      locale: "zh-CN",
-      activePlugins: ["setup", "narrator"],
-      presetId: "default",
-      runtimeModelOverrides: { narrator: "balance" },
-    },
-    ...overrides,
-  };
-}
-
-export function makeSnapshotPayloadV3(
-  overrides?: Partial<SnapshotPayloadV3>,
-): SnapshotPayloadV3 {
-  return {
-    ...makeSnapshotPayload(),
-    schemaVersion: 3,
-    session: {
-      status: "active",
-      turnCount: 3,
-      preGameCompleted: ["setup/schema"],
       locale: "zh-CN",
       activePlugins: ["setup", "narrator"],
       presetId: "default",

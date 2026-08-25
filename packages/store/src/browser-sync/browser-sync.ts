@@ -39,7 +39,7 @@ export const PERSISTENCE_PROFILES = [
 export type PersistenceProfile = (typeof PERSISTENCE_PROFILES)[number];
 
 /** Schema version of the browser checkpoint envelope. */
-export const BROWSER_CHECKPOINT_SCHEMA_VERSION = 1 as const;
+export const BROWSER_CHECKPOINT_SCHEMA_VERSION = 2 as const;
 
 export type BrowserCheckpointSchemaVersion =
   typeof BROWSER_CHECKPOINT_SCHEMA_VERSION;
@@ -195,6 +195,149 @@ function requireOptionalState(
   };
 }
 
+const SESSION_PHASES = ["setup", "playing"] as const;
+const SESSION_STATUSES = ["active", "paused", "ended"] as const;
+const EXECUTION_ORIGINS = [
+  "player",
+  "continuation",
+  "manual",
+  "background",
+  "recursive",
+  "resume",
+] as const;
+const COMMIT_STATUSES = ["pending", "committed", "failed"] as const;
+
+function requireEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  label: string,
+): T {
+  if (typeof value !== "string" || !allowed.includes(value as T)) {
+    throw new BrowserSyncValidationError(
+      `${label} must be one of: ${allowed.join(", ")}`,
+    );
+  }
+  return value as T;
+}
+
+function requireStringArray(value: unknown, label: string): readonly string[] {
+  const array = requireArray<unknown>(value, label);
+  if (!array.every((item) => typeof item === "string")) {
+    throw new BrowserSyncValidationError(`${label} must contain only strings`);
+  }
+  return array as readonly string[];
+}
+
+function validateSessionClock(
+  session: Record<string, unknown>,
+  label: string,
+): void {
+  requireEnum(session.phase, SESSION_PHASES, `${label}.phase`);
+  requireRevision(
+    session.completedPlayerTurns,
+    `${label}.completedPlayerTurns`,
+    0,
+  );
+  requireRecord(session.setupRuntimes, `${label}.setupRuntimes`);
+}
+
+function validateSessionRecord(
+  session: Record<string, unknown>,
+  sessionId: string,
+): SessionRecord {
+  const recordId = requireNonEmptyString(session.id, "session.id");
+  if (recordId !== sessionId) {
+    throw new BrowserSyncValidationError(
+      "session.id must match checkpoint.sessionId",
+    );
+  }
+  requireEnum(session.status, SESSION_STATUSES, "session.status");
+  validateSessionClock(session, "session");
+  requireStringArray(session.activePlugins, "session.activePlugins");
+  requireNonEmptyString(session.locale, "session.locale");
+  requireCommittedAt(session.createdAt);
+  requireCommittedAt(session.updatedAt);
+  return session as unknown as SessionRecord;
+}
+
+function validateTurnResults(value: unknown): readonly TurnResultRecord[] {
+  const results = requireArray<unknown>(value, "turnResults");
+  results.forEach((value, index) => {
+    const result = requireRecord(value, `turnResults[${index}]`);
+    requireEnum(
+      result.origin,
+      EXECUTION_ORIGINS,
+      `turnResults[${index}].origin`,
+    );
+    requireEnum(
+      result.commitStatus,
+      COMMIT_STATUSES,
+      `turnResults[${index}].commitStatus`,
+    );
+  });
+  return results as readonly TurnResultRecord[];
+}
+
+function validateExecutionContext(value: unknown, label: string): void {
+  const context = requireRecord(value, label);
+  requireNonEmptyString(context.executionId, `${label}.executionId`);
+  requireEnum(context.origin, EXECUTION_ORIGINS, `${label}.origin`);
+  requireEnum(
+    context.countPolicy,
+    ["none", "complete-player-turn"] as const,
+    `${label}.countPolicy`,
+  );
+}
+
+function validateSuspensions(
+  value: unknown,
+  label = "suspensions",
+): readonly SuspensionRecord[] {
+  const suspensions = requireArray<unknown>(value, label);
+  suspensions.forEach((value, index) => {
+    const suspension = requireRecord(value, `${label}[${index}]`);
+    const continuation = requireRecord(
+      suspension.pendingContinuation,
+      `${label}[${index}].pendingContinuation`,
+    );
+    validateExecutionContext(
+      continuation.executionContext,
+      `${label}[${index}].pendingContinuation.executionContext`,
+    );
+  });
+  return suspensions as readonly SuspensionRecord[];
+}
+
+function validateSnapshots(value: unknown): readonly SnapshotRecord[] {
+  const snapshots = requireArray<unknown>(value, "snapshots");
+  snapshots.forEach((value, index) => {
+    const snapshot = requireRecord(value, `snapshots[${index}]`);
+    requireEnum(
+      snapshot.kind,
+      ["auto", "manual", "fork"] as const,
+      `snapshots[${index}].kind`,
+    );
+    const payload = requireRecord(
+      snapshot.payload,
+      `snapshots[${index}].payload`,
+    );
+    if (payload.schemaVersion !== 3) {
+      throw new BrowserSyncValidationError(
+        `snapshots[${index}].payload.schemaVersion must be 3`,
+      );
+    }
+    validateSessionClock(
+      requireRecord(payload.session, `snapshots[${index}].payload.session`),
+      `snapshots[${index}].payload.session`,
+    );
+    validateSuspensions(
+      payload.suspensions,
+      `snapshots[${index}].payload.suspensions`,
+    );
+  });
+  return snapshots as readonly SnapshotRecord[];
+}
+
 export function isPersistenceProfile(
   value: unknown,
 ): value is PersistenceProfile {
@@ -231,12 +374,7 @@ export function validateBrowserCheckpoint(value: unknown): BrowserCheckpoint {
   const sessionId = requireNonEmptyString(checkpoint.sessionId, "sessionId");
   const profile = requireProfile(checkpoint.profile);
   const session = requireRecord(checkpoint.session, "session");
-  const sessionRecordId = requireNonEmptyString(session.id, "session.id");
-  if (sessionRecordId !== sessionId) {
-    throw new BrowserSyncValidationError(
-      "session.id must match checkpoint.sessionId",
-    );
-  }
+  const sessionRecord = validateSessionRecord(session, sessionId);
   const world =
     checkpoint.world === null ? null : requireRecord(checkpoint.world, "world");
   const revision = requireRevision(checkpoint.revision, "revision");
@@ -248,17 +386,14 @@ export function validateBrowserCheckpoint(value: unknown): BrowserCheckpoint {
     schemaVersion: BROWSER_CHECKPOINT_SCHEMA_VERSION,
     sessionId,
     profile,
-    session: session as unknown as SessionRecord,
+    session: sessionRecord,
     world: world as WorldRecord | null,
     messages: requireArray<MessageRecord>(checkpoint.messages, "messages"),
     turnMessages: requireArray<TurnMessageRecord>(
       checkpoint.turnMessages,
       "turnMessages",
     ),
-    turnResults: requireArray<TurnResultRecord>(
-      checkpoint.turnResults,
-      "turnResults",
-    ),
+    turnResults: validateTurnResults(checkpoint.turnResults),
     runtimeResults: requireArray<RuntimeResultRecord>(
       checkpoint.runtimeResults,
       "runtimeResults",
@@ -304,11 +439,8 @@ export function validateBrowserCheckpoint(value: unknown): BrowserCheckpoint {
       checkpoint.playerInputs,
       "playerInputs",
     ),
-    suspensions: requireArray<SuspensionRecord>(
-      checkpoint.suspensions,
-      "suspensions",
-    ),
-    snapshots: requireArray<SnapshotRecord>(checkpoint.snapshots, "snapshots"),
+    suspensions: validateSuspensions(checkpoint.suspensions),
+    snapshots: validateSnapshots(checkpoint.snapshots),
     worldDataLedger: requireArray<WorldDataImportLedgerRecord>(
       checkpoint.worldDataLedger,
       "worldDataLedger",

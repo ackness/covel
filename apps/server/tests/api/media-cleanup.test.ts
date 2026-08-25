@@ -32,9 +32,14 @@ function makeSession(id: string, worldId = "world-1"): SessionRecord {
     id,
     worldId,
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
+    phase: "playing",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     activePlugins: [],
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     createdAt: now,
     updatedAt: now,
   };

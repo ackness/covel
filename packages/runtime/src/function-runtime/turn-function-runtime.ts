@@ -48,6 +48,7 @@ import {
   withDefaultGatewaySignal,
   withDefaultUtilsSignal,
 } from "./runtime-abort-boundaries.js";
+import { attachSuspensionArtifact } from "../suspension-artifact.js";
 
 export interface ExecuteFunctionRuntimeOptions {
   readonly manifest: RuntimeManifest;
@@ -68,7 +69,7 @@ export interface ExecuteFunctionRuntimeOptions {
   /** Frozen cross-execution `recordAs` exports — exposed as `ctx.exports`. */
   readonly exports?: Readonly<Record<string, InputSlot>>;
   /** Full execution identity — exposed as `ctx.execution`. */
-  readonly executionContext?: ExecutionContext;
+  readonly executionContext: ExecutionContext;
   readonly createRecursiveCall: (
     parentSignal?: AbortSignal,
   ) => (
@@ -419,7 +420,7 @@ export async function executeFunctionRuntime({
         ? { exports: exportSlots }
         : {}),
       ...(activation ? { activation } : {}),
-      ...(executionContext ? { execution: executionContext } : {}),
+      execution: executionContext,
       ...(resumedFromSuspensionId !== undefined
         ? { resumeData, resumedFromSuspensionId }
         : {}),
@@ -525,7 +526,7 @@ export async function executeFunctionRuntime({
 
   // ── Suspend detection for function runtimes ────────────
   // A resume invocation must not create a second suspension record.
-  if (handlerOutcome.outcome === "suspended" && deps.store && allowSuspend) {
+  if (handlerOutcome.outcome === "suspended" && allowSuspend) {
     const suspensionId = crypto.randomUUID();
     // Function runtimes have no tool loop, so suspend records carry an
     // empty pendingProposals array and no partial content.
@@ -542,23 +543,10 @@ export async function executeFunctionRuntime({
         toolCallsSoFar: [],
         pendingProposals: [],
         emittedEvents: [],
-        ...(executionContext ? { executionContext } : {}),
+        executionContext,
       },
       createdAt: new Date().toISOString(),
     };
-    await deps.store.saveSuspension(suspension);
-
-    emitSubEvent(deps.eventBus, "game", "turn.suspended", input.sessionId, {
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      suspensionId,
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      suspendedAt: suspension.createdAt,
-      reason: suspension.reason,
-      resumeSchema: suspension.resumeSchema,
-    });
-
     const suspendedResult: RuntimeResult = {
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
@@ -576,12 +564,28 @@ export async function executeFunctionRuntime({
       timestamp: new Date().toISOString(),
     };
 
+    const finalResult = attachSuspensionArtifact(
+      await runPostRuntimeHook(
+        {
+          pipeline: hookPipeline,
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          pluginId: manifest.pluginId,
+          runtimeId: manifest.name,
+          eventBus: deps.eventBus,
+          emitter: deps.emitter,
+        },
+        suspendedResult,
+      ),
+      { record: suspension },
+    );
+
     try {
       await deps.onRuntimeComplete?.({
         runtimeId: manifest.name,
         pluginId: manifest.pluginId,
         status: "suspended",
-        durationMs: suspendedResult.durationMs,
+        durationMs: finalResult.durationMs,
       });
     } catch {
       /* callback error must not kill runtime */
@@ -596,22 +600,10 @@ export async function executeFunctionRuntime({
         runtimeId: manifest.name,
         pluginId: manifest.pluginId,
         status: "suspended",
-        durationMs: suspendedResult.durationMs,
+        durationMs: finalResult.durationMs,
       },
     );
-
-    return runPostRuntimeHook(
-      {
-        pipeline: hookPipeline,
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        pluginId: manifest.pluginId,
-        runtimeId: manifest.name,
-        eventBus: deps.eventBus,
-        emitter: deps.emitter,
-      },
-      suspendedResult,
-    );
+    return finalResult;
   }
 
   // `output.schema` validates the canonical success value. A mismatch fails

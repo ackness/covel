@@ -59,16 +59,8 @@ export {
   getRuntimeSpec,
   hasIllegalDetachedContract,
 } from "./scheduling/normalize.js";
-export {
-  deriveLegacyClockFields,
-  deriveLegacyClockForSession,
-  mirrorSetupDone,
-  mirrorSetupCompleted,
-} from "./scheduling/session-clock.js";
-export type {
-  SessionClock,
-  LegacyClockFields,
-} from "./scheduling/session-clock.js";
+export { mirrorSetupDone } from "./scheduling/session-clock.js";
+export type { SessionClock } from "./scheduling/session-clock.js";
 export {
   isSetupRuntime,
   isMainLoopRuntime,

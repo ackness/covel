@@ -113,6 +113,13 @@ const TURN_INPUT: TurnInput = {
   playerMessage: "roll for initiative",
 };
 
+const TOOL_CONTEXT = {
+  sessionId: SESSION_ID,
+  turnId: TURN_INPUT.turnId,
+  pluginId: "mega",
+  runtimeId: "mega/worker",
+};
+
 describe("tool-search: deferred loading in the agent loop", () => {
   it("advertises only search-tools initially, activates matches for the next step", async () => {
     const llm = new ScriptedLLM([
@@ -182,9 +189,9 @@ describe("buildToolDefinitions defer shapes", () => {
         defer: ["set-scene-background", "grant-item"],
       },
     });
-    const names = (buildToolDefinitions(manifest, toolExecutor) ?? []).map(
-      (d) => d.name,
-    );
+    const names = (
+      buildToolDefinitions(manifest, toolExecutor, TOOL_CONTEXT) ?? []
+    ).map((d) => d.name);
     expect(names).toContain("roll-dice");
     expect(names).toContain(SEARCH_TOOLS_TOOL_NAME);
     expect(names).not.toContain("set-scene-background");
@@ -205,9 +212,9 @@ describe("buildToolDefinitions defer shapes", () => {
     const manifest = makeManifest({
       tools: { builtin: TOOL_POOL.map((t) => t.name) },
     });
-    const names = (buildToolDefinitions(manifest, toolExecutor) ?? []).map(
-      (d) => d.name,
-    );
+    const names = (
+      buildToolDefinitions(manifest, toolExecutor, TOOL_CONTEXT) ?? []
+    ).map((d) => d.name);
     for (const t of TOOL_POOL) expect(names).toContain(t.name);
     expect(names).not.toContain(SEARCH_TOOLS_TOOL_NAME);
   });

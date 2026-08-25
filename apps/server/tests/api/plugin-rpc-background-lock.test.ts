@@ -74,13 +74,19 @@ describe("detached runtime cross-process lock boundary", () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [PLUGIN_ID],
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       createdAt: now,
       updatedAt: now,
     });

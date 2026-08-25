@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import { JSONUIProvider } from "@json-render/react";
 import { covelRegistry } from "../catalog.js";
-import { postPluginRpc } from "@/services/session-workspace.js";
+import { postPluginRpc } from "@/services/api.js";
 
 const sessionMock = vi.hoisted(() => ({
   current: {
@@ -25,8 +25,17 @@ vi.mock("@/stores/session-store.js", () => ({
   useSession: () => sessionMock.current,
 }));
 
-vi.mock("@/services/session-workspace.js", () => ({
+vi.mock("@/services/api.js", () => ({
   postPluginRpc: vi.fn(() => Promise.resolve({ status: "ok" })),
+}));
+vi.mock("@/services/data-service.js", () => ({
+  getSessionWorkspace: () => ({
+    run: (
+      _sessionId: string,
+      _actionId: string,
+      mutate: () => Promise<unknown>,
+    ) => mutate(),
+  }),
 }));
 
 vi.mock("@/lib/toast-channel.js", () => ({

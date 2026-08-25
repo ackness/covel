@@ -35,14 +35,20 @@ describe("GET /api/sessions/:id/state — database view", () => {
     store = createMemoryStore();
     app = buildApp(store);
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: "cloudmere",
       presetId: "default",
-      turnCount: 2,
+      completedPlayerTurns: 2,
       status: "active",
       locale: "zh-CN",
       activePlugins: ["narrator", "codex"],
-      preGameCompleted: ["pregame"],
+
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -65,15 +71,18 @@ describe("GET /api/sessions/:id/state — database view", () => {
     expect(sess).toBeDefined();
     expect(sess.data.id).toBe(sessionId);
     expect(sess.data.worldId).toBe("cloudmere");
-    expect(sess.data.turnCount).toBe(2);
+    expect(sess.data.phase).toBe("playing");
+    expect(sess.data.completedPlayerTurns).toBe(2);
+    expect(sess.data.setupRuntimes).toEqual({});
     expect(sess.data.activePlugins).toEqual(["narrator", "codex"]);
-    expect(sess.data.preGameCompleted).toEqual(["pregame"]);
     // Auto-generated schema lists every session field.
     expect(sess.schema.fields.map((f) => f.name)).toEqual(
       expect.arrayContaining([
         "id",
         "worldId",
-        "turnCount",
+        "phase",
+        "completedPlayerTurns",
+        "setupRuntimes",
         "status",
         "activePlugins",
       ]),
@@ -86,6 +95,7 @@ describe("GET /api/sessions/:id/state — database view", () => {
         publicLabel: "visible",
         ownerTokenHash: "secret-owner-hash",
         approvalScopeNonce: "secret-incarnation",
+        sessionIncarnationNonce: "secret-session-incarnation",
         approvalScopeRevisions: { plugin: "secret-revision" },
       },
     });

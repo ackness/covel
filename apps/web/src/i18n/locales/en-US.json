@@ -916,8 +916,7 @@
     },
     "invokeRuntime": {
       "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
-      "noFollowerEvents": "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope.",
-      "failedJobs": "{{count}} background job(s) failed. Check the job panel for details."
+      "noFollowerEvents": "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope."
     },
     "jobs": {
       "imagePromptGenerating": "Generating image prompt...",

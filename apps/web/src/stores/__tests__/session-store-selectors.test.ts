@@ -7,10 +7,13 @@ const baseSession: SessionRecord = {
   id: "session-1",
   worldId: "world-1",
   status: "active",
-  turnCount: 1,
-  preGameCompleted: [],
+  phase: "playing",
+  completedPlayerTurns: 1,
+  setupRuntimes: {},
   activePlugins: [],
+  locale: "en-US",
   createdAt: "2026-05-23T00:00:00.000Z",
+  updatedAt: "2026-05-23T00:00:00.000Z",
 };
 
 function stateFor(

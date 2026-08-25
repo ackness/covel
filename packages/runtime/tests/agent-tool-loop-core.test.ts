@@ -116,6 +116,11 @@ async function run(opts: {
   messages?: { role: string; content: string }[];
 }) {
   return (await runAgentToolLoop({
+    executionContext: {
+      executionId: crypto.randomUUID(),
+      origin: "manual",
+      countPolicy: "none",
+    },
     manifest: opts.manifest ?? manifest(),
     input,
     loaded,

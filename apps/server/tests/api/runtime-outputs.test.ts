@@ -78,10 +78,16 @@ describe("runtime-outputs API", () => {
     store = createMemoryStore();
     app = setupApp(store);
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sess-1",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "zh-CN",
       activePlugins: [],
       createdAt: new Date().toISOString(),

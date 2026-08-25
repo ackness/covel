@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
 import { Check, Loader2, RefreshCw } from "lucide-react";
-import { postPluginRpc } from "@/services/session-workspace.js";
+import { postPluginRpc as requestPluginRpc } from "@/services/api.js";
+import { getSessionWorkspace } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSession } from "@/stores/session-store.js";
 import { asRecord, useI18nResolver } from "./helpers.js";
@@ -146,11 +147,11 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
     }
     setPendingAction(action);
     try {
-      const res = await postPluginRpc(sessionId, {
-        pluginId,
-        runtimeId,
-        payload,
-      });
+      const res = await getSessionWorkspace().run(
+        sessionId,
+        `plugin-rpc:${crypto.randomUUID()}`,
+        () => requestPluginRpc(sessionId, { pluginId, runtimeId, payload }),
+      );
       if (res.status === "error") {
         emitToast("error", res.error);
       } else if (res.status === "accepted") {

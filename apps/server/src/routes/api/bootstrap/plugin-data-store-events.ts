@@ -137,7 +137,7 @@ export function wrapStoreWithPluginDataEvents(
               buffered.push(message);
             },
           };
-          const result = await target.withTransaction!((tx) =>
+          const result = await target.withTransaction((tx) =>
             fn(
               wrapStoreWithPluginDataEvents(
                 tx as unknown as DataStore,

@@ -19,12 +19,7 @@ import {
   COMMUNITY_SERVER_CODE_ACTION,
   type RpcApprovalGate,
 } from "@covel/approval";
-import {
-  deriveLegacyClockForSession,
-  isSetupRuntime,
-  readRuntimeEnv,
-  type SetupRuntimeState,
-} from "@covel/shared";
+import { isSetupRuntime, readRuntimeEnv } from "@covel/shared";
 import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
 import type {
   DataStore,
@@ -220,27 +215,18 @@ function withoutDeletionControl(
 }
 
 /**
- * Prepare a session for the wire: (1) strip the persisted owner-token hash — an
- * internal credential check a caller has no use for — and (2) refresh the legacy
- * `turnCount` / `preGameCompleted` fields from the clock. The kernel no longer
- * writes those columns; deriving them here keeps the response shape identical
- * while the persisted columns stay frozen for old-kernel / rollback reads.
+ * Prepare a session for the wire by stripping internal metadata credentials.
  */
 function sanitizeSessionForResponse<
   T extends {
     readonly metadata?: Record<string, unknown> | null;
-    readonly phase?: "setup" | "playing";
-    readonly completedPlayerTurns?: number;
-    readonly setupRuntimes?: Readonly<Record<string, SetupRuntimeState>>;
-    readonly turnCount?: number;
-    readonly preGameCompleted?: readonly string[];
   },
 >(session: T): T {
-  const { turnCount, preGameCompleted } = deriveLegacyClockForSession(session);
-  const withClock = { ...session, turnCount, preGameCompleted };
-  const metadata = withClock.metadata;
-  if (!metadata) return withClock;
-  return { ...withClock, metadata: publicSessionMetadata(metadata) };
+  if (!session.metadata) return session;
+  return {
+    ...session,
+    metadata: publicSessionMetadata(session.metadata),
+  };
 }
 
 /**
@@ -404,12 +390,8 @@ sessionRoutes.post("/", async (c) => {
   // tier. Only the hash is persisted; the raw token is returned once below.
   const owner = mintSessionOwnerToken();
 
-  // Initialize the scheduling-redesign clock. A session whose active set
-  // declares a setup runtime starts in `setup`; otherwise it goes straight to
-  // `playing`. The legacy turnCount / preGameCompleted keep their initial
-  // values (0 / []) — which already match the formula for a `setup` session and
-  // are re-derived from the clock by the first finalize for a `playing` one, so
-  // the band reads correctly from `phase` in the meantime.
+  // A session whose active set declares a setup runtime starts in `setup`;
+  // otherwise it goes straight to `playing`.
   const phase: "setup" | "playing" = sessionHasSetupRuntime(
     plugins.filter((p): p is string => typeof p === "string"),
     pluginRegistry,
@@ -431,8 +413,6 @@ sessionRoutes.post("/", async (c) => {
     // invalid/attacker-controlled value must never be stored verbatim.
     locale: normalizeLocale(body.locale),
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
     phase,
     completedPlayerTurns: 0,
     setupRuntimes: {},
@@ -460,7 +440,7 @@ sessionRoutes.post("/", async (c) => {
     // serializing the store.
     let importedMediaRefs: readonly WorldDataImportedMediaRef[];
     try {
-      importedMediaRefs = await store.withTransaction!(async (tx) => {
+      importedMediaRefs = await store.withTransaction(async (tx) => {
         await tx.createSession(session);
         const importedWorldData = await importWorldDataForSession({
           store: tx,
@@ -819,7 +799,7 @@ sessionRoutes.patch("/:id", async (c) => {
       c.get("hookPipeline"),
       c.get("eventBus"),
       id,
-      updated.session.activePlugins ?? [],
+      updated.session.activePlugins,
       "ended",
     );
   }
@@ -1051,7 +1031,7 @@ sessionRoutes.delete("/:id", async (c) => {
         c.get("hookPipeline"),
         c.get("eventBus"),
         id,
-        prepared.session.activePlugins ?? [],
+        prepared.session.activePlugins,
         "deleted",
       );
     }
@@ -1171,7 +1151,7 @@ sessionRoutes.get("/:id/plugins", async (c) => {
         409,
       );
     }
-    const previousActive = lockedGuard.session.activePlugins ?? [];
+    const previousActive = lockedGuard.session.activePlugins;
     const active = approvedActivePlugins(
       previousActive,
       pluginRegistry,
@@ -1289,7 +1269,7 @@ sessionRoutes.post("/:id/plugins/enable", async (c) => {
     }
 
     const active = resolveEnabledSessionPlugins(
-      session.activePlugins ?? [],
+      session.activePlugins,
       body.pluginId,
       pluginRegistry,
     );
@@ -1300,7 +1280,7 @@ sessionRoutes.post("/:id/plugins/enable", async (c) => {
     for (const activePluginId of active) {
       pluginRegistry.activate(activePluginId, id);
     }
-    for (const previousPluginId of session.activePlugins ?? []) {
+    for (const previousPluginId of session.activePlugins) {
       if (!active.includes(previousPluginId)) {
         pluginRegistry.deactivate(previousPluginId, id);
         c.get("rpcApprovalGate")?.revoke(id, previousPluginId);
@@ -1363,9 +1343,7 @@ sessionRoutes.post("/:id/plugins/disable", async (c) => {
       );
     }
 
-    const active = (session.activePlugins ?? []).filter(
-      (p) => p !== body.pluginId,
-    );
+    const active = session.activePlugins.filter((p) => p !== body.pluginId);
     await store.updateSession(id, {
       activePlugins: active,
       // Rotate the persisted plugin generation so grants cached by every
@@ -1400,16 +1378,21 @@ sessionRoutes.get("/:id/snapshot", async (c) => {
   }
 
   // Populate plugins from registry + session activePlugins
-  const session2 = await store.getSession(id);
-  const activeIds = new Set(session2?.activePlugins ?? []);
+  const currentSession = await store.getSession(id);
+  if (!currentSession) {
+    return c.json(
+      errorBody(`Session not found: ${id}`, { code: SESSION_NOT_FOUND_CODE }),
+      404,
+    );
+  }
+  const activeIds = new Set(currentSession.activePlugins);
   const pluginList = buildSnapshotPluginList(pluginRegistry, activeIds);
   (snapshot as unknown as Record<string, unknown>).plugins = pluginList;
 
   // Attach character attribute schema if a world-data-provider plugin exists.
   // Use session.activePlugins from DB + global registry (not in-memory activation map)
   // to survive server restarts / hot-reloads.
-  const session = await store.getSession(id);
-  const activePlugins = session?.activePlugins ?? [];
+  const activePlugins = currentSession.activePlugins;
   const worldDataPluginId = findWorldDataProviderPluginId(
     activePlugins,
     pluginRegistry,

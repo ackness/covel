@@ -1,4 +1,5 @@
 import type {
+  ExecutionContext,
   Proposal,
   RuntimeManifest,
   RuntimeResult,
@@ -59,6 +60,7 @@ export async function resumeSuspendedRuntime(
     sessionId: suspension.sessionId,
     turnId: suspension.turnId,
     playerMessage: "",
+    origin: "resume",
   };
 
   const postRuntimeOpts = {
@@ -122,15 +124,13 @@ export async function resumeSuspendedRuntime(
   }
 
   const { pendingContinuation } = suspension;
+  const inherited = pendingContinuation.executionContext;
+  const resumeExecutionContext: ExecutionContext = {
+    ...inherited,
+    executionId: runId,
+    origin: "resume",
+  };
   if (manifest.runtimeType === "function") {
-    const inherited = pendingContinuation.executionContext;
-    const resumeExecutionContext = inherited
-      ? {
-          ...inherited,
-          executionId: runId,
-          origin: "resume" as const,
-        }
-      : undefined;
     // Function continuations are deterministic handler invocations, not LLM
     // conversations. Feed resume data through the explicit handler context and
     // reuse the normal function finalizer so output normalization, hooks and
@@ -142,9 +142,7 @@ export async function resumeSuspendedRuntime(
       deps,
       hookPipeline,
       triggerEvent: undefined,
-      ...(resumeExecutionContext
-        ? { executionContext: resumeExecutionContext }
-        : {}),
+      executionContext: resumeExecutionContext,
       createRecursiveCall: () => async () => {
         throw new Error(
           `function runtime "${manifest.name}" cannot use recursiveCall while resuming`,
@@ -181,9 +179,9 @@ export async function resumeSuspendedRuntime(
     if (placeholderIndex >= 0) {
       messages[placeholderIndex] = resumedToolResult;
     } else {
-      // Backward compatibility for suspension rows written before complete
-      // batched transcripts were persisted.
-      messages.push(resumedToolResult);
+      throw new Error(
+        `Invalid suspension continuation: missing tool placeholder ${pendingContinuation.suspendToolCallId}`,
+      );
     }
   } else {
     messages.push({
@@ -209,6 +207,7 @@ export async function resumeSuspendedRuntime(
     hookPipeline,
     startTime,
     runId,
+    executionContext: resumeExecutionContext,
     allowSuspend: false,
     initialState: {
       finalContent: pendingContinuation.partialContent ?? null,

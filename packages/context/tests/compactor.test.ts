@@ -19,6 +19,7 @@ import type { CompactorDeps, CompactorLLMAdapter } from "../src/compactor.js";
 import { setPromptsRoot } from "../src/prompts-loader.js";
 import type {
   DataStore,
+  StoreTransaction,
   TurnMessageRecord,
   SessionSummaryRecord,
 } from "@covel/store";
@@ -62,7 +63,7 @@ function makeMinimalStore(): DataStore {
   const summaries: SessionSummaryRecord[] = [];
   const messages = new Map<string, TurnMessageRecord>();
 
-  return {
+  const store = {
     saveSessionSummary: vi.fn(async (s: SessionSummaryRecord) => {
       summaries.push(s);
     }),
@@ -83,7 +84,11 @@ function makeMinimalStore(): DataStore {
       },
     ),
     addTraceEvent: vi.fn(async () => {}),
+    withTransaction: async <T>(
+      fn: (tx: StoreTransaction) => Promise<T>,
+    ): Promise<T> => fn(store as unknown as StoreTransaction),
   } as unknown as DataStore;
+  return store;
 }
 
 function makeEstimator(): (text: string) => number {

@@ -7,6 +7,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { mirrorSetupDone } from "@covel/shared";
 import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
 import { runEventChain } from "../src/trigger/turn-event-chain.js";
 
@@ -71,6 +72,8 @@ describe("runEventChain deferred-follower dedup", () => {
       sessionId: "sess-1",
       turnId: "turn-1",
       turnNumber: 1,
+      logicalTurn: 1,
+      setupRuntimes: {},
     });
 
     // Without the dedup guard the background follower is deferred at both
@@ -127,6 +130,8 @@ describe("runEventChain honours event-runtime throttling", () => {
       sessionId: "sess-1",
       turnId: "turn-1",
       turnNumber: 3,
+      logicalTurn: 3,
+      setupRuntimes: {},
       runtimeTriggerCounts: new Map([["once/follower", 1]]),
     });
     expect(ran).toEqual([]);
@@ -144,6 +149,8 @@ describe("runEventChain honours event-runtime throttling", () => {
       sessionId: "sess-1",
       turnId: "turn-1",
       turnNumber: 3,
+      logicalTurn: 3,
+      setupRuntimes: {},
       runtimeTriggerCounts: new Map([["once/follower", 0]]),
     });
     expect(ran).toEqual(["once/follower"]);
@@ -161,6 +168,8 @@ describe("runEventChain honours event-runtime throttling", () => {
       sessionId: "sess-1",
       turnId: "turn-1",
       turnNumber: 3,
+      logicalTurn: 3,
+      setupRuntimes: {},
       runtimeTurnsSinceLastTrigger: new Map([["cool/follower", 2]]),
     });
     expect(ran).toEqual([]);
@@ -178,15 +187,16 @@ describe("runEventChain honours event-runtime throttling", () => {
       sessionId: "sess-1",
       turnId: "turn-1",
       turnNumber: 9,
+      logicalTurn: 9,
+      setupRuntimes: {},
       runtimeTurnsSinceLastTrigger: new Map([["cool/follower", 6]]),
     });
     expect(ran).toEqual(["cool/follower"]);
   });
 
   // Fan-out is intentionally cross-band (a reaction, not a scheduled slot), so
-  // `preGameCompleted` is the only thing keeping a finished setup runtime from
-  // being resurrected by a later emission of its topic. Passing a hardcoded
-  // empty set here made that gate dead.
+  // The setup mirror keeps a finished setup runtime from being resurrected by
+  // a later emission of its topic.
   const preGameFollower = {
     name: "setup/follower",
     pluginId: "setup",
@@ -208,7 +218,15 @@ describe("runEventChain honours event-runtime throttling", () => {
       sessionId: "sess-1",
       turnId: "turn-1",
       turnNumber: 4,
-      preGameCompleted: ["setup/follower"],
+      logicalTurn: 4,
+      setupRuntimes: {
+        "setup/follower": mirrorSetupDone(
+          "0.0.0",
+          "2026-01-01T00:00:00.000Z",
+          1,
+          1,
+        ),
+      },
     });
     expect(ran).toEqual([]);
   });
@@ -225,7 +243,8 @@ describe("runEventChain honours event-runtime throttling", () => {
       sessionId: "sess-1",
       turnId: "turn-1",
       turnNumber: 0,
-      preGameCompleted: [],
+      logicalTurn: 1,
+      setupRuntimes: {},
     });
     expect(ran).toEqual(["setup/follower"]);
   });

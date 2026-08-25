@@ -1,8 +1,6 @@
-/**
- * Turn / runtime execution record types (translation layer included).
- *
- * Split out of `../types.ts` by domain; re-exported there for compatibility.
- */
+/** Turn / runtime execution record types (translation layer included). */
+
+import type { ExecutionOrigin } from "@covel/shared";
 
 export interface TurnResultRecord {
   readonly id: string;
@@ -14,11 +12,10 @@ export interface TurnResultRecord {
   /**
    * Execution origin: which path produced this
    * execution artifact. `player` = main action turn; `manual` = plugin-rpc
-   * manual trigger; `follower` = deferred background follower; `recursive` =
-   * nested ctx.recursiveCall. Absent on rows written before the column
-   * existed — treated as `player` by consumers for backward compatibility.
+   * manual trigger; `background` = detached runtime; `recursive` = nested
+   * ctx.recursiveCall.
    */
-  readonly origin?: "player" | "manual" | "follower" | "recursive";
+  readonly origin: ExecutionOrigin;
   /** Parent turnId for `recursive` executions whose delta overrode turnId. */
   readonly parentTurnId?: string;
   /**
@@ -29,9 +26,9 @@ export interface TurnResultRecord {
    * crash signature. Without this field a crash is indistinguishable from a
    * turn whose commit failed, and both look like a successful turn to anyone
    * reading the table. `pending` is the pre-commit state; the commit-owning
-   * caller settles it. Absent on rows written before the column existed.
+   * caller settles it.
    */
-  readonly commitStatus?: "pending" | "committed" | "failed";
+  readonly commitStatus: "pending" | "committed" | "failed";
   readonly durationMs: number;
   readonly createdAt: string;
 }

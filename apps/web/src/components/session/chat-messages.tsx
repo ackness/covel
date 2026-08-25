@@ -125,7 +125,7 @@ export function ChatMessages({
     onLoadOlder: loadOlderMessages,
   });
   const isPreGame = isPreGameSession(session);
-  const isPlaying = session.status === "active" && session.turnCount > 0;
+  const isPlaying = session.status === "active" && session.phase === "playing";
   const isEnded = session.status === "ended";
 
   // Confirmation dialog state. The in-flight request carries its own `resolve`.

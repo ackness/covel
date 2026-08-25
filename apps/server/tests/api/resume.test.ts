@@ -81,11 +81,17 @@ function createTestApp(
 
 async function createSession(store: DataStore, sessionId = "sess-1") {
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id: sessionId,
     worldId: "test-world",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    completedPlayerTurns: 1,
+
     activePlugins: ["test-plugin"],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -116,7 +122,20 @@ async function createSuspension(
       required: ["name"],
     },
     pendingContinuation: {
-      messages: [{ role: "system", content: "You are a test agent." }],
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "player",
+        countPolicy: "complete-player-turn",
+        logicalTurnId: crypto.randomUUID(),
+      },
+      messages: [
+        { role: "system", content: "You are a test agent." },
+        {
+          role: "tool",
+          content: JSON.stringify({ suspended: true }),
+          toolCallId: "tc-suspend-1",
+        },
+      ],
       toolCallsSoFar: [],
       pendingProposals: [],
       ...(overrides?.executionContext
@@ -581,9 +600,8 @@ describe("Resume Routes", () => {
       // finalize transaction. If a LATER write in that transaction throws
       // (here: markSuspensionResolved), the whole transaction rolls back —
       // so PostStateCommit must never have fired for the rolled-back
-      // proposals. Before the barrier existed, the commit pipeline's
-      // non-transactional fallback ran the fan-out inline while the outer
-      // transaction was still open.
+      // proposals. The transaction-bound commit path must defer fan-out while
+      // the outer transaction is still open.
       const hookPipeline = createHookPipeline();
       const postStateCommit = vi.fn().mockResolvedValue({ action: "continue" });
       hookPipeline.register({
@@ -640,7 +658,10 @@ describe("Resume Routes", () => {
 
     it("does not restore a claimed suspension into a recreated session after failure", async () => {
       await store.updateSession("sess-1", {
-        metadata: { [SESSION_INCARNATION_KEY]: "old-incarnation" },
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          [SESSION_INCARNATION_KEY]: "old-incarnation",
+        },
       });
       await createSuspension(store);
       const sessionLock = createInProcessSessionLock();
@@ -683,13 +704,18 @@ describe("Resume Routes", () => {
         await store.deleteSession("sess-1");
         const now = new Date().toISOString();
         await store.createSession({
+          phase: "playing",
+          setupRuntimes: {},
           id: "sess-1",
           worldId: "test-world",
           status: "active",
-          turnCount: 0,
-          preGameCompleted: [],
+          completedPlayerTurns: 0,
+
           activePlugins: [],
-          metadata: { [SESSION_INCARNATION_KEY]: "new-incarnation" },
+          metadata: {
+            approvalScopeNonce: globalThis.crypto.randomUUID(),
+            [SESSION_INCARNATION_KEY]: "new-incarnation",
+          },
           createdAt: now,
           updatedAt: now,
         });

@@ -16,7 +16,6 @@ import {
   type SseEventHandlerDeps,
 } from "../session-store/sse-handler.js";
 import {
-  ensureServerThenRun,
   finalizeActionExecution,
   runActionStream,
 } from "../session-store/runtime-rpc.js";
@@ -147,7 +146,7 @@ describe("runtime RPC — originating session", () => {
       vi.fn(),
       dispatch,
       { sessionIdRef: { current: "sess-b" } },
-    );
+    ).catch(() => undefined);
 
     expect(dispatch).not.toHaveBeenCalled();
   });
@@ -177,36 +176,6 @@ describe("runtime RPC — originating session", () => {
     expect(handleSseEvent).not.toHaveBeenCalled();
   });
 
-  it("does not fire a delayed action after the player switches sessions", async () => {
-    let resolveEnsure!: () => void;
-    const syncToServer = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveEnsure = resolve;
-        }),
-    );
-    const fireAction = vi.fn();
-    const onAborted = vi.fn();
-    const sessionIdRef = { current: "sess-a" as string | null };
-
-    ensureServerThenRun(
-      { syncToServer } as unknown as SseEventHandlerDeps["ds"],
-      "sess-a",
-      fireAction,
-      {
-        onAborted,
-        sessionIdRef,
-      },
-    );
-    sessionIdRef.current = "sess-b";
-    resolveEnsure();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(fireAction).not.toHaveBeenCalled();
-    expect(onAborted).toHaveBeenCalledOnce();
-  });
-
   it("does not begin adventure when the overlay resolves after a switch", async () => {
     let resolveOverlay!: (value: null) => void;
     vi.spyOn(api, "getWorldOverlay").mockReturnValueOnce(
@@ -229,10 +198,13 @@ describe("runtime RPC — originating session", () => {
         id: "sess-a",
         worldId: "world-a",
         status: "active" as const,
-        turnCount: 0,
+        phase: "setup" as const,
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
         activePlugins: [],
         locale: "en-US",
         createdAt: "2026-08-24T00:00:00.000Z",
+        updatedAt: "2026-08-24T00:00:00.000Z",
       },
     };
     const refs: SessionRuntimeRefs = {
@@ -248,6 +220,11 @@ describe("runtime RPC — originating session", () => {
         state,
         dispatch,
         ds: {} as SseEventHandlerDeps["ds"],
+        workspace: {
+          hydrate: vi.fn(),
+          run: vi.fn(),
+          checkpoint: vi.fn(),
+        },
         refs,
         handleSseEvent: vi.fn(),
       }),
