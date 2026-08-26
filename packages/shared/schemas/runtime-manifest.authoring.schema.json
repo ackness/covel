@@ -98,6 +98,14 @@
     "requireToolUse": {
       "type": "boolean"
     },
+    "completeAfterTools": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "maxRecursionDepth": {
       "type": "integer",
       "minimum": 0,

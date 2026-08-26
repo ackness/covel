@@ -149,7 +149,7 @@ function resolveRepoPackageManager() {
   } catch {
     // ignore — fall through to default
   }
-  return "pnpm@11.9.0";
+  return "pnpm@11.22.0";
 }
 
 function replacePlaceholders(content) {
@@ -218,11 +218,12 @@ if (mode === "legacy-with-tools") {
     `  2. 编辑 ${relative(process.cwd(), targetDir)}/PLUGIN.md，填写 runtime 元信息和提示词`,
   );
   console.log(`  3. 修改 tools/record-note.js，实现工具逻辑`);
+  console.log("  4. 在 Covel 仓库根目录运行 pnpm install");
   console.log(
-    `  4. 在 ${relative(process.cwd(), targetDir)} 下跑 pnpm install && pnpm test`,
+    `  5. 在 Covel 仓库根目录运行 pnpm --filter covel-plugin-${pluginName} test`,
   );
   console.log(
-    `  5. 运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
+    `  6. 在 Covel 仓库根目录运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
   );
 } else {
   console.log(

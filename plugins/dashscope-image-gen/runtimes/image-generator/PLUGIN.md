@@ -61,8 +61,8 @@ userSettings:
       zh: 画质（可选）
       en: Quality (optional)
     description:
-      zh: 留空时使用默认画质。想更快、更省时可以选择较低画质。
-      en: Leave blank for the default quality. Choose lower quality for faster, cheaper results.
+      zh: 默认记录为 low。DashScope 原生 wire 不发送该字段，它只用于画廊记录展示。
+      en: Defaults to low. The native DashScope wire does not send this field; it is display-only gallery metadata.
   - key: negativePrompt
     type: textarea
     default: "low quality, blurry, watermark, text, extra fingers, distorted anatomy"

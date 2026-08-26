@@ -15,6 +15,11 @@ Running `pnpm --filter @covel/desktop dist` after that invokes electron-builder.
 
 ### Required environment variables
 
+Local builds use the electron-builder variable names below. For GitHub Releases,
+store the certificate as `MAC_CSC_LINK` and its password as
+`MAC_CSC_KEY_PASSWORD`; the workflow maps them to `CSC_LINK` and
+`CSC_KEY_PASSWORD` only inside the macOS build job.
+
 | Var                           | Purpose                                                                                      |
 | ----------------------------- | -------------------------------------------------------------------------------------------- |
 | `CSC_LINK`                    | Path (or https URL) to the Developer ID Application `.p12` bundle                            |
@@ -23,7 +28,11 @@ Running `pnpm --filter @covel/desktop dist` after that invokes electron-builder.
 | `APPLE_APP_SPECIFIC_PASSWORD` | [App-specific password](https://support.apple.com/en-us/102654) (NOT your Apple ID password) |
 | `APPLE_TEAM_ID`               | Developer Team ID (10-character, e.g. `ABCDE12345`)                                          |
 
-### Enable notarization
+### Enable notarization locally
+
+The GitHub Release workflow enables notarization automatically and fails before
+packaging when any signing/notarization secret is missing. The following edit is
+only needed for a local signed build.
 
 Edit `apps/desktop/electron-builder.yml`, change:
 
@@ -61,6 +70,10 @@ Artifacts land in `release/electron/` as `.dmg` and `.zip`. The current release 
 
 ### Required environment variables
 
+Local builds use `CSC_LINK` and `CSC_KEY_PASSWORD`. For GitHub Releases, store
+the same values as `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD`; the workflow maps
+them only inside the Windows build job.
+
 | Var                        | Purpose                                                                   |
 | -------------------------- | ------------------------------------------------------------------------- |
 | `CSC_LINK`                 | Path (or https URL) to the `.pfx` code-signing bundle                     |
@@ -75,7 +88,7 @@ CSC_KEY_PASSWORD=... \
   pnpm --filter @covel/desktop dist:win
 ```
 
-NSIS installer + portable build land in `release/`.
+NSIS installer + portable build land in `release/electron/`.
 
 ### SmartScreen
 
@@ -169,4 +182,4 @@ config above.
 - [ ] Smoke test on a clean machine (not your dev machine)
 - [ ] Tag the release: `git tag v$(node -p "require('./apps/desktop/package.json').version")`
 - [ ] Push `main` and the `v*` tag; the release workflow publishes the GitHub Release
-- [ ] Verify the published release notes and `.dmg` / `.zip` assets
+- [ ] Verify the published release notes and `.dmg` / `.zip` / `.exe` assets and signatures

@@ -26,16 +26,16 @@
   },
   "dependencies": {
     "@covel/shared": "workspace:*",
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.2",
     "idb": "^8.0.3",
     "postgres": "^3.4.9",
     "sqlite-vec": "^0.1.9"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
+    "@types/better-sqlite3": "^9.6.0",
     "fake-indexeddb": "^6.2.5",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

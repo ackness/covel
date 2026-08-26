@@ -9,11 +9,12 @@
 #   pnpm docker:logs      # Tail logs
 #
 # Prerequisites:
-#   1. cp .env.example .env — set POSTGRES_PASSWORD, COVEL_MEDIA_TOKEN_SECRET,
+#   1. Docker Compose 2.24+ (`env_file.required` is used below).
+#   2. cp .env.example .env — set POSTGRES_PASSWORD, COVEL_MEDIA_TOKEN_SECRET,
 #      COVEL_DESKTOP_REST_TOKEN, and CORS_ORIGIN. The stack is fail-closed:
 #      it refuses to start until all four are set.
-#   2. cp llm.toml.example llm.toml  (configure LLM provider slots)
-#   3. cp .env.llm.example .env.llm  (add LLM API keys, optional)
+#   3. cp llm.toml.example llm.toml  (configure LLM provider slots)
+#   4. cp .env.llm.example .env.llm  (add LLM API keys, optional)
 ##
 
 services:
@@ -21,9 +22,11 @@ services:
     # pgvector/pgvector ships PostgreSQL with the `vector` extension
     # pre-installed (required by ADR-002). The app container will refuse
     # to start if the extension is missing.
-    # Pinned by digest (pg17 as of 2026-07-15) — bump the digest (and this
-    # comment) when intentionally upgrading Postgres.
-    image: pgvector/pgvector:pg17@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
+    # PostgreSQL 18 + pgvector 0.8.6, pinned by multi-platform digest.
+    # PG18 changed PGDATA and its volume root. `pgdata18` is deliberately a
+    # new volume: existing PG17 `pgdata` contents are preserved but are not
+    # migrated or mounted automatically.
+    image: pgvector/pgvector:0.8.6-pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a
     container_name: covel-postgres
     restart: unless-stopped
     ports:
@@ -35,8 +38,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-covel}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-covel}
+      PGDATA: /var/lib/postgresql/18/docker
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-covel}"]
       interval: 5s
@@ -50,7 +54,9 @@ services:
     container_name: covel-app
     restart: unless-stopped
     ports:
-      - "${APP_PORT:-3001}:3001"
+      # Keep the plain-HTTP service local by default. Set APP_BIND_IP only
+      # when an authenticated TLS reverse proxy protects external traffic.
+      - "${APP_BIND_IP:-127.0.0.1}:${APP_PORT:-3001}:3001"
     environment:
       # ── Database ────────────────────────────────────────────────
       DATABASE_URL: postgresql://${POSTGRES_USER:-covel}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-covel}
@@ -65,7 +71,10 @@ services:
       NODE_ENV: production
       SERVE_STATIC: "true"
       STATIC_DIR: ./web-dist
-      COVEL_MEDIA_TOKEN_SECRET: ${COVEL_MEDIA_TOKEN_SECRET:?Set COVEL_MEDIA_TOKEN_SECRET in .env}
+      # Empty interpolation lets `docker compose up postgres` work without
+      # app-only secrets. The commercial server still rejects an empty value
+      # at boot, so starting the full stack remains fail-closed.
+      COVEL_MEDIA_TOKEN_SECRET: ${COVEL_MEDIA_TOKEN_SECRET:-}
 
       # ── Auth — fail-closed hosted posture (C-01) ────────────────
       # The container listens on 0.0.0.0 and is mapped to a host port, so it
@@ -73,19 +82,24 @@ services:
       # server hard-enforce per-session owner tokens on every session-scoped
       # route and gate session creation/listing and config endpoints behind
       # the operator token below — anonymous access is impossible. Like
-      # POSTGRES_PASSWORD / COVEL_MEDIA_TOKEN_SECRET, compose refuses to
-      # start until the token is set in .env.
+      # POSTGRES_PASSWORD / COVEL_MEDIA_TOKEN_SECRET, the server refuses to
+      # boot until the token is set in .env. Empty Compose defaults only keep
+      # the DB-only service command independent from app-only configuration.
       DEPLOYMENT_TIER: commercial
-      COVEL_DESKTOP_REST_TOKEN: ${COVEL_DESKTOP_REST_TOKEN:?Set COVEL_DESKTOP_REST_TOKEN in .env}
+      COVEL_DESKTOP_REST_TOKEN: ${COVEL_DESKTOP_REST_TOKEN:-}
       # Commercial posture also requires an explicit CORS allowlist at boot.
       # The bundled web UI is served same-origin, so set this to the public
       # origin players will use (e.g. https://covel.example.com).
-      CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN in .env (the app's public origin)}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
 
       # World package seed directory (inside container)
       COVEL_WORLDS_DIR: /app/worlds
     env_file:
-      - ../.env
+      # Root scripts already require .env via `--env-file`; keep this service
+      # source optional so Compose can resolve the postgres-only service with
+      # an alternate env file and without app configuration.
+      - path: ../.env
+        required: false
       # .env.llm is optional — only needed for server-side LLM key injection.
       # In browser-key mode (default), API keys are passed per-request via
       # X-Provider-Keys header from the frontend localStorage.
@@ -93,7 +107,13 @@ services:
         required: false
     volumes:
       # Model slot configuration (required — copy llm.toml.example to llm.toml)
-      - ../llm.toml:/app/llm.toml:ro
+      - type: bind
+        source: ../llm.toml
+        target: /app/llm.toml
+        read_only: true
+        bind:
+          # A missing file must fail instead of becoming a host directory.
+          create_host_path: false
       # Optional: mount custom world packages from host
       # - ../worlds:/app/worlds:ro
     depends_on:
@@ -108,4 +128,6 @@ services:
       start_period: 15s
 
 volumes:
-  pgdata:
+  # New name prevents Docker Compose from attaching the incompatible PG17
+  # development volume. The old `pgdata` volume remains untouched.
+  pgdata18:

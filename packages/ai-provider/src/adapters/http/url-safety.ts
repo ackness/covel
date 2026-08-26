@@ -90,6 +90,16 @@ export function buildProviderUrl(baseUrl: string, path: string): string {
   let p = path.startsWith("/") ? path : `/${path}`;
 
   if (p.startsWith("/api/")) {
+    // Some providers publish a base URL that already includes `/api/vN`, while
+    // their endpoint paths repeat the same prefix. Preserve arbitrary `/api/`
+    // paths, but collapse an identical version prefix once.
+    const apiVersionPrefix = p.match(/^\/api\/v\d[a-z0-9]*(?=\/|$)/i)?.[0];
+    if (
+      apiVersionPrefix &&
+      base.toLowerCase().endsWith(apiVersionPrefix.toLowerCase())
+    ) {
+      return `${base}${p.slice(apiVersionPrefix.length)}`;
+    }
     return `${base}${p}`;
   }
 

@@ -66,6 +66,35 @@ describe("dashscope-wan wire", () => {
     });
   });
 
+  it("accepts the recommended workspace base URL without duplicating /api/v1", async () => {
+    const calls = stubFetchSequence([
+      { json: { output: { task_id: "workspace-task" } } },
+      {
+        json: {
+          output: {
+            task_status: "SUCCEEDED",
+            results: [{ url: "https://oss.test/workspace.png" }],
+          },
+        },
+      },
+    ]);
+
+    await dashscopeWanWire.generate(
+      {
+        baseUrl: "https://workspace.dashscope.test/api/v1",
+        apiKey: "k",
+      },
+      { model: "wan2.2-t2i", prompt: "p" },
+      undefined,
+      { pollIntervalMs: 1, timeoutMs: 5_000 },
+    );
+
+    expect(calls.map((call) => call.url)).toEqual([
+      "https://workspace.dashscope.test/api/v1/services/aigc/image-generation/generation",
+      "https://workspace.dashscope.test/api/v1/tasks/workspace-task",
+    ]);
+  });
+
   it("strips negative_prompt for wan2.7-image* models and records a warning", async () => {
     const calls = stubFetchSequence([
       { json: { output: { task_id: "t" } } },

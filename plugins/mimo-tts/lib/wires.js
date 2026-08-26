@@ -9,7 +9,8 @@
  *   1. Auth is `api-key: <KEY>` (NOT `Authorization: Bearer …`).
  *   2. The text to speak is sent as `messages: [{ role: 'assistant', content }]`
  *      — counter to OpenAI conventions where assistant text is model output.
- *      Confirmed against the official example (github.com/iChochy/mimo-tts-chat).
+ *      Confirmed against Xiaomi's speech synthesis documentation:
+ *      https://mimo.mi.com/docs/usage-guide/speech-synthesis
  *
  * Wire format (non-streaming):
  *   POST {baseUrl}/v1/chat/completions

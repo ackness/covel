@@ -3,6 +3,9 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   getPendingProposals,
   tool,
@@ -25,6 +28,17 @@ const ctx = {
   pluginId: "{{pluginName}}",
   runtimeId: "{{pluginName}}",
 };
+
+const pluginDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+describe("scaffold workspace layout", () => {
+  it("resolves workspace dependencies from the Covel root", () => {
+    expect(existsSync(join(pluginDir, "pnpm-workspace.yaml"))).toBe(false);
+
+    const rootWorkspace = resolve(pluginDir, "../..", "pnpm-workspace.yaml");
+    expect(readFileSync(rootWorkspace, "utf8")).toContain('- "plugins/*"');
+  });
+});
 
 describe("record-note tool", () => {
   it("records a note and attaches a plugin-data proposal", async () => {

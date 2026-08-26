@@ -19,7 +19,7 @@ section 名默认应为 `[covel.mimo-tts]`（与插件 id 一致；插件两个 
 ```toml
 [covel.mimo-tts]
 provider = "xiaomi"
-model    = "mimo-v2.5-tts"   # 或 mimo-v2-tts / mimo-v2.5-tts-voicedesign / mimo-v2.5-tts-voiceclone
+model    = "mimo-v2.5-tts"   # 或 mimo-v2.5-tts-voicedesign / mimo-v2.5-tts-voiceclone
 baseUrl  = "https://token-plan-cn.xiaomimimo.com/v1"   # 或 https://api.xiaomimimo.com（按你的 key 套餐）
 protocol = "openai-chat-v1"   # 必填字段，但本插件自管 wire 不会用到
 tag      = "speech"
@@ -28,6 +28,8 @@ output   = ["audio"]
 
 > **特殊性**：MiMo 用 `api-key: <KEY>` 头部（不是 `Authorization: Bearer`），且文本要塞在 `messages: [{role: 'assistant', content}]`（违反 OpenAI 习惯）。本插件 wire 客户端已固化这两点，框架 slot 解析只用来取 `baseUrl` / `apiKey` / `model`。
 > **baseUrl 末尾的 `/v1`** 自动剥离，写或不写都行。
+
+> `mimo-v2-tts` 已于 2026-06-30 下线，请使用 `mimo-v2.5-tts`。迁移后 `mimo_default` 的默认音色映射会变化：中文为“冰糖”，其他语言为 Mia。参见 [MiMo 弃用公告](https://mimo.mi.com/docs/en-US/updates/deprecate) 和 [MiMo 模型列表](https://mimo.mi.com/docs/en-US/quick-start/model)。
 
 ### 2. 写 API key
 
@@ -51,7 +53,6 @@ Web 端：在前端 Settings → API Keys 录入 `xiaomi`。
 | ------------ | ------------------ | ------------------------------------------------------------------------------------------ |
 | auto-narrate | `enabled`          | 关掉就只剩手动朗读                                                                         |
 | 共用         | `modelPresetId`    | `slot` 类型（UI 渲染成已配置槽的选择器）；默认 `mimo-tts`，对应 `[covel.mimo-tts]`         |
-| 共用         | `model`            | 留空走 slot；填写则 per-call 覆盖（切 voicedesign / voiceclone 用）                        |
 | 共用         | `voice`            | 默认 `mimo_default`；voicedesign / voiceclone 用预生成的 id                                |
 | 共用         | `format`           | `mp3` (默认，audio/mpeg) / `wav` (audio/wav)。`pcm` / `pcm16` 浏览器无法直接播放，已不暴露 |
 | 共用         | `maxChars`         | 单次合成最大字符（避免触发 server 限制）                                                   |
@@ -86,5 +87,5 @@ pnpm --filter @covel/plugin-mimo-tts test   # vitest run，覆盖 wire + 两个 
 
 ## 参考
 
-- 官方 wire 形式参考：[github.com/iChochy/mimo-tts-chat](https://github.com/iChochy/mimo-tts-chat)
+- MiMo 官方文档：[OpenAI 兼容 API](https://mimo.mi.com/docs/api/chat/openai-api) · [语音合成](https://mimo.mi.com/docs/usage-guide/speech-synthesis)
 - 框架文档：[docs/guide/plugin-authoring.md](https://github.com/your-org/covel/blob/main/docs/guide/plugin-authoring.md) · [docs/reference/media-store.md](https://github.com/your-org/covel/blob/main/docs/reference/media-store.md) · [docs/reference/ui-components.md](https://github.com/your-org/covel/blob/main/docs/reference/ui-components.md)

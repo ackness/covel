@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreBinaries": ["only-allow", "ps", "which", "actionlint"],
+  "ignoreBinaries": ["ps", "which", "actionlint"],
   "workspaces": {
     ".": {
       "ignoreDependencies": [
