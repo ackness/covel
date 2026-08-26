@@ -37,6 +37,13 @@ const systemProxyDispatchers = new Map<string, Dispatcher>();
 let directDispatcher:
   ReturnType<typeof createConnectPinnedDispatcher> | undefined;
 
+function createProxyDispatcher(url: string): Dispatcher {
+  // Undici 8.7+ forwards plain HTTP with an absolute-form request target by
+  // default. Covel's proxy contract uses CONNECT for every target protocol,
+  // which also matches Chromium proxy routes and the pre-8.7 behavior.
+  return new ProxyAgent({ uri: url, proxyTunnel: true });
+}
+
 function getDirectDispatcher(): ReturnType<
   typeof createConnectPinnedDispatcher
 > {
@@ -145,7 +152,7 @@ function getSystemProxyDispatcher(url: string): Dispatcher {
     systemProxyDispatchers.set(url, existing);
     return existing;
   }
-  const dispatcher = new ProxyAgent(url);
+  const dispatcher = createProxyDispatcher(url);
   systemProxyDispatchers.set(url, dispatcher);
   if (systemProxyDispatchers.size > 16) {
     const oldest = systemProxyDispatchers.entries().next().value as
@@ -194,7 +201,7 @@ export function configureOutboundProxy(
       ? nextSystemProxyUrl
       : normalized.url;
   const nextDispatcher = effectiveProxyUrl
-    ? new ProxyAgent(effectiveProxyUrl)
+    ? createProxyDispatcher(effectiveProxyUrl)
     : undefined;
   const previous = proxyDispatcher;
 

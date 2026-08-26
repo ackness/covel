@@ -33,11 +33,21 @@ import { randomUUID } from "node:crypto";
 import { homedir, platform } from "node:os";
 import { spawn } from "node:child_process";
 import {
+  patchDesktopConfigFile,
+  readDesktopConfigFile,
+} from "@covel/shared/desktop-config/node";
+import {
   normalizeProviderKeyMap,
   providerKeyToId,
   readRuntimeEnv,
   toApiKeyEnvMap,
 } from "@covel/shared";
+import {
+  emptySettingsPersistenceBundle,
+  nextSettingsPersistenceBundle,
+  parseSettingsPersistenceBundle,
+  type SettingsPersistenceBundle,
+} from "@covel/shared/settings-persistence";
 import { errorBody, readJsonBody } from "../api-error.js";
 import { parseEnvLines } from "../lib/env-file.js";
 import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
@@ -201,11 +211,11 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   app.get("/api/config/settings", requireToken, (c) => {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
-      return c.json({ schemaVersion: 1, savedAt: "", entries: {} });
+      return c.json(emptySettingsPersistenceBundle());
     }
     const file = join(covelHome, "settings.json");
     if (!existsSync(file)) {
-      return c.json({ schemaVersion: 1, savedAt: "", entries: {} });
+      return c.json(emptySettingsPersistenceBundle());
     }
     try {
       return c.json(readSettingsBundle(file));
@@ -223,7 +233,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     }
   });
 
-  // PUT /api/config/settings — body: { entries: Record<string, unknown> }
+  // PUT /api/config/settings — body: { entries, expectedRevision }.
   // Atomically rewrites the bundle. Mode 0600 to match `keys.env` — even
   // though `settings.json` should not contain secrets, the user might
   // import/export with `includeSecrets: true`.
@@ -262,28 +272,48 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       );
     }
     const entries = rawEntries as Record<string, unknown>;
-
-    const payload = {
-      schemaVersion: 1,
-      savedAt: new Date().toISOString(),
-      entries,
-    };
-    const file = join(covelHome, "settings.json");
-    if (existsSync(file)) {
-      try {
-        readSettingsBundle(file);
-      } catch {
-        return c.json(
-          errorBody(
-            "Refusing to overwrite an unreadable settings.json; repair or back it up first",
-            { code: "settings_file_invalid" },
-          ),
-          409,
-        );
-      }
+    const rawExpectedRevision = (body as { expectedRevision?: unknown })
+      .expectedRevision;
+    if (
+      typeof rawExpectedRevision !== "number" ||
+      !Number.isInteger(rawExpectedRevision) ||
+      rawExpectedRevision < 0
+    ) {
+      return c.json(
+        errorBody("Body must include expectedRevision: non-negative integer", {
+          code: "invalid_settings_body",
+        }),
+        400,
+      );
     }
+    const expectedRevision = rawExpectedRevision;
+    const file = join(covelHome, "settings.json");
+    let current: SettingsPersistenceBundle;
+    try {
+      current = existsSync(file)
+        ? readSettingsBundle(file)
+        : emptySettingsPersistenceBundle();
+    } catch {
+      return c.json(
+        errorBody(
+          "Refusing to overwrite an unreadable settings.json; repair or back it up first",
+          { code: "settings_file_invalid" },
+        ),
+        409,
+      );
+    }
+    if (current.revision !== expectedRevision) {
+      return c.json(
+        errorBody("settings.json changed in another instance", {
+          code: "settings_revision_conflict",
+          details: { revision: current.revision },
+        }),
+        409,
+      );
+    }
+    const payload = nextSettingsPersistenceBundle(entries, current.revision);
     writePrivateFileAtomic(file, JSON.stringify(payload, null, 2) + "\n");
-    return c.json({ ok: true });
+    return c.json(payload);
   });
 
   app.get("/api/config/proxy", requireToken, (c) => {
@@ -328,6 +358,9 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         mode: rawMode as OutboundProxyMode,
         url: (body as { url?: string }).url,
       });
+      // Fail before hot-applying when a hand-edited config is malformed. The
+      // focused writer must never replace the only recoverable source copy.
+      readDesktopConfigFile(join(covelHome, "config.toml"));
       const status = configureOutboundProxy({
         ...config,
         systemProxyUrl: readRuntimeEnv().systemProxyUrl,
@@ -485,32 +518,9 @@ function openInFileManager(folder: string): Promise<void> {
 }
 
 function writeDataRootInConfig(covelHome: string, newPath: string): void {
-  const cfgFile = join(covelHome, "config.toml");
-  const replacement = `data_root = ${JSON.stringify(newPath)}`;
-  let current = "";
-  try {
-    current = readFileSync(cfgFile, "utf-8");
-  } catch {
-    current = "";
-  }
-  const linePattern = /^(\s*)(#\s*)?data_root\s*=.*$/m;
-  let next: string;
-  if (linePattern.test(current)) {
-    next = current.replace(
-      linePattern,
-      (_m, indent: string) => `${indent}${replacement}`,
-    );
-  } else if (/^\[paths]/m.test(current)) {
-    next = current.replace(/^\[paths]\s*$/m, `[paths]\n${replacement}`);
-  } else if (current.trim()) {
-    next = `${current.trimEnd()}\n\n[paths]\n${replacement}\n`;
-  } else {
-    next =
-      `# Covel user config (auto-generated by Settings panel).\n\n` +
-      `[paths]\n${replacement}\n\n[logging]\nmax_size_mb = 10\nmax_files   = 10\n`;
-  }
-  mkdirSync(dirname(cfgFile), { recursive: true });
-  writeFileSync(cfgFile, next);
+  patchDesktopConfigFile(join(covelHome, "config.toml"), {
+    paths: { data_root: newPath },
+  });
 }
 
 /**
@@ -560,30 +570,10 @@ function readKeysEnv(file: string): Record<string, string> {
   return normalizeProviderKeyMap(result);
 }
 
-function readSettingsBundle(file: string): {
-  schemaVersion: number;
-  savedAt: string;
-  entries: Record<string, unknown>;
-} {
-  const parsed = JSON.parse(readFileSync(file, "utf-8")) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("settings bundle must be an object");
-  }
-  const bundle = parsed as Record<string, unknown>;
-  if (
-    bundle.entries !== undefined &&
-    (!bundle.entries ||
-      typeof bundle.entries !== "object" ||
-      Array.isArray(bundle.entries))
-  ) {
-    throw new Error("settings entries must be an object");
-  }
-  return {
-    schemaVersion:
-      typeof bundle.schemaVersion === "number" ? bundle.schemaVersion : 1,
-    savedAt: typeof bundle.savedAt === "string" ? bundle.savedAt : "",
-    entries: (bundle.entries as Record<string, unknown> | undefined) ?? {},
-  };
+function readSettingsBundle(file: string): SettingsPersistenceBundle {
+  return parseSettingsPersistenceBundle(
+    JSON.parse(readFileSync(file, "utf-8")) as unknown,
+  );
 }
 
 function writePrivateFileAtomic(file: string, contents: string): void {

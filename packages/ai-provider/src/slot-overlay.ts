@@ -32,9 +32,12 @@ import type {
   ModelCapability,
   OperationMode,
   PresetConfig,
+  ResolvedTarget,
   SlotOverridesInput,
+  CapabilityOverridePolicy,
 } from "./types.js";
 import { resolveCapability } from "./capability/index.js";
+import { mergeRequestCapabilityOverride } from "./capability/resolver.js";
 
 /**
  * Minimal registry surface the overlay needs. Matches the real
@@ -155,9 +158,9 @@ export function applySlotOverlay(
         ...(cp.protocol ? { protocol: cp.protocol } : {}),
         ...(cp.baseUrl ? { baseUrl: cp.baseUrl } : {}),
         tier: "medium",
-        supportedModes: supportedModesFor(capability),
+        supportedModes: supportedModesForCapability(capability),
         enabled: true,
-        tag: tagFor(capability),
+        tag: tagForCapability(capability),
         capability,
         // Untrusted request origin — env keys must not bind to it, and the
         // provider registry resolves unknown providers ephemerally for it.
@@ -184,7 +187,9 @@ export function applySlotOverlay(
   };
 }
 
-function supportedModesFor(capability: ModelCapability): OperationMode[] {
+export function supportedModesForCapability(
+  capability: ModelCapability,
+): OperationMode[] {
   const modes = new Set<OperationMode>();
   for (const output of capability.output) {
     if (output === "text") {
@@ -202,11 +207,69 @@ function supportedModesFor(capability: ModelCapability): OperationMode[] {
   return modes.size > 0 ? [...modes] : ["text", "object", "stream"];
 }
 
-function tagFor(capability: ModelCapability): string {
+export function tagForCapability(capability: ModelCapability): string {
   if (capability.output.includes("image")) return "image";
   if (capability.output.includes("audio")) return "speech";
   if (capability.output.includes("embedding")) return "embedding";
   return "text";
+}
+
+/**
+ * Clone a resolved target with this request's effective capability. Capability
+ * overlays never write to the shared preset/profile registries.
+ */
+export function applyRequestCapabilityOverlay(
+  target: ResolvedTarget,
+  requestedId: string | undefined,
+  overrides: SlotOverridesInput | undefined,
+  policy: CapabilityOverridePolicy,
+  isPrimary: boolean,
+): ResolvedTarget {
+  const byId = overrides?.capabilityOverrides;
+  if (!byId) return target;
+  const publicTargetId = target.preset?.id
+    ? publicPresetId(target.preset.id)
+    : undefined;
+  const direct = publicTargetId ? byId[publicTargetId] : undefined;
+  const slotOverride = isPrimary ? byId[requestedId ?? "default"] : undefined;
+  const override = direct ?? slotOverride;
+  if (!override) return target;
+
+  const baseCapability =
+    target.preset?.capability ??
+    resolveCapability(
+      target.preset?.model ?? target.profile.model,
+      target.preset?.provider ?? target.profile.provider,
+      target.preset?.protocol,
+    );
+  const capability = mergeRequestCapabilityOverride(
+    baseCapability,
+    override,
+    policy,
+  );
+  const outputChanged =
+    JSON.stringify(capability.output) !== JSON.stringify(baseCapability.output);
+  const supportedModes = outputChanged
+    ? supportedModesForCapability(capability)
+    : (target.preset?.supportedModes ?? target.profile.supportedModes);
+
+  return {
+    profile: {
+      ...target.profile,
+      ...(capability.contextWindow !== undefined
+        ? { contextWindow: capability.contextWindow }
+        : {}),
+      supportedModes: [...supportedModes],
+    },
+    preset: target.preset
+      ? {
+          ...target.preset,
+          capability,
+          supportedModes: [...supportedModes],
+          ...(outputChanged ? { tag: tagForCapability(capability) } : {}),
+        }
+      : target.preset,
+  };
 }
 
 /**

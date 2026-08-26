@@ -169,6 +169,15 @@ export interface CustomPresetInput {
   protocol?: ProviderProtocol;
 }
 
+/** Operational model facts accepted from an untrusted request context. */
+export type RequestCapabilityOverride = Omit<
+  Partial<ModelCapability>,
+  "pricing"
+>;
+
+/** Server-selected trust policy. This value is never read from the header. */
+export type CapabilityOverridePolicy = "full" | "restrict-only";
+
 /**
  * Per-call overlay that transiently extends the gateway's view of slot
  * and preset configuration. Applied with reference counting so concurrent
@@ -187,6 +196,8 @@ export interface SlotOverridesInput {
   parameterOverrides?: Record<string, ModelParameterOverrides>;
   /** Preset definitions added for the duration of the call. */
   customPresets?: CustomPresetInput[];
+  /** Slot/preset-name → request-scoped operational capability facts. */
+  capabilityOverrides?: Record<string, RequestCapabilityOverride>;
 }
 
 // ── Model Profile ──────────────────────────────────────────────────
@@ -482,6 +493,8 @@ export interface ResolvedSlotConfig {
   readonly model: string;
   /** Slot tag (text / image / embedding / speech / transcription). */
   readonly tag: string;
+  /** Effective request-scoped capability; never mutates the base registry. */
+  readonly capability?: ModelCapability;
   /** Free-form fields from the llm.toml preset, plugin-owned semantics. */
   readonly metadata: Readonly<Record<string, unknown>>;
   readonly parameterOverrides?: ModelParameterOverrides;

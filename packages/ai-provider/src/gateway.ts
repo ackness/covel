@@ -3,7 +3,10 @@ import type { ZodType } from "zod";
 import { AiProviderError } from "./errors.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
-import { applySlotOverlay } from "./slot-overlay.js";
+import {
+  applyRequestCapabilityOverlay,
+  applySlotOverlay,
+} from "./slot-overlay.js";
 import {
   notifyStart,
   notifySuccess,
@@ -206,9 +209,19 @@ export function createGateway(deps: GatewayDependencies) {
     },
     options?: GatewayOptions,
   ): AsyncIterable<StreamEvent> {
-    const targets = deps.presetRegistry.resolveTextTargetChain({
-      presetId: resolveSlotOrPassthrough(input.presetId, "text", options),
-    });
+    const targets = deps.presetRegistry
+      .resolveTextTargetChain({
+        presetId: resolveSlotOrPassthrough(input.presetId, "text", options),
+      })
+      .map((target, index) =>
+        applyRequestCapabilityOverlay(
+          target,
+          input.presetId,
+          options?.slotOverrides,
+          options?.capabilityOverridePolicy ?? "restrict-only",
+          index === 0,
+        ),
+      );
     let lastError: AiProviderError | null = null;
 
     for (const [index, target] of targets.entries()) {

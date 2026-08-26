@@ -221,8 +221,23 @@ describe("outbound network transport", () => {
         "/models",
       );
       expect(await response.json()).toEqual({ proxied: true });
-      expect(proxyConnections).toBe(1);
+
+      // Dynamic system routes construct and cache their own dispatcher. Keep
+      // this real CONNECT check beside the explicit-proxy path so an Undici
+      // default change cannot silently split their transport semantics.
+      await resetOutboundProxyForTests();
+      configureOutboundProxy({
+        mode: "system",
+        resolveSystemProxy: async () => `PROXY 127.0.0.1:${proxyPort}`,
+      });
+      const systemResponse = await getJson(
+        { baseUrl: `http://127.0.0.1:${targetPort}` },
+        "/models",
+      );
+      expect(await systemResponse.json()).toEqual({ proxied: true });
+      expect(proxyConnections).toBe(2);
     } finally {
+      await resetOutboundProxyForTests();
       await new Promise<void>((resolve) => proxy.close(() => resolve()));
       await new Promise<void>((resolve) => target.close(() => resolve()));
     }

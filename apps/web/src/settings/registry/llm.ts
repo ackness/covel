@@ -13,16 +13,6 @@ const providerPriceMultipliersSchema = z.record(
   z.number().positive(),
 );
 
-const customPresetSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  provider: z.string(),
-  baseUrl: z.string().optional(),
-  model: z.string(),
-  protocol: z.string().optional(),
-  apiKey: z.string().optional(),
-});
-
 const providerModelProfileSchema = z.object({
   id: z.string().min(1),
   name: z.string(),
@@ -97,15 +87,6 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
     group: "llm",
     widget: "custom",
     label: { "zh-CN": "服务商价格倍率", "en-US": "Provider price multipliers" },
-  });
-
-  store.register({
-    key: "llm.customPresets",
-    schema: z.array(customPresetSchema),
-    default: [],
-    group: "llm",
-    widget: "custom",
-    label: { "zh-CN": "旧版模型方案", "en-US": "Legacy model plans" },
   });
 
   store.register({

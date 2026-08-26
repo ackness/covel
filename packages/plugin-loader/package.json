@@ -19,10 +19,10 @@
     "@covel/events": "workspace:*",
     "@covel/shared": "workspace:*",
     "gray-matter": "^4.0.3",
-    "smol-toml": "^1.7.0"
+    "smol-toml": "^1.8.0"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

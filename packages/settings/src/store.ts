@@ -1,12 +1,15 @@
-import type {
-  SettingEntry,
-  SettingGroup,
-  SettingKey,
-  SettingsBackendAdapter,
-  SettingsExportBundle,
-  SettingsListener,
-  SettingsStoreApi,
+import {
+  SettingsRevisionConflictError,
+  type SettingEntry,
+  type SettingGroup,
+  type SettingKey,
+  type SettingsBackendAdapter,
+  type SettingsExportBundle,
+  type SettingsListener,
+  type SettingsPersistenceErrorListener,
+  type SettingsStoreApi,
 } from "./types.js";
+import type { SettingsPersistenceBundle } from "@covel/shared/settings-persistence";
 
 /**
  * Core settings store. Tier-aware via the injected backend adapter.
@@ -24,6 +27,9 @@ export class SettingsStore implements SettingsStoreApi {
   private readonly secrets = new Map<string, string>();
   private readonly keyListeners = new Map<SettingKey, Set<SettingsListener>>();
   private readonly globalListeners = new Set<SettingsListener>();
+  private readonly persistenceErrorListeners =
+    new Set<SettingsPersistenceErrorListener>();
+  private readonly invalidHydratedKeys = new Set<SettingKey>();
   /**
    * Full snapshots must reach each backend in mutation order. Without this
    * queue, a slow older save can finish after a newer one and silently erase
@@ -47,6 +53,8 @@ export class SettingsStore implements SettingsStoreApi {
   private hydrationState: "pending" | "ready" | "failed" = "pending";
   /** Set when `init()` could not read existing state. See {@link assertHydrated}. */
   private hydrationError: Error | null = null;
+  /** Current v2 backend revision; null means a legacy adapter. */
+  private settingsRevision: number | null = null;
 
   constructor(private readonly adapter: SettingsBackendAdapter) {
     this.loaded = new Promise<void>((resolve) => {
@@ -61,20 +69,35 @@ export class SettingsStore implements SettingsStoreApi {
 
   private async hydrate(): Promise<void> {
     try {
-      const [entries, secrets] = await Promise.all([
-        this.adapter.load(),
+      const versioned = this.hasVersionedPersistence();
+      const [stored, secrets] = await Promise.all([
+        versioned ? this.adapter.loadWithRevision!() : this.adapter.load(),
         this.adapter.loadSecrets(),
       ]);
+      const versionedStored = stored as SettingsPersistenceBundle;
+      const entries = versioned
+        ? versionedStored.entries
+        : (stored as Record<SettingKey, unknown>);
+      const revision = versioned ? versionedStored.revision : null;
+      const hydratedValues = new Map<SettingKey, unknown>();
       for (const [key, value] of Object.entries(entries)) {
-        this.values.set(key, value);
+        const entry = this.registry.get(key);
+        if (entry && !entry.schema.safeParse(value).success) {
+          throw new Error(`Settings hydration validation failed for ${key}`);
+        }
+        hydratedValues.set(key, value);
       }
+      const hydratedSecrets = new Map<string, string>();
       for (const [provider, keyValue] of Object.entries(secrets)) {
         if (typeof keyValue === "string" && keyValue.length > 0) {
-          this.secrets.set(provider, keyValue);
+          hydratedSecrets.set(provider, keyValue);
         }
       }
+      this.restore(this.values, hydratedValues);
+      this.restore(this.secrets, hydratedSecrets);
       this.restore(this.persistedSnapshots.values, this.values);
       this.restore(this.persistedSnapshots.secrets, this.secrets);
+      this.settingsRevision = revision;
       this.hydrationError = null;
       this.hydrationState = "ready";
     } catch (err) {
@@ -83,6 +106,8 @@ export class SettingsStore implements SettingsStoreApi {
       // half-empty map would destroy the settings/keys we failed to read.
       this.hydrationError = err instanceof Error ? err : new Error(String(err));
       this.hydrationState = "failed";
+      this.values.clear();
+      this.secrets.clear();
       console.error("[settings] hydration failed — writes disabled", err);
     } finally {
       this.loadResolve();
@@ -135,6 +160,10 @@ export class SettingsStore implements SettingsStoreApi {
       await this.enqueueSnapshot(target, snapshot);
       this.replacePersistedSnapshot(target, snapshot);
     } catch (err) {
+      if (target === "values" && err instanceof SettingsRevisionConflictError) {
+        this.hydrationError = err;
+        this.hydrationState = "failed";
+      }
       if (this.persistRevisions[target] === revision) {
         this.restore(
           target === "values" ? this.values : this.secrets,
@@ -160,11 +189,26 @@ export class SettingsStore implements SettingsStoreApi {
     target: "values" | "secrets",
     snapshot: Record<string, unknown> | Record<string, string>,
   ): Promise<void> {
-    const operation = this.persistTails[target].then(() =>
-      target === "values"
-        ? this.adapter.save(snapshot as Record<SettingKey, unknown>)
-        : this.adapter.saveSecrets(snapshot as Record<string, string>),
-    );
+    const operation = this.persistTails[target].then(async () => {
+      if (this.hydrationState === "failed") {
+        throw (
+          this.hydrationError ?? new Error("settings persistence is read-only")
+        );
+      }
+      if (target === "secrets") {
+        await this.adapter.saveSecrets(snapshot as Record<string, string>);
+        return;
+      }
+      if (!this.hasVersionedPersistence()) {
+        await this.adapter.save(snapshot as Record<SettingKey, unknown>);
+        return;
+      }
+      const saved = await this.adapter.saveWithRevision!(
+        snapshot as Record<SettingKey, unknown>,
+        this.settingsRevision ?? 0,
+      );
+      this.settingsRevision = saved.revision;
+    });
     // Keep the queue usable after a rejected write while returning the
     // original rejection to the caller that owns that mutation.
     this.persistTails[target] = operation.catch(() => undefined);
@@ -175,8 +219,40 @@ export class SettingsStore implements SettingsStoreApi {
     return this.loaded;
   }
 
+  private hasVersionedPersistence(): boolean {
+    return (
+      typeof this.adapter.loadWithRevision === "function" &&
+      typeof this.adapter.saveWithRevision === "function"
+    );
+  }
+
+  private observePersistence<T>(promise: Promise<T>): Promise<T> {
+    void promise.catch((error: unknown) => {
+      this.emitPersistenceError(
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    });
+    return promise;
+  }
+
+  private emitPersistenceError(error: Error): void {
+    for (const listener of this.persistenceErrorListeners) listener(error);
+  }
+
   register<T>(entry: SettingEntry<T>): void {
     this.registry.set(entry.key, entry as SettingEntry);
+    if (
+      this.hydrationState === "ready" &&
+      this.values.has(entry.key) &&
+      !entry.schema.safeParse(this.values.get(entry.key)).success
+    ) {
+      this.invalidHydratedKeys.add(entry.key);
+      this.hydrationError = new Error(
+        `Settings hydration validation failed for dynamically registered ${entry.key}`,
+      );
+      this.hydrationState = "failed";
+      this.emitPersistenceError(this.hydrationError);
+    }
   }
 
   get<T>(key: SettingKey): T {
@@ -189,6 +265,7 @@ export class SettingsStore implements SettingsStoreApi {
       if (val !== undefined) return val as T;
       return (entry?.default ?? "") as T;
     }
+    if (this.invalidHydratedKeys.has(key) && entry) return entry.default as T;
     if (this.values.has(key)) return this.values.get(key) as T;
     if (entry) return entry.default as T;
     return undefined as T;
@@ -201,66 +278,85 @@ export class SettingsStore implements SettingsStoreApi {
     if (backend === "keys") {
       return this.secrets.has(this.stripKeysPrefix(key));
     }
+    if (this.invalidHydratedKeys.has(key)) return false;
     return this.values.has(key);
   }
 
-  async set<T>(key: SettingKey, value: T): Promise<void> {
-    const entry = this.registry.get(key);
-    if (entry) {
-      const parsed = entry.schema.safeParse(value);
-      if (!parsed.success) {
-        throw new Error(
-          `Settings validation failed for ${key}: ${parsed.error.message}`,
-        );
+  set<T>(key: SettingKey, value: T): Promise<void> {
+    try {
+      const entry = this.registry.get(key);
+      if (entry) {
+        const parsed = entry.schema.safeParse(value);
+        if (!parsed.success) {
+          throw new Error(
+            `Settings validation failed for ${key}: ${parsed.error.message}`,
+          );
+        }
       }
+      const backend =
+        entry?.backend ?? (key.startsWith("keys.") ? "keys" : "settings");
+      const operation =
+        backend === "keys"
+          ? this.persist("secrets", () => {
+              const provider = this.stripKeysPrefix(key);
+              const str =
+                typeof value === "string" ? value : String(value ?? "");
+              if (str.trim().length === 0) this.secrets.delete(provider);
+              else this.secrets.set(provider, str);
+            })
+          : this.persist("values", () => {
+              this.values.set(key, value);
+            });
+      return this.observePersistence(
+        operation.then(() => this.notify(key, value)),
+      );
+    } catch (error) {
+      return this.observePersistence(Promise.reject(error));
     }
-    const backend =
-      entry?.backend ?? (key.startsWith("keys.") ? "keys" : "settings");
-    if (backend === "keys") {
-      const provider = this.stripKeysPrefix(key);
-      const str = typeof value === "string" ? value : String(value ?? "");
-      await this.persist("secrets", () => {
-        if (str.trim().length === 0) this.secrets.delete(provider);
-        else this.secrets.set(provider, str);
-      });
-    } else {
-      await this.persist("values", () => {
-        this.values.set(key, value);
-      });
-    }
-    this.notify(key, value);
   }
 
-  async clear(key: SettingKey): Promise<void> {
-    const entry = this.registry.get(key);
-    const backend =
-      entry?.backend ?? (key.startsWith("keys.") ? "keys" : "settings");
-    if (backend === "keys") {
-      await this.persist("secrets", () => {
-        const provider = this.stripKeysPrefix(key);
-        this.secrets.delete(provider);
-      });
-    } else {
-      await this.persist("values", () => {
-        this.values.delete(key);
-      });
+  clear(key: SettingKey): Promise<void> {
+    try {
+      const entry = this.registry.get(key);
+      const backend =
+        entry?.backend ?? (key.startsWith("keys.") ? "keys" : "settings");
+      const operation =
+        backend === "keys"
+          ? this.persist("secrets", () => {
+              this.secrets.delete(this.stripKeysPrefix(key));
+            })
+          : this.persist("values", () => {
+              this.values.delete(key);
+            });
+      return this.observePersistence(
+        operation.then(() =>
+          this.notify(key, entry ? entry.default : undefined),
+        ),
+      );
+    } catch (error) {
+      return this.observePersistence(Promise.reject(error));
     }
-    const fresh = entry ? entry.default : undefined;
-    this.notify(key, fresh);
   }
 
-  async clearAll(): Promise<void> {
+  clearAll(): Promise<void> {
     // Guarded like every other write. A hydration failure makes the UI show
     // defaults, which reads to the player as "my settings are gone" — and
     // their natural response is to hit Reset, which would then wipe the very
     // settings.json / keys.env we failed to read.
-    this.assertHydrated();
-    await Promise.all([
-      this.persist("values", () => this.values.clear()),
-      this.persist("secrets", () => this.secrets.clear()),
-    ]);
-    for (const entry of this.registry.values()) {
-      this.notify(entry.key, entry.default);
+    try {
+      this.assertHydrated();
+      return this.observePersistence(
+        Promise.all([
+          this.persist("values", () => this.values.clear()),
+          this.persist("secrets", () => this.secrets.clear()),
+        ]).then(() => {
+          for (const entry of this.registry.values()) {
+            this.notify(entry.key, entry.default);
+          }
+        }),
+      );
+    } catch (error) {
+      return this.observePersistence(Promise.reject(error));
     }
   }
 
@@ -296,7 +392,14 @@ export class SettingsStore implements SettingsStoreApi {
     return bundle;
   }
 
-  async import(
+  import(
+    bundle: SettingsExportBundle,
+    opts: { keys: readonly SettingKey[]; includeSecrets?: boolean },
+  ): Promise<void> {
+    return this.observePersistence(this.importInternal(bundle, opts));
+  }
+
+  private async importInternal(
     bundle: SettingsExportBundle,
     opts: { keys: readonly SettingKey[]; includeSecrets?: boolean },
   ): Promise<void> {
@@ -358,6 +461,13 @@ export class SettingsStore implements SettingsStoreApi {
     return () => {
       this.globalListeners.delete(handler);
     };
+  }
+
+  subscribePersistenceErrors(
+    handler: SettingsPersistenceErrorListener,
+  ): () => void {
+    this.persistenceErrorListeners.add(handler);
+    return () => this.persistenceErrorListeners.delete(handler);
   }
 
   private notify(key: SettingKey, value: unknown): void {

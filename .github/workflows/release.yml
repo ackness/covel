@@ -1,20 +1,8 @@
 name: Build Desktop
 
-# Triggers:
-#   - push to a `v*` tag → build & publish a Release automatically.
-#   - manual dispatch     → optional tag/publish for ad-hoc reproductions.
-#
-# Primary distribution path is local builds (`pnpm build:electron`); CI is
-# the reproducible / signed path. macOS arm64 + Windows x64 —
-# Linux builds locally on its native OS.
-#
-# TODO(S-11): signing/notarization is a KNOWN, DELIBERATE gap — no
-# CSC_LINK/CSC_KEY_PASSWORD/APPLE_* secrets are provisioned, so both the
-# mac and win jobs below currently produce UNSIGNED artifacts (see
-# apps/desktop/electron-builder.yml). Once certs are provisioned, this
-# workflow should fail-closed: assert the signing secrets are present
-# before packaging and abort the release job rather than silently
-# publishing unsigned artifacts.
+# Tag pushes build and publish a signed release. Manual runs may build any
+# existing ref without signing; enabling publish_release requires an existing
+# v* tag and all release signing/notarization secrets.
 on:
   push:
     tags:
@@ -22,51 +10,191 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag or ref to build against. Leave empty for current HEAD."
+        description: "Existing tag or ref to build. Leave empty for this workflow commit."
         required: false
         type: string
       publish_release:
-        description: "Publish a GitHub Release with the built artefacts (requires tag)."
+        description: "Publish the existing v* tag (requires signing secrets)."
         required: false
         type: boolean
         default: false
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  # On tag push the ref is `refs/tags/vX.Y.Z`; on dispatch fall back to the
-  # supplied tag or the workflow ref. Either way one tag at a time.
-  group: release-${{ github.event_name == 'push' && github.ref_name || inputs.tag || github.ref }}
+  group: release-${{ github.event_name == 'push' && github.ref_name || inputs.tag || github.sha }}
   cancel-in-progress: false
 
 jobs:
-  # ── Electron shell (macOS arm64) ────────────────────────────────
-  build-electron:
-    name: Electron mac-arm64
-    runs-on: macos-14
+  prepare:
+    name: Resolve and validate source
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.resolve.outputs.commit }}
+      publish: ${{ steps.resolve.outputs.publish }}
+      tag: ${{ steps.resolve.outputs.tag }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Checkout requested source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # On tag push the runner already checks out the tag; on dispatch
-          # honour the optional input. Empty string falls back to default.
-          ref: ${{ inputs.tag || github.ref }}
+          # Resolve a moving branch only here. Every downstream job checks out
+          # the immutable commit output by this job.
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve commit and validate release tag
+        id: resolve
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_TAG: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          PUBLISH_INPUT: ${{ inputs.publish_release }}
+        run: |
+          set -euo pipefail
+
+          commit="$(git rev-parse HEAD)"
+          publish=false
+          release_tag=""
+
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            publish=true
+            release_tag="$EVENT_TAG"
+          elif [[ "$PUBLISH_INPUT" == "true" ]]; then
+            publish=true
+            release_tag="$INPUT_TAG"
+          fi
+
+          if [[ "$publish" == "true" ]]; then
+            if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::Publishing requires an existing semantic-version tag such as v0.0.27."
+              exit 1
+            fi
+
+            tag_commit="$(git rev-list -n 1 "refs/tags/$release_tag" 2>/dev/null || true)"
+            if [[ -z "$tag_commit" ]]; then
+              echo "::error::Tag $release_tag does not exist; the release workflow never creates tags."
+              exit 1
+            fi
+            if [[ "$tag_commit" != "$commit" ]]; then
+              echo "::error::Tag $release_tag resolves to $tag_commit, but the build resolved $commit."
+              exit 1
+            fi
+
+            version="${release_tag#v}"
+            RELEASE_VERSION="$version" node <<'NODE'
+          const { execFileSync } = require("node:child_process");
+          const fs = require("node:fs");
+
+          const files = execFileSync(
+            "git",
+            [
+              "ls-files",
+              "--",
+              "package.json",
+              "apps/*/package.json",
+              "packages/*/package.json",
+              "plugins/*/package.json",
+            ],
+            { encoding: "utf8" },
+          )
+            .trim()
+            .split(/\r?\n/)
+            .filter(
+              (file) =>
+                file &&
+                (file === "package.json" || file.split("/").length === 3),
+            );
+          const expected = process.env.RELEASE_VERSION;
+          const mismatches = files.filter(
+            (file) => JSON.parse(fs.readFileSync(file, "utf8")).version !== expected,
+          );
+          if (mismatches.length > 0) {
+            console.error(
+              `Release tag v${expected} does not match package version in:\n${mismatches.join("\n")}`,
+            );
+            process.exit(1);
+          }
+          console.log(`Validated version ${expected} across ${files.length} workspace manifests.`);
+          NODE
+
+            if ! grep -Fq "## [$version]" docs/CHANGELOG.md; then
+              echo "::error::docs/CHANGELOG.md has no section for $release_tag."
+              exit 1
+            fi
+          fi
+
+          {
+            echo "commit=$commit"
+            echo "publish=$publish"
+            echo "tag=$release_tag"
+          } >> "$GITHUB_OUTPUT"
+
+  verify-release:
+    name: Test and release preflight
+    needs: prepare
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout resolved commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Setup Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 26.7.0
           cache: pnpm
 
-      # Mirrors the Windows job below — without it every run re-downloads the
-      # Electron binary during packaging.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm lint
+
+      - name: Dependency hygiene
+        run: pnpm deps:check
+
+      - name: Test
+        run: pnpm test
+
+      - name: Check plugin/world i18n coverage and READMEs
+        run: pnpm check:i18n
+
+      - name: Release preflight
+        run: pnpm release:preflight -- --skip-lockfile
+
+  build-electron:
+    name: Electron mac-arm64
+    needs: [prepare, verify-release]
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout resolved commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.7.0
+          cache: pnpm
+
       - name: Cache Electron binaries
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/Library/Caches/electron
@@ -82,57 +210,90 @@ jobs:
       - name: Build desktop (web + server staging + native rebuild for Electron)
         run: pnpm --filter @covel/desktop build
 
+      - name: Require macOS release signing and notarization credentials
+        if: needs.prepare.outputs.publish == 'true'
+        shell: bash
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in MAC_CSC_LINK MAC_CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
+          done
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing macOS release secrets: ${missing[*]}"
+            exit 1
+          fi
+
       - name: Package Electron mac
         working-directory: apps/desktop
-        run: pnpm exec electron-builder --mac --publish=never
+        shell: bash
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISH_RELEASE: ${{ needs.prepare.outputs.publish }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ needs.prepare.outputs.publish == 'true' && 'true' || 'false' }}
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          args=(--mac --publish=never)
+          if [[ "$PUBLISH_RELEASE" == "true" ]]; then
+            args+=(--config.forceCodeSigning --config.mac.notarize)
+          fi
+          pnpm exec electron-builder "${args[@]}"
+
+      - name: Verify macOS code signature
+        if: needs.prepare.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path="$(find release/electron -type d -name Covel.app -print -quit)"
+          test -n "$app_path"
+          codesign --verify --deep --strict --verbose=2 "$app_path"
 
       - name: Verify unpacked release resources
         run: node apps/desktop/scripts/verify-release.mjs mac
 
       - name: Upload Electron artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: covel-electron-mac-arm64
-          # cleanup-artifacts.mjs strips blockmaps and update-info yml so the
-          # release dir only ever contains the two distributable bundles.
           path: |
             release/electron/*.dmg
             release/electron/*.zip
           if-no-files-found: error
           retention-days: 7
 
-  # ── Electron shell (Windows) ────────────────────────────────────
-  # windows-latest = Windows Server 2025. VS Build Tools are pre-installed,
-  # so the better-sqlite3 → Electron-ABI rebuild inside `desktop build`
-  # works out of the box. electron-builder bundles its own NSIS (cached
-  # below); without a CSC_LINK cert it emits unsigned installers.
   build-electron-win:
-    name: Electron windows
+    name: Electron windows-x64
+    needs: [prepare, verify-release]
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Checkout resolved commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Setup Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 26.7.0
           cache: pnpm
 
-      # Electron binaries + electron-builder toolchain (bundled NSIS).
-      # Caching both avoids the per-run download and the known NSIS
-      # cache-corruption redownload loop (electron-builder#8613).
       - name: Cache Electron binaries
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~\AppData\Local\electron\Cache
@@ -142,122 +303,115 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Type check runs on the mac job only — tsc output is platform-independent.
       - name: Build desktop (web + server staging + native rebuild for Electron)
         run: pnpm --filter @covel/desktop build
 
+      - name: Require Windows release signing credentials
+        if: needs.prepare.outputs.publish == 'true'
+        shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) { $missing += "WIN_CSC_LINK" }
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) { $missing += "WIN_CSC_KEY_PASSWORD" }
+          if ($missing.Count -gt 0) {
+            Write-Error "Missing Windows release secrets: $($missing -join ', ')"
+            exit 1
+          }
+
       - name: Package Electron win
         working-directory: apps/desktop
-        run: pnpm exec electron-builder --win --publish=never
+        shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISH_RELEASE: ${{ needs.prepare.outputs.publish }}
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          WIN_CSC_TIMESTAMP_SERVER: ${{ secrets.WIN_CSC_TIMESTAMP_SERVER }}
+        run: |
+          $arguments = @("--win", "--publish=never")
+          if ($env:PUBLISH_RELEASE -eq "true") {
+            $arguments += "--config.forceCodeSigning"
+          }
+          pnpm exec electron-builder @arguments
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify Windows Authenticode signatures
+        if: needs.prepare.outputs.publish == 'true'
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path release/electron -Filter *.exe -File
+          if ($files.Count -eq 0) { Write-Error "No Windows artifacts found"; exit 1 }
+          $invalid = $files | Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -ne "Valid" }
+          if ($invalid) {
+            $invalid | ForEach-Object { Write-Error "Invalid Authenticode signature: $($_.FullName)" }
+            exit 1
+          }
 
       - name: Verify unpacked release resources
         run: node apps/desktop/scripts/verify-release.mjs win
 
       - name: Upload Electron artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: covel-electron-win
-          # nsis and portable (x64) installers; cleanup-artifacts.mjs
-          # already strips blockmaps and update-info yml.
           path: release/electron/*.exe
           if-no-files-found: error
           retention-days: 7
 
-  # ── Publish GitHub Release ─────────────────────────────────────
-  # Auto-publishes when a `v*` tag is pushed. On manual dispatch the
-  # `publish_release` toggle still gates publication.
   release:
     name: Publish GitHub Release
-    needs: [build-electron, build-electron-win]
+    needs: [prepare, verify-release, build-electron, build-electron-win]
+    if: needs.prepare.outputs.publish == 'true'
     runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-      (github.event_name == 'workflow_dispatch' && inputs.publish_release && inputs.tag != '')
-
+    permissions:
+      contents: write
     env:
-      RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
 
     steps:
-      - name: Checkout (for CHANGELOG extraction)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - name: Checkout resolved commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag || github.ref }}
-          # We only need the working tree for docs/CHANGELOG.md, no history.
-          fetch-depth: 1
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
 
       - name: Extract CHANGELOG section for this tag
-        # Pull the lines between `## [<version>]` and the next `## [` header
-        # in docs/CHANGELOG.md and write them to release/notes.md so the
-        # GitHub Release body shows the same notes maintainers wrote in the
-        # repo. Falls back to a generic "see CHANGELOG.md" line when the
-        # section is missing — the auto-generated PR list still gets
-        # appended below by `generate_release_notes: true`.
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p release
           version="${RELEASE_TAG#v}"
-          if [ ! -f docs/CHANGELOG.md ]; then
-            echo "_See [docs/CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${RELEASE_TAG}/docs/CHANGELOG.md)._" > release/notes.md
-            echo "::warning::docs/CHANGELOG.md missing — release body will only carry auto-generated PR notes."
-            exit 0
-          fi
-          # `awk` is more reliable than sed for "between two markers" on
-          # macOS+linux. Stop printing the moment we hit the next `## [` header.
           awk -v ver="$version" '
             $0 ~ "^## \\[" ver "\\]" { capture=1; print; next }
             capture && /^## \[/ { exit }
             capture { print }
           ' docs/CHANGELOG.md > release/notes.md
-          if [ ! -s release/notes.md ]; then
-            echo "## ${RELEASE_TAG}" > release/notes.md
-            echo "" >> release/notes.md
-            echo "_No CHANGELOG entry found for ${RELEASE_TAG}. See [docs/CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${RELEASE_TAG}/docs/CHANGELOG.md)._" >> release/notes.md
-            echo "::warning::No CHANGELOG section matched version $version — using fallback body."
-          fi
-          echo "── release/notes.md ──"
-          cat release/notes.md
+          test -s release/notes.md
 
       - name: Download Electron artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: release/electron
           pattern: covel-electron-*
           merge-multiple: true
 
       - name: Inspect artifacts
-        run: |
-          echo "=== release/electron ==="
-          ls -lh release/electron/ || true
+        run: ls -lh release/electron/
 
-      - name: Remove stale releases for this tag
-        run: |
-          gh api /repos/${{ github.repository }}/releases \
-            --jq '.[] | select(.tag_name == "'"$RELEASE_TAG"'") | .id' |
-          while read -r id; do
-            echo "Deleting stale release $id for tag $RELEASE_TAG"
-            gh api -X DELETE "/repos/${{ github.repository }}/releases/$id"
-          done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
+      # action-gh-release updates an existing release for the immutable tag;
+      # do not delete a valid release before all new assets are ready.
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           name: Covel ${{ env.RELEASE_TAG }}
           tag_name: ${{ env.RELEASE_TAG }}
           draft: false
-          # `-rc1`, `-beta` etc. are pre-releases. Plain `v0.0.1` is stable.
           prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
-          # `body_path` populates the top of the release body with the
-          # CHANGELOG section authored in `docs/CHANGELOG.md`.
-          # `generate_release_notes: true` then appends the auto-generated
-          # "What's Changed" / "New Contributors" sections beneath it.
           body_path: release/notes.md
           generate_release_notes: true
           fail_on_unmatched_files: true
-          # cleanup-artifacts.mjs leaves only the distributables behind.
           files: |
             release/electron/*.dmg
             release/electron/*.zip

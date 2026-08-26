@@ -36,20 +36,22 @@ Object.defineProperty(globalThis, "localStorage", {
   writable: false,
 });
 
-// Late import so the settings store sees the mocked localStorage.
-const { getSettings, initSettings } = await import("@/settings/store");
-const {
-  getCustomPresets,
-  getProviderPriceMultiplier,
-  removeCustomPreset,
-  setCustomPresets,
-  setParamOverrides,
-  setProviderProfiles,
-  setProviderPriceMultipliers,
-  setSlotConfig,
-} = await import("../api.js");
-const { buildProviderKeysHeader, buildSlotConfigHeaderInternal } =
-  await import("../api/model-settings.js");
+type SettingsModule = typeof import("@/settings/store");
+type ApiModule = typeof import("../api.js");
+type ModelSettingsModule = typeof import("../api/model-settings.js");
+
+let getSettings: SettingsModule["getSettings"];
+let initSettings: SettingsModule["initSettings"];
+let getCustomPresets: ApiModule["getCustomPresets"];
+let getProviderPriceMultiplier: ApiModule["getProviderPriceMultiplier"];
+let removeCustomPreset: ApiModule["removeCustomPreset"];
+let setCustomPresets: ApiModule["setCustomPresets"];
+let setParamOverrides: ApiModule["setParamOverrides"];
+let setProviderProfiles: ApiModule["setProviderProfiles"];
+let setProviderPriceMultipliers: ApiModule["setProviderPriceMultipliers"];
+let setSlotConfig: ApiModule["setSlotConfig"];
+let buildProviderKeysHeader: ModelSettingsModule["buildProviderKeysHeader"];
+let buildSlotConfigHeaderInternal: ModelSettingsModule["buildSlotConfigHeaderInternal"];
 
 function readSettingsBlob(): Record<string, unknown> {
   const raw = localStorageMock.getItem(LOCAL_STORAGE_SETTINGS_KEY);
@@ -64,7 +66,24 @@ function readKeysBlob(): Record<string, string> {
 }
 
 beforeEach(async () => {
+  // Settings v2 intentionally detects stale full-snapshot writers. Give each
+  // test a fresh singleton so clearing the mocked storage cannot leave an old
+  // in-memory revision alive across test cases.
+  vi.resetModules();
   localStorageMock.clear();
+  ({ getSettings, initSettings } = await import("@/settings/store"));
+  ({
+    getCustomPresets,
+    getProviderPriceMultiplier,
+    removeCustomPreset,
+    setCustomPresets,
+    setParamOverrides,
+    setProviderProfiles,
+    setProviderPriceMultipliers,
+    setSlotConfig,
+  } = await import("../api.js"));
+  ({ buildProviderKeysHeader, buildSlotConfigHeaderInternal } =
+    await import("../api/model-settings.js"));
   await initSettings();
 });
 
@@ -134,6 +153,30 @@ describe("custom preset secret channel", () => {
     ]);
   });
 
+  it("sends only operational capability overrides in X-Slot-Config", async () => {
+    await getSettings().set("llm.capabilityOverrides", {
+      story: {
+        input: ["text", "image"],
+        output: ["text"],
+        contextWindow: 128_000,
+        maxOutputTokens: 16_000,
+        pricing: { inputPerMToken: 0.01, outputPerMToken: 0.02 },
+      },
+    });
+
+    const encoded = buildSlotConfigHeaderInternal()["X-Slot-Config"];
+    const overlay = JSON.parse(atob(encoded!));
+    expect(overlay.capabilityOverrides).toEqual({
+      story: {
+        input: ["text", "image"],
+        output: ["text"],
+        contextWindow: 128_000,
+        maxOutputTokens: 16_000,
+      },
+    });
+    expect(JSON.stringify(overlay)).not.toContain("pricing");
+  });
+
   it("strips apiKey from the settings blob and routes it to covel:keys", async () => {
     setCustomPresets([
       {
@@ -150,15 +193,19 @@ describe("custom preset secret channel", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     const settings = readSettingsBlob() as {
-      entries?: { "llm.customPresets"?: Array<Record<string, unknown>> };
+      entries?: {
+        "llm.customPresets"?: Array<Record<string, unknown>>;
+        "llm.providers"?: Array<Record<string, unknown>>;
+      };
     };
     const persisted = settings.entries?.["llm.customPresets"] ?? [];
-    expect(persisted).toHaveLength(1);
-    expect(persisted[0]).not.toHaveProperty("apiKey");
+    expect(persisted).toHaveLength(0);
+    expect(settings.entries?.["llm.providers"]).toHaveLength(1);
     expect(JSON.stringify(settings)).not.toContain("sk-topsecret");
 
     const keys = readKeysBlob();
-    expect(keys["preset:custom_x1"]).toBe("sk-topsecret");
+    expect(keys["preset:custom_x1"]).toBeUndefined();
+    expect(keys.dashscope).toBe("sk-topsecret");
   });
 
   it("rehydrates apiKey from the secrets channel on read", async () => {
@@ -197,7 +244,7 @@ describe("custom preset secret channel", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     const keys = readKeysBlob();
-    expect(keys["preset:custom_x1"]).toBeUndefined();
+    expect(keys.dashscope).toBeUndefined();
   });
 
   it("clears only preset secrets no longer referenced by provider profiles", async () => {
@@ -240,9 +287,11 @@ describe("custom preset secret channel", () => {
     await new Promise((r) => setTimeout(r, 0));
 
     const keys = readKeysBlob();
-    expect(keys["preset:model_keep"]).toBe("sk-keep");
-    expect(keys["preset:model_remove"]).toBeUndefined();
-    expect(keys["preset:provider_remove"]).toBeUndefined();
+    // API keys are connection-scoped in the canonical provider model. Both
+    // OpenAI models shared one connection, so the legacy last-model key stays
+    // authoritative even after one model is removed.
+    expect(keys.openai).toBe("sk-remove-model");
+    expect(keys.anthropic).toBeUndefined();
   });
 
   it("routes distinct legacy connection keys through distinct provider namespaces", async () => {
@@ -287,6 +336,89 @@ describe("custom preset secret channel", () => {
     expect(updatedProviderKeys[presets[1]!.provider]).toBe("sk-proxy-new");
   });
 
+  it("keeps legacy getters read-only until the explicit migration runs", async () => {
+    vi.resetModules();
+    const legacyBlob = {
+      schemaVersion: 1,
+      savedAt: "old",
+      entries: {
+        "llm.customPresets": [
+          {
+            id: "legacy_read_only",
+            name: "Legacy",
+            provider: "openai",
+            baseUrl: "https://api.openai.com/v1",
+            model: "gpt-5",
+            apiKey: "sk-read-only",
+          },
+        ],
+      },
+    };
+    localStorageMock.setItem(
+      LOCAL_STORAGE_SETTINGS_KEY,
+      JSON.stringify(legacyBlob),
+    );
+    const { initSettings: init2 } = await import("@/settings/store");
+    const freshApi = await import("../api.js");
+    await init2();
+    const beforeSettings = localStorageMock.getItem(LOCAL_STORAGE_SETTINGS_KEY);
+    const beforeKeys = localStorageMock.getItem(LOCAL_STORAGE_KEYS_KEY);
+
+    expect(freshApi.getProviderProfiles()).toHaveLength(1);
+    expect(freshApi.getCustomPresets()[0]?.apiKey).toBe("sk-read-only");
+
+    expect(localStorageMock.getItem(LOCAL_STORAGE_SETTINGS_KEY)).toBe(
+      beforeSettings,
+    );
+    expect(localStorageMock.getItem(LOCAL_STORAGE_KEYS_KEY)).toBe(beforeKeys);
+  });
+
+  it("preserves legacy data on migration failure and retries successfully", async () => {
+    vi.resetModules();
+    localStorageMock.setItem(
+      LOCAL_STORAGE_SETTINGS_KEY,
+      JSON.stringify({
+        schemaVersion: 1,
+        savedAt: "old",
+        entries: {
+          "llm.customPresets": [
+            {
+              id: "legacy_retry",
+              name: "Retry",
+              provider: "dashscope",
+              baseUrl: "https://dashscope.aliyuncs.com",
+              model: "qwen3.6-flash",
+              apiKey: "sk-retry",
+            },
+          ],
+        },
+      }),
+    );
+    const { initSettings: init2 } = await import("@/settings/store");
+    const freshApi = await import("../api.js");
+    await init2();
+    localStorageMock.setItem.mockImplementationOnce(() => {
+      throw new Error("quota");
+    });
+
+    await freshApi.migrateLegacyProviderProfiles();
+    expect(
+      (readSettingsBlob() as { entries?: Record<string, unknown> }).entries?.[
+        "llm.customPresets"
+      ],
+    ).toBeDefined();
+
+    await freshApi.migrateLegacyProviderProfiles();
+    const entries = (
+      readSettingsBlob() as {
+        entries?: Record<string, unknown>;
+      }
+    ).entries;
+    expect(entries?.["llm.providers"]).toBeDefined();
+    expect(entries?.["llm.customPresets"]).toBeUndefined();
+    expect(readKeysBlob().dashscope).toBe("sk-retry");
+  });
+
   it("migrates legacy inline apiKey to the secrets channel on first read", async () => {
     // Simulate legacy persisted blob containing an inline apiKey — this is
     // exactly what shipped in `settings.json` before the fix. We reset the
@@ -319,6 +451,7 @@ describe("custom preset secret channel", () => {
     const freshApi = await import("../api.js");
     await init2();
 
+    await freshApi.migrateLegacyProviderProfiles();
     const presets = freshApi.getCustomPresets();
     expect(presets[0]?.apiKey).toBe("sk-legacy-leak");
     await new Promise((r) => setTimeout(r, 0));
@@ -327,11 +460,12 @@ describe("custom preset secret channel", () => {
       entries?: { "llm.customPresets"?: Array<Record<string, unknown>> };
     };
     const persistedAfter = postSettings.entries?.["llm.customPresets"] ?? [];
-    expect(persistedAfter[0]).not.toHaveProperty("apiKey");
+    expect(persistedAfter).toHaveLength(0);
     expect(JSON.stringify(postSettings)).not.toContain("sk-legacy-leak");
 
     const keys = readKeysBlob();
-    expect(keys["preset:custom_legacy"]).toBe("sk-legacy-leak");
+    expect(keys["preset:custom_legacy"]).toBeUndefined();
+    expect(keys.dashscope).toBe("sk-legacy-leak");
   });
 
   it("copies legacy preset keys into connection-specific profile namespaces", async () => {
@@ -383,6 +517,7 @@ describe("custom preset secret channel", () => {
     const { initSettings: init2 } = await import("@/settings/store");
     const freshApi = await import("../api.js");
     await init2();
+    await freshApi.migrateLegacyProviderProfiles();
 
     const profiles = freshApi.getProviderProfiles();
     const profileByModelRef = new Map(
@@ -453,12 +588,13 @@ describe("custom preset secret channel", () => {
     const freshApi = await import("../api.js");
     await init2();
 
-    freshApi.getProviderProfiles();
+    await freshApi.migrateLegacyProviderProfiles();
     await vi.waitFor(() => {
       const keys = readKeysBlob();
       expect(keys["openai-official-model"]).toBe("sk-official");
       expect(keys["openai-proxy-model"]).toBe("sk-current-proxy");
       expect(keys["openai-proxy-responses-model"]).toBe("sk-provider-fallback");
+      expect(keys["preset:official_model"]).toBeUndefined();
     });
   });
 });

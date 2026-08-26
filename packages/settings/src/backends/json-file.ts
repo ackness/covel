@@ -1,4 +1,13 @@
-import type { SettingKey, SettingsBackendAdapter } from "../types.js";
+import {
+  SettingsRevisionConflictError,
+  type SettingKey,
+  type SettingsBackendAdapter,
+} from "../types.js";
+import {
+  emptySettingsPersistenceBundle,
+  parseSettingsPersistenceBundle,
+  type SettingsPersistenceBundle,
+} from "@covel/shared/settings-persistence";
 
 interface CovelIpcApiShape {
   invoke<T = unknown>(channel: string, payload?: unknown): Promise<T>;
@@ -19,6 +28,33 @@ function assertIpcWriteSucceeded(channel: string, result: unknown): void {
   ) {
     throw new Error(`[settings] IPC ${channel} failed`);
   }
+}
+
+function parseIpcBundle(value: unknown): SettingsPersistenceBundle {
+  try {
+    return parseSettingsPersistenceBundle(value);
+  } catch (error) {
+    throw new Error(
+      `[settings] IPC settings bundle is invalid: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+}
+
+async function throwForSaveResponse(res: Response): Promise<never> {
+  const body = (await res.json().catch(() => null)) as {
+    code?: unknown;
+    details?: { revision?: unknown };
+  } | null;
+  if (
+    res.status === 409 &&
+    body?.code === "settings_revision_conflict" &&
+    typeof body.details?.revision === "number"
+  ) {
+    throw new SettingsRevisionConflictError(body.details.revision);
+  }
+  throw new Error(`[settings] save failed: HTTP ${res.status}`);
 }
 
 interface JsonFileBackendOptions {
@@ -66,12 +102,13 @@ export function createJsonFileBackend(
 
   return {
     async load(): Promise<Record<SettingKey, unknown>> {
+      return (await this.loadWithRevision!()).entries;
+    },
+    async loadWithRevision(): Promise<SettingsPersistenceBundle> {
       const ipc = getIpc();
       if (ipc) {
-        const raw = await ipc.invoke<Record<SettingKey, unknown> | null>(
-          "covel:settings:load",
-        );
-        return raw ?? {};
+        const raw = await ipc.invoke<unknown>("covel:settings:load");
+        return parseIpcBundle(raw);
       }
       // `GET /api/config/settings` is bearer-gated exactly like the PUT, so it
       // needs the same header — without it a tokened desktop install 401s on
@@ -82,30 +119,47 @@ export function createJsonFileBackend(
       // always writes a full snapshot, so treating a failed load as "empty"
       // makes the next single-setting change overwrite settings.json with
       // just that one key.
-      if (res.status === 404) return {};
+      if (res.status === 404) return emptySettingsPersistenceBundle();
       if (!res.ok) {
         throw new Error(`[settings] load failed: HTTP ${res.status}`);
       }
-      const body = (await res.json()) as {
-        entries?: Record<SettingKey, unknown>;
-      };
-      return body.entries ?? {};
+      return parseIpcBundle(await res.json());
     },
     async save(entries): Promise<void> {
+      const current = await this.loadWithRevision!();
+      await this.saveWithRevision!(entries, current.revision);
+    },
+    async saveWithRevision(
+      entries: Record<SettingKey, unknown>,
+      expectedRevision: number,
+    ): Promise<SettingsPersistenceBundle> {
       const ipc = getIpc();
       if (ipc) {
-        const result = await ipc.invoke("covel:settings:save", entries);
+        const result = await ipc.invoke<{
+          ok?: unknown;
+          code?: unknown;
+          revision?: unknown;
+          bundle?: unknown;
+        }>("covel:settings:save", { entries, expectedRevision });
+        if (
+          result?.ok === false &&
+          result.code === "settings_revision_conflict" &&
+          typeof result.revision === "number"
+        ) {
+          throw new SettingsRevisionConflictError(result.revision);
+        }
         assertIpcWriteSucceeded("covel:settings:save", result);
-        return;
+        return parseIpcBundle(result?.bundle);
       }
       const res = await fetchImpl(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...authHeaders() },
-        body: JSON.stringify({ entries }),
+        body: JSON.stringify({ entries, expectedRevision }),
       });
       if (!res.ok) {
-        throw new Error(`[settings] save failed: HTTP ${res.status}`);
+        return throwForSaveResponse(res);
       }
+      return parseIpcBundle(await res.json());
     },
     async loadSecrets(): Promise<Record<string, string>> {
       const ipc = getIpc();

@@ -15,6 +15,8 @@ import type {
   ModelCapability,
   ModelPricing,
   ProviderProtocol,
+  RequestCapabilityOverride,
+  CapabilityOverridePolicy,
 } from "../types.js";
 import {
   BASE_CAPABILITY_DEFAULTS,
@@ -42,6 +44,68 @@ export interface ManualCapabilityOverride {
   contextWindow?: number;
   maxOutputTokens?: number;
   pricing?: Partial<ModelPricing>;
+}
+
+function restrictedArray<T>(
+  base: readonly T[] | undefined,
+  requested: readonly T[] | undefined,
+): T[] | undefined {
+  if (!base || !requested) return base ? [...base] : undefined;
+  const allowed = new Set(base);
+  const intersection = requested.filter((value) => allowed.has(value));
+  return intersection.length > 0 ? intersection : [...base];
+}
+
+/** Merge request data without ever mutating the registry-owned capability. */
+export function mergeRequestCapabilityOverride(
+  base: ModelCapability,
+  override: RequestCapabilityOverride,
+  policy: CapabilityOverridePolicy,
+): ModelCapability {
+  if (policy === "full") {
+    return {
+      input: [...(override.input ?? base.input)],
+      output: [...(override.output ?? base.output)],
+      ...((override.features ?? base.features)
+        ? { features: [...(override.features ?? base.features ?? [])] }
+        : {}),
+      ...((override.contextWindow ?? base.contextWindow)
+        ? { contextWindow: override.contextWindow ?? base.contextWindow }
+        : {}),
+      ...((override.maxOutputTokens ?? base.maxOutputTokens)
+        ? { maxOutputTokens: override.maxOutputTokens ?? base.maxOutputTokens }
+        : {}),
+      ...(base.pricing ? { pricing: { ...base.pricing } } : {}),
+    };
+  }
+
+  const input = restrictedArray(base.input, override.input) ?? [...base.input];
+  const output = restrictedArray(base.output, override.output) ?? [
+    ...base.output,
+  ];
+  const features = restrictedArray(base.features, override.features);
+  const contextWindow =
+    base.contextWindow === undefined
+      ? undefined
+      : Math.min(
+          base.contextWindow,
+          override.contextWindow ?? base.contextWindow,
+        );
+  const maxOutputTokens =
+    base.maxOutputTokens === undefined
+      ? undefined
+      : Math.min(
+          base.maxOutputTokens,
+          override.maxOutputTokens ?? base.maxOutputTokens,
+        );
+  return {
+    input,
+    output,
+    ...(features ? { features } : {}),
+    ...(contextWindow !== undefined ? { contextWindow } : {}),
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+    ...(base.pricing ? { pricing: { ...base.pricing } } : {}),
+  };
 }
 
 // ── Lookup ───────────────────────────────────────────────────────

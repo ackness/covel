@@ -7,6 +7,18 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./desktop-config": {
+      "types": "./src/desktop-config/schema.ts",
+      "import": "./src/desktop-config/schema.ts"
+    },
+    "./desktop-config/node": {
+      "types": "./src/desktop-config/node-file.ts",
+      "import": "./src/desktop-config/node-file.ts"
+    },
+    "./settings-persistence": {
+      "types": "./src/settings-persistence/schema.ts",
+      "import": "./src/settings-persistence/schema.ts"
     }
   },
   "scripts": {
@@ -18,9 +30,10 @@
   "devDependencies": {
     "ajv": "^8.20.0",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "dependencies": {
+    "smol-toml": "^1.8.0",
     "zod": "^4.4.3"
   }
 }

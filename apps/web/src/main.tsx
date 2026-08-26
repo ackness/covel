@@ -8,7 +8,10 @@ import {
   setStorageMode,
   storageModeForServerStorage,
 } from "@/services/data-service";
-import { fetchServerHealth } from "@/services/api";
+import {
+  fetchServerHealth,
+  migrateLegacyProviderProfiles,
+} from "@/services/api";
 import { probeDesktopMode } from "@/lib/desktop-bridge";
 import {
   applyAppearance,
@@ -75,6 +78,7 @@ function syncNextThemesStorage(scheme: ColorScheme): void {
 // fetch (skipped entirely under Electron IPC) and non-fatal on failure.
 probeDesktopMode()
   .then(() => initSettings())
+  .then(() => migrateLegacyProviderProfiles())
   .then(async () => {
     const store = getSettings();
     syncThemeRegistry(store);

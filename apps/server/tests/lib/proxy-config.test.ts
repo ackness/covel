@@ -51,4 +51,39 @@ describe("stored proxy TOML", () => {
       url: "socks5://127.0.0.1:7891",
     });
   });
+
+  it("preserves comments and refuses to overwrite malformed TOML", () => {
+    tempHome = mkdtempSync(join(tmpdir(), "covel-proxy-config-"));
+    const file = join(tempHome, "config.toml");
+    const valid = [
+      "# keep operator note",
+      "schema_version = 1",
+      "[network]",
+      "proxy_mode = 'direct' # keep mode note",
+      "proxy_url = ''",
+      "[custom]",
+      "value = 'keep'",
+      "",
+    ].join("\n");
+    writeFileSync(file, valid, "utf-8");
+
+    writeStoredProxyConfig(tempHome, {
+      mode: "http",
+      url: "http://127.0.0.1:7890",
+    });
+    const updated = readFileSync(file, "utf-8");
+    expect(updated).toContain("# keep operator note");
+    expect(updated).toContain('proxy_mode = "http" # keep mode note');
+    expect(updated).toContain("[custom]\nvalue = 'keep'");
+
+    const corrupt = "[network\nproxy_mode = 'direct'\n";
+    writeFileSync(file, corrupt, "utf-8");
+    expect(() =>
+      writeStoredProxyConfig(tempHome!, {
+        mode: "socks",
+        url: "socks5://127.0.0.1:7891",
+      }),
+    ).toThrow();
+    expect(readFileSync(file, "utf-8")).toBe(corrupt);
+  });
 });

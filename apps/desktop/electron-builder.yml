@@ -2,15 +2,10 @@ appId: com.covel.app
 productName: Covel
 copyright: Copyright © 2026 Covel
 
-# ── Signing / notarization: KNOWN, DELIBERATE gap ──────────────────
-# TODO(S-11): No code-signing certs are provisioned yet, so release builds
-# (.github/workflows/release.yml) ship unsigned macOS/Windows artifacts and
-# macOS notarize is hardcoded `false` below. This is intentional for now,
-# not an oversight. Once CSC_LINK/CSC_KEY_PASSWORD/APPLE_* secrets are
-# provisioned (see docs/CONTRIBUTING.md "代码签名"): flip `notarize` to
-# `{ teamId: "${APPLE_TEAM_ID}" }`, and make release CI fail-closed (assert
-# the signing env vars are present and abort the release job instead of
-# silently producing unsigned artifacts).
+# Local builds may remain unsigned. The release workflow supplies per-platform
+# signing credentials and overrides `forceCodeSigning` plus `mac.notarize`, so
+# an actual GitHub publication fails before packaging when credentials are
+# absent and electron-builder cannot silently emit an unsigned release.
 
 directories:
   output: ../../release/electron
@@ -90,7 +85,8 @@ compression: normal
 #   APPLE_ID           — Apple Developer account email (for notarization)
 #   APPLE_APP_SPECIFIC_PASSWORD — app-specific password for notarization
 #   APPLE_TEAM_ID      — Developer Team ID (e.g. "ABCDE12345")
-# If the env vars are missing the build will produce an UNSIGNED artifact.
+# Local builds without these variables produce an unsigned artifact; release
+# CI requires all variables and overrides notarization to true.
 mac:
   icon: resources/icon.icns
   target:
@@ -110,7 +106,7 @@ mac:
   # Auto-signing: electron-builder picks up CSC_LINK from env. `identity` can
   # be set explicitly to disambiguate when multiple certs are installed:
   # identity: "Developer ID Application: Your Name (TEAMID)"
-  notarize: false # set to `{ teamId: "${APPLE_TEAM_ID}" }` when certs are ready
+  notarize: false # release CI overrides this to true after checking credentials
 
 dmg:
   sign: false # DMG signing is redundant once the app inside is signed
@@ -122,18 +118,17 @@ dmg:
 #   WIN_CSC_TIMESTAMP_SERVER — optional RFC 3161 timestamp URL
 win:
   icon: resources/icon.ico
-  # x64 only: staging/server/node_modules (extraResources) carries a
-  # better-sqlite3 rebuilt for the build host's arch, so an arm64 installer
-  # built on an x64 runner would ship an x64 addon the arm64 sidecar cannot
-  # load (ERR_DLOPEN_FAILED). Windows-on-ARM runs the x64 installer via
-  # emulation. Re-add arm64 only together with per-arch staging/rebuild.
+  # The published Windows release remains x64-only. better-sqlite3 13 ships
+  # Node-API prebuilds for supported platforms, so adding arm64 later no longer
+  # requires an Electron ABI rebuild, but still needs a native Windows arm64
+  # packaging and smoke-test job before it can be released safely.
   target:
     - target: nsis
       arch: [x64]
     - target: portable
       arch: [x64]
   # electron-builder 26.x 起签名相关字段改到 signtoolOptions 下。
-  # 未配置 CSC_LINK 时会直接输出 unsigned 产物。
+  # Local builds may be unsigned; release CI enables forceCodeSigning.
   signtoolOptions:
     signingHashAlgorithms:
       - sha256

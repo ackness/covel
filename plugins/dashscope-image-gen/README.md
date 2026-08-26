@@ -61,7 +61,7 @@ image-generator：
 [covel.image]
 provider = "dashscope"
 model    = "qwen-image-3.0-pro"   # 推荐：同步出图 + negative_prompt + n 1–6；也可用 wan2.6-t2i / wan2.2-t2i-turbo
-baseUrl  = "https://dashscope.aliyuncs.com"
+baseUrl  = "https://<WorkspaceId>.dashscope.aliyuncs.com/api/v1"
 apiKey   = "${env:DASHSCOPE_API_KEY}"
 protocol = "openai-chat-v1"
 tag      = "image"
@@ -75,13 +75,15 @@ providerRequestMetadata = { imageWire = "dashscope-wan" }   # wan2.x 原生异�
 [covel.image-pro]
 provider = "dashscope"
 model    = "wan2.7-image-pro"
-baseUrl  = "https://dashscope.aliyuncs.com"
+baseUrl  = "https://<WorkspaceId>.dashscope.aliyuncs.com/api/v1"
 apiKey   = "${env:DASHSCOPE_API_KEY}"
 protocol = "openai-chat-v1"
 tag      = "image"
 output   = ["image"]
 providerRequestMetadata = { imageWire = "dashscope-wan" }
 ```
+
+`baseUrl` 优先使用控制台为 workspace 提供的专属地址；旧的 `https://dashscope.aliyuncs.com` 仍可用。框架会容忍 Base URL 已带 `/api/v1` 的形式，不会与 wire 端点重复拼接。参见 [DashScope Base URL](https://help.aliyun.com/en/model-studio/base-url)。
 
 `~/.covel/keys.env`：
 

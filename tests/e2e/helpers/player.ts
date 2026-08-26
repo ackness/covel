@@ -19,20 +19,72 @@ export function composerInput(page: Page): Locator {
   return page.getByTestId("game-composer-input");
 }
 
-/** Seed onboarding + locale so specs land straight on the world list. */
-export async function seedAppSettings(page: Page) {
-  await page.addInitScript(() => {
+/**
+ * Keep player-facing E2E preferences isolated in the browser context.
+ *
+ * A desktop-capable server hydrates settings from its COVEL_HOME over REST,
+ * so seeding localStorage alone is ignored and also lets one test mutate the
+ * shared server settings used by other workers. These specs exercise the web
+ * UI rather than desktop persistence; report web mode before the first load so
+ * each Playwright page owns its settings state.
+ */
+export async function useIsolatedBrowserSettings(page: Page) {
+  await page.route("**/api/config/info", async (route) => {
+    await route.fulfill({ json: { isDesktop: false } });
+  });
+}
+
+export async function seedBrowserSettings(
+  page: Page,
+  entries: Record<string, unknown>,
+) {
+  await useIsolatedBrowserSettings(page);
+  await page.addInitScript((seedEntries) => {
+    if (localStorage.getItem("covel:settings") !== null) return;
     localStorage.setItem(
       "covel:settings",
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
+        revision: 0,
         savedAt: new Date().toISOString(),
-        entries: {
-          "ui.onboardedVersion": 3,
-          "ui.locale": "zh-CN",
-        },
+        entries: seedEntries,
       }),
     );
+  }, entries);
+}
+
+/** Seed onboarding + locale so specs land straight on the world list. */
+export async function seedAppSettings(page: Page) {
+  await seedBrowserSettings(page, {
+    "ui.onboardedVersion": 3,
+    "ui.locale": "zh-CN",
+  });
+}
+
+/**
+ * Exercise file-backed worlds even when the clean E2E server advertises its
+ * memory store as browser-authoritative. The response otherwise stays real so
+ * the test still observes the server's current health contract.
+ */
+export async function useServerWorlds(page: Page) {
+  await page.route("**/api/health", async (route) => {
+    const response = await route.fetch();
+    const health = (await response.json()) as {
+      storage?: { data?: Record<string, unknown> };
+    };
+    await route.fulfill({
+      response,
+      json: {
+        ...health,
+        storage: {
+          ...health.storage,
+          data: {
+            ...health.storage?.data,
+            frontendMode: "remote",
+          },
+        },
+      },
+    });
   });
 }
 

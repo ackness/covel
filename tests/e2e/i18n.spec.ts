@@ -1,4 +1,8 @@
 import { test, expect } from "@playwright/test";
+import {
+  seedBrowserSettings,
+  useIsolatedBrowserSettings,
+} from "./helpers/player.js";
 
 /**
  * i18n persistence smoke tests.
@@ -15,18 +19,8 @@ test.describe("Locale preference", () => {
   test.use({ viewport: { width: 1280, height: 720 } });
 
   test("stored locale wins on reload", async ({ page }) => {
-    // Seed localStorage before first document load, then navigate.
-    await page.addInitScript(() => {
-      window.localStorage.setItem(
-        "covel:settings",
-        JSON.stringify({
-          schemaVersion: 1,
-          savedAt: new Date().toISOString(),
-          entries: {
-            "ui.locale": "en-US",
-          },
-        }),
-      );
+    await seedBrowserSettings(page, {
+      "ui.locale": "en-US",
     });
     await page.goto("/");
 
@@ -36,11 +30,17 @@ test.describe("Locale preference", () => {
 
     const html = page.locator("html");
     await expect(html).toHaveAttribute("lang", "en-US");
+
+    await page.reload();
+    await expect(html).toHaveAttribute("lang", "en-US");
   });
 
-  test("empty settings uses registry default locale", async ({ browser }) => {
+  test("empty settings uses the browser locale as registry default", async ({
+    browser,
+  }) => {
     const context = await browser.newContext({ locale: "en-US" });
     const page = await context.newPage();
+    await useIsolatedBrowserSettings(page);
     await page.addInitScript(() => {
       try {
         window.localStorage.removeItem("covel:settings");
@@ -49,24 +49,14 @@ test.describe("Locale preference", () => {
       }
     });
     await page.goto("/");
-    await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
     await context.close();
   });
 
   test("header toggle persists across reload", async ({ page }) => {
-    await page.addInitScript(() => {
-      if (!window.localStorage.getItem("covel:settings")) {
-        window.localStorage.setItem(
-          "covel:settings",
-          JSON.stringify({
-            schemaVersion: 1,
-            savedAt: new Date().toISOString(),
-            entries: {
-              "ui.locale": "zh-CN",
-            },
-          }),
-        );
-      }
+    await seedBrowserSettings(page, {
+      "ui.onboardedVersion": 3,
+      "ui.locale": "zh-CN",
     });
     await page.goto("/");
 

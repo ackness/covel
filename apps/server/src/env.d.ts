@@ -18,6 +18,7 @@ import type {
 import type { RpcApprovalGate } from "@covel/approval";
 import type { RuntimeManifest } from "@covel/shared";
 import type { BudgetOptions, CompactorRunner } from "@covel/context";
+import type { ModelCapability } from "@covel/ai-provider";
 import type { SessionLock } from "./lib/session-lock.js";
 import type { EventDirectory } from "./routes/api/bootstrap/event-directory.js";
 
@@ -64,6 +65,10 @@ declare module "hono" {
     eventBus: EventBus;
     pluginRegistry: PluginRegistry;
     llmAdapter: LLMAdapter;
+    /** True when per-request headers replaced the startup LLM facade. */
+    requestLlmOverridden?: boolean;
+    /** Effective default narrative capability for request budget rebinding. */
+    requestNarrativeCapability?: ModelCapability;
     /**
      * Narrow gateway facade exposed to function-runtime handlers via
      * `FunctionHandlerContext.gateway`. Set by `bootstrapApi()` when the

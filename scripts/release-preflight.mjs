@@ -26,7 +26,8 @@
  *   5. `prompts/server/` has at least one `*.md`.
  *   6. The bundled LiteLLM model database is a valid snapshot pinned to an
  *      immutable upstream commit.
- *   7. `actionlint` passes (when installed).
+ *   7. Production source env reads are covered by the shared registry.
+ *   8. `actionlint` passes (when installed).
  *
  * Exit code 0 = safe to push. Non-zero = fix before tagging.
  *
@@ -144,7 +145,7 @@ function pkgRoot(spec) {
 }
 
 // ── 1. Lockfile sync ─────────────────────────────────────────────
-console.log("\n[1/7] Lockfile sync (pnpm --frozen-lockfile dry-run)");
+console.log("\n[1/8] Lockfile sync (pnpm --frozen-lockfile dry-run)");
 if (args.has("--skip-lockfile")) {
   warn("skipped (--skip-lockfile)");
 } else {
@@ -162,7 +163,7 @@ if (args.has("--skip-lockfile")) {
 }
 
 // ── 2. Undeclared imports ─────────────────────────────────────────
-console.log("\n[2/7] Undeclared bare imports across packages/* and apps/*");
+console.log("\n[2/8] Undeclared bare imports across packages/* and apps/*");
 const wsPkgDirs = [
   ...fs
     .readdirSync(path.join(repoRoot, "packages"), { withFileTypes: true })
@@ -220,7 +221,7 @@ if (undeclaredCount === 0)
   ok(`all ${wsPkgDirs.length} workspace packages have all imports declared`);
 
 // ── 3. plugins/ structure ─────────────────────────────────────────
-console.log("\n[3/7] plugins/<id>/ structure (verify-release sentinels)");
+console.log("\n[3/8] plugins/<id>/ structure (verify-release sentinels)");
 const isPluginManifest = (f) => /^PLUGIN(\.[a-z-]+)?\.md$/i.test(f);
 
 // Same extraction as scripts/check-plugin-i18n.mjs — frontmatter is the YAML
@@ -393,7 +394,7 @@ if (pluginIssues === 0)
   );
 
 // ── 4. worlds/ structure ──────────────────────────────────────────
-console.log("\n[4/7] worlds/<id>/ structure");
+console.log("\n[4/8] worlds/<id>/ structure");
 const worldDirs = fs
   .readdirSync(path.join(repoRoot, "worlds"), { withFileTypes: true })
   // `_`-prefixed dirs are archives (e.g. worlds/_archive) — the world-seed
@@ -439,7 +440,7 @@ if (worldIssues === 0)
   );
 
 // ── 5. prompts/server/ ────────────────────────────────────────────
-console.log("\n[5/7] prompts/server/*.md");
+console.log("\n[5/8] prompts/server/*.md");
 const promptsDir = path.join(repoRoot, "prompts/server");
 if (!fs.existsSync(promptsDir)) {
   fail("prompts/server/ does not exist");
@@ -450,7 +451,7 @@ if (!fs.existsSync(promptsDir)) {
 }
 
 // ── 6. Bundled model database snapshot ──────────────────────────
-console.log("\n[6/7] Bundled LiteLLM model database snapshot");
+console.log("\n[6/8] Bundled LiteLLM model database snapshot");
 const modelDbPath = path.join(
   repoRoot,
   "packages/ai-provider/data/model-db.json",
@@ -521,8 +522,26 @@ if (fs.existsSync(modelDbPath) && fs.existsSync(modelDbSourcePath)) {
   }
 }
 
-// ── 7. actionlint ────────────────────────────────────────────────
-console.log("\n[7/7] GitHub Actions workflow lint");
+// ── 7. Production env registry coverage ─────────────────────────
+console.log("\n[7/8] Production env registry coverage");
+try {
+  execFileSync(
+    process.execPath,
+    [path.join(repoRoot, "scripts/check-production-env.mjs")],
+    {
+      cwd: repoRoot,
+      stdio: "pipe",
+    },
+  );
+  ok("all static production env reads are registered");
+} catch (e) {
+  fail(
+    `production env registry coverage:\n${e.stdout?.toString() ?? e.stderr?.toString() ?? e.message}`,
+  );
+}
+
+// ── 8. actionlint ────────────────────────────────────────────────
+console.log("\n[8/8] GitHub Actions workflow lint");
 try {
   execSync("which actionlint", { stdio: "pipe" });
   try {

@@ -20,6 +20,7 @@ import type {
 } from "@covel/plugin-loader";
 import type { ZodType } from "zod";
 import type {
+  CapabilityOverridePolicy,
   GatewayAdapterConfig,
   SlotOverridesInput,
 } from "../llm/gateway-llm-adapter.js";
@@ -36,6 +37,7 @@ interface FullGatewayOptions {
   traceId?: string;
   signal?: AbortSignal;
   slotOverrides?: SlotOverridesInput;
+  capabilityOverridePolicy?: CapabilityOverridePolicy;
 }
 
 /**
@@ -170,6 +172,9 @@ export function createPluginRuntimeGateway(
     ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
     ...(config?.traceId ? { traceId: config.traceId } : {}),
     ...(config?.slotOverrides ? { slotOverrides: config.slotOverrides } : {}),
+    ...(config?.capabilityOverridePolicy
+      ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
+      : {}),
   });
 
   const facade: PluginRuntimeGateway = {

@@ -55,6 +55,22 @@ describe("env registry", () => {
     expect(getEnvDefinition("MEDIA_BACKEND")?.defaultValue).toBe("mirror");
     expect(getEnvDefinition("VECTOR_BACKEND")?.defaultValue).toBe("embedded");
     expect(getEnvDefinition("COVEL_LLM_RETRY_DISABLED")?.group).toBe("ai");
+    expect(getEnvDefinition("COVEL_LLM_MAX_CONCURRENT")).toMatchObject({
+      type: "integer",
+      defaultValue: "4",
+      status: "active",
+    });
+    expect(getEnvDefinition("COVEL_PG_INGEST_LOCK_POOL_MAX")).toMatchObject({
+      type: "integer",
+      defaultValue: "4",
+      status: "active",
+    });
+    expect(getEnvDefinition("COVEL_EFFECTS_POLICY")).toMatchObject({
+      type: "enum",
+      values: ["warn", "strict"],
+      defaultValue: "warn",
+      status: "active",
+    });
   });
 
   it("parses strict feature flags", () => {
@@ -231,6 +247,21 @@ describe("env registry", () => {
       expect.stringContaining("Commercial-typo"),
     );
     spy.mockRestore();
+  });
+
+  it("rejects the documentation-only T1 label fail-safe to commercial", () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(readRuntimeEnv({ DEPLOYMENT_TIER: "T1" }).deploymentTier).toBe(
+      "commercial",
+    );
+    spy.mockRestore();
+  });
+
+  it("accepts true and 1 for COVEL_DESKTOP_REST", () => {
+    expect(readRuntimeEnv({ COVEL_DESKTOP_REST: "true" }).desktopRest).toBe(
+      true,
+    );
+    expect(readRuntimeEnv({ COVEL_DESKTOP_REST: "1" }).desktopRest).toBe(true);
   });
 
   it("keeps invalid enum values on fallback", () => {
