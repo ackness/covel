@@ -13,7 +13,10 @@
 
 Covel is an AI RPG where the world keeps running between your turns: NPCs track how they feel about you, lore accumulates as you play, and memory carries the thread across the session. Every mechanic behind that is an **autonomous agent shipped as a plugin** — disable one, swap one, or write your own.
 
-> **Current public release: v0.0.27**, early access — APIs, data formats, and plugin frontmatter may change between versions. Prebuilt binaries target macOS Apple Silicon and Windows x64; other platforms build from source.
+> **Current public release: v0.0.27**, early access — APIs, data formats, and plugin frontmatter may change between versions. Prebuilt binaries target macOS Apple Silicon and Windows x64; other platforms build from source. Official binaries are unsigned, so macOS Gatekeeper or Windows SmartScreen may warn on first launch.
+
+> [!IMPORTANT]
+> **v0.0.27 is a large update with substantial database and configuration changes.** You can upgrade in place, but back up any custom worlds or plugins you want to keep first. If startup, configuration, or saved-session problems appear after upgrading, quit Covel, reinstall it, and reset its local state by removing the complete `~/.covel/` directory plus any separate `data_root`. The reset removes API keys, settings, saves, logs, and any custom content you did not back up.
 
 ## Highlights
 
@@ -51,7 +54,7 @@ Open a side panel mid-play and you are reading what the background agents wrote 
 
 Download the **macOS Apple Silicon** or **Windows x64** build from [Releases](https://github.com/ackness/covel/releases), then: open Settings → paste an LLM API key → pick a world → play.
 
-Your data lives in `~/.covel/` (config, keys, SQLite, custom worlds, logs) — details in the [desktop config guide](./docs/guide/desktop-config.en.md). Per-release notes: [`docs/CHANGELOG.md`](./docs/CHANGELOG.md).
+Your data lives in `~/.covel/` (config, keys, SQLite, custom worlds, logs). If `config.toml` redirects `data_root`, that separate directory also holds data. See the [desktop config guide](./docs/guide/desktop-config.en.md) and [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) before upgrading.
 
 ### Run from source
 
@@ -97,6 +100,6 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono 
 
 ## Contributing & license
 
-Issues and PRs welcome — please read [`docs/CONTRIBUTING.en.md`](./docs/CONTRIBUTING.en.md) first. Releases are tag-driven: pushing `v*` builds and publishes the macOS installer via [GitHub Actions](./.github/workflows/release.yml).
+Issues and PRs welcome — please read [`docs/CONTRIBUTING.en.md`](./docs/CONTRIBUTING.en.md) first. Releases are tag-driven: pushing `v*` builds and publishes the macOS and Windows installers via [GitHub Actions](./.github/workflows/release.yml).
 
 [MIT](./LICENSE) © 2026 Covel Contributors

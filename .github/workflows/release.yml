@@ -1,8 +1,7 @@
 name: Build Desktop
 
-# Tag pushes build and publish a signed release. Manual runs may build any
-# existing ref without signing; enabling publish_release requires an existing
-# v* tag and all release signing/notarization secrets.
+# Tag pushes build and publish an unsigned release. Manual runs may build any
+# existing ref; enabling publish_release requires an existing v* tag.
 on:
   push:
     tags:
@@ -14,7 +13,7 @@ on:
         required: false
         type: string
       publish_release:
-        description: "Publish the existing v* tag (requires signing secrets)."
+        description: "Publish the existing v* tag."
         required: false
         type: boolean
         default: false
@@ -210,53 +209,14 @@ jobs:
       - name: Build desktop (web + server staging + native rebuild for Electron)
         run: pnpm --filter @covel/desktop build
 
-      - name: Require macOS release signing and notarization credentials
-        if: needs.prepare.outputs.publish == 'true'
-        shell: bash
-        env:
-          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          set -euo pipefail
-          missing=()
-          for name in MAC_CSC_LINK MAC_CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
-            if [[ -z "${!name:-}" ]]; then missing+=("$name"); fi
-          done
-          if (( ${#missing[@]} > 0 )); then
-            echo "::error::Missing macOS release secrets: ${missing[*]}"
-            exit 1
-          fi
-
       - name: Package Electron mac
         working-directory: apps/desktop
         shell: bash
         env:
-          PUBLISH_RELEASE: ${{ needs.prepare.outputs.publish }}
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ needs.prepare.outputs.publish == 'true' && 'true' || 'false' }}
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
           set -euo pipefail
-          args=(--mac --publish=never)
-          if [[ "$PUBLISH_RELEASE" == "true" ]]; then
-            args+=(--config.forceCodeSigning --config.mac.notarize)
-          fi
-          pnpm exec electron-builder "${args[@]}"
-
-      - name: Verify macOS code signature
-        if: needs.prepare.outputs.publish == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          app_path="$(find release/electron -type d -name Covel.app -print -quit)"
-          test -n "$app_path"
-          codesign --verify --deep --strict --verbose=2 "$app_path"
+          pnpm exec electron-builder --mac --publish=never
 
       - name: Verify unpacked release resources
         run: node apps/desktop/scripts/verify-release.mjs mac
@@ -306,48 +266,14 @@ jobs:
       - name: Build desktop (web + server staging + native rebuild for Electron)
         run: pnpm --filter @covel/desktop build
 
-      - name: Require Windows release signing credentials
-        if: needs.prepare.outputs.publish == 'true'
-        shell: pwsh
-        env:
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-        run: |
-          $missing = @()
-          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK)) { $missing += "WIN_CSC_LINK" }
-          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) { $missing += "WIN_CSC_KEY_PASSWORD" }
-          if ($missing.Count -gt 0) {
-            Write-Error "Missing Windows release secrets: $($missing -join ', ')"
-            exit 1
-          }
-
       - name: Package Electron win
         working-directory: apps/desktop
         shell: pwsh
         env:
-          PUBLISH_RELEASE: ${{ needs.prepare.outputs.publish }}
-          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-          WIN_CSC_TIMESTAMP_SERVER: ${{ secrets.WIN_CSC_TIMESTAMP_SERVER }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
-          $arguments = @("--win", "--publish=never")
-          if ($env:PUBLISH_RELEASE -eq "true") {
-            $arguments += "--config.forceCodeSigning"
-          }
-          pnpm exec electron-builder @arguments
+          pnpm exec electron-builder --win --publish=never
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-      - name: Verify Windows Authenticode signatures
-        if: needs.prepare.outputs.publish == 'true'
-        shell: pwsh
-        run: |
-          $files = Get-ChildItem -Path release/electron -Filter *.exe -File
-          if ($files.Count -eq 0) { Write-Error "No Windows artifacts found"; exit 1 }
-          $invalid = $files | Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -ne "Valid" }
-          if ($invalid) {
-            $invalid | ForEach-Object { Write-Error "Invalid Authenticode signature: $($_.FullName)" }
-            exit 1
-          }
 
       - name: Verify unpacked release resources
         run: node apps/desktop/scripts/verify-release.mjs win

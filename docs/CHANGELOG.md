@@ -2,28 +2,45 @@
 
 All notable changes to this project will be documented in this file. Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.27] - 2026-08-24
+## [0.0.27] - 2026-08-26
 
-This release improves Windows desktop networking, model setup defaults, remote model-database refreshes, and the visibility of provider failures.
+This is a large release that rebuilds core settings, session, storage, desktop-networking, world-localization, and release infrastructure while hardening the complete player flow.
+
+> [!IMPORTANT]
+> This release includes substantial database and configuration changes. A normal in-place upgrade is supported, but back up any custom worlds or plugins you want to keep first. If you encounter startup, configuration, or saved-session problems after upgrading, quit Covel, reinstall it, and reset its local state by removing the complete `~/.covel/` directory plus any separately configured `data_root`. The reset removes API keys, settings, saves, logs, and any custom content you did not back up. Official macOS and Windows artifacts are unsigned, so the operating system may warn on first launch.
 
 ### Added
 
 - **Desktop requests can use direct, system, HTTP(S), or SOCKS5 proxy modes.** The selected mode applies consistently to provider traffic and GitHub model-database updates, with the active route visible in settings.
 - **Provider failures now have actionable, expandable details.** Authentication, permission, quota, timeout, network, and upstream failures receive localized guidance while preserving the full original error for inspection and copying.
+- **World discovery is locale-aware and custom worlds can be deleted in the client.** Built-in worlds now resolve localized metadata, cast, rules, and presence consistently, while custom-world removal also clears its local media and cache state.
+- **Browser-local sessions use durable checkpoints.** The client synchronizes complete session snapshots through the store contract instead of maintaining a second IndexedDB runtime implementation.
 
 ### Changed
 
 - **The first provider model becomes both the story and plugin default.** A fresh setup can run plugin-backed tasks immediately without requiring a second manual slot assignment.
 - **GitHub model-database refreshes report progress and results.** Desktop refreshes go through the sidecar, update the bundled capability database safely, and surface start, success, and failure feedback.
+- **Settings and desktop configuration now share versioned, revision-aware persistence contracts.** Atomic writes, conflict detection, strict hydration, and explicit config/data roots prevent partial or stale snapshots from silently replacing newer state.
+- **Session, runtime, and storage paths converge on current contracts.** Turn control, suspension artifacts, plugin-data mutations, lifecycle cleanup, vector ingestion, and cross-backend transactions now use fewer duplicate state paths and consistent isolation rules.
+- **The bundled worlds and model workflow received a localization pass.** World selection follows the active locale, provider model choices stay scoped to the selected provider, and Mistport, Haruka Academy, and Emberback content has been refreshed.
+- **The build and deployment stack is modernized.** The workspace pins Node.js 26.7 and pnpm 11.22, updates Electron and the TypeScript/Vite toolchain, verifies unpacked desktop resources on both release platforms, and makes PostgreSQL integration coverage part of CI.
 
 ### Fixed
 
-- **Session-scoped work is generation-safe across server Pods and reused IDs.** Grants and pending decisions bind to a persisted incarnation plus per-plugin revocation generation; every mutation revalidates owner/incarnation/status under the backend lock; message/UI-spec batches are transactional; detached jobs validate every write; deletion drains durable pending-runtime locks, runs lifecycle hooks without holding advisory locks, clears media access, and stays fail-closed/retryable after partial failure. PostgreSQL nested/batch advisory locks reuse one reserved connection, including pool `max=1`.
-- **Undici requests share one validated outbound-network dispatcher.** Windows proxy and DNS behaviour no longer depends on incompatible request-hook shapes, and local/private targets keep their safety checks.
+- **Windows desktop LLM requests no longer fail before connecting.** Provider traffic now pairs npm Undici's fetch with its compatible dispatcher instead of crossing Electron's built-in Undici boundary, fixing the `fetch failed` / `UND_ERR_INVALID_ARG` failure across core providers reported in [#44](https://github.com/ackness/covel/issues/44) and [#45](https://github.com/ackness/covel/issues/45).
+- **Session-scoped work is generation-safe across server Pods and reused IDs.** Grants and pending decisions bind to a persisted incarnation plus per-plugin revocation generation; mutations revalidate owner, incarnation, and status under the backend lock; detached jobs validate every write; and deletion drains pending work and media access without leaving partial state.
+- **Undici requests share one validated outbound-network path.** Proxy and DNS behaviour no longer depends on incompatible request-hook shapes, local/private targets keep their safety checks, and response bodies and dispatchers are released reliably.
 - **Settings and API-key snapshots persist in mutation order.** A slow older write can no longer finish last and erase a newer provider, model, or secret configuration.
 - **Settings hydration is single-flight.** Concurrent or repeated `SettingsStore.init()` calls now share one load generation, so an older completion cannot overwrite a newer snapshot and `ready()` cannot report a stale generation.
+- **Browser-local restore and storage writes are coordinated across handles.** Recreated session ids, vectors, root IndexedDB updates, and legacy snapshots can no longer overwrite or attach to the wrong generation.
+- **Runtime cancellation, capability scheduling, and plugin transitions are deterministic.** Parent deadlines cancel recursive work, every declared capability need is honored, rejected executions preserve identity, and lifecycle events are emitted with transactional plugin-data changes.
+- **Chat and session surfaces remain usable during long runs.** Scrolling work is bounded to the chat viewport, narrow error and runtime layouts wrap cleanly, and stale provider-test results are invalidated after credential changes.
 - **Provider and runtime errors remain readable at narrow widths.** Model metadata and connection tests use separate rows, failed runtime chips wrap cleanly, and corrected API keys invalidate stale authentication-test results.
 - **Plugin README validation ignores package-manager residue.** Ignored `node_modules`-only directories no longer create false missing-README failures.
+
+### Removed
+
+- **The duplicate legacy state package and standalone IndexedDB session implementation are gone.** Browser and server modes now rely on the shared store and session contracts, reducing divergent persistence behaviour.
 
 ## [0.0.26] - 2026-08-19
 
@@ -950,7 +967,11 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.23...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.27...HEAD
+[0.0.27]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.27
+[0.0.26]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.26
+[0.0.25]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.25
+[0.0.24]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.24
 [0.0.23]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.23
 [0.0.22]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.22
 [0.0.21]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.21
