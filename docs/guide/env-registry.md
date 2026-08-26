@@ -40,6 +40,38 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 | `~/.covel/keys.env`    | 桌面端持久化 provider API key                                        |
 | `~/.covel/config.toml` | 桌面端数据目录与日志轮转配置                                         |
 
+## Registry 中的其他运行变量
+
+以下变量同样属于当前 `registry.ts` 契约，但不需要在上面的运行说明中展开：
+
+| 变量                                                  | 默认值 / 状态                   | 用途                                                   |
+| ----------------------------------------------------- | ------------------------------- | ------------------------------------------------------ |
+| `NODE_ENV`                                            | `development`                   | Node 运行模式（`development` / `production` / `test`） |
+| `SERVE_STATIC` / `STATIC_DIR`                         | `false` / `./web-dist`          | 让 server 托管指定目录中的 SPA                         |
+| `CORS_ORIGIN`                                         | —                               | 允许的 HTTP origin 列表                                |
+| `ENABLE_DEBUG_PAGE`                                   | `false`                         | 开启生产环境 debug/internal 路由                       |
+| `RATE_LIMIT_RPM`                                      | `60`                            | 默认每 IP 每分钟限流额度                               |
+| `TRUSTED_PROXY_IPS`                                   | —                               | 允许信任转发 IP 头的代理地址列表                       |
+| `COVEL_MEDIA_TOKEN_SECRET`                            | 生产环境必填                    | 签发媒体短期访问 token 的 HMAC secret                  |
+| `COVEL_INSTALL_API_ENABLED`                           | `false`                         | 无桌面 bearer token 时显式开启插件/世界文件变更接口    |
+| `COVEL_LOG_QUIET_PATHS`                               | `/api/health`                   | 逗号分隔的静默请求路径                                 |
+| `MEDIA_BACKEND` / `MEDIA_ROOT`                        | `mirror` / —                    | 媒体存储后端及文件根目录                               |
+| `VECTOR_BACKEND`                                      | `embedded`                      | 向量能力（`embedded` / `none` / `external`）           |
+| `COVEL_LLM_RETRY_DISABLED`                            | `false`                         | 设为 `1` 时关闭 provider HTTP 重试                     |
+| `COVEL_TRACE_TRUNCATE`                                | `false` / `planned`             | 计划中的 trace payload 截断开关，当前不可依赖          |
+| `E2E_BASE_URL` / `E2E_MODEL_SLOT`                     | `http://localhost:5173` / `e2e` | Playwright 地址及插件验证脚本 slot                     |
+| `COVEL_PG_PREFLIGHT_HOST` / `COVEL_PG_PREFLIGHT_PORT` | `127.0.0.1` / `5432`            | `dev:pg` 启动前的 TCP 检查目标                         |
+| `COVEL_PG_PREFLIGHT_SKIP`                             | `false`                         | 设为 `1` 跳过 `dev:pg` TCP 检查                        |
+| `RUNTIME_HOST` / `RUNTIME_PORT`                       | `127.0.0.1` / `3001`            | Vite 开发代理的 server 目标                            |
+| `VITE_ROUTER_DEVTOOLS`                                | `true`                          | 开启 Vite 路由开发工具                                 |
+
+`LIVE_LLM_ENABLED`、`LIVE_IMAGE_ENABLED`、`BASE_URL`、`SESSION_ID` 属于测试或
+截图脚本专用变量；`CSC_LINK`、`CSC_KEY_PASSWORD`、`WIN_CSC_TIMESTAMP_SERVER`、
+`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` 只由 Electron
+打包工具读取，详见 [`desktop-packaging.md`](./desktop-packaging.md)。
+
+> Registry 元数据尚有两处待代码侧收敛：`E2E_BASE_URL` 登记为 `http://localhost:3001`，但 `playwright.config.ts` 的实际默认值是 `http://localhost:5173`；`COVEL_PG_PREFLIGHT_SKIP` 已由 `scripts/dev-pg-preflight.mjs` 读取，但 registry 状态仍标为 `documented`。本页按实际运行行为列值。
+
 ## 迁移规则
 
 1. 新增环境变量时，先在 `COVEL_ENV_REGISTRY` 加 definition。

@@ -1,21 +1,22 @@
 # 角色立绘 — 提示词文档（Portrait Prompt Spec）
 
-为两个旗舰世界的角色生成**统一风格**的立绘 / 头像，接入 `character-presence` 插件，存入各世界的 `media/`，**生成一次、长期复用**。
+为三个内置世界的角色生成**统一风格**的立绘 / 头像，接入 `character-presence` 插件，存入各世界的 `media/`，**生成一次、长期复用**。
 
-- 机器清单（脚本直接读）：`worlds/mistport/media/portraits.json` · `worlds/haruka-academy/media/portraits.json`
+- 机器清单（脚本直接读）：`worlds/emberback/media/portraits.json` · `worlds/mistport/media/portraits.json` · `worlds/haruka-academy/media/portraits.json`
 - 每张图的最终提示词 = `style.prefix` + 该角色 `subject` + `style.suffix`（共享前后缀保证**整组同风格**），`negative` 作为负向提示。
-- 文件名对应角色卡的 `instantiate.characterId`：文件 `<id>.png` → 角色 `npc-<id>`（见清单 `characterId`）。
+- 清单中的 `characterId` 必须能匹配实例化后的角色 ID：角色卡声明 `instantiate.characterId` 时使用该值（如 `npc-lin-yuanzhou`）；未声明时可使用角色卡 `id`（如 `emberback` 的 `qin-jiulian`，实例化记录会带 session / `char-` 前缀，前端按后缀匹配）。文件名通常使用角色卡 `id` 的 `<id>.png`。
 
 场景背景的清单、日/夜变体与生成流程见 [场景背景生成指南](./world-scenes.md)。
 
-## 两套风格方向
+## 三套风格方向
 
 | 世界                        | 题材          | 统一风格                                                                        | 取景 / 画幅                |
 | --------------------------- | ------------- | ------------------------------------------------------------------------------- | -------------------------- |
+| **emberback** 鳌背孤城      | 末世生存·探索 | 末世东方奇幻、半写实绘画与克制水墨纹理、灰白尘烬与锈铜色                        | 半身胸像、3/4 侧、尘雾背景 |
 | **mistport** 雾港·裂潮纪    | 黑暗奇幻·悬疑 | fog-noir 写实绘画感、冷灰/青/锈的去饱和、海雾体积光、低调戏剧打光、哥特港口氛围 | 半身胸像、3/4 侧、灰雾背景 |
 | **haruka-academy** 遥风学园 | 校园恋爱·日常 | 动漫视觉小说立绘（GalGame 拔模/tachi-e）、柔和赛璐珞、春日粉彩、暖光、海边校园  | 半身胸像、柔和渐变背景     |
 
-> 两套**刻意不同**——一冷一暖、一写实一动漫——这样两个世界各自成体系，也直观传达"故事 vs 对话"两种玩法。每个世界**内部**则严格同风格（靠共享 prefix/suffix）。
+> 三套风格**刻意不同**——末世水墨、雾港写实、校园动漫——每个世界**内部**则严格同风格（靠共享 prefix/suffix）。
 
 ## 角色清单
 
@@ -45,10 +46,10 @@ npx tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
 
 ## 接入 character-presence（已接线）
 
-展示立绘的插件就是 **`character-presence`**：右侧角色面板显示头像，舞台模式（stage mode）下作为立绘。两个世界的 `data/world.data.yaml` 已加好两条 source：
+展示立绘的插件就是 **`character-presence`**：右侧角色面板显示头像，舞台模式（stage mode）下作为立绘。三个世界的 `data/world.data.yaml` 已加好两条 source：
 
 - `media` source：导入 `media/portraits/` 下的图，按 **sha256 内容寻址**存入媒体库，`to: media` + `indexTo: plugin:character-presence/assets`；
-- `presence` source（`media/presence.json`）：把 `characterId: npc-<id>` 的 `avatar` / `sprite` 指向上面导入的媒体（`mediaRef.id` = 该图的 sha256）。
+- `presence` source（`media/presence.json`）：把与实例化角色匹配的 `characterId` 的 `avatar` / `sprite` 指向上面导入的媒体（`mediaRef.id` = 该图的 sha256）。
 
 `presence.json` 由 `scripts/emit-presence.mjs <world>` 从 `portraits/` 目录按 sha256 自动生成：
 
@@ -59,7 +60,7 @@ node scripts/emit-presence.mjs haruka-academy
 
 > ⚠️ **重生成立绘后必须重跑 `emit-presence` 刷新哈希**，否则 presence 的 `avatar.id` 与新图对不上。
 
-两个世界都已把 `character-presence` 列入 `recommendedPlugins`，session 创建即自动导入、开局右侧面板与对话立绘直接显示。立绘 PNG 通过 `.gitignore` 负向规则 `!worlds/**/media/portraits/*.png` 纳入版本库，随世界包分发。
+三个世界都已把 `character-presence` 列入插件策略，session 创建即自动导入、开局右侧面板与对话立绘直接显示。立绘 PNG 通过 `.gitignore` 负向规则 `!worlds/**/media/portraits/*.png` 纳入版本库，随世界包分发。
 
 ## 复用与重生成
 

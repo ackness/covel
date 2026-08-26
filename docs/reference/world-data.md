@@ -12,8 +12,9 @@ worlds/my-world/
 ├── WORLD.md
 ├── data/
 │   ├── world.data.yaml
-│   ├── dimensions.yaml
-│   └── characters/cast.json
+│   └── dimensions.yaml
+├── characters/
+│   └── main-cast.json
 └── media/
     └── portraits/
 ```
@@ -124,7 +125,7 @@ sources:
 
   cast:
     kind: json
-    path: data/characters/cast.json
+    path: characters/main-cast.json
     schema: plugin://character-blueprint/blueprints
     to: plugin:character-blueprint/blueprints
     key: id
@@ -186,6 +187,47 @@ data/rules/tide-mystery.en.yaml
 | `lorebook`                         | session create | 直接写入 session lorebook                                                                  |
 | `characters`                       | session create | 直接 upsert session character                                                              |
 | `media` + `indexTo`                | session create | 导入媒体并把索引写入 `plugin_data`                                                         |
+
+### Lorebook 按玩家消息选择性注入
+
+`to: lorebook` 会在创建 session 时把 source 的每个值写成 lorebook 记录。适合大型世界设定的最小 descriptor：
+
+```yaml
+# world.yaml
+worldData: data/world.data.yaml
+```
+
+```yaml
+# data/world.data.yaml
+schemaVersion: 1
+sources:
+  lore:
+    kind: yaml
+    path: data/lorebook.yaml
+    to: lorebook
+    key: id
+```
+
+```yaml
+# data/lorebook.yaml
+- id: dragons
+  content: 龙族是远古时代最强大的种族……
+  strategy: selective
+  keys: [龙族, 龙鳞, Drakon]
+
+- id: core-rules
+  content: 本世界的魔法必须遵守等价交换。
+  strategy: constant
+```
+
+运行时边界：
+
+- `strategy: selective`（或 `kind: triggered`）只检查**当前玩家消息**；消息包含任一 `keys` 项时激活，大小写不敏感，按子串匹配。
+- `selective` 记录没有非空 `keys` 时不会激活。`constant` 每轮注入，不依赖 `keys`；省略 `strategy` / `kind` 时默认 `constant`。
+- 可选字段还包括 `position`、`insertionOrder`、`enabled` 和 `extra`。默认 `position` 是 `after_plugin`，默认 `enabled` 是 `true`。
+- `PLUGIN.md` 中的 Markdown 链接不会触发文件加载；`references/*.md` 及其自定义 `keywords` frontmatter 不是插件运行时契约。
+
+World Data 在 session 创建阶段导入。已有 session 需要通过本页的 `sync-data` 接口同步；先调用 `preflight` 可在写入前查看诊断。
 
 URI grammar：
 
@@ -303,7 +345,7 @@ sources:
 ```
 
 - `media` source 把 `media/portraits/` 下的图导入媒体库，按 **`sha256(内容)`** 寻址（与 `@covel/store` media-store 的 `sha256(bytes)` 一致），并把索引写进 `plugin_data[character-presence][assets]`。
-- `presence.json` 是 presence 记录数组，每条把 `characterId`（对上角色卡 `instantiate.characterId`，如 `npc-<id>`）的 `avatar` / `sprite` 指向那张图：
+- `presence.json` 是 presence 记录数组，每条把 `characterId` 对应角色的 `avatar` / `sprite` 指向那张图。前端按实例化 `CharacterRecord.id` 的精确值或 `-<characterId>` 后缀匹配：角色卡声明 `instantiate.characterId` 时应使用该值（如 `npc-<id>`）；未声明时可使用角色卡 `id`（`emberback` 即采用此形式）：
 
 ```json
 [

@@ -8,9 +8,9 @@ Terms are ordered alphabetically. Each entry includes a 1–2 sentence definitio
 
 ## Binding
 
-A declared link between a plugin and a provider capability (e.g. `text`, `image`, `embedding`), expressed in the runtime manifest. The kernel resolves bindings to concrete providers at turn time — plugins never touch SDKs directly.
+A typed data-flow edge declared in `inputs.<name>` between a producer runtime and a consumer runtime in the same execution. The kernel resolves the producer by runtime ID or capability, optionally selects a value with an RFC 6901 JSON Pointer, validates it against `accepts`, and exposes a provenance-wrapped value through `ctx.inputs` or the agent prompt.
 
-See: [docs/reference/plugins.md](./reference/plugins.md), [docs/architecture/flow.md](./architecture/flow.md).
+See: [docs/reference/plugins.md](./reference/plugins.md), [docs/architecture/flow.md](./architecture/flow.md), `packages/shared/src/types/runtime-scheduling.ts`.
 
 ## Capability
 
@@ -44,7 +44,7 @@ See: `packages/settings/src/`.
 
 ## Proposal
 
-A kernel-validated write envelope emitted by a plugin (never a direct DB write). Types are derived from the single source of truth `ProposalPayloadMap` (`packages/shared/src/types/proposal.ts`): `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `character.upsert`, `working_memory.set`, `lorebook.upsert`.
+A kernel-validated write envelope emitted by a plugin (never a direct DB write). Types are derived from the single source of truth `ProposalPayloadMap` (`packages/shared/src/types/proposal.ts`): `narrative.append`, `state.patch`, `event.emit`, `interaction.request`, `ui.render`, `asset.generate`, `plugin.data`, `plugin.data.batch`, `plugin.data.delete`, `character.upsert`, `working_memory.set`, `lorebook.upsert`.
 
 See: [docs/reference/transactions.md](./reference/transactions.md), [docs/architecture/flow.md](./architecture/flow.md).
 
@@ -80,7 +80,7 @@ See: [docs/reference/api.md](./reference/api.md), [docs/reference/transactions.m
 
 ## Slot
 
-A named routing key for model selection (`default`, `fast`, `balance`, `image`, …), labelled **Model Role** in the settings UI. Plugin manifests declare a slot by name; `llm.toml` maps it to a concrete provider and model; tag-aware fallback picks the nearest slot with the same modality tag.
+A named routing key for model selection (`story`, `plugin`, `memory`, `image`, …), labelled **Model Role** in the settings UI. Plugin manifests declare a slot by name; `llm.toml` or persisted provider/model settings bind it to a concrete model; tag-aware fallback stays within the same modality.
 
 See: [docs/reference/plugins.md](./reference/plugins.md), `llm.toml.example`.
 
@@ -92,7 +92,7 @@ See: [docs/reference/plugins.md](./reference/plugins.md).
 
 ## Turn
 
-One tick of the session loop: player input → trigger routing → per-stage DAG execution (strict barrier between stages, dependency-ordered within a stage) → proposal validation → commit → SSE broadcast. Each turn is assigned a monotonically increasing `turnId`; the band is selected by `session.phase` (`setup` runs the setup stage, `playing` runs `pre-turn → narrative → post-turn → audit`).
+One tick of the session loop: player input → trigger routing → per-stage DAG execution (strict barrier between stages, dependency-ordered within a stage) → proposal validation → commit → SSE broadcast. Each execution has an opaque `turnId`; committed player turns advance the monotonic `completedPlayerTurns` clock at most once per logical turn. The band is selected by `session.phase` (`setup` runs the setup stage, `playing` runs `pre-turn → narrative → post-turn → audit`).
 
 See: [docs/architecture/flow.md](./architecture/flow.md), [docs/reference/protocol.md](./reference/protocol.md).
 

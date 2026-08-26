@@ -134,7 +134,7 @@ flowchart TB
 | `'setup'`   | `setup`                                    | 游戏初始化（如 `pregame`、`world-init/schema-gen`、`char-creator/player-init`）；顺序完全由声明边决定（`schema-gen` 用 `after: [pregame]` 保持 `pregame → schema-gen` 串行）                                                                                                                          |
 | `'playing'` | `pre-turn → narrative → post-turn → audit` | 每轮依次跑四个 stage，stage 间严格屏障（上一 stage 全部 settle——成功/失败/skip——才进下一个）。同一 stage 内由 `needs` / `after` / `inputs` 绑定推导的 DAG 排序，独立 runtime 并行，`name` 做稳定 tiebreak。依赖成环的 runtime（及其下游）本回合被 `skipped: dependency-cycle`，不会回退成任意顺序执行 |
 
-**Proposal 类型**（全部过 commit chain，源自 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。
+**Proposal 类型**（全部过 commit chain，源自 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch` / `plugin.data.delete`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。
 
 ## 三、消息翻译层（玩家 ↔ LLM Agent）
 
@@ -746,7 +746,7 @@ sequenceDiagram
                              ├── createPluginDataTools()      plugin-data CRUD + 事件发射
                              └── shortId/shortIdBatch()       LLM 友好的语义 ID 生成
 
-启动 → 状态管理              @covel/store                     DataStore 接口 + 4 个后端实现
+启动 → 状态管理              @covel/store                     DataStore 接口 + 3 个服务端后端实现
                              ├── listStateSchemas()            动态表 schema
                              ├── listStateEntries()            状态表数据
                              └── listStateChanges()            变更追踪
@@ -817,18 +817,18 @@ Turn 执行                    @covel/runtime                   核心执行引�
 
 ### 8.3 各包核心接口
 
-| 包                    | 核心导出                                                                                                                | 调用方                    |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| **shared**            | `RuntimeManifest`, `UISpec`, `CovelEventType`, Zod schemas                                                              | 所有包                    |
-| **plugin-loader**     | `discoverPlugins()`, `loadRuntime()`, `PluginRegistry`                                                                  | server bootstrap          |
-| **ai-provider**       | `createGateway()`, `createPresetRegistry()`, `createSlotRegistry()`                                                     | server bootstrap, runtime |
-| **context**           | `buildContext()`, `interpolateTemplate()`                                                                               | runtime (per-runtime)     |
-| **runtime**           | `executeTurn()`, `createToolExecutor()`, `shouldTrigger()`                                                              | server actions route      |
-| **store**             | `DataStore`, `listStateSchemas()`, `listStateEntries()`, `listStateChanges()`, `createMemoryStore()`, `createPgStore()` | server, tools, runtime    |
-| **events**            | `createEventBus()`, `EventBus.emit()`, `EventBus.onEmit()`                                                              | server, plugin-data-tools |
-| **tools**             | `tool()`, `createPluginDataTools()`, `shortIdBatch()`                                                                   | bootstrap, plugin tools   |
-| **approval**          | `createApprovalPipeline()`, `ApprovalPipeline.check()`                                                                  | tool executor             |
-| **plugin-test-utils** | `MockLLM`, `makeManualFunctionContext()`, `expectAssetGenerated()`                                                      | plugin tests only         |
+| 包                    | 核心导出                                                                                                                                                                                | 调用方                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| **shared**            | `RuntimeManifest`, `UISpec`, `CovelEventType`, Zod schemas                                                                                                                              | 所有包                    |
+| **plugin-loader**     | `discoverPlugins()`, `loadRuntime()`, `PluginRegistry`                                                                                                                                  | server bootstrap          |
+| **ai-provider**       | `createGateway()`, `createPresetRegistry()`, `createSlotRegistry()`                                                                                                                     | server bootstrap, runtime |
+| **context**           | `buildContext()`, `interpolateTemplate()`                                                                                                                                               | runtime (per-runtime)     |
+| **runtime**           | `executeTurn()`, `createToolExecutor()`, `shouldTrigger()`                                                                                                                              | server actions route      |
+| **store**             | `DataStore`, `createStore()`, `createStoreFromEnv()`, `createMemoryStore()`, `createSqliteStore()`, `createPgStore()`, `listStateSchemas()`, `listStateEntries()`, `listStateChanges()` | server, tools, runtime    |
+| **events**            | `createEventBus()`, `EventBus.emit()`, `EventBus.onEmit()`                                                                                                                              | server, plugin-data-tools |
+| **tools**             | `tool()`, `createPluginDataTools()`, `shortIdBatch()`                                                                                                                                   | bootstrap, plugin tools   |
+| **approval**          | `createApprovalPipeline()`, `ApprovalPipeline.check()`                                                                                                                                  | tool executor             |
+| **plugin-test-utils** | `MockLLM`, `makeManualFunctionContext()`, `expectAssetGenerated()`                                                                                                                      | plugin tests only         |
 
 ## 九、设计约束与原则
 

@@ -19,6 +19,23 @@
 3. **`.env.llm`** 含对应 provider 的 API key（或 `llmock` 本地 base URL）
 4. 可选：`npx llmock -p 4012 --record --provider-openai https://your-provider` 起一个本地录制代理
 
+最小可执行流程如下（脚本本身不会启动 server，也不会自动创建 `llm.toml`）：
+
+```bash
+cp .env.example .env
+cp llm.toml.example llm.toml
+cp .env.llm.example .env.llm
+pnpm dev:server
+# 另开终端
+npx tsx --env-file=.env --env-file=.env.llm \
+  scripts/e2e-plugin-verify.ts --slot story
+```
+
+若使用 PostgreSQL，把 server 启动替换为 `pnpm db:up` 后的 `pnpm dev:pg`。
+上面的 `--slot story` 对应示例配置自带的 `[covel.story]`；省略参数时脚本默认找
+`[covel.e2e]`。`--slot` 必须是 `llm.toml` 中 `[covel.<name>]` 的 `<name>`；
+脚本通过 `/api/plugin-flows` 和 `/api/worlds` 自动发现 runtime/world，不需要维护插件列表。
+
 ## 基本调用
 
 ```bash
@@ -71,7 +88,7 @@ npx tsx --env-file=.env --env-file=.env.llm \
 | 1   | **Health Check**           | `GET /api/health`，确认 store backend 在线                                                                                                        |
 | 2   | **Plugin Flow Discovery**  | `GET /api/plugin-flows`，自动发现所有 plugin/runtime 及其 trigger 元数据                                                                          |
 | 3   | **World Selection**        | 挑选 `--world` 或第一个可用世界包                                                                                                                 |
-| 4   | **Session Creation**       | `POST /api/sessions` 建新会话，激活所有可用插件                                                                                                   |
+| 4   | **Session Creation**       | `POST /api/sessions` 建新会话，并读取世界策略选出的真实 `activePlugins`                                                                           |
 | 5   | **Turn Execution**         | 按 `setup → character_creation → playing×N` 顺序触发每一轮，逐轮对照 stage 调度期望                                                               |
 | 6   | **Final Session Snapshot** | `GET /api/sessions/:id/snapshot`（+ `GET /api/sessions/:id` 取权威 status）；断言 setup 运行时在 `setupRuntimes` 中为 `done`；校验 trace 类型覆盖 |
 | 7   | **Summary**                | 汇总 runtime/tool/assertion 成败 + scheduled 运行时的「≥1 次」断言，计算 `PASS`/`FAIL` 总结果                                                     |
@@ -151,10 +168,27 @@ Trigger Verification 的裁决列：
 | `1` | 至少一条断言失败（runtime 执行失败 / 触发预测不符 / 工具调用失败） |
 | `2` | 基础设施失败（HTTP、超时、响应格式错误）                           |
 
+成功运行的末尾会打印 summary，并以 `PASS` 作为总结果，进程退出码为 `0`；
+失败断言显示 `FAIL`（退出码 `1`），无法连接 API、SSE 超时或响应格式错误显示基础设施
+错误（退出码 `2`）。默认还会在 `debugs/e2e-logs/` 生成 `.log`、turn JSON、最终 snapshot
+及失败详情 JSON；传 `--no-log` 可关闭。
+
 ## 常见问题
 
-**Q: 提示 `preset not found: covel.e2e`？**
-A: `--slot` 只写 `[covel.xxx]` 里的 `xxx`。如果你的 toml 里是 `[covel.e2e_local]`，传 `--slot e2e_local`，不是 `--slot covel.e2e_local`。
+**Q: `ECONNREFUSED`、health check 失败或一直连接 3001？**
+A: 该脚本只调用 API，不负责启动服务。确认 `pnpm dev:server` / `pnpm dev:pg` 正在运行，
+并用 `--server http://localhost:<port>/api` 指定非默认端口；`SERVER_PORT` 改变时必须同步
+修改该参数。
+
+**Q: `preset not found`、`slot` 不存在或模型请求 401？**
+A: `--slot` 只接受 `[covel.xxx]` 的 `xxx`，不是完整表名；例如
+`[covel.e2e_local]` 应传 `--slot e2e_local`。确认 `.env.llm` 中 provider key 和
+`llm.toml` 的 slot/provider 配置有效。使用 llmock 时，直接把该 slot 的 `baseUrl`
+改为本地代理地址；`COVEL_STORY_BASE_URL` / `COVEL_PLUGIN_BASE_URL` 当前没有运行时读取方。
+
+**Q: 想保留 session、trace 或失败现场？**
+A: 传 `--keep` 保留通过后的 session；默认日志和 JSON 在 `debugs/e2e-logs/`，传
+`--log-dir <path>` 改目录，传 `--verbose` 输出完整 SSE 事件。
 
 **Q: Turn 4 开始一直 `WARNING: SSE stream terminated prematurely`？**
 A: 上游 LLM 会话被运营商断开，脚本会自动重读 turn 记录。只要 Runtime Timeline 里的 runtime 都是 `success`，可以当作正常通过。

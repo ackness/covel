@@ -770,7 +770,7 @@ my-plugin/
 - [ ] 不依赖内核内部 API（DB 表名、ORM 模型、内核私有模块）
 - [ ] 所有数据写入通过 proposal 或工具返回值，不直接操作 store
 - [ ] 有基本的集成测试
-- [ ] references/ 文件有适当的 keywords 设置
+- [ ] 大型世界资料通过 World Data / Lorebook 交付，并验证 `strategy` / `keys` 的激活边界
 
 ### 插件作者约束
 

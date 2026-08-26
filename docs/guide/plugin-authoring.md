@@ -8,9 +8,26 @@
 
 | 路径                                 | 面向的人                       | 前置要求                                                             | 你将产出什么                                                                                             | 文档                                                             |
 | ------------------------------------ | ------------------------------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| **零代码**                           | 内容创作者，只写 Markdown      | 会用 YAML + Markdown                                                 | 一个只含 `PLUGIN.md` 的插件，能自动触发、调用内置 UI 工具、按关键词加载 `references/`、打包成世界包      | [plugin-authoring-zero-code.md](./plugin-authoring-zero-code.md) |
+| **零代码**                           | 内容创作者，只写 Markdown      | 会用 YAML + Markdown                                                 | 一个只含 `PLUGIN.md` 的插件，能自动触发、调用内置 UI 工具，并用 World Data / Lorebook 交付世界资料       | [plugin-authoring-zero-code.md](./plugin-authoring-zero-code.md) |
 | **进阶（agent + 本地 JS）**          | 已经会零代码，要加一点 JS      | 会写基础 JS/TS、会用 Zod                                             | 本地 `tools/*.js`、`interaction` 返回的玩家交互块、`input.inject` 跨插件注入、entry RPC action、集成测试 | [plugin-authoring-agent.md](./plugin-authoring-agent.md)         |
 | **高级（TypeScript + 审批 + 发布）** | 要发布社区插件或做复杂游戏系统 | 熟悉 TS 类型系统、vitest、SillyTavern/NovelAI 之类的 prompt 工程概念 | 完整 TS 类型约束、多 runtime 插件、自定义审批、`I18nText` 合规、发布 checklist                           | [plugin-authoring-advanced.md](./plugin-authoring-advanced.md)   |
+
+## 先走哪条路径
+
+- 只需要一个提示词 runtime、内置工具和少量 `userSettings`：走**零代码**。放在 `~/.covel/plugins/` 的本地用户插件最小只需 `PLUGIN.md`，不需要构建步骤；提交到仓库 `plugins/<name>/` 的内置包仍必须带 `package.json`。
+- 需要确定性计算、插件本地 tool、玩家按钮或 RPC：走**进阶**。用 `entry` 注册 JS handler，再在 runtime 的 `tools.plugin` 中列出工具名。
+- 需要多个 runtime、审批/生命周期 hook、复杂类型或准备发布社区插件：走**高级**。先用进阶路径跑通一个最小闭环，再拆分 runtime。
+
+不确定时，先从零代码开始；只有当提示词无法可靠完成确定性逻辑或外部动作时，才增加 `entry` 和 JS。
+
+## 最小闭环（目录 → 验证 → 加载）
+
+1. 创建插件目录并写入 `PLUGIN.md`（至少需要 `name`、`description`；未声明 `trigger` 时按 schema 默认行为处理，`auto` / `scheduled` runtime 需要 `stage`）。仓库内置插件同时创建 `package.json`，本地用户目录则可只放 manifest 与它实际引用的资源。
+2. 在仓库根目录运行 `pnpm validate:plugin <插件目录>`。预期看到每个 manifest 的 `✓`；解析失败会标记 `(loader parse)`，字段/组合不合法会标记 `(authoring schema)` 并列出字段路径。
+3. 在 `COVEL_USER_PLUGINS_DIR`（默认 `~/.covel/plugins`）下放置插件，重启 server 后即可发现；也可在 runtime case 中显式传 `--plugins-dir <目录>`。多 runtime 扫描 `runtimes/*/PLUGIN.md`。
+4. 用 `pnpm test:runtime -- <plugin-id> --plugins-dir <目录> --pretty` 跑 mock case；没有 case 时，用 `<plugin-id>/<runtime-id>` 直接调试，并按需传 `--payload` / `--show-prompts`。
+
+需要检查真实 HTTP、SSE 或审批时，再运行 `scripts/e2e-plugin-verify.ts`（见 [plugin-testing.md](./plugin-testing.md)）。
 
 ## 交叉引用
 
@@ -224,8 +241,8 @@ plugins/<plugin-id>/
 │   └── my-tool.ts
 ├── tests/                 # 可选：测试文件
 │   └── my-plugin.test.ts
-├── references/            # 可选：按需加载的参考资料
-│   └── lore-data.md
+├── references/            # 可选：维护者参考文件；框架不会自动加载
+│   └── design-notes.md
 └── runtimes/              # 可选：多 runtime 子目录
     └── sub-runtime/
         └── PLUGIN.md

@@ -18,7 +18,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 | Memory     | `memory`        | 测试或一次性 demo，数据存于内存，重启丢失                                                                                |
 | PostgreSQL | `pg`            | 生产环境，需配置 `DATABASE_URL`；**多实例部署自动启用 `pg_advisory_lock` 分布式会话锁，跨 Node 进程对同一 session 互斥** |
 
-> **注意**: `@covel/store` 工厂也支持 `idb`，用于浏览器能力调用；常规服务器部署使用 `memory` / `sqlite` / `pg`。
+> **注意**: `idb` 不是 `@covel/store` 的 `DataStore` 后端；它仅用于浏览器端 MediaStore / BrowserVault 能力。常规服务器部署使用 `memory` / `sqlite` / `pg`。
 
 ### 错误响应约定（自 v0.0.5 起统一）
 

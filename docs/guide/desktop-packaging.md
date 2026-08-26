@@ -103,16 +103,17 @@ Until you have a purchased reputation (or an EV certificate), Windows SmartScree
 pnpm --filter @covel/desktop dist:linux
 ```
 
-Produces:
+Produces artifacts under `release/electron/`:
 
-- `Covel-<version>.AppImage` (portable, x64 and arm64)
-- `Covel-<version>.deb` (x64)
+- `Covel-electron-<version>-linux-x64.AppImage` and
+  `Covel-electron-<version>-linux-arm64.AppImage`
+- `Covel-electron-<version>-linux-x64.deb`
 
 GPG signing is not currently wired up. If required for distribution:
 
 ```bash
 # After building
-dpkg-sig --sign builder release/*.deb
+dpkg-sig --sign builder release/electron/*.deb
 ```
 
 ## Verifying a build locally
@@ -146,7 +147,7 @@ unzip -q release/electron/Covel-electron-*-mac-arm64.zip -d /tmp/covel-verify
 codesign --verify --deep --strict --verbose=2 "/tmp/covel-verify/Covel.app"
 
 # Windows (PowerShell)
-Get-AuthenticodeSignature release\Covel-Setup-*.exe
+Get-AuthenticodeSignature release\electron\Covel-electron-*-win-x64.exe
 ```
 
 ## Auto-update publishing

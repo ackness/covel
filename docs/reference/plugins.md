@@ -1039,8 +1039,8 @@ plugins/<plugin-id>/
 │   └── my-tool.ts
 ├── tests/                 # 可选：测试文件
 │   └── my-plugin.test.ts
-└── references/            # 可选：按需加载的参考资料
-    └── world-lore.md
+└── references/            # 可选：维护者参考文件；框架不会自动加载
+    └── design-notes.md
 ```
 
 ### 多 runtime 插件
@@ -1596,6 +1596,12 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 | `event`     | ✅ 生产可用 | 监听特定事件触发（在 Turn 内的事件 fan-out 中由 `shouldTrigger` 判定）                                                                                                                                                                                                                           |
 
 > trigger 枚举就是上面四种。manifest 输入 schema 对 `trigger.type` 做闭集校验，任何其他取值在**加载时**被拒绝，不会进入运行时。
+
+### Manifest 加载失败的边界
+
+`pnpm validate:plugin` 先调用 loader 兼容 schema 解析 `PLUGIN.md`，再调用 strict authoring schema；任一层失败都会让 CLI 退出非零。解析层错误通常表示缺少 `---`、YAML 无效或 frontmatter 无法解析，并会阻止 loader 发现该 runtime；authoring 层则报告字段路径并拒绝未知字段、非法枚举及不满足的组合（例如 `runtimeType: function` 缺少 `handler`，或 `auto` / `scheduled` 缺少 `stage`）。生产 loader 为兼容旧 manifest 使用较宽松的输入 schema，因此“server 能加载”不等于“通过当前作者规范”；提交或发布前应以该 CLI 的 strict 结果为准。传入插件目录时，还会检查多 runtime 的插件级 `userSettings` 冲突。
+
+这条 CLI 检查只验证 manifest 与跨 runtime 声明，不执行 `entry`、handler 或 LLM。要验证 runtime 行为，应使用 `pnpm test:runtime`；要验证 server、SSE 和审批链路，应使用 HTTP E2E。
 
 #### `event` 的调度例外：fan-out 不受 stage 屏障约束
 

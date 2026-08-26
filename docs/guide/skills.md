@@ -65,6 +65,26 @@ description: 一句话描述这个 skill 做什么、何时触发（代理通过
 4. **frontmatter 的 description 是匹配关键**。description 决定代理是否触发 skill；写得越具体越准，越泛越容易乱跳。
 5. **触发场景写进 description**。body 只有触发后才会加载；“何时使用”信息要放在 description 里。
 
+## 当前实际目录与调用方式
+
+当前仓库实际维护三个项目级 skill：
+
+- `.claude/skills/create-plugin/SKILL.md`：生成插件骨架、运行时声明与作者参考；细节在其 `references/`。
+- `.claude/skills/create-world/SKILL.md`：生成世界包与校验参考；细节在其 `references/`。
+- `.claude/skills/covel-static-turn-audit/SKILL.md`：静态审计 start-game、插件启用、turn 调度和多轮流程。
+
+它们不是 npm/pnpm 命令，也不会被 Covel server 自动发现。使用支持 Agent Skills 的代理时，
+将对应的 `SKILL.md` 作为 skill 输入，或直接在仓库根目录读取它：
+
+```bash
+cat .claude/skills/create-plugin/SKILL.md
+cat .claude/skills/create-world/SKILL.md
+cat .claude/skills/covel-static-turn-audit/SKILL.md
+```
+
+需要 schema 或示例时，再按 SKILL.md 的说明读取同目录 `references/`；不要把
+`agents/openai.yaml` 当作执行入口，它只提供 UI 展示元信息。
+
 ## 在 Claude Code 中使用
 
 Claude Code 启动时扫描以下两个目录的 skills:
@@ -72,20 +92,15 @@ Claude Code 启动时扫描以下两个目录的 skills:
 1. `~/.claude/skills/<name>/SKILL.md`（全局，跨项目）
 2. `<project>/.claude/skills/<name>/SKILL.md`（项目本地）
 
-Covel 已经内置项目本地 skills：
-
-- `.claude/skills/create-plugin/`：生成插件骨架与作者参考。
-- `.claude/skills/create-world/`：生成世界包与校验参考。
-- `.claude/skills/covel-static-turn-audit/`：静态审计 start-game、插件启用、turn 调度和多轮流程。
+Claude Code 会扫描项目本地 `.claude/skills/<name>/SKILL.md`；直接描述任务即可让其按
+skill 的 frontmatter 触发，或明确指定 skill 名称以减少歧义。
 
 ## 在外部代理中使用
 
-任何能读 markdown 的代理都可以用 skills:
-
-- **Codex**：直接读 `.claude/skills/<name>/SKILL.md`。
-- **OpenAI Assistants / Custom GPTs**：把 SKILL.md 作为 system context 喂进去。
-- **VS Code Copilot Workspace** 等：把 `.claude/skills/` 加入工作区。
-- **裸 LLM API 调用**：在 system prompt 里加入 `cat .claude/skills/<name>/SKILL.md` 的内容。
+任何能读取 Markdown 的代理都可以复用这些说明。若代理不自动发现 `.claude/skills/`，
+先让它完整读取目标 `SKILL.md`，再按入口里的 References 路由按需加载同目录资源；不要只截取
+入口前几百行，也不要把整个 `references/` 无差别塞进上下文。具体注入 system context、
+workspace context 还是工具资源，由该代理的上下文机制决定。
 
 ## 添加新 skill 的流程
 

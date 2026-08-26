@@ -29,6 +29,13 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
 
 Sidecar stderr is recorded as `error` by default. Recoverable framework warnings carry a `[covel:warn]` transport marker; collectors remove the marker and persist them at `warn`, so `policy: warn` scheduling diagnostics and automatic retries do not inflate error counts.
 
+The `/api/health` request is skipped by the Hono logger by default. Add
+comma-separated paths with `COVEL_LOG_QUIET_PATHS`. Business traces (LLM,
+proposal, and tool calls) stay in the `trace_events` database table rather
+than these log files. When running `pnpm dev:server`, stdout/stderr is also
+mirrored to `server.log`; set `COVEL_SERVER_LOG_FILE=""` to disable that
+mirror or provide an explicit path to override it.
+
 `settings.json` is atomically replaced through a same-directory temporary file and uses persistence `schemaVersion: 2` with a monotonic `revision`. A valid v1 bundle (which must contain object `entries`) is migrated in memory as revision 0 and written as v2 after the next successful save. Existing corrupt, unreadable, or future-version files are never treated as empty: reads fail with `settings_file_invalid`, and saves preserve the original file. Saves carry the loaded revision; an intervening write returns `409 settings_revision_conflict` without replacing the file.
 
 ## `~/.covel/config.toml`
@@ -86,6 +93,20 @@ Model settings persist `llm.providers` as the only source of truth. On startup, 
 ## Frontend entry point
 
 **Settings → Desktop** surfaces every path, proxy selection, one-click folder actions, and the `data_root` picker.
+
+## Desktop REST authentication
+
+Packaged desktop sidecars generate a one-time bearer token at every launch and
+inject it as `COVEL_DESKTOP_REST_TOKEN`. Write endpoints (`/api/config/keys`,
+`/api/config/settings`, `/api/config/proxy`, `/api/config/data-root`, and
+`/api/config/open-folder`) and the local-config reads for settings/proxy
+require `Authorization: Bearer <token>`. `/api/config/info` and the provider
+name-only `/api/config/keys` response remain public. Development web/server
+mode keeps the token gate disabled when the variable is absent.
+
+The LLM page can reload `llm.toml` without restarting through
+`POST /api/llm-config/reload`. Parse errors fall back to the built-in `story`
+slot and are exposed in `GET /api/llm-config` and the Settings UI.
 
 ## Related docs
 
