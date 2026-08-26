@@ -6,7 +6,7 @@ import type {
   ToolCallRecord,
   TurnInput,
 } from "@covel/shared";
-import { toJsonValueOrDiagnostic } from "@covel/shared";
+import { localeLanguage, toJsonValueOrDiagnostic } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
   isSuspendSentinel,
@@ -674,9 +674,10 @@ export async function runAgentToolLoop({
         );
         messages.push({
           role: "system",
-          content: input.locale?.toLowerCase().startsWith("zh")
-            ? "你没有调用任何工具就结束了。必须先调用声明的工具完成任务，再收尾。"
-            : "You finished without calling any tool. Call the declared tools to complete the task first, then wrap up.",
+          content:
+            localeLanguage(input.locale) === "zh"
+              ? "你没有调用任何工具就结束了。必须先调用声明的工具完成任务，再收尾。"
+              : "You finished without calling any tool. Call the declared tools to complete the task first, then wrap up.",
         });
         continue;
       }

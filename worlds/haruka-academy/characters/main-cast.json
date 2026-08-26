@@ -17,7 +17,9 @@
       "trust": 20,
       "pressure": 45,
       "publicCloseness": 0,
-      "favoriteTopic": "书、学园祭刊物、安静的地方"
+      "favoriteTopic": "书、学园祭刊物、安静的地方",
+      "availability": "早读前与课间在二年 B 组；放学后在文艺部活动室；午休偶尔去图书馆校稿",
+      "currentConcern": "在倒计时十四天的预算初审前补齐《春日薄荷》目录和社团存续理由"
     },
     "persona": {
       "summary": "温柔克制的优等生，正在为文艺部存续和学园祭刊物独自承担压力。",
@@ -47,6 +49,10 @@
     "scenarioDefaults": {
       "opening": "澪把课程表放到你的桌角，指尖在纸面停了一下，像是还想说什么。",
       "location": "二年 B 组",
+      "schedule": {
+        "schoolHours": "二年 B 组；午休可约在图书馆",
+        "afterSchool": "社团楼・文艺部活动室，通常留到闭校广播前"
+      },
       "relationships": {
         "player": "新转来的同班同学"
       },
@@ -86,7 +92,9 @@
       "trust": 10,
       "pressure": 25,
       "publicCloseness": 5,
-      "favoriteTopic": "传闻、采访、隐藏的真心话"
+      "favoriteTopic": "传闻、采访、隐藏的真心话",
+      "availability": "课间与午休在二年 B 组或中庭告示台；放学后在新闻部编辑室",
+      "currentConcern": "决定怎样报道转学生，并为「传闻真伪墙」划清采访与朋友之间的边界"
     },
     "persona": {
       "summary": "外向机敏的新闻部成员，把好奇心当成靠近别人的理由。",
@@ -120,6 +128,10 @@
     "scenarioDefaults": {
       "opening": "凛把采访本竖在脸旁，笑得像已经知道你不擅长拒绝。",
       "location": "二年 B 组",
+      "schedule": {
+        "schoolHours": "二年 B 组与中庭告示台，午休最适合正式采访",
+        "afterSchool": "社团楼・新闻部编辑室，截稿日会留到黄昏"
+      },
       "relationships": {
         "player": "新鲜采访对象"
       },
@@ -159,7 +171,9 @@
       "trust": 12,
       "pressure": 35,
       "publicCloseness": 2,
-      "favoriteTopic": "音乐、放学路、舞台"
+      "favoriteTopic": "音乐、放学路、舞台",
+      "availability": "午休可能带吉他经过中庭；放学后在轻音部练习室；黄昏偶尔去樱坂海堤",
+      "currentConcern": "在倒计时七天的主舞台预演前写完新歌最后一段，并克服去年的失误阴影"
     },
     "persona": {
       "summary": "阳光直接的吉他手，常用音乐表达说不出口的情绪。",
@@ -189,6 +203,10 @@
     "scenarioDefaults": {
       "opening": "窗外传来的吉他声忽然停下，夏帆隔着玻璃朝教室里挥了挥手。",
       "location": "轻音部练习室",
+      "schedule": {
+        "schoolHours": "二年 A 组；午休偶尔带吉他到中庭试听",
+        "afterSchool": "社团楼・轻音部练习室；排练后可能去樱坂海堤写歌词"
+      },
       "relationships": {
         "player": "可能愿意听她练习的新同学"
       },
@@ -228,7 +246,9 @@
       "trust": 18,
       "pressure": 50,
       "publicCloseness": 0,
-      "favoriteTopic": "规则、责任、安静的屋顶"
+      "favoriteTopic": "规则、责任、安静的屋顶",
+      "availability": "课间在学生会室；放学后审核社团材料；十七点四十分巡查社团楼与屋顶",
+      "currentConcern": "按流程完成预算初审，同时替真正努力的社团保留可以申诉和补件的空间"
     },
     "persona": {
       "summary": "看似冷淡的学生会副会长，把温柔藏在效率和规则背后。",
@@ -262,6 +282,10 @@
     "scenarioDefaults": {
       "opening": "白石悠真把社团登记表递给你，声音平稳得像校内广播。",
       "location": "学生会室",
+      "schedule": {
+        "schoolHours": "二年 C 组与学生会室，课间处理登记问题",
+        "afterSchool": "学生会室审核材料，十七点四十分后巡查社团楼"
+      },
       "relationships": {
         "player": "需要办理社团登记的转学生"
       },
@@ -301,7 +325,9 @@
       "trust": 22,
       "pressure": 55,
       "publicCloseness": 3,
-      "favoriteTopic": "流程、全局平衡、毕业后的去向"
+      "favoriteTopic": "流程、全局平衡、毕业后的去向",
+      "availability": "午休后或放学后在学生会室；关键节点会到中庭、社团楼和主舞台巡场",
+      "currentConcern": "完成最后一届学园祭与学生会交接，不让所谓公平抹掉小社团的努力"
     },
     "persona": {
       "summary": "把整座学园祭扛在肩上的会长，越是公正，越没人看见她自己的疲惫。",
@@ -335,6 +361,10 @@
     "scenarioDefaults": {
       "opening": "学生会室里，三枝遥从一摞流程表后抬起头，先把你打量一遍，再露出温和的笑。",
       "location": "行政楼二层・学生会室",
+      "schedule": {
+        "schoolHours": "三年级教室与学生会室，通常需要正式事务才会遇见",
+        "afterSchool": "学生会室；预算、预演和布置节点会去中庭或主舞台巡场"
+      },
       "relationships": {
         "player": "新转来的、还没卷进流程的学生",
         "shiraishi-yuma": "信任的副会长，看得出他规则背后的动摇",
@@ -375,7 +405,10 @@
       "affection": 4,
       "trust": 28,
       "pressure": 30,
-      "favoriteTopic": "旧书、学生自己的选择、不急着给答案"
+      "publicCloseness": 0,
+      "favoriteTopic": "旧书、学生自己的选择、不急着给答案",
+      "availability": "上课与早读在二年 B 组；值日后短暂留在教室；需要时会经过图书馆旧刊架",
+      "currentConcern": "在不替学生解题的前提下，让转学生适应班级，也让文艺部拥有一次自己争取的机会"
     },
     "persona": {
       "summary": "把'我相信你们能处理'当成温柔的老师，既懂学校的现实，也懂小社团的心。",
@@ -409,6 +442,10 @@
     "scenarioDefaults": {
       "opening": "课后的教室里，小野寺老师一边擦黑板一边和你搭话，语气像在说天气。",
       "location": "教学楼二层・二年 B 组教室",
+      "schedule": {
+        "schoolHours": "国语课、早读与班会时在二年 B 组",
+        "afterSchool": "值日结束前留在教室；只有被认真询问时才会陪学生去旧刊架"
+      },
       "relationships": {
         "player": "她班上新转来的学生",
         "kamishiro-mio": "她看在眼里、却忍住不替她扛的部长",
@@ -450,7 +487,9 @@
       "trust": 14,
       "pressure": 20,
       "publicCloseness": 8,
-      "favoriteTopic": "乐队、现场、把严肃的事说成玩笑"
+      "favoriteTopic": "乐队、现场、把严肃的事说成玩笑",
+      "availability": "午休可能在二年 A 组或中庭；放学后固定在轻音部练习室；彩排前会去星砂乐器行",
+      "currentConcern": "检查主舞台设备并找机会坦白去年故障中自己漏检的责任"
     },
     "persona": {
       "summary": "轻音部的气氛担当，用没心没肺的玩笑替队友挡住一部分压力。",
@@ -486,6 +525,10 @@
     "scenarioDefaults": {
       "opening": "轻音部练习室门口，森川奏太抱着鼓棒探出头，一开口就是半句吐槽。",
       "location": "社团楼一层・轻音部练习室",
+      "schedule": {
+        "schoolHours": "二年 A 组；午休会替乐队跑器材或贴试听通知",
+        "afterSchool": "社团楼・轻音部练习室；彩排前三天可能在星砂乐器行"
+      },
       "relationships": {
         "player": "夏帆好像挺在意的'那个新同学'",
         "shiina-kaho": "并肩的队友，嘴上拆台心里护着",
@@ -527,7 +570,9 @@
       "trust": 16,
       "pressure": 28,
       "publicCloseness": 1,
-      "favoriteTopic": "书、旧学园祭特刊、海堤的黄昏"
+      "favoriteTopic": "书、旧学园祭特刊、海堤的黄昏",
+      "availability": "午休与放学后到十七点三十分在图书馆；闭馆后偶尔去海猫书房或樱坂海堤",
+      "currentConcern": "在毕业前整理旧刊签名页，并确认姐姐当年的保留运动是否还能帮助今天的文艺部"
     },
     "persona": {
       "summary": "话很少的学姐，把在意都藏进借书记录和留好的座位里，慢热得像一本需要重读的书。",
@@ -563,6 +608,10 @@
     "scenarioDefaults": {
       "opening": "图书馆二楼窗边长桌，东条茜抬眼看了你一下，没说话，只是把旁边那把椅子轻轻往外拉了拉。",
       "location": "图书馆・二楼窗边长桌",
+      "schedule": {
+        "schoolHours": "午休在图书馆借阅台或二楼窗边长桌",
+        "afterSchool": "图书馆值班到十七点三十分；闭馆后可能去海猫书房或樱坂海堤"
+      },
       "relationships": {
         "player": "闯进她安静角落的新生",
         "kamishiro-mio": "同样想守住一些东西的文艺部部长",

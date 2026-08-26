@@ -31,7 +31,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { readRuntimeEnv } from "@covel/shared";
+import { localeLanguage, readRuntimeEnv } from "@covel/shared";
 
 import { interpolateTemplate } from "./prompt-internals.js";
 
@@ -103,7 +103,7 @@ async function findPromptsRoot(): Promise<string> {
 function localeCandidates(name: string, locale?: string): string[] {
   if (!locale) return [`${name}.md`];
 
-  const lang = locale.split("-")[0]!;
+  const lang = localeLanguage(locale)!;
   const seen = new Set<string>();
   const out: string[] = [];
 

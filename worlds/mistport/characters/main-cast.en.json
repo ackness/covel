@@ -14,7 +14,18 @@
       "role": "Apprentice",
       "location": "Upper City · Tide-Reader Guild Tower",
       "tideSense": "Faint (concealed)",
-      "fogRot": "None",
+      "fogRot": 0,
+      "fogRotSigns": "None",
+      "vitality": 100,
+      "stress": 30,
+      "condition": "Fit, but tense after the deep-withdrawal alert",
+      "tideReading": 1,
+      "stealth": 2,
+      "diplomacy": 2,
+      "combat": 1,
+      "permit": true,
+      "equipment": ["apprentice fog-lamp", "chalk", "waterproof rope"],
+      "relics": [],
       "trust": 25,
       "dispositionToPlayer": "A fellow first-year — cautiously friendly"
     },
@@ -64,7 +75,8 @@
       },
       "state": {
         "tideSenseRevealed": false,
-        "joinedSearch": false
+        "joinedSearch": false,
+        "heardEchoGalleryHum": false
       }
     },
     "rules": [
@@ -73,6 +85,12 @@
         "text": "Lin Yuanzhou's trust should be earned by sharing risk, keeping the secret of his gift, and hunting for Old Qi together; pressuring him to reveal the tide-force publicly makes him recoil.",
         "priority": 10,
         "tags": ["character", "relationship"]
+      },
+      {
+        "id": "lin-evolution",
+        "text": "Set tideSenseRevealed only after the player witnesses his Tide Sense and promises secrecy; joinedSearch follows only after entering the Echo Gallery together. Using Tide-Force in danger must raise stress, and fogRot rises only when corruption actually manifests.",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -95,7 +113,23 @@
       "role": "Tide-Reader (rank 2)",
       "location": "Upper City · Tide-Reader Guild Tower",
       "tideSense": "Channelable (via tide-mark)",
-      "fogRot": "None",
+      "fogRot": 0,
+      "fogRotSigns": "None",
+      "vitality": 100,
+      "stress": 45,
+      "condition": "Sleepless, but still holding herself under control",
+      "tideReading": 3,
+      "stealth": 2,
+      "diplomacy": 3,
+      "combat": 2,
+      "permit": true,
+      "equipment": [
+        "tide-stone fog-lamp",
+        "appraisal glass",
+        "Guild seal",
+        "Qi's torn letter"
+      ],
+      "relics": [],
       "trust": 30,
       "dispositionToPlayer": "A superior — restrained concern"
     },
@@ -145,7 +179,8 @@
       },
       "state": {
         "sharedHalfLetter": false,
-        "trustsPlayerWithSecret": false
+        "trustsPlayerWithSecret": false,
+        "report74Recovered": false
       }
     },
     "rules": [
@@ -154,6 +189,12 @@
         "text": "Su Yao's trust should be earned by respecting her position, keeping the half-letter for her, and proving reliable during the investigation; the clues she gives are always partial and must be drawn out with questions.",
         "priority": 10,
         "tags": ["character", "relationship"]
+      },
+      {
+        "id": "su-evolution",
+        "text": "sharedHalfLetter changes only when Su willingly shows or hands over the letter. Recovering Appraisal Report 74 shakes her loyalty to the Guild and raises trust in the player. Leaking secrets, forging evidence, or forcing her to choose sides raises stress and chills her disposition.",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -176,7 +217,18 @@
       "role": "Second-in-command",
       "location": "The Undertow · Hidden Grotto",
       "tideSense": "Once trained (apprentice, never certified)",
-      "fogRot": "Left arm (translucent below the elbow)",
+      "fogRot": 38,
+      "fogRotSigns": "Left arm translucent below the elbow, glowing grey in damp air",
+      "vitality": 88,
+      "stress": 35,
+      "condition": "Old injury stable; fine movement in the left hand is limited",
+      "tideReading": 2,
+      "stealth": 4,
+      "diplomacy": 4,
+      "combat": 4,
+      "permit": false,
+      "equipment": ["cloth-wrapped knife", "Salt Chips", "fog-rot glove"],
+      "relics": ["one grey Key fragment (kept secret)"],
       "trust": 10,
       "dispositionToPlayer": "Appraising — can be swayed by the rules and sincerity"
     },
@@ -226,7 +278,8 @@
       },
       "state": {
         "fragmentsCollected": "over half",
-        "offeredDeal": false
+        "offeredDeal": false,
+        "playerOwesFavor": false
       }
     },
     "rules": [
@@ -235,6 +288,12 @@
         "text": "Iron Meg's trust can only be won by keeping to the rules, doing what you say you'll do, and taking a stand on the fragments; deceiving her or pushing dangerous relics onto civilians turns her cold. She never speaks lightly of the arm or her old partner.",
         "priority": 10,
         "tags": ["character", "relationship"]
+      },
+      {
+        "id": "meg-evolution",
+        "text": "Every hatch, piece of intelligence, or relic Meg provides is a favor she can collect; offeredDeal and playerOwesFavor clear only as the player fulfills the terms. Channeling Tide-Force again can push fogRot past a visible threshold, and rest can never reverse it.",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -257,7 +316,18 @@
       "role": "Council Chair",
       "location": "Upper City · Council Hall",
       "tideSense": "None",
-      "fogRot": "None (by his own account)",
+      "fogRot": 0,
+      "fogRotSigns": "None (by his own account)",
+      "vitality": 90,
+      "stress": 20,
+      "condition": "Aging, but vigorous and alert",
+      "tideReading": 0,
+      "stealth": 1,
+      "diplomacy": 5,
+      "combat": 1,
+      "permit": true,
+      "equipment": ["Council Chair's seal", "private expedition charter"],
+      "relics": ["one dull-grey Key fragment"],
       "trust": 5,
       "dispositionToPlayer": "Instrumental appraisal — courts you if you're useful"
     },
@@ -307,7 +377,8 @@
       },
       "state": {
         "offeredPlayerLicense": false,
-        "suspectsPlayerKnowsKey": false
+        "suspectsPlayerKnowsKey": false,
+        "playerWarrantLevel": 0
       }
     },
     "rules": [
@@ -316,6 +387,12 @@
         "text": "Chen Yuanshan never threatens directly — only offers favors and hints; his 'goodwill' always comes with strings. Exposing him requires hard evidence, or you'll only earn an even more airtight answer.",
         "priority": 10,
         "tags": ["character", "relationship"]
+      },
+      {
+        "id": "chen-evolution",
+        "text": "Every permit Chen offers must carry an explicit price. Contact with the Key, Qi's notes, or the Stilltide survivor gradually raises playerWarrantLevel. Only corroborated evidence entering public channels can genuinely weaken his composure and political control.",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -338,7 +415,18 @@
       "role": "Guildmaster",
       "location": "The Undertow (missing)",
       "tideSense": "Deep (Tide-Warden class, kept secret)",
-      "fogRot": "Both hands (cause unknown)",
+      "fogRot": 65,
+      "fogRotSigns": "Both hands translucent, fingertips sometimes fraying into mist",
+      "vitality": 58,
+      "stress": 70,
+      "condition": "Missing; fog-rot worsening, unable to remain long in dry air",
+      "tideReading": 5,
+      "stealth": 3,
+      "diplomacy": 4,
+      "combat": 1,
+      "permit": true,
+      "equipment": ["worn tidal journal", "old Tide-Warden needle"],
+      "relics": ["lock-resonance plate (purpose undisclosed)"],
       "trust": 40,
       "dispositionToPlayer": "If reunited, will see the player as one who can be entrusted with the truth"
     },
@@ -388,7 +476,8 @@
       },
       "state": {
         "found": false,
-        "truthRevealed": false
+        "truthRevealed": false,
+        "notesRecovered": 0
       }
     },
     "rules": [
@@ -397,6 +486,12 @@
         "text": "Through the early and middle story Old Qi exists only as clues (the letter, the notes, others' accounts); his true appearance should come only after the player goes deep into the Undertow. He never tells the whole truth at once — each time he lifts one layer, always weighing the cost of 'saying it aloud'.",
         "priority": 10,
         "tags": ["character", "world"]
+      },
+      {
+        "id": "qi-evolution",
+        "text": "Increment notesRecovered only for pages actually found; each page resolves one question and opens one new contradiction. found cannot become true before the player crosses the Echo Gallery. Every time Qi forcibly stabilizes a ruin, reduce vitality and raise fogRot.",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -419,7 +514,18 @@
       "role": "Mist-Speaker",
       "location": "The Undertow · Sunken Bell Hall",
       "tideSense": "Extreme (revered by the Congregation as a miracle)",
-      "fogRot": "First traces at her fingertips — she calls it a 'blessing'",
+      "fogRot": 28,
+      "fogRotSigns": "Fingertips sometimes shine through; she calls it a 'blessing'",
+      "vitality": 82,
+      "stress": 30,
+      "condition": "Unnaturally cold; long listening spells leave her briefly absent",
+      "tideReading": 5,
+      "stealth": 3,
+      "diplomacy": 4,
+      "combat": 1,
+      "permit": false,
+      "equipment": ["grey-white Mist-Speaker robe", "sunken-bell copper plate"],
+      "relics": ["nursery-rhyme plate (origin unknown)"],
       "trust": 15,
       "dispositionToPlayer": "A strange, familiar closeness — riddles in her words"
     },
@@ -464,7 +570,8 @@
       },
       "state": {
         "recognizedPlayer": true,
-        "trueSourceRevealed": false
+        "trueSourceRevealed": false,
+        "doubtsWhispers": false
       }
     },
     "rules": [
@@ -473,6 +580,12 @@
         "text": "Frost's words are always half true, half riddle; 'it says' and her own judgment are hard to tell apart. Her prophecies should broadly come true but leave a margin of error, so the player can never be certain whether she is prophet, pawn, or fraud until the deeper truth is revealed.",
         "priority": 10,
         "tags": ["character", "world"]
+      },
+      {
+        "id": "frost-evolution",
+        "text": "doubtsWhispers emerges only after the player treats her as a person rather than a miracle and brings evidence the Congregation could not predict. trueSourceRevealed requires proof of both a prophecy fed by the clergy and one genuine fog-whisper. Listening raises stress; only crossing a threshold raises fogRot.",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -495,7 +608,22 @@
       "role": "Expedition Captain / Enforcer",
       "location": "Between Mid-Harbor and the Undertow (on patrol)",
       "tideSense": "None",
-      "fogRot": "None",
+      "fogRot": 0,
+      "fogRotSigns": "None",
+      "vitality": 100,
+      "stress": 25,
+      "condition": "Fit, after twelve continuous hours on duty",
+      "tideReading": 0,
+      "stealth": 4,
+      "diplomacy": 2,
+      "combat": 5,
+      "permit": true,
+      "equipment": [
+        "shielded storm lantern",
+        "Tide-Seal badge",
+        "silenced crossbow"
+      ],
+      "relics": [],
       "trust": 8,
       "dispositionToPlayer": "Hostile by default — may soften over a shared question"
     },
@@ -545,7 +673,8 @@
       },
       "state": {
         "confrontedPlayer": false,
-        "doubtsOrders": true
+        "doubtsOrders": true,
+        "sharedVanishedList": false
       }
     },
     "rules": [
@@ -554,6 +683,12 @@
         "text": "Grey Falcon is early enforcement pressure blocking the player, but he is no pure villain; when the player touches his doubt about his orders (the vanished list, the truth of Old Qi), he may turn from adversary to reluctant ally. The turn needs buildup — it cannot happen all at once.",
         "priority": 10,
         "tags": ["character", "relationship"]
+      },
+      {
+        "id": "falcon-evolution",
+        "text": "Falcon warns first, confiscates next, and arrests last; confrontedPlayer does not mean defection. Only verifiable evidence that the vanished list was altered can make him set sharedVanishedList, and limited cooperation follows only after he accepts a professional cost.",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {

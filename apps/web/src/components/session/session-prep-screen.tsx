@@ -240,6 +240,7 @@ export function SessionPrepScreen({
         open={settingsOpen}
         onOpenChange={handleSettingsOpenChange}
         initialKey={settingsInitialKey}
+        packages={packages}
       />
       <div className="h-full w-full overflow-y-auto overscroll-contain">
         <div className="mx-auto max-w-6xl px-4 md:px-8 py-5 md:py-8">

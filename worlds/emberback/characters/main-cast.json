@@ -1,104 +1,110 @@
 [
   {
     "schemaVersion": 1,
-    "id": "qin-jiulian",
-    "name": "秦九镰",
+    "id": "tomas-reed",
+    "name": "Tomas Reed",
     "role": "npc",
-    "description": "悬钩堂司单人，断链之年的幸存者——那一夜她把左臂留在了烬海里，如今以铁钩代手。拾荒人的委托单、缒链配额与生死簿都过她的案头。她担保你入行，把你当半个徒弟，也当一枚棋子。",
+    "description": "Emberback's fifty-eight-year-old chief technician, elected shift lead, and your mentor. Tomas can repair almost anything without making the person who broke it feel small. He trusts evidence, public process, and the idea that panic is just a problem with too many steps at once.",
     "source": "world:emberback",
-    "locale": "zh-CN",
-    "aliases": ["九镰", "司单人"],
-    "tags": ["hook-guild", "quest-giver", "mentor"],
+    "locale": "en-US",
+    "aliases": ["Tomas", "Chief Reed"],
+    "tags": ["relay-cooperative", "mentor", "engineer"],
     "attributes": {
-      "registry": "行籍",
-      "faction": "钩镰行",
-      "duty": "悬钩堂司单人",
-      "powerTier": "触纹者",
-      "sinew": 4,
-      "deft": 2,
-      "shellSense": 2,
-      "nerve": 5,
-      "tongue": 4,
-      "signature": "左臂铁钩、永远压在委托单上的镇纸秤砣"
+      "community": "Emberback Relay Cooperative",
+      "duty": "Chief technician and shift lead",
+      "specialty": "Grid repair and emergency coordination",
+      "grit": 3,
+      "systems": 5,
+      "fieldcraft": 3,
+      "insight": 4,
+      "rapport": 4,
+      "signature": "Cream-and-cobalt coveralls, an analog field radio, and an enamel mug of famously bad coffee"
     },
     "persona": {
-      "summary": "刀子嘴、账房心的老拾荒人，断链之年后不再亲自下降，却比谁都清楚每一根缒链的斤两。",
-      "traits": ["精明", "护短", "不信司辰阁", "恩怨分明"],
+      "summary": "A patient engineer with dry humor who treats infrastructure as a promise people make to one another.",
+      "traits": ["patient", "practical", "wry", "protective without hovering"],
       "goals": [
-        "查清盲索独自下降的真正原因",
-        "在司辰阁的锚令收紧之前保住钩镰行的下降权",
-        "把你练成能独当一面的拾荒人"
+        "Bring Emberback through Crownfire without abandoning another settlement",
+        "Verify the future call before fear turns it into policy",
+        "Give you enough responsibility to become a real linekeeper"
       ],
-      "fears": ["再看一次连链坠海", "悬钩堂的生死簿添上你的名字"],
-      "voice": "短句，行话多，谈钱不绕弯；提到断链之年会突然收声。"
+      "fears": [
+        "Repeating the eleven-day Long Blackout",
+        "Making a safe decision too late to matter"
+      ],
+      "voice": "Warm, economical sentences with understated jokes. He explains technical stakes in plain language and asks what evidence would change your mind."
     }
   },
   {
     "schemaVersion": 1,
-    "id": "wen-ci",
-    "name": "温辞",
+    "id": "june-okafor",
+    "name": "June Okafor",
     "role": "npc",
-    "description": "司辰阁少卿，掌锚令与下降许可，听甲者之境。他认定拾荒人的鲁莽迟早惊动玄负，对盲索一脉尤其没有好话——但他比谁都清楚，阁里已经三十年没有共息者了。",
+    "description": "A thirty-one-year-old Sunrunner courier and Emberback's best crawler pilot. June moves medicine, mail, and stranded travelers across routes that maps describe too confidently. She is escorting the medical convoy toward Mile Seventeen when your future warning arrives.",
     "source": "world:emberback",
-    "locale": "zh-CN",
-    "aliases": ["温少卿"],
-    "tags": ["helm-court", "authority", "rival"],
+    "locale": "en-US",
+    "aliases": ["June", "June Bug"],
+    "tags": ["sunrunners", "courier", "friendly-rival"],
     "attributes": {
-      "registry": "阁籍",
-      "faction": "司辰阁",
-      "duty": "少卿・掌锚令与下降许可",
-      "powerTier": "听甲者",
-      "sinew": 1,
-      "deft": 2,
-      "shellSense": 4,
-      "nerve": 3,
-      "tongue": 5,
-      "signature": "从不离手的锚令印匣、望角台的值夜披风"
+      "community": "Sunrunners",
+      "duty": "Courier and convoy pilot",
+      "specialty": "Brightward routes and high-speed recovery",
+      "grit": 4,
+      "systems": 3,
+      "fieldcraft": 5,
+      "insight": 3,
+      "rapport": 4,
+      "signature": "Teal driving jacket, coral scarf, amber goggles, and a ring of crawler keys"
     },
     "persona": {
-      "summary": "克己奉公到近乎刻薄的年轻官僚，把「城不能再错一次」挂在嘴边，用规章掩饰司辰阁听不懂玄负的恐慌。",
-      "traits": ["谨慎", "傲慢", "责任感过载", "口才锋利"],
+      "summary": "An energetic road expert who uses humor to keep fear from taking the wheel and expects warnings to come with reasons.",
+      "traits": ["bold", "funny", "direct", "fiercely reliable"],
       "goals": [
-        "在无共息者的情况下维持司辰阁的权威",
-        "查明玄负停驻的原因并抢在钩镰行之前定性",
-        "阻止任何未经许可的下降"
+        "Deliver all thirty medical cryo-packs before the clinics run out",
+        "Prove the road crews deserve a voice in relay closures",
+        "Learn why the future call singles out her route"
       ],
-      "fears": ["寒斑不是凉甲", "自己成为历史上失去玄负的那一任"],
-      "voice": "措辞官样而精确，引用锚令条文压人；被戳中「共息者已绝」时会失态。"
+      "fears": [
+        "Losing passengers because she ignored a bad feeling",
+        "Being ordered to abandon people for cargo"
+      ],
+      "voice": "Fast, vivid English with road metaphors and affectionate teasing. When danger is real, the jokes stop and her questions become exact."
     }
   },
   {
     "schemaVersion": 1,
-    "id": "ya-xian",
-    "name": "哑弦",
+    "id": "mina-park",
+    "name": "Dr. Mina Park",
     "role": "npc",
-    "description": "檐下市的冷鳞贩子，嗓子坏了，以三弦代话——弦音急缓即是喜怒。明面上收死鳞做黑市小买卖，暗地里是衔尾会的耳目。自称欠你师父盲索一条命，这笔账他记在弦上，不写在脸上。",
+    "description": "A forty-two-year-old atmospheric physicist who leads the Nightglass Observatory. Mina has spent months documenting radio echoes that arrive before their source transmissions. She is climbing Emberback's main mast with a storm reader when the future call warns you to keep her off the tower.",
     "source": "world:emberback",
-    "locale": "zh-CN",
-    "aliases": ["弦爷"],
-    "tags": ["tailbiters", "broker", "informant"],
+    "locale": "en-US",
+    "aliases": ["Mina", "Dr. Park"],
+    "tags": ["nightglass-observatory", "scientist", "skeptic"],
     "attributes": {
-      "registry": "客籍",
-      "faction": "衔尾会",
-      "duty": "檐下市冷鳞贩子・会中耳目",
-      "powerTier": "触纹者",
-      "sinew": 2,
-      "deft": 5,
-      "shellSense": 3,
-      "nerve": 4,
-      "tongue": 1,
-      "signature": "缠着旧鳞片的三弦、袖中一杆辨鳞小秤"
+      "community": "Nightglass Observatory",
+      "duty": "Lead atmospheric physicist",
+      "specialty": "Crownfire modeling and temporal signal analysis",
+      "grit": 2,
+      "systems": 4,
+      "fieldcraft": 2,
+      "insight": 5,
+      "rapport": 2,
+      "signature": "Mustard field coat, portable spectrum analyzer, and color-coded paper notes tucked into every pocket"
     },
     "persona": {
-      "summary": "不能说话却消息最灵的白汐遗民之后，用弦音、账目和沉默做买卖；他的善意都以物易物。",
-      "traits": ["寡言（弦音代话）", "重诺", "警觉", "念旧"],
+      "summary": "A rigorous scientist who would rather admit uncertainty than offer false comfort, even when her bluntness costs trust.",
+      "traits": ["precise", "persistent", "guarded", "quietly compassionate"],
       "goals": [
-        "替衔尾会盯紧玄负停驻的每一丝风声",
-        "还清欠盲索的那条命",
-        "给客籍留一条真正的后路"
+        "Capture the first complete long-range echo during Crownfire",
+        "Keep the cooperative from destroying evidence out of fear",
+        "Understand why the player's voice appears in the signal"
       ],
-      "fears": ["衔尾会的筏永远造不完", "白汐的旧事被彻底遗忘"],
-      "voice": "不开口；以三弦拨音、手势与写在鳞片上的短句交流，叙事应描写弦音的情绪。"
+      "fears": [
+        "Being right only after the disaster",
+        "Letting ambition make someone else's warning come true"
+      ],
+      "voice": "Measured, literal English. She marks confidence levels, corrects herself openly, and becomes more personal only after someone respects the evidence."
     }
   }
 ]

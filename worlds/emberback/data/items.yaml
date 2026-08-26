@@ -1,43 +1,45 @@
-# inventory 种子（to: plugin:inventory/items，key: id）
-- id: scale-coins
-  name: 鳞钱
-  quantity: 40
-  description: 玄负蜕鳞打磨成的小片货币，贴肤微温。凉透的是冷鳞，别收。
+- id: trade-chits
+  name: Trade chits
+  quantity: 60
+  description: Cooperative credit accepted for meals, parts, route fares, and personal supplies. Emergency service is not sold.
   tags:
     - currency
-- id: hook-sickle
-  name: 钩镰
+- id: field-radio
+  name: Field radio
   quantity: 1
   equipped: true
-  description: 拾荒人的吃饭家伙，一头攀缒钩、一头割取镰。师父盲索的遗物，配重顺手得不像话。
+  description: A rugged short-range set tuned to Emberback's maintenance channels. Its side buffer still holds the impossible call.
   tags:
-    - weapon
     - tool
-- id: descent-harness
-  name: 缒链甲带
+    - communication
+    - clue
+- id: linekeeper-kit
+  name: Linekeeper kit
   quantity: 1
-  equipped: false
-  description: 旧式下降甲带，皮革配沉城盐铁扣。卡扣有磨损，吃得住一次全重坠停——大概。
+  equipped: true
+  description: Signal probe, ceramic cutters, repair wire, sealant, and a hand-crank emergency charger in a weathered roll.
   tags:
-    - gear
-- id: dew-flasks
-  name: 露水囊
+    - tool
+    - repair
+- id: crawler-key
+  name: Utility crawler key
+  quantity: 1
+  description: Starts Emberback's battered maintenance crawler, provided nobody has pulled its charge allocation.
+  tags:
+    - vehicle
+    - quest
+- id: water-cells
+  name: Water cells
   quantity: 2
-  description: 露井广场打的配给露水。烬海下面一口都补不着，省着喝。
+  description: Two flexible half-liter cells from the nightward condensers. Enough for one person on a short field run.
   tags:
     - supply
     - water
-- id: crack-whistles
-  name: 摔响哨
-  quantity: 3
-  description: 往甲面上一摔就炸响的信号哨。三短一长，绞盘队收链——前提是他们还在上面。
-  tags:
-    - supply
-    - signal
-- id: baixi-map-half
-  name: 半张白汐旧图
+- id: heat-veil
+  name: Heat veil
   quantity: 1
-  description: 师父盲索留下的白汐城街巷图下半张，边角焦黑。有人用冷鳞粉在图上标了一个记号。
+  equipped: false
+  description: A reflective hood and shoulder wrap for brief brightward exposure. Useful, uncomfortable, and easy to tear in high wind.
   tags:
-    - clue
-    - quest
+    - gear
+    - protection

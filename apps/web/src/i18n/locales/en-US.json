@@ -482,9 +482,13 @@
     "aiSaving": "Saving world...",
     "aiDone": "World created successfully!",
     "aiError": "Generation failed",
+    "languageLabel": "World language: {{language}}",
+    "languageEnglish": "English",
+    "languageChinese": "Chinese",
+    "languageBadgeChinese": "中文",
     "delete": "Delete world",
     "deleteConfirmTitle": "Delete world?",
-    "deleteConfirmDesc": "This will permanently delete \"{{name}}\". This action cannot be undone.",
+    "deleteConfirmDesc": "This will permanently delete \"{{name}}\" and all of its session data. This action cannot be undone.",
     "deleteConfirmAction": "Delete"
   },
   "settings": {
@@ -529,6 +533,7 @@
     "collapseCapability": "Collapse",
     "editCapability": "Edit Capabilities",
     "resetOverride": "Reset",
+    "useLlmTomlDefault": "Use llm.toml default — {{provider}} / {{model}}",
     "overrideApplied": "Overridden",
     "modelDatabase": "Model Database",
     "updateFromGitHub": "Update from GitHub",

@@ -1,4 +1,21 @@
 - schemaVersion: 1
+  id: mistport-silence-protocol
+  title: 雾中生存法
+  content: 雾兽追逐突兀的声光与潮力波动，而非凭空定位猎物。进入浓雾时应写清冷光雾灯、包布金属、手势交流和撤离刻度；玩家若制造明火、撞击或高声，先给出可感知的逼近征兆，再让危险升级。
+  kind: constant
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 雾兽
+    - 声音
+    - 光源
+    - 雾灯
+    - 撤离
+  insertionOrder: 405
+- schemaVersion: 1
   id: mistport-fog-truth
   title: 雾中真相
   content: 雾港的线索经常互相矛盾。每次调查应保留可验证细节、目击者偏见和潮汐造成的证据偏移，让玩家通过追问和比对推进真相，而不是直接给出结论。
@@ -14,6 +31,23 @@
     - 目击者
     - 潮汐
   insertionOrder: 410
+- schemaVersion: 1
+  id: mistport-opening-leads
+  title: 三声钟后的第一步
+  content: 开局不要一次倾倒全部阴谋。苏窈的半封信、公会封档库缺失的第七十四号报告、封潮关外刚露出的回声廊，是三个可交叉验证的起点；盐牙会的暗门与议会许可证代表不同代价。每个场景至少给出一个可行动的具体线索，并让林远舟、铁姑、灰隼或小霜中的一人以自己的诉求把调查推向下一处。
+  kind: triggered
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 三连击
+    - 齐老失踪
+    - 半封信
+    - 第七十四号
+    - 回声廊
+  insertionOrder: 415
 - schemaVersion: 1
   id: mistport-tide-clock
   title: 潮汐时钟
@@ -99,3 +133,21 @@
     - 周期
     - 真相
   insertionOrder: 460
+- schemaVersion: 1
+  id: mistport-consequence-ledger
+  title: 会留下痕迹的选择
+  content: 有代价的行动应让状态持续演化，而非下一幕复原。明确更新潮时与地点、角色的体力/压力/雾蚀、对玩家的信任与态度、四方势力的许可/通缉/人情，或线索的未核实/已佐证/已污染/已解决状态；只更新叙事已经明确造成的变化，且把后果带入后续场景。
+  kind: evolving
+  category: relationship
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 信任
+    - 压力
+    - 许可
+    - 通缉
+    - 已佐证
+    - 已污染
+  insertionOrder: 470

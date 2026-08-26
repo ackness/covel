@@ -3,7 +3,7 @@ import type {
   SettingGroup,
   SettingsStoreApi,
 } from "@covel/settings";
-import { resolveI18nText } from "@covel/shared";
+import { resolveI18nText, type I18nText } from "@covel/shared";
 
 export type NavNodeKind = "group" | "plugin" | "subgroup";
 
@@ -75,13 +75,15 @@ const LLM_SUBNODES: Array<{
 ];
 
 function groupLabel(group: SettingGroup, locale: string): string {
-  const l = GROUP_LABELS[group];
-  return locale.startsWith("en") ? l["en-US"] : l["zh-CN"];
+  return (
+    resolveI18nText(GROUP_LABELS[group], locale) ?? GROUP_LABELS[group]["zh-CN"]
+  );
 }
 
 interface BuildNavOptions {
   readonly includeDesktop?: boolean;
   readonly locale?: string;
+  readonly pluginDisplayNames?: Readonly<Record<string, I18nText | undefined>>;
 }
 
 /**
@@ -117,7 +119,7 @@ export function buildNavTree(
       for (const sub of LLM_SUBNODES) {
         nodes.push({
           id: sub.id,
-          label: locale === "en-US" ? sub.label["en-US"] : sub.label["zh-CN"],
+          label: resolveI18nText(sub.label, locale) ?? sub.label["zh-CN"],
           kind: "subgroup",
           parentId: "llm",
           children: [],
@@ -141,7 +143,9 @@ export function buildNavTree(
         for (const [pluginId, pluginEntries] of byPlugin) {
           nodes.push({
             id: `plugin.${pluginId}`,
-            label: pluginId,
+            label:
+              resolveI18nText(opts.pluginDisplayNames?.[pluginId], locale) ??
+              pluginId,
             kind: "plugin",
             parentId: "plugin",
             children: pluginEntries,
@@ -176,9 +180,9 @@ export function buildNavTree(
       }
       nodes.push({
         id: APPEARANCE_NODE_ID,
-        label: locale.startsWith("en")
-          ? APPEARANCE_LABEL["en-US"]
-          : APPEARANCE_LABEL["zh-CN"],
+        label:
+          resolveI18nText(APPEARANCE_LABEL, locale) ??
+          APPEARANCE_LABEL["zh-CN"],
         kind: "group",
         children: [],
       });
@@ -197,18 +201,16 @@ export function buildNavTree(
   // default Settings pane; those servers simply ignore the optional header.
   nodes.push({
     id: OPERATOR_ACCESS_NODE_ID,
-    label: locale.startsWith("en")
-      ? OPERATOR_ACCESS_LABEL["en-US"]
-      : OPERATOR_ACCESS_LABEL["zh-CN"],
+    label:
+      resolveI18nText(OPERATOR_ACCESS_LABEL, locale) ??
+      OPERATOR_ACCESS_LABEL["zh-CN"],
     kind: "group",
     children: [],
   });
   // Virtual node for package import (UI-only, no registered SettingEntry).
   nodes.push({
     id: PACKAGES_NODE_ID,
-    label: locale.startsWith("en")
-      ? PACKAGES_LABEL["en-US"]
-      : PACKAGES_LABEL["zh-CN"],
+    label: resolveI18nText(PACKAGES_LABEL, locale) ?? PACKAGES_LABEL["zh-CN"],
     kind: "group",
     children: [],
   });

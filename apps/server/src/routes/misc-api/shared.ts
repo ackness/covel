@@ -1,5 +1,10 @@
 import { resolve, relative } from "node:path";
-import { FrameworkCapability, readRuntimeEnv, type Stage } from "@covel/shared";
+import {
+  FrameworkCapability,
+  readRuntimeEnv,
+  resolveI18nText,
+  type Stage,
+} from "@covel/shared";
 
 // Flow segments are the named stages plus one bucket for stage-less runtimes
 // (event / manual). The frontend groups steps by `step.segmentId === segment.id`
@@ -40,8 +45,12 @@ export function resolvePluginsDirs(): readonly string[] {
 export function textValue(value: unknown, locale = "zh-CN"): string {
   if (typeof value === "string") return value;
   if (value && typeof value === "object") {
-    const record = value as Record<string, string>;
-    return record[locale] ?? record["en-US"] ?? Object.values(record)[0] ?? "";
+    const localized = Object.fromEntries(
+      Object.entries(value).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    );
+    return resolveI18nText(localized, locale) ?? "";
   }
   return "";
 }

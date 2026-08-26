@@ -8,7 +8,11 @@
  * internals, or framework components are referenced.
  */
 
-import type { Proposal, ProposalType } from "@covel/shared";
+import {
+  localeLanguage,
+  type Proposal,
+  type ProposalType,
+} from "@covel/shared";
 
 /**
  * Bound provider work by a timeout while preserving the turn's cancellation
@@ -220,8 +224,7 @@ export function pickLocaleText(
   zh: string,
   en: string,
 ): string {
-  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
-  return lang === "zh" ? zh : en;
+  return localeLanguage(locale) === "zh" ? zh : en;
 }
 
 // ── Proposal factory ─────────────────────────────────────────────

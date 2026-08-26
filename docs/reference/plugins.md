@@ -1078,7 +1078,7 @@ plugins/<plugin-id>/
 
 #### displayName（友好展示名）
 
-`displayName` 是 frontmatter 顶层的 **I18nText** 字段，作为插件在插件列表、provider 切换器等 UI 处的**友好展示名**——与 `name`（runtime id，用于数据隔离 / 工具作用域 / trace）解耦。单 runtime 与多 runtime 插件都适用；服务器经 `PluginSummary.displayName` 下发，前端按 locale 解析（缺失时回落到 `name`，再回落到 plugin id）。
+`displayName` 是 frontmatter 顶层的 **I18nText** 字段，作为插件在插件列表、设置导航和执行时间线等 UI 处的**友好展示名**——与 `name`（runtime id，用于数据隔离 / 工具作用域 / trace）解耦。单 runtime 与多 runtime 插件都适用；服务器经 `PluginSummary.displayName` 下发，前端遵循[Internationalization](./i18n.md) 契约按 locale 解析（缺失时回落到 `name`，再回落到 plugin id）。
 
 ```yaml
 ---

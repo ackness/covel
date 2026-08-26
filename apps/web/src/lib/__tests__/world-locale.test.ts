@@ -1,0 +1,73 @@
+import { describe, expect, it } from "vitest";
+import type { WorldRecord } from "@/services/api.js";
+import {
+  prioritizeWorldsByLocale,
+  worldLanguage,
+  worldLanguageBadge,
+} from "../world-locale.js";
+
+function world(id: string, locale?: string): WorldRecord {
+  return {
+    id,
+    name: id,
+    description: id,
+    locale,
+    createdAt: "2026-08-26T00:00:00.000Z",
+  };
+}
+
+describe("world locale presentation", () => {
+  it.each([
+    ["en", "en"],
+    ["en-US", "en"],
+    ["EN_us", "en"],
+    ["zh", "zh"],
+    ["zh-CN", "zh"],
+    ["zh_Hans", "zh"],
+    ["ja-JP", null],
+    ["", null],
+    [undefined, null],
+  ] as const)("normalizes %s to %s", (locale, expected) => {
+    expect(worldLanguage(locale)).toBe(expected);
+  });
+
+  it("stably prioritizes English worlds for an English interface", () => {
+    const worlds = [
+      world("zh-one", "zh-CN"),
+      world("en-one", "en-US"),
+      world("unknown"),
+      world("en-two", "EN_us"),
+      world("zh-two", "zh-Hans"),
+    ];
+
+    expect(
+      prioritizeWorldsByLocale(worlds, "en-US").map(({ id }) => id),
+    ).toEqual(["en-one", "en-two", "zh-one", "unknown", "zh-two"]);
+    expect(worlds.map(({ id }) => id)).toEqual([
+      "zh-one",
+      "en-one",
+      "unknown",
+      "en-two",
+      "zh-two",
+    ]);
+  });
+
+  it("stably prioritizes Chinese worlds for a Chinese interface", () => {
+    const worlds = [
+      world("en", "en-US"),
+      world("zh-one", "zh-CN"),
+      world("unknown"),
+      world("zh-two", "zh"),
+    ];
+
+    expect(
+      prioritizeWorldsByLocale(worlds, "zh-CN").map(({ id }) => id),
+    ).toEqual(["zh-one", "zh-two", "en", "unknown"]);
+  });
+
+  it("provides concise language badges", () => {
+    expect(worldLanguageBadge("en-US")).toBe("EN");
+    expect(worldLanguageBadge("zh-CN")).toBe("ZH");
+    expect(worldLanguageBadge("fr-FR")).toBeNull();
+  });
+});

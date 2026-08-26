@@ -30,4 +30,30 @@ describe("operator access settings navigation", () => {
       expect.objectContaining({ id: OPERATOR_ACCESS_NODE_ID }),
     ]);
   });
+
+  it("uses localized plugin names while keeping plugin ids stable", () => {
+    const pluginStore = {
+      listEntries: () => [
+        {
+          key: "plugin.chat-mode-narrator.enabled",
+          group: "plugin",
+          pluginId: "chat-mode-narrator",
+        },
+      ],
+    } as unknown as SettingsStoreApi;
+
+    const english = buildNavTree(pluginStore, {
+      locale: "en-US",
+      pluginDisplayNames: {
+        "chat-mode-narrator": {
+          zh: "对话叙事",
+          en: "Dialogue Narrator",
+        },
+      },
+    });
+
+    expect(
+      english.find((node) => node.id === "plugin.chat-mode-narrator"),
+    ).toEqual(expect.objectContaining({ label: "Dialogue Narrator" }));
+  });
 });

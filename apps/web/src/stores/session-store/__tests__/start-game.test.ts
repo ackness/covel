@@ -79,6 +79,28 @@ beforeEach(() => {
 });
 
 describe("startGameSession bootstrap order", () => {
+  it("uses the world language when creating a session", async () => {
+    const ds = makeDataService([]);
+
+    await startGameSession({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch: vi.fn(),
+      sessionIdRef: { current: null },
+      world: { ...world, locale: "en-US" },
+      presets: [],
+      llmConfig: null,
+    });
+
+    expect(ds.createSession).toHaveBeenCalledWith(
+      world.id,
+      undefined,
+      undefined,
+      undefined,
+      "en-US",
+    );
+  });
+
   it("publishes the session only after server sync and model bindings", async () => {
     const order: string[] = [];
     api.updateSession.mockImplementation(async () => {

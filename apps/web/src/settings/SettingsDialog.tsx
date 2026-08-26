@@ -27,24 +27,34 @@ import { LlmPresetsPane } from "./panes/LlmPresetsPane.js";
 import { PackagesPane } from "./panes/PackagesPane.js";
 import { AppearancePane } from "./panes/AppearancePane.js";
 import { OperatorAccessPane } from "./panes/OperatorAccessPane.js";
+import type { PackageSummary } from "@/services/api.js";
 
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Deep-link target — either a nav node id ("llm.slots") or a setting key. */
   initialKey?: string;
+  packages?: readonly Pick<PackageSummary, "name" | "displayName">[];
 }
 
 export function SettingsDialog({
   open,
   onOpenChange,
   initialKey,
+  packages = [],
 }: SettingsDialogProps) {
   const store = useSettingsStore();
   const { t, i18n } = useTranslation();
   const [query, setQuery] = useState("");
   const desktop = isDesktopApp();
   const [storeRevision, setStoreRevision] = useState(0);
+  const pluginDisplayNames = useMemo(
+    () =>
+      Object.fromEntries(
+        packages.map((pkg) => [pkg.name, pkg.displayName] as const),
+      ),
+    [packages],
+  );
 
   useEffect(
     () =>
@@ -56,10 +66,14 @@ export function SettingsDialog({
 
   const tree = useMemo(
     () =>
-      buildNavTree(store, { includeDesktop: desktop, locale: i18n.language }),
+      buildNavTree(store, {
+        includeDesktop: desktop,
+        locale: i18n.language,
+        pluginDisplayNames,
+      }),
     // `open` included so the tree rebuilds when dialog opens and plugins
     // registered new entries since last render.
-    [store, desktop, i18n.language, open, storeRevision],
+    [store, desktop, i18n.language, open, storeRevision, pluginDisplayNames],
   );
   const filtered = useMemo(
     () => filterNav(tree, query, i18n.language),

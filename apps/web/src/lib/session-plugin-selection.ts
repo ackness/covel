@@ -1,5 +1,6 @@
 import type { I18nText } from "@covel/shared";
 import type { PackageSummary, WorldRecord } from "@/services/api.js";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
 
 export interface PluginPack {
   id: string;
@@ -126,22 +127,7 @@ function i18nAllText(value: unknown): string {
 }
 
 export function textValue(value: unknown, locale = "zh-CN"): string {
-  if (typeof value === "string") return value;
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    const direct = record[locale];
-    if (typeof direct === "string") return direct;
-    const language = locale.split("-")[0];
-    const languageValue = record[language];
-    if (typeof languageValue === "string") return languageValue;
-    const en = record["en-US"] ?? record.en;
-    if (typeof en === "string") return en;
-    const first = Object.values(record).find(
-      (item) => typeof item === "string",
-    );
-    return typeof first === "string" ? first : "";
-  }
-  return "";
+  return resolveDisplayText(value, locale);
 }
 
 function stringArrayFromMetadata(

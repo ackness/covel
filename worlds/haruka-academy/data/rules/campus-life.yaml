@@ -1,7 +1,7 @@
 - schemaVersion: 1
   id: haruka-dialogue-distance
   title: 对话距离感
-  content: 玩家与主要角色的关系推进必须通过具体对话、共同任务、承诺兑现和尊重边界体现。角色会在好感、信任、压力和公开亲密度之间产生不同步变化。
+  content: 玩家与主要角色的关系推进必须通过具体对话、共同任务、承诺兑现和尊重边界体现。好感、信任、压力和公开亲密度可以不同步变化；关系阶段只在共同完成任务、托付秘密、化解误会或明确约定后改变，并让称呼、邀约与公开距离出现可观察差异。
   kind: constant
   category: relationship
   enabled: true
@@ -15,10 +15,28 @@
     - 公开亲密度
   insertionOrder: 410
 - schemaVersion: 1
+  id: haruka-school-day
+  title: 校园一日节拍
+  content: 校园日依次经过八点二十分前的早读准备、上午课间、十二点二十分午休、十五点四十分放学、十六点至十七点三十分社团活动、黄昏和十八点闭校。跨时段时要交代铃声、光线、天气或下一项约定；每个时段通常只够完成一件主要行动，错过的邀约应进入约定记忆而不是自动补做。
+  kind: constant
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 早读
+    - 课间
+    - 午休
+    - 放学
+    - 黄昏
+    - 闭校
+  insertionOrder: 415
+- schemaVersion: 1
   id: haruka-school-calendar
   title: 学园祭倒计时
-  content: 学园祭筹备、社团审查、考试周、采访报道和主舞台选拔是推动日常关系变化的主要事件来源。每次事件应给出可对话、可选择、可承担后果的校园情境。
-  kind: triggered
+  content: 学园祭筹备按倒计时推进：十四天预算初审，十天考试与稿件中检，七天主舞台预演，三天《春日薄荷》截稿和总彩排，一天前夜布置，零天正式祭典与夕风点灯。二年 B 组「海风邮局」、文艺部特刊、新闻部「传闻真伪墙」、轻音部新歌和学生会流程应在节点上彼此影响；每个事件都给出可对话、可选择、可承担后果的情境。
+  kind: evolving
   category: world
   enabled: true
   coordinate:
@@ -26,11 +44,35 @@
   budgetClass: sticky
   keys:
     - 学园祭
+    - 倒计时
     - 社团审查
     - 考试
     - 采访
     - 主舞台
+    - 海风邮局
+    - 夕风点灯
   insertionOrder: 420
+- schemaVersion: 1
+  id: haruka-stage-route
+  title: 昼夜场景舞台
+  content: 首次确立场景、地点切换或昼夜变化时必须发射 scene.set。地点用「二年 B 组」「社团楼」「图书馆」「樱坂海堤」「青砾町商店街」等规范锚点，具体房间或店铺继续写在正文里；日落前使用 day，日落后或闭校广播后使用 night，让窗外海色、室内灯光和角色离校安排随之变化。五个锚点已有成套昼夜背景，优先使用，不要无故把同一地点改成新名称。
+  kind: constant
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - 地点
+    - 场景
+    - 日落
+    - 夜晚
+    - 教室
+    - 社团楼
+    - 图书馆
+    - 海堤
+    - 商店街
+  insertionOrder: 425
 - schemaVersion: 1
   id: haruka-romance-boundary
   title: 校园恋爱边界
@@ -49,7 +91,7 @@
 - schemaVersion: 1
   id: haruka-ensemble-reactions
   title: 群像交错
-  content: 主要角色彼此认识，支持角色（三枝遥、小野寺千寻、森川奏太）也会评价玩家对他人的选择。推进某段关系会影响其他角色的态度——偏袒、冷落或误会都会在群像中产生连锁反应，但核心冲突应保持青春日常质感。
+  content: 八名预设角色彼此有班级、社团与前辈关系，但每轮只聚焦一到两名发声角色。神代澪与朝仓凛在二年 B 组最常见，椎名夏帆与森川奏太在放学后的社团楼，白石悠真与三枝遥在学生会流程和巡查中，小野寺千寻在课堂与值日后，东条茜在午休或闭馆前的图书馆。临时跨行程登场要有任务、传闻或约定解释；偏袒、冷落或误会可以产生连锁反应，但保持青春日常质感。
   kind: triggered
   category: relationship
   enabled: true
@@ -62,12 +104,13 @@
     - 误会
     - 其他角色
     - 连锁
+    - 行程
   insertionOrder: 440
 - schemaVersion: 1
   id: haruka-rumor-heat
   title: 传闻热度
-  content: 青砾町和遥风学园都很小。公开场合频繁独处、明显偏袒或被新闻部记录，会优先提高传闻热度与公开亲密度；私下兑现承诺、记住细节、尊重沉默，则优先提升信任、降低压力。传闻能制造机会，也会让内向或守规矩的角色退后一步。
-  kind: triggered
+  content: 青砾町和遥风学园都很小。每条传闻按「种子—扩散—升温—澄清、坐实或转向」演化，必须记录来源、传播地点、涉及角色和当前热度，不能凭空全校皆知。公开独处、明显偏袒或被新闻部记录会提高热度与公开亲密度；私下兑现承诺、记住细节、尊重沉默则优先提升信任、降低压力。凛可以报道、压稿或公开辟谣，玩家也可以用行动改变传闻而非只靠解释。
+  kind: evolving
   category: scene
   enabled: true
   coordinate:
@@ -79,4 +122,23 @@
     - 私下
     - 新闻部
     - 热度
+    - 辟谣
   insertionOrder: 450
+- schemaVersion: 1
+  id: haruka-festival-convergence
+  title: 春日薄荷与夕风点灯
+  content: 祭典高潮不是彼此孤立的任务清单：文艺部《春日薄荷》可以刊登海风邮局来信或新闻部辟谣，新闻部报道能替轻音部预演争取观众，夏帆的新歌可以成为夕风点灯最后一曲，旧刊故事则能为保留社团楼提供公开理由。玩家可以优先帮助一条线，也可以通过具体交换让多条线互相支撑；成功仍要保留角色各自的代价、署名权和选择权。
+  kind: evolving
+  category: world
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - 春日薄荷
+    - 海风邮局
+    - 传闻真伪墙
+    - 新歌
+    - 夕风点灯
+    - 旧刊
+  insertionOrder: 460

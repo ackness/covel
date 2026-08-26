@@ -482,9 +482,13 @@
     "aiSaving": "保存世界...",
     "aiDone": "世界创建完成！",
     "aiError": "生成失败",
+    "languageLabel": "世界语言：{{language}}",
+    "languageEnglish": "英文",
+    "languageChinese": "中文",
+    "languageBadgeChinese": "中文",
     "delete": "删除世界",
     "deleteConfirmTitle": "删除世界？",
-    "deleteConfirmDesc": "将永久删除「{{name}}」，此操作无法撤销。",
+    "deleteConfirmDesc": "将永久删除「{{name}}」及其关联的所有会话数据，此操作无法撤销。",
     "deleteConfirmAction": "删除"
   },
   "settings": {
@@ -529,6 +533,7 @@
     "collapseCapability": "收起",
     "editCapability": "编辑能力",
     "resetOverride": "重置",
+    "useLlmTomlDefault": "使用 llm.toml 默认值 — {{provider}} / {{model}}",
     "overrideApplied": "已覆盖",
     "modelDatabase": "模型数据库",
     "updateFromGitHub": "从 GitHub 更新",

@@ -9,6 +9,7 @@ import matter from "gray-matter";
 import {
   pluginRelationsSchema,
   hasIllegalDetachedContract,
+  localeLanguage,
 } from "@covel/shared";
 import type {
   PluginRelations,
@@ -52,7 +53,7 @@ async function resolveLocalizedPluginMd(
   if (await fileExists(exact)) return exact;
 
   // Try language prefix: PLUGIN.en.md
-  const lang = locale.split("-")[0];
+  const lang = localeLanguage(locale);
   if (lang !== locale) {
     const langPath = path.join(dir, `PLUGIN.${lang}.md`);
     if (await fileExists(langPath)) return langPath;

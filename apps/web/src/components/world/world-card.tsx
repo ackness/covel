@@ -4,6 +4,8 @@ import { Eye, Trash2, ArrowRight } from "lucide-react";
 import type { WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { worldVisual } from "@/lib/world-visuals.js";
+import { worldLanguage, worldLanguageBadge } from "@/lib/world-locale.js";
+import { isWorldDeletable } from "./world-deletion.js";
 
 export interface WorldCardProps {
   world: WorldRecord;
@@ -38,6 +40,16 @@ export function WorldCard({
   onDelete,
 }: WorldCardProps) {
   const visual = worldVisual(world);
+  const language = worldLanguage(world.locale);
+  const languageCode = worldLanguageBadge(world.locale);
+  const languageBadge =
+    language === "zh" ? t("world.languageBadgeChinese", "ZH") : languageCode;
+  const languageName =
+    language === "en"
+      ? t("world.languageEnglish", "English")
+      : language === "zh"
+        ? t("world.languageChinese", "Chinese")
+        : null;
   return (
     <article
       aria-busy={isEntering}
@@ -92,12 +104,25 @@ export function WorldCard({
           <span className="ui-meta text-[10px] text-white/62 tabular-nums">
             № {String(index + 1).padStart(2, "0")} · {world.id}
           </span>
-          <span
-            className="ui-tag border-white/18 bg-black/18 text-white/70 backdrop-blur-sm"
-            title={t("session.worldStorage", "World storage")}
-          >
-            {storageLabel}
-          </span>
+          <div className="flex items-center gap-1.5">
+            {languageBadge && languageName && (
+              <span
+                className="ui-tag border-white/25 bg-black/28 text-white/88 backdrop-blur-sm"
+                title={t("world.languageLabel", {
+                  language: languageName,
+                  defaultValue: "World language: {{language}}",
+                })}
+              >
+                {languageBadge}
+              </span>
+            )}
+            <span
+              className="ui-tag border-white/18 bg-black/18 text-white/70 backdrop-blur-sm"
+              title={t("session.worldStorage", "World storage")}
+            >
+              {storageLabel}
+            </span>
+          </div>
         </div>
 
         <div className="space-y-3.5">
@@ -139,14 +164,17 @@ export function WorldCard({
               >
                 <Eye className="w-3.5 h-3.5" />
               </button>
-              {world.metadata?.source !== "file" && (
+              {isWorldDeletable(world) && (
                 <button
                   type="button"
                   onClick={(e) => onDelete(e, world.id)}
                   aria-label={t("world.delete", "Delete world")}
-                  className="ui-btn ui-btn-quiet h-8 w-8 border-white/12 bg-black/12 p-0 text-white/72 hover:text-(--accent-danger)"
+                  className="ui-btn ui-btn-quiet h-8 gap-1.5 border-white/12 bg-black/12 px-2.5 text-white/72 hover:text-(--accent-danger)"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
+                  <span className="text-[11px]">
+                    {t("world.delete", "Delete world")}
+                  </span>
                 </button>
               )}
             </div>

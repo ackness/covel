@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import i18nInstance from "@/i18n";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
 import {
   Backpack,
   Anchor,
@@ -110,34 +111,7 @@ export function resolveIcon(name: string | undefined): LucideIcon | null {
  * `useI18nResolver()` to subscribe to language changes and re-render.
  */
 export function resolveI18n(value: unknown, locale?: string): string {
-  if (typeof value === "string") return value;
-  if (typeof value === "object" && value !== null) {
-    // A locale-keyed record from a plugin spec is not guaranteed to hold
-    // strings. Returning a nested object here would reach React as a child and
-    // throw ("Objects are not valid as a React child"), so every branch below
-    // goes through `asString`.
-    const obj = value as Record<string, unknown>;
-    const asString = (v: unknown): string | undefined =>
-      typeof v === "string" ? v : undefined;
-    const lang = locale ?? i18nInstance.language ?? "";
-    const exact = lang ? asString(obj[lang]) : undefined;
-    if (exact) return exact;
-    const prefix = lang.split("-")[0];
-    if (prefix) {
-      for (const k of Object.keys(obj)) {
-        if (k !== prefix && !k.startsWith(`${prefix}-`)) continue;
-        const match = asString(obj[k]);
-        if (match) return match;
-      }
-    }
-    return (
-      asString(obj["en-US"]) ??
-      asString(obj["en"]) ??
-      Object.values(obj).find((v): v is string => typeof v === "string") ??
-      ""
-    );
-  }
-  return String(value ?? "");
+  return resolveDisplayText(value, locale ?? i18nInstance.language);
 }
 
 /**

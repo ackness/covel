@@ -103,7 +103,7 @@ export async function startGameSession({
       selectPresetId(presets, llmConfig),
       undefined,
       plugins,
-      i18n.language,
+      world.locale ?? i18n.language,
     );
     createdSessionId = session.id;
 

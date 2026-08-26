@@ -248,6 +248,7 @@ export function GameView({ session }: GameViewProps) {
         open={settings.open}
         onOpenChange={settings.onOpenChange}
         initialKey={settings.initialKey}
+        packages={packages}
       />
 
       <Dialog open={suspensionsOpen} onOpenChange={setSuspensionsOpen}>

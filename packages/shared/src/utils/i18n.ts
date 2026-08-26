@@ -1,12 +1,38 @@
 import type { I18nText } from "../types/world.js";
 
+/** Return a normalized primary language subtag (`en-US` / `en_US` → `en`). */
+export function localeLanguage(locale: string | undefined): string | undefined {
+  const language = locale
+    ?.trim()
+    .replaceAll("_", "-")
+    .split("-")[0]
+    ?.toLowerCase();
+  return language || undefined;
+}
+
+function normalizedLocale(locale: string): string {
+  return locale.trim().replaceAll("_", "-").toLowerCase();
+}
+
+function localeEntry(
+  text: Record<string, string>,
+  locale: string,
+): string | undefined {
+  const normalized = normalizedLocale(locale);
+  return Object.entries(text).find(
+    ([key, value]) =>
+      normalizedLocale(key) === normalized && typeof value === "string",
+  )?.[1];
+}
+
 /**
  * Resolve an {@link I18nText} value to a plain string for a given locale.
  *
  * Resolution order for locale-keyed records:
  *   1. exact locale key (e.g. `zh-CN`)
- *   2. language-only match (e.g. `zh` matches `zh-CN`)
- *   3. first available value
+ *   2. language-only key, then another variant of the same language
+ *   3. English (`en-US`, `en`, then another English variant)
+ *   4. first available value
  *
  * Returns `undefined` when the input is `undefined` (so callers can apply
  * their own fallback). A bare string is returned as-is.
@@ -18,14 +44,31 @@ export function resolveI18nText(
   if (text === undefined) return undefined;
   if (typeof text === "string") return text;
 
-  if (locale && typeof text[locale] === "string") return text[locale];
+  if (!locale?.trim()) {
+    return Object.values(text).find((value) => typeof value === "string");
+  }
 
-  const languageOnly = locale?.split("-")[0];
+  const exact = localeEntry(text, locale);
+  if (exact !== undefined) return exact;
+
+  const languageOnly = localeLanguage(locale);
   if (languageOnly) {
+    const languageEntry = localeEntry(text, languageOnly);
+    if (languageEntry !== undefined) return languageEntry;
     for (const [key, value] of Object.entries(text)) {
-      if (key.split("-")[0] === languageOnly && typeof value === "string") {
+      if (localeLanguage(key) === languageOnly && typeof value === "string") {
         return value;
       }
+    }
+  }
+
+  for (const englishLocale of ["en-US", "en"] as const) {
+    const english = localeEntry(text, englishLocale);
+    if (english !== undefined) return english;
+  }
+  for (const [key, value] of Object.entries(text)) {
+    if (localeLanguage(key) === "en" && typeof value === "string") {
+      return value;
     }
   }
 
@@ -33,8 +76,8 @@ export function resolveI18nText(
   return first;
 }
 
-/** Matches a locale code key like `zh`, `en`, `zh-CN`, `en-US`. */
-const LOCALE_KEY_RE = /^[a-z]{2}(?:-[A-Z]{2})?$/;
+/** Matches a locale code key like `zh`, `en`, `zh-CN`, `en_US`. */
+const LOCALE_KEY_RE = /^[a-z]{2}(?:[-_][a-z]{2})?$/i;
 
 /**
  * True for a plain object whose every key is a locale code and every value is

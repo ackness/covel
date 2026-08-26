@@ -9,14 +9,20 @@
 ```text
 worlds/my-world/
 ├── world.yaml
-├── WORLD.md
+├── WORLD.md                         # 默认世界观；也可用 WORLD.zh.md / WORLD.en.md
 ├── data/
 │   ├── world.data.yaml
-│   └── dimensions.yaml
+│   ├── dimensions.yaml
+│   └── rules/                       # 可选：题材规则，导入 living-world-rules
 ├── characters/
 │   └── main-cast.json
 └── media/
-    └── portraits/
+    ├── portraits.json               # 可选：立绘生成清单
+    ├── portraits/                   # 可选：角色立绘
+    ├── presence.json                # 可选：角色与立绘的内容寻址映射
+    ├── scenes.json                  # 可选：场景图生成清单
+    ├── scenes/                      # 可选：日 / 夜场景图
+    └── scenes.registry.json         # 可选：scene-stage 场景注册表
 ```
 
 `world.yaml`：
@@ -27,14 +33,14 @@ id: my-world
 name: 我的世界
 summary: 一个示例世界。
 defaultLocale: zh-CN
-requiredPlugins:
-  - pregame
-  - world-init
-  - char-creator
-recommendedPlugins:
-  - character-blueprint
 pluginPolicy:
   preset: traditional-story
+  requiredPlugins:
+    - pregame
+    - world-init
+    - char-creator
+  recommendedPlugins:
+    - character-blueprint
   preferTags:
     - mode:traditional-story
   avoidTags:
@@ -45,6 +51,17 @@ defaultViewMode: stage
 
 `worldData` path 相对 world root。
 
+### 两种完整内置示例
+
+世界包不必启用所有能力；应让题材决定插件组合与数据层。仓库内两个中文世界展示了两条互补路线：
+
+| 示例                    | 玩家体验                             | 主要能力                                                                                                                                                         | 适合参考的文件                                                                                                                    |
+| ----------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `worlds/mistport`       | 黑暗奇幻调查，行动与环境叙事为主     | 基于传统叙事的自定义 `mistport-investigation` 组合、按 locale 选择的世界观 / 角色 / 规则 / presence、题材记忆块、角色属性 schema、角色蓝图、立绘、潮汐与势力规则 | `world.yaml`、`WORLD.zh.md` / `WORLD.en.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                       |
+| `worlds/haruka-academy` | 校园群像恋爱，对话与视觉小说舞台为主 | `dialogue-mode` 策略、`defaultViewMode: stage`、关系数值、题材记忆块、角色蓝图、透明立绘 presence、地点对应的日 / 夜场景注册表、校园日程规则                     | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/scenes.json`、`media/scenes.registry.json` |
+
+两者都把内容通过 `data/world.data.yaml` 接入同一导入协议，但不会为了展示能力而加入与题材无关的插件。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
+
 `defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。目前仅 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）有效，其他值按 `parsed` 处理。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
 
 > **请把 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins` 写在 `pluginPolicy` 下**。写在顶层同样被接受，加载时**折叠进 `pluginPolicy`（去重合并）**，`WorldRecord.metadata` 只保留 `pluginPolicy` 作为插件选择的唯一来源；但顶层无法表达 `preset` / `packs` / `preferTags` 等场景意图。
@@ -53,7 +70,7 @@ defaultViewMode: stage
 
 | 字段                  | 说明                                                                                                                         |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `preset`              | 前端内置组合包 ID：`traditional-story`、`dialogue-mode`、`low-cost`。                                                        |
+| `preset`              | 默认选中的组合包 ID；可引用同一策略内的自定义 `packs[].id`，或内置的 `traditional-story`、`dialogue-mode`、`low-cost`。      |
 | `preferTags`          | 默认选中匹配这些插件 `tags` 的插件。                                                                                         |
 | `avoidTags`           | 默认关闭匹配这些插件 `tags` 的插件。                                                                                         |
 | `requireCapabilities` | 要求启用的机器能力标签。                                                                                                     |

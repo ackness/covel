@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { resolveI18nText } from "@covel/shared";
 import type { ExecutionStep } from "@/stores/session-store.js";
 import type { PackageSummary } from "@/services/api.js";
 import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
@@ -185,17 +186,6 @@ function RuntimeChip({
   );
 }
 
-function resolveDisplayName(
-  displayName: string | Record<string, string> | undefined,
-  locale: string,
-): string | undefined {
-  if (!displayName) return undefined;
-  if (typeof displayName === "string") return displayName;
-  return (
-    displayName[locale] ?? displayName["en-US"] ?? Object.values(displayName)[0]
-  );
-}
-
 /** Group steps by turnId, preserving insertion order. */
 function groupStepsByTurn(
   steps: ExecutionStep[],
@@ -237,7 +227,7 @@ export function ExecutionTimeline({
   // Build label map from plugin manifests (pluginId → display name)
   const RUNTIME_LABELS: Record<string, string> = {};
   for (const pkg of packages) {
-    const name = resolveDisplayName(pkg.displayName, i18n.language);
+    const name = resolveI18nText(pkg.displayName, i18n.language);
     if (name) RUNTIME_LABELS[pkg.name] = name;
   }
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   abortSignalWithTimeout,
   assertEntityEnvelope,
+  pickLocaleText,
   readManualEntity,
   splitList,
 } from "../src/index.js";
@@ -41,6 +42,14 @@ describe("splitList", () => {
     expect(
       splitList(Array.from({ length: 40 }, (_, i) => `k${i}`)),
     ).toHaveLength(32);
+  });
+});
+
+describe("pickLocaleText", () => {
+  it("uses the shared primary-language normalization", () => {
+    expect(pickLocaleText("ZH_cn", "中文", "English")).toBe("中文");
+    expect(pickLocaleText("en_GB", "中文", "English")).toBe("English");
+    expect(pickLocaleText(undefined, "中文", "English")).toBe("English");
   });
 });
 

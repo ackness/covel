@@ -3,6 +3,7 @@
     "schemaVersion": 1,
     "characterId": "npc-lin-yuanzhou",
     "displayName": "林远舟",
+    "style": "mistport-fog-noir",
     "avatar": {
       "id": "2d5975625090ac74cb1edca4f97ceb68ff197494279c26760c7e9df142d35deb",
       "mime": "image/png",
@@ -18,6 +19,7 @@
     "schemaVersion": 1,
     "characterId": "npc-su-yao",
     "displayName": "苏窈",
+    "style": "mistport-fog-noir",
     "avatar": {
       "id": "579848e3d93ce4d42c83bce33c50599cfe5467d0d0f6587f403eb4175e422ffd",
       "mime": "image/png",
@@ -33,6 +35,7 @@
     "schemaVersion": 1,
     "characterId": "npc-iron-meg",
     "displayName": "铁姑",
+    "style": "mistport-fog-noir",
     "avatar": {
       "id": "29da2c847d24983dce6b9c4098070b1a01d014e49912762a5f9ebec25304172c",
       "mime": "image/png",
@@ -48,6 +51,7 @@
     "schemaVersion": 1,
     "characterId": "npc-chen-yuanshan",
     "displayName": "陈远山",
+    "style": "mistport-fog-noir",
     "avatar": {
       "id": "a459d41dce1c9e86489b129b1b6c2c1f3f97269a5d1ae23e1a3b715799897147",
       "mime": "image/png",
@@ -63,6 +67,7 @@
     "schemaVersion": 1,
     "characterId": "npc-guildmaster-qi",
     "displayName": "齐老",
+    "style": "mistport-fog-noir",
     "avatar": {
       "id": "b4263dbbb034ebb17cccbd8efe22a7b26726b1dd5fd0628d08ece06924411746",
       "mime": "image/png",
@@ -78,6 +83,7 @@
     "schemaVersion": 1,
     "characterId": "npc-xiao-shuang",
     "displayName": "小霜",
+    "style": "mistport-fog-noir",
     "avatar": {
       "id": "c716e0a100465548a7b571c355474a2f91fbfb8c460e37f0edb9b84cb7eb24da",
       "mime": "image/png",
@@ -93,6 +99,7 @@
     "schemaVersion": 1,
     "characterId": "npc-grey-falcon",
     "displayName": "灰隼",
+    "style": "mistport-fog-noir",
     "avatar": {
       "id": "49d1a2b1ecc987e5420281662f2d852bb723c30ba362313a624ba370c2837aa8",
       "mime": "image/png",

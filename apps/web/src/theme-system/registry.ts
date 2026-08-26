@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { I18nText } from "@covel/shared";
+import { resolveI18nText, type I18nText } from "@covel/shared";
 import type { SettingOption, SettingsStoreApi } from "@covel/settings";
 import { getBuiltinThemes } from "./builtins.js";
 import {
@@ -49,8 +49,7 @@ function sortThemes(themes: ThemeDefinition[]): ThemeDefinition[] {
 }
 
 function labelToString(label: I18nText): string {
-  if (typeof label === "string") return label;
-  return label["en-US"] ?? label["zh-CN"] ?? Object.values(label)[0] ?? "";
+  return resolveI18nText(label, "en-US") ?? "";
 }
 
 function buildRegistry(

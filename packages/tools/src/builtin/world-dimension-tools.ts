@@ -12,7 +12,7 @@
  * the full structured payload in `parsedResult`.
  */
 
-import { DIMENSION_KEYS } from "@covel/shared";
+import { DIMENSION_KEYS, resolveI18nDeep } from "@covel/shared";
 import { z } from "zod";
 import { tool } from "../tool.js";
 import type { ToolModule } from "../types.js";
@@ -57,47 +57,8 @@ interface LoadedDimension {
 
 const dimensionKeys = [...DIMENSION_KEYS] as [DimensionKey, ...DimensionKey[]];
 
-const localeKeyRe = /^[a-z]{2}(?:-[A-Z]{2})?$/;
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function isLocaleMap(value: unknown): value is Record<string, string> {
-  if (!isPlainObject(value)) return false;
-  const entries = Object.entries(value);
-  return (
-    entries.length > 0 &&
-    entries.every(
-      ([key, item]) => localeKeyRe.test(key) && typeof item === "string",
-    )
-  );
-}
-
-function resolveI18nValue(value: unknown, locale?: string): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => resolveI18nValue(item, locale));
-  }
-  if (isLocaleMap(value)) {
-    if (locale && value[locale]) return value[locale];
-    const languageOnly = locale?.split("-")[0];
-    if (languageOnly) {
-      const exact = Object.entries(value).find(
-        ([key]) => key.split("-")[0] === languageOnly,
-      );
-      if (exact) return exact[1];
-    }
-    const first = Object.values(value)[0];
-    return first ?? "";
-  }
-  if (isPlainObject(value)) {
-    const out: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value)) {
-      out[key] = resolveI18nValue(item, locale);
-    }
-    return out;
-  }
-  return value;
 }
 
 function parsePath(path: string): Array<string | number> | null {
@@ -337,7 +298,7 @@ function createWorldDimensionGetTool(
         }
 
         const value = params.resolveI18n
-          ? resolveI18nValue(raw.value, locale)
+          ? resolveI18nDeep(raw.value, locale)
           : raw.value;
         results.push({
           dimension: query.dimension,

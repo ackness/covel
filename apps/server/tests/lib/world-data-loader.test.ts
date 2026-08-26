@@ -722,8 +722,14 @@ sources:
 
     // Each flagship world declares its own genre-specific core-memory blocks.
     const memoryBlocksByWorld = {
-      mistport: ["clues", "relics", "tides"],
-      "haruka-academy": ["festival", "promises", "relationships", "rumors"],
+      mistport: ["clues", "commitments", "relics", "tides"],
+      "haruka-academy": [
+        "campusSchedule",
+        "festival",
+        "promises",
+        "relationships",
+        "rumors",
+      ],
     } as const;
     for (const [worldId, labels] of Object.entries(memoryBlocksByWorld)) {
       const record = await loadSingleWorld(path.join(worldsRoot, worldId));

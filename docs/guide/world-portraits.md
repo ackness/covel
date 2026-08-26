@@ -10,15 +10,17 @@
 
 ## 三套风格方向
 
-| 世界                        | 题材          | 统一风格                                                                        | 取景 / 画幅                |
-| --------------------------- | ------------- | ------------------------------------------------------------------------------- | -------------------------- |
-| **emberback** 鳌背孤城      | 末世生存·探索 | 末世东方奇幻、半写实绘画与克制水墨纹理、灰白尘烬与锈铜色                        | 半身胸像、3/4 侧、尘雾背景 |
-| **mistport** 雾港·裂潮纪    | 黑暗奇幻·悬疑 | fog-noir 写实绘画感、冷灰/青/锈的去饱和、海雾体积光、低调戏剧打光、哥特港口氛围 | 半身胸像、3/4 侧、灰雾背景 |
-| **haruka-academy** 遥风学园 | 校园恋爱·日常 | 动漫视觉小说立绘（GalGame 拔模/tachi-e）、柔和赛璐珞、春日粉彩、暖光、海边校园  | 半身胸像、柔和渐变背景     |
+| 世界                          | 题材              | 统一风格                                                                        | 取景 / 画幅                  |
+| ----------------------------- | ----------------- | ------------------------------------------------------------------------------- | ---------------------------- |
+| **emberback** Emberback Relay | 科幻边疆·时间谜团 | 明亮复古科幻冒险海报、暖色硬边日光、奶油/陶土/钴蓝纯色背景、实用型工作服        | 全身立绘、清晰剪影、纯色背景 |
+| **mistport** 雾港·裂潮纪      | 黑暗奇幻·悬疑     | fog-noir 写实绘画感、冷灰/青/锈的去饱和、海雾体积光、低调戏剧打光、哥特港口氛围 | 半身胸像、3/4 侧、灰雾背景   |
+| **haruka-academy** 遥风学园   | 校园恋爱·日常     | 动漫视觉小说立绘（GalGame 拔模/tachi-e）、柔和赛璐珞、春日粉彩、暖光、海边校园  | 半身胸像、柔和渐变背景       |
 
-> 三套风格**刻意不同**——末世水墨、雾港写实、校园动漫——每个世界**内部**则严格同风格（靠共享 prefix/suffix）。
+> 三套风格**刻意不同**——明亮科幻海报、雾港写实、校园动漫——每个世界**内部**则严格同风格（靠共享 prefix/suffix）。
 
 ## 角色清单
+
+**emberback（3）**：Tomas Reed（中继站总技师·现场电台与搪瓷杯）· June Okafor（Sunrunner 驾驶员·珊瑚色围巾与车钥匙）· Dr. Mina Park（大气物理学家·频谱分析仪）。三张均为纯英文世界角色，采用奶油/陶土/钴蓝的明亮纯色背景，与 Mistport 的暗雾半身像明确区分。
 
 **mistport（7）**：林远舟（学徒·腕有潮纹）· 苏窈（验潮师·鉴定镜）· 铁姑（盐牙·左臂雾蚀半透明）· 陈远山（议长·把玩遗物碎片）· 齐老（公会长·指尖雾蚀·潮汐笔记）· 小霜（雾使·侧耳倾听）· 灰隼（执法队长·遮罩提灯）。每张的世界细节（潮纹、雾蚀、遗物碎片）都写进了 `subject`，让立绘自带世界观。
 
@@ -34,6 +36,7 @@
 # 并发生成某世界全部立绘（默认 slot gpt-image-2，并发 5；已存在的跳过）
 npx tsx scripts/generate-portraits.mjs mistport
 npx tsx scripts/generate-portraits.mjs haruka-academy
+npx tsx scripts/generate-portraits.mjs emberback
 # 指定 slot / 并发数 / 只重跑某角色 / 覆盖
 npx tsx scripts/generate-portraits.mjs mistport --slot gpt-image-2 --concurrency 6 --only iron-meg --force
 # 只打印 prompt 队列，不出图、不联网
@@ -56,6 +59,7 @@ npx tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
 ```bash
 node scripts/emit-presence.mjs mistport
 node scripts/emit-presence.mjs haruka-academy
+node scripts/emit-presence.mjs emberback
 ```
 
 > ⚠️ **重生成立绘后必须重跑 `emit-presence` 刷新哈希**，否则 presence 的 `avatar.id` 与新图对不上。

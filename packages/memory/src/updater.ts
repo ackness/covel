@@ -18,7 +18,7 @@
  * rather than free-form LLM editing.
  */
 
-import { resolveI18nText } from "@covel/shared";
+import { localeLanguage, resolveI18nText } from "@covel/shared";
 import type {
   CoreMemoryBlock,
   CoreMemoryBlockSchema,
@@ -137,7 +137,7 @@ export function createMemoryUpdater(
       locale,
     } = params;
     const effectiveLocale = locale ?? resolvedLocale;
-    const lang = effectiveLocale.startsWith("zh") ? "zh" : "en";
+    const lang = localeLanguage(effectiveLocale) === "zh" ? "zh" : "en";
 
     // Resolve the block schema for this session (plugin blocks merged with the
     // session's world-declared blocks) so world memory dimensions are extracted

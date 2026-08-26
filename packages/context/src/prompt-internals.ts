@@ -20,7 +20,7 @@ import type {
   PluginDataInjectDecl,
   RuntimeInjectDecl,
 } from "@covel/shared";
-import { resolveI18nText } from "@covel/shared";
+import { localeLanguage, resolveI18nText } from "@covel/shared";
 import type { PluginDataRecord } from "./session-context-store.js";
 import type { ContextBuildParams } from "./types.js";
 
@@ -415,14 +415,14 @@ export function buildCurrentTurnUserMessage(
   const locale = turnInput.locale ?? "";
   if (turnInput.manualTrigger) {
     const runtimeId = turnInput.manualTrigger.runtimeId;
-    if (locale === "zh" || locale.startsWith("zh-")) {
+    if (localeLanguage(locale) === "zh") {
       return `执行当前手动触发的 runtime：${runtimeId}。严格遵循系统提示中的输出格式，产出该 runtime 的结果。`;
     }
 
     return `Execute the current manually triggered runtime: ${runtimeId}. Follow the output format in the system prompt exactly and produce this runtime's result.`;
   }
 
-  if (locale === "zh" || locale.startsWith("zh-")) {
+  if (localeLanguage(locale) === "zh") {
     return "开始当前游戏回合，并按照系统设定直接给出游戏内结果。";
   }
 
@@ -462,7 +462,7 @@ export function buildFrameworkPreamble(
   // preamble, agent runtimes waste a round-trip on a terminator message after
   // every successful tool call. Emitted in the session locale (matching the
   // [LANGUAGE] constraint above) rather than every locale at once.
-  const isZh = locale.toLowerCase().startsWith("zh");
+  const isZh = localeLanguage(locale) === "zh";
   const usesRuntimeDone = options?.terminatesWithRuntimeDone ?? true;
   const completion = usesRuntimeDone
     ? isZh
@@ -583,7 +583,8 @@ export function renderCoreMemory(
   // `displayName` (attached by `@covel/memory`'s manager from the active block
   // schema). `@covel/context` intentionally does not depend on `@covel/memory`,
   // so no block vocabulary is hardcoded here — the raw label is the fallback.
-  const header = locale?.startsWith("en") ? "[Core Memory]" : "[核心记忆]";
+  const header =
+    localeLanguage(locale) === "en" ? "[Core Memory]" : "[核心记忆]";
   const sections = nonEmpty.map((b) => {
     const label = resolveI18nText(b.displayName, locale) ?? b.label;
     // a core-memory block is DATA that the model itself wrote in
@@ -609,12 +610,11 @@ export function renderCoreMemory(
  */
 export function resolveLocaleLanguageName(locale: string): string {
   const langMap: Record<string, string> = {
-    "zh-CN": "中文",
     zh: "中文",
-    "en-US": "English",
     en: "English",
     ja: "日本語",
     ko: "한국어",
   };
-  return langMap[locale] ?? locale;
+  const language = localeLanguage(locale);
+  return (language && langMap[language]) ?? locale;
 }

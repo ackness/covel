@@ -66,9 +66,9 @@ describe("buildWorldContextView i18n localization", () => {
       entriesMap: undefined,
       locale: "ja-JP",
     });
-    // No ja value → first available (zh-CN).
+    // No ja value → shared resolver prefers English before the first value.
     expect((view.dimensions as Record<string, any>).factions[0].name).toBe(
-      "盐牙会",
+      "Salt-Fangs",
     );
   });
 });

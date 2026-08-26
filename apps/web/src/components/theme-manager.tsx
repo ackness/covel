@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { resolveI18nText } from "@covel/shared";
 import { Check, Download, Palette, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { useSetting, useSettingsStore } from "@/settings/use-settings.js";
@@ -24,14 +25,7 @@ function labelToString(
   label: string | Record<string, string>,
   locale: string,
 ): string {
-  if (typeof label === "string") return label;
-  return (
-    label[locale] ??
-    label["en-US"] ??
-    label["zh-CN"] ??
-    Object.values(label)[0] ??
-    ""
-  );
+  return resolveI18nText(label, locale) ?? "";
 }
 
 export function ThemeManagerWidget() {

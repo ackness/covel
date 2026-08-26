@@ -222,7 +222,7 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 type I18nText = string | Record<LocaleTag, string>;
 ```
 
-- 合法 locale key：`zh`、`zh-CN`、`zh-TW`、`en`、`en-US`、`en-GB`。框架匹配顺序：当前 locale → 前缀匹配（`zh-CN` → `zh`）→ `en-US` → `en` → 对象中任一值。
+- 合法 locale key：`zh`、`zh-CN`、`zh-TW`、`en`、`en-US`、`en-GB`。统一解析契约和完整回退顺序见 [Internationalization](./i18n.md)；组件不得自行判断 locale。
 - **必须同时提供中文与英文**：只有英文 key（`en` 或 `en-US`）存在时，中文回退才能切回；反之亦然。
 - 单一纯字符串**仅限**以下场景：value 不是自然语言（ID / 图标名 / 路径 / URL / 状态值），或者已经是翻译后的英文短语且被所有 locale 共用（如 `"NEW"`、`"Ping"`）。
 - 禁止出现孤立的纯中文字符串。CI 脚本 `scripts/check-plugin-i18n.mjs` 会拒绝任何未被 I18nText 对象包裹的 CJK 字面量。

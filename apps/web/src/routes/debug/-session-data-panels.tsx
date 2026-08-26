@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import i18n from "@/i18n";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
 import type * as api from "@/services/api.js";
 import { fmtTime } from "./-debug-helpers.js";
 
@@ -310,26 +311,5 @@ function stringArray(value: unknown): string[] {
 }
 
 function displayText(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
-  const record = value as Record<string, unknown>;
-  const locale = i18n.language || "zh-CN";
-  for (const key of [
-    locale,
-    locale.split("-")[0],
-    "zh-CN",
-    "zh",
-    "en-US",
-    "en",
-  ]) {
-    const candidate = record[key];
-    if (typeof candidate === "string" && candidate.length > 0) {
-      return candidate;
-    }
-  }
-  const fallback = Object.values(record).find(
-    (candidate): candidate is string =>
-      typeof candidate === "string" && candidate.length > 0,
-  );
-  return fallback ?? "";
+  return resolveDisplayText(value, i18n.language || "zh-CN");
 }

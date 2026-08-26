@@ -213,6 +213,45 @@ describe("world routes", () => {
     expect(await store.getWorld("generated-world")).toBeNull();
   });
 
+  it("DELETE /api/worlds/:id removes a world created through the API", async () => {
+    const create = await app.request("/api/worlds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "player-world",
+        name: "Player World",
+        description: "Created from the world endpoint",
+      }),
+    });
+    expect(create.status).toBe(200);
+
+    const remove = await app.request("/api/worlds/player-world", {
+      method: "DELETE",
+    });
+
+    expect(remove.status).toBe(200);
+    expect(await store.getWorld("player-world")).toBeNull();
+  });
+
+  it("DELETE /api/worlds/:id rejects a built-in file world", async () => {
+    const now = new Date().toISOString();
+    await store.upsertWorld({
+      id: "built-in-world",
+      name: "Built-in",
+      description: "Repository managed",
+      metadata: { source: "file" },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const remove = await app.request("/api/worlds/built-in-world", {
+      method: "DELETE",
+    });
+
+    expect(remove.status).toBe(403);
+    expect(await store.getWorld("built-in-world")).not.toBeNull();
+  });
+
   it("POST /api/worlds/:id/sync-dimensions refreshes plugin_data and lorebook entries together", async () => {
     const now = new Date().toISOString();
     await store.upsertWorld({

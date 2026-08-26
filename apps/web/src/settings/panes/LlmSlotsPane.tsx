@@ -32,7 +32,9 @@ import {
 } from "./llm-capability-controls.js";
 import {
   autoBindDiscoveredSlots as resolveAutoBindDiscoveredSlots,
+  bindSlotToProvider,
   collectLlmSlotPresetCandidates,
+  createProviderScopedModelChoices,
   createVisibleSlotIds,
   discoverRuntimeSlotIds,
 } from "./llm-slots-model.js";
@@ -331,9 +333,11 @@ export function LlmSlotsPane() {
             ].filter(Boolean),
           ),
         );
-        const modelChoices = allPresets.filter(
-          (preset) => preset.provider === effectiveProvider,
-        );
+        const modelChoices = createProviderScopedModelChoices({
+          provider: effectiveProvider,
+          presets: allPresets,
+          serverSlot,
+        });
         const isRequired = !isConfigured && slotId === "default";
         const isFirst = isConfigured && slotId === configuredSlots[0];
         const isDiscovered = discoveredSlotIds.includes(slotId);
@@ -388,6 +392,25 @@ export function LlmSlotsPane() {
                     {t("settings.overrideApplied")}
                   </Badge>
                 )}
+                {selectedPreset && serverSlot && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1.5 text-[10px]"
+                    onClick={() => {
+                      const updated = { ...slotConfig };
+                      delete updated[slotId];
+                      commitSlot(updated);
+                    }}
+                    title={t("settings.useLlmTomlDefault", {
+                      provider: serverSlot.provider,
+                      model: serverSlot.model,
+                    })}
+                  >
+                    <RotateCw className="mr-0.5 h-3 w-3" />
+                    {t("settings.resetOverride")}
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -399,16 +422,15 @@ export function LlmSlotsPane() {
                 <select
                   value={effectiveProvider}
                   onChange={(event) => {
-                    const first = allPresets.find(
-                      (preset) => preset.provider === event.target.value,
+                    commitSlot(
+                      bindSlotToProvider({
+                        slotId,
+                        provider: event.target.value,
+                        slotConfig,
+                        presets: allPresets,
+                        serverSlot,
+                      }),
                     );
-                    if (!first) return;
-                    commitSlot({
-                      ...slotConfig,
-                      [slotId]: first.isCustom
-                        ? { modelRef: first.id }
-                        : { presetId: first.id },
-                    });
                   }}
                   className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
                 >
@@ -429,7 +451,13 @@ export function LlmSlotsPane() {
                   {t("settings.modelId", "Model ID")}
                 </span>
                 <select
-                  value={selectedPresetId || (serverSlot ? "__base" : "")}
+                  value={
+                    selectedPreset
+                      ? selectedPresetId
+                      : modelChoices.includesServerBase
+                        ? "__base"
+                        : ""
+                  }
                   onChange={(event) => {
                     const value = event.target.value;
                     if (!value || value === "__base") {
@@ -451,15 +479,16 @@ export function LlmSlotsPane() {
                   }}
                   className="w-full bg-background border border-border px-3 py-1.5 text-sm font-mono outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {serverSlot && (
+                  {modelChoices.includesServerBase && serverSlot && (
                     <option value="__base">{serverSlot.model}</option>
                   )}
-                  {!serverSlot && modelChoices.length === 0 && (
-                    <option value="">
-                      {t("settings.addModelFirst", "Add a model first")}
-                    </option>
-                  )}
-                  {modelChoices.map((preset) => (
+                  {!modelChoices.includesServerBase &&
+                    modelChoices.presets.length === 0 && (
+                      <option value="">
+                        {t("settings.addModelFirst", "Add a model first")}
+                      </option>
+                    )}
+                  {modelChoices.presets.map((preset) => (
                     <option key={preset.id} value={preset.id}>
                       {preset.model}
                     </option>
