@@ -174,6 +174,7 @@ describe("traceRoutes", () => {
     expect(body.count).toBe(1);
     expect(body.events).toHaveLength(1);
     expect(body.events[0]).toMatchObject({
+      id: "trace-1",
       type: "asset.generated",
       requestId: "req-1",
       traceId: "trace-1",
@@ -183,6 +184,175 @@ describe("traceRoutes", () => {
       seq: 1,
     });
     expect(body.events[0].payload.asset).toMatchObject({ ref });
+  });
+
+  it("adds stable diagnostics for prompts and failures", async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession("sess-diagnostics"));
+    await store.addTraceEvent({
+      id: "runtime-start-event",
+      sessionId: "sess-diagnostics",
+      type: "runtime.started",
+      traceId: "trace-diagnostics",
+      turnId: "turn-diagnostics",
+      payload: {
+        runtimeId: "story/narrator",
+        pluginId: "story",
+        stage: "narrative",
+      },
+      createdAt: "2026-04-25T23:59:59.000Z",
+    });
+    await store.addTraceEvent({
+      id: "prompt-event",
+      sessionId: "sess-diagnostics",
+      type: "llm.calling",
+      traceId: "trace-diagnostics",
+      turnId: "turn-diagnostics",
+      payload: {
+        flowId: "trace-diagnostics",
+        seq: 3,
+        runtimeId: "story/narrator",
+        pluginId: "story",
+        slot: "default",
+        provider: "openai",
+        model: "gpt-test",
+        attempt: 2,
+        startedAt: "2026-04-25T23:59:40.000Z",
+        messages: [
+          { role: "system", content: "Follow the world rules." },
+          { role: "user", content: "Open the door." },
+        ],
+        tools: [{ name: "inspect", description: "Inspect a target" }],
+      },
+      createdAt: "2026-04-26T00:00:00.000Z",
+    });
+    await store.addTraceEvent({
+      id: "failure-event",
+      sessionId: "sess-diagnostics",
+      type: "tool.failed",
+      traceId: "trace-diagnostics",
+      turnId: "turn-diagnostics",
+      payload: {
+        flowId: "trace-diagnostics",
+        seq: 4,
+        runtimeId: "story/narrator",
+        pluginId: "story",
+        toolName: "inspect",
+        toolCallId: "call-1",
+        arguments: { target: "door" },
+        code: "INVALID_ARGS",
+        error: "target is required",
+        details: ["missing target"],
+        durationMs: 1001,
+      },
+      createdAt: "2026-04-26T00:00:01.000Z",
+    });
+
+    const app = makeApp(store);
+    const res = await app.request("/api/traces/sess-diagnostics/turns");
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      turns: Array<{
+        events: Array<{
+          id: string;
+          diagnostic: Record<string, unknown>;
+          payload: Record<string, unknown>;
+        }>;
+      }>;
+    };
+    const [, calling, failed] = body.turns[0].events;
+    expect(calling).toMatchObject({
+      id: "prompt-event",
+      eventOrder: 1,
+      diagnostic: {
+        displayType: "llm.calling",
+        severity: "info",
+        runtimeId: "story/narrator",
+        pluginId: "story",
+        stage: "narrative",
+        provider: "openai",
+        model: "gpt-test",
+        slot: "default",
+        attempt: 2,
+        startedAt: "2026-04-25T23:59:40.000Z",
+        prompt: {
+          contentAvailable: true,
+          messageCount: 2,
+          roles: ["system", "user"],
+          toolCount: 1,
+          contentPath: "payload.messages",
+        },
+      },
+    });
+    expect(calling.payload.messages).toHaveLength(2);
+    expect(failed).toMatchObject({
+      id: "failure-event",
+      eventOrder: 2,
+      diagnostic: {
+        displayType: "tool.failed",
+        severity: "error",
+        runtimeId: "story/narrator",
+        pluginId: "story",
+        stage: "narrative",
+        operation: "inspect",
+        durationMs: 1001,
+        error: {
+          code: "INVALID_ARGS",
+          message: "target is required",
+          details: ["missing target"],
+        },
+        tool: {
+          name: "inspect",
+          callId: "call-1",
+          argumentsAvailable: true,
+          argumentsPath: "payload.arguments",
+          resultAvailable: false,
+          success: false,
+          durationMs: 1001,
+        },
+      },
+    });
+  });
+
+  it("marks slow successful calls with warning severity while preserving error priority", async () => {
+    const store = createMemoryStore();
+    await store.createSession(makeSession("sess-slow"));
+    await store.addTraceEvent({
+      id: "slow-event",
+      sessionId: "sess-slow",
+      type: "tool.completed",
+      traceId: "trace-slow",
+      turnId: "turn-slow",
+      payload: {
+        toolName: "inspect",
+        toolCallId: "call-slow",
+        result: { ok: true },
+        success: true,
+        durationMs: 1000,
+      },
+      createdAt: "2026-04-26T00:00:00.000Z",
+    });
+    const app = makeApp(store);
+    const res = await app.request("/api/traces/sess-slow");
+    const body = (await res.json()) as {
+      events: Array<{
+        eventOrder: number;
+        diagnostic: Record<string, unknown>;
+      }>;
+    };
+    expect(body.events[0]).toMatchObject({
+      eventOrder: 0,
+      diagnostic: {
+        severity: "warning",
+        warning: { code: "slow", thresholdMs: 1000 },
+        tool: {
+          resultAvailable: true,
+          resultPath: "payload.result",
+          success: true,
+        },
+      },
+    });
   });
 
   it("does not synthesize asset events from plugin_data records", async () => {
@@ -253,6 +423,16 @@ describe("traceRoutes", () => {
       eventCount: 2,
       events: [{ type: "runtime.started" }, { type: "runtime.completed" }],
     });
+
+    const pageRes = await app.request(
+      "/api/traces/sess-turns/turns/page?limit=2",
+    );
+    const pageBody = (await pageRes.json()) as {
+      turns: Array<{ events: Array<{ eventOrder: number }> }>;
+    };
+    expect(pageBody.turns[0].events.map((event) => event.eventOrder)).toEqual([
+      0, 1,
+    ]);
   });
 
   it("includes a discovery snapshot on trace turns without plugin_data values", async () => {

@@ -13,7 +13,7 @@ export function TraceTimeline({
   expandedTurns,
   expandedRuntimes,
   filterCategory,
-  selectedEventSeq,
+  selectedEventId,
   onToggleTurn,
   onToggleRuntime,
   onSelectEvent,
@@ -24,7 +24,7 @@ export function TraceTimeline({
   expandedTurns: Set<string>;
   expandedRuntimes: Set<string>;
   filterCategory: EventCategory | null;
-  selectedEventSeq?: number;
+  selectedEventId?: string;
   onToggleTurn: (turnId: string) => void;
   onToggleRuntime: (key: string) => void;
   onSelectEvent: (event: api.TraceEvent) => void;
@@ -66,7 +66,7 @@ export function TraceTimeline({
             onToggleRuntime={onToggleRuntime}
             filterCategory={filterCategory}
             onSelectEvent={onSelectEvent}
-            selectedEventSeq={selectedEventSeq}
+            selectedEventId={selectedEventId}
           />
         ))}
       </div>

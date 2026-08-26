@@ -64,6 +64,8 @@ export interface AgentLoopPolicy {
   readonly retryPolicy: RetryPolicy;
   /** Nudge a bare (no-tool-call) finish back into the loop once. */
   readonly requireToolUse: boolean;
+  /** Successful tool names that complete the runtime after the response batch. */
+  readonly completeAfterTools: ReadonlySet<string>;
   /**
    * Whether queued player steering messages are merged into the transcript
    * before each LLM step. Story runtimes only — plugin runtimes run
@@ -143,6 +145,7 @@ export function buildAgentLoopPolicy({
       runtimeTimeoutMs: timeoutMs,
     }),
     requireToolUse: manifest.requireToolUse === true,
+    completeAfterTools: new Set(manifest.completeAfterTools ?? []),
     acceptsSteering: manifest.outputKind === "story",
     authorizedToolNames,
   };

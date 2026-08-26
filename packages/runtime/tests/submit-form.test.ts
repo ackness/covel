@@ -112,6 +112,31 @@ describe("submitFormHandler (Epic A)", () => {
     expect(out).toBe("Player name is Aria");
   });
 
+  it("uses field defaults for missing and empty optional values", async () => {
+    await seedInteraction(store, {
+      interactionId: "defaults",
+      type: "form",
+      fields: [
+        { type: "text", name: "origin", label: "Origin", defaultValue: "home" },
+        {
+          type: "select",
+          name: "path",
+          label: "Path",
+          options: [{ value: "quiet", label: "Quiet" }],
+          defaultValue: "quiet",
+        },
+      ],
+      narrativeTemplate: "{{origin}} / {{path}}",
+    });
+    expect(
+      await submitOne(store, {
+        interactionId: "defaults",
+        type: "form",
+        values: { origin: "", path: "" },
+      }),
+    ).toBe("home / quiet");
+  });
+
   it("fills a choice template using selectedLabel, falling back to selectedId", async () => {
     await seedInteraction(store, {
       interactionId: "ch-1",

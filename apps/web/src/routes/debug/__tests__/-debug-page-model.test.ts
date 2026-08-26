@@ -87,6 +87,7 @@ function seqEvent(
   timestamp: string,
 ): api.TraceEvent {
   return {
+    id: `${turnId}-${seq}`,
     type: "llm.responded",
     requestId: `req-${seq}`,
     traceId: `trace-${turnId}`,
@@ -157,6 +158,25 @@ describe("mergeTurnPages", () => {
     expect(merged).toHaveLength(1);
     expect(merged[0].eventCount).toBe(3);
     expect(merged[0].events.map((e) => e.seq)).toEqual([1, 2, 3]);
+  });
+
+  it("uses the persisted event id when lifecycle events share seq and timestamp", () => {
+    const first = seqEvent("turn-stable", 0, "10:00");
+    const second = {
+      ...seqEvent("turn-stable", 0, "10:00"),
+      id: "turn-stable-second",
+      type: "runtime.completed",
+    };
+    const merged = mergeTurnPages(
+      [pagedTurn("turn-stable", "10:00", "10:00", [first])],
+      [pagedTurn("turn-stable", "10:00", "10:00", [second])],
+    );
+
+    expect(merged[0].events).toHaveLength(2);
+    expect(merged[0].events.map((event) => event.id)).toEqual([
+      "turn-stable-0",
+      "turn-stable-second",
+    ]);
   });
 
   it("orders merged turns by startedAt ascending and keeps distinct turns", () => {

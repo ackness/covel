@@ -6,6 +6,17 @@ import {
 import { PLUGIN_SCOPED_FIELDS } from "../src/types/plugin.js";
 
 describe("plugin manifest dataSchemas", () => {
+  it("accepts single-shot agent tool completion", () => {
+    const manifest = runtimeManifestInputSchema.parse({
+      name: "single-shot-tool-runtime",
+      description: "Calls one tool and finishes",
+      stage: "post-turn",
+      completeAfterTools: ["persist-result"],
+    });
+
+    expect(manifest.completeAfterTools).toEqual(["persist-result"]);
+  });
+
   it("normalizes keyed declarations into plugin data schema declarations", () => {
     const manifest = runtimeManifestInputSchema.parse({
       name: "world-data-runtime",

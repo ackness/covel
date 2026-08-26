@@ -110,7 +110,7 @@ Local 工具承接插件自己的业务封装，例如：
 | submitLabel       | string      | ✓    | 提交按钮文本                        |
 | narrativeTemplate | string      | ✓    | 叙事模板，含 `{{fieldName}}` 占位符 |
 
-**FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue? }`
+**FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue? }`. `defaultValue` is the actual initial value: the web form pre-fills it, and `submit-form` uses it when the submitted value is missing or an empty string. `placeholder` is display-only and is never submitted as a value. For `select`, `defaultValue` must equal a declared option value.
 
 - type: `text` | `textarea` | `select` | `checkbox` | `number`
 

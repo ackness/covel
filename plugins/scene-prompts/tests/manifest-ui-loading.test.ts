@@ -30,6 +30,8 @@ describe("scene-prompts manifest and UI loading", () => {
       stage: "post-turn",
       model: "plugin",
       outputKind: "system",
+      requireToolUse: true,
+      completeAfterTools: ["generate-scene-prompts"],
       trigger: {
         type: "scheduled",
         interval: 1,

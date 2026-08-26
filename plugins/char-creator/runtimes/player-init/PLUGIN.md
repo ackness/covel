@@ -107,6 +107,7 @@ postHistory:
 7. **数值型 stats** 不进表单（由 guard 用 schema `defaultValue` 自动填入）
 8. **select 选项要给玩家解释，就用 `{ value, label }` 两段式**：`value` 是能直接嵌进句子的短词（"旧地重游"），`label` 是下拉里帮助玩家判断的完整描述（"旧地重游 —— 与青砾町有过一段旧事，想要回来"）。
    叙事模板填入的是 `value`，写成一整串的选项会让正文出现「你的转学原因——旧地重游——与青砾町有过一段旧事，想要回来——已经写进了故事」这种破折号套破折号。选项本身就足够短时（"文艺部"）直接用字符串即可。
+9. 当 `narrativeTemplate` 引用了一个可选字段时，结合开场叙事为该字段生成语境自然的 `defaultValue`，让玩家不修改也能得到完整通顺的叙事；不要把 placeholder 当默认值。select 的 `defaultValue` 必须严格等于某个 option 的 `value`（字符串选项则等于该字符串）。
 
 ### 调用 create-form 参数
 

@@ -29,6 +29,8 @@ export interface LlmCallingPayloadInput {
   readonly messages: readonly LLMMessage[];
   readonly tools: readonly LLMToolDefinition[] | undefined;
   readonly attempt: number;
+  /** Actual provider request start, independent of trace persistence time. */
+  readonly startedAt: string;
   readonly streaming?: boolean;
 }
 
@@ -48,6 +50,7 @@ export function buildLlmCallingPayload(
       jsonSchema: t.parameters,
     })),
     attempt: input.attempt,
+    startedAt: input.startedAt,
     ...(input.streaming ? { streaming: true } : {}),
   };
 }

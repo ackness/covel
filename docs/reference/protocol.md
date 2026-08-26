@@ -482,7 +482,7 @@ These events ride the standard SSE envelope and are also persisted into `trace_e
 | `tool.calling`        | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }`                                                                                                                                                                                                                                                  |
 | `tool.completed`      | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }`                                                                                                                                                                                                                    |
 | `tool.failed`         | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }`                                                                                                                                                                                                                  |
-| `llm.calling`         | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, streaming? }`；`slot` 是 runtime 请求的 slot；生产 gateway 在调用前把它解析为 `model` / `provider` 目标身份。不支持 slot 解析的自定义 adapter 可省略 `provider`。                                                                                |
+| `llm.calling`         | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, streaming? }`；`slot` 是 runtime 请求的 slot；生产 gateway 在调用前把它解析为 `model` / `provider` 目标身份。不支持 slot 解析的自定义 adapter 可省略 `provider`。                                                                     |
 | `llm.responded`       | `{ runtimeId, pluginId, text?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`                                                                                                                                                                                                                                             |
 | `message.completed`   | `{ runtimeId, pluginId, content, len, deltaCount }` — `deltaCount` is the number of upstream `narrative.delta` events the runtime produced. Frontend views aggregating live `narrative.delta` streams use a separate synthesized `_aggregated` field; the two are not interchangeable — `deltaCount` is the authoritative persisted count. |
 | `block.emitted`       | `{ runtimeId, pluginId, proposalId, source, block }`                                                                                                                                                                                                                                                                                       |
@@ -496,5 +496,22 @@ Delta narrative continues to ride `narrative.delta` for realtime UI; only `messa
 
 Payload notes:
 
+- `/api/traces/*` 的读模型在不修改原始 `payload` 的前提下，为每条事件补充
+  持久化 `id`、响应内单调 `eventOrder` 与统一 `diagnostic` 摘要。客户端可直接用
+  `diagnostic.error` 定位失败，用 `diagnostic.prompt` 找到提示词规模与正文路径；
+  不需要按事件类型猜测 `payload` 字段。
+- `eventOrder` 从 0 开始，仅表示当前 API 响应（全量结果或单页）中的 chronological
+  record order，不是全局数据库序号，不能跨页比较。
+- `diagnostic.severity` 为 `info` / `warning` / `error`；错误优先。成功的
+  `llm.responded`、`gateway.responded`、`utils.fetch.responded`、`tool.completed`、
+  `runtime.completed`、`function.completed` 达到 1000ms 时标为 `warning`，并带
+  `diagnostic.warning = { code: "slow", thresholdMs: 1000 }`。
+- `tool.*` 事件带 `diagnostic.tool` 摘要（name、callId、参数/结果可用性与
+  `payload.arguments` / `payload.result` 等内容路径、success、durationMs）；原始
+  参数和结果仍只在 `payload`。
+- `llm.calling.payload.startedAt`（并投影为 `diagnostic.startedAt`）记录真实 provider
+  请求开始时间。事件自身 `timestamp` 仍是 trace 行持久化时间；部分 adapter 为了先确认
+  最终 provider/model 会稍后写入 calling 事件，耗时判断应结合 `startedAt` 与 responded
+  的 `durationMs`。
 - `llm.calling.tools` is `Array<{ name, description, jsonSchema }>` — mapped from `LLMToolDefinition.parameters` so the recorded schema matches what the provider actually received.
 - `llm.calling.provider` is `null` at direct `generate` / `generateStream` sites where the resolved provider string is not available; slot-routed calls populate it with the provider name (`openai`, `anthropic`, `deepseek`, `qwen`).

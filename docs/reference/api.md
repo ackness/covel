@@ -2736,6 +2736,7 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
   },
   "events": [
     {
+      "id": "trace-event-001",
       "type": "runtime.started",
       "requestId": "",
       "traceId": "8f1c2d3e-…",
@@ -2744,7 +2745,18 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
       "flowId": "8f1c2d3e-…",
       "seq": 0,
       "timestamp": "2025-01-15T10:00:00.000Z",
-      "payload": {}
+      "diagnostic": {
+        "displayType": "runtime.started",
+        "severity": "info",
+        "runtimeId": "narrator",
+        "pluginId": "story",
+        "stage": "narrative"
+      },
+      "payload": {
+        "runtimeId": "narrator",
+        "pluginId": "story",
+        "stage": "narrative"
+      }
     }
   ]
 }
@@ -2752,6 +2764,26 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 
 - `discovery` — top-level plugin/runtime discovery snapshot (same shape the
   `/debug` page consumes); present on both trace endpoints.
+- `id` 是 `trace_events` 持久化行 ID；分页合并、事件选中和复制链接应优先使用
+  它，不要假设 `seq` 在 recorder 事件上非零或唯一。
+- `eventOrder` 是本次 API 响应中按 chronological record order 编排的单调位置（从
+  `0` 开始）。它不是数据库全局序号；分页时只保证页内稳定，不能跨页比较。
+- `diagnostic` 是服务端从事件 payload 提取的稳定调试摘要：始终包含
+  `displayType` / `severity`，并按事件提供 `runtimeId`、`pluginId`、`stage`、
+  `operation`、`provider`、`model`、`slot`、`attempt`、`durationMs`、`startedAt`、`error`
+  、`warning`、`tool` 与 `prompt`。失败详情位于 `diagnostic.error.{message,code?,details?}`；提示词
+  摘要位于 `diagnostic.prompt`，其中 `contentAvailable` 表示正文是否已记录，
+  `contentPath` 指向原始正文所在的 `payload.messages`（旧记录可能是
+  `payload.data.messages`）。原始 `payload` 保持不变以兼容现有消费者。
+- `diagnostic.severity` 为 `info`、`warning` 或 `error`；错误优先于慢调用警告。
+  成功的 LLM/gateway/utils/tool/runtime 调用或任务耗时达到 1000ms 时带有
+  `warning: { code: "slow", thresholdMs: 1000 }`。
+- `diagnostic.tool` 提供工具名、call ID、参数/结果是否存在及其原始 payload 路径，
+  并在可推断时给出 `success` 和 `durationMs`；参数与结果正文仍只保留在原始
+  `payload` 中。
+- `llm.calling` 额外提供 `payload.startedAt` / `diagnostic.startedAt` 作为真实模型请求
+  开始时间；顶层 `timestamp` 保持 trace 记录的持久化时间，`llm.responded.durationMs`
+  仍是耗时权威值。
 - `flowId` equals `traceId` for the event (protocol.md `flowId = traceId`).
 - `requestId` is reserved and currently emitted as `""` (no per-turn request id
   is threaded yet).

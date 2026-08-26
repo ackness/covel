@@ -237,6 +237,7 @@ async function malformedToolArgsFallback(args: {
       messages,
       tools: toolDefs,
       attempt: 0,
+      startedAt: new Date(fallbackCallStart).toISOString(),
     });
   };
   let response: LLMResponse;

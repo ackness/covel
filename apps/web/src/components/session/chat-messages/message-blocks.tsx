@@ -200,8 +200,13 @@ export function MessageBlockRenderer({
   const { t, i18n } = useTranslation();
   const { upsertInteractionDraft } = useSessionActions();
   const formStateRef = useRef<Record<string, unknown>>({});
-
   const effectiveSubmitted = submitted;
+
+  const initialFormState = useMemo(
+    () => buildInitialFormState(block, effectiveSubmitted, submittedValues),
+    [block, effectiveSubmitted, submittedValues],
+  );
+
   const spec = useMemo(() => {
     const nested = effectiveSubmitted
       ? messageToSpecDisabled(msg, submittedValues)
@@ -249,7 +254,10 @@ export function MessageBlockRenderer({
         const { data, turnId, interactionId, submitBehavior } = readBlockMeta();
 
         // Extract form field values from json-render state tree (/form/<name>).
-        const formValues: Record<string, string> = {};
+        const formValues: Record<string, string> = {
+          ...((initialFormState.form as Record<string, string> | undefined) ??
+            {}),
+        };
         for (const [path, value] of Object.entries(formStateRef.current)) {
           const match = path.match(/^\/form\/(.+)$/);
           if (match && value != null) {
@@ -352,6 +360,7 @@ export function MessageBlockRenderer({
       onSendMessage,
       onSubmitBlock,
       upsertInteractionDraft,
+      initialFormState,
     ],
   );
 
@@ -374,9 +383,7 @@ export function MessageBlockRenderer({
     >
       <JSONUIProvider
         registry={covelRegistry}
-        initialState={
-          effectiveSubmitted && submittedValues ? { form: submittedValues } : {}
-        }
+        initialState={initialFormState}
         handlers={handlers}
         onStateChange={handleStateChange}
       >
@@ -384,4 +391,37 @@ export function MessageBlockRenderer({
       </JSONUIProvider>
     </div>
   );
+}
+
+/** Build the json-render state tree that backs bound `/form/<name>` fields. */
+export function buildInitialFormState(
+  block: Record<string, unknown>,
+  submitted: boolean,
+  submittedValues?: Readonly<Record<string, unknown>>,
+): { form: Record<string, unknown> } {
+  if (submitted && submittedValues) return { form: { ...submittedValues } };
+  const data = (block.data ?? block) as Record<string, unknown>;
+  const fields = Array.isArray(data.fields) ? data.fields : [];
+  const form: Record<string, unknown> = {};
+  for (const raw of fields) {
+    if (!raw || typeof raw !== "object") continue;
+    const field = raw as Record<string, unknown>;
+    const name = typeof field.name === "string" ? field.name : "";
+    const defaultValue =
+      typeof field.defaultValue === "string" ? field.defaultValue : undefined;
+    if (!name || defaultValue === undefined) continue;
+    if (field.type === "select") {
+      const options = Array.isArray(field.options) ? field.options : [];
+      const valid = options.some((option) =>
+        typeof option === "string"
+          ? option === defaultValue
+          : !!option &&
+            typeof option === "object" &&
+            (option as Record<string, unknown>).value === defaultValue,
+      );
+      if (!valid) continue;
+    }
+    form[name] = defaultValue;
+  }
+  return { form };
 }

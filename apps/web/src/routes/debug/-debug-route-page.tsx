@@ -19,6 +19,7 @@ import { CostPanel } from "./-cost-panel.js";
 import { SessionDataView } from "./-session-data-view.js";
 import { SessionSidebar } from "./-session-sidebar.js";
 import { TraceTimeline } from "./-trace-timeline.js";
+import { traceEventIdentity } from "./-debug-helpers.js";
 
 export function DebugRoutePage({ sid }: { sid?: string }) {
   const { t } = useTranslation();
@@ -242,7 +243,11 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
                   expandedTurns={expandedTurns}
                   expandedRuntimes={expandedRuntimes}
                   filterCategory={filterCategory}
-                  selectedEventSeq={selectedEvent?.seq}
+                  selectedEventId={
+                    selectedEvent
+                      ? traceEventIdentity(selectedEvent)
+                      : undefined
+                  }
                   onToggleTurn={toggleTurn}
                   onToggleRuntime={toggleRuntime}
                   onSelectEvent={setSelectedEvent}
@@ -250,6 +255,11 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
                 {selectedEvent && (
                   <EventDetailPanel
                     event={selectedEvent}
+                    relatedEvents={
+                      visibleTurns.find(
+                        ({ turn }) => turn.turnId === selectedEvent.turnId,
+                      )?.turn.events ?? []
+                    }
                     onClose={() => setSelectedEvent(null)}
                   />
                 )}

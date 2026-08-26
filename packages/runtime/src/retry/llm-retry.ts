@@ -146,6 +146,7 @@ function createAttemptTrace(
   params: CallLLMWithRetryParams,
   messages: readonly LLMMessage[],
   attempt: number,
+  startedAt: string,
   streaming = false,
 ): {
   readonly onTargetAttempt: (target: LLMTargetIdentity) => void;
@@ -172,6 +173,7 @@ function createAttemptTrace(
         messages,
         tools: params.tools,
         attempt,
+        startedAt,
         ...(streaming ? { streaming: true } : {}),
       });
     },
@@ -203,7 +205,12 @@ export async function callLLMWithRetry(
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
 
     const callStart = Date.now();
-    const trace = createAttemptTrace(params, attemptMessages, attempt);
+    const trace = createAttemptTrace(
+      params,
+      attemptMessages,
+      attempt,
+      new Date(callStart).toISOString(),
+    );
     try {
       const response = await llm.generate({
         model,
@@ -351,7 +358,13 @@ export async function streamLLMWithRetry(
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
     const forwardDeltas = attempt === 0; // avoid duplicate text on retry
     const streamStart = Date.now();
-    const trace = createAttemptTrace(params, attemptMessages, attempt, true);
+    const trace = createAttemptTrace(
+      params,
+      attemptMessages,
+      attempt,
+      new Date(streamStart).toISOString(),
+      true,
+    );
 
     try {
       for await (const event of llm.stream({

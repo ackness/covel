@@ -4,6 +4,10 @@ import { request } from "./request.js";
 // -- Trace API -------------------------------------------------
 
 export interface TraceEvent {
+  /** Stable persisted row id. Older servers may omit it. */
+  id?: string;
+  /** Monotonic position in this API response's chronological event list. */
+  eventOrder?: number;
   type: string;
   requestId: string;
   traceId: string;
@@ -12,7 +16,49 @@ export interface TraceEvent {
   flowId: string;
   seq: number;
   timestamp: string;
+  /** Event-shape-independent fields intended for debug UIs and API clients. */
+  diagnostic?: TraceEventDiagnostic;
   payload: Record<string, unknown>;
+}
+
+export interface TraceEventDiagnostic {
+  displayType: string;
+  severity: "info" | "warning" | "error";
+  runtimeId?: string;
+  pluginId?: string;
+  stage?: string;
+  operation?: string;
+  provider?: string;
+  model?: string;
+  slot?: string;
+  attempt?: number;
+  durationMs?: number;
+  /** Actual operation start when the trace row is persisted later. */
+  startedAt?: string;
+  warning?: { code: "slow"; thresholdMs: number };
+  error?: {
+    message: string;
+    code?: string;
+    details?: unknown;
+  };
+  prompt?: {
+    contentAvailable: boolean;
+    messageCount: number;
+    promptChars: number;
+    roles: string[];
+    toolCount: number;
+    contentPath?: "payload.messages" | "payload.data.messages";
+  };
+  tool?: {
+    name?: string;
+    callId?: string;
+    argumentsAvailable: boolean;
+    argumentsPath?: "payload.arguments" | "payload.data.arguments";
+    resultAvailable: boolean;
+    resultPath?: "payload.result" | "payload.data.result";
+    success?: boolean;
+    durationMs?: number;
+  };
 }
 
 export interface TurnTrace {

@@ -773,6 +773,8 @@ const runtimeManifestCommonShape = {
   loopDetectionThreshold: z.number().int().min(0).max(20).optional(),
   /** Retry a bare (no-tool-call) finish once before releasing. Default false. */
   requireToolUse: z.boolean().optional(),
+  /** Complete after a response batch successfully calls one of these tools. */
+  completeAfterTools: z.array(z.string().min(1)).min(1).optional(),
   /** Maximum nested ctx.recursiveCall() depth. Default 10. */
   maxRecursionDepth: z.number().int().min(0).max(50).optional(),
   pluginType: z.enum(["core-plugin", "plugin"]).optional(),

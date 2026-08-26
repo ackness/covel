@@ -166,6 +166,7 @@ export async function runAgentToolLoop({
     effectiveMaxSteps,
     retryPolicy,
     requireToolUse,
+    completeAfterTools,
     acceptsSteering,
     authorizedToolNames,
   } = buildAgentLoopPolicy({
@@ -292,6 +293,9 @@ export async function runAgentToolLoop({
       // reasoningContent is carried back verbatim so thinking-mode
       // providers (DashScope Qwen, DeepSeek v4) accept the follow-up turn.
       messages.push(buildAssistantToolCallMessage(response));
+
+      let successfulCompletingToolsInResponse = 0;
+      let failedBusinessToolsInResponse = 0;
 
       for (
         let toolCallIndex = 0;
@@ -503,6 +507,14 @@ export async function runAgentToolLoop({
             success: toolResult.success,
           });
 
+          if (!isRuntimeDoneSentinel(toolResult.parsedResult)) {
+            if (toolResult.success) {
+              if (completeAfterTools.has(effectiveTc.name)) {
+                successfulCompletingToolsInResponse++;
+              }
+            } else failedBusinessToolsInResponse++;
+          }
+
           // Build ToolCallRecord for RuntimeResult.toolCalls
           let parsedInput: Record<string, unknown> = {};
           try {
@@ -596,6 +608,26 @@ export async function runAgentToolLoop({
       // `runtime-done` call still gets its sentinel-strip + envelope cleanup
       // above). The response's prose, if any, is already in finalContent.
       if (terminatedByHook) {
+        stoppedWithResponse = true;
+        break;
+      }
+
+      // Single-shot tool runtimes do not need to ask the model for a second
+      // response whose only useful content is `runtime-done`. Execute the
+      // whole response batch first and auto-complete only when every business
+      // call in that batch succeeded. Failures stay in the transcript so the
+      // model can inspect the tool result and retry on the next step.
+      if (
+        successfulCompletingToolsInResponse > 0 &&
+        failedBusinessToolsInResponse === 0
+      ) {
+        if (!finalContent) {
+          finalContent = JSON.stringify({
+            toolCalls: collectedToolCalls
+              .filter((call) => call.toolName !== "runtime-done")
+              .map((call) => ({ name: call.toolName, output: call.output })),
+          });
+        }
         stoppedWithResponse = true;
         break;
       }

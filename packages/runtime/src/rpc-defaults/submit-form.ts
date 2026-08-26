@@ -193,8 +193,14 @@ function validateFormValues(
   }
   assertOnlyKeys(values, new Set(declared.keys()), interaction.interactionId);
 
+  const normalizedValues: Record<string, unknown> = { ...values };
   for (const [name, field] of declared) {
-    const value = values[name];
+    const submitted = values[name];
+    const value =
+      isMissingRequired(submitted) && typeof field.defaultValue === "string"
+        ? field.defaultValue
+        : submitted;
+    if (value !== undefined) normalizedValues[name] = value;
     if (field.required === true && isMissingRequired(value)) {
       throw new RpcValidationError(
         `Required field "${name}" is missing for interactionId: ${interaction.interactionId}`,
@@ -248,7 +254,7 @@ function validateFormValues(
         );
     }
   }
-  return { ...values };
+  return normalizedValues;
 }
 
 function validateSubmissionValues(

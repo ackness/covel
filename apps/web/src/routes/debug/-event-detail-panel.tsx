@@ -5,15 +5,17 @@ import { EventDetail } from "./-event-detail.js";
 
 export function EventDetailPanel({
   event,
+  relatedEvents = [],
   onClose,
 }: {
   event: api.TraceEvent;
+  relatedEvents?: readonly api.TraceEvent[];
   onClose: () => void;
 }) {
   const { t } = useTranslation();
 
   return (
-    <div className="w-80 shrink-0 border-l border-border flex flex-col min-h-0 ui-rail">
+    <div className="w-96 lg:w-136 xl:w-2xl max-w-[55vw] shrink-0 border-l border-border flex flex-col min-h-0 ui-rail">
       <div className="px-3 py-2 border-b border-(--rule-color) flex items-center justify-between">
         <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
           {t("debugger.eventDetail")}
@@ -26,7 +28,7 @@ export function EventDetailPanel({
         </button>
       </div>
       <ScrollArea className="flex-1 min-h-0">
-        <EventDetail event={event} />
+        <EventDetail event={event} relatedEvents={relatedEvents} />
       </ScrollArea>
     </div>
   );

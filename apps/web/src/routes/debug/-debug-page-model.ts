@@ -1,5 +1,9 @@
 import type * as api from "@/services/api.js";
-import { categorize, type EventCategory } from "./-debug-helpers.js";
+import {
+  categorize,
+  traceEventIdentity,
+  type EventCategory,
+} from "./-debug-helpers.js";
 
 export type DebugView = "traces" | "data" | "cost";
 
@@ -47,7 +51,7 @@ export function traceEventMatchesCategory(
  * 仍叠加 requestId/traceId/type/timestamp 以求稳妥。
  */
 function traceEventKey(event: api.TraceEvent): string {
-  return `${event.requestId}|${event.traceId}|${event.seq}|${event.type}|${event.timestamp}`;
+  return traceEventIdentity(event);
 }
 
 /** 取两个时间戳里较早的非空值（空串视为缺失，不参与比较）。 */

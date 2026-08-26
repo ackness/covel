@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Activity,
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   Wrench,
@@ -18,6 +19,11 @@ import {
   extractDetail,
   fmtDuration,
   fmtTime,
+  getDisplayType,
+  getTraceData,
+  getTraceError,
+  isTerminalTraceFailure,
+  traceEventIdentity,
   type EventCategory,
   type RuntimeInfo,
 } from "./-debug-helpers.js";
@@ -31,7 +37,7 @@ export function TurnCard({
   onToggleRuntime,
   filterCategory,
   onSelectEvent,
-  selectedEventSeq,
+  selectedEventId,
 }: {
   turn: api.TurnTrace;
   turnIndex: number;
@@ -41,7 +47,7 @@ export function TurnCard({
   onToggleRuntime: (key: string) => void;
   filterCategory: EventCategory | null;
   onSelectEvent: (event: api.TraceEvent) => void;
-  selectedEventSeq?: number;
+  selectedEventId?: string;
 }) {
   const { t } = useTranslation();
   const runtimes = useMemo(
@@ -49,15 +55,24 @@ export function TurnCard({
     [turn.events],
   );
 
-  const hasError = turn.events.some(
-    (event) =>
-      event.type === "flow.failed" ||
-      event.type === "turn.failed" ||
-      (event.payload.type as string) === "runtime.failed",
+  const errorEvents = useMemo(
+    () => turn.events.filter((event) => getTraceError(event) != null),
+    [turn.events],
   );
+  const firstErrorEvent = errorEvents[0];
+  const firstError = firstErrorEvent
+    ? getTraceError(firstErrorEvent)
+    : undefined;
+  const promptCount = turn.events.filter(
+    (event) =>
+      getDisplayType(event) === "llm.calling" ||
+      getDisplayType(event) === "gateway.calling",
+  ).length;
+  const hasError = errorEvents.some(isTerminalTraceFailure);
   const isCompleted = turn.events.some(
     (event) =>
-      event.type === "turn.completed" || event.type === "flow.completed",
+      getDisplayType(event) === "turn.completed" ||
+      getDisplayType(event) === "flow.completed",
   );
   const duration = fmtDuration(turn.startedAt, turn.completedAt);
 
@@ -73,18 +88,20 @@ export function TurnCard({
     return null;
   }, [turn.events]);
 
-  const runtimeEventSeqs = useMemo(() => {
-    const seqs = new Set<number>();
+  const runtimeEventIds = useMemo(() => {
+    const ids = new Set<string>();
     for (const runtime of runtimes) {
-      for (const event of runtime.events) seqs.add(event.seq);
+      for (const event of runtime.events) ids.add(traceEventIdentity(event));
     }
-    return seqs;
+    return ids;
   }, [runtimes]);
 
   const orphanEvents = useMemo(() => {
     const events =
       runtimes.length > 0
-        ? turn.events.filter((event) => !runtimeEventSeqs.has(event.seq))
+        ? turn.events.filter(
+            (event) => !runtimeEventIds.has(traceEventIdentity(event)),
+          )
         : turn.events;
     const filtered = filterCategory
       ? events.filter(
@@ -95,7 +112,7 @@ export function TurnCard({
         )
       : events;
     return aggregateDeltas(filtered);
-  }, [turn.events, filterCategory, runtimes, runtimeEventSeqs]);
+  }, [turn.events, filterCategory, runtimes, runtimeEventIds]);
 
   return (
     <div
@@ -111,28 +128,48 @@ export function TurnCard({
           <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
         )}
 
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          {manualTrigger ? (
-            <>
-              <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0 text-violet-500">
-                {t("debugger.pluginInvocation")}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {manualTrigger ? (
+              <>
+                <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0 text-violet-500">
+                  {t("debugger.pluginInvocation")}
+                </span>
+                <span className="font-mono text-[10px] text-violet-500/80 shrink-0 truncate">
+                  {manualTrigger.runtimeId}
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground/60 truncate">
+                  {turn.turnId}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0">
+                  {t("debugger.turn", { count: turnIndex })}
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground truncate">
+                  {turn.turnId}
+                </span>
+              </>
+            )}
+          </div>
+          {firstErrorEvent && firstError && (
+            <div
+              className={`mt-1 flex items-center gap-1.5 min-w-0 text-[10px] ${hasError ? "text-destructive" : "text-amber-500"}`}
+            >
+              <XCircle className="w-3 h-3 shrink-0" />
+              <span className="font-mono shrink-0">
+                {firstErrorEvent.diagnostic?.runtimeId ||
+                  (firstErrorEvent.payload.runtimeId as string) ||
+                  getDisplayType(firstErrorEvent)}
               </span>
-              <span className="font-mono text-[10px] text-violet-500/80 shrink-0 truncate">
-                {manualTrigger.runtimeId}
-              </span>
-              <span className="font-mono text-[10px] text-muted-foreground/60 truncate">
-                {turn.turnId}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0">
-                {t("debugger.turn", { count: turnIndex })}
-              </span>
-              <span className="font-mono text-[10px] text-muted-foreground truncate">
-                {turn.turnId}
-              </span>
-            </>
+              <span className="truncate">{firstError.message}</span>
+              {errorEvents.length > 1 && (
+                <span className="shrink-0 opacity-70">
+                  +{errorEvents.length - 1}
+                </span>
+              )}
+            </div>
           )}
         </div>
 
@@ -144,6 +181,13 @@ export function TurnCard({
               {runtimes.some((runtime) => runtime.status === "failed") && (
                 <XCircle className="w-2.5 h-2.5 text-destructive" />
               )}
+            </span>
+          )}
+
+          {promptCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] border border-amber-500/20 bg-amber-500/5 text-amber-500">
+              <Zap className="w-2.5 h-2.5" />
+              {t("debugger.promptCount", { count: promptCount })}
             </span>
           )}
 
@@ -183,7 +227,7 @@ export function TurnCard({
                     onToggle={() => onToggleRuntime(runtimeKey)}
                     filterCategory={filterCategory}
                     onSelectEvent={onSelectEvent}
-                    selectedEventSeq={selectedEventSeq}
+                    selectedEventId={selectedEventId}
                   />
                 );
               })}
@@ -201,9 +245,9 @@ export function TurnCard({
               )}
               {orphanEvents.map((event) => (
                 <EventRow
-                  key={event.seq}
+                  key={traceEventIdentity(event)}
                   event={event}
-                  selected={selectedEventSeq === event.seq}
+                  selected={selectedEventId === traceEventIdentity(event)}
                   onClick={() => onSelectEvent(event)}
                 />
               ))}
@@ -226,35 +270,58 @@ function RuntimeRow({
   onToggle,
   filterCategory,
   onSelectEvent,
-  selectedEventSeq,
+  selectedEventId,
 }: {
   runtime: RuntimeInfo;
   expanded: boolean;
   onToggle: () => void;
   filterCategory: EventCategory | null;
   onSelectEvent: (event: api.TraceEvent) => void;
-  selectedEventSeq?: number;
+  selectedEventId?: string;
 }) {
+  const { t } = useTranslation();
   const duration = runtime.completedAt
     ? fmtDuration(runtime.startedAt, runtime.completedAt)
     : "...";
 
   const llmCalls = runtime.events.filter(
-    (event) => (event.payload.type as string) === "llm.calling",
+    (event) =>
+      getDisplayType(event) === "llm.calling" ||
+      getDisplayType(event) === "gateway.calling",
   ).length;
   const toolCalls = runtime.events.filter(
-    (event) =>
-      (event.payload.type as string) === "tool.calling" ||
-      (event.payload.type as string) === "tool.completed",
+    (event) => getDisplayType(event) === "tool.calling",
   ).length;
+  const toolNames = Array.from(
+    runtime.events.reduce((names, event) => {
+      if (getDisplayType(event) !== "tool.calling") return names;
+      const data = getTraceData(event.payload);
+      const name =
+        event.diagnostic?.tool?.name ??
+        (typeof data.toolName === "string" ? data.toolName : undefined) ??
+        (typeof data.label === "string" ? data.label : undefined);
+      if (name) names.add(name);
+      return names;
+    }, new Set<string>()),
+  );
+  const slowWarnings = runtime.events.filter(
+    (event) => event.diagnostic?.warning?.code === "slow",
+  ).length;
+  const errors = runtime.events
+    .map((event) => ({ event, error: getTraceError(event) }))
+    .filter(
+      (
+        item,
+      ): item is {
+        event: api.TraceEvent;
+        error: NonNullable<typeof item.error>;
+      } => item.error != null,
+    );
 
   const filteredRuntimeEvents = useMemo(() => {
     const events = filterCategory
       ? runtime.events.filter(
-          (event) =>
-            categorize(event.type) === filterCategory ||
-            categorize((event.payload.type as string) || event.type) ===
-              filterCategory,
+          (event) => categorize(getDisplayType(event)) === filterCategory,
         )
       : runtime.events;
     return aggregateDeltas(events);
@@ -290,9 +357,28 @@ function RuntimeRow({
           }`}
         />
 
-        <span className="font-mono text-[11px] font-medium flex-1 truncate">
-          {runtime.label}
-        </span>
+        <div className="flex-1 min-w-0">
+          <div className="font-mono text-[11px] font-medium truncate">
+            {runtime.label}
+          </div>
+          {(runtime.pluginId !== runtime.runtimeId || runtime.stage) && (
+            <div className="mt-0.5 font-mono text-[9px] text-muted-foreground truncate">
+              {[runtime.pluginId, runtime.stage].filter(Boolean).join(" · ")}
+            </div>
+          )}
+          {toolNames.length > 0 && (
+            <div className="mt-0.5 font-mono text-[9px] text-violet-500/80 truncate">
+              {toolNames.map((name) => `${name}()`).join(" · ")}
+            </div>
+          )}
+          {errors[0] && (
+            <div
+              className={`mt-0.5 text-[9px] truncate ${runtime.status === "failed" ? "text-destructive" : "text-amber-500"}`}
+            >
+              {getDisplayType(errors[0].event)}: {errors[0].error.message}
+            </div>
+          )}
+        </div>
 
         <div className="flex items-center gap-2 text-[10px] text-muted-foreground shrink-0">
           {llmCalls > 0 && (
@@ -304,7 +390,16 @@ function RuntimeRow({
           {toolCalls > 0 && (
             <span className="flex items-center gap-0.5">
               <Wrench className="w-2.5 h-2.5 text-violet-500" />
-              {toolCalls / 2}
+              {toolCalls}
+            </span>
+          )}
+          {slowWarnings > 0 && (
+            <span
+              className="flex items-center gap-0.5 text-amber-500"
+              title={t("debugger.slowCalls", { count: slowWarnings })}
+            >
+              <AlertTriangle className="w-2.5 h-2.5" />
+              {slowWarnings}
             </span>
           )}
           <span className="font-mono">{duration}</span>
@@ -315,10 +410,10 @@ function RuntimeRow({
         <div className="border-t border-border/30 divide-y divide-border/30">
           {filteredRuntimeEvents.map((event) => (
             <EventRow
-              key={event.seq}
+              key={traceEventIdentity(event)}
               event={event}
               compact
-              selected={selectedEventSeq === event.seq}
+              selected={selectedEventId === traceEventIdentity(event)}
               onClick={() => onSelectEvent(event)}
             />
           ))}
@@ -339,15 +434,18 @@ function EventRow({
   selected?: boolean;
   onClick: () => void;
 }) {
-  const displayType =
-    event.type === "runtime.progress"
-      ? (event.payload.type as string) || event.type
-      : event.type;
+  const displayType = getDisplayType(event);
 
   const category = categorize(displayType);
   const style = CATEGORY_STYLES[category];
   const Icon = style.icon;
   const detail = extractDetail(event);
+  const error = getTraceError(event);
+  const warning = event.diagnostic?.warning?.code === "slow";
+  const data = getTraceData(event.payload);
+  const operationStartedAt =
+    event.diagnostic?.startedAt ??
+    (typeof data.startedAt === "string" ? data.startedAt : undefined);
 
   return (
     <button
@@ -360,10 +458,16 @@ function EventRow({
           : "hover:bg-muted/10 border-l-2 border-l-transparent"
       }`}
     >
-      <Icon className={`w-3 h-3 shrink-0 ${style.color}`} />
+      {error ? (
+        <XCircle className="w-3 h-3 shrink-0 text-destructive" />
+      ) : warning ? (
+        <AlertTriangle className="w-3 h-3 shrink-0 text-amber-500" />
+      ) : (
+        <Icon className={`w-3 h-3 shrink-0 ${style.color}`} />
+      )}
 
       <span
-        className={`font-mono text-[10px] ${style.color} shrink-0 min-w-30`}
+        className={`font-mono text-[10px] ${error ? "text-destructive" : warning ? "text-amber-500" : style.color} shrink-0 min-w-30`}
       >
         {displayType}
       </span>
@@ -375,7 +479,7 @@ function EventRow({
       )}
 
       <span className="text-[9px] text-muted-foreground/60 font-mono shrink-0 ml-auto">
-        {fmtTime(event.timestamp)}
+        {fmtTime(operationStartedAt ?? event.timestamp)}
       </span>
     </button>
   );

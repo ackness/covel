@@ -171,6 +171,7 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
     required?: boolean;
     placeholder?: string;
     options?: string[] | Array<{ value: string; label: string }>;
+    defaultValue?: string;
   }>;
   const submitLabel = (data.submitLabel as string) ?? tr("form.submit");
   const narrativeTemplate = data.narrativeTemplate as string | undefined;
@@ -211,6 +212,7 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
         placeholder: field.placeholder,
         required: field.required,
         options,
+        defaultValue: field.defaultValue,
         value: { $bindState: `/form/${field.name}` },
       },
     });

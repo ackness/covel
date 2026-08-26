@@ -76,20 +76,34 @@ const formFieldOptionSchema = z.union([
   }),
 ]);
 
-const formFieldSchema = z.object({
-  type: z.enum(["text", "textarea", "select", "checkbox", "number"]),
-  name: z.string().min(1),
-  label: z.string().min(1),
-  placeholder: z.string().optional(),
-  options: z
-    .array(formFieldOptionSchema)
-    .optional()
-    .describe(
-      "select 选项。字符串形式下展示文本即提交值；需要「展示详细、叙事简洁」时用 { value, label }",
-    ),
-  required: z.boolean().optional(),
-  defaultValue: z.string().optional(),
-});
+const formFieldSchema = z
+  .object({
+    type: z.enum(["text", "textarea", "select", "checkbox", "number"]),
+    name: z.string().min(1),
+    label: z.string().min(1),
+    placeholder: z.string().optional(),
+    options: z
+      .array(formFieldOptionSchema)
+      .optional()
+      .describe(
+        "select 选项。字符串形式下展示文本即提交值；需要「展示详细、叙事简洁」时用 { value, label }",
+      ),
+    required: z.boolean().optional(),
+    defaultValue: z.string().optional(),
+  })
+  .superRefine((field, ctx) => {
+    if (field.type !== "select" || field.defaultValue === undefined) return;
+    const values = (field.options ?? []).map((option) =>
+      typeof option === "string" ? option : option.value,
+    );
+    if (!values.includes(field.defaultValue)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["defaultValue"],
+        message: "select defaultValue must match a declared option value",
+      });
+    }
+  });
 
 const submitBehaviorSchema = z.object({
   echoFilledNarrative: z.boolean().optional(),
@@ -117,20 +131,33 @@ export const createFormTool = tool({
       .optional()
       .describe("可选的提交行为：是否回显提交内容、是否立即提交"),
   }),
-  execute: async (params) => ({
-    created: true,
-    formId: params.formId,
-    fieldCount: params.fields.length,
-    interaction: {
-      type: "form" as const,
-      interactionId: params.formId,
-      title: params.title,
-      fields: params.fields,
-      submitLabel: params.submitLabel,
-      narrativeTemplate: params.narrativeTemplate,
-      submitBehavior: params.submitBehavior,
-    },
-  }),
+  execute: async (params) => {
+    for (const field of params.fields) {
+      if (field.type !== "select" || field.defaultValue === undefined) continue;
+      const values = (field.options ?? []).map((option) =>
+        typeof option === "string" ? option : option.value,
+      );
+      if (!values.includes(field.defaultValue)) {
+        throw new Error(
+          `select defaultValue must match a declared option value for ${field.name}`,
+        );
+      }
+    }
+    return {
+      created: true,
+      formId: params.formId,
+      fieldCount: params.fields.length,
+      interaction: {
+        type: "form" as const,
+        interactionId: params.formId,
+        title: params.title,
+        fields: params.fields,
+        submitLabel: params.submitLabel,
+        narrativeTemplate: params.narrativeTemplate,
+        submitBehavior: params.submitBehavior,
+      },
+    };
+  },
 });
 
 // ── create-choices ───────────────────────────────────────────────

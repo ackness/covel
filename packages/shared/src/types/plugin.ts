@@ -697,6 +697,15 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    */
   readonly requireToolUse?: boolean;
   /**
+   * Agent runtimes only. Tool names whose successful execution completes the
+   * runtime after the current response batch. All calls in that response are
+   * executed first; any failed business call keeps the loop alive so the model
+   * can inspect the error and retry. This removes a redundant follow-up LLM
+   * call whose only purpose is to emit `runtime-done` while preserving read →
+   * write workflows that use other tools first.
+   */
+  readonly completeAfterTools?: readonly string[];
+  /**
    * Maximum nested `ctx.recursiveCall()` depth for this runtime. Defaults
    * to the executor limit, currently 10. Depth starts at 0 for a top-level
    * turn and increments once per recursive call.
