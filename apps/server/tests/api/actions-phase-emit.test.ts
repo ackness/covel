@@ -7,9 +7,10 @@
  * with the spurious 'playing' value, breaking sessions still in pre-game
  * while the persisted phase is unchanged.
  *
- * `phase` is fully removed — no proposal type,
- * no SSE event, no persistent session field. This test now protects the
- * migration by asserting `phase.changed` is never emitted, even indirectly.
+ * `phase` is now an authoritative persistent session-clock field, updated in
+ * the finalize transaction. It is not a synthetic per-action SSE signal. This
+ * test protects that boundary by asserting `phase.changed` is never emitted
+ * when the route merely observes or preserves the current phase.
  */
 
 import { describe, it, expect, beforeEach } from "vitest";

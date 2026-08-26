@@ -54,7 +54,10 @@ beforeEach(() => {
   api.getSession.mockRejectedValue(new Error("404"));
   api.createSession.mockResolvedValue({
     id: "sess-1",
-    phase: "setup",
+    // A server-created session without setup runtimes starts directly in the
+    // main loop. Keep this deliberately different from LocalDataService's
+    // fresh local checkpoint so the first-hydrate merge is observable.
+    phase: "playing",
     completedPlayerTurns: 0,
     setupRuntimes: {},
   });
@@ -90,13 +93,7 @@ describe("LocalDataService browser-authoritative sync", () => {
 
   it("creates and hydrates the transient server mirror", async () => {
     const service = await serviceWithWorld();
-    await service.createSession(
-      "world-1",
-      "preset-1",
-      "sess-1",
-      ["pregame", "world-init", "scene-stage"],
-      "en-US",
-    );
+    await service.createSession("world-1", "preset-1", "sess-1", [], "en-US");
 
     await service.syncToServer("sess-1");
 
@@ -104,9 +101,10 @@ describe("LocalDataService browser-authoritative sync", () => {
       "world-1",
       "preset-1",
       "sess-1",
-      ["pregame", "world-init", "scene-stage"],
+      [],
       "en-US",
     );
+    expect(api.uploadBrowserCheckpoint).toHaveBeenCalledOnce();
     expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
       "sess-1",
       expect.objectContaining({
@@ -114,12 +112,20 @@ describe("LocalDataService browser-authoritative sync", () => {
         profile: "browser-private",
         revision: 2,
         session: expect.objectContaining({
-          phase: "setup",
+          phase: "playing",
           completedPlayerTurns: 0,
           setupRuntimes: {},
         }),
       }),
     );
+    await expect(vault.getLatestCheckpoint("sess-1")).resolves.toMatchObject({
+      revision: 2,
+      session: {
+        phase: "playing",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
+      },
+    });
   });
 
   it("preserves an established browser clock when rebuilding a missing mirror", async () => {

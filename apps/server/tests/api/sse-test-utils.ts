@@ -26,6 +26,14 @@ export function parseBlock(block: string): Frame {
   return frame;
 }
 
+/** Parse the JSON `data` payload from every complete SSE frame in a body. */
+export function parseJsonFrames<T>(body: string): T[] {
+  return body.split(/\r?\n\r?\n/).flatMap((block) => {
+    const { data } = parseBlock(block);
+    return data ? [JSON.parse(data) as T] : [];
+  });
+}
+
 export function isSystemFrame(f: Frame): boolean {
   return f.event === "system.connected" || f.event === "system.heartbeat";
 }

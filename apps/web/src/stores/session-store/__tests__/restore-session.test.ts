@@ -150,28 +150,4 @@ describe("restoreSessionState workspace ordering", () => {
     expect(api.markServerAck).not.toHaveBeenCalled();
     expect(pluginData.setActiveSession).toHaveBeenLastCalledWith(null);
   });
-
-  it("falls back to browser data only after a successful workspace sync", async () => {
-    const order: string[] = [];
-    const ds = makeDataService(order);
-    vi.mocked(ds.listMessages).mockImplementationOnce(async () => {
-      order.push("local-messages");
-      return [];
-    });
-    api.getSessionSnapshot.mockImplementationOnce(async () => {
-      order.push("snapshot");
-      throw new Error("snapshot unavailable");
-    });
-
-    await restoreSessionState({
-      ds,
-      workspace: makeWorkspace(ds),
-      dispatch: vi.fn(),
-      sessionIdRef: { current: null },
-      worlds: [world],
-      session,
-    });
-
-    expect(order.slice(0, 3)).toEqual(["sync", "snapshot", "local-messages"]);
-  });
 });

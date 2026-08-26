@@ -778,10 +778,139 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
 });
 
 describe("commit transaction & rollback", () => {
-  // needs: finalizeExecution single-transaction commit + setup-attempt ledger (release step 2)
-  it.todo(
-    "scenario 6: 任一 proposal commit 失败时领域状态/completion/phase/计数全部回滚（commitStatus: failed），但 attempts 与 lastError 仍持久化；连续确定性失败最终到达 blocked — 断言回滚与记账两者互不干扰",
-  );
+  it("scenario 6: rolls back domain and clock writes while failed setup attempts still exhaust their budget", async () => {
+    const store = createMemoryStore();
+    const sessionId = "s6";
+    const setupRuntimeId = "plug/setup";
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: sessionId,
+      worldId: "w",
+      status: "active",
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {
+        [setupRuntimeId]: {
+          state: "pending",
+          pluginVersion: "1.0.0",
+          generation: 1,
+          attempts: 0,
+        },
+      },
+      activePlugins: ["plug"],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const finalizeFailedAttempt = async (attempt: number) => {
+      const executionId = `execution-${attempt}`;
+      const logicalTurnId = `logical-turn-${attempt}`;
+      const turnId = `turn-${attempt}`;
+      await store.saveTurnResult({
+        id: `result-${attempt}`,
+        sessionId,
+        turnId,
+        runtimeResults: [],
+        origin: "player",
+        commitStatus: "pending",
+        durationMs: 1,
+        createdAt: now,
+      });
+
+      const validSetupResult = {
+        ...statePatchResult("hp", attempt),
+        pluginId: "plug",
+        runtimeId: setupRuntimeId,
+        turnId,
+      };
+      const invalidLaterResult = {
+        ...statePatchResult("mp", attempt),
+        pluginId: "broken",
+        runtimeId: "broken/runtime",
+        turnId,
+        output: { statePatches: [{ field: "mp", value: attempt }] },
+      };
+      const completedSetup = mirrorSetupDone("1.0.0", now, 1, attempt);
+
+      const outcome = await finalizeExecution({
+        executionContext: PLAYER_CTX(logicalTurnId, executionId),
+        store,
+        sessionId,
+        runtimes: [makeRuntime(setupRuntimeId), makeRuntime("broken/runtime")],
+        results: [validSetupResult, invalidLaterResult],
+        turnIds: [turnId],
+        setupRan: [
+          {
+            runtimeId: setupRuntimeId,
+            pluginVersion: "1.0.0",
+            generation: 1,
+            executionId,
+            startedAt: now,
+            doneSignal: true,
+            ledgerState: "success",
+            budget: 2,
+          },
+        ],
+        sessionClock: {
+          now,
+          setupCompletion: {
+            newlyDone: { [setupRuntimeId]: completedSetup },
+            allSetupDone: true,
+          },
+        },
+      });
+
+      expect(outcome.status).toBe("failed");
+      expect(outcome.failedProposals).toHaveLength(1);
+      expect(await store.getStateEntry(sessionId, "stats", "hp")).toBeNull();
+      expect(
+        await store.getLogicalTurnCompletion(sessionId, logicalTurnId),
+      ).toBeNull();
+      expect(
+        (await store.listTurnResults(sessionId)).find(
+          (row) => row.turnId === turnId,
+        )?.commitStatus,
+      ).toBe("failed");
+      const attempts = await store.listSetupAttempts(sessionId, {
+        runtimeId: setupRuntimeId,
+        generation: 1,
+      });
+      expect(attempts).toHaveLength(attempt);
+      expect(attempts.at(-1)).toMatchObject({
+        executionId,
+        state: "failed",
+        error: "proposal commit rolled back",
+      });
+    };
+
+    await finalizeFailedAttempt(1);
+    let session = (await store.getSession(sessionId))!;
+    expect(session).toMatchObject({
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {
+        [setupRuntimeId]: {
+          state: "pending",
+          attempts: 1,
+          lastError: "proposal commit rolled back",
+        },
+      },
+    });
+
+    await finalizeFailedAttempt(2);
+    session = (await store.getSession(sessionId))!;
+    expect(session).toMatchObject({
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {
+        [setupRuntimeId]: {
+          state: "blocked",
+          attempts: 2,
+          reason: expect.stringContaining("retry budget"),
+        },
+      },
+    });
+  });
 });
 
 describe("current snapshot clock", () => {
@@ -931,24 +1060,21 @@ describe("blocked control (maxTriggerCount / retry / waive)", () => {
 });
 
 describe("media pipeline & job-status", () => {
-  // needs: kernel-owned append-only job-status store + ctx.progress.report (release step 2); legacy tracks/images view projector (release step 4/6 compat)
-  // LIT (partial) IN: media-boundaries-acceptance.test.ts — progress→terminal
-  // failed chain + non-success envelope observability-only stripping. The
-  // legacy tracks/images compat projector remains a Step 4/6 todo there.
+  // The kernel-owned progress→terminal chain and non-success envelope boundary
+  // are exercised in media-boundaries-acceptance.test.ts. The remaining
+  // unshipped surface is the Step 4/6 legacy view projector.
   it.todo(
-    "scenario 9: 媒体任务在 provider 调用前经 ctx.progress.report 提交 pending/progress，失败后 finalizer 追加 terminal failed；非 success 信封只接受 jobStatus/diagnostics，领域写被拒；compat projector 只按 manifest 声明投影本插件旧 tracks/images view，新 UI 直接订阅 kernel job-status — 断言实时进度与终态提交的边界",
+    "scenario 9 compat: manifest-declared jobStatus.legacyViews projects only the emitting plugin's jobs into legacy tracks/images while new UI consumes kernel job-status",
   );
 });
 
 describe("MediaRef canonicalization boundaries", () => {
-  // needs: shared MediaRef canonicalizer across activation/binding/export/resume/job-data + ownership validation (release step 3)
-  // LIT IN: media-boundaries-acceptance.test.ts (activation / binding / export /
-  // job-data boundaries share one canonicalizer; ownership reject; url strip;
-  // per-position caption in canonicalize-media-refs.test.ts) and
-  // apps/server/tests/api/snapshot.test.ts (fork atomic addRef + missing-asset
-  // whole-fork failure). Resume-boundary canonicalization is a later wave.
+  // activation/binding/export/job-data share a canonicalizer in
+  // media-boundaries-acceptance.test.ts; caption preservation is in
+  // canonicalize-media-refs.test.ts; fork reference atomicity is in
+  // apps/server/tests/api/snapshot.test.ts. Resume remains unwired.
   it.todo(
-    "scenario 10: MediaRef 在 activation/绑定/export/resume/job data 各边界使用同一 canonicalizer；当前 session 无 MediaRefRecord 时拒绝；持久值去掉临时 URL；同一 asset 的位置/caption 可不同；fork 为 child 原子增加 reference，缺 asset 时整次失败 — 断言各边界共享同一校验结果",
+    "scenario 10 resume: revalidate and canonicalize MediaRefs carried by resume data before continuing; reject missing current-session references and persist only the canonical value",
   );
 });
 

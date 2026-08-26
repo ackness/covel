@@ -5,9 +5,9 @@
  * Asserts the post-turn commit consistency contract on the real actions route:
  *   - post-turn memory ingestion fires only AFTER the proposal commit and the
  *     automatic snapshot (R-06/R-09 barrier — on this route the barrier is
- *     `TurnResult.completeTurn`, invoked after commit + snapshot; note the
- *     actions route does not thread an eventBus into executeTurn, so the
- *     bus-level turn.completed is exercised by the runtime-level tests);
+ *     `TurnResult.completeTurn`, invoked after commit + snapshot; the actions
+ *     route threads the eventBus through execute/finalize, and this suite also
+ *     verifies the committed bus-level `turn.completed` trace);
  *   - every trace_events row of the turn shares the single SSE traceId —
  *     recorder, emitter, and commit-pipeline rows alike (R-14).
  */

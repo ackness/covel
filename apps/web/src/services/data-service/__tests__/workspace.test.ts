@@ -10,7 +10,9 @@ function makeService(order: string[]): DataService {
     syncToServer: vi.fn(async () => {
       order.push("hydrate");
     }),
-    stageServerCommit: vi.fn(async () => {}),
+    stageServerCommit: vi.fn(async (_sessionId, actionId) => {
+      order.push(`stage:${actionId}`);
+    }),
     commitFromServer: vi.fn(async (_sessionId, actionId) => {
       order.push(`checkpoint:${actionId}`);
     }),
@@ -18,7 +20,7 @@ function makeService(order: string[]): DataService {
 }
 
 describe("SessionWorkspace", () => {
-  it("keeps local hydrate, mutation, and checkpoint in one FIFO job", async () => {
+  it("keeps local hydrate, stage, mutation, and commit in one FIFO job", async () => {
     const order: string[] = [];
     const workspace = createSessionWorkspace(makeService(order), "local");
 
@@ -27,7 +29,12 @@ describe("SessionWorkspace", () => {
       return "done";
     });
 
-    expect(order).toEqual(["hydrate", "mutate", "checkpoint:action-1"]);
+    expect(order).toEqual([
+      "hydrate",
+      "stage:action-1",
+      "mutate",
+      "checkpoint:action-1",
+    ]);
   });
 
   it("does not checkpoint a failed mutation", async () => {
@@ -41,7 +48,7 @@ describe("SessionWorkspace", () => {
       }),
     ).rejects.toThrow("transport failed");
 
-    expect(order).toEqual(["hydrate", "mutate"]);
+    expect(order).toEqual(["hydrate", "stage:action-1", "mutate"]);
   });
 
   it("recovers a failed checkpoint before uploading an older browser revision", async () => {
@@ -66,9 +73,11 @@ describe("SessionWorkspace", () => {
 
     expect(order).toEqual([
       "hydrate",
+      "stage:action-1",
       "mutate:1",
       "checkpoint:action-1",
       "hydrate",
+      "stage:action-2",
       "mutate:2",
       "checkpoint:action-2",
     ]);
@@ -92,17 +101,61 @@ describe("SessionWorkspace", () => {
     });
     const background = workspace.checkpoint("sess-1", "background:event-1");
 
-    await vi.waitFor(() => expect(order).toEqual(["hydrate", "mutate:start"]));
+    await vi.waitFor(() =>
+      expect(order).toEqual(["hydrate", "stage:turn-1", "mutate:start"]),
+    );
     releaseMutation();
     await Promise.all([mutation, background]);
 
     expect(order).toEqual([
       "hydrate",
+      "stage:turn-1",
       "mutate:start",
       "mutate:end",
       "checkpoint:turn-1",
+      "stage:background:event-1",
       "checkpoint:background:event-1",
     ]);
+  });
+
+  it("serializes per session without blocking an independent session", async () => {
+    const order: string[] = [];
+    const workspace = createSessionWorkspace(makeService(order), "local");
+    let releaseFirst!: () => void;
+    const first = workspace.run("sess-1", "action-1", async () => {
+      order.push("mutate:1:start");
+      await new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      order.push("mutate:1:end");
+    });
+
+    await vi.waitFor(() =>
+      expect(order).toEqual(["hydrate", "stage:action-1", "mutate:1:start"]),
+    );
+
+    const second = workspace.run("sess-2", "action-2", async () => {
+      order.push("mutate:2");
+    });
+    let beforeRelease: string[] = [];
+    try {
+      await vi.waitFor(() => expect(order).toContain("checkpoint:action-2"));
+      beforeRelease = [...order];
+    } finally {
+      releaseFirst();
+      await Promise.all([first, second]);
+    }
+
+    expect(beforeRelease).toEqual([
+      "hydrate",
+      "stage:action-1",
+      "mutate:1:start",
+      "hydrate",
+      "stage:action-2",
+      "mutate:2",
+      "checkpoint:action-2",
+    ]);
+    expect(order.slice(-2)).toEqual(["mutate:1:end", "checkpoint:action-1"]);
   });
 
   it("runs remote mutations directly without mirror calls", async () => {

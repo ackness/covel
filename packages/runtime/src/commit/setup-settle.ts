@@ -79,6 +79,10 @@ export async function settleSetupRuntimes(args: {
   };
   let changed = false;
   for (const r of ran) {
+    const lastError =
+      r.doneSignal && !committed
+        ? (r.error ?? "proposal commit rolled back")
+        : r.error;
     const terminal = (
       await store.listSetupAttempts(sessionId, {
         runtimeId: r.runtimeId,
@@ -100,7 +104,7 @@ export async function settleSetupRuntimes(args: {
         pluginVersion: r.pluginVersion,
         generation: r.generation,
         now,
-        ...(r.error ? { lastError: r.error } : {}),
+        ...(lastError ? { lastError } : {}),
       });
     }
     changed = true;

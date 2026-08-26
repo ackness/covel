@@ -11,9 +11,17 @@ import type { RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import { parseJsonFrames } from "./sse-test-utils.js";
 
 const SESSION_ID = "session-suspension-accounting";
 const PLUGIN_ID = "suspension-fixture";
+
+interface ActionEnvelope {
+  readonly type: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly payload: Record<string, unknown>;
+}
 
 function manifest(
   name: string,
@@ -45,7 +53,6 @@ async function runScenario(options: { readonly failCommit: boolean }) {
     phase: "playing",
     completedPlayerTurns: 3,
     setupRuntimes: {},
-    completedPlayerTurns: 3,
 
     createdAt: "2026-08-25T00:00:00.000Z",
     updatedAt: "2026-08-25T00:00:00.000Z",
@@ -145,24 +152,51 @@ async function runScenario(options: { readonly failCommit: boolean }) {
     }),
   });
   expect(response.status).toBe(200);
-  const body = await response.text();
-  return { store, body };
+  const envelopes = parseJsonFrames<ActionEnvelope>(await response.text());
+  return { store, envelopes };
 }
 
 describe("POST /api/actions suspension accounting", () => {
   it("does not complete the logical player turn at the suspension boundary", async () => {
-    const { store, body } = await runScenario({ failCommit: false });
+    const { store, envelopes } = await runScenario({ failCommit: false });
 
     expect((await store.getSession(SESSION_ID))?.completedPlayerTurns).toBe(3);
-    expect(await store.listSuspensions(SESSION_ID)).toHaveLength(1);
-    expect(body).toContain('"type":"turn.suspended"');
+    const suspensions = await store.listSuspensions(SESSION_ID);
+    expect(suspensions).toHaveLength(1);
+    const suspension = suspensions[0]!;
+    const suspended = envelopes.filter(
+      (envelope) => envelope.type === "turn.suspended",
+    );
+
+    expect(suspended).toHaveLength(1);
+    expect(suspended[0]).toMatchObject({
+      sessionId: suspension.sessionId,
+      turnId: suspension.turnId,
+      payload: {
+        suspensionId: suspension.id,
+        sessionId: suspension.sessionId,
+        turnId: suspension.turnId,
+        runtimeId: suspension.runtimeId,
+        pluginId: suspension.pluginId,
+        reason: suspension.reason,
+        resumeSchema: suspension.resumeSchema,
+      },
+    });
+    expect(envelopes.map((envelope) => envelope.type)).not.toContain(
+      "turn.completed",
+    );
   });
 
   it("removes a continuation when a sibling proposal rolls back", async () => {
-    const { store, body } = await runScenario({ failCommit: true });
+    const { store, envelopes } = await runScenario({ failCommit: true });
 
     expect((await store.getSession(SESSION_ID))?.completedPlayerTurns).toBe(3);
     expect(await store.listSuspensions(SESSION_ID)).toHaveLength(0);
-    expect(body).not.toContain('"type":"turn.suspended"');
+    expect(envelopes.map((envelope) => envelope.type)).not.toContain(
+      "turn.suspended",
+    );
+    expect(envelopes.map((envelope) => envelope.type)).not.toContain(
+      "turn.completed",
+    );
   });
 });

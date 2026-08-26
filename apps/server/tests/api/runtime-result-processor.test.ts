@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
+import { createEventBus } from "@covel/events";
 import type { RuntimeResult } from "@covel/shared";
-import { createHookPipeline, type KernelStore } from "@covel/runtime";
+import {
+  createHookPipeline,
+  createTurnEmitter,
+  type KernelStore,
+} from "@covel/runtime";
 import { createRuntimeResultProcessor } from "../../src/routes/api/runtime-result-processor.js";
 
 function makeRuntimeResult(
   runtimeId: string,
   output: Record<string, unknown>,
+  overrides: Partial<RuntimeResult> = {},
 ): RuntimeResult {
   return {
     pluginId: runtimeId,
@@ -17,7 +23,26 @@ function makeRuntimeResult(
     toolCalls: [],
     durationMs: 1,
     timestamp: "2026-05-09T00:00:00.000Z",
+    ...overrides,
   };
+}
+
+function createRecordingStore() {
+  const messages: Array<Record<string, unknown>> = [];
+  const traceEvents: Array<Record<string, unknown>> = [];
+  const store = {
+    async addMessage(record: Record<string, unknown>) {
+      messages.push(record);
+    },
+    async saveEvent() {},
+    async updateSession() {},
+    async addStateChange() {},
+    async addTraceEvent(record: Record<string, unknown>) {
+      traceEvents.push(record);
+    },
+  } as unknown as KernelStore;
+
+  return { store, messages, traceEvents };
 }
 
 describe("createRuntimeResultProcessor", () => {
@@ -72,33 +97,51 @@ describe("createRuntimeResultProcessor", () => {
     expect(order).toEqual(["first message", "second message"]);
   });
 
-  it("passes hook pipeline and emitter through to successful commits", async () => {
+  it("scopes hooks and forwards the committed asset session, turn, and trace event", async () => {
     const hookPipeline = createHookPipeline();
     const preHook = vi.fn().mockResolvedValue({ action: "continue" });
     const postHook = vi.fn().mockResolvedValue({ action: "continue" });
     hookPipeline.register({
-      id: "test:PreStateCommit",
+      id: "asset-plugin:PreStateCommit",
       event: "PreStateCommit",
+      pluginId: "asset-plugin",
       handler: preHook,
     });
     hookPipeline.register({
-      id: "test:PostStateCommit",
+      id: "asset-plugin:PostStateCommit",
       event: "PostStateCommit",
+      pluginId: "asset-plugin",
       handler: postHook,
     });
-    const emitter = {
+    const inactiveHook = vi.fn().mockResolvedValue({ action: "continue" });
+    hookPipeline.register({
+      id: "inactive-plugin:PreStateCommit",
+      event: "PreStateCommit",
+      pluginId: "inactive-plugin",
+      handler: inactiveHook,
+    });
+
+    const { store, messages, traceEvents } = createRecordingStore();
+    const eventBus = createEventBus();
+    const busEvents: Array<{
+      type: string;
+      sessionId: string;
+      payload: Record<string, unknown>;
+    }> = [];
+    eventBus.onEmit((event) => {
+      busEvents.push({
+        type: event.type,
+        sessionId: event.sessionId,
+        payload: event.payload as Record<string, unknown>,
+      });
+    });
+    const emitter = createTurnEmitter({
+      store,
+      eventBus,
       sessionId: "session-1",
       turnId: "turn-1",
-      emit: vi.fn(async () => undefined),
-    };
-    const store = {
-      async addMessage() {},
-      async saveEvent() {},
-      async updateSession() {},
-      async addStateChange() {},
-      async addTraceEvent() {},
-      async setPluginData() {},
-    } as unknown as KernelStore;
+      traceId: "asset-trace-1",
+    });
 
     const processor = createRuntimeResultProcessor({
       store,
@@ -106,58 +149,166 @@ describe("createRuntimeResultProcessor", () => {
       runtimes: [
         {
           name: "asset-runtime",
+          pluginId: "asset-plugin",
           outputKind: "plugin",
-          capabilities: ["asset.generate"],
+          capabilities: ["image-generation"],
         },
+        { name: "other-runtime", pluginId: "other-plugin" },
       ],
       hookPipeline,
+      eventBus,
       emitter,
     });
 
-    await processor.process(
-      makeRuntimeResult("asset-runtime", {
-        pluginData: [{ namespace: "gallery", key: "last", value: "asset-1" }],
-      }),
+    const output = await processor.process(
+      makeRuntimeResult(
+        "asset-runtime",
+        {
+          assetGenerations: [
+            {
+              ref: {
+                id: "a".repeat(64),
+                mime: "image/png",
+                size: 42,
+              },
+              modality: "image",
+              meta: { prompt: "forest" },
+            },
+          ],
+        },
+        { pluginId: "asset-plugin" },
+      ),
     );
 
-    expect(preHook).toHaveBeenCalledOnce();
-    expect(postHook).toHaveBeenCalledOnce();
-    expect(emitter.emit).toHaveBeenCalled();
+    expect(output.failedProposals).toEqual([]);
+    expect(messages).toEqual([
+      expect.objectContaining({
+        sessionId: "session-1",
+        metadata: expect.objectContaining({
+          turnId: "turn-1",
+          runtimeId: "asset-runtime",
+          block: expect.objectContaining({ type: "asset.generate" }),
+        }),
+      }),
+    ]);
+    expect(preHook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "session-1",
+        turnId: "turn-1",
+        pluginId: "asset-plugin",
+        runtimeId: "asset-runtime",
+        activePluginIds: new Set(["asset-plugin", "other-plugin"]),
+      }),
+      expect.objectContaining({
+        proposal: expect.objectContaining({
+          type: "asset.generate",
+          sessionId: "session-1",
+          turnId: "turn-1",
+          source: { pluginId: "asset-plugin", runtimeId: "asset-runtime" },
+        }),
+      }),
+    );
+    expect(postHook).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: "session-1", turnId: "turn-1" }),
+      expect.objectContaining({
+        proposal: expect.objectContaining({ type: "asset.generate" }),
+        result: { committed: true, event: expect.any(Object) },
+      }),
+    );
+    expect(inactiveHook).not.toHaveBeenCalled();
+
+    expect(traceEvents).toContainEqual(
+      expect.objectContaining({
+        type: "asset.generated",
+        sessionId: "session-1",
+        turnId: "turn-1",
+        traceId: "asset-trace-1",
+      }),
+    );
+    expect(busEvents.find((event) => event.type === "asset.generated")).toEqual(
+      expect.objectContaining({
+        sessionId: "session-1",
+        payload: expect.objectContaining({
+          turnId: "turn-1",
+          runtimeId: "asset-runtime",
+          pluginId: "asset-plugin",
+          flowId: "asset-trace-1",
+        }),
+      }),
+    );
   });
 
-  it("passes event bus through to hook abort observability", async () => {
+  it("reports an active hook abort and prevents the rejected domain write", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const hookPipeline = createHookPipeline();
     hookPipeline.register({
-      id: "test:PreStateCommit:abort",
+      id: "story-plugin:PreStateCommit:abort",
       event: "PreStateCommit",
+      pluginId: "story-plugin",
       handler: vi
         .fn()
         .mockResolvedValue({ action: "abort", reason: "blocked" }),
     });
-    const eventBus = { emit: vi.fn() };
-    const store = {
-      async addMessage() {},
-      async saveEvent() {},
-      async updateSession() {},
-      async addStateChange() {},
-      async addTraceEvent() {},
-    } as unknown as KernelStore;
+    const { store, messages } = createRecordingStore();
+    const eventBus = createEventBus();
+    const busEvents: Array<{ type: string; payload: Record<string, unknown> }> =
+      [];
+    eventBus.onEmit((event) => {
+      busEvents.push({
+        type: event.type,
+        payload: event.payload as Record<string, unknown>,
+      });
+    });
 
     const processor = createRuntimeResultProcessor({
       store,
       sessionId: "session-1",
-      runtimes: [{ name: "story-runtime", outputKind: "story" }],
+      runtimes: [
+        {
+          name: "story-runtime",
+          pluginId: "story-plugin",
+          outputKind: "story",
+          capabilities: [],
+        },
+      ],
       hookPipeline,
       eventBus,
     });
 
     const output = await processor.process(
-      makeRuntimeResult("story-runtime", { narrativeOutput: "blocked" }),
+      makeRuntimeResult(
+        "story-runtime",
+        { narrativeOutput: "blocked" },
+        { pluginId: "story-plugin" },
+      ),
     );
 
-    expect(output.failedProposals).toHaveLength(1);
-    expect(eventBus.emit).toHaveBeenCalledOnce();
+    expect(output.failedProposals).toEqual([
+      expect.objectContaining({
+        error: "pre-state-commit hook aborted: blocked",
+        proposal: expect.objectContaining({
+          type: "narrative.append",
+          sessionId: "session-1",
+          turnId: "turn-1",
+        }),
+      }),
+    ]);
+    expect(messages).toEqual([]);
+    expect(busEvents).toEqual([
+      expect.objectContaining({
+        type: "hook.aborted",
+        payload: {
+          event: "PreStateCommit",
+          sessionId: "session-1",
+          turnId: "turn-1",
+          pluginId: "story-plugin",
+          runtimeId: "story-runtime",
+          hookId: "story-plugin:PreStateCommit:abort",
+          hookPluginId: "story-plugin",
+          reason: "blocked",
+        },
+      }),
+    ]);
     warn.mockRestore();
   });
 });

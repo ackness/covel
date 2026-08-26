@@ -1,181 +1,183 @@
 /**
- * Tests for the delta-buffer session-switch race in session-store.tsx
- * (findings/08-frontend-races.md B).
+ * Regression tests for the delta-buffer session-switch race.
  *
- * Context:
- *   - `handleSseEvent` buffers narrative.delta tokens per-runtime and
- *     flushes once per animation frame.
- *   - If the user switches sessions between buffer push and RAF fire,
- *     the flush must NOT dispatch APPEND_DELTA — otherwise session 1's
- *     tokens bleed into session 2's messages array.
- *
- * Strategy: the buffer/flush logic is small enough that we re-implement
- * the exact guard here and verify it behaves as designed. A full
- * SessionProvider integration test would require mocking the subscription
- * transport and dozens of services — not worth the complexity for what is
- * effectively a 4-line change.
+ * A narrative delta is buffered until the next animation frame. The handler
+ * must only publish that buffered delta when the session which queued it is
+ * still loaded at flush time; otherwise an old stream can create a placeholder
+ * in the newly selected session.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { SseEnvelope } from "@/services/api";
+import {
+  clearAllStreamingText,
+  getStreamingText,
+} from "@/stores/streaming-text-store.js";
+import { initialState, reducer } from "../session-store/reducer.js";
+import {
+  createSseEventHandler,
+  type SseEventHandlerDeps,
+} from "../session-store/sse-handler.js";
+import type { SessionAction, SessionState } from "../session-store/types.js";
 
-interface BufferEntry {
-  turnId: string;
-  runtimeId: string;
-  pluginId: string;
-  text: string;
-  flushSessionId: string | null;
+interface RafHarness {
+  flush(frameId: number): void;
+  pendingFrameId(): number;
 }
 
-interface AppendDeltaAction {
-  type: "APPEND_DELTA";
-  turnId: string;
-  runtimeId: string;
-  pluginId: string;
-  delta: string;
+function installRafHarness(): RafHarness {
+  let nextFrameId = 1;
+  const callbacks = new Map<number, FrameRequestCallback>();
+
+  vi.stubGlobal(
+    "requestAnimationFrame",
+    (callback: FrameRequestCallback): number => {
+      const frameId = nextFrameId++;
+      callbacks.set(frameId, callback);
+      return frameId;
+    },
+  );
+  vi.stubGlobal("cancelAnimationFrame", (frameId: number): void => {
+    callbacks.delete(frameId);
+  });
+
+  return {
+    flush(frameId) {
+      const callback = callbacks.get(frameId);
+      if (!callback) throw new Error(`No pending frame ${frameId}`);
+      callbacks.delete(frameId);
+      callback(0);
+    },
+    pendingFrameId() {
+      const [frameId] = callbacks.keys();
+      if (frameId === undefined) throw new Error("No pending animation frame");
+      return frameId;
+    },
+  };
 }
 
-/** Re-implementation of the guarded flush exactly as written in session-store.tsx. */
-function flushGuarded(
-  buffer: Map<string, BufferEntry>,
-  currentSessionId: string | null,
-  dispatch: (action: AppendDeltaAction) => void,
-): void {
-  for (const entry of buffer.values()) {
-    if (entry.flushSessionId !== currentSessionId) continue;
-    dispatch({
-      type: "APPEND_DELTA",
-      turnId: entry.turnId,
-      runtimeId: entry.runtimeId,
-      pluginId: entry.pluginId,
-      delta: entry.text,
-    });
-  }
-  buffer.clear();
+function narrativeDelta(
+  delta = "Hello ",
+  sessionId = "session-a",
+): SseEnvelope {
+  return {
+    type: "narrative.delta",
+    requestId: "req-1",
+    traceId: "trace-1",
+    sessionId,
+    turnId: "turn-1",
+    flowId: "trace-1",
+    seq: 1,
+    timestamp: "2026-08-26T00:00:00.000Z",
+    payload: {
+      delta,
+      runtimeId: "narrator",
+      pluginId: "narrator",
+      kind: "story",
+    },
+  };
 }
 
-describe("delta buffer — session switch guard", () => {
-  it("dispatches when sessionId is unchanged between push and flush", () => {
-    const buffer = new Map<string, BufferEntry>();
-    buffer.set("turn-1_narrator", {
-      turnId: "turn-1",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      text: "Hello ",
-      flushSessionId: "session-a",
-    });
-    buffer.set("turn-1_codex", {
-      turnId: "turn-1",
-      runtimeId: "codex",
-      pluginId: "codex",
-      text: "world.",
-      flushSessionId: "session-a",
-    });
+function createHarness(sessionId = "session-a") {
+  const actions: SessionAction[] = [];
+  const stateRef: { current: SessionState } = { current: initialState };
+  const sessionIdRef = { current: sessionId as string | null };
+  const deps: SseEventHandlerDeps = {
+    dispatch(action) {
+      actions.push(action);
+      stateRef.current = reducer(stateRef.current, action);
+    },
+    ds: {} as SseEventHandlerDeps["ds"],
+    sessionIdRef,
+    stateRef,
+    runtimeKindRef: { current: new Map() },
+    deltaBufferRef: { current: new Map() },
+    deltaRafRef: { current: null },
+    lastBackfilledTurnIdRef: { current: null },
+  };
 
-    const dispatch = vi.fn();
-    flushGuarded(buffer, "session-a", dispatch);
+  return {
+    actions,
+    deps,
+    handle: createSseEventHandler(deps),
+    sessionIdRef,
+    state: () => stateRef.current,
+  };
+}
 
-    expect(dispatch).toHaveBeenCalledTimes(2);
-    expect(dispatch).toHaveBeenNthCalledWith(1, {
-      type: "APPEND_DELTA",
-      turnId: "turn-1",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      delta: "Hello ",
+afterEach(() => {
+  vi.unstubAllGlobals();
+  clearAllStreamingText();
+});
+
+describe("sse-handler narrative delta buffer", () => {
+  it("flushes coalesced story deltas into the current session's reducer state", () => {
+    const raf = installRafHarness();
+    const harness = createHarness();
+
+    harness.handle(narrativeDelta());
+    harness.handle({
+      ...narrativeDelta(),
+      seq: 2,
+      payload: narrativeDelta("world.").payload,
     });
-    expect(dispatch).toHaveBeenNthCalledWith(2, {
-      type: "APPEND_DELTA",
-      turnId: "turn-1",
-      runtimeId: "codex",
-      pluginId: "codex",
-      delta: "world.",
-    });
-    expect(buffer.size).toBe(0);
+    raf.flush(raf.pendingFrameId());
+
+    expect(harness.state().messages).toMatchObject([
+      {
+        id: "stream_turn-1_narrator",
+        turnId: "turn-1",
+        runtimeId: "narrator",
+        kind: "story",
+      },
+    ]);
+    expect(getStreamingText("stream_turn-1_narrator")).toBe("Hello world.");
+    expect(
+      harness.actions.filter((action) => action.type === "APPEND_DELTA"),
+    ).toEqual([
+      {
+        type: "APPEND_DELTA",
+        turnId: "turn-1",
+        runtimeId: "narrator",
+        pluginId: "narrator",
+        delta: "Hello world.",
+      },
+    ]);
+    expect(harness.deps.deltaBufferRef.current.size).toBe(0);
+    expect(harness.deps.deltaRafRef.current).toBeNull();
   });
 
-  it("drops buffered entries when the active session changed mid-stream", () => {
-    const buffer = new Map<string, BufferEntry>();
-    buffer.set("turn-1_narrator", {
-      turnId: "turn-1",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      text: "stale token",
-      flushSessionId: "session-a", // captured during session A
-    });
+  it("drops a queued delta when the player switches sessions before its frame flushes", () => {
+    const raf = installRafHarness();
+    const harness = createHarness("session-a");
 
-    const dispatch = vi.fn();
-    // User switched to session B — currentSessionId is "session-b".
-    flushGuarded(buffer, "session-b", dispatch);
+    harness.handle(narrativeDelta());
+    harness.sessionIdRef.current = "session-b";
+    raf.flush(raf.pendingFrameId());
 
-    expect(dispatch).not.toHaveBeenCalled();
-    expect(buffer.size).toBe(0); // still cleared so next RAF starts fresh
+    expect(harness.state().messages).toEqual([]);
+    expect(harness.actions.map((action) => action.type)).toEqual([
+      "BACKFILL_TURN_ID",
+    ]);
+    expect(getStreamingText("stream_turn-1_narrator")).toBeUndefined();
+    expect(harness.deps.deltaBufferRef.current.size).toBe(0);
+    expect(harness.deps.deltaRafRef.current).toBeNull();
   });
 
-  it("drops only the stale entries and dispatches the current-session ones", () => {
-    const buffer = new Map<string, BufferEntry>();
-    buffer.set("turn-1_narrator", {
-      turnId: "turn-1",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      text: "from A",
-      flushSessionId: "session-a",
-    });
-    // Unrealistic in practice (a single buffer only accumulates tokens
-    // for the currently-active session), but validates the filter
-    // behaves per-entry rather than all-or-nothing.
-    buffer.set("turn-2_narrator", {
-      turnId: "turn-2",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      text: "from B",
-      flushSessionId: "session-b",
-    });
+  it("drops a queued delta when the session is detached before its frame flushes", () => {
+    const raf = installRafHarness();
+    const harness = createHarness("session-a");
 
-    const dispatch = vi.fn();
-    flushGuarded(buffer, "session-b", dispatch);
+    harness.handle(narrativeDelta());
+    harness.sessionIdRef.current = null;
+    raf.flush(raf.pendingFrameId());
 
-    expect(dispatch).toHaveBeenCalledTimes(1);
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "APPEND_DELTA",
-      turnId: "turn-2",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      delta: "from B",
-    });
-  });
-
-  it("drops entries when session was detached (null) mid-stream", () => {
-    const buffer = new Map<string, BufferEntry>();
-    buffer.set("turn-1_narrator", {
-      turnId: "turn-1",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      text: "pending",
-      flushSessionId: "session-a",
-    });
-
-    const dispatch = vi.fn();
-    flushGuarded(buffer, null, dispatch);
-
-    expect(dispatch).not.toHaveBeenCalled();
-  });
-
-  it("reproduces Finding 8 B: session 1 tokens no longer leak into session 2", () => {
-    // Simulate: tokens accumulated for session 1 while SSE was active, then
-    // the user clicked session 2 in the sidebar. sessionIdRef flips to B.
-    // RAF fires a few ms later — the guard must prevent session 1 tokens
-    // from being dispatched against session 2's messages array.
-    const buffer = new Map<string, BufferEntry>();
-    buffer.set("turn-1_narrator", {
-      turnId: "turn-1-session-1",
-      runtimeId: "narrator",
-      pluginId: "narrator",
-      text: "...narrative from session 1",
-      flushSessionId: "session-1",
-    });
-
-    const dispatch = vi.fn();
-    flushGuarded(buffer, "session-2", dispatch);
-
-    expect(dispatch).not.toHaveBeenCalled();
+    expect(harness.state().messages).toEqual([]);
+    expect(harness.actions.map((action) => action.type)).toEqual([
+      "BACKFILL_TURN_ID",
+    ]);
+    expect(getStreamingText("stream_turn-1_narrator")).toBeUndefined();
+    expect(harness.deps.deltaBufferRef.current.size).toBe(0);
+    expect(harness.deps.deltaRafRef.current).toBeNull();
   });
 });
