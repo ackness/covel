@@ -59,6 +59,17 @@ Reference for the json-render components available to plugin UI specs. This page
 | `PortraitGallery`       | Framework-provided player-facing character-portrait gallery. Reads the plugin's `presence` namespace and renders each character's portrait as a framed, click-to-enlarge thumbnail with a hover "replace" action — the player picks an image file, it uploads via `POST /api/media`, and the resulting `MediaRef` is written back as the character's presence (no sha256 / MIME / size hand-entry).                                     | `pluginId`                                                                                                                                                                                                                                                                         |
 | `BranchReplyCandidates` | Candidate-reply switcher for `branch-reply` plugin data. Draft/send route through the session draft path; accept/regenerate call plugin-rpc directly. Renders nothing when there are no non-original candidates.                                                                                                                                                                                                                        | `value`/`candidateSet`/`replySet`/`data` (candidate payload), `pluginId`, `runtimeId` (enable accept/regenerate RPC), `title`/`draftLabel`/`sendLabel`/`acceptLabel`/`regenerateLabel` _(I18nText)_                                                                                |
 
+`Icon.name` and plugin panel icons use a bounded protocol allow-list so a
+plugin cannot pull the complete Lucide library into the client bundle. Current
+names are: `anchor`, `backpack`, `book-marked`, `book-open`, `book-user`,
+`brain`, `calendar-days`, `check-circle-2`, `compass`, `dices`, `gem`,
+`handshake`, `headphones`, `heart`, `id-card`, `image`, `loader`, `map`,
+`map-pin`, `megaphone`, `mic`, `network`, `scroll-text`, `search`, `shield`,
+`skull`, `sliders-horizontal`, `sparkles`, `swords`, `turtle`, `user`,
+`user-search`, `users`, `users-round`, `wand`, `waves`, and `x-circle`.
+PascalCase aliases such as `BookOpen` are normalized. Unknown names render no
+catalog icon (panel tabs use `HelpCircle` as their fallback).
+
 ### Data
 
 | Component                | Purpose                                                                                                                                                                                                                                                                                           | Key props                                                                                                                                                                                                 |

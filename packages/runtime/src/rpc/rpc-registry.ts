@@ -2,46 +2,31 @@
  * Plugin RPC registry.
  *
  * Holds the lookup table for RPC handlers exposed via
- * `POST /api/sessions/:id/plugin-rpc`. Two kinds of registrations:
- *
- *   1. **Plugin-declared actions** — discovered from `manifest.rpc` during
- *      plugin load. Handlers are loaded lazily on first dispatch.
- *
- *   2. **Framework default actions** — registered eagerly at bootstrap.
- *      Always available regardless of which plugins are loaded. Requests
- *      address them with `pluginId: "framework"`.
- *
- * The registry does not resolve handlers (i.e. does not `import()` modules);
- * it only stores the declarations and exposes a lookup interface. The
- * dispatcher calls `loadHandler` provided by the caller to actually execute.
+ * `POST /api/sessions/:id/plugin-rpc`. Plugin entry modules register inline
+ * handlers, while framework defaults are registered eagerly at bootstrap.
  */
 
-import type {
-  RpcActionDecl,
-  RpcHandlerStore,
-  RpcTrustLevel,
-} from "@covel/shared";
+import type { RpcHandlerStore, RpcTrustLevel } from "@covel/shared";
 
 /**
  * Trust ranking — higher rank = more permissive (auto-allows the call).
  *
- * The approval gate uses this so plugin-declared `decl.trustLevel` can
+ * The approval gate uses this so an entry's requested `trustLevel` can
  * only ever **raise restrictions** relative to the plugin's source trust:
  * a community plugin can't quietly opt itself into `builtin` and bypass
  * the dialog. See CRITICAL-1 fix in the code review report.
  */
 const TRUST_RANK: Readonly<Record<RpcTrustLevel, number>> = {
   community: 0,
-  official: 1,
-  builtin: 2,
+  builtin: 1,
 };
 
 /**
- * Resolve the effective trust for a plugin-declared action.
+ * Resolve the effective trust for a plugin action.
  *
- *   - If the manifest does not set `decl.trustLevel`, fall back to the
+ *   - If the registration does not set `trustLevel`, fall back to the
  *     plugin's source trust.
- *   - If the manifest sets a level **at or below** the plugin's source
+ *   - If the registration sets a level **at or below** the plugin's source
  *     trust (i.e., equal or more restrictive), honour it — this is the
  *     intended use case (a builtin plugin marking one action as
  *     "community-approval-required").
@@ -52,18 +37,18 @@ const TRUST_RANK: Readonly<Record<RpcTrustLevel, number>> = {
 function resolveActionTrust(
   pluginId: string,
   action: string,
-  decl: Pick<RpcActionDecl, "trustLevel">,
+  options: { readonly trustLevel?: RpcTrustLevel },
   pluginTrust: RpcTrustLevel,
 ): RpcTrustLevel {
-  if (!decl.trustLevel) return pluginTrust;
-  if (TRUST_RANK[decl.trustLevel] > TRUST_RANK[pluginTrust]) {
+  if (!options.trustLevel) return pluginTrust;
+  if (TRUST_RANK[options.trustLevel] > TRUST_RANK[pluginTrust]) {
     console.warn(
-      `[plugin-rpc] ${pluginId}::${action} declared trustLevel=${decl.trustLevel} ` +
+      `[plugin-rpc] ${pluginId}::${action} declared trustLevel=${options.trustLevel} ` +
         `but plugin source is ${pluginTrust}; clamping to ${pluginTrust}.`,
     );
     return pluginTrust;
   }
-  return decl.trustLevel;
+  return options.trustLevel;
 }
 
 /** Resolved RPC handler signature. */
@@ -98,32 +83,21 @@ export interface RpcHandlerContext {
 }
 
 /**
- * One entry in the registry. Plugin-declared entries have a `pluginId` and
- * lazy `handlerPath`; framework-default entries inline the handler directly.
+ * One entry in the registry. Both plugin and framework registrations keep an
+ * inline handler; plugin entries additionally carry their namespace id.
  */
 export interface RpcRegistryEntry {
   readonly action: string;
   readonly pluginId?: string;
   readonly trustLevel: RpcTrustLevel;
   readonly description?: string;
-  /** For plugin-declared actions: relative path on disk to the handler module. */
-  readonly handlerPath?: string;
-  /** For framework-default actions: inline implementation. */
-  readonly handler?: RpcHandler;
+  readonly handler: RpcHandler;
 }
 
 export interface PluginRpcRegistry {
-  /** Register a plugin-declared action. Throws if the (pluginId, action) pair is already registered. */
-  registerPluginAction(
-    pluginId: string,
-    action: string,
-    decl: RpcActionDecl,
-    pluginTrust: RpcTrustLevel,
-  ): void;
   /**
-   * Register a plugin action with an inline handler (unified `entry` module
-   * registration path — no handlerPath / lazy import). Same duplicate and
-   * trust-clamping semantics as `registerPluginAction`.
+   * Register a plugin action from its entry module. Throws if the
+   * (pluginId, action) pair is already registered.
    */
   registerPluginHandler(
     pluginId: string,
@@ -157,22 +131,6 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
   const frameworkEntries = new Map<string, RpcRegistryEntry>();
 
   return {
-    registerPluginAction(pluginId, action, decl, pluginTrust) {
-      const key = `${pluginId}::${action}`;
-      if (pluginEntries.has(key)) {
-        throw new Error(
-          `[plugin-rpc] duplicate registration: plugin "${pluginId}" already declares action "${action}"`,
-        );
-      }
-      pluginEntries.set(key, {
-        action,
-        pluginId,
-        trustLevel: resolveActionTrust(pluginId, action, decl, pluginTrust),
-        description: decl.description,
-        handlerPath: decl.handler,
-      });
-    },
-
     registerPluginHandler(pluginId, action, handler, options, pluginTrust) {
       const key = `${pluginId}::${action}`;
       if (pluginEntries.has(key)) {

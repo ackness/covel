@@ -3,26 +3,28 @@
  *
  * When a tool returns the suspend sentinel, the loop must capture its full
  * mid-turn state (messages, partial content, collected tool calls, buffered
- * proposals) into a {@link SuspensionRecord}, emit the `turn.suspended` /
- * `runtime.completed` events, run the PostRuntime hook, and exit with a
- * `status: "suspended"` RuntimeResult. Extracted verbatim from
+ * proposals) into an execution-local {@link SuspensionRecord} artifact, run
+ * the PostRuntime hook, emit `runtime.completed`, and exit with a
+ * `status: "suspended"` RuntimeResult. Extracted from
  * `turn-agent-tool-loop.ts` so the main loop stays focused on iteration.
  */
 
 import type {
   Proposal,
+  ExecutionContext,
   RuntimeManifest,
   RuntimeResult,
   ToolCallRecord,
   TurnInput,
 } from "@covel/shared";
 import type { SuspensionRecord } from "@covel/store";
-import type { SuspendSentinel } from "@covel/tools";
+import type { EmittedEvent, SuspendSentinel } from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
+import { attachSuspensionArtifact } from "../suspension-artifact.js";
 
 export interface HandleSuspensionOptions {
   readonly sentinel: SuspendSentinel;
@@ -34,15 +36,16 @@ export interface HandleSuspensionOptions {
   readonly finalContent: string | null;
   readonly collectedToolCalls: readonly ToolCallRecord[];
   readonly pendingProposals: readonly Proposal[];
+  readonly emittedEvents: readonly EmittedEvent[];
+  readonly executionContext: ExecutionContext;
   readonly suspendToolCallId: string;
   readonly startTime: number;
   readonly runId: string;
 }
 
 /**
- * Persist a suspension record and return the terminal `suspended` RuntimeResult
- * (after the PostRuntime hook). The caller must have already confirmed
- * `deps.store` is present.
+ * Return the terminal `suspended` RuntimeResult with an execution-local
+ * continuation artifact. Persistence belongs to `finalizeExecution`.
  */
 export async function handleSuspension(
   opts: HandleSuspensionOptions,
@@ -57,6 +60,8 @@ export async function handleSuspension(
     finalContent,
     collectedToolCalls,
     pendingProposals,
+    emittedEvents,
+    executionContext,
     suspendToolCallId,
     startTime,
     runId,
@@ -64,15 +69,16 @@ export async function handleSuspension(
 
   const suspensionId = crypto.randomUUID();
 
-  // Messages array currently has the assistant message (with tool_calls)
-  // but not the suspend tool result. We capture the full message
-  // array together with any buffered proposals so resume can
-  // continue with the same mid-turn write set.
+  // Capture the provider-valid transcript (including a placeholder tool result
+  // for the suspender and cancellation results for later calls in its batch)
+  // together with buffered writes so resume can continue atomically.
   const pendingContinuation: SuspensionRecord["pendingContinuation"] = {
     messages: [...messages],
     partialContent: finalContent ?? undefined,
     toolCallsSoFar: [...collectedToolCalls],
     pendingProposals: [...pendingProposals],
+    ...(emittedEvents.length > 0 ? { emittedEvents: [...emittedEvents] } : {}),
+    executionContext,
     // Store the suspend tool's call ID so resume can append a proper tool result
     suspendToolCallId,
   };
@@ -88,23 +94,6 @@ export async function handleSuspension(
     pendingContinuation,
     createdAt: new Date().toISOString(),
   };
-
-  await deps.store!.saveSuspension(suspension);
-
-  // Emit turn.suspended SSE event via the actions channel.
-  // Include pluginId/runtimeId/suspendedAt so web clients can
-  // render a suspension row without a follow-up REST fetch
-  // (web suspend/resume integration).
-  emitSubEvent(deps.eventBus, "game", "turn.suspended", input.sessionId, {
-    sessionId: input.sessionId,
-    turnId: input.turnId,
-    suspensionId,
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-    suspendedAt: suspension.createdAt,
-    reason: sentinel.reason,
-    resumeSchema: sentinel.resumeSchema,
-  });
 
   const suspendedResult: RuntimeResult = {
     pluginId: manifest.pluginId,
@@ -123,12 +112,28 @@ export async function handleSuspension(
     timestamp: new Date().toISOString(),
   };
 
+  const finalResult = attachSuspensionArtifact(
+    await runPostRuntimeHook(
+      {
+        pipeline: hookPipeline,
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        pluginId: manifest.pluginId,
+        runtimeId: manifest.name,
+        eventBus: deps.eventBus,
+        emitter: deps.emitter,
+      },
+      suspendedResult,
+    ),
+    { record: suspension },
+  );
+
   try {
     await deps.onRuntimeComplete?.({
       runtimeId: manifest.name,
       pluginId: manifest.pluginId,
       status: "suspended",
-      durationMs: suspendedResult.durationMs,
+      durationMs: finalResult.durationMs,
     });
   } catch {
     /* callback error must not kill runtime */
@@ -138,19 +143,7 @@ export async function handleSuspension(
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
     status: "suspended",
-    durationMs: suspendedResult.durationMs,
+    durationMs: finalResult.durationMs,
   });
-
-  return runPostRuntimeHook(
-    {
-      pipeline: hookPipeline,
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      eventBus: deps.eventBus,
-      emitter: deps.emitter,
-    },
-    suspendedResult,
-  );
+  return finalResult;
 }

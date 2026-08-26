@@ -9,7 +9,8 @@
  *   - `vector_models` table: registry of known embedding models.
  *   - Each model gets one physical vec0 virtual table: `vec_mem_m{id}`.
  *   - `sessions.embedding_model_id` FK locks a session to one model.
- *   - In-memory caches avoid redundant DB lookups within a process.
+ *   - Immutable model rows are cached; session bindings are read each time so
+ *     delete/recreate of the same session id cannot reuse a stale target.
  *
  * Layer 2 — Physical Table CRUD (VectorStoreCapability):
  *   - `upsertVector`: resolve session → model table → DELETE+INSERT.
@@ -52,6 +53,7 @@ import type {
   VectorSearchResult,
   DeleteVectorsInput,
 } from "../vector-store.js";
+import { normalizeVectorTopK } from "../vector-store.js";
 
 // ── Safety helpers ───────────────────────────────────────────────
 
@@ -64,6 +66,16 @@ function assertValidId(id: number): void {
 function physicalTableName(id: number): string {
   assertValidId(id);
   return `vec_mem_m${id}`;
+}
+
+function requireCurrentTableName(id: number, tableName: string): string {
+  const expected = physicalTableName(id);
+  if (tableName !== expected) {
+    throw new Error(
+      `sqlite-vec: vector_models.id ${id} violates the current table_name invariant`,
+    );
+  }
+  return expected;
 }
 
 /** Convert a Float32Array to the JSON string form sqlite-vec expects. */
@@ -87,6 +99,11 @@ interface VectorModelRow {
 interface SessionEmbeddingRow {
   embedding_model_id: number | null;
   embedding_locked_at: string | null;
+}
+
+interface UpsertSessionRow {
+  embedding_model_id: number | null;
+  created_at: string;
 }
 
 // ── Factory ──────────────────────────────────────────────────────
@@ -118,8 +135,6 @@ export function createSqliteVectorCapability(
   // ── In-memory caches ────────────────────────────────────────────
   // Keyed by modelRegistryId (number) → VectorTarget
   const modelCache = new Map<number, VectorTarget>();
-  // Keyed by sessionId → VectorTarget | null (null = RAG disabled)
-  const sessionTargetCache = new Map<string, VectorTarget | null>();
   // Physical table IDs that have already been created in this process.
   const createdTables = new Set<number>();
 
@@ -146,7 +161,7 @@ export function createSqliteVectorCapability(
       modelRegistryId: row.id,
       modelId: row.model_id,
       dim: row.dim,
-      tableName: row.table_name,
+      tableName: requireCurrentTableName(row.id, row.table_name),
     };
   }
 
@@ -192,16 +207,6 @@ export function createSqliteVectorCapability(
       );
     }
 
-    // Defensive: if a legacy row still carries a placeholder (e.g. the
-    // database was created by an older version of this module), repair it.
-    if (!row.table_name || row.table_name === "__pending__") {
-      const tname = physicalTableName(row.id);
-      sqlite
-        .prepare(`UPDATE vector_models SET table_name = ? WHERE id = ?`)
-        .run(tname, row.id);
-      row.table_name = tname;
-    }
-
     const target = rowToTarget(row);
     modelCache.set(target.modelRegistryId, target);
     ensurePhysicalTable(target);
@@ -242,18 +247,11 @@ export function createSqliteVectorCapability(
           WHERE id = ?`,
       )
       .run(target.modelRegistryId, now, sessionId);
-
-    // Invalidate session cache so the next resolve hits DB.
-    sessionTargetCache.delete(sessionId);
   }
 
   async function resolveSessionVectorTarget(
     sessionId: string,
   ): Promise<VectorTarget | null> {
-    if (sessionTargetCache.has(sessionId)) {
-      return sessionTargetCache.get(sessionId) ?? null;
-    }
-
     const sessionRow = sqlite
       .prepare(
         `SELECT embedding_model_id, embedding_locked_at FROM sessions WHERE id = ?`,
@@ -261,7 +259,6 @@ export function createSqliteVectorCapability(
       .get(sessionId) as SessionEmbeddingRow | undefined;
 
     if (!sessionRow || sessionRow.embedding_model_id == null) {
-      sessionTargetCache.set(sessionId, null);
       return null;
     }
 
@@ -270,7 +267,6 @@ export function createSqliteVectorCapability(
     // Try in-memory model cache first.
     const cached = modelCache.get(modelId);
     if (cached) {
-      sessionTargetCache.set(sessionId, cached);
       return cached;
     }
 
@@ -290,7 +286,6 @@ export function createSqliteVectorCapability(
 
     const target = rowToTarget(modelRow);
     modelCache.set(target.modelRegistryId, target);
-    sessionTargetCache.set(sessionId, target);
     ensurePhysicalTable(target);
     return target;
   }
@@ -319,7 +314,7 @@ export function createSqliteVectorCapability(
       provider: r.provider,
       modelName: r.model_name,
       dim: r.dim,
-      tableName: r.table_name,
+      tableName: requireCurrentTableName(r.id, r.table_name),
       createdAt: r.created_at,
       lastUsedAt: r.last_used_at,
     }));
@@ -344,7 +339,9 @@ export function createSqliteVectorCapability(
     const tname = physicalTableName(target.modelRegistryId);
 
     // vec0 has no native primary key on user columns. Emulate upsert via
-    // DELETE-then-INSERT in a transaction.
+    // DELETE-then-INSERT in an IMMEDIATE transaction. The session check is in
+    // that same write critical section so another connection cannot
+    // delete/recreate the id between the incarnation check and the insert.
     const del = sqlite.prepare(
       `DELETE FROM ${tname}
         WHERE session_id = ? AND plugin_id = ? AND namespace = ? AND data_key = ?`,
@@ -355,6 +352,31 @@ export function createSqliteVectorCapability(
        VALUES (?, ?, ?, ?, ?, ?)`,
     );
     const txn = sqlite.transaction(() => {
+      const session = sqlite
+        .prepare(
+          `SELECT embedding_model_id, created_at
+             FROM sessions
+            WHERE id = ?`,
+        )
+        .get(input.sessionId) as UpsertSessionRow | undefined;
+      if (!session) {
+        throw new Error(
+          `sqlite-vec upsertVector: session ${input.sessionId} not found`,
+        );
+      }
+      if (session.embedding_model_id !== target.modelRegistryId) {
+        throw new Error(
+          `sqlite-vec upsertVector: session ${input.sessionId} changed embedding model`,
+        );
+      }
+      if (
+        input.expectedSessionCreatedAt !== undefined &&
+        session.created_at !== input.expectedSessionCreatedAt
+      ) {
+        throw new Error(
+          `sqlite-vec upsertVector: session ${input.sessionId} incarnation changed`,
+        );
+      }
       del.run(input.sessionId, input.pluginId, input.namespace, input.key);
       ins.run(
         input.sessionId,
@@ -365,12 +387,14 @@ export function createSqliteVectorCapability(
         toJsonVector(input.embedding),
       );
     });
-    txn();
+    txn.immediate();
   }
 
   async function searchVectors(
     input: SearchVectorsInput,
   ): Promise<VectorSearchResult[]> {
+    const topK = normalizeVectorTopK(input.topK);
+    if (topK === 0) return [];
     const target = await resolveSessionVectorTarget(input.sessionId);
     if (!target) {
       // No embedding model locked → return empty results (RAG disabled).
@@ -385,13 +409,12 @@ export function createSqliteVectorCapability(
 
     ensurePhysicalTable(target);
     const tname = physicalTableName(target.modelRegistryId);
-    const topK = input.topK ?? 8;
 
     // Build WHERE dynamically. `k` must appear in WHERE for sqlite-vec.
     const conditions = ["embedding MATCH ?", "k = ?", "session_id = ?"];
     const params: Array<string | number> = [
       toJsonVector(input.query),
-      Math.max(1, topK),
+      topK,
       input.sessionId,
     ];
 

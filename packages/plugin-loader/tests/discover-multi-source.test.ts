@@ -39,8 +39,8 @@ describe("discoverPluginsMulti — load-path-based source tagging", () => {
     // trust derivation to load-path-based `source` tagging. discoverPluginsMulti
     // must therefore stamp `source: 'builtin'` on results from index 0 — without
     // it, getPluginTrustInfo falls through to the community fallback and
-    // bootstrap skips importing tools.local for shipped plugins, breaking
-    // codex/guide/npc-graph local tool calls at runtime.
+    // bootstrap defers their entry modules as community code, breaking
+    // codex/guide/npc-graph plugin tool calls at runtime.
     await writePlugin(bundledDir, "codex");
     await writePlugin(bundledDir, "guide");
 

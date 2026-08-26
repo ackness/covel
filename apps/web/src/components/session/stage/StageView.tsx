@@ -257,7 +257,7 @@ export function StageView(props: StageViewProps): ReactElement {
           Hidden once deltas arrive: the typewriter itself is then the feedback. */}
       {executing && !isStreaming && (
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-[8rem] z-30 flex justify-center px-4 md:bottom-40"
+          className="pointer-events-none absolute inset-x-0 bottom-32 z-30 flex justify-center px-4 md:bottom-40"
           data-testid="stage-thinking"
         >
           <div className="ui-stage-panel flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs text-muted-foreground">
@@ -274,13 +274,13 @@ export function StageView(props: StageViewProps): ReactElement {
           className="pointer-events-none absolute inset-x-0 top-14 z-50 flex justify-center px-4"
           data-testid="stage-error"
         >
-          <div className="ui-stage-panel pointer-events-auto flex max-w-2xl items-start gap-2 rounded-[var(--radius-card)] border border-destructive/60 px-4 py-3 text-sm">
+          <div className="ui-stage-panel pointer-events-auto flex max-w-2xl items-start gap-2 rounded-(--radius-card) border border-destructive/60 px-4 py-3 text-sm">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
             <div className="min-w-0 flex-1">
               <p className="font-medium text-destructive">
                 {t("common.error")}
               </p>
-              <p className="mt-1 break-words text-xs text-muted-foreground">
+              <p className="mt-1 wrap-break-word text-xs text-muted-foreground">
                 {executionError}
               </p>
             </div>
@@ -298,7 +298,7 @@ export function StageView(props: StageViewProps): ReactElement {
       )}
 
       {/* History drawer — the full parsed chat, needs a bounded flex column
-          for its internal ScrollArea (flex-1 min-h-0). Zero out executionSteps
+          for its internal scroll viewport (flex-1 min-h-0). Zero out executionSteps
           / executionError so the drawer stays player-facing: the per-turn
           runtime timeline (dev timing chips) and the failed-turn banner belong
           on the stage itself, not in this narrative read-back. */}

@@ -22,6 +22,8 @@ interface AdapterCall {
   baseUrl: string | undefined;
   apiKey: string | undefined;
   providerRequestMetadata?: Record<string, unknown>;
+  capability?: PresetConfig["capability"];
+  tag?: string;
 }
 
 function createRecordingAdapter(
@@ -29,7 +31,7 @@ function createRecordingAdapter(
   calls: AdapterCall[],
 ): ModelProviderAdapter {
   return {
-    async generateText(config, params) {
+    async generateText(config, params, context) {
       calls.push({
         provider,
         method: "generateText",
@@ -37,6 +39,8 @@ function createRecordingAdapter(
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
         providerRequestMetadata: params.providerRequestMetadata,
+        capability: context?.preset?.capability,
+        tag: context?.preset?.tag,
       });
       return {
         text: `reply from ${provider}/${params.model}`,
@@ -44,7 +48,7 @@ function createRecordingAdapter(
         usage: { inputTokens: 1, outputTokens: 1 },
       };
     },
-    async *streamText(config, params) {
+    async *streamText(config, params, context) {
       calls.push({
         provider,
         method: "streamText",
@@ -52,6 +56,8 @@ function createRecordingAdapter(
         baseUrl: config.baseUrl,
         apiKey: config.apiKey,
         providerRequestMetadata: params.providerRequestMetadata,
+        capability: context?.preset?.capability,
+        tag: context?.preset?.tag,
       });
       yield { type: "text-delta" as const, textDelta: "hi" };
       yield {
@@ -90,6 +96,14 @@ const basePresets: PresetConfig[] = [
     supportedModes: ["text", "stream"],
     enabled: true,
     tag: "text",
+    capability: {
+      input: ["text"],
+      output: ["text"],
+      features: ["reasoning"],
+      contextWindow: 100_000,
+      maxOutputTokens: 8_000,
+      pricing: { inputPerMToken: 1 },
+    },
   },
 ];
 
@@ -208,6 +222,94 @@ describe("gateway + slotOverrides", () => {
         maxOutputTokens: 777,
       },
     });
+  });
+
+  it("applies one capability clone consistently to generate, stream, and resolveSlot", async () => {
+    const { gateway, calls, presetRegistry } = setup();
+    const slotOverrides: SlotOverridesInput = {
+      capabilityOverrides: {
+        story: {
+          input: ["text", "image"],
+          output: ["image"],
+          contextWindow: 240_000,
+          maxOutputTokens: 24_000,
+        },
+      },
+    };
+    const options = {
+      slotOverrides,
+      capabilityOverridePolicy: "full" as const,
+    };
+
+    await gateway.generateText(
+      { presetId: "story", messages: [{ role: "user", content: "hi" }] },
+      options,
+    );
+    for await (const _event of gateway.streamText(
+      { presetId: "story", messages: [{ role: "user", content: "hi" }] },
+      options,
+    )) {
+      // exhaust the stream so its request-scoped target is observed
+    }
+    const resolved = gateway.resolveSlot("story", options);
+
+    expect(calls.map((call) => call.capability)).toEqual([
+      expect.objectContaining({ contextWindow: 240_000, output: ["image"] }),
+      expect.objectContaining({ contextWindow: 240_000, output: ["image"] }),
+    ]);
+    expect(calls.map((call) => call.tag)).toEqual(["image", "image"]);
+    expect(resolved).toMatchObject({
+      tag: "image",
+      capability: { contextWindow: 240_000, output: ["image"] },
+    });
+    expect(presetRegistry.resolvePreset("ds-chat")?.capability).toMatchObject({
+      contextWindow: 100_000,
+      output: ["text"],
+    });
+  });
+
+  it("restricts hosted expansion and isolates concurrent request targets", async () => {
+    const { gateway, calls, presetRegistry } = setup();
+    const invoke = (contextWindow: number) =>
+      gateway.generateText(
+        { presetId: "story", messages: [{ role: "user", content: "hi" }] },
+        {
+          capabilityOverridePolicy: "restrict-only",
+          slotOverrides: {
+            capabilityOverrides: {
+              story: {
+                input: ["text", "image"],
+                output: ["image"],
+                features: ["reasoning", "vision"],
+                contextWindow,
+                maxOutputTokens: 16_000,
+              },
+            },
+          },
+        },
+      );
+
+    await Promise.all([invoke(40_000), invoke(60_000)]);
+
+    expect(calls.map((call) => call.capability)).toEqual([
+      expect.objectContaining({
+        input: ["text"],
+        output: ["text"],
+        features: ["reasoning"],
+        contextWindow: 40_000,
+        maxOutputTokens: 8_000,
+      }),
+      expect.objectContaining({
+        input: ["text"],
+        output: ["text"],
+        features: ["reasoning"],
+        contextWindow: 60_000,
+        maxOutputTokens: 8_000,
+      }),
+    ]);
+    expect(
+      presetRegistry.resolvePreset("ds-chat")?.capability?.contextWindow,
+    ).toBe(100_000);
   });
 
   it("lets top-level parameter overrides win over request-scoped slot overrides", async () => {

@@ -17,11 +17,14 @@ import {
   type LorebookEntryRecord,
 } from "@covel/store";
 import { lorebookRoutes } from "../../src/routes/api/lorebook.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 function createTestApp(store: DataStore): Hono {
   const app = new Hono();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", lorebookRoutes);
@@ -58,11 +61,17 @@ describe("Lorebook API routes", () => {
   beforeEach(async () => {
     store = createMemoryStore();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: "world-1",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "en",
       activePlugins: [],
       createdAt: new Date().toISOString(),

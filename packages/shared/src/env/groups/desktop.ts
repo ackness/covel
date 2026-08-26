@@ -76,6 +76,23 @@ export const DESKTOP_ENV_VARS = [
     description: "Desktop config directory for model DB and settings.",
   },
   {
+    name: "COVEL_SYSTEM_PROXY_URL",
+    group: "desktop",
+    type: "string",
+    status: "active",
+    description:
+      "Compatibility fallback for shells without dynamic system-proxy IPC. Electron resolves each request URL over IPC.",
+  },
+  {
+    name: "COVEL_DESKTOP_SYSTEM_PROXY_IPC",
+    group: "desktop",
+    type: "boolean",
+    status: "active",
+    defaultValue: "false",
+    description:
+      "Internal capability flag injected by Electron when its sidecar IPC supports per-URL system-proxy resolution.",
+  },
+  {
     name: "COVEL_LOGS_DIR",
     group: "desktop",
     type: "path",

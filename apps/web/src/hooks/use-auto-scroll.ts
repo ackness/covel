@@ -104,11 +104,21 @@ export function useAutoScroll(
   useEffect(() => {
     const subscribe = options?.subscribeToStreaming;
     if (!subscribe) return;
-    return subscribe(() => {
-      if (isPinnedRef.current) {
-        scrollViewportToBottom("auto");
-      }
+    let frameId: number | null = null;
+    const unsubscribe = subscribe(() => {
+      if (!isPinnedRef.current || frameId !== null) return;
+      // A provider can deliver several deltas inside one display frame. Batch
+      // their scrollHeight read + scrollTo into one animation-frame callback
+      // so streaming text does not force layout for every token chunk.
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        if (isPinnedRef.current) scrollViewportToBottom("auto");
+      });
     });
+    return () => {
+      unsubscribe();
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+    };
   }, [options?.subscribeToStreaming, scrollViewportToBottom]);
 
   return { scrollRef, showJumpButton, jumpToBottom };

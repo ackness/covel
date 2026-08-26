@@ -20,7 +20,7 @@ describe("dice-check roller handler", () => {
     // Act
     for (let i = 0; i < 30; i += 1) {
       const result = await handler(makeCtx());
-      rolls.push(result.pluginData[0].value.dice);
+      rolls.push(result.effects.pluginData[0].value.dice);
     }
 
     // Assert
@@ -42,12 +42,12 @@ describe("dice-check roller handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    expect(typeof result.checkContext).toBe("string");
-    expect(result.checkContext.length).toBeGreaterThan(0);
-    expect(result.checkContext).toContain("check.resolved");
-    expect(result.checkContext).toContain("DC");
-    expect(result.checkContext).toContain("大成功");
-    expect(result.checkContext).toContain("大失败");
+    expect(typeof result.value.checkContext).toBe("string");
+    expect(result.value.checkContext.length).toBeGreaterThan(0);
+    expect(result.value.checkContext).toContain("check.resolved");
+    expect(result.value.checkContext).toContain("DC");
+    expect(result.value.checkContext).toContain("大成功");
+    expect(result.value.checkContext).toContain("大失败");
   });
 
   it("lists every rolled die in the checkContext pool", async () => {
@@ -58,9 +58,9 @@ describe("dice-check roller handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    const { dice } = result.pluginData[0].value;
+    const { dice } = result.effects.pluginData[0].value;
     dice.forEach((value, index) => {
-      expect(result.checkContext).toContain(`#${index + 1}: ${value}`);
+      expect(result.value.checkContext).toContain(`#${index + 1}: ${value}`);
     });
   });
 
@@ -72,8 +72,8 @@ describe("dice-check roller handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    expect(result.pluginData).toHaveLength(1);
-    const [row] = result.pluginData;
+    expect(result.effects.pluginData).toHaveLength(1);
+    const [row] = result.effects.pluginData;
     expect(row.namespace).toBe("rolls");
     expect(row.key).toBe("turn-42");
     expect(row.value.dice).toHaveLength(3);
@@ -87,8 +87,8 @@ describe("dice-check roller handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    expect(result.checkContext).toContain("critical success");
-    expect(result.checkContext).toContain("check.resolved");
-    expect(result.checkContext).not.toContain("大成功");
+    expect(result.value.checkContext).toContain("critical success");
+    expect(result.value.checkContext).toContain("check.resolved");
+    expect(result.value.checkContext).not.toContain("大成功");
   });
 });

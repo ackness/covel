@@ -94,26 +94,17 @@ export function collectSetupRan(args: {
 }
 
 /**
- * Setup runtimes that count as satisfied at execution start — mirror `done`
- * (incl. waived) or the legacy `preGameCompleted` signal for pre-mirror
- * sessions. Seeds the live done-set the session gate reads.
+ * Setup runtimes that count as satisfied at execution start. A `done` mirror
+ * only counts while the plugin version is unchanged.
  */
 export function initialDoneSetup(
   activeSetupRuntimes: readonly RuntimeManifest[],
   setupRuntimes: Readonly<Record<string, SetupRuntimeState>>,
-  preGameCompleted: readonly string[],
 ): Set<string> {
   const done = new Set<string>();
   for (const rt of activeSetupRuntimes) {
     const mirror = setupRuntimes[rt.name];
-    if (mirror) {
-      // A `done` mirror only counts while the plugin version is unchanged; a
-      // version bump invalidates it (re-run under a new generation).
-      if (isSetupDoneForVersion(mirror, rt.version)) done.add(rt.name);
-    } else if (preGameCompleted.includes(rt.name)) {
-      // Pre-mirror (legacy) session: fall back to the completion signal.
-      done.add(rt.name);
-    }
+    if (mirror && isSetupDoneForVersion(mirror, rt.version)) done.add(rt.name);
   }
   return done;
 }

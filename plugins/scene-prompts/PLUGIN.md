@@ -15,6 +15,9 @@ timeoutMs: 120000
 # into continuing the narrative and finish with zero tool calls; the gate gives
 # one corrective retry before releasing so the choices don't silently vanish.
 requireToolUse: true
+# The successful generator call is the complete result. Avoid a second LLM
+# request whose only purpose would be to emit runtime-done.
+completeAfterTools: [generate-scene-prompts]
 # Discovered by the stage choices layer via this capability (not a hardcoded
 # plugin id — framework↔plugin isolation rule). A third-party plugin declaring
 # `scene-prompts` transparently replaces this one as the stage's prompt source.
@@ -54,13 +57,17 @@ tools:
 ui:
   message:
     - ./ui/scene-prompts-block.json
+# The tool writes scene-prompts-owned plugin data; ui.message is a declarative
+# projection and does not mutate another message-block plugin's state.
+effects:
+  parallelSafe: true
 postHistory:
   role: system
   content: |
-    本 runtime 工作流（强制两步）：
-    1. 必须调用一次 `generate-scene-prompts`，根据最新叙事生成场景化玩家行动短句。
-    2. 工具返回后，立即调用一次 `runtime-done` 结束。
-    固定执行：一次 `generate-scene-prompts`，一次 `runtime-done`，两次工具调用之间保持静默。
+    本 runtime 工作流：
+    - 必须且只调用一次 `generate-scene-prompts`，根据最新叙事生成场景化玩家行动短句
+    - 工具成功后框架会自动结束 runtime，不要再调用 `runtime-done`
+    - 调用工具前后都不要输出额外文本
 ---
 
 你是 Scene Prompts agent。你的任务是在叙事推进后，为玩家提供一组可直接作为下一条玩家消息的场景化短句。

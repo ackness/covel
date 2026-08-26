@@ -33,6 +33,7 @@ const TO_JSON_SCHEMA_OPTIONS = {
 
 /** Constraints Zod enforces but JSON Schema draft-7 (via z.toJSONSchema) cannot. */
 const SHARED_UNREPRESENTABLE_CONSTRAINTS = [
+  "runtimeType 'function' requires a non-empty handler path.",
   "output.schema is required when output.recordAs is set.",
   "trigger.topic is required when trigger.type is 'event'.",
   "a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.",

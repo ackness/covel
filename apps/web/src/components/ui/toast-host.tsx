@@ -32,10 +32,10 @@ const ICONS: Record<ToastKind, ComponentType<{ className?: string }>> = {
 
 const TONE_CLASS: Record<ToastKind, string> = {
   error:
-    "border-destructive/50 bg-background text-foreground [&_[data-slot=icon]]:text-destructive",
-  info: "border-border bg-background text-foreground [&_[data-slot=icon]]:text-primary",
+    "border-destructive/50 bg-background text-foreground **:data-[slot=icon]:text-destructive",
+  info: "border-border bg-background text-foreground **:data-[slot=icon]:text-primary",
   success:
-    "border-emerald-500/40 bg-background text-foreground [&_[data-slot=icon]]:text-emerald-500",
+    "border-emerald-500/40 bg-background text-foreground **:data-[slot=icon]:text-emerald-500",
 };
 
 export function ToastHost() {
@@ -144,7 +144,7 @@ export function ToastHost() {
     <div
       aria-live="polite"
       aria-atomic="false"
-      className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
+      className="pointer-events-none fixed bottom-4 right-4 z-100 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
     >
       {toasts.map((toast) => {
         const Icon = ICONS[toast.kind];
@@ -162,9 +162,9 @@ export function ToastHost() {
           >
             <Icon data-slot="icon" className="mt-0.5 size-4 shrink-0" />
             <div className="flex min-w-0 flex-1 flex-col gap-1 text-sm leading-tight">
-              <p className="break-words font-medium">{toast.message}</p>
+              <p className="wrap-break-word font-medium">{toast.message}</p>
               {toast.detail ? (
-                <p className="break-words text-xs text-muted-foreground line-clamp-3">
+                <p className="wrap-break-word text-xs text-muted-foreground line-clamp-3">
                   {toast.detail}
                 </p>
               ) : null}

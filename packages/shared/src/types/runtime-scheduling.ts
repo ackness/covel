@@ -181,17 +181,13 @@ export interface HttpPermissionDecl {
   readonly methods?: readonly HttpMethod[];
 }
 
-// ── Legacy job view projection (compat only) ─────────────────────
-
 // ── Normalized runtime spec (loader-level IR) ────────────────────
 
-/** Declared trigger after normalization (e.g. setup scheduled→auto folding). */
+/** Declared trigger after applying current defaults. */
 export type TriggerSpec = TriggerConfig;
 
-export type RuntimeResultFormat = "legacy" | "envelope-v1";
-
 /**
- * Loader product: one per manifest, compat-normalized but not
+ * Loader product: one per manifest, normalized but not
  * session-resolved. Does NOT carry an activation source — how a runtime is
  * activated is a run-time property (`RuntimeActivation`).
  */
@@ -199,10 +195,8 @@ export interface NormalizedRuntimeSpec {
   readonly id: string;
   readonly pluginId: string;
   readonly declaredTrigger: TriggerSpec;
-  /** Normalized from the legacy `execution: background` manifest field. */
+  /** Derived from the manifest's `execution: background` declaration. */
   readonly backgroundWhenDetached: boolean;
-  /** Guides result parsing before normalization. Defaults to `legacy`. */
-  readonly resultFormat: RuntimeResultFormat;
   /** Absent for event/manual runtimes and for UI-only registration surfaces. */
   readonly stage?: Stage;
   /** capability refs unresolved at this level. */

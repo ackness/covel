@@ -18,7 +18,6 @@ import {
   type LLMResponse,
 } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
-import { deriveLegacyClockForSession } from "@covel/shared";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
@@ -137,10 +136,18 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
       promptTemplate: "",
       handler: async () => {
         if (manifest.name === "pregame") {
-          return { narrativeOutput: "pregame ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "pregame ready" },
+            completion: "done",
+          };
         }
         if (manifest.name === "world-init/schema-gen") {
-          return { narrativeOutput: "world ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "world ready" },
+            completion: "done",
+          };
         }
         if (manifest.name === "char-creator/player-init") {
           const inputs = await store.listPlayerInputs("sess-start-flow-api");
@@ -152,18 +159,21 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
 
           if (!values) {
             return {
-              narrativeOutput: "character form ready",
-              interactions: [
-                {
-                  type: "form",
-                  interactionId: "form-char-creation",
-                  narrativeTemplate: "Player {{name}} enters as {{concept}}.",
-                  fields: [
-                    { id: "name", label: "Name", type: "text" },
-                    { id: "concept", label: "Concept", type: "text" },
-                  ],
-                },
-              ],
+              outcome: "success",
+              value: { narrativeOutput: "character form ready" },
+              effects: {
+                interactions: [
+                  {
+                    type: "form",
+                    interactionId: "form-char-creation",
+                    narrativeTemplate: "Player {{name}} enters as {{concept}}.",
+                    fields: [
+                      { id: "name", label: "Name", type: "text" },
+                      { id: "concept", label: "Concept", type: "text" },
+                    ],
+                  },
+                ],
+              },
             };
           }
 
@@ -192,10 +202,17 @@ function makeLoadedRuntimes(store: DataStore): Map<string, LoadedRuntime> {
             createdAt: now,
             updatedAt: now,
           });
-          return { narrativeOutput: "player ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "player ready" },
+            completion: "done",
+          };
         }
 
-        return { narrativeOutput: "main loop started" };
+        return {
+          outcome: "success",
+          value: { narrativeOutput: "main loop started" },
+        };
       },
     });
   }
@@ -213,12 +230,7 @@ function makeApp(
   const sessionLock = createInProcessSessionLock();
   const rpcRegistry = createPluginRpcRegistry();
   rpcRegistry.registerFrameworkDefault("submit-form", submitFormHandler);
-  const rpcExecutor = createRpcExecutor({
-    registry: rpcRegistry,
-    loadHandler: async () => {
-      throw new Error("plugin handler lookup skipped in scenario tests");
-    },
-  });
+  const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
   const rpcApprovalGate = createRpcApprovalGate();
 
   app.use("*", async (c, next) => {
@@ -258,13 +270,31 @@ describe("start-game API lifecycle scenario", () => {
     }
 
     await store.createSession({
+      phase: "setup",
+      setupRuntimes: Object.fromEntries(
+        ["pregame", "world-init/schema-gen", "char-creator/player-init"].map(
+          (runtimeId) => [
+            runtimeId,
+            {
+              state: "pending" as const,
+              pluginVersion: "0.0.0",
+              generation: 1,
+              attempts: 0,
+            },
+          ],
+        ),
+      ),
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sess-start-flow-api",
       worldId: "world-1",
       presetId: null,
       status: "active",
       activePlugins: ["pregame", "world-init", "char-creator", "narrator"],
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -291,7 +321,8 @@ describe("start-game API lifecycle scenario", () => {
     );
 
     const session = await store.getSession("sess-start-flow-api");
-    expect(deriveLegacyClockForSession(session!).turnCount).toBe(0);
+    expect(session?.phase).toBe("setup");
+    expect(session?.completedPlayerTurns).toBe(0);
 
     const playerMessages = (await store.listTurnMessages("sess-start-flow-api"))
       .filter((message) => message.sourceType === "player")
@@ -403,10 +434,10 @@ describe("start-game API lifecycle scenario", () => {
       followupEvents.filter((event) => event.type === "execution.completed"),
     ).toHaveLength(1);
 
-    // The chained opening turn is the first counted player turn.
+    // Setup and its opening continuation are not completed player turns.
     const session = await store.getSession("sess-start-flow-api");
-    expect(deriveLegacyClockForSession(session!).turnCount).toBe(1);
-    expect(session?.completedPlayerTurns).toBe(1);
+    expect(session?.phase).toBe("playing");
+    expect(session?.completedPlayerTurns).toBe(0);
 
     const turnResults = await store.listTurnResults("sess-start-flow-api");
     expect(turnResults).toHaveLength(3);
@@ -440,7 +471,6 @@ describe("start-game API lifecycle scenario", () => {
     ).toBe(1);
 
     const afterFirstMainLoop = await store.getSession("sess-start-flow-api");
-    expect(deriveLegacyClockForSession(afterFirstMainLoop!).turnCount).toBe(2);
-    expect(afterFirstMainLoop?.completedPlayerTurns).toBe(2);
+    expect(afterFirstMainLoop?.completedPlayerTurns).toBe(1);
   });
 });

@@ -16,12 +16,15 @@ import {
 import type { RuntimeManifest } from "@covel/shared";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { pluginDataRoutes } from "../../src/routes/api/plugin-data.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 function buildApp(store: DataStore, pluginRegistry: PluginRegistry): Hono {
   const app = new Hono();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("pluginRegistry", pluginRegistry);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", pluginDataRoutes);
@@ -84,11 +87,17 @@ describe("Plugin Data REST API routes", () => {
     app = buildApp(store, registry);
 
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: "cloudmere",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "zh-CN",
       activePlugins: [pluginId],
       createdAt: new Date().toISOString(),
@@ -122,6 +131,21 @@ describe("Plugin Data REST API routes", () => {
       key: "theme",
       value: { mode: "dark" },
     });
+  });
+
+  it("authorizes writes from persisted activations after a server restart", async () => {
+    registry.clearSession(sessionId);
+
+    const res = await app.request(
+      `/api/sessions/${sessionId}/plugin-data/${pluginId}/settings/theme`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: "dark" }),
+      },
+    );
+
+    expect(res.status).toBe(200);
   });
 
   it("DELETE removes a value", async () => {
@@ -282,11 +306,17 @@ describe("Plugin Data write guards", () => {
     app = buildApp(store, registry);
 
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: "cloudmere",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "zh-CN",
       activePlugins: [pluginId, corePluginId],
       createdAt: new Date().toISOString(),

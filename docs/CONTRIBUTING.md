@@ -9,7 +9,7 @@
 ## 开发环境
 
 - Node.js ≥ 26
-- pnpm 11.9.0（见根目录 `package.json` 的 `packageManager`）
+- pnpm 11.22.0（见根目录 `package.json` 的 `packageManager`）
 - 可选：Docker（用于 PostgreSQL 模式）
 
 ```bash
@@ -17,6 +17,20 @@ pnpm install
 cp llm.toml.example llm.toml   # 配置 LLM slot
 cp .env.llm.example .env.llm   # 填写 API Key
 pnpm dev                       # 同时启动前端与后端
+```
+
+### PostgreSQL 18 开发环境
+
+Docker Compose 使用 PostgreSQL 18 + pgvector 0.8.6，并把数据写入新的
+`pgdata18` 卷。原 PG17 `pgdata` 卷不会被挂载、迁移或删除；升级后第一次运行
+`pnpm docker:build` 会初始化一个空的 PG18 开发数据库。
+
+需要重建当前 PG18 开发数据库时运行以下命令。`docker:down-all` 会删除当前
+Compose 项目的 `pgdata18` 卷及其中全部数据，但不会删除旧的 `pgdata` 卷：
+
+```bash
+pnpm docker:down-all
+pnpm docker:build
 ```
 
 ## 开发规范
@@ -96,18 +110,20 @@ Covel 的发布由 Git tag 驱动。
    ```
 
 5. [`.github/workflows/release.yml`](../.github/workflows/release.yml) 将在 `v*` tag 推送时自动：
-   - 在 macOS runner 上构建 Electron macOS arm64 `.dmg` / `.zip`
+   - 校验 tag、提交 SHA、workspace 版本、CHANGELOG 与完整发布前检查
+   - 构建并验证 Electron macOS arm64 `.dmg` / `.zip` 和 Windows x64 `.exe`
+   - 对 macOS 产物签名并公证，对 Windows 产物执行 Authenticode 签名
    - 从 `docs/CHANGELOG.md` 抽取对应版本说明
-   - 直接发布 GitHub Release
+   - 所有检查通过后发布或更新 GitHub Release
 
 6. 在 Releases 页面检查正式发布页、release notes 与附件
 
-### 代码签名（可选）
+### 代码签名（正式发布必需）
 
-- macOS：在仓库 Secrets 配置 `CSC_LINK`、`CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`，并在 `apps/desktop/electron-builder.yml` 打开 notarize
-- Windows：在 Secrets 配置 `CSC_LINK`（`.pfx`）、`CSC_KEY_PASSWORD`
+- macOS：在仓库 Secrets 配置 `MAC_CSC_LINK`、`MAC_CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`
+- Windows：在仓库 Secrets 配置 `WIN_CSC_LINK`（`.pfx`）、`WIN_CSC_KEY_PASSWORD`；可选配置 `WIN_CSC_TIMESTAMP_SERVER`
 
-无签名产物会被标记为 "unsigned"，首次运行时系统会警告。详见 [`guide/desktop-packaging.md`](./guide/desktop-packaging.md)。
+发布工作流缺少任一必需凭据时会直接失败，不会发布 unsigned 产物。本地非发布构建仍可保持 unsigned。详见 [`guide/desktop-packaging.md`](./guide/desktop-packaging.md)。
 
 ## 报告问题
 

@@ -8,7 +8,7 @@
  * the domain writes (docs 02 §3.4.1 / §3.4.5).
  *
  * The export boundary is always enforced: the value must pass the declared
- * `output.schema` before it is published. A legacy handler whose outcome stayed
+ * `output.schema` before it is published. A handler whose outcome stayed
  * "success" but whose value fails the schema keeps its success outcome — only
  * the export is withheld, with an `export-schema-invalid` diagnostic (docs 02
  * §4.3). No per-export failure (schema-invalid, revision race, store error) is

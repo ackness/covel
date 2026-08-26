@@ -41,8 +41,27 @@
  */
 
 import { createHash } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Sql } from "postgres";
-import { SessionLockTimeoutError, type SessionLock } from "./session-lock.js";
+import {
+  createInProcessSessionLock,
+  SessionLockTimeoutError,
+  type SessionLock,
+} from "./session-lock.js";
+
+interface PgLockState {
+  readonly reserved: ReservedConnection;
+  readonly localNestedLock: SessionLock;
+  active: boolean;
+  nestedCount: number;
+  nestedIdle: Promise<void>;
+  resolveNestedIdle?: () => void;
+}
+
+interface PgLockBranch {
+  readonly state: PgLockState;
+  readonly heldKeys: ReadonlySet<string>;
+}
 
 export interface PgAdvisorySessionLockOptions {
   /**
@@ -76,63 +95,165 @@ export function createPgAdvisorySessionLock(
 ): SessionLock {
   const acquireTimeoutMs = opts.acquireTimeoutMs ?? 30_000;
   const pollIntervalMs = opts.pollIntervalMs ?? 50;
+  const lockContext = new AsyncLocalStorage<PgLockBranch>();
 
-  return {
-    async withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
-      // postgres.js's `Serializable` type does not include `bigint`, even
-      // though the driver serialises bigint parameters correctly at
-      // runtime. Passing the key as a decimal string with an explicit
-      // `::bigint` cast is the safest TypeScript-clean way to keep the
-      // full 2^63 key space without losing precision through a `number`
-      // (which maxes out at 2^53).
-      const keyLiteral = hashSessionId(sessionId).toString();
+  const beginNested = (state: PgLockState): void => {
+    if (state.nestedCount === 0) {
+      state.nestedIdle = new Promise<void>((resolve) => {
+        state.resolveNestedIdle = resolve;
+      });
+    }
+    state.nestedCount += 1;
+  };
 
-      // Single deadline covering BOTH pool checkout and the advisory-lock
-      // polling loop. `sql.reserve()` queues unboundedly when the pool is
-      // exhausted; starting the clock only after it resolved (the previous
-      // behaviour) let pool exhaustion hide behind an unbounded wait.
-      const deadlineAt = Date.now() + acquireTimeoutMs;
+  const endNested = (state: PgLockState): void => {
+    state.nestedCount -= 1;
+    if (state.nestedCount === 0) {
+      state.resolveNestedIdle?.();
+      state.resolveNestedIdle = undefined;
+    }
+  };
 
-      // `sql.reserve()` checks out a dedicated connection. The same handle
-      // MUST be used for both the acquire and the release — advisory locks
-      // are session-scoped (PG session, not Covel session).
-      const reserved = await reserveWithDeadline(
-        sql,
-        deadlineAt,
-        acquireTimeoutMs,
-        sessionId,
-      );
-      let locked = false;
+  const unlockEntries = async (
+    reserved: ReservedConnection,
+    entries: readonly { readonly id: string; readonly keyLiteral: string }[],
+  ): Promise<void> => {
+    for (const entry of [...entries].reverse()) {
       try {
+        await reserved`SELECT pg_advisory_unlock(${entry.keyLiteral}::bigint)`;
+      } catch (err) {
+        // PG auto-releases on connection close. Do not mask the original fn
+        // error with a secondary unlock failure.
+        console.warn(
+          `[pg-session-lock] unlock failed for session ${entry.id}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+    }
+  };
+
+  const withLocks = async <T>(
+    lockIds: readonly string[],
+    fn: () => Promise<T>,
+  ): Promise<T> => {
+    const orderedIds = [...new Set(lockIds)];
+    if (orderedIds.length === 0) return fn();
+    // postgres.js's `Serializable` type does not include `bigint`, even
+    // though the driver serialises bigint parameters correctly at
+    // runtime. Passing the key as a decimal string with an explicit
+    // `::bigint` cast is the safest TypeScript-clean way to keep the
+    // full 2^63 key space without losing precision through a `number`
+    // (which maxes out at 2^53).
+    const keyed = orderedIds.map((id) => ({
+      id,
+      keyLiteral: hashSessionId(id).toString(),
+    }));
+
+    // Nested runtime -> session locking must reuse the connection already
+    // reserved by the outer runtime lock. Reserving again deadlocks at pool
+    // max=1 and can exhaust any finite pool under enough concurrent jobs.
+    const parent = lockContext.getStore();
+    if (parent?.state.active) {
+      const newlyLocked = keyed.filter(
+        (entry) => !parent.heldKeys.has(entry.keyLiteral),
+      );
+      if (newlyLocked.length === 0) return fn();
+      beginNested(parent.state);
+      try {
+        return await parent.state.localNestedLock.withLocks(
+          newlyLocked.map((entry) => entry.keyLiteral),
+          async () => {
+            const acquired: typeof newlyLocked = [];
+            const nestedDeadlineAt = Date.now() + acquireTimeoutMs;
+            try {
+              for (const entry of newlyLocked) {
+                await acquireWithTimeout(
+                  parent.state.reserved,
+                  entry.keyLiteral,
+                  nestedDeadlineAt,
+                  acquireTimeoutMs,
+                  pollIntervalMs,
+                  entry.id,
+                );
+                acquired.push(entry);
+              }
+              return await lockContext.run(
+                {
+                  state: parent.state,
+                  heldKeys: new Set([
+                    ...parent.heldKeys,
+                    ...acquired.map((entry) => entry.keyLiteral),
+                  ]),
+                },
+                fn,
+              );
+            } finally {
+              await unlockEntries(parent.state.reserved, acquired);
+            }
+          },
+        );
+      } finally {
+        endNested(parent.state);
+      }
+    }
+
+    // Single deadline covering BOTH pool checkout and the advisory-lock
+    // polling loop. `sql.reserve()` queues unboundedly when the pool is
+    // exhausted; starting the clock only after it resolved (the previous
+    // behaviour) let pool exhaustion hide behind an unbounded wait.
+    const deadlineAt = Date.now() + acquireTimeoutMs;
+
+    // `sql.reserve()` checks out a dedicated connection. The same handle
+    // MUST be used for both the acquire and the release — advisory locks
+    // are session-scoped (PG session, not Covel session).
+    const reserved = await reserveWithDeadline(
+      sql,
+      deadlineAt,
+      acquireTimeoutMs,
+      orderedIds.join(","),
+    );
+    const locked: Array<{ readonly id: string; readonly keyLiteral: string }> =
+      [];
+    const state: PgLockState = {
+      reserved,
+      localNestedLock: createInProcessSessionLock(),
+      active: true,
+      nestedCount: 0,
+      nestedIdle: Promise.resolve(),
+    };
+    try {
+      for (const entry of keyed) {
         await acquireWithTimeout(
           reserved,
-          keyLiteral,
+          entry.keyLiteral,
           deadlineAt,
           acquireTimeoutMs,
           pollIntervalMs,
-          sessionId,
+          entry.id,
         );
-        locked = true;
-        return await fn();
-      } finally {
-        if (locked) {
-          try {
-            await reserved`SELECT pg_advisory_unlock(${keyLiteral}::bigint)`;
-          } catch (err) {
-            // Log but do not rethrow. PG auto-releases on connection close,
-            // and masking the original `fn` error (if any) with an unlock
-            // failure would be misleading.
-            // eslint-disable-next-line no-console
-            console.warn(
-              `[pg-session-lock] unlock failed for session ${sessionId}:`,
-              err instanceof Error ? err.message : String(err),
-            );
-          }
-        }
-        // Always return the connection to the pool, even on failed acquires.
-        reserved.release();
+        locked.push(entry);
       }
+      return await lockContext.run(
+        {
+          state,
+          heldKeys: new Set(locked.map((entry) => entry.keyLiteral)),
+        },
+        fn,
+      );
+    } finally {
+      await state.nestedIdle;
+      state.active = false;
+      await unlockEntries(reserved, locked);
+      // Always return the connection to the pool, even on failed acquires.
+      reserved.release();
+    }
+  };
+
+  return {
+    withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+      return withLocks([sessionId], fn);
     },
+    withLocks,
   };
 }
 

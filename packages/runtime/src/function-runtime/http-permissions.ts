@@ -5,7 +5,7 @@
  * `permissions.http`; anything else is rejected before the request is sent. The
  * SSRF guard (private-IP / DNS-rebinding checks inside `utils.fetchWithRetry`)
  * still runs for permitted origins — this is an ADDITIONAL allowlist, not a
- * replacement. builtin / official plugins are trusted and NOT enforced (their
+ * replacement. Builtin plugins are trusted and NOT enforced (their
  * calls are already audited via the `utils.fetch.*` trace events emitted by
  * `withUtilsTrace`), so the facade returns their utils unchanged.
  */

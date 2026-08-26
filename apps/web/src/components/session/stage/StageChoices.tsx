@@ -74,7 +74,7 @@ export function StageChoices({
 
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 bottom-[8rem] z-40 flex justify-center px-4 md:bottom-40"
+      className="pointer-events-none absolute inset-x-0 bottom-32 z-40 flex justify-center px-4 md:bottom-40"
       data-testid="stage-choices"
     >
       <div
@@ -89,7 +89,7 @@ export function StageChoices({
             key={item.id}
             type="button"
             onClick={() => handleSelect(item)}
-            className="ui-stage-panel ui-stage-choice-item rounded-[var(--radius-control)] px-3.5 py-2 text-left text-sm transition-colors hover:border-[var(--accent-primary)]"
+            className="ui-stage-panel ui-stage-choice-item rounded-(--radius-control) px-3.5 py-2 text-left text-sm transition-colors hover:border-(--accent-primary)"
             style={{ animationDelay: `${index * STAGGER_STEP_MS}ms` }}
           >
             <span className="flex items-center justify-between gap-3">
@@ -110,7 +110,7 @@ export function StageChoices({
         <button
           type="button"
           onClick={onFreeInput}
-          className="ui-stage-panel ui-stage-choice-item rounded-[var(--radius-control)] px-4 py-2.5 text-left text-sm text-muted-foreground transition-colors hover:border-[var(--accent-primary)]"
+          className="ui-stage-panel ui-stage-choice-item rounded-(--radius-control) px-4 py-2.5 text-left text-sm text-muted-foreground transition-colors hover:border-(--accent-primary)"
           style={{ animationDelay: `${items.length * STAGGER_STEP_MS}ms` }}
         >
           {t("stage.freeInputLabel")}

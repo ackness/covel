@@ -333,7 +333,7 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
           lorebookEntries,
           values.lorebookEntryInsert(record),
           {
-            target: lorebookEntries.id,
+            target: [lorebookEntries.sessionId, lorebookEntries.id],
             set: values.lorebookEntryUpdate(record),
           },
         );

@@ -15,13 +15,11 @@ export type SqliteTransactions = Pick<DataStore, "withTransaction">;
  * next starts, so neither loses writes. The tx scope is the same data-method
  * store (one connection); no shared handle is swapped.
  *
- * Two important caveats follow from the single connection:
+ * Two important constraints follow from the single connection:
  *
- * - **Concurrent non-tx writes are folded in.** While a `withTransaction`
- *   callback is mid-flight (between BEGIN and COMMIT), any other write issued on
- *   this same store — including writes that do NOT go through `withTransaction`
- *   — runs on the open transaction and is committed or rolled back with it.
- *   Callers must not interleave unrelated writes with a serialized transaction.
+ * - **Every bundled root mutator shares the connection write gate.** While a
+ *   `withTransaction` callback is mid-flight (between BEGIN and COMMIT), an
+ *   unrelated root write waits instead of joining the open transaction.
  *
  *   ENFORCED INVARIANT — same-session: correctness within one session comes
  *   from *ordering*, not isolation. Every write belonging to a turn (player

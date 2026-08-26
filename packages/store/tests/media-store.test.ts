@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import "fake-indexeddb/auto";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { runMediaStoreContractTests } from "../src/contract/media-store-contract.js";
 import { createIndexedDbMediaStore } from "../src/indexeddb/idb-media-store.js";
 import {
@@ -10,6 +10,10 @@ import {
   createPgMediaStore,
   createSqliteMediaStore,
 } from "../src/media-store.js";
+import {
+  acquireSqliteConnection,
+  releaseSqliteConnection,
+} from "../src/sqlite/shared-connection.js";
 
 runMediaStoreContractTests("MemoryMediaStore", () => createMemoryMediaStore());
 
@@ -22,9 +26,50 @@ runMediaStoreContractTests("SqliteMediaStore", () => {
   });
 });
 
+describe("SqliteMediaStore transaction boundaries", () => {
+  it("removes refs and the asset inside one SQLite transaction", async () => {
+    const tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "covel-media-delete-tx-"),
+    );
+    const dbPath = path.join(tmpDir, "test.db");
+    const store = createSqliteMediaStore(dbPath, {
+      mediaRoot: path.join(tmpDir, "media"),
+    });
+    const sqlite = acquireSqliteConnection(dbPath);
+    let deleteObservedInTransaction = false;
+    sqlite.function("covel_observe_media_delete_tx", () => {
+      deleteObservedInTransaction = sqlite.inTransaction;
+      return null;
+    });
+    sqlite.exec(`
+      CREATE TEMP TRIGGER observe_media_delete_tx
+      AFTER DELETE ON media_refs
+      BEGIN
+        SELECT covel_observe_media_delete_tx();
+      END
+    `);
+
+    try {
+      const ref = await store.put(new Uint8Array([1, 2, 3]), "image/png");
+      await store.addRef(ref.id, "sess-delete", "plugin-delete");
+      await store.delete(ref.id);
+
+      expect(deleteObservedInTransaction).toBe(true);
+      expect(await store.exists(ref.id)).toBe(false);
+      expect(await store.listRefs()).toEqual([]);
+    } finally {
+      sqlite.exec("DROP TRIGGER IF EXISTS observe_media_delete_tx");
+      releaseSqliteConnection(sqlite);
+      await store.close?.();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});
+
 const DATABASE_URL =
   process.env.DATABASE_URL ??
   "postgresql://covel:covel_dev@localhost:5432/covel";
+const REQUIRE_PG = process.env.COVEL_REQUIRE_PG_TESTS === "1";
 
 let pgAvailable = false;
 try {
@@ -33,21 +78,35 @@ try {
   await client`SELECT 1`;
   await client.end();
   pgAvailable = true;
-} catch {
+} catch (error) {
+  if (REQUIRE_PG) {
+    throw new Error("PostgreSQL is required for PgMediaStore tests", {
+      cause: error,
+    });
+  }
   console.warn("PostgreSQL not available, skipping PgMediaStore tests");
 }
 
 if (pgAvailable) {
-  const { createIsolatedPgUrl } = await import("./pg-test-db.js");
+  const { createIsolatedPgDatabase } = await import("./pg-test-db.js");
   // Own database so this file never races concurrent PG test files on schema DDL.
-  const isolatedUrl = await createIsolatedPgUrl(
+  const isolated = await createIsolatedPgDatabase(
     DATABASE_URL,
     "covel_test_media",
   );
+  afterAll(() => isolated.cleanup());
 
   runMediaStoreContractTests("PgMediaStore", () =>
-    createPgMediaStore(isolatedUrl, { freshSchema: true }),
+    createPgMediaStore(isolated.url, { freshSchema: true }),
   );
+  describe("PgMediaStore lifecycle", () => {
+    it("exposes an idempotent close for its owned client", async () => {
+      const store = await createPgMediaStore(isolated.url);
+      expect(store.close).toEqual(expect.any(Function));
+      await store.close?.();
+      await store.close?.();
+    });
+  });
 } else {
   describe("PgMediaStore (skipped)", () => {
     it("skipped — PostgreSQL not available", () => {
@@ -61,5 +120,57 @@ runMediaStoreContractTests("IndexedDbMediaStore", async () => {
   idbCounter += 1;
   return createIndexedDbMediaStore({
     dbName: `covel-media-store-test-${idbCounter}`,
+  });
+});
+
+describe("IndexedDbMediaStore concurrent first-writer semantics", () => {
+  it("preserves the first owner and ref source under concurrent calls", async () => {
+    const store = await createIndexedDbMediaStore({
+      dbName: `covel-media-idb-concurrency-${crypto.randomUUID()}`,
+    });
+    try {
+      const ref = await store.put(
+        new Uint8Array([91, 92, 93]),
+        "application/octet-stream",
+      );
+
+      await Promise.all([
+        store.recordOwnership(ref.id, "session-first", "plugin-first"),
+        store.recordOwnership(ref.id, "session-second", "plugin-second"),
+      ]);
+      expect(await store.lookup(ref.id)).toMatchObject({
+        ownerSessionId: "session-first",
+        ownerPluginId: "plugin-first",
+      });
+
+      await Promise.all([
+        store.addRef(ref.id, "session-shared", "plugin-first"),
+        store.addRef(ref.id, "session-shared", "plugin-second"),
+      ]);
+      const refs = (await store.listRefs()).filter(
+        (row) => row.mediaId === ref.id && row.sessionId === "session-shared",
+      );
+      expect(refs).toHaveLength(1);
+      expect(refs[0]?.pluginId).toBe("plugin-first");
+    } finally {
+      await store.close?.();
+    }
+  });
+
+  it("returns the same first record from concurrent content-identical puts", async () => {
+    const store = await createIndexedDbMediaStore({
+      dbName: `covel-media-idb-put-${crypto.randomUUID()}`,
+    });
+    try {
+      const bytes = new Uint8Array([101, 102, 103]);
+      const [first, second] = await Promise.all([
+        store.put(bytes, "application/first", { source: "first" }),
+        store.put(bytes, "application/second", { source: "second" }),
+      ]);
+      expect(second).toEqual(first);
+      expect(await store.lookup(first.id)).toMatchObject({ mime: first.mime });
+    } finally {
+      await store.close?.();
+    }
   });
 });

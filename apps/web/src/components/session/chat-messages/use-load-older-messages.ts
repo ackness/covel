@@ -15,7 +15,7 @@ import {
  */
 
 interface UseLoadOlderMessagesArgs {
-  /** 实际滚动的视口元素（Radix ScrollArea 的 viewport），null 时不启用。 */
+  /** 实际滚动的原生视口元素，null 时不启用。 */
   readonly viewportEl: HTMLElement | null;
   /** 是否还有更旧消息可加载（olderMessagesCursor 非 null）。 */
   readonly hasOlder: boolean;

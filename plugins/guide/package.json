@@ -1,6 +1,6 @@
 {
   "name": "@covel/plugin-guide",
-  "version": "0.0.26",
+  "version": "0.0.27",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,6 @@
     "@covel/tools": "workspace:*"
   },
   "devDependencies": {
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

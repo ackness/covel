@@ -30,8 +30,8 @@
 ## 已知边界
 
 - **门控中途从关切换到开，同场景同变体不会立即补图**：`stage/current` 的 no-op 防抖（`previous.sceneId` 与 `previous.variant` 都不变时直接跳过）在补图判断之前就早退了，所以如果 `autoGenerateScenes` 关闭期间某场景/变体已经写过一次 `stage/current`（未命中或缺变体），随后开启门控但叙事仍反复发同一场景/变体的 `scene.set`，不会补发生成请求——需要先切换地点或昼夜（打破 no-op 条件）才能让 resolver 重新评估门控。
-- ~~**生成期间会话锁被长时间持有**~~：**已解决**（2026-07-28）。deferred follower 的执行（含 60-300s 的图像生成）现在跑在会话锁**外**，只有提交阶段（`processTurnResults`：finalize 事务 + auto-snapshot）进锁，玩家因此只需等毫秒级的提交而不是整张图。同一 runtime 的并发 follower 由一把 `<sessionId>::<runtimeId>` 作业锁串行，所以"是否已生成"这类 check-then-act 仍是原子的、不会重复计费。提交前会在锁内重读一次会话状态，玩家中途暂停/结束会话时 follower 的写入会被丢弃而不是提交进去。
-- **`execution: background` 任务不跨进程重启恢复**：`background-gen` 由框架的 `_jobs` 挂起队列（`setImmediate` + `_jobs/<jobId>` pending 行）驱动，没有持久化的任务队列；服务进程在生成请求排队后、完成前重启，该请求就丢了。框架**不会**自动重跑——重跑要再计一次费，且请求级 `userSettings` 没有持久化在任务行上，重跑等于换参数重新扣费。现在服务重启后的开机扫描会按 owner 判定把这类孤儿任务立即标为 `failed`（`reason: "orphaned"`，并保留 `triggerEvent` 供重试），前端因此会弹出失败提示，不再是无声的永久转圈。但 `stage/current.source` 仍会停在 `"pending"`——那是插件自己的状态，框架不碰。玩家需要重新触发一次同场景/变体的 `scene.set`（例如切走再切回）才能重新排队；让 resolver 订阅任务失败并把 `stage/current` 回落到 `none` 是尚未做的改进。
+- ~~**生成期间会话锁被长时间持有**~~：**已解决**（2026-07-28）。deferred follower 的执行（含 60-300s 的图像生成）现在跑在会话锁**外**，只有提交阶段（`processTurnResults`：finalize 事务 + auto-snapshot）进锁，玩家因此只需等毫秒级的提交而不是整张图。`resolver` 对相同 scene/variant 的 `pending` 状态不再重复发生成事件，避免多 Pod 在首个任务提交前各自计费；同一进程内的 follower 仍由 `<sessionId>::<runtimeId>` 作业锁串行。提交前会在锁内重读一次会话状态，玩家中途暂停/结束会话时 follower 的写入会被丢弃而不是提交进去。
+- **`execution: background` 任务不跨进程重启恢复**：`background-gen` 由框架的 `_jobs` 挂起队列（`setImmediate` + `_jobs/<jobId>` pending 行）驱动，没有持久化的任务队列；服务进程在生成请求排队后、完成前重启，该请求就丢了。框架**不会**自动重跑——重跑要再计一次费，且请求级 `userSettings` 没有持久化在任务行上，重跑等于换参数重新扣费。现在服务重启后的开机扫描会按 owner 判定把这类孤儿任务立即标为 `failed`（`reason: "orphaned"`，并保留 `triggerEvent` 供显式重试），前端因此会弹出失败提示，不再是无声的永久转圈。但 `stage/current.source` 仍会停在 `"pending"`——那是插件自己的状态，框架不碰；直接重发相同 `scene.set` 会被幂等 no-op，玩家应从失败任务提示执行 retry，或先切换地点/昼夜再回来。
 
 ## 开发
 

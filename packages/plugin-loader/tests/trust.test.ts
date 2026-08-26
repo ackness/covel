@@ -36,14 +36,6 @@ describe("getPluginTrustInfo", () => {
       expect(info.autoLoad).toBe(true);
       expect(info.requiresApproval).toBe(false);
     });
-
-    it("classifies an explicit official plugin as autoLoad with no approval", () => {
-      const info = getPluginTrustInfo("some-official-plugin", "official");
-
-      expect(info.source).toBe("official");
-      expect(info.autoLoad).toBe(true);
-      expect(info.requiresApproval).toBe(false);
-    });
   });
 
   describe("community fallback", () => {
@@ -72,7 +64,6 @@ describe("getPluginTrustInfo", () => {
       const derived = deriveBuiltinPluginIds([
         { id: "narrator", source: "builtin" },
         { id: "user-mod", source: "community" },
-        { id: "blessed", source: "official" },
         { id: "no-source" }, // unclassified → not reserved
       ]);
 

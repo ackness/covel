@@ -2,7 +2,7 @@
  * Session Kernel — Proposal Normalizer + Commit Pipeline.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   normalizeOutput,
   createCommitPipeline,
@@ -10,7 +10,7 @@ import {
   createTraceRecorder,
 } from "../src/session/session-kernel.js";
 import { withPendingProposals } from "@covel/tools";
-import type { Proposal, SessionEvent, RuntimeResult } from "@covel/shared";
+import type { Proposal, RuntimeResult } from "@covel/shared";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
 const SOURCE = { pluginId: "test-plugin", runtimeId: "test-runtime" };
@@ -549,6 +549,7 @@ describe("createCommitPipeline", () => {
       upsertCharacter: vi.fn(),
       setPluginData: vi.fn(),
       setPluginDataBatch: vi.fn(),
+      deletePluginData: vi.fn(),
       addTraceEvent: vi.fn(),
       addStateChange: vi.fn(),
       upsertStateEntry: vi.fn(),
@@ -843,6 +844,25 @@ describe("createCommitPipeline", () => {
       expect(store.setPluginDataBatch).toHaveBeenCalledOnce();
       expect(store.setPluginDataBatch.mock.calls[0][0]).toHaveLength(2);
     });
+
+    it("should delete plugin data through the proposal source scope", async () => {
+      const store = createMockStore();
+      const pipeline = createCommitPipeline(store as any);
+      const proposal = makeProposal("plugin.data.delete", {
+        namespace: "entries",
+        key: "obsolete",
+      });
+
+      const result = await pipeline.commit(proposal);
+
+      expect(result.committed).toBe(true);
+      expect(store.deletePluginData).toHaveBeenCalledWith(
+        SESSION_ID,
+        SOURCE.pluginId,
+        "entries",
+        "obsolete",
+      );
+    });
   });
 
   describe("character.upsert commit", () => {
@@ -873,6 +893,51 @@ describe("createCommitPipeline", () => {
         fields: { class: "Ranger" },
         version: 2,
         createdAt: "2026-04-27T00:00:00.000Z",
+      });
+    });
+
+    it("rebases concurrent field patches onto the latest character version", async () => {
+      const characters = [
+        {
+          id: "char-1",
+          sessionId: SESSION_ID,
+          name: "Ari",
+          type: "player",
+          fields: { base: 1 },
+          version: 1,
+          createdAt: "2026-04-27T00:00:00.000Z",
+          updatedAt: "2026-04-27T00:00:00.000Z",
+        },
+      ];
+      const store = {
+        ...createMockStore(),
+        listCharacters: vi.fn(async () => characters),
+        upsertCharacter: vi.fn(async (record) => {
+          characters[0] = record;
+        }),
+      };
+      const pipeline = createCommitPipeline(store as any);
+      const left = makeProposal("character.upsert", {
+        id: "char-1",
+        name: "Ari",
+        fields: { left: 1 },
+        expectedVersion: 1,
+        version: 2,
+      });
+      const right = makeProposal("character.upsert", {
+        id: "char-1",
+        name: "Ari",
+        fields: { right: 1 },
+        expectedVersion: 1,
+        version: 2,
+      });
+
+      const results = await pipeline.commitAll([left, right]);
+
+      expect(results.every((result) => result.committed)).toBe(true);
+      expect(characters[0]).toMatchObject({
+        fields: { base: 1, left: 1, right: 1 },
+        version: 3,
       });
     });
 

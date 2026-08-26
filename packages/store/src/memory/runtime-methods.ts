@@ -4,7 +4,7 @@ import {
   applyPagination,
   sortByCursorAsc,
 } from "../common/pagination.js";
-import { stateEntryKey } from "../common/keys.js";
+import { characterKey, stateEntryKey } from "../common/keys.js";
 import { computeTurnMessageStats } from "../common/turn-message-stats.js";
 import type { SessionSummaryRecord } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
@@ -188,14 +188,6 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
       );
     },
 
-    async saveApproval(record) {
-      state.approvals.push(record);
-    },
-
-    async listApprovals(sessionId) {
-      return state.approvals.filter((r) => r.sessionId === sessionId);
-    },
-
     async addMessage(record) {
       state.messages.push(record);
     },
@@ -215,7 +207,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async upsertCharacter(record) {
-      state.characters.set(record.id, record);
+      state.characters.set(characterKey(record.sessionId, record.id), record);
     },
 
     async listCharacters(sessionId) {
@@ -225,10 +217,7 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     },
 
     async deleteCharacter(sessionId, id) {
-      const existing = state.characters.get(id);
-      if (existing?.sessionId === sessionId) {
-        state.characters.delete(id);
-      }
+      state.characters.delete(characterKey(sessionId, id));
     },
 
     async addTraceEvent(record) {
@@ -305,7 +294,9 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
     async listSessionSummaries(
       sessionId: string,
     ): Promise<readonly SessionSummaryRecord[]> {
-      return state.sessionSummaries.filter((r) => r.sessionId === sessionId);
+      return sortByCursorAsc(
+        state.sessionSummaries.filter((r) => r.sessionId === sessionId),
+      );
     },
 
     async deleteSessionSummaries(sessionId: string): Promise<void> {

@@ -6,7 +6,6 @@ import type {
 } from "../../types.js";
 import {
   id,
-  makeApproval,
   makeCharacter,
   makeEvent,
   makeInteractionRecord,
@@ -56,7 +55,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       await store.upsertStateEntry(makeStateEntry({ sessionId }));
       await store.addStateChange(makeStateChange({ sessionId }));
       await store.saveEvent(makeEvent({ sessionId }));
-      await store.saveApproval(makeApproval({ sessionId }));
       await store.addMessage(makeMessage({ sessionId }));
       await store.upsertCharacter(makeCharacter({ sessionId }));
       await store.addTraceEvent(makeTraceEvent({ sessionId }));
@@ -109,7 +107,6 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
         await store.listStateChanges(sessionId, "stats", "hp"),
       ).toHaveLength(0);
       expect(await store.listEvents(sessionId)).toHaveLength(0);
-      expect(await store.listApprovals(sessionId)).toHaveLength(0);
       expect(await store.listMessages(sessionId)).toHaveLength(0);
       expect(await store.listCharacters(sessionId)).toHaveLength(0);
       expect(await store.listTraceEvents(sessionId)).toHaveLength(0);
@@ -176,6 +173,41 @@ export function registerIntegrityStoreSuites(getStore: () => DataStore): void {
       for (const keep of baselineIds) {
         expect(afterIds).toContain(keep);
       }
+    });
+
+    it("does not expose writes through the root store before the transaction settles", async () => {
+      const pending = makeSession();
+      let release!: () => void;
+      let markWritten!: () => void;
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const written = new Promise<void>((resolve) => {
+        markWritten = resolve;
+      });
+
+      const txPromise = store.withTransaction!(async (tx) => {
+        await tx.createSession(pending);
+        markWritten();
+        await hold;
+        throw new Error("visibility rollback");
+      });
+      await written;
+
+      const readPromise = store.getSession(pending.id);
+      const early = await Promise.race([
+        readPromise.then((value) => ({ settled: true as const, value })),
+        new Promise<{ settled: false }>((resolve) =>
+          setTimeout(() => resolve({ settled: false }), 20),
+        ),
+      ]);
+
+      release();
+      await expect(txPromise).rejects.toThrow("visibility rollback");
+      // PG may immediately return its committed snapshot (null); serialized
+      // backends wait. Neither behavior may expose the in-flight row.
+      if (early.settled) expect(early.value).toBeNull();
+      await expect(readPromise).resolves.toBeNull();
     });
 
     it("returns the callback result", async () => {

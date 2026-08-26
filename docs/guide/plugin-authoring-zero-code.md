@@ -7,7 +7,7 @@
 > - 写一个只靠 `PLUGIN.md` 就能运行的插件
 > - 根据场景选对触发类型（`auto` / `scheduled` / `event` / `manual`）
 > - 用框架内置的四个 UI 工具（`render-ui` / `create-form` / `create-choices` / `create-notification`）产生玩家可交互块。`render-ui` 是通用的 parts 模型（详见 [docs/reference/tools.md#render-ui](../reference/tools.md#render-ui)），后三个是 form / choices / notification 的语义糖。
-> - 通过 `references/` 目录按关键词按需注入参考资料，避免每轮烧 token
+> - 通过 World Data / Lorebook 按玩家消息中的关键词选择性注入世界资料
 > - 用 `userSettings` 字段暴露玩家可调参数
 > - 打包一个 `worlds/<id>/` 世界包并指定 `requiredPlugins` / `recommendedPlugins`
 
@@ -38,7 +38,7 @@ name: narrator
 description: 主叙事生成器，负责根据玩家输入和世界观设定生成故事内容。每个 Turn 自动执行。
 pluginType: core-plugin
 stage: narrative
-model: ds
+model: story
 outputKind: story
 capabilities: [narrative, narrative-engine]
 trigger:
@@ -65,7 +65,27 @@ trigger:
 - 在末尾留下一个自然的互动节点
 ```
 
-就这样。没有 TypeScript，没有构建步骤。框架发现 `plugins/my-narrator/PLUGIN.md` 后会自动注册。
+就这样。没有 TypeScript，没有构建步骤。用户插件放到
+`~/.covel/plugins/my-narrator/PLUGIN.md` 后会在 server 重启时被发现；若要把它提交为
+仓库内置的 `plugins/my-narrator/` 包，还必须按仓库规范补 `package.json`。
+
+### 从零开始的可执行检查
+
+在仓库根目录创建一个临时插件后，先只做 manifest 验证：
+
+```bash
+mkdir -p ~/.covel/plugins/my-narrator
+# 写入 ~/.covel/plugins/my-narrator/PLUGIN.md
+pnpm validate:plugin ~/.covel/plugins/my-narrator
+```
+
+预期输出为该文件的 `✓`。`(loader parse)` 表示先修复 YAML/frontmatter 或路径；`(authoring schema)` 则按输出的字段路径修复闭集字段或字段组合。验证通过后重启 server；默认会合并仓库内置 `plugins/` 与 `COVEL_USER_PLUGINS_DIR`（默认 `~/.covel/plugins`）中的插件。
+
+零代码 agent 没有本地测试 case 时，可直接用 `pnpm test:runtime -- my-narrator --plugins-dir ~/.covel/plugins --pretty` 检查发现和一次 mock 执行；需要固定输出时，在插件目录加入 `tests/runtime-cases.json`，再重复该命令。
+
+默认 mock 只适合不强制调用业务工具的 smoke test。若插件声明了 `requireToolUse`，或结果
+取决于特定 tool call，请在 runtime case 中提供 `llmResponse` / `llmResponses`；否则失败
+表示 mock 没有按预期调用工具，不代表需要切换到真实 provider。
 
 ## 2. Frontmatter 字段详解
 
@@ -433,43 +453,42 @@ tools:
 每解锁一个新条目，发一条通知。使用 `success` 级别，标题格式："📖 发现新知识：{title}"
 ```
 
-## 6. 使用 references/ 目录
+## 6. 大型世界资料：使用 World Data / Lorebook
 
-对于大量参考资料（如世界观细节、怪物图鉴数据），可以放在 `references/` 目录下，**按需注入**，避免每轮都消耗 token。
+插件加载器只会解析 `PLUGIN.md` 的 frontmatter 和正文。Markdown 链接只是提示词文本；框架不会自动扫描 `references/*.md`，也不会把参考文件 frontmatter 中的 `keywords` 当成运行时契约。少量且每轮都需要的稳定规则应直接写在 `PLUGIN.md` 正文中。
 
-```
-plugins/my-codex/
-├── PLUGIN.md
-└── references/
-    ├── dragons.md
-    ├── elven-history.md
-    └── alchemy-recipes.md
+需要按关键词加载大量世界资料时，把资料交给 world 包的 World Data / Lorebook。先在 `world.yaml` 中声明 descriptor：
+
+```yaml
+worldData: data/world.data.yaml
 ```
 
-**参考文件格式：**
+再创建 `data/world.data.yaml`：
 
-```markdown
----
-keywords: [龙族, 龙鳞, 上古战争, Drakon]
----
-
-# 龙族传说
-
-龙族是远古时代最强大的种族...
+```yaml
+schemaVersion: 1
+sources:
+  lore:
+    kind: yaml
+    path: data/lorebook.yaml
+    to: lorebook
+    key: id
 ```
 
-- `keywords` 是触发条件 —— 当玩家消息或叙事上下文中出现任一关键词时，这个参考文件的内容会自动注入到 LLM 上下文中
-- 没有 `keywords`（或空数组）的参考文件**每次都会注入**
-- 关键词匹配不区分大小写，支持子串匹配
+`data/lorebook.yaml` 中每一项是一条 lorebook 记录：
 
-**在 PLUGIN.md 中引用：**
-
-在 Markdown 正文中用标准 Markdown 链接指向 references/ 路径，框架会自动发现并加载：
-
-```markdown
-更多关于龙族的信息请参见 [龙族传说](references/dragons.md)。
-关于精灵历史请参见 [精灵编年史](references/elven-history.md)。
+```yaml
+- id: dragons
+  content: 龙族是远古时代最强大的种族……
+  strategy: selective
+  keys: [龙族, 龙鳞, 上古战争, Drakon]
 ```
+
+- `strategy: selective` 只在**当前玩家消息**包含任一 `keys` 项时注入；匹配不区分大小写，使用子串匹配。
+- `selective` 记录没有有效 `keys` 时不会激活。需要每轮注入时使用默认的 `constant` 策略，并省略 `strategy`。
+- World Data 在创建 session 时导入；修改源文件后要新建 session，或使用 world-data 同步接口更新已有 session。
+
+完整字段、导入时机、同步与 preflight 见 [World Data 参考](../reference/world-data.md#lorebook-按玩家消息选择性注入)。
 
 ## 7. 配置字段（`userSettings`）
 

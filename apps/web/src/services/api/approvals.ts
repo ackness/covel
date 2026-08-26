@@ -8,7 +8,7 @@ export interface ApprovalRecord {
   action: string;
   pluginId: string;
   payload: unknown;
-  trustLevel: "builtin" | "official" | "community";
+  trustLevel: "builtin" | "community";
   description?: string;
   requestedAt: string;
 }

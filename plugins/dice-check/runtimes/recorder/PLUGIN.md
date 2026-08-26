@@ -15,6 +15,12 @@ tags:
 trigger:
   type: event
   topic: check.resolved
+inputs:
+  dicePool:
+    from:
+      runtime: dice-check/roller
+    select: "/dice"
+    required: true
 events:
   - topic: check.resolved
     schema: ./schemas/check-resolved.event.json
@@ -32,7 +38,7 @@ ui:
 
 订阅 `check.resolved` 事件（由叙事引擎按 `dice-check/roller` 注入的规则经 emit-event 发射）：
 
-1. 容错读取事件 payload——`checks` 数组逐项校验，缺必填字段（action / roll / total / outcome）或类型不对的项跳过，全部无效才整体 skip，不让一条坏回执拖垮回合
+1. 防御性读取事件 payload——`checks` 数组逐项按预掷骰顺序校验，缺必填字段（action / roll / modifier / dc / difficulty / total / outcome）、类型不对或计算关系不一致的项跳过，全部无效才整体 skip
 2. 每条判定记录写入 `plugin_data[checks]`（key = `<turnId>-<序号>`），含展示字段（结果标签/配色/骰式文本），倒序面板直接消费
 3. 本回合判定数组写入 `plugin_data[message]`（key = turnId，值带 `__turnId` 绑定到本回合消息），消息区判定结果块直接消费
 

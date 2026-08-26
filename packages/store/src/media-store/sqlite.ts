@@ -18,6 +18,7 @@ import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { createTables } from "../sqlite/sqlite-store-mappers.js";
 import type { SqliteMediaStoreOptions } from "./types.js";
+import { finalizeMediaCleanupResult } from "./cleanup-result.js";
 import {
   cleanupCandidates,
   filterAssetsByMetadata,
@@ -71,6 +72,21 @@ export function createSqliteMediaStore(
   const removeRefs = sqlite.prepare(
     "DELETE FROM media_refs WHERE media_id = ?",
   );
+  const deleteAsset = sqlite.transaction((id: string) => {
+    removeRefs.run(id);
+    remove.run(id);
+  });
+  const selectAnyRef = sqlite.prepare(
+    "SELECT 1 AS one FROM media_refs WHERE media_id = ? LIMIT 1",
+  );
+  const deleteUnreferencedAsset = sqlite.transaction((id: string) => {
+    const row = select.get(id) as
+      { path: string; ownerSessionId: string | null } | undefined;
+    if (!row || row.ownerSessionId !== null) return null;
+    if (selectAnyRef.get(id)) return null;
+    remove.run(id);
+    return row.path;
+  });
 
   // First-writer wins guard: only set owner when row has no owner yet, or
   // when the caller already owns it (idempotent re-record). Prevents a
@@ -83,12 +99,21 @@ export function createSqliteMediaStore(
   `);
   const insertRef = sqlite.prepare(`
     INSERT OR IGNORE INTO media_refs (session_id, media_id, plugin_id, created_at)
-    VALUES (@sessionId, @mediaId, @pluginId, @createdAt)
+    SELECT @sessionId, @mediaId, @pluginId, @createdAt
+    WHERE EXISTS (SELECT 1 FROM media_assets WHERE id = @mediaId)
   `);
   const removeRef = sqlite.prepare(`
     DELETE FROM media_refs
     WHERE media_id = @mediaId
       AND session_id = @sessionId
+  `);
+  const removeSessionRefs = sqlite.prepare(
+    "DELETE FROM media_refs WHERE session_id = ?",
+  );
+  const clearSessionOwnership = sqlite.prepare(`
+    UPDATE media_assets
+    SET owner_session_id = NULL, owner_plugin_id = NULL
+    WHERE owner_session_id = ?
   `);
   const checkOwner = sqlite.prepare(
     "SELECT owner_session_id AS ownerSessionId FROM media_assets WHERE id = ?",
@@ -162,9 +187,10 @@ export function createSqliteMediaStore(
     async delete(id) {
       const row = select.get(id) as { path: string } | undefined;
       // Clean up the inbound refs first so a foreign-key-style invariant holds
-      // even though the schema has no explicit FK between the two tables.
-      removeRefs.run(id);
-      remove.run(id);
+      // even though the schema has no explicit FK between the two tables. The
+      // transaction also excludes a writer in another OS process from adding a
+      // ref between the two statements and leaving it dangling.
+      deleteAsset(id);
       if (row?.path) {
         rmSync(row.path, { force: true });
       }
@@ -214,6 +240,13 @@ export function createSqliteMediaStore(
       removeRef.run({ mediaId: id, sessionId });
     },
 
+    async releaseSession(sessionId) {
+      sqlite.transaction(() => {
+        removeSessionRefs.run(sessionId);
+        clearSessionOwnership.run(sessionId);
+      })();
+    },
+
     async isReferencedBy(id, sessionId) {
       const ownerRow = checkOwner.get(id) as
         { ownerSessionId: string | null } | undefined;
@@ -254,15 +287,23 @@ export function createSqliteMediaStore(
     },
 
     async cleanup(protectedIds, policy) {
+      const inventory = await this.listAssets();
       const { result, idsToDelete } = cleanupCandidates(
-        await this.listAssets(),
+        inventory,
         protectedIds,
         policy,
       );
       if (!policy?.dryRun) {
+        const deletedIds: string[] = [];
         for (const id of idsToDelete) {
-          await this.delete(id);
+          // BEGIN IMMEDIATE excludes another process's addRef/ownership write
+          // across the final check and asset deletion.
+          const path = deleteUnreferencedAsset.immediate(id);
+          if (path === null) continue;
+          rmSync(path, { force: true });
+          deletedIds.push(id);
         }
+        return finalizeMediaCleanupResult(result, inventory, deletedIds);
       }
       return result;
     },
@@ -280,12 +321,10 @@ export function createSqliteMediaStore(
     },
   };
 
-  // Same connection as the DataStore ⇒ same write gate. Without this a media
-  // write issued while another caller's transaction is open joins that
-  // transaction and is silently lost when it rolls back.
-  // `cleanup` is deliberately NOT in MEDIA_WRITE_METHODS: it is not gated, so
-  // each `this.delete` it calls takes the queue on its own. Gating cleanup
-  // itself would deadlock — its inner deletes would wait on the chain slot
-  // cleanup is still holding.
+  // Same connection as the DataStore ⇒ same operation gate. Without this a
+  // media write issued while another caller's transaction is open joins that
+  // transaction and is silently lost when it rolls back. Cleanup now performs
+  // its conditional DB deletion inline (rather than recursively calling the
+  // wrapped `delete`), so it can safely hold the gate for its complete sweep.
   return getConnectionWriteGate(sqlite).gateWrites(store, MEDIA_WRITE_METHODS);
 }

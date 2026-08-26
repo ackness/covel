@@ -2,12 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type {
   CharacterRecord,
   DataStore,
-  SnapshotPayloadV2,
+  SnapshotPayload,
   StateEntryRecord,
 } from "../../types.js";
 import {
   id,
-  makeApproval,
   makeCharacter,
   makeEvent,
   makeInteractionRecord,
@@ -20,7 +19,6 @@ import {
   makeSessionSummary,
   makeSnapshot,
   makeSnapshotPayload,
-  makeSnapshotPayloadV2,
   makeStateChange,
   makeStateEntry,
   makeStateSchema,
@@ -310,14 +308,22 @@ export function registerPersistenceStoreSuites(
 
     it("isolates entries by sessionId", async () => {
       await store.upsertLorebookEntries([
-        makeLorebookEntry({ id: "lore-x", sessionId: "sess-lore-A" }),
-        makeLorebookEntry({ id: "lore-y", sessionId: "sess-lore-B" }),
+        makeLorebookEntry({
+          id: "lore-shared",
+          sessionId: "sess-lore-A",
+          content: "session A",
+        }),
+        makeLorebookEntry({
+          id: "lore-shared",
+          sessionId: "sess-lore-B",
+          content: "session B",
+        }),
       ]);
 
       const a = await store.listSessionLorebookEntries("sess-lore-A");
       const b = await store.listSessionLorebookEntries("sess-lore-B");
-      expect(a.map((r) => r.id)).toEqual(["lore-x"]);
-      expect(b.map((r) => r.id)).toEqual(["lore-y"]);
+      expect(a).toMatchObject([{ id: "lore-shared", content: "session A" }]);
+      expect(b).toMatchObject([{ id: "lore-shared", content: "session B" }]);
     });
 
     it("deleteLorebookEntry removes a single entry by sessionId+id", async () => {
@@ -430,34 +436,35 @@ export function registerPersistenceStoreSuites(
       expect(result!.payload.messagesCursor).toBe("tm-last-abc");
     });
 
-    it("should round-trip a V2 payload's session lifecycle state", async () => {
-      const payload = makeSnapshotPayloadV2();
-      const snap = makeSnapshot({ sessionId: "sess-snap-v2", payload });
+    it("round-trips the current snapshot session lifecycle state", async () => {
+      const payload = makeSnapshotPayload();
+      const snap = makeSnapshot({ sessionId: "sess-snap-current", payload });
       await store.saveSnapshot(snap);
 
       const result = (await store.getSnapshot(snap.id))!
-        .payload as SnapshotPayloadV2;
-      expect(result.schemaVersion).toBe(2);
+        .payload as SnapshotPayload;
+      expect(result.schemaVersion).toBe(3);
       expect(result.session).toEqual(payload.session);
     });
 
-    it("should keep optional V2 session fields absent after round-trip", async () => {
+    it("keeps optional session fields absent after round-trip", async () => {
       // presetId / runtimeModelOverrides are optional — JSON serialisation
       // must not resurrect them as null (store-backend parity contract).
-      const payload = makeSnapshotPayloadV2({
+      const payload = makeSnapshotPayload({
         session: {
           status: "paused",
-          turnCount: 0,
-          preGameCompleted: [],
           locale: "en-US",
           activePlugins: [],
+          phase: "setup",
+          completedPlayerTurns: 0,
+          setupRuntimes: {},
         },
       });
-      const snap = makeSnapshot({ sessionId: "sess-snap-v2", payload });
+      const snap = makeSnapshot({ sessionId: "sess-snap-current", payload });
       await store.saveSnapshot(snap);
 
       const result = (await store.getSnapshot(snap.id))!
-        .payload as SnapshotPayloadV2;
+        .payload as SnapshotPayload;
       expect(result.session.presetId).toBeUndefined();
       expect(result.session.runtimeModelOverrides).toBeUndefined();
       expect(result.session.status).toBe("paused");

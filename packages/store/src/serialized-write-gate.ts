@@ -1,6 +1,6 @@
 /**
- * Write serialization for single-connection backends (SqliteStore,
- * MemoryStore).
+ * Operation serialization for single-connection/live-state backends
+ * (SqliteStore, MemoryStore).
  *
  * These backends run every operation on ONE connection / one in-memory state,
  * so `withTransaction` cannot isolate: while a transaction is open, any write
@@ -10,7 +10,10 @@
  * at all (world imports, character edits, settings), so a write from session B
  * could vanish when session A's transaction rolled back.
  *
- * The gate closes that by making writes and transactions share one queue:
+ * The gate closes that by making root operations and transactions share one
+ * queue. Reads must join too: both backends expose in-flight transaction writes
+ * through their shared connection/state, so an ungated read could observe data
+ * that is subsequently rolled back.
  *
  *   - a transaction takes the queue for its whole BEGIN…COMMIT span;
  *   - a write issued from OUTSIDE any transaction waits for the queue, so it
@@ -37,9 +40,9 @@ export interface SerializedWriteGate {
   /** Run `fn` as the exclusive queue holder, marked as a transaction scope. */
   readonly runExclusive: <T>(fn: () => Promise<T>) => Promise<T>;
   /**
-   * Wrap a store's mutating methods so each awaits the queue when called from
-   * outside a transaction. Method names come from `writeMethodNames`; unknown
-   * names (reads) are returned untouched.
+   * Wrap selected store methods so each awaits the queue when called from
+   * outside a transaction. Callers may pass only mutators for a resource that
+   * cannot expose transactional reads, or every method for a live shared view.
    */
   readonly gateWrites: <T extends object>(
     store: T,

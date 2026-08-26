@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
-import { deriveLegacyClockForSession } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import type { LoadedRuntime } from "@covel/plugin-loader";
@@ -65,8 +64,10 @@ async function createScenarioStore(sessionId: string): Promise<DataStore> {
     presetId: null,
     status: "active",
     activePlugins: ["pregame", "world-init", "char-creator", "narrator"],
-    turnCount: 0,
-    preGameCompleted: [],
+    phase: "setup",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
+    locale: "zh-CN",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -88,10 +89,18 @@ function makeRuntimeHarness(store: DataStore): {
         calls[manifest.name] = (calls[manifest.name] ?? 0) + 1;
 
         if (manifest.name === "pregame") {
-          return { narrativeOutput: "pregame ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "pregame ready" },
+            completion: "done",
+          };
         }
         if (manifest.name === "world-init/schema-gen") {
-          return { narrativeOutput: "world ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "world ready" },
+            completion: "done",
+          };
         }
         if (manifest.name === "char-creator/player-init") {
           const inputs = await store.listPlayerInputs("sess-start-flow");
@@ -103,15 +112,18 @@ function makeRuntimeHarness(store: DataStore): {
 
           if (!values) {
             return {
-              narrativeOutput: "character form ready",
-              interactions: [
-                {
-                  type: "form",
-                  interactionId: "form-char-creation",
-                  narrativeTemplate: "Player {{name}} enters as {{concept}}.",
-                  fields: [{ id: "name", label: "Name", type: "text" }],
-                },
-              ],
+              outcome: "success",
+              value: { narrativeOutput: "character form ready" },
+              effects: {
+                interactions: [
+                  {
+                    type: "form",
+                    interactionId: "form-char-creation",
+                    narrativeTemplate: "Player {{name}} enters as {{concept}}.",
+                    fields: [{ id: "name", label: "Name", type: "text" }],
+                  },
+                ],
+              },
             };
           }
 
@@ -140,10 +152,17 @@ function makeRuntimeHarness(store: DataStore): {
             createdAt: now,
             updatedAt: now,
           });
-          return { narrativeOutput: "player ready", preGameDone: true };
+          return {
+            outcome: "success",
+            value: { narrativeOutput: "player ready" },
+            completion: "done",
+          };
         }
 
-        return { narrativeOutput: "main loop started" };
+        return {
+          outcome: "success",
+          value: { narrativeOutput: "main loop started" },
+        };
       },
     });
   }
@@ -169,6 +188,7 @@ async function runTurn(
       sessionId: "sess-start-flow",
       turnId,
       playerMessage: "",
+      origin: "player",
       ...input,
     },
     manifests,
@@ -179,6 +199,11 @@ async function runTurn(
   // (turn 2 must see turn 1's completed setup), so drive finalize like the
   // real actions route does.
   await finalizeExecution({
+    executionContext: {
+      executionId: crypto.randomUUID(),
+      origin: "manual",
+      countPolicy: "none",
+    },
     store,
     sessionId: "sess-start-flow",
     ...(result.executionContext
@@ -216,9 +241,8 @@ describe("start-game flow scenario at runtime level", () => {
     expect(playerMessages).toEqual([]);
 
     const session = await store.getSession("sess-start-flow");
-    const legacy = deriveLegacyClockForSession(session!);
-    expect(legacy.turnCount).toBe(0);
-    expect(legacy.preGameCompleted.sort()).toEqual(
+    expect(session!.phase).toBe("setup");
+    expect(Object.keys(session!.setupRuntimes).sort()).toEqual(
       ["pregame", "world-init/schema-gen"].sort(),
     );
   });
@@ -265,12 +289,12 @@ describe("start-game flow scenario at runtime level", () => {
       ).map((result) => result.runtimeId),
     ).toEqual(["char-creator/player-init"]);
 
-    // Setup completed → the finalize session-clock write flipped the band to
-    // playing (turnCount 1) and recorded every Pre-Game runtime.
+    // Setup completed → the finalizer flipped the band and mirrored every
+    // setup runtime.
     const session = await store.getSession("sess-start-flow");
-    const legacy = deriveLegacyClockForSession(session!);
-    expect(legacy.turnCount).toBe(1);
-    expect(legacy.preGameCompleted.sort()).toEqual(
+    expect(session!.phase).toBe("playing");
+    expect(session!.completedPlayerTurns).toBe(0);
+    expect(Object.keys(session!.setupRuntimes).sort()).toEqual(
       ["char-creator/player-init", "pregame", "world-init/schema-gen"].sort(),
     );
 

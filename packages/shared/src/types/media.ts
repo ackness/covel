@@ -119,6 +119,12 @@ export interface MediaStore {
    */
   removeRef(id: string, sessionId: string): Promise<void>;
   /**
+   * Remove every authorization edge owned by a deleted session while
+   * preserving the asset bytes and references held by other sessions.
+   * Implementations clear matching ownership and explicit ref rows atomically.
+   */
+  releaseSession(sessionId: string): Promise<void>;
+  /**
    * True if `sessionId` owns the asset OR has a row in `media_refs` for it.
    * The route handler uses this to gate dereferencing.
    */

@@ -26,6 +26,10 @@ import type { SessionRow } from "./mappers/session-mappers.js";
 import type { SqlRunner } from "./sql-runner.js";
 import type { DataStore, SessionRecord } from "../types.js";
 import { mergeSessionPatch } from "../types.js";
+import {
+  isUniqueConstraintError,
+  SessionAlreadyExistsError,
+} from "../errors.js";
 
 type SessionsTable = Table & { id: Column };
 
@@ -57,7 +61,14 @@ export function createSqlSessionRecords(
 
   return {
     async createSession(session: SessionRecord): Promise<void> {
-      await runner.insert(sessions, values.sessionInsert(session));
+      try {
+        await runner.insert(sessions, values.sessionInsert(session));
+      } catch (error) {
+        if (isUniqueConstraintError(error)) {
+          throw new SessionAlreadyExistsError(session.id);
+        }
+        throw error;
+      }
     },
 
     async getSession(id: string): Promise<SessionRecord | null> {

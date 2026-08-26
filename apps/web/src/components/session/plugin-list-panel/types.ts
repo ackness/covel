@@ -6,6 +6,11 @@ import type {
   SetupRuntimeState,
 } from "@/services/api.js";
 
+export type RuntimeModelOverrideChange = (
+  runtimeKey: string,
+  slot: string,
+) => Promise<void>;
+
 export interface PluginListPanelProps {
   packages: PackageSummary[];
   loadErrors?: PluginLoadError[];
@@ -21,6 +26,7 @@ export interface PluginListPanelProps {
   sessionId?: string;
   /** Current `runtimeModelOverrides` map from SessionRecord. */
   runtimeModelOverrides?: Record<string, string>;
+  onRuntimeModelOverrideChange?: RuntimeModelOverrideChange;
   /** Current `setupRuntimes` lifecycle map from SessionRecord. */
   setupRuntimes?: Record<string, SetupRuntimeState>;
 }
@@ -33,6 +39,7 @@ export interface PluginItemProps {
   resolvedSlots?: ResolvedSlot[];
   sessionId?: string;
   runtimeModelOverrides?: Record<string, string>;
+  onRuntimeModelOverrideChange?: RuntimeModelOverrideChange;
   setupRuntimes?: Record<string, SetupRuntimeState>;
 }
 
@@ -47,6 +54,7 @@ export interface SessionPluginItemProps {
   resolvedSlots?: ResolvedSlot[];
   sessionId?: string;
   runtimeModelOverrides?: Record<string, string>;
+  onRuntimeModelOverrideChange?: RuntimeModelOverrideChange;
   setupRuntimes?: Record<string, SetupRuntimeState>;
 }
 

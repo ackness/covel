@@ -7,6 +7,7 @@ import {
   resolveMedia,
   sourceLabelFor,
 } from "../../lib/stage-data.js";
+import { abortSignalWithTimeout } from "@covel/plugin-handlers-utils";
 
 const SCENE_KIND = "scene-background";
 // Scene backgrounds are landscape by convention (A-spec) — the registry
@@ -106,7 +107,7 @@ export default async function handler(ctx) {
       prompt,
       size: SCENE_SIZE,
       n: 1,
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: abortSignalWithTimeout(ctx.signal, REQUEST_TIMEOUT_MS),
       metadata: { kind: SCENE_KIND, sceneId, variant },
     });
     if (!refs || refs.length === 0) {

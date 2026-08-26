@@ -23,6 +23,11 @@ export interface CreateBootstrapMemorySystemParams {
    * search and embed-on-write ingestion is wired onto the post-turn path.
    */
   readonly embed?: EmbedFn;
+  /** Serialize a complete vector-ingestion sweep across server processes. */
+  readonly runIngestExclusive?: <T>(
+    sessionId: string,
+    task: () => Promise<T>,
+  ) => Promise<T>;
   readonly preferredMemorySlot?: string;
   readonly resolveModel: (
     manifest: RuntimeManifest,
@@ -31,7 +36,7 @@ export interface CreateBootstrapMemorySystemParams {
   /**
    * Resolve a plugin's discovery-source trust tier (load-path derived, so
    * non-forgeable). Used to break `memoryBlocks` label collisions by trust
-   * (builtin > official > community) rather than discovery order, so a
+   * (builtin > community) rather than discovery order, so a
    * community plugin can never silently shadow a builtin default block.
    * Optional: when omitted every plugin resolves to the community fallback
    * and collisions degrade to first-declaration-wins (fine for tests and
@@ -50,6 +55,7 @@ export function createBootstrapMemorySystem({
   store,
   llmAdapter,
   embed,
+  runIngestExclusive,
   preferredMemorySlot,
   resolveModel,
   getPluginSource,
@@ -158,6 +164,7 @@ export function createBootstrapMemorySystem({
       store,
       llm: memoryLlm,
       ...(embed ? { embed } : {}),
+      ...(runIngestExclusive ? { runIngestExclusive } : {}),
       resolveSlot: (slot: string) =>
         resolveModel({ name: slot, model: slot } as RuntimeManifest),
     },
@@ -252,8 +259,7 @@ function findMemoryPanelPluginId(
  * style control flow, only trust-tier comparison on discovery source.
  */
 const TRUST_RANK: Readonly<Record<PluginSource, number>> = {
-  builtin: 3,
-  official: 2,
+  builtin: 2,
   community: 1,
 };
 
@@ -267,7 +273,7 @@ const TRUST_RANK: Readonly<Record<PluginSource, number>> = {
  * pack adding `clues` / `suspects` / `timeline`). Manifests are validated at
  * load time, so each entry already matches `MemoryBlockSchema`.
  *
- * Duplicate labels resolve by **trust tier** (builtin > official > community):
+ * Duplicate labels resolve by **trust tier** (builtin > community):
  * a higher-trust declaration always overrides a lower-trust one regardless of
  * discovery order, so a community plugin can never silently shadow a builtin
  * default block (e.g. redefining `story_state`'s extractionHint) just by

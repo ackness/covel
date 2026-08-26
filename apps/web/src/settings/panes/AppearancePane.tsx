@@ -212,7 +212,7 @@ export function AppearancePane() {
             onKeyDown={(event) => {
               if (event.key === "Enter") void handleSaveAsTheme();
             }}
-            className="w-44 rounded-[var(--radius-control)] border border-[var(--rule-color)] bg-[var(--surface-page)] px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-[var(--accent-primary)]"
+            className="w-44 rounded-(--radius-control) border border-(--rule-color) bg-(--surface-page) px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-(--accent-primary)"
           />
           <Button
             size="sm"
@@ -234,7 +234,7 @@ export function AppearancePane() {
         />
         {error && (
           <div className="ui-band text-xs" data-tone="danger">
-            <span className="text-[var(--accent-danger)]">{error}</span>
+            <span className="text-(--accent-danger)">{error}</span>
           </div>
         )}
       </div>
@@ -299,7 +299,7 @@ function TokenGroupSection({
       open={defaultOpen}
       className="ui-frame group/section overflow-hidden [&_summary::-webkit-details-marker]:hidden"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 hover:bg-[var(--surface-inset)]">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 hover:bg-(--surface-inset)">
         <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-50 transition-transform group-open/section:rotate-90" />
         <span className="ui-section-title">
           {resolveI18nText(group.label, locale) ?? group.id}
@@ -310,7 +310,7 @@ function TokenGroupSection({
         </span>
       </summary>
 
-      <div className="border-t border-[var(--rule-color)] px-3 pb-2">
+      <div className="border-t border-(--rule-color) px-3 pb-2">
         {group.tokens.map((spec) => (
           <TokenControl
             key={spec.name}

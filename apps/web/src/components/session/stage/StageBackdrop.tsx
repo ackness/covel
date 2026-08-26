@@ -140,7 +140,7 @@ export function StageBackdrop({
         {renderLayer(current, sessionId)}
       </div>
       <div
-        className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent"
+        className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/75 via-black/15 to-transparent"
         aria-hidden="true"
       />
     </div>

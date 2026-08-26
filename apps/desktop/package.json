@@ -1,6 +1,6 @@
 {
   "name": "@covel/desktop",
-  "version": "0.0.26",
+  "version": "0.0.27",
   "private": true,
   "type": "module",
   "main": "dist/main.mjs",
@@ -12,7 +12,7 @@
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
     "lint": "tsc --noEmit",
-    "test": "tsx src/zip-extract.selfcheck.ts && tsx src/trusted-origin.selfcheck.ts && tsx src/logging.selfcheck.ts",
+    "test": "tsx src/zip-extract.selfcheck.ts && tsx src/trusted-origin.selfcheck.ts && tsx src/logging.selfcheck.ts && tsx src/system-proxy.selfcheck.ts && tsx src/network.selfcheck.ts && tsx src/settings-json.selfcheck.ts",
     "pack": "pnpm build && electron-builder --dir",
     "dist": "pnpm build && electron-builder",
     "dist:mac": "pnpm build && electron-builder --mac",
@@ -21,15 +21,14 @@
     "clean": "node ../../scripts/remove-paths.mjs dist staging ../../release/electron"
   },
   "dependencies": {
-    "smol-toml": "^1.7.0",
-    "tsx": "4.22.4"
+    "@covel/shared": "workspace:*",
+    "tsx": "4.23.12"
   },
   "devDependencies": {
     "@covel/web": "workspace:*",
-    "@electron/rebuild": "^4.2.0",
-    "electron": "43.1.0",
+    "electron": "43.4.1",
     "electron-builder": "26.15.6",
-    "esbuild": "^0.28.1",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }
 }

@@ -126,7 +126,20 @@ export interface SimpleCompletionAdapter<
   }): Promise<{ content: string }>;
 }
 
+/** Provider/model identity resolved from an LLM slot for observability. */
+export interface LLMTargetIdentity {
+  readonly provider: string;
+  readonly model: string;
+}
+
 export interface LLMAdapter {
+  /**
+   * Predict the primary provider/model for a requested slot. A gateway may
+   * select a later fallback during the actual call; use `onTargetAttempt` for
+   * the concrete per-call identity.
+   */
+  resolveTarget?(slot?: string): LLMTargetIdentity | undefined;
+
   /**
    * Call the LLM with messages and optional tools.
    * The `model` parameter maps to a slot name (e.g., 'default', 'fast', 'balance').
@@ -136,6 +149,8 @@ export interface LLMAdapter {
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
     readonly responseFormat?: LLMResponseFormat;
+    /** Synchronously reports each concrete provider attempt made by a gateway. */
+    readonly onTargetAttempt?: (target: LLMTargetIdentity) => void;
     /**
      * Abort the HTTP call when the signal fires. Required for timeouts —
      * turn-executor's `timeoutMs` is a loop guard; without this signal a
@@ -152,6 +167,8 @@ export interface LLMAdapter {
     readonly model?: string;
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
+    /** @see generate.onTargetAttempt */
+    readonly onTargetAttempt?: (target: LLMTargetIdentity) => void;
     /** @see generate.signal */
     readonly signal?: AbortSignal;
   }): AsyncIterable<LLMStreamEvent>;

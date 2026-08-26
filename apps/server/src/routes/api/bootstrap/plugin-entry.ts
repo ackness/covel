@@ -12,15 +12,9 @@
  *     covel.registerWires({ image: [myWire] });
  *   }
  *
- * This is the successor of the four legacy registration fields. `tools.local`
- * has been removed outright (declaring it fails the manifest load); `hooks` /
- * `rpc` / `wires` still parse but are deprecated (warned once per plugin at
- * boot).
- *
- * Trust gating mirrors plugin-wires.ts: builtin/official
- * entries run at bootstrap; community entries run on `ensurePluginEntry()`
- * (memoized, in-flight-deduped) — wired into the same activation seams as
- * local tools and wires.
+ * Trust gating mirrors runtime handlers: builtin entries run at bootstrap;
+ * community entries run on `ensurePluginEntry()` (memoized and
+ * in-flight-deduped) after the server-code approval gate clears.
  */
 
 import fsSync from "node:fs";
@@ -34,7 +28,6 @@ import {
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 import {
-  activateDeferredPluginHooks,
   type HookPipeline,
   type PluginAPI,
   type PluginRpcRegistry,
@@ -65,8 +58,7 @@ export interface BootstrapPluginEntriesParams {
   readonly store: DataStore;
   readonly toolMap: Map<string, ToolModule>;
   readonly localToolNames: Set<string>;
-  /** Mutable — entry-registered tool names are added at invocation time
-   *  (unlike legacy `tools.local`, names aren't derivable from the manifest). */
+  /** Mutable: entry-registered tool names are discovered at invocation time. */
   readonly pluginToolAccess: Map<string, Set<string>>;
   readonly hookPipeline: HookPipeline;
   readonly rpcRegistry: PluginRpcRegistry;
@@ -74,12 +66,12 @@ export interface BootstrapPluginEntriesParams {
   readonly isCommunityServerCodeApproved?: (
     sessionId: string | undefined,
     pluginId: string,
-  ) => boolean;
+  ) => boolean | Promise<boolean>;
   /** Narrower grant used for lifecycle hook execution after import. */
   readonly isCommunityHookApproved?: (
     sessionId: string,
     pluginId: string,
-  ) => boolean;
+  ) => boolean | Promise<boolean>;
 }
 
 export interface BootstrapPluginEntries {
@@ -122,23 +114,16 @@ export async function createBootstrapPluginEntries({
 }: BootstrapPluginEntriesParams): Promise<BootstrapPluginEntries> {
   const http = { fetchWithRetry, validateBaseUrl: validateBaseUrlForPlugin };
 
-  warnLegacyRegistrationFields(manifestCache);
-
   const buildApi = (pluginId: string, pluginRelPath: string): PluginAPI => {
     let hookSeq = 0;
     const trustInfo = getPluginTrustInfo(
       pluginId,
       discoveryMap.get(pluginId)?.source,
     );
-    const pluginTrust: RpcTrustLevel =
-      trustInfo.source === "builtin"
-        ? "builtin"
-        : trustInfo.source === "community"
-          ? "community"
-          : "official";
+    const pluginTrust: RpcTrustLevel = trustInfo.source;
 
-    // Community entries get a pluginId-scoped store view; builtin/official
-    // keep the raw store (parity with the legacy tools.local factory).
+    // Community entries get a pluginId-scoped store view; builtin entries keep
+    // the raw store.
     const toolkit: PluginToolkit = {
       tool,
       z,
@@ -198,7 +183,7 @@ export async function createBootstrapPluginEntries({
         const sessionGuardedHandler: typeof handler = async (ctx, payload) => {
           if (
             pluginTrust === "community" &&
-            !isCommunityHookApproved?.(ctx.sessionId, pluginId)
+            !(await isCommunityHookApproved?.(ctx.sessionId, pluginId))
           ) {
             return { action: "continue" };
           }
@@ -330,7 +315,7 @@ export async function createBootstrapPluginEntries({
     }
   };
 
-  // builtin/official: run entries at bootstrap so their capabilities are
+  // Builtin entries run at bootstrap so their capabilities are
   // available from the first turn.
   for (const [pluginId, discovery] of discoveryMap) {
     const trust = getPluginTrustInfo(pluginId, discovery.source);
@@ -341,24 +326,8 @@ export async function createBootstrapPluginEntries({
   const invokedPluginIds = new Set<string>();
   const inFlight = new Map<string, Promise<void>>();
 
-  // KNOWN LIMITATION (community entry hooks miss early events).
-  //
-  // Legacy `hooks` register their declarations at boot for every trust tier
-  // (handlers lazy-load on first fire — community handlers stay dormant until
-  // `activateDeferredPluginHooks` below), so builtin/official legacy
-  // hooks catch SessionStart / TurnStart from turn one. Entry hooks only
-  // enter the HookPipeline once `ensurePluginEntry` has run. For a community
-  // plugin the earliest that either fires is at APPROVAL (`approvals.ts`
-  // `allow` → activatePluginServerCode) or first runtime schedule / rpc
-  // activation — never before approval, by design (unapproved third-party
-  // code must not run at boot). Consequences:
-  //   - events that fire before the activation point in the approving turn
-  //     (e.g. this session's SessionStart) are missed by the entry's hooks;
-  //   - every process restart re-opens the window for an already-approved
-  //     community plugin until it is next activated.
-  // We do NOT close this by reviving declarative hook manifests — that would
-  // trade the single-entry model for the very split it replaced. builtin /
-  // official entries ran in the boot loop above and are unaffected.
+  // Community entry hooks exist only after the entry is approved and invoked;
+  // lifecycle events emitted before activation are intentionally not replayed.
   const ensurePluginEntry = async (
     pluginId: string,
     sessionId?: string,
@@ -371,7 +340,7 @@ export async function createBootstrapPluginEntries({
       invokedPluginIds.add(pluginId);
       return;
     }
-    if (!isCommunityServerCodeApproved?.(sessionId, pluginId)) {
+    if (!(await isCommunityServerCodeApproved?.(sessionId, pluginId))) {
       throw new Error(
         `[plugin-entry] ${pluginId}: community server code requires explicit approval for session ${sessionId ?? "<missing>"}`,
       );
@@ -382,12 +351,6 @@ export async function createBootstrapPluginEntries({
 
     const promise = (async () => {
       try {
-        // Approval also unlocks the plugin's legacy `hooks:` handlers,
-        // which were registered dormant at boot (plugin-hooks.ts). Activate
-        // BEFORE the entry runs, and regardless of whether the plugin
-        // declares an `entry` at all — a legacy-hooks-only community plugin
-        // reaches this seam through the same approval path.
-        activateDeferredPluginHooks(hookPipeline, pluginId);
         await invokeEntryForPlugin(pluginId);
         invokedPluginIds.add(pluginId);
       } finally {
@@ -402,7 +365,7 @@ export async function createBootstrapPluginEntries({
     if (invokedPluginIds.has(pluginId)) return false;
     const discovery = discoveryMap.get(pluginId);
     if (!discovery) return false;
-    // builtin/official entries ran at boot, so a miss is a genuine 404.
+    // Builtin entries ran at boot, so a miss is a genuine 404.
     if (getPluginTrustInfo(pluginId, discovery.source).autoLoad) return false;
     const manifests = manifestCache.get(pluginId);
     if (!manifests) return false;
@@ -410,25 +373,4 @@ export async function createBootstrapPluginEntries({
   };
 
   return { ensurePluginEntry, hasPendingEntry };
-}
-
-/** One warning per plugin still using the legacy registration fields. */
-function warnLegacyRegistrationFields(
-  manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>,
-): void {
-  for (const [pluginId, manifests] of manifestCache) {
-    const legacy = new Set<string>();
-    for (const parsed of manifests) {
-      const m = parsed.manifest;
-      if (m.hooks?.length) legacy.add("hooks");
-      if (m.rpc && Object.keys(m.rpc).length > 0) legacy.add("rpc");
-      if (m.wires) legacy.add("wires");
-    }
-    if (legacy.size === 0) continue;
-    console.warn(
-      `[plugin-entry] ${pluginId}: PLUGIN.md field(s) ${[...legacy].join(", ")} are deprecated — ` +
-        `migrate to a single "entry" module (export default function (covel) { ... }). ` +
-        `Legacy fields are planned for removal in v0.0.17.`,
-    );
-  }
 }

@@ -78,6 +78,8 @@
 
 🔵 core（`pluginType: core-plugin`，不可禁用） · ⚪ optional（`pluginType: plugin`，可禁用） · 🧠 uses LLM（`agent` runtime） · ⚙ pure function（`runtimeType: function`，零 token） · 🖼 UI only（只提供面板，无 runtime）
 
+Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填的 runtime 相对路径，目标模块必须 `export default function`。manifest 校验会拒绝缺失 handler，loader 会拒绝没有默认函数导出的模块，避免插件安装后到首次激活才失败。
+
 ---
 
 ## 调度层级
@@ -166,7 +168,7 @@
 
 **职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。
 
-**setup 契约**: 位于 `setup` stage（`phase === "setup"` 期间运行），`maxTriggerCount: 1` 保证仅在 session 首轮执行。完成后可在 `RuntimeOutput` 中声明 `preGameDone: true`，框架据此在 `session.setupRuntimes` 集合中记录本 runtime 已完成 setup 初始化（API 响应仍会派生出兼容字段 `preGameCompleted`）。
+**setup 契约**: 位于 `setup` stage（`phase === "setup"` 期间运行），`maxTriggerCount: 1` 保证仅在 session 首轮执行。完成后可在 `RuntimeOutput` 中声明 `preGameDone: true`，框架据此在 `session.setupRuntimes` 中记录本 runtime 的解析状态。
 
 ---
 
@@ -250,7 +252,7 @@
 - `{{ world.tone }}` — 叙事风格设定
 - `{{ player.message }}` — 玩家当前输入
 - `{{ player.character }}` — 玩家角色数据（CharacterSummary）
-- `{{ session.turnNumber }}` — 当前回合数（全局 turnCount）
+- `{{ session.turnNumber }}` — 当前已完成玩家回合数（`completedPlayerTurns`）
 - `{{ session.status }}` — 会话状态（`active` / `paused` / `ended`）
 
 **调度说明**: Narrator 位于 `narrative` stage，每个主循环轮次（`phase !== "setup"`）都会执行。是否在首轮发声由 `setup` stage 的插件流水线决定（例如 char-creator/player-init 处理玩家建角），Narrator 不再通过 `phases` 自我门控。
@@ -824,6 +826,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 | needs        | `[{ capability: narrative-engine }]` — 引擎无关，按 capability 发现当前模式的叙事引擎；两种模式下都可用 |
 | tools.plugin | `generate-scene-prompts`                                                                                |
 | ui.message   | `scene-prompts-block.json`                                                                              |
+| effects      | `parallelSafe: true`；仅写本插件数据，message block 是声明式投影，可与同层独立 block 并行               |
 
 ---
 
@@ -900,13 +903,14 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 **路径**: `plugins/branch-reply/`
 
-| 字段         | 值                                              |
-| ------------ | ----------------------------------------------- |
-| pluginType   | `plugin`                                        |
-| runtimeType  | `function`，`trigger: auto`，`stage: post-turn` |
-| outputKind   | `system`                                        |
-| capabilities | `[branch-reply, prompt-history-rewriter]`       |
-| ui.message   | `branch-reply-block.json`                       |
+| 字段         | 值                                                               |
+| ------------ | ---------------------------------------------------------------- |
+| pluginType   | `plugin`                                                         |
+| runtimeType  | `function`，`trigger: auto`，`stage: post-turn`                  |
+| outputKind   | `system`                                                         |
+| capabilities | `[branch-reply, prompt-history-rewriter]`                        |
+| ui.message   | `branch-reply-block.json`                                        |
+| effects      | `parallelSafe: true`；仅写本插件数据，message block 是声明式投影 |
 
 **生命周期（两条路径，按 `manualPayload` 是否存在区分）**：
 
@@ -1035,8 +1039,8 @@ plugins/<plugin-id>/
 │   └── my-tool.ts
 ├── tests/                 # 可选：测试文件
 │   └── my-plugin.test.ts
-└── references/            # 可选：按需加载的参考资料
-    └── world-lore.md
+└── references/            # 可选：维护者参考文件；框架不会自动加载
+    └── design-notes.md
 ```
 
 ### 多 runtime 插件
@@ -1074,7 +1078,7 @@ plugins/<plugin-id>/
 
 #### displayName（友好展示名）
 
-`displayName` 是 frontmatter 顶层的 **I18nText** 字段，作为插件在插件列表、provider 切换器等 UI 处的**友好展示名**——与 `name`（runtime id，用于数据隔离 / 工具作用域 / trace）解耦。单 runtime 与多 runtime 插件都适用；服务器经 `PluginSummary.displayName` 下发，前端按 locale 解析（缺失时回落到 `name`，再回落到 plugin id）。
+`displayName` 是 frontmatter 顶层的 **I18nText** 字段，作为插件在插件列表、设置导航和执行时间线等 UI 处的**友好展示名**——与 `name`（runtime id，用于数据隔离 / 工具作用域 / trace）解耦。单 runtime 与多 runtime 插件都适用；服务器经 `PluginSummary.displayName` 下发，前端遵循[Internationalization](./i18n.md) 契约按 locale 解析（缺失时回落到 `name`，再回落到 plugin id）。
 
 ```yaml
 ---
@@ -1119,7 +1123,7 @@ entry: ./server/index.js # 整个插件声明一次（多 runtime 声明同一�
 ```js
 // server/index.js
 export default function (covel) {
-  // 本地工具（等价旧 tools.local；toolkit 即旧工厂注入包 { tool, z, shortId, shortIdBatch, withPendingProposals, store }）
+  // 本地工具（toolkit 提供 { tool, z, shortId, shortIdBatch, withPendingProposals, store }）
   covel.registerTool(
     covel.toolkit.tool({
       name: "my-tool",
@@ -1128,17 +1132,17 @@ export default function (covel) {
       execute,
     }),
   );
-  // 生命周期 hook（等价旧 hooks 字段；16 事件语义不变，options 支持 match 谓词 / timeoutMs / enforce）
+  // 生命周期 hook（16 事件，options 支持 match 谓词 / timeoutMs / enforce）
   covel.on("PostLLMResponse", handler, { enforce: "post" });
-  // RPC action（等价旧 rpc 字段；handler 内联，信任等级仍按插件来源钳制）
+  // RPC action（handler 内联，trustLevel 只能收紧插件来源权限）
   covel.registerRpc("my-action", handler, { description: "..." });
-  // 媒体 wire（等价旧 wires 字段；仍以 <pluginId>/<wireId> 命名空间注册，SSRF 防护经 covel.http 注入）
+  // 媒体 wire（以 <pluginId>/<wireId> 命名空间注册，SSRF 防护经 covel.http 注入）
   covel.registerWires({ image: [myWire] });
 }
 ```
 
 - **类型可导入**：`PluginAPI` / `PluginToolkit` / `PluginHookOptions` / `PluginRpcOptions` / `PluginEntryFactory` 从 `@covel/runtime` 导出（Public Plugin API 的稳定契约）。JS 插件用 JSDoc `@param {import('@covel/runtime').PluginAPI} covel` 标注工厂参数，TS 插件直接 `import type`。服务端实现按同一类型做编译期对齐（`buildApi(): PluginAPI`），不会与文档 / 作者可见类型漂移。
-- **信任门控**与 local tools 一致：builtin/official 在启动时执行 entry；community 延迟到插件激活（`ensurePluginEntry`，与 runtime 加载同刻）。弃用的 `hooks` 字段（下方）同受此门控：community 的 legacy hook handler 在批准+激活前保持休眠（不 `import()`），激活后每次触发还按 session 复核授权（H-03）。
+- **来源门控**与 local tools 一致：builtin 在启动时执行 entry；community 延迟到插件激活（`ensurePluginEntry`，与 runtime 加载同刻）。
 - entry 抛错 / 非函数导出 / 路径逃逸只 warn 跳过，不影响启动；工厂每插件只执行一次（幂等）。
 - **agent runtime 暴露给 LLM 的工具**仍需在各 runtime manifest 声明：entry 注册的工具用 `tools.plugin`（名字列表）声明可见性，替代旧 `tools.local` 的路径列表：
 
@@ -1149,20 +1153,6 @@ tools:
   builtin: # builtin 启用列表（不变）
     - plugin-data-get
 ```
-
-> **移除说明**：`tools.local` 已移除——声明它会让整个 manifest 加载失败。`hooks` / `rpc` / `wires` 三个注册字段仍被接受但已弃用（启动时每插件 warn 一次），请迁移到 `entry`。
-
-### wires（媒体厂商 wire 注册，已弃用 — 改用 entry 的 `covel.registerWires`）
-
-`wires` 指向一个**插件根目录相对**的 JS 模块，default export `{ image?, speech?, transcription? }` 三组 wire 数组，或一个接受 `{ fetchWithRetry, validateBaseUrl }` 注入的工厂函数。框架加载后把每个 wire 以 `<pluginId>/<wireId>` 命名空间注册进 `@covel/ai-provider` 的对应 registry，llm.toml slot 通过 `providerRequestMetadata.imageWire / speechWire / transcriptionWire` 选中它。
-
-```yaml
-wires: lib/wires.js # 整个插件声明一次即可（多 runtime 声明同一路径会去重）
-```
-
-- 信任门控与 local tools 一致：builtin/official 启动即注册，community 在其 runtime 首次加载时注册。
-- 路径逃逸 / 文件缺失 / 条目形状错误只 warn 跳过，不影响启动；重复注册幂等。
-- 教程与 wire 接口签名见 [plugin-authoring-advanced.md § 注册自定义 wire](../guide/plugin-authoring-advanced.md#注册自定义-wireentry-里的-covelregisterwires)，slot 侧配置见 [slots.md](./slots.md)。
 
 ### dataSchemas
 
@@ -1206,12 +1196,12 @@ events:
     advertise: true # 默认 true，可省略
 ```
 
-| 字段          | 类型       | 默认   | 说明                                                                                                                                                                                                                                                                                                                        |
-| ------------- | ---------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `topic`       | `string`   | 必填   | 点分 kebab-case（`domain.verb`，如 `quest.updated`），正则拒绝其他格式                                                                                                                                                                                                                                                      |
-| `schema`      | `string`   | 必填   | 插件根目录相对 JSON Schema 路径，校验 `data` payload（与 `dataSchemas` 同规则）                                                                                                                                                                                                                                             |
-| `description` | `I18nText` | 必填   | 目录展示用说明，按 session locale 解析                                                                                                                                                                                                                                                                                      |
-| `advertise`   | `boolean`  | `true` | `false` 时该 topic 为**内部信令**：不出现在 `<available-events>` 目录里，且**不进 `emit-event` 白名单**——只能由声明它的插件自己的函数 runtime 经 `output.events` 结果通道发射（或 `trigger: { type: event, topic }` 触发消费方），agent 无法经 `emit-event` 直发。适合两个插件间不希望被通用叙事 runtime 随手调用的内部信令 |
+| 字段          | 类型       | 默认   | 说明                                                                                                                                                                                                                                                                                                                                         |
+| ------------- | ---------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `topic`       | `string`   | 必填   | 点分 kebab-case（`domain.verb`，如 `quest.updated`），正则拒绝其他格式                                                                                                                                                                                                                                                                       |
+| `schema`      | `string`   | 必填   | 插件根目录相对 JSON Schema 路径，校验 `data` payload（与 `dataSchemas` 同规则）                                                                                                                                                                                                                                                              |
+| `description` | `I18nText` | 必填   | 目录展示用说明，按 session locale 解析                                                                                                                                                                                                                                                                                                       |
+| `advertise`   | `boolean`  | `true` | `false` 时该 topic 为**内部信令**：不出现在 `<available-events>` 目录里，且**不进 `emit-event` 白名单**——只能由声明它的插件自己的函数 runtime 经 `HandlerResult.success.effects.events` 发射（或由 `trigger: { type: event, topic }` 触发消费方），agent 无法经 `emit-event` 直发。适合两个插件间不希望被通用叙事 runtime 随手调用的内部信令 |
 
 同一 session 内若两个不同插件声明了同一 `topic` 但 `schema` 路径不同，服务端按插件激活优先级顺序**首胜**（保留先声明者的 schema）并 `console.warn` 一次（同一 `(session, topic)` 不重复告警）。
 
@@ -1225,6 +1215,19 @@ tools:
 ```
 
 目录为空（当前会话没有任何插件声明可发射事件）时不会注入 `<available-events>` 块，不占用 prompt 空间。`narrator` / `chat-mode-narrator` 已按此接入，作为发射方参考实现；[`scene-stage/resolver`](#scene-stageresolver) 消费 `narrator` 发射的 `scene.set`，是消费方（`trigger: { type: event, topic: ... }`）的参考实现。
+
+### Function handler 返回值（`HandlerResult`）
+
+`runtimeType: function` 的 handler 必须直接返回 `HandlerResult` 判别联合：
+
+| `outcome`   | 必填字段     | 领域 effects                                                                                            |
+| ----------- | ------------ | ------------------------------------------------------------------------------------------------------- |
+| `success`   | 无           | `statePatches` / `events` / `interactions` / `ui` / `assetGenerations` / `pluginData` / `notifications` |
+| `suspended` | `reason`     | 不携带领域写入                                                                                          |
+| `skipped`   | `skipReason` | 仅 `jobStatus` / `diagnostics` 等观测 effects                                                           |
+| `failed`    | `error`      | 仅 `jobStatus` / `diagnostics` 等观测 effects                                                           |
+
+`success.value` 必须是 JSON 值。领域 effects 仅在 `success` 中生效，由内核在 proposal 提交前物化；非 success 的领域 effects 会被剥离并记录诊断。完整 TypeScript 类型见 `packages/shared/src/types/handler-result.ts`。
 
 ### recursiveCall
 
@@ -1275,7 +1278,7 @@ Guard 适用于"先检查再决定是否需要 LLM"的场景，替代了之前�
 
 声明该插件/世界贡献的**核心记忆块**（Letta 式 in-context memory）。框架的记忆系统（`@covel/memory`）会**聚合所有已加载插件的 `memoryBlocks`**，据此驱动每轮结束后的 LLM 抽取、持久化与 prompt 渲染——块定义因此是纯数据，而非内核硬编码。这正是「插件承载玩法、内核提供原语」在记忆维度的落地：侦探局可声明 `clues` / `suspects` / `timeline`，商战局可声明 `deals` / `rivals`，无需 fork 框架包。
 
-builtin `memory` 插件声明默认的四个通用块（`story_state` / `character_relationships` / `scene` / `player_profile`）。任意插件或世界包都可追加自己的块；**标签重复时按信任层级决胜（builtin > official > community）：高信任声明覆盖低信任声明，与发现顺序无关**——因此 community 插件无法靠抢先加载来静默覆盖 builtin 默认块的定义（如改写 `story_state` 的 `extractionHint`）。同一信任层级内取首次声明（稳定）；当同层级的多个插件以**不同定义**声明同一标签时，框架打印一条 dev 警告。信任层级取自插件的发现来源（加载路径，不可伪造），框架不按具体插件 id 决胜。未声明任何 `memoryBlocks` 时，框架回退到 `@covel/memory` 内置的同名通用默认块。
+builtin `memory` 插件声明默认的四个通用块（`story_state` / `character_relationships` / `scene` / `player_profile`）。任意插件或世界包都可追加自己的块；**标签重复时按插件来源决胜（builtin > community）：高来源声明覆盖低来源声明，与发现顺序无关**——因此 community 插件无法靠抢先加载来静默覆盖 builtin 默认块的定义（如改写 `story_state` 的 `extractionHint`）。同一来源内取首次声明（稳定）；当同一来源的多个插件以**不同定义**声明同一标签时，框架打印一条 dev 警告。来源取自插件的发现路径（不可伪造），框架不按具体插件 id 决胜。未声明任何 `memoryBlocks` 时，框架回退到 `@covel/memory` 内置的同名通用默认块。
 
 每轮结束后的抽取输入同时包含叙事、工具摘要，以及已提交会话状态中的玩家角色和最近一次表单值。结构化会话事实具有最高事实优先级；`player_profile` 的首行由框架根据角色记录与世界属性显示名确定性生成，LLM 只维护其后的动态状态摘要。这样后续回合无法翻译、改写或覆盖玩家已确认的姓名与属性值。
 
@@ -1298,57 +1301,6 @@ memoryBlocks:
       zh: 已发现的线索、物证及其与嫌疑人的关联。
       en: Discovered clues, physical evidence, and their links to suspects.
 ```
-
-### hooks（frontmatter 声明式，已弃用 — 改用 entry 的 `covel.on`）
-
-`hooks` 声明生命周期处理器。`handler` 路径相对插件目录解析，首次触发时懒加载。新代码请在 [entry](#entry统一服务端入口) 模块里用 `covel.on(event, handler, { match?, timeoutMs?, enforce? })` 注册（`match` 为谓词函数而非浅层等值 map）；事件表与执行语义两种方式完全一致。
-
-```yaml
-hooks:
-  - event: PreToolUse
-    handler: ./hooks/validate-tool.ts
-    enforce: pre
-    timeoutMs: 3000
-    match:
-      tool: create-character
-```
-
-只要 manifest 声明了 `hooks:`，loader 会校验每个条目并注册有效 hook。单个 hook 条目格式错误或事件名未知时只跳过该条目并输出 warning，其他有效条目继续生效。
-
-| 字段        | 类型                               | 默认值   | 含义                                       |
-| ----------- | ---------------------------------- | -------- | ------------------------------------------ |
-| `event`     | `HookEvent`                        | 必填     | 生命周期事件名                             |
-| `handler`   | `string`                           | 必填     | hook 模块路径，默认导出 async 函数         |
-| `enforce`   | `pre \| normal \| post`            | `normal` | 排序分组，执行顺序为 `pre → normal → post` |
-| `timeoutMs` | `number`                           | `5000`   | 单个 handler 的超时                        |
-| `match`     | `Record<string, string \| number>` | 无       | payload 浅层等值过滤                       |
-
-同一事件内先按 `enforce` 分组排序；同组内全局 hook 先执行，插件 hook 保持注册顺序。
-
-| Event                 | Semantic     | 行为                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| --------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SessionStart`        | `parallel`   | 会话级（无回合）：会话创建 + 插件激活后触发，payload `{sessionId, worldId}`。观察型,不能否决创建（对齐 pi 的 `session_start`）                                                                                                                                                                                                                                                                                          |
-| `TurnStart`           | `sequential` | 回合开始的否决门：任一 handler `abort` 则整回合中止(无 runtime 运行,返回带 `abortReason` 的 TurnResult),用于访问控制 / 限流                                                                                                                                                                                                                                                                                             |
-| `PreCompaction`       | `sequential` | 历史压缩前的否决门：任一 handler `abort` 则本回合跳过压缩、保留完整历史（对齐 pi 的 `session_before_compact` 取消路径）                                                                                                                                                                                                                                                                                                 |
-| `PostCompaction`      | `parallel`   | 并发观察压缩结果（`compacted` / `summaryId`）；返回值只用于日志和 trace（对齐 pi 的 `session_compact`）                                                                                                                                                                                                                                                                                                                 |
-| `PreSchedule`         | `sequential` | 触发选择之后、调度之前观察 / 收窄本回合要跑的 runtime 集；`replace.triggered` 链式改写（如条件门控 / 成本控制）。**严格 filter-only**：返回列表按稳定 runtime 身份（`manifest.name`）与原集合对账，框架复用原 manifest 对象——不在原集合的注入项被丢弃并 warn，变造副本无法替换原 manifest。**仅能影响主循环 runtime**：`phase === "setup"` 时，框架强制保留被 hook 删掉的 `setup` stage runtime，避免静默中断会话初始化 |
-| `PreRuntime`          | `sequential` | 链式改写 runtime 输入；`replace` 会传给下一个 handler；`abort` 会停止执行                                                                                                                                                                                                                                                                                                                                               |
-| `PostContextAssembly` | `sequential` | turn 级（每 runtime 一次，`buildContext` 之后、进 loop 之前）改写已装配的 `systemPrompt` / 投影历史；`replace.{systemPrompt,messages}` 链式累积（对齐 pi 的 `before_agent_start`）                                                                                                                                                                                                                                      |
-| `PreLLMCall`          | `sequential` | 每次 LLM 调用前非破坏性改写发往模型的请求；`replace.{messages,model,tools}` 链式累积。不改写底层 transcript（对齐 pi 的 `context`）。`abort` 无意义、视为不变                                                                                                                                                                                                                                                           |
-| `PostLLMResponse`     | `sequential` | LLM 响应返回后、工具派发前；`replace.response` 链式改写 `content`/`toolCalls`（对齐 pi 的 `after_provider_response`）                                                                                                                                                                                                                                                                                                   |
-| `PostRuntime`         | `sequential` | 链式改写 runtime 输出：`replace.result` 重写该 runtime 的 `RuntimeResult`(链式累积),不改则原样。**执行身份不可改写**：`pluginId` / `runtimeId` / `runId` / `turnId` 始终被还原为框架实际选中并加载的 manifest 身份——提交阶段按这些字段重绑 proposal,否则已批准的 hook 能把写入重定向到别的插件名下                                                                                                                      |
-| `PreToolUse`          | `sequential` | 链式改写 tool call；`replace` 会传给下一个 handler；`abort` 会跳过该 tool（不中止回合）                                                                                                                                                                                                                                                                                                                                 |
-| `PostToolUse`         | `sequential` | 链式 patch tool result：`replace.result` 改写结果、`replace.terminate: true` 在记录该结果后结束工具循环（对齐 pi 的 `tool_result.terminate`）。**结束循环用 `replace.terminate`，不要用 `abort`**（PostToolUse 的 `abort` 不生效，结果原样、循环继续）                                                                                                                                                                  |
-| `PreStateCommit`      | `sequential` | 链式改写 commit payload；任一 handler 可用 `abort` 拒绝 commit                                                                                                                                                                                                                                                                                                                                                          |
-| `PostStateCommit`     | `parallel`   | 并发观察 commit 结果；返回值只用于日志和 trace                                                                                                                                                                                                                                                                                                                                                                          |
-| `TurnStop`            | `parallel`   | 并发观察回合结束；返回值只用于日志和 trace                                                                                                                                                                                                                                                                                                                                                                              |
-| `SessionEnd`          | `parallel`   | 会话级（无回合）：会话 PATCH 状态→`ended` 或 DELETE 时触发,payload `{sessionId, reason: "ended"｜"deleted"}`。仅在进入 `ended` 的那次触发(不重复),适合清理（对齐 pi 的 `session_shutdown`）                                                                                                                                                                                                                             |
-
-> `PostToolUse` 为 `sequential`：`parallel` 语义会丢弃 `replace`，因此结果 patch 与 `terminate` 必须在顺序链中累积。
-> `SessionStart` / `SessionEnd` 是会话级 hook（`turnId` 为空）：在 server 的 session 路由触发,不属于 turn pipeline。
-> **Session 作用域**：hook pipeline 是全局单例,但执行时按当前 session 的激活插件集过滤(`hooks/hook-scope.ts`,经 AsyncLocalStorage)——插件 hook **只对该插件激活的 session 触发**,框架 hook(无 `pluginId`)始终触发。turn hook 的作用域取自 `activeRuntimes`,SessionStart/End 取自 `session.activePlugins`。`HookContext.activePluginIds` 暴露给 handler。
-
-`first` 和 `stream` 已作为框架语义保留：`first` 用于未来的首个命中选择类 hook，`stream` 用于未来的流式 transform hook。
 
 ### outputKind
 
@@ -1415,7 +1367,7 @@ execution: background # wan2.x 文生图需要几十秒,不阻塞 UI
 
 > `dataSchemas.<namespace>.acceptsWorldData: true` 同样是一种能力声明：世界角色蓝图导入（`blueprintStorageTargets` / `characterMirrorTargets`）据此发现「接受世界蓝图 / 角色镜像」的插件（如 `character-blueprint`），框架不再硬编码 `character-blueprint` / `char-creator`。
 
-声明 `image-generation` 的 runtime 在完成态返回 `assetGenerations[]`，每一项包含 `{ ref: MediaRef, modality: "image", meta? }`。图像画廊索引写入 `plugin_data.images` 时保存 `{ status, ref, prompt, ... }`，运行时会把旧 `url` / `base64` / `dataUrl` 字段记录为 `image.generate.plugin_data_inline_media` error。
+声明 `image-generation` 的 runtime 在 `HandlerResult.success.effects` 中返回 `assetGenerations[]`，每一项包含 `{ ref: MediaRef, modality: "image", meta? }`。图像画廊索引写入 `plugin_data.images` 时保存 `{ status, ref, prompt, ... }`，运行时会把旧 `url` / `base64` / `dataUrl` 字段记录为 `image.generate.plugin_data_inline_media` error。
 
 插件可以声明任意自定义能力标签。框架仅依赖上述已定义标签。框架代码（server / runtime / web）引用这些标签时**不得**使用裸字符串字面量，而应使用 `@covel/shared` 导出的常量：插件级用 `FrameworkCapability`（如 `FrameworkCapability.WorldDataProvider`），runtime 级用 `FrameworkRuntimeCapability`（如 `FrameworkRuntimeCapability.ImageGenerator`），这样拼写漂移会变成编译错误而非静默 `undefined`。两组常量的并集导出为 `FRAMEWORK_KNOWN_CAPABILITIES`（单一事实源）；plugin-loader 在加载 PLUGIN.md 时，对「形似某个框架已知能力但拼错」的声明发 dev 警告（不阻断、不丢弃，自定义能力仍自由声明）。新增框架消费的能力标签时，需同时更新对应常量（`packages/shared/src/types/plugin.ts`）与本表。
 
@@ -1468,18 +1420,21 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 
 **LLM 并发闸门**：进程内所有 LLM 调用共享一个 FIFO 并发上限（`COVEL_LLM_MAX_CONCURRENT`，默认 4，`0` 关闭）——post-turn 阶段多个 agent 并行时不再裸并发打满 provider。排队等槽的时间**顺延**该 runtime 的 deadline（排队是框架的成本，不占 runtime 预算），流式调用在整个流消费期间持有槽位。实现见 `packages/runtime/src/retry/llm-slots.ts`。
 
-**Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。超时后框架会**吊销 handler 的全部副作用能力**——`store`、`pluginData`、`media`、`images`、`speech`、`gateway`、`utils`、`recursiveCall`、`logger`、`assetProgress`——脱离的 handler 再调用会同步抛出 `capability ... is revoked`，避免它在本次执行已经收场之后仍然写入。吊销挂在超时本身、不挂在任何锁上，因此对持锁与不持锁的执行路径一样有效。协作式 handler 应监听 `ctx.signal` 主动取消。
+**Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse` / `completeAfterTools`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。超时后框架会**吊销 handler 的全部副作用能力**——`store`、`pluginData`、`media`、`images`、`speech`、`gateway`、`utils`、`recursiveCall`、`logger`、`assetProgress`——脱离的 handler 再调用会同步抛出 `capability ... is revoked`，避免它在本次执行已经收场之后仍然写入。吊销挂在超时本身、不挂在任何锁上，因此对持锁与不持锁的执行路径一样有效。协作式 handler 应监听 `ctx.signal` 主动取消。
 
-| 字段                     | 类型      | 默认                                              | 含义                                                                                                                                                                                                                     |
-| ------------------------ | --------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `timeoutMs`              | `number`  | 60000                                             | 运行总时长硬上限。任何情况下都不会超过此值                                                                                                                                                                               |
-| `maxRetries`             | `number`  | `1`                                               | transient 错误/超时/循环时的重试次数（不含首次尝试）。`0` 禁用重试。上限 5                                                                                                                                               |
-| `callTimeoutMs`          | `number`  | `min(60000, floor(timeoutMs / (maxRetries + 1)))` | 单次 LLM 调用的总时长。防止一个挂死请求吃掉整轮预算                                                                                                                                                                      |
-| `firstTokenTimeoutMs`    | `number`  | `30000`                                           | 流式 runtime 的首 token（TTFB）上限；非流式忽略                                                                                                                                                                          |
-| `loopDetectionThreshold` | `number`  | `3`                                               | 连续重复相同 `(tool name + JSON arguments)` 的次数；命中则注入扰动继续。`0` 关闭                                                                                                                                         |
-| `requireToolUse`         | `boolean` | `false`                                           | 仅 agent runtime。循环在“零成功工具调用”下收场（LLM 只回散文）时，注入一条纠正 system 消息并重试一次；第二次仍零工具则放行并 `console.warn`（`maxSteps` 仍兜底）。适合唯一职责就是调某工具、却会漂移成续写正文的 runtime |
+| 字段                     | 类型       | 默认                                              | 含义                                                                                                                                                                                                                     |
+| ------------------------ | ---------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `timeoutMs`              | `number`   | 60000                                             | 运行总时长硬上限。任何情况下都不会超过此值                                                                                                                                                                               |
+| `maxRetries`             | `number`   | `1`                                               | transient 错误/超时/循环时的重试次数（不含首次尝试）。`0` 禁用重试。上限 5                                                                                                                                               |
+| `callTimeoutMs`          | `number`   | `min(60000, floor(timeoutMs / (maxRetries + 1)))` | 单次 LLM 调用的总时长。防止一个挂死请求吃掉整轮预算                                                                                                                                                                      |
+| `firstTokenTimeoutMs`    | `number`   | `30000`                                           | 流式 runtime 的首 token（TTFB）上限；非流式忽略                                                                                                                                                                          |
+| `loopDetectionThreshold` | `number`   | `3`                                               | 连续重复相同 `(tool name + JSON arguments)` 的次数；命中则注入扰动继续。`0` 关闭                                                                                                                                         |
+| `requireToolUse`         | `boolean`  | `false`                                           | 仅 agent runtime。循环在“零成功工具调用”下收场（LLM 只回散文）时，注入一条纠正 system 消息并重试一次；第二次仍零工具则放行并 `console.warn`（`maxSteps` 仍兜底）。适合唯一职责就是调某工具、却会漂移成续写正文的 runtime |
+| `completeAfterTools`     | `string[]` | `[]`                                              | 仅 agent runtime。一个响应批次内指定工具至少一个成功且没有业务工具失败时，执行完该批全部调用后直接结束，不再额外请求模型输出 `runtime-done`。读取类工具不在列表即可继续 read → write 工作流                              |
 
 **`requireToolUse` 判定**：仅当本轮 loop 从未有任何工具**成功**执行、且 LLM 本次回复无 tool call 时触发；已经成功干过活再收尾的 runtime 不受影响。纠正消息按 `input.locale` 分支（zh 前缀 → 中文“你没有调用任何工具就结束了……”，其余含无 locale → 英文），记一条 `[runtime-retry] <name> ... reason=no-tool-call`。内置的 `scene-prompts`（每回合必须调用 `generate-scene-prompts`）已启用。
+
+**`completeAfterTools` 适用边界**：适合“某个写入工具成功就是最终产物”的单步或单批 agent runtime。框架仍会执行同一响应中的全部工具调用，并把调用记录组成 runtime 输出；只把终结写入工具列入，不要把需要读取结果后继续决策的查询工具列入。
 
 **四类重试触发条件：**
 
@@ -1550,42 +1505,6 @@ authorsNote:
 postHistory:
   content: Always respond in valid markdown. Never break character.
 ```
-
-### rpc（frontmatter 声明式已弃用 — 改用 entry 的 `covel.registerRpc`）
-
-声明插件暴露给 `POST /api/sessions/:id/plugin-rpc` 的结构化 action,供前端或外部代理用统一通道调用。每个 entry 是一个 RPC handler 模块的相对路径。新代码请在 [entry](#entry统一服务端入口) 模块里用 `covel.registerRpc(action, handler, { description?, trustLevel? })` 内联注册；路由、审批门与信任钳制语义不变。
-
-| 字段                   | 类型                                               | 说明                                                                                                                   |
-| ---------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `<action-name>`        | `string`(必须 kebab-case,不可以 `framework-` 开头) | action 名,与 `pluginId` 一起作为路由 key                                                                               |
-| `<action>.handler`     | `string`(必填)                                     | handler 模块的插件相对路径,必须 `.js` / `.mjs` / `.cjs`,**不允许绝对路径或 `..` 段**(框架在 schema 与 loader 两层校验) |
-| `<action>.input`       | `string`(可选)                                     | payload 的 JSON Schema 路径,仅作文档参考,框架不强制                                                                    |
-| `<action>.trustLevel`  | `'builtin' \| 'official' \| 'community'`(可选)     | 强制声明此 action 的信任级别,**只能比插件源信任更严格(降级)**;尝试升级会被 clamp 并 warn                               |
-| `<action>.description` | `string`(可选)                                     | 一句话描述,会显示在 approval 对话框里                                                                                  |
-
-> **已移除**：`<action>.streaming` 不再被 schema 接受。RPC 派发始终同步，长任务走 `execution: background` + `plugin-data.changed` SSE 汇报进度，从来没有流式协议读取该字段。注意 rpc 块的解析策略：**任何一个无法识别的 key 会跳过整个 `rpc` 块**（而非仅该 action），manifest 仍报告加载成功、只打一条指明文件/行/键名的 warning——所以残留 `streaming` 的插件会一次性丢掉全部 rpc action。
-
-handler 模块必须 default export 一个 `(payload, context) => Promise<unknown>` 函数。`context` 包含 `{ sessionId, pluginId, action, store: RpcHandlerStore }`,其中 `store` 是窄结构接口(`getSession` / `listTurnMessages` / `savePlayerInput` / 可选 plugin-data 三件套),不暴露完整的 `DataStore`。
-
-示例 frontmatter:
-
-```yaml
-rpc:
-  regenerate:
-    handler: ./rpc/regenerate.js
-    description: 重新生成上一段叙事
-  cancel:
-    handler: ./rpc/cancel.js
-    trustLevel: community # 即使插件本身是 official,也强制对 cancel 走 community 审批
-```
-
-**框架默认 actions(无需声明,通过 `pluginId: "framework"` sentinel 调用):**
-
-| Action        | 说明                                                                                 |
-| ------------- | ------------------------------------------------------------------------------------ |
-| `submit-form` | 绑定已提交 interaction，严格校验并幂等持久化表单 / 选择 / 确认，再填充模板 narrative |
-
-详细 API 说明见 [api.md `POST /api/sessions/:id/plugin-rpc`](api.md#post-apisessionsidplugin-rpc),作者指南见 [../guide/plugin-authoring.md §2.3.1](../guide/plugin-authoring.md)。
 
 ### input.inject（prompt 上下文注入）
 
@@ -1669,14 +1588,20 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 ### trigger 类型
 
-| 类型        | 状态        | 说明                                                                                                                                                                                                                                                                                  |
-| ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `auto`      | ✅ 生产可用 | 每个 Turn 自动触发                                                                                                                                                                                                                                                                    |
-| `manual`    | ✅ 生产可用 | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度                                                                                                                                                                                                                        |
-| `scheduled` | ✅ 生产可用 | 每 N 个**逻辑玩家回合**触发一次（配合 `interval` + `maxTriggerCount`）。基数是逻辑回合号 `completedPlayerTurns + 1`（`interval: 2` 在第 2、4、6 个玩家回合触发）；manual / follower / recursive 执行不推进 `completedPlayerTurns`，因此不影响 cadence，setup 阶段的交互轮次同样不占号 |
-| `event`     | ✅ 生产可用 | 监听特定事件触发（在 Turn 内的事件 fan-out 中由 `shouldTrigger` 判定）                                                                                                                                                                                                                |
+| 类型        | 状态        | 说明                                                                                                                                                                                                                                                                                             |
+| ----------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `auto`      | ✅ 生产可用 | 每个 Turn 自动触发                                                                                                                                                                                                                                                                               |
+| `manual`    | ✅ 生产可用 | 仅玩家手动触发；启用插件只表示该能力可用，不会自动进入每轮调度                                                                                                                                                                                                                                   |
+| `scheduled` | ✅ 生产可用 | 每 N 个**逻辑玩家回合**触发一次（配合 `interval` + `maxTriggerCount`）。基数是逻辑回合号 `completedPlayerTurns + 1`（`interval: 2` 在第 2、4、6 个玩家回合触发）；manual / background / recursive / resume 执行不推进 `completedPlayerTurns`，因此不影响 cadence，setup 阶段的交互轮次同样不占号 |
+| `event`     | ✅ 生产可用 | 监听特定事件触发（在 Turn 内的事件 fan-out 中由 `shouldTrigger` 判定）                                                                                                                                                                                                                           |
 
 > trigger 枚举就是上面四种。manifest 输入 schema 对 `trigger.type` 做闭集校验，任何其他取值在**加载时**被拒绝，不会进入运行时。
+
+### Manifest 加载失败的边界
+
+`pnpm validate:plugin` 先调用 loader 兼容 schema 解析 `PLUGIN.md`，再调用 strict authoring schema；任一层失败都会让 CLI 退出非零。解析层错误通常表示缺少 `---`、YAML 无效或 frontmatter 无法解析，并会阻止 loader 发现该 runtime；authoring 层则报告字段路径并拒绝未知字段、非法枚举及不满足的组合（例如 `runtimeType: function` 缺少 `handler`，或 `auto` / `scheduled` 缺少 `stage`）。生产 loader 为兼容旧 manifest 使用较宽松的输入 schema，因此“server 能加载”不等于“通过当前作者规范”；提交或发布前应以该 CLI 的 strict 结果为准。传入插件目录时，还会检查多 runtime 的插件级 `userSettings` 冲突。
+
+这条 CLI 检查只验证 manifest 与跨 runtime 声明，不执行 `entry`、handler 或 LLM。要验证 runtime 行为，应使用 `pnpm test:runtime`；要验证 server、SSE 和审批链路，应使用 HTTP E2E。
 
 #### `event` 的调度例外：fan-out 不受 stage 屏障约束
 
@@ -1684,7 +1609,7 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 扇出仍然受这些约束：
 
-- **`session.setupRuntimes`**：已经报告完成的 `setup` stage runtime 不会被后续同名 topic 复活——这是「一次性 setup」契约真正的守卫，也是扇出唯一继承的 stage 相关语义（API 响应仍会派生出兼容字段 `session.preGameCompleted`）。
+- **`session.setupRuntimes`**：已经报告完成的 `setup` stage runtime 不会被后续同名 topic 复活——这是「一次性 setup」契约真正的守卫，也是扇出唯一继承的 stage 相关语义。
 - **`maxDepth`**（默认 8）：限制事件链在单回合内的递归深度。
 - **回合内去重**：本回合已产出结果的 runtime 不会被再次执行；`execution: background` 的订阅者每回合最多被 defer 一次。
 
@@ -1692,12 +1617,12 @@ setup ──▶ pre-turn ──▶ narrative ──▶ post-turn ──▶ audit
 
 ### trigger 字段速查
 
-| 字段              | 默认 | 含义                                                                                                                                                                   |
-| ----------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `interval`        | 1    | `scheduled` 类型每隔 N 轮触发一次                                                                                                                                      |
-| `cooldownTurns`   | —    | 上一次触发后多少轮内不可再次触发                                                                                                                                       |
-| `maxTriggerCount` | —    | 整个 session 内最多触发次数（达到后不再触发）                                                                                                                          |
-| `startTurn`       | —    | 从第几个主循环轮次起开始介入。基于 `completedPlayerTurns`（0-based，legacy `turnCount` 的派生源），与 `setup` 首轮自动跳过互不冲突。适合"让玩家先熟悉环境再介入"的场景 |
+| 字段              | 默认 | 含义                                                                                                                                      |
+| ----------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `interval`        | 1    | `scheduled` 类型每隔 N 轮触发一次                                                                                                         |
+| `cooldownTurns`   | —    | 上一次触发后多少轮内不可再次触发                                                                                                          |
+| `maxTriggerCount` | —    | 整个 session 内最多触发次数（达到后不再触发）                                                                                             |
+| `startTurn`       | —    | 从第几个主循环轮次起开始介入。基于 `completedPlayerTurns`（0-based），与 `setup` 首轮自动跳过互不冲突。适合"让玩家先熟悉环境再介入"的场景 |
 
 **`startTurn` 用例**：
 
@@ -1758,4 +1683,4 @@ tools:
 { "preGameDone": true }
 ```
 
-框架在 commit 链上看到该字段为 `true` 时，会将该 `runtimeId` 追加到 `session.setupRuntimes`（API 响应仍会派生出兼容字段 `session.preGameCompleted`，响应形状不变）；后续轮次的调度器会跳过已完成的 `setup` stage runtime。这是 runtime 粒度的闸门；顶层 `session.phase`（`setup` / `playing`）只是粗粒度的 stage-band 选择器，不下放到单插件的触发条件里，两者互不冲突。
+框架在 commit 链上看到该字段为 `true` 时，会把该 `runtimeId` 标为 `session.setupRuntimes` 的 `done` 状态；后续轮次的调度器会跳过已完成的 `setup` stage runtime。这是 runtime 粒度的闸门；顶层 `session.phase`（`setup` / `playing`）只是粗粒度的 stage-band 选择器，不下放到单插件的触发条件里，两者互不冲突。

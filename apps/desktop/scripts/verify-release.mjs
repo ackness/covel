@@ -154,6 +154,10 @@ for (const resourcesDir of resourceDirs) {
   mustExist(resourcesDir, "server/src/index.ts");
   mustExist(resourcesDir, "server/node_modules/tsx/dist/cli.mjs");
   mustExist(resourcesDir, "server/node_modules/esbuild/package.json");
+  mustExist(
+    resourcesDir,
+    "server/node_modules/@covel/ai-provider/data/model-db.json",
+  );
   mustExist(resourcesDir, "web-dist/index.html");
   mustHaveBundledWorlds(resourcesDir);
   mustHaveBundledPlugins(resourcesDir);

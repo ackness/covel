@@ -88,15 +88,15 @@ export default async function handler(ctx) {
     turnId: ctx.turnId,
   });
 
-  // A "pending" previous stage is never a no-op: if background-gen failed
-  // (no `generated` row written), a re-emitted scene.set is the only signal
-  // that can retry generation — swallowing it would wedge the stage on
-  // "背景生成中…" forever. Successful double-generation is already prevented
-  // by background-gen's cachedRef check.
+  // A repeated scene.set for the same scene+variant is always a no-op,
+  // including while generation is pending. Background followers execute
+  // outside the cross-process session lock, so re-emitting here can enqueue
+  // the same billed request on two pods before either one commits its cache.
+  // Failed background jobs retain their triggerEvent and are retried through
+  // the explicit job retry flow instead of a new scene.set.
   const isNoOp =
     previous &&
     typeof previous === "object" &&
-    previous.source !== "pending" &&
     previous.sceneId === stage.sceneId &&
     previous.variant === stage.variant;
   if (isNoOp) {

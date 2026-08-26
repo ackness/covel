@@ -52,18 +52,44 @@ describe("LocalStorageBackend", () => {
     expect(await be.loadSecrets()).toEqual({ openai: "sk-x" });
   });
 
-  it("returns empty object on corrupt JSON", async () => {
+  it("rejects corrupt JSON instead of treating it as empty", async () => {
     storage.setItem("covel:settings", "not-json");
     const be = createLocalStorageBackend(storage);
-    expect(await be.load()).toEqual({});
+    await expect(be.load()).rejects.toThrow(/invalid/);
   });
 
-  it("ignores non-string secret values", async () => {
+  it("rejects corrupt secret values", async () => {
     storage.setItem(
       "covel:keys",
       JSON.stringify({ openai: "sk-x", bogus: 42 }),
     );
     const be = createLocalStorageBackend(storage);
-    expect(await be.loadSecrets()).toEqual({ openai: "sk-x" });
+    await expect(be.loadSecrets()).rejects.toThrow(/invalid/);
+  });
+
+  it("migrates v1 on read and detects a stale revision", async () => {
+    storage.setItem(
+      "covel:settings",
+      JSON.stringify({
+        schemaVersion: 1,
+        savedAt: "old",
+        entries: { old: true },
+      }),
+    );
+    const be = createLocalStorageBackend(storage);
+    const initial = await be.loadWithRevision!();
+    expect(initial).toMatchObject({
+      schemaVersion: 2,
+      revision: 0,
+      entries: { old: true },
+    });
+    const saved = await be.saveWithRevision!({ next: true }, 0);
+    expect(saved.revision).toBe(1);
+    await expect(
+      be.saveWithRevision!({ stale: true }, 0),
+    ).rejects.toMatchObject({
+      code: "settings_revision_conflict",
+      currentRevision: 1,
+    });
   });
 });

@@ -2,135 +2,73 @@ import type {
   RuntimeManifest,
   RuntimeResult,
   SetupRuntimeState,
-  TurnInput,
 } from "@covel/shared";
-import { mirrorSetupDone } from "@covel/shared";
-import type { SessionContextSnapshot } from "@covel/context";
-import type { TurnExecutorDeps } from "./turn-executor-types.js";
-import type { TurnSessionMeta } from "./session-state.js";
+import {
+  isSetupDoneForVersion,
+  mirrorSetupDone,
+  resolveSetupGeneration,
+} from "@covel/shared";
 
 export interface MarkPreGameCompletionResult {
   readonly allDone: boolean;
-  readonly preGameCompleted: readonly string[];
-  readonly sessionMeta: TurnSessionMeta;
-  readonly sessionContext: SessionContextSnapshot | undefined;
-  /**
-   * Setup runtimes that reported done for the FIRST time in this call, mirrored
-   * as `SetupRuntimeState`. The turn executor accumulates these across the
-   * pass(es) it makes and hands them to the finalizer, which folds them into
-   * the session-clock write (setup mirror + phase flip) inside the commit
-   * transaction. Empty when nothing newly completed.
-   */
+  /** Setup mirrors produced for the first time by this execution. */
   readonly newlyDone: Readonly<Record<string, SetupRuntimeState>>;
 }
 
-export async function markPreGameCompletion(args: {
-  readonly activeRuntimes: readonly RuntimeManifest[];
-  readonly completedResults: ReadonlyMap<string, RuntimeResult>;
-  readonly deps: TurnExecutorDeps;
-  readonly input: TurnInput;
-  readonly isPreGamePending: boolean;
-  readonly preGameRuntimes: readonly RuntimeManifest[];
-  readonly preGameCompleted: readonly string[];
-  readonly sessionMeta: TurnSessionMeta;
-  readonly sessionContext: SessionContextSnapshot | undefined;
-  readonly refreshSessionContext: () => Promise<
-    SessionContextSnapshot | undefined
-  >;
-}): Promise<MarkPreGameCompletionResult> {
-  const {
-    activeRuntimes,
-    completedResults,
-    deps,
-    input,
-    isPreGamePending,
-    preGameRuntimes,
-    refreshSessionContext,
-  } = args;
-  let preGameCompleted = args.preGameCompleted;
-  let sessionMeta = args.sessionMeta;
-  let sessionContext = args.sessionContext;
-
-  if (!isPreGamePending || !deps.store || input.manualTrigger) {
-    return {
-      allDone: !isPreGamePending,
-      preGameCompleted,
-      sessionMeta,
-      sessionContext,
-      newlyDone: {},
-    };
-  }
-
-  const newlyDoneNames = collectNewlyDoneRuntimes({
-    completedResults,
-    preGameCompleted,
-  });
-  const updated =
-    newlyDoneNames.length > 0
-      ? [...preGameCompleted, ...newlyDoneNames]
-      : preGameCompleted;
-  const allDone = preGameRuntimes.every((rt) => updated.includes(rt.name));
-
-  let newlyDone: Record<string, SetupRuntimeState> = {};
-  if (newlyDoneNames.length > 0) {
-    preGameCompleted = updated;
-    // Mirror each newly-done setup runtime. The actual persist happens in the
-    // finalize transaction (session-clock write) so the phase flip and mirror
-    // roll back with a failed commit; here we only advance in-memory state so
-    // same-request main-loop follow-ups see setup as complete.
-    const now = new Date().toISOString();
-    const manifestById = new Map(activeRuntimes.map((rt) => [rt.name, rt]));
-    newlyDone = Object.fromEntries(
-      newlyDoneNames.map((name) => [
-        name,
-        mirrorSetupDone(manifestById.get(name)?.version ?? "0.0.0", now),
-      ]),
-    );
-
-    const refreshedCharacters = await deps.store.listCharacters(
-      input.sessionId,
-    );
-    sessionMeta = {
-      ...sessionMeta,
-      preGameCompleted,
-      characters: refreshedCharacters.map((c) => ({
-        name: c.name,
-        type: c.type,
-        description: c.description,
-        fields: c.fields as Record<string, unknown>,
-      })),
-    };
-    sessionContext = await refreshSessionContext();
-  }
-
-  return { allDone, preGameCompleted, sessionMeta, sessionContext, newlyDone };
-}
-
 /**
- * A setup runtime is marked done ONLY by an explicit completion signal:
- * `preGameDone: true` or a guard that returned `{ skip: true }`. Deliberate
- * change (scheduling redesign): exhausting `maxTriggerCount` no longer counts
- * as done. A setup runtime that burns its retry budget without completing lands
- * on `blocked` (via `settleSetupRuntimes`), which holds the session in the setup
- * band until the player retries or waives it — the old "advance past a broken
- * setup" behaviour is gone.
+ * Project explicit setup completion signals into the authoritative setup
+ * mirror. Persistence remains the finalizer's responsibility so completion
+ * and proposal writes commit atomically.
  */
-function collectNewlyDoneRuntimes(args: {
+export function markPreGameCompletion(args: {
   readonly completedResults: ReadonlyMap<string, RuntimeResult>;
-  readonly preGameCompleted: readonly string[];
-}): string[] {
-  const { completedResults, preGameCompleted } = args;
-  const newlyDone: string[] = [];
+  readonly isPreGamePending: boolean;
+  readonly isManualTrigger: boolean;
+  readonly preGameRuntimes: readonly RuntimeManifest[];
+  readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
+}): MarkPreGameCompletionResult {
+  const {
+    completedResults,
+    isPreGamePending,
+    isManualTrigger,
+    preGameRuntimes,
+    setupRuntimes,
+  } = args;
+  if (!isPreGamePending || isManualTrigger) {
+    return { allDone: !isPreGamePending, newlyDone: {} };
+  }
 
-  for (const [name, result] of completedResults) {
-    if (preGameCompleted.includes(name)) continue;
-    const output = result.output as Record<string, unknown> | undefined;
-    const preGameDone = output?.preGameDone === true;
-    const guardSkipped = result.status === "skipped" && output?.skip === true;
-    if (preGameDone || guardSkipped) {
-      newlyDone.push(name);
+  const now = new Date().toISOString();
+  const newlyDone: Record<string, SetupRuntimeState> = {};
+  for (const runtime of preGameRuntimes) {
+    if (isSetupDoneForVersion(setupRuntimes[runtime.name], runtime.version)) {
+      continue;
+    }
+    const result = completedResults.get(runtime.name);
+    if (result && setupResultIsDone(result)) {
+      const previous = setupRuntimes[runtime.name];
+      const generation = resolveSetupGeneration(runtime.version, previous);
+      newlyDone[runtime.name] = mirrorSetupDone(
+        runtime.version ?? "0.0.0",
+        now,
+        generation,
+        previous?.generation === generation ? previous.attempts + 1 : 1,
+      );
     }
   }
 
-  return newlyDone;
+  const updated = { ...setupRuntimes, ...newlyDone };
+  const allDone = preGameRuntimes.every((runtime) =>
+    isSetupDoneForVersion(updated[runtime.name], runtime.version),
+  );
+  return { allDone, newlyDone };
+}
+
+/** A setup runtime completes only through an explicit framework signal. */
+function setupResultIsDone(result: RuntimeResult): boolean {
+  const output = result.output as Record<string, unknown> | undefined;
+  return (
+    (result.status === "success" && output?.preGameDone === true) ||
+    (result.status === "skipped" && output?.skip === true)
+  );
 }

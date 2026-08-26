@@ -57,7 +57,7 @@ export function StageHud({
         {sceneCurrent?.name && (
           <div
             className={clsx(
-              "ui-stage-panel pointer-events-auto flex items-center gap-1.5 rounded-[var(--radius-control)] px-2.5 py-1.5 text-xs",
+              "ui-stage-panel pointer-events-auto flex items-center gap-1.5 rounded-(--radius-control) px-2.5 py-1.5 text-xs",
               isPending && "ui-pulse-dot",
             )}
           >
@@ -76,7 +76,7 @@ export function StageHud({
         )}
       </div>
 
-      <div className="ui-stage-panel pointer-events-auto flex items-center gap-1 rounded-[var(--radius-control)] p-1">
+      <div className="ui-stage-panel pointer-events-auto flex items-center gap-1 rounded-(--radius-control) p-1">
         <Button
           variant="ghost"
           size="icon-sm"
@@ -94,7 +94,7 @@ export function StageHud({
           // Ghost buttons have no pressed background, so when auto-play is on
           // only the Play→Pause icon swap signals it. Tint the button accent
           // while active so the on-state reads at a glance.
-          className={clsx(autoPlay && "text-[var(--accent-primary)]")}
+          className={clsx(autoPlay && "text-(--accent-primary)")}
           aria-label={t(
             autoPlay ? "stage.autoPlayPauseLabel" : "stage.autoPlayLabel",
           )}
@@ -113,7 +113,7 @@ export function StageHud({
           size="icon-sm"
           onClick={onToggleImmersive}
           aria-pressed={immersive}
-          className={clsx(immersive && "text-[var(--accent-primary)]")}
+          className={clsx(immersive && "text-(--accent-primary)")}
           aria-label={t(
             immersive ? "stage.immersiveExitLabel" : "stage.immersiveLabel",
           )}

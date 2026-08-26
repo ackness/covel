@@ -324,6 +324,27 @@ describe("loadPluginManifest", () => {
 // ── loadRuntime ─────────────────────────────────────────────────
 
 describe("loadRuntime", () => {
+  it("rejects a function handler module whose default export is not a function", async () => {
+    const pluginDir = path.join(tmpDir, "invalid-handler");
+    await fs.mkdir(pluginDir, { recursive: true });
+    await fs.writeFile(
+      path.join(pluginDir, "PLUGIN.md"),
+      makeFrontmatter({
+        runtimeType: "function",
+        handler: "./handler.mjs",
+      }),
+    );
+    await fs.writeFile(
+      path.join(pluginDir, "handler.mjs"),
+      "export default { run: true };\n",
+    );
+
+    const [discovery] = await discoverPlugins(tmpDir);
+    await expect(loadRuntime(discovery, "test-plugin")).rejects.toThrow(
+      'Handler module "./handler.mjs" does not export a default function (got object)',
+    );
+  });
+
   it("loads prompt template", async () => {
     const pluginDir = path.join(tmpDir, "runtime-refs");
     await fs.mkdir(pluginDir, { recursive: true });

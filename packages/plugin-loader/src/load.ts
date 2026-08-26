@@ -9,6 +9,7 @@ import matter from "gray-matter";
 import {
   pluginRelationsSchema,
   hasIllegalDetachedContract,
+  localeLanguage,
 } from "@covel/shared";
 import type {
   PluginRelations,
@@ -22,6 +23,7 @@ import type {
   LoadedRuntime,
   ParsedPluginMd,
   FunctionHandler,
+  AgentGuard,
 } from "./types.js";
 import { parsePluginMd } from "./parse-plugin-md.js";
 import { reconcileLocalizedManifest } from "./localized-manifest.js";
@@ -51,7 +53,7 @@ async function resolveLocalizedPluginMd(
   if (await fileExists(exact)) return exact;
 
   // Try language prefix: PLUGIN.en.md
-  const lang = locale.split("-")[0];
+  const lang = localeLanguage(locale);
   if (lang !== locale) {
     const langPath = path.join(dir, `PLUGIN.${lang}.md`);
     if (await fileExists(langPath)) return langPath;
@@ -481,11 +483,16 @@ export async function loadRuntime(
     const handlerPath = path.resolve(runtimeDir, parsed.manifest.handler);
     await assertInsideRoot(discovery.rootPath, handlerPath, "Handler");
     const mod = await import(pathToFileURL(handlerPath).href);
+    if (typeof mod.default !== "function") {
+      throw new Error(
+        `Handler module "${parsed.manifest.handler}" does not export a default function (got ${typeof mod.default})`,
+      );
+    }
     handler = mod.default as FunctionHandler;
   }
 
   // Load guard function for agent runtimes with pre-execution gate
-  let guard: FunctionHandler | undefined;
+  let guard: AgentGuard | undefined;
   if (parsed.manifest.guard) {
     const guardPath = path.resolve(runtimeDir, parsed.manifest.guard);
     await assertInsideRoot(discovery.rootPath, guardPath, "Guard");
@@ -495,7 +502,7 @@ export async function loadRuntime(
         `Guard module "${parsed.manifest.guard}" does not export a default function (got ${typeof mod.default})`,
       );
     }
-    guard = mod.default as FunctionHandler;
+    guard = mod.default as AgentGuard;
   }
 
   // Load UI spec files from ui/ directory

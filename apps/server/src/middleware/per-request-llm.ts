@@ -5,7 +5,7 @@
  * browser:
  *
  *   - `X-Provider-Keys`  base64 JSON  →  `{ [provider]: apiKey }`
- *   - `X-Slot-Config`    base64 JSON  →  `{ slotPresetOverrides?, parameterOverrides?, customPresets? }`
+ *   - `X-Slot-Config`    base64 JSON  →  slot, parameter, preset, and operational capability overlays
  *
  * and, when either is present, swaps `c.get('llmAdapter')` for a
  * request-scoped adapter that forwards these through the gateway. This
@@ -41,6 +41,7 @@ import {
 } from "@covel/ai-provider";
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
 import { decodeBase64Json } from "../lib/base64-json.js";
+import { readRuntimeEnv } from "@covel/shared";
 
 export interface PerRequestLlmOptions {
   readonly ai: AiStack;
@@ -66,6 +67,26 @@ export interface PerRequestLlmOptions {
 }
 
 const MAX_HEADER_BYTES = 64 * 1024; // sanity cap — browsers rarely send bigger
+const MAX_CONTEXT_WINDOW = 10_000_000;
+const MAX_OUTPUT_TOKENS = 1_000_000;
+const INPUT_MODALITIES = new Set(["text", "image", "audio", "video", "file"]);
+const OUTPUT_MODALITIES = new Set([
+  "text",
+  "image",
+  "audio",
+  "video",
+  "embedding",
+]);
+const MODEL_FEATURES = new Set([
+  "function_calling",
+  "structured_output",
+  "streaming",
+  "reasoning",
+  "vision",
+  "prompt_caching",
+  "web_search",
+  "computer_use",
+]);
 
 export function createPerRequestLlmMiddleware(
   opts: PerRequestLlmOptions,
@@ -73,6 +94,8 @@ export function createPerRequestLlmMiddleware(
   return async (c, next) => {
     const requestKeys = parseProviderKeys(c.req.header("X-Provider-Keys"));
     const slotOverrides = parseSlotOverrides(c.req.header("X-Slot-Config"));
+    const capabilityOverridePolicy =
+      readRuntimeEnv().deploymentTier === "self" ? "full" : "restrict-only";
 
     const hasRequestKeys =
       requestKeys !== null && Object.keys(requestKeys).length > 0;
@@ -80,7 +103,8 @@ export function createPerRequestLlmMiddleware(
       slotOverrides !== null &&
       ((slotOverrides.customPresets?.length ?? 0) > 0 ||
         Object.keys(slotOverrides.parameterOverrides ?? {}).length > 0 ||
-        Object.keys(slotOverrides.slotPresetOverrides ?? {}).length > 0);
+        Object.keys(slotOverrides.slotPresetOverrides ?? {}).length > 0 ||
+        Object.keys(slotOverrides.capabilityOverrides ?? {}).length > 0);
 
     if (!hasRequestKeys && !hasOverrides) {
       await next();
@@ -91,6 +115,7 @@ export function createPerRequestLlmMiddleware(
       apiKeys: requestKeys ?? {},
       envApiKeys: opts.envApiKeys,
       ...(slotOverrides ? { slotOverrides } : {}),
+      capabilityOverridePolicy,
     });
 
     // Keep the function-runtime gateway in lock-step with the
@@ -105,11 +130,28 @@ export function createPerRequestLlmMiddleware(
         apiKeys: requestKeys ?? {},
         envApiKeys: opts.envApiKeys,
         ...(slotOverrides ? { slotOverrides } : {}),
+        capabilityOverridePolicy,
       },
     );
 
     c.set("llmAdapter", perRequestAdapter);
     c.set("pluginGateway", perRequestPluginGateway);
+    c.set("requestLlmOverridden", true);
+    try {
+      const narrative = opts.ai.gateway.resolveSlot("default", {
+        apiKeys: requestKeys ?? {},
+        envApiKeys: opts.envApiKeys,
+        ...(slotOverrides ? { slotOverrides } : {}),
+        capabilityOverridePolicy,
+        fallbackTag: "text",
+      });
+      if (narrative?.capability) {
+        c.set("requestNarrativeCapability", narrative.capability);
+      }
+    } catch {
+      // Generation retains its normal explicit error path; budget rebinding
+      // falls back to the trusted startup capability when lookup fails.
+    }
     await next();
   };
 }
@@ -226,8 +268,84 @@ function parseSlotOverrides(
       }
       if (clean.length > 0) out.customPresets = clean;
     }
+    const capabilityMap = (parsed as Record<string, unknown>)
+      .capabilityOverrides;
+    if (
+      capabilityMap &&
+      typeof capabilityMap === "object" &&
+      !Array.isArray(capabilityMap)
+    ) {
+      const clean: NonNullable<SlotOverridesInput["capabilityOverrides"]> = {};
+      for (const [slotId, raw] of Object.entries(
+        capabilityMap as Record<string, unknown>,
+      ).slice(0, 64)) {
+        if (
+          !slotId ||
+          slotId.length > 128 ||
+          !raw ||
+          typeof raw !== "object" ||
+          Array.isArray(raw)
+        )
+          continue;
+        const source = raw as Record<string, unknown>;
+        const next: NonNullable<
+          SlotOverridesInput["capabilityOverrides"]
+        >[string] = {};
+        const input = cleanStringArray(source.input, INPUT_MODALITIES, false);
+        const output = cleanStringArray(
+          source.output,
+          OUTPUT_MODALITIES,
+          false,
+        );
+        const features = cleanStringArray(
+          source.features,
+          MODEL_FEATURES,
+          true,
+        );
+        if (input) next.input = input as typeof next.input;
+        if (output) next.output = output as typeof next.output;
+        if (features) next.features = features as typeof next.features;
+        const contextWindow = cleanPositiveInt(
+          source.contextWindow,
+          MAX_CONTEXT_WINDOW,
+        );
+        const maxOutputTokens = cleanPositiveInt(
+          source.maxOutputTokens,
+          MAX_OUTPUT_TOKENS,
+        );
+        if (contextWindow !== undefined) next.contextWindow = contextWindow;
+        if (maxOutputTokens !== undefined)
+          next.maxOutputTokens = maxOutputTokens;
+        // `pricing` is deliberately ignored: request callers cannot assert
+        // accounting facts used by a shared host.
+        if (Object.keys(next).length > 0) clean[slotId] = next;
+      }
+      if (Object.keys(clean).length > 0) out.capabilityOverrides = clean;
+    }
     return out;
   } catch {
     return null;
   }
+}
+
+function cleanPositiveInt(value: unknown, max: number): number | undefined {
+  return typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value > 0 &&
+    value <= max
+    ? value
+    : undefined;
+}
+
+function cleanStringArray(
+  value: unknown,
+  allowed: ReadonlySet<string>,
+  allowEmpty: boolean,
+): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const clean = [
+    ...new Set(value.filter((item) => typeof item === "string")),
+  ].filter((item) => allowed.has(item));
+  if (!allowEmpty && clean.length === 0) return undefined;
+  return clean;
 }

@@ -38,6 +38,7 @@ import {
 import { executeAgentRuntime } from "../agent-loop/turn-agent-runtime.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { executeAgentGuard } from "../agent-loop/turn-agent-guard.js";
+import { combineAbortSignals } from "./turn-control.js";
 
 export type ExecuteTurnFn = (
   input: TurnInput,
@@ -76,7 +77,6 @@ export interface RuntimeInvocation {
           fields?: Record<string, unknown>;
         }[];
         lastFormValues?: Record<string, unknown>;
-        preGameCompleted?: readonly string[];
       }
     | undefined;
   readonly hookPipeline: HookPipeline | undefined;
@@ -98,12 +98,14 @@ export interface RuntimeInvocation {
   readonly recursionDepth?: number;
   /** Execution identity — forwarded to the function-runtime `ctx.progress` scope. */
   readonly executionId?: string;
+  /** Framework-owned runtime attempt identity, allocated before scheduling. */
+  readonly runId?: string;
   /**
    * Full execution identity for this scheduling run — exposed to function
    * handlers as `ctx.execution` and to the agent activation segment. Absent
    * for thin direct callers / tests.
    */
-  readonly executionContext?: ExecutionContext;
+  readonly executionContext: ExecutionContext;
   /**
    * Execution-start instant (ISO), frozen once per turn. Pins `atOrBefore` on
    * every `recordAs` export read so a consumer sees the revision that was live
@@ -121,6 +123,8 @@ export interface RuntimeInvocation {
    * Absent (direct callers / tests) means "no gate — always ready".
    */
   readonly pluginSetupReady?: (pluginId: string) => boolean;
+  /** Whether a setup runtime is satisfied in the execution's live mirror. */
+  readonly setupRuntimeDone: (runtimeId: string) => boolean;
   /**
    *  sink for runtime results produced by nested `ctx.recursiveCall`
    * executions. The top-level executeTurn wires this to a collector so the
@@ -154,11 +158,12 @@ export async function executeOneRuntime(
     recursionDepth = 0,
     executionId,
     executionContext,
+    setupRuntimeDone,
   } = inv;
   const startTime = Date.now();
-  const runId = crypto.randomUUID();
+  const runId = inv.runId ?? crypto.randomUUID();
   const timeoutMs = manifest.timeoutMs ?? defaultTimeoutMs;
-  const createRecursiveCall = () => {
+  const createRecursiveCall = (parentSignal?: AbortSignal) => {
     return async (
       rawDelta: RecursiveCallDelta,
       opts?: { readonly reason?: string },
@@ -191,7 +196,7 @@ export async function executeOneRuntime(
         playerMessage: delta.playerMessage ?? input.playerMessage,
         suppressPlayerMessage: true,
         // A nested execution is never a player turn — stamp its origin
-        // and parent so turn accounting excludes it from `turnCount`.
+        // and parent so it is excluded from player-turn accounting.
         origin: "recursive",
         parentTurnId: input.turnId,
       };
@@ -222,10 +227,29 @@ export async function executeOneRuntime(
 
       await deps.emitter?.emit("recursive.calling", tracePayload);
       try {
+        if (parentSignal?.aborted) {
+          throw abortReason(
+            parentSignal,
+            `recursiveCall from runtime "${manifest.name}" was aborted`,
+          );
+        }
+        const nestedExecutionSignal = combineAbortSignals(
+          deps.turnControl?.executionSignal,
+          parentSignal,
+        );
+        const nestedDeps: TurnExecutorDeps = nestedExecutionSignal
+          ? {
+              ...deps,
+              turnControl: {
+                ...deps.turnControl,
+                executionSignal: nestedExecutionSignal,
+              },
+            }
+          : deps;
         const nestedResult = await executeTurnFn(
           nestedInput,
           activeRuntimes,
-          deps,
+          nestedDeps,
           {
             ...turnOptions,
             maxSteps,
@@ -233,6 +257,15 @@ export async function executeOneRuntime(
             recursionDepth: nextDepth,
           },
         );
+        // The nested executor may return a terminal result after the parent
+        // deadline fired. Never publish or collect that late result into the
+        // already-finalized parent execution.
+        if (parentSignal?.aborted) {
+          throw abortReason(
+            parentSignal,
+            `recursiveCall from runtime "${manifest.name}" was aborted`,
+          );
+        }
         // Bubble the nested execution's results (its own + any it
         // collected from deeper levels) up to the top-level turn so the
         // commit-owning caller processes their proposals — a nested
@@ -349,28 +382,32 @@ export async function executeOneRuntime(
     if (required.length > 0) {
       // Two entry shapes:
       //  • runtime (string / {runtime}) — that exact runtime must have produced
-      //    a successful result this turn (or be done from an earlier setup
-      //    execution, via the preGameCompleted fallback). An absent (disabled)
-      //    upstream stays a skip, never treated as success.
-      //  • {capability} — at least one in-scope runtime providing that
-      //    capability must have succeeded. Lets a guidance plugin depend on "the
-      //    active narrative engine" without naming narrator / chat-mode-narrator;
-      //    zero in-scope providers ⇒ unsatisfied (skip, not run blind).
+      //    a successful result this turn. An absent (disabled) upstream stays
+      //    a skip, never treated as success.
+      //  • {capability} — `cardinality: "all"` requires every in-scope
+      //    provider; the default requires at least one. Zero providers is always
+      //    unsatisfied, so a consumer never runs blind.
       const missing: string[] = [];
       for (const entry of required) {
         if (typeof entry === "string" || "runtime" in entry) {
           const name = typeof entry === "string" ? entry : entry.runtime;
           const up = completedResults.get(name);
-          if (!up && sessionMeta?.preGameCompleted?.includes(name)) continue;
+          if (!up && setupRuntimeDone(name)) continue;
           if (!isRequiredUpstreamSatisfied(up)) missing.push(name);
           continue;
         }
         const providers = activeRuntimes
           .filter((r) => r.capabilities?.includes(entry.capability))
           .map((r) => r.name);
-        const satisfied = providers.some((name) =>
-          isRequiredUpstreamSatisfied(completedResults.get(name)),
-        );
+        const satisfied =
+          providers.length > 0 &&
+          (entry.cardinality === "all"
+            ? providers.every((name) =>
+                isRequiredUpstreamSatisfied(completedResults.get(name)),
+              )
+            : providers.some((name) =>
+                isRequiredUpstreamSatisfied(completedResults.get(name)),
+              ));
         if (!satisfied) missing.push(`capability:${entry.capability}`);
       }
       if (missing.length > 0) {
@@ -616,7 +653,7 @@ export async function executeOneRuntime(
         activation,
         inputs: inputSlots,
         exports: exportSlots,
-        ...(executionContext ? { executionContext } : {}),
+        executionContext,
         createRecursiveCall,
         recursionDepth,
         startTime,
@@ -659,6 +696,7 @@ export async function executeOneRuntime(
       activation,
       inputs: inputSlots,
       exports: exportSlots,
+      executionContext,
       startTime,
       runId,
     });
@@ -671,13 +709,17 @@ export async function executeOneRuntime(
       startTime,
       message,
     );
-    await deps.onRuntimeComplete?.({
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      status: failedResult.status,
-      durationMs: failedResult.durationMs,
-      error: message,
-    });
+    try {
+      await deps.onRuntimeComplete?.({
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        status: failedResult.status,
+        durationMs: failedResult.durationMs,
+        error: message,
+      });
+    } catch {
+      /* callback error must not replace the runtime failure */
+    }
 
     emitSubEvent(deps.eventBus, "runtime", "runtime.failed", input.sessionId, {
       runtimeId: manifest.name,
@@ -701,6 +743,10 @@ export async function executeOneRuntime(
       failedResult,
     );
   }
+}
+
+function abortReason(signal: AbortSignal, fallback: string): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error(fallback);
 }
 
 // buildToolDefinitions and makeFailedResult extracted to turn-executor-helpers.ts

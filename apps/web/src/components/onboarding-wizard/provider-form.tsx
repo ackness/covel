@@ -70,7 +70,7 @@ export function ProviderForm({
             <button
               key={p.id}
               onClick={() => handleProviderSelect(p.id)}
-              className={`rounded-[var(--radius-control)] px-3 py-2 text-xs font-medium border text-left transition-colors ${
+              className={`rounded-(--radius-control) px-3 py-2 text-xs font-medium border text-left transition-colors ${
                 state.selected === p.id
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-border text-muted-foreground hover:border-primary/40"
@@ -81,7 +81,7 @@ export function ProviderForm({
           ))}
           <button
             onClick={() => handleProviderSelect(CUSTOM_PROVIDER_ID)}
-            className={`col-span-2 rounded-[var(--radius-control)] px-3 py-2 text-xs font-medium border text-left transition-colors ${
+            className={`col-span-2 rounded-(--radius-control) px-3 py-2 text-xs font-medium border text-left transition-colors ${
               isCustom
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-border text-muted-foreground hover:border-primary/40"

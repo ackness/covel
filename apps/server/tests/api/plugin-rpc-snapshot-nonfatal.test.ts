@@ -15,6 +15,7 @@ import type { RuntimeManifest } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { createPluginRpcRuntimeTurnRunner } from "../../src/routes/api/plugin-rpc/runtime-turn.js";
+import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 
 const SESSION_ID = "sess-snap-nonfatal";
 const PLUGIN_ID = "demo";
@@ -43,13 +44,19 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
     };
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [PLUGIN_ID],
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       createdAt: now,
       updatedAt: now,
     });
@@ -59,6 +66,8 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
       promptTemplate: "",
       handler: async () => ({ ok: true }),
     };
+    const session = await store.getSession(SESSION_ID);
+    if (!session) throw new Error("expected session");
 
     const runner = createPluginRpcRuntimeTurnRunner({
       store,
@@ -67,6 +76,9 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
       sessionId: SESSION_ID,
       session: { locale: "en" },
       activeRuntimes: [manifest()],
+      approvalScopes: new Map([
+        [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
+      ]),
       deps: {
         loadRuntime: async (m) => (m.name === RUNTIME_ID ? loaded : undefined),
         llm: { generate: vi.fn() },
@@ -85,4 +97,76 @@ describe("auto-snapshot failure is non-fatal to a committed turn", () => {
     expect(summary.commit.committed).toBe(true);
     expect(summary.commit.failedProposalCount).toBe(0);
   });
+
+  it.each([
+    ["manual", false],
+    ["background", true],
+  ] as const)(
+    "persists a %s suspension without completing the turn",
+    async (_mode, detached) => {
+      const store = createMemoryStore();
+      const now = new Date().toISOString();
+      await store.createSession({
+        phase: "playing",
+        setupRuntimes: {},
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
+        id: SESSION_ID,
+        worldId: null,
+        status: "active",
+        presetId: null,
+        activePlugins: [PLUGIN_ID],
+        completedPlayerTurns: 1,
+
+        createdAt: now,
+        updatedAt: now,
+      });
+      const loaded: LoadedRuntime = {
+        manifest: manifest(),
+        promptTemplate: "",
+        handler: async () =>
+          ({
+            outcome: "suspended",
+            reason: "need input",
+            resumeSchema: {},
+          }) as never,
+      };
+      const session = await store.getSession(SESSION_ID);
+      if (!session) throw new Error("expected session");
+      const eventBus = createEventBus(store);
+      const eventTypes: string[] = [];
+      eventBus.onEmit((event) => eventTypes.push(event.type));
+      const runner = createPluginRpcRuntimeTurnRunner({
+        store,
+        eventBus,
+        sessionLock: createInProcessSessionLock(),
+        sessionId: SESSION_ID,
+        session: { locale: "en" },
+        activeRuntimes: [manifest()],
+        approvalScopes: new Map([
+          [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
+        ]),
+        deps: {
+          loadRuntime: async (m) =>
+            m.name === RUNTIME_ID ? loaded : undefined,
+          llm: { generate: vi.fn() },
+        } as unknown as Parameters<
+          typeof createPluginRpcRuntimeTurnRunner
+        >[0]["deps"],
+      });
+
+      const summary = await runner.runManualTurn({
+        turnId: `turn-suspended-${_mode}`,
+        runtimeId: RUNTIME_ID,
+        ...(detached ? { detached: true } : {}),
+      });
+
+      expect(summary.commit.committed).toBe(true);
+      expect(await store.listSuspensions(SESSION_ID)).toHaveLength(1);
+      expect(eventTypes).toContain("turn.suspended");
+      expect(eventTypes).not.toContain("turn.completed");
+    },
+  );
 });

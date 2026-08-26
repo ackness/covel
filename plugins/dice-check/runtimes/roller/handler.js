@@ -19,11 +19,18 @@ export default async function handler(ctx) {
   );
 
   return {
-    checkContext: buildCheckContext(dice, ctx.locale),
-    // Audit trail: the raw pool survives even when the narrative never uses it.
-    pluginData: [
-      { namespace: ROLLS_NAMESPACE, key: ctx.turnId, value: { dice } },
-    ],
+    outcome: "success",
+    value: {
+      // Same-execution source for recorder's declared `inputs.dicePool`.
+      dice,
+      checkContext: buildCheckContext(dice, ctx.locale),
+    },
+    effects: {
+      // Audit trail: the raw pool survives even when the narrative never uses it.
+      pluginData: [
+        { namespace: ROLLS_NAMESPACE, key: ctx.turnId, value: { dice } },
+      ],
+    },
   };
 }
 

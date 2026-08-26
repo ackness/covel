@@ -7,6 +7,8 @@
  * and enforces lore quality rules.
  */
 
+import { resolveI18nText } from "@covel/shared";
+
 const WORLD_MANIFEST_ROOT_KEYS = new Set([
   "schemaVersion",
   "id",
@@ -178,12 +180,12 @@ export function normalizeGeneratedManifest(
 function manifestText(value: unknown, locale: string): string | undefined {
   if (typeof value === "string") return value;
   if (!isRecord(value)) return undefined;
-  const localized = value[locale];
-  if (typeof localized === "string") return localized;
-  const fallback = Object.values(value).find(
-    (entry): entry is string => typeof entry === "string",
+  const localized = Object.fromEntries(
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
   );
-  return fallback;
+  return resolveI18nText(localized, locale);
 }
 
 export function normalizeLoreDocument(

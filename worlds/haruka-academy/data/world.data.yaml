@@ -41,7 +41,7 @@ sources:
     schema: plugin://scene-stage/scenes
     to: plugin:scene-stage/scenes
     key: registryId
-    after: dimensions
+    after: scenes
   presence:
     kind: json
     path: media/presence.json

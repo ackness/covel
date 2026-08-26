@@ -26,6 +26,7 @@ export type { RuntimeExecuteFn } from "./schedule/parallel-executor.js";
 export {
   executeTurn,
   resumeSuspendedRuntime,
+  buildHookSettings,
 } from "./turn-executor/turn-executor.js";
 export type {
   AgentLoopDeps,
@@ -40,6 +41,8 @@ export {
 } from "./turn-executor/turn-control.js";
 export type { TurnControl } from "./turn-executor/turn-control.js";
 export { collectExecutionJournal } from "./execution-journal.js";
+export { collectExecutionSuspensions } from "./suspension-artifact.js";
+export type { SuspensionArtifact } from "./suspension-artifact.js";
 export { createRuntimeMediaContext } from "./function-runtime/runtime-media-context.js";
 export type { MediaStoreLike } from "./function-runtime/runtime-media-context.js";
 
@@ -66,6 +69,7 @@ export type {
 // ── LLM Adapter ─────────────────────────────────────────────────
 export type {
   LLMAdapter,
+  LLMTargetIdentity,
   LLMMessage as LLMAdapterMessage,
   LLMResponse,
   LLMStreamEvent,
@@ -149,6 +153,8 @@ export type {
   ProcessRuntimeResultOutput,
 } from "./session/session-kernel.js";
 export { finalizeExecution } from "./commit/finalize-execution.js";
+export { normalizeHandlerResult } from "./commit/normalize-handler-result.js";
+export { materializeHandlerSuccess } from "./commit/materialize-handler-output.js";
 export type {
   FinalizeExecutionArgs,
   FinalizeExecutionOutcome,
@@ -175,18 +181,12 @@ export type { TriggerContext, ScheduledGroup } from "./types.js";
 export {
   HookPipeline,
   createHookPipeline,
-  registerPluginHooks,
-  activateDeferredPluginHooks,
   runSessionStartHook,
   runSessionEndHook,
   runWithHookScope,
 } from "./hooks/index.js";
 export type { SessionStartPayload, SessionEndPayload } from "./hooks/index.js";
 export { HOOK_SEMANTICS } from "./hooks/index.js";
-export type {
-  PluginHookSource,
-  RegisterPluginHooksOptions,
-} from "./hooks/index.js";
 export type {
   HookEvent,
   HookSemantic,

@@ -62,10 +62,8 @@ export interface RuntimeOutputMetaData {
    * Set by Pre-Game band runtimes (priority 0-99) when they have finished
    * their session-level work. Ignored on main-loop runtimes.
    *
-   * @deprecated Superseded by the envelope-v1 `completion: "done"` signal, the
-   * canonical source of Pre-Game completion. Kept only for the legacy
-   * resultFormat path and the compat projection in `project-envelope-result.ts`,
-   * which derives this flag from `completion: "done"` for older readers.
+   * Derived from the function-handler `completion: "done"` signal for the
+   * internal scheduling and persistence layers.
    */
   readonly preGameDone?: boolean;
   /**

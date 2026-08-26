@@ -48,6 +48,11 @@ export function overlayPluginDataValue(
           result = { hit: true, value: item.value };
         }
       }
+    } else if (proposal.type === "plugin.data.delete") {
+      const p = proposal.payload;
+      if (p.namespace === namespace && p.key === key) {
+        result = { hit: true, value: null };
+      }
     }
   }
   return result;
@@ -62,14 +67,26 @@ export function overlayPluginDataRows(
   proposals: readonly Proposal[],
   pluginId: string,
   namespace?: string,
-): Map<string, { namespace: string; key: string; value: unknown }> {
+): Map<
+  string,
+  { namespace: string; key: string; value: unknown; deleted?: true }
+> {
   const overlay = new Map<
     string,
-    { namespace: string; key: string; value: unknown }
+    { namespace: string; key: string; value: unknown; deleted?: true }
   >();
   const add = (ns: string, key: string, value: unknown): void => {
     if (namespace !== undefined && ns !== namespace) return;
     overlay.set(pluginDataKey(ns, key), { namespace: ns, key, value });
+  };
+  const remove = (ns: string, key: string): void => {
+    if (namespace !== undefined && ns !== namespace) return;
+    overlay.set(pluginDataKey(ns, key), {
+      namespace: ns,
+      key,
+      value: null,
+      deleted: true,
+    });
   };
   for (const proposal of proposals) {
     if (proposal.source.pluginId !== pluginId) continue;
@@ -80,6 +97,8 @@ export function overlayPluginDataRows(
       for (const item of proposal.payload.items ?? []) {
         add(item.namespace, item.key, item.value);
       }
+    } else if (proposal.type === "plugin.data.delete") {
+      remove(proposal.payload.namespace, proposal.payload.key);
     }
   }
   return overlay;

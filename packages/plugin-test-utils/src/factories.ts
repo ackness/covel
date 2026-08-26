@@ -21,6 +21,7 @@ export function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
     sessionId: "sess-test",
     turnId: "turn-1",
     playerMessage: "开始游戏",
+    origin: "player",
     ...overrides,
   };
 }
@@ -42,11 +43,11 @@ export function makeTriggerContext(
   return {
     sessionId: "sess-test",
     turnNumber: 1,
+    logicalTurn: 1,
     triggerCount: 0,
     turnsSinceLastTrigger: 999,
     pendingEventTopics: [],
     isManualTrigger: false,
-    preGameCompleted: [],
     ...overrides,
   };
 }

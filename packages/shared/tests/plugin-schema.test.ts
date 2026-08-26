@@ -1,13 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
-  runtimeManifestSchema,
+  runtimeManifestInputSchema,
   validateRuntimeManifestSemantics,
 } from "../src/schemas/plugin.js";
 import { PLUGIN_SCOPED_FIELDS } from "../src/types/plugin.js";
 
 describe("plugin manifest dataSchemas", () => {
+  it("accepts single-shot agent tool completion", () => {
+    const manifest = runtimeManifestInputSchema.parse({
+      name: "single-shot-tool-runtime",
+      description: "Calls one tool and finishes",
+      stage: "post-turn",
+      completeAfterTools: ["persist-result"],
+    });
+
+    expect(manifest.completeAfterTools).toEqual(["persist-result"]);
+  });
+
   it("normalizes keyed declarations into plugin data schema declarations", () => {
-    const manifest = runtimeManifestSchema.parse({
+    const manifest = runtimeManifestInputSchema.parse({
       name: "world-data-runtime",
       description: "World data runtime",
       stage: "narrative",
@@ -34,7 +45,7 @@ describe("plugin manifest dataSchemas", () => {
 
   it("rejects declarations whose namespace disagrees with the map key", () => {
     expect(() =>
-      runtimeManifestSchema.parse({
+      runtimeManifestInputSchema.parse({
         name: "world-data-runtime",
         description: "World data runtime",
         stage: "narrative",
@@ -52,7 +63,7 @@ describe("plugin manifest dataSchemas", () => {
 
   it("rejects schema paths outside the plugin package", () => {
     expect(() =>
-      runtimeManifestSchema.parse({
+      runtimeManifestInputSchema.parse({
         name: "world-data-runtime",
         description: "World data runtime",
         stage: "narrative",
@@ -67,26 +78,26 @@ describe("plugin manifest dataSchemas", () => {
     ).toThrow(/plugin-relative \.json path/);
   });
 
-  it("accepts a plugin-relative wires path and rejects traversal", () => {
-    const manifest = runtimeManifestSchema.parse({
+  it("accepts a plugin-relative entry path and rejects traversal", () => {
+    const manifest = runtimeManifestInputSchema.parse({
       name: "tts-runtime",
       description: "TTS runtime",
       stage: "post-turn",
-      wires: "lib/wires.js",
+      entry: "server/index.js",
     });
-    expect(manifest.wires).toBe("lib/wires.js");
+    expect(manifest.entry).toBe("server/index.js");
 
     expect(() =>
-      runtimeManifestSchema.parse({
+      runtimeManifestInputSchema.parse({
         name: "tts-runtime",
         description: "TTS runtime",
-        wires: "../outside/wires.js",
+        entry: "../outside/entry.js",
       }),
     ).toThrow(/plugin-relative/);
   });
 
   it("accepts catalogue tags and relation metadata", () => {
-    const manifest = runtimeManifestSchema.parse({
+    const manifest = runtimeManifestInputSchema.parse({
       name: "dialogue-narrator",
       description: "Dialogue narrator",
       stage: "narrative",
@@ -112,7 +123,7 @@ describe("plugin manifest dataSchemas", () => {
 
 describe("plugin manifest semantic diagnostics", () => {
   it("does not warn for manual runtimes without priority", () => {
-    const manifest = runtimeManifestSchema.parse({
+    const manifest = runtimeManifestInputSchema.parse({
       name: "manual-tool",
       description: "Manual tool",
       trigger: { type: "manual" },
@@ -122,7 +133,7 @@ describe("plugin manifest semantic diagnostics", () => {
   });
 
   it("warns when a capability looks like a misspelled framework-known tag", () => {
-    const manifest = runtimeManifestSchema.parse({
+    const manifest = runtimeManifestInputSchema.parse({
       name: "typo-plugin",
       description: "Typo plugin",
       stage: "narrative",
@@ -137,7 +148,7 @@ describe("plugin manifest semantic diagnostics", () => {
   });
 
   it("does not warn for exact framework-known or clearly custom capabilities", () => {
-    const manifest = runtimeManifestSchema.parse({
+    const manifest = runtimeManifestInputSchema.parse({
       name: "ok-plugin",
       description: "OK plugin",
       stage: "narrative",
@@ -164,7 +175,6 @@ describe("plugin-scoped field registry", () => {
       "relations",
       "tags",
       "userSettings",
-      "wires",
     ]);
   });
 
@@ -172,9 +182,8 @@ describe("plugin-scoped field registry", () => {
     // dataSchemas is the only field that hard-fails; userSettings warns.
     expect(PLUGIN_SCOPED_FIELDS.dataSchemas.conflict).toMatch(/throw/i);
     expect(PLUGIN_SCOPED_FIELDS.userSettings.conflict).toMatch(/warn/i);
-    // entry/wires read as single-declaration fields but are additive.
+    // Entry modules are additive across declarations.
     expect(PLUGIN_SCOPED_FIELDS.entry.merge).toBe("union");
-    expect(PLUGIN_SCOPED_FIELDS.wires.merge).toBe("union");
     // displayName is the sole root-only field.
     expect(PLUGIN_SCOPED_FIELDS.displayName.merge).toBe("root-only");
   });
@@ -200,7 +209,7 @@ describe("plugin manifest relations", () => {
   };
 
   it("accepts plugin ids and pluginId/runtimeId strings", () => {
-    const manifest = runtimeManifestSchema.parse({
+    const manifest = runtimeManifestInputSchema.parse({
       ...base,
       relations: {
         provides: ["narrative-engine"],
@@ -226,12 +235,17 @@ describe("plugin manifest relations", () => {
     ["tag", { recommends: [{ tag: "mode:dialogue" }] }],
     ["metadata only", { requires: [{ optional: true, reason: "why" }] }],
   ])("rejects the removed object form: %s", (_label, relations) => {
-    expect(() => runtimeManifestSchema.parse({ ...base, relations })).toThrow();
+    expect(() =>
+      runtimeManifestInputSchema.parse({ ...base, relations }),
+    ).toThrow();
   });
 
   it("rejects an empty id", () => {
     expect(() =>
-      runtimeManifestSchema.parse({ ...base, relations: { requires: [""] } }),
+      runtimeManifestInputSchema.parse({
+        ...base,
+        relations: { requires: [""] },
+      }),
     ).toThrow();
   });
 });

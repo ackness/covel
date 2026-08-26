@@ -37,9 +37,14 @@ function makeSession(id: string): SessionRecord {
     id,
     worldId: "world-1",
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
+    phase: "playing",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     activePlugins: [],
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     createdAt: now,
     updatedAt: now,
   };
@@ -121,6 +126,11 @@ function createMockMediaStore(options: MockMediaStoreOptions = {}): {
     },
     async removeRef() {
       // No-op: the test fixture seeds references via the `references` set.
+    },
+    async releaseSession(sessionId) {
+      for (const asset of assets.values()) {
+        asset.references.delete(sessionId);
+      }
     },
     async isReferencedBy(id, sessionId) {
       const a = assets.get(id);

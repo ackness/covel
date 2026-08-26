@@ -9,7 +9,6 @@ description:
 pluginType: core-plugin
 stage: setup
 runtimeType: function
-resultFormat: envelope-v1
 outputKind: system
 handler: ./handler.js
 tags:
@@ -26,13 +25,13 @@ trigger:
 
 ## 执行时机
 
-`stage: setup`——仅在 `session.phase === "setup"` 时调度，报告完成后不再运行（maxTriggerCount: 1 是重试预算）。完成状态记录在 `session.setupRuntimes` 镜像（API 仍派生兼容的 preGameCompleted 字段）。
+`stage: setup`——仅在 `session.phase === "setup"` 时调度，报告完成后不再运行（maxTriggerCount: 1 是重试预算）。完成状态记录在 `session.setupRuntimes` 镜像。
 
 ## 职责
 
 1. 读取世界信息构建欢迎通知
 2. 返回 narrativeOutput 给后续插件作为上下文
-3. 报告 preGameDone: true（envelope-v1 下即 `completion: "done"`），全部 setup 完成后内核把 `phase` 翻到 playing
+3. 报告 `completion: "done"`，全部 setup 完成后内核把 `phase` 翻到 playing
 
 ## 输出
 

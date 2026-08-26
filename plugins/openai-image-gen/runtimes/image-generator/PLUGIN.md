@@ -59,8 +59,8 @@ userSettings:
       zh: 画质（可选）
       en: Quality (optional)
     description:
-      zh: 留空时使用默认画质。想更快、更省时可以选择较低画质。
-      en: Leave blank for the default quality. Choose lower quality for faster, cheaper results.
+      zh: 默认为 low。GPT Image 可填 low、medium、high 或 auto。
+      en: Defaults to low. GPT Image accepts low, medium, high, or auto.
   - key: style
     type: text
     default: ""

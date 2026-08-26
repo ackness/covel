@@ -30,11 +30,15 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 4. **Per-runtime 覆盖** — `sessions.runtime_model_overrides`（runtimeId → slot 名）先于 `manifest.model` 与 gateway 默认（`packages/runtime/src/agent-loop/agent-loop-policy.ts`；请求级 `modelOverride` 只对 `outputKind: story` 的 runtime 优先于它）。
 5. **Per-request 覆盖** — 前端经 `X-Slot-Config` / `X-Provider-Keys` header 注入的自定义 preset 与 key 覆盖同名配置（`middleware/per-request-llm.ts`）。
 
-模型能力（模态 / 特性 / 上限 / 计价）自动检测优先级：前端 localStorage 覆盖 → `llm.toml` 手动字段 → 内置模型资料 → LiteLLM DB（`pnpm --filter @covel/ai-provider update-model-db`）→ 协议默认。
+模型能力（模态 / 特性 / 上限 / 计价）自动检测优先级：请求级 operational 覆盖 → `llm.toml` 手动字段 → 内置模型资料 → 版本化 LiteLLM 快照 → 协议默认。请求覆盖经 `X-Slot-Config.capabilityOverrides` 下发，只包含 input/output/features/contextWindow/maxOutputTokens；价格覆盖仅供客户端显示，绝不进入服务端信任边界。`self` 部署允许本机用户扩张能力；`demo` / `commercial` 只接受基础能力的非空子集，并对 token 上限取服务端值与请求值的较小者。每次请求只克隆 effective target，不修改全局 registry；同一能力同时驱动 generate/stream、function runtime 的 tag、compactor 阈值与 hard-prune budget，显式 `COVEL_COMPACTOR_CONTEXT_WINDOW` 始终优先。仓库快照由维护者通过 `pnpm --filter @covel/ai-provider update-model-db` 从固定 commit 生成；设置页的手动刷新会把较新数据写入用户配置目录，并在后续启动时优先于内置快照加载。
 
 ## 服务商与模型 ID
 
 设置界面将连接信息和模型 ID 分开保存：一个服务商配置一组 `baseUrl`、协议、API 密钥和价格倍率，并可包含多个模型 ID。用途绑定只引用其中一个模型。请求时前端把该引用编译为兼容服务器的自定义 preset；preset 是内部传输结构，用户无需单独创建。
+
+持久化层只保存 `llm.providers`。旧版 `llm.customPresets` 在启动时执行一次可重试的单向迁移，成功后删除；兼容 facade 和 `X-Slot-Config.customPresets` 均按请求从 providers 投影，不再双写。
+
+首次手动创建服务商与模型时，若 `story` / `plugin` 尚未显式分配，设置页会把这两个用途同时绑定到该模型，保证叙事与插件任务都能立即运行。DeepSeek、OpenAI、Anthropic、DashScope 即使首次配置未填写 `baseUrl`，也会使用框架内置的官方端点与协议；用户填写的地址始终优先。
 
 模型 ID 是不透明字符串，发送请求时不会被裁剪或改写。例如服务商 `openai` 下的 `openai/gpt-5.6-sol` 和 `deepseek/deepseek-v4-flash` 会保持原样。能力查询按以下候选顺序匹配，匹配结果只用于显示能力和价格：
 

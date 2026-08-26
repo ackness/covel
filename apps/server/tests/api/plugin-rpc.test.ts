@@ -2,7 +2,7 @@
  * POST /api/sessions/:id/plugin-rpc integration tests.
  */
 
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
   createMemoryMediaStore,
@@ -32,7 +32,11 @@ import { createEventBus } from "@covel/events";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import { sessionRoutes } from "../../src/routes/api/session.js";
 import { actionRoutes } from "../../src/routes/api/actions.js";
-import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "../../src/lib/session-lock.js";
+import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 import branchReplyHandler from "../../../../plugins/branch-reply/handler.js";
 
 type Env = {
@@ -51,6 +55,7 @@ function setup(): {
   executor: RpcExecutor;
   gate: RpcApprovalGate;
   pluginRegistry: PluginRegistry;
+  sessionLock: SessionLock;
 } {
   const store = createMemoryStore();
   const registry = createPluginRpcRegistry();
@@ -58,10 +63,7 @@ function setup(): {
   registry.registerFrameworkDefault("echo", async (payload) => ({
     echoed: payload,
   }));
-  const executor = createRpcExecutor({
-    registry,
-    loadHandler: async () => async (payload) => ({ pluginEcho: payload }),
-  });
+  const executor = createRpcExecutor({ registry });
   const gate = createRpcApprovalGate();
   const pluginRegistry = createPluginRegistry();
   const sessionLock = createInProcessSessionLock();
@@ -79,7 +81,15 @@ function setup(): {
     await next();
   });
   app.route("/api/sessions", pluginRpcRoutes);
-  return { app, store, registry, executor, gate, pluginRegistry };
+  return {
+    app,
+    store,
+    registry,
+    executor,
+    gate,
+    pluginRegistry,
+    sessionLock,
+  };
 }
 
 async function seedSession(
@@ -89,16 +99,42 @@ async function seedSession(
 ): Promise<void> {
   const now = new Date().toISOString();
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id,
     worldId: "cloudmere",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    completedPlayerTurns: 1,
+
     locale,
     activePlugins: [],
     createdAt: now,
     updatedAt: now,
   });
+}
+
+async function decideSessionApproval(
+  gate: RpcApprovalGate,
+  store: DataStore,
+  sessionId: string,
+  pluginId: string,
+  approvalId: string,
+) {
+  const session = await store.getSession(sessionId);
+  if (!session) throw new Error("expected session");
+  return gate.decide(
+    {
+      approvalId,
+      decision: "allow",
+      scope: "session",
+      decidedAt: new Date().toISOString(),
+    },
+    sessionApprovalScope(session, pluginId),
+  );
 }
 
 async function seedInteractionTemplate(
@@ -140,9 +176,10 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   let app: Hono;
   let store: DataStore;
   let registry: PluginRpcRegistry;
+  let sessionLock: SessionLock;
 
   beforeEach(async () => {
-    ({ app, store, registry } = setup());
+    ({ app, store, registry, sessionLock } = setup());
     await seedSession(store);
   });
 
@@ -215,12 +252,60 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(body.result).toEqual({ echoed: { hello: "world" } });
   });
 
-  it("dispatches a plugin-declared action via lazy loader", async () => {
-    registry.registerPluginAction(
+  it("rejects an action paused while it waits for the session lock", async () => {
+    let releaseHolder!: () => void;
+    let markHolderStarted!: () => void;
+    const holderStarted = new Promise<void>((resolve) => {
+      markHolderStarted = resolve;
+    });
+    const holderGate = new Promise<void>((resolve) => {
+      releaseHolder = resolve;
+    });
+    const holder = sessionLock.withLock("sess-rpc-1", async () => {
+      markHolderStarted();
+      await holderGate;
+    });
+    await holderStarted;
+
+    const originalGetSession = store.getSession.bind(store);
+    let markInitialRead!: () => void;
+    const initialRead = new Promise<void>((resolve) => {
+      markInitialRead = resolve;
+    });
+    const getSpy = vi
+      .spyOn(store, "getSession")
+      .mockImplementation(async (id) => {
+        const current = await originalGetSession(id);
+        markInitialRead();
+        return current;
+      });
+    const request = app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        pluginId: "framework",
+        action: "echo",
+        payload: { shouldNotRun: true },
+      }),
+    });
+    await initialRead;
+    await store.updateSession("sess-rpc-1", { status: "paused" });
+    releaseHolder();
+    await holder;
+
+    const res = await request;
+    getSpy.mockRestore();
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "session-not-active" });
+  });
+
+  it("dispatches an entry-registered plugin action", async () => {
+    registry.registerPluginHandler(
       "codex",
       "regenerate",
-      { handler: "./rpc/regenerate.js" },
-      "official",
+      async (payload) => ({ pluginEcho: payload }),
+      {},
+      "builtin",
     );
 
     const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
@@ -265,7 +350,17 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       name: "form-template",
       content: "Player name is {{name}}",
       order: 700,
-      pendingInput: { formId: "form-char-creation" },
+      pendingInput: [
+        {
+          interactionId: "form-char-creation",
+          type: "form",
+          title: "Character name",
+          fields: [
+            { type: "text", name: "name", label: "Name", required: true },
+          ],
+          submitLabel: "Continue",
+        },
+      ],
       createdAt: new Date().toISOString(),
     });
 
@@ -492,10 +587,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
   } {
     const store = createMemoryStore();
     const registry = createPluginRpcRegistry();
-    const executor = createRpcExecutor({
-      registry,
-      loadHandler: async () => async (payload) => ({ echoed: payload }),
-    });
+    const executor = createRpcExecutor({ registry });
     const gate = createRpcApprovalGate();
     let activated = false;
     let activateCount = 0;
@@ -567,12 +659,13 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
 
     const first = await call(app, "entry-action");
     const { approvalId } = (await first.json()) as { approvalId: string };
-    gate.decide({
+    await decideSessionApproval(
+      gate,
+      store,
+      "sess-rpc-1",
+      PLUGIN_ID,
       approvalId,
-      decision: "allow",
-      scope: "session",
-      decidedAt: new Date().toISOString(),
-    });
+    );
 
     const actionApproval = await call(app, "entry-action");
     expect(actionApproval.status).toBe(202);
@@ -581,12 +674,13 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
       pending: { action: string };
     };
     expect(secondPending.pending.action).toBe("entry-action");
-    gate.decide({
-      approvalId: secondPending.approvalId,
-      decision: "allow",
-      scope: "session",
-      decidedAt: new Date().toISOString(),
-    });
+    await decideSessionApproval(
+      gate,
+      store,
+      "sess-rpc-1",
+      PLUGIN_ID,
+      secondPending.approvalId,
+    );
 
     const third = await call(app, "entry-action");
     expect(third.status).toBe(200);
@@ -608,12 +702,13 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     // before any action-specific approval is created.
     const first = await call(app, "does-not-exist");
     const { approvalId } = (await first.json()) as { approvalId: string };
-    gate.decide({
+    await decideSessionApproval(
+      gate,
+      store,
+      "sess-rpc-1",
+      PLUGIN_ID,
       approvalId,
-      decision: "allow",
-      scope: "session",
-      decidedAt: new Date().toISOString(),
-    });
+    );
     const res = await call(app, "does-not-exist");
     expect(res.status).toBe(404);
     const body = (await res.json()) as { code?: string };
@@ -695,7 +790,48 @@ function makeFunctionEntry(args: {
   const loaded: LoadedRuntime = {
     manifest,
     promptTemplate: "",
-    handler: args.handler,
+    handler: async (ctx) => {
+      const raw = (await args.handler(ctx)) as unknown as Record<
+        string,
+        unknown
+      >;
+      if (
+        raw.outcome === "success" ||
+        raw.outcome === "failed" ||
+        raw.outcome === "skipped" ||
+        raw.outcome === "suspended"
+      ) {
+        return raw as never;
+      }
+      const {
+        events,
+        interactions,
+        pluginData,
+        assetGenerations,
+        notifications,
+        ui,
+        statePatches,
+        preGameDone,
+        ...value
+      } = raw;
+      const effects = {
+        ...(events ? { events } : {}),
+        ...(interactions ? { interactions } : {}),
+        ...(pluginData ? { pluginData } : {}),
+        ...(assetGenerations ? { assetGenerations } : {}),
+        ...(notifications ? { notifications } : {}),
+        ...(ui ? { ui } : {}),
+        ...(statePatches ? { statePatches } : {}),
+      };
+      return {
+        outcome: "success",
+        value: value as never,
+        ...(Object.keys(effects).length > 0
+          ? { effects: effects as never }
+          : {}),
+        ...(preGameDone === true ? { completion: "done" as const } : {}),
+      };
+    },
   };
 
   const parsed = {
@@ -763,6 +899,7 @@ interface RuntimeTestEnv {
   app: Hono;
   store: DataStore;
   pluginRegistry: PluginRegistry;
+  sessionLock: SessionLock;
 }
 
 function setupRuntimeTestEnv(args: {
@@ -787,10 +924,7 @@ function setupRuntimeTestEnv(args: {
   pluginRegistry.register(entry);
 
   const rpcRegistry = createPluginRpcRegistry();
-  const rpcExecutor = createRpcExecutor({
-    registry: rpcRegistry,
-    loadHandler: async () => async () => ({}),
-  });
+  const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
   const gate = createRpcApprovalGate();
   const eventBus = createEventBus(store);
   const sessionLock = createInProcessSessionLock();
@@ -850,11 +984,17 @@ async function seedRuntimeSession(
 ): Promise<void> {
   const now = new Date().toISOString();
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id: sessionId,
     worldId: "cloudmere",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    completedPlayerTurns: 1,
+
     locale: "zh-CN",
     activePlugins: [pluginId],
     createdAt: now,
@@ -886,6 +1026,70 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
   const SYNC_RUNTIME = "test-runtime-plug/sync-fn";
   const BG_RUNTIME = "test-runtime-plug/bg-fn";
   const SESSION_ID = "sess-rt-1";
+
+  async function expectPausedWhileQueued(
+    execution: "sync" | "background",
+    runtimeId: string,
+  ): Promise<void> {
+    const handler = vi.fn(async () => ({ ok: true }));
+    const env = setupRuntimeTestEnv({
+      pluginId: PLUGIN_ID,
+      runtimeId,
+      execution,
+      handler,
+    });
+    await seedRuntimeSession(env.store, PLUGIN_ID, SESSION_ID);
+
+    let releaseHolder!: () => void;
+    let markHolderStarted!: () => void;
+    const holderStarted = new Promise<void>((resolve) => {
+      markHolderStarted = resolve;
+    });
+    const holderGate = new Promise<void>((resolve) => {
+      releaseHolder = resolve;
+    });
+    const holder = env.sessionLock.withLock(SESSION_ID, async () => {
+      markHolderStarted();
+      await holderGate;
+    });
+    await holderStarted;
+
+    const originalGetSession = env.store.getSession.bind(env.store);
+    let markInitialRead!: () => void;
+    const initialRead = new Promise<void>((resolve) => {
+      markInitialRead = resolve;
+    });
+    const getSpy = vi
+      .spyOn(env.store, "getSession")
+      .mockImplementation(async (id) => {
+        const current = await originalGetSession(id);
+        markInitialRead();
+        return current;
+      });
+    const request = env.app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pluginId: PLUGIN_ID, runtimeId, payload: {} }),
+    });
+    await initialRead;
+    await env.store.updateSession(SESSION_ID, { status: "paused" });
+    releaseHolder();
+    await holder;
+
+    const res = await request;
+    getSpy.mockRestore();
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "session-not-active" });
+    expect(handler).not.toHaveBeenCalled();
+  }
+
+  it("rejects a sync runtime paused while waiting for its lock", async () => {
+    await expectPausedWhileQueued("sync", SYNC_RUNTIME);
+  });
+
+  it("rejects a background enqueue paused while waiting for its lock", async () => {
+    await expectPausedWhileQueued("background", BG_RUNTIME);
+  });
 
   it("runs a sync function runtime and returns 200 with runtimeResults", async () => {
     let handlerInvokedWith: Record<string, unknown> | undefined;
@@ -976,10 +1180,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     pluginRegistry.register(narratorEntry);
 
     const rpcRegistry = createPluginRpcRegistry();
-    const rpcExecutor = createRpcExecutor({
-      registry: rpcRegistry,
-      loadHandler: async () => async () => ({}),
-    });
+    const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
     const gate = createRpcApprovalGate();
     const eventBus = createEventBus(store);
     const sessionLock = createInProcessSessionLock();
@@ -1107,12 +1308,11 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       acceptedText: "Accepted branch text.",
     });
 
-    // Advance out of the Pre-Game band so a send_message schedules the
-    // main-loop narrator (stage narrative). /api/actions enforces band gating;
-    // without this the narrator would not run and no LLM call would be made.
+    // Advance to the playing band so send_message schedules the main-loop
+    // narrator (stage narrative).
     await store.updateSession(session.id, {
-      turnCount: 1,
-      preGameCompleted: ["pregame"],
+      phase: "playing",
+      completedPlayerTurns: 0,
       updatedAt: new Date().toISOString(),
     });
 
@@ -1727,12 +1927,13 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(firstBody.pending?.action).toBe("covel:plugin-server-code");
     expect(handlerCalls).toBe(0);
 
-    const serverCodeDecision = gate.decide({
-      approvalId: firstBody.approvalId!,
-      decision: "allow",
-      scope: "session",
-      decidedAt: new Date().toISOString(),
-    });
+    const serverCodeDecision = await decideSessionApproval(
+      gate,
+      store,
+      SESSION_ID,
+      PLUGIN_ID,
+      firstBody.approvalId!,
+    );
     expect(serverCodeDecision.ok).toBe(true);
 
     // Phase 2: the retry now asks for the exact `runtime:<name>` grant.
@@ -1755,12 +1956,13 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     expect(secondBody.pending?.action).toBe(`runtime:${SYNC_RUNTIME}`);
     expect(handlerCalls).toBe(0);
 
-    const runtimeDecision = gate.decide({
-      approvalId: secondBody.approvalId!,
-      decision: "allow",
-      scope: "session",
-      decidedAt: new Date().toISOString(),
-    });
+    const runtimeDecision = await decideSessionApproval(
+      gate,
+      store,
+      SESSION_ID,
+      PLUGIN_ID,
+      secondBody.approvalId!,
+    );
     expect(runtimeDecision.ok).toBe(true);
 
     // Both exact grants present — the runtime executes for the rest of the
@@ -1802,10 +2004,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     pluginRegistry.register(entry);
 
     const rpcRegistry = createPluginRpcRegistry();
-    const rpcExecutor = createRpcExecutor({
-      registry: rpcRegistry,
-      loadHandler: async () => async () => ({}),
-    });
+    const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
     const gate = createRpcApprovalGate();
     const eventBus = createEventBus(store);
     const sessionLock = createInProcessSessionLock();
@@ -1952,10 +2151,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     } as PluginRegistryEntry);
 
     const rpcRegistry = createPluginRpcRegistry();
-    const rpcExecutor = createRpcExecutor({
-      registry: rpcRegistry,
-      loadHandler: async () => async () => ({}),
-    });
+    const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
     const gate = createRpcApprovalGate();
     const eventBus = createEventBus(store);
     const sessionLock = createInProcessSessionLock();
@@ -2002,11 +2198,17 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
 
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: "cloudmere",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "zh-CN",
       activePlugins: [PLUGIN_ID],
       createdAt: now,
@@ -2141,10 +2343,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     } as PluginRegistryEntry);
 
     const rpcRegistry = createPluginRpcRegistry();
-    const rpcExecutor = createRpcExecutor({
-      registry: rpcRegistry,
-      loadHandler: async () => async () => ({}),
-    });
+    const rpcExecutor = createRpcExecutor({ registry: rpcRegistry });
     const gate = createRpcApprovalGate();
     const eventBus = createEventBus(store);
     const sessionLock = createInProcessSessionLock();
@@ -2199,11 +2398,17 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
   ): Promise<{ jobId: string }> {
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: "cloudmere",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "zh-CN",
       activePlugins: [PLUGIN_ID],
       createdAt: now,

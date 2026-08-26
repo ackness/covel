@@ -52,10 +52,10 @@ describe("matchPermissionRule", () => {
 
   it("third-party wildcard — third-party:* matches third-party source", () => {
     const rules: readonly PermissionRule[] = [
-      { pattern: "third-party:*", action: "ask" },
+      { pattern: "third-party:*", action: "deny" },
     ];
     const result = matchPermissionRule("covel_some_tool", "third-party", rules);
-    expect(result).toEqual({ pattern: "third-party:*", action: "ask" });
+    expect(result).toEqual({ pattern: "third-party:*", action: "deny" });
   });
 
   it("no match — builtin:* does not match third-party source", () => {
@@ -70,7 +70,7 @@ describe("matchPermissionRule", () => {
     const rules: readonly PermissionRule[] = [
       { pattern: "local:*", action: "deny" },
       { pattern: "local:*", action: "allow" },
-      { pattern: "covel_my_tool", action: "ask" },
+      { pattern: "covel_my_tool", action: "deny" },
     ];
     const result = matchPermissionRule("covel_my_tool", "local", rules);
     expect(result).toEqual({ pattern: "local:*", action: "deny" });
@@ -90,46 +90,43 @@ describe("createApprovalPipeline", () => {
     it("check: default allow-all", () => {
       const result = pipeline.check(makeRequest());
       expect(result).toEqual({
-        needsApproval: false,
-        autoDecision: "allow",
+        decision: "allow",
         reason: "default-allow-all",
       });
     });
   });
 
   describe("with custom rules", () => {
+    it("rejects unsupported ask rules during configuration", () => {
+      expect(() =>
+        createApprovalPipeline([
+          { pattern: "third-party:*", action: "ask" },
+        ] as unknown as readonly PermissionRule[]),
+      ).toThrow(/ask.*not supported/i);
+    });
+
     it("check: builtin allowed — no approval needed", () => {
-      const pipeline = createApprovalPipeline(undefined, [
+      const pipeline = createApprovalPipeline([
         { pattern: "builtin:*", action: "allow" },
-        { pattern: "third-party:*", action: "ask" },
+        { pattern: "third-party:*", action: "deny" },
       ]);
       const result = pipeline.check(makeRequest(), "builtin");
       expect(result).toEqual({
-        needsApproval: false,
-        autoDecision: "allow",
+        decision: "allow",
         reason: "rule-allow",
       });
     });
 
-    it("check: third-party asks — needs approval", () => {
-      const pipeline = createApprovalPipeline(undefined, [
+    it("check: third-party denied — execution is blocked", () => {
+      const pipeline = createApprovalPipeline([
         { pattern: "builtin:*", action: "allow" },
-        { pattern: "third-party:*", action: "ask" },
+        { pattern: "third-party:*", action: "deny" },
       ]);
       const result = pipeline.check(makeRequest(), "third-party");
       expect(result).toEqual({
-        needsApproval: true,
-        reason: "rule-ask",
+        decision: "deny",
+        reason: "rule-deny",
       });
-    });
-  });
-
-  describe("hasSessionAllow", () => {
-    it("returns false — community session approvals are not wired to persistence", () => {
-      const pipeline = createApprovalPipeline();
-      expect(
-        pipeline.hasSessionAllow("sess-1", "covel_test_rt_my_tool", "test"),
-      ).toBe(false);
     });
   });
 });

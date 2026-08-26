@@ -238,6 +238,23 @@ describe("createBootstrapMemorySystem", () => {
     const store = createMemoryStore();
     const sessionId = "session-ingest";
 
+    await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
+      id: sessionId,
+      worldId: null,
+      status: "active",
+      presetId: null,
+      activePlugins: [],
+      completedPlayerTurns: 0,
+
+      createdAt: new Date().toISOString(),
+    });
+
     // Lock an embedding model so the session has a vector target.
     const target = await store.ensureVectorModel!({
       provider: "test",

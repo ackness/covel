@@ -26,9 +26,13 @@ export async function listWorlds(): Promise<WorldRecord[]> {
   return res.items.map(mapWorldRecord);
 }
 
-export async function getWorld(id: string): Promise<WorldRecord> {
+export async function getWorld(
+  id: string,
+  options?: { silentErrors?: boolean },
+): Promise<WorldRecord> {
   const raw = await request<Record<string, unknown>>(
     `/api/worlds/${encodeURIComponent(id)}`,
+    options,
   );
   return mapWorldRecord(raw);
 }

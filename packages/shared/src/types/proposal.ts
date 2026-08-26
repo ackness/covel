@@ -74,6 +74,11 @@ export interface PluginDataBatchPayload {
   readonly items: readonly PluginDataPayload[];
 }
 
+export interface PluginDataDeletePayload {
+  readonly namespace: string;
+  readonly key: string;
+}
+
 export interface CharacterUpsertPayload {
   readonly id: string;
   readonly name: string;
@@ -81,6 +86,12 @@ export interface CharacterUpsertPayload {
   readonly description?: string;
   readonly fields?: unknown;
   readonly version?: number;
+  /**
+   * Version read by an update tool before it built this proposal. When set,
+   * `fields` is treated as a shallow patch and the commit handler rebases it
+   * onto the latest stored character, then increments the live version.
+   */
+  readonly expectedVersion?: number;
   readonly createdAt?: string;
   /**
    * Optional plugin-data mirror target. When provided, the commit handler
@@ -150,6 +161,7 @@ export interface ProposalPayloadMap {
   "asset.generate": AssetGeneratePayload;
   "plugin.data": PluginDataPayload;
   "plugin.data.batch": PluginDataBatchPayload;
+  "plugin.data.delete": PluginDataDeletePayload;
   "character.upsert": CharacterUpsertPayload;
   "working_memory.set": WorkingMemorySetPayload;
   "lorebook.upsert": LorebookUpsertPayload;
@@ -196,6 +208,7 @@ export const PROPOSAL_TYPES = [
   "asset.generate",
   "plugin.data",
   "plugin.data.batch",
+  "plugin.data.delete",
   "character.upsert",
   "working_memory.set",
   "lorebook.upsert",

@@ -1,6 +1,6 @@
 {
   "name": "@covel/events",
-  "version": "0.0.26",
+  "version": "0.0.27",
   "private": true,
   "type": "module",
   "exports": {
@@ -21,6 +21,6 @@
   },
   "devDependencies": {
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

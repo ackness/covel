@@ -7,7 +7,6 @@ import type {
   TurnResult,
 } from "@covel/shared";
 import { buildRuntimeOutputFromResult } from "./turn-runtime-helpers.js";
-import { toLegacyOrigin } from "./execution-context.js";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 
 export interface FinalizeTurnResultParams {
@@ -104,12 +103,9 @@ async function persistTurnResult(
     sessionId: input.sessionId,
     turnId: input.turnId,
     runtimeResults: turnResult.runtimeResults,
-    // Stamp the execution origin so turn accounting can exclude
-    // non-player executions (manual RPC / background follower / recursive)
-    // from `session.turnCount`, which drives UI turn display and the
-    // auto-snapshot cadence. Projected back to the legacy label so the
-    // persisted column stays byte-identical (`background` → `follower`).
-    origin: toLegacyOrigin(executionContext.origin),
+    // Persist the canonical execution origin. Turn accounting excludes every
+    // non-player execution through `ExecutionContext.countPolicy`.
+    origin: executionContext.origin,
     ...(input.parentTurnId ? { parentTurnId: input.parentTurnId } : {}),
     // Written before the commit runs, so it starts `pending`. The
     // commit-owning caller settles it — a row left `pending` is a crash, not

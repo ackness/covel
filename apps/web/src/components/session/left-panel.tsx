@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { History, KeyRound, Plus, Trash2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -85,7 +84,7 @@ export function LeftPanel({
         </h2>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="flex flex-col">
           {/* ── Current Session ── */}
           <div className="ui-panel-section border-b border-border space-y-2">
@@ -96,7 +95,7 @@ export function LeftPanel({
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${session ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`}
                 />
                 <Badge variant="secondary" className="ui-chip text-[10px]">
-                  {session.status} · turn {session.turnCount}
+                  {session.status} · turn {session.completedPlayerTurns}
                 </Badge>
               </div>
               <Button
@@ -140,7 +139,7 @@ export function LeftPanel({
                       >
                         <span className="block truncate">{s.id}</span>
                         <span className="text-[10px] text-muted-foreground">
-                          {s.status} · turn {s.turnCount} ·{" "}
+                          {s.status} · turn {s.completedPlayerTurns} ·{" "}
                           {new Date(s.createdAt).toLocaleString()}
                         </span>
                       </button>
@@ -177,6 +176,7 @@ export function LeftPanel({
               )}
             </h3>
             <PluginListPanel
+              key={session.id}
               packages={enabledPackages}
               loadErrors={pluginLoadErrors}
               sessionPlugins={sessionPlugins}
@@ -189,7 +189,7 @@ export function LeftPanel({
             />
           </div>
         </div>
-      </ScrollArea>
+      </div>
 
       {/* ── Bottom Actions (sticky) ── */}
       <div className="ui-panel-footer border-t border-border shrink-0 space-y-2">

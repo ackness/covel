@@ -31,14 +31,13 @@ export interface ScheduleResult {
 
 /**
  * Whether a setup runtime should run this turn, from its persistent mirror:
- * pending (or never-run, absent from the mirror and the legacy set) → yes;
+ * pending (or never-run, absent from the mirror) → yes;
  * blocked or done → no. Setup scheduling is governed by the ledger-based retry
  * budget (blocked), not turn cadence, so `shouldTrigger` is bypassed for them.
  */
 function setupRuntimePending(
   rt: RuntimeManifest,
   setupRuntimes: Readonly<Record<string, SetupRuntimeState>>,
-  preGameCompleted: readonly string[],
 ): boolean {
   const mirror = setupRuntimes[rt.name];
   if (mirror?.state === "blocked") return false;
@@ -47,22 +46,18 @@ function setupRuntimePending(
     // completion no longer satisfies the gate. Same version → stays done.
     return !isSetupDoneForVersion(mirror, rt.version);
   }
-  // No mirror: fall back to the legacy `preGameCompleted` signal.
-  if (preGameCompleted.includes(rt.name)) return false;
   return true;
 }
 
-/** A setup target counts as done from the frozen snapshot (mirror or legacy signal). */
+/** A setup target counts as done from the frozen setup mirror. */
 function isSetupTargetDone(
   target: RuntimeManifest,
   setupRuntimes: Readonly<Record<string, SetupRuntimeState>>,
-  preGameCompleted: readonly string[],
 ): boolean {
   const mirror = setupRuntimes[target.name];
-  if (mirror?.state === "done") {
-    return isSetupDoneForVersion(mirror, target.version);
-  }
-  return preGameCompleted.includes(target.name);
+  return Boolean(
+    mirror?.state === "done" && isSetupDoneForVersion(mirror, target.version),
+  );
 }
 
 /** One-shot diagnostics for unsatisfiable session gates (per session+runtime+target). */
@@ -82,7 +77,6 @@ function setupSessionGateSatisfied(
   rt: RuntimeManifest,
   activeSetupRuntimes: readonly RuntimeManifest[],
   setupRuntimes: Readonly<Record<string, SetupRuntimeState>>,
-  preGameCompleted: readonly string[],
   sessionId: string,
 ): boolean {
   const warnUnsatisfiable = (targetLabel: string): void => {
@@ -107,7 +101,7 @@ function setupSessionGateSatisfied(
         warnUnsatisfiable(`runtime "${need.runtime}"`);
         return false;
       }
-      if (!isSetupTargetDone(target, setupRuntimes, preGameCompleted)) {
+      if (!isSetupTargetDone(target, setupRuntimes)) {
         return false;
       }
     } else {
@@ -119,7 +113,7 @@ function setupSessionGateSatisfied(
         return false;
       }
       const doneCount = providers.filter((p) =>
-        isSetupTargetDone(p, setupRuntimes, preGameCompleted),
+        isSetupTargetDone(p, setupRuntimes),
       ).length;
       const satisfied =
         (need.cardinality ?? "one") === "all"
@@ -135,7 +129,6 @@ export function selectTriggeredRuntimes(args: {
   readonly activeRuntimes: readonly RuntimeManifest[];
   readonly manualRuntimeId: string | undefined;
   readonly messageHistory: readonly TurnMessageRecord[];
-  readonly preGameCompleted: readonly string[];
   readonly runtimeTriggerCounts: ReadonlyMap<string, number>;
   readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
   readonly sessionId: string;
@@ -147,7 +140,6 @@ export function selectTriggeredRuntimes(args: {
     activeRuntimes,
     manualRuntimeId,
     messageHistory,
-    preGameCompleted,
     runtimeTriggerCounts,
     setupRuntimes,
     sessionId,
@@ -177,12 +169,11 @@ export function selectTriggeredRuntimes(args: {
     // frozen snapshot.
     if (isSetupRuntime(rt)) {
       return (
-        setupRuntimePending(rt, setupRuntimes, preGameCompleted) &&
+        setupRuntimePending(rt, setupRuntimes) &&
         setupSessionGateSatisfied(
           rt,
           activeSetupRuntimes,
           setupRuntimes,
-          preGameCompleted,
           sessionId,
         )
       );
@@ -198,7 +189,6 @@ export function selectTriggeredRuntimes(args: {
       ),
       pendingEventTopics: [],
       isManualTrigger: false,
-      preGameCompleted,
     };
     return shouldTrigger(rt, triggerContext);
   });

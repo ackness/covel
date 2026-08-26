@@ -44,7 +44,7 @@ function NonMemoNarrativeMessageBody({
 }: NarrativeMessageBodyProps) {
   return (
     <div
-      className={`text-sm wrap-break-words w-full ${
+      className={`text-sm wrap-break-word w-full ${
         isUser
           ? "ui-message-player prose prose-sm max-w-[90%] md:max-w-[85%] border border-border p-4 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
           : isHiddenAssistantKind
@@ -83,7 +83,7 @@ export function SubmittedSelectionFooter({
       <span className="font-semibold not-italic">
         {t("interaction.playerSelected")}
       </span>
-      <span className="whitespace-pre-wrap break-words">{label}</span>
+      <span className="whitespace-pre-wrap wrap-break-word">{label}</span>
     </div>
   );
 }
@@ -110,12 +110,12 @@ export function SystemMessageLine({ msg }: { msg: StreamMessage }) {
       >
         {hasMore ? (
           expanded ? (
-            <ChevronDown className="w-3 h-3 mt-[3px] shrink-0 opacity-70" />
+            <ChevronDown className="w-3 h-3 mt-0.75 shrink-0 opacity-70" />
           ) : (
-            <ChevronRight className="w-3 h-3 mt-[3px] shrink-0 opacity-70" />
+            <ChevronRight className="w-3 h-3 mt-0.75 shrink-0 opacity-70" />
           )
         ) : (
-          <Settings2 className="w-3 h-3 mt-[3px] shrink-0 opacity-60" />
+          <Settings2 className="w-3 h-3 mt-0.75 shrink-0 opacity-60" />
         )}
         <span className="truncate">
           {msg.runtimeId && (
@@ -129,7 +129,7 @@ export function SystemMessageLine({ msg }: { msg: StreamMessage }) {
         </span>
       </button>
       {expanded && hasMore && (
-        <pre className="ml-4 pl-2 border-l border-border/60 text-[11px] whitespace-pre-wrap break-words text-muted-foreground/80">
+        <pre className="ml-4 pl-2 border-l border-border/60 text-[11px] whitespace-pre-wrap wrap-break-word text-muted-foreground/80">
           {content}
         </pre>
       )}

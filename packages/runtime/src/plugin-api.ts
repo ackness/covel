@@ -53,8 +53,8 @@ import type { RpcHandler } from "./rpc/rpc-registry.js";
  * (`withPendingProposals`) from tools/runtimes, or the session-scoped store
  * an RPC handler receives per dispatch.
  *
- * Builtin/official plugins receive the full `DataStore` at runtime (parity
- * with the legacy `tools.local` factory) because they implement framework
+ * Builtin plugins receive the full `DataStore` at runtime because they
+ * implement framework
  * primitives — but the published contract is this view, so third-party code
  * cannot depend on methods the community proxy denies.
  */

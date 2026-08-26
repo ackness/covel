@@ -24,7 +24,7 @@ export function ConnectionStatus() {
 
   return (
     <span
-      className="ui-chip ml-1 inline-flex items-center gap-1 text-[10px] border-transparent bg-[color-mix(in_oklab,var(--accent-warning)_14%,transparent)] text-[var(--accent-warning)]"
+      className="ui-chip ml-1 inline-flex items-center gap-1 text-[10px] border-transparent bg-[color-mix(in_oklab,var(--accent-warning)_14%,transparent)] text-(--accent-warning)"
       role="status"
       aria-live="polite"
     >

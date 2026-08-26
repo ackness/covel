@@ -2,8 +2,9 @@
  * Optional vector-search capability for stores that support it.
  *
  * This is intentionally NOT part of the core DataStore contract — not every
- * backend can implement ANN/brute-force vector search (IdbStore can't, for
- * example). Stores declare support by implementing this interface on top of
+ * backend needs to implement ANN/brute-force vector search; BrowserVault is
+ * intentionally outside this server-side capability. Stores declare support
+ * by implementing this interface on top of
  * DataStore; consumers check via `supportsVector()` before using it.
  *
  * Design notes
@@ -57,6 +58,14 @@ export interface VectorTarget {
  */
 export interface UpsertVectorInput {
   readonly sessionId: string;
+  /**
+   * Optional session-incarnation guard. When present, the backend rejects the
+   * write unless the current session row has this exact `createdAt` value.
+   * Callers that perform embedding work asynchronously should capture the
+   * value before starting that work so a delete/recreate of the same session
+   * id cannot receive a stale result.
+   */
+  readonly expectedSessionCreatedAt?: string;
   readonly pluginId: string;
   readonly namespace: string;
   readonly key: string;
@@ -80,6 +89,15 @@ export interface SearchVectorsInput {
   readonly pluginId?: string;
   /** Optional narrowing — only match rows with this namespace. */
   readonly namespace?: string;
+}
+
+/** Normalize the backend-independent top-k contract before issuing a query. */
+export function normalizeVectorTopK(topK: number | undefined): number {
+  const value = topK ?? 8;
+  if (!Number.isSafeInteger(value)) {
+    throw new RangeError("vector search topK must be a safe integer");
+  }
+  return value <= 0 ? 0 : value;
 }
 
 /**

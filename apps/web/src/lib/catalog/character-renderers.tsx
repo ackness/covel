@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
-import * as Icons from "lucide-react";
+import { IdCard, UserRound } from "lucide-react";
 import { formatDateTime, isRecordLike, toTextArray } from "./helpers.js";
 
 export { CharacterFieldsView } from "./character-fields-renderer.js";
@@ -79,7 +79,7 @@ function BlueprintChip({
       className={clsx(
         "ui-chip inline-flex max-w-full items-center px-1.5 py-0.5 text-[9px] leading-none border",
         tone === "primary" &&
-          "border-[var(--accent-primary)]/30 bg-[color-mix(in_oklab,var(--accent-primary)_10%,transparent)] text-[var(--accent-primary)]",
+          "border-(--accent-primary)/30 bg-[color-mix(in_oklab,var(--accent-primary)_10%,transparent)] text-(--accent-primary)",
         tone === "success" &&
           "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300",
         tone === "info" &&
@@ -125,7 +125,7 @@ export const CharacterBlueprintList: ComponentRenderer = ({ element }) => {
           >
             <div className="flex items-center justify-between gap-2 min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <Icons.IdCard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <IdCard className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <div className="truncate text-[13px] font-semibold leading-tight text-foreground">
                     {name}
@@ -269,7 +269,7 @@ export const SceneCastList: ComponentRenderer = ({ element }) => {
             data-tone="muted"
           >
             <div className="flex min-w-0 items-center gap-2">
-              <Icons.UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <UserRound className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate text-[13px] font-semibold text-foreground">
                 {name}
               </span>

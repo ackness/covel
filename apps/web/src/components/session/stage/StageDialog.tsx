@@ -97,7 +97,7 @@ export function StageDialog({
       className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-4 pb-4 md:px-8 md:pb-8"
       data-testid="stage-dialog"
     >
-      <div className="ui-stage-panel pointer-events-auto relative w-full max-w-3xl rounded-[var(--radius-card)]">
+      <div className="ui-stage-panel pointer-events-auto relative w-full max-w-3xl rounded-(--radius-card)">
         {inputMode ? (
           <div className="flex flex-col gap-2 p-4">
             <textarea
@@ -123,10 +123,10 @@ export function StageDialog({
             type="button"
             onClick={handleFrameClick}
             aria-label={t("stage.advanceLabel")}
-            className="flex w-full cursor-pointer flex-col gap-1.5 rounded-[var(--radius-card)] p-4 text-left transition-colors hover:bg-[color-mix(in_oklab,var(--color-foreground)_5%,transparent)]"
+            className="flex w-full cursor-pointer flex-col gap-1.5 rounded-(--radius-card) p-4 text-left transition-colors hover:bg-[color-mix(in_oklab,var(--color-foreground)_5%,transparent)]"
           >
             {speakerName && (
-              <span className="ui-stage-panel absolute -top-3.5 left-4 rounded-full border-[var(--accent-primary)] px-3.5 py-0.5 text-xs font-semibold text-[var(--accent-primary)]">
+              <span className="ui-stage-panel absolute -top-3.5 left-4 rounded-full border-(--accent-primary) px-3.5 py-0.5 text-xs font-semibold text-(--accent-primary)">
                 {speakerName}
               </span>
             )}

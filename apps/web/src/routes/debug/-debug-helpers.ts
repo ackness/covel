@@ -93,11 +93,74 @@ export const CATEGORY_STYLES: Record<
 export interface RuntimeInfo {
   runtimeId: string;
   pluginId: string;
+  stage?: string;
   label: string;
   status: "running" | "completed" | "failed";
   events: api.TraceEvent[];
   startedAt: string;
   completedAt?: string;
+}
+
+export function getDisplayType(event: api.TraceEvent): string {
+  if (event.diagnostic?.displayType) return event.diagnostic.displayType;
+  return event.type === "runtime.progress"
+    ? (event.payload.type as string) || event.type
+    : event.type;
+}
+
+/** Current trace payloads are flat; the fallback keeps old persisted traces readable. */
+export function getTraceData(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const legacy = payload.data;
+  return typeof legacy === "object" && legacy !== null && !Array.isArray(legacy)
+    ? { ...(legacy as Record<string, unknown>), ...payload }
+    : payload;
+}
+
+export function getTraceError(event: api.TraceEvent):
+  | {
+      message: string;
+      code?: string;
+      details?: unknown;
+    }
+  | undefined {
+  if (event.diagnostic?.error) return event.diagnostic.error;
+  const type = getDisplayType(event);
+  const data = getTraceData(event.payload);
+  const isFailure =
+    type.endsWith(".failed") ||
+    type === "error.occurred" ||
+    type === "proposal.failed" ||
+    (type === "llm.responded" && data.finishReason === "error");
+  if (!isFailure) return undefined;
+  const message = [data.error, data.message, data.reason, data.detail].find(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+  return {
+    message: message ?? type,
+    ...(typeof data.code === "string" ? { code: data.code } : {}),
+    ...(data.details != null ? { details: data.details } : {}),
+  };
+}
+
+/** Failures that determine the turn/runtime outcome, excluding recoverable attempts. */
+export function isTerminalTraceFailure(event: api.TraceEvent): boolean {
+  const type = getDisplayType(event);
+  return (
+    type === "runtime.failed" ||
+    type === "flow.failed" ||
+    type === "turn.failed" ||
+    type === "proposal.failed" ||
+    type === "error.occurred"
+  );
+}
+
+export function traceEventIdentity(event: api.TraceEvent): string {
+  return (
+    event.id ??
+    `${event.requestId}|${event.traceId}|${event.turnId}|${event.seq}|${event.type}|${event.timestamp}`
+  );
 }
 
 export interface FmtTimeOptions {
@@ -111,17 +174,22 @@ export function deriveRuntimesFromTurn(
   const map = new Map<string, RuntimeInfo>();
 
   for (const event of events) {
-    const payload = event.payload;
-    const runtimeId = (payload.runtimeId as string) || "";
+    const payload = getTraceData(event.payload);
+    const runtimeId =
+      event.diagnostic?.runtimeId || (payload.runtimeId as string) || "";
     if (!runtimeId) continue;
 
-    const pluginId = (payload.pluginId as string) || runtimeId;
-    const label = (payload.label as string) || pluginId;
+    const pluginId =
+      event.diagnostic?.pluginId || (payload.pluginId as string) || runtimeId;
+    const stage =
+      event.diagnostic?.stage || (payload.stage as string) || undefined;
+    const label = (payload.label as string) || runtimeId;
 
     if (!map.has(runtimeId)) {
       map.set(runtimeId, {
         runtimeId,
         pluginId,
+        ...(stage ? { stage } : {}),
         label,
         status: "running",
         events: [],
@@ -130,12 +198,14 @@ export function deriveRuntimesFromTurn(
     }
 
     const info = map.get(runtimeId)!;
+    if (!info.stage && stage) info.stage = stage;
     info.events.push(event);
 
-    if (event.type === "runtime.completed") {
+    const displayType = getDisplayType(event);
+    if (displayType === "runtime.completed") {
       info.status = "completed";
       info.completedAt = event.timestamp;
-    } else if (event.type === "runtime.failed") {
+    } else if (displayType === "runtime.failed") {
       info.status = "failed";
       info.completedAt = event.timestamp;
     }
@@ -191,10 +261,7 @@ export function aggregateDeltas(events: api.TraceEvent[]): api.TraceEvent[] {
 
   while (i < events.length) {
     const event = events[i];
-    const innerType =
-      event.type === "runtime.progress"
-        ? (event.payload.type as string) || event.type
-        : event.type;
+    const innerType = getDisplayType(event);
 
     if (innerType !== "message.delta") {
       result.push(event);
@@ -209,10 +276,7 @@ export function aggregateDeltas(events: api.TraceEvent[]): api.TraceEvent[] {
 
     while (j < events.length) {
       const next = events[j];
-      const nextType =
-        next.type === "runtime.progress"
-          ? (next.payload.type as string) || next.type
-          : next.type;
+      const nextType = getDisplayType(next);
       if (
         nextType !== "message.delta" ||
         (next.payload.runtimeId as string) !== runtimeId
@@ -226,6 +290,14 @@ export function aggregateDeltas(events: api.TraceEvent[]): api.TraceEvent[] {
 
     result.push({
       ...event,
+      ...(event.diagnostic
+        ? {
+            diagnostic: {
+              ...event.diagnostic,
+              displayType: "message.completed",
+            },
+          }
+        : {}),
       payload: {
         ...event.payload,
         type: "message.completed",
@@ -241,30 +313,39 @@ export function aggregateDeltas(events: api.TraceEvent[]): api.TraceEvent[] {
 }
 
 export function extractDetail(event: api.TraceEvent): string {
-  const payload = event.payload;
-  const innerType = (payload.type as string) || event.type;
+  const payload = getTraceData(event.payload);
+  const innerType = getDisplayType(event);
+  const error = getTraceError(event);
+  if (error) {
+    const location =
+      event.diagnostic?.runtimeId ||
+      (payload.runtimeId as string) ||
+      event.diagnostic?.operation ||
+      (payload.toolName as string) ||
+      "";
+    return `${location ? `${location} - ` : ""}${error.code ? `[${error.code}] ` : ""}${error.message}`;
+  }
 
   switch (innerType) {
     case "runtime.started":
       return `${payload.pluginId || ""}${payload.detail && payload.detail !== "[cached]" ? ` - ${payload.detail}` : ""}${payload.detail === "[cached]" ? " (cached)" : ""}`;
     case "runtime.completed":
       return (payload.pluginId as string) || "";
-    case "runtime.failed":
-      return `${payload.pluginId || ""} - ${payload.detail || "error"}`;
     case "llm.calling": {
-      const data = payload.data as Record<string, unknown> | undefined;
-      const msgCount = Array.isArray(data?.messages)
-        ? (data.messages as unknown[]).length
+      const msgCount = Array.isArray(payload.messages)
+        ? payload.messages.length
         : 0;
-      return `${payload.detail || ""} ${msgCount > 0 ? `(${msgCount} messages)` : ""}`.trim();
+      const target = [payload.provider, payload.model, payload.slot]
+        .filter(Boolean)
+        .join(" / ");
+      return `${target} ${msgCount > 0 ? `(${msgCount} messages)` : ""}`.trim();
     }
     case "llm.responded": {
-      const data = payload.data as Record<string, unknown> | undefined;
-      const text = (data?.text as string) || "";
-      const toolCalls = Array.isArray(data?.toolCalls)
-        ? (data.toolCalls as unknown[]).length
+      const text = (payload.text as string) || "";
+      const toolCalls = Array.isArray(payload.toolCalls)
+        ? payload.toolCalls.length
         : 0;
-      const usage = data?.usage as
+      const usage = payload.usage as
         { inputTokens?: number; outputTokens?: number } | undefined;
       const usageStr = usage
         ? ` [${usage.inputTokens ?? 0}->${usage.outputTokens ?? 0} tok]`
@@ -274,14 +355,13 @@ export function extractDetail(event: api.TraceEvent): string {
       return `${preview}${text.length > 80 ? "..." : ""}${usageStr}`;
     }
     case "tool.calling":
-      return `${payload.label || ""} ${(payload.detail as string) || ""}`.trim();
+      return `${payload.label || payload.toolName || ""} ${formatPreview(payload.arguments)}`.trim();
     case "tool.completed": {
-      const data = payload.data as Record<string, unknown> | undefined;
-      const result = data?.result;
+      const result = payload.result ?? payload.parsedResult;
       const resultStr =
         typeof result === "string" ? result : JSON.stringify(result ?? "");
       const preview = resultStr.slice(0, 80);
-      return `${payload.label || ""} -> ${preview}${resultStr.length > 80 ? "..." : ""}`;
+      return `${payload.label || payload.toolName || ""} -> ${preview}${resultStr.length > 80 ? "..." : ""}`;
     }
     case "message.delta":
       return `${payload.runtimeId || ""} +${String((payload.delta as string) || "").length} chars`;
@@ -308,7 +388,18 @@ export function extractDetail(event: api.TraceEvent): string {
         : "";
     case "flow.failed":
       return (payload.message as string) || "";
+    case "gateway.calling":
+      return `${payload.method || ""} (${payload.messageCount || 0} messages, ${payload.promptChars || 0} chars)`;
     default:
       return "";
   }
+}
+
+function formatPreview(value: unknown): string {
+  if (value == null) return "";
+  const text =
+    typeof value === "string"
+      ? value
+      : (JSON.stringify(value) ?? String(value));
+  return text.length > 80 ? `${text.slice(0, 80)}...` : text;
 }

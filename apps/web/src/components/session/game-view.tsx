@@ -103,7 +103,8 @@ export function GameView({ session }: GameViewProps) {
   // the backdrop shows the world hero image until the narrator's first
   // scene.set lands.
   const stageReady =
-    session.turnCount >= 1 || hasSubmittedForm(messages, submittedBlockIds);
+    session.phase === "playing" ||
+    hasSubmittedForm(messages, submittedBlockIds);
   const settings = useSettingsDialog(refreshSlots);
   // Publishes data-turn / data-session on <html> for theme CSS to hook into.
   useDocumentSessionState();
@@ -247,6 +248,7 @@ export function GameView({ session }: GameViewProps) {
         open={settings.open}
         onOpenChange={settings.onOpenChange}
         initialKey={settings.initialKey}
+        packages={packages}
       />
 
       <Dialog open={suspensionsOpen} onOpenChange={setSuspensionsOpen}>
@@ -402,6 +404,7 @@ export function GameView({ session }: GameViewProps) {
           {/* Messages */}
           {viewMode === "stage" && stageReady ? (
             <StageView
+              key={session.id}
               session={session}
               world={world}
               messages={messages}

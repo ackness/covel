@@ -353,6 +353,12 @@ export interface MemorySystemDeps {
    * When absent, the system stays keyword-only (every existing deployment).
    */
   readonly embed?: import("./vector-common.js").EmbedFn;
+  /**
+   * Optional cross-process serialization for a complete vector-ingestion
+   * sweep. Production PostgreSQL deployments inject an advisory-lock runner;
+   * local deployments rely on the ingestor's in-process single-flight map.
+   */
+  readonly runIngestExclusive?: import("./vector-ingest.js").RunIngestExclusive;
 }
 
 /**

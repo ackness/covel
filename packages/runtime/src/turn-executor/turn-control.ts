@@ -21,11 +21,58 @@ export interface TurnControl {
    */
   readonly signal?: AbortSignal;
   /**
+   * Internal execution cancellation. Parent runtime deadlines use this signal
+   * to stop nested work without masquerading as a player-requested abort.
+   */
+  readonly executionSignal?: AbortSignal;
+  /**
    * Drain queued player interjections. Story-output runtimes call this
    * before each LLM step and merge the messages into the live transcript;
    * plugin runtimes never see steering.
    */
   readonly drainSteering?: () => readonly string[];
+}
+
+export function combineAbortSignals(
+  first: AbortSignal | undefined,
+  second: AbortSignal | undefined,
+): AbortSignal | undefined {
+  if (!first) return second;
+  if (!second || first === second) return first;
+  return AbortSignal.any([first, second]);
+}
+
+/** Signal that all in-flight execution work must observe. */
+export function getTurnExecutionSignal(
+  control: TurnControl | undefined,
+): AbortSignal | undefined {
+  return combineAbortSignals(control?.signal, control?.executionSignal);
+}
+
+/** True for either a player abort or an internal parent/deadline abort. */
+export function isTurnExecutionAborted(
+  control: TurnControl | undefined,
+): boolean {
+  return (
+    control?.signal?.aborted === true ||
+    control?.executionSignal?.aborted === true
+  );
+}
+
+/** Preserve the public player-abort error while surfacing internal reasons. */
+export function throwIfTurnExecutionAborted(
+  control: TurnControl | undefined,
+  context: string,
+): void {
+  if (control?.signal?.aborted) {
+    throw new TurnAbortedError(`turn aborted by player during ${context}`);
+  }
+  if (control?.executionSignal?.aborted) {
+    const reason = control.executionSignal.reason;
+    throw reason instanceof Error
+      ? reason
+      : new Error(`turn execution aborted during ${context}`);
+  }
 }
 
 /** Thrown when a player abort interrupts an LLM call or the agent loop. */

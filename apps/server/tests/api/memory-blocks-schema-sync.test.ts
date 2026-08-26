@@ -70,7 +70,9 @@ describe("memory plugin memoryBlocks <-> DEFAULT_CORE_MEMORY_BLOCKS sync", () =>
     const parsed = parsePluginMd(await readFile(abs, "utf8"), abs);
     const declared = parsed.manifest.memoryBlocks;
     if (declared && declared.length > 0) {
-      expect(normalize(declared)).toEqual(normalize(DEFAULT_CORE_MEMORY_BLOCKS));
+      expect(normalize(declared)).toEqual(
+        normalize(DEFAULT_CORE_MEMORY_BLOCKS),
+      );
     }
   });
 });

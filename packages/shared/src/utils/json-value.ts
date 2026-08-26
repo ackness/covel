@@ -43,6 +43,10 @@ function walk(value: unknown, path: string, seen: Set<object>): void {
   if (Array.isArray(obj)) {
     obj.forEach((v, i) => walk(v, `${path}[${i}]`, seen));
   } else {
+    const prototype = Object.getPrototypeOf(obj);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error(`${path} is not a plain JSON object`);
+    }
     for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
       walk(v, `${path}.${k}`, seen);
     }

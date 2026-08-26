@@ -80,7 +80,7 @@ export function TokenControl({
   return (
     // Deliberately not `.ui-band`: that atom is display:block and paints an
     // accent bar per row, which reads as noise across 45 stacked controls.
-    <div className="flex items-center justify-between gap-4 border-b border-[var(--rule-color)] py-2 last:border-b-0">
+    <div className="flex items-center justify-between gap-4 border-b border-(--rule-color) py-2 last:border-b-0">
       <div className="min-w-0 flex-1 space-y-0.5">
         <div className="flex items-center gap-1.5">
           {override !== null && (
@@ -162,7 +162,7 @@ function TokenInput({ spec, value, onPreview, onReset }: TokenInputProps) {
 }
 
 const FIELD_CLASS =
-  "border border-[var(--rule-color)] bg-[var(--surface-page)] px-2 py-1 text-[11px] font-mono outline-none focus:ring-1 focus:ring-[var(--accent-primary)] rounded-[var(--radius-control)]";
+  "border border-(--rule-color) bg-(--surface-page) px-2 py-1 text-[11px] font-mono outline-none focus:ring-1 focus:ring-(--accent-primary) rounded-(--radius-control)";
 
 function ColorInput({
   spec,
@@ -190,7 +190,7 @@ function ColorInput({
         value={swatch}
         onChange={(event) => onPreview(event.target.value)}
         aria-label={label}
-        className="h-6 w-8 cursor-pointer border border-[var(--rule-color)] bg-transparent p-0.5 rounded-[var(--radius-control)]"
+        className="h-6 w-8 cursor-pointer border border-(--rule-color) bg-transparent p-0.5 rounded-(--radius-control)"
       />
       <input
         type="text"
@@ -204,7 +204,7 @@ function ColorInput({
           if (isValidCssColor(event.target.value))
             onPreview(event.target.value);
         }}
-        className={`${FIELD_CLASS} w-40 ${valid ? "" : "text-[var(--accent-danger)]"}`}
+        className={`${FIELD_CLASS} w-40 ${valid ? "" : "text-(--accent-danger)"}`}
       />
     </div>
   );
@@ -240,7 +240,7 @@ function LengthInput({
         onChange={(event) =>
           onPreview(formatLength(Number(event.target.value), unit))
         }
-        className="w-28 accent-[var(--accent-primary)]"
+        className="w-28 accent-(--accent-primary)"
       />
       <input
         type="text"
@@ -277,7 +277,7 @@ function NumberInput({
         step={step}
         value={amount}
         onChange={(event) => onPreview(event.target.value)}
-        className="w-28 accent-[var(--accent-primary)]"
+        className="w-28 accent-(--accent-primary)"
       />
       <span className={`${FIELD_CLASS} w-20 text-center tabular-nums`}>
         {Number(amount.toFixed(3))}

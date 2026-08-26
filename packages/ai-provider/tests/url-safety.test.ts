@@ -162,4 +162,15 @@ describe("buildProviderUrl", () => {
       buildProviderUrl("https://api.openai.com///", "/chat/completions"),
     ).toBe("https://api.openai.com/v1/chat/completions");
   });
+
+  it("dedupes a provider /api/v1 prefix present in both base and path", () => {
+    expect(
+      buildProviderUrl(
+        "https://workspace.dashscope.example/api/v1",
+        "/api/v1/services/aigc/image-generation/generation",
+      ),
+    ).toBe(
+      "https://workspace.dashscope.example/api/v1/services/aigc/image-generation/generation",
+    );
+  });
 });

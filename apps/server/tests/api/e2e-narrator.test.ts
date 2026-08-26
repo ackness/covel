@@ -10,8 +10,8 @@
  *
  * `/api/actions` is the single turn-execution entrypoint (the old non-streaming
  * `POST /:id/turn` route was removed); a send_message only schedules the
- * main-loop narrator once the session is out of the Pre-Game band, so each test
- * advances `turnCount`/`preGameCompleted` first.
+ * main-loop narrator once the session is in the playing band, so each test
+ * settles the current setup mirror first.
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
@@ -108,22 +108,27 @@ describe("E2E: Narrator game flow", () => {
   });
 
   async function markPreGameComplete(sessionId: string) {
-    // Put the session genuinely into the playing band. Setting only
-    // preGameCompleted / turnCount (the pre-redesign shortcut) left phase at
-    // `setup`, so the send_message turn scheduled nothing and the narrator only
-    // appeared via the same-batch main-loop follow-up — which was removed in the
-    // scheduling redesign (Step 2). The main-loop band flips on `phase`, so this
-    // helper must set it for the narrator to run on the send_message turn.
+    const session = await store.getSession(sessionId);
+    if (!session) throw new Error("expected session");
+    const now = new Date().toISOString();
+    const setupRuntimes = Object.fromEntries(
+      Object.entries(session.setupRuntimes).map(([runtimeId, state]) => [
+        runtimeId,
+        {
+          state: "done" as const,
+          resolution: "completed" as const,
+          generation: state.generation,
+          attempts: Math.max(1, state.attempts),
+          completedAt: now,
+          pluginVersion: state.pluginVersion,
+        },
+      ]),
+    );
     await store.updateSession(sessionId, {
-      preGameCompleted: [
-        "pregame",
-        "world-init/schema-gen",
-        "char-creator/player-init",
-      ],
-      turnCount: 1,
       phase: "playing",
-      completedPlayerTurns: 1,
-      updatedAt: new Date().toISOString(),
+      completedPlayerTurns: 0,
+      setupRuntimes,
+      updatedAt: now,
     });
   }
 
@@ -139,11 +144,12 @@ describe("E2E: Narrator game flow", () => {
     const session = (await startRes.json()) as {
       id: string;
       status: string;
-      turnCount: number;
+      phase: "setup" | "playing";
+      completedPlayerTurns: number;
     };
     expect(session.id).toBeDefined();
     expect(session.status).toBe("active");
-    expect(session.turnCount).toBe(0);
+    expect(session.completedPlayerTurns).toBe(0);
 
     const sessionId = session.id;
 

@@ -207,7 +207,7 @@ function canReplaceProtectedPlugin(
 ): boolean {
   if (!sourceEntry || !targetEntry) return false;
   const trust = getPluginTrustInfo(sourceEntry.id, sourceEntry.source);
-  if (trust.source !== "builtin" && trust.source !== "official") return false;
+  if (trust.source !== "builtin") return false;
 
   const sourceProvides = new Set(relationPluginIds(sourceEntry, "provides"));
   if (sourceProvides.size === 0) return false;

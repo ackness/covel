@@ -26,6 +26,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { isEnvTruthy } from "@covel/shared";
 import { setupServerLogFile } from "./server-log-tee.js";
 import { parseEnvLines } from "./lib/env-file.js";
 
@@ -93,7 +94,7 @@ export function bootstrap(): BootstrapSummary {
       skipReason: "production",
     };
   }
-  if (process.env.COVEL_DESKTOP_REST === "1") {
+  if (isEnvTruthy("COVEL_DESKTOP_REST")) {
     return {
       applied: false,
       setVars: [],

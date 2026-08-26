@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge.js";
 import i18n from "@/i18n";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
 import type * as api from "@/services/api.js";
 import { fmtTime } from "./-debug-helpers.js";
 
@@ -133,10 +134,6 @@ export function PluginContractsPanel({
               <DiscoveryMetric
                 label={t("debugger.discovery.extension", "extension")}
                 values={[
-                  t("debugger.discovery.rpc", {
-                    count: plugin.rpc?.length ?? 0,
-                    defaultValue: "{{count}} rpc",
-                  }),
                   t("debugger.discovery.ui", {
                     count: uiCount,
                     defaultValue: "{{count}} ui",
@@ -230,15 +227,19 @@ export function DataSection({
   title,
   icon,
   children,
+  defaultExpanded = true,
 }: {
   title: string;
   icon: ReactNode;
   children: ReactNode;
+  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   return (
     <div className="border border-border">
       <button
+        type="button"
+        aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
         className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground ui-rail"
       >
@@ -310,26 +311,5 @@ function stringArray(value: unknown): string[] {
 }
 
 function displayText(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
-  const record = value as Record<string, unknown>;
-  const locale = i18n.language || "zh-CN";
-  for (const key of [
-    locale,
-    locale.split("-")[0],
-    "zh-CN",
-    "zh",
-    "en-US",
-    "en",
-  ]) {
-    const candidate = record[key];
-    if (typeof candidate === "string" && candidate.length > 0) {
-      return candidate;
-    }
-  }
-  const fallback = Object.values(record).find(
-    (candidate): candidate is string =>
-      typeof candidate === "string" && candidate.length > 0,
-  );
-  return fallback ?? "";
+  return resolveDisplayText(value, i18n.language || "zh-CN");
 }

@@ -90,6 +90,20 @@ function commitCharacterProposals(
   for (const p of pending) {
     if (p.type !== "character.upsert") continue;
     const pl = p.payload;
+    const live =
+      pl.expectedVersion === undefined
+        ? undefined
+        : store.characters.find((character) => character.id === pl.id);
+    const liveFields =
+      live?.fields &&
+      typeof live.fields === "object" &&
+      !Array.isArray(live.fields)
+        ? (live.fields as Record<string, unknown>)
+        : {};
+    const patch =
+      pl.fields && typeof pl.fields === "object" && !Array.isArray(pl.fields)
+        ? (pl.fields as Record<string, unknown>)
+        : {};
     // Use the proposal's logical timestamp for updatedAt so a sequence of
     // buffered writes keeps a deterministic order in tests (the real commit
     // handler stamps commit-time now; ordering among same-turn writes is a
@@ -98,12 +112,12 @@ function commitCharacterProposals(
     store.upsertCharacter({
       id: pl.id,
       sessionId: p.sessionId,
-      name: pl.name,
-      type: pl.type ?? "npc",
-      description: pl.description,
-      fields: pl.fields,
-      version: pl.version ?? 1,
-      createdAt: pl.createdAt ?? ts,
+      name: live?.name ?? pl.name,
+      type: live?.type ?? pl.type ?? "npc",
+      description: pl.description ?? live?.description,
+      fields: live ? { ...liveFields, ...patch } : pl.fields,
+      version: live ? live.version + 1 : (pl.version ?? 1),
+      createdAt: live?.createdAt ?? pl.createdAt ?? ts,
       updatedAt: ts,
     });
     const mirrors = [
@@ -119,12 +133,12 @@ function commitCharacterProposals(
         key: pl.id,
         value: {
           id: pl.id,
-          name: pl.name,
-          type: pl.type ?? "npc",
-          description: pl.description,
-          fields: pl.fields,
-          version: pl.version ?? 1,
-          createdAt: pl.createdAt ?? ts,
+          name: live?.name ?? pl.name,
+          type: live?.type ?? pl.type ?? "npc",
+          description: pl.description ?? live?.description,
+          fields: live ? { ...liveFields, ...patch } : pl.fields,
+          version: live ? live.version + 1 : (pl.version ?? 1),
+          createdAt: live?.createdAt ?? pl.createdAt ?? ts,
           updatedAt: ts,
         },
         createdAt: ts,

@@ -1,4 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import type {
@@ -6,7 +12,10 @@ import type {
   ProviderModelProfile,
   ReasoningEffortProfile,
 } from "@/services/api.js";
-import { parseNumericParameterOverride } from "../LlmAdvancedPane.js";
+import {
+  LlmAdvancedPane,
+  parseNumericParameterOverride,
+} from "../LlmAdvancedPane.js";
 import { ProviderDetails } from "../llm-provider-details.js";
 import {
   clearChangedSlotReasoningEfforts,
@@ -15,6 +24,29 @@ import {
 
 vi.mock("@/components/shared/ping-button.js", () => ({
   PingButton: () => null,
+}));
+
+const apiMocks = vi.hoisted(() => ({
+  getParamOverrides: vi.fn(),
+  getProviderProfiles: vi.fn(),
+  getSlotConfig: vi.fn(),
+  lookupModelCapabilityDetails: vi.fn(),
+  setParamOverrides: vi.fn(),
+}));
+
+vi.mock("@/stores/session-store.js", () => ({
+  useSession: () => ({
+    state: {
+      llmConfig: {
+        configured: true,
+        slots: {
+          story: { provider: "openai", model: "story-model" },
+          fast: { provider: "deepseek", model: "fast-model" },
+        },
+      },
+      presets: [],
+    },
+  }),
 }));
 
 vi.mock("../LlmKeysPane.js", () => ({
@@ -27,8 +59,12 @@ vi.mock("@/services/api.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/services/api.js")>();
   return {
     ...original,
+    getParamOverrides: apiMocks.getParamOverrides,
+    getProviderProfiles: apiMocks.getProviderProfiles,
+    getSlotConfig: apiMocks.getSlotConfig,
     getApiKey: vi.fn(() => ""),
-    lookupModelCapabilityDetails: vi.fn(() => new Promise(() => undefined)),
+    lookupModelCapabilityDetails: apiMocks.lookupModelCapabilityDetails,
+    setParamOverrides: apiMocks.setParamOverrides,
   };
 });
 
@@ -42,6 +78,13 @@ const profile = (options: ReasoningEffortProfile["options"]) =>
 describe("LLM settings regressions", () => {
   beforeEach(async () => {
     await i18n.changeLanguage("en-US");
+    apiMocks.getParamOverrides.mockReset().mockReturnValue({});
+    apiMocks.getProviderProfiles.mockReset().mockReturnValue([]);
+    apiMocks.getSlotConfig.mockReset().mockReturnValue({});
+    apiMocks.lookupModelCapabilityDetails
+      .mockReset()
+      .mockImplementation(() => new Promise(() => undefined));
+    apiMocks.setParamOverrides.mockReset();
   });
 
   it("removes a reasoning override that the newly bound model cannot use", () => {
@@ -98,6 +141,72 @@ describe("LLM settings regressions", () => {
     expect(parseNumericParameterOverride("5", -2, 2)).toBe(2);
     expect(parseNumericParameterOverride("-5", -2, 2)).toBe(-2);
     expect(parseNumericParameterOverride("invalid", -2, 2)).toBeUndefined();
+  });
+
+  it("waits for the selected target profile before pruning its override", async () => {
+    apiMocks.getParamOverrides.mockReturnValue({
+      fast: { reasoningEffort: "max" },
+    });
+    let resolveFastLookup: ((value: unknown) => void) | undefined;
+    apiMocks.lookupModelCapabilityDetails.mockImplementation((model) => {
+      if (model === "story-model") {
+        return Promise.resolve({
+          reasoning: profile([{ value: "high" }]),
+        });
+      }
+      return new Promise((resolve) => {
+        resolveFastLookup = resolve;
+      });
+    });
+
+    render(<LlmAdvancedPane />);
+    await waitFor(() =>
+      expect(apiMocks.lookupModelCapabilityDetails).toHaveBeenCalledWith(
+        "story-model",
+        "openai",
+        undefined,
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Reasoning effort") as HTMLSelectElement)
+          .disabled,
+      ).toBe(false),
+    );
+
+    fireEvent.change(screen.getByLabelText("Select Slot"), {
+      target: { value: "fast" },
+    });
+
+    expect(apiMocks.setParamOverrides).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveFastLookup?.({
+        reasoning: profile([{ value: "max" }]),
+      });
+    });
+    expect(apiMocks.setParamOverrides).not.toHaveBeenCalled();
+  });
+
+  it("preserves a reasoning override when capability lookup fails", async () => {
+    apiMocks.getParamOverrides.mockReturnValue({
+      story: { reasoningEffort: "max" },
+    });
+    apiMocks.lookupModelCapabilityDetails.mockRejectedValue(
+      new Error("lookup unavailable"),
+    );
+
+    render(<LlmAdvancedPane />);
+
+    await waitFor(() =>
+      expect(apiMocks.lookupModelCapabilityDetails).toHaveBeenCalledWith(
+        "story-model",
+        "openai",
+        undefined,
+      ),
+    );
+    await act(async () => undefined);
+    expect(apiMocks.setParamOverrides).not.toHaveBeenCalled();
   });
 
   it("keeps the base URL as a draft and commits it once on blur", () => {

@@ -14,7 +14,7 @@ import type {
   SnapshotTraceEvent,
   TimeCursor,
 } from "@covel/shared";
-import { deriveLegacyClockForSession } from "@covel/shared";
+import type { SetupRuntimeState } from "@covel/shared";
 
 /**
  * Restore windows: the snapshot ships the most-recent slice, not the whole
@@ -31,17 +31,17 @@ const SNAPSHOT_TRACE_EVENT_LIMIT = 600;
  * Minimal store interface for snapshot building.
  * Uses only the read methods it needs.
  *
- * Shape mirrors SessionRecord: `status` + `turnCount` + `preGameCompleted`
- * describe the session lifecycle and scheduling state.
+ * Shape mirrors the authoritative session lifecycle clock.
  */
 export interface SnapshotStore {
   getSession(id: string): Promise<{
     id: string;
     worldId?: string;
     status: string;
-    turnCount: number;
-    preGameCompleted?: readonly string[];
-    locale?: string;
+    phase: "setup" | "playing";
+    completedPlayerTurns: number;
+    setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
+    locale: string;
   } | null>;
   listMessagesPage(
     sessionId: string,
@@ -171,7 +171,9 @@ export async function buildSessionSnapshot(
     session: {
       id: session.id,
       worldId: session.worldId,
-      turnCount: deriveLegacyClockForSession(session).turnCount,
+      phase: session.phase,
+      completedPlayerTurns: session.completedPlayerTurns,
+      setupRuntimes: session.setupRuntimes,
       locale: session.locale,
     },
     messages,

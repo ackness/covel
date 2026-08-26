@@ -13,16 +13,7 @@ export function shouldTrigger(
 ): boolean {
   const trigger = manifest.trigger;
   const type = trigger?.type ?? "auto";
-  // Logical-turn number N (= completedPlayerTurns + 1). Production selection
-  // always supplies it; fall back to the raw player-message count when a caller
-  // omits it (legacy test builders) so behaviour degrades to the old reading.
-  const logicalTurn = context.logicalTurn ?? context.turnNumber;
-
-  // Pre-Game completion gate: skip runtimes already marked done for the session.
-  // Main-loop runtimes never enter preGameCompleted, so this is a no-op for them.
-  if (context.preGameCompleted.includes(manifest.name)) {
-    return false;
-  }
+  const logicalTurn = context.logicalTurn;
 
   // startTurn — "from the N-th main-loop logical turn". Gated on `logicalTurn`
   // (completed player turns + 1), which counts only committed main-loop turns,

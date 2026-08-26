@@ -134,7 +134,7 @@ export function PluginPackageRow({
 
   return (
     <div
-      className={`border px-3 py-2.5 transition-colors ${
+      className={`prep-plugin-row border px-3 py-2.5 transition-colors ${
         isSelected
           ? "border-primary/40 bg-primary/5"
           : "border-border bg-muted/20 opacity-60"
@@ -201,7 +201,7 @@ export function PluginPackageRow({
                   event.target.value,
                 )
               }
-              className="min-w-[100px] flex-shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[240px]"
+              className="min-w-25 shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-60"
               aria-label={t(
                 "plugin.modelBindingAria",
                 "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
@@ -300,7 +300,7 @@ export function PluginPackageRow({
             <select
               value={providerSlotOverride ?? ""}
               onChange={(event) => handleProviderSlotChange(event.target.value)}
-              className="ml-auto min-w-[120px] flex-shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[280px]"
+              className="ml-auto min-w-30 shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-70"
               aria-label={t(
                 "plugin.providerSlotOverrideAria",
                 "Override which configured slot this plugin's provider uses. Leave at default unless you have a reason to change it.",
@@ -346,7 +346,7 @@ export function PluginPackageRow({
                 >
                   <Cpu className="w-3 h-3 shrink-0" />
                   <span
-                    className="font-mono truncate min-w-0 max-w-[240px]"
+                    className="font-mono truncate min-w-0 max-w-60"
                     title={binding.qualifiedId}
                   >
                     {binding.qualifiedId}
@@ -384,7 +384,7 @@ export function PluginPackageRow({
                           event.target.value,
                         )
                       }
-                      className="ml-auto min-w-[120px] flex-shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-[280px]"
+                      className="ml-auto min-w-30 shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-70"
                       aria-label={t(
                         "plugin.modelBindingAria",
                         "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",

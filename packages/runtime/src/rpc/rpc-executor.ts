@@ -1,9 +1,8 @@
 /**
  * Plugin RPC dispatcher.
  *
- * Resolves an `{ pluginId, action?, runtimeId? }` request against the
- * registry, loads the handler module if needed, and runs it with the
- * supplied context, and returns the handler's result synchronously.
+ * Resolves an `{ pluginId, action }` request against the registry, runs its
+ * inline handler, and returns the result synchronously.
  *
  * Dispatch is always synchronous. Long-running work goes through a background
  * job whose progress reaches the UI as `plugin-data.changed` SSE events.
@@ -19,7 +18,6 @@
 
 import type {
   PluginRpcRegistry,
-  RpcHandler,
   RpcHandlerContext,
   RpcRegistryEntry,
 } from "./rpc-registry.js";
@@ -37,26 +35,12 @@ export interface RpcDispatchResult {
 
 export interface RpcDispatchDeps {
   readonly registry: PluginRpcRegistry;
-  /**
-   * Loads a plugin RPC handler module from disk. The caller (server bootstrap)
-   * supplies this so the runtime package stays free of fs imports. The path
-   * is the `handlerPath` recorded in the registry entry, resolved against
-   * the plugin's root directory.
-   */
-  readonly loadHandler: (
-    pluginId: string,
-    handlerPath: string,
-  ) => Promise<RpcHandler>;
 }
 
 export class RpcDispatchError extends Error {
   constructor(
     message: string,
-    public readonly code:
-      | "unknown-plugin"
-      | "unknown-action"
-      | "handler-load-failed"
-      | "handler-threw",
+    public readonly code: "unknown-plugin" | "unknown-action" | "handler-threw",
   ) {
     super(message);
     this.name = "RpcDispatchError";
@@ -64,37 +48,6 @@ export class RpcDispatchError extends Error {
 }
 
 export function createRpcExecutor(deps: RpcDispatchDeps) {
-  const handlerCache = new Map<string, RpcHandler>();
-
-  async function resolveHandler(entry: RpcRegistryEntry): Promise<RpcHandler> {
-    // Framework defaults inline the handler.
-    if (entry.handler) return entry.handler;
-
-    if (!entry.pluginId || !entry.handlerPath) {
-      throw new RpcDispatchError(
-        `[plugin-rpc] entry "${entry.action}" has neither inline handler nor handlerPath`,
-        "handler-load-failed",
-      );
-    }
-
-    const cacheKey = `${entry.pluginId}::${entry.handlerPath}`;
-    const cached = handlerCache.get(cacheKey);
-    if (cached) return cached;
-
-    try {
-      const handler = await deps.loadHandler(entry.pluginId, entry.handlerPath);
-      handlerCache.set(cacheKey, handler);
-      return handler;
-    } catch (err) {
-      throw new RpcDispatchError(
-        `[plugin-rpc] failed to load handler ${entry.handlerPath} for plugin ${entry.pluginId}: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-        "handler-load-failed",
-      );
-    }
-  }
-
   function lookupEntry(pluginId: string, action: string): RpcRegistryEntry {
     // Plugin-declared takes precedence over framework defaults so plugins
     // can override built-ins for their own pluginId namespace.
@@ -117,8 +70,6 @@ export function createRpcExecutor(deps: RpcDispatchDeps) {
       context: Omit<RpcHandlerContext, "pluginId" | "action" | "runtimeId">,
     ): Promise<RpcDispatchResult> {
       const entry = lookupEntry(req.pluginId, req.action);
-      const handler = await resolveHandler(entry);
-
       const fullContext: RpcHandlerContext = {
         ...context,
         pluginId: req.pluginId,
@@ -126,7 +77,7 @@ export function createRpcExecutor(deps: RpcDispatchDeps) {
       };
 
       try {
-        const result = await handler(req.payload, fullContext);
+        const result = await entry.handler(req.payload, fullContext);
         return { entry, result };
       } catch (err) {
         if (err instanceof RpcDispatchError) throw err;

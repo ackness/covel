@@ -10,7 +10,6 @@
 
 import { execSync } from "node:child_process";
 import { build } from "esbuild";
-import { rebuild as electronRebuild } from "@electron/rebuild";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -95,6 +94,19 @@ await build({
 // electron-builder 打包时不再触碰 workspace 体系。
 console.log("\n[3/4] Staging server resources (pnpm deploy)...");
 const stagingDir = path.join(desktopRoot, "staging");
+const bundledModelDb = path.join(
+  projectRoot,
+  "packages/ai-provider/data/model-db.json",
+);
+
+// Release builds use a committed snapshot generated from a fixed LiteLLM
+// revision. Builds never fetch mutable upstream data; maintainers update the
+// snapshot explicitly with the package's update-model-db task.
+if (!fs.existsSync(bundledModelDb)) {
+  throw new Error(
+    `Committed model database snapshot is missing: ${bundledModelDb}`,
+  );
+}
 
 // Clean previous staging
 if (fs.existsSync(stagingDir)) {
@@ -218,39 +230,42 @@ function ensurePluginWorkspaceDeps() {
   }
 }
 
-async function rebuildNativeForElectron(stagingDir) {
-  const electronPkgPath = path.join(
-    desktopRoot,
-    "node_modules/electron/package.json",
-  );
-  if (!fs.existsSync(electronPkgPath)) {
-    throw new Error(
-      `Cannot locate electron package to derive ABI version: ${electronPkgPath}`,
-    );
-  }
-  const electronVersion = JSON.parse(
-    fs.readFileSync(electronPkgPath, "utf-8"),
-  ).version;
-  console.log(`  Electron ${electronVersion} ABI target`);
-
-  await electronRebuild({
-    buildPath: stagingDir,
-    electronVersion,
-    onlyModules: ["better-sqlite3"],
-    force: true,
-  });
-}
-
 function verifyStagedServerRuntime() {
+  const betterSqliteDir = path.join(
+    serverStaging,
+    "node_modules/better-sqlite3",
+  );
+  const betterSqlitePkgPath = path.join(betterSqliteDir, "package.json");
   const checks = [
     path.join(serverStaging, "src/index.ts"),
     path.join(serverStaging, "node_modules/tsx/dist/cli.mjs"),
     path.join(serverStaging, "node_modules/esbuild/package.json"),
+    path.join(
+      serverStaging,
+      "node_modules/@covel/ai-provider/data/model-db.json",
+    ),
+    betterSqlitePkgPath,
   ];
   const missing = checks.filter((target) => !fs.existsSync(target));
   if (missing.length > 0) {
     throw new Error(
       `Desktop server staging is incomplete:\n${missing.map((p) => `- ${p}`).join("\n")}`,
+    );
+  }
+
+  const stagedModelDbPath = checks[3];
+  let stagedModelDb;
+  try {
+    stagedModelDb = JSON.parse(fs.readFileSync(stagedModelDbPath, "utf-8"));
+  } catch (error) {
+    throw new Error(
+      `Desktop model database snapshot is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  const stagedModelCount = Object.keys(stagedModelDb.models ?? {}).length;
+  if (stagedModelDb.count !== stagedModelCount || stagedModelCount === 0) {
+    throw new Error(
+      `Desktop model database snapshot is inconsistent (${stagedModelDb.count ?? "missing"} declared, ${stagedModelCount} entries)`,
     );
   }
 
@@ -270,6 +285,37 @@ function verifyStagedServerRuntime() {
       `Desktop server staging is missing @esbuild platform packages in ${esbuildScopeDir}`,
     );
   }
+
+  const betterSqlitePkg = JSON.parse(
+    fs.readFileSync(betterSqlitePkgPath, "utf-8"),
+  );
+  const betterSqliteMajor = Number.parseInt(
+    String(betterSqlitePkg.version).split(".")[0],
+    10,
+  );
+  if (betterSqliteMajor < 13 || betterSqlitePkg.gypfile !== false) {
+    throw new Error(
+      `Desktop staging requires better-sqlite3 13+ Node-API prebuilds; found ${betterSqlitePkg.version ?? "unknown"}`,
+    );
+  }
+
+  // These are the architectures emitted by electron-builder.yml. v13 carries
+  // all of them in one package, so staging must preserve the complete prebuild
+  // set even when a runner packages a non-host architecture.
+  const requiredNativePrebuilds = [
+    "darwin-arm64.node",
+    "win32-x64.node",
+    "linux-x64.node",
+    "linux-arm64.node",
+  ].map((filename) => path.join(betterSqliteDir, "prebuilds", filename));
+  const missingNativePrebuilds = requiredNativePrebuilds.filter(
+    (target) => !fs.existsSync(target),
+  );
+  if (missingNativePrebuilds.length > 0) {
+    throw new Error(
+      `Desktop staging is missing better-sqlite3 Node-API prebuilds:\n${missingNativePrebuilds.map((p) => `- ${p}`).join("\n")}`,
+    );
+  }
 }
 
 // Copy web dist
@@ -285,12 +331,15 @@ console.log("  ✓ web-dist copied");
 // - --filter 锁定目标 workspace 包
 // - --prod 剔除 devDeps
 // - --legacy 走复制语义（2026+ 默认开启 dedicated-lockfile，用 --legacy 关掉）
+// - --ignore-scripts 阻止 legacy deploy 因 binding.gyp 隐式调用 node-gyp；
+//   better-sqlite3 13 已随包携带 Node-API prebuild，下面会逐架构校验，
+//   esbuild 的平台包也由 ensureRuntimePackages + 完整性检查显式保证。
 // - --config.node-linker=hoisted 让 node_modules 里全是真实文件夹而非
 //   .pnpm/ 软链（默认 isolated 模式下 node_modules/tsx → .pnpm/tsx@X.Y/...
 //   这种软链 macOS 可用，Windows 上 electron-builder 复制 extraResources
 //   时会断链，导致打包后 resources/server/node_modules/tsx 不存在）。
 execSync(
-  `pnpm --filter @covel/server deploy --prod --legacy --config.node-linker=hoisted "${serverStaging}"`,
+  `pnpm --filter @covel/server deploy --prod --legacy --ignore-scripts --config.node-linker=hoisted "${serverStaging}"`,
   {
     cwd: projectRoot,
     stdio: "inherit",
@@ -307,6 +356,16 @@ ensureRuntimePackages();
 // (e.g. @covel/plugin-handlers-utils) — stage them so handler/guard imports
 // resolve in the packaged sidecar instead of ERR_MODULE_NOT_FOUND.
 ensurePluginWorkspaceDeps();
+
+// Copy the committed snapshot explicitly so workspace packlist differences do
+// not remove the baseline database from an installer.
+const stagedModelDb = path.join(
+  serverStaging,
+  "node_modules/@covel/ai-provider/data/model-db.json",
+);
+fs.mkdirSync(path.dirname(stagedModelDb), { recursive: true });
+fs.copyFileSync(bundledModelDb, stagedModelDb);
+console.log("  ✓ bundled model database staged");
 
 // 拷贝 server 运行所需的仓库级资源（这些不在 @covel/server 依赖图里）。
 // 注意：plugins/*/node_modules 来自 pnpm workspace 安装，内部是层层嵌套的
@@ -353,21 +412,16 @@ verifyStagedServerRuntime();
 console.log("  ✓ server runtime verified");
 console.log("  ✓ server resources staged");
 
-// Step 3b: rebuild native addons against the Electron Node ABI so they load
-// inside the Electron main process at runtime. Electron 40 has
-// NODE_MODULE_VERSION 143; a CI-default Node 24 bakes 137 into
-// better_sqlite3.node and we get ERR_DLOPEN_FAILED on first use.
-console.log("\n[3b/4] Rebuilding native addons for Electron ABI...");
-await rebuildNativeForElectron(serverStaging);
-console.log("  ✓ native addons rebuilt for Electron");
-
-// Step 3c: smoke-test the staged server so electron-builder never wraps a
+// Step 3b: smoke-test the staged server so electron-builder never wraps a
 // known-broken sidecar. Run it under Electron's Node mode because the packaged
 // app launches the sidecar with process.execPath + ELECTRON_RUN_AS_NODE.
+// better-sqlite3 13 uses Node-API and ships its platform binaries in the
+// package, so forcing an Electron ABI rebuild is unnecessary. This real
+// Electron + SQLite boot remains the fail-closed compatibility gate.
 // The runtime binary must be materialised first — electron@42+ no longer
 // downloads it on install (see ensure-electron.mjs).
 ensureElectronBinary();
-console.log("\n[3c/4] Smoke-testing staged server (with llm.toml)...");
+console.log("\n[3b/4] Smoke-testing staged server (with llm.toml)...");
 execSync(
   `node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --electron-node`,
   {
@@ -375,7 +429,7 @@ execSync(
     stdio: "inherit",
   },
 );
-console.log("\n[3c/4] Smoke-testing staged server (without llm.toml)...");
+console.log("\n[3b/4] Smoke-testing staged server (without llm.toml)...");
 execSync(
   `node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --electron-node --no-llm-toml`,
   {

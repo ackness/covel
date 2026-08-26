@@ -54,25 +54,34 @@ const formBlock = message({
   data: { fields: [{ name: "name", type: "text" }] },
 });
 
-// `turnCount: 0` is the pre-game state — the "begin adventure" hero is still
+// `phase: "setup"` is the pre-game state — the "begin adventure" hero is still
 // on screen. Default to a started session so the existing cases keep testing
 // in-play behaviour.
-const sessionRecord = (turnCount: number): SessionRecord => ({
+const sessionRecord = (phase: "setup" | "playing"): SessionRecord => ({
   id: "session-1",
   worldId: "world-1",
   status: "active",
-  turnCount,
+  phase,
+  completedPlayerTurns: phase === "playing" ? 1 : 0,
+  setupRuntimes: {},
+  activePlugins: [],
+  locale: "en-US",
   createdAt: "2026-05-09T00:00:00.000Z",
+  updatedAt: "2026-05-09T00:00:00.000Z",
 });
 
-const setup = (messages: StreamMessage[], executing = false, turnCount = 1) => {
+const setup = (
+  messages: StreamMessage[],
+  executing = false,
+  phase: "setup" | "playing" = "playing",
+) => {
   const onSendMessage = vi.fn();
   const view = renderHook(() =>
     useGameViewComposer({
       messages,
       submittedBlockIds: new Set<string>(),
       executing,
-      session: sessionRecord(turnCount),
+      session: sessionRecord(phase),
       onSendMessage,
     }),
   );
@@ -88,7 +97,7 @@ describe("useGameViewComposer", () => {
   it("locks the composer while the begin-adventure hero is still waiting", () => {
     // Sending here would open a turn before any setup runtime has run, so the
     // narrator would answer in a world with no character and no opening scene.
-    const { result } = setup([], false, 0);
+    const { result } = setup([], false, "setup");
     expect(result.current.awaitingBegin).toBe(true);
     expect(result.current.composerDisabled).toBe(true);
     // Not "blocked" — that word is reserved for an unanswered interaction, and
@@ -97,7 +106,7 @@ describe("useGameViewComposer", () => {
   });
 
   it("refuses to send while awaiting begin, including via Enter", () => {
-    const { result, onSendMessage } = setup([], false, 0);
+    const { result, onSendMessage } = setup([], false, "setup");
     act(() => result.current.setInputValue("我想先说点什么"));
     act(() => result.current.handleSubmit());
     expect(onSendMessage).not.toHaveBeenCalled();
@@ -106,13 +115,13 @@ describe("useGameViewComposer", () => {
   it("releases the composer once pre-game starts executing", () => {
     // The hero disappears the moment the turn starts, so the composer should
     // follow it and become a steer surface rather than staying dead.
-    const { result } = setup([], true, 0);
+    const { result } = setup([], true, "setup");
     expect(result.current.awaitingBegin).toBe(false);
     expect(result.current.composerDisabled).toBe(false);
   });
 
   it("releases the composer once the opening messages exist", () => {
-    const { result } = setup([suggestionPanel], false, 0);
+    const { result } = setup([suggestionPanel], false, "setup");
     expect(result.current.awaitingBegin).toBe(false);
   });
 

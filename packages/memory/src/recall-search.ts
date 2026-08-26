@@ -11,8 +11,8 @@
  * vector-recall-search.ts / vector-ingest.ts). The vector searcher falls back
  * here per-session whenever a session has no embedding model locked, its vector
  * index is empty, or embedding fails — so this path keeps every deployment
- * without embeddings (and IdbStore, which has no vector capability) working
- * exactly as before. Both implement the {@link RecallSearcher} swap seam, so
+ * without embeddings working exactly as before. Both implement the
+ * {@link RecallSearcher} swap seam, so
  * callers are agnostic to which is wired. See memory-system.ts.
  */
 

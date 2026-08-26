@@ -146,7 +146,8 @@ ui:
 - `groupLabel` — 合并后外层 Tab 的显示名（可选，省略时用第一个 spec 的 `label`）
 - `label` — 面板自身名（在子 Tab 上显示）
 - `shortLabel` — activity-bar 垂直 Tab 条上的短标签（可选，见下方「activity-bar 短标签」章节）
-- `icon` — Lucide 图标名（kebab-case）
+- `icon` — 框架允许列表内的 Lucide 图标名（kebab-case）；完整列表见
+  [UI Components / Display](ui-components.md#display)
 - `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据
 - `emptyState.message` — 数据为空时显示的提示文字（见下方"空状态渲染"章节）
 - `view` — json-render nested spec，使用框架 catalog 中的组件（与 `_componentPath` 二选一：`.tsx`/`.js` 自定义组件由 loader 写入 `_componentPath`）
@@ -221,7 +222,7 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 type I18nText = string | Record<LocaleTag, string>;
 ```
 
-- 合法 locale key：`zh`、`zh-CN`、`zh-TW`、`en`、`en-US`、`en-GB`。框架匹配顺序：当前 locale → 前缀匹配（`zh-CN` → `zh`）→ `en-US` → `en` → 对象中任一值。
+- 合法 locale key：`zh`、`zh-CN`、`zh-TW`、`en`、`en-US`、`en-GB`。统一解析契约和完整回退顺序见 [Internationalization](./i18n.md)；组件不得自行判断 locale。
 - **必须同时提供中文与英文**：只有英文 key（`en` 或 `en-US`）存在时，中文回退才能切回；反之亦然。
 - 单一纯字符串**仅限**以下场景：value 不是自然语言（ID / 图标名 / 路径 / URL / 状态值），或者已经是翻译后的英文短语且被所有 locale 共用（如 `"NEW"`、`"Ping"`）。
 - 禁止出现孤立的纯中文字符串。CI 脚本 `scripts/check-plugin-i18n.mjs` 会拒绝任何未被 I18nText 对象包裹的 CJK 字面量。
@@ -346,7 +347,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 `viewMode: "stage"` 是消息区之外的第四个呈现档（与 `parsed` / `detailed` / `raw` 并列，头部 `GameViewHeader` 的 Toggle 切换）。它把消息区三件（`ChatMessages` + `PendingDraftsBar` + `MessageComposer`）整体替换成全屏舞台（视觉小说式：场景背景 + 立绘 + 打字机对话框），`GameViewHeader` 保留。
 
-- **渲染条件**：`viewMode === "stage" && session.turnCount >= 1`。Pre-Game（`turnCount === 0`）即使处于 stage 档也走原有消息流（角色创建 / begin-adventure 不受影响）。
+- **渲染条件**：`viewMode === "stage" && session.completedPlayerTurns >= 1`。setup 阶段（`completedPlayerTurns === 0`）即使处于 stage 档也走原有消息流（角色创建 / begin-adventure 不受影响）。
 - **初值**：世界包 `world.yaml` 顶层 `defaultViewMode: stage`（→ `WorldRecord.metadata.defaultViewMode`）让会话**首挂载**即进舞台；玩家在头部切换后以玩家选择为准（无持久化）。见 [world-data.md](./world-data.md#world-package)。
 
 ### 层级与数据源

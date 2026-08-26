@@ -227,7 +227,7 @@ export function AudioPlayer(props: AudioPlayerProps): ReactElement {
     return (
       <div
         className={clsx(
-          "flex items-center gap-2 px-3 py-2 border border-border rounded-[var(--radius-card)] bg-muted/40 w-full",
+          "flex items-center gap-2 px-3 py-2 border border-border rounded-(--radius-card) bg-muted/40 w-full",
           className,
         )}
         role="status"
@@ -250,7 +250,7 @@ export function AudioPlayer(props: AudioPlayerProps): ReactElement {
   return (
     <div
       className={clsx(
-        "flex items-center gap-3 px-3 py-2 border border-border rounded-[var(--radius-card)] bg-muted/40 w-full",
+        "flex items-center gap-3 px-3 py-2 border border-border rounded-(--radius-card) bg-muted/40 w-full",
         className,
       )}
       role="group"
@@ -258,7 +258,7 @@ export function AudioPlayer(props: AudioPlayerProps): ReactElement {
     >
       <audio
         ref={audioRef}
-        src={resolved.url}
+        src={isReady ? resolved.url : undefined}
         preload="metadata"
         aria-label={altText}
         className="hidden"
@@ -277,7 +277,7 @@ export function AudioPlayer(props: AudioPlayerProps): ReactElement {
         {playing ? (
           <Pause className="w-4 h-4" aria-hidden="true" />
         ) : (
-          <Play className="w-4 h-4 translate-x-[1px]" aria-hidden="true" />
+          <Play className="w-4 h-4 translate-x-px" aria-hidden="true" />
         )}
       </button>
 

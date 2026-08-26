@@ -1,10 +1,8 @@
 /**
  * Golden characterization of the agent runtime output schema gate.
  *
- * The runtime-scheduling redesign will introduce an envelope-v1 result format
- * and, in a later step, move schema enforcement onto a shared path. These
- * tests are the regression anchor: they pin the CURRENT agent behaviour so any
- * refactor that touches the gate has to keep it byte-for-byte identical.
+ * These tests are the regression anchor for the agent-specific structured
+ * output path.
  *
  * Pinned behaviours (all via `executeTurn` → `executeAgentRuntime`):
  *   1. schema declared + conforming JSON → success, output = parsed envelope.

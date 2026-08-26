@@ -1,23 +1,26 @@
 # 角色立绘 — 提示词文档（Portrait Prompt Spec）
 
-为两个旗舰世界的角色生成**统一风格**的立绘 / 头像，接入 `character-presence` 插件，存入各世界的 `media/`，**生成一次、长期复用**。
+为三个内置世界的角色生成**统一风格**的立绘 / 头像，接入 `character-presence` 插件，存入各世界的 `media/`，**生成一次、长期复用**。
 
-- 机器清单（脚本直接读）：`worlds/mistport/media/portraits.json` · `worlds/haruka-academy/media/portraits.json`
+- 机器清单（脚本直接读）：`worlds/emberback/media/portraits.json` · `worlds/mistport/media/portraits.json` · `worlds/haruka-academy/media/portraits.json`
 - 每张图的最终提示词 = `style.prefix` + 该角色 `subject` + `style.suffix`（共享前后缀保证**整组同风格**），`negative` 作为负向提示。
-- 文件名对应角色卡的 `instantiate.characterId`：文件 `<id>.png` → 角色 `npc-<id>`（见清单 `characterId`）。
+- 清单中的 `characterId` 必须能匹配实例化后的角色 ID：角色卡声明 `instantiate.characterId` 时使用该值（如 `npc-lin-yuanzhou`）；未声明时可使用角色卡 `id`（如 `emberback` 的 `qin-jiulian`，实例化记录会带 session / `char-` 前缀，前端按后缀匹配）。文件名通常使用角色卡 `id` 的 `<id>.png`。
 
 场景背景的清单、日/夜变体与生成流程见 [场景背景生成指南](./world-scenes.md)。
 
-## 两套风格方向
+## 三套风格方向
 
-| 世界                        | 题材          | 统一风格                                                                        | 取景 / 画幅                |
-| --------------------------- | ------------- | ------------------------------------------------------------------------------- | -------------------------- |
-| **mistport** 雾港·裂潮纪    | 黑暗奇幻·悬疑 | fog-noir 写实绘画感、冷灰/青/锈的去饱和、海雾体积光、低调戏剧打光、哥特港口氛围 | 半身胸像、3/4 侧、灰雾背景 |
-| **haruka-academy** 遥风学园 | 校园恋爱·日常 | 动漫视觉小说立绘（GalGame 拔模/tachi-e）、柔和赛璐珞、春日粉彩、暖光、海边校园  | 半身胸像、柔和渐变背景     |
+| 世界                          | 题材              | 统一风格                                                                        | 取景 / 画幅                  |
+| ----------------------------- | ----------------- | ------------------------------------------------------------------------------- | ---------------------------- |
+| **emberback** Emberback Relay | 科幻边疆·时间谜团 | 明亮复古科幻冒险海报、暖色硬边日光、奶油/陶土/钴蓝纯色背景、实用型工作服        | 全身立绘、清晰剪影、纯色背景 |
+| **mistport** 雾港·裂潮纪      | 黑暗奇幻·悬疑     | fog-noir 写实绘画感、冷灰/青/锈的去饱和、海雾体积光、低调戏剧打光、哥特港口氛围 | 半身胸像、3/4 侧、灰雾背景   |
+| **haruka-academy** 遥风学园   | 校园恋爱·日常     | 动漫视觉小说立绘（GalGame 拔模/tachi-e）、柔和赛璐珞、春日粉彩、暖光、海边校园  | 半身胸像、柔和渐变背景       |
 
-> 两套**刻意不同**——一冷一暖、一写实一动漫——这样两个世界各自成体系，也直观传达"故事 vs 对话"两种玩法。每个世界**内部**则严格同风格（靠共享 prefix/suffix）。
+> 三套风格**刻意不同**——明亮科幻海报、雾港写实、校园动漫——每个世界**内部**则严格同风格（靠共享 prefix/suffix）。
 
 ## 角色清单
+
+**emberback（3）**：Tomas Reed（中继站总技师·现场电台与搪瓷杯）· June Okafor（Sunrunner 驾驶员·珊瑚色围巾与车钥匙）· Dr. Mina Park（大气物理学家·频谱分析仪）。三张均为纯英文世界角色，采用奶油/陶土/钴蓝的明亮纯色背景，与 Mistport 的暗雾半身像明确区分。
 
 **mistport（7）**：林远舟（学徒·腕有潮纹）· 苏窈（验潮师·鉴定镜）· 铁姑（盐牙·左臂雾蚀半透明）· 陈远山（议长·把玩遗物碎片）· 齐老（公会长·指尖雾蚀·潮汐笔记）· 小霜（雾使·侧耳倾听）· 灰隼（执法队长·遮罩提灯）。每张的世界细节（潮纹、雾蚀、遗物碎片）都写进了 `subject`，让立绘自带世界观。
 
@@ -33,6 +36,7 @@
 # 并发生成某世界全部立绘（默认 slot gpt-image-2，并发 5；已存在的跳过）
 npx tsx scripts/generate-portraits.mjs mistport
 npx tsx scripts/generate-portraits.mjs haruka-academy
+npx tsx scripts/generate-portraits.mjs emberback
 # 指定 slot / 并发数 / 只重跑某角色 / 覆盖
 npx tsx scripts/generate-portraits.mjs mistport --slot gpt-image-2 --concurrency 6 --only iron-meg --force
 # 只打印 prompt 队列，不出图、不联网
@@ -45,21 +49,22 @@ npx tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
 
 ## 接入 character-presence（已接线）
 
-展示立绘的插件就是 **`character-presence`**：右侧角色面板显示头像，舞台模式（stage mode）下作为立绘。两个世界的 `data/world.data.yaml` 已加好两条 source：
+展示立绘的插件就是 **`character-presence`**：右侧角色面板显示头像，舞台模式（stage mode）下作为立绘。三个世界的 `data/world.data.yaml` 已加好两条 source：
 
 - `media` source：导入 `media/portraits/` 下的图，按 **sha256 内容寻址**存入媒体库，`to: media` + `indexTo: plugin:character-presence/assets`；
-- `presence` source（`media/presence.json`）：把 `characterId: npc-<id>` 的 `avatar` / `sprite` 指向上面导入的媒体（`mediaRef.id` = 该图的 sha256）。
+- `presence` source（`media/presence.json`）：把与实例化角色匹配的 `characterId` 的 `avatar` / `sprite` 指向上面导入的媒体（`mediaRef.id` = 该图的 sha256）。
 
 `presence.json` 由 `scripts/emit-presence.mjs <world>` 从 `portraits/` 目录按 sha256 自动生成：
 
 ```bash
 node scripts/emit-presence.mjs mistport
 node scripts/emit-presence.mjs haruka-academy
+node scripts/emit-presence.mjs emberback
 ```
 
 > ⚠️ **重生成立绘后必须重跑 `emit-presence` 刷新哈希**，否则 presence 的 `avatar.id` 与新图对不上。
 
-两个世界都已把 `character-presence` 列入 `recommendedPlugins`，session 创建即自动导入、开局右侧面板与对话立绘直接显示。立绘 PNG 通过 `.gitignore` 负向规则 `!worlds/**/media/portraits/*.png` 纳入版本库，随世界包分发。
+三个世界都已把 `character-presence` 列入插件策略，session 创建即自动导入、开局右侧面板与对话立绘直接显示。立绘 PNG 通过 `.gitignore` 负向规则 `!worlds/**/media/portraits/*.png` 纳入版本库，随世界包分发。
 
 ## 复用与重生成
 

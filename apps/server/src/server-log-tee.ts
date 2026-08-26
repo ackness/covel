@@ -4,7 +4,7 @@
  * record `{ ts, level, source, msg }`.
  *
  * Activation rules (decided in `dev-home-bootstrap.ts`):
- *   - Skip when `COVEL_DESKTOP_REST=1`. The packaged desktop already
+ *   - Skip when `COVEL_DESKTOP_REST=true` or `1`. The packaged desktop already
  *     captures the sidecar's stdout/stderr from outside and writes its
  *     own `server.log` — we don't want a double-write.
  *   - Skip when `NODE_ENV=production` and no explicit

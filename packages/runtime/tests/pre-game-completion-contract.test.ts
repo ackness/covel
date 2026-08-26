@@ -7,10 +7,8 @@
  *
  * Scheduling redesign: the completion write moved out of `executeTurn` and into
  * the finalize transaction (session-clock write), so the observable contract at
- * the executeTurn boundary is now `TurnResult.setupCompletion` — the delta the
- * executor hands the finalizer — rather than the persisted `turnCount` /
- * `preGameCompleted`. The derivation of those legacy fields from the delta is
- * pinned by the session-clock / acceptance tests instead.
+ * the executeTurn boundary is `TurnResult.setupCompletion`, the delta the
+ * executor hands the finalizer.
  *
  * This is subtle enough that drift here silently breaks opening flows
  * (player stuck on character form, main-loop never starts), so we pin
@@ -18,12 +16,15 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { mirrorSetupDone } from "@covel/shared";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
+import type { HookPipeline } from "../src/hooks/pipeline.js";
+import { createHookPipeline } from "../src/hooks/pipeline.js";
 
 class NoopLLM implements LLMAdapter {
   async generate(): Promise<LLMResponse> {
@@ -60,10 +61,12 @@ async function freshStore(
   await store.createSession({
     id: sessionId,
     worldId,
-    turnCount: 0,
     status: "active",
     activePlugins: [],
-    preGameCompleted: [],
+    phase: "setup",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
+    locale: "zh-CN",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -76,22 +79,38 @@ async function runPregameTurn(
   handlers: Record<string, (ctx: unknown) => Promise<Record<string, unknown>>>,
   options?: {
     guards?: Record<string, (ctx: unknown) => Promise<Record<string, unknown>>>;
+    hookPipeline?: HookPipeline;
   },
 ): Promise<{
   store: DataStore;
   result: Awaited<ReturnType<typeof executeTurn>>;
 }> {
   const store = await freshStore(sessionId);
-  const input: TurnInput = { sessionId, turnId: "turn-0", playerMessage: "" };
+  const input: TurnInput = {
+    sessionId,
+    turnId: "turn-0",
+    playerMessage: "",
+    origin: "player",
+  };
   const deps: TurnExecutorDeps = {
     loadRuntime: async (m) => ({
       manifest: m,
       promptTemplate: "",
-      handler: handlers[m.name],
+      handler: async (ctx) => {
+        const value = await handlers[m.name]!(ctx);
+        const done = value.preGameDone === true;
+        const { preGameDone: _preGameDone, ...rest } = value;
+        return {
+          outcome: "success",
+          value: rest as never,
+          ...(done ? { completion: "done" as const } : {}),
+        };
+      },
       guard: options?.guards?.[m.name],
     }),
     llm: new NoopLLM(),
     store,
+    ...(options?.hookPipeline ? { hookPipeline: options.hookPipeline } : {}),
   };
   const result = await executeTurn(input, manifests, deps);
   return { store, result };
@@ -115,6 +134,35 @@ describe("Pre-Game completion contract", () => {
     expect(newlyDone(result)).toEqual(["pregame"]);
     // Only Pre-Game runtime present, so everyone's done → band flips to playing.
     expect(result.setupCompletion?.allSetupDone).toBe(true);
+  });
+
+  it("does not mark a failed runtime done even when its output says preGameDone", async () => {
+    const pipeline = createHookPipeline();
+    pipeline.register({
+      id: "fail-after-runtime",
+      event: "PostRuntime",
+      handler: async (_ctx, payload) => ({
+        action: "continue",
+        replace: {
+          result: {
+            ...(payload as { result: Record<string, unknown> }).result,
+            status: "failed",
+            error: "post-runtime rejection",
+          },
+        },
+      }),
+    });
+    const manifest = pregameManifest("pregame");
+    const { result } = await runPregameTurn(
+      "sess-failed-done",
+      [manifest],
+      { pregame: async () => ({ preGameDone: true }) },
+      { hookPipeline: pipeline },
+    );
+
+    expect(result.runtimeResults[0]?.status).toBe("failed");
+    expect(newlyDone(result)).toEqual([]);
+    expect(result.setupCompletion?.allSetupDone).toBe(false);
   });
 
   it("marks an AGENT runtime done when its guard returns skip:true", async () => {
@@ -142,7 +190,7 @@ describe("Pre-Game completion contract", () => {
     expect(result.setupCompletion?.allSetupDone).toBe(true);
   });
 
-  it("does NOT advance turnCount when any Pre-Game runtime is unfinished", async () => {
+  it("keeps setup incomplete when any setup runtime is unfinished", async () => {
     const pregame = pregameManifest("pregame", { stage: "setup" });
     // player-init simulates "form shown, waiting for submission": handler
     // returns without preGameDone so the framework keeps it open across turns.
@@ -178,6 +226,7 @@ describe("Pre-Game completion contract", () => {
       turnId: "turn-0",
       playerMessage: "",
       suppressPlayerMessage: true,
+      origin: "player" as const,
     };
     const deps: TurnExecutorDeps = {
       loadRuntime: async (m) => ({
@@ -185,8 +234,11 @@ describe("Pre-Game completion contract", () => {
         promptTemplate: "",
         handler: async () =>
           m.name === "pregame"
-            ? { preGameDone: true }
-            : { form: { formId: "character-form" } },
+            ? { outcome: "success", value: {}, completion: "done" }
+            : {
+                outcome: "success",
+                value: { form: { formId: "character-form" } },
+              },
       }),
       llm: new NoopLLM(),
       store,
@@ -211,7 +263,9 @@ describe("Pre-Game completion contract", () => {
     const narrator = pregameManifest("narrator", { stage: "narrative" });
     const store = await freshStore("sess-resume");
     await store.updateSession("sess-resume", {
-      preGameCompleted: ["pregame"],
+      setupRuntimes: {
+        pregame: mirrorSetupDone("0.0.0", new Date().toISOString(), 1, 1),
+      },
       updatedAt: new Date().toISOString(),
     });
     await store.appendTurnMessage({
@@ -231,9 +285,12 @@ describe("Pre-Game completion contract", () => {
         promptTemplate: "",
         handler: async () => {
           if (m.name === "narrator") {
-            return { narrativeOutput: "main loop started" };
+            return {
+              outcome: "success",
+              value: { narrativeOutput: "main loop started" },
+            };
           }
-          return { preGameDone: true };
+          return { outcome: "success", value: {}, completion: "done" };
         },
       }),
       llm: new NoopLLM(),
@@ -245,6 +302,7 @@ describe("Pre-Game completion contract", () => {
         sessionId: "sess-resume",
         turnId: "turn-1",
         playerMessage: "continue setup",
+        origin: "player",
       },
       [pregame, playerInit, narrator],
       deps,
@@ -322,10 +380,10 @@ describe("Pre-Game completion contract", () => {
     expect(result.setupCompletion?.allSetupDone).toBe(true);
   });
 
-  it("advances turnCount when EVERY Pre-Game runtime reports done in the same turn", async () => {
+  it("resolves setup when every setup runtime reports done in the same turn", async () => {
     // When both plugins complete in turn 0 (e.g. pregame completes on first
     // hit, schema-gen guard skips because schema already exists), the kernel
-    // must atomically record both in preGameCompleted AND bump turnCount to 1.
+    // must atomically mirror both and flip the phase in the finalizer.
     const pregame = pregameManifest("pregame", { stage: "setup" });
     const playerInit = pregameManifest("char-creator/player-init", {
       stage: "setup",
@@ -386,14 +444,19 @@ describe("Pre-Game completion contract", () => {
         // Runs but does not report done → stays pending, never marked done.
         handler: async () => {
           invoked += 1;
-          return {};
+          return { outcome: "success", value: {} };
         },
       }),
       llm: new NoopLLM(),
       store,
     };
     const result = await executeTurn(
-      { sessionId: "sess-exh", turnId: "turn-0", playerMessage: "" },
+      {
+        sessionId: "sess-exh",
+        turnId: "turn-0",
+        playerMessage: "",
+        origin: "player",
+      },
       [pregame],
       deps,
     );

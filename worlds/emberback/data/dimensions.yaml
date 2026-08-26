@@ -1,172 +1,175 @@
 geography:
-  overview: 天燔之后低地尽成烬海，最后一头巨鳌玄负驮着孤城横渡灰烬。城长在鳌甲之上，分首埠、中脊市、尾甲滩三境；甲外偶然浮出的无常泊点，是拾荒人的猎场，也是坟场。
+  overview: Vesper is a tidally locked world. Its white-hot day side and frozen night side meet along the Duskline, a habitable ribbon of red ridges, cold wind, and settlements linked by radio.
   regions:
-    - name: 首埠
-      description: 颈前最暖的城区，司辰阁所在，阁籍世家聚居；历法、锚令与下降许可皆出于此。
-      climate: 甲温常暖，烬风被颈甲挡去大半
+    - name: Emberback Ridge
+      description: A long rust-red escarpment carrying the relay, its homes, workshops, and movable solar fields. The ridge is isolated but never quiet.
+      climate: Dry, windy, and sharply divided between brightward heat and nightward cold.
       landmarks:
-        - name: 望角台
-          description: 司辰阁观烬定航的高台，晨钟由此报时；钟声一乱，全城皆惊。
-    - name: 中脊市
-      description: 城的腰腹与集市，行籍匠人与拾荒者的地盘；悬钩堂的委托与露井广场的水配额在此定价。
-      climate: 干暖多烬尘，晨间甲棱凝露
+        - name: The Three Masts
+          description: Emberback's long-range array. The central mast can reach every settlement on the western relay chain when the sky is clear.
+        - name: Switchyard
+          description: A public workshop, charging bay, kitchen, and meeting floor built around the station's oldest transformer.
+    - name: Brightward Road
+      description: A hard-packed crawler route running toward the sun through glass flats and basalt shade. Mile Seventeen is its most exposed crossing.
+      climate: Blinding glare, abrasive dust, and heat fronts that can overtake a vehicle in minutes.
       landmarks:
-        - name: 悬钩堂
-          description: 钩镰行总堂。委托挂单、缒链绞盘与拾荒人的生死簿都在这里。
-        - name: 露井广场
-          description: 全城净水所出，露水按籍配给；排队的秩序比锚令更不容触犯。
-    - name: 尾甲滩
-      description: 尾部甲鳞开裂的贫民地界，寒斑正从这里蔓延；客籍聚居，黑市藏在锚桩之间。
-      climate: 甲温渐凉，寒斑处冷得反常
+        - name: Mile Seventeen
+          description: A field repeater beside a natural stone arch. The future warning names this place, but its maintenance log shows nothing unusual.
+        - name: Mirror Farm
+          description: Mobile solar collectors that power Emberback. Their daily alignment determines how much charge the community can spend.
+    - name: Nightward Shelf
+      description: A descending plateau of dark blue stone, frost grass, and buried ice conduits leading toward permanent night.
+      climate: Clear, bitterly cold, and prone to fast-moving ice squalls.
       landmarks:
-        - name: 尾锚桩
-          description: 下降用的锚桩与绞盘阵列；锚令封锚时，以火漆封链。
-        - name: 檐下市
-          description: 半明半暗的黑市。冷鳞、私盐与不过秤的匣子在此易手，衔尾会的耳目遍布。
-    - name: 无常泊点
-      description: 玄负途经时偶然浮出的沉城残骸，位置从不重复；白汐城旧址是其中最大、最忌讳的一处。今晨破烬而出的黑色尖塔，不在任何一张图上。
-      climate: 烬海之上灼烬扑面，烬潮起时必须撤离
+        - name: Nightglass Observatory
+          description: A compact research station that studies magnetic storms, atmospheric echoes, and the moving edge of Vesper's ice.
+    - name: Crownfire Front
+      description: A continent-scale magnetic storm moving along the Duskline. Its charged dust bends radio signals and paints gold ribbons across the sky.
+      climate: Electrically active, unpredictable, and dangerous to exposed people, vehicles, and antenna arrays.
 factions:
-  - id: helm-court
-    name: 司辰阁
-    description: 以听甲定航的执政团体，执锚令、发下降许可，垄断历法与航向。自称仍能听懂玄负的心意，实则最后一位共息者已死去三十年，「听旨定航」再无人能证。
-    type: political
-    influence: major
-    leader: 大司辰・晏浮岁
-    headquarters: 首埠・望角台
-    relations:
-      - targetId: hook-guild
-        type: tense
-        description: 靠许可与配额辖制钩镰行；断链之年后互信破裂，明面合作暗地提防
-      - targetId: tailbiters
-        type: hostile
-        description: 斥「鳌终有一沉」为惑众邪说，屡次查抄檐下市却始终拔不了根
-  - id: hook-guild
-    name: 钩镰行
-    description: 掌缒链、绞盘与下降作业的拾荒者行会，悬钩堂里挂着全城的委托与生死簿。断链之年折了四十一人之后，行里对司辰阁报的航向再不肯全信。
+  - id: relay-cooperative
+    name: Emberback Relay Cooperative
+    description: The station's technicians, operators, medics, growers, and cooks jointly maintain the relay and decide how its limited power is spent.
     type: guild
     influence: major
-    leader: 行首・铁瓢
-    headquarters: 中脊市・悬钩堂
+    leader: Tomas Reed, elected shift lead
+    headquarters: Emberback Ridge, Switchyard
     relations:
-      - targetId: helm-court
-        type: tense
-        description: 下降许可攥在阁里手中，不得不低头；私下里自记烬潮，另算航向
-      - targetId: tailbiters
-        type: complicated
-        description: 明令行众不得沾衔尾会的货，可行里断了炊的老人，往往是他们接济
-  - id: tailbiters
-    name: 衔尾会
-    description: 信奉「鳌终有一沉」的地下会社，在檐下市收冷鳞、囤物资，暗地里造筏留后路。司辰阁称其为邪祟，尾甲滩的穷人叫他们「留后路的人」。
-    type: criminal
+      - targetId: sunrunners
+        type: interdependent
+        description: The relay keeps couriers out of storms; couriers keep the isolated station supplied.
+      - targetId: nightglass-observatory
+        type: strained
+        description: The cooperative needs the observatory's forecasts but resents experiments that consume relay time and power.
+  - id: sunrunners
+    name: Sunrunners
+    description: Independent crawler crews who carry medicine, mail, spare parts, and passengers between Duskline settlements.
+    type: guild
+    influence: major
+    leader: A rotating road captain chosen at each route meeting
+    headquarters: The road itself
+    relations:
+      - targetId: relay-cooperative
+        type: loyal
+        description: They trust Emberback's operators with their lives, even while complaining about every route closure.
+      - targetId: nightglass-observatory
+        type: skeptical
+        description: Forecast models matter less to most drivers than landmarks, instinct, and a clear voice on the radio.
+  - id: nightglass-observatory
+    name: Nightglass Observatory
+    description: A small civilian research team tracking Vesper's atmosphere and the radio echoes that sometimes arrive before their source transmission.
+    type: other
     influence: minor
-    leader: 筏主（身份不明）
-    headquarters: 尾甲滩・檐下市
+    leader: Dr. Mina Park
+    headquarters: Nightward Shelf
     relations:
-      - targetId: helm-court
-        type: hostile
-        description: 视锚令与航向皆为谎言的一部分，专挖司辰阁瞒下的事
+      - targetId: relay-cooperative
+        type: dependent
+        description: Nightglass needs Emberback's array to test its theories; Emberback needs Nightglass to predict Crownfire.
 powerSystem:
-  name: 听甲
-  type: other
-  description: 隔着鳌甲听懂玄负震颤与血络的天赋之术。天赋不问出身，自浅入深分四境；甲感越深，越能在烬海边缘多抢回几息活命的时间。
+  name: Echo Reading
+  type: technology
+  description: The craft of extracting useful information from time-shifted radio echoes caused by Vesper's magnetic weather. It is technical practice, not prophecy.
   rules:
-    - 须手贴甲面方可施展，离开玄负之甲，一切感应皆失
-    - 甲感越深，越能预判烬潮与鳌身挪动——下降队伍抢的就是这几息
-    - 强行深听会遭「震回」，轻则七窍渗血，重则耳目俱废
-    - 当世已无共息者，司辰阁的「听旨定航」三十年无人能证
+    - An echo must be recorded, timestamped, and compared against an independent signal before it can count as evidence.
+    - Clearer future information creates stronger interference when people act on it; certainty is never free.
+    - Echoes show a possible transmission, not a fixed future. Choices can prevent, alter, or cause what was heard.
+    - Crownfire improves echo range while making ordinary communications less reliable and exposed electronics more dangerous.
   tiers:
-    - name: 触纹
+    - name: Listener
       rank: 1
-      description: 手贴甲面能辨震颤吉凶，拾荒学徒的入门功
-    - name: 听甲
+      description: Can identify patterns, false repeats, and deliberate speech inside heavy static.
+    - name: Tracer
       rank: 2
-      description: 可断烬潮远近与强弱，够资格带队下降
-    - name: 循脉
+      description: Can estimate where and when an echo originated by comparing phase drift across receivers.
+    - name: Splicer
       rank: 3
-      description: 循甲下血络行走，能寻软甲与暖脉；全城不过十指之数
-    - name: 共息
+      description: Can reconstruct missing fragments from several conflicting echoes without pretending uncertainty has vanished.
+    - name: Caller
       rank: 4
-      description: 与玄负同呼吸，传说能劝动它转向；最后一位已死去三十年
+      description: Theoretical ability to transmit a reply into an earlier window. No verified caller is known.
 history:
-  - era: 远古
-    name: 天燔
-    description: 天火烧了七日，低地尽成烬海；六头巨鳌自深处浮起，以背负人，是为负城之始。
+  - era: Settlement Era
+    year: 214 years ago
+    name: The Duskline Landing
+    description: The first permanent habitats were placed where Vesper's light and cold could be balanced with ordinary engineering.
     significance: major
-  - era: 沉汐纪
-    year: 九十年前
-    name: 白汐沉没
-    description: 姊妹鳌白汐连同白汐城一夜沉入烬海，链筏载来的遗民成了今日的客籍。衔尾会的第一批筏，就是那时开始造的。
+  - era: Relay Era
+    year: 86 years ago
+    name: Emberback Goes Live
+    description: Three ridge masts closed the longest dead zone in the western chain and turned a repair camp into a community.
     significance: major
-  - era: 当代
-    year: 十二年前
-    name: 断链之年
-    description: 玄负在泊点上突然挪身，缒链齐断，四十一名拾荒人坠入烬海。司辰阁咎钩镰行贪功，行里却传：是塔下有什么惊了鳌。
+  - era: Modern Era
+    year: 19 years ago
+    name: The Long Blackout
+    description: A Crownfire storm cut six settlements off for eleven days. The cooperative's promise that no call goes unanswered dates from the recovery.
     significance: major
-  - era: 当下
-    year: 三年前至今
-    name: 寒斑初现
-    description: 尾甲的鳞一块块凉下去，寒斑逐月蔓延。司辰阁称之为「季节性凉甲」，却在暗中悬赏测绘寒斑边界。
+  - era: Present
+    year: 4 months ago
+    name: First Verified Echo
+    description: Mina Park recorded a weather bulletin nine minutes before Nightglass transmitted it. Repeat incidents have grown longer and more specific.
     significance: major
 economy:
   currencies:
-    - name: 鳞钱
-      description: 玄负蜕鳞打磨成的小片货币，贴肤微温；凉透的「冷鳞」是死鳞，也是伪币——可衔尾会一直在暗中回收冷鳞，没人知道为什么。
+    - name: Trade chits
+      symbol: tc
+      description: Cooperative credit accepted for food, repairs, route passage, and personal supplies. Essential emergency service is never denied for lack of chits.
   resources:
-    - 露水
-    - 苔麦与甲薯
-    - 蜕鳞
-    - 沉城盐铁
-    - 烬玻璃
-  tradeNotes: 全城物价以露水配给与下降配额为锚。合法拾荒所得须过司辰阁的秤再入市；不想过秤的货，走檐下市。冷鳞在黑市另有行情。
+    - Battery charge
+    - Condensed water
+    - Ceramic electronics
+    - Crawler parts
+    - Medical cryo-packs
+  tradeNotes: Power is Emberback's real budget. Every major repair, transmission, vehicle charge, or research scan takes energy away from another public need.
 socialStructure:
   classes:
-    - name: 阁籍
+    - name: Residents
       rank: 1
-      description: 司辰阁世家与首埠旧族，掌历法、锚令与许可
-    - name: 行籍
+      description: Cooperative members who live at Emberback and share maintenance shifts, votes, and emergency obligations.
+    - name: Route crews
       rank: 2
-      description: 在册的匠人、拾荒者与井务人，凭手艺吃饭，居中脊市
-    - name: 客籍
+      description: Couriers, haulers, and mechanics who move between settlements and rely on temporary station berths.
+    - name: Visitors
       rank: 3
-      description: 白汐遗民之后，无下降之权，聚居尾甲滩，多有人走檐下市的黑索
-  notes: 唯有听甲天赋不问出身——测出一分甲感，三籍皆可擢用。寒斑蔓延后，尾甲滩客籍迁居无门，怨气日深。
+      description: Researchers, passengers, and traders under the same emergency protections as everyone else but without a cooperative vote.
+  notes: Rank describes civic responsibility, not personal worth. During an emergency, the person with the relevant expertise leads the response.
 tone:
   genres:
-    - survival
-    - mystery
-    - adventure
+    - frontier science fiction
+    - community adventure
+    - temporal mystery
   contentRating: teen
-  narrativeStyle: 苍茫克制的旅途笔法：巨兽的呼吸是城市的背景音，物资的斤两与人心的冷暖同样锱铢必较，真相沉在灰烬之下，一次下降捞起一角。
+  narrativeStyle: Clear, character-led adventure prose with tactile technical detail, moments of dry humor, and visible consequences. Wonder should come from people solving impossible problems together.
   themes:
-    - 资源匮乏下的抉择
-    - 与巨兽共生
-    - 靠谎言维持的秩序
-    - 迟来的告别
+    - Whether warning someone changes or creates the danger
+    - Public infrastructure as a promise between strangers
+    - Expertise, trust, and shared responsibility
+    - Hope as a practical discipline
 mechanics:
   combatStyle: narrative
   difficulty: normal
-  skillSystem: 冒险行动交由骰子判定，以五项底子（筋骨/巧手/甲感/心胆/谈锋）作修正；下降、攀缒与烬海行动失败有实际代价。
+  skillSystem: Risky actions use Grit, Systems, Fieldcraft, Insight, or Rapport. Failure changes time, charge, trust, safety, or the quality of available information rather than simply stopping the story.
   customRules:
-    - 有风险的行动应掷骰判定，用对应属性作修正；失败会付出物资、伤势或好感的代价
-    - 物资与鳞钱有限，露水按配给发放；行囊里没有的东西，就是没有
-    - 接下的委托与许诺记入任务日志，完成与否影响声誉与各方态度
-    - 关键人物记好感；好感决定价钱、情报深浅，以及关键时刻有没有人拉你一把
-    - 烬潮起时必须撤离甲外区域，赖着不走就是找死
+    - Track the Crownfire countdown and state the cost when an action consumes meaningful time.
+    - Vehicles, radios, and station systems require charge; power committed in one place is unavailable elsewhere.
+    - Future echoes provide clues, never mandatory outcomes. Player choices may prevent, alter, or cause the heard transmission.
+    - Commitments and discoveries belong in the quest and signal logs.
+    - Important characters remember honesty, care, competence, and whose safety the player prioritized.
 startingConditions:
-  openingScenario: 破晓，玄负毫无征兆地垂首停驻，望角台的晨钟乱了套。左舷烬海之中，一座图上没有的黑色尖塔正破烬而出。司辰阁少卿温辞已带人赶往尾锚桩封锚；悬钩堂里，秦九镰把一张委托单拍在你面前——封锚之前挂链下去，看看那座塔。玄负为它停了下来，而烬潮不会等人。
-  openingHook: 鳌停了，塔出来了。封锚之前，你敢不敢下去？
+  openingScenario: At 06:14 every receiver at Emberback plays the same impossible distress call—your own voice, speaking from seventy-two hours ahead. The message warns you to stop a medical convoy at Mile Seventeen, keep Mina off the tower, and prevent Tomas from shutting down the signal. The network then fails as a Crownfire storm approaches.
+  openingHook: The future used your voice. Who do you warn first?
   openingChips:
-    - 接下委托，抢在封锚前下降
-    - 向秦九镰问清委托底细
-    - 去尾锚桩探温辞的口风
-    - 找哑弦买消息
-    - 先清点行囊与装具
+    - Play the recording for Tomas
+    - Call June and stop the convoy
+    - Climb after Mina
+    - Trace the signal before it fades
+    - Check the station's remaining charge
   playerConstraints:
-    - 你是行籍拾荒学徒，甲感一分，尚无独立带队资格
-    - 未经许可下降违反锚令，被抓住会吊销行籍
-    - 烬海之中不可久留，烬潮预警一响必须回链
-  startingLocation: 中脊市・悬钩堂
+    - You are Emberback's newest linekeeper, trained but not yet trusted to run a crisis alone.
+    - Crownfire reaches the ridge in three hours.
+    - The medical convoy is already moving and long-range communication is failing.
+  startingLocation: Emberback Relay, Signal Room
   startingResources:
-    鳞钱: 40
-    露水囊: 2
+    Trade chits: 60
+    Water cells: 2
+    Crawler charge: 65

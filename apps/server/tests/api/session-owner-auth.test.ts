@@ -2,8 +2,9 @@
  * Session owner-token authorization.
  *
  * Tiered model:
- *   - self (default): owner tokens are minted but NOT enforced — local play
- *     stays token-free (the network boundary is the loopback bind).
+ *   - self (default): owner tokens are minted but NOT enforced in dev/desktop.
+ *   - self + production MemoryStore: browser-private mode enforces owner tokens
+ *     while keeping anonymous session creation open.
  *   - demo / commercial: every session-scoped route behind
  *     `resolveSessionParam` / `checkSessionOwner` hard-requires the token;
  *     COVEL_DESKTOP_REST_TOKEN acts as an operator master key.
@@ -23,8 +24,17 @@ import { sessionRoutes } from "../../src/routes/api/session.js";
 import { messageRoutes } from "../../src/routes/api/messages.js";
 import { traceRoutes } from "../../src/routes/api/traces.js";
 import { subscribeRoutes } from "../../src/routes/api/subscribe.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import {
+  hashSessionOwnerToken,
+  verifyResolvedSessionRead,
+} from "../../src/routes/api/session/session-guard.js";
 
-const ENV_KEYS = ["DEPLOYMENT_TIER", "COVEL_DESKTOP_REST_TOKEN"] as const;
+const ENV_KEYS = [
+  "DEPLOYMENT_TIER",
+  "COVEL_DESKTOP_REST_TOKEN",
+  "NODE_ENV",
+] as const;
 const ORIGINAL_ENV = Object.fromEntries(
   ENV_KEYS.map((k) => [k, process.env[k]]),
 );
@@ -40,11 +50,16 @@ afterEach(() => {
 function createTestApp(store: DataStore, registry: PluginRegistry): Hono {
   const app = new Hono();
   const eventBus = createEventBus(store);
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("storeBackend", "memory");
     c.set("pluginRegistry", registry);
     c.set("eventBus", eventBus);
+    c.set("sessionLock", sessionLock);
     await next();
+    const staleRead = await verifyResolvedSessionRead(c);
+    if (staleRead) c.res = staleRead;
   });
   app.route("/api/sessions", sessionRoutes);
   app.route("/api/sessions", messageRoutes);
@@ -92,9 +107,16 @@ describe("self tier (default) — no enforcement, no breakage", () => {
     const stored = await store.getSession(created.id);
     expect(JSON.stringify(stored)).not.toContain(created.ownerToken);
     expect(stored?.metadata?.ownerTokenHash).toBeTypeOf("string");
+    expect(stored?.metadata?.approvalScopeNonce).toBeTypeOf("string");
+    expect(created.metadata?.ownerTokenHash).toBeUndefined();
+    expect(created.metadata?.approvalScopeNonce).toBeUndefined();
 
     // Token-free access works everywhere (existing local clients unchanged).
-    expect((await app.request(`/api/sessions/${created.id}`)).status).toBe(200);
+    const getSession = await app.request(`/api/sessions/${created.id}`);
+    expect(getSession.status).toBe(200);
+    const sessionBody = (await getSession.json()) as CreatedSession;
+    expect(sessionBody.metadata?.ownerTokenHash).toBeUndefined();
+    expect(sessionBody.metadata?.approvalScopeNonce).toBeUndefined();
     expect(
       (await app.request(`/api/sessions/${created.id}/messages`)).status,
     ).toBe(200);
@@ -105,6 +127,23 @@ describe("self tier (default) — no enforcement, no breakage", () => {
       body: JSON.stringify({ status: "paused" }),
     });
     expect(patch.status).toBe(200);
+  });
+});
+
+describe("browser-private tier — anonymous create, owner-only access", () => {
+  it("enforces owner tokens for production MemoryStore mirrors", async () => {
+    delete process.env.DEPLOYMENT_TIER;
+    process.env.NODE_ENV = "production";
+
+    const created = await createSession(app);
+    expect((await app.request(`/api/sessions/${created.id}`)).status).toBe(401);
+    expect(
+      (
+        await app.request(`/api/sessions/${created.id}`, {
+          headers: { "x-session-token": created.ownerToken },
+        })
+      ).status,
+    ).toBe(200);
   });
 });
 
@@ -217,6 +256,68 @@ describe("commercial tier — owner token hard-required", () => {
     ).toBe(200);
   });
 
+  it("rejects data read from a same-id replacement after owner authorization", async () => {
+    let markReadStarted = (): void => undefined;
+    const readStarted = new Promise<void>((resolve) => {
+      markReadStarted = resolve;
+    });
+    let releaseRead = (): void => undefined;
+    const readReleased = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const racingStore = new Proxy(store, {
+      get(target, property, receiver) {
+        if (property !== "listMessages") {
+          return Reflect.get(target, property, receiver);
+        }
+        return async (sessionId: string) => {
+          markReadStarted();
+          await readReleased;
+          return store.listMessages(sessionId);
+        };
+      },
+    }) as DataStore;
+    const racingApp = createTestApp(racingStore, createPluginRegistry());
+
+    const responsePromise = racingApp.request(
+      `/api/sessions/${created.id}/messages`,
+      { headers: { authorization: `Bearer ${created.ownerToken}` } },
+    );
+    await readStarted;
+    await store.deleteSession(created.id);
+    const now = new Date().toISOString();
+    await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      id: created.id,
+      status: "active",
+      completedPlayerTurns: 0,
+
+      activePlugins: [],
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        ownerTokenHash: hashSessionOwnerToken("new-owner"),
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+    await store.addMessage({
+      id: "new-incarnation-secret",
+      sessionId: created.id,
+      role: "assistant",
+      content: "must not cross the old owner check",
+      createdAt: now,
+    });
+    releaseRead();
+
+    const response = await responsePromise;
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "session_incarnation_changed",
+    });
+  });
+
   it("gates trace reads (and keeps 404 for unknown sessions)", async () => {
     expect((await app.request(`/api/traces/${created.id}`)).status).toBe(401);
     expect(
@@ -247,10 +348,16 @@ describe("commercial tier — owner token hard-required", () => {
 
   it("fails closed for legacy sessions without a stored hash", async () => {
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "legacy-1",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       locale: "zh-CN",
       activePlugins: [],
       createdAt: new Date().toISOString(),

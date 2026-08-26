@@ -65,7 +65,7 @@ export function ImageJobsPanel({ pluginId }: { pluginId: string }) {
         return (
           <div
             key={job.jobId}
-            className="rounded-lg border border-border bg-card/60"
+            className="image-job-row rounded-lg border border-border bg-card/60"
           >
             <button
               type="button"

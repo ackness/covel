@@ -12,6 +12,15 @@ cp .env.llm.example .env.llm
 pnpm e2e
 ```
 
+这组命令会运行 `tests/e2e/` 下全部 Chromium spec。只想跑一个文件或一个
+测试名称时，直接把参数传给 Playwright：
+
+```bash
+pnpm exec playwright test tests/e2e/game-session.spec.ts
+pnpm exec playwright test tests/e2e/game-session.spec.ts --grep "restore"
+pnpm exec playwright test --project=chromium tests/e2e/i18n.spec.ts
+```
+
 `pnpm e2e` 使用 Playwright。未设置 `E2E_BASE_URL` 时，Playwright 会自动执行
 `pnpm dev`，等待 `http://localhost:3001/api/health` 可用后开始测试；**页面导航则指向
 Vite 的 `http://localhost:5173`**（`pnpm dev` 下 server 不服务 SPA，3001 的页面路由是裸
@@ -32,6 +41,10 @@ E2E_BASE_URL=http://localhost:5173 pnpm e2e
 ```bash
 pnpm e2e:ui
 ```
+
+`pnpm e2e:ui` 会打开 Playwright UI；也可以用
+`pnpm exec playwright test --debug tests/e2e/game-session.spec.ts` 逐步跑单个
+spec。Playwright 只配置了 `chromium` project。
 
 ## 编写 spec：共享辅助函数
 
@@ -78,13 +91,13 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 ## 环境变量
 
-| 变量                    | 默认值                  | 说明                                                            |
-| ----------------------- | ----------------------- | --------------------------------------------------------------- |
-| `E2E_BASE_URL`          | `http://localhost:5173` | Playwright 页面导航地址（Vite）。设了它就不再自动起 `pnpm dev`  |
-| `E2E_MODEL_SLOT`        | `e2e`                   | `scripts/e2e-plugin-verify.ts` 使用的 slot                      |
-| `COVEL_STORY_BASE_URL`  | —                       | story LLM 代理地址；用于通过环境变量覆盖测试 slot 的 `baseUrl`  |
-| `COVEL_PLUGIN_BASE_URL` | —                       | plugin LLM 代理地址；用于通过环境变量覆盖测试 slot 的 `baseUrl` |
-| `CI`                    | `false`                 | CI 模式下 Playwright 启用重试并限制 worker                      |
+| 变量                    | 默认值                  | 说明                                                           |
+| ----------------------- | ----------------------- | -------------------------------------------------------------- |
+| `E2E_BASE_URL`          | `http://localhost:5173` | Playwright 页面导航地址（Vite）。设了它就不再自动起 `pnpm dev` |
+| `E2E_MODEL_SLOT`        | `e2e`                   | `scripts/e2e-plugin-verify.ts` 使用的 slot                     |
+| `COVEL_STORY_BASE_URL`  | 仅登记、未读取          | 不会覆盖 slot；代理地址应直接写入 `llm.toml`                   |
+| `COVEL_PLUGIN_BASE_URL` | 仅登记、未读取          | 不会覆盖 slot；代理地址应直接写入 `llm.toml`                   |
+| `CI`                    | `false`                 | CI 模式下 Playwright 启用重试并限制 worker                     |
 
 ## PostgreSQL 模式
 
@@ -111,3 +124,19 @@ pnpm docker:down
 | `debugs/e2e-logs`     | 插件验证脚本日志与 JSON 产物    |
 
 这些目录已在 `.dockerignore` 中排除，不进入生产镜像上下文。
+
+## 失败排查
+
+- **端口已占用或页面打不开**：默认 Vite 是 `5173`、API 是 `3001`。运行
+  `pnpm stop` 后重试；若已有服务，设置 `E2E_BASE_URL` 指向实际的 SPA 地址。
+  设置该变量后 Playwright 不会自动启动 `pnpm dev`。
+- **API health 等待超时**：确认 `http://localhost:3001/api/health` 可访问；若使用
+  PostgreSQL，先运行 `pnpm db:up` 再运行 `pnpm dev:pg`。
+- **模型/角色创建失败**：浏览器 live spec 使用应用配置的 `story` / `plugin` 等用途；
+  `scripts/e2e-plugin-verify.ts` 才默认使用 `e2e`（或 `E2E_MODEL_SLOT`）。分别确认所需
+  slot 存在且 `.env.llm` 已提供对应 key。
+- **需要定位异步失败**：失败时 Playwright 保留 screenshot；首次重试才保留
+  trace/video。查看 `tests/e2e/report`，用 `pnpm exec playwright show-report tests/e2e/report`
+  打开 HTML 报告。
+- **插件验证 artifact**：HTTP 验证脚本默认写入 `debugs/e2e-logs/`；若只想在终端
+  调试，传 `--no-log`，若要保留会话和快照，传 `--keep`。

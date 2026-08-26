@@ -1,10 +1,9 @@
 /**
  * Backend-agnostic canonical row→record mappers for the state domain
- * (state schemas/entries/changes, events, approvals, messages, characters).
+ * (state schemas/entries/changes, events, messages, characters).
  */
 
 import type {
-  ApprovalRecord,
   CharacterRecord,
   EventRecord,
   MessageRecord,
@@ -51,16 +50,6 @@ export interface EventRow {
   payload: unknown;
   targetRuntime: string | null;
   turnId: string | null;
-  createdAt: string;
-}
-
-export interface ApprovalRow {
-  id: string;
-  sessionId: string;
-  toolName: string;
-  pluginId: string;
-  decision: string;
-  turnId: string;
   createdAt: string;
 }
 
@@ -141,18 +130,6 @@ export function toEventRecord(row: EventRow, json: JsonReader): EventRecord {
     payload: json.read(row.payload),
     targetRuntime: row.targetRuntime ?? undefined,
     turnId: row.turnId ?? undefined,
-    createdAt: row.createdAt,
-  };
-}
-
-export function toApprovalRecord(row: ApprovalRow): ApprovalRecord {
-  return {
-    id: row.id,
-    sessionId: row.sessionId,
-    toolName: row.toolName,
-    pluginId: row.pluginId,
-    decision: row.decision,
-    turnId: row.turnId,
     createdAt: row.createdAt,
   };
 }

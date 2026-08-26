@@ -1,3 +1,4 @@
+import { FormData as UndiciFormData } from "undici";
 import type { TranscriptionWire } from "./types.js";
 import type {
   ProviderConfig,
@@ -15,7 +16,10 @@ async function transcribe(
   config: ProviderConfig,
   params: TranscriptionParams,
 ): Promise<TranscriptionResult> {
-  const formData = new FormData();
+  // Production requests use the package-pinned npm Undici transport. Use its
+  // matching FormData implementation so multipart bodies retain their brand
+  // across Node/Electron Undici version boundaries.
+  const formData = new UndiciFormData();
   formData.set("model", params.model);
   formData.set(
     "file",

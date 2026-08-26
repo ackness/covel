@@ -10,6 +10,8 @@ import {
   createPluginDataWriter,
   createPluginLogger,
   createRuntimeMediaContext,
+  materializeHandlerSuccess,
+  normalizeHandlerResult,
   processRuntimeResult,
 } from "@covel/runtime";
 
@@ -135,7 +137,7 @@ export async function runDeferredFollower(args: {
       sessionId: args.sessionId,
       pluginId: args.follower.pluginId,
     });
-    const output = await loaded.handler({
+    const rawOutput = await loaded.handler({
       sessionId: args.sessionId,
       turnId,
       pluginId: args.follower.pluginId,
@@ -157,27 +159,33 @@ export async function runDeferredFollower(args: {
       pluginData: createPluginDataWriter(args.store, helperCtx),
       logger: createPluginLogger(args.store, helperCtx),
     });
-    const outputRecord = (output ?? {}) as Record<string, unknown>;
-    const failed =
-      outputRecord.status === "failed" ||
-      (typeof outputRecord.error === "string" && outputRecord.error.length > 0);
+    const { outcome } = normalizeHandlerResult(rawOutput);
+    const outputRecord: Record<string, unknown> =
+      outcome.outcome === "success"
+        ? materializeHandlerSuccess(outcome, rawOutput)
+        : outcome.outcome === "failed"
+          ? { error: outcome.error }
+          : outcome.outcome === "skipped"
+            ? { skipReason: outcome.skipReason }
+            : {
+                reason: outcome.reason,
+                resumeSchema: outcome.resumeSchema,
+              };
+    const failed = outcome.outcome === "failed";
     const completedAt = new Date().toISOString();
     const runtimeResult: RuntimeResult = {
       runtimeId: args.follower.runtimeId,
       pluginId: args.follower.pluginId,
       runId: turnId,
       turnId,
-      status: failed ? "failed" : "success",
+      status: outcome.outcome === "success" ? "success" : outcome.outcome,
       durationMs: Date.now() - startMs,
       output: outputRecord,
       toolCalls: [],
       timestamp: completedAt,
       ...(failed
         ? {
-            error:
-              typeof outputRecord.error === "string"
-                ? outputRecord.error
-                : "runtime reported failure",
+            error: outcome.outcome === "failed" ? outcome.error : undefined,
           }
         : {}),
     };

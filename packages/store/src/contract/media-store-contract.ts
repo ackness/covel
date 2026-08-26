@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { mediaRefSchema } from "@covel/shared";
 import type { MediaStore } from "../media-store.js";
 
@@ -12,9 +12,21 @@ async function toUint8Array(value: Uint8Array | Blob): Promise<Uint8Array> {
 
 export function runMediaStoreContractTests(
   name: string,
-  createStore: () => MediaStore | Promise<MediaStore>,
+  createStoreResource: () => MediaStore | Promise<MediaStore>,
 ): void {
   describe(`MediaStore Contract: ${name}`, () => {
+    const openStores = new Set<MediaStore>();
+    const createStore = async (): Promise<MediaStore> => {
+      const store = await createStoreResource();
+      openStores.add(store);
+      return store;
+    };
+
+    afterEach(async () => {
+      for (const store of openStores) await store.close?.();
+      openStores.clear();
+    });
+
     it("stores bytes as a MediaRef and reads them back", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png", { width: 1, height: 1 });
@@ -55,6 +67,24 @@ export function runMediaStoreContractTests(
       expect(lookup?.ownerPluginId).toBe("plugin-A");
     });
 
+    it("isolates persisted metadata from caller-owned references", async () => {
+      const store = await createStore();
+      const meta = { nested: { value: 1 } };
+      const ref = await store.put(OTHER, "application/original", meta);
+
+      meta.nested.value = 7;
+      (ref as { mime: string }).mime = "application/corrupt";
+      (ref.meta as { nested: { value: number } }).nested.value = 9;
+
+      expect(await store.lookup(ref.id)).toMatchObject({
+        mime: "application/original",
+      });
+      const persisted = (await store.listAssets()).find(
+        (asset) => asset.id === ref.id,
+      );
+      expect(persisted?.meta).toEqual({ nested: { value: 1 } });
+    });
+
     it("resolves a readable URL for stored media", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png");
@@ -90,11 +120,15 @@ export function runMediaStoreContractTests(
     it("deletes stored media by id", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png");
+      await store.addRef(ref.id, "sess-delete", "plugin-delete");
 
       await store.delete(ref.id);
 
       expect(await store.exists(ref.id)).toBe(false);
       await expect(store.get(ref)).rejects.toThrow(ref.id);
+      expect(
+        (await store.listRefs()).filter((row) => row.mediaId === ref.id),
+      ).toEqual([]);
     });
 
     // ── Ownership / refs / streaming (P0-a §5.1 g/h) ───────────────
@@ -156,6 +190,20 @@ export function runMediaStoreContractTests(
       expect(await store.isReferencedBy(ref.id, "sess-C")).toBe(false);
     });
 
+    it("does not create a ref for an unknown asset", async () => {
+      const store = await createStore();
+
+      await store.addRef("missing-asset", "sess-A", "plugin-A");
+
+      expect(await store.isReferencedBy("missing-asset", "sess-A")).toBe(false);
+      expect(
+        (await store.listRefs()).filter(
+          (row) =>
+            row.mediaId === "missing-asset" && row.sessionId === "sess-A",
+        ),
+      ).toEqual([]);
+    });
+
     it("addRef is idempotent on (sessionId, mediaId) regardless of pluginId", async () => {
       // The UNIQUE constraint on media_refs is (session_id, media_id) only —
       // plugin_id is "first-source metadata", not part of the key. SQL UNIQUE
@@ -194,6 +242,24 @@ export function runMediaStoreContractTests(
       expect(yRefs[0]?.pluginId).toBe("plugin-A");
     });
 
+    it("does not leave a dangling ref when addRef races delete", async () => {
+      const store = await createStore();
+      const ref = await store.put(OTHER, "application/octet-stream");
+
+      // Start addRef first so the legacy IDB implementation completed its
+      // asset-exists read before delete, then issued the ref put afterwards.
+      const adding = store.addRef(ref.id, "sess-race", "plugin-race");
+      const deleting = store.delete(ref.id);
+      await Promise.all([adding, deleting]);
+
+      expect(
+        (await store.listRefs()).filter((row) => row.mediaId === ref.id),
+      ).toEqual([]);
+      const recreated = await store.put(OTHER, "application/octet-stream");
+      expect(recreated.id).toBe(ref.id);
+      expect(await store.isReferencedBy(ref.id, "sess-race")).toBe(false);
+    });
+
     it("removeRef only removes the specified session ref and preserves shared assets", async () => {
       const store = await createStore();
       const ref = await store.put(PNG, "image/png");
@@ -218,6 +284,33 @@ export function runMediaStoreContractTests(
           sessionId: "sess-B",
           pluginId: "plugin-B",
         }),
+      );
+    });
+
+    it("releaseSession removes only the deleted session's authorization edges", async () => {
+      const store = await createStore();
+      const owned = await store.put(PNG, "image/png");
+      const shared = await store.put(OTHER, "application/octet-stream");
+      await store.recordOwnership(owned.id, "sess-delete", "plugin-owner");
+      await store.addRef(owned.id, "sess-keep", "plugin-keep");
+      await store.recordOwnership(shared.id, "sess-keep", "plugin-keep");
+      await store.addRef(shared.id, "sess-delete", "plugin-delete");
+
+      await store.releaseSession("sess-delete");
+
+      expect(await store.exists(owned.id)).toBe(true);
+      expect(await store.lookup(owned.id)).toMatchObject({
+        ownerSessionId: null,
+        ownerPluginId: null,
+      });
+      expect(await store.isReferencedBy(owned.id, "sess-delete")).toBe(false);
+      expect(await store.isReferencedBy(owned.id, "sess-keep")).toBe(true);
+      expect(await store.isReferencedBy(shared.id, "sess-delete")).toBe(false);
+      expect(await store.isReferencedBy(shared.id, "sess-keep")).toBe(true);
+      expect(await store.listRefs()).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ sessionId: "sess-delete" }),
+        ]),
       );
     });
 
@@ -293,6 +386,19 @@ export function runMediaStoreContractTests(
       expect(result.protectedIds).toEqual([keep.id]);
       expect(await store.exists(keep.id)).toBe(true);
       expect(await store.exists(remove.id)).toBe(false);
+    });
+
+    it("cleanup rechecks current refs instead of trusting a stale protected set", async () => {
+      const store = await createStore();
+      const ref = await store.put(OTHER, "application/octet-stream");
+      await store.addRef(ref.id, "sess-new-ref", "plugin-new-ref");
+
+      const result = await store.cleanup(new Set(), { maxAgeMs: 0 });
+
+      expect(result.deletedIds).not.toContain(ref.id);
+      expect(result.deleted).toBe(0);
+      expect(await store.exists(ref.id)).toBe(true);
+      expect(await store.isReferencedBy(ref.id, "sess-new-ref")).toBe(true);
     });
 
     it("isReferencedBy returns true purely from ownership when no addRef ran", async () => {

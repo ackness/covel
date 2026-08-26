@@ -78,25 +78,25 @@ export function GameViewHeader({
         <span
           className={`ui-chip hidden lg:inline-flex ml-1 text-[10px] ${
             executing
-              ? "border-transparent bg-[color-mix(in_oklab,var(--accent-primary)_12%,transparent)] text-[var(--accent-primary)]"
-              : "border-transparent bg-[color-mix(in_oklab,var(--accent-success)_14%,transparent)] text-[var(--accent-success)]"
+              ? "border-transparent bg-[color-mix(in_oklab,var(--accent-primary)_12%,transparent)] text-(--accent-primary)"
+              : "border-transparent bg-[color-mix(in_oklab,var(--accent-success)_14%,transparent)] text-(--accent-success)"
           }`}
           aria-live="polite"
         >
           <span
-            className={`w-[5px] h-[5px] rounded-full bg-current ${executing ? "ui-pulse-dot" : ""}`}
+            className={`w-1.25 h-1.25 rounded-full bg-current ${executing ? "ui-pulse-dot" : ""}`}
           />
           {executing ? t("session.stateStreaming") : t("session.statePlaying")}
         </span>
         <ConnectionStatus />
       </div>
       <div className="flex items-center gap-1 shrink-0">
-        <div className="flex items-center border border-[var(--rule-color)] rounded-[var(--radius-control)] overflow-hidden">
+        <div className="flex items-center border border-(--rule-color) rounded-(--radius-control) overflow-hidden">
           <Toggle
             pressed={viewMode === "parsed"}
             onPressedChange={() => onViewModeChange("parsed")}
             size="sm"
-            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-[var(--surface-page)]"
+            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page)"
             aria-label={t("session.viewParsedAria")}
             title={t("session.viewParsed")}
           >
@@ -106,7 +106,7 @@ export function GameViewHeader({
             pressed={viewMode === "detailed"}
             onPressedChange={() => onViewModeChange("detailed")}
             size="sm"
-            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-[var(--surface-page)]"
+            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page)"
             aria-label={t("session.viewDetailedAria")}
             title={t("session.viewDetailed")}
           >
@@ -116,7 +116,7 @@ export function GameViewHeader({
             pressed={viewMode === "raw"}
             onPressedChange={() => onViewModeChange("raw")}
             size="sm"
-            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-[var(--surface-page)]"
+            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page)"
             aria-label={t("session.viewRawAria")}
             title={t("session.viewRaw")}
           >
@@ -126,7 +126,7 @@ export function GameViewHeader({
             pressed={viewMode === "stage"}
             onPressedChange={() => onViewModeChange("stage")}
             size="sm"
-            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-[var(--surface-page)]"
+            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page)"
             aria-label={t("session.viewStageAria")}
             title={t("session.viewStage")}
           >
@@ -149,7 +149,7 @@ export function GameViewHeader({
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 px-2 shrink-0 gap-1 text-[var(--accent-warning)] hover:bg-[color-mix(in_oklab,var(--accent-warning)_8%,transparent)]"
+            className="h-7 px-2 shrink-0 gap-1 text-(--accent-warning) hover:bg-[color-mix(in_oklab,var(--accent-warning)_8%,transparent)]"
             onClick={onOpenSuspensions}
             aria-label={t("session.suspensionsBadge", {
               count: suspensionsCount,

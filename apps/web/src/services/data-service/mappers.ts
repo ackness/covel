@@ -3,7 +3,7 @@ import type {
   MessageRecord as StoreMessageRecord,
   SessionRecord as StoreSessionRecord,
   WorldRecord as StoreWorldRecord,
-} from "@covel/store";
+} from "@covel/store/browser-sync";
 import type { MessageRecord, SessionRecord, WorldRecord } from "../api.js";
 
 export function toFrontendWorld(w: StoreWorldRecord): WorldRecord {
@@ -28,14 +28,16 @@ export function toFrontendSession(s: StoreSessionRecord): SessionRecord {
     worldId: s.worldId ?? "",
     status: s.status,
     locale: s.locale,
-    turnCount: s.turnCount,
-    preGameCompleted: s.preGameCompleted,
+    phase: s.phase,
+    completedPlayerTurns: s.completedPlayerTurns,
+    setupRuntimes: { ...s.setupRuntimes },
     activePlugins: s.activePlugins,
     presetId: s.presetId,
     runtimeModelOverrides: s.runtimeModelOverrides
       ? { ...s.runtimeModelOverrides }
       : undefined,
     createdAt: s.createdAt,
+    updatedAt: s.updatedAt,
   };
 }
 

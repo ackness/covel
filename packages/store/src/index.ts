@@ -18,6 +18,38 @@ export {
   createSqliteMediaStore,
 } from "./media-store.js";
 export { supportsVector } from "./vector-store.js";
+export { SessionAlreadyExistsError } from "./errors.js";
+export {
+  BROWSER_CHECKPOINT_SCHEMA_VERSION,
+  PERSISTENCE_PROFILES,
+  ActionIdConflictError,
+  BrowserSyncValidationError,
+  RevisionConflictError,
+  applySessionCommit,
+  assertBrowserCheckpoint,
+  assertPersistenceProfile,
+  assertSessionCommit,
+  isBrowserCheckpoint,
+  isPersistenceProfile,
+  isSessionCommit,
+  validateBrowserCheckpoint,
+  validateSessionCommit,
+} from "./browser-sync/browser-sync.js";
+export type {
+  BrowserCheckpoint,
+  BrowserCheckpointState,
+  BrowserCheckpointSchemaVersion,
+  PersistenceProfile,
+  SessionCommit,
+} from "./browser-sync/browser-sync.js";
+export {
+  exportSessionCheckpoint,
+  replaceSessionFromCheckpoint,
+} from "./browser-sync/session-checkpoint.js";
+export type {
+  ExportSessionCheckpointOptions,
+  ReplaceSessionCheckpointOptions,
+} from "./browser-sync/session-checkpoint.js";
 export type {
   MediaAssetLookup,
   MediaAssetRecord,
@@ -66,7 +98,6 @@ export type {
   StateEntryRecord,
   StateChangeRecord,
   EventRecord,
-  ApprovalRecord,
   MessageRecord,
   CharacterRecord,
   PluginDataRecord,
@@ -86,8 +117,6 @@ export type {
   SuspensionRecord,
   SnapshotRecord,
   SnapshotPayload,
-  SnapshotPayloadV1,
-  SnapshotPayloadV2,
   SnapshotSessionState,
   SnapshotKind,
 } from "./types.js";

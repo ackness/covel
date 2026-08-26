@@ -18,17 +18,16 @@
  *      `PLUGIN.md` or `runtimes/<sub>/PLUGIN.md` — what
  *      verify-release.mjs enforces in CI. Each PLUGIN.md's declared
  *      `events[]` also gets its `schema` path resolved, JSON-parsed, and
- *      shape-checked (has `type` or `properties`, i.e. looks like a JSON
- *      Schema). This is a structural check, not a full ajv compile: ajv is
- *      a dependency of packages/tools and apps/server but not of the repo
- *      root, and this script only declares node builtins + the root `yaml`
- *      devDependency (see check #2 above, which this script itself must
- *      satisfy). Full ajv 2020 validation of event payloads happens at
- *      runtime via the same dataSchemas validator emit-event already uses.
+ *      shape-checked, then passed through the production loader parser and
+ *      strict authoring schema.
  *   4. Every `worlds/<id>/` has `world.yaml` + at least one
- *      `WORLD*.md`.
+ *      `WORLD*.md`; world.yaml and worldData sources also pass through the
+ *      production schemas and diagnostics.
  *   5. `prompts/server/` has at least one `*.md`.
- *   6. `actionlint` passes (when installed).
+ *   6. The bundled LiteLLM model database is a valid snapshot pinned to an
+ *      immutable upstream commit.
+ *   7. Production source env reads are covered by the shared registry.
+ *   8. `actionlint` passes (when installed).
  *
  * Exit code 0 = safe to push. Non-zero = fix before tagging.
  *
@@ -39,7 +38,7 @@
  * Wired into the root package.json as `pnpm release:preflight`.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -146,7 +145,7 @@ function pkgRoot(spec) {
 }
 
 // ── 1. Lockfile sync ─────────────────────────────────────────────
-console.log("\n[1/6] Lockfile sync (pnpm --frozen-lockfile dry-run)");
+console.log("\n[1/8] Lockfile sync (pnpm --frozen-lockfile dry-run)");
 if (args.has("--skip-lockfile")) {
   warn("skipped (--skip-lockfile)");
 } else {
@@ -164,7 +163,7 @@ if (args.has("--skip-lockfile")) {
 }
 
 // ── 2. Undeclared imports ─────────────────────────────────────────
-console.log("\n[2/6] Undeclared bare imports across packages/* and apps/*");
+console.log("\n[2/8] Undeclared bare imports across packages/* and apps/*");
 const wsPkgDirs = [
   ...fs
     .readdirSync(path.join(repoRoot, "packages"), { withFileTypes: true })
@@ -222,7 +221,7 @@ if (undeclaredCount === 0)
   ok(`all ${wsPkgDirs.length} workspace packages have all imports declared`);
 
 // ── 3. plugins/ structure ─────────────────────────────────────────
-console.log("\n[3/6] plugins/<id>/ structure (verify-release sentinels)");
+console.log("\n[3/8] plugins/<id>/ structure (verify-release sentinels)");
 const isPluginManifest = (f) => /^PLUGIN(\.[a-z-]+)?\.md$/i.test(f);
 
 // Same extraction as scripts/check-plugin-i18n.mjs — frontmatter is the YAML
@@ -327,7 +326,14 @@ const pluginDirs = fs
   .readdirSync(path.join(repoRoot, "plugins"), { withFileTypes: true })
   // `_`-prefixed dirs are non-plugin conventions (plugins/_archive holds
   // retired plugins; discovery and the workspace glob skip them too).
-  .filter((e) => e.isDirectory() && !e.name.startsWith("_"));
+  .filter((e) => e.isDirectory() && !e.name.startsWith("_"))
+  // A package manager can leave an ignored node_modules-only directory after
+  // a plugin is archived. Keep validating every directory with actual source
+  // content while excluding that non-package residue.
+  .filter((e) => {
+    const dir = path.join(repoRoot, "plugins", e.name);
+    return fs.readdirSync(dir).some((name) => name !== "node_modules");
+  });
 let pluginIssues = 0;
 let eventSchemaChecks = 0;
 for (const entry of pluginDirs) {
@@ -358,13 +364,37 @@ for (const entry of pluginDirs) {
     pluginIssues += checkEventsSchemas(manifestFile, dir);
   }
 }
+try {
+  execFileSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      path.join(
+        repoRoot,
+        "packages/plugin-loader/scripts/validate-manifest.ts",
+      ),
+      ...pluginDirs.map((entry) => path.join(repoRoot, "plugins", entry.name)),
+    ],
+    { cwd: repoRoot, encoding: "utf-8", stdio: "pipe" },
+  );
+} catch (e) {
+  const output = [e.stdout?.toString(), e.stderr?.toString()]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  fail(
+    `strict plugin manifest validation failed${output ? `:\n${output}` : ""}`,
+  );
+  pluginIssues++;
+}
 if (pluginIssues === 0)
   ok(
-    `all ${pluginDirs.length} plugins have package.json + PLUGIN.md (${eventSchemaChecks} manifest(s) checked for events[] schema refs)`,
+    `all ${pluginDirs.length} plugins have package.json + PLUGIN.md (${eventSchemaChecks} manifest(s) passed strict validation and events[] schema refs)`,
   );
 
 // ── 4. worlds/ structure ──────────────────────────────────────────
-console.log("\n[4/6] worlds/<id>/ structure");
+console.log("\n[4/8] worlds/<id>/ structure");
 const worldDirs = fs
   .readdirSync(path.join(repoRoot, "worlds"), { withFileTypes: true })
   // `_`-prefixed dirs are archives (e.g. worlds/_archive) — the world-seed
@@ -385,11 +415,32 @@ for (const entry of worldDirs) {
     worldIssues++;
   }
 }
+try {
+  execFileSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      path.join(repoRoot, "scripts/validate-release-worlds.ts"),
+      ...worldDirs.map((entry) => path.join(repoRoot, "worlds", entry.name)),
+    ],
+    { cwd: repoRoot, encoding: "utf-8", stdio: "pipe" },
+  );
+} catch (e) {
+  const output = [e.stdout?.toString(), e.stderr?.toString()]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  fail(`world manifest/data validation failed${output ? `:\n${output}` : ""}`);
+  worldIssues++;
+}
 if (worldIssues === 0)
-  ok(`all ${worldDirs.length} worlds have world.yaml + WORLD*.md`);
+  ok(
+    `all ${worldDirs.length} worlds have world.yaml + WORLD*.md and pass manifest/worldData validation`,
+  );
 
 // ── 5. prompts/server/ ────────────────────────────────────────────
-console.log("\n[5/6] prompts/server/*.md");
+console.log("\n[5/8] prompts/server/*.md");
 const promptsDir = path.join(repoRoot, "prompts/server");
 if (!fs.existsSync(promptsDir)) {
   fail("prompts/server/ does not exist");
@@ -399,8 +450,98 @@ if (!fs.existsSync(promptsDir)) {
   else ok(`${md.length} prompt files present`);
 }
 
-// ── 6. actionlint ────────────────────────────────────────────────
-console.log("\n[6/6] GitHub Actions workflow lint");
+// ── 6. Bundled model database snapshot ──────────────────────────
+console.log("\n[6/8] Bundled LiteLLM model database snapshot");
+const modelDbPath = path.join(
+  repoRoot,
+  "packages/ai-provider/data/model-db.json",
+);
+const modelDbRelativePath = "packages/ai-provider/data/model-db.json";
+const modelDbSourcePath = path.join(
+  repoRoot,
+  "packages/ai-provider/model-db-source.json",
+);
+const modelDbSourceRelativePath = "packages/ai-provider/model-db-source.json";
+
+function isGitTracked(relativePath) {
+  try {
+    execFileSync("git", ["ls-files", "--error-unmatch", "--", relativePath], {
+      cwd: repoRoot,
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+if (!fs.existsSync(modelDbPath)) {
+  fail("packages/ai-provider/data/model-db.json is missing");
+} else if (!isGitTracked(modelDbRelativePath)) {
+  fail(`${modelDbRelativePath} is not tracked by Git`);
+}
+if (!fs.existsSync(modelDbSourcePath)) {
+  fail(`${modelDbSourceRelativePath} is missing`);
+} else if (!isGitTracked(modelDbSourceRelativePath)) {
+  fail(`${modelDbSourceRelativePath} is not tracked by Git`);
+}
+
+if (fs.existsSync(modelDbPath) && fs.existsSync(modelDbSourcePath)) {
+  try {
+    const sourceManifest = JSON.parse(
+      fs.readFileSync(modelDbSourcePath, "utf-8"),
+    );
+    const revision = sourceManifest.revision ?? "";
+    const expectedSource = `https://raw.githubusercontent.com/BerriAI/litellm/${revision}/model_prices_and_context_window.json`;
+    const hasValidRevision = /^[0-9a-f]{40}$/.test(revision);
+    const hasValidTimestamp = /^\d{4}-\d{2}-\d{2}T/.test(
+      sourceManifest.updatedAt ?? "",
+    );
+    if (!hasValidRevision) {
+      fail("model-db-source.json revision must be a 40-character commit");
+    }
+    if (!hasValidTimestamp) {
+      fail("model-db-source.json updatedAt must be an ISO timestamp");
+    }
+
+    const modelDb = JSON.parse(fs.readFileSync(modelDbPath, "utf-8"));
+    const modelCount = Object.keys(modelDb.models ?? {}).length;
+    if (modelDb.source !== expectedSource) {
+      fail("model-db.json source does not match model-db-source.json");
+    } else if (modelDb.updatedAt !== sourceManifest.updatedAt) {
+      fail("model-db.json updatedAt does not match model-db-source.json");
+    } else if (modelDb.count !== modelCount || modelCount === 0) {
+      fail(
+        `model-db.json count is inconsistent (${modelDb.count ?? "missing"} declared, ${modelCount} entries)`,
+      );
+    } else if (hasValidRevision && hasValidTimestamp) {
+      ok(`${modelCount} models match the pinned LiteLLM source manifest`);
+    }
+  } catch (e) {
+    fail(`bundled model database metadata is invalid — ${e.message}`);
+  }
+}
+
+// ── 7. Production env registry coverage ─────────────────────────
+console.log("\n[7/8] Production env registry coverage");
+try {
+  execFileSync(
+    process.execPath,
+    [path.join(repoRoot, "scripts/check-production-env.mjs")],
+    {
+      cwd: repoRoot,
+      stdio: "pipe",
+    },
+  );
+  ok("all static production env reads are registered");
+} catch (e) {
+  fail(
+    `production env registry coverage:\n${e.stdout?.toString() ?? e.stderr?.toString() ?? e.message}`,
+  );
+}
+
+// ── 8. actionlint ────────────────────────────────────────────────
+console.log("\n[8/8] GitHub Actions workflow lint");
 try {
   execSync("which actionlint", { stdio: "pipe" });
   try {

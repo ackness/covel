@@ -10,26 +10,29 @@ import type { RpcHandler } from "../src/index.js";
 describe("PluginRpcRegistry", () => {
   it("registers a plugin action and looks it up by (pluginId, action)", () => {
     const registry = createPluginRpcRegistry();
-    registry.registerPluginAction(
+    const handler: RpcHandler = async () => ({ ok: true });
+    registry.registerPluginHandler(
       "codex",
       "regenerate",
-      { handler: "./rpc/regenerate.js" },
-      "official",
+      handler,
+      {},
+      "builtin",
     );
     const entry = registry.getPluginAction("codex", "regenerate");
     expect(entry).toBeDefined();
     expect(entry?.action).toBe("regenerate");
     expect(entry?.pluginId).toBe("codex");
-    expect(entry?.trustLevel).toBe("official");
-    expect(entry?.handlerPath).toBe("./rpc/regenerate.js");
+    expect(entry?.trustLevel).toBe("builtin");
+    expect(entry?.handler).toBe(handler);
   });
 
   it("honors per-action trust override when it is more restrictive than plugin source", () => {
     const registry = createPluginRpcRegistry();
-    registry.registerPluginAction(
+    registry.registerPluginHandler(
       "core-plugin",
       "risky-action",
-      { handler: "./h.js", trustLevel: "community" },
+      async () => null,
+      { trustLevel: "community" },
       "builtin",
     );
     const entry = registry.getPluginAction("core-plugin", "risky-action");
@@ -40,10 +43,11 @@ describe("PluginRpcRegistry", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const registry = createPluginRpcRegistry();
     // A community plugin tries to opt itself into builtin trust → clamped.
-    registry.registerPluginAction(
+    registry.registerPluginHandler(
       "untrusted-plugin",
       "sneaky-action",
-      { handler: "./h.js", trustLevel: "builtin" },
+      async () => null,
+      { trustLevel: "builtin" },
       "community",
     );
     const entry = registry.getPluginAction("untrusted-plugin", "sneaky-action");
@@ -53,13 +57,14 @@ describe("PluginRpcRegistry", () => {
     warnSpy.mockRestore();
   });
 
-  it("clamps community plugin trying to claim official trust", () => {
+  it("clamps community plugin trying to claim builtin trust", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const registry = createPluginRpcRegistry();
-    registry.registerPluginAction(
+    registry.registerPluginHandler(
       "untrusted-plugin",
       "medium-action",
-      { handler: "./h.js", trustLevel: "official" },
+      async () => null,
+      { trustLevel: "builtin" },
       "community",
     );
     const entry = registry.getPluginAction("untrusted-plugin", "medium-action");
@@ -67,29 +72,25 @@ describe("PluginRpcRegistry", () => {
     warnSpy.mockRestore();
   });
 
-  it("official plugin can downgrade an action to community", () => {
+  it("builtin plugin can downgrade an action to community", () => {
     const registry = createPluginRpcRegistry();
-    registry.registerPluginAction(
-      "official-plugin",
+    registry.registerPluginHandler(
+      "builtin-plugin",
       "restricted",
-      { handler: "./h.js", trustLevel: "community" },
-      "official",
+      async () => null,
+      { trustLevel: "community" },
+      "builtin",
     );
     expect(
-      registry.getPluginAction("official-plugin", "restricted")?.trustLevel,
+      registry.getPluginAction("builtin-plugin", "restricted")?.trustLevel,
     ).toBe("community");
   });
 
   it("throws on duplicate (pluginId, action) registration", () => {
     const registry = createPluginRpcRegistry();
-    registry.registerPluginAction("p", "a", { handler: "./h.js" }, "official");
+    registry.registerPluginHandler("p", "a", async () => null, {}, "builtin");
     expect(() =>
-      registry.registerPluginAction(
-        "p",
-        "a",
-        { handler: "./h2.js" },
-        "official",
-      ),
+      registry.registerPluginHandler("p", "a", async () => null, {}, "builtin"),
     ).toThrow(/duplicate registration/);
   });
 
@@ -108,11 +109,12 @@ describe("PluginRpcRegistry", () => {
   it("list() returns framework + plugin entries", () => {
     const registry = createPluginRpcRegistry();
     registry.registerFrameworkDefault("submit-form", async () => null);
-    registry.registerPluginAction(
+    registry.registerPluginHandler(
       "codex",
       "regenerate",
-      { handler: "./h.js" },
-      "official",
+      async () => null,
+      {},
+      "builtin",
     );
     const list = registry.list();
     expect(list).toHaveLength(2);
@@ -122,14 +124,10 @@ describe("PluginRpcRegistry", () => {
 });
 
 describe("createRpcExecutor", () => {
-  function makeExecutor(opts?: { loadHandler?: () => Promise<RpcHandler> }) {
+  function makeExecutor() {
     const registry = createPluginRpcRegistry();
-    const loadHandler = vi.fn(
-      opts?.loadHandler ??
-        (async (): Promise<RpcHandler> => async () => "loaded-result"),
-    );
-    const executor = createRpcExecutor({ registry, loadHandler });
-    return { registry, executor, loadHandler };
+    const executor = createRpcExecutor({ registry });
+    return { registry, executor };
   }
 
   it("dispatches a framework default action", async () => {
@@ -146,56 +144,35 @@ describe("createRpcExecutor", () => {
     expect(result.result).toEqual({ received: { x: 1 } });
   });
 
-  it("dispatches a plugin-declared action via lazy loader", async () => {
-    const { registry, executor, loadHandler } = makeExecutor();
-    registry.registerPluginAction(
+  it("dispatches an entry-registered plugin action", async () => {
+    const { registry, executor } = makeExecutor();
+    registry.registerPluginHandler(
       "codex",
       "regenerate",
-      { handler: "./rpc/regenerate.js" },
-      "official",
+      async () => "plugin-result",
+      {},
+      "builtin",
     );
 
     const result = await executor.dispatch(
       { pluginId: "codex", action: "regenerate", payload: null },
       { sessionId: "sess-1", store: {} as never },
     );
-    expect(loadHandler).toHaveBeenCalledWith("codex", "./rpc/regenerate.js");
-    expect(result.result).toBe("loaded-result");
-  });
-
-  it("caches the loaded handler module across calls", async () => {
-    const { registry, executor, loadHandler } = makeExecutor();
-    registry.registerPluginAction(
-      "codex",
-      "regenerate",
-      { handler: "./rpc/regenerate.js" },
-      "official",
-    );
-
-    await executor.dispatch(
-      { pluginId: "codex", action: "regenerate", payload: null },
-      { sessionId: "sess-1", store: {} as never },
-    );
-    await executor.dispatch(
-      { pluginId: "codex", action: "regenerate", payload: null },
-      { sessionId: "sess-1", store: {} as never },
-    );
-    expect(loadHandler).toHaveBeenCalledTimes(1);
+    expect(result.result).toBe("plugin-result");
   });
 
   it("plugin-declared action takes precedence over framework default of the same name", async () => {
-    const { registry, executor } = makeExecutor({
-      loadHandler: async () => async () => "plugin-version",
-    });
+    const { registry, executor } = makeExecutor();
     registry.registerFrameworkDefault(
       "submit-form",
       async () => "framework-version",
     );
-    registry.registerPluginAction(
+    registry.registerPluginHandler(
       "codex",
       "submit-form",
-      { handler: "./rpc/submit-form.js" },
-      "official",
+      async () => "plugin-version",
+      {},
+      "builtin",
     );
 
     const result = await executor.dispatch(
@@ -231,29 +208,6 @@ describe("createRpcExecutor", () => {
     ).rejects.toMatchObject({
       name: "RpcDispatchError",
       code: "handler-threw",
-    });
-  });
-
-  it('handler-load failure surfaces as code "handler-load-failed"', async () => {
-    const { registry, executor } = makeExecutor({
-      loadHandler: async () => {
-        throw new Error("module not found");
-      },
-    });
-    registry.registerPluginAction(
-      "p",
-      "a",
-      { handler: "./missing.js" },
-      "official",
-    );
-    await expect(
-      executor.dispatch(
-        { pluginId: "p", action: "a", payload: null },
-        { sessionId: "sess-1", store: {} as never },
-      ),
-    ).rejects.toMatchObject({
-      name: "RpcDispatchError",
-      code: "handler-load-failed",
     });
   });
 

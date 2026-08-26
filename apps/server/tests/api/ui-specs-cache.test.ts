@@ -7,11 +7,15 @@
  * request re-materialises.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, writeFile, mkdir, rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createMemoryStore, type DataStore } from "@covel/store";
+import {
+  createMemoryStore,
+  type DataStore,
+  type StoreTransaction,
+} from "@covel/store";
 import {
   createPluginRegistry,
   type PluginRegistry,
@@ -19,6 +23,7 @@ import {
 import type { Hono } from "hono";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
 import { __resetUiSpecsCache } from "../../src/routes/misc-api/ui-specs.js";
+import { SESSION_INCARNATION_KEY } from "../../src/routes/api/session/session-guard.js";
 
 const stubAi = {
   presetRegistry: { listPresets: () => [] },
@@ -52,28 +57,42 @@ function spec(content: string): string {
 interface Counters {
   batchWrites: number;
   deletes: number;
+  failNextBatch?: boolean;
 }
 
 /** Wrap a store, counting the two write paths the sync uses. */
 function countingStore(store: DataStore, counters: Counters): DataStore {
-  return new Proxy(store, {
-    get(target, prop, receiver) {
-      if (prop === "setPluginDataBatch") {
-        return async (...args: Parameters<DataStore["setPluginDataBatch"]>) => {
-          counters.batchWrites += 1;
-          return target.setPluginDataBatch(...args);
-        };
-      }
-      if (prop === "deletePluginData") {
-        return async (...args: Parameters<DataStore["deletePluginData"]>) => {
-          counters.deletes += 1;
-          return target.deletePluginData(...args);
-        };
-      }
-      const value = Reflect.get(target, prop, receiver);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  }) as DataStore;
+  const wrap = <T extends DataStore | StoreTransaction>(target: T): T =>
+    new Proxy(target, {
+      get(target, prop, receiver) {
+        if (prop === "withTransaction") {
+          const transaction = target.withTransaction;
+          return transaction
+            ? <R>(fn: (tx: StoreTransaction) => Promise<R>) =>
+                transaction.call(target, (tx) => fn(wrap(tx)))
+            : undefined;
+        }
+        if (prop === "setPluginDataBatch") {
+          return async (...args: Parameters<T["setPluginDataBatch"]>) => {
+            counters.batchWrites += 1;
+            if (counters.failNextBatch) {
+              counters.failNextBatch = false;
+              throw new Error("injected UI batch failure");
+            }
+            return target.setPluginDataBatch(...args);
+          };
+        }
+        if (prop === "deletePluginData") {
+          return async (...args: Parameters<DataStore["deletePluginData"]>) => {
+            counters.deletes += 1;
+            return target.deletePluginData(...args);
+          };
+        }
+        const value = Reflect.get(target, prop, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  return wrap(store);
 }
 
 describe("GET /api/ui-specs — materialisation cache", () => {
@@ -107,14 +126,20 @@ describe("GET /api/ui-specs — materialisation cache", () => {
     registry = createPluginRegistry();
 
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
       id: sessionId,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       presetId: null,
       activePlugins: ["panel-plugin"],
       createdAt: new Date().toISOString(),
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        [SESSION_INCARNATION_KEY]: "first",
+      },
     });
 
     app = createMiscApiRoutes(stubAi, registry, store);
@@ -146,6 +171,69 @@ describe("GET /api/ui-specs — materialisation cache", () => {
       right: Array<{ pluginId: string }>;
     };
     expect(body.right.map((e) => e.pluginId)).toEqual(["panel-plugin"]);
+  });
+
+  it("re-materialises after deleting and recreating the same session id", async () => {
+    const first = await app.request(`/api/ui-specs?sessionId=${sessionId}`);
+    expect(first.status).toBe(200);
+    expect(counters.batchWrites).toBe(1);
+
+    await store.deleteSession(sessionId);
+    await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      id: sessionId,
+      worldId: null,
+      status: "active",
+      completedPlayerTurns: 1,
+
+      presetId: null,
+      activePlugins: ["panel-plugin"],
+      createdAt: new Date().toISOString(),
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        [SESSION_INCARNATION_KEY]: "second",
+      },
+    });
+
+    const recreated = await app.request(`/api/ui-specs?sessionId=${sessionId}`);
+    expect(recreated.status).toBe(200);
+    expect(counters.batchWrites).toBe(2);
+    expect(
+      await store.listPluginData(sessionId, "panel-plugin", "__ui_right__"),
+    ).toHaveLength(1);
+  });
+
+  it("rolls back stale-row deletion and does not advance the cache on batch failure", async () => {
+    await store.setPluginData({
+      id: "stale-ui-row",
+      sessionId,
+      pluginId: "panel-plugin",
+      namespace: "__ui_right__",
+      key: "stale",
+      value: [{ id: "stale" }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    counters.failNextBatch = true;
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const failed = await app.request(`/api/ui-specs?sessionId=${sessionId}`);
+      expect(failed.status).toBe(500);
+    } finally {
+      errorLog.mockRestore();
+    }
+    expect(
+      await store.listPluginData(sessionId, "panel-plugin", "__ui_right__"),
+    ).toEqual([expect.objectContaining({ key: "stale" })]);
+
+    const retried = await app.request(`/api/ui-specs?sessionId=${sessionId}`);
+    expect(retried.status).toBe(200);
+    expect(counters.batchWrites).toBe(2);
+    expect(
+      await store.listPluginData(sessionId, "panel-plugin", "__ui_right__"),
+    ).toEqual([expect.objectContaining({ key: "000:panel-plugin" })]);
   });
 
   it("re-materialises after a spec file changes", async () => {

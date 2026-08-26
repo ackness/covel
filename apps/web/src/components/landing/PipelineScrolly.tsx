@@ -101,7 +101,7 @@ export function PipelineScrolly({ scrollRoot }: Props) {
       aria-labelledby="pipeline-heading"
       className="relative w-full bg-background border-t border-border"
     >
-      <div className="max-w-[1400px] mx-auto px-6 md:px-10 py-20 md:py-28">
+      <div className="max-w-350 mx-auto px-6 md:px-10 py-20 md:py-28">
         <header className="max-w-3xl mb-16 md:mb-24">
           <span className="ui-eyebrow text-muted-foreground">
             {t("home.pipeline.eyebrow", "One turn, six stations")}
@@ -128,7 +128,7 @@ export function PipelineScrolly({ scrollRoot }: Props) {
           <div className="md:col-span-6 md:order-2">
             <div className="md:sticky md:top-24 md:h-[60vh] flex items-center justify-center">
               <div
-                className="relative w-full aspect-square max-w-md rounded-[var(--radius-card)] border border-border bg-card overflow-hidden"
+                className="relative w-full aspect-square max-w-md rounded-(--radius-card) border border-border bg-card overflow-hidden"
                 style={{
                   background:
                     "radial-gradient(ellipse at top, color-mix(in oklab, var(--color-primary) 8%, transparent) 0%, var(--surface-panel-strong) 60%)",
@@ -220,7 +220,7 @@ export function PipelineScrolly({ scrollRoot }: Props) {
                   <p className="text-base md:text-lg text-muted-foreground font-light leading-relaxed mb-4 max-w-prose">
                     {t(step.bodyKey, step.bodyFallback)}
                   </p>
-                  <p className="font-mono text-xs text-foreground/70 px-3 py-2 inline-block bg-muted/50 border border-border rounded-[var(--radius-control)]">
+                  <p className="font-mono text-xs text-foreground/70 px-3 py-2 inline-block bg-muted/50 border border-border rounded-(--radius-control)">
                     {t(step.detailKey, step.detailFallback)}
                   </p>
                 </li>

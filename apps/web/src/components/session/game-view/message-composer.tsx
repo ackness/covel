@@ -31,7 +31,7 @@ export function MessageComposer({
   onAbort,
   onKeyDown,
 }: MessageComposerProps) {
-  const isPlaying = session.status === "active" && session.turnCount > 0;
+  const isPlaying = session.status === "active" && session.phase === "playing";
   const isEnded = session.status === "ended";
 
   return (
@@ -42,7 +42,7 @@ export function MessageComposer({
       data-testid="game-composer"
       data-executing={executing}
       data-blocked={composerBlocked}
-      className="border-t border-[var(--rule-color)] shrink-0 px-3 md:px-4 py-4 md:py-5 bg-[var(--surface-page)]"
+      className="border-t border-(--rule-color) shrink-0 px-3 md:px-4 py-4 md:py-5 bg-(--surface-page)"
     >
       {isEnded ? (
         <p className="ui-empty-copy mx-auto text-center text-sm">
@@ -50,7 +50,7 @@ export function MessageComposer({
         </p>
       ) : (
         <div className="ui-composer-frame mx-auto">
-          <div className="flex items-stretch rounded-[var(--radius-control)] border border-[var(--rule-color)] bg-[var(--surface-inset)] focus-within:border-[var(--accent-primary)] transition-colors">
+          <div className="flex items-stretch rounded-(--radius-control) border border-(--rule-color) bg-(--surface-inset) focus-within:border-(--accent-primary) transition-colors">
             <input
               data-testid="game-composer-input"
               type="text"
@@ -84,7 +84,7 @@ export function MessageComposer({
                 onClick={onAbort}
                 aria-label={t("session.abortTurn", "Stop the current turn")}
                 title={t("session.abortTurn", "Stop the current turn")}
-                className="shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-[var(--rule-color)] text-muted-foreground hover:text-destructive hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] transition-colors"
+                className="shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-(--rule-color) text-muted-foreground hover:text-destructive hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] transition-colors"
               >
                 <Square className="w-3 h-3 animate-pulse" />
               </button>
@@ -98,7 +98,7 @@ export function MessageComposer({
                   ? t("session.steerSend", "interject")
                   : t("session.inputKbdHint", "send")
               }
-              className="shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-[var(--rule-color)] text-muted-foreground hover:text-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
+              className="shrink-0 inline-flex items-center justify-center w-11 self-stretch border-l border-(--rule-color) text-muted-foreground hover:text-foreground hover:bg-[color-mix(in_oklab,var(--color-foreground)_6%,transparent)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors"
             >
               <Send className="w-3.5 h-3.5" />
             </button>

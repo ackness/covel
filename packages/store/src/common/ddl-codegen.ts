@@ -55,6 +55,7 @@ interface TableSpec {
   readonly name: string;
   readonly columns: readonly ColumnSpec[];
   readonly indexes: readonly IndexSpec[];
+  readonly primaryKeys: readonly (readonly string[])[];
 }
 
 /**
@@ -110,9 +111,13 @@ function renderColumn(col: ColumnSpec, dialect: Dialect): string {
 
 function renderTable(spec: TableSpec, dialect: Dialect): string {
   const table = quoteIdent(spec.name);
-  const cols = spec.columns
-    .map((c) => `  ${renderColumn(c, dialect)}`)
-    .join(",\n");
+  const definitions = [
+    ...spec.columns.map((c) => renderColumn(c, dialect)),
+    ...spec.primaryKeys.map(
+      (columns) => `PRIMARY KEY (${columns.map(quoteIdent).join(", ")})`,
+    ),
+  ];
+  const cols = definitions.map((definition) => `  ${definition}`).join(",\n");
   const create = `CREATE TABLE IF NOT EXISTS ${table} (\n${cols}\n);`;
   const indexes = spec.indexes.map((idx) => {
     const kw = idx.unique ? "CREATE UNIQUE INDEX" : "CREATE INDEX";
@@ -147,6 +152,9 @@ function toTableSpec(table: unknown, dialect: Dialect): TableSpec | null {
           (col) => (col as { name?: string }).name ?? String(col),
         ),
       })),
+      primaryKeys: cfg.primaryKeys.map((key) =>
+        key.columns.map((column) => column.name),
+      ),
     };
   }
   if (!is(table, PgTable)) return null;
@@ -170,6 +178,9 @@ function toTableSpec(table: unknown, dialect: Dialect): TableSpec | null {
         (col) => (col as { name?: string }).name ?? String(col),
       ),
     })),
+    primaryKeys: cfg.primaryKeys.map((key) =>
+      key.columns.map((column) => column.name),
+    ),
   };
 }
 

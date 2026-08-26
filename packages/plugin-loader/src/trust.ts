@@ -51,7 +51,6 @@ export function deriveBuiltinPluginIds(
  * Determine trust level for a plugin.
  *
  * - builtin: shipped under `plugins/` (auto-load, no approval)
- * - official: whitelisted (auto-load, no approval)
  * - community: everything else (requires user confirmation, tools need approval)
  *
  * The caller should always pass an explicit `source` derived from the load
@@ -62,11 +61,10 @@ export function getPluginTrustInfo(
   _pluginId: string,
   source?: PluginSource,
 ): PluginTrustInfo {
-  const resolvedSource = source ?? detectSource();
+  const resolvedSource = source ?? "community";
 
   switch (resolvedSource) {
     case "builtin":
-    case "official":
       return {
         source: resolvedSource,
         autoLoad: true,
@@ -79,9 +77,4 @@ export function getPluginTrustInfo(
         requiresApproval: true,
       };
   }
-}
-
-function detectSource(): PluginSource {
-  // ponytail: no official plugins yet; reintroduce a whitelist when the first one ships
-  return "community";
 }

@@ -12,7 +12,7 @@
  * - H3: pluginId body validation
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import {
   COMMUNITY_SERVER_CODE_ACTION,
@@ -27,6 +27,8 @@ import {
 } from "@covel/plugin-loader";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { sessionRoutes } from "../../src/routes/api/session.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import { sessionApprovalScope } from "../../src/routes/api/session/session-guard.js";
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -61,13 +63,18 @@ function createTestApp(
   registry: PluginRegistry,
   store: DataStore,
   rpcApprovalGate: RpcApprovalGate,
+  activatePluginServerCode: (
+    pluginId: string,
+  ) => Promise<void> = async () => {},
 ): Hono {
   const app = new Hono();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("pluginRegistry", registry);
     c.set("rpcApprovalGate", rpcApprovalGate);
-    c.set("activatePluginServerCode", async () => {});
+    c.set("activatePluginServerCode", activatePluginServerCode);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", sessionRoutes);
@@ -248,11 +255,17 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 
     // Create a session with both plugins active
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       presetId: null,
       activePlugins: ["narrator", "optional-plugin"],
       createdAt: new Date().toISOString(),
@@ -331,7 +344,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
               conflicts: ["relation-conflict"],
             },
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
       registry.register(
@@ -341,7 +354,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
             id: "relation-required",
             name: "Relation Required",
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
       registry.register(
@@ -351,7 +364,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
             id: "relation-conflict",
             name: "Relation Conflict",
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
 
@@ -396,17 +409,32 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       );
       await store.createSession({
+        phase: "playing",
+        setupRuntimes: {},
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
         id: "sess-reverse-conflict",
         worldId: null,
         status: "active",
-        turnCount: 1,
-        preGameCompleted: [],
+        completedPlayerTurns: 1,
+
         presetId: null,
         activePlugins: ["default-engine"],
         createdAt: new Date().toISOString(),
       });
+      const reverseConflictSession = await store.getSession(
+        "sess-reverse-conflict",
+      );
+      if (!reverseConflictSession) throw new Error("expected session");
+      const reverseScope = sessionApprovalScope(
+        reverseConflictSession,
+        "alternate-engine",
+      );
       const approval = rpcApprovalGate.evaluate({
         sessionId: "sess-reverse-conflict",
+        sessionScope: reverseScope,
         pluginId: "alternate-engine",
         action: "covel:plugin-server-code",
         payload: {},
@@ -415,12 +443,15 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       if (approval.status !== "pending") {
         throw new Error("expected community enable approval");
       }
-      rpcApprovalGate.decide({
-        approvalId: approval.approvalId,
-        decision: "allow",
-        scope: "session",
-        decidedAt: new Date().toISOString(),
-      });
+      rpcApprovalGate.decide(
+        {
+          approvalId: approval.approvalId,
+          decision: "allow",
+          scope: "session",
+          decidedAt: new Date().toISOString(),
+        },
+        reverseScope,
+      );
 
       const res = await app.request(
         "/api/sessions/sess-reverse-conflict/plugins/enable",
@@ -479,7 +510,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
               requires: ["required-plugin"],
             },
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
       registry.register(
@@ -489,7 +520,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
             id: "required-plugin",
             name: "Required Plugin",
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
       registry.register(
@@ -502,7 +533,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
               conflicts: ["required-plugin"],
             },
           }),
-          source: "official",
+          source: "builtin",
         }),
       );
 
@@ -676,6 +707,95 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(session?.activePlugins).toEqual(body.active);
     });
 
+    it("serializes concurrent plugin enables and preserves both updates", async () => {
+      for (const pluginId of ["concurrent-plugin-a", "concurrent-plugin-b"]) {
+        registry.register(
+          makeEntry({
+            id: pluginId,
+            summary: makeSummary({ id: pluginId, pluginType: "plugin" }),
+            source: "builtin",
+          }),
+        );
+      }
+
+      let releaseFirst!: () => void;
+      let markFirstStarted!: () => void;
+      const firstStarted = new Promise<void>((resolve) => {
+        markFirstStarted = resolve;
+      });
+      const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+      const getSession = vi.spyOn(store, "getSession");
+      app = createTestApp(
+        registry,
+        store,
+        rpcApprovalGate,
+        async (pluginId) => {
+          if (pluginId === "concurrent-plugin-a") {
+            markFirstStarted();
+            await firstGate;
+          }
+        },
+      );
+
+      const enable = (pluginId: string) =>
+        app.request(`/api/sessions/${SESSION_ID}/plugins/enable`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pluginId }),
+        });
+      const first = enable("concurrent-plugin-a");
+      await firstStarted;
+      const readsBeforeSecond = getSession.mock.calls.length;
+      const second = enable("concurrent-plugin-b");
+      await vi.waitFor(() => {
+        expect(getSession.mock.calls.length).toBeGreaterThan(readsBeforeSecond);
+      });
+
+      releaseFirst();
+      const responses = await Promise.all([first, second]);
+      expect(responses.map((response) => response.status)).toEqual([200, 200]);
+      expect((await store.getSession(SESSION_ID))?.activePlugins).toEqual(
+        expect.arrayContaining(["concurrent-plugin-a", "concurrent-plugin-b"]),
+      );
+    });
+
+    it("keeps the registry unchanged when enabling fails to persist", async () => {
+      registry.register(
+        makeEntry({
+          id: "persist-failure-plugin",
+          summary: makeSummary({
+            id: "persist-failure-plugin",
+            pluginType: "plugin",
+          }),
+          source: "builtin",
+        }),
+      );
+      const activate = vi.spyOn(registry, "activate");
+      vi.spyOn(store, "updateSession").mockRejectedValueOnce(
+        new Error("simulated persistence failure"),
+      );
+
+      const response = await app.request(
+        `/api/sessions/${SESSION_ID}/plugins/enable`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pluginId: "persist-failure-plugin" }),
+        },
+      );
+
+      expect(response.status).toBe(500);
+      expect(activate).not.toHaveBeenCalledWith(
+        "persist-failure-plugin",
+        SESSION_ID,
+      );
+      expect((await store.getSession(SESSION_ID))?.activePlugins).not.toContain(
+        "persist-failure-plugin",
+      );
+    });
+
     it("requires a session grant before enabling community server code", async () => {
       const requestEnable = () =>
         app.request(`/api/sessions/${SESSION_ID}/plugins/enable`, {
@@ -689,12 +809,21 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       const pending = (await pendingResponse.json()) as {
         approvalId: string;
       };
-      rpcApprovalGate.decide({
-        approvalId: pending.approvalId,
-        decision: "allow",
-        scope: "session",
-        decidedAt: new Date().toISOString(),
-      });
+      const pendingSession = await store.getSession(SESSION_ID);
+      if (!pendingSession) throw new Error("expected session");
+      const pendingScope = sessionApprovalScope(
+        pendingSession,
+        "optional-plugin",
+      );
+      rpcApprovalGate.decide(
+        {
+          approvalId: pending.approvalId,
+          decision: "allow",
+          scope: "session",
+          decidedAt: new Date().toISOString(),
+        },
+        pendingScope,
+      );
 
       const allowedResponse = await requestEnable();
       expect(allowedResponse.status).toBe(200);
@@ -705,6 +834,10 @@ describe("Session plugin routes (real sessionRoutes)", () => {
           SESSION_ID,
           "optional-plugin",
           COMMUNITY_SERVER_CODE_ACTION,
+          sessionApprovalScope(
+            (await store.getSession(SESSION_ID))!,
+            "optional-plugin",
+          ),
         ),
       ).toBe(true);
     });
@@ -737,6 +870,31 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       expect(body.ok).toBe(true);
       // Real route returns `active`, not `activePlugins`
       expect(body.active as string[]).not.toContain("optional-plugin");
+    });
+
+    it("keeps the registry unchanged when disabling fails to persist", async () => {
+      const deactivate = vi.spyOn(registry, "deactivate");
+      vi.spyOn(store, "updateSession").mockRejectedValueOnce(
+        new Error("simulated persistence failure"),
+      );
+
+      const response = await app.request(
+        `/api/sessions/${SESSION_ID}/plugins/disable`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pluginId: "optional-plugin" }),
+        },
+      );
+
+      expect(response.status).toBe(500);
+      expect(deactivate).not.toHaveBeenCalledWith(
+        "optional-plugin",
+        SESSION_ID,
+      );
+      expect((await store.getSession(SESSION_ID))?.activePlugins).toContain(
+        "optional-plugin",
+      );
     });
 
     it("should still include narrator in active list after failed disable", async () => {

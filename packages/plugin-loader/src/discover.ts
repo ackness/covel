@@ -111,7 +111,7 @@ export async function discoverPlugins(
  *     then user-provided). The FIRST occurrence of a given plugin id wins —
  *     so bundled plugins cannot be shadowed by a user plugin with the same id.
  *   - Plugins from index 0 keep their default trust classification (builtin
- *     prefix / official whitelist apply). Plugins from index >= 1 are tagged
+ *     name-based trust inference applies). Plugins from index >= 1 are tagged
  *     `source: 'community'` so a user-dropped `core-evil` cannot auto-load.
  *   - Collisions are reported via `onCollision` so the caller can warn.
  *   - Missing directories are silently skipped (user dirs may not exist yet).

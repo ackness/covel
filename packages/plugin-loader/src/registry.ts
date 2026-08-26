@@ -81,6 +81,12 @@ export interface PluginRegistry {
   /** Deactivate a plugin for a session. Returns false if pluginId is not registered. */
   deactivate(pluginId: string, sessionId: string): boolean;
 
+  /** Reconcile a session's in-memory activations with a complete persisted snapshot. */
+  syncSessionActivations(sessionId: string, pluginIds: readonly string[]): void;
+
+  /** Drop every in-memory activation owned by a deleted session. */
+  clearSession(sessionId: string): void;
+
   /**
    * Find the plugin package ID of an active plugin that declares a given capability.
    * Searches all runtimes (including multi-runtime sub-entries) of active plugins.
@@ -153,6 +159,7 @@ export function createPluginRegistry(
         sessionSet = new Set();
         sessionActivations.set(sessionId, sessionSet);
       }
+      if (sessionSet.has(pluginId)) return true;
       sessionSet.add(pluginId);
       emit({ type: "plugin-activated", pluginId, sessionId });
       emitToEventBus("plugin.activated", sessionId, { pluginId, sessionId });
@@ -164,12 +171,29 @@ export function createPluginRegistry(
         return false;
       }
       const sessionSet = sessionActivations.get(sessionId);
-      if (sessionSet !== undefined) {
-        sessionSet.delete(pluginId);
-      }
+      if (sessionSet === undefined || !sessionSet.delete(pluginId)) return true;
+      if (sessionSet.size === 0) sessionActivations.delete(sessionId);
       emit({ type: "plugin-deactivated", pluginId, sessionId });
       emitToEventBus("plugin.deactivated", sessionId, { pluginId, sessionId });
       return true;
+    },
+
+    syncSessionActivations(
+      sessionId: string,
+      pluginIds: readonly string[],
+    ): void {
+      const desired = new Set(
+        pluginIds.filter((pluginId) => entries.has(pluginId)),
+      );
+      if (desired.size === 0) {
+        sessionActivations.delete(sessionId);
+      } else {
+        sessionActivations.set(sessionId, desired);
+      }
+    },
+
+    clearSession(sessionId: string): void {
+      sessionActivations.delete(sessionId);
     },
 
     onChange(handler: (event: RegistryChangeEvent) => void): () => void {

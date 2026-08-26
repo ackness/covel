@@ -14,7 +14,18 @@
       "role": "学徒",
       "location": "上城・验潮师公会塔",
       "tideSense": "微弱（隐瞒中）",
-      "fogRot": "无",
+      "fogRot": 0,
+      "fogRotSigns": "无",
+      "vitality": 100,
+      "stress": 30,
+      "condition": "状态良好，因深退潮预警而紧张",
+      "tideReading": 1,
+      "stealth": 2,
+      "diplomacy": 2,
+      "combat": 1,
+      "permit": true,
+      "equipment": ["学徒雾灯", "粉笔", "防水绳"],
+      "relics": [],
       "trust": 25,
       "dispositionToPlayer": "同期同侪，谨慎友好"
     },
@@ -53,7 +64,8 @@
       },
       "state": {
         "tideSenseRevealed": false,
-        "joinedSearch": false
+        "joinedSearch": false,
+        "heardEchoGalleryHum": false
       }
     },
     "rules": [
@@ -62,6 +74,12 @@
         "text": "林远舟的信任应通过共担风险、保守他的天赋秘密、以及一起追查齐老来体现；逼他公开潮力会让他退缩。",
         "priority": 10,
         "tags": ["character", "relationship"]
+      },
+      {
+        "id": "lin-evolution",
+        "text": "只有当玩家亲眼见证他的潮感并承诺保密，才把 tideSenseRevealed 改为 true；共赴回声廊后 joinedSearch 才成立。危险中使用潮力必须同步提高 stress，出现侵蚀时再提高 fogRot。",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -84,7 +102,18 @@
       "role": "验潮师（rank 2）",
       "location": "上城・验潮师公会塔",
       "tideSense": "可引导（潮纹）",
-      "fogRot": "无",
+      "fogRot": 0,
+      "fogRotSigns": "无",
+      "vitality": 100,
+      "stress": 45,
+      "condition": "彻夜未眠，仍维持克制",
+      "tideReading": 3,
+      "stealth": 2,
+      "diplomacy": 3,
+      "combat": 2,
+      "permit": true,
+      "equipment": ["潮石雾灯", "鉴定镜", "公会印章", "齐老的半封信"],
+      "relics": [],
       "trust": 30,
       "dispositionToPlayer": "上级，克制的关切"
     },
@@ -129,7 +158,8 @@
       },
       "state": {
         "sharedHalfLetter": false,
-        "trustsPlayerWithSecret": false
+        "trustsPlayerWithSecret": false,
+        "report74Recovered": false
       }
     },
     "rules": [
@@ -138,6 +168,12 @@
         "text": "苏窈的信任应通过尊重她的处境、替她保守半封信、以及在调查中证明可靠来体现；她给出的线索总是留有保留，需要追问。",
         "priority": 10,
         "tags": ["character", "relationship"]
+      },
+      {
+        "id": "su-evolution",
+        "text": "sharedHalfLetter 只在苏窈主动交出或展示信件后改变；找回第七十四号报告会动摇她对公会的忠诚并提高对玩家的信任。泄密、伪造证据或强迫她选边会提高 stress 并使态度转冷。",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -160,7 +196,18 @@
       "role": "二当家",
       "location": "下潮区・隐潮窟",
       "tideSense": "曾受训（学徒未出师）",
-      "fogRot": "左臂（肘以下半透明）",
+      "fogRot": 38,
+      "fogRotSigns": "左臂肘部以下半透明，受潮时泛灰光",
+      "vitality": 88,
+      "stress": 35,
+      "condition": "旧伤稳定，左手精细动作受限",
+      "tideReading": 2,
+      "stealth": 4,
+      "diplomacy": 4,
+      "combat": 4,
+      "permit": false,
+      "equipment": ["包布短刀", "盐牙筹", "雾蚀长手套"],
+      "relics": ["灰色钥匙碎片一枚（未公开）"],
       "trust": 10,
       "dispositionToPlayer": "估价中，可被规矩与诚意打动"
     },
@@ -205,7 +252,8 @@
       },
       "state": {
         "fragmentsCollected": "过半",
-        "offeredDeal": false
+        "offeredDeal": false,
+        "playerOwesFavor": false
       }
     },
     "rules": [
@@ -214,6 +262,12 @@
         "text": "铁姑的信任只能靠遵守规矩、说到做到、以及在碎片一事上展现立场来赢得；欺骗或把危险遗物推给平民会让她翻脸。她绝不轻易谈及左臂与旧搭档。",
         "priority": 10,
         "tags": ["character", "relationship"]
+      },
+      {
+        "id": "meg-evolution",
+        "text": "铁姑提供暗门、情报或遗物都算一笔可追索的人情；只有玩家履约，offeredDeal 与 playerOwesFavor 才能逐项结清。她再次引导潮力会推动 fogRot 越过可见阈值，不能靠休息逆转。",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -236,7 +290,18 @@
       "role": "议长",
       "location": "上城・议事厅",
       "tideSense": "无",
-      "fogRot": "无（据其所称）",
+      "fogRot": 0,
+      "fogRotSigns": "无（据其所称）",
+      "vitality": 90,
+      "stress": 20,
+      "condition": "年长但精神充沛",
+      "tideReading": 0,
+      "stealth": 1,
+      "diplomacy": 5,
+      "combat": 1,
+      "permit": true,
+      "equipment": ["议长印信", "私人探险许可证"],
+      "relics": ["钝灰色钥匙碎片一枚"],
       "trust": 5,
       "dispositionToPlayer": "工具性评估，可利用则拉拢"
     },
@@ -281,7 +346,8 @@
       },
       "state": {
         "offeredPlayerLicense": false,
-        "suspectsPlayerKnowsKey": false
+        "suspectsPlayerKnowsKey": false,
+        "playerWarrantLevel": 0
       }
     },
     "rules": [
@@ -290,6 +356,12 @@
         "text": "陈远山从不直接威胁，只给好处与暗示；他的'善意'永远附带条件。揭穿他需要确凿证据，否则只会换来更滴水不漏的说辞。",
         "priority": 10,
         "tags": ["character", "relationship"]
+      },
+      {
+        "id": "chen-evolution",
+        "text": "陈远山给出的许可证必须对应明确交换条件；玩家接触钥匙、齐老笔记或静潮病院幸存者会逐步提高 playerWarrantLevel。只有已佐证证据进入公开渠道，才能真正削弱他的从容与政治控制。",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -312,7 +384,18 @@
       "role": "公会长",
       "location": "下潮区（失踪）",
       "tideSense": "深（御潮者级，秘而不宣）",
-      "fogRot": "双手（不明原因）",
+      "fogRot": 65,
+      "fogRotSigns": "双手半透明，指尖偶尔散成雾丝",
+      "vitality": 58,
+      "stress": 70,
+      "condition": "失踪；雾蚀持续恶化，无法久留在干燥处",
+      "tideReading": 5,
+      "stealth": 3,
+      "diplomacy": 4,
+      "combat": 1,
+      "permit": true,
+      "equipment": ["磨损的潮汐笔记", "旧式御潮针"],
+      "relics": ["门锁共鸣片（作用未公开）"],
       "trust": 40,
       "dispositionToPlayer": "若重逢，将视玩家为可托付真相的人"
     },
@@ -357,7 +440,8 @@
       },
       "state": {
         "found": false,
-        "truthRevealed": false
+        "truthRevealed": false,
+        "notesRecovered": 0
       }
     },
     "rules": [
@@ -366,6 +450,12 @@
         "text": "齐老在故事前中期只以线索（信、笔记、他人转述）存在；真正现身应放在玩家深入下潮区之后。他从不一次说尽真相，每次只揭开一层，且总在权衡'说出来'的代价。",
         "priority": 10,
         "tags": ["character", "world"]
+      },
+      {
+        "id": "qi-evolution",
+        "text": "notesRecovered 随实际找到的笔记页递增，每页只解决一个问题并引出一个新矛盾；found 必须在玩家越过回声廊后才可能为 true。齐老每次强行稳定遗迹都应损失 vitality 并提高 fogRot。",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -388,7 +478,18 @@
       "role": "雾使",
       "location": "下潮区・沉钟堂",
       "tideSense": "极强（被教会奉为神迹）",
-      "fogRot": "指尖初现，她视为'恩典'",
+      "fogRot": 28,
+      "fogRotSigns": "指尖偶尔透光，她称其为'恩典'",
+      "vitality": 82,
+      "stress": 30,
+      "condition": "体温偏低，长时间聆听后会短暂失神",
+      "tideReading": 5,
+      "stealth": 3,
+      "diplomacy": 4,
+      "combat": 1,
+      "permit": false,
+      "equipment": ["灰白雾使袍", "沉钟铜片"],
+      "relics": ["童谣铜片（来源不明）"],
       "trust": 15,
       "dispositionToPlayer": "似曾相识般的亲近，话里有谜"
     },
@@ -415,7 +516,7 @@
       {
         "id": "frost-meet",
         "user": "你怎么知道我会来这里？",
-        "character": "它告诉我的。退潮前第三声钟，会有一个'也听得见'的人,踏上栈桥。……你也听得见，对吗？别怕。能听见的人，从来不是疯了，是被选中了。"
+        "character": "它告诉我的。退潮前第三声钟，会有一个'也听得见'的人踏上栈桥。……你也听得见，对吗？别怕。能听见的人，从来不是疯了，是被选中了。"
       },
       {
         "id": "frost-prophecy",
@@ -433,7 +534,8 @@
       },
       "state": {
         "recognizedPlayer": true,
-        "trueSourceRevealed": false
+        "trueSourceRevealed": false,
+        "doubtsWhispers": false
       }
     },
     "rules": [
@@ -442,6 +544,12 @@
         "text": "小霜的话始终半真半谜，'它说'与她自己的判断难以分辨。她的预言应大体应验但留有偏差，让玩家无法确定她是先知、棋子还是骗子，直到深层真相揭开。",
         "priority": 10,
         "tags": ["character", "world"]
+      },
+      {
+        "id": "frost-evolution",
+        "text": "玩家将她当人而非神迹，并拿出教会无法预知的反证后，doubtsWhispers 才会出现；trueSourceRevealed 需要同时证实一条教会喂给她的预言和一条真实雾语。持续聆听会提高 stress，越界才推动 fogRot。",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {
@@ -464,7 +572,18 @@
       "role": "探险队队长 / 执法者",
       "location": "中港与下潮区之间（巡查）",
       "tideSense": "无",
-      "fogRot": "无",
+      "fogRot": 0,
+      "fogRotSigns": "无",
+      "vitality": 100,
+      "stress": 25,
+      "condition": "状态良好，连续值勤十二小时",
+      "tideReading": 0,
+      "stealth": 4,
+      "diplomacy": 2,
+      "combat": 5,
+      "permit": true,
+      "equipment": ["遮光风灯", "封潮令执法牌", "静音弩"],
+      "relics": [],
       "trust": 8,
       "dispositionToPlayer": "默认敌对，可因共同的疑问而松动"
     },
@@ -509,7 +628,8 @@
       },
       "state": {
         "confrontedPlayer": false,
-        "doubtsOrders": true
+        "doubtsOrders": true,
+        "sharedVanishedList": false
       }
     },
     "rules": [
@@ -518,6 +638,12 @@
         "text": "灰隼初期是阻挡玩家的执法压力，但他并非纯粹反派；当玩家触及他对命令的怀疑（失踪的名单、齐老的真相）时，他可能从对手转为不情愿的盟友。转变需铺垫，不可一蹴而就。",
         "priority": 10,
         "tags": ["character", "relationship"]
+      },
+      {
+        "id": "falcon-evolution",
+        "text": "灰隼先警告、再扣押、后逮捕；confrontedPlayer 不等于倒戈。只有玩家用失踪名单与可核验证据证明命令被篡改，他才会 sharedVanishedList，并在承担职业代价后转为有限合作。",
+        "priority": 9,
+        "tags": ["character", "state"]
       }
     ],
     "instantiate": {

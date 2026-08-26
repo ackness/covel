@@ -1,6 +1,16 @@
-import type { RuntimeManifest, RuntimeResult, TurnResult } from "@covel/shared";
-import { getRuntimeSpec } from "@covel/shared";
+import type {
+  RuntimeManifest,
+  RuntimeResult,
+  SetupRuntimeState,
+  TurnResult,
+} from "@covel/shared";
+import {
+  getRuntimeSpec,
+  isSetupDoneForVersion,
+  isSetupRuntime,
+} from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
+import type { ParallelRuntimeIdentity } from "../schedule/parallel-executor.js";
 import { shouldTrigger } from "./trigger.js";
 import type { TriggerContext } from "../types.js";
 
@@ -12,6 +22,7 @@ export type EventChainRuntimeExecutor = (
   manifest: RuntimeManifest,
   triggerEvent:
     { topic: string; data: Readonly<Record<string, unknown>> } | undefined,
+  identity: ParallelRuntimeIdentity,
 ) => Promise<RuntimeResult>;
 
 export interface RunEventChainParams {
@@ -22,6 +33,8 @@ export interface RunEventChainParams {
   /** Current session id — threaded into the `TriggerContext` fed to
    *  `shouldTrigger` when re-evaluating event subscribers. */
   readonly sessionId: string;
+  /** Current turn identity used when a parallel invocation rejects. */
+  readonly turnId: string;
   /** Current main-loop turn number — same purpose as `sessionId`. */
   readonly turnNumber: number;
   /** Logical-turn number (completedPlayerTurns + 1), frozen for this execution. */
@@ -38,14 +51,8 @@ export interface RunEventChainParams {
    */
   readonly runtimeTriggerCounts?: ReadonlyMap<string, number>;
   readonly runtimeTurnsSinceLastTrigger?: ReadonlyMap<string, number>;
-  /**
-   * RuntimeIds the session has already marked Pre-Game-done. A Pre-Game
-   * runtime that reported completion must not be resurrected by a later
-   * emission of the topic it subscribes to — that is the same one-shot
-   * contract the main scheduler enforces, and it is the only gate that keeps
-   * setup runtimes out of main-loop fan-out.
-   */
-  readonly preGameCompleted?: readonly string[];
+  /** Setup mirror frozen at execution start. */
+  readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
 }
 
 /**
@@ -62,10 +69,8 @@ export interface RunEventChainParams {
  * Fan-out is deliberately NOT filtered by the current priority band: it is a
  * causal reaction to something that actually happened, not a scheduled slot.
  * Band filtering would silently drop a subscriber whenever the emitter sat in
- * the other band (a Pre-Game runtime announcing the world is ready, say), with
- * no diagnostic. The gate that genuinely has to hold — "a completed setup
- * runtime never runs again" — is `preGameCompleted`, so that one is passed
- * through for real.
+ * the other band. Completed setup runtimes are filtered against the
+ * authoritative setup mirror before trigger evaluation.
  */
 function eventFanoutTriggerContext(
   sessionId: string,
@@ -75,7 +80,6 @@ function eventFanoutTriggerContext(
   runtimeName: string,
   triggerCounts: ReadonlyMap<string, number> | undefined,
   turnsSinceLastTrigger: ReadonlyMap<string, number> | undefined,
-  preGameCompleted: readonly string[],
 ): TriggerContext {
   return {
     sessionId,
@@ -89,7 +93,6 @@ function eventFanoutTriggerContext(
       turnsSinceLastTrigger?.get(runtimeName) ?? Number.MAX_SAFE_INTEGER,
     pendingEventTopics,
     isManualTrigger: false,
-    preGameCompleted,
   };
 }
 
@@ -119,11 +122,12 @@ export async function runEventChain({
   executeRuntime,
   maxDepth = 8,
   sessionId,
+  turnId,
   turnNumber,
   logicalTurn,
   runtimeTriggerCounts,
   runtimeTurnsSinceLastTrigger,
-  preGameCompleted = [],
+  setupRuntimes,
 }: RunEventChainParams): Promise<DeferredFollower[]> {
   const emittedEvents = new Map<string, Record<string, unknown>>();
   for (const [, result] of completedResults) {
@@ -149,6 +153,12 @@ export async function runEventChain({
       // trigger semantics. Without this guard, `shouldTrigger` would return
       // true for an `auto` runtime and wrongly re-execute it.
       if (rt.trigger?.type !== "event") return false;
+      if (
+        isSetupRuntime(rt) &&
+        isSetupDoneForVersion(setupRuntimes[rt.name], rt.version)
+      ) {
+        return false;
+      }
       // Single source of truth for the event topic-match (+ gates): delegate
       // to `shouldTrigger`, feeding it the freshly-emitted topics.
       return shouldTrigger(
@@ -161,7 +171,6 @@ export async function runEventChain({
           rt.name,
           runtimeTriggerCounts,
           runtimeTurnsSinceLastTrigger,
-          preGameCompleted,
         ),
       );
     });
@@ -207,16 +216,20 @@ export async function runEventChain({
 
     if (syncBatch.length === 0) break;
 
-    const results = await executeParallel(syncBatch, async (manifest) => {
-      const topic = manifest.trigger?.topic;
-      const matchedEvent =
-        topic !== undefined ? currentDepthEvents.get(topic) : undefined;
-      const triggerEvent =
-        topic !== undefined && matchedEvent !== undefined
-          ? { topic, data: matchedEvent }
-          : undefined;
-      return executeRuntime(manifest, triggerEvent);
-    });
+    const results = await executeParallel(
+      syncBatch,
+      async (manifest, identity) => {
+        const topic = manifest.trigger?.topic;
+        const matchedEvent =
+          topic !== undefined ? currentDepthEvents.get(topic) : undefined;
+        const triggerEvent =
+          topic !== undefined && matchedEvent !== undefined
+            ? { topic, data: matchedEvent }
+            : undefined;
+        return executeRuntime(manifest, triggerEvent, identity);
+      },
+      turnId,
+    );
     for (const [name, result] of results) {
       completedResults.set(name, result);
       collectEventsFrom(result, newEvents);

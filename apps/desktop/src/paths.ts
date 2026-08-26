@@ -25,7 +25,12 @@ import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { parse as parseToml } from "smol-toml";
+import {
+  patchDesktopConfigFile,
+  readDesktopConfigFile,
+  writeDesktopConfigFileAtomic,
+  type DesktopConfig,
+} from "@covel/shared/desktop-config/node";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -63,19 +68,16 @@ export function userPluginsDir(): string {
   return path.join(covelHome(), "plugins");
 }
 
-interface CovelConfig {
-  paths?: { data_root?: string };
-  logging?: { max_size_mb?: number; max_files?: number };
-}
-
-function readConfig(): CovelConfig {
+function readConfig(): DesktopConfig {
   const file = configTomlPath();
-  if (!fs.existsSync(file)) return {};
   try {
-    return parseToml(fs.readFileSync(file, "utf-8")) as CovelConfig;
+    return readDesktopConfigFile(file);
   } catch (err) {
-    console.warn(`[paths] config.toml parse failed:`, err);
-    return {};
+    // A hand-edited invalid config must not prevent the desktop shell from
+    // starting. Reads fall back to defaults, while the shared patch helper
+    // remains strict and refuses to overwrite the recoverable source file.
+    console.warn("[paths] config.toml invalid; using defaults:", err);
+    return { schema_version: 1 };
   }
 }
 
@@ -218,8 +220,15 @@ const DEFAULT_CONFIG_TOML = `# Covel user config.
 # Edit [paths] data_root to move user data (SQLite db, worlds, logs) to
 # another drive. Relative paths are resolved against this file's directory.
 
+schema_version = 1
+
 [paths]
 # data_root = "/Volumes/External/covel-data"
+
+[network]
+# Outbound LLM/model-database requests: direct | system | http | socks
+proxy_mode = "direct"
+# proxy_url = "http://127.0.0.1:7890"
 
 [logging]
 # Rolling log files under <data_root>/logs/. Each file caps at max_size_mb;
@@ -241,10 +250,15 @@ export function ensureUserPaths(): ResolvedPaths {
   const cfgFile = configTomlPath();
   if (!fs.existsSync(cfgFile)) {
     try {
-      fs.writeFileSync(cfgFile, DEFAULT_CONFIG_TOML);
+      writeDesktopConfigFileAtomic(cfgFile, DEFAULT_CONFIG_TOML);
     } catch (err) {
       console.warn("[paths] Could not seed config.toml:", err);
     }
+  }
+  try {
+    fs.chmodSync(cfgFile, 0o600);
+  } catch (err) {
+    console.warn("[paths] Could not tighten config.toml permissions:", err);
   }
 
   const data = dataRoot();
@@ -293,38 +307,13 @@ export function ensureUserPaths(): ResolvedPaths {
 }
 
 /**
- * Update `[paths] data_root` in `config.toml`. Preserves other fields via a
- * read-modify-write, but uses a simple rewrite strategy — not a full TOML
- * round-trip. Good enough because we own the schema.
+ * Update `[paths] data_root` in `config.toml`. The shared helper preserves
+ * unrelated text, validates both sides of the patch, and atomically replaces
+ * the file with mode 0600.
  */
 export function writeDataRoot(newRoot: string): void {
-  const cfgFile = configTomlPath();
-  let current = "";
-  try {
-    current = fs.readFileSync(cfgFile, "utf-8");
-  } catch {
-    current = DEFAULT_CONFIG_TOML;
-  }
-
   const normalized = newRoot.trim();
-  const replacement = normalized
-    ? `data_root = ${JSON.stringify(normalized)}`
-    : `# data_root = "/Volumes/External/covel-data"`;
-
-  // Replace an existing (possibly commented) data_root line under [paths],
-  // else append a new one.
-  const pattern = /^(\s*)(#\s*)?data_root\s*=.*$/m;
-  let next: string;
-  if (pattern.test(current)) {
-    next = current.replace(
-      pattern,
-      (_m, indent: string) => `${indent}${replacement}`,
-    );
-  } else if (/^\[paths]/m.test(current)) {
-    next = current.replace(/^\[paths]\s*$/m, `[paths]\n${replacement}`);
-  } else {
-    next = `${current.trimEnd()}\n\n[paths]\n${replacement}\n`;
-  }
-
-  fs.writeFileSync(cfgFile, next);
+  patchDesktopConfigFile(configTomlPath(), {
+    paths: { data_root: normalized || null },
+  });
 }

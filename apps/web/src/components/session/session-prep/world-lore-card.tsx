@@ -52,7 +52,7 @@ export function WorldLoreCard({
           <textarea
             value={loreValue}
             onChange={(event) => onLoreChange(event.target.value)}
-            className="w-full min-h-[300px] bg-background border border-border px-4 py-3 text-sm font-mono leading-relaxed outline-none focus:ring-1 focus:ring-primary resize-y"
+            className="w-full min-h-75 bg-background border border-border px-4 py-3 text-sm font-mono leading-relaxed outline-none focus:ring-1 focus:ring-primary resize-y"
             placeholder={t("session.lorePlaceholder")}
           />
           <div className="flex items-center justify-between text-xs text-muted-foreground">

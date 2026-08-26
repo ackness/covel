@@ -17,7 +17,10 @@ import {
 import { buildSplashHtml } from "./splash-screen.js";
 import { writeLog } from "./logging.js";
 import { t } from "./main-i18n.js";
-import { isSameTrustedOrigin } from "./trusted-origin.js";
+import {
+  isSameStartupSplashDocument,
+  isSameTrustedOrigin,
+} from "./trusted-origin.js";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -34,6 +37,16 @@ export function isTrustedFrameUrl(
   candidateUrl: string | null | undefined,
 ): boolean {
   return isSameTrustedOrigin(mainWindow?.webContents.getURL(), candidateUrl);
+}
+
+/** Recovery-only trust for the main-process-authored data: splash document. */
+export function isTrustedStartupFrameUrl(
+  candidateUrl: string | null | undefined,
+): boolean {
+  return isSameStartupSplashDocument(
+    mainWindow?.webContents.getURL(),
+    candidateUrl,
+  );
 }
 
 /** Emit a typed IPC message to the focused / main window. */

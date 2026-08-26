@@ -10,6 +10,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { mirrorSetupDone } from "@covel/shared";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
@@ -59,6 +60,7 @@ function makeTurnInput(
     sessionId,
     turnId: "turn-1",
     playerMessage: "Look around",
+    origin: "player",
     ...overrides,
   };
 }
@@ -126,8 +128,9 @@ async function seedWorld(
     id: sessionId,
     worldId,
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    phase: "playing",
+    completedPlayerTurns: 1,
+    setupRuntimes: {},
     locale: "zh-CN",
     activePlugins: [],
     createdAt: ts(),
@@ -251,8 +254,12 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       id: sessionId,
       worldId,
       status: "active",
-      turnCount: 0,
-      preGameCompleted: ["pregame", "world-init/schema-gen"],
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {
+        pregame: mirrorSetupDone("0.0.0", ts(), 1, 1),
+        "world-init/schema-gen": mirrorSetupDone("0.0.0", ts(), 1, 1),
+      },
       locale: "zh-CN",
       activePlugins: [],
       createdAt: ts(),
@@ -277,6 +284,21 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       trigger: { type: "auto" },
       needs: ["pregame", "world-init/schema-gen"],
     } as RuntimeManifest;
+    const pregame: RuntimeManifest = {
+      name: "pregame",
+      pluginId: "pregame",
+      description: "pregame",
+      stage: "setup",
+      runtimeType: "function",
+      handler: "./handler.js",
+      trigger: { type: "auto" },
+    } as RuntimeManifest;
+    const schemaGen: RuntimeManifest = {
+      ...pregame,
+      name: "world-init/schema-gen",
+      pluginId: "world-init",
+      description: "schema gen",
+    };
     const narrator = makeManifest({
       name: "narrator",
       pluginId: "narrator",
@@ -304,7 +326,11 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
                 createdAt: now,
                 updatedAt: now,
               });
-              return { narrativeOutput: "player ready", preGameDone: true };
+              return {
+                outcome: "success",
+                value: { narrativeOutput: "player ready" },
+                completion: "done",
+              };
             },
           };
         }
@@ -322,15 +348,15 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
       makeTurnInput(sessionId, {
         turnId: "turn-form",
         playerMessage: "Player Aria enters as cartographer.",
-        preGamePending: true,
       }),
-      [playerInit, narrator],
+      [pregame, schemaGen, playerInit, narrator],
       deps,
     );
 
     expect(
       setupResult.runtimeResults.map((runtime) => runtime.runtimeId),
     ).toEqual(["char-creator/player-init"]);
+    expect(setupResult.runtimeResults[0]?.status).toBe("success");
     // The narrator never ran this turn, so no system prompt was captured.
     expect(llm.captured.systemPrompts).toHaveLength(0);
     // Setup completed this turn (player created) → the finalize session-clock
@@ -339,6 +365,11 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
 
     // Commit the setup execution so the band flips to playing for turn 2.
     await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId,
       ...(setupResult.executionContext
@@ -361,7 +392,7 @@ describe("turn-executor → SessionContextSnapshot wiring", () => {
         turnId: "turn-main",
         playerMessage: "Aria surveys the district.",
       }),
-      [playerInit, narrator],
+      [pregame, schemaGen, playerInit, narrator],
       deps,
     );
 

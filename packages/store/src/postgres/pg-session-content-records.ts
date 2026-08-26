@@ -1,5 +1,5 @@
 /**
- * PostgreSQL session-content records (events / approvals / messages /
+ * PostgreSQL session-content records (events / messages /
  * characters) — a thin adapter over the shared
  * `common/sql-session-content-records.ts` query layer. Supplies the PG runner,
  * PG tables, and PG JSON read/write gateways; all query logic is shared with the
@@ -30,7 +30,6 @@ export function createPgSessionContentRecords(
       values,
       tables: {
         events: schema.events,
-        approvals: schema.approvals,
         messages: schema.messages,
         characters: schema.characters,
       },

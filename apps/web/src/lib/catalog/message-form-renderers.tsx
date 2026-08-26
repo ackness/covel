@@ -12,7 +12,7 @@ export const Prose: ComponentRenderer = ({ element }) => {
   const paragraphs = content.split(/\n\n+/).filter(Boolean);
 
   return (
-    <div className="ui-narrative space-y-5 max-w-[var(--story-max-width)]">
+    <div className="ui-narrative space-y-5 max-w-(--story-max-width)">
       {paragraphs.map((p, i) => (
         <p key={i} className="text-sm text-foreground leading-relaxed">
           {p.split(/(\*\*[^*]+\*\*)/).map((segment, j) =>
@@ -62,10 +62,10 @@ export const Alert: ComponentRenderer = ({ element }) => {
     info: "info",
   };
   const textColorMap: Record<string, string> = {
-    success: "text-[var(--accent-success)]",
-    warning: "text-[var(--accent-warning)]",
-    error: "text-[var(--accent-danger)]",
-    info: "text-[var(--accent-secondary)]",
+    success: "text-(--accent-success)",
+    warning: "text-(--accent-warning)",
+    error: "text-(--accent-danger)",
+    info: "text-(--accent-secondary)",
   };
 
   return (
@@ -156,10 +156,10 @@ export const SubmitButton: ComponentRenderer = ({ element, emit }) => {
       onClick={() => emit("click")}
       disabled={disabled}
       className={clsx(
-        "w-full py-3 text-sm font-medium rounded-[var(--radius-control)] transition-colors tracking-[0.04em]",
+        "w-full py-3 text-sm font-medium rounded-(--radius-control) transition-colors tracking-[0.04em]",
         disabled
           ? "bg-muted text-muted-foreground cursor-not-allowed"
-          : "bg-foreground text-[var(--surface-page)] hover:opacity-90",
+          : "bg-foreground text-(--surface-page) hover:opacity-90",
       )}
     >
       {label}

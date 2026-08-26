@@ -6,7 +6,7 @@
  */
 
 import type { ZodError, ZodType } from "zod";
-import { runtimeManifestSchema } from "./plugin.js";
+import { runtimeManifestInputSchema } from "./plugin.js";
 import {
   worldManifestSchema,
   worldDimensionsSchema,
@@ -60,7 +60,7 @@ function validate<T>(
 export function validatePluginManifest(
   data: unknown,
 ): ManifestValidationResult {
-  return validate(runtimeManifestSchema, data);
+  return validate(runtimeManifestInputSchema, data);
 }
 
 /**

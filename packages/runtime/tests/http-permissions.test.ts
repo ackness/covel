@@ -3,7 +3,7 @@
  *
  * A community plugin's `ctx.utils.fetchWithRetry` may only reach an
  * origin+method it declared under `permissions.http`; anything else is rejected
- * before the request is sent. Trusted (builtin/official) plugins are not
+ * before the request is sent. Trusted (builtin) plugins are not
  * enforced. The SSRF guard is unaffected — it still runs inside the wrapped
  * `fetchWithRetry` for permitted origins.
  */
@@ -97,7 +97,7 @@ describe("enforceHttpPermissions (community)", () => {
   });
 });
 
-describe("enforceHttpPermissions (trusted builtin/official)", () => {
+describe("enforceHttpPermissions (trusted builtin)", () => {
   it("does not enforce — returns the utils unchanged so any origin passes", async () => {
     const { utils, fetch } = mockUtils();
     const guarded = enforceHttpPermissions(utils, {

@@ -9,9 +9,9 @@
 import type { z } from "zod";
 
 import { FRAMEWORK_KNOWN_CAPABILITIES } from "../types/plugin.js";
-import type { runtimeManifestSchema } from "./plugin-schemas.js";
+import type { runtimeManifestInputSchema } from "./plugin-schemas.js";
 
-export type RuntimeManifestInput = z.input<typeof runtimeManifestSchema>;
+export type RuntimeManifestInput = z.input<typeof runtimeManifestInputSchema>;
 
 export type RuntimeManifestSemanticDiagnosticCode =
   "capability-typo" | "schedulable-missing-stage";
@@ -51,9 +51,7 @@ export function validateRuntimeManifestSemantics(
     readonly handler?: string;
     readonly model?: string;
     readonly ui?: unknown;
-    readonly hooks?: unknown;
     readonly entry?: string;
-    readonly wires?: string;
   },
 ): readonly RuntimeManifestSemanticDiagnostic[] {
   const diagnostics: RuntimeManifestSemanticDiagnostic[] = [];
@@ -72,10 +70,7 @@ export function validateRuntimeManifestSemantics(
     const isSchedulable = triggerType === "auto" || triggerType === "scheduled";
     const hasStageSignal = manifest.stage !== undefined;
     const isRegistrationOnlyIdiom =
-      (manifest.ui !== undefined ||
-        manifest.hooks !== undefined ||
-        manifest.entry !== undefined ||
-        manifest.wires !== undefined) &&
+      (manifest.ui !== undefined || manifest.entry !== undefined) &&
       manifest.handler === undefined &&
       manifest.runtimeType !== "function" &&
       manifest.model === undefined;
@@ -88,7 +83,7 @@ export function validateRuntimeManifestSemantics(
           `Runtime "${manifest.name}" has trigger.type='${triggerType}' but declares no stage — ` +
           "it will NEVER be scheduled (stage-less runtimes are treated as UI-only declarations). " +
           "Declare a stage (setup / pre-turn / narrative / post-turn / audit) to run it, " +
-          "or add a ui/hooks declaration if it is intentionally UI-only.",
+          "or add a ui/entry declaration if it is intentionally UI-only.",
       });
     }
   }

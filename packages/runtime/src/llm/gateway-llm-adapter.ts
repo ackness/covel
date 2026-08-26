@@ -12,6 +12,7 @@ import type {
   LLMMessageContent,
   LLMResponse,
   LLMStreamEvent,
+  LLMTargetIdentity,
   LLMToolDefinition,
 } from "./llm-adapter.js";
 
@@ -22,15 +23,58 @@ import type {
  */
 export interface SlotOverridesInput {
   slotPresetOverrides?: Record<string, string>;
+  parameterOverrides?: Record<
+    string,
+    {
+      temperature?: number;
+      topP?: number;
+      topK?: number;
+      maxOutputTokens?: number;
+      frequencyPenalty?: number;
+      presencePenalty?: number;
+      reasoningEffort?:
+        | "disabled"
+        | "automatic"
+        | "none"
+        | "minimal"
+        | "low"
+        | "medium"
+        | "high"
+        | "xhigh"
+        | "max";
+    }
+  >;
   customPresets?: Array<{
     id: string;
     name: string;
     provider: string;
     baseUrl?: string;
     model: string;
-    protocol?: string;
+    protocol?:
+      "openai-chat-v1" | "openai-responses-v1" | "anthropic-messages-v1";
   }>;
+  capabilityOverrides?: Record<
+    string,
+    {
+      input?: Array<"text" | "image" | "audio" | "video" | "file">;
+      output?: Array<"text" | "image" | "audio" | "video" | "embedding">;
+      features?: Array<
+        | "function_calling"
+        | "structured_output"
+        | "streaming"
+        | "reasoning"
+        | "vision"
+        | "prompt_caching"
+        | "web_search"
+        | "computer_use"
+      >;
+      contextWindow?: number;
+      maxOutputTokens?: number;
+    }
+  >;
 }
+
+export type CapabilityOverridePolicy = "full" | "restrict-only";
 
 /**
  * Minimal gateway interface — only the parts we need.
@@ -46,6 +90,17 @@ export interface SlotOverridesInput {
  * of the LLM-call contract — merging the two would re-couple the packages.
  */
 export interface GatewayLike {
+  resolveSlot(
+    presetId: string | undefined,
+    options?: {
+      apiKeys?: Record<string, string>;
+      envApiKeys?: Record<string, string>;
+      slotOverrides?: SlotOverridesInput;
+      capabilityOverridePolicy?: CapabilityOverridePolicy;
+      fallbackTag?: string;
+    },
+  ): { provider: string; model: string } | null;
+
   generateText(
     input: {
       presetId?: string;
@@ -72,6 +127,8 @@ export interface GatewayLike {
       traceId?: string;
       signal?: AbortSignal;
       slotOverrides?: SlotOverridesInput;
+      capabilityOverridePolicy?: CapabilityOverridePolicy;
+      onTargetAttempt?: (target: LLMTargetIdentity) => void;
     },
   ): Promise<{
     text: string;
@@ -107,6 +164,8 @@ export interface GatewayLike {
       traceId?: string;
       signal?: AbortSignal;
       slotOverrides?: SlotOverridesInput;
+      capabilityOverridePolicy?: CapabilityOverridePolicy;
+      onTargetAttempt?: (target: LLMTargetIdentity) => void;
     },
   ): AsyncIterable<{
     type: string;
@@ -137,6 +196,8 @@ export interface GatewayAdapterConfig {
    * client-declared preset without needing a server-side llm.toml entry.
    */
   readonly slotOverrides?: SlotOverridesInput;
+  /** Server-selected policy; never sourced from the client header. */
+  readonly capabilityOverridePolicy?: CapabilityOverridePolicy;
 }
 
 /**
@@ -151,6 +212,29 @@ export function createGatewayAdapter(
   config?: GatewayAdapterConfig,
 ): LLMAdapter {
   return {
+    resolveTarget(slot) {
+      try {
+        const target = gateway.resolveSlot(slot, {
+          apiKeys: config?.apiKeys,
+          ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
+          ...(config?.slotOverrides
+            ? { slotOverrides: config.slotOverrides }
+            : {}),
+          ...(config?.capabilityOverridePolicy
+            ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
+            : {}),
+          fallbackTag: "text",
+        });
+        return target
+          ? { provider: target.provider, model: target.model }
+          : undefined;
+      } catch {
+        // Target identity only enriches telemetry. The actual generate/stream
+        // call must retain its existing retry and paired error-trace path.
+        return undefined;
+      }
+    },
+
     async generate(params): Promise<LLMResponse> {
       // Convert LLMToolDefinition[] → gateway ToolDefinition[]
       const tools = params.tools?.map(toGatewayTool);
@@ -171,7 +255,13 @@ export function createGatewayAdapter(
           ...(config?.slotOverrides
             ? { slotOverrides: config.slotOverrides }
             : {}),
+          ...(config?.capabilityOverridePolicy
+            ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
+            : {}),
           ...(params.signal ? { signal: params.signal } : {}),
+          ...(params.onTargetAttempt
+            ? { onTargetAttempt: params.onTargetAttempt }
+            : {}),
         },
       );
 
@@ -219,7 +309,13 @@ export function createGatewayAdapter(
           ...(config?.slotOverrides
             ? { slotOverrides: config.slotOverrides }
             : {}),
+          ...(config?.capabilityOverridePolicy
+            ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
+            : {}),
           ...(params.signal ? { signal: params.signal } : {}),
+          ...(params.onTargetAttempt
+            ? { onTargetAttempt: params.onTargetAttempt }
+            : {}),
         },
       )) {
         if (event.type === "text-delta" && event.textDelta !== undefined) {

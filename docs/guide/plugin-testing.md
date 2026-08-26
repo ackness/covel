@@ -14,6 +14,23 @@ See also: [plugin-authoring.md](./plugin-authoring.md) · [e2e-plugin-verify.md]
 | Runtime cases   | `@covel/test-runtime` / `pnpm test:runtime` | 插件自带 `tests/runtime-cases.json`、外部 `~/.covel/plugins` 调试、mock/live 切换                                                                                                                                                                                                                                                  | mock 否，live 需要 key      |
 | HTTP E2E        | `scripts/e2e-plugin-verify.ts`              | 真实 API、SSE、session kernel、approval、store 路径                                                                                                                                                                                                                                                                                | 需要 server，可用 mock slot |
 
+## 推荐反馈环
+
+每次修改都按由快到慢的顺序反馈：
+
+1. `pnpm validate:plugin <插件目录>`：先确认 loader 能解析，随后由 strict authoring schema 检查闭集字段、触发器/`stage` 组合和 handler 约束。看到 `(loader parse)` 时修 frontmatter/YAML 或路径；看到 `(authoring schema)` 时按输出的字段路径修字段类型、枚举或必需组合。
+2. `pnpm vitest run plugins/<id>/tests`（或对应 workspace 的 `pnpm --filter ... test`）：反馈本地 tool、handler 和 schema 行为。
+3. `pnpm test:runtime -- <plugin-id> --plugins-dir <dir> --pretty`：mock 执行 runtime case；多 runtime 可传 `<plugin-id>/<runtime-id>`，跨插件 `needs` 不满足时加 `--ignore-upstreams` 仅用于隔离调试。
+4. 最后再跑 `scripts/e2e-plugin-verify.ts` 验证 server、SSE、approval 和真实 session store。mock 通过不代表 provider/API 或审批链路已通过。
+
+`test:runtime` 的 `--mode mock` 是默认值；`--mode live` 会读取 `llm.toml` 和 `~/.covel/keys.env`。缺少凭据时应停留在 mock，不要把凭据写进仓库。
+
+没有 runtime case 时，CLI 会对同名的单 runtime 做一次默认 mock smoke test。默认 mock
+不会自行构造业务 tool call：声明了 `requireToolUse` 的 runtime 应添加
+`tests/runtime-cases.json`，在 case 中提供 `llmResponse` / `llmResponses`，或调试时显式传
+对应 CLI 参数。结果为 `skipped: upstream not success` 只证明依赖门控生效，并未执行目标
+runtime；`--ignore-upstreams` 可隔离该门控，但不会替你生成所需的 mock tool call。
+
 默认组合：
 
 - 只改 `PLUGIN.md`：跑 `pnpm validate:plugin plugins/<id>`（传目录而非单个文件，才能跑到跨 runtime 检查）。

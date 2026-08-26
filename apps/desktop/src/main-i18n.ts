@@ -1,5 +1,6 @@
 import { app } from "electron";
 import fs from "node:fs";
+import { localeLanguage } from "@covel/shared";
 
 export type DesktopLocale = "zh-CN" | "en-US";
 
@@ -135,9 +136,9 @@ let currentLocale: DesktopLocale = "en-US";
 
 function normalizeLocale(value: unknown): DesktopLocale | null {
   if (typeof value !== "string") return null;
-  const normalized = value.toLowerCase();
-  if (normalized.startsWith("zh")) return "zh-CN";
-  if (normalized.startsWith("en")) return "en-US";
+  const language = localeLanguage(value);
+  if (language === "zh") return "zh-CN";
+  if (language === "en") return "en-US";
   return null;
 }
 

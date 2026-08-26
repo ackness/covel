@@ -36,6 +36,7 @@ import type { ProviderResolution } from "./provider-registry.js";
 import {
   notifyStart,
   notifySuccess,
+  notifyTargetAttempt,
   targetModel,
 } from "./gateway-lifecycle.js";
 import {
@@ -43,7 +44,10 @@ import {
   prepareTarget,
 } from "./gateway-fallback-chain.js";
 import type { ProviderRegistryLike } from "./gateway-fallback-chain.js";
-import { applySlotOverlay } from "./slot-overlay.js";
+import {
+  applyRequestCapabilityOverlay,
+  applySlotOverlay,
+} from "./slot-overlay.js";
 import type { OverlayDeps } from "./slot-overlay.js";
 import type { GatewayOptions } from "./gateway-slot-resolution.js";
 import type { OperationMode, ResolvedTarget, UsageSummary } from "./types.js";
@@ -125,7 +129,17 @@ export function createRunOperation(
         spec.fallbackTag,
         options,
       );
-      const targets = spec.resolveTargets(effectivePresetId);
+      const targets = spec
+        .resolveTargets(effectivePresetId)
+        .map((target, index) =>
+          applyRequestCapabilityOverlay(
+            target,
+            spec.presetId,
+            options?.slotOverrides,
+            options?.capabilityOverridePolicy ?? "restrict-only",
+            index === 0,
+          ),
+        );
       const resolveUsage = spec.resolveUsage ?? (() => null);
       let lastError: AiProviderError | null = null;
 
@@ -137,6 +151,7 @@ export function createRunOperation(
         const startTime = Date.now();
 
         try {
+          notifyTargetAttempt(options?.onTargetAttempt, target);
           await notifyStart(
             resolved.hooks,
             provider,

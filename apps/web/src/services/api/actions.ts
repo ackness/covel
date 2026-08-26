@@ -6,7 +6,11 @@ import type { SseEnvelope } from "./types.js";
 // -- Actions (SSE) -------------------------------------------------
 
 export type ActionType =
-  "send_message" | "execute_command" | "start_session" | "retry_runtime";
+  | "send_message"
+  | "execute_command"
+  | "start_session"
+  | "retry_runtime"
+  | "retry_turn";
 
 export interface ActionRequest {
   requestId: string;

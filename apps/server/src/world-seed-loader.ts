@@ -23,6 +23,8 @@ import {
   validateDimensionData,
   formatValidationErrors,
   DIMENSION_KEYS,
+  localeLanguage,
+  resolveI18nText,
 } from "@covel/shared";
 import type { MemoryBlockSchema } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
@@ -32,17 +34,13 @@ import { fileExists } from "./world-data/session-import/utils.js";
 
 /**
  * Resolve a single I18nText field to a plain display string.
- * If the value is a Record, pick `defaultLocale` key → first key → empty.
+ * Uses the shared exact → language → English → first-value fallback order.
  */
 function resolveText(
   value: string | Record<string, string> | undefined,
   defaultLocale?: string,
 ): string {
-  if (value === undefined) return "";
-  if (typeof value === "string") return value;
-  if (defaultLocale && value[defaultLocale]) return value[defaultLocale];
-  const keys = Object.keys(value);
-  return keys.length > 0 ? value[keys[0]] : "";
+  return resolveI18nText(value, defaultLocale) ?? "";
 }
 
 /**
@@ -53,7 +51,7 @@ async function readLore(
   worldDir: string,
   defaultLocale?: string,
 ): Promise<string> {
-  const lang = defaultLocale?.split("-")[0]; // "zh-CN" → "zh"
+  const lang = localeLanguage(defaultLocale);
 
   // Try locale-specific first
   if (lang) {
@@ -97,7 +95,7 @@ async function resolveLocaleDimensionPath(
   relativePath: string,
   defaultLocale?: string,
 ): Promise<string | null> {
-  const lang = defaultLocale?.split("-")[0]; // "zh-CN" → "zh"
+  const lang = localeLanguage(defaultLocale);
 
   if (lang) {
     const parsed = path.parse(relativePath);

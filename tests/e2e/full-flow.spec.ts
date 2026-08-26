@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { seedAppSettings } from "./helpers/player.js";
 
 // Run serially to avoid rate-limiting from the server
 test.describe.configure({ mode: "serial" });
@@ -8,19 +9,7 @@ test.describe("Covel Full Flow", () => {
   test.use({ viewport: { width: 1280, height: 720 } });
 
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem(
-        "covel:settings",
-        JSON.stringify({
-          schemaVersion: 1,
-          savedAt: new Date().toISOString(),
-          entries: {
-            "ui.onboardedVersion": 3,
-            "ui.locale": "zh-CN",
-          },
-        }),
-      );
-    });
+    await seedAppSettings(page);
   });
 
   test("health API responds", async ({ request }) => {
@@ -58,7 +47,9 @@ test.describe("Covel Full Flow", () => {
   test("landing page loads", async ({ page }) => {
     await page.goto("/");
 
-    await expect(page.locator("h1")).toContainText(/构建世界|Build worlds/i);
+    await expect(page.locator("h1")).toContainText(
+      /构建世界，\s*运行回合。|Build the world,\s*run the turn\./i,
+    );
     await expect(page.locator("header a", { hasText: "COVEL" })).toBeVisible();
 
     await expect(
@@ -106,7 +97,9 @@ test.describe("Covel Full Flow", () => {
       timeout: 15_000,
     });
     await expect(
-      page.getByRole("heading", { name: /遥风学园|HARUKA-ACADEMY/i }),
+      page.getByRole("heading", {
+        name: /雾港・裂潮纪|Mistport Chronicles/i,
+      }),
     ).toBeVisible();
   });
 
@@ -114,7 +107,9 @@ test.describe("Covel Full Flow", () => {
     await page.goto("/session");
 
     const worldCard = page
-      .getByRole("heading", { name: /遥风学园|HARUKA-ACADEMY/i })
+      .getByRole("heading", {
+        name: /雾港・裂潮纪|Mistport Chronicles/i,
+      })
       .locator("xpath=ancestor::article[1]");
     await expect(worldCard).toBeVisible({ timeout: 15_000 });
     await worldCard.click();
@@ -128,7 +123,7 @@ test.describe("Covel Full Flow", () => {
     ).toBeVisible({ timeout: 10_000 });
 
     await expect(
-      page.getByText(/遥风学园|HARUKA-ACADEMY/i).first(),
+      page.getByText(/雾港・裂潮纪|Mistport Chronicles/i).first(),
     ).toBeVisible();
   });
 
@@ -142,8 +137,7 @@ test.describe("Covel Full Flow", () => {
     await expect(themeToggle).toBeVisible();
     await themeToggle.click();
 
-    const newClass = await html.getAttribute("class");
-    expect(newClass).not.toBe(initialClass);
+    await expect.poll(() => html.getAttribute("class")).not.toBe(initialClass);
   });
 
   test("language toggle switches locale", async ({ page }) => {
@@ -158,7 +152,8 @@ test.describe("Covel Full Flow", () => {
     const initialText = await langButton.textContent();
     await langButton.click();
 
-    const newText = await langButton.textContent();
-    expect(newText).not.toBe(initialText);
+    await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+    await expect(langButton).toHaveText(/^ZH$/);
+    expect(initialText).toBe("EN");
   });
 });

@@ -31,7 +31,12 @@ import {
   getMediaTokenSecret,
   verifyMediaToken,
 } from "../../middleware/media-token.js";
-import { checkSessionOwnerById } from "./session/session-guard.js";
+import {
+  checkHostedOperator,
+  checkSessionOwnerById,
+  sessionIncarnationIdentity,
+  SESSION_DELETION_PENDING_KEY,
+} from "./session/session-guard.js";
 import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { errorBody } from "../../api-error.js";
 
@@ -61,6 +66,7 @@ export const mediaRoutes = new Hono();
 const STREAM_THRESHOLD_BYTES = 1 * 1024 * 1024;
 
 type ErrorCode =
+  | "conflict"
   | "invalid_request"
   | "invalid_token"
   | "forbidden"
@@ -69,7 +75,7 @@ type ErrorCode =
   | "unavailable"
   | "limit_exceeded";
 
-type ErrorStatus = 400 | 401 | 403 | 404 | 500 | 503;
+type ErrorStatus = 400 | 401 | 403 | 404 | 409 | 500 | 503;
 
 function jsonError(
   code: ErrorCode,
@@ -114,9 +120,16 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
   }
   // Owner guard: the upload records ownership + a media ref for
   // `sessionId`, so on hosted tiers the caller must own that session.
-  // Strict no-op on self (store lookup skipped, historical behavior kept).
+  // Self tier skips the token check, but the live-session/incarnation check
+  // below is required everywhere so uploads cannot attach to a deleted or
+  // same-id-recreated session.
   const denied = await checkSessionOwnerById(c, c.get("store"), sessionId);
   if (denied) return denied;
+  const initialSession = await c.get("store").getSession(sessionId);
+  if (!initialSession) {
+    return jsonError("not_found", `session ${sessionId} not found`, 404);
+  }
+  const expectedIncarnation = sessionIncarnationIdentity(initialSession);
   const mime = (c.req.header("content-type") ?? "").split(";")[0]!.trim();
   if (!mime.startsWith("image/")) {
     return jsonError(
@@ -148,11 +161,35 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
     );
   }
   const ref = await mediaStore.put(bytes, mime);
-  // Owner for GC/quota; ref guarantees this session can read it back through
-  // the signed media-token (which checks owner OR a media_refs row).
-  await mediaStore.recordOwnership(ref.id, sessionId);
-  await mediaStore.addRef(ref.id, sessionId);
-  return c.json({ id: ref.id, mime: ref.mime, size: ref.size });
+  return c.get("sessionLock").withLock(sessionId, async () => {
+    const liveSession = await c.get("store").getSession(sessionId);
+    if (
+      !liveSession ||
+      sessionIncarnationIdentity(liveSession) !== expectedIncarnation
+    ) {
+      return jsonError(
+        "conflict",
+        "session was replaced while the upload was being stored",
+        409,
+      );
+    }
+    if (
+      liveSession.status !== "active" ||
+      liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]
+    ) {
+      return jsonError(
+        "conflict",
+        `session is ${liveSession.status}; media binding refused`,
+        409,
+      );
+    }
+    // Owner for GC/quota; ref guarantees this incarnation can read it back
+    // through the signed media-token. The blob itself may remain unowned if
+    // the session changed while the request body was uploading; GC reclaims it.
+    await mediaStore.recordOwnership(ref.id, sessionId);
+    await mediaStore.addRef(ref.id, sessionId);
+    return c.json({ id: ref.id, mime: ref.mime, size: ref.size });
+  });
 });
 
 interface CleanupRequestBody {
@@ -367,9 +404,8 @@ export async function buildProtectedMediaIds(
  * Hardening summary (audit P1/P2):
  *
  *   1. Disabled by default: must set `COVEL_MEDIA_CLEANUP_ENABLED=true`.
- *   2. Forbidden in `DEPLOYMENT_TIER=commercial` until an admin auth
- *      middleware is wired (no caller-identifying claim available right now,
- *      so we refuse to even inspect the body).
+ *   2. Forbidden in `DEPLOYMENT_TIER=commercial`; `demo` requires the hosted
+ *      operator credential before the route inspects cleanup policy.
  *   3. `dryRun:false` requires an explicit `X-Confirm-Cleanup: yes` header
  *      so an automated job or curl typo cannot delete bytes.
  *   4. Single-flight wrapper prevents two cleanup runs from racing each
@@ -395,6 +431,9 @@ mediaRoutes.post("/cleanup", singleFlight(), async (c) => {
       503,
     );
   }
+
+  const operatorDenied = checkHostedOperator(c);
+  if (operatorDenied) return operatorDenied;
 
   if (!isEnvTruthy("COVEL_MEDIA_CLEANUP_ENABLED")) {
     return jsonError("forbidden", "cleanup endpoint disabled", 403);

@@ -30,6 +30,8 @@ describe("scene-prompts manifest and UI loading", () => {
       stage: "post-turn",
       model: "plugin",
       outputKind: "system",
+      requireToolUse: true,
+      completeAfterTools: ["generate-scene-prompts"],
       trigger: {
         type: "scheduled",
         interval: 1,
@@ -38,6 +40,7 @@ describe("scene-prompts manifest and UI loading", () => {
       tools: {
         plugin: ["generate-scene-prompts"],
       },
+      effects: { parallelSafe: true },
       ui: {
         message: ["./ui/scene-prompts-block.json"],
       },

@@ -278,6 +278,7 @@ function SessionPage() {
         packages={state.packages}
         presets={state.presets}
         llmConfig={state.llmConfig}
+        startError={state.executionError}
         onBack={backToWorldSelect}
         onStart={startGame}
         onResume={resumeSession}

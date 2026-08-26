@@ -1,12 +1,31 @@
 import i18n from "i18next";
 import * as api from "@/services/api";
-import type { DataService } from "@/services/data-service.js";
+import { SessionWorkspaceSyncError } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import type { MutableRef } from "./runtime-refs.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import type { SessionDispatch } from "./types.js";
 
 const CONNECTION_CLOSED_REASON = "__i18n:session.reasonConnectionClosed__";
+
+export function reportWorkspaceSyncError(
+  error: unknown,
+  dispatch: SessionDispatch,
+): error is SessionWorkspaceSyncError {
+  if (!(error instanceof SessionWorkspaceSyncError)) return false;
+  const detail =
+    error.cause instanceof Error ? error.cause.message : String(error.cause);
+  console.error(`[session] workspace ${error.stage} failed:`, error.cause);
+  dispatch({ type: "SET_EXECUTION_ERROR", error: detail });
+  emitToast(
+    "error",
+    i18n.t("toast.syncFailed", {
+      defaultValue: "Could not sync this session to the server",
+    }) as string,
+    detail,
+  );
+  return true;
+}
 
 /**
  * Settle the executing flag once an action stream ends.
@@ -40,15 +59,31 @@ export function runActionStream(
   request: api.ActionRequest,
   handleSseEvent: SseEventHandler,
   dispatch: SessionDispatch,
-  opts?: { toastOnError?: boolean },
+  opts?: {
+    toastOnError?: boolean;
+    sessionIdRef?: MutableRef<string | null>;
+  },
 ): Promise<void> {
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     api.sendAction(
       request,
-      handleSseEvent,
+      (envelope) => {
+        if (
+          opts?.sessionIdRef &&
+          opts.sessionIdRef.current !== request.sessionId
+        ) {
+          return;
+        }
+        handleSseEvent(envelope);
+      },
       (err) => {
-        dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
-        if (opts?.toastOnError) {
+        const isCurrent =
+          !opts?.sessionIdRef ||
+          opts.sessionIdRef.current === request.sessionId;
+        if (isCurrent) {
+          dispatch({ type: "SET_EXECUTION_ERROR", error: err.message });
+        }
+        if (isCurrent && opts?.toastOnError) {
           emitToast(
             "error",
             i18n.t("toast.sendMessageFailed", {
@@ -57,42 +92,11 @@ export function runActionStream(
             err.message,
           );
         }
-        resolve();
+        reject(err);
       },
       () => {
         resolve();
       },
     );
   });
-}
-
-/**
- * Rebuild the server's session context if needed, then run the action.
- *
- * If the context sync fails the action is NOT fired: the kernel would build
- * its prompt from an empty server-side history and the player would watch the
- * narrator forget the story with nothing on screen explaining why. `onAborted`
- * lets the caller settle whatever state it had already put in flight.
- */
-export function ensureServerThenRun(
-  ds: DataService,
-  sessionId: string,
-  fireAction: () => void,
-  onAborted?: () => void,
-): void {
-  api
-    .ensureServerSession(sessionId, (sid) => ds.syncToServer(sid))
-    .then(fireAction)
-    .catch((err: unknown) => {
-      const detail = err instanceof Error ? err.message : String(err);
-      console.error("[session] server context sync failed:", err);
-      emitToast(
-        "error",
-        i18n.t("toast.syncFailed", {
-          defaultValue: "Could not sync this session to the server",
-        }) as string,
-        detail,
-      );
-      onAborted?.();
-    });
 }

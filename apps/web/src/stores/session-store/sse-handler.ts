@@ -158,22 +158,6 @@ function addBlockMessageFromSse(
     block,
   };
   deps.dispatch({ type: "ADD_MESSAGE", message: msg });
-  const sid = deps.sessionIdRef.current;
-  if (sid) {
-    deps.ds
-      .addMessage({
-        id: blockId,
-        sessionId: sid,
-        role: "assistant",
-        content: "",
-        turnId: blockTurnId,
-        runtimeId,
-        kind: "plugin",
-        block,
-        createdAt: timestamp,
-      })
-      .catch(ignoreError("persist block message"));
-  }
 }
 
 function toRuntimeCompletedStatus(rawStatus: unknown): ExecutionStep["status"] {
@@ -296,23 +280,9 @@ export function createSseEventHandler(
           }
         }
 
-        if (content) {
-          const sid = deps.sessionIdRef.current;
-          if (sid) {
-            deps.ds
-              .addMessage({
-                id: msgId,
-                sessionId: sid,
-                role: "assistant",
-                content,
-                turnId,
-                runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
-                kind: completedKind,
-                createdAt: envelope.timestamp,
-              })
-              .catch(ignoreError("persist narrative message"));
-          }
-        }
+        // The browser stores the complete post-action checkpoint after the SSE
+        // stream closes. Persisting individual server messages here would
+        // create local revisions that race and conflict with that checkpoint.
         break;
       }
       case "interaction.requested": {

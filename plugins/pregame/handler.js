@@ -4,8 +4,8 @@ import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
  * Pre-Game handler — pure function runtime, no LLM.
  *
  * Reads world info and builds a welcome notification. Reports preGameDone=true
- * so the kernel records completion in session.preGameCompleted. Session
- * status is not touched — turn advancement is the kernel's job.
+ * so the kernel records this runtime as done in session.setupRuntimes. Session
+ * status is not touched — lifecycle advancement is the kernel's job.
  *
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  * @returns {Promise<Record<string, unknown>>}
@@ -59,8 +59,7 @@ export default async function pregameHandler(ctx) {
         `Game initialized. Welcome to ${worldName}.`,
       );
 
-  // completion:"done" is the pre-game completion signal (kernel projects it to
-  // the legacy top-level preGameDone). narrativeOutput stays a business value
+  // completion:"done" is the setup completion signal. narrativeOutput stays a business value
   // (drives the turn message); notifications are a domain effect.
   return {
     outcome: "success",

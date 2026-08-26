@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import * as api from "@/services/api";
+import type { SessionWorkspace } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import {
   createSessionSubscription,
@@ -27,11 +28,42 @@ interface MutableRef<T> {
 interface UseSessionSubscriptionOptions {
   sessionId: string | null | undefined;
   dispatch: (action: SessionAction) => void;
+  workspace: SessionWorkspace;
   sessionIdRef: MutableRef<string | null>;
 }
 
+function containsTerminalBackgroundJob(
+  payload: Readonly<Record<string, unknown>>,
+): boolean {
+  const changes = payload.changes;
+  if (!Array.isArray(changes)) return false;
+  return changes.some((change) => {
+    if (!change || typeof change !== "object") return false;
+    const row = change as Record<string, unknown>;
+    if (row.namespace !== "_jobs") return false;
+    const value = row.value;
+    if (!value || typeof value !== "object") return false;
+    const status = (value as Record<string, unknown>).status;
+    return status === "done" || status === "failed";
+  });
+}
+
+export function isCurrentSubscriptionEvent(
+  event: SubscriptionEvent,
+  subscribedSessionId: string,
+  activeSessionId: string | null,
+): boolean {
+  return (
+    activeSessionId === subscribedSessionId &&
+    event.sessionId === subscribedSessionId
+  );
+}
+
 function createSubscriptionEventHandler(
-  options: Pick<UseSessionSubscriptionOptions, "dispatch" | "sessionIdRef"> & {
+  options: Pick<
+    UseSessionSubscriptionOptions,
+    "dispatch" | "workspace" | "sessionIdRef"
+  > & {
     onReset: () => void;
   },
 ) {
@@ -80,6 +112,14 @@ function createSubscriptionEventHandler(
       }
       case "plugin-data.changed": {
         reducePluginDataChanged(options.dispatch, event.payload ?? {});
+        if (containsTerminalBackgroundJob(event.payload ?? {})) {
+          const actionId = event.id
+            ? `background:${event.id}`
+            : `background:${crypto.randomUUID()}`;
+          options.workspace
+            .checkpoint(event.sessionId, actionId)
+            .catch(ignoreError("checkpoint terminal background job"));
+        }
         break;
       }
       case "turn.suspended": {
@@ -170,6 +210,7 @@ export async function rehydrateSessionSideState(
 export function useSessionSubscription({
   sessionId,
   dispatch,
+  workspace,
   sessionIdRef,
 }: UseSessionSubscriptionOptions): void {
   const subscriptionRef = useRef<SessionSubscription | null>(null);
@@ -196,6 +237,7 @@ export function useSessionSubscription({
     let startRecovery: () => void = () => undefined;
     const applySubscriptionEvent = createSubscriptionEventHandler({
       dispatch,
+      workspace,
       sessionIdRef,
       onReset: () => startRecovery(),
     });
@@ -224,6 +266,13 @@ export function useSessionSubscription({
     };
 
     const handleSubscriptionEvent = (event: SubscriptionEvent): void => {
+      // React updates the subscription effect after commit. During a session
+      // switch, the old stream can therefore deliver one last event after
+      // restoreSession has already rebound the shared stores to the new id.
+      // Reject both stale connections and malformed/cross-session envelopes.
+      if (!isCurrentSubscriptionEvent(event, sessionId, sessionIdRef.current)) {
+        return;
+      }
       if (event.type === "system.reset") {
         startRecovery();
       } else if (recovering) {
@@ -263,5 +312,5 @@ export function useSessionSubscription({
       subscriptionRef.current = null;
       setConnectionState("closed");
     };
-  }, [sessionId, dispatch, sessionIdRef]);
+  }, [sessionId, dispatch, workspace, sessionIdRef]);
 }

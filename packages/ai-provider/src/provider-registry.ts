@@ -1,4 +1,5 @@
 import type { ModelProviderAdapter } from "./adapters/adapter.js";
+import { getBuiltinProviderConnection } from "@covel/shared";
 import { getProtocolDefinition } from "./protocol-registry.js";
 import type {
   CacheStrategy,
@@ -145,12 +146,17 @@ export function createProviderRegistry(options?: {
     // so concurrent requests can never poison each other's provider config
     // and env keys never attach (no trusted default origin).
     const stored = providers.get(target.provider);
-    if (!stored && !target.requestScoped) {
+    const builtinDefaults = getBuiltinProviderConnection(target.provider);
+    if (!stored && !builtinDefaults && !target.requestScoped) {
       throw new Error(
         `Provider registry: provider "${target.provider}" is not registered.`,
       );
     }
-    const registered: ProviderRegistration = stored ?? { requestScoped: true };
+    const registered: ProviderRegistration =
+      stored ??
+      (builtinDefaults
+        ? { defaults: builtinDefaults }
+        : { requestScoped: true });
 
     const protocol = resolveProtocol(target);
     const protocolRoute = registered.protocols?.[protocol];

@@ -134,7 +134,7 @@ export function createSqlRuntimeRecords(
     async setTurnResultCommitStatus(
       sessionId: string,
       turnId: string,
-      status: NonNullable<TurnResultRecord["commitStatus"]>,
+      status: TurnResultRecord["commitStatus"],
     ): Promise<void> {
       await runner.update(
         turnResults,

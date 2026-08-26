@@ -8,7 +8,8 @@ const CHARACTER_PLUGIN_ID = "char-creator";
  *
  * Three branches:
  *   1. Player already exists → skip LLM; emit preGameDone=true so the
- *      kernel advances turnCount from 0 to 1.
+ *      kernel resolves this setup runtime and advances the session phase to
+ *      playing when every required setup runtime is done.
  *   2. No player AND player has submitted the char-creation form
  *      → synthesise create-character deterministically from lastFormValues,
  *        skip LLM, emit preGameDone=true. The LLM version of "Step 2" is

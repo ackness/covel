@@ -32,6 +32,7 @@ function makeCtx({
       .mockResolvedValue({ refs: [makeRef()], warnings: [], cached: false }),
   },
   progress = undefined,
+  signal = undefined,
 } = {}) {
   const get = vi.fn(async (namespace, key) => {
     if (namespace === "scenes" && key === "scene-registry") return registry;
@@ -57,10 +58,11 @@ function makeCtx({
     logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     images,
     ...(progress ? { progress } : {}),
+    ...(signal ? { signal } : {}),
   };
 }
 
-// Deliberate change: handler migrated to envelope-v1. On success the asset is
+// Deliberate change: handler returns the canonical HandlerResult. On success the asset is
 // under `result.effects.assetGenerations`; a skip/failure is `result.outcome`
 // ("skipped"/"failed") with the failed error still top-level.
 describe("scene-stage background-gen handler", () => {
@@ -277,6 +279,17 @@ describe("scene-stage background-gen handler", () => {
 
     expect(result.outcome).toBe("failed");
     expect(ctx.logger.error).toHaveBeenCalled();
+  });
+
+  it("combines the player abort signal with the provider timeout", async () => {
+    const controller = new AbortController();
+    const ctx = makeCtx({ signal: controller.signal });
+
+    await handler(ctx);
+    const providerSignal = ctx.images.generate.mock.calls[0][0].signal;
+    expect(providerSignal.aborted).toBe(false);
+    controller.abort(new Error("player stopped turn"));
+    expect(providerSignal.aborted).toBe(true);
   });
 });
 

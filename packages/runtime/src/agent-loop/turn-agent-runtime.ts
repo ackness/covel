@@ -3,6 +3,7 @@ import type {
   RuntimeResult,
   TurnInput,
   RuntimeActivation,
+  ExecutionContext,
   InputSlot,
 } from "@covel/shared";
 import { attachExecutionJournal } from "../execution-journal.js";
@@ -28,7 +29,6 @@ import {
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
-import { normalizeHandlerResult } from "../commit/normalize-handler-result.js";
 import { filterRuntimeHistory } from "./message-filter.js";
 import {
   checkSchemaProseFailure,
@@ -61,7 +61,6 @@ export interface ExecuteAgentRuntimeOptions {
           fields?: Record<string, unknown>;
         }[];
         lastFormValues?: Record<string, unknown>;
-        preGameCompleted?: readonly string[];
       }
     | undefined;
   readonly hookPipeline: HookPipeline | undefined;
@@ -75,6 +74,8 @@ export interface ExecuteAgentRuntimeOptions {
   readonly activation?: RuntimeActivation;
   /** Resolved input bindings — rendered into the reserved inputs prompt block. */
   readonly inputs?: Readonly<Record<string, InputSlot>>;
+  /** Execution identity persisted if this agent suspends mid-turn. */
+  readonly executionContext: ExecutionContext;
   /** Frozen cross-execution `recordAs` exports — rendered into the reserved exports block. */
   readonly exports?: Readonly<Record<string, InputSlot>>;
   readonly startTime: number;
@@ -98,6 +99,7 @@ export async function executeAgentRuntime({
   sessionContext,
   activation,
   inputs,
+  executionContext,
   exports: exportSlots,
   startTime,
   runId,
@@ -278,6 +280,7 @@ export async function executeAgentRuntime({
     hookPipeline,
     startTime,
     runId,
+    executionContext,
   });
   if ("status" in toolLoop) return toolLoop;
 
@@ -429,28 +432,6 @@ export async function executeAgentRuntime({
   }
   const output = finalized.output;
 
-  // Observe-only normalization cross-check (docs 02 §4). The agent path keeps
-  // producing its result unchanged; here we run the same unified normalizer and
-  // surface any divergence as diagnostics (e.g. a legacy agent output carrying
-  // a business `status: failed/skipped`, or domain effects on a non-success
-  // shape). The full agent switch to the normalizer lands in a later wave.
-  {
-    const { outcome, diagnostics } = normalizeHandlerResult(output, {
-      resultFormat: manifest.resultFormat ?? "legacy",
-      runtimeType: "agent",
-    });
-    for (const d of diagnostics) {
-      console.warn(
-        `[runtime] ${manifest.name} (observe): ${d.code} — ${d.message}`,
-      );
-    }
-    if (outcome.outcome !== "success") {
-      console.warn(
-        `[runtime] ${manifest.name} (observe): normalizer classified agent output as "${outcome.outcome}" but the agent path keeps status: success`,
-      );
-    }
-  }
-
   const rawResult: RuntimeResult = {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,
@@ -525,13 +506,24 @@ export async function executeAgentRuntime({
     /* callback error must not kill runtime */
   }
 
-  // Emit a compact `message.completed` trace event for story runtimes that
-  // produced non-empty narrative content.
-  if (finalContent && manifest.outputKind === "story") {
+  // Emit the finalized (PostRuntime-rewritten) story content. A hook may redact
+  // or replace the narrative, or downgrade the result to failed; the trace must
+  // describe the same committed result as the journal above.
+  const completedContent =
+    typeof finalOutput.narrativeOutput === "string"
+      ? finalOutput.narrativeOutput
+      : typeof finalOutput.content === "string"
+        ? finalOutput.content
+        : "";
+  if (
+    result.status === "success" &&
+    completedContent.length > 0 &&
+    manifest.outputKind === "story"
+  ) {
     await emitMessageCompleted(
       deps.emitter,
       manifest,
-      finalContent,
+      completedContent,
       streamDeltaCount,
     );
   }

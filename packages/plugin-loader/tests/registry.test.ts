@@ -235,6 +235,82 @@ describe("PluginRegistry", () => {
     });
   });
 
+  describe("clearSession", () => {
+    it("removes every activation without affecting registered plugins", () => {
+      registry.register(
+        makeEntry("alpha", {
+          manifest: makeParsedPluginMd("alpha/runtime", 500),
+        }),
+      );
+      registry.register(
+        makeEntry("beta", {
+          manifest: makeParsedPluginMd("beta/runtime", 600),
+        }),
+      );
+      registry.activate("alpha", "session-1");
+      registry.activate("beta", "session-1");
+      expect(registry.getActiveRuntimes("session-1")).toHaveLength(2);
+
+      registry.clearSession("session-1");
+
+      expect(registry.getActiveRuntimes("session-1")).toEqual([]);
+      expect(registry.get("alpha")).toBeDefined();
+      expect(registry.activate("alpha", "session-1")).toBe(true);
+      expect(registry.getActiveRuntimes("session-1")).toHaveLength(1);
+    });
+  });
+
+  describe("syncSessionActivations", () => {
+    it("replaces stale activations without affecting other sessions", () => {
+      registry.register(
+        makeEntry("alpha", {
+          manifest: makeParsedPluginMd("alpha/runtime", 500),
+        }),
+      );
+      registry.register(
+        makeEntry("beta", {
+          manifest: makeParsedPluginMd("beta/runtime", 600),
+        }),
+      );
+      registry.activate("alpha", "session-1");
+      registry.activate("alpha", "session-2");
+
+      registry.syncSessionActivations("session-1", ["beta", "missing"]);
+
+      expect(
+        registry.getActiveRuntimes("session-1").map((runtime) => runtime.name),
+      ).toEqual(["beta/runtime"]);
+      expect(
+        registry.getActiveRuntimes("session-2").map((runtime) => runtime.name),
+      ).toEqual(["alpha/runtime"]);
+    });
+
+    it("hydrates persisted activation state without emitting lifecycle events", () => {
+      registry.register(
+        makeEntry("alpha", {
+          manifest: makeParsedPluginMd("alpha/runtime", 500),
+        }),
+      );
+      registry.register(
+        makeEntry("beta", {
+          manifest: makeParsedPluginMd("beta/runtime", 600),
+        }),
+      );
+      const handler = vi.fn<(event: RegistryChangeEvent) => void>();
+      registry.onChange(handler);
+
+      registry.syncSessionActivations("cold-process", ["alpha"]);
+      registry.syncSessionActivations("cold-process", ["beta"]);
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(
+        registry
+          .getActiveRuntimes("cold-process")
+          .map((runtime) => runtime.name),
+      ).toEqual(["beta/runtime"]);
+    });
+  });
+
   describe("onChange fires on register", () => {
     it("should notify handler with plugin-registered event", () => {
       const handler = vi.fn<(event: RegistryChangeEvent) => void>();

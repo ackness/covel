@@ -7,7 +7,7 @@ function createMockStore() {
   const records = new Map<string, any>();
   const makeKey = (sid: string, scope: string, key: string) =>
     `${sid}:${scope}:${key}`;
-  return {
+  const store = {
     async upsertWorkingMemory(record: any) {
       records.set(makeKey(record.sessionId, record.scope, record.key), record);
     },
@@ -22,6 +22,18 @@ function createMockStore() {
       return results;
     },
   };
+  return Object.assign(store, {
+    async withTransaction<T>(fn: (tx: typeof store) => Promise<T>): Promise<T> {
+      const snapshot = new Map(records);
+      try {
+        return await fn(store);
+      } catch (error) {
+        records.clear();
+        for (const [key, record] of snapshot) records.set(key, record);
+        throw error;
+      }
+    },
+  });
 }
 
 function createMockLLM(response: string): MemoryLLMAdapter {

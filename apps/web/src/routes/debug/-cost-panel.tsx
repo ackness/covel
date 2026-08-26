@@ -247,7 +247,7 @@ function fmt(n: number): string {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col gap-0.5 border border-[var(--rule-color)] px-3 py-2 min-w-[7rem]">
+    <div className="flex flex-col gap-0.5 border border-(--rule-color) px-3 py-2 min-w-28">
       <span className="ui-meta text-[9px] text-muted-foreground uppercase tracking-wider">
         {label}
       </span>
@@ -375,7 +375,7 @@ export function CostPanel({
           <h2 className="ui-meta text-[10px] uppercase tracking-wider text-muted-foreground">
             {t("debugger.cost.byModel", "By model")}
           </h2>
-          <div className="border border-[var(--rule-color)] divide-y divide-[var(--rule-color)]">
+          <div className="border border-(--rule-color) divide-y divide-(--rule-color)">
             {model.byModel.map((m) => {
               const priceKey = `${m.provider ?? ""}\u0000${m.model}`;
               const price = m.model === UNKNOWN_MODEL ? null : prices[priceKey];
@@ -422,7 +422,7 @@ export function CostPanel({
                     {fmt(tokens)} · {r.calls}×
                   </span>
                 </div>
-                <div className="h-1.5 w-full bg-[var(--surface-inset)] overflow-hidden">
+                <div className="h-1.5 w-full bg-(--surface-inset) overflow-hidden">
                   <div
                     className="h-full bg-primary/60"
                     style={{ width: `${pct}%` }}
@@ -439,11 +439,11 @@ export function CostPanel({
         <h2 className="ui-meta text-[10px] uppercase tracking-wider text-muted-foreground">
           {t("debugger.cost.byTurn", "By turn")}
         </h2>
-        <div className="border border-[var(--rule-color)] divide-y divide-[var(--rule-color)]">
+        <div className="border border-(--rule-color) divide-y divide-(--rule-color)">
           {model.byTurn.map((tn) => (
             <div
               key={tn.turnId}
-              className="flex items-baseline justify-between gap-3 px-3 py-1.5 text-[11px]"
+              className="debug-compact-row flex items-baseline justify-between gap-3 px-3 py-1.5 text-[11px]"
             >
               <span className="font-mono text-foreground">
                 {t("debugger.turn", { count: tn.turnIndex })}

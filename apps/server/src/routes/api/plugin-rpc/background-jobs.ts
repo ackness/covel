@@ -1,5 +1,11 @@
 import type { DataStore } from "@covel/store";
-import type { RuntimeResult, TurnResult } from "@covel/shared";
+import type { TurnResult } from "@covel/shared";
+import type { SessionLock } from "../../../lib/session-lock.js";
+import { sessionApprovalScope } from "../session/session-guard.js";
+import {
+  SessionApprovalScopeChangedError,
+  SessionNotActiveError,
+} from "./runtime-turn.js";
 import {
   commitFailureMessage,
   deriveBackgroundJobCompletion,
@@ -28,6 +34,8 @@ export interface DeferredFollower {
 interface PluginRpcJobRunnerOptions {
   readonly store: DataStore;
   readonly sessionId: string;
+  readonly sessionLock: SessionLock;
+  readonly approvalScopes: ReadonlyMap<string, string>;
   readonly userSettings?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
@@ -57,20 +65,30 @@ interface PluginRpcJobRunnerOptions {
 // starving others ever matters.
 const MAX_CONCURRENT_BACKGROUND_JOBS = 4;
 let runningBackgroundJobs = 0;
-const backgroundJobQueue: Array<() => void> = [];
+const backgroundJobQueue: Array<() => Promise<void>> = [];
+
+function startBackgroundJob(task: () => Promise<void>): void {
+  // Reserve the slot before yielding to setImmediate. Otherwise every job in
+  // one request burst observes the old count and bypasses the cap.
+  runningBackgroundJobs++;
+  setImmediate(() => {
+    void task()
+      .finally(() => {
+        runningBackgroundJobs--;
+        const next = backgroundJobQueue.shift();
+        if (next) startBackgroundJob(next);
+      })
+      .catch((err: unknown) => {
+        console.error("[plugin-rpc] background job escaped its handler", err);
+      });
+  });
+}
 
 function scheduleBackgroundJob(task: () => Promise<void>): void {
-  const start = (): void => {
-    runningBackgroundJobs++;
-    void task().finally(() => {
-      runningBackgroundJobs--;
-      backgroundJobQueue.shift()?.();
-    });
-  };
   if (runningBackgroundJobs < MAX_CONCURRENT_BACKGROUND_JOBS) {
-    setImmediate(start);
+    startBackgroundJob(task);
   } else {
-    backgroundJobQueue.push(start);
+    backgroundJobQueue.push(task);
   }
 }
 
@@ -99,15 +117,33 @@ export function createPluginRpcJobRunner(
     readonly jobId: string;
     readonly startedAt: string;
     readonly updatedAt?: string;
+    readonly terminal?: boolean;
     readonly value: Parameters<typeof writePluginJob>[1]["value"];
   }): Promise<void> => {
-    await writePluginJob(options.store, {
-      sessionId: options.sessionId,
-      pluginId: args.pluginId,
-      jobId: args.jobId,
-      startedAt: args.startedAt,
-      updatedAt: args.updatedAt ?? args.startedAt,
-      value: args.value,
+    await options.sessionLock.withLock(options.sessionId, async () => {
+      const session = await options.store.getSession(options.sessionId);
+      const expected = options.approvalScopes.get(args.pluginId);
+      if (!session) throw new SessionNotActiveError("deleted");
+      if (
+        session.status !== "active" &&
+        !(args.terminal && session.status === "paused")
+      ) {
+        throw new SessionNotActiveError(session.status);
+      }
+      if (
+        !expected ||
+        sessionApprovalScope(session, args.pluginId) !== expected
+      ) {
+        throw new SessionApprovalScopeChangedError();
+      }
+      await writePluginJob(options.store, {
+        sessionId: options.sessionId,
+        pluginId: args.pluginId,
+        jobId: args.jobId,
+        startedAt: args.startedAt,
+        updatedAt: args.updatedAt ?? args.startedAt,
+        value: args.value,
+      });
     });
   };
 
@@ -126,6 +162,7 @@ export function createPluginRpcJobRunner(
         jobId: args.jobId,
         startedAt: args.startedAt,
         updatedAt: completedAt,
+        terminal: true,
         value: makeTerminalPluginJobValue({
           status: "failed",
           runtimeId: args.runtimeId,
@@ -167,6 +204,7 @@ export function createPluginRpcJobRunner(
         jobId: args.jobId,
         startedAt: args.startedAt,
         updatedAt: completedAt,
+        terminal: true,
         value: makeTerminalPluginJobValue({
           status: jobResult.jobStatus,
           runtimeId: args.runtimeId,
@@ -195,6 +233,7 @@ export function createPluginRpcJobRunner(
         jobId: args.jobId,
         startedAt: args.startedAt,
         updatedAt: completedAt,
+        terminal: true,
         value: makeTerminalPluginJobValue({
           status: "failed",
           runtimeId: args.runtimeId,
@@ -272,6 +311,7 @@ export function createPluginRpcJobRunner(
           jobId,
           startedAt,
           updatedAt: completedAt,
+          terminal: true,
           value: makeTerminalPluginJobValue({
             status: completion.status,
             runtimeId: args.runtimeId,
@@ -294,6 +334,7 @@ export function createPluginRpcJobRunner(
           jobId,
           startedAt,
           updatedAt: completedAt,
+          terminal: true,
           value: makeTerminalPluginJobValue({
             status: "failed",
             runtimeId: args.runtimeId,
@@ -346,6 +387,7 @@ export function createPluginRpcJobRunner(
             jobId,
             startedAt,
             updatedAt: completedAt,
+            terminal: true,
             value: makeTerminalPluginJobValue({
               status: "failed",
               runtimeId: args.runtimeId,
@@ -376,6 +418,7 @@ export function createPluginRpcJobRunner(
             jobId,
             startedAt,
             updatedAt: completedAt,
+            terminal: true,
             value: makeTerminalPluginJobValue({
               status: "done",
               runtimeId: args.runtimeId,
@@ -401,6 +444,7 @@ export function createPluginRpcJobRunner(
           jobId,
           startedAt,
           updatedAt: completedAt,
+          terminal: true,
           value: makeTerminalPluginJobValue({
             status: "failed",
             runtimeId: args.runtimeId,
@@ -425,6 +469,7 @@ export function createPluginRpcJobRunner(
           jobId,
           startedAt,
           updatedAt: completedAt,
+          terminal: true,
           value: makeTerminalPluginJobValue({
             status: "failed",
             runtimeId: args.runtimeId,

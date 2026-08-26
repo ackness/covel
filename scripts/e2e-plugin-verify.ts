@@ -244,9 +244,9 @@ interface SessionRecord {
   id: string;
   worldId?: string;
   status: string;
-  turnCount: number;
-  phase?: string;
-  preGameCompleted?: readonly string[];
+  phase: "setup" | "playing";
+  completedPlayerTurns: number;
+  setupRuntimes: Readonly<Record<string, { state: string }>>;
   locale?: string;
   activePlugins?: readonly string[];
   createdAt?: string;
@@ -689,7 +689,7 @@ type TurnBand = "setup" | "playing";
  *               its own event/manual trigger, never as part of a staged turn.
  *   off-band  — staged, active, but its stage does not run in this band.
  *   setup     — a setup-stage runtime in the setup band. Completion is judged
- *               authoritatively from `session.preGameCompleted`, not per turn
+ *               authoritatively from `session.setupRuntimes`, not per turn
  *               (setup work can settle inside the form-submit sub-execution
  *               the turn loop does not read back).
  *   auto      — staged, active, in-band, trigger auto → expected every turn.
@@ -734,7 +734,7 @@ function classifyStep(
   }
   if (step.stage === "setup") {
     return band === "setup"
-      ? { cls: "setup", reason: "setup stage — via preGameCompleted" }
+      ? { cls: "setup", reason: "setup stage — via setupRuntimes" }
       : { cls: "off-band", reason: "setup stage — idle in playing band" };
   }
   // Non-setup stages (pre-turn / narrative / post-turn / audit) run in playing
@@ -974,8 +974,10 @@ async function runTurn(
 
 interface PerTurnContext {
   turnNumber: number;
-  /** Mirrors `session.turnCount` — 0 for the setup band, >=1 for playing. */
-  turnCount: number;
+  /** Mirrors the session lifecycle clock used for band selection. */
+  phase: TurnBand;
+  /** Mirrors the count of completed player turns in the main loop. */
+  completedPlayerTurns: number;
   /** Mirrors `session.status` — 'active' | 'paused' | 'ended'. */
   status: string;
   flow: PluginFlowResponse;
@@ -1089,13 +1091,13 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
   //           ran with a non-success status. Scheduled misses are NOT failed
   //           here; the run-level ≥1 check in Phase 7 owns them.
   //   WAIT  — scheduled runtime idle this turn (interval/cooldown may gate),
-  //           or a setup runtime not yet in preGameCompleted (Phase 6 owns it).
+  //           or a setup runtime not yet resolved (Phase 6 owns it).
   //   FIRE  — a stage-less event/manual runtime fired (informational).
   //   WARN  — an inactive / off-band runtime ran unexpectedly (soft anomaly).
   //   SKIP  — not expected this turn (inactive / unstaged / off-band / gated).
   console.log("");
   console.log("  Trigger Verification:");
-  const band: TurnBand = ctx.turnCount === 0 ? "setup" : "playing";
+  const band = ctx.phase;
   const triggerRows: string[][] = [];
   for (const step of orderedSteps) {
     if (!runtimePasses(step, ctx.runtimeFilter, ctx.pluginFilter)) continue;
@@ -1127,7 +1129,7 @@ function reportTurn(ctx: PerTurnContext, exec: TurnExecution): void {
         verdict = ranIt ? "FIRE" : "SKIP";
         break;
       case "setup":
-        // Completion is asserted in Phase 6 from preGameCompleted; per turn we
+        // Completion is asserted in Phase 6 from setupRuntimes; per turn we
         // only surface progress (and flag a hard failure). No per-turn pass
         // assertion — that would double-count Phase 6.
         expectedCol = "setup";
@@ -1418,14 +1420,16 @@ async function runMain(
   state.sessionId = session.id;
   kv("Session ID", session.id);
   kv("Status", session.status);
-  kv("Turn count", session.turnCount);
+  kv("Phase", session.phase);
+  kv("Completed player turns", session.completedPlayerTurns);
 
   // ── Phase 5: Turn execution ────────────────────────────────────
   section("Phase 5: Turn Execution");
 
   const ctx: PerTurnContext = {
     turnNumber: 0,
-    turnCount: session.turnCount,
+    phase: session.phase,
+    completedPlayerTurns: session.completedPlayerTurns,
     status: session.status,
     flow,
     // Expectations are derived against the session's REAL active set (seeded
@@ -1443,19 +1447,20 @@ async function runMain(
   // Fold a fresh SessionRecord into the context: lifecycle band + live active
   // set (enable/disable mid-session applies next turn, so re-read every turn).
   function refreshSession(rec: SessionRecord): void {
-    ctx.turnCount = rec.turnCount;
+    ctx.phase = rec.phase;
+    ctx.completedPlayerTurns = rec.completedPlayerTurns;
     ctx.status = rec.status;
     if (rec.activePlugins) ctx.active = new Set(rec.activePlugins);
   }
 
   function bandLabel(): string {
-    return ctx.turnCount === 0 ? "setup" : "playing";
+    return ctx.phase;
   }
 
   // Turn 1: start_session
   console.log("");
   console.log(
-    `  Turn ${ctx.turnNumber + 1}: start_session (band=${bandLabel()}, turnCount=${ctx.turnCount})`,
+    `  Turn ${ctx.turnNumber + 1}: start_session (phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
   );
   console.log(DIV);
   let exec = await runTurn(args, session.id, {
@@ -1464,7 +1469,7 @@ async function runMain(
   });
   reportTurn(ctx, exec);
 
-  // Advance turn counter
+  // Advance report sequence.
   ctx.turnNumber += 1;
 
   // Auto form handling: detect a form in turn 1 results, submit it,
@@ -1510,8 +1515,8 @@ async function runMain(
     const filled = submitResp.result?.results?.[0]?.filledNarrative ?? "";
     if (filled) kv("Filled narrative", truncate(filled, 80));
 
-    // Refresh band from server — the submit-form + turn commit chain may
-    // have advanced session.turnCount past Pre-Game already.
+    // Refresh phase from server — the submit-form + turn commit chain may
+    // have advanced the lifecycle into playing already.
     const sessAfterSubmit = await httpGet<SessionRecord>(
       args.server,
       `/sessions/${session.id}`,
@@ -1520,7 +1525,7 @@ async function runMain(
 
     console.log("");
     console.log(
-      `  Turn ${ctx.turnNumber + 1}: send_message (after form submit, band=${bandLabel()}, turnCount=${ctx.turnCount})`,
+      `  Turn ${ctx.turnNumber + 1}: send_message (after form submit, phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
     );
     console.log(DIV);
     exec = await runTurn(args, session.id, {
@@ -1532,14 +1537,15 @@ async function runMain(
     // that continuation is a NEW turnId — which is the record `runTurn` reads
     // back. Re-read the session before classifying so the band reflects the
     // turn this record actually belongs to. Judging it by the pre-request
-    // turnCount marks every narrative / post-turn runtime that legitimately ran
+    // phase marks every narrative / post-turn runtime that legitimately ran
     // in the continuation as an off-band anomaly. When setup did NOT finish,
-    // turnCount stays 0 and a genuine off-band run is still flagged.
+    // phase stays setup and a genuine off-band run is still flagged.
     const sessAfterTurn = await httpGet<SessionRecord>(
       args.server,
       `/sessions/${session.id}`,
     );
-    const continued = ctx.turnCount === 0 && sessAfterTurn.turnCount >= 1;
+    const continued =
+      ctx.phase === "setup" && sessAfterTurn.phase === "playing";
     refreshSession(sessAfterTurn);
     if (continued) {
       console.log(
@@ -1571,7 +1577,7 @@ async function runMain(
       defaultPlayerMessages[i % defaultPlayerMessages.length];
     console.log("");
     console.log(
-      `  Turn ${ctx.turnNumber + 1}: send_message #${i + 1} (band=${bandLabel()}, turnCount=${ctx.turnCount})`,
+      `  Turn ${ctx.turnNumber + 1}: send_message #${i + 1} (phase=${bandLabel()}, completedPlayerTurns=${ctx.completedPlayerTurns})`,
     );
     console.log(DIV);
     console.log(`  Player: ${truncate(content, 72)}`);
@@ -1594,14 +1600,14 @@ async function runMain(
   // ── Phase 6: Final snapshot ────────────────────────────────────
   section("Phase 6: Final Session Snapshot");
   const snapshot = await httpGet<{
-    session: { id: string; turnCount?: number };
+    session: { id: string };
     messages?: unknown[];
     characters?: unknown[];
     plugins?: Array<{ id: string; isActive: boolean }>;
   }>(args.server, `/sessions/${session.id}/snapshot`);
   state.snapshot = snapshot;
-  // The snapshot's `session` is the client-restore projection (id / worldId /
-  // turnCount / locale) — it omits `status`. Read the live SessionRecord for
+  // The snapshot's `session` is the client-restore projection and omits
+  // lifecycle fields. Read the live SessionRecord for
   // the authoritative lifecycle status + the final active set.
   const finalSession = await httpGet<SessionRecord>(
     args.server,
@@ -1610,25 +1616,25 @@ async function runMain(
   refreshSession(finalSession);
   kv("Session ID", snapshot.session.id);
   kv("Status", finalSession.status);
-  kv("Turn count", finalSession.turnCount);
+  kv("Phase", finalSession.phase);
+  kv("Completed player turns", finalSession.completedPlayerTurns);
   kv("Messages", snapshot.messages?.length ?? 0);
   kv("Characters", snapshot.characters?.length ?? 0);
   kv("Active plugins", snapshot.plugins?.filter((p) => p.isActive).length ?? 0);
 
   // Setup completion: setup-stage runtimes settle during the setup phase
   // (possibly inside the form-submit sub-execution the turn loop cannot read
-  // back), so their authoritative "done" signal is `session.preGameCompleted`
-  // — a list of runtimeIds, derived from the setupRuntimes mirror — NOT the
-  // per-turn timeline. Assert every active setup-stage runtime reached it.
-  const completedSetup = new Set(finalSession.preGameCompleted ?? []);
+  // back), so their authoritative "done" signal is their current
+  // `session.setupRuntimes[runtimeId].state`, not the per-turn timeline.
+  // Assert every active setup-stage runtime reached the done state.
   console.log("");
-  console.log("  Setup Completion (preGameCompleted):");
+  console.log("  Setup Completion (setupRuntimes):");
   const setupRows: string[][] = [];
   for (const step of flow.steps) {
     if (step.stage !== "setup") continue;
     if (!runtimePasses(step, args.runtimeFilter, args.pluginFilter)) continue;
     if (!ctx.active.has(step.pluginId)) continue;
-    const done = completedSetup.has(step.runtimeId);
+    const done = finalSession.setupRuntimes[step.runtimeId]?.state === "done";
     setupRows.push([
       done ? "PASS" : "FAIL",
       step.runtimeId,

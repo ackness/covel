@@ -46,7 +46,11 @@ export function useRuntimeBindings(
   runtimeModelOverrides?: Record<string, string>,
   onPersist?: (bindings: Record<string, string>) => void,
 ): UseRuntimeBindingsResult {
-  const [bindings, setBindingsState] = useState<Record<string, string>>({});
+  // Seed from the supplied snapshot so the auto-assign effect in this first
+  // commit cannot race the hydration effect and overwrite saved bindings.
+  const [bindings, setBindingsState] = useState<Record<string, string>>(
+    () => runtimeModelOverrides ?? {},
+  );
 
   const runtimeTargets = useMemo(() => {
     const result: Array<Omit<RuntimeBindingEntry, "slotName">> = [];

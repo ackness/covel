@@ -12,7 +12,7 @@
  *   8. Clean up on quit
  */
 
-import { app, BrowserWindow, Menu } from "electron";
+import { app, BrowserWindow, Menu, session } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import path from "node:path";
@@ -27,7 +27,7 @@ import {
   userServerPortFile,
 } from "./paths.js";
 import { loadEnvFiles, loadKeysEnvForChild } from "./env-files.js";
-import { findFreePort, waitForServer } from "./network.js";
+import { fetchWithTimeout, findFreePort, waitForServer } from "./network.js";
 import { diagnoseStartupError, type DiagnosedError } from "./startup-errors.js";
 import {
   initPersistentLog,
@@ -47,6 +47,11 @@ import {
   navigateToApp,
 } from "./windows.js";
 import { initDesktopI18n, t } from "./main-i18n.js";
+import { resolveSystemProxyRequest } from "./system-proxy.js";
+import {
+  parseSettingsPersistenceBundle,
+  type SettingsPersistenceBundle,
+} from "@covel/shared/settings-persistence";
 
 // ── Splash screen ──────────────────────────────────────────────
 
@@ -64,39 +69,78 @@ function captureStderrLine(line: string): void {
   writeServerStreamLine("stderr", line);
 }
 
+export class SidecarUnavailableError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "SidecarUnavailableError";
+  }
+}
+
+export class SidecarHttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: string,
+    readonly revision?: number,
+  ) {
+    super(message);
+    this.name = "SidecarHttpError";
+  }
+}
+
 async function requestSidecarConfig<T>(
   pathName: string,
   init?: RequestInit,
 ): Promise<T> {
-  if (serverPort <= 0) throw new Error("sidecar not ready");
-  const res = await fetch(`http://127.0.0.1:${serverPort}${pathName}`, {
-    ...init,
-    headers: {
-      ...init?.headers,
-      Authorization: `Bearer ${desktopRestToken}`,
-    },
-  });
+  if (serverPort <= 0) throw new SidecarUnavailableError("sidecar not ready");
+  let res: Response;
+  try {
+    res = await fetch(`http://127.0.0.1:${serverPort}${pathName}`, {
+      ...init,
+      headers: {
+        ...init?.headers,
+        Authorization: `Bearer ${desktopRestToken}`,
+      },
+    });
+  } catch (error) {
+    throw new SidecarUnavailableError("sidecar request failed", {
+      cause: error,
+    });
+  }
   if (!res.ok) {
-    throw new Error(`sidecar ${pathName} failed: ${res.status}`);
+    const body = (await res.json().catch(() => null)) as {
+      code?: unknown;
+      details?: { revision?: unknown };
+    } | null;
+    throw new SidecarHttpError(
+      res.status,
+      `sidecar ${pathName} failed: ${res.status}`,
+      typeof body?.code === "string" ? body.code : undefined,
+      typeof body?.details?.revision === "number"
+        ? body.details.revision
+        : undefined,
+    );
   }
   return (await res.json()) as T;
 }
 
-async function getSettingsViaSidecar(): Promise<Record<string, unknown>> {
-  const bundle = await requestSidecarConfig<{
-    entries?: Record<string, unknown>;
-  }>("/api/config/settings");
-  return bundle.entries ?? {};
+async function getSettingsViaSidecar(): Promise<SettingsPersistenceBundle> {
+  return parseSettingsPersistenceBundle(
+    await requestSidecarConfig<unknown>("/api/config/settings"),
+  );
 }
 
 async function saveSettingsViaSidecar(
   entries: Record<string, unknown>,
-): Promise<void> {
-  await requestSidecarConfig<{ ok?: boolean }>("/api/config/settings", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ entries }),
-  });
+  expectedRevision: number,
+): Promise<SettingsPersistenceBundle> {
+  return parseSettingsPersistenceBundle(
+    await requestSidecarConfig<unknown>("/api/config/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries, expectedRevision }),
+    }),
+  );
 }
 
 async function saveKeysViaSidecar(keys: Record<string, string>): Promise<void> {
@@ -161,7 +205,6 @@ async function startServer(
 
   const envOverrides = loadEnvFiles(projectRoot);
   const keysEnv = loadKeysEnvForChild(paths.userKeysEnvPath);
-
   // Data dir lives at <dataRoot>/; ensure the db's parent (and logs dir) exist.
   fs.mkdirSync(path.dirname(paths.dbPath), { recursive: true });
 
@@ -191,6 +234,7 @@ async function startServer(
     COVEL_LOGS_DIR: paths.logsDir,
     COVEL_LOG_MAX_SIZE_MB: String(paths.logRotation.maxSizeMb),
     COVEL_LOG_MAX_FILES: String(paths.logRotation.maxFiles),
+    COVEL_DESKTOP_SYSTEM_PROXY_IPC: "1",
   };
 
   if (!isDev) {
@@ -203,6 +247,7 @@ async function startServer(
   writeLog("info", `cwd: ${projectRoot}`);
   writeLog("info", `db: ${paths.dbPath}`);
   writeLog("info", `llm.toml: ${paths.effectiveLlmToml}`);
+  writeLog("info", "system proxy: dynamic Electron resolver available");
 
   const spawnEnv: Record<string, string> = { ...env };
   const nodeBin = isDev ? "node" : process.execPath;
@@ -215,9 +260,26 @@ async function startServer(
   serverProcess = spawn(nodeBin, [tsxPath, serverEntry], {
     cwd: projectRoot,
     env: spawnEnv,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
   serverStartedAt = Date.now();
+
+  const child = serverProcess;
+  child.on("message", async (message) => {
+    const response = await resolveSystemProxyRequest(message, (url) =>
+      session.defaultSession.resolveProxy(url),
+    );
+    if (!response || !child.connected) return;
+    try {
+      child.send(response, (error) => {
+        if (error) {
+          writeLog("warn", "Could not return system proxy result:", error);
+        }
+      });
+    } catch (error) {
+      writeLog("warn", "Could not return system proxy result:", error);
+    }
+  });
 
   serverProcess.stdout?.on("data", (data: Buffer) => {
     const text = data.toString();
@@ -339,7 +401,7 @@ function startHealthHeartbeat(healthUrl: string): void {
   stopHealthHeartbeat();
   heartbeatTimer = setInterval(async () => {
     try {
-      const res = await fetch(healthUrl);
+      const res = await fetchWithTimeout(healthUrl, 5_000);
       const ok = res.ok;
       if (ok !== lastHealthOk) {
         lastHealthOk = ok;

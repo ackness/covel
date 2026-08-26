@@ -16,7 +16,7 @@ const PLUGINS_DIR = resolve(REPO_ROOT, "plugins");
 const TEMPLATES_DIR = resolve(REPO_ROOT, "templates");
 const PLACEHOLDER_REGEX = /\{\{[^}]+\}\}/;
 
-function pluginDirs(root) {
+function childDirs(root) {
   if (!existsSync(root)) return [];
   return readdirSync(root)
     .map((entry) => join(root, entry))
@@ -24,11 +24,17 @@ function pluginDirs(root) {
     .sort();
 }
 
-const pluginDirsToCheck = pluginDirs(PLUGINS_DIR);
+// Package managers can leave ignored `node_modules`-only directories after a
+// plugin is moved or archived. A real built-in plugin package has a manifest
+// or package.json; residue must not create a false missing-README failure.
+const pluginDirsToCheck = childDirs(PLUGINS_DIR).filter(
+  (dir) =>
+    existsSync(join(dir, "PLUGIN.md")) || existsSync(join(dir, "package.json")),
+);
 const missing = pluginDirsToCheck.filter(
   (dir) => !existsSync(join(dir, "README.md")),
 );
-const templateDirsToCheck = pluginDirs(TEMPLATES_DIR);
+const templateDirsToCheck = childDirs(TEMPLATES_DIR);
 const templateReadmesToCheck = templateDirsToCheck
   .map((dir) => join(dir, "README.md"))
   .filter((file) => existsSync(file));

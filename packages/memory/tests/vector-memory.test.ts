@@ -50,6 +50,19 @@ const llm: MemoryLLMAdapter = {
 // ── Store seeding helpers ────────────────────────────────────────
 
 async function lockModel(store: DataStore, sessionId: string): Promise<void> {
+  if (!(await store.getSession(sessionId))) {
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: sessionId,
+      status: "active",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
   // supportsVector(store) is true for MemoryStore.
   const s = store as DataStore & {
     ensureVectorModel: NonNullable<DataStore["ensureVectorModel"]>;
@@ -202,6 +215,261 @@ describe("vector recall (semantic)", () => {
     const lastBatch = calls[calls.length - 1];
     expect(lastBatch).toEqual(["the dragon returned home"]);
   });
+
+  it("coalesces concurrent sweeps and performs one trailing pass", async () => {
+    const concurrentStore = createMemoryStore();
+    const concurrentSession = "sess-concurrent-ingest";
+    order = 0;
+    await lockModel(concurrentStore, concurrentSession);
+    await addMessage(
+      concurrentStore,
+      concurrentSession,
+      "assistant",
+      "first message",
+    );
+    let markFirstEmbedStarted!: () => void;
+    let releaseFirstEmbed!: () => void;
+    const firstEmbedStarted = new Promise<void>((resolve) => {
+      markFirstEmbedStarted = resolve;
+    });
+    const firstEmbedGate = new Promise<void>((resolve) => {
+      releaseFirstEmbed = resolve;
+    });
+    const calls: string[][] = [];
+    const gatedEmbed: EmbedFn = async (texts) => {
+      calls.push([...texts]);
+      if (calls.length === 1) {
+        markFirstEmbedStarted();
+        await firstEmbedGate;
+      }
+      return texts.map(embedText);
+    };
+    const ingestor = createVectorIngestor({
+      store: concurrentStore,
+      embed: gatedEmbed,
+    });
+
+    const firstRun = ingestor.ingest(concurrentSession);
+    await firstEmbedStarted;
+    await addMessage(
+      concurrentStore,
+      concurrentSession,
+      "assistant",
+      "second message",
+    );
+    const secondRun = ingestor.ingest(concurrentSession);
+    expect(secondRun).toBe(firstRun);
+
+    releaseFirstEmbed();
+    const [firstResult, secondResult] = await Promise.all([
+      firstRun,
+      secondRun,
+    ]);
+    expect(firstResult).toEqual({ skipped: false, recall: 2, archival: 0 });
+    expect(secondResult).toEqual(firstResult);
+    expect(calls).toEqual([["first message"], ["second message"]]);
+  });
+
+  it("does not duplicate one batch across many concurrent callers", async () => {
+    const { fn, calls } = spyEmbed();
+    const ingestor = createVectorIngestor({ store, embed: fn });
+
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => ingestor.ingest(sessionId)),
+    );
+
+    expect(results.every((result) => result.recall === 3)).toBe(true);
+    expect(calls).toEqual([
+      [
+        "the dragon breathed fire",
+        "a merchant sold apples",
+        "rivers flowed through the valley",
+      ],
+    ]);
+  });
+
+  it("does not write an old embedding into a recreated session with the same id", async () => {
+    let releaseEmbedding!: () => void;
+    let markEmbeddingStarted!: () => void;
+    const embeddingStarted = new Promise<void>((resolve) => {
+      markEmbeddingStarted = resolve;
+    });
+    const embeddingGate = new Promise<void>((resolve) => {
+      releaseEmbedding = resolve;
+    });
+    const delayedEmbed: EmbedFn = async (texts) => {
+      markEmbeddingStarted();
+      await embeddingGate;
+      return texts.map(embedText);
+    };
+    const ingestor = createVectorIngestor({ store, embed: delayedEmbed });
+
+    const staleSweep = ingestor.ingest(sessionId);
+    await embeddingStarted;
+    await store.deleteSession(sessionId);
+    await store.createSession({
+      id: sessionId,
+      status: "active",
+      phase: "playing",
+      completedPlayerTurns: 0,
+      setupRuntimes: {},
+      activePlugins: [],
+      createdAt: "2099-01-01T00:00:00.000Z",
+      updatedAt: "2099-01-01T00:00:00.000Z",
+    });
+    await lockModel(store, sessionId);
+    releaseEmbedding();
+
+    expect((await staleSweep).recall).toBe(0);
+    const vectorStore = store as DataStore & {
+      searchVectors: NonNullable<DataStore["searchVectors"]>;
+    };
+    await expect(
+      vectorStore.searchVectors({
+        sessionId,
+        query: embedText("dragon"),
+        topK: 5,
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it("does not duplicate embeddings across independent ingestors sharing a coordinator", async () => {
+    const { fn, calls } = spyEmbed();
+    let tail = Promise.resolve();
+    const runIngestExclusive = async <T>(
+      _sessionId: string,
+      task: () => Promise<T>,
+    ): Promise<T> => {
+      const previous = tail;
+      let release!: () => void;
+      tail = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await previous;
+      try {
+        return await task();
+      } finally {
+        release();
+      }
+    };
+    const firstPod = createVectorIngestor({
+      store,
+      embed: fn,
+      runIngestExclusive,
+    });
+    const secondPod = createVectorIngestor({
+      store,
+      embed: fn,
+      runIngestExclusive,
+    });
+
+    const [first, second] = await Promise.all([
+      firstPod.ingest(sessionId),
+      secondPod.ingest(sessionId),
+    ]);
+
+    expect(first.recall + second.recall).toBe(3);
+    expect(calls).toEqual([
+      [
+        "the dragon breathed fire",
+        "a merchant sold apples",
+        "rivers flowed through the valley",
+      ],
+    ]);
+  });
+
+  it("fails open for the turn and retries after coordinator errors", async () => {
+    let fail = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ingestor = createVectorIngestor({
+      store,
+      embed,
+      runIngestExclusive: async (_sessionId, task) => {
+        if (fail) {
+          fail = false;
+          throw new Error("lock pool unavailable");
+        }
+        return task();
+      },
+    });
+
+    try {
+      await expect(ingestor.ingest(sessionId)).resolves.toEqual({
+        skipped: false,
+        recall: 0,
+        archival: 0,
+      });
+      await expect(ingestor.ingest(sessionId)).resolves.toMatchObject({
+        skipped: false,
+        recall: 3,
+      });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("still ingests different sessions in parallel", async () => {
+    const parallelStore = createMemoryStore();
+    const firstSession = "sess-parallel-a";
+    const secondSession = "sess-parallel-b";
+    order = 0;
+    await lockModel(parallelStore, firstSession);
+    await lockModel(parallelStore, secondSession);
+    await addMessage(parallelStore, firstSession, "assistant", "session a");
+    await addMessage(parallelStore, secondSession, "assistant", "session b");
+    let activeCalls = 0;
+    let maxActiveCalls = 0;
+    let releaseCalls!: () => void;
+    const callGate = new Promise<void>((resolve) => {
+      releaseCalls = resolve;
+    });
+    let markBothStarted!: () => void;
+    const bothStarted = new Promise<void>((resolve) => {
+      markBothStarted = resolve;
+    });
+    const parallelEmbed: EmbedFn = async (texts) => {
+      activeCalls += 1;
+      maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+      if (activeCalls === 2) markBothStarted();
+      await callGate;
+      activeCalls -= 1;
+      return texts.map(embedText);
+    };
+    const ingestor = createVectorIngestor({
+      store: parallelStore,
+      embed: parallelEmbed,
+    });
+
+    const firstRun = ingestor.ingest(firstSession);
+    const secondRun = ingestor.ingest(secondSession);
+    await bothStarted;
+    expect(maxActiveCalls).toBe(2);
+
+    releaseCalls();
+    await expect(Promise.all([firstRun, secondRun])).resolves.toEqual([
+      { skipped: false, recall: 1, archival: 0 },
+      { skipped: false, recall: 1, archival: 0 },
+    ]);
+  });
+
+  it("clears coalescing state after an embedding failure", async () => {
+    let attempts = 0;
+    const flaky: EmbedFn = async (texts) => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("embedding unavailable");
+      return texts.map(embedText);
+    };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ingestor = createVectorIngestor({ store, embed: flaky });
+
+    try {
+      expect((await ingestor.ingest(sessionId)).recall).toBe(0);
+      expect((await ingestor.ingest(sessionId)).recall).toBe(3);
+      expect(attempts).toBe(2);
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe("vector archival (semantic over lorebook + characters)", () => {
@@ -314,6 +582,48 @@ describe("graceful degradation", () => {
     // Query embed throws → must degrade to keyword, not reject.
     const results = await system.recall.search(sessionId, "dragon", 5);
     expect(results.some((r) => r.content.includes("dragon"))).toBe(true);
+  });
+
+  it("falls back to keyword when vector-target resolution throws", async () => {
+    const store = createMemoryStore();
+    const sessionId = "sess-target-fail";
+    order = 0;
+    await addMessage(
+      store,
+      sessionId,
+      "assistant",
+      "the dragon guarded a forge",
+    );
+    await addLorebook(
+      store,
+      sessionId,
+      "forge-entry",
+      "forge",
+      "the ancient forge is guarded by a dragon",
+    );
+
+    const failingStore = new Proxy(store, {
+      get(target, property, receiver) {
+        if (property === "resolveSessionVectorTarget") {
+          return async () => {
+            throw new Error("vector metadata unavailable");
+          };
+        }
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const system = createMemorySystem({
+      store: failingStore,
+      llm,
+      embed,
+    });
+
+    const recall = await system.recall.search(sessionId, "dragon", 5);
+    const archival = await system.archival.search(sessionId, "forge", 5);
+    expect(recall.some((result) => result.content.includes("dragon"))).toBe(
+      true,
+    );
+    expect(archival.some((result) => result.key === "forge")).toBe(true);
   });
 
   it("stays keyword-only (ingest no-op) when no embed function is injected", async () => {

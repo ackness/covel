@@ -29,8 +29,8 @@ export function WelcomeStep({ locale, setLocale, onNext }: WelcomeStepProps) {
     <div className="space-y-8 text-center">
       <div className="space-y-4">
         <div className="flex items-center justify-center">
-          <div className="h-12 w-12 rounded-[var(--radius-card)] bg-primary flex items-center justify-center">
-            <div className="h-4 w-4 bg-[var(--surface-dialog)] rounded-full" />
+          <div className="h-12 w-12 rounded-(--radius-card) bg-primary flex items-center justify-center">
+            <div className="h-4 w-4 bg-(--surface-dialog) rounded-full" />
           </div>
         </div>
         <h1 className="text-2xl font-bold tracking-tight">
@@ -51,7 +51,7 @@ export function WelcomeStep({ locale, setLocale, onNext }: WelcomeStepProps) {
         <div className="flex items-center justify-center gap-2">
           <button
             onClick={() => setLocale("zh-CN")}
-            className={`rounded-[var(--radius-control)] px-4 py-2 text-xs font-medium border transition-colors ${
+            className={`rounded-(--radius-control) px-4 py-2 text-xs font-medium border transition-colors ${
               locale === "zh-CN"
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-border text-muted-foreground hover:border-primary/40"
@@ -61,7 +61,7 @@ export function WelcomeStep({ locale, setLocale, onNext }: WelcomeStepProps) {
           </button>
           <button
             onClick={() => setLocale("en-US")}
-            className={`rounded-[var(--radius-control)] px-4 py-2 text-xs font-medium border transition-colors ${
+            className={`rounded-(--radius-control) px-4 py-2 text-xs font-medium border transition-colors ${
               locale === "en-US"
                 ? "border-primary bg-primary/10 text-primary"
                 : "border-border text-muted-foreground hover:border-primary/40"
@@ -218,7 +218,7 @@ export function PluginStep({
       <div className="space-y-2">
         <button
           onClick={() => setPluginMode("same")}
-          className={`w-full flex items-start gap-3 p-3 rounded-[var(--radius-card)] border text-left transition-colors ${
+          className={`w-full flex items-start gap-3 p-3 rounded-(--radius-card) border text-left transition-colors ${
             pluginMode === "same"
               ? "border-primary bg-primary/10"
               : "border-border hover:border-primary/40"
@@ -242,7 +242,7 @@ export function PluginStep({
         </button>
         <button
           onClick={() => setPluginMode("different")}
-          className={`w-full flex items-start gap-3 p-3 rounded-[var(--radius-card)] border text-left transition-colors ${
+          className={`w-full flex items-start gap-3 p-3 rounded-(--radius-card) border text-left transition-colors ${
             pluginMode === "different"
               ? "border-primary bg-primary/10"
               : "border-border hover:border-primary/40"
@@ -335,7 +335,7 @@ export function ReadyStep({ onDismiss }: ReadyStepProps) {
         </p>
       </div>
 
-      <div className="border border-border p-4 text-left space-y-3 rounded-[var(--radius-card)] bg-card/35">
+      <div className="border border-border p-4 text-left space-y-3 rounded-(--radius-card) bg-card/35">
         <div className="flex items-start gap-3">
           <Globe className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
           <div>

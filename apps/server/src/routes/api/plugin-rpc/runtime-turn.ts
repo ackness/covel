@@ -1,6 +1,7 @@
 import {
   createTurnEmitter,
   collectExecutionJournal,
+  collectExecutionSuspensions,
   executeTurn,
   finalizeExecution,
   saveAutoSnapshot,
@@ -10,33 +11,26 @@ import type { DataStore, SessionRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
 import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
 
-import {
-  createInProcessSessionLock,
-  type SessionLock,
-} from "../../../lib/session-lock.js";
+import type { SessionLock } from "../../../lib/session-lock.js";
 import type {
   ManualTurnSummary,
   TurnCommitOutcome,
 } from "./runtime-response.js";
+import { sessionApprovalScope } from "../session/session-guard.js";
 
-/**
- * Serialises deferred followers of the SAME runtime within a session, keyed
- * `<sessionId>::<runtimeId>`.
- *
- * A follower's handler typically does check-then-act against its own data
- * ("has this scene already been generated?", the promptHash dedupe inside
- * `ctx.images`). Those checks were previously made atomic by the session lock;
- * once execution moves outside it, two followers for the same runtime could
- * both see "not generated yet" and both pay for a generation. This lock keeps
- * that guarantee without blocking the player, who takes a different key.
- *
- * In-process on purpose: the background queue driving these followers is
- * itself per-process (`setImmediate` + a module-level counter), so a
- * cross-process lock would guard a scope that does not exist — and the PG
- * implementation would hold a reserved connection for the whole multi-minute
- * generation.
- */
-const followerJobLock = createInProcessSessionLock();
+export class SessionApprovalScopeChangedError extends Error {
+  constructor() {
+    super("approval scope changed while the runtime request was waiting");
+    this.name = "SessionApprovalScopeChangedError";
+  }
+}
+
+export class SessionNotActiveError extends Error {
+  constructor(readonly status: string) {
+    super(`session is ${status}; runtime execution refused`);
+    this.name = "SessionNotActiveError";
+  }
+}
 
 export interface PluginRpcRuntimeTurnContext {
   readonly store: DataStore;
@@ -45,6 +39,8 @@ export interface PluginRpcRuntimeTurnContext {
   readonly sessionId: string;
   readonly session: Pick<SessionRecord, "locale" | "runtimeModelOverrides">;
   readonly activeRuntimes: readonly RuntimeManifest[];
+  /** Capability incarnation captured for every runtime plugin in this graph. */
+  readonly approvalScopes: ReadonlyMap<string, string>;
   readonly deps: Omit<TurnExecutorDeps, "store" | "eventBus" | "emitter">;
   readonly hookPipeline?: TurnExecutorDeps["hookPipeline"];
 }
@@ -83,6 +79,22 @@ export interface RunDeferredFollowerArgs {
   >;
 }
 
+/**
+ * Stable cross-process identity for detached work owned by one runtime.
+ *
+ * Runtime handlers commonly perform read-check-generate-write sequences over
+ * plugin data. Until those domain writes expose their own atomic idempotency
+ * keys, every activation of the same runtime must stay serialised; otherwise
+ * different payloads can still target the same record and overwrite each
+ * other after both have paid for provider work.
+ */
+export function backgroundRuntimeLockId(
+  sessionId: string,
+  runtimeId: string,
+): string {
+  return `background-runtime:${JSON.stringify([sessionId, runtimeId])}`;
+}
+
 export function createPluginRpcRuntimeTurnRunner(
   ctx: PluginRpcRuntimeTurnContext,
 ): {
@@ -92,6 +104,37 @@ export function createPluginRpcRuntimeTurnRunner(
     readonly commit: TurnCommitOutcome;
   }>;
 } {
+  function assertApprovalScope(
+    session: SessionRecord,
+    runtimeId: string,
+  ): void {
+    const pluginId = ctx.activeRuntimes.find(
+      (runtime) => runtime.name === runtimeId,
+    )?.pluginId;
+    const expected = pluginId ? ctx.approvalScopes.get(pluginId) : undefined;
+    if (
+      !pluginId ||
+      !expected ||
+      sessionApprovalScope(session, pluginId) !== expected
+    ) {
+      throw new SessionApprovalScopeChangedError();
+    }
+  }
+
+  async function requireLiveApprovedSession(
+    runtimeId: string,
+  ): Promise<SessionRecord> {
+    const live = await ctx.store.getSession(ctx.sessionId);
+    if (!live) {
+      throw new SessionNotActiveError("deleted");
+    }
+    if (live.status !== "active") {
+      throw new SessionNotActiveError(live.status);
+    }
+    assertApprovalScope(live, runtimeId);
+    return live;
+  }
+
   async function processTurnResults(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
@@ -104,15 +147,14 @@ export function createPluginRpcRuntimeTurnRunner(
     const outcome = await finalizeExecution({
       store: ctx.store,
       sessionId: ctx.sessionId,
-      ...(turnResult.executionContext
-        ? { executionContext: turnResult.executionContext }
-        : {}),
+      executionContext: turnResult.executionContext,
       runtimes: ctx.activeRuntimes,
       results: [
         ...turnResult.runtimeResults,
         ...(turnResult.nestedRuntimeResults ?? []),
       ],
       journalMessages: collectExecutionJournal(turnResult),
+      suspensions: collectExecutionSuspensions(turnResult),
       turnIds: [turnResult.turnId],
       ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
       eventBus: ctx.eventBus,
@@ -125,8 +167,7 @@ export function createPluginRpcRuntimeTurnRunner(
       loadOutputSchema: async (runtimeId) => {
         const rt = ctx.activeRuntimes.find((r) => r.name === runtimeId);
         return rt
-          ? (await ctx.deps.loadRuntime(rt, ctx.session.locale ?? undefined))
-              ?.outputSchema
+          ? (await ctx.deps.loadRuntime(rt, ctx.session.locale))?.outputSchema
           : undefined;
       },
       // MediaRef canonicalization / ownership for published export values.
@@ -179,8 +220,12 @@ export function createPluginRpcRuntimeTurnRunner(
     // sync RPC return 500 and the client retry, replaying committed proposals.
     // So `committed` tracks proposal commit alone, matching commit_status;
     // `snapshotFailed` stays on the outcome for observability.
-    if (committed) {
-      turnResult.completeTurn?.();
+    const hasSuspendedRuntime = [
+      ...turnResult.runtimeResults,
+      ...(turnResult.nestedRuntimeResults ?? []),
+    ].some((result) => result.status === "suspended");
+    if (committed && !hasSuspendedRuntime) {
+      await turnResult.completeTurn?.();
     }
     return {
       committed,
@@ -202,8 +247,11 @@ export function createPluginRpcRuntimeTurnRunner(
    * `completedPlayerTurns` counts only player-origin executions), domain writes
    * are buffered into the commit transaction rather than dribbling out during
    * the run, and no turn messages are appended. Executions of the SAME runtime
-   * stay serialised on `followerJobLock`, which is what keeps a handler's
-   * "already generated?" check atomic and stops a double charge.
+   * stay serialised on the injected cross-process session lock, using a key
+   * distinct from the session commit lock. This keeps a handler's "already
+   * generated?" check and provider call atomic across pods without blocking
+   * player turns; the nested commit lock uses the plain session id, so the two
+   * acquisitions cannot self-deadlock.
    */
   async function runDetached(
     runtimeId: string,
@@ -213,41 +261,42 @@ export function createPluginRpcRuntimeTurnRunner(
     readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
     readonly commit: TurnCommitOutcome;
   }> {
-    return followerJobLock.withLock(
-      `${ctx.sessionId}::${runtimeId}`,
-      async () => {
-        const result = await executeTurn(turnInput, ctx.activeRuntimes, {
-          ...ctx.deps,
-          store: ctx.store,
-          eventBus: ctx.eventBus,
-          emitter,
-          ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-        });
-        const outcome = await ctx.sessionLock.withLock(
-          ctx.sessionId,
-          async () => {
-            // Minutes can pass while the generation runs, so the session state
-            // read before it started is no longer trustworthy. Re-read under
-            // the lock and refuse to commit into a session the player has since
-            // paused or ended — the throw is caught by the background job
-            // runner, which settles the job row as failed.
-            const live = await ctx.store.getSession(ctx.sessionId);
-            if (!live) {
-              throw new Error(
-                "session was deleted while the background job was running",
-              );
-            }
-            if (live.status && live.status !== "active") {
-              throw new Error(
-                `session is ${live.status}; background job results were discarded`,
-              );
-            }
-            return processTurnResults(result, emitter);
-          },
-        );
-        return { turnResult: result, commit: outcome };
-      },
-    );
+    const jobLockId = backgroundRuntimeLockId(ctx.sessionId, runtimeId);
+    return ctx.sessionLock.withLock(jobLockId, async () => {
+      // Detached work does not hold the main session lock during provider
+      // execution. Take it briefly to linearize authorization against a
+      // concurrent revoke/disable/delete before spending external work.
+      await ctx.sessionLock.withLock(ctx.sessionId, () =>
+        requireLiveApprovedSession(runtimeId).then(() => undefined),
+      );
+      const result = await executeTurn(turnInput, ctx.activeRuntimes, {
+        ...ctx.deps,
+        store: ctx.store,
+        eventBus: ctx.eventBus,
+        emitter,
+        ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+      });
+      const outcome = await ctx.sessionLock.withLock(
+        ctx.sessionId,
+        async () => {
+          // Minutes can pass while the generation runs, so the session state
+          // read before it started is no longer trustworthy. Re-read under
+          // the lock and refuse to commit into a session the player has since
+          // paused or ended — the throw is caught by the background job
+          // runner, which settles the job row as failed.
+          const live = await ctx.store.getSession(ctx.sessionId);
+          if (!live) {
+            throw new SessionNotActiveError("deleted");
+          }
+          if (live.status !== "active") {
+            throw new SessionNotActiveError(live.status);
+          }
+          assertApprovalScope(live, runtimeId);
+          return processTurnResults(result, emitter);
+        },
+      );
+      return { turnResult: result, commit: outcome };
+    });
   }
 
   async function runManualTurn(
@@ -263,7 +312,7 @@ export function createPluginRpcRuntimeTurnRunner(
       sessionId: ctx.sessionId,
       turnId: args.turnId,
       playerMessage: "",
-      locale: ctx.session.locale ?? "zh-CN",
+      locale: ctx.session.locale,
       // A manual RPC trigger is not a player turn.
       origin: "manual",
       manualTrigger: {
@@ -294,6 +343,7 @@ export function createPluginRpcRuntimeTurnRunner(
           commit: r.commit,
         }))
       : await ctx.sessionLock.withLock(ctx.sessionId, async () => {
+          await requireLiveApprovedSession(args.runtimeId);
           const turnResult = await executeTurn(turnInput, ctx.activeRuntimes, {
             ...ctx.deps,
             store: ctx.store,
@@ -338,9 +388,9 @@ export function createPluginRpcRuntimeTurnRunner(
       sessionId: ctx.sessionId,
       turnId: args.followerTurnId,
       playerMessage: "",
-      locale: ctx.session.locale ?? "zh-CN",
+      locale: ctx.session.locale,
       // A deferred background follower is not a player turn.
-      origin: "follower",
+      origin: "background",
       manualTrigger: {
         runtimeId: args.runtimeId,
         triggerEvent: args.triggerEvent,

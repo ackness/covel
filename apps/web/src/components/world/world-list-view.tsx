@@ -8,7 +8,6 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import type { WorldRecord } from "@/services/api.js";
 import { WorldCard } from "@/components/world/world-card.js";
 
@@ -49,7 +48,7 @@ export function WorldListView({
   onDeleteWorld,
 }: WorldListViewProps) {
   return (
-    <ScrollArea className="w-full h-full">
+    <div className="h-full w-full overflow-y-auto overscroll-contain">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-10 py-5 md:py-8">
         {/* Editorial header */}
         <header className="grid grid-cols-1 md:grid-cols-12 gap-5 md:gap-8 items-end mb-7 md:mb-9">
@@ -79,7 +78,7 @@ export function WorldListView({
             <button
               type="button"
               onClick={onOpenGenerator}
-              className="group relative min-h-[92px] overflow-hidden rounded-[var(--radius-card)] border border-primary/25 bg-card/80 hover:border-primary/55 transition-all p-3 sm:p-4 text-left"
+              className="group relative min-h-23 overflow-hidden rounded-(--radius-card) border border-primary/25 bg-card/80 hover:border-primary/55 transition-all p-3 sm:p-4 text-left"
             >
               <div
                 aria-hidden="true"
@@ -112,7 +111,7 @@ export function WorldListView({
             <button
               type="button"
               onClick={onOpenSettings}
-              className="group flex min-h-[92px] items-center justify-between rounded-[var(--radius-card)] border border-border bg-card/70 hover:border-primary/40 hover:bg-muted/30 transition-all p-3 sm:p-4 text-left"
+              className="group flex min-h-23 items-center justify-between rounded-(--radius-card) border border-border bg-card/70 hover:border-primary/40 hover:bg-muted/30 transition-all p-3 sm:p-4 text-left"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <KeyRound className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -156,7 +155,7 @@ export function WorldListView({
         )}
 
         {worlds.length === 0 && (
-          <div className="text-center py-16 md:py-24 border-y border-dashed border-[var(--rule-color)]">
+          <div className="text-center py-16 md:py-24 border-y border-dashed border-(--rule-color)">
             <FolderOpen className="w-10 h-10 mx-auto text-muted-foreground/60" />
             <h2 className="font-display font-bold text-xl mt-5">
               {t("session.worldsEmptyTitle", "No worlds yet")}
@@ -210,6 +209,6 @@ export function WorldListView({
           )}
         </div>
       </div>
-    </ScrollArea>
+    </div>
   );
 }

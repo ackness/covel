@@ -18,12 +18,24 @@ import {
   type PluginRpcRegistry,
   type RpcExecutor,
 } from "@covel/runtime";
-import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
+import {
+  COMMUNITY_SERVER_CODE_ACTION,
+  createRpcApprovalGate,
+  type RpcApprovalGate,
+} from "@covel/approval";
 import { pluginRpcRoutes } from "../../src/routes/api/plugin-rpc.js";
 import {
   approvalRoutes,
   sessionApprovalRoutes,
 } from "../../src/routes/api/approvals.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "../../src/lib/session-lock.js";
+import {
+  SESSION_DELETION_PENDING_KEY,
+  sessionApprovalScope,
+} from "../../src/routes/api/session/session-guard.js";
 
 type Env = {
   Variables: {
@@ -34,32 +46,33 @@ type Env = {
   };
 };
 
-function setup(): {
+function setup(
+  store: DataStore = createMemoryStore(),
+  gate: RpcApprovalGate = createRpcApprovalGate(),
+): {
   app: Hono;
   store: DataStore;
   registry: PluginRpcRegistry;
   gate: RpcApprovalGate;
 } {
-  const store = createMemoryStore();
   const registry = createPluginRpcRegistry();
   // Community-trust action that just echoes payload.
-  registry.registerPluginAction(
+  registry.registerPluginHandler(
     "untrusted",
     "do-thing",
-    { handler: "./rpc/do-thing.js", description: "Run the thing" },
+    async (payload) => ({ ranWith: payload }),
+    { description: "Run the thing" },
     "community",
   );
-  const executor = createRpcExecutor({
-    registry,
-    loadHandler: async () => async (payload) => ({ ranWith: payload }),
-  });
-  const gate = createRpcApprovalGate();
+  const executor = createRpcExecutor({ registry });
+  const sessionLock = createInProcessSessionLock();
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("rpcExecutor", executor);
     c.set("rpcRegistry", registry);
     c.set("rpcApprovalGate", gate);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", pluginRpcRoutes);
@@ -74,11 +87,17 @@ async function seedSession(
 ): Promise<void> {
   const now = new Date().toISOString();
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id,
     worldId: "cloudmere",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    completedPlayerTurns: 1,
+
     locale: "zh-CN",
     activePlugins: [],
     createdAt: now,
@@ -235,8 +254,11 @@ describe("Plugin RPC approval flow", () => {
   });
 
   it("requires session scope for approvals that unlock runtime code", async () => {
+    const sessionRecord = await store.getSession("sess-approval-1");
+    if (!sessionRecord) throw new Error("expected session");
     const pending = gate.evaluate({
       sessionId: "sess-approval-1",
+      sessionScope: sessionApprovalScope(sessionRecord, "untrusted"),
       pluginId: "untrusted",
       action: "runtime:agent",
       payload: {},
@@ -275,11 +297,77 @@ describe("Plugin RPC approval flow", () => {
     expect(res.status).toBe(404);
   });
 
+  it("invalidates another Pod's stale grants and pending decisions after revoke", async () => {
+    const sharedStore = createMemoryStore();
+    const podA = setup(sharedStore);
+    const podB = setup(sharedStore);
+    await seedSession(sharedStore, "shared-session");
+
+    const serverCode = await dispatchRpc(podA.app, "shared-session");
+    expect(serverCode.status).toBe(202);
+    const serverCodePending = (await serverCode.json()) as {
+      approvalId: string;
+    };
+    expect(
+      (
+        await podA.app.request(
+          `/api/approvals/${serverCodePending.approvalId}/decision`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ decision: "allow", scope: "session" }),
+          },
+        )
+      ).status,
+    ).toBe(200);
+
+    // The next request has cleared phase 1 and is waiting on the exact action.
+    const action = await dispatchRpc(podA.app, "shared-session");
+    expect(action.status).toBe(202);
+    const staleActionPending = (await action.json()) as {
+      approvalId: string;
+      pending: { action: string };
+    };
+    expect(staleActionPending.pending.action).toBe("do-thing");
+
+    // Pod B has no local grants to clear. Persisting a new plugin revision is
+    // what invalidates Pod A's cache without an in-process broadcast.
+    const revoke = await podB.app.request(
+      "/api/sessions/shared-session/approvals?pluginId=untrusted",
+      { method: "DELETE" },
+    );
+    expect(revoke.status).toBe(200);
+    expect(await revoke.json()).toMatchObject({ ok: true, cleared: 0 });
+
+    const staleDecision = await podA.app.request(
+      `/api/approvals/${staleActionPending.approvalId}/decision`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision: "allow", scope: "session" }),
+      },
+    );
+    expect(staleDecision.status).toBe(409);
+    expect(await staleDecision.json()).toMatchObject({
+      code: "approval_scope_changed",
+    });
+
+    const retried = await dispatchRpc(podA.app, "shared-session");
+    expect(retried.status).toBe(202);
+    const retriedBody = (await retried.json()) as {
+      pending: { action: string };
+    };
+    expect(retriedBody.pending.action).toBe(COMMUNITY_SERVER_CODE_ACTION);
+  });
+
   // Stage 4 regression: when bootstrap wires the activator, an `allow`
   // decision must invoke it for the approved pluginId. `deny` must not.
   // We stub the activator into the context and assert call shape.
-  describe("community plugin tools.local activation hook", () => {
-    function setupWithActivator(): {
+  describe("community plugin entry activation hook", () => {
+    function setupWithActivator(options?: {
+      sessionLock?: SessionLock;
+      activate?: (pluginId: string) => Promise<void>;
+    }): {
       app: Hono;
       store: DataStore;
       gate: RpcApprovalGate;
@@ -287,17 +375,16 @@ describe("Plugin RPC approval flow", () => {
     } {
       const store = createMemoryStore();
       const registry = createPluginRpcRegistry();
-      registry.registerPluginAction(
+      registry.registerPluginHandler(
         "untrusted",
         "do-thing",
-        { handler: "./rpc/do-thing.js", description: "Run the thing" },
+        async () => ({ ok: true }),
+        { description: "Run the thing" },
         "community",
       );
-      const executor = createRpcExecutor({
-        registry,
-        loadHandler: async () => async () => ({ ok: true }),
-      });
+      const executor = createRpcExecutor({ registry });
       const gate = createRpcApprovalGate();
+      const sessionLock = options?.sessionLock ?? createInProcessSessionLock();
       const activatorCalls: string[] = [];
       const app = new Hono<
         Env & {
@@ -311,8 +398,10 @@ describe("Plugin RPC approval flow", () => {
         c.set("rpcExecutor", executor);
         c.set("rpcRegistry", registry);
         c.set("rpcApprovalGate", gate);
+        c.set("sessionLock", sessionLock);
         c.set("activatePluginServerCode", async (pluginId: string) => {
           activatorCalls.push(pluginId);
+          await options?.activate?.(pluginId);
         });
         await next();
       });
@@ -338,6 +427,44 @@ describe("Plugin RPC approval flow", () => {
       expect(activatorCalls).toEqual(["untrusted"]);
     });
 
+    it("releases the session lock before running community entry code", async () => {
+      let held = false;
+      const strictLock: SessionLock = {
+        async withLock<T>(_key: string, fn: () => Promise<T>): Promise<T> {
+          if (held) throw new Error("nested lifecycle lock");
+          held = true;
+          try {
+            return await fn();
+          } finally {
+            held = false;
+          }
+        },
+        async withLocks<T>(
+          _keys: readonly string[],
+          fn: () => Promise<T>,
+        ): Promise<T> {
+          return this.withLock("batch", fn);
+        },
+      };
+      const { app, store } = setupWithActivator({
+        sessionLock: strictLock,
+        activate: async () => {
+          expect(held).toBe(false);
+        },
+      });
+      await seedSession(store);
+
+      const initial = await dispatchRpc(app, "sess-approval-1");
+      const { approvalId } = (await initial.json()) as { approvalId: string };
+      const res = await app.request(`/api/approvals/${approvalId}/decision`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision: "allow", scope: "session" }),
+      });
+
+      expect(res.status).toBe(200);
+    });
+
     it("does NOT call activator on deny", async () => {
       const { app, store, activatorCalls } = setupWithActivator();
       await seedSession(store);
@@ -357,17 +484,16 @@ describe("Plugin RPC approval flow", () => {
     it("survives activator throwing — decision still committed", async () => {
       const store = createMemoryStore();
       const registry = createPluginRpcRegistry();
-      registry.registerPluginAction(
+      registry.registerPluginHandler(
         "untrusted",
         "do-thing",
-        { handler: "./rpc/do-thing.js", description: "Run the thing" },
+        async () => ({ ok: true }),
+        { description: "Run the thing" },
         "community",
       );
-      const executor = createRpcExecutor({
-        registry,
-        loadHandler: async () => async () => ({ ok: true }),
-      });
+      const executor = createRpcExecutor({ registry });
       const gate = createRpcApprovalGate();
+      const sessionLock = createInProcessSessionLock();
       const app = new Hono<
         Env & {
           Variables: {
@@ -380,6 +506,7 @@ describe("Plugin RPC approval flow", () => {
         c.set("rpcExecutor", executor);
         c.set("rpcRegistry", registry);
         c.set("rpcApprovalGate", gate);
+        c.set("sessionLock", sessionLock);
         c.set("activatePluginServerCode", async () => {
           throw new Error("boom");
         });
@@ -414,18 +541,22 @@ describe("Plugin RPC approval flow", () => {
     ): void {
       const ev = gate.evaluate({
         sessionId,
+        sessionScope: "revoke-test-scope",
         pluginId,
         action: "do-thing",
         payload: null,
         trustLevel: "community",
       });
       if (ev.status !== "pending") throw new Error("unreachable");
-      gate.decide({
-        approvalId: ev.approvalId,
-        decision: "allow",
-        scope: "session",
-        decidedAt: new Date().toISOString(),
-      });
+      gate.decide(
+        {
+          approvalId: ev.approvalId,
+          decision: "allow",
+          scope: "session",
+          decidedAt: new Date().toISOString(),
+        },
+        "revoke-test-scope",
+      );
     }
     const allowed = (
       gate: RpcApprovalGate,
@@ -434,6 +565,7 @@ describe("Plugin RPC approval flow", () => {
     ): boolean =>
       gate.evaluate({
         sessionId,
+        sessionScope: "revoke-test-scope",
         pluginId,
         action: "do-thing",
         payload: null,
@@ -441,7 +573,8 @@ describe("Plugin RPC approval flow", () => {
       }).status === "allow";
 
     it("revokes all session grants and returns the cleared count", async () => {
-      const { app, gate } = setup();
+      const { app, gate, store } = setup();
+      await seedSession(store, "s1");
       grant(gate, "s1", "untrusted");
       grant(gate, "s1", "other");
       expect(allowed(gate, "s1", "untrusted")).toBe(true);
@@ -457,7 +590,8 @@ describe("Plugin RPC approval flow", () => {
     });
 
     it("scopes the revoke to one plugin via ?pluginId=", async () => {
-      const { app, gate } = setup();
+      const { app, gate, store } = setup();
+      await seedSession(store, "s1");
       grant(gate, "s1", "untrusted");
       grant(gate, "s1", "other");
 
@@ -470,6 +604,27 @@ describe("Plugin RPC approval flow", () => {
       expect(body.cleared).toBe(1);
       expect(allowed(gate, "s1", "untrusted")).toBe(false);
       expect(allowed(gate, "s1", "other")).toBe(true);
+    });
+
+    it("does not revoke grants after session deletion has started", async () => {
+      const { app, gate, store } = setup();
+      await seedSession(store, "s1");
+      await store.updateSession("s1", {
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+          [SESSION_DELETION_PENDING_KEY]: "delete-1",
+        },
+      });
+      grant(gate, "s1", "untrusted");
+
+      const res = await app.request("/api/sessions/s1/approvals", {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ code: "session_deleting" });
+      expect(allowed(gate, "s1", "untrusted")).toBe(true);
     });
   });
 });

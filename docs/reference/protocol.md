@@ -35,7 +35,7 @@
 
 ## 一、事件类型（CovelEvent）
 
-所有 server→client 事件现在收口为 `packages/shared/src/types/protocol.ts` 中的**单一 discriminated union** `CovelEvent`（`{ type; payload }`），它是事件名、转发白名单、前端穷尽校验的唯一真相。`ProtocolEventType` 是 `CovelEvent['type']` 的导出别名。
+所有 server→client 事件收口为 `packages/shared/src/types/protocol.ts` 中的**单一 discriminated union** `CovelEvent`（`{ type; payload }`），它是事件名、转发白名单、前端穷尽校验的唯一真相；事件名类型直接使用 `CovelEventType`。
 
 新增一个 SSE 事件 = 在 `CovelEvent` 加一个成员 + 在 `COVEL_EVENT_META` 加一条元数据，二者由 `satisfies Record<CovelEventType, CovelEventMeta>` 互相约束——漏改任一处即编译失败。
 
@@ -83,7 +83,7 @@
 
 ### 会话生命周期事件
 
-（没有 `phase.changed` 事件：`SessionRecord.phase`（`'setup' | 'playing'`）与 `completedPlayerTurns` / `setupRuntimes` 是会话进度的业务真值，但 phase 翻转不单独推送 SSE——客户端从会话响应里读 `phase`（以及由它派生的 legacy `turnCount` / `preGameCompleted`）。未来若需要推送 `status` 变化，将以 `status.changed` 形式引入，届时在此补记。）
+（没有 `phase.changed` 事件：`SessionRecord.phase`（`'setup' | 'playing'`）与 `completedPlayerTurns` / `setupRuntimes` 是会话进度的业务真值，但 phase 翻转不单独推送 SSE——客户端从会话响应或快照读取这三个字段。未来若需要推送 `status` 变化，将以 `status.changed` 形式引入，届时在此补记。）
 
 ### 系统事件
 
@@ -176,12 +176,14 @@ Provider 图片输入矩阵：
 
 所有 `_jobs/<jobId>` 的写入都是普通 `setPluginData` 调用，因此都会通过标准 `plugin-data.changed` 频道广播。插件**禁止**直接写入 `_jobs` —— 框架独占该命名空间。业务数据请使用自定义命名空间（如 `images`、`prompts`）。
 
+`pending` 行也作为跨 Pod 删除 drain 的权威索引：入队会在 session lock 内先持久化 runtimeId，再启动 detached work。Memory/SQLite 启动时可按进程 owner 将孤儿标为 failed；PostgreSQL 多 Pod 不做不安全的 owner 扫描，崩溃遗留 pending 的自动回收需等待可续租 job lease/持久队列。
+
 ### Suspend / Resume 事件
 
-| 事件类型         | 方向 | 描述                                                                            | 负载                                                        |
-| ---------------- | ---- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `turn.suspended` | S→C  | 插件调用 `suspend()` 工具成功序列化 pendingContinuation 后由 turn-executor 发出 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
-| `turn.resumed`   | S→C  | `POST /api/sessions/:id/resume` 成功重新启动 runtime 后由 resume 路由发出       | `{ sessionId, turnId, suspensionId }`                       |
+| 事件类型         | 方向 | 描述                                                                                                                          | 负载                                                        |
+| ---------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `turn.suspended` | S→C  | runtime 创建 suspension artifact；`finalizeExecution` 将记录与同一 execution 的写入提交成功后才发出。回滚不保留记录也不发事件 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
+| `turn.resumed`   | S→C  | `POST /api/sessions/:id/resume` 成功重新启动 runtime 后由 resume 路由发出                                                     | `{ sessionId, turnId, suspensionId }`                       |
 
 ### Snapshot / Fork 事件
 
@@ -296,20 +298,21 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ### 回合执行（SSE 流式响应）
 
-`/api/actions` 接受的 `type` 字段（实际由 `apps/server/src/routes/api/actions.ts` 的 `SUPPORTED_ACTIONS` 数组定义）：
+`/api/actions` 接受的 `type` 字段由 `apps/server/src/routes/api/actions/request.ts` 的闭合请求联合定义：
 
-| 命令          | 方法 | 端点                                     | 响应                  |
-| ------------- | ---- | ---------------------------------------- | --------------------- |
-| `turn.submit` | POST | `/api/actions` `type: "send_message"`    | SSE: ProtocolEvent 流 |
-| `turn.cmd`    | POST | `/api/actions` `type: "execute_command"` | SSE: ProtocolEvent 流 |
-| `turn.start`  | POST | `/api/actions` `type: "start_session"`   | SSE: ProtocolEvent 流 |
-| `turn.retry`  | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
+| 命令            | 方法 | 端点                                     | 响应                  |
+| --------------- | ---- | ---------------------------------------- | --------------------- |
+| `turn.submit`   | POST | `/api/actions` `type: "send_message"`    | SSE: ProtocolEvent 流 |
+| `turn.cmd`      | POST | `/api/actions` `type: "execute_command"` | SSE: ProtocolEvent 流 |
+| `turn.start`    | POST | `/api/actions` `type: "start_session"`   | SSE: ProtocolEvent 流 |
+| `turn.retry`    | POST | `/api/actions` `type: "retry_turn"`      | SSE: ProtocolEvent 流 |
+| `runtime.retry` | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
 
-`retry_runtime` 的 `payload.runtimeId`（可选）把重跑收窄到指定 runtime（走 manual-trigger 路径）；缺省时保持整回合重跑语义。收窄重跑会以源回合（`payload.retryFromTurnId`，缺省取最近的 player-origin 工件）持久化的 runtime 输出**播种**执行，使被重试 runtime 的 `input.inject` / `needs` 按原回合叙事解析——裸 manual 触发这些解析为空，重试型调用因此必须播种。
+`retry_turn` 显式重跑整回合，payload 必须为空。`retry_runtime` 必须提供 `payload.runtimeId`，并通过 manual-trigger 路径只重跑该 runtime；它会以源回合（`payload.retryFromTurnId`，缺省取最近的 player-origin 工件）持久化的 runtime 输出**播种**执行，使被重试 runtime 的 `input.inject` / `needs` 按原回合叙事解析——裸 manual 触发这些解析为空，重试型调用因此必须播种。
 
 `start_session` 要求会话已带非空 `activePlugins`（创建会话时选定）。空集合直接 400，不会退化成"激活全部注册插件"——详见 [api.md](./api.md#post-apiactions)。
 
-> `type` 是闭集，上面四种之外的取值一律返回 400 `Unsupported action type`。插件侧发事件请用 builtin `emit-event` 工具。
+> `type` 是闭集，上面五种之外的取值一律返回 400 `Unsupported action type`。插件侧发事件请用 builtin `emit-event` 工具。
 >
 > 区分 chat turn 与 plugin runtime 调用：
 >
@@ -357,15 +360,16 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 **响应分支:**
 
-| 状态码 | status                                                                       | 触发                                                                                                                |
-| ------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 200    | `ok`                                                                         | action 级成功 / runtime 级 sync 模式成功                                                                            |
-| 202    | `approval-required`                                                          | community-trust 首次调用(action 或 runtime 级)                                                                      |
-| 202    | `accepted`                                                                   | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
-| 400    | `error`                                                                      | 缺字段 / action+runtimeId 互斥违反 / payload 校验失败 / `plugin-mismatch`                                           |
-| 404    | `error` (`code: "unknown-action"` / `"runtime-not-active"`)                  | action 未注册 / runtimeId 未加载到该 session                                                                        |
-| 429    | `error` (`code: "queue-full"`)                                               | pending approvals 超过 cap                                                                                          |
-| 500    | `error` (`code: "runtime-execution-failed"` / `"background-enqueue-failed"`) | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
+| 状态码 | status                                                                                                                       | 触发                                                                                                                |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 200    | `ok`                                                                                                                         | action 级成功 / runtime 级 sync 模式成功                                                                            |
+| 202    | `approval-required`                                                                                                          | community-trust 首次调用(action 或 runtime 级)                                                                      |
+| 202    | `accepted`                                                                                                                   | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
+| 400    | `error`                                                                                                                      | 缺字段 / action+runtimeId 互斥违反 / payload 校验失败 / `plugin-mismatch`                                           |
+| 404    | `error` (`code: "unknown-action"` / `"runtime-not-active"`)                                                                  | action 未注册 / runtimeId 未加载到该 session                                                                        |
+| 409    | `error` (`code: "approval-scope-changed"` / `"session-not-active"` / `"session-deleting"` / `"session-incarnation-changed"`) | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                  |
+| 429    | `error` (`code: "queue-full"`)                                                                                               | pending approvals 超过 cap                                                                                          |
+| 500    | `error` (`code: "runtime-execution-failed"` / `"background-enqueue-failed"`)                                                 | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
 
 带延迟 `entry` 的 community action 会连续返回两次 `approval-required`：先授权 `covel:plugin-server-code`，重试后再授权真实 action。客户端逐阶段展示审批并重试原请求，最多处理两个阶段，超过上限即终止以避免异常审批循环。
 
@@ -390,6 +394,8 @@ community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 
 ```
 
 详细流程图见 [api.md](api.md#rpc-approval-流程pr-7)。
+
+每个 pending/grant 都绑定服务端持久化的 session incarnation 与 plugin revocation generation。撤销、禁用、删除或同 ID 重建后，旧 decision 返回 `409 approval_scope_changed`；旧 Pod 的内存 grant 也不能命中新代次。
 
 ## 三、查询端点
 
@@ -418,7 +424,7 @@ community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 
 
 ```typescript
 interface SseEnvelope {
-  type: ProtocolEventType; // 事件类型（标准协议名）
+  type: CovelEventType; // 事件类型（标准协议名）
   requestId: string; // 请求关联 ID
   traceId: string; // 追踪 ID
   sessionId: string; // 会话 ID
@@ -476,7 +482,7 @@ These events ride the standard SSE envelope and are also persisted into `trace_e
 | `tool.calling`        | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }`                                                                                                                                                                                                                                                  |
 | `tool.completed`      | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }`                                                                                                                                                                                                                    |
 | `tool.failed`         | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }`                                                                                                                                                                                                                  |
-| `llm.calling`         | `{ runtimeId, pluginId, slot, model, provider: string \| null, messages, tools, attempt, streaming? }`                                                                                                                                                                                                                                     |
+| `llm.calling`         | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, streaming? }`；`slot` 是 runtime 请求的 slot；生产 gateway 在调用前把它解析为 `model` / `provider` 目标身份。不支持 slot 解析的自定义 adapter 可省略 `provider`。                                                                     |
 | `llm.responded`       | `{ runtimeId, pluginId, text?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`                                                                                                                                                                                                                                             |
 | `message.completed`   | `{ runtimeId, pluginId, content, len, deltaCount }` — `deltaCount` is the number of upstream `narrative.delta` events the runtime produced. Frontend views aggregating live `narrative.delta` streams use a separate synthesized `_aggregated` field; the two are not interchangeable — `deltaCount` is the authoritative persisted count. |
 | `block.emitted`       | `{ runtimeId, pluginId, proposalId, source, block }`                                                                                                                                                                                                                                                                                       |
@@ -490,5 +496,22 @@ Delta narrative continues to ride `narrative.delta` for realtime UI; only `messa
 
 Payload notes:
 
+- `/api/traces/*` 的读模型在不修改原始 `payload` 的前提下，为每条事件补充
+  持久化 `id`、响应内单调 `eventOrder` 与统一 `diagnostic` 摘要。客户端可直接用
+  `diagnostic.error` 定位失败，用 `diagnostic.prompt` 找到提示词规模与正文路径；
+  不需要按事件类型猜测 `payload` 字段。
+- `eventOrder` 从 0 开始，仅表示当前 API 响应（全量结果或单页）中的 chronological
+  record order，不是全局数据库序号，不能跨页比较。
+- `diagnostic.severity` 为 `info` / `warning` / `error`；错误优先。成功的
+  `llm.responded`、`gateway.responded`、`utils.fetch.responded`、`tool.completed`、
+  `runtime.completed`、`function.completed` 达到 1000ms 时标为 `warning`，并带
+  `diagnostic.warning = { code: "slow", thresholdMs: 1000 }`。
+- `tool.*` 事件带 `diagnostic.tool` 摘要（name、callId、参数/结果可用性与
+  `payload.arguments` / `payload.result` 等内容路径、success、durationMs）；原始
+  参数和结果仍只在 `payload`。
+- `llm.calling.payload.startedAt`（并投影为 `diagnostic.startedAt`）记录真实 provider
+  请求开始时间。事件自身 `timestamp` 仍是 trace 行持久化时间；部分 adapter 为了先确认
+  最终 provider/model 会稍后写入 calling 事件，耗时判断应结合 `startedAt` 与 responded
+  的 `durationMs`。
 - `llm.calling.tools` is `Array<{ name, description, jsonSchema }>` — mapped from `LLMToolDefinition.parameters` so the recorded schema matches what the provider actually received.
 - `llm.calling.provider` is `null` at direct `generate` / `generateStream` sites where the resolved provider string is not available; slot-routed calls populate it with the provider name (`openai`, `anthropic`, `deepseek`, `qwen`).

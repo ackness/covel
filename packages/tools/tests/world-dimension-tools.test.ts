@@ -195,6 +195,31 @@ describe("builtin world dimension tools", () => {
     ]);
   });
 
+  it("uses the shared English fallback for an unsupported session locale", async () => {
+    store.sessions.set("sess-1", {
+      id: "sess-1",
+      worldId: "world-1",
+      locale: "de-DE",
+    });
+
+    const tool = findByName(tools, "world-dimension-get");
+    const result = (await tool.execute(
+      {
+        queries: [{ dimension: "tone", path: "narrativeStyle" }],
+      },
+      ctx(),
+    )) as {
+      results: Array<{ value: unknown; found: boolean }>;
+    };
+
+    expect(result.results[0]).toEqual(
+      expect.objectContaining({
+        found: true,
+        value: "Classical fantasy prose",
+      }),
+    );
+  });
+
   it("returns the raw i18n object when resolveI18n=false", async () => {
     const tool = findByName(tools, "world-dimension-get");
     const result = (await tool.execute(

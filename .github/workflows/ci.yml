@@ -15,6 +15,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -26,15 +29,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Setup Node.js
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 26
+          node-version: 26.7.0
           cache: pnpm
 
       - name: Install dependencies
@@ -45,7 +50,7 @@ jobs:
       # here instead of re-running them. restore-keys falls back to the most
       # recent cache on this OS when the exact SHA has no entry.
       - name: Cache turbo
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
@@ -65,6 +70,11 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # Exclude convention-only `_archive`; every active plugin directory is
+      # validated together so cross-runtime collisions are also detected.
+      - name: Strict plugin manifest validation
+        run: pnpm validate:plugin plugins/[!_]*
+
       # Only the three apps have a build script, so this covers the bundling
       # layer (vite/rolldown config, manualChunks, circular imports) that
       # `tsc --noEmit` in Lint cannot see. Kept off PRs for faster feedback —
@@ -75,3 +85,49 @@ jobs:
 
       - name: Check plugin/world i18n coverage + READMEs
         run: pnpm check:i18n
+
+  postgres:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # PostgreSQL 18 + pgvector 0.8.6, pinned by multi-platform digest.
+        image: pgvector/pgvector:0.8.6-pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a
+        env:
+          POSTGRES_USER: covel
+          POSTGRES_PASSWORD: covel_ci
+          POSTGRES_DB: covel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U covel -d covel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://covel:covel_ci@localhost:5432/covel
+      COVEL_REQUIRE_PG_TESTS: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.7.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test PostgreSQL stores
+        run: pnpm --filter @covel/store test
+
+      - name: Test PostgreSQL server integration
+        run: pnpm --filter @covel/server exec vitest run tests/integration

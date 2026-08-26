@@ -1,44 +1,44 @@
 # 工具注册表
 
-> 所有可供 LLM Runtime 调用的工具（Function Calling）。工具分为 builtin（框架内置）和 local（插件本地）两类。
+> 所有可供 agent runtime 通过 Function Calling 调用的工具。作者声明分为 builtin（框架内置）和 plugin（插件 entry 注册）两类；`tools.local` 路径声明已移除。下文表格和审批规则中的 `local` 是执行器仍在使用的**内部来源标签**，指 entry 注册成功的 plugin tool，不是 manifest 字段。
 
 ---
 
 ## 概览
 
-| 工具名                  | 来源    | 所属插件      | 审批策略   | 描述                                                                                |
-| ----------------------- | ------- | ------------- | ---------- | ----------------------------------------------------------------------------------- |
-| create-form             | builtin | —             | auto-allow | 创建玩家表单                                                                        |
-| create-choices          | builtin | —             | auto-allow | 创建选项列表                                                                        |
-| create-notification     | builtin | —             | auto-allow | 显示通知消息                                                                        |
-| render-ui               | builtin | —             | auto-allow | 渲染带独立 part 状态的 UI 块                                                        |
-| plugin-data-set         | builtin | —             | auto-allow | 写入插件持久化数据（单条）                                                          |
-| plugin-data-set-batch   | builtin | —             | auto-allow | 批量写入插件持久化数据                                                              |
-| plugin-data-get         | builtin | —             | auto-allow | 读取当前插件持久化数据                                                              |
-| plugin-data-list        | builtin | —             | auto-allow | 列出当前插件持久化数据                                                              |
-| **create-character**    | builtin | —             | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data             |
-| **update-character**    | builtin | —             | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                            |
-| **list-characters**     | builtin | —             | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                               |
-| **get-character**       | builtin | —             | auto-allow | 按 id 或 name 查找单个角色                                                          |
-| **world-dimension-get** | builtin | —             | auto-allow | 按需读取当前 session 世界的结构化维度字段                                           |
-| **emit-event**          | builtin | —             | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema    |
-| **suspend**             | builtin | —             | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复          |
-| **runtime-done**        | builtin | —             | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                    |
-| **search-tools**        | 注入    | —             | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具 |
-| **memory-search**       | builtin | —             | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)           |
-| **memory-get-block**    | builtin | —             | auto-allow | 读取一个核心记忆块的当前内容                                                        |
-| **memory-update-block** | builtin | —             | auto-allow | 更新（完整替换）一个核心记忆块。无 capability 门控——列入 tools.builtin 即可用       |
-| set-world-schema        | local   | world-init    | auto-allow | 定义世界角色属性 Schema                                                             |
-| set-world-entries-batch | local   | world-init    | auto-allow | 批量写入世界词条                                                                    |
-| unlock-codex-entries    | local   | codex         | auto-allow | 批量解锁图鉴条目                                                                    |
-| update-codex-entry      | local   | codex         | auto-allow | 更新已有图鉴条目                                                                    |
-| generate-guide          | local   | guide         | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`      |
-| upsert-npc-graph        | local   | npc-graph     | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                  |
-| list-npc-graph          | local   | npc-graph     | auto-allow | 读取现有 NPC 图；图已注入 prompt，仅在需要某关系完整 `fact` 时按需调用              |
-| generate-scene-prompts  | local   | scene-prompts | auto-allow | 写入对话模式的玩家口吻快捷回复                                                      |
-| upsert-quests           | local   | core-quest    | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）       |
-| update-affinity         | local   | affinity      | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）   |
-| update-inventory        | local   | inventory     | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）         |
+| 工具名                  | 来源    | 所属插件      | 审批策略   | 描述                                                                                      |
+| ----------------------- | ------- | ------------- | ---------- | ----------------------------------------------------------------------------------------- |
+| create-form             | builtin | —             | auto-allow | 创建玩家表单                                                                              |
+| create-choices          | builtin | —             | auto-allow | 创建选项列表                                                                              |
+| create-notification     | builtin | —             | auto-allow | 显示通知消息                                                                              |
+| render-ui               | builtin | —             | auto-allow | 渲染带独立 part 状态的 UI 块                                                              |
+| plugin-data-set         | builtin | —             | auto-allow | 写入插件持久化数据（单条）                                                                |
+| plugin-data-set-batch   | builtin | —             | auto-allow | 批量写入插件持久化数据                                                                    |
+| plugin-data-get         | builtin | —             | auto-allow | 读取当前插件持久化数据                                                                    |
+| plugin-data-list        | builtin | —             | auto-allow | 列出当前插件持久化数据                                                                    |
+| **create-character**    | builtin | —             | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data                   |
+| **update-character**    | builtin | —             | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                                  |
+| **list-characters**     | builtin | —             | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                                     |
+| **get-character**       | builtin | —             | auto-allow | 按 id 或 name 查找单个角色                                                                |
+| **world-dimension-get** | builtin | —             | auto-allow | 按需读取当前 session 世界的结构化维度字段                                                 |
+| **emit-event**          | builtin | —             | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema          |
+| **suspend**             | builtin | —             | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复                |
+| **runtime-done**        | builtin | —             | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                          |
+| **search-tools**        | 注入    | —             | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具       |
+| **memory-search**       | builtin | —             | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)                 |
+| **memory-get-block**    | builtin | —             | auto-allow | 按标签读取核心记忆块；接受世界/插件 `memoryBlocks` 声明的自定义标签                       |
+| **memory-update-block** | builtin | —             | auto-allow | 按标签完整替换核心记忆块；支持自定义标签，无 capability 门控——列入 `tools.builtin` 即可用 |
+| set-world-schema        | local   | world-init    | auto-allow | 定义世界角色属性 Schema                                                                   |
+| set-world-entries-batch | local   | world-init    | auto-allow | 批量写入世界词条                                                                          |
+| unlock-codex-entries    | local   | codex         | auto-allow | 批量解锁图鉴条目                                                                          |
+| update-codex-entry      | local   | codex         | auto-allow | 更新已有图鉴条目                                                                          |
+| generate-guide          | local   | guide         | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`            |
+| upsert-npc-graph        | local   | npc-graph     | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                        |
+| list-npc-graph          | local   | npc-graph     | auto-allow | 读取现有 NPC 图；图已注入 prompt，仅在需要某关系完整 `fact` 时按需调用                    |
+| generate-scene-prompts  | local   | scene-prompts | auto-allow | 写入对话模式的玩家口吻快捷回复                                                            |
+| upsert-quests           | local   | core-quest    | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）             |
+| update-affinity         | local   | affinity      | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）         |
+| update-inventory        | local   | inventory     | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）               |
 
 ---
 
@@ -51,6 +51,112 @@
 1. 通用、重复、跨插件复用的能力，使用 `tools.builtin`
 2. 插件专属 schema、RAG、NPC 关系维护、图鉴整理等能力，在插件 `entry` 模块里 `covel.registerTool()` 注册，并在 runtime manifest 用 `tools.plugin`（名字列表）声明 LLM 可见性
 3. 多个插件长期共享且契约稳定的能力，升级为新的 builtin 工具
+
+### 一个可复制的最小插件
+
+下面的例子只依赖当前公开的 `entry`、`covel.toolkit.tool()` 和
+`tools.plugin` 契约。`PLUGIN.md` 的 `name` / `description` 是必需字段；
+`entry` 必须是插件根目录内的相对 `.js` 路径。运行时的 `tools.plugin` 只
+让 LLM 看到工具，真正的实现必须先由 entry 调用 `registerTool()` 注册。
+
+```text
+plugins/echo-demo/
+├── package.json
+├── PLUGIN.md
+└── server/index.js
+```
+
+```json
+{
+  "name": "@covel/plugin-echo-demo",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module"
+}
+```
+
+`package.json` 是仓库内置插件包的要求；若只放在 `~/.covel/plugins/echo-demo/`
+作为本地用户插件，loader 只要求 `PLUGIN.md` 及它实际引用的文件。
+
+```yaml
+# PLUGIN.md
+---
+name: echo-demo
+description: Echoes one short value for a smoke test.
+runtimeType: agent
+maxSteps: 2
+trigger:
+  type: manual
+entry: ./server/index.js
+tools:
+  plugin:
+    - echo-value
+---
+When manually triggered, read `payload.value` from the `<runtime-activation>`
+block, call `echo-value` once, then call `runtime-done`.
+```
+
+```js
+// server/index.js
+export default function (covel) {
+  covel.registerTool(
+    covel.toolkit.tool({
+      name: "echo-value",
+      description: "Echo one short value.",
+      parameters: covel.toolkit.z.object({
+        value: covel.toolkit.z
+          .string()
+          .min(1)
+          .max(80)
+          .describe("Value to echo (1-80 characters)."),
+      }),
+      execute: async ({ value }) => ({ ok: true, value }),
+    }),
+  );
+}
+```
+
+Entry 工具应使用框架注入的 `covel.toolkit.tool` 与 `covel.toolkit.z`。这样无需
+给插件增加 Zod 依赖，也能保证参数 schema 和运行时的 `VALIDATION_ERROR` 类型来自
+同一工具链；不要在同一个定义中混用插件自行打包的另一份 Zod 实例。
+
+Agent 调用 `echo-value` 时，成功内容是 `{ "ok": true, "value": "..." }`。
+参数先由 `tool()` 生成 JSON Schema，再由同一 Zod schema 在执行时校验；缺少
+`value`、空字符串或超过 80 个字符会得到 `VALIDATION_ERROR`，而不是进入
+handler。要持久化插件数据，改用 builtin `plugin-data-set`（声明在
+`tools.builtin`）；它返回成功内容 `{ success, namespace, key }`，并把写入
+作为 `plugin.data` proposal 交给回合末 commit chain。
+
+这里的工具调用发生在 agent runtime 内。若需求是 HTTP/前端主动触发一个
+插件动作，应在 entry 用 `covel.registerRpc(action, handler)` 注册，并调用
+`POST /api/sessions/:id/plugin-rpc`；RPC 不是 LLM tool，也不应塞进
+`tools.plugin`。
+
+### 失败定位与验证
+
+- 工具不在 LLM 清单：检查运行时是否声明了正确的 `tools.builtin` 或
+  `tools.plugin` 名称；plugin 工具还必须确认 entry 成功加载且未发生全局重名。
+- `UNAUTHORIZED`：最终工具名不在该 runtime 的授权集合，或 hook 替换后的名称
+  越界；先查 runtime manifest 与 trace 中的最终 tool name。
+- `VALIDATION_ERROR`：查看错误响应/工具结果的 `details`，其中包含字段路径和
+  Zod 消息；不要盲目重试同一组参数。
+- RPC 返回 `401/403`：检查 session owner/operator token。社区插件首次执行通常返回
+  `202 approval-required`，批准后应重试原请求；`404` 通常表示 session/action/runtime
+  不存在，`409` 常见于 session 非 active、锁竞争或审批 scope 已变化。
+- 写入看似成功但未落库：工具返回的成功内容只代表 proposal 已缓冲；应检查
+  `execution.completed.committed`。runtime `failed` 或 `suspended` 时 proposal
+  不提交，提交失败可在 action stream 查 `proposal.failed`。
+
+最小验证命令（仓库根目录）：
+
+```bash
+pnpm validate:plugin plugins/echo-demo
+pnpm --filter @covel/tools test
+pnpm --filter @covel/runtime exec vitest run tests/proposal-type-contract.test.ts
+```
+
+`validate:plugin` 检查 manifest；工具参数/返回契约应补充插件自己的 Vitest，
+而 proposal 提交契约可参考 `packages/runtime/tests/proposal-type-contract.test.ts`。
 
 ### Builtin 的职责
 
@@ -65,9 +171,9 @@ Builtin 工具承接系统级 building blocks，例如：
 
 这类能力适合被多个插件直接复用。
 
-### Local 的职责
+### Plugin tool 的职责（内部来源标签：`local`）
 
-Local 工具承接插件自己的业务封装，例如：
+Plugin tool 承接插件自己的业务封装，例如：
 
 - `generate-guide`
 - `upsert-npc-graph`
@@ -77,9 +183,9 @@ Local 工具承接插件自己的业务封装，例如：
 
 ### 目录与访问边界
 
-- local 工具在插件 `entry` 模块（frontmatter `entry` 字段，基于插件根目录解析）里用 `covel.registerTool()` 注册。旧的 `tools.local` 路径声明已移除,声明即加载失败
+- plugin tool 在插件 `entry` 模块（frontmatter `entry` 字段，基于插件根目录解析）里用 `covel.registerTool()` 注册。旧的 `tools.local` 路径声明已移除，声明即加载失败
 - bootstrap 会校验 entry 路径边界，并只加载位于插件目录内的文件
-- local 工具访问权限按 `pluginId` 隔离，且**只在注册成功时授予**：`tools.plugin` 的 manifest 声明只控制 runtime 的 LLM 可见面，本身不授予执行权——声明了未注册（或注册被碰撞跳过）的名字时，该名字对声明插件解析失败，不会命中其他插件的同名实现
+- plugin tool 访问权限按 `pluginId` 隔离，且**只在注册成功时授予**：`tools.plugin` 的 manifest 声明只控制 runtime 的 LLM 可见面，本身不授予执行权——声明了未注册（或注册被碰撞跳过）的名字时，该名字对声明插件解析失败，不会命中其他插件的同名实现
 - 工具名全局唯一：与 builtin 或其他插件已注册的工具重名时，注册会被拒绝（warn + skip），不会静默覆盖已有实现，声明方也不会因此获得已有实现的调用权
 
 ### 不是 Tool：`FunctionHandlerContext` 上的框架能力
@@ -88,7 +194,7 @@ Local 工具承接插件自己的业务封装，例如：
 
 ### 当前代码状态
 
-当前实现里，local tool 可以读取注入的 `store`，持久化写入优先通过 `withPendingProposals(...)` 交给 commit chain；deterministic function handler 继续使用 `store` 完成内部批量工作。
+当前实现里，plugin tool 可以读取注入的 `store`，持久化写入优先通过 `withPendingProposals(...)` 交给 commit chain；deterministic function handler 继续使用 `store` 完成内部批量工作。
 
 插件对外暴露给 runtime 的稳定契约依旧建议留在插件目录内，由插件自己维护测试。
 
@@ -110,7 +216,7 @@ Local 工具承接插件自己的业务封装，例如：
 | submitLabel       | string      | ✓    | 提交按钮文本                        |
 | narrativeTemplate | string      | ✓    | 叙事模板，含 `{{fieldName}}` 占位符 |
 
-**FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue? }`
+**FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue? }`. `defaultValue` is the actual initial value: the web form pre-fills it, and `submit-form` uses it when the submitted value is missing or an empty string. `placeholder` is display-only and is never submitted as a value. For `select`, `defaultValue` must equal a declared option value.
 
 - type: `text` | `textarea` | `select` | `checkbox` | `number`
 
@@ -193,7 +299,7 @@ interface UIRenderPart {
 
 **治理路径**: 写入经 Session Kernel commit chain 提交，统一进入 `PreStateCommit` / `PostStateCommit`、trace 与 store 事务。
 
-**保留命名空间**: `_` 前缀的 namespace（`_jobs` 后台任务、`_logs` runtime 日志环）属于框架簿记，插件不可写。该限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖全部插件侧写入口：REST `PUT /api/sessions/:id/plugin-data/...`、`plugin.data` / `plugin.data.batch` commit handler（含 function runtime 输出规范化出的 proposal）、function runtime 的 `ctx.pluginData`、RPC handler 的 store view，以及 builtin/official 插件 handler 拿到的完整 store 句柄（function runtime / agent guard 的 `ctx.store` 与 RPC action handler 的 store 均经 `createTrustedHandlerStore()` 包装——保留 namespace 的读取不受影响，只拦截写入）。框架自身的特权写入者（后台 job runner、runtime logger）直接调 store，不走这些通路。
+**保留命名空间**: `_` 前缀的 namespace（`_jobs` 后台任务、`_logs` runtime 日志环）属于框架簿记，插件不可写。该限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖全部插件侧写入口：REST `PUT /api/sessions/:id/plugin-data/...`、`plugin.data` / `plugin.data.batch` commit handler（含 function runtime 输出规范化出的 proposal）、function runtime 的 `ctx.pluginData`、RPC handler 的 store view，以及 builtin 插件 handler 拿到的完整 store 句柄（function runtime / agent guard 的 `ctx.store` 与 RPC action handler 的 store 均经 `createTrustedHandlerStore()` 包装——保留 namespace 的读取不受影响，只拦截写入）。框架自身的特权写入者（后台 job runner、runtime logger）直接调 store，不走这些通路。
 
 ---
 
@@ -344,7 +450,7 @@ interface UIRenderPart {
 
 ### suspend
 
-声明在 `packages/tools/src/builtin/suspend.ts`。Agent runtime 调用 `suspend({ reason, resumeSchema })` 时，工具直接返回一个 sentinel 对象 `{ _covelSuspend: true, reason, resumeSchema }`。turn-executor 在每次 tool 执行后通过 `isSuspendSentinel()` 检测：识别到 sentinel 后会序列化当前 pendingContinuation 写入 `suspensions` 表，并发出 `turn.suspended` 事件，整个 tool loop 立即停止。后续可通过 `POST /api/sessions/:id/resume` 提交匹配 `resumeSchema` 的数据重新启动该 runtime（详见 `docs/reference/api.md`）。
+声明在 `packages/tools/src/builtin/suspend.ts`。Agent runtime 调用 `suspend({ reason, resumeSchema })` 时，工具直接返回一个 sentinel 对象 `{ _covelSuspend: true, reason, resumeSchema }`。turn-executor 在每次 tool 执行后通过 `isSuspendSentinel()` 检测：识别到 sentinel 后会序列化当前 pendingContinuation（含 execution identity、已缓冲 proposal/event 和完整 provider transcript）写入 `suspensions` 表，并发出 `turn.suspended` 事件，整个 tool loop 立即停止。同一 assistant 消息含多个 tool call 时，suspend call 保留可替换的 tool result placeholder，其后未执行 call 写入 cancellation result，因此 resume 后 transcript 仍符合 provider 的 tool-call 成对要求。后续可通过 `POST /api/sessions/:id/resume` 提交匹配 `resumeSchema` 的数据重新启动该 runtime（详见 `docs/reference/api.md`）。
 
 | 参数         | 类型   | 必需 | 描述                                                                                                                                             |
 | ------------ | ------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -431,7 +537,7 @@ Character "苏婉" (npc) already exists as char-abc123. No new record created. U
 
 > **提交语义（缓冲提交）**：`create-character` / `update-character` 在执行阶段**不再直写** `characters` 表，而是把写入缓冲成一条 [`character.upsert`](#characterupsert) proposal。同一 tool loop 内的读取走**读穿透 overlay**——先 create 再 update 时，update 能读到自己刚缓冲的 create。真正的 `characters` 表写入 + plugin-data 镜像（`characters` namespace）由 commit handler 在回合结束时随该执行的**单一事务**一起落库：`success` / `skipped` 结果会提交其缓冲 proposal，`failed` / `suspended` 则不提交。
 
-> **Turn-band 重构注记**：`create-character` 原本接受 `transitionPhase` 参数并通过 `CharacterToolHooks.onPhaseTransition` 驱动 SSE `phase.changed` 广播。该路径在 turn-band 重构中被移除——setup 段落的完成改由 runtime 输出 `preGameDone: true`，框架据此写入 `session.setupRuntimes`（per-runtime 解析状态 map，见 `SetupRuntimeState`）；`session.phase`（`setup` / `playing`）仍是 stage-band 选择器，但由框架自己推进，工具无从触碰。legacy 的 `session.preGameCompleted` 现为读时派生的兼容字段。该工具不再触发任何 phase / status 副作用。
+> **Turn-band 重构注记**：`create-character` 原本接受 `transitionPhase` 参数并通过 `CharacterToolHooks.onPhaseTransition` 驱动 SSE `phase.changed` 广播。该路径已移除——setup 段落的完成改由 runtime 输出 `preGameDone: true`，框架据此写入 `session.setupRuntimes`（per-runtime 解析状态 map，见 `SetupRuntimeState`）；`session.phase`（`setup` / `playing`）仍是 stage-band 选择器，但由框架自己推进，工具无从触碰。该工具不再触发任何 phase / status 副作用。
 
 ---
 
@@ -514,17 +620,17 @@ Attributes:
 
 ---
 
-## Local 工具
+## Plugin tools（内部来源标签：`local`）
 
-插件自带的工具，定义在插件包自己的 `tools/` 目录或 runtime 子目录下，使用 `tool()` 包装函数创建。
+插件自带的工具，实现文件通常放在插件包自己的 `tools/` 或 `server/` 目录，用 `tool()` 包装函数创建并由 `entry` 导入注册。
 
-### Local 工具的推荐使用方式
+### Plugin tool 的推荐使用方式
 
 - 文件放在插件自己的 `tools/` 或 runtime 子目录下
-- 在 `entry` 模块（`server/index.js`）里 `covel.registerTool(makeMyTool(covel.toolkit))` 注册；使用工具的 runtime 在 `PLUGIN.md` 里用 `tools.plugin` 按名字声明（旧 `tools.local` 路径声明已弃用）
-- 为每个 local tool 提供独立测试
+- 在 `entry` 模块（`server/index.js`）里 `covel.registerTool(makeMyTool(covel.toolkit))` 注册；使用工具的 runtime 在 `PLUGIN.md` 里用 `tools.plugin` 按名字声明（旧 `tools.local` 路径字段已移除，声明会导致加载失败）
+- 为每个 plugin tool 提供独立测试
 - 持久化写入优先返回 `withPendingProposals(...)`，让 commit chain 接管落盘
-- 通过 local tool 封装插件自己的数据 schema 和批量写入逻辑
+- 通过 plugin tool 封装插件自己的数据 schema 和批量写入逻辑
 
 ### set-world-schema
 
@@ -714,10 +820,10 @@ interface ToolClient {
 Bootstrap 时自动分类：
 
 - `builtinUITools` 中的工具 → `builtin`
-- 插件 `tools/` 目录加载的工具 → `local`
+- 插件 `entry` 通过 `registerTool()` 注册成功的工具 → `local`
 - 其他 → `third-party`（当前不存在，预留给社区插件）
 
-### 第三方插件 server-code / local tool 审批边界
+### 第三方插件 server-code / plugin tool 审批边界
 
 社区插件（位于 `~/.covel/plugins/` 或后续添加的非 first-dir 来源）会被 `getPluginTrustInfo` 标记为 `community`，bootstrap 在启动阶段**跳过这些插件的 `entry` 执行**（见 `apps/server/src/routes/api/bootstrap/plugin-entry.ts` 中 `if (!trust.autoLoad) continue;`；工具访问表由 `plugin-tool-access.ts` 构建）。
 
@@ -727,7 +833,7 @@ Bootstrap 时自动分类：
 - **approved**：首次 deferred entry 调用先审批固定的 `covel:plugin-server-code`，加载并验证真实 action 后再做 action 审批。server-code 与 `runtime:*` 只接受 session scope；普通 action 支持 once/session。hosted 环境还要求 operator token，因为 community ESM 在服务端进程内执行。
 - **import**：approve 后经 `activatePluginServerCode` JIT 懒加载该插件的服务端代码——执行 `entry` 工厂（`ensurePluginEntry`，allow 决定时 + RPC 派发时各触发一次）。
 - **active**：运行期工具调用受真实审批规则门控（builtin allow / local allow / third-party deny）。
-- **revoked**：`DELETE /api/sessions/:id/approvals[?pluginId=]` 与 plugin disable 会同时清除 session grant、one-time grant 和 pending approval。community grant 不跨 create/fork/进程重启恢复。
+- **revoked**：`DELETE /api/sessions/:id/approvals[?pluginId=]` 与 plugin disable 会在 session lock 内轮换持久化的 plugin/session 授权代次，并清除本进程的 session grant、one-time grant 和 pending approval。其他 Pod 的旧 grant 因代次不匹配同步失效；community grant 不跨 create/fork/进程重启恢复。
 - **uninstalled**：`DELETE /api/plugins/:id` 删除 `~/.covel/plugins/<id>` 目录（拒绝内置 ID，返回 `restartRequired:true`）；前端 Settings → Packages 面板列出已安装第三方插件并提供卸载按钮。
 
 实际影响：
@@ -914,7 +1020,7 @@ tools:
 
 ## Proposal 类型
 
-Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。`ProposalType` 由单一真相源 `ProposalPayloadMap` 派生，commit handler 注册表（`satisfies CommitHandlerMap`）与 discovery 广告（`PROPOSAL_TYPES`）均与之编译期对齐——新增 proposal 类型只改 `ProposalPayloadMap` 一处，漏注册 handler 即编译失败。当前已注册类型：`narrative.append`、`state.patch`、`event.emit`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。（历史上的 `phase.transition` 已随 turn-band 迁移移除；从未实装的 `narrative.template`、`record.upsert` 也已移除——它们曾被声明并对外广告但无 commit handler，提交即以 `unknown proposal type` 失败。）
+Runtime 输出最终都被规范化为 `Proposal[]`（定义见 `packages/shared/src/types/proposal.ts`），由 commit chain 顺序提交、写入 store、再以 SessionEvent 形式广播。`ProposalType` 由单一真相源 `ProposalPayloadMap` 派生，commit handler 注册表（`satisfies CommitHandlerMap`）与 discovery 广告（`PROPOSAL_TYPES`）均与之编译期对齐——新增 proposal 类型只改 `ProposalPayloadMap` 一处，漏注册 handler 即编译失败。当前已注册类型：`narrative.append`、`state.patch`、`event.emit`、`interaction.request`、`ui.render`、`asset.generate`、`plugin.data`、`plugin.data.batch`、`plugin.data.delete`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。（历史上的 `phase.transition` 已随 turn-band 迁移移除；从未实装的 `narrative.template`、`record.upsert` 也已移除——它们曾被声明并对外广告但无 commit handler，提交即以 `unknown proposal type` 失败。）
 
 ### `ui.render`
 
@@ -936,16 +1042,19 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
 
 **Payload (`CharacterUpsertPayload`):**
 
-| 字段           | 类型    | 必需 | 描述                                                                            |
-| -------------- | ------- | ---- | ------------------------------------------------------------------------------- |
-| id             | string  | ✓    | 角色 ID                                                                         |
-| name           | string  | ✓    | 角色名称                                                                        |
-| type           | string  |      | 角色类型，默认 `npc`                                                            |
-| description    | string  |      | 角色描述                                                                        |
-| fields         | unknown |      | 角色属性                                                                        |
-| version        | number  |      | 版本号，默认 `1`                                                                |
-| createdAt      | string  |      | 创建时间，缺省为提交时间                                                        |
-| mirrorPluginId | string  |      | 可选：同时镜像到该插件的 `plugin_data/<plugin>/characters/<id>`，供插件 UI 订阅 |
+| 字段            | 类型    | 必需 | 描述                                                                                                  |
+| --------------- | ------- | ---- | ----------------------------------------------------------------------------------------------------- |
+| id              | string  | ✓    | 角色 ID                                                                                               |
+| name            | string  | ✓    | 角色名称                                                                                              |
+| type            | string  |      | 角色类型，默认 `npc`                                                                                  |
+| description     | string  |      | 角色描述                                                                                              |
+| fields          | unknown |      | 角色属性                                                                                              |
+| version         | number  |      | 版本号，默认 `1`                                                                                      |
+| expectedVersion | number  |      | 更新 proposal 读取到的版本；提交时把 `fields` 作为 shallow patch 合并到最新角色并从 live version 递增 |
+| createdAt       | string  |      | 创建时间，缺省为提交时间                                                                              |
+| mirrorPluginId  | string  |      | 可选：同时镜像到该插件的 `plugin_data/<plugin>/characters/<id>`，供插件 UI 订阅                       |
+
+`update-character` 自动填写 `expectedVersion`。同一 stage 的并行 runtime 即使都从 v1 开始，提交时也会按顺序重读 live 角色并合并互不冲突的 fields patch，避免后提交者丢失先提交者的新字段；同一字段发生冲突时仍由后提交的 patch 覆盖。
 
 ### `working_memory.set`
 

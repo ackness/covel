@@ -1,5 +1,8 @@
 minimum_pre_commit_version: "4.0.0"
 
+default_language_version:
+  node: "26.7.0"
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -40,7 +43,7 @@ repos:
     hooks:
       - id: prettier
         name: prettier
-        entry: pnpm exec prettier --write --ignore-unknown
+        entry: mise exec -- pnpm exec prettier --write --ignore-unknown
         language: system
         types_or:
           - css
@@ -55,7 +58,7 @@ repos:
           - yaml
       - id: pnpm-lint
         name: pnpm lint
-        entry: pnpm lint
+        entry: mise exec -- pnpm lint
         language: system
         pass_filenames: false
         types_or: [ts, tsx, javascript, jsx]

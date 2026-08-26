@@ -2,6 +2,7 @@ import type { ProviderDefaults } from "./types.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
 import {
+  applyRequestCapabilityOverlay,
   applySlotOverlay,
   publicPresetId,
   resolveOverlayPresetId,
@@ -16,6 +17,7 @@ import type {
   ResolvedSlotConfig,
   ResolvedTarget,
   SlotOverridesInput,
+  CapabilityOverridePolicy,
 } from "./types.js";
 
 export interface GatewaySlotResolutionDependencies {
@@ -67,6 +69,8 @@ export interface GatewayOptions {
   parameterOverrides?: ModelParameterOverrides;
   /** Abort signal for cancellation (e.g. budget timeout). */
   signal?: AbortSignal;
+  /** Synchronously observes every concrete provider/model attempt. */
+  onTargetAttempt?: (target: { provider: string; model: string }) => void;
   /**
    * Per-request overlay that transiently extends the gateway's preset /
    * provider / slot view. Populated by server middleware from the
@@ -74,6 +78,8 @@ export interface GatewayOptions {
    * real LLM calls. See {@link SlotOverridesInput}.
    */
   slotOverrides?: SlotOverridesInput;
+  /** Server-derived trust policy for request capability facts. */
+  capabilityOverridePolicy?: CapabilityOverridePolicy;
 }
 
 export interface GatewaySlotResolution {
@@ -261,9 +267,16 @@ export function createGatewaySlotResolution(
       );
       if (!effectivePresetId) return null;
 
-      const target = deps.presetRegistry.resolveTextTarget({
+      const baseTarget = deps.presetRegistry.resolveTextTarget({
         presetId: effectivePresetId,
       });
+      const target = applyRequestCapabilityOverlay(
+        baseTarget,
+        presetId,
+        options?.slotOverrides,
+        options?.capabilityOverridePolicy ?? "restrict-only",
+        true,
+      );
       let resolved = deps.providerRegistry.resolve(
         target.preset ?? target.profile,
         { mode: tag === "image" ? "image" : "text" },
@@ -309,6 +322,9 @@ export function createGatewaySlotResolution(
           : {}),
         model,
         tag: presetTag,
+        ...(target.preset?.capability
+          ? { capability: target.preset.capability }
+          : {}),
         metadata,
         ...(parameterOverrides ? { parameterOverrides } : {}),
       };

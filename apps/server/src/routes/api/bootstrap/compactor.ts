@@ -8,6 +8,7 @@ import {
   type CompactorRunner,
 } from "@covel/context";
 import type { ParsedPluginMd } from "@covel/plugin-loader";
+import { localeLanguage } from "@covel/shared";
 
 /**
  * Last-resort context window when neither an explicit env override nor a
@@ -87,9 +88,7 @@ export function createBootstrapCompactorRunner(
       // The compactor only ships zh-CN / en-US prompt templates; map the
       // session locale by prefix (en* → en-US, else the zh-CN default).
       const compactorLocale =
-        typeof locale === "string" && locale.toLowerCase().startsWith("en")
-          ? "en-US"
-          : "zh-CN";
+        localeLanguage(locale) === "en" ? "en-US" : "zh-CN";
       return await maybeCompact(
         sessionId,
         systemPromptPreview,

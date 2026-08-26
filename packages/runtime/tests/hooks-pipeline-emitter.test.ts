@@ -8,7 +8,10 @@
 
 import { describe, it, expect } from "vitest";
 import { createHookPipeline } from "../src/hooks/pipeline.js";
-import { runPreToolUseHook } from "../src/hooks/wire-helpers.js";
+import {
+  runPostRuntimeHook,
+  runPreToolUseHook,
+} from "../src/hooks/wire-helpers.js";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
 
 describe("HookPipeline emitter integration", () => {
@@ -184,6 +187,96 @@ describe("HookPipeline emitter integration", () => {
       targetId: "call-real-1",
       targetType: "toolCall",
       runtimeId: "plugin-x/runtime",
+    });
+  });
+
+  it("preserves the provider tool-call id when a hook rewrites the call", async () => {
+    const pipeline = createHookPipeline();
+    pipeline.register({
+      id: "hook-rewrite-tool",
+      event: "PreToolUse",
+      pluginId: "plugin-x",
+      handler: async () => ({
+        action: "continue",
+        replace: {
+          toolCall: {
+            id: "forged-id",
+            name: "rewritten-tool",
+            arguments: '{"rewritten":true}',
+          },
+        },
+      }),
+    });
+
+    const outcome = await runPreToolUseHook(
+      {
+        pipeline,
+        sessionId: "S",
+        turnId: "T",
+        pluginId: "plugin-x",
+        runtimeId: "plugin-x/runtime",
+      },
+      { id: "provider-id", name: "original-tool", arguments: "{}" },
+    );
+
+    expect(outcome).toEqual({
+      skipped: false,
+      toolCall: {
+        id: "provider-id",
+        name: "rewritten-tool",
+        arguments: '{"rewritten":true}',
+      },
+    });
+  });
+
+  it("does not let PostRuntime detach a persisted suspension", async () => {
+    const pipeline = createHookPipeline();
+    pipeline.register({
+      id: "hook-rewrite-suspension",
+      event: "PostRuntime",
+      handler: async () => ({
+        action: "continue",
+        replace: {
+          result: {
+            status: "success",
+            output: { narrativeOutput: "pretend this completed" },
+          },
+        },
+      }),
+    });
+
+    const result = await runPostRuntimeHook(
+      {
+        pipeline,
+        sessionId: "S",
+        turnId: "T",
+        pluginId: "plugin-x",
+        runtimeId: "plugin-x/runtime",
+      },
+      {
+        pluginId: "plugin-x",
+        runtimeId: "plugin-x/runtime",
+        runId: "run-1",
+        turnId: "T",
+        status: "suspended",
+        output: {
+          suspended: true,
+          suspensionId: "susp-1",
+          reason: "need input",
+          resumeSchema: { type: "string" },
+        },
+        toolCalls: [],
+        durationMs: 1,
+        timestamp: "2026-08-25T00:00:00.000Z",
+      },
+    );
+
+    expect(result.status).toBe("suspended");
+    expect(result.output).toMatchObject({
+      narrativeOutput: "pretend this completed",
+      suspended: true,
+      suspensionId: "susp-1",
+      reason: "need input",
     });
   });
 });

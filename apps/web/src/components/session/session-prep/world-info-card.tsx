@@ -37,7 +37,7 @@ export function WorldInfoCard({
       {expanded && (
         <CardContent className="px-4 pb-4">
           <div className="grid gap-4 sm:grid-cols-[11rem_1fr]">
-            <div className="relative aspect-[4/3] overflow-hidden rounded-[var(--radius-card)] border border-border bg-muted">
+            <div className="relative aspect-4/3 overflow-hidden rounded-(--radius-card) border border-border bg-muted">
               <img
                 src={visual.image}
                 alt=""
@@ -50,7 +50,7 @@ export function WorldInfoCard({
               />
             </div>
             <div className="space-y-2">
-              <p className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">
+              <p className="text-sm text-muted-foreground wrap-break-word">
                 {text(world.description)}
               </p>
               {world.tags && world.tags.length > 0 && (

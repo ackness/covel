@@ -5,9 +5,9 @@
  * scheduling IR. Production scheduling consumes that IR: `stage` selects the
  * band and the DAG orders within it (see packages/runtime/src/schedule).
  *
- * `execution: background` and setup runtimes declared as `scheduled
- * interval: 1` fold here. Every manifest single-declares `stage` +
- * `needs`/`after` — there is no alternative spelling to reconcile.
+ * `execution: background` folds here. Every manifest single-declares `stage` +
+ * `needs`/`after`, and setup runtimes declare `trigger: auto`; there is no
+ * alternative spelling to reconcile.
  */
 
 import type {
@@ -23,8 +23,7 @@ import type { RuntimeManifest } from "../types/plugin.js";
 
 /**
  * Sort rank for listing / serialization consumers that order by
- * `(stage, name)` during the compat period, replacing the old
- * `legacyOrder ?? Infinity` sort. Stage-less runtimes (event / manual /
+ * `(stage, name)`. Stage-less runtimes (event / manual /
  * UI-only) rank last. Intra-stage order is broken by name at the call site.
  */
 export function stageRank(stage: Stage | undefined): number {
@@ -41,25 +40,12 @@ export function stageMessageOrder(stage: Stage | undefined): number {
   return stage === undefined ? 99 : STAGE_ORDER.indexOf(stage);
 }
 
-function foldTrigger(
+function declaredTrigger(
   manifest: RuntimeManifest,
-  stage: Stage | undefined,
   derivedFrom: string[],
 ): TriggerSpec {
   const declared = manifest.trigger ?? { type: "auto" as const };
   if (manifest.trigger === undefined) derivedFrom.push("trigger:default-auto");
-
-  // Setup runtimes are auto-only in the new model. The legacy idiom
-  // `scheduled + interval: 1 + maxTriggerCount: 1` in the pre-game band is
-  // behaviorally equivalent to `auto + maxTriggerCount: 1`, so fold it.
-  if (stage === "setup" && declared.type === "scheduled") {
-    derivedFrom.push("trigger:scheduled-as-auto");
-    const { interval, startTurn, cooldownTurns, ...rest } = declared;
-    void interval;
-    void startTurn;
-    void cooldownTurns;
-    return { ...rest, type: "auto" };
-  }
   return declared;
 }
 
@@ -90,7 +76,7 @@ export function normalizeRuntimeManifest(
 
   const stage: Stage | undefined = manifest.stage;
 
-  const declaredTrigger = foldTrigger(manifest, stage, derivedFrom);
+  const trigger = declaredTrigger(manifest, derivedFrom);
 
   if (manifest.execution === "background") derivedFrom.push("execution");
 
@@ -102,9 +88,8 @@ export function normalizeRuntimeManifest(
   return {
     id: manifest.name,
     pluginId: manifest.pluginId,
-    declaredTrigger,
+    declaredTrigger: trigger,
     backgroundWhenDetached: manifest.execution === "background",
-    resultFormat: manifest.resultFormat ?? "legacy",
     ...(stage !== undefined ? { stage } : {}),
     deps: {
       after: manifest.after ?? [],

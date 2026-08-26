@@ -43,7 +43,7 @@ function createMockStore() {
   const makePdKey = (sid: string, pid: string, ns: string, key: string) =>
     `${sid}:${pid}:${ns}:${key}`;
 
-  return {
+  const store = {
     records,
     pluginData,
     async upsertWorkingMemory(record: {
@@ -79,6 +79,18 @@ function createMockStore() {
       );
     },
   };
+  return Object.assign(store, {
+    async withTransaction<T>(fn: (tx: typeof store) => Promise<T>): Promise<T> {
+      const snapshot = new Map(records);
+      try {
+        return await fn(store);
+      } catch (error) {
+        records.clear();
+        for (const [key, record] of snapshot) records.set(key, record);
+        throw error;
+      }
+    },
+  });
 }
 
 describe("CoreMemoryManager", () => {
@@ -206,6 +218,43 @@ describe("CoreMemoryManager", () => {
       const scene = await manager.getBlock("sess-1", "scene");
       expect(story!.content).toBe("主线开始");
       expect(scene!.content).toBe("坊市");
+    });
+
+    it("rolls back every block and skips mirrors when one write fails", async () => {
+      const atomicStore = createMockStore();
+      const atomicManager = createMemoryManager(atomicStore as any, {
+        pluginId: "memory",
+      });
+      await atomicManager.updateBlock("sess-1", "story_state", "old story");
+      await atomicManager.updateBlock("sess-1", "scene", "old scene");
+      const originalUpsert = atomicStore.upsertWorkingMemory.bind(atomicStore);
+      atomicStore.upsertWorkingMemory = async (record) => {
+        if (record.key === "scene") throw new Error("write failed");
+        await originalUpsert(record);
+      };
+
+      await expect(
+        atomicManager.updateBlocks(
+          "sess-1",
+          new Map<CoreMemoryLabel, string>([
+            ["story_state", "new story"],
+            ["scene", "new scene"],
+          ]),
+        ),
+      ).rejects.toThrow("write failed");
+
+      await expect(
+        atomicManager.getBlock("sess-1", "story_state"),
+      ).resolves.toMatchObject({ content: "old story" });
+      await expect(
+        atomicManager.getBlock("sess-1", "scene"),
+      ).resolves.toMatchObject({ content: "old scene" });
+      expect(
+        atomicStore.pluginData.get("sess-1:memory:blocks:story_state")?.value,
+      ).toMatchObject({ content: "old story" });
+      expect(
+        atomicStore.pluginData.get("sess-1:memory:blocks:scene")?.value,
+      ).toMatchObject({ content: "old scene" });
     });
   });
 

@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.26-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.26)
+[![Version](https://img.shields.io/badge/version-v0.0.27-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.27)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](<>)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,10 @@
 
 Covel 是一款 AI 驱动的 RPG，回合之间世界仍在运转：NPC 记录着对你的态度、世界典籍随游玩积累、记忆贯穿整局。支撑这一切的每个机制都是一个**以插件形式分发的自主 agent** —— 禁用一个、替换一个，或者自己写一个。
 
-> **当前公开版本：v0.0.26**，早期阶段 —— API、数据格式、插件 frontmatter 可能随版本变化。官方预编译包面向 macOS Apple Silicon 与 Windows x64，其余平台从源码构建。
+> **当前公开版本：v0.0.27**，早期阶段 —— API、数据格式、插件 frontmatter 可能随版本变化。官方预编译包面向 macOS Apple Silicon 与 Windows x64，其余平台从源码构建。官方安装包未签名，首次启动时 macOS Gatekeeper 或 Windows SmartScreen 可能会发出警告。
+
+> [!IMPORTANT]
+> **v0.0.27 是一次改动很大的更新，数据库和配置相关代码均有较大变化。** 可以直接原地升级，但建议先备份需要保留的自定义世界或插件。如果升级后出现启动、配置或存档异常，请完全退出 Covel，重新安装，并删除整个 `~/.covel/` 目录和另行配置的 `data_root`，以全新配置和数据重新开始。重置会删除 API 密钥、设置、存档、日志和所有未备份的自定义内容。
 
 ## 亮点
 
@@ -51,7 +54,7 @@ Covel 是一款 AI 驱动的 RPG，回合之间世界仍在运转：NPC 记录�
 
 从 [Releases](https://github.com/ackness/covel/releases) 下载 **macOS Apple Silicon** 或 **Windows x64** 安装包，然后：打开设置 → 粘贴 LLM API 密钥 → 选一个世界 → 开玩。
 
-你的数据都在 `~/.covel/`（配置、密钥、SQLite、自定义世界、日志）—— 详见[桌面配置指南](./docs/guide/desktop-config.md)。版本说明：[`docs/CHANGELOG.md`](./docs/CHANGELOG.md)。
+配置、密钥、SQLite、自定义世界和日志默认都在 `~/.covel/`；如果 `config.toml` 重定向了 `data_root`，数据也会位于那个独立目录。升级前请阅读[桌面配置指南](./docs/guide/desktop-config.md)和[`docs/CHANGELOG.md`](./docs/CHANGELOG.md)。
 
 ### 从源码运行
 
@@ -97,6 +100,6 @@ pnpm workspaces + Turborepo · ESM-only · TypeScript strict · React 19 + Hono 
 
 ## 贡献与许可
 
-欢迎 Issue 和 PR —— 请先阅读 [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md)。发布由 Git 标签驱动：推送 `v*` 标签即由 [GitHub Actions](./.github/workflows/release.yml) 构建并发布 macOS 安装包。
+欢迎 Issue 和 PR —— 请先阅读 [`docs/CONTRIBUTING.md`](./docs/CONTRIBUTING.md)。发布由 Git 标签驱动：推送 `v*` 标签即由 [GitHub Actions](./.github/workflows/release.yml) 构建并发布 macOS 与 Windows 安装包。
 
 [MIT](./LICENSE) © 2026 Covel Contributors

@@ -17,8 +17,8 @@ export function DebugToolbar({
   const { t } = useTranslation();
 
   return (
-    <div className="flex-shrink-0 h-9 px-4 border-b border-[var(--rule-color)] ui-rail flex items-center gap-4 overflow-x-auto">
-      <div className="flex items-center gap-1 shrink-0 border-r border-[var(--rule-color)] pr-3">
+    <div className="shrink-0 h-9 px-4 border-b border-(--rule-color) ui-rail flex items-center gap-4 overflow-x-auto">
+      <div className="flex items-center gap-1 shrink-0 border-r border-(--rule-color) pr-3">
         <button
           onClick={() => onDebugViewChange("traces")}
           className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${

@@ -22,40 +22,31 @@ export interface StorageMigrationSummary {
 
 const REGISTRY: readonly StorageMigrationSummary[] = [
   {
-    id: "browser:idb:unified-storage",
+    id: "browser:idb:cache-media",
     domain: "browser",
     backend: "idb",
     version: BROWSER_IDB_SCHEMA_VERSION,
     status: "managed-by-backend",
     description:
-      "Browser-local data, media, app-KV, and render cache share the covel-browser IndexedDB schema.",
+      "Browser UI state and media caches use a lightweight IndexedDB schema; durable game data lives in the separate Dexie BrowserVault.",
   },
   {
     id: "data:sqlite:schema",
     domain: "data",
     backend: "sqlite",
-    version: 1,
-    status: "manual-required",
+    version: 3,
+    status: "managed-by-backend",
     description:
-      "SQLite schema migrations run through the server Drizzle migration path.",
+      "SQLite creates the current data schema directly; development builds do not upgrade prior schemas.",
   },
   {
     id: "data:pg:schema",
     domain: "data",
     backend: "pg",
-    version: 1,
-    status: "manual-required",
-    description:
-      "PostgreSQL schema migrations run through the server Drizzle migration path.",
-  },
-  {
-    id: "data:idb:store",
-    domain: "data",
-    backend: "idb",
-    version: BROWSER_IDB_SCHEMA_VERSION,
+    version: 3,
     status: "managed-by-backend",
     description:
-      "IndexedDB DataStore upgrades through the idb openDB upgrade callback.",
+      "PostgreSQL creates the current data schema directly; development builds do not upgrade prior schemas.",
   },
   {
     id: "media:idb:store",

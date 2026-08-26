@@ -25,6 +25,7 @@ export function PluginItem({
   resolvedSlots,
   sessionId,
   runtimeModelOverrides,
+  onRuntimeModelOverrideChange,
   setupRuntimes,
 }: PluginItemProps) {
   const { t } = useTranslation();
@@ -35,11 +36,13 @@ export function PluginItem({
   );
   const primaryRuntime = agentRuntimes[0];
   const runtimeKey = primaryRuntime?.id ?? "";
-  const [boundSlot, handleSlotChange] = useRuntimeModelSlotOverride({
-    runtimeKey,
-    sessionId,
-    runtimeModelOverrides,
-  });
+  const [boundSlot, handleSlotChange, overrideError] =
+    useRuntimeModelSlotOverride({
+      runtimeKey,
+      sessionId,
+      runtimeModelOverrides,
+      onChange: onRuntimeModelOverrideChange,
+    });
 
   const displayName = text(pkg.displayName) || pkg.name;
   const description = text(pkg.description);
@@ -54,7 +57,7 @@ export function PluginItem({
   const toggleDisabled = executing === true || isLocked;
 
   return (
-    <div className="border border-border rounded-[var(--radius-card)] overflow-hidden">
+    <div className="border border-border rounded-(--radius-card) overflow-hidden">
       <div className="flex items-center gap-0 hover:bg-muted/50 transition-colors">
         <button
           type="button"
@@ -75,26 +78,18 @@ export function PluginItem({
                 "ui-chip text-[9px] px-1.5 py-0 h-4 shrink-0",
                 sessionPlugin.source === "builtin"
                   ? "border-primary/40 bg-primary/10 text-primary"
-                  : sessionPlugin.source === "official"
-                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                    : "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                  : "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
               ].join(" ")}
               title={t(
                 `plugin.source.${sessionPlugin.source}.tooltip`,
                 sessionPlugin.source === "builtin"
                   ? "Builtin core plugin shipped with Covel"
-                  : sessionPlugin.source === "official"
-                    ? "Official plugin curated by Covel"
-                    : "Third-party plugin installed under ~/.covel/plugins",
+                  : "Third-party plugin installed under ~/.covel/plugins",
               )}
             >
               {t(
                 `plugin.source.${sessionPlugin.source}.label`,
-                sessionPlugin.source === "builtin"
-                  ? "Core"
-                  : sessionPlugin.source === "official"
-                    ? "Official"
-                    : "Third-party",
+                sessionPlugin.source === "builtin" ? "Core" : "Third-party",
               )}
             </Badge>
           )}
@@ -310,6 +305,15 @@ export function PluginItem({
                     "Override active — next turn will use this model",
                   )}
                 </p>
+              )}
+              {overrideError && (
+                <span
+                  className="text-[9px] text-destructive"
+                  role="alert"
+                  title={overrideError}
+                >
+                  {t("plugin.modelOverrideFailed", "Save failed")}
+                </span>
               )}
             </div>
           )}

@@ -38,6 +38,30 @@ More unsettling still: the fog is thickening. The most sensitive Tide-Readers ca
 - **Frost** — the Congregation's youngest Mist-Speaker, barely sixteen. She claims to hear the fog's whispers, and has predicted ebb timing and ruin locations more than once. Prophet, lunatic, or fraud? The way she looks at the player, it is as if she already knows them.
 - **Grey Falcon** — captain of Councilor Chen's private expedition, and the sharpest instrument of the Seal Tide Decree. Silent, efficient, without a wasted emotion, he seals off certain zones, hunts certain relics, and arrests people "no one has ever heard of." Lately his quarry points toward where Qi vanished — and he, too, has begun to question what lies behind his orders.
 
+## Player Origins and Ensemble Entry
+
+The player is not a singular savior named by prophecy, but a new variable capable of bending seven existing lives off course. The opening naturally supports two origins:
+
+- **New Tide-Reader apprentice** — the entrance trial left a faint tide-mark on your wrist. Su Yao examined you and Lin Yuanzhou is your peer. You may enter the Guild Tower lawfully, but are expected to obey its sealed archives and appraisal discipline.
+- **Undertow local** — you know the Drawdown Steps, the pier hatch, and fog-lamp hand signs. Qi once appraised a relic for you or your family without charge. Before vanishing, he left Su a note asking for “someone who remembers routes and does not trust maps.” You have no permit, but reach the Salt Fangs and the Congregation more easily.
+
+Whichever your origin, Su finds you on the Main Pier with only half a letter. Its other half, Qi's real route, and the reason the deep withdrawal came early must be assembled from gaps between other people's interests. Lin needs someone to keep his Tide Sense secret; Iron Meg needs Chen stopped from completing the Key first; Grey Falcon needs to know whether his orders were altered; Frost wants proof that the player truly “also hears.” They ask for promises, refuse requests that violate their positions, and change trust and whereabouts when the player keeps faith, lies, suffers, or chooses — they do not wait in place like quest dispensers.
+
+## Opening Caseboard and State
+
+The first four leads connect, but none proves a conclusion alone:
+
+- **The torn letter** is held by Su and reads, “The Key must not fall into his hands.” Its edge bears black tide-salt that crystallizes only in exposed ruins, though witnesses saw Qi leave at high tide.
+- **Appraisal Report 74** is missing one page from the Sealed Archive; the catalog still describes a “hinged-tooth grey fragment.” A page also vanished cleanly from that day's visitor ledger.
+- **Three traces in the Echo Gallery** belong to Qi's tide-mark, fresh rope from Falcon's unit, and a copper plate engraved with a nursery rhyme. Their apparent times contradict one another and require tide-lines and testimony to cross-check.
+- **The Stilltide survivor** is the only person to return from the expedition three years ago. The Council keeps him isolated; he says only, “It woke up down there,” but ward records show those were not his first words.
+
+Clues move through unverified, corroborated, contaminated, and resolved states. Finding an object makes it unverified; independent testimony or tide-mark records can corroborate it; floodwater, forgery, or a public leak can contaminate it. The tide removing evidence never proves anyone's interpretation.
+
+The deep withdrawal advances from triple warning, to water passing step ninety, to full exposure, return bell, and sudden flood. After the return bell, usually only half an hour remains. Every bypassed checkpoint, activated relic, accepted permit, or favor owed for the pier hatch should leave at least one visible consequence: tide-time advancing, location changing, vitality or stress shifting, fog-rot rising, a person's attitude changing, a faction permit or warrant escalating, or confidence in a clue changing.
+
+Fog-rot never reverses. Below twenty-five it usually shows only as cold sensitivity or ringing ears; from twenty-five to forty-nine a body part turns translucent; from fifty to seventy-four Tide-Force grows clearer while lasting impairment sets in; above seventy-five dissolution into the fog may come at any time. Rest can restore vitality and reduce stress, but never reduce fog-rot.
+
 ## Story Arcs
 
 The story forces no single ending, but falls naturally into three stages — and the deeper you go, the higher the price:
@@ -63,9 +87,11 @@ Then the bell rings — not the regular timekeeping toll, but three sharp strike
 
 The pier splits into two currents of humanity. To your left, Salt Fang recruiters whisper promises of fortune to anyone brave or desperate enough to descend. To your right, Council officers plaster emergency Seal Tide Decree notices on every surface, warning that unauthorized Undertow entry means immediate arrest.
 
-A young woman in a Tide-Reader Guild uniform pushes through the crowd toward you — you recognize her as the invigilator from your entrance exam days ago: Su Yao. She looks rattled.
+A young woman in a Tide-Reader Guild uniform pushes through the crowd toward you. If you sat the entrance trial, you recognize its examiner, Su Yao; if you are an Undertow local, the note showing at her sleeve bears the name Qi used for you. She looks rattled.
 
-"You're the new apprentice, the one who arrived today?" She doesn't wait for an answer; her voice drops. "Guildmaster Qi is missing. He left a note this morning and walked into the Undertow — but the tide was still in. No one can enter the Undertow during high tide."
+Her eyes catch the fresh apprentice tide-mark on your wrist. If instead you wear an Undertow local's waterproof knot, she draws a note bearing your origin from her sleeve.
+
+“Guildmaster Qi is missing.” She does not wait for you to speak; her voice drops. “He left a note this morning and walked into the Undertow — but the tide was still in. No one can enter the Undertow during high tide.”
 
 She glances toward the clocktower. "Unless a deep withdrawal changes the timing…"
 

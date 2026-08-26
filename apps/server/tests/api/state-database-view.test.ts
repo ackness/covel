@@ -1,7 +1,7 @@
 /**
  * GET /api/sessions/:id/state "database view" aggregation —
  * locks the right-panel Database tab contract. Before this change the
- * endpoint only returned `stateManager`-registered tables (currently zero)
+ * endpoint only returned registered state tables (currently zero)
  * so the Database tab was always empty even for sessions full of data.
  *
  * The endpoint now additionally surfaces:
@@ -13,15 +13,13 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { Hono } from "hono";
-import { createStateManager, type StateManager } from "@covel/state";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { stateRoutes } from "../../src/routes/api/state.js";
 
-function buildApp(store: DataStore, stateManager: StateManager): Hono {
+function buildApp(store: DataStore): Hono {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", store);
-    c.set("stateManager", stateManager);
     await next();
   });
   app.route("/api/sessions", stateRoutes);
@@ -35,16 +33,22 @@ describe("GET /api/sessions/:id/state — database view", () => {
 
   beforeEach(async () => {
     store = createMemoryStore();
-    app = buildApp(store, createStateManager(store));
+    app = buildApp(store);
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: "cloudmere",
       presetId: "default",
-      turnCount: 2,
+      completedPlayerTurns: 2,
       status: "active",
       locale: "zh-CN",
       activePlugins: ["narrator", "codex"],
-      preGameCompleted: ["pregame"],
+
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -67,17 +71,56 @@ describe("GET /api/sessions/:id/state — database view", () => {
     expect(sess).toBeDefined();
     expect(sess.data.id).toBe(sessionId);
     expect(sess.data.worldId).toBe("cloudmere");
-    expect(sess.data.turnCount).toBe(2);
+    expect(sess.data.phase).toBe("playing");
+    expect(sess.data.completedPlayerTurns).toBe(2);
+    expect(sess.data.setupRuntimes).toEqual({});
     expect(sess.data.activePlugins).toEqual(["narrator", "codex"]);
-    expect(sess.data.preGameCompleted).toEqual(["pregame"]);
     // Auto-generated schema lists every session field.
     expect(sess.schema.fields.map((f) => f.name)).toEqual(
       expect.arrayContaining([
         "id",
         "worldId",
-        "turnCount",
+        "phase",
+        "completedPlayerTurns",
+        "setupRuntimes",
         "status",
         "activePlugins",
+      ]),
+    );
+  });
+
+  it("omits framework-private session metadata from data and schema", async () => {
+    await store.updateSession(sessionId, {
+      metadata: {
+        publicLabel: "visible",
+        ownerTokenHash: "secret-owner-hash",
+        approvalScopeNonce: "secret-incarnation",
+        sessionIncarnationNonce: "secret-session-incarnation",
+        approvalScopeRevisions: { plugin: "secret-revision" },
+      },
+    });
+
+    const res = await app.request(`/api/sessions/${sessionId}/state`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      tables: {
+        session: {
+          data: Record<string, unknown>;
+          schema: { fields: { name: string }[] };
+        };
+      };
+    };
+    expect(body.tables.session.data.metadata).toEqual(
+      expect.objectContaining({ publicLabel: "visible" }),
+    );
+    expect(JSON.stringify(body.tables.session)).not.toContain("secret-");
+    expect(
+      body.tables.session.schema.fields.map((field) => field.name),
+    ).not.toEqual(
+      expect.arrayContaining([
+        "ownerTokenHash",
+        "approvalScopeNonce",
+        "approvalScopeRevisions",
       ]),
     );
   });

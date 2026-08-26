@@ -12,7 +12,7 @@
     {
       "sceneId": "classroom-2b",
       "name": "二年 B 组",
-      "locationRef": "二年 B 组",
+      "locationRef": "二年 B 组/靠窗座位/黑板旁公告栏/后排储物柜",
       "day": {
         "id": "8a02503330e9163669a7bd82a71195154863ad367958ec71471f7c20e12d7ab8",
         "mime": "image/png",
@@ -27,7 +27,7 @@
     {
       "sceneId": "club-building",
       "name": "社团楼",
-      "locationRef": "社团楼",
+      "locationRef": "社团楼/文艺部活动室/轻音部练习室/新闻部编辑室/社团楼屋顶",
       "day": {
         "id": "6a0c93618a2284d570ce0eafe43a5bcf2a987eb566b612367585fd51976c654e",
         "mime": "image/png",
@@ -42,7 +42,7 @@
     {
       "sceneId": "library",
       "name": "图书馆",
-      "locationRef": "图书馆",
+      "locationRef": "图书馆/二楼窗边长桌/旧刊架/借阅台便签盒",
       "day": {
         "id": "a5793b4c64645aabb7bddf5ddc62d775ee51fddee90f08457f541ccd3f1160f3",
         "mime": "image/png",
@@ -57,7 +57,7 @@
     {
       "sceneId": "sakurazaka-seawall",
       "name": "樱坂海堤",
-      "locationRef": "樱坂海堤",
+      "locationRef": "樱坂海堤/自动贩卖机/海堤长椅",
       "day": {
         "id": "0a8a6bc497e49a267cb8c37c52989e0eb9050ed39bb7f7b4a46c3d4ab8b05931",
         "mime": "image/png",
@@ -72,7 +72,7 @@
     {
       "sceneId": "shopping-street",
       "name": "青砾町商店街",
-      "locationRef": "青砾町商店街",
+      "locationRef": "青砾町商店街/海猫书房/橙屋家庭餐厅/星砂乐器行",
       "day": {
         "id": "aec9ef6b0f6dff09d651cb524d9f7e4321c6e63b495bd6b625567852d13b74dc",
         "mime": "image/png",

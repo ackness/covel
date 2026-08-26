@@ -16,6 +16,7 @@ import {
   type PluginRegistry,
 } from "@covel/plugin-loader";
 import { sessionRoutes } from "../../src/routes/api/session.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 type Env = {
   Variables: {
@@ -26,9 +27,11 @@ type Env = {
 
 function setupApp(store: DataStore, pluginRegistry: PluginRegistry): Hono {
   const app = new Hono<Env>();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("pluginRegistry", pluginRegistry);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", sessionRoutes);
@@ -41,10 +44,15 @@ function makeSession(overrides: Partial<SessionRecord> = {}): SessionRecord {
     id: "sess-overrides-1",
     worldId: "cloudmere",
     status: "active",
-    turnCount: 3,
-    preGameCompleted: [],
+    phase: "playing",
+    completedPlayerTurns: 3,
+    setupRuntimes: {},
     locale: "zh-CN",
     activePlugins: ["narrator"],
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     createdAt: now,
     updatedAt: now,
     ...overrides,
@@ -119,6 +127,20 @@ describe("PATCH /api/sessions/:id runtimeModelOverrides", () => {
       body: JSON.stringify({ runtimeModelOverrides: ["fast"] }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("keeps ended as a terminal session status", async () => {
+    await store.updateSession("sess-overrides-1", { status: "ended" });
+
+    const res = await app.request("/api/sessions/sess-overrides-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "active" }),
+    });
+
+    expect(res.status).toBe(409);
+    await expect(res.json()).resolves.toMatchObject({ code: "session_ended" });
+    expect((await store.getSession("sess-overrides-1"))?.status).toBe("ended");
   });
 
   it("rejects more than 64 entries", async () => {

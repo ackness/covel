@@ -1,4 +1,5 @@
 import type {
+  ExecutionContext,
   Proposal,
   RuntimeManifest,
   RuntimeResult,
@@ -6,6 +7,7 @@ import type {
   TurnInput,
 } from "@covel/shared";
 import type { SuspensionRecord } from "@covel/store";
+import type { EmittedEvent } from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
 import {
   runPostRuntimeHook,
@@ -15,11 +17,13 @@ import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
 import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
+import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
 export interface ResumeSuspendedRuntimeOptions {
   readonly maxSteps?: number;
   readonly timeoutMs?: number;
+  readonly userSettings?: TurnInput["userSettings"];
 }
 
 /**
@@ -57,6 +61,8 @@ export async function resumeSuspendedRuntime(
     sessionId: suspension.sessionId,
     turnId: suspension.turnId,
     playerMessage: "",
+    origin: "resume",
+    ...(options?.userSettings ? { userSettings: options.userSettings } : {}),
   };
 
   const postRuntimeOpts = {
@@ -119,19 +125,66 @@ export async function resumeSuspendedRuntime(
     });
   }
 
+  const { pendingContinuation } = suspension;
+  const inherited = pendingContinuation.executionContext;
+  const resumeExecutionContext: ExecutionContext = {
+    ...inherited,
+    executionId: runId,
+    origin: "resume",
+  };
+  if (manifest.runtimeType === "function") {
+    // Function continuations are deterministic handler invocations, not LLM
+    // conversations. Feed resume data through the explicit handler context and
+    // reuse the normal function finalizer so output normalization, hooks and
+    // buffered proposals follow the same path as an ordinary invocation.
+    return executeFunctionRuntime({
+      manifest,
+      input,
+      loaded,
+      deps,
+      hookPipeline,
+      triggerEvent: undefined,
+      executionContext: resumeExecutionContext,
+      createRecursiveCall: () => async () => {
+        throw new Error(
+          `function runtime "${manifest.name}" cannot use recursiveCall while resuming`,
+        );
+      },
+      recursionDepth: 0,
+      startTime,
+      runId,
+      timeoutMs,
+      executionId: runId,
+      resumeData,
+      resumedFromSuspensionId: suspension.id,
+      allowSuspend: false,
+    });
+  }
+
   // Rebuild the mid-turn transcript from the suspension and append the resume
   // payload: a tool result for the suspend tool (agent runtimes) or a user
   // message (function-runtime suspensions with no suspend tool call id).
-  const { pendingContinuation } = suspension;
   const messages: LLMMessage[] = [
     ...(pendingContinuation.messages as LLMMessage[]),
   ];
   if (pendingContinuation.suspendToolCallId) {
-    messages.push({
+    const resumedToolResult: LLMMessage = {
       role: "tool",
       content: JSON.stringify({ resumeData }),
       toolCallId: pendingContinuation.suspendToolCallId,
-    });
+    };
+    const placeholderIndex = messages.findIndex(
+      (message) =>
+        message.role === "tool" &&
+        message.toolCallId === pendingContinuation.suspendToolCallId,
+    );
+    if (placeholderIndex >= 0) {
+      messages[placeholderIndex] = resumedToolResult;
+    } else {
+      throw new Error(
+        `Invalid suspension continuation: missing tool placeholder ${pendingContinuation.suspendToolCallId}`,
+      );
+    }
   } else {
     messages.push({
       role: "user",
@@ -156,12 +209,15 @@ export async function resumeSuspendedRuntime(
     hookPipeline,
     startTime,
     runId,
+    executionContext: resumeExecutionContext,
     allowSuspend: false,
     initialState: {
       finalContent: pendingContinuation.partialContent ?? null,
       collectedToolCalls:
         pendingContinuation.toolCallsSoFar as ToolCallRecord[],
       pendingProposals: pendingContinuation.pendingProposals as Proposal[],
+      emittedEvents:
+        (pendingContinuation.emittedEvents as EmittedEvent[] | undefined) ?? [],
     },
   });
   // With allowSuspend:false the loop never suspends, so it cannot return a

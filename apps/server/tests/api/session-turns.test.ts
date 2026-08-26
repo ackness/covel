@@ -25,10 +25,16 @@ describe("GET /api/sessions/:id/turns", () => {
   it("lists persisted turn artifacts with their commit status", async () => {
     const { app, store } = await makeApp();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sess-turns",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       activePlugins: [],
       locale: "zh-CN",
       createdAt: new Date().toISOString(),

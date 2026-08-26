@@ -27,24 +27,34 @@ import { LlmPresetsPane } from "./panes/LlmPresetsPane.js";
 import { PackagesPane } from "./panes/PackagesPane.js";
 import { AppearancePane } from "./panes/AppearancePane.js";
 import { OperatorAccessPane } from "./panes/OperatorAccessPane.js";
+import type { PackageSummary } from "@/services/api.js";
 
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Deep-link target — either a nav node id ("llm.slots") or a setting key. */
   initialKey?: string;
+  packages?: readonly Pick<PackageSummary, "name" | "displayName">[];
 }
 
 export function SettingsDialog({
   open,
   onOpenChange,
   initialKey,
+  packages = [],
 }: SettingsDialogProps) {
   const store = useSettingsStore();
   const { t, i18n } = useTranslation();
   const [query, setQuery] = useState("");
   const desktop = isDesktopApp();
   const [storeRevision, setStoreRevision] = useState(0);
+  const pluginDisplayNames = useMemo(
+    () =>
+      Object.fromEntries(
+        packages.map((pkg) => [pkg.name, pkg.displayName] as const),
+      ),
+    [packages],
+  );
 
   useEffect(
     () =>
@@ -56,10 +66,14 @@ export function SettingsDialog({
 
   const tree = useMemo(
     () =>
-      buildNavTree(store, { includeDesktop: desktop, locale: i18n.language }),
+      buildNavTree(store, {
+        includeDesktop: desktop,
+        locale: i18n.language,
+        pluginDisplayNames,
+      }),
     // `open` included so the tree rebuilds when dialog opens and plugins
     // registered new entries since last render.
-    [store, desktop, i18n.language, open, storeRevision],
+    [store, desktop, i18n.language, open, storeRevision, pluginDisplayNames],
   );
   const filtered = useMemo(
     () => filterNav(tree, query, i18n.language),
@@ -107,7 +121,7 @@ export function SettingsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] p-0 gap-0 flex flex-col">
-        <DialogHeader className="px-6 pt-5 pb-4 border-b border-[var(--rule-color)]">
+        <DialogHeader className="px-6 pt-5 pb-4 border-b border-(--rule-color)">
           <DialogTitle className="flex items-baseline gap-3">
             <span className="ui-meta text-[10px] text-muted-foreground">
               § SETTINGS
@@ -123,10 +137,10 @@ export function SettingsDialog({
         </DialogHeader>
         <div className="flex-1 flex overflow-hidden">
           <aside
-            className="w-56 shrink-0 border-r border-[var(--rule-color)] flex flex-col"
+            className="w-56 shrink-0 border-r border-(--rule-color) flex flex-col"
             style={{ background: "var(--surface-rail)" }}
           >
-            <div className="p-3 border-b border-[var(--rule-color)] flex items-center gap-2">
+            <div className="p-3 border-b border-(--rule-color) flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <input
                 value={query}
@@ -160,7 +174,7 @@ export function SettingsDialog({
                     {isSelected && !isHeader && (
                       <span
                         aria-hidden
-                        className="absolute left-0 top-0 bottom-0 w-[3px]"
+                        className="absolute left-0 top-0 bottom-0 w-0.75"
                         style={{ background: "var(--accent-primary)" }}
                       />
                     )}

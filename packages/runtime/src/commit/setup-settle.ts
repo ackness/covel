@@ -3,13 +3,13 @@
  * transaction.
  *
  * For every setup runtime that ran in an execution, this terminalises its
- * ledger attempt and (for the ones that did not complete) recomputes `attempts`
- * and writes the pending/blocked mirror. It runs after the domain commit
- * outcome is known, deliberately outside the transaction: a rolled-back commit
- * still burns an attempt, so a deterministic failure eventually exhausts the
- * retry budget and lands on `blocked` instead of retrying forever. The `done`
- * mirror + phase flip stay the finalize transaction's job (`applySessionClockTx`);
- * this only owns pending/blocked.
+ * ledger attempt, recomputes the real terminal-attempt count, and reconciles
+ * the session mirror. It runs after the domain commit outcome is known,
+ * deliberately outside the transaction: a rolled-back commit still burns an
+ * attempt, so a deterministic failure eventually exhausts the retry budget
+ * and lands on `blocked` instead of retrying forever. The finalize transaction
+ * still owns the atomic done signal and phase flip; this settlement replaces
+ * its provisional attempt count with the authoritative ledger total.
  *
  * Idempotency: the ledger is keyed on `(sessionId, runtimeId, generation,
  * executionId)`. Each execution carries a unique executionId, so re-running
@@ -22,7 +22,11 @@ import type {
   SetupAttemptState,
   SetupRuntimeState,
 } from "@covel/shared";
-import { isBudgetedAttempt, resolvePendingOrBlocked } from "@covel/shared";
+import {
+  isBudgetedAttempt,
+  mirrorSetupDone,
+  resolvePendingOrBlocked,
+} from "@covel/shared";
 
 export type { RanSetupRuntime } from "@covel/shared";
 
@@ -71,33 +75,42 @@ export async function settleSetupRuntimes(args: {
   const session = await store.getSession(sessionId);
   if (!session) return;
   const mirror: Record<string, SetupRuntimeState> = {
-    ...(session.setupRuntimes ?? {}),
+    ...session.setupRuntimes,
   };
   let changed = false;
   for (const r of ran) {
-    // A committed done mirror is owned by the finalize transaction; leave it.
-    if (r.doneSignal && committed) continue;
+    const lastError =
+      r.doneSignal && !committed
+        ? (r.error ?? "proposal commit rolled back")
+        : r.error;
     const terminal = (
       await store.listSetupAttempts(sessionId, {
         runtimeId: r.runtimeId,
         generation: r.generation,
       })
     ).filter((a) => isBudgetedAttempt(a.state)).length;
-    mirror[r.runtimeId] = resolvePendingOrBlocked({
-      attempts: terminal,
-      budget: r.budget,
-      pluginVersion: r.pluginVersion,
-      generation: r.generation,
-      now,
-      ...(r.error ? { lastError: r.error } : {}),
-    });
+    if (r.doneSignal && committed) {
+      const current = session.setupRuntimes[r.runtimeId];
+      mirror[r.runtimeId] = mirrorSetupDone(
+        r.pluginVersion,
+        current?.state === "done" ? current.completedAt : now,
+        r.generation,
+        terminal,
+      );
+    } else {
+      mirror[r.runtimeId] = resolvePendingOrBlocked({
+        attempts: terminal,
+        budget: r.budget,
+        pluginVersion: r.pluginVersion,
+        generation: r.generation,
+        now,
+        ...(lastError ? { lastError } : {}),
+      });
+    }
     changed = true;
   }
   if (!changed) return;
 
-  // The setup mirror is the sole write surface; `preGameCompleted` is derived
-  // from it at read time (a runtime that just left `done` — a rolled-back
-  // completion — drops out of the derived set and gets re-scheduled).
   await store.updateSession(sessionId, {
     setupRuntimes: mirror,
     updatedAt: now,

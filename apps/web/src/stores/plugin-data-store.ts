@@ -118,15 +118,25 @@ export function loadPluginData(
   items: readonly { key: string; value: unknown }[],
 ): void {
   if (!activeSessionId) return;
-  const prev = sessionStores.get(activeSessionId) ?? {};
+  loadPluginDataForSession(activeSessionId, pluginId, namespace, items);
+}
+
+/** Bulk-load data into one session without depending on the active UI slot. */
+export function loadPluginDataForSession(
+  sessionId: string,
+  pluginId: string,
+  namespace: string,
+  items: readonly { key: string; value: unknown }[],
+): void {
+  const prev = sessionStores.get(sessionId) ?? {};
   const pluginNs = { ...prev[pluginId] };
   const ns: Record<string, unknown> = {};
   for (const item of items) {
     ns[item.key] = item.value;
   }
   pluginNs[namespace] = ns;
-  sessionStores.set(activeSessionId, { ...prev, [pluginId]: pluginNs });
-  notify();
+  sessionStores.set(sessionId, { ...prev, [pluginId]: pluginNs });
+  if (activeSessionId === sessionId) notify();
 }
 
 /** Atomically replace the active session's complete plugin-data snapshot. */

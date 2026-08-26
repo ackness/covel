@@ -27,6 +27,18 @@ geography:
           description:
             zh-CN: 鉴定远古遗物的学术要地，也是雾港唯一的图书馆与档案库。
             en-US: Academy and appraisal center for ancient relics; also Mistport's only library and archive.
+        - name:
+            zh-CN: 封档库
+            en-US: Sealed Archive
+          description:
+            zh-CN: 公会塔地下的禁阅档案室。齐老失踪当日，第七十四号鉴定报告与访客簿各少了一页，门锁却没有被撬动。
+            en-US: A restricted archive beneath the Guild Tower. On the day Qi vanished, one page disappeared from Appraisal Report 74 and another from the visitor ledger, though the lock was untouched.
+        - name:
+            zh-CN: 静潮病院
+            en-US: Stilltide Infirmary
+          description:
+            zh-CN: 名义上收治重度雾蚀患者，实际由议会严密看守；三年前深潜队唯一的幸存者被关在最下层病房。
+            en-US: Officially a ward for advanced fog-rot, but kept under Council guard; the sole survivor of the expedition three years ago is confined on its lowest floor.
     - name:
         zh-CN: 中港
         en-US: Mid-Harbor
@@ -55,6 +67,18 @@ geography:
           description:
             zh-CN: 中港背巷里半公开的市集，盐牙会在此放货与招募；持盐牙筹者才听得到真正的价。
             en-US: A half-open bazaar in Mid-Harbor's back alleys where the Salt Fangs move goods and recruit; only Salt Chips hear the real prices.
+        - name:
+            zh-CN: 无声栈
+            en-US: Quiet-Fog Inn
+          description:
+            zh-CN: 探险者常住的低顶旅店，墙壁填了吸音雾菌。老板不问来路，却会把未归者的雾灯挂在门梁上。
+            en-US: A low-ceilinged explorers' inn insulated with sound-eating fog fungus. Its keeper asks no origins, but hangs every missing guest's fog-lamp above the door.
+        - name:
+            zh-CN: 封潮关
+            en-US: Tide-Seal Gate
+          description:
+            zh-CN: 中港通往下潮区褪水阶的检查站，灰隼在此核验许可证、没收明火与未登记遗物；栈桥暗门可绕行，但欠盐牙会一份人情。
+            en-US: The checkpoint between Mid-Harbor and the Undertow steps, where Grey Falcon inspects permits and seizes open flames or undeclared relics. A pier hatch bypasses it at the price of a favor owed to the Salt Fangs.
     - name:
         zh-CN: 下潮区
         en-US: The Undertow
@@ -83,6 +107,18 @@ geography:
           description:
             zh-CN: 涨潮也淹不到的洞窟群，盐牙会的根据地，铁姑在此存放她搜集的遗物碎片。
             en-US: A cave network the flood never reaches, the Salt Fangs' stronghold, where Iron Meg keeps the relic fragments she gathers.
+        - name:
+            zh-CN: 褪水阶
+            en-US: Drawdown Steps
+          description:
+            zh-CN: 封潮关下方通往遗迹的长阶，每一级刻着撤离刻度。海水退过第九十级才算深退潮；返潮警铃后，安全窗口只剩约半小时。
+            en-US: The long stair descending from the Tide-Seal Gate, each step marked for evacuation. A deep withdrawal begins below step ninety; once the return bell sounds, roughly half an hour remains.
+        - name:
+            zh-CN: 回声廊
+            en-US: Echo Gallery
+          description:
+            zh-CN: 本次深退潮最先露出的环形廊道，石壁会延迟复述脚步与耳语。齐老的潮纹印记、灰隼私队的新绳痕与一枚陌生童谣铜片同时出现在这里。
+            en-US: A ring corridor first exposed by the present deep withdrawal, its stone repeating footsteps and whispers seconds late. Qi's tide-mark, fresh rope scars from Falcon's unit, and an unknown copper nursery-rhyme plate all appear here.
 factions:
   - id: council
     name:
@@ -224,6 +260,8 @@ powerSystem:
       en-US: Overusing Tide-Force causes 'fog-rot' — the body turning translucent and dissolving into the mist, irreversibly
     - zh-CN: 极少数人无需遗物也能感知潮力，这种天赋被公会视为危险，被教会奉为神迹
       en-US: A rare few sense Tide-Force without any relic — a gift the Guild deems dangerous and the Congregation calls a miracle
+    - zh-CN: 雾蚀以 0-100 记录且不可逆：25 起出现可见异变，50 起伴随持续失能，75 以上随时可能溶入雾中
+      en-US: "Fog-rot is tracked from 0-100 and never reverses: visible changes begin at 25, lasting impairment at 50, and dissolution may occur above 75"
   tiers:
     - name:
         zh-CN: 学徒
@@ -427,27 +465,31 @@ mechanics:
       en-US: Channeling Tide-Force or using active relics accrues fog-rot; past a threshold the body changes irreversibly
     - zh-CN: 四方势力（议会/公会/盐牙会/教会）对玩家的遗物与下潮区行动各有反应，立场此消彼长
       en-US: The four powers (Council/Guild/Salt Fangs/Congregation) each react to the player's relic and Undertow actions, standings shifting against one another
+    - zh-CN: 线索按「未核实 / 已佐证 / 已污染 / 已解决」演化；潮水可能带走物证，却不会自动证明任何人的解释
+      en-US: Clues evolve through unverified, corroborated, contaminated, and resolved states; the tide may remove evidence, but never proves anyone's interpretation by itself
+    - zh-CN: 有代价的行动应更新至少一项可见状态：潮时、地点、伤势/雾蚀、角色态度、阵营压力或线索可信度
+      en-US: "Any costly action should visibly update at least one state: tide-time, location, condition/fog-rot, character attitude, faction pressure, or clue confidence"
 startingConditions:
   openingScenario:
-    zh-CN: 黄昏，你刚抵达中港主栈桥。潮汐钟敲响罕见的三连击——深退潮预警。码头上盐牙会在招募探险者，议会在张贴封潮令；验潮师苏窈挤过人群告诉你：公会长齐老今早留信走进了下潮区，而那时正是涨潮期。
-    en-US:
+    zh-CN: 黄昏，你刚抵达中港主栈桥。潮汐钟敲响罕见的三连击——深退潮预警。码头上盐牙会在招募探险者，议会在张贴封潮令；验潮师苏窈挤过人群。若你是新学徒，她认得你的考核潮纹；若你是潮民，她带着齐老点名寻找熟路人的便笺。她告诉你：齐老今早走进了下潮区，而那时正是涨潮期。
+    en-US: >-
       Dusk on Mid-Harbor's main pier. The tide-bell rings a rare triple strike — a deep-withdrawal alert. Salt Fangs
-      recruit explorers while Council officers post the Seal Tide Decree; Tide-Reader Su Yao pushes through the crowd to
-      tell you Guildmaster Qi left a note this morning and walked into the Undertow — at high tide, when no one can.
+      recruit explorers while Council officers post the Seal Tide Decree. Tide-Reader Su Yao pushes through the crowd:
+      if you are a new apprentice, she recognizes your examination tide-mark; if you are an Undertow local, she carries
+      Qi's note asking for someone who knows the hidden ways. Qi walked into the Undertow that morning — at high tide,
+      when no one can.
   openingHook:
     zh-CN: 潮钟三鸣，齐老失踪，下潜还是封港？
     en-US: The bell tolls thrice, Qi is gone — dive, or seal?
   openingChips:
-    - zh-CN: 中港主栈桥
-      en-US: Mid-Harbor pier
     - zh-CN: 深退潮
       en-US: Deep withdrawal
     - zh-CN: 封潮令
       en-US: Seal Tide Decree
     - zh-CN: 齐老失踪
       en-US: Qi's disappearance
-    - zh-CN: 验潮师学徒
-      en-US: Tide-Reader apprentice
+    - zh-CN: 半封失踪信
+      en-US: A torn letter
   playerConstraints:
     - zh-CN: 初始为验潮师学徒或普通潮民
       en-US: Start as a Tide-Reader apprentice or common Undertow dweller

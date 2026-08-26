@@ -58,14 +58,6 @@ export interface RuntimePluginContract {
     message: string[];
     left: string[];
   };
-  rpc: Array<{
-    action: string;
-    handler: string;
-    input?: unknown;
-    trustLevel?: string;
-    description?: unknown;
-  }>;
-  hooks: unknown[];
   userSettings: unknown[];
 }
 
@@ -95,7 +87,6 @@ export interface PluginContract {
     builtin: string[];
     local: Array<{ runtimeId: string; path?: string; name: string }>;
   };
-  rpc: JsonRecord[];
   ui: {
     right: Array<{ runtimeId: string; path: string }>;
     message: Array<{ runtimeId: string; path: string }>;
@@ -262,14 +253,6 @@ function buildRuntimeContract(
     ]),
     readablePluginDataNamespaces: uniqueSorted(pluginDataInjectNamespaces),
     ui,
-    rpc: Object.entries(manifest.rpc ?? {}).map(([action, decl]) => ({
-      action,
-      handler: decl.handler,
-      ...(decl.input ? { input: decl.input } : {}),
-      ...(decl.trustLevel ? { trustLevel: String(decl.trustLevel) } : {}),
-      ...(decl.description ? { description: decl.description } : {}),
-    })),
-    hooks: [...(manifest.hooks ?? [])],
     userSettings: [...(manifest.userSettings ?? [])],
   };
 }
@@ -323,9 +306,6 @@ export function buildPluginContract(
         runtime.tools.local.map((tool) => ({ runtimeId: runtime.id, ...tool })),
       ),
     },
-    rpc: runtimes.flatMap((runtime) =>
-      runtime.rpc.map((action) => ({ runtimeId: runtime.id, ...action })),
-    ),
     ui: {
       right: runtimes.flatMap((runtime) =>
         runtime.ui.right.map((path) => ({ runtimeId: runtime.id, path })),

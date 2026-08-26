@@ -12,11 +12,14 @@ import {
 } from "@covel/shared";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { workingMemoryRoutes } from "../../src/routes/api/working-memory.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 function createTestApp(store: DataStore): Hono {
   const app = new Hono();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/sessions", workingMemoryRoutes);
@@ -31,11 +34,17 @@ describe("Working Memory API routes", () => {
   beforeEach(async () => {
     store = createMemoryStore();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: "world-1",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "en",
       activePlugins: [],
       createdAt: new Date().toISOString(),
@@ -224,6 +233,37 @@ describe("Working Memory API routes", () => {
         "last-slot",
       );
       expect(entry?.value).toBe("updated");
+    });
+
+    it("serializes concurrent quota checks so only one final slot is admitted", async () => {
+      for (let i = 0; i < MAX_WORKING_MEMORY_ENTRIES - 1; i++) {
+        await store.upsertWorkingMemory({
+          id: `wm-race-${i}`,
+          sessionId: SESSION_ID,
+          scope: "story",
+          key: `race-${i}`,
+          value: i,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      const write = (key: string) =>
+        app.request(`/api/sessions/${SESSION_ID}/working-memory/story/${key}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: key }),
+        });
+      const responses = await Promise.all([
+        write("candidate-a"),
+        write("candidate-b"),
+      ]);
+
+      expect(responses.map((response) => response.status).sort()).toEqual([
+        200, 409,
+      ]);
+      expect(await store.listWorkingMemory(SESSION_ID)).toHaveLength(
+        MAX_WORKING_MEMORY_ENTRIES,
+      );
     });
 
     it("PUT for unknown session returns 404", async () => {

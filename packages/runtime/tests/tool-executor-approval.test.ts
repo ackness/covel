@@ -5,7 +5,7 @@
  * 1. Whitelisted tools (builtin + known local) execute without approval
  * 2. Unknown tools are denied by default
  * 3. approvalStatus is correctly recorded in store
- * 4. Backward compatibility: no approval pipeline = auto-allow all (legacy)
+ * 4. An omitted approval capability auto-allows tools
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -66,7 +66,7 @@ describe("ToolExecutor with ApprovalPipeline", () => {
     ];
 
     it("should execute whitelisted builtin tool", async () => {
-      const approval = createApprovalPipeline(store, rules);
+      const approval = createApprovalPipeline(rules);
       const executor = createToolExecutor({
         findTool: (name) => (name === "echo" ? echoTool : undefined),
         store,
@@ -83,7 +83,7 @@ describe("ToolExecutor with ApprovalPipeline", () => {
     });
 
     it("should execute whitelisted local tool", async () => {
-      const approval = createApprovalPipeline(store, rules);
+      const approval = createApprovalPipeline(rules);
       const executor = createToolExecutor({
         findTool: (name) => (name === "echo" ? echoTool : undefined),
         store,
@@ -99,7 +99,7 @@ describe("ToolExecutor with ApprovalPipeline", () => {
     });
 
     it("should deny third-party tool", async () => {
-      const approval = createApprovalPipeline(store, rules);
+      const approval = createApprovalPipeline(rules);
       const executor = createToolExecutor({
         findTool: (name) =>
           name === "dangerous-action" ? dangerousTool : undefined,
@@ -117,7 +117,7 @@ describe("ToolExecutor with ApprovalPipeline", () => {
     });
 
     it("should record correct approvalStatus in store", async () => {
-      const approval = createApprovalPipeline(store, rules);
+      const approval = createApprovalPipeline(rules);
       const executor = createToolExecutor({
         findTool: (name) => (name === "echo" ? echoTool : undefined),
         store,
@@ -132,7 +132,7 @@ describe("ToolExecutor with ApprovalPipeline", () => {
     });
 
     it("should record denied status in store", async () => {
-      const approval = createApprovalPipeline(store, rules);
+      const approval = createApprovalPipeline(rules);
       const executor = createToolExecutor({
         findTool: (name) =>
           name === "dangerous-action" ? dangerousTool : undefined,
@@ -147,11 +147,11 @@ describe("ToolExecutor with ApprovalPipeline", () => {
       );
       const calls = await store.listToolCalls("sess-1");
       expect(calls).toHaveLength(1);
-      expect(calls[0].approvalStatus).toBe("user-denied");
+      expect(calls[0].approvalStatus).toBe("policy-denied");
     });
   });
 
-  describe("backward compatibility: no approval pipeline", () => {
+  describe("without an approval pipeline", () => {
     it("should auto-allow all tools when no approval configured", async () => {
       const executor = createToolExecutor({
         findTool: (name) => (name === "echo" ? echoTool : undefined),
@@ -159,7 +159,7 @@ describe("ToolExecutor with ApprovalPipeline", () => {
       });
 
       const result = await executor.execute(
-        makeCall("echo", { message: "legacy" }),
+        makeCall("echo", { message: "unconfigured" }),
         ctx,
       );
       expect(result.success).toBe(true);
@@ -176,7 +176,7 @@ describe("ToolExecutor with ApprovalPipeline", () => {
     ];
 
     it("should allow explicitly whitelisted tool by name", async () => {
-      const approval = createApprovalPipeline(store, rules);
+      const approval = createApprovalPipeline(rules);
       const executor = createToolExecutor({
         findTool: (name) => (name === "echo" ? echoTool : undefined),
         store,

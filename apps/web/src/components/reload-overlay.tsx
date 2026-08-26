@@ -54,7 +54,7 @@ export function ReloadOverlay() {
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex flex-col items-center justify-center gap-3 bg-background/80 backdrop-blur-sm"
+      className="fixed inset-0 z-200 flex flex-col items-center justify-center gap-3 bg-background/80 backdrop-blur-sm"
       role="alert"
       aria-live="assertive"
     >

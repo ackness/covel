@@ -9,7 +9,7 @@ Thanks for considering contributing! This document outlines the process for cont
 ## Development environment
 
 - Node.js ≥ 26
-- pnpm 11.9.0 (see the root `package.json` `packageManager`)
+- pnpm 11.22.0 (see the root `package.json` `packageManager`)
 - Optional: Docker (for PostgreSQL mode)
 
 ```bash
@@ -17,6 +17,22 @@ pnpm install
 cp llm.toml.example llm.toml   # configure LLM slots
 cp .env.llm.example .env.llm   # fill in API keys
 pnpm dev                       # start frontend + backend
+```
+
+### PostgreSQL 18 development environment
+
+Docker Compose uses PostgreSQL 18 with pgvector 0.8.6 and stores data in the
+new `pgdata18` volume. The previous PG17 `pgdata` volume is not mounted,
+migrated, or deleted; the first `pnpm docker:build` after this upgrade creates
+an empty PG18 development database.
+
+To rebuild the current PG18 development database, run the commands below.
+`docker:down-all` deletes the current Compose project's `pgdata18` volume and
+all of its data, but does not delete the old `pgdata` volume:
+
+```bash
+pnpm docker:down-all
+pnpm docker:build
 ```
 
 ## Development conventions
@@ -90,18 +106,20 @@ Covel releases are driven by Git tags.
    ```
 
 5. [`.github/workflows/release.yml`](../.github/workflows/release.yml) will, on any `v*` tag push:
-   - Build Electron macOS arm64 `.dmg` / `.zip` on a macOS runner
+   - Validate the tag, immutable commit SHA, workspace versions, CHANGELOG, and release gates
+   - Build and verify Electron macOS arm64 `.dmg` / `.zip` and Windows x64 `.exe` artifacts
+   - Sign and notarize macOS artifacts and Authenticode-sign Windows artifacts
    - Extract the matching release notes from `docs/CHANGELOG.md`
-   - Publish the GitHub Release directly
+   - Publish or update the GitHub Release only after every gate passes
 
 6. Open the Releases page and verify the published release notes and assets
 
-### Code signing (optional)
+### Code signing (required for publication)
 
-- macOS: configure `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` in repository Secrets, and enable notarize in `apps/desktop/electron-builder.yml`
-- Windows: configure `CSC_LINK` (`.pfx`) and `CSC_KEY_PASSWORD` in Secrets
+- macOS: configure `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` in repository Secrets
+- Windows: configure `WIN_CSC_LINK` (`.pfx`) and `WIN_CSC_KEY_PASSWORD`; `WIN_CSC_TIMESTAMP_SERVER` is optional
 
-Unsigned artifacts are marked as such, and operating systems will warn on first run. See [`guide/desktop-packaging.md`](./guide/desktop-packaging.md).
+The release workflow fails when any required credential is absent and never publishes unsigned artifacts. Local non-publishing builds may remain unsigned. See [`guide/desktop-packaging.md`](./guide/desktop-packaging.md).
 
 ## Reporting issues
 

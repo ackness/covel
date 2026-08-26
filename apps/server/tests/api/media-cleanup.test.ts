@@ -32,9 +32,14 @@ function makeSession(id: string, worldId = "world-1"): SessionRecord {
     id,
     worldId,
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
+    phase: "playing",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     activePlugins: [],
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     createdAt: now,
     updatedAt: now,
   };
@@ -56,6 +61,7 @@ function createTestApp(
 
 const ORIGINAL_FLAG = process.env.COVEL_MEDIA_CLEANUP_ENABLED;
 const ORIGINAL_TIER = process.env.DEPLOYMENT_TIER;
+const ORIGINAL_OPERATOR_TOKEN = process.env.COVEL_DESKTOP_REST_TOKEN;
 
 function restoreEnv(): void {
   if (ORIGINAL_FLAG === undefined) {
@@ -68,12 +74,18 @@ function restoreEnv(): void {
   } else {
     process.env.DEPLOYMENT_TIER = ORIGINAL_TIER;
   }
+  if (ORIGINAL_OPERATOR_TOKEN === undefined) {
+    delete process.env.COVEL_DESKTOP_REST_TOKEN;
+  } else {
+    process.env.COVEL_DESKTOP_REST_TOKEN = ORIGINAL_OPERATOR_TOKEN;
+  }
 }
 
 describe("POST /api/media/cleanup gate", () => {
   beforeEach(() => {
     delete process.env.COVEL_MEDIA_CLEANUP_ENABLED;
     delete process.env.DEPLOYMENT_TIER;
+    delete process.env.COVEL_DESKTOP_REST_TOKEN;
   });
   afterEach(() => {
     restoreEnv();
@@ -104,6 +116,33 @@ describe("POST /api/media/cleanup gate", () => {
     expect(res.status).toBe(503);
     const body = (await res.json()) as { code: string };
     expect(body.code).toBe("unavailable");
+  });
+
+  it("requires the operator token on the demo hosted tier", async () => {
+    process.env.COVEL_MEDIA_CLEANUP_ENABLED = "true";
+    process.env.DEPLOYMENT_TIER = "demo";
+    process.env.COVEL_DESKTOP_REST_TOKEN = "operator-secret";
+    const app = createTestApp(createMemoryMediaStore());
+
+    const denied = await app.request("/api/media/cleanup", {
+      method: "POST",
+      body: JSON.stringify({ dryRun: true }),
+      headers: { "content-type": "application/json" },
+    });
+    expect(denied.status).toBe(401);
+    expect(await denied.json()).toMatchObject({
+      code: "operator_token_required",
+    });
+
+    const allowed = await app.request("/api/media/cleanup", {
+      method: "POST",
+      body: JSON.stringify({ dryRun: true }),
+      headers: {
+        authorization: "Bearer operator-secret",
+        "content-type": "application/json",
+      },
+    });
+    expect(allowed.status).toBe(200);
   });
 
   it("returns 400 invalid_request when dryRun:false missing confirmation header", async () => {

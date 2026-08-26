@@ -32,6 +32,10 @@ import type {
   LLMToolDefinition,
   LLMResponseFormat,
 } from "../llm/llm-adapter.js";
+import {
+  combineAbortSignals,
+  getTurnExecutionSignal,
+} from "../turn-executor/turn-control.js";
 
 export interface RequestLLMResponseOptions {
   readonly manifest: RuntimeManifest;
@@ -71,6 +75,14 @@ export async function requestLLMResponse(
     onStreamDelta,
     onQueueWait,
   } = opts;
+  // Target resolution enriches telemetry only. A custom resolver failure must
+  // not bypass the normal retry/error path of the actual LLM request.
+  let resolvedTarget: ReturnType<NonNullable<typeof deps.llm.resolveTarget>>;
+  try {
+    resolvedTarget = deps.llm.resolveTarget?.(effectiveModel);
+  } catch {
+    resolvedTarget = undefined;
+  }
 
   const callParams = {
     llm: deps.llm,
@@ -85,8 +97,14 @@ export async function requestLLMResponse(
     emitter: deps.emitter,
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
-    // Player abort cuts the in-flight call/stream and bypasses salvage.
-    abortSignal: deps.turnControl?.signal,
+    ...(resolvedTarget
+      ? {
+          resolvedModel: resolvedTarget.model,
+          provider: resolvedTarget.provider,
+        }
+      : {}),
+    // Player aborts and parent execution deadlines both cut the in-flight call.
+    abortSignal: getTurnExecutionSignal(deps.turnControl),
   } as const;
 
   if (useStreaming) {
@@ -173,6 +191,8 @@ async function requestNonStreaming(
       responseFormat,
       retryPolicy,
       deadline,
+      resolvedModel: callParams.resolvedModel,
+      provider: callParams.provider,
     });
   }
 }
@@ -186,6 +206,8 @@ async function malformedToolArgsFallback(args: {
   responseFormat: LLMResponseFormat | undefined;
   retryPolicy: RetryPolicy;
   deadline: number;
+  resolvedModel: string | undefined;
+  provider: string | undefined;
 }): Promise<LLMResponse> {
   const {
     manifest,
@@ -196,22 +218,28 @@ async function malformedToolArgsFallback(args: {
     responseFormat,
     retryPolicy,
     deadline,
+    resolvedModel,
+    provider,
   } = args;
   const fallbackCallStart = Date.now();
-  // Malformed-tool-arguments fallback bypasses the retry helper, so provider
-  // identity is not available here. Explicit `null` signals "provider unknown
-  // at this call site" and survives JSON serialisation (unlike `undefined`,
-  // which is dropped), keeping the payload schema uniform across emit sites.
-  await emitLlmCalling(deps.emitter, {
-    runtimeId: manifest.name,
-    pluginId: manifest.pluginId,
-    slot: effectiveModel,
-    model: effectiveModel,
-    provider: null,
-    messages,
-    tools: toolDefs,
-    attempt: 0,
-  });
+  let actualTarget =
+    provider && resolvedModel ? { provider, model: resolvedModel } : undefined;
+  let callingEmitted = false;
+  const ensureCalling = async (): Promise<void> => {
+    if (callingEmitted) return;
+    callingEmitted = true;
+    await emitLlmCalling(deps.emitter, {
+      runtimeId: manifest.name,
+      pluginId: manifest.pluginId,
+      slot: effectiveModel,
+      model: actualTarget?.model ?? resolvedModel ?? effectiveModel,
+      provider: actualTarget?.provider ?? provider,
+      messages,
+      tools: toolDefs,
+      attempt: 0,
+      startedAt: new Date(fallbackCallStart).toISOString(),
+    });
+  };
   let response: LLMResponse;
   try {
     response = await deps.llm.generate({
@@ -219,16 +247,24 @@ async function malformedToolArgsFallback(args: {
       messages,
       tools: toolDefs,
       responseFormat,
-      signal: AbortSignal.timeout(
-        Math.max(
-          1000,
-          Math.min(retryPolicy.callTimeoutMs, deadline - Date.now()),
+      onTargetAttempt: (target) => {
+        actualTarget = target;
+      },
+      signal: combineAbortSignals(
+        getTurnExecutionSignal(deps.turnControl),
+        AbortSignal.timeout(
+          Math.max(
+            1000,
+            Math.min(retryPolicy.callTimeoutMs, deadline - Date.now()),
+          ),
         ),
       ),
     });
+    await ensureCalling();
   } catch (fallbackErr) {
     // Pair every `llm.calling` with an `llm.responded` on the error path so
     // trace-viewer pairing stays intact when this fallback generate throws.
+    await ensureCalling();
     await emitLlmRespondedError(deps.emitter, {
       runtimeId: manifest.name,
       pluginId: manifest.pluginId,

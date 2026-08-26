@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   autoBindDiscoveredSlots,
+  bindSlotToProvider,
   collectLlmSlotPresetCandidates,
+  createProviderScopedModelChoices,
   createVisibleSlotIds,
   discoverRuntimeSlotIds,
 } from "../llm-slots-model.js";
@@ -133,5 +135,74 @@ describe("llm slots model", () => {
         isCustom: true,
       },
     ]);
+  });
+
+  it("keeps a server base model out of another provider's model choices", () => {
+    const choices = createProviderScopedModelChoices({
+      provider: "ali-coding-plan",
+      presets: [
+        { id: "slot-story", provider: "deepseek" },
+        { id: "qwen-flash", provider: "ali-coding-plan" },
+        { id: "qwen-plus", provider: "ali-coding-plan" },
+      ],
+      serverSlot: { provider: "deepseek", model: "deepseek-v4-flash" },
+    });
+
+    expect(choices.includesServerBase).toBe(false);
+    expect(choices.presets.map((preset) => preset.id)).toEqual([
+      "qwen-flash",
+      "qwen-plus",
+    ]);
+  });
+
+  it("offers the server base only within its own provider", () => {
+    const choices = createProviderScopedModelChoices({
+      provider: "deepseek",
+      presets: [
+        {
+          id: "slot-story",
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+        },
+        {
+          id: "slot-plugin",
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+        },
+        {
+          id: "custom-deepseek",
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+          isCustom: true,
+        },
+      ],
+      serverSlot: { provider: "deepseek", model: "deepseek-v4-flash" },
+    });
+
+    expect(choices.includesServerBase).toBe(true);
+    expect(choices.presets.map((preset) => preset.id)).toEqual([
+      "custom-deepseek",
+    ]);
+  });
+
+  it("clears an override when switching back to the server provider", () => {
+    expect(
+      bindSlotToProvider({
+        slotId: "story",
+        provider: "deepseek",
+        slotConfig: {
+          story: { modelRef: "qwen-flash" },
+          plugin: { presetId: "slot-plugin" },
+        },
+        presets: [
+          {
+            id: "qwen-flash",
+            provider: "ali-coding-plan",
+            isCustom: true,
+          },
+        ],
+        serverSlot: { provider: "deepseek" },
+      }),
+    ).toEqual({ plugin: { presetId: "slot-plugin" } });
   });
 });

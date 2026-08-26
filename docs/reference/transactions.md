@@ -51,6 +51,7 @@ backend must pass:
 - `returns the callback result`
 - `does not swallow writes across concurrent transactions`
 - `rolls back only the failing concurrent transaction`
+- `does not expose writes through the root store before the transaction settles`
 - `rejects a nested withTransaction with a clear error instead of deadlocking`
 - `recovers and accepts a fresh withTransaction after a nested rejection`
 
@@ -83,22 +84,6 @@ starts, so neither loses writes.
 
 - File: `packages/store/src/sqlite/sqlite-transactions.ts`
 
-### IdbStore
-
-Lazy first-touch snapshot. `withTransaction` wraps an internal snapshot primitive
-that does not pre-`getAll()` every object store —— 那样会和并发的 SSE / interval /
-其他 tab 写入冲突。它只初始化两个跟踪结构：`idbSnapshot: Map<storeName, rows[]>` 与
-`touchedStores: Set<storeName>`。每次 `put` / `delete` 通过 `ensureStoreSnapshot(name)`
-检查 `touchedStores`：首次 mutation 时调用 `db.getAll(name)` + `structuredClone` 把当前
-rows 抓进 `idbSnapshot` 并把 name 加进 set，后续 mutation 命中 set 直接跳过。回滚只
-clear + refill `touchedStores` 中的 object store，未触碰的 store 完全不动 —— 因此事务
-开启后落入未触碰 store 的并发写入不会被 rollback 覆盖。
-
-- Files: `packages/store/src/indexeddb/idb-store.ts` (wires `withTransaction`),
-  `packages/store/src/indexeddb/idb-transaction.ts` (internal snapshot primitive)
-- Runtime environment: browser IndexedDB plus `fake-indexeddb` polyfill
-  for tests.
-
 ### PgStore
 
 `postgres.js` is a connection pool, so a bare `unsafe('BEGIN')` does not bind to a
@@ -112,24 +97,23 @@ run on independent connections — true parallel transactions.
 
 ### Cross-backend semantics (read before adopting)
 
-The four backends honor the same observable contract (atomic commit / rollback,
+The three backends honor the same observable contract (atomic commit / rollback,
 nested-call rejection) but differ in concurrency and isolation:
 
-| Backend                       | Concurrency model                                                                                                                                                                                                                                                 | Concurrent non-tx write during a callback                                                                              |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| **PgStore**                   | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                                                                                                                                                          | Isolated on its own connection; not folded in.                                                                         |
-| **SqliteStore / MemoryStore** | **Single connection / single snapshot.** Concurrent calls are **serialized** through a promise chain — each runs its full BEGIN…COMMIT before the next starts, so neither loses writes. Mutating store methods share that same queue (**serialized write gate**). | **Queued until the transaction settles** — never folded in. Writes issued from _inside_ the callback still run inline. |
-| **IdbStore**                  | **Single snapshot**, serialized like above, but **without** the write gate (browser single-user local mode).                                                                                                                                                      | **Folded into the open transaction** and committed / rolled back with it.                                              |
+| Backend                       | Concurrency model                                                                                                                   | Concurrent root operation during a callback                                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **PgStore**                   | Each call runs on its **own pooled connection** (Drizzle `db.transaction`) — true parallel transactions.                            | Reads observe their database snapshot; writes stay on their own connection and are not folded in.                              |
+| **SqliteStore / MemoryStore** | **Single connection / live state.** Transactions and every root read/write share one promise queue (**serialized operation gate**). | **Queued until the transaction settles** — no dirty read and no folded write. Operations issued through `tx` still run inline. |
 
-> **Serialized write gate (SQLite / Memory).** One connection means a
-> transaction cannot isolate: a write issued elsewhere while a transaction is
-> open used to land inside it — harmless on COMMIT, silently **lost** on
-> ROLLBACK. The session lock orders writes belonging to one session's turn, but
+> **Serialized operation gate (SQLite / Memory).** One connection/live state
+> means a transaction cannot isolate by itself: a write issued elsewhere while
+> a transaction is open used to land inside it, while an outside read could see
+> data that was later rolled back. The session lock orders writes belonging to one session's turn, but
 > it is per-session and some routes hold no session lock at all (world imports,
 > character edits, settings), so a write from another session could vanish.
-> `packages/store/src/serialized-write-gate.ts` puts transactions and
-> outside-of-transaction writes on **one queue**: an outside write waits for the
-> transaction instead of joining it; a write from inside the callback runs
+> `packages/store/src/serialized-write-gate.ts` puts transactions and all root
+> store operations on **one queue**: outside reads/writes wait for the
+> transaction; operations through the `tx` scope run
 > inline (it belongs to that transaction, and queueing it would deadlock).
 > Inside vs outside is decided by `AsyncLocalStorage`, so a genuinely concurrent
 > caller that starts while a transaction is suspended at an `await` is not
@@ -150,13 +134,30 @@ nested-call rejection) but differ in concurrency and isolation:
 > gap without a store-connection rearchitecture. Regression coverage:
 > `packages/store/tests/serialized-write-gate.test.ts`.
 
+### MediaStore transaction and concurrency fixes
+
+Media lifecycle mutations use per-resource atomicity alongside the DataStore
+transactions:
+
+- SQLite/local-fs cleanup performs its final owner/reference check and asset
+  deletion inside `BEGIN IMMEDIATE`. Its MediaStore shares the DataStore
+  connection gate, so a concurrent transaction cannot absorb or lose a media
+  write on rollback. Cleanup reports only assets actually deleted.
+- PostgreSQL `put`, ownership, reference, deletion, and cleanup operations use
+  a transaction-scoped advisory lock keyed by content id. This serializes
+  first-writer-wins and reference/deletion races across processes; cleanup also
+  uses `NOT EXISTS` in the guarded delete.
+- IndexedDB MediaStore keeps ownership and reference updates atomic in its
+  object-store transactions. It is a media backend only; browser game-state
+  persistence is handled by BrowserVault below, not by an IndexedDB DataStore.
+
 ### Nesting is rejected on every backend
 
 Calling `withTransaction` from inside another `withTransaction` callback is a
 programming error and is **rejected synchronously with a clear error** on all
-four backends:
+three backends:
 
-- **Serialized backends (SQLite / Memory / IndexedDB):** the inner call would
+- **Serialized backends (SQLite / Memory):** the inner call would
   queue behind the outer transaction _on the serialization chain_ — and the
   outer call is awaiting the inner — a permanent **deadlock**. The guard turns
   that silent hang into an immediate rejection.
@@ -176,15 +177,27 @@ writes directly through the outer callback's tx scope."`
   context. `isNested()` — checked synchronously when a new `withTransaction` is
   entered — returns `true` only for a re-entrant (nested) call and `false` for an
   independent concurrent caller, so legitimate concurrency is never misflagged.
-- **IdbStore (browser):** `AsyncLocalStorage` is unavailable in the browser
-  bundle, so it uses a coarser synchronous boolean. It reliably rejects nesting
-  (the deadlock case) but may also reject a genuinely concurrent call issued
-  while another callback is mid-flight — an edge that is irrelevant for IdbStore's
-  single-user local mode.
+  The shared error builder lives in `packages/store/src/tx-nesting-error.ts`.
+  The AsyncLocalStorage guard is Node-only because all `DataStore` backends run
+  on the server.
 
-The shared error builder lives in `packages/store/src/tx-nesting-error.ts`
-(browser-safe; imported by every backend). The AsyncLocalStorage guard is
-Node-only and is never pulled into the IdbStore browser bundle.
+## BrowserVault transactions
+
+Browser-private persistence is deliberately outside `DataStore`. Dexie owns
+the IndexedDB transaction and schema lifecycle in
+`apps/web/src/services/storage/browser-vault.ts`:
+
+- a checkpoint and its compact action-idempotency row commit in one `rw`
+  transaction;
+- only the latest full checkpoint is retained;
+- `baseRevision`, `revision`, and `actionId` reject stale or divergent writes;
+- browser checkpoint upload/download operations are serialized by
+  `LocalDataService`;
+- the transient server workspace uses `MemoryStore.withTransaction` when a
+  checkpoint replaces a session.
+
+This is a synchronization contract, not an attempt to reproduce the full
+server transaction API in the browser.
 
 ## Kernel integration
 
@@ -226,8 +239,8 @@ Node-only and is never pulled into the IdbStore browser bundle.
 >   通过 `sessionClock` 参数把逻辑回合计数（`completedPlayerTurns` 的 logical-turn
 >   ledger 幂等推进）与 setup 频段翻转（`phase: setup → playing` + `setupRuntimes`
 >   镜像）折叠进 proposal 提交后、`commit_status` 结算前的同一事务（
->   `commit/session-clock.ts` 的 `applySessionClockTx`）。legacy 字段 `turnCount` /
->   `preGameCompleted` 保持冻结，在 API / snapshot 读取时由三字段公式派生。任一 proposal 失败即整体回滚——
+>   `commit/session-clock.ts` 的 `applySessionClockTx`）。API 与 snapshot 直接保存
+>   current-only 时钟字段。任一 proposal 失败即整体回滚——
 >   计数、phase、setup 镜像都不推进，ledger 不写入。manual / background / resume
 >   finalize 不传 `sessionClock`，时钟不动。
 > - **Action 级 plugin-rpc 锁边界**：action handler 在 session lock 内完成读、校验和写入；
@@ -298,14 +311,23 @@ Table + index DDL is derived from the Drizzle schema
 (`packages/store/src/{sqlite,postgres}/schema.ts`) via
 `packages/store/src/common/ddl-codegen.ts`, using `CREATE TABLE IF NOT EXISTS`
 and additive `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` so fresh installs and
-existing databases both boot. The store package does **not** ship destructive
-auto-migrations — when a constraint becomes stricter (e.g. `media_refs UNIQUE`
-was widened from `(session_id, media_id, plugin_id)` to `(session_id, media_id)`
-to fix NULL-pluginId duplicate rows; see
-[`media-store.md`](./media-store.md#ownership)), the DDL still creates the new
-index, but operators with legacy duplicates must run a one-off cleanup SQL before
-the new index can be applied. Each such migration is documented next to the
-affected table in the relevant reference doc.
+existing databases both boot. Store-managed migrations include the lossless
+character/lorebook identity change from a global `id` primary key to
+`(session_id, id)`: SQLite rebuilds both tables in one transaction, PostgreSQL
+changes the primary-key constraint after checking the catalog, and browser
+IndexedDB v15 rebuilds both object stores in the active versionchange
+transaction. Existing rows remain unchanged because the legacy global key is a
+subset of the new composite key; operators should still back up durable stores
+before a release migration.
+
+Constraint changes that require data cleanup remain operator-managed. For
+example, `media_refs UNIQUE` was widened from
+`(session_id, media_id, plugin_id)` to `(session_id, media_id)` to fix
+NULL-pluginId duplicate rows (see
+[`media-store.md`](./media-store.md#ownership)). The DDL still creates the new
+index, but operators with legacy duplicates must run a one-off cleanup SQL
+before the new index can be applied. Each such migration is documented next to
+the affected table in the relevant reference doc.
 
 ## References
 

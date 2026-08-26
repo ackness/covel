@@ -12,8 +12,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { resolveI18nText } from "@covel/shared";
 import type { ExecutionStep } from "@/stores/session-store.js";
 import type { PackageSummary } from "@/services/api.js";
+import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
 
 interface RuntimeStatus {
   runtimeId: string;
@@ -133,7 +135,7 @@ function RuntimeChip({
   return (
     <span
       className={
-        "group inline-flex items-center gap-1 px-2 py-0.5 text-[11px] border transition-colors " +
+        "group inline-flex max-w-full flex-wrap items-center gap-1 px-2 py-0.5 text-[11px] border transition-colors " +
         "ui-chip " +
         (isActive
           ? "border-primary/30 bg-primary/5 text-foreground"
@@ -147,11 +149,11 @@ function RuntimeChip({
       }
     >
       <StatusIcon status={rt.status} />
-      <span className="font-medium truncate max-w-[120px] ui-chip-name">
+      <span className="font-medium truncate max-w-30 ui-chip-name">
         {rt.label}
       </span>
       {rt.status === "tool" && rt.toolName && (
-        <span className="text-[10px] text-muted-foreground truncate max-w-[140px] font-mono">
+        <span className="text-[10px] text-muted-foreground truncate max-w-35 font-mono">
           {rt.toolName}
         </span>
       )}
@@ -166,12 +168,7 @@ function RuntimeChip({
         </span>
       )}
       {rt.status === "failed" && resolvedDetail && (
-        <span
-          className="text-[10px] text-destructive/90 truncate max-w-[260px]"
-          title={resolvedDetail}
-        >
-          {resolvedDetail}
-        </span>
+        <ActionableErrorNotice error={resolvedDetail} />
       )}
       {canRetry && onRetry && (
         <button
@@ -186,17 +183,6 @@ function RuntimeChip({
         </button>
       )}
     </span>
-  );
-}
-
-function resolveDisplayName(
-  displayName: string | Record<string, string> | undefined,
-  locale: string,
-): string | undefined {
-  if (!displayName) return undefined;
-  if (typeof displayName === "string") return displayName;
-  return (
-    displayName[locale] ?? displayName["en-US"] ?? Object.values(displayName)[0]
   );
 }
 
@@ -241,7 +227,7 @@ export function ExecutionTimeline({
   // Build label map from plugin manifests (pluginId → display name)
   const RUNTIME_LABELS: Record<string, string> = {};
   for (const pkg of packages) {
-    const name = resolveDisplayName(pkg.displayName, i18n.language);
+    const name = resolveI18nText(pkg.displayName, i18n.language);
     if (name) RUNTIME_LABELS[pkg.name] = name;
   }
 

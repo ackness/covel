@@ -2,14 +2,13 @@
  * Regression tests for the PREPEND_MESSAGES / SET_OLDER_MESSAGES_CURSOR slice
  * of the session-store reducer (backward "load older" cursor pagination).
  *
- * Unlike the assets / suspensions slice tests (which re-implement the slice as
- * a pure mirror), these exercise the REAL production `reducer` + `initialState`
- * so any drift in the merge / dedup / ordering / cursor logic fails here.
+ * These exercise the real production `reducer` + `initialState`, so any drift
+ * in the merge / dedup / ordering / cursor logic fails here.
  *
  * Invariants pinned:
  *   - older batch is merged to the FRONT (never LOAD_MESSAGES overwrite)
  *   - dedup by id (overlapping boundary rows are not duplicated)
- *   - result stays ordered by createdAt (StreamMessage.timestamp) ascending
+ *   - the server-ordered older page is prepended without re-sorting live rows
  *   - olderMessagesCursor is advanced to the action's cursor (incl. null)
  *   - the previous messages array is never mutated (immutability)
  */

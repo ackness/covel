@@ -5,12 +5,6 @@
 export { HookPipeline, createHookPipeline } from "./pipeline.js";
 export { HOOK_SEMANTICS } from "./types.js";
 export {
-  registerPluginHooks,
-  activateDeferredPluginHooks,
-  type PluginHookSource,
-  type RegisterPluginHooksOptions,
-} from "./register-plugin-hooks.js";
-export {
   runSessionStartHook,
   runSessionEndHook,
   type SessionStartPayload,

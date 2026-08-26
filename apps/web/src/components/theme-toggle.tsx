@@ -21,7 +21,7 @@ export function ThemeToggle() {
     <Button
       variant="ghost"
       size="icon"
-      className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-[var(--radius-control)]"
+      className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control)"
       disabled={!canToggle}
       aria-disabled={!canToggle}
       onClick={() => {

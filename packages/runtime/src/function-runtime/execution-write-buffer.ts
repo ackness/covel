@@ -77,6 +77,24 @@ export function bufferPluginDataBatch(
   });
 }
 
+/** Buffer a plugin-data delete. */
+export function bufferPluginDataDelete(
+  buffer: ExecutionWriteBuffer,
+  ctx: HandlerHelperContext,
+  namespace: string,
+  key: string,
+): void {
+  buffer.push({
+    id: crypto.randomUUID(),
+    type: "plugin.data.delete",
+    source: proposalSource(ctx),
+    turnId: ctx.turnId,
+    sessionId: ctx.sessionId,
+    payload: { namespace, key },
+    timestamp: new Date().toISOString(),
+  });
+}
+
 /**
  * Buffer a character upsert. No `mirrorPluginId` is set: trusted guards drive
  * their own plugin-data mirror through a separate `setPluginData` call (which
@@ -126,6 +144,10 @@ export function mergePluginDataRows(
     byKey.set(compositeKey(row.namespace, row.key), row);
   for (const entry of overlay.values()) {
     const ck = compositeKey(entry.namespace, entry.key);
+    if (entry.deleted) {
+      byKey.delete(ck);
+      continue;
+    }
     const base = byKey.get(ck);
     byKey.set(ck, {
       id: base?.id ?? crypto.randomUUID(),

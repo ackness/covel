@@ -45,6 +45,12 @@ interface ParameterDefinition {
   step: number;
 }
 
+interface ReasoningProfileLookup {
+  targetKey: string;
+  profile: ReasoningEffortProfile | null;
+  succeeded: boolean;
+}
+
 const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
   {
     field: "temperature",
@@ -141,29 +147,56 @@ export function LlmAdvancedPane() {
     model: boundModel?.model ?? serverSlot?.model ?? "",
     protocol: boundModel?.protocol ?? serverSlot?.protocol,
   };
-  const [reasoningProfile, setReasoningProfile] = useState<
-    ReasoningEffortProfile | null | undefined
-  >(undefined);
+  const reasoningTargetKey = JSON.stringify([
+    effectiveTarget.provider,
+    effectiveTarget.model,
+    effectiveTarget.protocol ?? null,
+  ]);
+  const [reasoningLookup, setReasoningLookup] =
+    useState<ReasoningProfileLookup>();
+  const reasoningProfile =
+    reasoningLookup?.targetKey === reasoningTargetKey
+      ? reasoningLookup.profile
+      : undefined;
+  const canPruneReasoningOverride =
+    reasoningLookup?.targetKey === reasoningTargetKey &&
+    reasoningLookup.succeeded;
 
   useEffect(() => {
     let active = true;
     if (!effectiveTarget.model) {
-      setReasoningProfile(null);
+      setReasoningLookup({
+        targetKey: reasoningTargetKey,
+        profile: null,
+        succeeded: false,
+      });
       return () => {
         active = false;
       };
     }
-    setReasoningProfile(undefined);
+    setReasoningLookup(undefined);
     lookupModelCapabilityDetails(
       effectiveTarget.model,
       effectiveTarget.provider,
       effectiveTarget.protocol,
     )
       .then((result) => {
-        if (active) setReasoningProfile(result.reasoning);
+        if (active) {
+          setReasoningLookup({
+            targetKey: reasoningTargetKey,
+            profile: result.reasoning,
+            succeeded: true,
+          });
+        }
       })
       .catch(() => {
-        if (active) setReasoningProfile(null);
+        if (active) {
+          setReasoningLookup({
+            targetKey: reasoningTargetKey,
+            profile: null,
+            succeeded: false,
+          });
+        }
       });
     return () => {
       active = false;
@@ -172,6 +205,7 @@ export function LlmAdvancedPane() {
     effectiveTarget.model,
     effectiveTarget.provider,
     effectiveTarget.protocol,
+    reasoningTargetKey,
   ]);
   const overrideCount = Object.values(current).filter(
     (value) => value !== undefined,
@@ -197,13 +231,19 @@ export function LlmAdvancedPane() {
   };
 
   useEffect(() => {
+    if (!canPruneReasoningOverride) return;
     const next = pruneInvalidReasoningEffortOverride(
       paramOverrides,
       selectedSlot,
       reasoningProfile,
     );
     if (next !== paramOverrides) commit(next);
-  }, [reasoningProfile, selectedSlot, current.reasoningEffort]);
+  }, [
+    canPruneReasoningOverride,
+    reasoningProfile,
+    selectedSlot,
+    current.reasoningEffort,
+  ]);
 
   const resetSlot = () => {
     const next = { ...paramOverrides };

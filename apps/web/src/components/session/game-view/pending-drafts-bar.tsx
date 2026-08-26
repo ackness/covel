@@ -24,7 +24,7 @@ export function PendingDraftsBar({
     <div
       data-testid="pending-drafts"
       data-count={pendingDrafts.length}
-      className="px-3 md:px-4 py-2.5 border-t border-[var(--rule-color)] shrink-0 relative"
+      className="px-3 md:px-4 py-2.5 border-t border-(--rule-color) shrink-0 relative"
       style={{
         background:
           "color-mix(in oklab, var(--accent-primary) 4%, transparent)",
@@ -61,7 +61,7 @@ export function PendingDraftsBar({
             return (
               <span
                 key={draft.id}
-                className="group inline-flex items-start gap-1 max-w-full sm:max-w-[520px] rounded-[var(--radius-control)] border border-primary/20 bg-background pl-2 pr-0.5 py-1 text-[11px] leading-tight text-foreground shadow-sm"
+                className="group inline-flex items-start gap-1 max-w-full sm:max-w-130 rounded-(--radius-control) border border-primary/20 bg-background pl-2 pr-0.5 py-1 text-[11px] leading-tight text-foreground shadow-sm"
               >
                 <span
                   className="max-w-full overflow-hidden whitespace-normal [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
@@ -72,7 +72,7 @@ export function PendingDraftsBar({
                 <button
                   type="button"
                   onClick={() => onRemoveDraft(draft.id)}
-                  className="inline-flex items-center justify-center h-6 w-6 -my-1 shrink-0 rounded-[var(--radius-control)] text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                  className="inline-flex items-center justify-center h-6 w-6 -my-1 shrink-0 rounded-(--radius-control) text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
                   aria-label={t("session.removeDraft")}
                   title={t("session.removeDraft")}
                 >

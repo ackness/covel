@@ -1,11 +1,12 @@
 import type {
   Proposal,
+  ExecutionContext,
   RuntimeManifest,
   RuntimeResult,
   ToolCallRecord,
   TurnInput,
 } from "@covel/shared";
-import { toJsonValueOrDiagnostic } from "@covel/shared";
+import { localeLanguage, toJsonValueOrDiagnostic } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
   isSuspendSentinel,
@@ -39,7 +40,7 @@ import {
   buildToolResultMessage,
 } from "./turn-agent-tool-loop-messages.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
-import { TurnAbortedError } from "../turn-executor/turn-control.js";
+import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
 
 export interface AgentToolLoopCompleted {
   readonly finalContent: string | null;
@@ -74,6 +75,7 @@ export interface AgentToolLoopInitialState {
   readonly finalContent?: string | null;
   readonly collectedToolCalls?: readonly ToolCallRecord[];
   readonly pendingProposals?: readonly Proposal[];
+  readonly emittedEvents?: readonly EmittedEvent[];
 }
 
 export interface RunAgentToolLoopOptions {
@@ -89,6 +91,8 @@ export interface RunAgentToolLoopOptions {
   readonly hookPipeline: HookPipeline | undefined;
   readonly startTime: number;
   readonly runId: string;
+  /** Original scheduling identity, persisted if this loop suspends. */
+  readonly executionContext: ExecutionContext;
   /** Seed mid-turn state — used by the resume path. Omitted = fresh loop. */
   readonly initialState?: AgentToolLoopInitialState;
   /**
@@ -111,6 +115,7 @@ export async function runAgentToolLoop({
   hookPipeline,
   startTime,
   runId,
+  executionContext,
   initialState,
   allowSuspend = true,
 }: RunAgentToolLoopOptions): Promise<AgentToolLoopResult> {
@@ -136,10 +141,9 @@ export async function runAgentToolLoop({
   const pendingProposals: Proposal[] = [
     ...(initialState?.pendingProposals ?? []),
   ];
-  // Fresh per loop run — not seeded from initialState. A suspend mid-round
-  // that follows an emit-event call in the same LLM response would lose that
-  // event on resume; narrow edge case, not covered by SuspensionRecord today.
-  const emittedEvents: EmittedEvent[] = [];
+  const emittedEvents: EmittedEvent[] = [
+    ...(initialState?.emittedEvents ?? []),
+  ];
   let steps = 0;
 
   // Mutable: LLM-slot queue waits extend it (via onQueueWait below) so
@@ -162,6 +166,7 @@ export async function runAgentToolLoop({
     effectiveMaxSteps,
     retryPolicy,
     requireToolUse,
+    completeAfterTools,
     acceptsSteering,
     authorizedToolNames,
   } = buildAgentLoopPolicy({
@@ -228,11 +233,7 @@ export async function runAgentToolLoop({
     // additionally cut by the retry layer via the same signal). Steering:
     // merge queued player interjections into the live transcript so the
     // next LLM step sees them.
-    if (deps.turnControl?.signal?.aborted) {
-      throw new TurnAbortedError(
-        `turn aborted by player during ${manifest.name}`,
-      );
-    }
+    throwIfTurnExecutionAborted(deps.turnControl, manifest.name);
     if (acceptsSteering) {
       for (const steer of deps.turnControl?.drainSteering?.() ?? []) {
         messages.push({ role: "user", content: steer });
@@ -293,7 +294,15 @@ export async function runAgentToolLoop({
       // providers (DashScope Qwen, DeepSeek v4) accept the follow-up turn.
       messages.push(buildAssistantToolCallMessage(response));
 
-      for (const tc of response.toolCalls) {
+      let successfulCompletingToolsInResponse = 0;
+      let failedBusinessToolsInResponse = 0;
+
+      for (
+        let toolCallIndex = 0;
+        toolCallIndex < response.toolCalls.length;
+        toolCallIndex += 1
+      ) {
+        const tc = response.toolCalls[toolCallIndex]!;
         if (deps.toolExecutor) {
           const tcStart = Date.now();
 
@@ -428,8 +437,8 @@ export async function runAgentToolLoop({
           }
 
           // ── Suspend detection ────────────────────────
-          // When the suspend tool is called, capture the current loop state and
-          // persist a SuspensionRecord. The tool result is not pushed back to
+          // When the suspend tool is called, capture the current loop state as
+          // an execution-local artifact. The tool result is not pushed back to
           // the LLM; instead we exit the loop with status 'suspended'.
           //
           // The resume path runs the same loop with `allowSuspend: false`: a
@@ -447,7 +456,31 @@ export async function runAgentToolLoop({
               );
               continue;
             }
-            if (deps.store) {
+            {
+              // The captured assistant message contains the whole tool-call
+              // batch. Provider protocols require a tool-role result for every
+              // call before the next LLM request. Capture a placeholder for the
+              // suspender (resume replaces its content) and explicitly cancel
+              // later calls rather than leaving dangling ids in the transcript.
+              messages.push(
+                buildToolResultMessage({
+                  toolCallId: effectiveTc.id,
+                  content: JSON.stringify({ suspended: true }),
+                }),
+              );
+              for (const skipped of response.toolCalls.slice(
+                toolCallIndex + 1,
+              )) {
+                messages.push(
+                  buildToolResultMessage({
+                    toolCallId: skipped.id,
+                    content: JSON.stringify({
+                      error:
+                        "Tool call skipped because an earlier call suspended the runtime",
+                    }),
+                  }),
+                );
+              }
               return handleSuspension({
                 sentinel: toolResult.parsedResult,
                 manifest,
@@ -458,13 +491,13 @@ export async function runAgentToolLoop({
                 finalContent,
                 collectedToolCalls,
                 pendingProposals,
+                emittedEvents,
+                executionContext,
                 suspendToolCallId: effectiveTc.id,
                 startTime,
                 runId,
               });
             }
-            // allowSuspend but no store: fall through and treat the sentinel as
-            // an ordinary tool result (unchanged pre-suspend-feature behaviour).
           }
 
           executedToolCalls.push({
@@ -473,6 +506,14 @@ export async function runAgentToolLoop({
             result: toolResult.parsedResult,
             success: toolResult.success,
           });
+
+          if (!isRuntimeDoneSentinel(toolResult.parsedResult)) {
+            if (toolResult.success) {
+              if (completeAfterTools.has(effectiveTc.name)) {
+                successfulCompletingToolsInResponse++;
+              }
+            } else failedBusinessToolsInResponse++;
+          }
 
           // Build ToolCallRecord for RuntimeResult.toolCalls
           let parsedInput: Record<string, unknown> = {};
@@ -571,6 +612,26 @@ export async function runAgentToolLoop({
         break;
       }
 
+      // Single-shot tool runtimes do not need to ask the model for a second
+      // response whose only useful content is `runtime-done`. Execute the
+      // whole response batch first and auto-complete only when every business
+      // call in that batch succeeded. Failures stay in the transcript so the
+      // model can inspect the tool result and retry on the next step.
+      if (
+        successfulCompletingToolsInResponse > 0 &&
+        failedBusinessToolsInResponse === 0
+      ) {
+        if (!finalContent) {
+          finalContent = JSON.stringify({
+            toolCalls: collectedToolCalls
+              .filter((call) => call.toolName !== "runtime-done")
+              .map((call) => ({ name: call.toolName, output: call.output })),
+          });
+        }
+        stoppedWithResponse = true;
+        break;
+      }
+
       // Tool-loop detection: when the LLM keeps emitting the exact same
       // tool call (name + JSON args) `threshold` times in a row it's
       // almost certainly stuck in a KV-cache echo. Inject a perturbation
@@ -613,9 +674,10 @@ export async function runAgentToolLoop({
         );
         messages.push({
           role: "system",
-          content: input.locale?.toLowerCase().startsWith("zh")
-            ? "你没有调用任何工具就结束了。必须先调用声明的工具完成任务，再收尾。"
-            : "You finished without calling any tool. Call the declared tools to complete the task first, then wrap up.",
+          content:
+            localeLanguage(input.locale) === "zh"
+              ? "你没有调用任何工具就结束了。必须先调用声明的工具完成任务，再收尾。"
+              : "You finished without calling any tool. Call the declared tools to complete the task first, then wrap up.",
         });
         continue;
       }

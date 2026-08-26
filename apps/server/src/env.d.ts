@@ -6,7 +6,6 @@ import type {
   PluginRuntimeUtils,
   PluginSource,
 } from "@covel/plugin-loader";
-import type { StateManager } from "@covel/state";
 import type { EventBus } from "@covel/events";
 import type {
   LLMAdapter,
@@ -14,10 +13,12 @@ import type {
   RpcExecutor,
   PluginRpcRegistry,
   HookPipeline,
+  TurnExecutorDeps,
 } from "@covel/runtime";
 import type { RpcApprovalGate } from "@covel/approval";
 import type { RuntimeManifest } from "@covel/shared";
 import type { BudgetOptions, CompactorRunner } from "@covel/context";
+import type { ModelCapability } from "@covel/ai-provider";
 import type { SessionLock } from "./lib/session-lock.js";
 import type { EventDirectory } from "./routes/api/bootstrap/event-directory.js";
 
@@ -34,10 +35,9 @@ type EnsureEmbeddingLockFn = (sessionId: string) => Promise<void>;
 type PrepareToolsForSessionFn = (sessionId: string) => Promise<void>;
 type GetPluginSourceFn = (pluginId: string) => PluginSource | undefined;
 /**
- * Activate a community plugin's server code — its `entry` module first, then
- * any legacy `tools.local` modules, so both registration styles are live once
- * this resolves. Only runs after approval. Idempotent: returns immediately on
- * the second call. No-op for builtin/official plugins (loaded at boot).
+ * Activate a community plugin's server `entry` module after approval.
+ * Idempotent: returns immediately on the second call. No-op for builtin
+ * plugins, whose entries are loaded at boot.
  */
 type ActivatePluginServerCodeFn = (
   pluginId: string,
@@ -48,15 +48,27 @@ declare module "hono" {
   interface ContextVariableMap {
     store: DataStore;
     /**
+     * Incarnation captured by `resolveSessionParam()` for GET/HEAD requests.
+     * The bootstrap response barrier rechecks it after the route has finished
+     * reading so delete + same-id recreate cannot cross the owner check.
+     */
+    sessionReadIncarnation?: {
+      readonly sessionId: string;
+      readonly identity: string;
+    };
+    /**
      * Backend of the DataStore actually instantiated by `bootstrapApi()`.
      * `memory` signals a local-mode deployment (frontend persists to browser
      * IndexedDB; server-side sessions are transient sync copies).
      */
     storeBackend?: StoreBackend;
-    stateManager: StateManager;
     eventBus: EventBus;
     pluginRegistry: PluginRegistry;
     llmAdapter: LLMAdapter;
+    /** True when per-request headers replaced the startup LLM facade. */
+    requestLlmOverridden?: boolean;
+    /** Effective default narrative capability for request budget rebinding. */
+    requestNarrativeCapability?: ModelCapability;
     /**
      * Narrow gateway facade exposed to function-runtime handlers via
      * `FunctionHandlerContext.gateway`. Set by `bootstrapApi()` when the
@@ -74,6 +86,8 @@ declare module "hono" {
     toolExecutor: ToolExecutor;
     resolveModel: ResolveModelFn;
     compactorRunner: CompactorRunner;
+    /** Request-visible memory system wired by the bootstrap composition root. */
+    memorySystem?: NonNullable<TurnExecutorDeps["memorySystem"]>;
     /**
      * Prompt-assembly hard-prune budget (`applyBudget`), derived from the
      * narrative slot's model capability. Optional so hand-built test DI
@@ -131,11 +145,10 @@ declare module "hono" {
      */
     reservedPluginIds?: ReadonlySet<string>;
     /**
-     * Activates a community plugin's server code (`entry` + legacy
-     * `tools.local`). Called from the plugin-rpc executor right before a
-     * runtime runs (so its registrations resolve) and from the approvals
-     * decision route after `allow` (so they are pre-loaded before the
-     * renderer retries the original RPC).
+     * Activates a community plugin's server `entry` module. Called from the
+     * plugin-rpc executor right before a runtime runs (so its registrations
+     * resolve) and from the approvals decision route after `allow` (so they
+     * are pre-loaded before the renderer retries the original RPC).
      *
      * Optional so tests with hand-built DI middleware don't have to wire it.
      */

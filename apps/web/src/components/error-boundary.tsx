@@ -92,7 +92,7 @@ export class PluginSurfaceBoundary extends BaseBoundary {
     const label = this.props.surfaceLabel;
     return (
       <div className="border border-destructive/35 bg-destructive/10 px-3 py-2 text-xs text-destructive space-y-1">
-        <p className="leading-relaxed break-words [overflow-wrap:anywhere]">
+        <p className="leading-relaxed wrap-break-word">
           {label
             ? i18n.t("error.boundary.pluginSurfaceNamed", {
                 label,

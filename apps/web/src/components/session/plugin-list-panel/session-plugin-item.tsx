@@ -26,17 +26,20 @@ export function SessionPluginItem({
   resolvedSlots,
   sessionId,
   runtimeModelOverrides,
+  onRuntimeModelOverrideChange,
   setupRuntimes,
 }: SessionPluginItemProps) {
   const { t, i18n } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
   const runtimeKey = plugin.id;
-  const [boundSlot, handleSlotChange] = useRuntimeModelSlotOverride({
-    runtimeKey,
-    sessionId,
-    runtimeModelOverrides,
-  });
+  const [boundSlot, handleSlotChange, overrideError] =
+    useRuntimeModelSlotOverride({
+      runtimeKey,
+      sessionId,
+      runtimeModelOverrides,
+      onChange: onRuntimeModelOverrideChange,
+    });
 
   if (plugin.status === "error") {
     return (
@@ -93,7 +96,7 @@ export function SessionPluginItem({
     RUNTIME_TYPE_ICONS[plugin.runtimeType ?? "agent"] ?? "LLM";
 
   return (
-    <div className="border border-border rounded-[var(--radius-card)] overflow-hidden">
+    <div className="border border-border rounded-(--radius-card) overflow-hidden">
       <div className="flex flex-wrap items-center gap-y-1 hover:bg-muted/50 transition-colors">
         <button
           type="button"
@@ -141,7 +144,7 @@ export function SessionPluginItem({
                 "Override active — next turn will use this model",
               )}
               aria-label={t("plugin.modelBinding", "Model")}
-              className="ui-input-shell min-w-0 flex-shrink mr-2 max-w-[140px] text-[9px] bg-background border border-border px-1 py-0.5 disabled:opacity-50"
+              className="ui-input-shell min-w-0 shrink mr-2 max-w-35 text-[9px] bg-background border border-border px-1 py-0.5 disabled:opacity-50"
             >
               <option value="">
                 {plugin.model ? `auto · ${plugin.model}` : "auto"}
@@ -164,6 +167,15 @@ export function SessionPluginItem({
               no slots
             </span>
           ))}
+        {overrideError && (
+          <span
+            className="mr-2 text-[9px] text-destructive"
+            role="alert"
+            title={overrideError}
+          >
+            {t("plugin.modelOverrideFailed", "Save failed")}
+          </span>
+        )}
         {onToggle && !isLocked && (
           <button
             type="button"

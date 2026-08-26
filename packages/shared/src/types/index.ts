@@ -28,6 +28,7 @@ export type {
   LLMToolDefinition,
   LLMResponseFormat,
   LLMStreamEvent,
+  LLMTargetIdentity,
   LLMAdapter,
   SimpleCompletionAdapter,
 } from "./llm-adapter.js";
@@ -183,6 +184,7 @@ export type {
   AssetGeneratePayload,
   PluginDataPayload,
   PluginDataBatchPayload,
+  PluginDataDeletePayload,
   CharacterUpsertPayload,
   WorkingMemorySetPayload,
   LorebookUpsertPayload,
@@ -193,7 +195,6 @@ export type {
 export { PROPOSAL_TYPES } from "./proposal.js";
 
 export type {
-  ProtocolEventType,
   ProtocolEvent,
   SessionSnapshot,
   SnapshotMessage,
@@ -271,8 +272,6 @@ export type {
 
 export type {
   RpcTrustLevel,
-  RpcActionDecl,
-  RpcDeclMap,
   RpcHandlerStore,
   PluginRpcActionRequest,
   PluginRpcRequest,
@@ -339,7 +338,6 @@ export type {
   HttpMethod,
   HttpPermissionDecl,
   TriggerSpec,
-  RuntimeResultFormat,
   NormalizedRuntimeSpec,
   ExecutionOrigin,
   CountPolicy,

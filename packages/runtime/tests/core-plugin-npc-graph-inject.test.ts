@@ -51,12 +51,9 @@ async function createMainLoopStore(sessionId: string): Promise<DataStore> {
     id: sessionId,
     worldId: "world-npc-graph",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [
-      "pregame",
-      "world-init/schema-gen",
-      "char-creator/player-init",
-    ],
+    phase: "playing",
+    completedPlayerTurns: 1,
+    setupRuntimes: {},
     locale: "zh-CN",
     activePlugins: ["npc-graph", "narrator"],
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -128,9 +125,8 @@ describe("npc-graph core plugin write-read-inject path", () => {
       pluginId: "npc-graph",
       stage: "pre-turn",
       runtimeType: "function",
-      // Matches the real PLUGIN.md so the envelope→legacy projection fires and
-      // the injected `npcContext` field resolves from the flattened output.
-      resultFormat: "envelope-v1",
+      // Matches the real PLUGIN.md so the injected `npcContext` field resolves
+      // from the materialized handler value.
       handler: "./handler.js",
       trigger: { type: "scheduled", interval: 1 },
     });
@@ -156,6 +152,7 @@ describe("npc-graph core plugin write-read-inject path", () => {
       turnId: "turn-npc-inject",
       playerMessage: "我去找萧宗主谈灵脉异常。",
       locale: "zh-CN",
+      origin: "player",
     };
     const deps: TurnExecutorDeps = {
       loadRuntime: async (runtime) => {

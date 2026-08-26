@@ -1,14 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Database, BookOpen, HelpCircle, type LucideIcon } from "lucide-react";
-import * as Icons from "lucide-react";
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Badge } from "@/components/ui/badge.js";
 import { WorldDocumentPanel } from "./world-document-panel.js";
 import { PluginPanel } from "./plugin-panel.js";
@@ -33,6 +31,29 @@ import { loadPluginData } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
 import { onNavEvent } from "@/lib/nav-events.js";
 import { ignoreError } from "@/lib/ignore-error.js";
+import { resolveIcon } from "@/lib/catalog/helpers.js";
+
+export interface StorageStatusData {
+  readonly backend?: ServerStoreBackend;
+  readonly frontendMode?: "local" | "remote";
+}
+
+export interface StorageStatus {
+  readonly browserAuthority: boolean;
+  readonly backend: ServerStoreBackend | null;
+}
+
+/** Resolve the durable authority before choosing the execution-store label. */
+export function resolveStorageStatus(
+  data: StorageStatusData | null | undefined,
+): StorageStatus | null {
+  const browserAuthority = data?.frontendMode === "local";
+  if (!browserAuthority && !data?.backend) return null;
+  return {
+    browserAuthority,
+    backend: data?.backend ?? null,
+  };
+}
 
 interface RightPanelTabItem {
   id: string;
@@ -43,20 +64,15 @@ interface RightPanelTabItem {
   title?: string;
 }
 
-function resolvePluginIcon(name: string): Icons.LucideIcon {
-  const pascal = name
-    .split("-")
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join("");
-  const resolved = (Icons as Record<string, unknown>)[pascal] as
-    Icons.LucideIcon | undefined;
+function resolvePluginIcon(name: string): LucideIcon {
+  const resolved = resolveIcon(name);
   if (resolved) return resolved;
   // Surface the mismatch loudly in dev so plugin authors notice mis-typed
   // icons without crashing the panel.
   if (import.meta.env.DEV) {
     // eslint-disable-next-line no-console
     console.warn(
-      `[right-panel] unknown lucide icon "${name}" (looked up as "${pascal}") — falling back to HelpCircle`,
+      `[right-panel] unknown lucide icon "${name}" — falling back to HelpCircle`,
     );
   }
   return HelpCircle;
@@ -91,7 +107,7 @@ export function RightPanel({
 }: RightPanelProps) {
   const { t, i18n } = useTranslation();
   const pluginPanelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
-  const [storeBackend, setStoreBackend] = useState<ServerStoreBackend | null>(
+  const [storageData, setStorageData] = useState<StorageStatusData | null>(
     null,
   );
   const [pluginTabGroups, setPluginTabGroups] = useState<PluginPanelTabGroup[]>(
@@ -139,9 +155,11 @@ export function RightPanel({
 
   useEffect(() => {
     fetchServerHealth()
-      .then((h) => setStoreBackend(h.storage?.data?.backend ?? null))
+      .then((h) => setStorageData(h.storage?.data ?? null))
       .catch(ignoreError("fetch server health"));
   }, []);
+
+  const storageStatus = resolveStorageStatus(storageData);
 
   // Topbar nav → controlled tab switch. Previously this dispatched synthetic
   // mouse events at the trigger DOM node matched by aria-label, which silently
@@ -229,7 +247,7 @@ export function RightPanel({
         orientation="vertical"
       >
         <div
-          className="border-r border-[var(--rule-color)] shrink-0 w-12 overflow-hidden"
+          className="border-r border-(--rule-color) shrink-0 w-12 overflow-hidden"
           style={{
             background:
               "color-mix(in oklab, var(--surface-rail) 70%, var(--surface-page))",
@@ -258,7 +276,7 @@ export function RightPanel({
                   >
                     <span
                       aria-hidden
-                      className="absolute left-0 top-1 bottom-1 w-[2px] bg-transparent transition-colors group-data-[state=active]:bg-[var(--accent-primary)]"
+                      className="absolute left-0 top-1 bottom-1 w-0.5 bg-transparent transition-colors group-data-[state=active]:bg-(--accent-primary)"
                     />
                     <span className="flex h-full w-full flex-col items-center justify-center gap-0.5 overflow-hidden px-1">
                       <ItemIcon className="w-4 h-4 shrink-0" />
@@ -272,9 +290,9 @@ export function RightPanel({
             })}
           </TabsList>
         </div>
-        <ScrollArea className="flex-1 min-h-0 min-w-0">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
           <TabsContent value="world" className="p-4 m-0 max-w-full">
-            <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-[var(--rule-color)] pb-3">
+            <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-(--rule-color) pb-3">
               <BookOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
               <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
                 {t("session.worldTab")}
@@ -283,7 +301,7 @@ export function RightPanel({
             <WorldDocumentPanel world={world} />
           </TabsContent>
           <TabsContent value="database" className="p-4 m-0 max-w-full">
-            <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-[var(--rule-color)] pb-3">
+            <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-(--rule-color) pb-3">
               <Database className="w-4 h-4 shrink-0 text-muted-foreground" />
               <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
                 {t("session.database")}
@@ -308,7 +326,7 @@ export function RightPanel({
                 value={`plugin-${group.id}`}
                 className="p-4 m-0 max-w-full"
               >
-                <div className="mb-3 flex min-w-0 items-center gap-2 border-b border-[var(--rule-color)] pb-3">
+                <div className="mb-3 flex min-w-0 items-center gap-2 border-b border-(--rule-color) pb-3">
                   <GroupIcon className="w-4 h-4 shrink-0 text-muted-foreground" />
                   <h3 className="ui-title text-sm font-semibold tracking-tight truncate">
                     {group.label}
@@ -319,7 +337,7 @@ export function RightPanel({
                 {providerPlan.multiProvider && (
                   <div className="flex items-center gap-2 mb-2 ui-meta text-[10px] text-muted-foreground">
                     <span>{t("session.provider", "provider")}</span>
-                    <div className="flex items-center border border-[var(--rule-color)] rounded-[var(--radius-control)] overflow-hidden">
+                    <div className="flex items-center border border-(--rule-color) rounded-(--radius-control) overflow-hidden">
                       {providerPlan.providers.map((p) => {
                         const isActive =
                           p.pluginId === providerPlan.activeProviderId;
@@ -337,9 +355,9 @@ export function RightPanel({
                                 }));
                               }
                             }}
-                            className={`px-2 py-0.5 text-[10px] font-medium tracking-wider transition-colors max-w-[10rem] truncate ${
+                            className={`px-2 py-0.5 text-[10px] font-medium tracking-wider transition-colors max-w-40 truncate ${
                               isActive
-                                ? "bg-foreground text-[var(--surface-page)]"
+                                ? "bg-foreground text-(--surface-page)"
                                 : "text-muted-foreground hover:text-foreground"
                             }`}
                             title={p.pluginId}
@@ -362,7 +380,7 @@ export function RightPanel({
                 {(providerPlan.activeProviderSubs.length > 1 ||
                   (!providerPlan.multiProvider &&
                     group.subPanels.length > 1)) && (
-                  <div className="flex items-center gap-2 mb-3 border-b border-[var(--rule-color)] pb-2 flex-wrap">
+                  <div className="flex items-center gap-2 mb-3 border-b border-(--rule-color) pb-2 flex-wrap">
                     {(providerPlan.multiProvider
                       ? providerPlan.activeProviderSubs
                       : group.subPanels.map((sub, idx) => ({ sub, idx }))
@@ -381,14 +399,12 @@ export function RightPanel({
                           }
                           className={`flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium border-b-2 -mb-px transition-colors ${
                             isActive
-                              ? "border-[var(--accent-primary)] text-foreground"
+                              ? "border-(--accent-primary) text-foreground"
                               : "border-transparent text-muted-foreground hover:text-foreground"
                           }`}
                         >
                           <SubIcon className="w-3 h-3" />
-                          <span className="truncate max-w-[8rem]">
-                            {sub.label}
-                          </span>
+                          <span className="truncate max-w-32">{sub.label}</span>
                         </button>
                       );
                     })}
@@ -406,9 +422,9 @@ export function RightPanel({
               </TabsContent>
             );
           })}
-        </ScrollArea>
+        </div>
       </Tabs>
-      {storeBackend && (
+      {storageStatus && (
         <div className="border-t border-border px-3 py-2 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0 bg-[color-mix(in_oklab,var(--surface-rail)_82%,var(--surface-page))]">
           <Database className="w-3 h-3" />
           <span className="ui-meta text-[9px]">
@@ -417,22 +433,32 @@ export function RightPanel({
           <Badge
             variant="outline"
             className={`text-[9px] rounded-none ${
-              storeBackend === "pg" || storeBackend === "sqlite"
+              storageStatus.browserAuthority ||
+              storageStatus.backend === "pg" ||
+              storageStatus.backend === "sqlite"
                 ? "border-green-500/40 text-green-600 dark:text-green-400"
                 : "border-amber-500/40 text-amber-600 dark:text-amber-400"
             }`}
           >
-            {storeBackend === "pg"
-              ? "PostgreSQL"
-              : storeBackend === "sqlite"
-                ? "SQLite"
-                : "Memory"}
+            {storageStatus.browserAuthority
+              ? t("session.storage.browserIndexedDbAuthority")
+              : storageStatus.backend === "pg"
+                ? "PostgreSQL"
+                : storageStatus.backend === "sqlite"
+                  ? "SQLite"
+                  : "Memory"}
           </Badge>
-          {storeBackend === "memory" && (
-            <span className="text-amber-600 dark:text-amber-400">
-              {t("session.memoryStoreWarning", "Data lost on restart")}
+          {storageStatus.browserAuthority && (
+            <span className="text-muted-foreground">
+              {t("session.storage.memoryExecutionMirror")}
             </span>
           )}
+          {!storageStatus.browserAuthority &&
+            storageStatus.backend === "memory" && (
+              <span className="text-amber-600 dark:text-amber-400">
+                {t("session.memoryStoreWarning", "Data lost on restart")}
+              </span>
+            )}
         </div>
       )}
     </div>

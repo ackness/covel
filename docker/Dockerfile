@@ -1,33 +1,48 @@
-# syntax=docker/dockerfile:1-labs
-# node:26-alpine (26.5.0-alpine3.24 as of 2026-07-21) — pinned by digest so
+# syntax=docker/dockerfile:1.20.0@sha256:26147acbda4f14c5add9946e2fd2ed543fc402884fd75146bd342a7f6271dc1d
+# node:26.7.0-alpine3.24 (2026-08-05) — pinned by multi-platform digest so
 # the base image can't silently drift; bump the digest (and this comment)
 # when intentionally upgrading Node.
-FROM node:26-alpine@sha256:e88a35be04478413b7c71c455cd9865de9b9360e1f43456be5951032d7ac1a66 AS base
+FROM node:26.7.0-alpine3.24@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 AS base
 RUN apk add --no-cache libc6-compat libstdc++
-# Node 25+ no longer bundles corepack, so install it explicitly. Corepack
-# resolves the pnpm version from the root package.json `packageManager` field,
-# which keeps this image in sync without a second pinned version here.
-ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN npm i -g corepack && corepack enable pnpm
+# Node 25+ no longer bundles Corepack. Pin both the shim and pnpm payload so
+# builds cannot drift and the non-root runtime never downloads a package
+# manager on first start. Keep pnpm aligned with package.json.
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    COREPACK_HOME=/opt/corepack
+RUN npm i -g corepack@0.35.0 \
+    && corepack enable pnpm \
+    && corepack install --global pnpm@11.22.0 \
+    && chmod -R a+rX /opt/corepack
 WORKDIR /app
 
 # ── Stage 1: Copy workspace manifests (cached by lockfile + manifests) ───
 FROM base AS workspace-manifests
 RUN apk add --no-cache --virtual .build-deps python3 make g++
 # Every workspace importer declared in pnpm-lock.yaml must have its manifest
-# present for --frozen-lockfile to succeed, even for members the final image
-# never runs (apps/desktop). `--parents` keeps each manifest at its workspace
-# path, so the globs stay correct when a package or plugin is added — an
-# explicit per-member list silently drifts and breaks the build.
+# present for --frozen-lockfile to succeed. Stable Dockerfile 1.20 supports
+# `--parents`, which preserves workspace paths without a drifting member list.
 COPY --parents pnpm-lock.yaml package.json pnpm-workspace.yaml apps/*/package.json packages/*/package.json plugins/*/package.json ./
+# The root preinstall guard is local and lockfile-independent; it must be
+# present before either dependency install runs.
+COPY scripts/require-pnpm.mjs scripts/require-pnpm.mjs
 
 # ── Stage 2a: Dev dependencies for the web build ──────────────────
 FROM workspace-manifests AS dev-deps
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=covel-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
+    pnpm exec node scripts/require-pnpm.mjs \
+    && pnpm install --frozen-lockfile --ignore-scripts
 
 # ── Stage 2b: Production dependencies for the runtime image ────────
 FROM workspace-manifests AS prod-deps
-RUN pnpm install --prod --frozen-lockfile
+# better-sqlite3 13 ships Node-API binaries, including linuxmusl. pnpm's
+# implicit binding.gyp lifecycle path would rebuild it from source even though
+# the prebuild is present. tsx resolves esbuild's platform package directly.
+# Disable package scripts, then verify both native paths explicitly.
+RUN --mount=type=cache,id=covel-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
+    pnpm exec node scripts/require-pnpm.mjs \
+    && pnpm install --prod --frozen-lockfile --ignore-scripts \
+    && pnpm --filter @covel/store exec node -e "const Database=require('better-sqlite3');const db=new Database(':memory:');db.prepare('select 1').get();db.close()" \
+    && pnpm --filter @covel/server exec tsx --eval "const value: number = 1; if (value !== 1) process.exit(1)"
 
 # ── Stage 3: Build web frontend (static assets) ─────────────────────
 FROM dev-deps AS build-web
@@ -78,5 +93,8 @@ ENV NODE_ENV=production
 ENV SERVE_STATIC=true
 ENV STATIC_DIR=./web-dist
 EXPOSE 3001
+
+RUN mkdir -p /app/apps/server/data && chown node:node /app/apps/server/data
+USER node
 
 CMD ["pnpm", "exec", "tsx", "src/index.ts"]

@@ -67,6 +67,12 @@ export interface VectorIngestor {
   ingest(sessionId: string): Promise<IngestResult>;
 }
 
+/** Cross-process coordinator injected by the server composition root. */
+export type RunIngestExclusive = <T>(
+  sessionId: string,
+  task: () => Promise<T>,
+) => Promise<T>;
+
 /** A no-op ingestor for keyword-only deployments (no embed fn / no vector store). */
 export function createNoopIngestor(): VectorIngestor {
   return { ingest: async () => SKIPPED };
@@ -75,31 +81,104 @@ export function createNoopIngestor(): VectorIngestor {
 export function createVectorIngestor(deps: {
   readonly store: DataStore;
   readonly embed: EmbedFn;
+  readonly runIngestExclusive?: RunIngestExclusive;
 }): VectorIngestor {
-  const { store, embed } = deps;
+  const { store, embed, runIngestExclusive } = deps;
+  interface PendingIngest {
+    dirty: boolean;
+    promise: Promise<IngestResult>;
+  }
+  const pendingBySession = new Map<string, PendingIngest>();
 
-  return {
-    async ingest(sessionId: string): Promise<IngestResult> {
-      if (!supportsVector(store)) return SKIPPED;
+  const runSweep = async (sessionId: string): Promise<IngestResult> => {
+    if (!supportsVector(store)) return SKIPPED;
 
+    const session = await store.getSession(sessionId);
+    if (!session) return SKIPPED;
+    // Bind every delayed embedding write to the session incarnation whose
+    // source rows were read. A delete + same-id recreate during provider work
+    // must not let the old sweep populate the new session's vector namespace.
+    const expectedSessionCreatedAt = session.createdAt;
+
+    let target;
+    try {
       // No embedding model locked → RAG disabled for this session. Skip cleanly
       // so keyword search remains the (already-working) path.
-      const target = await store.resolveSessionVectorTarget(sessionId);
-      if (!target) return SKIPPED;
+      target = await store.resolveSessionVectorTarget(sessionId);
+    } catch (err) {
+      warn("target", sessionId, err);
+      return { skipped: false, recall: 0, archival: 0 };
+    }
+    if (!target) return SKIPPED;
 
-      let recall = 0;
-      let archival = 0;
-      try {
-        recall = await ingestRecall(store, embed, sessionId);
-      } catch (err) {
-        warn("recall", sessionId, err);
+    let recall = 0;
+    let archival = 0;
+    try {
+      recall = await ingestRecall(
+        store,
+        embed,
+        sessionId,
+        expectedSessionCreatedAt,
+      );
+    } catch (err) {
+      warn("recall", sessionId, err);
+    }
+    try {
+      archival = await ingestArchival(
+        store,
+        embed,
+        sessionId,
+        expectedSessionCreatedAt,
+      );
+    } catch (err) {
+      warn("archival", sessionId, err);
+    }
+    return { skipped: false, recall, archival };
+  };
+
+  return {
+    ingest(sessionId: string): Promise<IngestResult> {
+      const pending = pendingBySession.get(sessionId);
+      if (pending) {
+        // The active sweep may already have read its cursor/hash snapshot. Mark
+        // it dirty so one trailing pass observes data committed in that window.
+        pending.dirty = true;
+        return pending.promise;
       }
-      try {
-        archival = await ingestArchival(store, embed, sessionId);
-      } catch (err) {
-        warn("archival", sessionId, err);
-      }
-      return { skipped: false, recall, archival };
+
+      // `promise` is replaced before the state is published in the map.
+      const state: PendingIngest = {
+        dirty: false,
+        promise: Promise.resolve(SKIPPED),
+      };
+      const run = async (): Promise<IngestResult> => {
+        let skipped = true;
+        let recall = 0;
+        let archival = 0;
+        do {
+          state.dirty = false;
+          const result = await runSweep(sessionId);
+          skipped = skipped && result.skipped;
+          recall += result.recall;
+          archival += result.archival;
+        } while (state.dirty);
+        return { skipped, recall, archival };
+      };
+      const coordinatedRun = runIngestExclusive
+        ? () => runIngestExclusive(sessionId, run)
+        : run;
+      state.promise = coordinatedRun()
+        .catch((error: unknown) => {
+          warn("coordination", sessionId, error);
+          return { skipped: false, recall: 0, archival: 0 };
+        })
+        .finally(() => {
+          if (pendingBySession.get(sessionId) === state) {
+            pendingBySession.delete(sessionId);
+          }
+        });
+      pendingBySession.set(sessionId, state);
+      return state.promise;
     },
   };
 }
@@ -110,6 +189,7 @@ async function ingestRecall(
   store: VectorStore,
   embed: EmbedFn,
   sessionId: string,
+  expectedSessionCreatedAt: string,
 ): Promise<number> {
   const cursor = await readPluginJson<RecallCursor>(
     store,
@@ -158,6 +238,7 @@ async function ingestRecall(
       namespace: RECALL_NAMESPACE,
       key: msg.id,
       embedding,
+      expectedSessionCreatedAt,
       payload: JSON.stringify({
         turnId: msg.turnId ?? "",
         role: msg.role,
@@ -195,6 +276,7 @@ async function ingestArchival(
   store: VectorStore,
   embed: EmbedFn,
   sessionId: string,
+  expectedSessionCreatedAt: string,
 ): Promise<number> {
   const items = await collectArchivalItems(store, sessionId);
 
@@ -258,6 +340,7 @@ async function ingestArchival(
       namespace: ARCHIVAL_NAMESPACE,
       key: it.vecKey,
       embedding,
+      expectedSessionCreatedAt,
       payload: JSON.stringify({
         source: it.source,
         key: it.displayKey,

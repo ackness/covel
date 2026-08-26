@@ -23,10 +23,18 @@ import type { RuntimeManifest } from "@covel/shared";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { abortActiveTurn } from "../../src/routes/api/turn-control.js";
+import { parseJsonFrames } from "./sse-test-utils.js";
 
 const PLUGIN_ID = "test-concurrency";
 const RUNTIME = "test-concurrency/main";
 const SESSION_ID = "sess-turn-control-concurrency";
+
+interface ActionEnvelope {
+  type: string;
+  sessionId: string;
+  turnId?: string;
+  payload?: Record<string, unknown>;
+}
 
 function makeRegistryEntry(handler: FunctionHandler): PluginRegistryEntry {
   const manifest = {
@@ -81,12 +89,14 @@ async function readUntil(
 
 async function drain(
   reader: ReadableStreamDefaultReader<Uint8Array>,
-): Promise<string> {
+): Promise<ActionEnvelope[]> {
   const decoder = new TextDecoder();
   let out = "";
   while (true) {
     const { done, value } = await reader.read();
-    if (done) return out;
+    if (done) {
+      return parseJsonFrames<ActionEnvelope>(out);
+    }
     out += decoder.decode(value, { stream: true });
   }
 }
@@ -136,13 +146,19 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
 
     const now = new Date().toISOString();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [PLUGIN_ID],
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       createdAt: now,
     });
 
@@ -169,6 +185,7 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
     );
     const turn1Id = started1.turnId;
     expect(turn1Id).toBeTruthy();
+    if (!turn1Id) throw new Error("turn 1 did not publish a turnId");
     await firstTurnStarted;
 
     // Second action for the same session queues before emitting lifecycle
@@ -189,9 +206,26 @@ describe("POST /api/actions — steer/abort targets the executing turn, not a qu
     releaseFirstTurn?.();
     const [out1, out2] = await Promise.all([drain(reader1), drain(reader2)]);
     // Turn 1 was aborted mid-execution; turn 2 ran to completion untouched.
-    expect(out1).toContain("aborted-by-player");
-    expect(out2).toContain("execution.completed");
-    expect(out2).not.toContain("aborted-by-player");
+    const completed1 = out1.filter(
+      (event) => event.type === "execution.completed",
+    );
+    const completed2 = out2.filter(
+      (event) => event.type === "execution.completed",
+    );
+    expect(completed1).toEqual([
+      expect.objectContaining({
+        sessionId: SESSION_ID,
+        turnId: turn1Id,
+        payload: expect.objectContaining({
+          abortReason: "aborted-by-player",
+        }),
+      }),
+    ]);
+    expect(completed2).toHaveLength(1);
+    expect(completed2[0]).toMatchObject({ sessionId: SESSION_ID });
+    expect(completed2[0]?.turnId).toBeTruthy();
+    expect(completed2[0]?.turnId).not.toBe(turn1Id);
+    expect(completed2[0]?.payload).not.toHaveProperty("abortReason");
     expect(callCount).toBe(2);
   });
 });

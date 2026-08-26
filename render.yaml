@@ -33,7 +33,17 @@ services:
         value: ./web-dist
       - key: SERVER_PORT
         value: "3001"
+      # Render's proxy can only reach services that listen on all container
+      # interfaces; the application default remains loopback for local use.
+      - key: COVEL_BIND_HOST
+        value: 0.0.0.0
       - key: DEPLOYMENT_TIER
         value: demo
+      # Public demo posture is fail-closed without both independent secrets.
+      # Render generates them once and keeps their values out of the Blueprint.
+      - key: COVEL_MEDIA_TOKEN_SECRET
+        generateValue: true
+      - key: COVEL_DESKTOP_REST_TOKEN
+        generateValue: true
       - key: ENABLE_DEBUG_PAGE
         value: "false"

@@ -1,11 +1,31 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  abortSignalWithTimeout,
   assertEntityEnvelope,
+  pickLocaleText,
   readManualEntity,
   splitList,
 } from "../src/index.js";
 
 const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+describe("abortSignalWithTimeout", () => {
+  it("aborts provider work when the turn signal aborts", () => {
+    const controller = new AbortController();
+    const combined = abortSignalWithTimeout(controller.signal, 60_000);
+
+    expect(combined.aborted).toBe(false);
+    controller.abort(new Error("turn stopped"));
+    expect(combined.aborted).toBe(true);
+    expect(combined.reason).toEqual(new Error("turn stopped"));
+  });
+
+  it("returns a timeout signal when the turn has no control signal", () => {
+    const combined = abortSignalWithTimeout(undefined, 60_000);
+    expect(combined).toBeInstanceOf(AbortSignal);
+    expect(combined.aborted).toBe(false);
+  });
+});
 
 describe("splitList", () => {
   it("splits strings on comma / fullwidth-comma / newline", () => {
@@ -22,6 +42,14 @@ describe("splitList", () => {
     expect(
       splitList(Array.from({ length: 40 }, (_, i) => `k${i}`)),
     ).toHaveLength(32);
+  });
+});
+
+describe("pickLocaleText", () => {
+  it("uses the shared primary-language normalization", () => {
+    expect(pickLocaleText("ZH_cn", "中文", "English")).toBe("中文");
+    expect(pickLocaleText("en_GB", "中文", "English")).toBe("English");
+    expect(pickLocaleText(undefined, "中文", "English")).toBe("English");
   });
 });
 

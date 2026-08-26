@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
+import { Request as UndiciRequest } from "undici";
 import { openAiSpeechWire } from "../src/speech/openai-speech-wire.js";
 import { openAiTranscriptionWire } from "../src/speech/openai-transcription-wire.js";
 import type { ProviderConfig } from "../src/types.js";
@@ -124,6 +125,21 @@ describe("openai-transcription wire", () => {
     expect(formData.get("language")).toBe("en");
     expect(formData.get("transcriptionWire")).toBeNull();
     expect(formData.get("file")).toBeInstanceOf(Blob);
+
+    // Production uses the package-pinned npm Undici implementation. Its
+    // FormData brand must match or the body degrades to `[object FormData]`.
+    const transportRequest = new UndiciRequest("https://x.test", {
+      method: "POST",
+      body: formData as never,
+    });
+    expect(transportRequest.headers.get("content-type")).toMatch(
+      /^multipart\/form-data; boundary=/,
+    );
+    const serializedBody = await transportRequest.text();
+    expect(serializedBody).toContain('name="model"');
+    expect(serializedBody).toContain("whisper-1");
+    expect(serializedBody).toContain('filename="clip.wav"');
+    expect(serializedBody).toContain('name="language"');
     expect(result.text).toBe("hello world");
     expect(result.usage).toEqual({ inputTokens: 7, outputTokens: 3 });
     expect(result.warnings).toEqual([]);

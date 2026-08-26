@@ -43,7 +43,7 @@ export function AssetGenericLink({
 
   return (
     <section
-      className="ui-asset-generic flex flex-col gap-2 w-full border border-border rounded-[var(--radius-card)] p-3 bg-card"
+      className="ui-asset-generic flex flex-col gap-2 w-full border border-border rounded-(--radius-card) p-3 bg-card"
       aria-label={`asset ${view.modality}`}
     >
       <header className="ui-eyebrow text-[10px] font-mono uppercase tracking-wider text-muted-foreground/80 flex flex-wrap items-baseline gap-x-2">

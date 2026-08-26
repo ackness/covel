@@ -25,6 +25,7 @@ const baseIdentity = {
 };
 
 describe("buildLlmCallingPayload", () => {
+  const startedAt = "2026-08-26T04:00:00.000Z";
   const messages: readonly LLMMessage[] = [{ role: "user", content: "ping" }];
   const tools: readonly LLMToolDefinition[] = [
     { name: "echo", description: "echoes", parameters: { type: "object" } },
@@ -39,6 +40,7 @@ describe("buildLlmCallingPayload", () => {
       messages,
       tools,
       attempt: 0,
+      startedAt,
     });
 
     expect(payload).toMatchObject({
@@ -49,6 +51,7 @@ describe("buildLlmCallingPayload", () => {
       provider: "deepseek",
       messages,
       attempt: 0,
+      startedAt,
     });
     expect(payload.tools).toEqual([
       { name: "echo", description: "echoes", jsonSchema: { type: "object" } },
@@ -60,10 +63,11 @@ describe("buildLlmCallingPayload", () => {
       ...baseIdentity,
       slot: "x",
       model: "x",
-      provider: null,
+      provider: undefined,
       messages,
       tools: undefined,
       attempt: 0,
+      startedAt,
     });
     expect("streaming" in notStreaming).toBe(false);
 
@@ -71,32 +75,14 @@ describe("buildLlmCallingPayload", () => {
       ...baseIdentity,
       slot: "x",
       model: "x",
-      provider: null,
+      provider: undefined,
       messages,
       tools: undefined,
       attempt: 0,
+      startedAt,
       streaming: true,
     });
     expect(streaming.streaming).toBe(true);
-  });
-
-  it("accepts provider: null for direct-generate sites (survives JSON serialisation)", () => {
-    const payload = buildLlmCallingPayload({
-      ...baseIdentity,
-      slot: "x",
-      model: "x",
-      provider: null,
-      messages,
-      tools: undefined,
-      attempt: 0,
-    });
-    // Round-trip to JSON — `null` key survives, `undefined` key would be dropped.
-    const roundtripped = JSON.parse(JSON.stringify(payload)) as Record<
-      string,
-      unknown
-    >;
-    expect("provider" in roundtripped).toBe(true);
-    expect(roundtripped.provider).toBeNull();
   });
 
   it("normalises missing tools to empty array", () => {
@@ -104,10 +90,11 @@ describe("buildLlmCallingPayload", () => {
       ...baseIdentity,
       slot: "x",
       model: "x",
-      provider: null,
+      provider: undefined,
       messages,
       tools: undefined,
       attempt: 1,
+      startedAt,
     });
     expect(payload.tools).toEqual([]);
   });

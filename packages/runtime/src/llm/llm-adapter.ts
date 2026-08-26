@@ -20,5 +20,6 @@ export type {
   LLMToolDefinition,
   LLMResponseFormat,
   LLMStreamEvent,
+  LLMTargetIdentity,
   LLMAdapter,
 } from "@covel/shared";

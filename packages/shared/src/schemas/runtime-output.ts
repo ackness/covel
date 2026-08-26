@@ -28,8 +28,7 @@ export const runtimeOutputPromptMessageSchema = z.object({
 
 export const runtimeOutputMetaDataSchema = z.object({
   turn: z.number().int().nonnegative(),
-  // @deprecated in favor of the envelope-v1 `completion: "done"` signal; still
-  // accepted for the legacy resultFormat path and the compat projection.
+  // Derived from a function handler's `completion: "done"` signal.
   preGameDone: z.boolean().optional(),
   outputResponses: z.array(z.string()).optional(),
   toolCallList: z.array(runtimeOutputToolCallSchema).optional(),

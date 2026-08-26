@@ -7,7 +7,7 @@
  * onboarding.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -20,11 +20,13 @@ import {
   HardDrive,
   FileCode,
   KeyRound,
+  Network,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import {
   hasElectronIpc,
   getDesktopInfo,
+  getDesktopProxyConfig,
   isDesktopApp,
   openLogsDir,
   openConfigDir,
@@ -33,6 +35,9 @@ import {
   openKeysEnv,
   pickDataDir,
   reloadServerAndWait,
+  setDesktopProxyConfig,
+  type DesktopProxyConfig,
+  type DesktopProxyMode,
 } from "@/lib/desktop-bridge.js";
 import { resetOnboarding } from "@/components/onboarding-wizard.js";
 import { useSession } from "@/stores/session-store.js";
@@ -58,6 +63,13 @@ export function DesktopPane() {
   const [info, setInfo] = useState<DesktopInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [proxy, setProxy] = useState<DesktopProxyConfig | null>(null);
+  const [proxyMode, setProxyMode] = useState<DesktopProxyMode>("direct");
+  const [proxyUrl, setProxyUrl] = useState("");
+  const [proxyLoadState, setProxyLoadState] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const proxyLoadRequest = useRef(0);
 
   // First-launch llm.toml detection (O-6). Only surface on desktop builds
   // where opening the file actually works; Web users can't edit the sidecar
@@ -68,11 +80,56 @@ export function DesktopPane() {
   const showLlmMissingBanner =
     isDesktopApp() && state.llmConfig?.configured === false;
 
+  async function loadProxyConfig() {
+    const requestId = ++proxyLoadRequest.current;
+    setProxyLoadState("loading");
+    try {
+      const config = await getDesktopProxyConfig();
+      if (requestId !== proxyLoadRequest.current) return;
+      setProxy(config);
+      setProxyMode(config.mode);
+      setProxyUrl(config.url ?? "");
+      setProxyLoadState("ready");
+    } catch (error) {
+      if (requestId !== proxyLoadRequest.current) return;
+      setProxyLoadState("error");
+      ignoreError("load desktop proxy config")(error);
+    }
+  }
+
   useEffect(() => {
     getDesktopInfo()
       .then((i) => setInfo(i as DesktopInfo | null))
       .catch(ignoreError("load desktop info"));
+    void loadProxyConfig();
+    return () => {
+      proxyLoadRequest.current += 1;
+    };
   }, []);
+
+  async function handleSaveProxy() {
+    if (proxyLoadState !== "ready" || busy !== null) return;
+    // Invalidate any stale load response before applying the user's draft.
+    proxyLoadRequest.current += 1;
+    setBusy("proxy");
+    try {
+      const config = await setDesktopProxyConfig({
+        mode: proxyMode,
+        ...(proxyMode === "http" || proxyMode === "socks"
+          ? { url: proxyUrl }
+          : {}),
+      });
+      setProxy(config);
+      setProxyMode(config.mode);
+      setProxyUrl(config.url ?? "");
+      setToast(t("settings.desktopProxySaved"));
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+      setTimeout(() => setToast(null), 5000);
+    }
+  }
 
   async function refreshInfo() {
     setBusy("refresh");
@@ -272,6 +329,91 @@ export function DesktopPane() {
       </section>
 
       <section className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <Network className="w-3.5 h-3.5" />
+          {t("settings.desktopProxy")}
+        </h3>
+        <div className="text-[11px] text-muted-foreground leading-relaxed">
+          {t("settings.desktopProxyHint")}
+        </div>
+        <div className="grid grid-cols-[9rem_minmax(0,1fr)] gap-2">
+          <select
+            value={proxyMode}
+            disabled={proxyLoadState !== "ready" || busy !== null}
+            onChange={(event) =>
+              setProxyMode(event.target.value as DesktopProxyMode)
+            }
+            className="border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary"
+          >
+            <option value="direct">{t("settings.desktopProxyDirect")}</option>
+            <option value="system">{t("settings.desktopProxySystem")}</option>
+            <option value="http">{t("settings.desktopProxyHttp")}</option>
+            <option value="socks">{t("settings.desktopProxySocks")}</option>
+          </select>
+          {(proxyMode === "http" || proxyMode === "socks") && (
+            <input
+              value={proxyUrl}
+              disabled={proxyLoadState !== "ready" || busy !== null}
+              onChange={(event) => setProxyUrl(event.target.value)}
+              placeholder={
+                proxyMode === "socks"
+                  ? "socks5://127.0.0.1:7891"
+                  : "http://127.0.0.1:7890"
+              }
+              className="border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-primary"
+            />
+          )}
+        </div>
+        {proxyMode === "system" && !proxy?.systemAvailable && (
+          <div className="text-[10px] text-amber-600">
+            {t("settings.desktopProxySystemDirect")}
+          </div>
+        )}
+        {proxyLoadState === "loading" && (
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            {t("settings.desktopProxyLoading")}
+          </div>
+        )}
+        {proxyLoadState === "error" && (
+          <div className="flex items-center gap-2 text-[10px] text-amber-600">
+            <span>{t("settings.desktopProxyLoadFailed")}</span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-[10px]"
+              onClick={() => void loadProxyConfig()}
+              disabled={busy !== null}
+            >
+              {t("settings.desktopProxyRetry")}
+            </Button>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleSaveProxy}
+            disabled={busy !== null || proxyLoadState !== "ready"}
+          >
+            {busy === "proxy" && (
+              <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+            )}
+            {t("settings.desktopProxySave")}
+          </Button>
+          {proxy && (
+            <span className="text-[10px] text-muted-foreground">
+              {proxy.effective === "system"
+                ? t("settings.desktopProxyDynamic")
+                : proxy.effective === "proxy"
+                  ? t("settings.desktopProxyActive")
+                  : t("settings.desktopProxyInactive")}
+            </span>
+          )}
+        </div>
+      </section>
+
+      <section className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           {t("settings.desktopServer")}
         </h3>
@@ -350,7 +492,7 @@ export function DesktopPane() {
           />
         </div>
         <div className="flex items-start gap-1.5 pt-1 text-xs text-muted-foreground">
-          <Info className="w-3 h-3 mt-0.5 flex-shrink-0" />
+          <Info className="w-3 h-3 mt-0.5 shrink-0" />
           <span>
             {t("settings.desktopKeysNote", {
               path: info?.keysEnvPath ?? "~/.covel/keys.env",
@@ -373,7 +515,7 @@ function InfoRow({
 }) {
   return (
     <div className="flex items-start gap-3">
-      <span className="text-muted-foreground min-w-[80px]">{label}:</span>
+      <span className="text-muted-foreground min-w-20">{label}:</span>
       <span
         className={`flex-1 break-all ${mono ? "font-mono text-[11px]" : ""}`}
       >

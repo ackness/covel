@@ -54,6 +54,7 @@ when present; retries and recovery may fall back to the committed schema below.
 7. **Numeric stats do not enter the form** — the guard auto-fills them from the schema's `defaultValue` when the player submits.
 8. **When a select option needs an explanation, use the two-part `{ value, label }` form**: `value` is a short phrase that reads naturally inside a sentence ("returning home"), `label` is the full description that helps the player choose ("Returning home — you have history in Aoiseki, and you came back for it").
    The narrative template interpolates the `value`, so an option written as one long string yields prose like "your reason for transferring — returning home — you have history in Aoiseki, and you came back for it — is now part of your story", a dash inside a dash. When the option is already short ("Literature Club"), a plain string is fine.
+9. When `narrativeTemplate` references an optional field, generate a context-fitting `defaultValue` from the opening narrative so the filled prose is complete and natural even when the player leaves it untouched; a placeholder is only a hint, never a default. A select `defaultValue` MUST exactly equal one declared option `value` (or the string option itself).
 
 ### `create-form` parameters
 

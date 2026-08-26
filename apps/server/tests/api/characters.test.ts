@@ -35,11 +35,17 @@ describe("Character REST API routes", () => {
     store = createMemoryStore();
     app = buildApp(store);
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: "cloudmere",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "zh-CN",
       activePlugins: [],
       createdAt: new Date().toISOString(),
@@ -132,6 +138,19 @@ describe("Character REST API routes", () => {
     expect(await missingName.json()).toEqual({
       error: "name (string) is required",
     });
+  });
+
+  it("refuses writes after the session is paused", async () => {
+    await store.updateSession(sessionId, { status: "paused" });
+    const res = await app.request(`/api/sessions/${sessionId}/characters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "char-paused", name: "Too late" }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "session_not_active" });
+    expect(await store.listCharacters(sessionId)).toEqual([]);
   });
 
   it("returns 404 for unknown sessions", async () => {

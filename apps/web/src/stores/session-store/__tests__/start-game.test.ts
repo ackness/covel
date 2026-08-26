@@ -1,4 +1,5 @@
 import type { DataService } from "@/services/data-service.js";
+import type { SessionWorkspace } from "@/services/data-service.js";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,10 +27,13 @@ const session: SessionRecord = {
   id: "sess-1",
   worldId: "world-1",
   status: "active",
-  turnCount: 0,
+  phase: "setup",
+  completedPlayerTurns: 0,
+  setupRuntimes: {},
   activePlugins: ["pregame", "world-init"],
   locale: "en-US",
   createdAt: "2026-08-09T00:00:00.000Z",
+  updatedAt: "2026-08-09T00:00:00.000Z",
 };
 const world = {
   id: "world-1",
@@ -44,10 +48,25 @@ function makeDataService(order: string[]): DataService {
       order.push("create");
       return session;
     }),
+    getSession: vi.fn(async () => session),
     syncToServer: vi.fn(async () => {
       order.push("sync");
     }),
+    updateSession: vi.fn((sessionId, updates) =>
+      api.updateSession(sessionId, updates),
+    ),
+    deleteSession: vi.fn(async () => {
+      order.push("delete");
+    }),
   } as unknown as DataService;
+}
+
+function makeWorkspace(ds: DataService): SessionWorkspace {
+  return {
+    hydrate: (sessionId) => ds.syncToServer(sessionId),
+    run: (_sessionId, _actionId, mutate) => mutate(),
+    checkpoint: () => Promise.resolve(),
+  };
 }
 
 beforeEach(() => {
@@ -60,6 +79,28 @@ beforeEach(() => {
 });
 
 describe("startGameSession bootstrap order", () => {
+  it("uses the world language when creating a session", async () => {
+    const ds = makeDataService([]);
+
+    await startGameSession({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch: vi.fn(),
+      sessionIdRef: { current: null },
+      world: { ...world, locale: "en-US" },
+      presets: [],
+      llmConfig: null,
+    });
+
+    expect(ds.createSession).toHaveBeenCalledWith(
+      world.id,
+      undefined,
+      undefined,
+      undefined,
+      "en-US",
+    );
+  });
+
   it("publishes the session only after server sync and model bindings", async () => {
     const order: string[] = [];
     api.updateSession.mockImplementation(async () => {
@@ -73,8 +114,10 @@ describe("startGameSession bootstrap order", () => {
       if (action.type === "SET_SESSION") order.push("dispatch-session");
     });
 
+    const ds = makeDataService(order);
     await startGameSession({
-      ds: makeDataService(order),
+      ds,
+      workspace: makeWorkspace(ds),
       dispatch,
       sessionIdRef: { current: null },
       world,
@@ -96,9 +139,11 @@ describe("startGameSession bootstrap order", () => {
   it("keeps prep bindings when the server patch fails", async () => {
     api.updateSession.mockRejectedValue(new Error("patch failed"));
     const dispatch = vi.fn();
+    const ds = makeDataService([]);
 
     await startGameSession({
-      ds: makeDataService([]),
+      ds,
+      workspace: makeWorkspace(ds),
       dispatch,
       sessionIdRef: { current: null },
       world,
@@ -109,5 +154,94 @@ describe("startGameSession bootstrap order", () => {
 
     expect(api.clearPrepRuntimeBindings).not.toHaveBeenCalled();
     expect(dispatch).toHaveBeenCalledWith({ type: "SET_SESSION", session });
+  });
+
+  it("rejects visibly and removes a local session when server sync fails", async () => {
+    const order: string[] = [];
+    const ds = makeDataService(order);
+    vi.mocked(ds.syncToServer).mockRejectedValueOnce(new Error("offline"));
+    const dispatch = vi.fn();
+
+    await expect(
+      startGameSession({
+        ds,
+        workspace: makeWorkspace(ds),
+        dispatch,
+        sessionIdRef: { current: null },
+        world,
+        presets: [],
+        llmConfig: null,
+      }),
+    ).rejects.toThrow("offline");
+
+    expect(ds.deleteSession).toHaveBeenCalledWith(session.id);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTION_ERROR",
+      error: "offline",
+    });
+    expect(dispatch).not.toHaveBeenCalledWith({ type: "SET_SESSION", session });
+  });
+
+  it("clears a published session when initial snapshot hydration fails", async () => {
+    api.getSessionSnapshot.mockRejectedValueOnce(new Error("snapshot failed"));
+    const ds = makeDataService([]);
+    vi.mocked(ds.deleteSession).mockRejectedValueOnce(
+      new Error("cleanup failed"),
+    );
+    const dispatch = vi.fn();
+    const sessionIdRef = { current: null as string | null };
+
+    await expect(
+      startGameSession({
+        ds,
+        workspace: makeWorkspace(ds),
+        dispatch,
+        sessionIdRef,
+        world,
+        presets: [],
+        llmConfig: null,
+      }),
+    ).rejects.toThrow("snapshot failed");
+
+    expect(dispatch).toHaveBeenCalledWith({ type: "SET_SESSION", session });
+    expect(dispatch).toHaveBeenCalledWith({ type: "RESET_SESSION" });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTION_ERROR",
+      error: "snapshot failed",
+    });
+    expect(sessionIdRef.current).toBeNull();
+    expect(ds.deleteSession).toHaveBeenCalledWith(session.id);
+  });
+
+  it("drops an initial snapshot that resolves after a session switch", async () => {
+    let resolveSnapshot!: (snapshot: Record<string, unknown>) => void;
+    api.getSessionSnapshot.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSnapshot = resolve;
+      }),
+    );
+    const ds = makeDataService([]);
+    const dispatch = vi.fn();
+    const sessionIdRef = { current: null as string | null };
+
+    const starting = startGameSession({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch,
+      sessionIdRef,
+      world,
+      presets: [],
+      llmConfig: null,
+    });
+    await vi.waitFor(() => expect(sessionIdRef.current).toBe(session.id));
+    sessionIdRef.current = "sess-b";
+    resolveSnapshot({ scene: "session A" });
+    await starting;
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SET_GAME_STATE" }),
+    );
+    expect(dispatch).not.toHaveBeenCalledWith({ type: "RESET_SESSION" });
+    expect(ds.deleteSession).not.toHaveBeenCalled();
   });
 });

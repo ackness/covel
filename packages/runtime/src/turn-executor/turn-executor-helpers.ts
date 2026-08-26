@@ -58,13 +58,13 @@ export function retainPreGameRuntimes(
  * Build LLM tool definitions from a runtime's manifest declarations.
  * Looks up each declared tool in the ToolExecutor's registry to get its JSON schema.
  *
- * `context` is optional: when provided, the executor can surface session-
- * specific tool variants (e.g. `create-character` with schema-typed fields).
+ * The required context lets the executor surface session-specific tool
+ * variants and enforce plugin scoping while resolving schemas.
  */
 export function buildToolDefinitions(
   manifest: RuntimeManifest,
   toolExecutor: ToolExecutor,
-  context?: ToolCallContext,
+  context: ToolCallContext,
 ): LLMToolDefinition[] | undefined {
   // Deferred tools (tools.defer) are registered and authorized but withheld
   // from the initial advertisement — the LLM discovers them through the
@@ -171,7 +171,7 @@ export function makeSkippedResult(
     runId: crypto.randomUUID(),
     turnId: input.turnId,
     status: "skipped",
-    output: { skipped: true, reason, skippedBy: by, ...(detail ?? {}) },
+    output: { skipped: true, reason, skippedBy: by, ...detail },
     toolCalls: [],
     durationMs: 0,
     timestamp: new Date().toISOString(),

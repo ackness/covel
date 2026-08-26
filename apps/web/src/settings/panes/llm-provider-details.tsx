@@ -170,29 +170,31 @@ function ProviderModelRow({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center gap-2 px-2.5 py-2">
-      <PingButton target={{ kind: "preset", presetId }} />
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-mono text-xs" title={modelId}>
-          {modelId}
+    <div className="space-y-2 px-2.5 py-2">
+      <div className="flex min-w-0 items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-mono text-xs" title={modelId}>
+            {modelId}
+          </div>
+          <ModelCapabilitySummary provider={provider} modelId={modelId} />
         </div>
-        <ModelCapabilitySummary provider={provider} modelId={modelId} />
+        <Badge variant="outline" className="shrink-0 text-[9px]">
+          {source === "server"
+            ? t("settings.fromLlmToml", "llm.toml")
+            : t("settings.localModel", "Local model")}
+        </Badge>
+        {onDelete && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={onDelete}
+            aria-label={t("common.delete", "Delete")}
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        )}
       </div>
-      <Badge variant="outline" className="shrink-0 text-[9px]">
-        {source === "server"
-          ? t("settings.fromLlmToml", "llm.toml")
-          : t("settings.localModel", "Local model")}
-      </Badge>
-      {onDelete && (
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          onClick={onDelete}
-          aria-label={t("common.delete", "Delete")}
-        >
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      )}
+      <PingButton target={{ kind: "preset", presetId }} />
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { fmtTime } from "./-debug-helpers.js";
 import type { DebugPageData } from "./-debug-page-data.js";
 
@@ -16,13 +15,13 @@ export function SessionSidebar({
   const { t } = useTranslation();
 
   return (
-    <div className="w-56 flex-shrink-0 border-r border-[var(--rule-color)] flex flex-col min-h-0 ui-rail">
-      <div className="px-3 py-2 border-b border-[var(--rule-color)]">
+    <div className="w-56 shrink-0 border-r border-(--rule-color) flex flex-col min-h-0 ui-rail">
+      <div className="px-3 py-2 border-b border-(--rule-color)">
         <h2 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
           {t("debugger.sessions")}
         </h2>
       </div>
-      <ScrollArea className="flex-1 min-h-0">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="p-1.5 space-y-0.5">
           {sessions.length === 0 && (
             <p className="text-[11px] text-muted-foreground italic px-2 py-3">
@@ -53,7 +52,7 @@ export function SessionSidebar({
               </div>
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                 <Badge variant="secondary" className="text-[9px] h-4 px-1">
-                  {session.status} · t{session.turnCount}
+                  {session.status} · t{session.completedPlayerTurns}
                 </Badge>
                 <span title={session.createdAt}>
                   {fmtTime(session.createdAt, {
@@ -65,7 +64,7 @@ export function SessionSidebar({
             </button>
           ))}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

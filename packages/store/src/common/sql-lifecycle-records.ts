@@ -36,6 +36,7 @@ import type {
 type LogicalTurnLedgerTable = Table & {
   sessionId: Column;
   logicalTurnId: Column;
+  completedAt: Column;
 };
 
 type SetupAttemptsTable = Table & {
@@ -75,6 +76,7 @@ export type SqlLifecycleRecords = Pick<
   DataStore,
   | "insertLogicalTurnCompletion"
   | "getLogicalTurnCompletion"
+  | "listLogicalTurnCompletions"
   | "insertSetupAttempt"
   | "updateSetupAttempt"
   | "listSetupAttempts"
@@ -121,6 +123,22 @@ export function createSqlLifecycleRecords(
         },
       );
       return row ? toLogicalTurnLedgerRecord(row) : null;
+    },
+
+    async listLogicalTurnCompletions(
+      sessionId: string,
+    ): Promise<readonly LogicalTurnLedgerRecord[]> {
+      const rows = await runner.select<LogicalTurnLedgerRow>(
+        logicalTurnLedger,
+        {
+          where: eq(logicalTurnLedger.sessionId, sessionId),
+          orderBy: [
+            asc(logicalTurnLedger.completedAt),
+            asc(logicalTurnLedger.logicalTurnId),
+          ],
+        },
+      );
+      return rows.map(toLogicalTurnLedgerRecord);
     },
 
     // ── Setup-runtime attempts ───────────────────────────────────

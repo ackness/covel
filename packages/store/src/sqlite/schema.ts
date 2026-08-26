@@ -20,6 +20,7 @@ import {
   integer,
   real,
   index,
+  primaryKey,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
@@ -43,8 +44,6 @@ export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(),
   worldId: text("world_id"),
   status: text("status").notNull().default("active"),
-  turnCount: integer("turn_count").notNull().default(0),
-  preGameCompleted: text("pre_game_completed").notNull().default("[]"), // JSON
   locale: text("locale").notNull().default("zh-CN"),
   activePlugins: text("active_plugins").notNull().default("[]"),
   metadata: text("metadata"), // JSON
@@ -53,10 +52,9 @@ export const sessions = sqliteTable("sessions", {
   embeddingModelId: integer("embedding_model_id"),
   embeddingLockedAt: text("embedding_locked_at"),
   runtimeModelOverrides: text("runtime_model_overrides").default("{}"),
-  // Scheduling-redesign lifecycle fields (nullable; absent on legacy rows).
-  phase: text("phase"), // 'setup' | 'playing'
-  completedPlayerTurns: integer("completed_player_turns"),
-  setupRuntimes: text("setup_runtimes"), // JSON Record<runtimeId, SetupRuntimeState>
+  phase: text("phase").notNull().default("setup"),
+  completedPlayerTurns: integer("completed_player_turns").notNull().default(0),
+  setupRuntimes: text("setup_runtimes").notNull().default("{}"), // JSON Record<runtimeId, SetupRuntimeState>
 });
 
 // ── Turn Results ────────────────────────────────────────────────
@@ -70,11 +68,10 @@ export const turnResults = sqliteTable(
     runtimeResults: text("runtime_results").notNull(), // JSON
     conflicts: text("conflicts"), // JSON
     auditResult: text("audit_result"), // JSON
-    // Execution origin (player/manual/follower/recursive) + parent
-    // turn for recursive executions. NULL on legacy rows (= player).
-    origin: text("origin"),
+    // Execution origin + parent turn for recursive executions.
+    origin: text("origin").notNull(),
     parentTurnId: text("parent_turn_id"),
-    commitStatus: text("commit_status"),
+    commitStatus: text("commit_status").notNull(),
     durationMs: integer("duration_ms").notNull(),
     createdAt: text("created_at").notNull(),
   },
@@ -217,22 +214,6 @@ export const events = sqliteTable(
   ],
 );
 
-// ── Approvals ───────────────────────────────────────────────────
-
-export const approvals = sqliteTable(
-  "approvals",
-  {
-    id: text("id").primaryKey(),
-    sessionId: text("session_id").notNull(),
-    toolName: text("tool_name").notNull(),
-    pluginId: text("plugin_id").notNull().default(""),
-    decision: text("decision").notNull(),
-    turnId: text("turn_id").notNull(),
-    createdAt: text("created_at").notNull(),
-  },
-  (table) => [index("approvals_session_id_idx").on(table.sessionId)],
-);
-
 // ── Messages ────────────────────────────────────────────────────
 
 export const messages = sqliteTable(
@@ -258,7 +239,7 @@ export const messages = sqliteTable(
 export const characters = sqliteTable(
   "characters",
   {
-    id: text("id").primaryKey(),
+    id: text("id").notNull(),
     sessionId: text("session_id").notNull(),
     name: text("name").notNull(),
     type: text("type").notNull(),
@@ -268,7 +249,10 @@ export const characters = sqliteTable(
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [index("characters_session_id_idx").on(table.sessionId)],
+  (table) => [
+    primaryKey({ columns: [table.sessionId, table.id] }),
+    index("characters_session_id_idx").on(table.sessionId),
+  ],
 );
 
 // ── Plugin Data ─────────────────────────────────────────────────
@@ -528,7 +512,7 @@ export const mediaRefs = sqliteTable(
 export const lorebookEntries = sqliteTable(
   "lorebook_entries",
   {
-    id: text("id").primaryKey(),
+    id: text("id").notNull(),
     sessionId: text("session_id").notNull(),
     pluginId: text("plugin_id").notNull(),
     keys: text("keys").notNull(), // JSON string[]
@@ -542,6 +526,7 @@ export const lorebookEntries = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
+    primaryKey({ columns: [table.sessionId, table.id] }),
     index("lorebook_entries_session_id_idx").on(table.sessionId),
     index("lorebook_entries_plugin_id_idx").on(table.sessionId, table.pluginId),
   ],

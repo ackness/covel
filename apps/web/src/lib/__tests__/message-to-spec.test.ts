@@ -46,4 +46,24 @@ describe("formToSpec narrativeTemplate preview", () => {
     expect(preview).toContain("你已说出口——___。");
     expect(preview).toContain("关于你转学的原因：「___」。");
   });
+
+  it("carries field defaults into the rendered field spec", () => {
+    const spec = messageToSpec({
+      ...formMsg("Hello {{characterName}}"),
+      block: {
+        type: "interactive_form",
+        fields: [
+          {
+            type: "text",
+            name: "characterName",
+            label: "Name",
+            defaultValue: "Aria",
+          },
+        ],
+        narrativeTemplate: "Hello {{characterName}}",
+      },
+    } as unknown as StreamMessage) as Spec;
+    const field = spec.children?.find((c) => c.type === "FormField");
+    expect(field?.props?.defaultValue).toBe("Aria");
+  });
 });

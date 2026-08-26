@@ -10,13 +10,18 @@ import type { Proposal } from "@covel/shared";
 import type { HookPipeline } from "@covel/runtime";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { frameworkProposalSource } from "../../lib/framework-source.js";
-import { resolveSessionParam } from "./session/session-guard.js";
+import type { SessionLock } from "../../lib/session-lock.js";
+import {
+  resolveSessionParam,
+  withLockedSessionMutation,
+} from "./session/session-guard.js";
 
 type Env = {
   Variables: {
     store: DataStore;
     hookPipeline?: HookPipeline;
     eventBus?: EventBus;
+    sessionLock: SessionLock;
   };
 };
 
@@ -99,14 +104,21 @@ characterRoutes.post("/:id/characters", async (c) => {
   // upserts, the tool writes back a stale copy) and silently lose the edit.
   // Commit fires PreStateCommit / PostStateCommit — scope to this session's
   // active plugins so only their hooks run (see hooks/hook-scope.ts).
-  const result = await c
-    .get("sessionLock")
-    .withLock(sessionId, () =>
+  const committed = await withLockedSessionMutation({
+    c,
+    store,
+    sessionLock: c.get("sessionLock"),
+    sessionId,
+    expectedSession: guard.session,
+    allowedStatuses: ["active"],
+    mutate: (liveSession) =>
       runWithHookScope(
-        { activePluginIds: new Set(guard.session.activePlugins ?? []) },
+        { activePluginIds: new Set(liveSession.activePlugins) },
         () => pipeline.commit(proposal),
       ),
-    );
+  });
+  if (committed instanceof Response) return committed;
+  const result = committed;
   if (!result.committed) {
     return c.json(errorBody(result.error ?? "Failed to upsert character"), 500);
   }

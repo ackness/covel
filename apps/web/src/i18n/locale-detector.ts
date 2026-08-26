@@ -1,3 +1,5 @@
+import { localeLanguage } from "@covel/shared";
+
 /**
  * Locale constants and type guards. Storage moved to the unified
  * SettingsStore (`ui.locale`) — this module no longer reads or writes
@@ -9,9 +11,9 @@ export const DEFAULT_LOCALE: SupportedLocale = "zh-CN";
 
 function detectFromNavigator(): SupportedLocale | null {
   if (typeof navigator === "undefined") return null;
-  const lang = navigator.language?.toLowerCase() ?? "";
-  if (lang.startsWith("zh")) return "zh-CN";
-  if (lang.startsWith("en")) return "en-US";
+  const language = localeLanguage(navigator.language);
+  if (language === "zh") return "zh-CN";
+  if (language === "en") return "en-US";
   return null;
 }
 

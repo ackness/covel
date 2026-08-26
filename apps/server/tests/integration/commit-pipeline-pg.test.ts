@@ -17,34 +17,35 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import postgres from "postgres";
 import type { Proposal } from "@covel/shared";
 import type { DataStore, SessionRecord } from "@covel/store";
 import { createPgStore } from "@covel/store";
 import { createCommitPipeline } from "@covel/runtime";
+import {
+  createIsolatedPgDatabase,
+  type IsolatedPgDatabase,
+} from "./pg-test-db.js";
 
 const BASE_URL =
   process.env.DATABASE_URL ??
   "postgresql://covel:covel_dev@localhost:5432/covel";
-const ISOLATED_DB = "covel_test_commit_pipeline_pg";
+const REQUIRE_PG = process.env.COVEL_REQUIRE_PG_TESTS === "1";
+let isolatedDatabase: IsolatedPgDatabase | undefined;
 
-/** DROP+CREATE an isolated database so this file never clobbers other PG suites. */
+/** Create a process-unique database or skip locally when PostgreSQL is absent. */
 async function createIsolatedPgUrl(): Promise<string | null> {
   try {
-    const admin = postgres(BASE_URL, { max: 1, connect_timeout: 3 });
-    try {
-      await admin`SELECT 1`;
-      await admin.unsafe(
-        `DROP DATABASE IF EXISTS "${ISOLATED_DB}" WITH (FORCE)`,
-      );
-      await admin.unsafe(`CREATE DATABASE "${ISOLATED_DB}"`);
-    } finally {
-      await admin.end();
+    isolatedDatabase = await createIsolatedPgDatabase(
+      BASE_URL,
+      "covel_test_commit_pipeline_pg",
+    );
+    return isolatedDatabase.url;
+  } catch (error) {
+    if (REQUIRE_PG) {
+      throw new Error("PostgreSQL is required for commit pipeline tests", {
+        cause: error,
+      });
     }
-    const url = new URL(BASE_URL);
-    url.pathname = `/${ISOLATED_DB}`;
-    return url.toString();
-  } catch {
     return null;
   }
 }
@@ -79,10 +80,15 @@ async function seedSession(store: DataStore, id: string): Promise<void> {
     id,
     worldId: "pg-test",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    phase: "playing",
+    completedPlayerTurns: 1,
+    setupRuntimes: {},
     locale: "en",
     activePlugins: [],
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     createdAt: now,
     updatedAt: now,
   };
@@ -98,7 +104,8 @@ describe.skipIf(!isolatedUrl)("commit pipeline on real PG (bug6)", () => {
 
   afterAll(async () => {
     await store?.close();
-  });
+    await isolatedDatabase?.cleanup();
+  }, 30_000);
 
   it("commits a multi-proposal chain atomically", async () => {
     const sessionId = "pg-commit-ok";

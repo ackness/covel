@@ -78,6 +78,21 @@ export { createAnthropicMessagesAdapter } from "./adapters/anthropic-messages.js
 
 // Registries
 export { createProviderRegistry } from "./provider-registry.js";
+export {
+  configureOutboundProxy,
+  getOutboundProxyStatus,
+  normalizeOutboundProxyConfig,
+  outboundFetch,
+  parseSystemProxyRoutes,
+} from "./outbound-network.js";
+export type {
+  ConfigureOutboundProxyInput,
+  OutboundProxyConfig,
+  OutboundProxyMode,
+  OutboundProxyStatus,
+  SystemProxyResolver,
+  SystemProxyRoute,
+} from "./outbound-network.js";
 export { createPresetRegistry } from "./preset-registry.js";
 export { createSlotRegistry, type SlotRegistry } from "./slot-registry.js";
 

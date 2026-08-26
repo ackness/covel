@@ -15,10 +15,9 @@ export interface TriggerContext {
    * + 1`. Counts only committed main-loop player turns (setup interactions do
    * not advance it), so `scheduled` cadence and `startTurn` gate on the real
    * turn number rather than the raw player-message count. Frozen at execution
-   * start. Production selection always sets it; when a caller omits it (legacy
-   * test builders), `shouldTrigger` falls back to `turnNumber`.
+   * start.
    */
-  readonly logicalTurn?: number;
+  readonly logicalTurn: number;
   /** How many times this runtime has been triggered in this session. */
   readonly triggerCount: number;
   /** Turns since last trigger. */
@@ -27,9 +26,6 @@ export interface TriggerContext {
   readonly pendingEventTopics: readonly string[];
   /** Whether this is a manual trigger request for this specific runtime. */
   readonly isManualTrigger: boolean;
-  /** RuntimeIds already in the session's preGameCompleted set — used to skip
-   *  Pre-Game runtimes that are already done during Turn 0 iteration. */
-  readonly preGameCompleted: readonly string[];
 }
 
 // ── Scheduling ───────────────────────────────────────────────────

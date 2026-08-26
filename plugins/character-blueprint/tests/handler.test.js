@@ -15,7 +15,7 @@ function ctx(manualPayload) {
   };
 }
 
-// Deliberate change: handler migrated to envelope-v1, so the business return
+// Deliberate change: handler returns the canonical HandlerResult, so the business return
 // is under `result.value`; pending proposals stay on the envelope (result).
 describe("character-blueprint handler", () => {
   it("imports a blueprint into plugin data", async () => {

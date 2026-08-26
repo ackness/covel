@@ -79,7 +79,9 @@ describe("debug route components", () => {
       session: {
         id: "session-data",
         worldId: "world-1",
-        turnCount: 3,
+        phase: "playing",
+        completedPlayerTurns: 3,
+        setupRuntimes: {},
         locale: "zh-CN",
       },
       messages: [
@@ -156,6 +158,17 @@ describe("debug route components", () => {
       />,
     );
 
+    for (const section of [
+      /插件契约/,
+      /插件数据索引/,
+      /角色/,
+      /消息/,
+      /游戏状态/,
+      /执行步骤/,
+    ]) {
+      fireEvent.click(screen.getByRole("button", { name: section }));
+    }
+
     expect(screen.getByText("Mira")).toBeDefined();
     expect(screen.getByText("The door opens.")).toBeDefined();
     expect(screen.getAllByText("story-plugin").length).toBeGreaterThan(0);
@@ -197,6 +210,60 @@ describe("debug route components", () => {
     );
   });
 
+  it("keeps zero-seq flow events visible and summarizes the failed location", () => {
+    const selectedTurn = turn("turn-zero-seq", [
+      { ...traceEvent("turn.started"), id: "turn-start" },
+      {
+        ...traceEvent("runtime.started", {
+          runtimeId: "story/narrator",
+          pluginId: "story",
+          stage: "narrative",
+        }),
+        id: "runtime-start",
+      },
+      {
+        ...traceEvent("llm.calling", {
+          runtimeId: "story/narrator",
+          messages: [{ role: "system", content: "rules" }],
+        }),
+        id: "prompt-call",
+      },
+      {
+        ...traceEvent("runtime.failed", {
+          runtimeId: "story/narrator",
+          pluginId: "story",
+          error: "Provider request timed out",
+        }),
+        id: "runtime-failed",
+      },
+    ]);
+    selectedTurn.events = selectedTurn.events.map((event) => ({
+      ...event,
+      seq: 0,
+    }));
+
+    render(
+      <TraceTimeline
+        selectedSessionId="session-a"
+        turns={getVisibleTurns([selectedTurn])}
+        loading={false}
+        expandedTurns={new Set(["turn-zero-seq"])}
+        expandedRuntimes={new Set()}
+        filterCategory={null}
+        onToggleTurn={vi.fn()}
+        onToggleRuntime={vi.fn()}
+        onSelectEvent={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("turn.started")).toBeDefined();
+    expect(screen.getByText("1 次提示词")).toBeDefined();
+    expect(
+      screen.getAllByText(/Provider request timed out/).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("story · narrative")).toBeDefined();
+  });
+
   it("renders event detail payloads and closes the detail panel", () => {
     const onClose = vi.fn();
 
@@ -216,5 +283,128 @@ describe("debug route components", () => {
     );
 
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("renders current flat prompt payloads with model and tool definitions", () => {
+    render(
+      <EventDetailPanel
+        event={traceEvent("llm.calling", {
+          runtimeId: "story/narrator",
+          pluginId: "story",
+          provider: "openai",
+          model: "gpt-test",
+          slot: "default",
+          attempt: 1,
+          messages: [
+            { role: "system", content: "SYSTEM RULES: stay in character" },
+            { role: "user", content: "USER PROMPT: open the door" },
+            {
+              role: "assistant",
+              content: "Checking first.",
+              toolCalls: [
+                {
+                  id: "call-123",
+                  name: "inspect-door",
+                  arguments: { target: "door" },
+                },
+              ],
+            },
+          ],
+          tools: [
+            {
+              name: "inspect-door",
+              description: "Inspect the selected door",
+              jsonSchema: { type: "object" },
+            },
+          ],
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("SYSTEM RULES: stay in character")).toBeDefined();
+    expect(screen.getByText("USER PROMPT: open the door")).toBeDefined();
+    expect(screen.getByText("openai / gpt-test")).toBeDefined();
+    expect(screen.getByText(/可用工具定义/)).toBeDefined();
+    expect(screen.getByText("消息内工具调用")).toBeDefined();
+    expect(screen.getAllByText(/call-123/).length).toBeGreaterThan(0);
+  });
+
+  it("surfaces runtime and tool failures without opening raw payload", () => {
+    const failed = traceEvent("runtime.failed", {
+      runtimeId: "story/narrator",
+      pluginId: "story",
+      status: "failed",
+      error: "Provider request timed out",
+      durationMs: 30001,
+    });
+
+    render(<EventDetailPanel event={failed} onClose={vi.fn()} />);
+
+    expect(screen.getByText("错误详情")).toBeDefined();
+    expect(screen.getByText("Provider request timed out")).toBeDefined();
+    expect(screen.getByText("story/narrator")).toBeDefined();
+    expect(screen.getByText("30001ms")).toBeDefined();
+  });
+
+  it("reads tool input and legacy nested trace payloads", () => {
+    const { rerender } = render(
+      <EventDetailPanel
+        event={traceEvent("tool.calling", {
+          toolName: "inspect",
+          arguments: { target: "north-door" },
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getAllByText(/north-door/).length).toBeGreaterThan(0);
+
+    rerender(
+      <EventDetailPanel
+        event={traceEvent("llm.responded", {
+          data: {
+            text: "Legacy response text",
+            usage: { inputTokens: 4, outputTokens: 2 },
+          },
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Legacy response text")).toBeDefined();
+  });
+
+  it("pairs tool input and output by toolCallId", () => {
+    const calling = traceEvent("tool.calling", {
+      runtimeId: "story/tools",
+      toolName: "inspect-door",
+      toolCallId: "call-paired",
+      arguments: JSON.stringify({ target: "north-door" }),
+    });
+    const completed = traceEvent(
+      "tool.completed",
+      {
+        runtimeId: "story/tools",
+        toolName: "inspect-door",
+        toolCallId: "call-paired",
+        parsedResult: { locked: true },
+        durationMs: 1250,
+      },
+      2,
+    );
+
+    render(
+      <EventDetailPanel
+        event={completed}
+        relatedEvents={[calling, completed]}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText(/inspect-door\(\)/).length).toBeGreaterThan(0);
+    expect(screen.getByText("输入参数")).toBeDefined();
+    expect(screen.getByText("输出结果")).toBeDefined();
+    expect(screen.getByText(/north-door/)).toBeDefined();
+    expect(screen.getAllByText(/locked/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/成功 · 1250ms/)).toBeDefined();
   });
 });

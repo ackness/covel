@@ -144,9 +144,7 @@ export function DataPane() {
                       setPending({ ...pending, keys: next });
                     }}
                   />
-                  <span className="font-mono truncate max-w-[180px]">
-                    {key}
-                  </span>
+                  <span className="font-mono truncate max-w-45">{key}</span>
                   <span className="text-muted-foreground truncate flex-1">
                     = {JSON.stringify(value)}
                   </span>

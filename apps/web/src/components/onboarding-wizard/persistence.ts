@@ -10,6 +10,7 @@ import {
 import type { CustomPreset, PresetSummary } from "@/services/api.js";
 import { invalidatePingResult } from "@/components/shared/ping-button.js";
 import { getSettings } from "@/settings/store";
+import { getBuiltinProviderConnection } from "@covel/shared";
 import { CUSTOM_PROVIDER_ID, ONBOARDING_VERSION } from "./constants.js";
 import { providerOptionLabel } from "./provider-state.js";
 import type { ProviderFormState, SlotName } from "./types.js";
@@ -115,11 +116,13 @@ export async function persistSlot(
       return match.id;
     }
 
+    const connection = getBuiltinProviderConnection(form.selected);
     const presetId = upsertTransientPreset({
       name: `${providerOptionLabel(form.selected)} — ${desiredModel}`,
       provider: form.selected,
       model: desiredModel,
-      baseUrl: "",
+      baseUrl: connection?.baseUrl ?? "",
+      protocol: connection?.protocol,
       apiKey: key,
     });
     const slots = getSlotConfig();

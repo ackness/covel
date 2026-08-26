@@ -2,7 +2,11 @@
  * Execution types for turns, runtime results, and tool calls.
  */
 
-import type { ExecutionContext, JsonValue } from "./runtime-scheduling.js";
+import type {
+  ExecutionContext,
+  ExecutionOrigin,
+  JsonValue,
+} from "./runtime-scheduling.js";
 import type {
   RanSetupRuntime,
   SetupRuntimeState,
@@ -21,7 +25,7 @@ export type RuntimeStatus =
 
 // ── Tool call record ─────────────────────────────────────────────
 
-export type ApprovalStatus = "auto-allowed" | "user-allowed" | "user-denied";
+export type ApprovalStatus = "auto-allowed" | "policy-denied";
 
 export interface ToolCallRecord {
   readonly toolCallId: string;
@@ -112,18 +116,10 @@ export interface TurnInput {
   /**
    * Execution origin, stamped onto the persisted
    * `turn_results` row so turn accounting can distinguish a real player turn
-   * from a manual RPC trigger, a deferred background follower, or a nested
-   * recursiveCall. Defaults to `player` when omitted.
+   * from a manual RPC trigger, a detached background runtime, or a nested
+   * recursiveCall.
    */
-  readonly origin?: "player" | "manual" | "follower" | "recursive";
-  /**
-   * Transition field: whether the session was still in the Pre-Game band when
-   * the caller snapshotted it (before this execution ran). Only the player
-   * actions route feeds it; other entries omit it (treated as `false`). Read
-   * once at execution creation to fix `ExecutionContext.countPolicy`. Removed
-   * once the persisted phase field lands and the kernel derives this itself.
-   */
-  readonly preGamePending?: boolean;
+  readonly origin: ExecutionOrigin;
   /**
    * Identity of the player's logical turn, minted once at the player action
    * entry (actions route) and carried into `ExecutionContext.logicalTurnId`.
@@ -179,10 +175,9 @@ export interface TurnResult {
    * Immutable identity of the scheduling run that produced this result,
    * created once at `executeTurn` entry. Carries the normalized
    * `ExecutionOrigin` and counting responsibility for the commit-owning caller
-   * and later scheduling waves. Optional: entries not yet threaded through it
-   * (e.g. approval-resume) omit it during the redesign.
+   * and later scheduling waves.
    */
-  readonly executionContext?: ExecutionContext;
+  readonly executionContext: ExecutionContext;
   /**
    * Runtime results produced by nested `ctx.recursiveCall` executions,
    * flattened across depths. They are NOT part of
@@ -251,7 +246,7 @@ export interface TurnResult {
    * commit fails or the process crashes: no ghost completion event, no memory
    * derived from uncommitted state.
    */
-  readonly completeTurn?: () => void;
+  readonly completeTurn?: () => void | Promise<void>;
 }
 
 // ── Interaction protocol ────────────────────────────────────────

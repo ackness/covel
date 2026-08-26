@@ -141,6 +141,43 @@ describe("gateway", () => {
     expect(events[2]).toMatchObject({ type: "done", finishReason: "stop" });
   });
 
+  it("does not fallback after a streamed tool call is observable", async () => {
+    let callCount = 0;
+    const { gateway } = setup({
+      async *streamText() {
+        callCount++;
+        yield {
+          type: "tool-call" as const,
+          id: "call-1",
+          name: "lookup",
+          arguments: "{}",
+        };
+        throw new Error(
+          JSON.stringify({
+            code: "PROVIDER_ERROR",
+            provider: "test",
+            retriable: true,
+            statusCode: 500,
+          }),
+        );
+      },
+    });
+    const events: StreamEvent[] = [];
+
+    await expect(async () => {
+      for await (const event of gateway.streamText({
+        messages: [{ role: "user", content: "hi" }],
+      })) {
+        events.push(event);
+      }
+    }).rejects.toThrow();
+
+    expect(events).toEqual([
+      { type: "tool-call", id: "call-1", name: "lookup", arguments: "{}" },
+    ]);
+    expect(callCount).toBe(1);
+  });
+
   it("falls back to backup on primary failure", async () => {
     let callCount = 0;
     const { gateway } = setup({
@@ -171,6 +208,55 @@ describe("gateway", () => {
 
     expect(callCount).toBe(2);
     expect(result.text).toBe("backup response");
+  });
+
+  it("observes every concrete provider attempt in fallback order", async () => {
+    let callCount = 0;
+    const { gateway } = setup({
+      async generateText() {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error(
+            JSON.stringify({
+              code: "PROVIDER_ERROR",
+              provider: "test",
+              retriable: true,
+              statusCode: 500,
+            }),
+          );
+        }
+        return {
+          text: "backup response",
+          finishReason: "stop",
+          usage: { inputTokens: 5, outputTokens: 10 },
+        };
+      },
+    });
+    const attempts: Array<{ provider: string; model: string }> = [];
+
+    await gateway.generateText(
+      { messages: [{ role: "user", content: "hi" }] },
+      { onTargetAttempt: (target) => attempts.push(target) },
+    );
+
+    expect(attempts).toEqual([
+      { provider: "test", model: "test-model" },
+      { provider: "backup-provider", model: "backup-model" },
+    ]);
+  });
+
+  it("does not let a target observer failure affect the provider call", async () => {
+    const { gateway } = setup();
+    await expect(
+      gateway.generateText(
+        { messages: [{ role: "user", content: "hi" }] },
+        {
+          onTargetAttempt: () => {
+            throw new Error("telemetry unavailable");
+          },
+        },
+      ),
+    ).resolves.toMatchObject({ text: "stub response" });
   });
 
   it("does not fallback on non-retriable error", async () => {

@@ -47,6 +47,7 @@ import type {
   VectorSearchResult,
   DeleteVectorsInput,
 } from "../vector-store.js";
+import { normalizeVectorTopK } from "../vector-store.js";
 
 // ── Safety helpers ───────────────────────────────────────────────
 
@@ -59,6 +60,16 @@ function assertValidId(id: number): void {
 function physicalTableName(id: number): string {
   assertValidId(id);
   return `vec_mem_m${id}`;
+}
+
+function requireCurrentTableName(id: number, tableName: string): string {
+  const expected = physicalTableName(id);
+  if (tableName !== expected) {
+    throw new Error(
+      `pg-vector: vector_models.id ${id} violates the current table_name invariant`,
+    );
+  }
+  return expected;
 }
 
 /** Serialize a Float32Array for pgvector: "[v1,v2,...,vn]" */
@@ -75,9 +86,10 @@ function toVectorString(v: Float32Array): string {
 export function createPgVectorCapability(
   client: Sql,
 ): VectorStoreCapability & VectorModelOps {
-  // In-memory caches to avoid redundant DB lookups within a process.
+  // Model rows are immutable and safe to cache. Session bindings are not
+  // cached: another Pod may delete/recreate the same session id, and a stale
+  // positive cache would route the new incarnation into the old model/table.
   const modelCache = new Map<number, VectorTarget>();
-  const sessionTargetCache = new Map<string, VectorTarget | null>();
   const createdTables = new Set<number>();
 
   // NOTE: vector_models table and sessions.embedding_model_id column are
@@ -169,21 +181,11 @@ export function createPgVectorCapability(
 
     const row = rows[0];
 
-    // Defensive: repair legacy rows from older module versions that used
-    // the old "__pending__" placeholder scheme.
-    if (!row.table_name || row.table_name === "__pending__") {
-      const tname = physicalTableName(row.id);
-      await client`
-        UPDATE vector_models SET table_name = ${tname} WHERE id = ${row.id}
-      `;
-      row.table_name = tname;
-    }
-
     const target: VectorTarget = {
       modelRegistryId: row.id,
       modelId: row.model_id,
       dim: row.dim,
-      tableName: row.table_name,
+      tableName: requireCurrentTableName(row.id, row.table_name),
     };
 
     modelCache.set(target.modelRegistryId, target);
@@ -196,52 +198,40 @@ export function createPgVectorCapability(
     sessionId: string,
     target: VectorTarget,
   ): Promise<void> {
-    const rows = await client<
-      Array<{
-        embedding_model_id: number | null;
-        embedding_locked_at: string | null;
-      }>
-    >`
-      SELECT embedding_model_id, embedding_locked_at
+    const now = new Date().toISOString();
+    const updated = await client<Array<{ id: string }>>`
+      UPDATE sessions
+         SET embedding_model_id = ${target.modelRegistryId},
+             embedding_locked_at = ${now}
+       WHERE id = ${sessionId}
+         AND embedding_model_id IS NULL
+       RETURNING id
+    `;
+    if (updated.length === 1) {
+      return;
+    }
+
+    // The conditional update distinguishes a missing session from a lock that
+    // another connection won. PostgreSQL re-checks the WHERE predicate after
+    // waiting on a concurrent row lock, so exactly one first writer succeeds.
+    const rows = await client<Array<{ embedding_model_id: number | null }>>`
+      SELECT embedding_model_id
         FROM sessions
        WHERE id = ${sessionId}
     `;
-
     if (rows.length === 0) {
       throw new Error(
         `pg-vector lockSessionEmbeddingModel: session ${sessionId} not found`,
       );
     }
-
-    const existing = rows[0];
-    if (
-      existing.embedding_model_id !== null &&
-      existing.embedding_model_id !== undefined
-    ) {
-      throw new Error(
-        `pg-vector lockSessionEmbeddingModel: session ${sessionId} is already locked to model ${existing.embedding_model_id}`,
-      );
-    }
-
-    const now = new Date().toISOString();
-    await client`
-      UPDATE sessions
-         SET embedding_model_id = ${target.modelRegistryId},
-             embedding_locked_at = ${now}
-       WHERE id = ${sessionId}
-    `;
-
-    // Invalidate session cache.
-    sessionTargetCache.delete(sessionId);
+    throw new Error(
+      `pg-vector lockSessionEmbeddingModel: session ${sessionId} is already locked to model ${rows[0].embedding_model_id}`,
+    );
   }
 
   async function resolveSessionVectorTarget(
     sessionId: string,
   ): Promise<VectorTarget | null> {
-    if (sessionTargetCache.has(sessionId)) {
-      return sessionTargetCache.get(sessionId) ?? null;
-    }
-
     const sessionRows = await client<
       Array<{ embedding_model_id: number | null }>
     >`
@@ -249,7 +239,10 @@ export function createPgVectorCapability(
     `;
 
     if (sessionRows.length === 0 || sessionRows[0].embedding_model_id == null) {
-      sessionTargetCache.set(sessionId, null);
+      // An unlocked session can be locked by another server instance at any
+      // time. Caching null would make this process permanently miss that
+      // immutable transition because only the winning instance can invalidate
+      // its local cache.
       return null;
     }
 
@@ -258,7 +251,6 @@ export function createPgVectorCapability(
     // Try in-memory model cache first.
     const cached = modelCache.get(modelId);
     if (cached) {
-      sessionTargetCache.set(sessionId, cached);
       return cached;
     }
 
@@ -288,11 +280,10 @@ export function createPgVectorCapability(
       modelRegistryId: row.id,
       modelId: row.model_id,
       dim: row.dim,
-      tableName: row.table_name,
+      tableName: requireCurrentTableName(row.id, row.table_name),
     };
 
     modelCache.set(target.modelRegistryId, target);
-    sessionTargetCache.set(sessionId, target);
     await ensurePhysicalTable(target);
 
     return target;
@@ -331,7 +322,7 @@ export function createPgVectorCapability(
       provider: r.provider,
       modelName: r.model_name,
       dim: r.dim,
-      tableName: r.table_name,
+      tableName: requireCurrentTableName(r.id, r.table_name),
       createdAt: Number(r.created_at),
       lastUsedAt: r.last_used_at !== null ? Number(r.last_used_at) : null,
     }));
@@ -340,41 +331,104 @@ export function createPgVectorCapability(
   // ── VectorStoreCapability ────────────────────────────────────────
 
   async function upsertVector(input: UpsertVectorInput): Promise<void> {
-    const target = await resolveSessionVectorTarget(input.sessionId);
-    if (!target) {
-      throw new Error(
-        `pg-vector upsertVector: session ${input.sessionId} has no embedding model locked`,
-      );
-    }
-    if (input.embedding.length !== target.dim) {
-      throw new Error(
-        `pg-vector upsertVector: embedding length ${input.embedding.length} does not match model dim ${target.dim}`,
-      );
-    }
-
-    await ensurePhysicalTable(target);
-    const tname = physicalTableName(target.modelRegistryId);
+    // The extension and physical tables are created by ensureVectorModel. Do
+    // not resolve a session binding here: the binding, model row, incarnation
+    // guard, and INSERT must all be observed under one parent-row lock.
+    await ensureVectorExtension();
     const vecStr = toVectorString(input.embedding);
 
-    await client.unsafe(
-      `INSERT INTO ${tname} (session_id, plugin_id, namespace, key, embedding, payload)
-       VALUES ($1, $2, $3, $4, $5::vector, $6)
-       ON CONFLICT (session_id, plugin_id, namespace, key)
-       DO UPDATE SET embedding = EXCLUDED.embedding, payload = EXCLUDED.payload`,
-      [
-        input.sessionId,
-        input.pluginId,
-        input.namespace,
-        input.key,
-        vecStr,
-        input.payload ?? null,
-      ],
-    );
+    await client.begin(async (tx) => {
+      // Pair with deletePgSessionCascade's parent FOR UPDATE lock. Resolving
+      // the target only after this lock removes the resolve/delete/recreate
+      // ABA window, while expectedSessionCreatedAt rejects results produced
+      // for an older incarnation of the same id.
+      const sessionRows = await tx<
+        Array<{ embedding_model_id: number | null; created_at: string }>
+      >`
+        SELECT embedding_model_id, created_at
+          FROM sessions
+         WHERE id = ${input.sessionId}
+         FOR KEY SHARE
+      `;
+      if (sessionRows.length === 0) {
+        throw new Error(
+          `pg-vector upsertVector: session ${input.sessionId} not found`,
+        );
+      }
+      const session = sessionRows[0];
+      if (
+        input.expectedSessionCreatedAt !== undefined &&
+        session.created_at !== input.expectedSessionCreatedAt
+      ) {
+        throw new Error(
+          `pg-vector upsertVector: session ${input.sessionId} incarnation changed`,
+        );
+      }
+      if (session.embedding_model_id == null) {
+        throw new Error(
+          `pg-vector upsertVector: session ${input.sessionId} has no embedding model locked`,
+        );
+      }
+
+      const modelRows = await tx<
+        Array<{
+          id: number;
+          model_id: string;
+          dim: number;
+          table_name: string;
+        }>
+      >`
+        SELECT id, model_id, dim, table_name
+          FROM vector_models
+         WHERE id = ${session.embedding_model_id}
+      `;
+      if (modelRows.length === 0) {
+        throw new Error(
+          `pg-vector: session ${input.sessionId} references unknown vector_models.id ${session.embedding_model_id}`,
+        );
+      }
+      const model = modelRows[0];
+      const tname = physicalTableName(model.id);
+      if (model.table_name !== tname) {
+        throw new Error(
+          `pg-vector: unsafe vector table name ${JSON.stringify(model.table_name)} for model ${model.id}`,
+        );
+      }
+      if (input.embedding.length !== model.dim) {
+        throw new Error(
+          `pg-vector upsertVector: embedding length ${input.embedding.length} does not match model dim ${model.dim}`,
+        );
+      }
+
+      modelCache.set(model.id, {
+        modelRegistryId: model.id,
+        modelId: model.model_id,
+        dim: model.dim,
+        tableName: model.table_name,
+      });
+
+      await tx.unsafe(
+        `INSERT INTO ${tname} (session_id, plugin_id, namespace, key, embedding, payload)
+         VALUES ($1, $2, $3, $4, $5::vector, $6)
+         ON CONFLICT (session_id, plugin_id, namespace, key)
+         DO UPDATE SET embedding = EXCLUDED.embedding, payload = EXCLUDED.payload`,
+        [
+          input.sessionId,
+          input.pluginId,
+          input.namespace,
+          input.key,
+          vecStr,
+          input.payload ?? null,
+        ],
+      );
+    });
   }
 
   async function searchVectors(
     input: SearchVectorsInput,
   ): Promise<VectorSearchResult[]> {
+    const topK = normalizeVectorTopK(input.topK);
+    if (topK === 0) return [];
     const target = await resolveSessionVectorTarget(input.sessionId);
     if (!target) {
       // No embedding model locked → return empty results.
@@ -389,7 +443,6 @@ export function createPgVectorCapability(
 
     await ensurePhysicalTable(target);
     const tname = physicalTableName(target.modelRegistryId);
-    const topK = input.topK ?? 8;
     const vecStr = toVectorString(input.query);
 
     // Build conditional WHERE clauses.

@@ -57,7 +57,7 @@ pnpm deps:check       # knip — flag unused / undeclared workspace deps
 pnpm check:i18n       # web + plugin i18n coverage + plugin READMEs (check:plugins is a subset)
 pnpm e2e:verify       # API-driven, real-LLM plugin harness (needs .env.llm); pass --slot e2e_local --turns 3
 pnpm test:runtime     # standalone runtime harness CLI (packages/test-runtime)
-pnpm validate:plugin  # validate PLUGIN.md manifests; pass file or plugin dir, --compat for legacy
+pnpm validate:plugin  # validate PLUGIN.md manifests; pass file or plugin dir
                       # a plugin DIR also gets cross-runtime checks (userSettings key collisions)
 pnpm build:electron   # production desktop installer → release/
 pnpm release:preflight  # static pre-tag gate: lockfile sync, import resolution, plugin/world/prompt structure
@@ -73,7 +73,7 @@ Dev-time files (copied from `*.example`):
 
 Desktop-shell files under `<covelHome>/` (typically `~/.covel/`):
 
-- `config.toml` — desktop shell config (paths, log rotation)
+- `config.toml` — desktop shell config (paths, log rotation, outbound proxy)
 - `llm.toml` — hand-editable slot / provider definitions (same schema as dev-time). Hot-reloaded from Settings without a server restart.
 - `keys.env` — provider API keys, mode 600
 - `settings.json` — front-end user preferences (locale, appearance, slot overrides, custom presets, parameter overrides, per-plugin settings). Managed via the unified **SettingsStore** (`@covel/settings`, `packages/settings/src/`). Auto-saved on every change; mirrored to `localStorage` (`covel:settings`) on pure-web tiers.
@@ -82,9 +82,11 @@ Provider API keys flow through the `SettingsStore` too: writes end up in `keys.e
 
 ## Monorepo Structure
 
-- pnpm workspaces + Turborepo. `pnpm@11.9.0`, Node ≥ 26 (dev scripts use `--env-file-if-exists`).
+- pnpm workspaces + Turborepo. `pnpm@11.22.0`, Node ≥ 26 (dev scripts use `--env-file-if-exists`).
 - ESM-only (`"type": "module"`), TypeScript strict, ES2022, NodeNext module resolution — **use `.js` extensions in TS imports**.
 - Packages export TS source directly (`"import": "./src/index.ts"`) — no build step for dev.
+- Run Tailwind diagnostics through `apps/web/scripts/check-tailwind-canonical.mjs`. Keep `tailwind-lint` read-only: v0.12.1 can treat ordinary TypeScript identifiers as classes and corrupt them through `--fix`.
+- Canonical numeric Tailwind utilities depend on the default `--spacing` scale. Audit fixed-layout geometry before overriding that token globally.
 
 - Top level: `apps/` (web · server · desktop) · `packages/` · `plugins/` (see [docs/reference/plugins.md](./docs/reference/plugins.md)) · `prompts/` (externalised locale-aware prompt templates) · `worlds/` — **`worlds/_archive/` is not loaded**.
 - `@covel/settings` carries the unified SettingsStore + localStorage/json-file backends, split out of `shared` so pure-type consumers avoid pulling in browser/Electron code.
@@ -120,22 +122,22 @@ Input/Event → Trigger Router → Stage Scheduler → [per stage:]
 | `post-turn` | main loop, 3rd                       | Post-narrative bookkeeping, state updates, follow-up event emission |
 | `audit`     | main loop, 4th                       | Conflict/consistency audit (reserved slot)                          |
 
-Band selection is by **`phase`**, not `turnCount`: the session runs the `setup` stage while `phase === "setup"`; once `phase` flips to the main loop it runs `pre-turn → narrative → post-turn → audit` in strict order with a **barrier between stages** (a stage fully drains — every runtime settles success/failure/skip — before the next stage starts). Within a stage, a **DAG** derived from `needs` / `after` / typed `inputs` bindings (plus legacy `input.inject`) orders runtimes; independent runtimes in the same stage run in parallel, `name` breaks ties. There is no more numeric priority scheduler.
+Band selection is by **`phase`**: the session runs the `setup` stage while `phase === "setup"`; once `phase` flips to the main loop it runs `pre-turn → narrative → post-turn → audit` in strict order with a **barrier between stages** (a stage fully drains — every runtime settles success/failure/skip — before the next stage starts). Within a stage, a **DAG** derived from `needs` / `after` / typed `inputs` bindings (plus `input.inject`) orders runtimes; independent runtimes in the same stage run in parallel, `name` breaks ties. There is no more numeric priority scheduler.
 
 Session lifecycle tracked on `SessionRecord`:
 
 - `status: 'active' | 'paused' | 'ended'` — `paused`/`ended` halts scheduling.
-- `phase: 'setup' | 'playing'` — the stage-band selector (business truth; replaces the old `preGameCompleted`-derived band check).
-- `completedPlayerTurns: number` — business-truth count of completed **player** turns. Kernel auto-advances 0 → 1 once all setup runtimes report done. Non-player executions (manual plugin-rpc trigger, deferred background follower, nested `recursiveCall`) each persist their own `turn_results` row stamped with `origin` and are excluded from the count; several executions sharing one `turnId` count once.
+- `phase: 'setup' | 'playing'` — required stage-band selector.
+- `completedPlayerTurns: number` — business-truth count of completed **player** turns. The opening continuation advances 0 → 1 only after its player execution commits. Non-player executions (manual plugin-rpc trigger, deferred background follower, nested `recursiveCall`) each persist their own `turn_results` row stamped with `origin` and are excluded from the count; several executions sharing one logical turn count once.
 - `setupRuntimes: Record<runtimeId, SetupRuntimeState>` — business-truth per-runtime resolution mirror for the `setup` stage. `SetupRuntimeState` is a three-state union: `pending` / `done{resolution: "completed" | "waived"}` / `blocked` (retry budget exhausted — pins the session in setup until the `retry` / `waive` endpoints unblock it). Not a plain id list.
 
-`turnCount` and `preGameCompleted` are **legacy fields the kernel no longer writes** — API responses and snapshots derive them at read time from `phase` / `completedPlayerTurns` / `setupRuntimes` via a shared `deriveLegacyClockForSession` helper (response shape is unchanged). `turnCount` (now a derived value) still drives the UI turn display, auto-snapshot cadence, and snapshot numbering downstream of that derivation. The DB columns are retained (frozen) for old-kernel/rollback reads, and the one-time lazy backfill for pre-`phase` sessions is retained.
+The session clock is current-only: API responses, snapshots, UI turn display, and auto-snapshot cadence use the required `phase` / `completedPlayerTurns` / `setupRuntimes` fields directly. Development builds do not accept or reconstruct deprecated session-clock fields.
 
 ### Plugin system
 
 - **Layout**: `PLUGIN.md` (frontmatter + agent skill prompt) + `package.json` is the minimum. Optional: `prompts/`, `schemas/`, `server/`, `client/`, `ui/`.
 - **Session scope**: Global plugin pool loaded at startup; each session's `SessionRecord.activePlugins` (string[]) is the active set. Runtime selection, tool lookup, and hooks all filter against it (hooks see it as `activePluginIds` via `AsyncLocalStorage`, see `packages/runtime/src/hooks/hook-scope.ts`). World manifest seeds initial set; enable/disable mid-session applies next turn.
-- **Trust tiers**: `builtin` (auto-load) · `official` (whitelist) · `community` (deferred `import()` until user approves).
+- **Plugin sources**: `builtin` (auto-load) · `community` (deferred `import()` until user approves).
 - **Plugin data**: session-scoped KV storage keyed by `(sessionId, pluginId, namespace, key)` in `plugin_data` table. Builtin tools: `plugin-data-{set,get,list,set-batch}`, `create-character` / `update-character` / `list-characters` / `get-character`, `emit-event`.
 - **Plugin-data inject** (agent runtimes): `input.inject` with `kind: plugin-data` reads the runtime's own namespace and inlines a summary into the system prompt (avoids tool-call round-trips). Switches that runtime to the async context path.
 
@@ -151,8 +153,8 @@ All panels/blocks render through [json-render](https://github.com/vercel-labs/js
 - Configured via `llm.toml` `[covel.<slot>]` sections. If missing, single `story` → DeepSeek fallback boots the app.
 - **Tag-aware fallback**: an unconfigured slot falls back to the first slot with the same tag (`text`/`image`/`embedding`/`speech`/`transcription`). Cross-tag fallback is forbidden (an image request never silently routes to text).
 - Supports OpenAI, Anthropic, DeepSeek, Qwen (Aliyun DashScope).
-- **Model capabilities** (multimodal, features, token limits, pricing) auto-detected via: frontend localStorage override → `llm.toml` manual → `known-models.ts` (~60 common) → LiteLLM DB (2967 models, `pnpm --filter @covel/ai-provider update-model-db`) → protocol defaults. Directional modality: `input: InputModality[]` = accepts, `output: OutputModality[]` = produces.
-- **Media generation (image / TTS / STT)**: `ctx.images.generate()` and `ctx.speech.generate()`/`.transcribe()` (function-runtime plugins, preferred) route through pluggable per-modality wire registries — builtin `openai-images` (default) + `dashscope-wan` for image, `openai-speech` / `openai-transcription` for speech — selectable per-slot via `llm.toml` `providerRequestMetadata.imageWire|speechWire|transcriptionWire`. Both `generate` paths dedupe on promptHash and persist to MediaStore. Plugins register vendor wires via the PLUGIN.md `wires` frontmatter field (ids namespaced `<pluginId>/<wireId>`, trust-gated loading in `bootstrap/plugin-wires.ts`); bundled code may call `register{Image,Speech,Transcription}Wire()` directly. See [docs/reference/slots.md](./docs/reference/slots.md), [docs/reference/media-store.md](./docs/reference/media-store.md) and [docs/guide/plugin-authoring-advanced.md](./docs/guide/plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行).
+- **Model capabilities** (multimodal, features, token limits, pricing) auto-detected via: frontend localStorage override → `llm.toml` manual → `known-models.ts` (~60 common) → committed LiteLLM snapshot (`pnpm --filter @covel/ai-provider update-model-db`) → protocol defaults. Directional modality: `input: InputModality[]` = accepts, `output: OutputModality[]` = produces.
+- **Media generation (image / TTS / STT)**: `ctx.images.generate()` and `ctx.speech.generate()`/`.transcribe()` (function-runtime plugins, preferred) route through pluggable per-modality wire registries — builtin `openai-images` (default) + `dashscope-wan` for image, `openai-speech` / `openai-transcription` for speech — selectable per-slot via `llm.toml` `providerRequestMetadata.imageWire|speechWire|transcriptionWire`. Both `generate` paths dedupe on promptHash and persist to MediaStore. Plugins register vendor wires from their `entry` module via `covel.registerWires` (ids namespaced `<pluginId>/<wireId>`, source-gated loading in `bootstrap/plugin-wires.ts`); bundled code may call `register{Image,Speech,Transcription}Wire()` directly. See [docs/reference/slots.md](./docs/reference/slots.md), [docs/reference/media-store.md](./docs/reference/media-store.md) and [docs/guide/plugin-authoring-advanced.md](./docs/guide/plugin-authoring-advanced.md#注册自定义-wireentry-里的-covelregisterwires).
 
 ## Critical Conventions (Read These)
 
@@ -194,24 +196,24 @@ All store writes key on `pluginId`; all trace logs key on `runtimeId`.
 
 **Any code change that touches framework-visible surface area MUST update the matching doc in the same PR.** Missing sync = incomplete PR.
 
-| Change                                    | Doc to update                                                                                    |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Add/modify/remove plugin                  | `docs/reference/plugins.md`                                                                      |
-| Add/modify/remove tool (builtin or local) | `docs/reference/tools.md`                                                                        |
-| Change approval policy / tool trust tier  | `docs/reference/tools.md`                                                                        |
-| Add/change model slot                     | `docs/reference/slots.md` (create if missing)                                                    |
-| Change SSE event type / protocol          | `docs/reference/protocol.md`                                                                     |
-| Change right-panel tab / data source      | `docs/reference/ui-panels.md`                                                                    |
-| Add/change API endpoint                   | `docs/reference/api.md`                                                                          |
-| Change package structure / deps           | `CLAUDE.md` (Workspace + Dependency Flow)                                                        |
-| Add/change PLUGIN.md frontmatter field    | `docs/reference/plugins.md` + `docs/guide/plugin-authoring.md`                                   |
-| Add/change `PLUGIN.md dataSchemas`        | `docs/reference/plugins.md` + `docs/guide/plugin-authoring*.md` + `docs/reference/world-data.md` |
-| Add/change world package `worldData`      | `docs/reference/world-data.md` + relevant guide docs                                             |
-| Add/change world-data import/sync rules   | `docs/reference/world-data.md` + `docs/reference/api.md` + `docs/reference/transactions.md`      |
-| Add/change RPC action / framework default | `docs/reference/api.md` (plugin-rpc) + `docs/reference/protocol.md`                              |
-| Add/change approval flow / trust level    | `docs/reference/api.md` + `docs/reference/protocol.md`                                           |
-| Modify `README.md` (English, primary)     | `README.zh-CN.md` (must sync in same PR)                                                         |
-| Modify `README.zh-CN.md`                  | `README.md` (must sync in same PR)                                                               |
+| Change                                      | Doc to update                                                                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Add/modify/remove plugin                    | `docs/reference/plugins.md`                                                                      |
+| Add/modify/remove tool (builtin or local)   | `docs/reference/tools.md`                                                                        |
+| Change approval policy / plugin source gate | `docs/reference/tools.md`                                                                        |
+| Add/change model slot                       | `docs/reference/slots.md` (create if missing)                                                    |
+| Change SSE event type / protocol            | `docs/reference/protocol.md`                                                                     |
+| Change right-panel tab / data source        | `docs/reference/ui-panels.md`                                                                    |
+| Add/change API endpoint                     | `docs/reference/api.md`                                                                          |
+| Change package structure / deps             | `CLAUDE.md` (Workspace + Dependency Flow)                                                        |
+| Add/change PLUGIN.md frontmatter field      | `docs/reference/plugins.md` + `docs/guide/plugin-authoring.md`                                   |
+| Add/change `PLUGIN.md dataSchemas`          | `docs/reference/plugins.md` + `docs/guide/plugin-authoring*.md` + `docs/reference/world-data.md` |
+| Add/change world package `worldData`        | `docs/reference/world-data.md` + relevant guide docs                                             |
+| Add/change world-data import/sync rules     | `docs/reference/world-data.md` + `docs/reference/api.md` + `docs/reference/transactions.md`      |
+| Add/change RPC action / framework default   | `docs/reference/api.md` (plugin-rpc) + `docs/reference/protocol.md`                              |
+| Add/change approval flow / trust level      | `docs/reference/api.md` + `docs/reference/protocol.md`                                           |
+| Modify `README.md` (English, primary)       | `README.zh-CN.md` (must sync in same PR)                                                         |
+| Modify `README.zh-CN.md`                    | `README.md` (must sync in same PR)                                                               |
 
 ### Plugin authoring contract
 
@@ -231,7 +233,7 @@ Locale enters the execution chain via `KernelInput.locale` → `RuntimeContextVi
 
 Core objects (never collapse into a single JSON blob): **Run, Branch, Snapshot, State, Event, Record, Character, PluginData**.
 
-Store backends (`@covel/store`): `MemoryStore` (dev/test), `SqliteStore` (desktop/default), `IdbStore` (browser IDB), `PgStore` (production PG via Drizzle). Selection at server startup uses `STORE_BACKEND=memory|sqlite|pg` with default `sqlite`; `STORE_BACKEND=pg` requires `DATABASE_URL`. Browser `local` mode uses IDB through `createStore({ backend: "idb" })`; browser `remote` mode uses the server API and the server's configured backend. `MEDIA_BACKEND=mirror` follows the server data backend by default. `VECTOR_BACKEND=embedded` uses the active DataStore vector capability. World seeds load from `COVEL_WORLDS_DIR` (default `worlds/`). Desktop shells additionally pass `COVEL_USER_WORLDS_DIR=<data_root>/worlds` so user-authored worlds move together with SQLite and logs when `data_root` is redirected.
+Server store backends (`@covel/store`): `MemoryStore` (dev/test and browser-private execution), `SqliteStore` (desktop/default), and `PgStore` (hosted PostgreSQL via Drizzle). Selection uses `STORE_BACKEND=memory|sqlite|pg` with default `sqlite`; `STORE_BACKEND=pg` requires `DATABASE_URL`. Browser `local` mode persists versioned checkpoints in the Dexie `BrowserVault` and hydrates an ephemeral MemoryStore for execution; it is not a DataStore backend. Browser `remote` mode uses the server API and the configured SQLite/PostgreSQL store. `MEDIA_BACKEND=mirror` follows the server data backend by default. `VECTOR_BACKEND=embedded` uses the active DataStore vector capability. World seeds load from `COVEL_WORLDS_DIR` (default `worlds/`). Desktop shells additionally pass `COVEL_USER_WORLDS_DIR=<data_root>/worlds` so user-authored worlds move together with SQLite and logs when `data_root` is redirected.
 
 Each SQL backend keeps a thin public factory plus focused method modules:
 
@@ -240,7 +242,7 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 - `*-store-mappers.ts` / `*-store-values.ts` — row conversion and JSON helpers.
 - `*-data-crud.ts`, `*-runtime-records.ts`, `*-session-*`, `*-snapshot*`, `*-state*`, `*-world*` — focused persistence surfaces.
 
-31 tables via Drizzle; authoritative list in `packages/store/src/{sqlite,postgres}/schema.ts`, transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md).
+30 tables via Drizzle; authoritative list in `packages/store/src/{sqlite,postgres}/schema.ts`, transactions contract in [docs/reference/transactions.md](./docs/reference/transactions.md), and browser synchronization contract in [docs/architecture/storage.md](./docs/architecture/storage.md).
 
 - **`sessions.runtime_model_overrides`** — JSONB map of `runtimeId → slot name`, snapshotted into `TurnInput` each turn and read by `agent-loop-policy` (a request-scoped `modelOverride` wins for `story` runtimes) before `manifest.model` / gateway default. Keys still flow via `X-Provider-Keys` + localStorage.
 - **`turn_results.commit_status`** — `pending` when the execution artifact is persisted (before proposals commit), settled to `committed` / `failed` by the commit-owning caller. A row still `pending` is a crash signature, not a successful turn.
@@ -261,7 +263,7 @@ Each SQL backend keeps a thin public factory plus focused method modules:
 
 ## Security & Operations
 
-- **SSRF guard**: `validateBaseUrl()` in `ai-provider/adapters/http.ts` is **open by default** — any public https host is allowed. Blocks: RFC1918 / link-local IPs (`10.x` / `172.16-31.x` / `192.168.x` / `169.254.x` / `fc00::` / `fe80::`), cloud metadata hostnames (`metadata.google.internal`, `metadata.internal`), non-https on remote hosts, non-http(s) protocols. Loopback (`localhost` / `127.0.0.1` / `::1`) bypasses the https requirement for Ollama-style local dev. Additionally, core provider requests (`postJson` / `getJson` / `postFormData`) and the plugin `fetchWithRetry` helper (`plugin-utils.ts`; surfaced as `ctx.utils.fetchWithRetry` to handlers and `covel.http.fetchWithRetry` to entry modules) resolve DNS through a pinning dispatcher (`adapters/http/dns-safety.ts`): every A/AAAA answer must be publicly routable (loopback hostnames must resolve to loopback), closing the string-check-to-connect DNS-rebinding gap. **Self-tier exemption (core provider path only)**: on the `self` tier (desktop/self-deploy default — already loopback-bound with owner/operator tokens as no-ops), the core provider path (the user's own configured LLM `baseUrl`) accepts any resolver answer for a hostname (the socket is still pinned to it). Single-user local machines run TUN proxies (Clash/mihomo/sing-box/Surge map every domain into a private/benchmark range and route by SNI) and LAN endpoints (Ollama at `192.168.x.x`) that the public-only rule wrongly rejected. The exemption is NOT granted to the plugin `fetchWithRetry` path (third-party plugin code stays strict — no probing the local network even on a desktop install), to IP-literal URLs (url-safety's string check still blocks private literals), or to hosted tiers (`demo`/`commercial` may run inside a cloud network where private answers reach real internal services). There is **no host allowlist env** — the guard is open by design; third-party plugin authors targeting custom provider hosts do not need any env shim (the never-read `COVEL_ALLOWED_LLM_HOSTS` registry entry was removed).
+- **SSRF guard**: `validateBaseUrl()` in `ai-provider/adapters/http.ts` is **open by default** — any public https host is allowed. Blocks: RFC1918 / link-local IPs (`10.x` / `172.16-31.x` / `192.168.x` / `169.254.x` / `fc00::` / `fe80::`), cloud metadata hostnames (`metadata.google.internal`, `metadata.internal`), non-https on remote hosts, non-http(s) protocols. Loopback (`localhost` / `127.0.0.1` / `::1`) bypasses the https requirement for Ollama-style local dev. In direct mode, core provider requests (`postJson` / `getJson` / `postFormData`) and the plugin `fetchWithRetry` helper (`plugin-utils.ts`; surfaced as `ctx.utils.fetchWithRetry` to handlers and `covel.http.fetchWithRetry` to entry modules) resolve DNS through a pinning dispatcher (`adapters/http/dns-safety.ts`): every A/AAAA answer must be publicly routable (loopback hostnames must resolve to loopback), closing the string-check-to-connect DNS-rebinding gap. Desktop `system` / `http` / `socks` modes route only framework-owned core provider and model-database requests through an npm Undici `ProxyAgent`; proxy-side DNS replaces local pinning for those trusted self-tier targets. Plugin `fetchWithRetry` always remains on the strict direct pinned path. **Self-tier exemption (core provider path only)**: on the `self` tier (desktop/self-deploy default — already loopback-bound with owner/operator tokens as no-ops), the direct core provider path (the user's own configured LLM `baseUrl`) accepts any resolver answer for a hostname (the socket is still pinned to it). Single-user local machines run TUN proxies (Clash/mihomo/sing-box/Surge map every domain into a private/benchmark range and route by SNI) and LAN endpoints (Ollama at `192.168.x.x`) that the public-only rule wrongly rejected. The exemption is NOT granted to the plugin `fetchWithRetry` path (third-party plugin code stays strict — no probing the local network even on a desktop install), to IP-literal URLs (url-safety's string check still blocks private literals), or to hosted tiers (`demo`/`commercial` may run inside a cloud network where private answers reach real internal services). There is **no host allowlist env** — the guard is open by design; third-party plugin authors targeting custom provider hosts do not need any env shim (the never-read `COVEL_ALLOWED_LLM_HOSTS` registry entry was removed).
 - **Env-key origin binding (S-01)**: server-env / platform API keys flow to the gateway as `envApiKeys`, separate from request-supplied `X-Provider-Keys` (`apiKeys`). The provider registry only attaches an env key when the resolved target's baseUrl origin matches trusted config (llm.toml / registered provider defaults) — a request-scoped custom preset (`X-Slot-Config` overlay) that redirects a provider to another origin gets no env key and no trusted default headers; it must supply its own key.
 - **Hosted auth (S-02/C-01/C-02)**: `demo` / `commercial` tiers enforce a per-session **owner token** (minted at session create, hash-persisted in `SessionRecord.metadata`, returned once) on every session-scoped route, and an **operator token** (`COVEL_DESKTOP_REST_TOKEN`, also a master key that passes any owner check) on global/admin routes (session create/list, world writes, AI/model, community server-code activation). `validateSecurityPosture` fails boot on a hosted tier missing the operator token / media secret / CORS origin. The server binds `127.0.0.1` by default (`COVEL_BIND_HOST` opts into `0.0.0.0`). `self` / desktop / dev are a strict no-op (single-user local play unchanged). Community server code (`entry` / handler / hook / wire / runtime JS) is import-gated behind two-phase approval (a `covel:plugin-server-code` grant, then the action grant). Full model: [docs/reference/api.md](./docs/reference/api.md) 鉴权 section.
 - **Signed media URLs**: `middleware/media-token.ts` signs `MediaRef` URLs with `COVEL_MEDIA_TOKEN_SECRET`. Desktop shells must provision it or generated images/portraits fail to load; web uses an ephemeral per-boot secret.

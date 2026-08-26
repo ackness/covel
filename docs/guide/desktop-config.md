@@ -40,10 +40,19 @@
 首次启动自带注释模板。字段：
 
 ```toml
+schema_version = 1
+
 [paths]
 # 数据目录。相对路径相对于本文件所在目录；绝对路径直接使用。
 # 默认：~/.covel/data
 # data_root = "/Volumes/External/covel-data"
+
+[network]
+# direct | system | http | socks
+proxy_mode = "direct"
+# HTTP(S) 示例：http://127.0.0.1:7890
+# SOCKS5 示例：socks5://127.0.0.1:7891
+proxy_url = ""
 
 [logging]
 # 单个日志文件上限（MB），超过后轮转
@@ -52,7 +61,13 @@ max_size_mb = 10
 max_files   = 10
 ```
 
-改完要重启 Covel 生效。**改 `data_root` 不会搬旧数据** —— 新位置是空的，老数据与用户世界留在原处你自己处理。
+未写 `schema_version` 的旧配置按 v1 读取。桌面 UI 和 REST 接口只修改上述已知字段，保留未知字段、未知 section 和已有注释；写入前后都会严格解析整份 TOML。若文件损坏，应用仍可用默认值启动并打印警告，但拒绝覆盖原文件，须先手动修复。成功写入通过同目录临时文件 + rename 原子替换，并将权限设为 `0600`。
+
+手动改完要重启 Covel 生效；在 **设置 → 桌面 → 网络代理** 保存则会立即热应用。`direct` 不走代理，`system` 针对每个目标 URL 动态采用 Electron/Chromium 返回的系统规则和有序 fallback，`http` 接受 `http://` / `https://` 地址，`socks` 接受 `socks://` / `socks5://` 地址；省略协议时分别补为 `http://` 与 `socks5://`。代理 URL 可带 `user:password@host`，因此配置文件会收紧为 `0600`。
+
+代理覆盖框架拥有的核心 LLM 请求与“从 GitHub 更新”模型数据库请求。第三方插件的 `fetchWithRetry` 保持直连和严格 DNS/SSRF pinning，避免代理侧远程 DNS 绕过插件网络边界。
+
+**改 `data_root` 不会搬旧数据** —— 新位置是空的，老数据与用户世界留在原处你自己处理。
 
 ## `~/.covel/keys.env`
 
@@ -71,6 +86,8 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 设置界面的模型部分分为“用途分配”“服务商与模型”“生成参数”。“服务商与模型”采用服务商列表 + 详情结构，一个服务商只需配置一次 API 地址、协议、密钥和价格倍率，并可批量添加多个模型 ID；`openai/gpt-5.6-sol` 等带 `/` 的 ID 会按原样发送。随后在“用途分配”中分别选择服务商和模型，无需再创建自定义 Preset。价格倍率默认 `1`，调试成本面板会用模型参考价乘以该倍率估算结算金额。
 
+模型设置只把 `llm.providers` 作为持久化真源；旧版 `llm.customPresets` 会在启动时先迁移连接密钥和模型引用，全部成功后删除。旧 API facade 与请求中的 custom preset 结构由 providers 即时编译，不再维护第二份同步副本。
+
 **热重载**：改完 `llm.toml` 不必重启应用 —— 到 **设置 → 模型 → 用途分配** 点“重新加载配置”即可。后端会重读文件并原地应用到运行中的 gateway（`POST /api/llm-config/reload`），新增/删除的用途立即生效。桌面版该接口受一次性 bearer token 保护（同其他写接口），前端自动附带；dev/web tier 无 token 时开放。
 
 **解析失败可见**：若 `llm.toml` 有语法错误（如某个 key 写了 `=` 却没值），整份文件会解析失败并**回退到内置默认**（只剩一个 `story` slot）。此时 `GET /api/llm-config` 会带 `error` 字段，**Settings → LLM** 顶部显示红色提示（含具体错误），不再静默回退让你摸不着头脑。改好后点「重载配置」即可恢复。
@@ -83,7 +100,13 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 ## 桌面 REST 写接口的 token 门
 
-桌面版 sidecar 会在每次启动时生成一个一次性 bearer token，并以 `COVEL_DESKTOP_REST_TOKEN` 注入子进程环境。所有写接口（`PUT /api/config/keys`、`PUT /api/config/settings`、`PUT /api/config/data-root`、`POST /api/config/open-folder`）以及 `GET /api/config/settings`（返回完整 settings.json 内容）都会校验请求头 `Authorization: Bearer <token>`，缺失或不匹配返回 `401`。真正开放的只有 `GET /api/config/info` 和 `GET /api/config/keys`（仅返回 provider 列表，不含 key 值）。
+桌面版 sidecar 会在每次启动时生成一个一次性 bearer token，并以 `COVEL_DESKTOP_REST_TOKEN` 注入子进程环境。所有写接口（`PUT /api/config/keys`、`PUT /api/config/settings`、`PUT /api/config/proxy`、`PUT /api/config/data-root`、`POST /api/config/open-folder`）以及会返回本地配置的 `GET /api/config/settings` / `GET /api/config/proxy` 都会校验请求头 `Authorization: Bearer <token>`，缺失或不匹配返回 `401`。真正开放的只有 `GET /api/config/info` 和 `GET /api/config/keys`（仅返回 provider 列表，不含 key 值）。
+
+REST Settings backend 会把 `GET /api/config/keys` 返回的 provider 列表 hydration 为仅存在于内存的“server-managed”标记；该标记不会显示为 key 明文，也不会进入 `X-Provider-Keys`。保存全量 SettingsStore secret snapshot 时，backend 会保留未编辑的 server-managed key、把新输入转换成 PUT patch，并把从快照移除的 provider 转换成显式删除，因此不会把 provider 列表误当成 secret map，也不会因编辑一个 key 覆盖其他 key。
+
+若 `keys.env` 无法读取，GET 返回 `500 keys_file_unreadable`，PUT 返回 `409 keys_file_unreadable` 并保留原路径；写入同样使用同目录临时文件 + rename 原子替换。
+
+`settings.json` 使用同目录临时文件 + rename 原子替换，当前持久化格式为 `schemaVersion: 2`，并携带单调 `revision`。旧版 v1（必须有对象 `entries`）会在内存迁移为 revision 0，并在下次成功保存时写为 v2。若现有文件无法读取、JSON/`entries` 损坏或版本过新，GET 返回 `500 settings_file_invalid`，PUT 返回 `409 settings_file_invalid` 并保留原文件；写入必须携带读取到的 revision，若另一实例先保存则返回 `409 settings_revision_conflict` 且文件不变。SettingsStore 会保持只读状态，避免下一次单字段编辑用不完整或陈旧快照覆盖可恢复数据。
 
 `GET /api/config/info` 的响应里增加了 `requiresAuth` 字段，前端据此决定是否需要附带 Authorization 头。Electron 渲染进程通过 `covel:get-info` IPC 拿到 `restToken` 字段，自动注入到所有写请求。开发模式下若未设置该 env，token 门不启用，纯 web tier 与 `pnpm dev:web` 流程保持原样。
 

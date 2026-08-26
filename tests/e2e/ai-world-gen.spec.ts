@@ -19,9 +19,8 @@ import {
  *   8. Start a game with the world → verify character creation has schema-derived fields
  */
 
-test.describe.configure({ mode: "serial" });
-
 test.describe("AI World Generation", () => {
+  test.describe.configure({ mode: "serial" });
   test.use({ viewport: { width: 1280, height: 720 } });
   test.setTimeout(600_000); // 10 min — world gen + game start with LLM calls
   let hasProviderKeys = false;
@@ -404,10 +403,14 @@ test.describe("AI World Generation", () => {
     expect(page.url()).toMatch(/sid=/);
     await expectPlayerCanAct(page);
   });
+});
 
-  test("example prompt chips populate the textarea", async ({ page }) => {
-    test.skip(!hasProviderKeys, "No provider keys configured for live LLM e2e");
+test.describe("AI World Generator example prompts", () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
 
+  test("example prompt chips populate the textarea without provider credentials", async ({
+    page,
+  }) => {
     await seedAppSettings(page);
 
     await page.goto("/session");
@@ -416,37 +419,27 @@ test.describe("AI World Generation", () => {
     });
     await expect(worldCards.first()).toBeVisible({ timeout: 15_000 });
 
-    // Open dialog
     const aiCreateBtn = page.locator("button", {
       hasText: /AI 创建世界|AI Create/i,
     });
+    await expect(aiCreateBtn).toBeVisible();
     await aiCreateBtn.click();
 
     const dialog = page.locator("[role=dialog]");
     await expect(dialog).toBeVisible({ timeout: 5_000 });
 
-    // Example prompt chips should be visible when textarea is empty
+    // Example prompt chips are local UI state and must not require a provider.
     const exampleChips = dialog.locator("button.text-xs");
     await expect(exampleChips.first()).toBeVisible({ timeout: 3_000 });
-    const chipCount = await exampleChips.count();
-    expect(chipCount).toBeGreaterThanOrEqual(1);
+    expect(await exampleChips.count()).toBeGreaterThanOrEqual(1);
 
-    // Click the first example chip
-    const chipText = await exampleChips.first().textContent();
     await exampleChips.first().click();
 
-    // Textarea should now have content
     const promptTextarea = dialog.locator("#world-prompt");
-    const promptValue = await promptTextarea.inputValue();
-    expect(promptValue.length).toBeGreaterThan(0);
-    console.log(`Example prompt selected: ${promptValue.slice(0, 50)}...`);
+    await expect(promptTextarea).not.toHaveValue("");
 
-    // Example chips should hide after prompt is filled
+    // Selecting a prompt leaves the idle state, which hides the chips.
     await expect(exampleChips.first()).toBeHidden();
-
-    await page.screenshot({
-      path: "tests/e2e/artifacts/world-gen-example.png",
-    });
   });
 });
 

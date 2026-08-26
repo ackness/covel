@@ -146,7 +146,7 @@ export function OnboardingWizard() {
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm">
+    <div className="fixed inset-0 z-100 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm">
       <LocaleToggle locale={locale} setLocale={setLocale} />
       <CloseButton onDismiss={dismiss} />
 

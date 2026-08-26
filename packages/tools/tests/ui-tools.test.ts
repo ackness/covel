@@ -154,4 +154,47 @@ describe("create-form select options", () => {
 
     expect(result.interaction.fields[0]!.options).toEqual(["文艺部", "轻音部"]);
   });
+
+  it("preserves contextual defaults and rejects an invalid select default", async () => {
+    const result = (await createFormTool.execute(
+      {
+        formId: "f-default",
+        title: "t",
+        submitLabel: "ok",
+        narrativeTemplate: "{{origin}}",
+        fields: [
+          {
+            type: "select",
+            name: "origin",
+            label: "Origin",
+            options: [{ value: "home", label: "Returning home" }],
+            defaultValue: "home",
+          },
+        ],
+      },
+      CTX,
+    )) as { interaction: { fields: Array<{ defaultValue?: string }> } };
+    expect(result.interaction.fields[0]!.defaultValue).toBe("home");
+
+    await expect(
+      createFormTool.execute(
+        {
+          formId: "f-invalid-default",
+          title: "t",
+          submitLabel: "ok",
+          narrativeTemplate: "{{origin}}",
+          fields: [
+            {
+              type: "select",
+              name: "origin",
+              label: "Origin",
+              options: ["home"],
+              defaultValue: "elsewhere",
+            },
+          ],
+        },
+        CTX,
+      ),
+    ).rejects.toThrow();
+  });
 });

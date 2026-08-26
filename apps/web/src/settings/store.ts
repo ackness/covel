@@ -2,6 +2,7 @@ import {
   createJsonFileBackend,
   createLocalStorageBackend,
   SettingsStore,
+  SettingsRevisionConflictError,
 } from "@covel/settings";
 import type { SettingsStoreApi } from "@covel/settings";
 import {
@@ -9,8 +10,9 @@ import {
   registerLlmSettings,
   registerProviderKeys,
 } from "./registry/index.js";
-import { cleanupLegacyLocalStorage } from "./legacy-cleanup.js";
+import i18n from "i18next";
 import { getDesktopRestAuthHeaders, isDesktopApp } from "@/lib/desktop-bridge";
+import { emitToast } from "@/lib/toast-channel";
 
 let singleton: SettingsStore | null = null;
 let readyPromise: Promise<void> | null = null;
@@ -28,6 +30,21 @@ function createStore(): SettingsStore {
   const store = new SettingsStore(adapter);
   registerCoreSettings(store);
   registerLlmSettings(store);
+  // Store observes rejected persistence promises itself so existing `void
+  // store.set()` calls cannot leak unhandled rejections. Surface only CAS
+  // conflicts here; other validation/read-only errors are already represented
+  // by their owning UI paths and would otherwise duplicate toasts.
+  store.subscribePersistenceErrors((error) => {
+    if (error instanceof SettingsRevisionConflictError) {
+      emitToast(
+        "error",
+        i18n.t("settings.saveFailed", {
+          defaultValue: "Could not save setting",
+        }) as string,
+        error.message,
+      );
+    }
+  });
   return store;
 }
 
@@ -45,7 +62,6 @@ export function getSettings(): SettingsStoreApi {
  */
 export function initSettings(): Promise<void> {
   if (!readyPromise) {
-    cleanupLegacyLocalStorage();
     const store = getSettings() as SettingsStore;
     readyPromise = store.init();
   }

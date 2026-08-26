@@ -100,13 +100,11 @@ export interface ToolExecutor {
   /**
    * Look up a tool's LLM-facing shape (name/description/jsonSchema).
    *
-   * `context` is optional so legacy call sites keep working, but passing it
-   * lets the resolver return a session-specific variant — e.g.
+   * `context` lets the resolver return a session-specific variant — e.g.
    * `create-character` / `update-character` with `fields` typed against the
-   * active world's CharacterAttributeSchema. Without context the generic
-   * variant is returned.
+   * active world's CharacterAttributeSchema — and enforces plugin scoping.
    */
-  getToolInfo(name: string, context?: ToolCallContext): ToolInfo | undefined;
+  getToolInfo(name: string, context: ToolCallContext): ToolInfo | undefined;
 }
 
 // ── Implementation ───────────────────────────────────────────────
@@ -115,7 +113,7 @@ export interface ToolExecutorConfig {
   /** Tool lookup function — returns the tool module by name. Context enables per-plugin scoping. */
   readonly findTool?: (
     name: string,
-    context?: ToolCallContext,
+    context: ToolCallContext,
   ) => ToolModule | undefined;
   /** Optional DataStore for recording tool calls. */
   readonly store?: DataStore;
@@ -208,14 +206,14 @@ function emitToolFailed(
 function resolveToolModule(
   config: ToolExecutorConfig,
   name: string,
-  context?: ToolCallContext,
+  context: ToolCallContext,
 ): ToolModule | undefined {
   return config.findTool?.(name, context);
 }
 
 export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
   return {
-    getToolInfo(name: string, context?: ToolCallContext): ToolInfo | undefined {
+    getToolInfo(name: string, context: ToolCallContext): ToolInfo | undefined {
       const tool = resolveToolModule(config, name, context);
       if (!tool) return undefined;
       return {
@@ -323,50 +321,38 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           toolSource,
         );
 
-        if (checkResult.needsApproval) {
-          // Check session-level prior approval
-          if (
-            config.approval.hasSessionAllow(
-              context.sessionId,
-              call.name,
-              context.pluginId,
-            )
-          ) {
-            approvalStatus = "user-allowed";
-          } else {
-            // Denied — do not execute
-            approvalStatus = "user-denied";
-            const denyResult = toolError(
-              "DENIED",
-              `Tool "${call.name}" was denied by the approval policy. Reason: ${checkResult.reason}. Do not retry this tool call.`,
-            );
-            await recordCall(
-              config.store,
-              call,
-              context,
-              denyResult,
-              startTime,
-              false,
-              approvalStatus,
-            );
-            await emitToolFailed(
-              context,
-              call,
-              "DENIED",
-              checkResult.reason ?? "denied by approval policy",
-              undefined,
-              Date.now() - startTime,
-              approvalStatus,
-            );
-            return {
-              toolCallId: call.toolCallId,
-              name: call.name,
-              result: denyResult,
-              parsedResult: null,
-              success: false,
-              approvalStatus,
-            };
-          }
+        if (checkResult.decision === "deny") {
+          approvalStatus = "policy-denied";
+          const denyResult = toolError(
+            "DENIED",
+            `Tool "${call.name}" was denied by the approval policy. Reason: ${checkResult.reason}. Do not retry this tool call.`,
+          );
+          await recordCall(
+            config.store,
+            call,
+            context,
+            denyResult,
+            startTime,
+            false,
+            approvalStatus,
+          );
+          await emitToolFailed(
+            context,
+            call,
+            "DENIED",
+            checkResult.reason ?? "denied by approval policy",
+            undefined,
+            Date.now() - startTime,
+            approvalStatus,
+          );
+          return {
+            toolCallId: call.toolCallId,
+            name: call.name,
+            result: denyResult,
+            parsedResult: null,
+            success: false,
+            approvalStatus,
+          };
         }
       }
 

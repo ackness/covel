@@ -3,9 +3,8 @@ import type { DataStore } from "@covel/store";
 /**
  * Community-facing plugin store view: default-deny every method.
  *
- * Both community server-code entry points — the unified `entry` module and the
- * legacy `tools.local` factory — close over their injected store for the
- * lifetime of the process, so this view must be safe on its own:
+ * A community plugin's unified `entry` module closes over its injected store
+ * for the lifetime of the process, so this view must be safe on its own:
  *  - EVERY read and write — including own-namespace `setPluginData` /
  *    `setPluginDataBatch` / `deletePluginData` — and every other DataStore
  *    method throws a clear error. Community writes must flow through

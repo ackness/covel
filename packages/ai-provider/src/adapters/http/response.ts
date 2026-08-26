@@ -1,3 +1,4 @@
+import type { FormData as UndiciFormData } from "undici";
 import { ERROR_PREVIEW_MAX_CHARS } from "./constants.js";
 
 export async function parseJson(
@@ -122,7 +123,7 @@ export function createUnsupportedModeError(
 }
 
 export function appendProviderMetadata(
-  formData: FormData,
+  formData: UndiciFormData,
   metadata: Record<string, unknown> | undefined,
 ): void {
   if (!metadata) return;

@@ -7,14 +7,16 @@ import { Hono } from "hono";
 import { createEventBus, type EventBus } from "@covel/events";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { eventRoutes } from "../../src/routes/api/events.js";
+import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import type { SubscriptionEvent } from "@covel/shared";
 
-function createTestApp(eventBus: EventBus): Hono {
-  const store = createMemoryStore();
+function createTestApp(eventBus: EventBus, store: DataStore): Hono {
   const app = new Hono();
+  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("eventBus", eventBus);
     c.set("store", store);
+    c.set("sessionLock", sessionLock);
     await next();
   });
   app.route("/api/events", eventRoutes);
@@ -26,10 +28,25 @@ describe("SSE Events", () => {
   let eventBus: EventBus;
   let busStore: DataStore;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     busStore = createMemoryStore();
     eventBus = createEventBus(busStore);
-    app = createTestApp(eventBus);
+    app = createTestApp(eventBus, busStore);
+    await busStore.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
+      id: "sess-1",
+      worldId: null,
+      status: "active",
+      completedPlayerTurns: 0,
+
+      activePlugins: [],
+      createdAt: new Date().toISOString(),
+    });
   });
 
   describe("POST /api/events/emit", () => {
@@ -78,6 +95,20 @@ describe("SSE Events", () => {
       expect(res.status).toBe(400);
     });
 
+    it("should refuse injection into a paused session", async () => {
+      await busStore.updateSession("sess-1", { status: "paused" });
+      const res = await app.request("/api/events/emit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: "test.event", sessionId: "sess-1" }),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ code: "session_not_active" });
+      await eventBus.flush();
+      expect(await busStore.listEvents("sess-1")).toEqual([]);
+    });
+
     it("should pass targetRuntime if provided", async () => {
       await app.request("/api/events/emit", {
         method: "POST",
@@ -108,11 +139,17 @@ describe("SSE Events", () => {
       const store = createMemoryStore();
       // Create a session so the route can find it
       await store.createSession({
+        phase: "playing",
+        setupRuntimes: {},
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
         id: "sess-topic",
         worldId: null,
         status: "active",
-        turnCount: 1,
-        preGameCompleted: [],
+        completedPlayerTurns: 1,
+
         presetId: null,
         activePlugins: [],
         createdAt: new Date().toISOString(),

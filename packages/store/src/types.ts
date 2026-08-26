@@ -2,8 +2,8 @@
  * Unified DataStore interface and record types.
  *
  * All data is session-scoped. Server deployments switch backends through
- * STORE_BACKEND (memory | sqlite | pg). Browser callers can request idb
- * directly through createStore({ backend: "idb" }).
+ * STORE_BACKEND (memory | sqlite | pg). Browser-private persistence uses the
+ * dedicated Dexie BrowserVault contract rather than implementing DataStore.
  *
  * Record type definitions are organised by domain under `./records/*`; this
  * module re-exports them all so existing `../types.js` imports keep working,
@@ -36,7 +36,6 @@ export type {
   StateEntryRecord,
   StateChangeRecord,
   EventRecord,
-  ApprovalRecord,
   MessageRecord,
   CharacterRecord,
 } from "./records/state-records.js";
@@ -58,11 +57,7 @@ export type {
 export type {
   SnapshotKind,
   SnapshotPayload,
-  SnapshotPayloadV1,
-  SnapshotPayloadV2,
-  SnapshotPayloadV3,
   SnapshotSessionState,
-  SnapshotSessionStateV3,
   SnapshotRecord,
   SnapshotMetadata,
   SuspensionRecord,
@@ -104,7 +99,6 @@ import type {
   StateEntryRecord,
   StateChangeRecord,
   EventRecord,
-  ApprovalRecord,
   MessageRecord,
   CharacterRecord,
 } from "./records/state-records.js";
@@ -161,8 +155,6 @@ export interface SessionStore {
       Pick<
         SessionRecord,
         | "status"
-        | "turnCount"
-        | "preGameCompleted"
         | "activePlugins"
         | "presetId"
         | "locale"
@@ -205,7 +197,7 @@ export interface RuntimeRecordStore {
   setTurnResultCommitStatus(
     sessionId: string,
     turnId: string,
-    status: NonNullable<TurnResultRecord["commitStatus"]>,
+    status: TurnResultRecord["commitStatus"],
   ): Promise<void>;
 
   // ── Runtime Results ──
@@ -283,12 +275,6 @@ export interface EventStore {
    * `listEvents` scan.
    */
   getEventById(sessionId: string, id: string): Promise<EventRecord | null>;
-}
-
-/** Tool-approval records. Part of `sql-session-content-records`. */
-export interface ApprovalStore {
-  saveApproval(record: ApprovalRecord): Promise<void>;
-  listApprovals(sessionId: string): Promise<ApprovalRecord[]>;
 }
 
 /** Chat/narrative message log. Part of `sql-session-content-records`. */
@@ -593,6 +579,10 @@ export interface LifecycleStore {
     sessionId: string,
     logicalTurnId: string,
   ): Promise<LogicalTurnLedgerRecord | null>;
+  /** List every completed logical turn for checkpoint/export workflows. */
+  listLogicalTurnCompletions(
+    sessionId: string,
+  ): Promise<readonly LogicalTurnLedgerRecord[]>;
 
   /**
    * Insert a setup-runtime attempt. Idempotent on
@@ -727,24 +717,24 @@ export interface TransactionalStore {
    * - PostgreSQL runs each call on an independent pooled connection (Drizzle's
    *   native `db.transaction`), giving true concurrency. A non-tx write made
    *   during a transaction stays isolated on its own connection.
-   * - Single-connection backends (SQLite / Memory / IndexedDB) serialize
-   *   concurrent calls so neither loses writes. **Caveat:** because there is one
-   *   connection / one snapshot, any other write issued on the same store while
-   *   a callback is mid-flight — including writes that do NOT go through
-   *   `withTransaction` — is folded into the open transaction and committed or
-   *   rolled back with it. Do not interleave unrelated writes with a serialized
-   *   transaction.
+   * - Single-connection/snapshot backends (SQLite / Memory / IndexedDB)
+   *   serialize transactions and bundled root mutators through one write gate,
+   *   so an unrelated root write waits instead of being folded into a rollback.
+   *   SQLite gates every store sharing its connection; IndexedDB gates every
+   *   handle for one database name through Web Locks when available.
    *
    * **Nesting is not supported on any backend.** Calling `withTransaction` from
    * inside another `withTransaction` callback rejects with a clear error rather
    * than (serialized backends) deadlocking on the serialization chain or (PG)
    * silently running a non-atomic inner transaction on a separate connection.
-   * The guard is precise: genuinely concurrent (non-nested) calls are unaffected.
+   * Node backends use a precise async-context guard. IndexedDB uses a coarse
+   * per-handle flag and can conservatively reject a genuinely concurrent call
+   * on that same handle while a transaction callback is active.
    *
-   * Optional so partial mock stores remain assignable; all bundled backends
-   * implement it.
+   * Every store implements this boundary. Test doubles should use a bundled
+   * in-memory store or provide the same transactional contract explicitly.
    */
-  withTransaction?: <T>(fn: (tx: StoreTransaction) => Promise<T>) => Promise<T>;
+  withTransaction<T>(fn: (tx: StoreTransaction) => Promise<T>): Promise<T>;
 }
 
 /** Store lifecycle. Omitted from {@link StoreTransaction}. */
@@ -766,7 +756,6 @@ export interface DataStore
     RuntimeRecordStore,
     StateStore,
     EventStore,
-    ApprovalStore,
     MessageStore,
     CharacterStore,
     PluginDataStore,
@@ -796,8 +785,8 @@ export type StoreTransaction = Omit<DataStore, "withTransaction" | "close">;
 
 // ── Store config ─────────────────────────────────────────────────
 
-export type StoreBackend = "memory" | "sqlite" | "pg" | "idb";
-export type RuntimeStoreBackend = Exclude<StoreBackend, "idb">;
+export type StoreBackend = "memory" | "sqlite" | "pg";
+export type RuntimeStoreBackend = StoreBackend;
 
 export interface StoreConfig {
   readonly backend: StoreBackend;
@@ -805,6 +794,4 @@ export interface StoreConfig {
   readonly sqlitePath?: string;
   /** PostgreSQL connection URL */
   readonly databaseUrl?: string;
-  /** IndexedDB database name (default: covel-browser) */
-  readonly idbDbName?: string;
 }

@@ -211,7 +211,7 @@ export function AiWorldGenerator({
               </div>
               <textarea
                 id="world-prompt"
-                className="flex min-h-[140px] w-full rounded-[var(--radius-control)] border border-border bg-background px-4 py-3 text-sm leading-relaxed placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:border-primary/60 focus-visible:ring-1 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50 resize-none transition-colors"
+                className="flex min-h-35 w-full rounded-(--radius-control) border border-border bg-background px-4 py-3 text-sm leading-relaxed placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:border-primary/60 focus-visible:ring-1 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-50 resize-none transition-colors"
                 placeholder={t(
                   "world.aiPromptPlaceholderFull",
                   "e.g. A floating archipelago of stormbound airships where every island holds a single oracle...",
@@ -248,7 +248,7 @@ export function AiWorldGenerator({
 
             {/* Progress indicator */}
             {isWorking && (
-              <div className="flex items-center gap-3 p-4 rounded-[var(--radius-control)] bg-muted/40 border border-border">
+              <div className="flex items-center gap-3 p-4 rounded-(--radius-control) bg-muted/40 border border-border">
                 <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium">{phaseLabel[phase]}</p>
@@ -278,7 +278,7 @@ export function AiWorldGenerator({
 
             {/* Done */}
             {phase === "done" && (
-              <div className="flex items-center gap-3 p-4 rounded-[var(--radius-control)] bg-emerald-500/10 border border-emerald-500/30">
+              <div className="flex items-center gap-3 p-4 rounded-(--radius-control) bg-emerald-500/10 border border-emerald-500/30">
                 <Check className="h-4 w-4 text-emerald-500 shrink-0" />
                 <p className="text-sm font-medium text-emerald-500">
                   {phaseLabel.done}
@@ -288,13 +288,13 @@ export function AiWorldGenerator({
 
             {/* Error */}
             {phase === "error" && error && (
-              <div className="flex items-start gap-3 p-4 rounded-[var(--radius-control)] bg-destructive/10 border border-destructive/30">
+              <div className="flex items-start gap-3 p-4 rounded-(--radius-control) bg-destructive/10 border border-destructive/30">
                 <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-destructive">
                     {t("world.aiError", "Generation failed")}
                   </p>
-                  <p className="text-xs text-destructive/80 mt-1 break-words leading-relaxed">
+                  <p className="text-xs text-destructive/80 mt-1 wrap-break-word leading-relaxed">
                     {error}
                   </p>
                 </div>

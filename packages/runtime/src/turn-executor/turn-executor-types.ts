@@ -45,12 +45,6 @@ export interface AgentLoopDeps {
     manifest: RuntimeManifest,
     apiOverride?: string,
   ) => string | undefined;
-  /**
-   * Optional DataStore. Within the core loop this is the persistence escape
-   * hatch for suspension records only; broader persistence is orchestrated by
-   * the harness. (Candidate to hoist out of the loop entirely in S3.)
-   */
-  readonly store?: DataStore;
   /** Optional EventBus for emitting subscription events during turn execution. */
   readonly eventBus?: EventBus;
   /** Called for each LLM text delta during streaming (narrative-only runtimes). */
@@ -71,7 +65,8 @@ export interface AgentLoopDeps {
    * Trace emitter for per-turn observability. When present, runtime emits
    * tool.calling / tool.completed / llm.calling / llm.responded / message.completed
    * etc. into trace_events and the action SSE stream via eventBus.
-   * Optional for backward compatibility with tests and embedders.
+   * Optional for isolated or embedded execution paths that do not collect
+   * traces or publish an action event stream.
    */
   readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
   /**
@@ -83,6 +78,8 @@ export interface AgentLoopDeps {
 }
 
 export interface TurnExecutorDeps extends AgentLoopDeps {
+  /** Optional store used by the orchestration harness and function runtimes. */
+  readonly store?: DataStore;
   /** Resolve a runtime manifest to its fully loaded data. Locale enables localized PLUGIN.md (e.g., PLUGIN.en.md). */
   readonly loadRuntime: (
     manifest: RuntimeManifest,

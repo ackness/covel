@@ -8,7 +8,6 @@ description:
   en: Offers several reply options so you can choose the one that fits best.
 pluginType: plugin
 runtimeType: function
-resultFormat: envelope-v1
 outputKind: system
 stage: post-turn
 handler: ./handler.js
@@ -40,6 +39,10 @@ tags:
 ui:
   message:
     - ./ui/branch-reply-block.json
+# This runtime only writes its own plugin-data namespaces. Its message block is
+# a declarative projection, so it commutes with other message-block producers.
+effects:
+  parallelSafe: true
 ---
 
 # Branch Reply

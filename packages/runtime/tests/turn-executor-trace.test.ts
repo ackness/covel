@@ -52,13 +52,14 @@ function makeTurnInput(overrides?: Partial<TurnInput>): TurnInput {
 }
 
 describe("turn-executor message.completed trace emission", () => {
-  it("emits message.completed for a story runtime with finalContent", async () => {
+  it("emits the resolved provider and model on llm.calling", async () => {
     const manifest: RuntimeManifest = {
       name: "story-narrator",
       pluginId: "story-narrator",
       description: "Story runtime for message.completed trace test.",
       stage: "narrative",
       outputKind: "story",
+      model: "story",
     };
     const loaded: LoadedRuntime = {
       manifest,
@@ -66,7 +67,11 @@ describe("turn-executor message.completed trace emission", () => {
     };
 
     const narrative = "The village was quiet under the morning mist.";
-    const llm: LLMAdapter = {
+    const llm = {
+      resolveTarget(slot: string | undefined) {
+        expect(slot).toBe("story");
+        return { provider: "deepseek-proxy", model: "deepseek-chat" };
+      },
       async generate() {
         return {
           content: narrative,
@@ -75,7 +80,7 @@ describe("turn-executor message.completed trace emission", () => {
           usage: { inputTokens: 10, outputTokens: 20 },
         };
       },
-    };
+    } satisfies LLMAdapter;
 
     const emitter = makeEmitterSpy();
     const store = await createMainLoopStore("sess-1");
@@ -87,6 +92,13 @@ describe("turn-executor message.completed trace emission", () => {
     };
 
     await executeTurn(makeTurnInput(), [manifest], deps, { maxSteps: 2 });
+
+    const llmCalling = emitter.events.find((e) => e.type === "llm.calling");
+    expect(llmCalling?.payload).toMatchObject({
+      slot: "story",
+      model: "deepseek-chat",
+      provider: "deepseek-proxy",
+    });
 
     const messageCompleted = emitter.events.find(
       (e) => e.type === "message.completed",
@@ -156,6 +168,7 @@ describe("turn-executor direct-generate error trace pairing (Q1)", () => {
       pluginId: "trace-fallback",
       description: "Runtime exercising the malformed-args fallback error path.",
       stage: "post-turn",
+      model: "plugin",
       tools: { plugin: ["fallback-tool"] },
     };
     const loaded: LoadedRuntime = {
@@ -172,15 +185,24 @@ describe("turn-executor direct-generate error trace pairing (Q1)", () => {
       );
 
     let callCount = 0;
-    const llm: LLMAdapter = {
-      async generate() {
+    const llm = {
+      resolveTarget(slot: string | undefined) {
+        expect(slot).toBe("plugin");
+        return { provider: "deepseek-proxy", model: "deepseek-chat" };
+      },
+      async generate(params) {
         callCount++;
+        params.onTargetAttempt?.(
+          callCount === 1
+            ? { provider: "deepseek-proxy", model: "deepseek-chat" }
+            : { provider: "backup-proxy", model: "backup-chat" },
+        );
         // Every attempt throws a malformed-args-classified error.
         // Helper path: throws → LLMRetryError with classified cause.
         // Fallback direct call: throws → Q1 catch block runs here.
         throw malformedArgsError();
       },
-    };
+    } satisfies LLMAdapter;
 
     const emitter = makeEmitterSpy();
     const store = await createMainLoopStore("sess-1");
@@ -210,6 +232,17 @@ describe("turn-executor direct-generate error trace pairing (Q1)", () => {
     );
     expect(callingEvents.length).toBeGreaterThan(0);
     expect(respondedEvents.length).toBe(callingEvents.length);
+    expect(
+      callingEvents.every((event) => event.payload.slot === "plugin"),
+    ).toBe(true);
+    expect(callingEvents[0]?.payload).toMatchObject({
+      model: "deepseek-chat",
+      provider: "deepseek-proxy",
+    });
+    expect(callingEvents.at(-1)?.payload).toMatchObject({
+      model: "backup-chat",
+      provider: "backup-proxy",
+    });
 
     // At least one llm.responded carries finishReason:error, usage, durationMs.
     const errorResponded = respondedEvents.find(

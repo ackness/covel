@@ -19,6 +19,7 @@ import {
   sleepWithAbort,
 } from "./adapters/http.js";
 import { createPinnedDispatcher } from "./adapters/http/dns-safety.js";
+import { fetchWithDispatcher } from "./outbound-network.js";
 import type { ImageWire } from "./image/types.js";
 import type { SpeechWire, TranscriptionWire } from "./speech/types.js";
 
@@ -111,12 +112,15 @@ export async function fetchWithRetry(
       // provider path: force manual redirect handling and fail closed on a 3xx
       // so a `302 Location: http://169.254.169.254/…` can't reach internal
       // hosts. `redirect` is placed after `...rest` to override any caller value.
-      const response = await fetch(input, {
-        ...rest,
-        redirect: "manual",
-        ...(signal ? { signal } : {}),
+      const response = await fetchWithDispatcher(
+        input,
+        {
+          ...rest,
+          redirect: "manual",
+          ...(signal ? { signal } : {}),
+        },
         dispatcher,
-      } as RequestInit);
+      );
       if (response.status >= 300 && response.status < 400) {
         throw new Error(
           `baseUrl rejected by SSRF policy: refusing to follow redirect (HTTP ${response.status}) from "${url}".`,

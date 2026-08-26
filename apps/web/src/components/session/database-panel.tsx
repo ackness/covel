@@ -154,7 +154,7 @@ export function DatabasePanel({
 
   return (
     <div className="space-y-4 min-w-0">
-      <header className="flex items-center justify-between gap-2 min-w-0 pb-2 border-b border-[var(--rule-color)]">
+      <header className="flex items-center justify-between gap-2 min-w-0 pb-2 border-b border-(--rule-color)">
         <span className="ui-folio truncate">
           {t("session.database")}&nbsp;&nbsp;
           <em className="not-italic">
@@ -263,9 +263,7 @@ function Section({ ord, title, count, subCount, children }: SectionProps) {
 }
 
 function RowList({ children }: { children: React.ReactNode }) {
-  return (
-    <ul className="border-t border-[var(--rule-color)] min-w-0">{children}</ul>
-  );
+  return <ul className="border-t border-(--rule-color) min-w-0">{children}</ul>;
 }
 
 function PluginGroupView({ group }: { group: PluginGroup }) {
@@ -307,7 +305,7 @@ function TableRow({ table, parsed, compact = false }: TableRowProps) {
         : (parsed.pluginId ?? parsed.fullName);
 
   return (
-    <li className="border-b border-[var(--rule-color)] min-w-0 last:border-b-0">
+    <li className="border-b border-(--rule-color) min-w-0 last:border-b-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -326,7 +324,7 @@ function TableRow({ table, parsed, compact = false }: TableRowProps) {
         </span>
       </button>
       {open && (
-        <div className="px-3 pb-3 pt-1 space-y-2 min-w-0 overflow-hidden bg-[color-mix(in_oklab,var(--surface-inset)_45%,transparent)] border-t border-[var(--rule-color)]">
+        <div className="px-3 pb-3 pt-1 space-y-2 min-w-0 overflow-hidden bg-[color-mix(in_oklab,var(--surface-inset)_45%,transparent)] border-t border-(--rule-color)">
           {fieldCount > 0 && <SchemaList fields={table.fields} />}
           <ValuesBlock data={table.data} valueCount={valueCount} />
         </div>
@@ -347,7 +345,7 @@ function SchemaList({ fields }: { fields: StateTableEntry["fields"] }) {
             className="text-[10px] flex items-baseline gap-2 min-w-0"
             title={f.description ? `${f.name} — ${f.description}` : f.name}
           >
-            <span className="font-mono truncate text-foreground/90 shrink-[2] basis-auto">
+            <span className="font-mono truncate text-foreground/90 shrink-2 basis-auto">
               {f.name}
             </span>
             {f.type && (
@@ -383,7 +381,7 @@ function ValuesBlock({
           {t("session.dbValueEmpty", "(empty)")}
         </p>
       ) : (
-        <pre className="max-h-[200px] max-w-full overflow-auto p-2 text-[10px] font-mono leading-snug whitespace-pre-wrap break-words [overflow-wrap:anywhere] bg-[var(--surface-inset)] border border-[var(--rule-color)] rounded-sm">
+        <pre className="max-h-50 max-w-full overflow-auto p-2 text-[10px] font-mono leading-snug whitespace-pre-wrap wrap-break-word bg-(--surface-inset) border border-(--rule-color) rounded-sm">
           {JSON.stringify(data, null, 2)}
         </pre>
       )}

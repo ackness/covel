@@ -6,6 +6,8 @@ export interface SessionPrepScreenProps {
   packages: api.PackageSummary[];
   presets: api.PresetSummary[];
   llmConfig?: api.LlmConfigResponse | null;
+  /** Last session-creation error, surfaced while the prep screen stays mounted. */
+  startError?: string | null;
   onBack: () => void;
   onStart: (plugins?: string[]) => Promise<void> | void;
   onResume: (session: api.SessionRecord) => Promise<void> | void;

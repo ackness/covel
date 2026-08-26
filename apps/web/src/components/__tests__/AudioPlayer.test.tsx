@@ -70,6 +70,15 @@ afterEach(() => {
 });
 
 describe("AudioPlayer", () => {
+  it("omits the audio src while the MediaRef is still resolving", () => {
+    vi.mocked(resolveMediaSrc).mockReturnValueOnce(new Promise(() => {}));
+    const { container } = render(
+      <AudioPlayer src={FAKE_REF} sessionId="sess" alt="narration" />,
+    );
+
+    expect(container.querySelector("audio")?.hasAttribute("src")).toBe(false);
+  });
+
   it("renders play / seek / speed / download chrome once the ref resolves", async () => {
     render(<AudioPlayer src={FAKE_REF} sessionId="sess" alt="narration" />);
 

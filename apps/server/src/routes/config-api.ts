@@ -26,18 +26,42 @@ import {
   existsSync,
   mkdirSync,
   chmodSync,
+  renameSync,
+  unlinkSync,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir, platform } from "node:os";
 import { spawn } from "node:child_process";
+import {
+  patchDesktopConfigFile,
+  readDesktopConfigFile,
+} from "@covel/shared/desktop-config/node";
 import {
   normalizeProviderKeyMap,
   providerKeyToId,
   readRuntimeEnv,
   toApiKeyEnvMap,
 } from "@covel/shared";
+import {
+  emptySettingsPersistenceBundle,
+  nextSettingsPersistenceBundle,
+  parseSettingsPersistenceBundle,
+  type SettingsPersistenceBundle,
+} from "@covel/shared/settings-persistence";
 import { errorBody, readJsonBody } from "../api-error.js";
 import { parseEnvLines } from "../lib/env-file.js";
 import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
+import {
+  configureOutboundProxy,
+  getOutboundProxyStatus,
+  normalizeOutboundProxyConfig,
+  type OutboundProxyMode,
+} from "@covel/ai-provider";
+import {
+  readStoredProxyConfig,
+  writeStoredProxyConfig,
+} from "../lib/proxy-config.js";
+import { getDesktopSystemProxyResolver } from "../lib/desktop-system-proxy.js";
 
 export interface ConfigApiDeps {
   /** Mutable map shared with the gateway adapter. PUT handlers mutate in-place. */
@@ -47,6 +71,31 @@ export interface ConfigApiDeps {
 export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   const app = new Hono();
   const requireToken = makeDesktopRestTokenGuard();
+  const initialCovelHome = resolveCovelHome();
+  const systemProxyUrl = readRuntimeEnv().systemProxyUrl;
+  const resolveSystemProxy = getDesktopSystemProxyResolver();
+  try {
+    configureOutboundProxy({
+      ...(initialCovelHome
+        ? readStoredProxyConfig(initialCovelHome)
+        : { mode: "direct" as const }),
+      systemProxyUrl,
+      resolveSystemProxy,
+    });
+  } catch (error) {
+    // A manually edited or previously persisted proxy must not prevent the
+    // desktop sidecar from starting. Keep the file for user recovery and run
+    // direct until a valid setting is saved.
+    console.warn(
+      "[proxy-config] Ignoring invalid stored proxy settings:",
+      error,
+    );
+    configureOutboundProxy({
+      mode: "direct",
+      systemProxyUrl,
+      resolveSystemProxy,
+    });
+  }
 
   app.get("/api/config/info", (c) => {
     const covelHome = resolveCovelHome();
@@ -78,7 +127,17 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     if (!covelHome) return c.json({ providers: [] });
 
     const file = join(covelHome, "keys.env");
-    const entries = readKeysEnv(file);
+    let entries: Record<string, string>;
+    try {
+      entries = readKeysEnv(file);
+    } catch {
+      return c.json(
+        errorBody("keys.env could not be read safely", {
+          code: "keys_file_unreadable",
+        }),
+        500,
+      );
+    }
     const providers: string[] = [];
     for (const key of Object.keys(entries)) {
       if (entries[key]) {
@@ -114,7 +173,18 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
     }
 
     const file = join(covelHome, "keys.env");
-    const entries = readKeysEnv(file);
+    let entries: Record<string, string>;
+    try {
+      entries = readKeysEnv(file);
+    } catch {
+      return c.json(
+        errorBody(
+          "Refusing to overwrite an unreadable keys.env; repair or back it up first",
+          { code: "keys_file_unreadable" },
+        ),
+        409,
+      );
+    }
 
     for (const [provider, raw] of Object.entries(
       body as Record<string, unknown>,
@@ -141,30 +211,29 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   app.get("/api/config/settings", requireToken, (c) => {
     const covelHome = resolveCovelHome();
     if (!covelHome) {
-      return c.json({ schemaVersion: 1, savedAt: "", entries: {} });
+      return c.json(emptySettingsPersistenceBundle());
     }
     const file = join(covelHome, "settings.json");
+    if (!existsSync(file)) {
+      return c.json(emptySettingsPersistenceBundle());
+    }
     try {
-      if (!existsSync(file)) {
-        return c.json({ schemaVersion: 1, savedAt: "", entries: {} });
-      }
-      const raw = readFileSync(file, "utf-8");
-      const parsed = JSON.parse(raw) as {
-        schemaVersion?: number;
-        savedAt?: string;
-        entries?: Record<string, unknown>;
-      };
-      return c.json({
-        schemaVersion: parsed.schemaVersion ?? 1,
-        savedAt: parsed.savedAt ?? "",
-        entries: parsed.entries ?? {},
-      });
+      return c.json(readSettingsBundle(file));
     } catch {
-      return c.json({ schemaVersion: 1, savedAt: "", entries: {} });
+      // `save()` writes a full snapshot. Reporting corrupt/unreadable data as
+      // an empty success would let the next one-field edit destroy the only
+      // recoverable copy, so make SettingsStore enter its read-only failed
+      // hydration state instead.
+      return c.json(
+        errorBody("settings.json could not be read safely", {
+          code: "settings_file_invalid",
+        }),
+        500,
+      );
     }
   });
 
-  // PUT /api/config/settings — body: { entries: Record<string, unknown> }
+  // PUT /api/config/settings — body: { entries, expectedRevision }.
   // Atomically rewrites the bundle. Mode 0600 to match `keys.env` — even
   // though `settings.json` should not contain secrets, the user might
   // import/export with `includeSecrets: true`.
@@ -189,26 +258,126 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         400,
       );
     }
-    const entries =
-      (body as { entries?: unknown }).entries &&
-      typeof (body as { entries?: unknown }).entries === "object"
-        ? ((body as { entries?: Record<string, unknown> }).entries ?? {})
-        : {};
-
-    const payload = {
-      schemaVersion: 1,
-      savedAt: new Date().toISOString(),
-      entries,
-    };
+    const rawEntries = (body as { entries?: unknown }).entries;
+    if (
+      !rawEntries ||
+      typeof rawEntries !== "object" ||
+      Array.isArray(rawEntries)
+    ) {
+      return c.json(
+        errorBody("Body must be { entries: object }", {
+          code: "invalid_settings_body",
+        }),
+        400,
+      );
+    }
+    const entries = rawEntries as Record<string, unknown>;
+    const rawExpectedRevision = (body as { expectedRevision?: unknown })
+      .expectedRevision;
+    if (
+      typeof rawExpectedRevision !== "number" ||
+      !Number.isInteger(rawExpectedRevision) ||
+      rawExpectedRevision < 0
+    ) {
+      return c.json(
+        errorBody("Body must include expectedRevision: non-negative integer", {
+          code: "invalid_settings_body",
+        }),
+        400,
+      );
+    }
+    const expectedRevision = rawExpectedRevision;
     const file = join(covelHome, "settings.json");
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify(payload, null, 2) + "\n", {
-      mode: 0o600,
-    });
-    // settings.json may carry secrets via `includeSecrets`; re-assert 0600
-    // so an existing looser-permission file gets tightened (audit M1).
-    chmodSync(file, 0o600);
-    return c.json({ ok: true });
+    let current: SettingsPersistenceBundle;
+    try {
+      current = existsSync(file)
+        ? readSettingsBundle(file)
+        : emptySettingsPersistenceBundle();
+    } catch {
+      return c.json(
+        errorBody(
+          "Refusing to overwrite an unreadable settings.json; repair or back it up first",
+          { code: "settings_file_invalid" },
+        ),
+        409,
+      );
+    }
+    if (current.revision !== expectedRevision) {
+      return c.json(
+        errorBody("settings.json changed in another instance", {
+          code: "settings_revision_conflict",
+          details: { revision: current.revision },
+        }),
+        409,
+      );
+    }
+    const payload = nextSettingsPersistenceBundle(entries, current.revision);
+    writePrivateFileAtomic(file, JSON.stringify(payload, null, 2) + "\n");
+    return c.json(payload);
+  });
+
+  app.get("/api/config/proxy", requireToken, (c) => {
+    if (!resolveCovelHome()) {
+      return c.json(
+        errorBody("Proxy configuration is available only in desktop mode.", {
+          code: "proxy_config_unavailable",
+        }),
+        400,
+      );
+    }
+    return c.json(getOutboundProxyStatus());
+  });
+
+  app.put("/api/config/proxy", requireToken, async (c) => {
+    const covelHome = resolveCovelHome();
+    if (!covelHome) {
+      return c.json(
+        errorBody("Proxy configuration is available only in desktop mode.", {
+          code: "proxy_config_unavailable",
+        }),
+        400,
+      );
+    }
+    const parsed = await readJsonBody(c);
+    if (parsed instanceof Response) return parsed;
+    const body = parsed.body;
+    if (!body || typeof body !== "object") {
+      return c.json(
+        errorBody("Body must be { mode, url? }", {
+          code: "invalid_proxy_config",
+        }),
+        400,
+      );
+    }
+    try {
+      const rawMode = (body as { mode?: unknown }).mode;
+      if (typeof rawMode !== "string") {
+        throw new Error("Proxy mode is required.");
+      }
+      const config = normalizeOutboundProxyConfig({
+        mode: rawMode as OutboundProxyMode,
+        url: (body as { url?: string }).url,
+      });
+      // Fail before hot-applying when a hand-edited config is malformed. The
+      // focused writer must never replace the only recoverable source copy.
+      readDesktopConfigFile(join(covelHome, "config.toml"));
+      const status = configureOutboundProxy({
+        ...config,
+        systemProxyUrl: readRuntimeEnv().systemProxyUrl,
+        resolveSystemProxy,
+      });
+      // ProxyAgent construction above validates transport-specific details
+      // such as credential escaping before the new value reaches disk.
+      writeStoredProxyConfig(covelHome, config);
+      return c.json(status);
+    } catch (error) {
+      return c.json(
+        errorBody(error instanceof Error ? error.message : String(error), {
+          code: "invalid_proxy_config",
+        }),
+        400,
+      );
+    }
   });
 
   // PUT /api/config/data-root — body: { path: string }
@@ -349,32 +518,9 @@ function openInFileManager(folder: string): Promise<void> {
 }
 
 function writeDataRootInConfig(covelHome: string, newPath: string): void {
-  const cfgFile = join(covelHome, "config.toml");
-  const replacement = `data_root = ${JSON.stringify(newPath)}`;
-  let current = "";
-  try {
-    current = readFileSync(cfgFile, "utf-8");
-  } catch {
-    current = "";
-  }
-  const linePattern = /^(\s*)(#\s*)?data_root\s*=.*$/m;
-  let next: string;
-  if (linePattern.test(current)) {
-    next = current.replace(
-      linePattern,
-      (_m, indent: string) => `${indent}${replacement}`,
-    );
-  } else if (/^\[paths]/m.test(current)) {
-    next = current.replace(/^\[paths]\s*$/m, `[paths]\n${replacement}`);
-  } else if (current.trim()) {
-    next = `${current.trimEnd()}\n\n[paths]\n${replacement}\n`;
-  } else {
-    next =
-      `# Covel user config (auto-generated by Settings panel).\n\n` +
-      `[paths]\n${replacement}\n\n[logging]\nmax_size_mb = 10\nmax_files   = 10\n`;
-  }
-  mkdirSync(dirname(cfgFile), { recursive: true });
-  writeFileSync(cfgFile, next);
+  patchDesktopConfigFile(join(covelHome, "config.toml"), {
+    paths: { data_root: newPath },
+  });
 }
 
 /**
@@ -418,14 +564,34 @@ function resolveCovelHome(): string | null {
 function readKeysEnv(file: string): Record<string, string> {
   const result: Record<string, string> = {};
   if (!existsSync(file)) return result;
-  try {
-    for (const [key, val] of parseEnvLines(readFileSync(file, "utf-8"))) {
-      result[key] = val;
-    }
-  } catch (err) {
-    console.warn(`[config-api] Could not read ${file}:`, err);
+  for (const [key, val] of parseEnvLines(readFileSync(file, "utf-8"))) {
+    result[key] = val;
   }
   return normalizeProviderKeyMap(result);
+}
+
+function readSettingsBundle(file: string): SettingsPersistenceBundle {
+  return parseSettingsPersistenceBundle(
+    JSON.parse(readFileSync(file, "utf-8")) as unknown,
+  );
+}
+
+function writePrivateFileAtomic(file: string, contents: string): void {
+  mkdirSync(dirname(file), { recursive: true });
+  const temp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temp, contents, { mode: 0o600 });
+    chmodSync(temp, 0o600);
+    renameSync(temp, file);
+    chmodSync(file, 0o600);
+  } catch (err) {
+    try {
+      if (existsSync(temp)) unlinkSync(temp);
+    } catch {
+      // Preserve the original write error.
+    }
+    throw err;
+  }
 }
 
 function writeKeysEnv(file: string, entries: Record<string, string>): void {
@@ -449,10 +615,5 @@ function writeKeysEnv(file: string, entries: Record<string, string>): void {
     })
     .map(([k, v]) => `${k}=${v.trim()}`)
     .join("\n");
-  mkdirSync(dirname(file), { recursive: true });
-  // mode in writeFileSync only applies when creating a new file. Re-assert
-  // 0600 after every write so an existing file with looser permissions gets
-  // tightened (audit M1). chmod is a no-op on Windows but does not throw.
-  writeFileSync(file, header + body + "\n", { mode: 0o600 });
-  chmodSync(file, 0o600);
+  writePrivateFileAtomic(file, header + body + "\n");
 }

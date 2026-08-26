@@ -19,6 +19,7 @@ import { CostPanel } from "./-cost-panel.js";
 import { SessionDataView } from "./-session-data-view.js";
 import { SessionSidebar } from "./-session-sidebar.js";
 import { TraceTimeline } from "./-trace-timeline.js";
+import { traceEventIdentity } from "./-debug-helpers.js";
 
 export function DebugRoutePage({ sid }: { sid?: string }) {
   const { t } = useTranslation();
@@ -53,9 +54,9 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
   } = useDebugPageData(sid);
 
   return (
-    <div className="flex h-full w-full flex-col border-t border-[var(--rule-color)] overflow-hidden">
+    <div className="flex h-full w-full flex-col border-t border-(--rule-color) overflow-hidden">
       <div
-        className="flex-shrink-0 min-h-11 px-4 py-2 border-b border-[var(--rule-color)] flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+        className="shrink-0 min-h-11 px-4 py-2 border-b border-(--rule-color) flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
         style={{ background: "var(--surface-page)" }}
       >
         <div className="flex items-center gap-3">
@@ -92,7 +93,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
           )}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="hidden md:flex items-center gap-1.5 border-r border-[var(--rule-color)] pr-3 text-[10px] text-muted-foreground">
+          <div className="hidden md:flex items-center gap-1.5 border-r border-(--rule-color) pr-3 text-[10px] text-muted-foreground">
             <span className="ui-meta text-[9px]">{t("debugger.sessions")}</span>
             <span className="font-mono text-foreground">{sessions.length}</span>
             <span className="ui-meta text-[9px]">
@@ -163,7 +164,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
       </div>
 
       {selectedSessionId && (
-        <div className="flex-shrink-0 border-b border-[var(--rule-color)] bg-[color-mix(in_oklab,var(--surface-page)_82%,var(--surface-inset))] px-4 py-2">
+        <div className="shrink-0 border-b border-(--rule-color) bg-[color-mix(in_oklab,var(--surface-page)_82%,var(--surface-inset))] px-4 py-2">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[10px] text-muted-foreground">
             <span className="inline-flex min-w-0 items-center gap-1.5">
               <span className="ui-meta text-[9px]">
@@ -242,7 +243,11 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
                   expandedTurns={expandedTurns}
                   expandedRuntimes={expandedRuntimes}
                   filterCategory={filterCategory}
-                  selectedEventSeq={selectedEvent?.seq}
+                  selectedEventId={
+                    selectedEvent
+                      ? traceEventIdentity(selectedEvent)
+                      : undefined
+                  }
                   onToggleTurn={toggleTurn}
                   onToggleRuntime={toggleRuntime}
                   onSelectEvent={setSelectedEvent}
@@ -250,6 +255,11 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
                 {selectedEvent && (
                   <EventDetailPanel
                     event={selectedEvent}
+                    relatedEvents={
+                      visibleTurns.find(
+                        ({ turn }) => turn.turnId === selectedEvent.turnId,
+                      )?.turn.events ?? []
+                    }
                     onClose={() => setSelectedEvent(null)}
                   />
                 )}

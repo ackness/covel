@@ -9,9 +9,7 @@ import type { JsonReader } from "./json-reader.js";
 export interface SessionRow {
   id: string;
   worldId: string | null;
-  status: string | null;
-  turnCount: number;
-  preGameCompleted: unknown;
+  status: string;
   locale: string;
   activePlugins: unknown;
   metadata: unknown;
@@ -20,9 +18,44 @@ export interface SessionRow {
   embeddingModelId: number | null;
   embeddingLockedAt: string | null;
   runtimeModelOverrides: unknown;
-  phase: string | null;
-  completedPlayerTurns: number | null;
+  phase: string;
+  completedPlayerTurns: number;
   setupRuntimes: unknown;
+}
+
+const SESSION_STATUSES = new Set<SessionStatus>(["active", "paused", "ended"]);
+
+function requireSessionStatus(value: string): SessionStatus {
+  if (!SESSION_STATUSES.has(value as SessionStatus)) {
+    throw new Error(`Invalid session status: ${value}`);
+  }
+  return value as SessionStatus;
+}
+
+function requireSessionPhase(value: string): SessionRecord["phase"] {
+  if (value !== "setup" && value !== "playing") {
+    throw new Error(`Invalid session phase: ${value}`);
+  }
+  return value;
+}
+
+function requireActivePlugins(value: unknown): readonly string[] {
+  if (
+    !Array.isArray(value) ||
+    !value.every((item) => typeof item === "string")
+  ) {
+    throw new Error("Invalid session activePlugins: expected string array");
+  }
+  return value;
+}
+
+function requireSetupRuntimes(
+  value: unknown,
+): Readonly<Record<string, SetupRuntimeState>> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid session setupRuntimes: expected object");
+  }
+  return value as Readonly<Record<string, SetupRuntimeState>>;
 }
 
 export function toSessionRecord(
@@ -33,17 +66,26 @@ export function toSessionRecord(
     Record<string, unknown> | undefined;
   const overrides = json.read(row.runtimeModelOverrides) as
     Record<string, string> | undefined;
-  const setupRuntimes = json.read(row.setupRuntimes) as
-    Record<string, SetupRuntimeState> | undefined;
+  const activePlugins = requireActivePlugins(
+    json.readRequired(row.activePlugins),
+  );
+  const setupRuntimes = requireSetupRuntimes(
+    json.readRequired(row.setupRuntimes),
+  );
+  if (
+    !Number.isSafeInteger(row.completedPlayerTurns) ||
+    row.completedPlayerTurns < 0
+  ) {
+    throw new Error(
+      `Invalid completedPlayerTurns: ${row.completedPlayerTurns}`,
+    );
+  }
   return {
     id: row.id,
     worldId: row.worldId ?? undefined,
-    status: (row.status ?? "active") as SessionStatus,
-    turnCount: row.turnCount,
-    preGameCompleted: (json.read(row.preGameCompleted) ??
-      []) as readonly string[],
+    status: requireSessionStatus(row.status),
     locale: row.locale,
-    activePlugins: (json.read(row.activePlugins) ?? []) as readonly string[],
+    activePlugins,
     metadata,
     ...(typeof metadata?.presetId === "string"
       ? { presetId: metadata.presetId }
@@ -59,12 +101,8 @@ export function toSessionRecord(
     ...(overrides && Object.keys(overrides).length > 0
       ? { runtimeModelOverrides: overrides }
       : {}),
-    ...(row.phase != null ? { phase: row.phase as "setup" | "playing" } : {}),
-    ...(row.completedPlayerTurns != null
-      ? { completedPlayerTurns: row.completedPlayerTurns }
-      : {}),
-    ...(setupRuntimes && Object.keys(setupRuntimes).length > 0
-      ? { setupRuntimes }
-      : {}),
+    phase: requireSessionPhase(row.phase),
+    completedPlayerTurns: row.completedPlayerTurns,
+    setupRuntimes,
   };
 }

@@ -115,8 +115,9 @@ describe("tool-carried proposal rebinding", () => {
       status: "active",
       presetId: null,
       activePlugins: ["p"],
-      turnCount: 1,
-      preGameCompleted: [],
+      phase: "playing",
+      completedPlayerTurns: 1,
+      setupRuntimes: {},
       createdAt: new Date().toISOString(),
     });
 
@@ -175,8 +176,9 @@ describe("PreStateCommit replacement is payload-only", () => {
       status: "active",
       presetId: null,
       activePlugins: ["p"],
-      turnCount: 1,
-      preGameCompleted: [],
+      phase: "playing",
+      completedPlayerTurns: 1,
+      setupRuntimes: {},
       createdAt: new Date().toISOString(),
     });
 
@@ -325,13 +327,13 @@ describe("isTrustedPluginSource ignores manifest claims", () => {
     ).toBe(false);
   });
 
-  it("trusts only builtin/official registry sources", () => {
+  it("trusts only builtin registry sources", () => {
     const manifest = makeManifest({});
     expect(
       isTrustedPluginSource({ getPluginSource: () => "builtin" }, manifest),
     ).toBe(true);
     expect(
-      isTrustedPluginSource({ getPluginSource: () => "official" }, manifest),
+      isTrustedPluginSource({ getPluginSource: () => "builtin" }, manifest),
     ).toBe(true);
   });
 });

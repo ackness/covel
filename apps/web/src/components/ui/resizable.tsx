@@ -41,7 +41,7 @@ const ResizableHandle = ({
   return (
     <Separator
       className={cn(
-        "ui-resize-handle relative shrink-0 transition-colors focus-visible:outline-none focus-visible:bg-[var(--accent-primary)]",
+        "ui-resize-handle relative shrink-0 transition-colors focus-visible:outline-none focus-visible:bg-(--accent-primary)",
         isVertical
           ? "w-full h-px cursor-row-resize"
           : "h-full w-px cursor-col-resize",

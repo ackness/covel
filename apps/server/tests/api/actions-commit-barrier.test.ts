@@ -5,9 +5,9 @@
  * Asserts the post-turn commit consistency contract on the real actions route:
  *   - post-turn memory ingestion fires only AFTER the proposal commit and the
  *     automatic snapshot (R-06/R-09 barrier — on this route the barrier is
- *     `TurnResult.completeTurn`, invoked after commit + snapshot; note the
- *     actions route does not thread an eventBus into executeTurn, so the
- *     bus-level turn.completed is exercised by the runtime-level tests);
+ *     `TurnResult.completeTurn`, invoked after commit + snapshot; the actions
+ *     route threads the eventBus through execute/finalize, and this suite also
+ *     verifies the committed bus-level `turn.completed` trace);
  *   - every trace_events row of the turn shares the single SSE traceId —
  *     recorder, emitter, and commit-pipeline rows alike (R-14).
  */
@@ -23,7 +23,7 @@ import {
   type PluginSummary,
   type LoadedRuntime,
 } from "@covel/plugin-loader";
-import { actionRoutes, setMemorySystem } from "../../src/routes/api/actions.js";
+import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import { makeFakeLLM, makeFakeLoadedRuntime } from "./__helpers/fake-llm.js";
 
@@ -104,18 +104,22 @@ describe("POST /api/actions — turn commit barrier", () => {
     registry = createPluginRegistry();
     registry.register(makeEntry(makeFakeLoadedRuntime({ name: RUNTIME_ID })));
 
-    // turnCount 0 with no turn_results rows: this turn advances the counter
-    // to 1, which is always an auto-snapshot checkpoint (turnCount <= 1
-    // bypasses the cadence gate), so the barrier assertions below can rely on
-    // a snapshot existing.
+    // The first completed player turn is always an auto-snapshot checkpoint,
+    // so the barrier assertions below can rely on a snapshot existing.
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [RUNTIME_ID],
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       createdAt: new Date().toISOString(),
     });
     // Prime one prior player message so turnNumber >= 1 and the main-loop
@@ -138,7 +142,7 @@ describe("POST /api/actions — turn commit barrier", () => {
     // Memory system mock — records the bus events visible at ingestion time,
     // so tests can prove ingestion ran after the snapshot (commit barrier).
     memoryCalls = [];
-    setMemorySystem({
+    const memorySystem = {
       manager: {
         loadBlocks: async () => [
           { label: "persona", content: "seed", updatedAt: "2024-01-01" },
@@ -153,7 +157,7 @@ describe("POST /api/actions — turn commit barrier", () => {
           return { updated: true, blocksChanged: [] };
         },
       },
-    });
+    };
 
     const { llm } = makeFakeLLM("A committed narrative line.");
     const sessionLock = createInProcessSessionLock();
@@ -171,6 +175,7 @@ describe("POST /api/actions — turn commit barrier", () => {
       c.set("resolveModel", () => undefined);
       c.set("eventBus", eventBus);
       c.set("sessionLock", sessionLock);
+      c.set("memorySystem", memorySystem);
       await next();
     });
     app.route("/api/actions", actionRoutes);
@@ -224,20 +229,24 @@ describe("POST /api/actions — turn commit barrier", () => {
 });
 
 describe("POST /api/actions — turn accounting follows the commit outcome", () => {
-  it("does not advance turnCount when the turn's proposals fail to commit", async () => {
+  it("does not advance completedPlayerTurns when proposals fail", async () => {
     const store = createMemoryStore();
     const registry = createPluginRegistry();
     registry.register(makeEntry(makeFakeLoadedRuntime({ name: RUNTIME_ID })));
-    setMemorySystem(undefined);
-
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: SESSION_ID,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [RUNTIME_ID],
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       createdAt: new Date().toISOString(),
     });
     // A prior completed player turn: turn accounting must count history
@@ -315,7 +324,7 @@ describe("POST /api/actions — turn accounting follows the commit outcome", () 
     // counter that drives the UI turn display and auto-snapshot cadence must
     // stay where it was.
     const session = await store.getSession(SESSION_ID);
-    expect(session?.turnCount).toBe(1);
+    expect(session?.completedPlayerTurns).toBe(1);
 
     // Player/runtime conversation messages share the proposal transaction.
     // This test seeded only a turn-result artifact, so no conversation rows

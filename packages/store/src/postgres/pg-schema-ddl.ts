@@ -6,9 +6,8 @@
  * a hand-maintained copy of the column/index definitions here.
  *
  * Only the things Drizzle cannot model stay hand-written below, because they are
- * operational, not a second copy of the schema:
- *   - idempotent `sessions` column migrations for pre-existing databases;
- *   - the `vector_models` table-name backfill function + trigger.
+ * operational, not a second copy of the schema: the `vector_models` table-name
+ * backfill function + trigger.
  *
  * Media tables are emitted into their own constant ({@link CREATE_MEDIA_TABLES_SQL})
  * because the MediaStore boots them standalone (`media-store/pg.ts`).
@@ -57,28 +56,6 @@ export const CREATE_MEDIA_TABLES_SQL = buildCreateTablesSql(mediaTables, "pg");
 const CREATE_CORE_TABLES_SQL = buildCreateTablesSql(coreTables, "pg");
 
 /**
- * T3 (turn-band refactor) + later additions: bring databases created by an
- * earlier schema up to date. Every statement is idempotent (`IF [NOT] EXISTS`),
- * so this is safe to run on every boot, fresh or legacy.
- */
-const SESSIONS_MIGRATIONS_SQL = `
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pre_game_completed JSONB NOT NULL DEFAULT '[]'::jsonb;
-  ALTER TABLE sessions DROP COLUMN IF EXISTS playing_turn_offset;
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS runtime_model_overrides JSONB DEFAULT '{}'::jsonb;
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS metadata JSONB;
-  -- Scheduling-redesign lifecycle fields (nullable; safe on legacy rows). NOTE:
-  -- an earlier iteration dropped 'phase'; it is re-added here (ADD, not DROP —
-  -- a DROP would wipe live phase data on every boot).
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS phase TEXT;
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS completed_player_turns INTEGER;
-  ALTER TABLE sessions ADD COLUMN IF NOT EXISTS setup_runtimes JSONB;
-  ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS origin TEXT;
-  ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS parent_turn_id TEXT;
-  ALTER TABLE turn_results ADD COLUMN IF NOT EXISTS commit_status TEXT;
-`;
-
-/**
  * BEFORE INSERT trigger: PG evaluates SERIAL defaults before BEFORE INSERT
  * triggers fire, so NEW.id is already populated. We mutate NEW.table_name in
  * place — no separate UPDATE statement needed. Drizzle does not model triggers,
@@ -103,7 +80,6 @@ const VECTOR_MODELS_TRIGGER_SQL = `
 
 export const CREATE_TABLES_SQL = [
   CREATE_CORE_TABLES_SQL,
-  SESSIONS_MIGRATIONS_SQL,
   VECTOR_MODELS_TRIGGER_SQL,
   CREATE_MEDIA_TABLES_SQL,
 ].join("\n\n");
@@ -117,6 +93,7 @@ export const ALL_TABLE_NAMES: readonly string[] = [
   "worlds",
   SESSIONS_TABLE,
   ...SESSION_SCOPED_TABLE_NAMES,
+  "vector_models",
   "media_refs",
   "media_assets",
 ];

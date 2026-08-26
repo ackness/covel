@@ -1,8 +1,51 @@
 import { describe, expect, it } from "vitest";
 import {
+  decodePluginUserSettingsHeader,
   mergePluginUserSettings,
   readWorldPluginSettings,
 } from "../../src/routes/api/plugin-user-settings.js";
+
+function header(value: unknown): string {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64");
+}
+
+describe("decodePluginUserSettingsHeader", () => {
+  it("keeps missing and malformed headers compatible as no settings", () => {
+    expect(decodePluginUserSettingsHeader(undefined)).toEqual({
+      ok: true,
+      settings: undefined,
+    });
+    expect(decodePluginUserSettingsHeader("not@@base64")).toEqual({
+      ok: true,
+      settings: undefined,
+    });
+  });
+
+  it("rejects every declared transport quota with the stable 431 code", () => {
+    const oversizedHeader = "a".repeat(8 * 1024 + 1);
+    const tooManyBuckets = Object.fromEntries(
+      Array.from({ length: 65 }, (_, index) => [`plugin-${index}`, {}]),
+    );
+    const tooManyKeys = Object.fromEntries(
+      Array.from({ length: 65 }, (_, index) => [`key-${index}`, index]),
+    );
+    const cases = [
+      oversizedHeader,
+      header(tooManyBuckets),
+      header({ plugin: tooManyKeys }),
+      header({ ["p".repeat(129)]: {} }),
+      header({ plugin: { ["k".repeat(129)]: true } }),
+    ];
+
+    for (const raw of cases) {
+      expect(decodePluginUserSettingsHeader(raw)).toMatchObject({
+        ok: false,
+        status: 431,
+        code: "plugin_user_settings_header_too_large",
+      });
+    }
+  });
+});
 
 describe("mergePluginUserSettings", () => {
   it("returns undefined when both layers are empty", () => {

@@ -102,6 +102,32 @@ function collectDependencies(
   return [...deps];
 }
 
+/**
+ * Turn-scoped capability needs with `cardinality: one` are OR dependencies.
+ * We normally wait for every provider so the runtime gate can observe all
+ * outcomes, but a provider trapped in a separate cycle must not drag the
+ * consumer into that cycle once another provider has completed.
+ */
+function collectOneProviderGroups(
+  manifest: RuntimeManifest,
+  capabilityProviders: ReadonlyMap<string, readonly string[]>,
+): readonly (readonly string[])[] {
+  const groups: string[][] = [];
+  for (const need of getRuntimeSpec(manifest).deps.needs) {
+    if (
+      typeof need === "string" ||
+      "runtime" in need ||
+      need.scope === "session" ||
+      need.cardinality === "all"
+    ) {
+      continue;
+    }
+    const providers = capabilityProviders.get(need.capability) ?? [];
+    if (providers.length > 0) groups.push([...providers]);
+  }
+  return groups;
+}
+
 function buildCapabilityProviders(
   runtimes: readonly RuntimeManifest[],
 ): Map<string, string[]> {
@@ -125,8 +151,11 @@ export function scheduleByDag(
   const inScope = new Set(runtimes.map((r) => r.name));
   const inDegree = new Map<string, number>();
   const dependents = new Map<string, string[]>();
+  const directDependencies = new Map<string, Set<string>>();
+  const oneProviderGroups = new Map<string, readonly (readonly string[])[]>();
   const byName = new Map<string, RuntimeManifest>();
   const capabilityProviders = buildCapabilityProviders(runtimes);
+  const completed = new Set<string>();
 
   for (const rt of runtimes) {
     byName.set(rt.name, rt);
@@ -135,10 +164,15 @@ export function scheduleByDag(
 
   for (const rt of runtimes) {
     const deps = new Set(collectDependencies(rt, capabilityProviders));
-    for (const dep of deps) {
+    const inScopeDeps = new Set([...deps].filter((dep) => inScope.has(dep)));
+    directDependencies.set(rt.name, inScopeDeps);
+    oneProviderGroups.set(
+      rt.name,
+      collectOneProviderGroups(rt, capabilityProviders),
+    );
+    for (const dep of inScopeDeps) {
       // A self-edge is left in place: it makes the node unreachable in the Kahn
       // sort, so it (a plugin authoring mistake) surfaces as a cycle.
-      if (!inScope.has(dep)) continue;
       inDegree.set(rt.name, (inDegree.get(rt.name) ?? 0) + 1);
       const list = dependents.get(dep) ?? [];
       list.push(rt.name);
@@ -162,7 +196,37 @@ export function scheduleByDag(
   };
 
   while (inDegree.size > 0) {
-    const ready = pickReady();
+    let ready = pickReady();
+    if (ready.length === 0) {
+      // `needs({ capability, cardinality: "one" })` is an OR edge. Keep the
+      // conservative all-provider barrier during normal scheduling, then relax
+      // only blockers belonging to an OR group that already has a completed
+      // provider. This prevents a cyclic alternative provider from classifying
+      // an otherwise runnable consumer as cycle/downstream.
+      for (const [name, deps] of directDependencies) {
+        if (!inDegree.has(name)) continue;
+        const remaining = [...deps].filter((dep) => inDegree.has(dep));
+        if (remaining.length === 0) continue;
+        const groups = oneProviderGroups.get(name) ?? [];
+        const satisfiedGroups = groups.filter((group) =>
+          group.some((provider) => completed.has(provider)),
+        );
+        if (satisfiedGroups.length === 0) continue;
+        const relaxable = new Set(satisfiedGroups.flat());
+        const hasUnsatisfiedGroup = groups.some(
+          (group) =>
+            group.some((provider) => inDegree.has(provider)) &&
+            !group.some((provider) => completed.has(provider)),
+        );
+        if (
+          !hasUnsatisfiedGroup &&
+          remaining.every((dep) => relaxable.has(dep))
+        ) {
+          inDegree.set(name, 0);
+        }
+      }
+      ready = pickReady();
+    }
     if (ready.length === 0) {
       // Cycle — return the acyclic prefix plus the stuck nodes (the SCC and its
       // downstream) so the caller can disable exactly those and still run the
@@ -179,7 +243,12 @@ export function scheduleByDag(
 
     for (const rt of ready) {
       inDegree.delete(rt.name);
+      completed.add(rt.name);
       for (const down of dependents.get(rt.name) ?? []) {
+        // A cardinality-one consumer may have been released while an optional
+        // provider was still stuck. Never resurrect an already-run node when
+        // that provider becomes schedulable later.
+        if (!inDegree.has(down)) continue;
         inDegree.set(down, (inDegree.get(down) ?? 0) - 1);
       }
     }

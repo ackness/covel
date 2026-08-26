@@ -5,11 +5,12 @@
  * unconditionally emits `phase.changed { phase: 'playing' }` for every
  * action. The frontend reducer used to overwrite the real session phase
  * with the spurious 'playing' value, breaking sessions still in pre-game
- * (turnCount: 0).
+ * while the persisted phase is unchanged.
  *
- * `phase` is fully removed — no proposal type,
- * no SSE event, no persistent session field. This test now protects the
- * migration by asserting `phase.changed` is never emitted, even indirectly.
+ * `phase` is now an authoritative persistent session-clock field, updated in
+ * the finalize transaction. It is not a synthetic per-action SSE signal. This
+ * test protects that boundary by asserting `phase.changed` is never emitted
+ * when the route merely observes or preserves the current phase.
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -111,16 +112,22 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
     loadedByName = new Map([[RUNTIME_ID, loaded]]);
     registry.register(makeEntry({ id: RUNTIME_ID, loaded }));
 
-    // Session starts in pre-game (turnCount: 0) — the broken behavior would
-    // have forced a 'phase.changed → playing' emit for every action.
+    // The persisted phase is stable; the route must not synthesize a phase
+    // transition for every action.
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [RUNTIME_ID],
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       createdAt: new Date().toISOString(),
     });
 
@@ -145,7 +152,7 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
     app.route("/api/actions", actionRoutes);
   });
 
-  it("does NOT emit phase.changed for a send_message during pre-game (turnCount: 0)", async () => {
+  it("does NOT emit phase.changed for an unchanged playing session", async () => {
     const res = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -186,7 +193,7 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
     expect(types).not.toContain("phase.changed");
   });
 
-  it("keeps turnCount at setup value when start_session leaves Pre-Game pending", async () => {
+  it("keeps the session clock in setup while start_session is pending", async () => {
     const PREGAME_ID = "char-creator/player-init";
     const loaded = makeFakeLoadedRuntime({
       name: PREGAME_ID,
@@ -206,13 +213,26 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
 
     const pendingSessionId = "sess-pending-pregame";
     await store.createSession({
+      phase: "setup",
+      setupRuntimes: {
+        [PREGAME_ID]: {
+          state: "pending",
+          pluginVersion: "0.0.0",
+          generation: 1,
+          attempts: 0,
+        },
+      },
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: pendingSessionId,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: ["char-creator"],
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       createdAt: new Date().toISOString(),
     });
 
@@ -236,6 +256,7 @@ describe("POST /api/actions — phase.changed hygiene (Finding 4 regression)", (
     ).filter((msg) => msg.sourceType === "player");
     expect(turnResults).toHaveLength(1);
     expect(playerMessages).toHaveLength(0);
-    expect(session?.turnCount).toBe(0);
+    expect(session?.phase).toBe("setup");
+    expect(session?.completedPlayerTurns).toBe(0);
   });
 });

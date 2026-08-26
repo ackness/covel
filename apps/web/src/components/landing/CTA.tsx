@@ -15,7 +15,7 @@ export function CTA() {
       aria-labelledby="cta-heading"
       className="relative w-full bg-card border-t border-border overflow-hidden"
     >
-      <div className="max-w-[1400px] mx-auto px-6 md:px-10 py-24 md:py-36">
+      <div className="max-w-350 mx-auto px-6 md:px-10 py-24 md:py-36">
         <div
           ref={ref}
           className="grid grid-cols-1 md:grid-cols-12 gap-12 md:gap-16 transition-all duration-700"
@@ -40,7 +40,7 @@ export function CTA() {
             </h2>
           </div>
 
-          <ul className="md:col-span-5 flex flex-col gap-px bg-border border border-border rounded-[var(--radius-card)] overflow-hidden">
+          <ul className="md:col-span-5 flex flex-col gap-px bg-border border border-border rounded-(--radius-card) overflow-hidden">
             <Door
               to="/session"
               label={t("home.cta.playLabel", "Just play")}

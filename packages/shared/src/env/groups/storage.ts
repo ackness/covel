@@ -10,7 +10,7 @@ export const STORAGE_ENV_VARS = [
     defaultValue: "sqlite",
     example: "sqlite",
     description:
-      "Server DataStore backend. Browser callers can use idb through @covel/store createStore().",
+      "Server DataStore backend. Browser-private persistence uses the web BrowserVault and is not a DataStore backend.",
   },
   {
     name: "SQLITE_PATH",
@@ -66,6 +66,15 @@ export const STORAGE_ENV_VARS = [
     defaultValue: "16",
     description:
       "Max connections in the dedicated PG advisory session-lock pool. Each in-flight turn holds one reserved connection; size at least at expected peak concurrent sessions per pod.",
+  },
+  {
+    name: "COVEL_PG_INGEST_LOCK_POOL_MAX",
+    group: "storage",
+    type: "integer",
+    status: "active",
+    defaultValue: "4",
+    description:
+      "Max connections in the dedicated PG advisory lock pool for semantic-memory ingestion.",
   },
   {
     name: "POSTGRES_USER",

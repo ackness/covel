@@ -13,7 +13,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { workingMemoryQuotaViolation } from "@covel/shared";
 import type { DataStore } from "@covel/store";
-import { resolveSessionParam } from "./session/session-guard.js";
+import {
+  resolveSessionParam,
+  withLockedSessionMutation,
+} from "./session/session-guard.js";
 import { errorBody, readJsonBody } from "../../api-error.js";
 
 type Env = {
@@ -109,32 +112,38 @@ workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
   // definition in @covel/shared): value-size cap, and at capacity only
   // updates to existing keys pass — a direct API client must not be able to
   // grow the table past what the proposal path allows.
-  const existing = await store.listWorkingMemory(sessionId);
-  const violation = workingMemoryQuotaViolation(
-    scope,
-    key,
-    parsed.data.value,
-    existing,
-  );
-  if (violation) {
-    return c.json(
-      errorBody(violation.message, { code: violation.kind }),
-      violation.kind === "value-too-large" ? 413 : 409,
-    );
-  }
-
-  const now = new Date().toISOString();
-  await store.upsertWorkingMemory({
-    id: crypto.randomUUID(),
+  return withLockedSessionMutation({
+    c,
+    store,
+    sessionLock: c.get("sessionLock"),
     sessionId,
-    key,
-    scope: scope as "player" | "story" | "shared",
-    value: parsed.data.value,
-    schemaRef: parsed.data.schemaRef,
-    updatedAt: now,
+    expectedSession: guard.session,
+    allowedStatuses: ["active"],
+    mutate: async () => {
+      const existing = await store.listWorkingMemory(sessionId);
+      const violation = workingMemoryQuotaViolation(
+        scope,
+        key,
+        parsed.data.value,
+        existing,
+      );
+      if (violation)
+        return c.json(
+          errorBody(violation.message, { code: violation.kind }),
+          violation.kind === "value-too-large" ? 413 : 409,
+        );
+      await store.upsertWorkingMemory({
+        id: crypto.randomUUID(),
+        sessionId,
+        key,
+        scope: scope as "player" | "story" | "shared",
+        value: parsed.data.value,
+        schemaRef: parsed.data.schemaRef,
+        updatedAt: new Date().toISOString(),
+      });
+      return c.json({ success: true, scope, key });
+    },
   });
-
-  return c.json({ success: true, scope, key });
 });
 
 // DELETE /sessions/:id/working-memory/:scope/:key
@@ -155,10 +164,20 @@ workingMemoryRoutes.delete("/:id/working-memory/:scope/:key", async (c) => {
   }
 
   const key = c.req.param("key");
-  await store.deleteWorkingMemory(
+  return withLockedSessionMutation({
+    c,
+    store,
+    sessionLock: c.get("sessionLock"),
     sessionId,
-    scope as "player" | "story" | "shared",
-    key,
-  );
-  return c.json({ success: true });
+    expectedSession: guard.session,
+    allowedStatuses: ["active"],
+    mutate: async () => {
+      await store.deleteWorkingMemory(
+        sessionId,
+        scope as "player" | "story" | "shared",
+        key,
+      );
+      return c.json({ success: true });
+    },
+  });
 });

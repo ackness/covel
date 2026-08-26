@@ -12,7 +12,7 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "ui-card-surface text-card-foreground border-y border-[var(--rule-color)] bg-transparent",
+        "ui-card-surface text-card-foreground border-y border-(--rule-color) bg-transparent",
         className,
       )}
       {...props}

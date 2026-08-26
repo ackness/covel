@@ -28,7 +28,6 @@ import { describe, it, expect } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import {
   authoringTriggerConfigSchema,
-  deriveLegacyClockFields,
   getRuntimeSpec,
   isSetupSatisfied,
   mirrorSetupDone,
@@ -38,6 +37,7 @@ import {
   triggerConfigSchema,
   waiveSetup,
   type ExecutionContext,
+  type HandlerResult,
   type RanSetupRuntime,
   type RuntimeActivation,
   type RuntimeManifest,
@@ -87,18 +87,11 @@ async function scheduledRuntimeTriggers(
   interval: number,
 ): Promise<boolean> {
   const store = createMemoryStore();
-  const legacy = deriveLegacyClockFields({
-    phase: "playing",
-    completedPlayerTurns,
-    setupRuntimes: {},
-  });
   const now = new Date().toISOString();
   await store.createSession({
     id: "s",
     worldId: "w",
     status: "active",
-    turnCount: legacy.turnCount,
-    preGameCompleted: [],
     phase: "playing",
     completedPlayerTurns,
     setupRuntimes: {},
@@ -122,14 +115,19 @@ async function scheduledRuntimeTriggers(
       promptTemplate: "",
       handler: async () => {
         ran = true;
-        return {};
+        return { outcome: "success", value: {} };
       },
     }),
     llm: new NoopLLM(),
     store,
   };
   await executeTurn(
-    { sessionId: "s", turnId: "t", playerMessage: "go" },
+    {
+      sessionId: "s",
+      turnId: "t",
+      playerMessage: "go",
+      origin: "player",
+    },
     [ticker],
     deps,
   );
@@ -173,18 +171,11 @@ async function seedPlaying(
   store: DataStore,
   completedPlayerTurns: number,
 ): Promise<void> {
-  const legacy = deriveLegacyClockFields({
-    phase: "playing",
-    completedPlayerTurns,
-    setupRuntimes: {},
-  });
   const now = new Date().toISOString();
   await store.createSession({
     id: "s",
     worldId: "w",
     status: "active",
-    turnCount: legacy.turnCount,
-    preGameCompleted: [],
     phase: "playing",
     completedPlayerTurns,
     setupRuntimes: {},
@@ -207,8 +198,6 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
       id: sessionId,
       worldId: "w",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
       phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
@@ -249,9 +238,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        handler: async (ctx: {
-          store: DataStore;
-        }): Promise<Record<string, unknown>> => {
+        handler: async (ctx: { store: DataStore }) => {
           if (m.name === "p/schema-gen") {
             // Buffered domain write → flushed onto the result as a plugin.data
             // proposal (NOT a direct store write), committed by finalize below.
@@ -265,7 +252,11 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             });
-            return { preGameDone: true };
+            return {
+              outcome: "success",
+              value: {},
+              completion: "done",
+            } as const;
           }
           // player-init reads the committed schema from the frozen snapshot.
           const row = await ctx.store.getPluginData(
@@ -275,7 +266,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
             "schema",
           );
           playerInitRead = row?.value;
-          return {};
+          return { outcome: "success", value: {} } as const;
         },
       }),
       llm: new NoopLLM(),
@@ -290,7 +281,7 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
         sessionId,
         turnId: "t1",
         playerMessage: "go",
-        preGamePending: true,
+        origin: "player",
       },
       [schemaGen, playerInit],
       deps,
@@ -307,6 +298,11 @@ describe("setup frozen snapshot (cross-execution read of committed setup data)",
     // Commit execution 1 — the buffered proposal lands and the setup-completion
     // delta flips the band to playing (frozen for the next execution).
     const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId,
       ...(setupTurn.executionContext
@@ -357,8 +353,6 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
       id: "s2",
       worldId: "w",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
       phase: "playing",
       completedPlayerTurns: 1,
       setupRuntimes: {},
@@ -406,7 +400,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         promptTemplate: "",
         handler: async () => {
           ran.push(m.name);
-          return {};
+          return { outcome: "success", value: {} };
         },
       }),
       llm: new NoopLLM(),
@@ -468,7 +462,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
           inputSchema: INPUT_SCHEMA,
           handler: async (ctx) => {
             activation = ctx.activation;
-            return {};
+            return { outcome: "success", value: {} };
           },
         }),
         llm: new NoopLLM(),
@@ -502,7 +496,7 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
           manifest: m,
           promptTemplate: "",
           inputSchema: INPUT_SCHEMA,
-          handler: async () => ({}),
+          handler: async () => ({ outcome: "success", value: {} }),
         }),
         llm: new NoopLLM(),
         store,
@@ -530,8 +524,6 @@ describe("setup gating across trigger paths (setup-incomplete skip)", () => {
         id: "s",
         worldId: "w",
         status: "active",
-        turnCount: 1,
-        preGameCompleted: [],
         phase: "playing",
         completedPlayerTurns: 1,
         setupRuntimes: {},
@@ -721,9 +713,12 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
         handler: async (ctx) => {
           if (m.name === "c/main") {
             captured = ctx.inputs?.data;
-            return {};
+            return { outcome: "success", value: {} };
           }
-          return { payload: { from: m.name } };
+          return {
+            outcome: "success",
+            value: { payload: { from: m.name } },
+          };
         },
       }),
       llm: new NoopLLM(),
@@ -783,86 +778,163 @@ describe("capability cardinality (provider 0 / 1 / N / all)", () => {
 });
 
 describe("commit transaction & rollback", () => {
-  // needs: finalizeExecution single-transaction commit + setup-attempt ledger (release step 2)
-  it.todo(
-    "scenario 6: 任一 proposal commit 失败时领域状态/completion/phase/计数全部回滚（commitStatus: failed），但 attempts 与 lastError 仍持久化；连续确定性失败最终到达 blocked — 断言回滚与记账两者互不干扰",
-  );
+  it("scenario 6: rolls back domain and clock writes while failed setup attempts still exhaust their budget", async () => {
+    const store = createMemoryStore();
+    const sessionId = "s6";
+    const setupRuntimeId = "plug/setup";
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: sessionId,
+      worldId: "w",
+      status: "active",
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {
+        [setupRuntimeId]: {
+          state: "pending",
+          pluginVersion: "1.0.0",
+          generation: 1,
+          attempts: 0,
+        },
+      },
+      activePlugins: ["plug"],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const finalizeFailedAttempt = async (attempt: number) => {
+      const executionId = `execution-${attempt}`;
+      const logicalTurnId = `logical-turn-${attempt}`;
+      const turnId = `turn-${attempt}`;
+      await store.saveTurnResult({
+        id: `result-${attempt}`,
+        sessionId,
+        turnId,
+        runtimeResults: [],
+        origin: "player",
+        commitStatus: "pending",
+        durationMs: 1,
+        createdAt: now,
+      });
+
+      const validSetupResult = {
+        ...statePatchResult("hp", attempt),
+        pluginId: "plug",
+        runtimeId: setupRuntimeId,
+        turnId,
+      };
+      const invalidLaterResult = {
+        ...statePatchResult("mp", attempt),
+        pluginId: "broken",
+        runtimeId: "broken/runtime",
+        turnId,
+        output: { statePatches: [{ field: "mp", value: attempt }] },
+      };
+      const completedSetup = mirrorSetupDone("1.0.0", now, 1, attempt);
+
+      const outcome = await finalizeExecution({
+        executionContext: PLAYER_CTX(logicalTurnId, executionId),
+        store,
+        sessionId,
+        runtimes: [makeRuntime(setupRuntimeId), makeRuntime("broken/runtime")],
+        results: [validSetupResult, invalidLaterResult],
+        turnIds: [turnId],
+        setupRan: [
+          {
+            runtimeId: setupRuntimeId,
+            pluginVersion: "1.0.0",
+            generation: 1,
+            executionId,
+            startedAt: now,
+            doneSignal: true,
+            ledgerState: "success",
+            budget: 2,
+          },
+        ],
+        sessionClock: {
+          now,
+          setupCompletion: {
+            newlyDone: { [setupRuntimeId]: completedSetup },
+            allSetupDone: true,
+          },
+        },
+      });
+
+      expect(outcome.status).toBe("failed");
+      expect(outcome.failedProposals).toHaveLength(1);
+      expect(await store.getStateEntry(sessionId, "stats", "hp")).toBeNull();
+      expect(
+        await store.getLogicalTurnCompletion(sessionId, logicalTurnId),
+      ).toBeNull();
+      expect(
+        (await store.listTurnResults(sessionId)).find(
+          (row) => row.turnId === turnId,
+        )?.commitStatus,
+      ).toBe("failed");
+      const attempts = await store.listSetupAttempts(sessionId, {
+        runtimeId: setupRuntimeId,
+        generation: 1,
+      });
+      expect(attempts).toHaveLength(attempt);
+      expect(attempts.at(-1)).toMatchObject({
+        executionId,
+        state: "failed",
+        error: "proposal commit rolled back",
+      });
+    };
+
+    await finalizeFailedAttempt(1);
+    let session = (await store.getSession(sessionId))!;
+    expect(session).toMatchObject({
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {
+        [setupRuntimeId]: {
+          state: "pending",
+          attempts: 1,
+          lastError: "proposal commit rolled back",
+        },
+      },
+    });
+
+    await finalizeFailedAttempt(2);
+    session = (await store.getSession(sessionId))!;
+    expect(session).toMatchObject({
+      phase: "setup",
+      completedPlayerTurns: 0,
+      setupRuntimes: {
+        [setupRuntimeId]: {
+          state: "blocked",
+          attempts: 2,
+          reason: expect.stringContaining("retry budget"),
+        },
+      },
+    });
+  });
 });
 
-describe("legacy backfill & dual-write formula", () => {
-  // needs: SnapshotPayloadV3 completedPlayerTurns field + backfill formula + turnCount/preGameCompleted dual-write (release step 2)
-  //
-  // This lights the two claims testable at the runtime layer: the dual-write
-  // formula boundaries and the V3 snapshot round-trip. The server-side halves —
-  // the lazy backfill three-branch (turnCount 0/1/>1) and the conservative fork
-  // completedPlayerTurns = turnCount === 0 ? 0 : turnCount + diagnostic — are
-  // pinned in apps/server/tests/api/turn-count.test.ts (ensureSessionClockBackfilled)
-  // and apps/server/tests/api/snapshot.test.ts (fork). None of these paths parse
-  // a turnId or scan child turn_results.
-  it("scenario 7: 双写公式在 0/floor/首回合/多回合边界均可回滚旧内核读取；新 snapshot 原样携带 completedPlayerTurns（backfill/fork 保守回填见 server 套件）", async () => {
-    // Dual-write formula boundaries — the legacy kernel keeps reading turnCount.
-    expect(
-      deriveLegacyClockFields({
-        phase: "setup",
-        completedPlayerTurns: 0,
-        setupRuntimes: {},
-      }),
-    ).toEqual({ turnCount: 0, preGameCompleted: [] }); // 0
-    expect(
-      deriveLegacyClockFields({
-        phase: "playing",
-        completedPlayerTurns: 0,
-        setupRuntimes: {},
-      }).turnCount,
-    ).toBe(0); // bare session: playing with no setup + no turns → 0
-    expect(
-      deriveLegacyClockFields({
-        phase: "playing",
-        completedPlayerTurns: 0,
-        setupRuntimes: { "p/setup": mirrorSetupDone("1.0.0", "t") },
-      }).turnCount,
-    ).toBe(1); // Pre-Game floor: setup completed, no counted turn yet
-    expect(
-      deriveLegacyClockFields({
-        phase: "playing",
-        completedPlayerTurns: 1,
-        setupRuntimes: {},
-      }).turnCount,
-    ).toBe(1); // first main-loop turn
-    expect(
-      deriveLegacyClockFields({
-        phase: "playing",
-        completedPlayerTurns: 6,
-        setupRuntimes: {},
-      }).turnCount,
-    ).toBe(6); // many turns
-
-    // V3 snapshot round-trip: the builder carries the clock fields verbatim so a
-    // fork restores completedPlayerTurns / phase / setupRuntimes as-is.
+describe("current snapshot clock", () => {
+  it("scenario 7: snapshot carries the authoritative clock verbatim", async () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();
     await store.createSession({
       id: "s",
       worldId: "w",
       status: "active",
-      turnCount: 3,
-      preGameCompleted: ["pregame"],
       phase: "playing",
       completedPlayerTurns: 3,
-      setupRuntimes: { pregame: mirrorSetupDone("1.0.0", now) },
+      setupRuntimes: { pregame: mirrorSetupDone("1.0.0", now, 1, 1) },
       activePlugins: [],
       createdAt: now,
       updatedAt: now,
     });
     const payload = await buildSnapshotPayload(store, "s", "turn-3");
     expect(payload.schemaVersion).toBe(3);
-    if (payload.schemaVersion === 3) {
-      expect(payload.session.completedPlayerTurns).toBe(3);
-      expect(payload.session.phase).toBe("playing");
-      expect(payload.session.setupRuntimes).toMatchObject({
-        pregame: { state: "done" },
-      });
-    }
+    expect(payload.session.completedPlayerTurns).toBe(3);
+    expect(payload.session.phase).toBe("playing");
+    expect(payload.session.setupRuntimes).toMatchObject({
+      pregame: { state: "done" },
+    });
   });
 });
 
@@ -876,8 +948,6 @@ describe("blocked control (maxTriggerCount / retry / waive)", () => {
       id: "s8",
       worldId: "w",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
       phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
@@ -905,6 +975,11 @@ describe("blocked control (maxTriggerCount / retry / waive)", () => {
 
     const settle = (setupRan: readonly RanSetupRuntime[]) =>
       finalizeExecution({
+        executionContext: {
+          executionId: crypto.randomUUID(),
+          origin: "manual",
+          countPolicy: "none",
+        },
         store,
         sessionId: "s8",
         runtimes: [makeRuntime(runtimeId)],
@@ -985,33 +1060,30 @@ describe("blocked control (maxTriggerCount / retry / waive)", () => {
 });
 
 describe("media pipeline & job-status", () => {
-  // needs: kernel-owned append-only job-status store + ctx.progress.report (release step 2); legacy tracks/images view projector (release step 4/6 compat)
-  // LIT (partial) IN: media-boundaries-acceptance.test.ts — progress→terminal
-  // failed chain + non-success envelope observability-only stripping. The
-  // legacy tracks/images compat projector remains a Step 4/6 todo there.
+  // The kernel-owned progress→terminal chain and non-success envelope boundary
+  // are exercised in media-boundaries-acceptance.test.ts. The remaining
+  // unshipped surface is the Step 4/6 legacy view projector.
   it.todo(
-    "scenario 9: 媒体任务在 provider 调用前经 ctx.progress.report 提交 pending/progress，失败后 finalizer 追加 terminal failed；非 success 信封只接受 jobStatus/diagnostics，领域写被拒；compat projector 只按 manifest 声明投影本插件旧 tracks/images view，新 UI 直接订阅 kernel job-status — 断言实时进度与终态提交的边界",
+    "scenario 9 compat: manifest-declared jobStatus.legacyViews projects only the emitting plugin's jobs into legacy tracks/images while new UI consumes kernel job-status",
   );
 });
 
 describe("MediaRef canonicalization boundaries", () => {
-  // needs: shared MediaRef canonicalizer across activation/binding/export/resume/job-data + ownership validation (release step 3)
-  // LIT IN: media-boundaries-acceptance.test.ts (activation / binding / export /
-  // job-data boundaries share one canonicalizer; ownership reject; url strip;
-  // per-position caption in canonicalize-media-refs.test.ts) and
-  // apps/server/tests/api/snapshot.test.ts (fork atomic addRef + missing-asset
-  // whole-fork failure). Resume-boundary canonicalization is a later wave.
+  // activation/binding/export/job-data share a canonicalizer in
+  // media-boundaries-acceptance.test.ts; caption preservation is in
+  // canonicalize-media-refs.test.ts; fork reference atomicity is in
+  // apps/server/tests/api/snapshot.test.ts. Resume remains unwired.
   it.todo(
-    "scenario 10: MediaRef 在 activation/绑定/export/resume/job data 各边界使用同一 canonicalizer；当前 session 无 MediaRefRecord 时拒绝；持久值去掉临时 URL；同一 asset 的位置/caption 可不同；fork 为 child 原子增加 reference，缺 asset 时整次失败 — 断言各边界共享同一校验结果",
+    "scenario 10 resume: revalidate and canonicalize MediaRefs carried by resume data before continuing; reject missing current-session references and persist only the canonical value",
   );
 });
 
-describe("legacy handler compat (mixed return shape)", () => {
+describe("function handler result contract", () => {
   const fnManifest = (name: string): RuntimeManifest =>
     ({
       name,
       pluginId: name.split("/")[0],
-      description: "legacy mixed-shape function runtime",
+      description: "canonical function runtime",
       stage: "narrative",
       outputKind: "plugin",
       runtimeType: "function",
@@ -1021,7 +1093,7 @@ describe("legacy handler compat (mixed return shape)", () => {
   const runFn = async (
     sessionId: string,
     manifest: RuntimeManifest,
-    ret: Record<string, unknown>,
+    ret: HandlerResult,
   ) => {
     const store = createMemoryStore();
     const loaded: LoadedRuntime = {
@@ -1041,39 +1113,35 @@ describe("legacy handler compat (mixed return shape)", () => {
     return { store, rr: result.runtimeResults[0]! };
   };
 
-  it("scenario 11: legacy mixed success return — value preserved, control keys committed", async () => {
-    const manifest = fnManifest("legacy-mixed/ok");
-    // A mixed shape: a public field a downstream binding would read (`ref`) plus
-    // a `pluginData` control key that must still commit.
+  it("scenario 11: success value is materialized and effects are committed", async () => {
+    const manifest = fnManifest("canonical-handler/ok");
     const ref = { id: "r".repeat(64), mime: "image/png", size: 42 };
     const ret = {
-      ref,
-      note: "public field",
-      pluginData: [{ namespace: "gallery", key: "latest", value: { ref } }],
-    };
-    const { store, rr } = await runFn("sess-legacy-ok", manifest, ret);
+      outcome: "success",
+      value: { ref, note: "public field" },
+      effects: {
+        pluginData: [{ namespace: "gallery", key: "latest", value: { ref } }],
+      },
+    } as const;
+    const { store, rr } = await runFn("sess-canonical-ok", manifest, ret);
 
-    // Business success stays success; the whole object is preserved so a
-    // downstream consumer can still read `ref` / `note` (the adapter does not
-    // strip fields it does not recognise).
     expect(rr.status).toBe("success");
     expect(rr.output).toMatchObject({ ref, note: "public field" });
 
-    // Control keys are copied + executed: the plugin.data proposal commits.
-    await processRuntimeResult(rr, store, "sess-legacy-ok", "plugin", {});
+    await processRuntimeResult(rr, store, "sess-canonical-ok", "plugin", {});
     const stored = await store.getPluginData(
-      "sess-legacy-ok",
-      "legacy-mixed",
+      "sess-canonical-ok",
+      "canonical-handler",
       "gallery",
       "latest",
     );
     expect(stored?.value).toEqual({ ref });
   });
 
-  it("scenario 11: business status: failed maps to RuntimeResult.status failed", async () => {
-    const manifest = fnManifest("legacy-mixed/bad");
-    const { rr } = await runFn("sess-legacy-bad", manifest, {
-      status: "failed",
+  it("scenario 11: failed outcome maps to RuntimeResult.status failed", async () => {
+    const manifest = fnManifest("canonical-handler/bad");
+    const { rr } = await runFn("sess-canonical-bad", manifest, {
+      outcome: "failed",
       error: "provider down",
     });
     expect(rr.status).toBe("failed");
@@ -1339,7 +1407,7 @@ describe("activation payload (canonical payload shared by function/agent)", () =
         inputSchema: INPUT_SCHEMA,
         handler: async (ctx) => {
           fnActivation = ctx.activation;
-          return {};
+          return { outcome: "success", value: {} };
         },
       }),
       llm: new NoopLLM(),
@@ -1484,6 +1552,11 @@ describe("recordAs export (persistent export revision)", () => {
     committedAt: string,
   ) =>
     finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId,
       runtimes: [producer("cfg")],
@@ -1526,6 +1599,11 @@ describe("recordAs export (persistent export revision)", () => {
       // export append is in the same tx, so it is discarded with the domain
       // writes. Revision stays at 2.
       const rolled = await finalizeExecution({
+        executionContext: {
+          executionId: crypto.randomUUID(),
+          origin: "manual",
+          countPolicy: "none",
+        },
         store,
         sessionId: "s",
         runtimes: [producer("cfg")],
@@ -1589,7 +1667,7 @@ describe("recordAs export (persistent export revision)", () => {
           handler: async (ctx) => {
             captured = (ctx as { exports?: Record<string, unknown> }).exports
               ?.cfg;
-            return {};
+            return { outcome: "success", value: {} };
           },
         }),
         llm: new NoopLLM(),
@@ -1625,7 +1703,7 @@ describe("recordAs export (persistent export revision)", () => {
         loadRuntime: async (m): Promise<LoadedRuntime> => ({
           manifest: m,
           promptTemplate: "",
-          handler: async () => ({}),
+          handler: async () => ({ outcome: "success", value: {} }),
         }),
         llm: new NoopLLM(),
         store,
@@ -1664,7 +1742,7 @@ describe("recordAs export (persistent export revision)", () => {
           ...(m.name === "c/main"
             ? { exportAcceptsSchemas: { cfg: CONSUMER_ACCEPTS } }
             : {}),
-          handler: async () => ({}),
+          handler: async () => ({ outcome: "success", value: {} }),
         }),
         llm: new NoopLLM(),
         store,

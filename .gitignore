@@ -74,6 +74,9 @@ apps/server/drizzle/
 data/
 !worlds/*/data/
 !worlds/*/data/**
+!packages/ai-provider/data/
+packages/ai-provider/data/*
+!packages/ai-provider/data/model-db.json
 
 # ── Docker volumes (local dev) ──────────────────────────────────
 docker/data/

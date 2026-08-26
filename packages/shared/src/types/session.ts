@@ -20,22 +20,12 @@ export interface Session {
   readonly worldId?: string;
   /** Lifecycle flag. `active` under normal play; `paused`/`ended` stops scheduling. */
   readonly status: SessionStatus;
-  /**
-   * Legacy main-loop progress field, derived at read time from `phase` and
-   * `completedPlayerTurns`. The kernel no longer schedules by numeric bands.
-   */
-  readonly turnCount: number;
-  /**
-   * Legacy setup completion list, derived from the `done` entries in
-   * `setupRuntimes`.
-   */
-  readonly preGameCompleted: readonly string[];
-  /** Authoritative setup/main-loop scheduling phase. Optional on legacy rows. */
-  readonly phase?: "setup" | "playing";
-  /** Number of committed main-loop player turns. Optional on legacy rows. */
-  readonly completedPlayerTurns?: number;
+  /** Authoritative setup/main-loop scheduling phase. */
+  readonly phase: "setup" | "playing";
+  /** Number of committed main-loop player turns. */
+  readonly completedPlayerTurns: number;
   /** Per-runtime setup lifecycle mirror, keyed by runtimeId. */
-  readonly setupRuntimes?: Readonly<Record<string, SetupRuntimeState>>;
+  readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
   readonly activePlugins: readonly string[];
   readonly locale: string;
   readonly createdAt: string;

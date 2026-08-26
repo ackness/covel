@@ -1,4 +1,21 @@
 - schemaVersion: 1
+  id: mistport-silence-protocol
+  title: Survival in the Fog
+  content: Fog beasts hunt abrupt sound, light, and Tide-Force disturbances; they do not locate prey from nowhere. In thick fog, make cold fog-lamps, cloth-wrapped metal, hand signs, and evacuation marks concrete. If the player makes flame, impact, or a loud voice, first give perceptible signs of approach, then escalate the danger.
+  kind: constant
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - fog beast
+    - sound
+    - light
+    - fog-lamp
+    - evacuation
+  insertionOrder: 405
+- schemaVersion: 1
   id: mistport-fog-truth
   title: Truth in the Fog
   content: In Mistport the clues often contradict one another. Every investigation should preserve verifiable details, witness bias, and the drift of evidence caused by the tides, letting the player advance the truth by questioning and cross-checking rather than being handed a conclusion.
@@ -14,6 +31,23 @@
     - witness
     - tide
   insertionOrder: 410
+- schemaVersion: 1
+  id: mistport-opening-leads
+  title: The First Step After Three Bells
+  content: Do not unload the whole conspiracy at the opening. Su Yao's torn letter, the missing Appraisal Report 74 in the Sealed Archive, and the newly exposed Echo Gallery beyond the Tide-Seal Gate are three cross-checkable beginnings; the Salt Fangs' hatch and a Council permit carry different costs. Give every scene at least one concrete lead to act on, and let Lin Yuanzhou, Iron Meg, Grey Falcon, or Frost push the investigation toward the next place through their own needs.
+  kind: triggered
+  category: scene
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: flexible
+  keys:
+    - triple strike
+    - Qi's disappearance
+    - torn letter
+    - Report 74
+    - Echo Gallery
+  insertionOrder: 415
 - schemaVersion: 1
   id: mistport-tide-clock
   title: The Tide Clock
@@ -99,3 +133,21 @@
     - cycle
     - truth
   insertionOrder: 460
+- schemaVersion: 1
+  id: mistport-consequence-ledger
+  title: Choices Leave Marks
+  content: A costly action should keep changing state instead of resetting next scene. Explicitly update tide-time and location; a character's vitality, stress, fog-rot, trust, and disposition; faction permits, warrants, and favors; or a clue's unverified, corroborated, contaminated, or resolved state. Update only changes the narrative has clearly caused, and carry each consequence into later scenes.
+  kind: evolving
+  category: relationship
+  enabled: true
+  coordinate:
+    position: before_plugin
+  budgetClass: sticky
+  keys:
+    - trust
+    - stress
+    - permit
+    - warrant
+    - corroborated
+    - contaminated
+  insertionOrder: 470

@@ -285,7 +285,6 @@ function createUpdateCharacterTool(
           ? { ...prevFields, ...params.fields }
           : existing.fields;
       const newVersion = existing.version + 1;
-      const nextDescription = params.description ?? existing.description;
 
       // Buffer the upsert as a proposal (commit handler does the write +
       // mirror). `existing` may itself be a buffered create from earlier in
@@ -297,11 +296,12 @@ function createUpdateCharacterTool(
           id: existing.id,
           name: existing.name,
           type: existing.type,
-          ...(nextDescription !== undefined
-            ? { description: nextDescription }
+          ...(params.description !== undefined
+            ? { description: params.description }
             : {}),
-          fields: mergedFields,
+          ...(params.fields !== undefined ? { fields: params.fields } : {}),
           version: newVersion,
+          expectedVersion: existing.version,
           createdAt: existing.createdAt,
           mirrorPluginId: context.pluginId,
         },

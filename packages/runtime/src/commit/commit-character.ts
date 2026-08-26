@@ -50,6 +50,10 @@ export function createCharacterCommitHandlers(
         payload.version,
         "character.upsert: version must be a number when provided",
       ),
+      requireOptionalNumber(
+        payload.expectedVersion,
+        "character.upsert: expectedVersion must be a number when provided",
+      ),
       requireOptionalString(
         payload.createdAt,
         "character.upsert: createdAt must be a string when provided",
@@ -66,17 +70,53 @@ export function createCharacterCommitHandlers(
     if (invalid) return invalid;
 
     const now = new Date().toISOString();
+    const versionedUpdate = payload.expectedVersion !== undefined;
+    const live = versionedUpdate
+      ? (await store.listCharacters?.(proposal.sessionId))?.find(
+          (character) => character.id === payload.id,
+        )
+      : undefined;
+    if (versionedUpdate && !store.listCharacters) {
+      return commitError(
+        "character.upsert: store does not support versioned character updates",
+      );
+    }
+    if (versionedUpdate && !live) {
+      return commitError(
+        `character.upsert: character ${payload.id} no longer exists`,
+      );
+    }
+    if (
+      live &&
+      (payload.expectedVersion! < 1 ||
+        payload.expectedVersion! > live.version ||
+        !Number.isInteger(payload.expectedVersion))
+    ) {
+      return commitError(
+        `character.upsert: expectedVersion ${payload.expectedVersion} is invalid for live version ${live.version}`,
+      );
+    }
+
+    const liveFields = asFieldsRecord(live?.fields);
+    const fieldPatch = asFieldsRecord(payload.fields);
+    const rebasedFields = live
+      ? payload.fields === undefined
+        ? live.fields
+        : liveFields && fieldPatch
+          ? { ...liveFields, ...fieldPatch }
+          : payload.fields
+      : payload.fields;
     const record = {
       id: payload.id,
       sessionId: proposal.sessionId,
-      name: payload.name,
-      type: payload.type ?? "npc",
-      ...(payload.description !== undefined
-        ? { description: payload.description }
+      name: live?.name ?? payload.name,
+      type: live?.type ?? payload.type ?? "npc",
+      ...(payload.description !== undefined || live?.description !== undefined
+        ? { description: payload.description ?? live?.description }
         : {}),
-      ...(payload.fields !== undefined ? { fields: payload.fields } : {}),
-      version: payload.version ?? 1,
-      createdAt: payload.createdAt ?? now,
+      ...(rebasedFields !== undefined ? { fields: rebasedFields } : {}),
+      version: live ? live.version + 1 : (payload.version ?? 1),
+      createdAt: live?.createdAt ?? payload.createdAt ?? now,
       updatedAt: now,
     };
 
@@ -123,4 +163,12 @@ export function createCharacterCommitHandlers(
   }
 
   return { "character.upsert": commitCharacterUpsert };
+}
+
+function asFieldsRecord(
+  value: unknown,
+): Readonly<Record<string, unknown>> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Readonly<Record<string, unknown>>)
+    : undefined;
 }

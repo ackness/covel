@@ -77,7 +77,7 @@ function makeCtx({
   };
 }
 
-// Deliberate change: handler migrated to envelope-v1. The business value
+// Deliberate change: handler returns the canonical HandlerResult. The business value
 // (stage / skipped marker) is under `result.value`; the generate-requested
 // event is under `result.effects.events`.
 describe("scene-stage resolver handler", () => {
@@ -372,23 +372,22 @@ describe("scene-stage resolver handler", () => {
     expect(ctx.pluginData.get).not.toHaveBeenCalled();
   });
 
-  it("10. re-emitted scene.set for a stuck pending stage retries generation instead of no-op", async () => {
+  it("10. re-emitted scene.set for a pending stage is a no-op to avoid duplicate billed jobs", async () => {
     const location = "废弃天文台";
-    // First resolve queued generation, but background-gen failed — stage is
-    // still "pending" and no `generated` row was ever written.
+    // First resolve queued generation. While its detached follower is still
+    // running, another turn may reach a different server pod.
     const first = await handler(makeCtx({ location }));
     const pendingStage = getPendingProposals(first)[0].payload.value;
     expect(pendingStage.source).toBe("pending");
 
     const result = await handler(makeCtx({ location, previous: pendingStage }));
 
-    expect(result.value.skipped).toBeUndefined();
-    expect(result.effects?.events).toEqual([
-      {
-        topic: "scene-stage.generate.requested",
-        data: { sceneId: pendingStage.sceneId, location, variant: "day" },
-      },
-    ]);
+    expect(result.value).toMatchObject({
+      skipped: true,
+      reason: "no-op: scene/variant unchanged",
+    });
+    expect(result.effects?.events).toBeUndefined();
+    expect(getPendingProposals(result)).toHaveLength(0);
   });
 
   it("9. day-to-night switch on the same scene writes a new variant, not a no-op", async () => {

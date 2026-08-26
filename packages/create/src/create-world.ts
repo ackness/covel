@@ -9,7 +9,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
-import { validateWorldManifest, formatValidationErrors } from "@covel/shared";
+import {
+  validateWorldManifest,
+  formatValidationErrors,
+  localeLanguage,
+} from "@covel/shared";
 import type { CreateWorldOptions, CreateResult } from "./types.js";
 import { buildWorldPrompt } from "./prompts.js";
 import { parseWorldOutput } from "./lore-processor.js";
@@ -227,7 +231,7 @@ export async function createWorld(
 
     // Extract id from validated data
     const id = yamlData.id as string;
-    const lang = locale.split("-")[0];
+    const lang = localeLanguage(locale) ?? "zh";
     log(options, "info", `validation passed id=${id}`);
 
     // Write files

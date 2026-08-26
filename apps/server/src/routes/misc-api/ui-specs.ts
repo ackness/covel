@@ -8,7 +8,8 @@ import {
   type PluginDiscoveryResult,
   type PluginRegistry,
 } from "@covel/plugin-loader";
-import type { DataStore } from "@covel/store";
+import type { DataStore, SessionRecord, StoreTransaction } from "@covel/store";
+import { sessionIncarnationIdentity } from "../api/session/session-guard.js";
 import {
   resolvePluginsDirs,
   UI_NAMESPACE_BY_SLOT,
@@ -194,7 +195,7 @@ async function loadValidatedSpecs(): Promise<ValidatedSpecs> {
 async function syncUiSpecsToStore(
   sessionId: string,
   activePluginIds: ReadonlySet<string>,
-  store: DataStore,
+  store: DataStore | StoreTransaction,
   loaded: ValidatedSpecs,
 ): Promise<void> {
   const now = new Date().toISOString();
@@ -253,6 +254,7 @@ async function syncUiSpecsToStore(
 
 export async function buildUiSpecsResponse(params: {
   sessionId?: string;
+  session?: SessionRecord;
   registry: PluginRegistry;
   store: DataStore;
 }): Promise<{
@@ -264,7 +266,7 @@ export async function buildUiSpecsResponse(params: {
   left: Array<{ pluginId: string; specs: readonly Record<string, unknown>[] }>;
   diagnostics: UiSpecDiagnostic[];
 }> {
-  const { sessionId, registry, store } = params;
+  const { sessionId, session: lockedSession, registry, store } = params;
   type SlotEntry = {
     pluginId: string;
     specs: readonly Record<string, unknown>[];
@@ -276,7 +278,7 @@ export async function buildUiSpecsResponse(params: {
 
   let activeFilter: Set<string> | null = null;
   if (sessionId) {
-    const session = await store.getSession(sessionId);
+    const session = lockedSession ?? (await store.getSession(sessionId));
     if (session) {
       activeFilter = new Set(session.activePlugins ?? []);
       const loaded = await loadValidatedSpecs();
@@ -287,11 +289,15 @@ export async function buildUiSpecsResponse(params: {
       // per-request DB churn. The gate keys on BOTH the spec content signature
       // and the session's active set, so enabling a plugin mid-session (same
       // files, new active id) still re-materialises its rows.
-      const syncKey = `${loaded.signature}::${[...activeFilter]
+      const syncKey = `${sessionIncarnationIdentity(session)}::${loaded.signature}::${[
+        ...activeFilter,
+      ]
         .sort()
         .join(",")}`;
       if (sessionSyncSignature.get(sessionId) !== syncKey) {
-        await syncUiSpecsToStore(sessionId, activeFilter, store, loaded);
+        await store.withTransaction((tx) =>
+          syncUiSpecsToStore(sessionId, activeFilter!, tx, loaded),
+        );
         sessionSyncSignature.set(sessionId, syncKey);
       }
     }

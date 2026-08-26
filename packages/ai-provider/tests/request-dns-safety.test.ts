@@ -134,4 +134,31 @@ describe("core request DNS SSRF safety", () => {
       );
     }
   });
+
+  it("falls back to IPv4 when the first IPv6 answer is unavailable", async () => {
+    lookupMock.mockResolvedValue([
+      { address: "::1", family: 6 },
+      { address: "127.0.0.1", family: 4 },
+    ] as never);
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ family: 4 }));
+    });
+    await new Promise<void>((resolvePromise) =>
+      server.listen(0, "127.0.0.1", resolvePromise),
+    );
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      const response = await getJson(
+        { baseUrl: `http://localhost:${port}` },
+        "/models",
+      );
+      expect(await response.json()).toEqual({ family: 4 });
+    } finally {
+      await new Promise<void>((resolvePromise) =>
+        server.close(() => resolvePromise()),
+      );
+    }
+  });
 });

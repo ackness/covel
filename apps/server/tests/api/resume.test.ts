@@ -14,10 +14,14 @@ import {
   createPluginRegistry,
   type PluginRegistry,
 } from "@covel/plugin-loader";
-import type { RuntimeManifest } from "@covel/shared";
+import type { ExecutionContext, RuntimeManifest } from "@covel/shared";
 import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 import { resumeRoutes } from "../../src/routes/api/resume.js";
-import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "../../src/lib/session-lock.js";
+import { SESSION_INCARNATION_KEY } from "../../src/routes/api/session/session-guard.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -32,9 +36,13 @@ type Deps = {
   };
   resolveModel: () => undefined;
   hookPipeline?: HookPipeline;
+  prepareToolsForSession?: (sessionId: string) => Promise<void>;
 };
 
-function createTestApp(deps: Deps) {
+function createTestApp(
+  deps: Deps,
+  sessionLock: SessionLock = createInProcessSessionLock(),
+) {
   const app = new Hono<{
     Variables: {
       store: DataStore;
@@ -46,7 +54,6 @@ function createTestApp(deps: Deps) {
     };
   }>();
 
-  const sessionLock = createInProcessSessionLock();
   app.use("*", async (c, next) => {
     c.set("store", deps.store);
     c.set("pluginRegistry", deps.pluginRegistry);
@@ -59,6 +66,9 @@ function createTestApp(deps: Deps) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     c.set("resolveModel", deps.resolveModel as any);
     c.set("sessionLock", sessionLock);
+    if (deps.prepareToolsForSession) {
+      c.set("prepareToolsForSession", deps.prepareToolsForSession);
+    }
     if (deps.hookPipeline) {
       c.set("hookPipeline", deps.hookPipeline);
     }
@@ -71,11 +81,18 @@ function createTestApp(deps: Deps) {
 
 async function createSession(store: DataStore, sessionId = "sess-1") {
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id: sessionId,
     worldId: "test-world",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    completedPlayerTurns: 1,
+
+    activePlugins: ["test-plugin"],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
@@ -89,6 +106,7 @@ async function createSuspension(
     resolvedAt: string;
     resumeSchema: unknown;
     createdAt: string;
+    executionContext: ExecutionContext;
   }>,
 ) {
   const suspension = {
@@ -104,9 +122,25 @@ async function createSuspension(
       required: ["name"],
     },
     pendingContinuation: {
-      messages: [{ role: "system", content: "You are a test agent." }],
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "player",
+        countPolicy: "complete-player-turn",
+        logicalTurnId: crypto.randomUUID(),
+      },
+      messages: [
+        { role: "system", content: "You are a test agent." },
+        {
+          role: "tool",
+          content: JSON.stringify({ suspended: true }),
+          toolCallId: "tc-suspend-1",
+        },
+      ],
       toolCallsSoFar: [],
       pendingProposals: [],
+      ...(overrides?.executionContext
+        ? { executionContext: overrides.executionContext }
+        : {}),
       suspendToolCallId: "tc-suspend-1",
     },
     createdAt: overrides?.createdAt ?? new Date().toISOString(),
@@ -140,6 +174,21 @@ const TEST_MANIFEST: RuntimeManifest = {
   // runtimes produce `narrative.append` proposals — other kinds keep
   // their text internal to the RuntimeResult.
   outputKind: "story" as const,
+  userSettings: [
+    { key: "tone", type: "select", default: "manifest", label: "Tone" },
+    {
+      key: "detail",
+      type: "number",
+      default: 1,
+      label: "Detail",
+    },
+    {
+      key: "fallback",
+      type: "select",
+      default: "manifest-only",
+      label: "Fallback",
+    },
+  ],
 };
 
 function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
@@ -200,7 +249,7 @@ describe("Resume Routes", () => {
   });
 
   describe("POST /api/sessions/:id/resume", () => {
-    it("returns 400 when X-Provider-Keys header is missing", async () => {
+    it("uses the server-configured adapter when X-Provider-Keys is missing", async () => {
       const app = createTestApp(makeDefaultDeps(store));
       await createSuspension(store);
 
@@ -213,16 +262,68 @@ describe("Resume Routes", () => {
         }),
       });
 
-      expect(res.status).toBe(400);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body.error).toMatch(/X-Provider-Keys/);
+      expect(res.status).toBe(200);
     });
 
-    it("scopes the resumed plugin's own hooks when it was inactive at snapshot time (review M2)", async () => {
-      // The plugin is registered but never activated for the session, so the
-      // resume route activates it on demand (resume.ts ~L189-204). Its own
-      // hooks must therefore be in scope. Before the fix, activePluginIds was
-      // built from the pre-activation snapshot and silently filtered them out.
+    it("threads player, world, and manifest settings to resumed runtime hooks", async () => {
+      const worldId = `settings-world-${crypto.randomUUID()}`;
+      await store.updateSession("sess-1", { worldId });
+      await store.upsertWorld({
+        id: worldId,
+        name: "Test world",
+        description: "",
+        metadata: {
+          pluginSettings: { "test-plugin": { tone: "world", detail: 2 } },
+        },
+        createdAt: new Date().toISOString(),
+      });
+      await createSuspension(store);
+      const hookPipeline = createHookPipeline();
+      let runtimeInputSettings: unknown;
+      let hookSettings: unknown;
+      hookPipeline.register({
+        id: "test-plugin:PreRuntime:settings",
+        event: "PreRuntime",
+        pluginId: "test-plugin",
+        handler: async (ctx, payload) => {
+          runtimeInputSettings = payload.input.userSettings;
+          hookSettings = ctx.getOwnSettings?.();
+          return { action: "continue" };
+        },
+      });
+      const app = createTestApp(makeDefaultDeps(store, { hookPipeline }));
+      const playerSettings = Buffer.from(
+        JSON.stringify({ "test-plugin": { tone: "player" } }),
+        "utf8",
+      ).toString("base64");
+
+      const res = await app.request("/api/sessions/sess-1/resume", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Plugin-User-Settings": playerSettings,
+        },
+        body: JSON.stringify({
+          suspensionId: "susp-1",
+          data: { name: "Alice" },
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(runtimeInputSettings).toEqual({
+        "test-plugin": { tone: "player", detail: 2 },
+      });
+      expect(hookSettings).toEqual({
+        tone: "player",
+        detail: 2,
+        fallback: "manifest-only",
+      });
+    });
+
+    it("restores persisted plugin activations before scoping resume hooks", async () => {
+      // The plugin is persisted on the session but not yet activated in this
+      // fresh process-local registry. Resume must restore it before building
+      // the hook scope.
       const hookPipeline = createHookPipeline();
       const preToolUse = vi.fn().mockResolvedValue({ action: "continue" });
       hookPipeline.register({
@@ -275,6 +376,29 @@ describe("Resume Routes", () => {
       expect(res.status).toBe(200);
       // The resumed plugin's own PreToolUse hook fired — it was in hook scope.
       expect(preToolUse).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not reactivate a plugin disabled after suspension", async () => {
+      await createSuspension(store);
+      await store.updateSession("sess-1", { activePlugins: [] });
+      const deps = makeDefaultDeps(store);
+      deps.pluginRegistry.activate("test-plugin", "sess-1");
+      const app = createTestApp(deps);
+
+      const res = await app.request("/api/sessions/sess-1/resume", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Provider-Keys": "dGVzdA==",
+        },
+        body: JSON.stringify({
+          suspensionId: "susp-1",
+          data: { name: "Alice" },
+        }),
+      });
+
+      expect(res.status).toBe(404);
+      expect(deps.pluginRegistry.getActiveRuntimes("sess-1")).toEqual([]);
     });
 
     it("returns 400 when body is not valid JSON", async () => {
@@ -471,14 +595,83 @@ describe("Resume Routes", () => {
       );
     });
 
+    it("completes the inherited logical player turn exactly once on resume", async () => {
+      await store.updateSession("sess-1", {
+        phase: "playing",
+        completedPlayerTurns: 1,
+      });
+      await createSuspension(store, {
+        executionContext: {
+          executionId: "execution-before-suspend",
+          origin: "player",
+          logicalTurnId: "logical-suspended-turn",
+          countPolicy: "complete-player-turn",
+        },
+      });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      const resume = () =>
+        app.request("/api/sessions/sess-1/resume", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            suspensionId: "susp-1",
+            data: { name: "Alice" },
+          }),
+        });
+
+      expect((await resume()).status).toBe(200);
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
+      expect((await resume()).status).toBe(409);
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
+    });
+
+    it("waits for the final sibling suspension before completing the logical turn", async () => {
+      await store.updateSession("sess-1", {
+        phase: "playing",
+        completedPlayerTurns: 1,
+      });
+      const executionContext: ExecutionContext = {
+        executionId: "parallel-execution",
+        origin: "player",
+        logicalTurnId: "logical-parallel-suspensions",
+        countPolicy: "complete-player-turn",
+      };
+      await createSuspension(store, {
+        id: "susp-a",
+        executionContext,
+      });
+      await createSuspension(store, {
+        id: "susp-b",
+        executionContext,
+      });
+      const app = createTestApp(makeDefaultDeps(store));
+      const resume = (suspensionId: string) =>
+        app.request("/api/sessions/sess-1/resume", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({ suspensionId, data: { name: "Alice" } }),
+        });
+
+      expect((await resume("susp-a")).status).toBe(200);
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(1);
+      expect((await resume("susp-b")).status).toBe(200);
+      expect((await store.getSession("sess-1"))?.completedPlayerTurns).toBe(2);
+    });
+
     it("buffers post-commit fan-out until the finalize transaction commits: a rollback leaves hooks unobserved", async () => {
       // Proposals commit through the tx-bound store view inside the route's
       // finalize transaction. If a LATER write in that transaction throws
       // (here: markSuspensionResolved), the whole transaction rolls back —
       // so PostStateCommit must never have fired for the rolled-back
-      // proposals. Before the barrier existed, the commit pipeline's
-      // non-transactional fallback ran the fan-out inline while the outer
-      // transaction was still open.
+      // proposals. The transaction-bound commit path must defer fan-out while
+      // the outer transaction is still open.
       const hookPipeline = createHookPipeline();
       const postStateCommit = vi.fn().mockResolvedValue({ action: "continue" });
       hookPipeline.register({
@@ -531,6 +724,81 @@ describe("Resume Routes", () => {
       expect(messages.map((m) => m.content)).not.toContain("Resume complete.");
       // …and no hook ever observed a "committed" state for it.
       expect(postStateCommit).not.toHaveBeenCalled();
+    });
+
+    it("does not restore a claimed suspension into a recreated session after failure", async () => {
+      await store.updateSession("sess-1", {
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          [SESSION_INCARNATION_KEY]: "old-incarnation",
+        },
+      });
+      await createSuspension(store);
+      const sessionLock = createInProcessSessionLock();
+      let enteredPrepare!: () => void;
+      const prepareStarted = new Promise<void>((resolve) => {
+        enteredPrepare = resolve;
+      });
+      let failPrepare!: () => void;
+      const continuePrepare = new Promise<void>((resolve) => {
+        failPrepare = resolve;
+      });
+      const app = createTestApp(
+        makeDefaultDeps(store, {
+          prepareToolsForSession: async () => {
+            enteredPrepare();
+            await continuePrepare;
+            throw new Error("forced preparation failure");
+          },
+        }),
+        sessionLock,
+      );
+
+      const request = app.request("/api/sessions/sess-1/resume", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Provider-Keys": "dGVzdA==",
+        },
+        body: JSON.stringify({
+          suspensionId: "susp-1",
+          data: { name: "Alice" },
+        }),
+      });
+      await prepareStarted;
+
+      // Queue delete/recreate behind the in-flight resume. Its slot is ahead
+      // of the catch-path claim release, reproducing the ABA ordering that
+      // previously restored the old suspension into the new incarnation.
+      const replace = sessionLock.withLock("sess-1", async () => {
+        await store.deleteSession("sess-1");
+        const now = new Date().toISOString();
+        await store.createSession({
+          phase: "playing",
+          setupRuntimes: {},
+          id: "sess-1",
+          worldId: "test-world",
+          status: "active",
+          completedPlayerTurns: 0,
+
+          activePlugins: [],
+          metadata: {
+            approvalScopeNonce: globalThis.crypto.randomUUID(),
+            [SESSION_INCARNATION_KEY]: "new-incarnation",
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+      });
+      failPrepare();
+
+      await replace;
+      const res = await request;
+      expect(res.status).toBe(500);
+      expect(await store.getSuspension("susp-1")).toBeNull();
+      expect(
+        (await store.getSession("sess-1"))?.metadata?.[SESSION_INCARNATION_KEY],
+      ).toBe("new-incarnation");
     });
 
     it("commits resumed runtime output to the store before returning", async () => {
@@ -753,15 +1021,14 @@ describe("Resume Routes", () => {
       await createSuspension(store, { id: "susp-fresh-post" });
       const app = createTestApp(makeDefaultDeps(store));
 
-      // The sweep fires at the very top of the POST handler, before the
-      // X-Provider-Keys guard — so even a 400 (missing keys) request still
-      // exercises the wiring. We assert the sweep, not the resume outcome.
+      // The sweep fires at the very top of the POST handler. The requested
+      // suspension does not exist, but the opportunistic sweep still runs.
       const res = await app.request("/api/sessions/sess-1/resume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ suspensionId: "irrelevant" }),
       });
-      expect(res.status).toBe(400); // missing X-Provider-Keys
+      expect(res.status).toBe(404);
       await flush();
 
       expect(await store.getSuspension("susp-old-post")).toBeNull();

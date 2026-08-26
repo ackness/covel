@@ -100,13 +100,13 @@ describe("mimo speech wire", () => {
     const wire = makeWire(fetchMock);
 
     const { audio } = await wire.synthesize(CONFIG, {
-      model: "mimo-v2-tts",
+      model: "mimo-v2.5-tts",
       text: "hello",
       format: "wav",
     });
     expect(audio.mimeType).toBe("audio/wav");
 
-    await wire.synthesize(CONFIG, { model: "mimo-v2-tts", text: "hello" });
+    await wire.synthesize(CONFIG, { model: "mimo-v2.5-tts", text: "hello" });
     const body = JSON.parse(fetchMock.mock.calls[1][1].body);
     expect(body.audio).toEqual({ format: "mp3", voice: "mimo_default" });
   });

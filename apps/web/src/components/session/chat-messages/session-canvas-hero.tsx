@@ -42,7 +42,7 @@ export function SessionCanvasHero({
 
   return (
     <div
-      className="ui-session-canvas relative mx-auto my-2 max-w-4xl overflow-hidden rounded-[var(--radius-card)] border border-[var(--rule-color)] bg-card"
+      className="ui-session-canvas relative mx-auto my-2 max-w-4xl overflow-hidden rounded-(--radius-card) border border-(--rule-color) bg-card"
       style={{ "--world-accent": visual.accent } as React.CSSProperties}
     >
       <img
@@ -70,7 +70,7 @@ export function SessionCanvasHero({
         style={{ background: "var(--world-accent)" }}
       />
 
-      <div className="relative z-10 flex min-h-[360px] flex-col justify-between p-5 text-white md:min-h-[420px] md:p-7">
+      <div className="relative z-10 flex min-h-90 flex-col justify-between p-5 text-white md:min-h-105 md:p-7">
         <div className="flex flex-wrap items-center gap-2">
           <span className="ui-eyebrow text-white/62">§ SESSION CANVAS</span>
           {chips.map((chip, i) => (

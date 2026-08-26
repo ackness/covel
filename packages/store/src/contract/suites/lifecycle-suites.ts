@@ -4,21 +4,21 @@
  *   - Logical-turn completion ledger (idempotent, count-at-most-once).
  *   - Setup-runtime attempt log (idempotent insert + terminalising update).
  *   - Append-only job-status stream (idempotent, ordered).
- *   - Snapshot payload V3 round-trip.
+ *   - Current snapshot payload round-trip.
  *
  * Every backend runs this shared suite, so any SQLite/PG/Memory/IDB divergence
  * fails CI — backend parity is a hard contract.
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
-import type { DataStore, SnapshotPayloadV3 } from "../../types.js";
+import type { DataStore, SnapshotPayload } from "../../types.js";
 import {
   makeJobStatus,
   makeLogicalTurnCompletion,
   makeSession,
   makeSetupAttempt,
   makeSnapshot,
-  makeSnapshotPayloadV3,
+  makeSnapshotPayload,
   ts,
 } from "../test-fixtures.js";
 
@@ -79,17 +79,6 @@ export function registerLifecycleStoreSuites(getStore: () => DataStore): void {
       expect(updated?.phase).toBe("playing");
       expect(updated?.completedPlayerTurns).toBe(4);
       expect(updated?.setupRuntimes?.["setup/schema"]?.state).toBe("done");
-    });
-
-    it("reads a session written without lifecycle fields as absent", async () => {
-      // Legacy-row parity: a session created without the new fields must read
-      // back with them absent on every backend (no null resurrected).
-      const session = makeSession();
-      await store.createSession(session);
-      const created = await store.getSession(session.id);
-      expect(created?.phase).toBeUndefined();
-      expect(created?.completedPlayerTurns).toBeUndefined();
-      expect(created?.setupRuntimes).toBeUndefined();
     });
 
     it("replaces setupRuntimes wholesale (no deep merge)", async () => {
@@ -160,6 +149,9 @@ export function registerLifecycleStoreSuites(getStore: () => DataStore): void {
 
       const read = await store.getLogicalTurnCompletion("sess-ltl", "lt-1");
       expect(read?.completedByExecutionId).toBe("exec-1");
+      expect(await store.listLogicalTurnCompletions("sess-ltl")).toEqual([
+        first,
+      ]);
     });
 
     it("returns null for an unrecorded logical turn", async () => {
@@ -392,14 +384,14 @@ export function registerLifecycleStoreSuites(getStore: () => DataStore): void {
     });
   });
 
-  describe("Snapshot payload V3", () => {
-    it("round-trips a V3 payload's setup-band session state", async () => {
-      const payload = makeSnapshotPayloadV3();
-      const snap = makeSnapshot({ sessionId: "sess-snap-v3", payload });
+  describe("Snapshot payload", () => {
+    it("round-trips the setup-band session state", async () => {
+      const payload = makeSnapshotPayload();
+      const snap = makeSnapshot({ sessionId: "sess-snap-current", payload });
       await store.saveSnapshot(snap);
 
       const result = (await store.getSnapshot(snap.id))!
-        .payload as SnapshotPayloadV3;
+        .payload as SnapshotPayload;
       expect(result.schemaVersion).toBe(3);
       expect(result.session).toEqual(payload.session);
       expect(result.session.phase).toBe("playing");

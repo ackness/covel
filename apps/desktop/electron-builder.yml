@@ -2,15 +2,10 @@ appId: com.covel.app
 productName: Covel
 copyright: Copyright © 2026 Covel
 
-# ── Signing / notarization: KNOWN, DELIBERATE gap ──────────────────
-# TODO(S-11): No code-signing certs are provisioned yet, so release builds
-# (.github/workflows/release.yml) ship unsigned macOS/Windows artifacts and
-# macOS notarize is hardcoded `false` below. This is intentional for now,
-# not an oversight. Once CSC_LINK/CSC_KEY_PASSWORD/APPLE_* secrets are
-# provisioned (see docs/CONTRIBUTING.md "代码签名"): flip `notarize` to
-# `{ teamId: "${APPLE_TEAM_ID}" }`, and make release CI fail-closed (assert
-# the signing env vars are present and abort the release job instead of
-# silently producing unsigned artifacts).
+# Official artifacts are intentionally unsigned. The release workflow disables
+# certificate discovery, and `mac.identity: null` makes that policy explicit.
+# A future signed distribution must change this config and the release workflow
+# together instead of relying on a certificate that happens to be installed.
 
 directories:
   output: ../../release/electron
@@ -84,13 +79,6 @@ asarUnpack:
 compression: normal
 
 # ── macOS ─────────────────────────────────────────────────────────
-# Signing requirements (set these env vars in CI / before running `dist:mac`):
-#   CSC_LINK           — path or https URL to the .p12 certificate bundle
-#   CSC_KEY_PASSWORD   — password for the .p12 bundle
-#   APPLE_ID           — Apple Developer account email (for notarization)
-#   APPLE_APP_SPECIFIC_PASSWORD — app-specific password for notarization
-#   APPLE_TEAM_ID      — Developer Team ID (e.g. "ABCDE12345")
-# If the env vars are missing the build will produce an UNSIGNED artifact.
 mac:
   icon: resources/icon.icns
   target:
@@ -104,42 +92,33 @@ mac:
   gatekeeperAssess: false
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
+  identity: null
   extendInfo:
     NSCameraUsageDescription: "Covel does not use the camera."
     NSMicrophoneUsageDescription: "Covel does not use the microphone."
-  # Auto-signing: electron-builder picks up CSC_LINK from env. `identity` can
-  # be set explicitly to disambiguate when multiple certs are installed:
-  # identity: "Developer ID Application: Your Name (TEAMID)"
-  notarize: false # set to `{ teamId: "${APPLE_TEAM_ID}" }` when certs are ready
+  notarize: false
 
 dmg:
   sign: false # DMG signing is redundant once the app inside is signed
 
 # ── Windows ───────────────────────────────────────────────────────
-# Signing requirements:
-#   CSC_LINK           — path or https URL to the .pfx bundle
-#   CSC_KEY_PASSWORD   — password for the .pfx bundle
-#   WIN_CSC_TIMESTAMP_SERVER — optional RFC 3161 timestamp URL
 win:
   icon: resources/icon.ico
-  # x64 only: staging/server/node_modules (extraResources) carries a
-  # better-sqlite3 rebuilt for the build host's arch, so an arm64 installer
-  # built on an x64 runner would ship an x64 addon the arm64 sidecar cannot
-  # load (ERR_DLOPEN_FAILED). Windows-on-ARM runs the x64 installer via
-  # emulation. Re-add arm64 only together with per-arch staging/rebuild.
+  # The published Windows release remains x64-only. better-sqlite3 13 ships
+  # Node-API prebuilds for supported platforms, so adding arm64 later no longer
+  # requires an Electron ABI rebuild, but still needs a native Windows arm64
+  # packaging and smoke-test job before it can be released safely.
   target:
     - target: nsis
       arch: [x64]
     - target: portable
       arch: [x64]
-  # electron-builder 26.x 起签名相关字段改到 signtoolOptions 下。
-  # 未配置 CSC_LINK 时会直接输出 unsigned 产物。
+  # Keep hash configuration ready for a future signed distribution. Official
+  # release CI currently disables certificate discovery and publishes unsigned.
   signtoolOptions:
     signingHashAlgorithms:
       - sha256
-  # verifyUpdateCodeSignature defaults to true in electron-updater — keep it
-  # for published builds but allow unsigned locally via env.
-  # publisherName: "Your Organization"  # uncomment once cert is in place
+  # publisherName: "Your Organization" # add only with a signing certificate
 
 # Distinct artifact name — nsis and portable otherwise both emit
 # ${productName}-electron-${version}-win-${arch}.exe and the portable build

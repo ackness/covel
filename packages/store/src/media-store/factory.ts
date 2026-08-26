@@ -12,7 +12,6 @@ function resolveMediaBackend(
   const requested = config.backend ?? "mirror";
   if (requested !== "mirror") return requested;
   const dataBackend = config.storeBackend ?? "sqlite";
-  if (dataBackend === "idb") return "idb";
   return dataBackend;
 }
 

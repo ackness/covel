@@ -146,7 +146,7 @@ function RootLayout() {
       <ConfirmHost />
       <div className="h-screen w-full bg-background text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex flex-col overflow-hidden">
         <header
-          className={`ui-panel-header relative flex-shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? "h-12" : "h-16"}`}
+          className={`ui-panel-header relative shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? "h-12" : "h-16"}`}
           style={isElectron ? dragStyle : undefined}
         >
           {/* Centred brand — absolutely positioned so the macOS traffic-light
@@ -167,7 +167,7 @@ function RootLayout() {
           </Link>
 
           <div
-            className={`w-full flex h-full items-center justify-between ${isMacDesktop ? "pl-[88px] pr-4 md:pr-6" : "px-4 md:px-6"}`}
+            className={`w-full flex h-full items-center justify-between ${isMacDesktop ? "pl-22 pr-4 md:pr-6" : "px-4 md:px-6"}`}
           >
             <nav
               className="hidden md:flex items-center gap-1 text-xs font-medium"
@@ -183,7 +183,7 @@ function RootLayout() {
                     onClick={item.onClick}
                     disabled={item.disabled}
                     aria-current={isActive ? "page" : undefined}
-                    className={`relative h-8 px-3 transition-colors rounded-[var(--radius-control)] ${
+                    className={`relative h-8 px-3 transition-colors rounded-(--radius-control) ${
                       isActive
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground"
@@ -197,7 +197,7 @@ function RootLayout() {
                     {isActive && (
                       <span
                         aria-hidden
-                        className="absolute left-2 right-2 -bottom-[1px] h-[2px] bg-[var(--accent-primary)]"
+                        className="absolute left-2 right-2 -bottom-px h-0.5 bg-(--accent-primary)"
                       />
                     )}
                   </button>
@@ -216,7 +216,7 @@ function RootLayout() {
                     ? t("onboarding.localeEn", "Switch to English")
                     : t("onboarding.localeZh", "Switch to Chinese")
                 }
-                className="hidden md:flex items-center justify-center h-9 min-w-9 px-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-muted/40 transition-colors rounded-[var(--radius-control)]"
+                className="hidden md:flex items-center justify-center h-9 min-w-9 px-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-muted/40 transition-colors rounded-(--radius-control)"
               >
                 {locale === "zh-CN" ? "EN" : "ZH"}
               </button>
@@ -224,7 +224,7 @@ function RootLayout() {
                 <Button
                   variant="default"
                   asChild
-                  className="hidden md:flex h-9 ml-1.5 px-4 text-[11px] font-semibold uppercase tracking-widest rounded-[var(--radius-control)]"
+                  className="hidden md:flex h-9 ml-1.5 px-4 text-[11px] font-semibold uppercase tracking-widest rounded-(--radius-control)"
                 >
                   <Link to="/session">
                     {t("nav.getStarted", "Get Started")}
@@ -242,7 +242,7 @@ function RootLayout() {
                     variant="ghost"
                     size="icon"
                     aria-label={t("nav.primary", "Primary")}
-                    className="md:hidden h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-[var(--radius-control)]"
+                    className="md:hidden h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control)"
                   >
                     <Menu className="h-4 w-4" />
                   </Button>
@@ -264,7 +264,7 @@ function RootLayout() {
                           setMobileNavOpen(false);
                           item.onClick();
                         }}
-                        className={`h-11 px-2 text-left text-sm transition-colors rounded-[var(--radius-control)] ${
+                        className={`h-11 px-2 text-left text-sm transition-colors rounded-(--radius-control) ${
                           activeNav === item.id
                             ? "text-foreground font-medium"
                             : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
@@ -300,7 +300,7 @@ function RootLayout() {
 
         {!isHome && (
           <footer
-            className={`ui-panel-footer flex-shrink-0 border-t border-border transition-all ${isSession ? "py-1.5" : "py-8"}`}
+            className={`ui-panel-footer shrink-0 border-t border-border transition-all ${isSession ? "py-1.5" : "py-8"}`}
           >
             <div
               className={`w-full px-4 md:px-6 flex items-center justify-between ${isSession ? "gap-2" : "flex-col md:flex-row gap-6"}`}

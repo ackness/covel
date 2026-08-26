@@ -6,9 +6,8 @@
  *   was never read server-side and no UI called it — the request just
  *   re-ran a full turn. The action type is removed; requests must get a
  *   400, not a silent whole-turn execution.
- * - `retry_runtime` ignored `payload.runtimeId` and re-ran the whole turn.
- *   It now honors the runtimeId via the manual-trigger path (scoped rerun);
- *   omitting runtimeId keeps the historical whole-turn-retry semantics.
+ * - `retry_runtime` requires `payload.runtimeId` and uses the manual-trigger
+ *   path. Whole-turn retry is the explicit `retry_turn` action.
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -96,13 +95,19 @@ describe("POST /api/actions — action type contract ", () => {
     registry.register(makeEntry({ id: SIDE_ID, loaded: side }));
 
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [NARRATOR_ID, SIDE_ID],
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       createdAt: new Date().toISOString(),
     });
 
@@ -238,6 +243,15 @@ describe("POST /api/actions — action type contract ", () => {
       },
     },
     {
+      label: "retry_runtime without runtimeId",
+      body: {
+        requestId: "req-missing-runtime",
+        type: "retry_runtime",
+        sessionId,
+        payload: {},
+      },
+    },
+    {
       label: "retry source without a scoped runtime",
       body: {
         requestId: "req-bad-retry-source",
@@ -279,11 +293,33 @@ describe("POST /api/actions — action type contract ", () => {
     expect(ranRuntimeIds).not.toContain(NARRATOR_ID);
   });
 
-  it("scoped retry_runtime does not advance turnCount", async () => {
+  it("reconciles stale in-memory activations with the persisted session", async () => {
+    registry.activate(NARRATOR_ID, sessionId);
+    await store.updateSession(sessionId, { activePlugins: [SIDE_ID] });
+
+    const res = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "req-reconcile-plugins",
+        type: "retry_runtime",
+        sessionId,
+        payload: { runtimeId: SIDE_ID },
+      }),
+    });
+    expect(res.status).toBe(200);
+    await drainStream(res);
+
+    expect(
+      registry.getActiveRuntimes(sessionId).map((runtime) => runtime.pluginId),
+    ).toEqual([SIDE_ID]);
+  });
+
+  it("scoped retry_runtime does not advance completedPlayerTurns", async () => {
     // Rerunning one runtime over the same logical turn is not a new player
     // turn. It used to be stamped origin=player and committed, so retrying
-    // pushed turnCount a second time (UI turn number / snapshot cadence drift).
-    const before = (await store.getSession(sessionId))!.turnCount;
+    // pushed the player clock a second time (UI display / snapshot cadence drift).
+    const before = (await store.getSession(sessionId))!.completedPlayerTurns;
     const res = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -297,7 +333,7 @@ describe("POST /api/actions — action type contract ", () => {
     expect(res.status).toBe(200);
     await drainStream(res);
 
-    const after = (await store.getSession(sessionId))!.turnCount;
+    const after = (await store.getSession(sessionId))!.completedPlayerTurns;
     expect(after).toBe(before);
 
     // The rerun's persisted row is stamped non-player origin.
@@ -319,13 +355,19 @@ describe("POST /api/actions — action type contract ", () => {
     // bug, not a request for the whole catalogue.
     const emptySessionId = "sess-no-plugins";
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: emptySessionId,
       worldId: null,
       status: "active",
       presetId: null,
       activePlugins: [],
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       createdAt: new Date().toISOString(),
     });
 
@@ -381,13 +423,13 @@ describe("POST /api/actions — action type contract ", () => {
     );
   });
 
-  it("retry_runtime without runtimeId keeps whole-turn-retry semantics", async () => {
+  it("retry_turn re-runs the whole turn explicitly", async () => {
     const res = await app.request("/api/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         requestId: "req-retry-full",
-        type: "retry_runtime",
+        type: "retry_turn",
         sessionId,
         payload: {},
       }),

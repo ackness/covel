@@ -49,7 +49,7 @@ export function ActiveModelSlots({
               className="inline-flex items-center gap-1 rounded-md border border-border/70 bg-muted/20 px-1.5 py-1"
               title={tooltip}
             >
-              <span className="max-w-[5.5rem] truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <span className="max-w-22 truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 {slot.label}
               </span>
               <PingButton

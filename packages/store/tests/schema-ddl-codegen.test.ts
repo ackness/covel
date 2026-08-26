@@ -48,12 +48,17 @@ function sqliteExpected(): Map<string, Map<string, ExpectedColumn>> {
   for (const value of Object.values(sqliteSchema)) {
     if (!is(value, SQLiteTable)) continue;
     const cfg = getSqliteConfig(value);
+    const tablePrimaryColumns = new Set(
+      cfg.primaryKeys.flatMap((key) =>
+        key.columns.map((column) => column.name),
+      ),
+    );
     const cols = new Map<string, ExpectedColumn>();
     for (const c of cfg.columns) {
       cols.set(c.name, {
         type: c.getSQLType().toUpperCase(),
         notNull: c.notNull,
-        primary: c.primary,
+        primary: c.primary || tablePrimaryColumns.has(c.name),
         hasDefault: c.hasDefault && c.default !== undefined,
       });
     }
@@ -79,7 +84,7 @@ describe("DDL codegen ↔ Drizzle parity", () => {
     const b = buildCreateTablesSql(Object.values(pgSchema), "pg");
     expect(a).toBe(b);
     // Every generated CREATE TABLE statement must appear in the composed boot
-    // DDL (which also carries the hand-written migrations + trigger).
+    // DDL (which also carries the hand-written trigger).
     // Identifiers are quoted in the generated DDL (`"sessions"`); the boot DDL
     // is the same derived string, so the quoted statement is matched verbatim.
     const createStmts = a.match(/CREATE TABLE IF NOT EXISTS "?\w+"?/g) ?? [];
@@ -159,6 +164,7 @@ describe("DDL codegen ↔ Drizzle parity", () => {
 // ── PostgreSQL column parity (gated on a real PG) ───────────────
 
 const DATABASE_URL = process.env.DATABASE_URL;
+const REQUIRE_PG = process.env.COVEL_REQUIRE_PG_TESTS === "1";
 let pgAvailable = false;
 if (DATABASE_URL) {
   try {
@@ -167,9 +173,16 @@ if (DATABASE_URL) {
     await client`SELECT 1`;
     await client.end();
     pgAvailable = true;
-  } catch {
+  } catch (error) {
+    if (REQUIRE_PG) {
+      throw new Error("PostgreSQL is required for DDL parity tests", {
+        cause: error,
+      });
+    }
     pgAvailable = false;
   }
+} else if (REQUIRE_PG) {
+  throw new Error("DATABASE_URL is required when COVEL_REQUIRE_PG_TESTS=1");
 }
 
 /** Normalize a Drizzle PG SQL type to its information_schema.data_type. */
@@ -187,12 +200,12 @@ describe.skipIf(!pgAvailable)(
   () => {
     it("real PG generated DDL yields exactly the Drizzle column shape", async () => {
       const { default: postgres } = await import("postgres");
-      const { createIsolatedPgUrl } = await import("./pg-test-db.js");
-      const url = await createIsolatedPgUrl(
+      const { createIsolatedPgDatabase } = await import("./pg-test-db.js");
+      const isolated = await createIsolatedPgDatabase(
         DATABASE_URL!,
         "covel_test_ddlcodegen",
       );
-      const client = postgres(url, { max: 1 });
+      const client = postgres(isolated.url, { max: 1 });
       try {
         await client.unsafe(PG_DDL);
 
@@ -254,6 +267,7 @@ describe.skipIf(!pgAvailable)(
         expect(problems, problems.join("\n")).toEqual([]);
       } finally {
         await client.end();
+        await isolated.cleanup();
       }
     });
   },

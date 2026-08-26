@@ -22,16 +22,15 @@ export interface LlmCallingPayloadInput {
   readonly slot: string | undefined;
   readonly model: string | undefined;
   /**
-   * Provider identity. `undefined` from retry-helper sites that haven't been
-   * wired with provider detection yet; `null` from direct-generate sites that
-   * bypass the helper and therefore can't know the provider. JSON-serialising
-   * `undefined` drops the key — callers that want stable key presence emit
-   * `null` explicitly.
+   * Provider identity resolved from the requested slot. `undefined` is kept
+   * for lightweight adapters that do not expose slot resolution.
    */
-  readonly provider: string | undefined | null;
+  readonly provider: string | undefined;
   readonly messages: readonly LLMMessage[];
   readonly tools: readonly LLMToolDefinition[] | undefined;
   readonly attempt: number;
+  /** Actual provider request start, independent of trace persistence time. */
+  readonly startedAt: string;
   readonly streaming?: boolean;
 }
 
@@ -51,6 +50,7 @@ export function buildLlmCallingPayload(
       jsonSchema: t.parameters,
     })),
     attempt: input.attempt,
+    startedAt: input.startedAt,
     ...(input.streaming ? { streaming: true } : {}),
   };
 }

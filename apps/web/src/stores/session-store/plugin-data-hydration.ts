@@ -1,6 +1,6 @@
 import * as api from "@/services/api";
 import {
-  loadPluginData,
+  loadPluginDataForSession,
   type PluginDataChange,
 } from "@/stores/plugin-data-store.js";
 import type { SessionDispatch } from "./types.js";
@@ -33,13 +33,15 @@ async function hydratePluginDataNamespaces(
   sessionId: string,
   namespaces: readonly PluginNamespace[],
   dispatch: SessionDispatch,
+  isCurrent: () => boolean,
 ): Promise<void> {
   await Promise.all(
     namespaces.map(async ({ pluginId, namespace }) => {
       const rows = await api.listPluginData(sessionId, pluginId, namespace);
-      if (rows.length === 0) return;
+      if (!isCurrent() || rows.length === 0) return;
 
-      loadPluginData(
+      loadPluginDataForSession(
+        sessionId,
         pluginId,
         namespace,
         rows.map((row) => ({ key: row.key, value: row.value })),
@@ -59,11 +61,14 @@ async function hydratePluginDataNamespaces(
 export async function hydratePluginDataForUiSpecs(
   sessionId: string,
   dispatch: SessionDispatch,
+  isCurrent: () => boolean = () => true,
 ): Promise<void> {
   const specs = await api.fetchUiSpecs(sessionId);
+  if (!isCurrent()) return;
   await hydratePluginDataNamespaces(
     sessionId,
     collectSpecNamespaces(specs),
     dispatch,
+    isCurrent,
   );
 }

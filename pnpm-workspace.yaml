@@ -25,8 +25,22 @@ allowBuilds:
   electron-winstaller: false
   esbuild: true
 
-# Keep transitive tool peers inside the same seven-day stable window as their
-# direct consumers. Newer compatible releases are still quarantined upstream.
+# Keep tool resolutions inside the seven-day stable window. The Tailwind
+# language service and esbuild-kit still pin vulnerable transitive versions,
+# so scope their overrides to the affected parent and use the tested safe
+# PostCSS patch / current esbuild release until upstream updates its pins.
 overrides:
   rolldown: 1.1.4
-  tsx: 4.22.4
+  tsx: 4.23.12
+  "@tailwindcss/language-service>postcss": 8.5.26
+  "@esbuild-kit/core-utils>esbuild": 0.28.2
+
+# @tailwindcss/language-service currently combines media-query-list-parser
+# 2.0.4 with the csstools v3 parser/tokenizer family. Its transitive peer
+# metadata still requests v2 even though this installed combination is the one
+# selected by the upstream toolchain. Keep the exception exact so it can be
+# removed when that package publishes corrected peer ranges.
+peerDependencyRules:
+  allowedVersions:
+    "@csstools/media-query-list-parser@2.0.4>@csstools/css-parser-algorithms": "3.0.4"
+    "@csstools/media-query-list-parser@2.0.4>@csstools/css-tokenizer": "3.0.3"

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  bindFirstProviderModel,
   buildProviderCatalog,
   normalizeProviderId,
   normalizeProviderProfiles,
@@ -9,6 +10,84 @@ import {
 } from "../llm-provider-catalog.js";
 
 describe("provider catalogue", () => {
+  it("binds the first manually created model to story and plugin", () => {
+    expect(bindFirstProviderModel({}, [], "model_first", [], [])).toEqual({
+      story: { modelRef: "model_first" },
+      plugin: { modelRef: "model_first" },
+    });
+  });
+
+  it("preserves explicit bindings and skips later provider models", () => {
+    expect(
+      bindFirstProviderModel(
+        { story: { modelRef: "existing" } },
+        [],
+        "model_first",
+        [],
+        [],
+      ),
+    ).toEqual({
+      story: { modelRef: "existing" },
+      plugin: { modelRef: "model_first" },
+    });
+    expect(
+      bindFirstProviderModel(
+        {},
+        [
+          {
+            id: "existing",
+            name: "Existing",
+            baseUrl: "https://example.com",
+            models: [{ ref: "old", modelId: "old" }],
+          },
+        ],
+        "model_second",
+        [],
+        [],
+      ),
+    ).toEqual({});
+  });
+
+  it("preserves explicit server assignments for each core slot", () => {
+    const serverPreset = {
+      id: "server-story",
+      name: "Server story",
+      provider: "openai",
+      model: "gpt-5",
+      enabled: true,
+      isDefault: true,
+      scope: "server" as const,
+      slotBindings: ["story", "plugin"],
+    };
+
+    expect(
+      bindFirstProviderModel({}, [], "model_first", [serverPreset], []),
+    ).toEqual({});
+    expect(
+      bindFirstProviderModel({}, [], "model_first", [], ["story"]),
+    ).toEqual({ plugin: { modelRef: "model_first" } });
+  });
+
+  it("auto-binds core slots when server config only covers other roles", () => {
+    const imagePreset = {
+      id: "server-image",
+      name: "Server image",
+      provider: "openai",
+      model: "gpt-image-1",
+      enabled: true,
+      isDefault: true,
+      scope: "server" as const,
+      slotBindings: ["image"],
+    };
+
+    expect(
+      bindFirstProviderModel({}, [], "model_first", [imagePreset], ["image"]),
+    ).toEqual({
+      story: { modelRef: "model_first" },
+      plugin: { modelRef: "model_first" },
+    });
+  });
+
   it("uses the persisted provider-id normalization for catalogue identity", () => {
     expect(normalizeProviderId(" OpenAI_API ")).toBe("openai-api");
 

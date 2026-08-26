@@ -1,4 +1,4 @@
-/** Commit handlers for `plugin.data` and `plugin.data.batch` KV writes. */
+/** Commit handlers for plugin-data KV writes and deletes. */
 
 import {
   reservedPluginDataNamespaceError,
@@ -30,7 +30,10 @@ function reservedNamespaceFailure(
 
 export function createPluginDataCommitHandlers(
   store: KernelStore,
-): Pick<CommitHandlerMap, "plugin.data" | "plugin.data.batch"> {
+): Pick<
+  CommitHandlerMap,
+  "plugin.data" | "plugin.data.batch" | "plugin.data.delete"
+> {
   async function commitPluginData(
     proposal: ProposalFor<"plugin.data">,
   ): Promise<CommitResult> {
@@ -116,8 +119,41 @@ export function createPluginDataCommitHandlers(
     return { committed: true };
   }
 
+  async function commitPluginDataDelete(
+    proposal: ProposalFor<"plugin.data.delete">,
+  ): Promise<CommitResult> {
+    const payload = proposal.payload;
+    const deletePluginData = store.deletePluginData;
+    if (!deletePluginData) {
+      return commitError(
+        "plugin.data.delete: store does not support plugin data deletes",
+      );
+    }
+    const invalid = firstFailure(
+      requireNonEmptyString(
+        payload.namespace,
+        "plugin.data.delete: namespace must be a non-empty string",
+      ),
+      requireNonEmptyString(
+        payload.key,
+        "plugin.data.delete: key must be a non-empty string",
+      ),
+      reservedNamespaceFailure("plugin.data.delete", payload.namespace),
+    );
+    if (invalid) return invalid;
+
+    await deletePluginData(
+      proposal.sessionId,
+      proposal.source.pluginId,
+      payload.namespace,
+      payload.key,
+    );
+    return { committed: true };
+  }
+
   return {
     "plugin.data": commitPluginData,
     "plugin.data.batch": commitPluginDataBatch,
+    "plugin.data.delete": commitPluginDataDelete,
   };
 }

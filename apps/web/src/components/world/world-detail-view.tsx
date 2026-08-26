@@ -1,11 +1,11 @@
 import { useTranslation } from "react-i18next";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import type { WorldRecord } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Separator } from "@/components/ui/separator.js";
 import { text } from "./world-detail/detail-primitives.js";
+import { worldLanguage, worldLanguageBadge } from "@/lib/world-locale.js";
 import {
   GeographySection,
   FactionsSection,
@@ -22,15 +22,27 @@ export interface WorldDetailViewProps {
   world: WorldRecord;
   onClose: () => void;
   onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 export function WorldDetailView({
   world,
   onClose,
   onEdit,
+  onDelete,
 }: WorldDetailViewProps) {
   const { t } = useTranslation();
   const dims = world.dimensions;
+  const language = worldLanguage(world.locale);
+  const languageCode = worldLanguageBadge(world.locale);
+  const languageBadge =
+    language === "zh" ? t("world.languageBadgeChinese", "ZH") : languageCode;
+  const languageName =
+    language === "en"
+      ? t("world.languageEnglish", "English")
+      : language === "zh"
+        ? t("world.languageChinese", "Chinese")
+        : world.locale;
 
   const hasDimensions =
     dims &&
@@ -39,7 +51,7 @@ export function WorldDetailView({
     );
 
   return (
-    <ScrollArea className="h-full">
+    <div className="h-full overflow-y-auto overscroll-contain">
       <div className="space-y-6 p-4">
         {/* Header */}
         <div className="space-y-2">
@@ -48,10 +60,26 @@ export function WorldDetailView({
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <h2 className="text-lg font-bold flex-1">{text(world.name)}</h2>
-            {world.locale && <Badge variant="outline">{world.locale}</Badge>}
+            {languageBadge && languageName && (
+              <Badge
+                variant="outline"
+                title={t("world.languageLabel", {
+                  language: languageName,
+                  defaultValue: "World language: {{language}}",
+                })}
+              >
+                {languageBadge}
+              </Badge>
+            )}
             {onEdit && (
               <Button variant="outline" size="sm" onClick={onEdit}>
                 {t("common.edit")}
+              </Button>
+            )}
+            {onDelete && (
+              <Button variant="destructive" size="sm" onClick={onDelete}>
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                {t("world.delete", "Delete world")}
               </Button>
             )}
           </div>
@@ -68,7 +96,7 @@ export function WorldDetailView({
 
         {/* Description */}
         {world.description && (
-          <p className="text-sm text-muted-foreground break-words [overflow-wrap:anywhere]">
+          <p className="text-sm text-muted-foreground wrap-break-word">
             {text(world.description)}
           </p>
         )}
@@ -113,6 +141,6 @@ export function WorldDetailView({
           </div>
         )}
       </div>
-    </ScrollArea>
+    </div>
   );
 }

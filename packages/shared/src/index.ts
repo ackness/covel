@@ -3,7 +3,11 @@ export * from "./types/index.js";
 
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from "./utils/deep-merge.js";
-export { resolveI18nText, resolveI18nDeep } from "./utils/i18n.js";
+export {
+  localeLanguage,
+  resolveI18nText,
+  resolveI18nDeep,
+} from "./utils/i18n.js";
 export { collectMediaRefIds } from "./utils/media-ref-scan.js";
 export {
   assertJsonValue,
@@ -11,6 +15,15 @@ export {
   toJsonValueOrDiagnostic,
 } from "./utils/json-value.js";
 export { reservedPluginDataNamespaceError } from "./utils/plugin-data-namespace.js";
+export {
+  SYSTEM_PROXY_IPC_VERSION,
+  isSystemProxyResolveRequest,
+  isSystemProxyResolveResponse,
+} from "./system-proxy-ipc.js";
+export type {
+  SystemProxyResolveRequest,
+  SystemProxyResolveResponse,
+} from "./system-proxy-ipc.js";
 export {
   MAX_WORKING_MEMORY_ENTRIES,
   MAX_WORKING_MEMORY_VALUE_CHARS,
@@ -30,6 +43,14 @@ export {
   providerKeyToId,
   toApiKeyEnvMap,
 } from "./utils/provider-keys.js";
+export {
+  BUILTIN_PROVIDER_CONNECTIONS,
+  getBuiltinProviderConnection,
+} from "./utils/provider-defaults.js";
+export type {
+  BuiltinProviderConnection,
+  BuiltinProviderProtocol,
+} from "./utils/provider-defaults.js";
 
 // ── Environment Registry ──────────────────────────────────────────
 export * from "./env/index.js";
@@ -42,16 +63,8 @@ export {
   getRuntimeSpec,
   hasIllegalDetachedContract,
 } from "./scheduling/normalize.js";
-export {
-  deriveLegacyClockFields,
-  deriveLegacyClockForSession,
-  mirrorSetupDone,
-  mirrorSetupCompleted,
-} from "./scheduling/session-clock.js";
-export type {
-  SessionClock,
-  LegacyClockFields,
-} from "./scheduling/session-clock.js";
+export { mirrorSetupDone } from "./scheduling/session-clock.js";
+export type { SessionClock } from "./scheduling/session-clock.js";
 export {
   isSetupRuntime,
   isMainLoopRuntime,
@@ -81,12 +94,9 @@ export {
   hookDeclarationSchema,
   authorsNoteDeclSchema,
   postHistoryDeclSchema,
-  rpcActionDeclSchema,
-  rpcDeclMapSchema,
   memoryBlockDeclSchema,
   pluginEventDeclSchema,
   pluginRelationsSchema,
-  runtimeManifestSchema,
   runtimeManifestInputSchema,
   runtimeManifestAuthoringSchema,
   authoringTriggerConfigSchema,

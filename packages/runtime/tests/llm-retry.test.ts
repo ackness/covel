@@ -747,6 +747,48 @@ describe("callLLMWithRetry trace emissions", () => {
     ]);
     expect(emitter.events[1].payload).toMatchObject({ finishReason: "error" });
   });
+
+  it("records the final provider attempted inside a gateway fallback", async () => {
+    const emitter = makeEmitterSpy();
+    const llm: LLMAdapter = {
+      async generate(params) {
+        params.onTargetAttempt?.({ provider: "primary", model: "model-a" });
+        params.onTargetAttempt?.({ provider: "backup", model: "model-b" });
+        return {
+          content: "ok",
+          toolCalls: [],
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    };
+
+    await callLLMWithRetry({
+      llm,
+      model: "story",
+      resolvedModel: "model-a",
+      provider: "primary",
+      messages: [],
+      policy: {
+        maxRetries: 0,
+        callTimeoutMs: 1_000,
+        firstTokenTimeoutMs: 1_000,
+        loopDetectionThreshold: 3,
+      },
+      deadline: Date.now() + 5_000,
+      emitter,
+    });
+
+    expect(emitter.events.map((event) => event.type)).toEqual([
+      "llm.calling",
+      "llm.responded",
+    ]);
+    expect(emitter.events[0]?.payload).toMatchObject({
+      slot: "story",
+      provider: "backup",
+      model: "model-b",
+    });
+  });
 });
 
 describe("streamLLMWithRetry trace emissions", () => {
@@ -843,6 +885,43 @@ describe("streamLLMWithRetry trace emissions", () => {
       usage: { inputTokens: 0, outputTokens: 0 },
     });
     expect(typeof emitter.events[1].payload.error).toBe("string");
+  });
+
+  it("records a gateway backup selected before the first stream event", async () => {
+    const emitter = makeEmitterSpy();
+    const llm: LLMAdapter = {
+      async generate() {
+        throw new Error("unused");
+      },
+      async *stream(params) {
+        params.onTargetAttempt?.({ provider: "primary", model: "model-a" });
+        params.onTargetAttempt?.({ provider: "backup", model: "model-b" });
+        yield { type: "text-delta", textDelta: "ok" };
+        yield { type: "done", finishReason: "stop" };
+      },
+    };
+
+    await streamLLMWithRetry({
+      llm,
+      model: "story",
+      resolvedModel: "model-a",
+      provider: "primary",
+      messages: [],
+      policy: {
+        maxRetries: 0,
+        callTimeoutMs: 1_000,
+        firstTokenTimeoutMs: 1_000,
+        loopDetectionThreshold: 3,
+      },
+      deadline: Date.now() + 5_000,
+      emitter,
+    });
+
+    expect(emitter.events[0]?.payload).toMatchObject({
+      provider: "backup",
+      model: "model-b",
+      streaming: true,
+    });
   });
 });
 

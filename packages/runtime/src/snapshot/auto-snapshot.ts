@@ -1,5 +1,5 @@
 import type { EventBus } from "@covel/events";
-import { deriveLegacyClockForSession, readEnvInt } from "@covel/shared";
+import { readEnvInt } from "@covel/shared";
 import type { DataStore, SnapshotRecord } from "@covel/store";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { buildSnapshotPayload } from "./snapshot-payload-builder.js";
@@ -20,9 +20,9 @@ export interface SaveAutoSnapshotOptions {
   readonly createdAt?: string;
   readonly eventBus?: EventBus;
   /**
-   * Checkpoint cadence: snapshot only when `session.turnCount` is a multiple
-   * of this interval (turnCount <= 1 — pre-game and the first post-pre-game
-   * turn — always snapshots). Defaults to `COVEL_SNAPSHOT_INTERVAL_TURNS`
+   * Checkpoint cadence: snapshot only when `completedPlayerTurns` is a multiple
+   * of this interval (values <= 1 always snapshot). Defaults to
+   * `COVEL_SNAPSHOT_INTERVAL_TURNS`
    * (fallback {@link DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS}); values < 1 clamp
    * to 1 (every turn).
    */
@@ -62,15 +62,15 @@ export async function saveAutoSnapshot(
     const interval = resolveIntervalTurns(options.intervalTurns);
     if (interval > 1) {
       const session = await options.store.getSession(options.sessionId);
-      // Derive the cadence turnCount from the clock — the column is no longer
-      // written by the kernel.
-      const turnCount = session
-        ? deriveLegacyClockForSession(session).turnCount
-        : 0;
-      // turnCount <= 1 covers pre-game turns (0) and the turn that completes
-      // pre-game (synced to 1 just before the snapshot), so a fork point
-      // always exists once setup finishes.
-      if (turnCount > 1 && turnCount % interval !== 0) return null;
+      if (!session) {
+        throw new Error(
+          `Session not found while saving snapshot: ${options.sessionId}`,
+        );
+      }
+      const completedPlayerTurns = session.completedPlayerTurns;
+      if (completedPlayerTurns > 1 && completedPlayerTurns % interval !== 0) {
+        return null;
+      }
     }
   }
 

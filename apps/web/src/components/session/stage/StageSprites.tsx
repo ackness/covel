@@ -118,7 +118,7 @@ export function StageSprites({
             className={clsx(
               "ui-stage-panel absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs whitespace-nowrap transition-colors duration-300",
               slot.active
-                ? "border-[var(--accent-primary)] text-[var(--accent-primary)]"
+                ? "border-(--accent-primary) text-(--accent-primary)"
                 : "text-muted-foreground",
             )}
           >

@@ -12,6 +12,10 @@ import {
 } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
+import {
+  createInProcessSessionLock,
+  type SessionLock,
+} from "../../src/lib/session-lock.js";
 
 type Env = {
   Variables: {
@@ -21,6 +25,7 @@ type Env = {
     mediaStore?: MediaStore;
     worldsDirs?: readonly string[];
     covelHome?: string;
+    sessionLock: SessionLock;
   };
 };
 
@@ -34,11 +39,13 @@ function createTestApp(
   } = {},
 ): Hono<Env> {
   const eventBus = createEventBus();
+  const sessionLock = createInProcessSessionLock();
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
     c.set("store", store);
     c.set("eventBus", eventBus);
     c.set("pluginRegistry", pluginRegistry);
+    c.set("sessionLock", sessionLock);
     if (options.mediaStore) c.set("mediaStore", options.mediaStore);
     if (options.worldsDirs) c.set("worldsDirs", options.worldsDirs);
     if (options.covelHome) c.set("covelHome", options.covelHome);
@@ -206,6 +213,45 @@ describe("world routes", () => {
     expect(await store.getWorld("generated-world")).toBeNull();
   });
 
+  it("DELETE /api/worlds/:id removes a world created through the API", async () => {
+    const create = await app.request("/api/worlds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "player-world",
+        name: "Player World",
+        description: "Created from the world endpoint",
+      }),
+    });
+    expect(create.status).toBe(200);
+
+    const remove = await app.request("/api/worlds/player-world", {
+      method: "DELETE",
+    });
+
+    expect(remove.status).toBe(200);
+    expect(await store.getWorld("player-world")).toBeNull();
+  });
+
+  it("DELETE /api/worlds/:id rejects a built-in file world", async () => {
+    const now = new Date().toISOString();
+    await store.upsertWorld({
+      id: "built-in-world",
+      name: "Built-in",
+      description: "Repository managed",
+      metadata: { source: "file" },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const remove = await app.request("/api/worlds/built-in-world", {
+      method: "DELETE",
+    });
+
+    expect(remove.status).toBe(403);
+    expect(await store.getWorld("built-in-world")).not.toBeNull();
+  });
+
   it("POST /api/worlds/:id/sync-dimensions refreshes plugin_data and lorebook entries together", async () => {
     const now = new Date().toISOString();
     await store.upsertWorld({
@@ -219,11 +265,17 @@ describe("world routes", () => {
       updatedAt: now,
     });
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sess-1",
       worldId: "world-2",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       locale: "zh-CN",
       activePlugins: [],
       createdAt: now,
@@ -398,11 +450,17 @@ describe("world routes", () => {
     } as PluginRegistry;
     app = createTestApp(store, pluginRegistry, { worldsDirs: [worldsDir] });
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sync-session",
       worldId: "preflight-world",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       locale: "zh-CN",
       activePlugins: ["world-notes"],
       createdAt: now,
@@ -466,11 +524,17 @@ describe("world routes", () => {
     } as PluginRegistry;
     app = createTestApp(store, pluginRegistry, { worldsDirs: [worldsDir] });
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sync-conflict",
       worldId: "preflight-world",
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       locale: "zh-CN",
       activePlugins: ["world-notes"],
       createdAt: now,
@@ -543,11 +607,17 @@ describe("world routes", () => {
     });
     for (const sessionId of ["media-a", "media-b"]) {
       await store.createSession({
+        phase: "playing",
+        setupRuntimes: {},
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
         id: sessionId,
         worldId: "media-world",
         status: "active",
-        turnCount: 0,
-        preGameCompleted: [],
+        completedPlayerTurns: 0,
+
         locale: "zh-CN",
         activePlugins: ["character-presence"],
         createdAt: now,

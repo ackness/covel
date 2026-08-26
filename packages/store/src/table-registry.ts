@@ -11,7 +11,6 @@
  *
  *   - PG cascade delete         → postgres/pg-session-cascade.ts
  *   - SQLite cascade delete      → sqlite/sqlite-session-cascade.ts
- *   - IDB cascade delete         → indexeddb/idb-session-store.ts
  *   - MemoryStore cascade        → memory/session-methods.ts
  *   - MemoryStore tx snapshot    → memory/transaction-methods.ts
  *   - DROP list / ALL_TABLE_NAMES → postgres/pg-schema-ddl.ts
@@ -37,7 +36,6 @@
  */
 
 import type { MemoryState } from "./memory/memory-types.js";
-import type { IdbStoreName } from "./indexeddb/idb-db.js";
 
 /**
  * Keys of {@link MemoryState} that back a session-scoped collection — a `Map`
@@ -53,7 +51,6 @@ export type SessionScopedMemoryKey = Extract<
   | "stateEntries"
   | "stateChanges"
   | "events"
-  | "approvals"
   | "messages"
   | "characters"
   | "pluginData"
@@ -83,14 +80,6 @@ export interface SessionScopedTable {
   readonly memoryKey: SessionScopedMemoryKey;
   /** Whether the MemoryState collection is a `Map` or an array. */
   readonly memoryKind: MemoryCollectionKind;
-  /**
-   * Browser IDB object-store name. IDB names are historically inconsistent
-   * (some camelCase like `turnResults`, some snake_case like `plugin_data`) and
-   * match neither {@link table} nor {@link memoryKey} reliably, so the mapping
-   * is declared explicitly. The IDB cascade auto-picks index vs full-scan
-   * deletion by whether the store carries a `sessionId` index.
-   */
-  readonly idbStore: IdbStoreName;
 }
 
 /**
@@ -104,157 +93,126 @@ export const SESSION_SCOPED_TABLES: readonly SessionScopedTable[] = [
     table: "turn_results",
     memoryKey: "turnResults",
     memoryKind: "array",
-    idbStore: "turnResults",
   },
   {
     table: "runtime_results",
     memoryKey: "runtimeResults",
     memoryKind: "array",
-    idbStore: "runtimeResults",
   },
   {
     table: "tool_calls",
     memoryKey: "toolCalls",
     memoryKind: "array",
-    idbStore: "toolCalls",
   },
   {
     table: "state_schemas",
     memoryKey: "stateSchemas",
     memoryKind: "array",
-    idbStore: "stateSchemas",
   },
   {
     table: "state_entries",
     memoryKey: "stateEntries",
     memoryKind: "map",
-    idbStore: "stateEntries",
   },
   {
     table: "state_changes",
     memoryKey: "stateChanges",
     memoryKind: "array",
-    idbStore: "stateChanges",
   },
   {
     table: "events",
     memoryKey: "events",
     memoryKind: "array",
-    idbStore: "events",
-  },
-  {
-    table: "approvals",
-    memoryKey: "approvals",
-    memoryKind: "array",
-    idbStore: "approvals",
   },
   {
     table: "messages",
     memoryKey: "messages",
     memoryKind: "array",
-    idbStore: "messages",
   },
   {
     table: "characters",
     memoryKey: "characters",
     memoryKind: "map",
-    idbStore: "characters",
   },
   {
     table: "plugin_data",
     memoryKey: "pluginData",
     memoryKind: "map",
-    idbStore: "plugin_data",
   },
   {
     table: "world_data_import_ledger",
     memoryKey: "worldDataImportLedger",
     memoryKind: "map",
-    idbStore: "world_data_import_ledger",
   },
   {
     table: "trace_events",
     memoryKey: "traceEvents",
     memoryKind: "array",
-    idbStore: "traceEvents",
   },
   {
     table: "runtime_outputs",
     memoryKey: "runtimeOutputs",
     memoryKind: "array",
-    idbStore: "runtime_outputs",
   },
   {
     table: "interaction_records",
     memoryKey: "interactionRecords",
     memoryKind: "array",
-    idbStore: "interaction_records",
   },
   {
     table: "turn_messages",
     memoryKey: "turnMessages",
     memoryKind: "array",
-    idbStore: "turnMessages",
   },
   {
     table: "player_inputs",
     memoryKey: "playerInputs",
     memoryKind: "array",
-    idbStore: "playerInputs",
   },
   {
     table: "working_memory",
     memoryKey: "workingMemoryEntries",
     memoryKind: "map",
-    idbStore: "working_memory",
   },
   {
     table: "lorebook_entries",
     memoryKey: "lorebookEntries",
     memoryKind: "map",
-    idbStore: "lorebook_entries",
   },
   {
     table: "session_summaries",
     memoryKey: "sessionSummaries",
     memoryKind: "array",
-    idbStore: "sessionSummaries",
   },
   {
     table: "suspensions",
     memoryKey: "suspensions",
     memoryKind: "map",
-    idbStore: "suspensions",
   },
   {
     table: "state_snapshots",
     memoryKey: "snapshots",
     memoryKind: "map",
-    idbStore: "state_snapshots",
   },
   {
     table: "logical_turn_ledger",
     memoryKey: "logicalTurnLedger",
     memoryKind: "map",
-    idbStore: "logical_turn_ledger",
   },
   {
     table: "setup_attempts",
     memoryKey: "setupAttempts",
     memoryKind: "map",
-    idbStore: "setup_attempts",
   },
   {
     table: "job_status",
     memoryKey: "jobStatus",
     memoryKind: "map",
-    idbStore: "job_status",
   },
   {
     table: "runtime_exports",
     memoryKey: "runtimeExports",
     memoryKind: "map",
-    idbStore: "runtime_exports",
   },
 ];
 

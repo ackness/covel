@@ -34,7 +34,7 @@ function imageRadiusCls(rounded: string): string {
   if (rounded === "none") return "rounded-none";
   if (rounded === "sm") return "rounded-sm";
   if (rounded === "lg") return "rounded-lg";
-  return "rounded-[var(--radius-card)]";
+  return "rounded-(--radius-card)";
 }
 
 /**
@@ -84,7 +84,7 @@ export const ImageComponent: ComponentRenderer = ({ element }) => {
     // matching the image-generation gallery's thumbnail cards.
     const frameCls =
       props.framed === true
-        ? "block w-full overflow-hidden rounded-[var(--radius-card)] border border-border bg-card/60 transition-colors hover:border-primary/40"
+        ? "block w-full overflow-hidden rounded-(--radius-card) border border-border bg-card/60 transition-colors hover:border-primary/40"
         : "";
     // `zoom: true` makes the image click-to-enlarge via the shared preview.
     if (props.zoom !== true) {
@@ -209,7 +209,7 @@ export const AudioPlayerCatalogComponent: ComponentRenderer = ({ element }) => {
   if (!ref) {
     return (
       <div
-        className="flex items-center gap-2 px-3 py-2 border border-border rounded-[var(--radius-card)] bg-muted/40 w-full"
+        className="flex items-center gap-2 px-3 py-2 border border-border rounded-(--radius-card) bg-muted/40 w-full"
         role="status"
         aria-label={alt ? `${alt} unavailable` : "audio unavailable"}
       >

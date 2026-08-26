@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { localeLanguage } from "@covel/shared";
 import { parse as parseYaml } from "yaml";
 import { resolveContainedPath } from "./safe-path.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
@@ -22,7 +23,7 @@ async function resolveSourcePath(
 ): Promise<string | null> {
   const root = source.pathOrigin.descriptorRoot;
   const declared = source.descriptor.path;
-  const lang = locale?.split("-")[0];
+  const lang = localeLanguage(locale);
   if (lang) {
     const parsed = path.parse(declared);
     const variant = path.join(

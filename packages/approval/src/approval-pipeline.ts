@@ -6,38 +6,29 @@
  *   - local:*       → allow (plugin-declared tools from trusted sources)
  *   - third-party:* → deny  (community plugins, not yet implemented)
  *
- * When community plugin support is added, this pipeline gains the missing
- * decision-recording + session-allow persistence path (`hasSessionAllow` is a
- * stub until then).
+ * Community-plugin approval persistence is not implemented yet; denied calls
+ * remain denied until that flow is added.
  */
 
 import type { ApprovalRequest } from "@covel/shared";
-import type { DataStore } from "@covel/store";
 
 export interface ApprovalCheckResult {
-  readonly needsApproval: boolean;
-  readonly autoDecision?: "allow";
+  readonly decision: "allow" | "deny";
   readonly reason: string;
 }
 
 export interface PermissionRule {
   /** Pattern: 'builtin:*', 'local:*', 'third-party:*', or specific tool name. */
   readonly pattern: string;
-  readonly action: "allow" | "deny" | "ask";
+  readonly action: "allow" | "deny";
 }
 
 export interface ApprovalPipeline {
-  /** Check if a tool call needs approval. */
+  /** Resolve the policy decision for a tool call. */
   check(
     request: ApprovalRequest,
     toolSource?: "builtin" | "local" | "third-party",
   ): ApprovalCheckResult;
-  /** Check if a tool has a session-level allow decision for a specific plugin. */
-  hasSessionAllow(
-    sessionId: string,
-    toolName: string,
-    pluginId: string,
-  ): boolean;
 }
 
 /** Source-category wildcards supported by permission rules. */
@@ -82,11 +73,8 @@ export function matchPermissionRule(
  * When no custom rules are provided, all tool calls are auto-approved (default-allow-all).
  * When custom rules are provided, each tool call is matched against the rule list in order.
  *
- * @param _store - Reserved for the future decision-persistence path (community
- *   plugin approvals). Currently unused — accepted so callers need not change
- *   when persistence lands.
- * @param rules - Optional permission rules (e.g., `[{ pattern: 'third-party:*', action: 'ask' }]`). Defaults to allow-all.
- * @returns An `ApprovalPipeline` with `check` and `hasSessionAllow` methods.
+ * @param rules - Optional permission rules (e.g., `[{ pattern: 'third-party:*', action: 'deny' }]`). Defaults to allow-all.
+ * @returns An `ApprovalPipeline` with a `check` method.
  *
  * @example
  * ```typescript
@@ -95,19 +83,27 @@ export function matchPermissionRule(
  * // Default: allow everything
  * const pipeline = createApprovalPipeline();
  * const result = pipeline.check({ toolName: 'get-weather', sessionId: 's1', turnId: 't1' });
- * // => { needsApproval: false, autoDecision: 'allow', reason: 'default-allow-all' }
+ * // => { decision: 'allow', reason: 'default-allow-all' }
  *
- * // With rules: require approval for third-party tools
- * const gated = createApprovalPipeline(store, [
+ * // With rules: deny third-party tools
+ * const gated = createApprovalPipeline([
  *   { pattern: 'builtin:*', action: 'allow' },
- *   { pattern: 'third-party:*', action: 'ask' },
+ *   { pattern: 'third-party:*', action: 'deny' },
  * ]);
  * ```
  */
 export function createApprovalPipeline(
-  _store?: DataStore,
   rules?: readonly PermissionRule[],
 ): ApprovalPipeline {
+  for (const rule of rules ?? []) {
+    const action: unknown = (rule as { readonly action?: unknown }).action;
+    if (action !== "allow" && action !== "deny") {
+      throw new Error(
+        `Approval action ${JSON.stringify(action)} is not supported. Use "allow" or "deny" until durable approval decisions are implemented.`,
+      );
+    }
+  }
+
   function check(
     request: ApprovalRequest,
     toolSource?: "builtin" | "local" | "third-party",
@@ -115,8 +111,7 @@ export function createApprovalPipeline(
     // No custom rules → default allow-all.
     if (rules === undefined || rules.length === 0) {
       return {
-        needsApproval: false,
-        autoDecision: "allow",
+        decision: "allow",
         reason: "default-allow-all",
       };
     }
@@ -127,8 +122,7 @@ export function createApprovalPipeline(
     if (matched === undefined) {
       // No rule matched — default allow.
       return {
-        needsApproval: false,
-        autoDecision: "allow",
+        decision: "allow",
         reason: "default-allow-all",
       };
     }
@@ -136,23 +130,13 @@ export function createApprovalPipeline(
     switch (matched.action) {
       case "allow":
         return {
-          needsApproval: false,
-          autoDecision: "allow",
+          decision: "allow",
           reason: "rule-allow",
         };
-      case "ask":
-        return { needsApproval: true, reason: "rule-ask" };
       case "deny":
-        return { needsApproval: true, reason: "rule-deny" };
+        return { decision: "deny", reason: "rule-deny" };
     }
   }
 
-  // Community-plugin session approvals aren't wired to persistence yet, so
-  // there is never a recorded prior allow-session. Stub returns false until
-  // that decision-recording flow lands.
-  function hasSessionAllow(): boolean {
-    return false;
-  }
-
-  return { check, hasSessionAllow };
+  return { check };
 }

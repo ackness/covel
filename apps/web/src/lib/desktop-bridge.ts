@@ -264,6 +264,38 @@ export async function openKeysEnv(): Promise<void> {
   return postOpenFolder("keys.env");
 }
 
+export type DesktopProxyMode = "direct" | "system" | "http" | "socks";
+
+export interface DesktopProxyConfig {
+  readonly mode: DesktopProxyMode;
+  readonly url?: string;
+  readonly effective: "direct" | "proxy" | "system";
+  readonly systemAvailable: boolean;
+}
+
+export async function getDesktopProxyConfig(): Promise<DesktopProxyConfig> {
+  await ensureDesktopRestToken();
+  const res = await fetch("/api/config/proxy", {
+    headers: getDesktopRestAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(await desktopRestErrorMessage(res));
+  return (await res.json()) as DesktopProxyConfig;
+}
+
+export async function setDesktopProxyConfig(input: {
+  mode: DesktopProxyMode;
+  url?: string;
+}): Promise<DesktopProxyConfig> {
+  await ensureDesktopRestToken();
+  const res = await fetch("/api/config/proxy", {
+    method: "PUT",
+    headers: desktopJsonHeaders(),
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error(await desktopRestErrorMessage(res));
+  return (await res.json()) as DesktopProxyConfig;
+}
+
 /**
  * Set the data_root path in `~/.covel/config.toml`.
  *

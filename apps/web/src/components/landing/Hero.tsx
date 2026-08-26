@@ -11,7 +11,7 @@ export function Hero() {
   return (
     <section
       aria-labelledby="hero-heading"
-      className="relative w-full h-full min-h-[560px] sm:min-h-[640px] flex items-stretch overflow-hidden bg-background"
+      className="relative w-full h-full min-h-140 sm:min-h-160 flex items-stretch overflow-hidden bg-background"
     >
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
         <img
@@ -85,14 +85,14 @@ export function Hero() {
         </div>
       </div>
 
-      <div className="relative z-10 w-full max-w-[1400px] mx-auto px-5 sm:px-6 md:px-10 py-12 sm:py-16 md:py-24 flex flex-col justify-between gap-10 md:gap-0">
+      <div className="relative z-10 w-full max-w-350 mx-auto px-5 sm:px-6 md:px-10 py-12 sm:py-16 md:py-24 flex flex-col justify-between gap-10 md:gap-0">
         <div className="flex-1 flex flex-col justify-center max-w-3xl">
           <span className="ui-eyebrow text-muted-foreground mb-5 md:mb-6">
             {t("home.heroEyebrow", "v0.1.0 · Plugin-first AI RPG runtime")}
           </span>
           <h1
             id="hero-heading"
-            className="font-display text-[clamp(2.75rem,9vw,8rem)] lg:text-9xl font-bold tracking-tight leading-[0.92] mb-6 md:mb-8 break-words"
+            className="font-display text-[clamp(2.75rem,9vw,8rem)] lg:text-9xl font-bold tracking-tight leading-[0.92] mb-6 md:mb-8 wrap-break-word"
           >
             {t("home.heroLine1", "Stories")}
             <br />
@@ -110,7 +110,7 @@ export function Hero() {
             <Button
               size="lg"
               asChild
-              className="h-12 px-6 sm:px-7 text-sm rounded-[var(--radius-control)] font-medium uppercase tracking-wider"
+              className="h-12 px-6 sm:px-7 text-sm rounded-(--radius-control) font-medium uppercase tracking-wider"
             >
               <Link to="/session">
                 {t("home.startPlaying", "Start Playing")}
@@ -121,7 +121,7 @@ export function Hero() {
               size="lg"
               variant="outline"
               asChild
-              className="h-12 px-6 sm:px-7 text-sm rounded-[var(--radius-control)] font-medium uppercase tracking-wider"
+              className="h-12 px-6 sm:px-7 text-sm rounded-(--radius-control) font-medium uppercase tracking-wider"
             >
               <a href={REPO_URL} target="_blank" rel="noreferrer noopener">
                 {t("home.viewRepository", "View Repository")}

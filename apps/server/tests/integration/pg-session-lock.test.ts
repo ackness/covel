@@ -28,6 +28,7 @@ import {
 const DATABASE_URL =
   process.env.DATABASE_URL ??
   "postgresql://covel:covel_dev@localhost:5432/covel";
+const REQUIRE_PG = process.env.COVEL_REQUIRE_PG_TESTS === "1";
 
 // Probe once at module load so the describe.skipIf below is deterministic.
 async function pgReachable(): Promise<boolean> {
@@ -36,7 +37,12 @@ async function pgReachable(): Promise<boolean> {
     await probe`SELECT 1`;
     await probe.end();
     return true;
-  } catch {
+  } catch (error) {
+    if (REQUIRE_PG) {
+      throw new Error("PostgreSQL is required for session lock tests", {
+        cause: error,
+      });
+    }
     return false;
   }
 }
@@ -227,6 +233,110 @@ describe.skipIf(!pgAvailable)("pg-session-lock", () => {
 
     await holder;
     await sql.end();
+  });
+
+  it("acquires many ordered keys on one reserved connection", async () => {
+    // A recursive withLock implementation consumes one reserved connection per
+    // key and deadlocks itself once the pool is full. max=1 makes that bug
+    // deterministic: a native batch must still acquire every key and run.
+    const sql = postgres(DATABASE_URL, { max: 1 });
+    const lock = createPgAdvisorySessionLock(sql, {
+      acquireTimeoutMs: 1_000,
+      pollIntervalMs: 10,
+    });
+    const keys = Array.from(
+      { length: 32 },
+      (_, index) => `batch-${Date.now()}-${index}`,
+    );
+
+    let ran = false;
+    await lock.withLocks(keys, async () => {
+      ran = true;
+    });
+    expect(ran).toBe(true);
+
+    await sql.end();
+  });
+
+  it("reuses one reserved connection for nested runtime-to-session locks", async () => {
+    const sql = postgres(DATABASE_URL, { max: 1 });
+    const lock = createPgAdvisorySessionLock(sql, {
+      acquireTimeoutMs: 1_000,
+      pollIntervalMs: 10,
+    });
+    const suffix = Date.now();
+    const order: string[] = [];
+
+    await lock.withLock(`background-runtime-${suffix}`, async () => {
+      order.push("runtime");
+      await lock.withLock(`session-${suffix}`, async () => {
+        order.push("session");
+      });
+    });
+
+    expect(order).toEqual(["runtime", "session"]);
+    await sql.end();
+  });
+
+  it("serializes sibling nested calls for the same key", async () => {
+    const sql = postgres(DATABASE_URL, { max: 1 });
+    const lock = createPgAdvisorySessionLock(sql);
+    const suffix = Date.now();
+    let active = 0;
+    let maxActive = 0;
+
+    await lock.withLock(`outer-${suffix}`, () =>
+      Promise.all(
+        [1, 2].map(() =>
+          lock.withLock(`same-nested-${suffix}`, async () => {
+            active += 1;
+            maxActive = Math.max(maxActive, active);
+            await new Promise((resolve) => setTimeout(resolve, 25));
+            active -= 1;
+          }),
+        ),
+      ).then(() => undefined),
+    );
+
+    expect(maxActive).toBe(1);
+    await sql.end();
+  });
+
+  it("holds every batch key against another Pod", async () => {
+    const sqlA = postgres(DATABASE_URL, { max: 1 });
+    const sqlB = postgres(DATABASE_URL, { max: 1 });
+    const lockA = createPgAdvisorySessionLock(sqlA);
+    const lockB = createPgAdvisorySessionLock(sqlB);
+    const keys = [
+      `batch-cross-a-${Date.now()}`,
+      `batch-cross-b-${Date.now()}`,
+      `batch-cross-session-${Date.now()}`,
+    ];
+    let releaseBatch!: () => void;
+    let markBatchStarted!: () => void;
+    const batchStarted = new Promise<void>((resolve) => {
+      markBatchStarted = resolve;
+    });
+    const batchGate = new Promise<void>((resolve) => {
+      releaseBatch = resolve;
+    });
+    const holder = lockA.withLocks(keys, async () => {
+      markBatchStarted();
+      await batchGate;
+    });
+    await batchStarted;
+
+    let contenderStarted = false;
+    const contender = lockB.withLock(keys[1]!, async () => {
+      contenderStarted = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(contenderStarted).toBe(false);
+
+    releaseBatch();
+    await Promise.all([holder, contender]);
+    expect(contenderStarted).toBe(true);
+    await Promise.all([sqlA.end(), sqlB.end()]);
   });
 });
 

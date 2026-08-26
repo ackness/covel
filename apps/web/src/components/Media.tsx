@@ -65,7 +65,7 @@ function radiusClass(rounded: NonNullable<MediaProps["rounded"]>): string {
       return "rounded-lg";
     case "md":
     default:
-      return "rounded-[var(--radius-card)]";
+      return "rounded-(--radius-card)";
   }
 }
 

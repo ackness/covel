@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
-import * as Icons from "lucide-react";
-import { postPluginRpc } from "@/services/api.js";
+import { Check, Loader2, RefreshCw } from "lucide-react";
+import { postPluginRpc as requestPluginRpc } from "@/services/api.js";
+import { getSessionWorkspace } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSession } from "@/stores/session-store.js";
 import { asRecord, useI18nResolver } from "./helpers.js";
@@ -146,11 +147,11 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
     }
     setPendingAction(action);
     try {
-      const res = await postPluginRpc(sessionId, {
-        pluginId,
-        runtimeId,
-        payload,
-      });
+      const res = await getSessionWorkspace().run(
+        sessionId,
+        `plugin-rpc:${crypto.randomUUID()}`,
+        () => requestPluginRpc(sessionId, { pluginId, runtimeId, payload }),
+      );
       if (res.status === "error") {
         emitToast("error", res.error);
       } else if (res.status === "accepted") {
@@ -214,9 +215,9 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
             }
             disabled={!canInvokeRuntime || pendingAction !== null}
             aria-busy={pendingAction === "createCandidates" || undefined}
-            className="inline-flex items-center gap-1 rounded-[var(--radius-control)] border border-border px-2 py-1 text-[11px] text-muted-foreground hover:border-foreground/40 hover:text-foreground transition-colors"
+            className="inline-flex items-center gap-1 rounded-(--radius-control) border border-border px-2 py-1 text-[11px] text-muted-foreground hover:border-foreground/40 hover:text-foreground transition-colors"
           >
-            <Icons.RefreshCw
+            <RefreshCw
               className={clsx(
                 "w-3 h-3",
                 pendingAction === "createCandidates" && "animate-spin",
@@ -253,21 +254,21 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
                   {candidate.content}
                 </p>
                 {accepted && (
-                  <Icons.Check className="w-3.5 h-3.5 shrink-0 text-primary mt-0.5" />
+                  <Check className="w-3.5 h-3.5 shrink-0 text-primary mt-0.5" />
                 )}
               </div>
               <div className="flex flex-wrap items-center gap-1.5 pl-5">
                 <button
                   type="button"
                   onClick={() => draftCandidate(candidate)}
-                  className="font-medium rounded-[var(--radius-control)] transition-all text-left inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-transparent text-muted-foreground border border-dashed border-border hover:border-foreground/40 hover:text-foreground"
+                  className="font-medium rounded-(--radius-control) transition-all text-left inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-transparent text-muted-foreground border border-dashed border-border hover:border-foreground/40 hover:text-foreground"
                 >
                   {draftLabel}
                 </button>
                 <button
                   type="button"
                   onClick={() => sendCandidate(candidate)}
-                  className="font-medium rounded-[var(--radius-control)] transition-all text-left inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-transparent text-foreground border border-border hover:border-foreground/40 hover:bg-foreground/5"
+                  className="font-medium rounded-(--radius-control) transition-all text-left inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] bg-transparent text-foreground border border-border hover:border-foreground/40 hover:bg-foreground/5"
                 >
                   {sendLabel}
                 </button>
@@ -283,15 +284,15 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
                   disabled={!canInvokeRuntime || pendingAction !== null}
                   aria-busy={pendingAction === "acceptCandidate" || undefined}
                   className={clsx(
-                    "font-medium rounded-[var(--radius-control)] transition-all text-left inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] border",
+                    "font-medium rounded-(--radius-control) transition-all text-left inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] border",
                     accepted
-                      ? "bg-foreground text-[var(--surface-page)] border-foreground hover:bg-foreground/90"
+                      ? "bg-foreground text-(--surface-page) border-foreground hover:bg-foreground/90"
                       : "bg-transparent text-muted-foreground border-dashed border-border hover:border-foreground/40 hover:text-foreground",
                     pendingAction !== null && "opacity-70 cursor-progress",
                   )}
                 >
                   {pendingAction === "acceptCandidate" && (
-                    <Icons.Loader2
+                    <Loader2
                       aria-hidden="true"
                       className="w-3 h-3 animate-spin"
                     />

@@ -1,7 +1,47 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import i18nInstance from "@/i18n";
-import * as Icons from "lucide-react";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
+import {
+  Backpack,
+  Anchor,
+  BookMarked,
+  BookOpen,
+  BookUser,
+  Brain,
+  CalendarDays,
+  CheckCircle2,
+  Compass,
+  Dices,
+  Gem,
+  Headphones,
+  Heart,
+  Handshake,
+  IdCard,
+  Image as ImageIcon,
+  Loader,
+  Map as MapIcon,
+  MapPin,
+  Megaphone,
+  Mic,
+  Network,
+  ScrollText,
+  Search,
+  Shield,
+  Skull,
+  SlidersHorizontal,
+  Sparkles,
+  Swords,
+  Turtle,
+  User,
+  UserSearch,
+  Users,
+  UsersRound,
+  Wand,
+  Waves,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 
 export interface FilterTab {
   value: string;
@@ -10,19 +50,53 @@ export interface FilterTab {
   color?: string;
 }
 
-export function resolveIcon(name: string | undefined): Icons.LucideIcon | null {
+/** Icons accepted by the plugin UI protocol. Unknown names render no icon. */
+export const catalogIcons: Readonly<Record<string, LucideIcon>> = {
+  anchor: Anchor,
+  backpack: Backpack,
+  "book-marked": BookMarked,
+  "book-open": BookOpen,
+  "book-user": BookUser,
+  brain: Brain,
+  "calendar-days": CalendarDays,
+  "check-circle-2": CheckCircle2,
+  compass: Compass,
+  dices: Dices,
+  gem: Gem,
+  headphones: Headphones,
+  heart: Heart,
+  handshake: Handshake,
+  "id-card": IdCard,
+  image: ImageIcon,
+  loader: Loader,
+  map: MapIcon,
+  "map-pin": MapPin,
+  megaphone: Megaphone,
+  mic: Mic,
+  network: Network,
+  "scroll-text": ScrollText,
+  search: Search,
+  shield: Shield,
+  skull: Skull,
+  "sliders-horizontal": SlidersHorizontal,
+  sparkles: Sparkles,
+  swords: Swords,
+  turtle: Turtle,
+  user: User,
+  "user-search": UserSearch,
+  users: Users,
+  "users-round": UsersRound,
+  wand: Wand,
+  waves: Waves,
+  "x-circle": XCircle,
+};
+
+export function resolveIcon(name: string | undefined): LucideIcon | null {
   // The declared type is a lie at runtime: `name` comes straight out of a
   // plugin-authored spec, so anything can arrive here and `.split` would throw.
   if (typeof name !== "string" || !name) return null;
-  // Convert kebab-case to PascalCase: "book-open" -> "BookOpen"
-  const pascal = name
-    .split("-")
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join("");
-  return (
-    ((Icons as Record<string, unknown>)[pascal] as
-      Icons.LucideIcon | undefined) ?? null
-  );
+  const normalized = name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+  return catalogIcons[normalized] ?? null;
 }
 
 /**
@@ -37,34 +111,7 @@ export function resolveIcon(name: string | undefined): Icons.LucideIcon | null {
  * `useI18nResolver()` to subscribe to language changes and re-render.
  */
 export function resolveI18n(value: unknown, locale?: string): string {
-  if (typeof value === "string") return value;
-  if (typeof value === "object" && value !== null) {
-    // A locale-keyed record from a plugin spec is not guaranteed to hold
-    // strings. Returning a nested object here would reach React as a child and
-    // throw ("Objects are not valid as a React child"), so every branch below
-    // goes through `asString`.
-    const obj = value as Record<string, unknown>;
-    const asString = (v: unknown): string | undefined =>
-      typeof v === "string" ? v : undefined;
-    const lang = locale ?? i18nInstance.language ?? "";
-    const exact = lang ? asString(obj[lang]) : undefined;
-    if (exact) return exact;
-    const prefix = lang.split("-")[0];
-    if (prefix) {
-      for (const k of Object.keys(obj)) {
-        if (k !== prefix && !k.startsWith(`${prefix}-`)) continue;
-        const match = asString(obj[k]);
-        if (match) return match;
-      }
-    }
-    return (
-      asString(obj["en-US"]) ??
-      asString(obj["en"]) ??
-      Object.values(obj).find((v): v is string => typeof v === "string") ??
-      ""
-    );
-  }
-  return String(value ?? "");
+  return resolveDisplayText(value, locale ?? i18nInstance.language);
 }
 
 /**

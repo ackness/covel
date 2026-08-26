@@ -13,10 +13,10 @@
 
 ## 数据与行为
 
-- 骰池审计轨写入 `plugin_data[dice-check][rolls]`（key = turnId，`{ dice: [n1, n2, n3] }`）。
+- 骰池通过 roller 的 `dice` runtime output 在同回合绑定给 recorder（`inputs.dicePool`），同时把审计轨写入 `plugin_data[dice-check][rolls]`（key = turnId，`{ dice: [n1, n2, n3] }`）；后者到 turn finalizer 才提交，供事后审计与重试兜底。
 - 判定回执写入 `plugin_data[dice-check][checks]`（key = `<turnId>-<序号>`，含展示字段）。
 - 本回合判定数组写入 `plugin_data[dice-check][message]`（key = turnId，值带 `__turnId`，消息层 block 数据源）。
-- 回执批量逐项校验：无效项跳过、有效项照常落库，全部无效才整体 skip，不影响回合。
+- 回执批量逐项校验：按顺序匹配本回合预掷骰池，并验证 `total = roll + modifier`、difficulty 对应 DC、天然 1/20 和 `total vs DC` 对应 outcome；无效项跳过、有效项照常落库，缺少预掷审计轨时整体 fail-closed。
 
 ## 集成
 

@@ -1,6 +1,6 @@
 # openai-image-gen
 
-OpenAI 兼容图像生成插件。生成走框架统一的 `ctx.images.generate()` 管线——插件只负责拼 prompt 和把返回的 `MediaRef[]` 落进画廊，HTTP 调用、SSRF 守卫、响应解析、幂等去重全部由框架处理。可指向任何 OpenAI-API 兼容的第三方供应商，默认模型 `gpt-image-2`。
+OpenAI Images API 图像生成插件。生成走框架统一的 `ctx.images.generate()` 管线——插件只负责拼 prompt 和把返回的 `MediaRef[]` 落进画廊，HTTP 调用、SSRF 守卫、响应解析、幂等去重全部由框架处理。默认模型是 `gpt-image-2`；只有实现标准 OpenAI Images 请求和响应形状的第三方服务才能复用当前 `openai-images` wire。
 
 **全部凭据走 `~/.covel/llm.toml`**，与 dashscope-image-gen 同构——加新供应商只改一个 `[covel.<slot>]` 块，不动插件代码。
 
@@ -86,13 +86,13 @@ prompt-generator（与 dashscope 同构，便于熟悉的玩家无缝切换）�
 
 image-generator：
 
-| Key             | 类型   | 默认           | 说明                                                                                                |
-| --------------- | ------ | -------------- | --------------------------------------------------------------------------------------------------- |
+| Key             | 类型   | 默认           | 说明                                                                                                                           |
+| --------------- | ------ | -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `modelPresetId` | slot   | `openai-image` | 对应 `~/.covel/llm.toml` 里的 `[covel.<slot>]` 名字，UI 渲染成已配置槽的选择器。换第三方 / 换模型 = 加一个新 slot 然后改这个值 |
-| `imageSize`     | text   | `1024x1024`    | OpenAI Images API size 参数（小写 x）                                                               |
-| `n`             | number | `1`            | 一次生成几张图                                                                                      |
-| `quality`       | text   | _(空)_         | 可选；`standard` / `hd`；空 = 不传                                                                  |
-| `style`         | text   | _(空)_         | 可选；没有独立的 wire 参数，会拼进 prompt 文案末尾（`<prompt>, style: <style>`）                    |
+| `imageSize`     | text   | `1024x1024`    | OpenAI Images API size 参数（小写 x）                                                                                          |
+| `n`             | number | `1`            | 一次生成几张图                                                                                                                 |
+| `quality`       | text   | `low`          | GPT Image 可填 `low` / `medium` / `high` / `auto`                                                                              |
+| `style`         | text   | _(空)_         | 可选；没有独立的 wire 参数，会拼进 prompt 文案末尾（`<prompt>, style: <style>`）                                               |
 
 > **画质保证**：4K / ultra detailed / masterpiece 等关键词写在 prompt-generator 的 PLUGIN.md 系统提示里，模型在每条 prompt 末尾或 `quality` 字段强制带上。漫画模式额外追加 `crisp ink lines, clean panel borders, professional manga / comic page composition`。
 
@@ -131,21 +131,19 @@ pnpm test:runtime -- openai-image-gen --plugins-dir plugins --pretty
 pnpm test:runtime -- openai-image-gen --plugins-dir plugins --mode live --pretty
 ```
 
-## 第三方供应商示例
+## 第三方供应商
 
-某些 OpenAI 兼容图像供应商：
+当前 `openai-images` wire 固定调用 `POST /images/generations`，并解析 `data[].b64_json` / `data[].url`。以下两个供应商的官方文档明确提供该兼容接口：
 
-- **Together AI**: `baseUrl=https://api.together.xyz/v1`, model 如 `black-forest-labs/FLUX.1-schnell-Free`
-- **Fireworks**: `baseUrl=https://api.fireworks.ai/inference/v1`, model 如 `accounts/fireworks/models/flux-1-schnell`
-- **DeepInfra**: `baseUrl=https://api.deepinfra.com/v1/openai`
-- **fal.ai (OpenAI shim)**: 见 fal-ai 文档配置
+- **Together AI**: `baseUrl=https://api.together.xyz/v1`，`model=black-forest-labs/FLUX.1-schnell`。不要使用已下线的 `black-forest-labs/FLUX.1-schnell-Free`。参见 [Together Images API](https://docs.together.ai/reference/post-images-generations) 和 [Together 模型下线记录](https://docs.together.ai/docs/deprecations)。
+- **DeepInfra**: `baseUrl=https://api.deepinfra.com/v1/openai`，`model=black-forest-labs/FLUX-1-schnell`。参见 [DeepInfra Image Generation API](https://docs.deepinfra.com/apis/image-generation)。
 
-框架的 `openai-images` wire 认标准 OpenAI Images 响应形状（`data[].b64_json` / `data[].url`）；供应商响应形状不同时通过 `providerRequestMetadata.imageWire` 切换到其他已注册 wire，而不是改插件代码。
+Fireworks 当前使用模型 workflow 端点且响应形状不同，fal.ai 当前官方接口是 `fal.run`/队列协议；两者都不能配成当前 `openai-images` wire。除非框架后续注册对应专用 wire，不要把它们的 Base URL 填入本插件示例。
 
 ## 注意事项
 
-- `gpt-image-2` 是默认占位；如果你的供应商没有这个模型，把 llm.toml 里 slot 的 `model` 改成实际可用的（`gpt-image-1` / `dall-e-3` 等）
+- `gpt-image-2` 是 OpenAI 默认模型。使用第三方服务时，必须改成该服务实际提供的模型 ID。`gpt-image-1` 已弃用，`dall-e-3` 已从 API 移除，不再作为可用备选；参见 [OpenAI GPT Image 2](https://developers.openai.com/api/docs/models/gpt-image-2)。
 - SSRF 守卫、baseUrl 校验、重试都由框架的 `ctx.images.generate()` 统一处理，插件不再自己做这些检查
 - 画廊 UI 接 `images` 命名空间；`ctx.images.generate()` 已经把字节落进 MediaStore 并返回 `MediaRef[]`，handler 只需把 `ref` 写进 `images.<imageId>` 记录；多图请求会发布 `images.<imageId>-1`、`images.<imageId>-2` 这类独立记录，SSE `plugin-data.changed` 自动刷新；前端用 `<Media src={ref}>` 组件解析
 - **凭据流向**：插件**不**持久化 apiKey/baseUrl 在 settings.json；`ctx.images.generate()` 内部通过 `modelPresetId` 从框架解析 slot，与 dashscope-image-gen 完全同模式
-- 本插件不依赖任何 npm 包（`package.json` 无 `dependencies`），无需 `npm install`
+- 本插件不引入第三方 HTTP SDK；依赖由 Covel 根 workspace 统一安装。

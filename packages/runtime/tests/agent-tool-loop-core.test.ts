@@ -116,6 +116,11 @@ async function run(opts: {
   messages?: { role: string; content: string }[];
 }) {
   return (await runAgentToolLoop({
+    executionContext: {
+      executionId: crypto.randomUUID(),
+      origin: "manual",
+      countPolicy: "none",
+    },
     manifest: opts.manifest ?? manifest(),
     input,
     loaded,
@@ -172,6 +177,24 @@ describe("runAgentToolLoop core", () => {
     const roles = messages.map((m) => m.role);
     expect(roles).toEqual(["system", "user", "assistant", "tool"]);
     expect(messages[3]!.content).toContain("marked:alpha");
+  });
+
+  it("completeAfterTools avoids a follow-up LLM call after a completing tool", async () => {
+    const llm = new ScriptedLLM([
+      toolCall("mark", { note: "single-shot" }),
+      prose("should never be reached"),
+    ]);
+    const result = await run({
+      llm,
+      manifest: manifest({ completeAfterTools: ["mark"] }),
+    });
+
+    expect(llm.calls).toBe(1);
+    expect(result.stoppedWithResponse).toBe(true);
+    expect(result.collectedToolCalls.map((call) => call.toolName)).toEqual([
+      "mark",
+    ]);
+    expect(result.finalContent).toContain("single-shot");
   });
 
   it("runtime-done sentinel: early exit, sentinel stripped from business calls", async () => {

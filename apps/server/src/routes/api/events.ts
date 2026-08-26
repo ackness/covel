@@ -10,12 +10,17 @@ import type { DataStore } from "@covel/store";
 import type { CovelMessage } from "@covel/shared";
 import { isEnvTruthy, readRuntimeEnv } from "@covel/shared";
 import { errorBody, readJsonBody } from "../../api-error.js";
-import { checkSessionOwnerById } from "./session/session-guard.js";
+import type { SessionLock } from "../../lib/session-lock.js";
+import {
+  checkSessionOwner,
+  withLockedSessionMutation,
+} from "./session/session-guard.js";
 
 type Env = {
   Variables: {
     eventBus: EventBus;
     store: DataStore;
+    sessionLock: SessionLock;
   };
 };
 
@@ -47,7 +52,17 @@ eventRoutes.post("/emit", async (c) => {
   // Audit 2026-07-16 L-3: on hosted tiers, gate event injection on the target
   // session's owner token so a non-production demo boot can't accept arbitrary
   // cross-session events. Strict no-op on self/desktop (unenforced tiers).
-  const denied = await checkSessionOwnerById(c, c.get("store"), body.sessionId);
+  const store = c.get("store");
+  const session = await store.getSession(body.sessionId);
+  if (!session) {
+    return c.json(
+      errorBody(`Session not found: ${body.sessionId}`, {
+        code: "session_not_found",
+      }),
+      404,
+    );
+  }
+  const denied = checkSessionOwner(c, session);
   if (denied) return denied;
 
   const message: CovelMessage = {
@@ -60,6 +75,20 @@ eventRoutes.post("/emit", async (c) => {
     timestamp: new Date().toISOString(),
   };
 
-  eventBus.emit(message);
-  return c.json({ id: message.id, emitted: true });
+  return withLockedSessionMutation({
+    c,
+    store,
+    sessionLock: c.get("sessionLock"),
+    sessionId: body.sessionId,
+    expectedSession: session,
+    allowedStatuses: ["active"],
+    mutate: async () => {
+      eventBus.emit(message);
+      // EventBus persistence is intentionally queued. Drain it before releasing
+      // the lifecycle lock so delete/recreate cannot be followed by a late
+      // audit row belonging to the old incarnation.
+      await eventBus.flush();
+      return c.json({ id: message.id, emitted: true });
+    },
+  });
 });

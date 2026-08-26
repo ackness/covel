@@ -109,7 +109,7 @@ function SuspensionCard({
             </span>
           </div>
           {suspension.reason && (
-            <p className="mt-1 text-muted-foreground break-words">
+            <p className="mt-1 text-muted-foreground wrap-break-word">
               {suspension.reason}
             </p>
           )}
@@ -132,10 +132,12 @@ function SuspensionCard({
         onChange={(e) => setPayload(e.target.value)}
         placeholder={t("session.suspensionResumePlaceholder")}
         disabled={busy !== null}
-        className="w-full min-h-[72px] text-xs font-mono bg-background border border-border rounded-sm px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary resize-y disabled:opacity-50"
+        className="w-full min-h-18 text-xs font-mono bg-background border border-border rounded-sm px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary resize-y disabled:opacity-50"
       />
 
-      {error && <p className="text-xs text-destructive break-words">{error}</p>}
+      {error && (
+        <p className="text-xs text-destructive wrap-break-word">{error}</p>
+      )}
 
       <div className="flex gap-2 justify-end">
         <Button

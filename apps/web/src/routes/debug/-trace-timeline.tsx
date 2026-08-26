@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 import { Activity, Terminal } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import type * as api from "@/services/api.js";
 import type { EventCategory } from "./-debug-helpers.js";
 import type { VisibleTurn } from "./-debug-page-model.js";
@@ -13,7 +12,7 @@ export function TraceTimeline({
   expandedTurns,
   expandedRuntimes,
   filterCategory,
-  selectedEventSeq,
+  selectedEventId,
   onToggleTurn,
   onToggleRuntime,
   onSelectEvent,
@@ -24,7 +23,7 @@ export function TraceTimeline({
   expandedTurns: Set<string>;
   expandedRuntimes: Set<string>;
   filterCategory: EventCategory | null;
-  selectedEventSeq?: number;
+  selectedEventId?: string;
   onToggleTurn: (turnId: string) => void;
   onToggleRuntime: (key: string) => void;
   onSelectEvent: (event: api.TraceEvent) => void;
@@ -32,7 +31,7 @@ export function TraceTimeline({
   const { t } = useTranslation();
 
   return (
-    <ScrollArea className="flex-1 min-h-0">
+    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
       <div className="p-4 space-y-2 max-w-5xl">
         {!selectedSessionId && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -66,10 +65,10 @@ export function TraceTimeline({
             onToggleRuntime={onToggleRuntime}
             filterCategory={filterCategory}
             onSelectEvent={onSelectEvent}
-            selectedEventSeq={selectedEventSeq}
+            selectedEventId={selectedEventId}
           />
         ))}
       </div>
-    </ScrollArea>
+    </div>
   );
 }

@@ -100,7 +100,7 @@ export function toMeta(
 ): Readonly<Record<string, unknown>> | undefined {
   return meta === undefined
     ? undefined
-    : { ...(meta as Record<string, unknown>) };
+    : structuredClone(meta as Record<string, unknown>);
 }
 
 export function bytesToReadableStream(

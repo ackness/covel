@@ -63,8 +63,9 @@ async function setupSessionWithModel(
   await store.createSession({
     id: sessionId,
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    phase: "setup",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     locale: "en",
     activePlugins: [],
     createdAt: new Date().toISOString(),
@@ -135,6 +136,38 @@ export function runVectorStoreContractTests(
       });
       expect(results).toHaveLength(3);
       expect(results[0].key).toBe("k0"); // exact match lands first
+    });
+
+    it("returns no results when topK is zero or negative", async () => {
+      const dim = 16;
+      await setupSessionWithModel(store, "s1", dim);
+      const query = seededVector(dim, 1);
+      await store.upsertVector({
+        sessionId: "s1",
+        pluginId: "p",
+        namespace: "ns",
+        key: "k1",
+        embedding: query,
+      });
+
+      await expect(
+        store.searchVectors({ sessionId: "s1", query, topK: 0 }),
+      ).resolves.toEqual([]);
+      await expect(
+        store.searchVectors({ sessionId: "s1", query, topK: -1 }),
+      ).resolves.toEqual([]);
+    });
+
+    it("rejects non-safe-integer topK values", async () => {
+      const dim = 16;
+      await setupSessionWithModel(store, "s1", dim);
+      const query = seededVector(dim, 1);
+
+      for (const topK of [1.5, Number.NaN, Infinity, 2 ** 53]) {
+        await expect(
+          store.searchVectors({ sessionId: "s1", query, topK }),
+        ).rejects.toBeInstanceOf(RangeError);
+      }
     });
 
     it("narrows by pluginId and namespace filters", async () => {
@@ -276,13 +309,57 @@ export function runVectorStoreContractTests(
       ).rejects.toThrow(/dim/i);
     });
 
+    it("rejects a vector produced for a deleted session incarnation", async () => {
+      const dim = 16;
+      const target = await setupSessionWithModel(store, "reused-id", dim);
+      const originalSession = await store.getSession("reused-id");
+      expect(originalSession).not.toBeNull();
+
+      await store.deleteSession("reused-id");
+      const recreatedAt = new Date(
+        Date.parse(originalSession!.createdAt) + 1_000,
+      ).toISOString();
+      await store.createSession({
+        id: "reused-id",
+        status: "active",
+        phase: "setup",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
+        locale: "en",
+        activePlugins: [],
+        createdAt: recreatedAt,
+        updatedAt: recreatedAt,
+      });
+      await store.lockSessionEmbeddingModel("reused-id", target);
+
+      await expect(
+        store.upsertVector({
+          sessionId: "reused-id",
+          expectedSessionCreatedAt: originalSession!.createdAt,
+          pluginId: "p",
+          namespace: "ns",
+          key: "stale",
+          embedding: seededVector(dim, 1),
+        }),
+      ).rejects.toThrow(/incarnation/i);
+
+      await expect(
+        store.searchVectors({
+          sessionId: "reused-id",
+          query: seededVector(dim, 1),
+          topK: 5,
+        }),
+      ).resolves.toEqual([]);
+    });
+
     it("returns empty array for session without locked model", async () => {
       // Create session but do NOT lock an embedding model
       await store.createSession({
         id: "no-model",
         status: "active",
-        turnCount: 1,
-        preGameCompleted: [],
+        phase: "setup",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
         locale: "en",
         activePlugins: [],
         createdAt: new Date().toISOString(),
@@ -316,6 +393,45 @@ export function runVectorStoreContractTests(
       await expect(
         store.lockSessionEmbeddingModel("s-lock", target),
       ).rejects.toThrow();
+    });
+
+    it("does not reuse a vector binding or rows after a session id is recreated", async () => {
+      const sessionId = "s-recreated";
+      const dim = 16;
+      const target = await setupSessionWithModel(store, sessionId, dim);
+      const vector = seededVector(dim, 41);
+      await store.upsertVector({
+        sessionId,
+        pluginId: "p",
+        namespace: "ns",
+        key: "old-incarnation",
+        embedding: vector,
+      });
+      await expect(
+        store.resolveSessionVectorTarget(sessionId),
+      ).resolves.toEqual(target);
+
+      await store.deleteSession(sessionId);
+      const now = new Date().toISOString();
+      await store.createSession({
+        id: sessionId,
+        status: "active",
+        phase: "setup",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
+        locale: "en",
+        activePlugins: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await expect(
+        store.resolveSessionVectorTarget(sessionId),
+      ).resolves.toBeNull();
+      await store.lockSessionEmbeddingModel(sessionId, target);
+      await expect(
+        store.searchVectors({ sessionId, query: vector, topK: 5 }),
+      ).resolves.toEqual([]);
     });
 
     // ── ADR-004/005 core scenarios ───────────────────────────────
@@ -430,8 +546,9 @@ export function runVectorStoreContractTests(
       await store.createSession({
         id: "s3",
         status: "active",
-        turnCount: 1,
-        preGameCompleted: [],
+        phase: "setup",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
         locale: "en",
         activePlugins: [],
         createdAt: new Date().toISOString(),

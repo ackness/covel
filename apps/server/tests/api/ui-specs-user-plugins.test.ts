@@ -119,11 +119,17 @@ describe("GET /api/ui-specs — multi-dir plugin discovery", () => {
     registry = createPluginRegistry();
 
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       presetId: null,
       // Both plugins are active in this session — the fix must expose
       // BOTH under the UI-specs endpoint, not just the bundled one.

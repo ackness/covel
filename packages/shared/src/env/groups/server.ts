@@ -48,7 +48,7 @@ export const SERVER_ENV_VARS = [
     group: "server",
     type: "enum",
     status: "active",
-    values: ["self", "demo", "commercial", "T1"],
+    values: ["self", "demo", "commercial"],
     defaultValue: "self",
     description: "Deployment posture used by security-sensitive endpoints.",
   },

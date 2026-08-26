@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { mirrorSetupDone } from "@covel/shared";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
@@ -57,8 +58,17 @@ async function createPregameStore(sessionId: string): Promise<DataStore> {
     id: sessionId,
     worldId: "world-char-bridge",
     status: "active",
-    turnCount: 0,
-    preGameCompleted: ["pregame", "world-init/schema-gen"],
+    phase: "setup",
+    completedPlayerTurns: 0,
+    setupRuntimes: {
+      pregame: mirrorSetupDone("0.0.0", "2026-01-01T00:00:00.000Z", 1, 1),
+      "world-init/schema-gen": mirrorSetupDone(
+        "0.0.0",
+        "2026-01-01T00:00:00.000Z",
+        1,
+        1,
+      ),
+    },
     locale: "zh-CN",
     activePlugins: ["char-creator", "narrator"],
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -93,6 +103,16 @@ describe("char-creator core plugin guard bridge", () => {
   it("buffers the submitted player on the setup turn (committed by finalize) and the narrator reads it on the next turn", async () => {
     const sessionId = "sess-char-bridge";
     const store = await createPregameStore(sessionId);
+    const pregame = manifest("pregame", {
+      pluginId: "pregame",
+      stage: "setup",
+      runtimeType: "function",
+    });
+    const schemaGen = manifest("world-init/schema-gen", {
+      pluginId: "world-init",
+      stage: "setup",
+      runtimeType: "function",
+    });
     const playerInit = manifest("char-creator/player-init", {
       pluginId: "char-creator",
       stage: "setup",
@@ -136,11 +156,11 @@ describe("char-creator core plugin guard bridge", () => {
       turnId: "turn-form",
       playerMessage: "柳无痕完成登记。",
       locale: "zh-CN",
-      preGamePending: true,
+      origin: "player",
     };
     const setupResult = await executeTurn(
       setupInput,
-      [playerInit, narrator],
+      [pregame, schemaGen, playerInit, narrator],
       deps,
     );
 
@@ -156,9 +176,8 @@ describe("char-creator core plugin guard bridge", () => {
       playerName: "柳无痕",
       preGameDone: true,
     });
-    // player-init completes setup this turn (guard skip). The persisted
-    // turnCount / preGameCompleted are written by the finalize session-clock
-    // step; here we pin the completion delta the executor produces.
+    // player-init completes setup this turn (guard skip); here we pin the
+    // completion delta the executor produces for the finalizer.
     expect(Object.keys(setupResult.setupCompletion?.newlyDone ?? {})).toEqual([
       "char-creator/player-init",
     ]);
@@ -173,6 +192,11 @@ describe("char-creator core plugin guard bridge", () => {
     // character.upsert + plugin-data mirror commit in ONE transaction (and the
     // session-clock write flips the band to playing).
     await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId,
       ...(setupResult.executionContext
@@ -220,8 +244,13 @@ describe("char-creator core plugin guard bridge", () => {
       turnId: "turn-main",
       playerMessage: "柳无痕环顾四周。",
       locale: "zh-CN",
+      origin: "player",
     };
-    await executeTurn(mainInput, [playerInit, narrator], deps);
+    await executeTurn(
+      mainInput,
+      [pregame, schemaGen, playerInit, narrator],
+      deps,
+    );
 
     expect(llm.systemPrompts).toHaveLength(1);
     expect(llm.systemPrompts[0]).toContain("Player=柳无痕");

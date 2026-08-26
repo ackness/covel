@@ -15,6 +15,21 @@ export function targetModel(target: ResolvedTarget): string {
   return target.preset?.model ?? target.profile.model;
 }
 
+/** Telemetry observers are isolated from provider routing and call results. */
+export function notifyTargetAttempt(
+  observer: ((target: { provider: string; model: string }) => void) | undefined,
+  target: ResolvedTarget,
+): void {
+  try {
+    observer?.({
+      provider: targetProvider(target),
+      model: targetModel(target),
+    });
+  } catch {
+    // Observability must never alter the provider fallback chain.
+  }
+}
+
 export function shouldFallback(error: AiProviderError): boolean {
   // Never fallback on client errors (4xx) — the request itself is malformed,
   // so retrying with a different provider will produce the same failure.

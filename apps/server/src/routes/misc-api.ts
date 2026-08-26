@@ -15,13 +15,16 @@ import {
 } from "@covel/ai-provider";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
+import type { SessionLock } from "../lib/session-lock.js";
+import { createInProcessSessionLock } from "../lib/session-lock.js";
 import { buildPackagesResponse } from "./misc-api/plugin-catalog.js";
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
 import { bearerToken } from "./misc-api/shared.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
 import {
   checkHostedOperator,
-  checkSessionOwnerById,
+  checkSessionOwner,
+  withLockedSessionMutation,
 } from "./api/session/session-guard.js";
 import { decodeBase64Json } from "../lib/base64-json.js";
 
@@ -29,6 +32,7 @@ export function createMiscApiRoutes(
   ai: AiStack,
   registry: PluginRegistry,
   store: DataStore,
+  sessionLock: SessionLock = createInProcessSessionLock(),
 ): Hono {
   const app = new Hono();
 
@@ -107,8 +111,30 @@ export function createMiscApiRoutes(
     // misc-api routes mount on the root app (no bootstrap middleware), so
     // the closure `store` is passed explicitly.
     if (sessionId) {
-      const denied = await checkSessionOwnerById(c, store, sessionId);
-      if (denied) return denied;
+      const initialSession = await store.getSession(sessionId);
+      if (initialSession) {
+        const denied = checkSessionOwner(c, initialSession);
+        if (denied) return denied;
+        return withLockedSessionMutation({
+          c,
+          store,
+          sessionLock,
+          sessionId,
+          expectedSession: initialSession,
+          // Paused/ended sessions may still render their final UI. Only an
+          // in-progress/failed deletion is excluded by the helper.
+          allowedStatuses: "any",
+          mutate: async (liveSession) =>
+            c.json(
+              await buildUiSpecsResponse({
+                sessionId,
+                session: liveSession,
+                registry,
+                store,
+              }),
+            ),
+        });
+      }
     }
     return c.json(
       await buildUiSpecsResponse({

@@ -8,7 +8,6 @@ description:
   en: Saves preset character profiles so important people can be added to the story quickly.
 pluginType: plugin
 runtimeType: function
-resultFormat: envelope-v1
 outputKind: system
 handler: ./handler.js
 trigger:

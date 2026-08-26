@@ -12,7 +12,7 @@ export function DemoSection() {
       aria-labelledby="demo-heading"
       className="relative w-full bg-background border-t border-border"
     >
-      <div className="max-w-[1400px] mx-auto px-6 md:px-10 py-20 md:py-28">
+      <div className="max-w-350 mx-auto px-6 md:px-10 py-20 md:py-28">
         <header className="max-w-3xl mb-12">
           <span className="ui-eyebrow text-muted-foreground">
             {t("home.demo.eyebrow", "See it run")}
@@ -33,7 +33,7 @@ export function DemoSection() {
 
         <div
           ref={containerRef}
-          className="relative rounded-[var(--radius-card)] overflow-hidden border border-border bg-card transition-all duration-700"
+          className="relative rounded-(--radius-card) overflow-hidden border border-border bg-card transition-all duration-700"
           style={{
             opacity: inView ? 1 : 0,
             transform: inView ? "translateY(0)" : "translateY(32px)",
@@ -69,7 +69,7 @@ export function DemoSection() {
           />
         </div>
 
-        <ul className="grid grid-cols-2 md:grid-cols-4 gap-px mt-px bg-border border border-border border-t-0 rounded-b-[var(--radius-card)] overflow-hidden">
+        <ul className="grid grid-cols-2 md:grid-cols-4 gap-px mt-px bg-border border border-border border-t-0 rounded-b-(--radius-card) overflow-hidden">
           <Stat
             label={t("home.demo.stat1Label", "Plugins active")}
             value={t("home.demo.stat1Value", "8")}

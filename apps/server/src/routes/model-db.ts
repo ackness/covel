@@ -7,8 +7,11 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { readRuntimeEnv } from "@covel/shared";
 import {
+  createModelDatabase,
+  fetchLiteLlmModels,
   resolveCapabilityDetails,
   resolveReasoningEffortProfile,
+  setModelDatabase,
 } from "@covel/ai-provider";
 import { rateLimiter, singleFlight } from "../middleware/rate-limit.js";
 import type { AiStack } from "../ai-setup.js";
@@ -95,12 +98,16 @@ export function createModelDbRoutes(ai: AiStack): Hono {
     rateLimiter({ max: 1 }),
     singleFlight(),
     async (c) => {
-      if (!ai.modelDb)
-        return c.json({ ok: false, error: "Model database not available" });
       try {
-        const { fetchLiteLlmModels } = await import("@covel/ai-provider");
         const freshData = await fetchLiteLlmModels();
-        ai.modelDb.replaceAll(freshData);
+        if (ai.modelDb) {
+          ai.modelDb.replaceAll(freshData);
+        } else {
+          const modelDb = createModelDatabase(freshData);
+          await modelDb.ready;
+          ai.modelDb = modelDb;
+        }
+        setModelDatabase(ai.modelDb);
 
         // Persist to the user config dir so the refresh survives restarts.
         // Non-fatal if the disk write fails — the in-memory DB is still updated.

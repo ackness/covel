@@ -76,14 +76,14 @@ export function SessionBreadcrumb({
             )}
             {item.onClick ? (
               <button
-                className="hover:text-primary transition-colors underline-offset-2 hover:underline truncate max-w-[14rem]"
+                className="hover:text-primary transition-colors underline-offset-2 hover:underline truncate max-w-56"
                 onClick={item.onClick}
               >
                 {item.label}
               </button>
             ) : (
               <span
-                className={`truncate max-w-[14rem] ${
+                className={`truncate max-w-56 ${
                   item.active ? "text-foreground font-medium" : ""
                 }`}
               >

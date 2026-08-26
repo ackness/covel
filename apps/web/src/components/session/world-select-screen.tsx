@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import { WorldDetailView } from "@/components/world/world-detail-view.js";
+import { isWorldDeletable } from "@/components/world/world-deletion.js";
 import { WorldEditor } from "@/components/world/world-editor.js";
 import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
 import { WorldListView } from "@/components/world/world-list-view.js";
@@ -17,6 +18,7 @@ import * as api from "@/services/api.js";
 import type { WorldRecord, PackageSummary } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
+import { prioritizeWorldsByLocale } from "@/lib/world-locale.js";
 import i18n from "@/i18n";
 
 type ViewMode = "list" | "detail" | "edit";
@@ -75,9 +77,17 @@ export function WorldSelectScreen({
   onWorldCreated,
   onWorldDeleted,
 }: WorldSelectScreenProps) {
-  const { t } = useTranslation();
+  const { t, i18n: translation } = useTranslation();
   const primarySlotLabel = formatSlotLabel(resolvedSlots[0]);
   const enabledPluginCount = packages.filter((p) => p.enabled).length;
+  const prioritizedWorlds = useMemo(
+    () =>
+      prioritizeWorldsByLocale(
+        worlds,
+        translation.resolvedLanguage ?? translation.language,
+      ),
+    [worlds, translation.language, translation.resolvedLanguage],
+  );
 
   const [mode, setMode] = useState<ViewMode>("list");
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
@@ -138,11 +148,17 @@ export function WorldSelectScreen({
     setDeleteConfirmOpen(true);
   }
 
+  function handleDeleteFromDetail(worldId: string) {
+    setDeletingWorldId(worldId);
+    setDeleteConfirmOpen(true);
+  }
+
   async function handleDeleteConfirm() {
     if (!deletingWorldId) return;
     try {
       await api.deleteWorld(deletingWorldId);
       onWorldDeleted?.(deletingWorldId);
+      handleBack();
     } catch {
       // toast already shown by api request handler
     } finally {
@@ -157,6 +173,11 @@ export function WorldSelectScreen({
         world={selectedWorld}
         onClose={handleBack}
         onEdit={handleEditFromDetail}
+        onDelete={
+          isWorldDeletable(selectedWorld)
+            ? () => handleDeleteFromDetail(selectedWorld.id)
+            : undefined
+        }
       />
     );
   }
@@ -217,6 +238,7 @@ export function WorldSelectScreen({
         open={settingsOpen}
         onOpenChange={onSettingsOpenChange}
         initialKey={settingsInitialKey}
+        packages={packages}
       />
       <AiWorldGenerator
         open={generatorOpen}
@@ -224,7 +246,7 @@ export function WorldSelectScreen({
         onWorldCreated={(world) => onWorldCreated?.(world)}
       />
       <WorldListView
-        worlds={worlds}
+        worlds={prioritizedWorlds}
         t={t}
         primarySlotLabel={primarySlotLabel}
         enabledPluginCount={enabledPluginCount}

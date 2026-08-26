@@ -4,6 +4,23 @@ import { PROVIDER_PROTOCOLS } from "../src/types.js";
 import { getProtocolDefinition } from "../src/protocol-registry.js";
 
 describe("provider-registry", () => {
+  it("supplies canonical endpoints for built-in providers without llm.toml", () => {
+    const registry = createProviderRegistry();
+
+    expect(
+      registry.resolve(
+        { provider: "openai", requestScoped: true },
+        { mode: "text" },
+      ).config.baseUrl,
+    ).toBe("https://api.openai.com/v1");
+    expect(
+      registry.resolve(
+        { provider: "anthropic", requestScoped: true },
+        { mode: "text" },
+      ).config.baseUrl,
+    ).toBe("https://api.anthropic.com");
+  });
+
   it("resolves a registered provider with defaults", () => {
     const registry = createProviderRegistry({
       providerDefaults: {

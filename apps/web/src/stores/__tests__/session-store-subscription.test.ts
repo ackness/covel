@@ -14,10 +14,19 @@ vi.mock("@/stores/plugin-data-store.js", () => ({
 
 import * as api from "@/services/api";
 import { replaceSessionPluginData } from "@/stores/plugin-data-store.js";
-import { rehydrateSessionSideState } from "../session-store/subscription.js";
+import {
+  isCurrentSubscriptionEvent,
+  rehydrateSessionSideState,
+} from "../session-store/subscription.js";
 
 const snapshot = {
-  session: { id: "s1", worldId: "w1", turnCount: 2 },
+  session: {
+    id: "s1",
+    worldId: "w1",
+    phase: "playing" as const,
+    completedPlayerTurns: 2,
+    setupRuntimes: {},
+  },
   messages: [],
   characters: [],
   gameState: { hp: 7 },
@@ -106,5 +115,26 @@ describe("rehydrateSessionSideState", () => {
 
     expect(dispatch).not.toHaveBeenCalled();
     expect(replaceSessionPluginData).not.toHaveBeenCalled();
+  });
+});
+
+describe("session subscription event ownership", () => {
+  const event = {
+    id: "e1",
+    topic: "plugin" as const,
+    type: "plugin-data.changed",
+    sessionId: "s1",
+    timestamp: "2026-01-01T00:00:00.000Z",
+    payload: {},
+  };
+
+  it("drops the old stream immediately after the active session ref changes", () => {
+    expect(isCurrentSubscriptionEvent(event, "s1", "s2")).toBe(false);
+  });
+
+  it("drops cross-session envelopes even on the current connection", () => {
+    expect(
+      isCurrentSubscriptionEvent({ ...event, sessionId: "s2" }, "s1", "s1"),
+    ).toBe(false);
   });
 });

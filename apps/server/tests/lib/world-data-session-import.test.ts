@@ -56,11 +56,17 @@ worldData: data/world.data.yaml
 async function makeStore(activePlugins: readonly string[]): Promise<DataStore> {
   const store = createMemoryStore();
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id: "sess-1",
     worldId: "demo-world",
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
+    completedPlayerTurns: 0,
+
     locale: "zh-CN",
     activePlugins,
     createdAt: NOW,
@@ -76,11 +82,17 @@ async function addSession(
   worldId = "demo-world",
 ): Promise<void> {
   await store.createSession({
+    phase: "playing",
+    setupRuntimes: {},
+    metadata: {
+      approvalScopeNonce: globalThis.crypto.randomUUID(),
+      sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+    },
     id,
     worldId,
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
+    completedPlayerTurns: 0,
+
     locale: "zh-CN",
     activePlugins,
     createdAt: NOW,
@@ -1336,11 +1348,17 @@ sources: {}
     ];
     const store = createMemoryStore();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: "sess-haruka",
       worldId,
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       locale: "zh-CN",
       activePlugins,
       createdAt: NOW,
@@ -1396,11 +1414,17 @@ sources: {}
     const sessionId = `sess-${worldId}`;
     const store = createMemoryStore();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId,
       status: "active",
-      turnCount: 0,
-      preGameCompleted: [],
+      completedPlayerTurns: 0,
+
       locale: "zh-CN",
       activePlugins,
       createdAt: NOW,
@@ -1423,8 +1447,8 @@ sources: {}
     expect(result.written).toBeGreaterThanOrEqual(6);
     expect(
       await store.listPluginData(sessionId, "living-world-rules", "rules"),
-    ).toHaveLength(6);
-    expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(6);
+    ).toHaveLength(9);
+    expect(await store.listSessionLorebookEntries(sessionId)).toHaveLength(9);
     expect(
       (await store.listWorldDataImportLedger(sessionId)).map(
         (row) => row.sourceId,
@@ -1445,20 +1469,27 @@ sources: {}
     ];
 
     // haruka media = 8 portraits + 10 scene backdrops (scenes source has indexTo).
-    for (const [worldId, portraitCount, mediaCount] of [
-      ["mistport", 7, 7],
-      ["haruka-academy", 8, 18],
+    for (const [worldId, locale, portraitCount, mediaCount] of [
+      ["mistport", "zh-CN", 7, 7],
+      ["mistport", "en-US", 7, 7],
+      ["haruka-academy", "zh-CN", 8, 18],
     ] as const) {
-      const sessionId = `sess-portraits-${worldId}`;
+      const sessionId = `sess-portraits-${worldId}-${locale}`;
       const store = createMemoryStore();
       const mediaStore = createMemoryMediaStore();
       await store.createSession({
+        phase: "playing",
+        setupRuntimes: {},
+        metadata: {
+          approvalScopeNonce: globalThis.crypto.randomUUID(),
+          sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+        },
         id: sessionId,
         worldId,
         status: "active",
-        turnCount: 0,
-        preGameCompleted: [],
-        locale: "zh-CN",
+        completedPlayerTurns: 0,
+
+        locale,
         activePlugins,
         createdAt: NOW,
         updatedAt: NOW,
@@ -1471,6 +1502,7 @@ sources: {}
         worldId,
         worldsDirs: [worldsDir],
         now: NOW,
+        locale,
         preflight: { activePlugins, registry: pluginRegistry },
       });
 
@@ -1490,6 +1522,13 @@ sources: {}
         "presence",
       );
       expect(presence).toHaveLength(portraitCount);
+      if (worldId === "mistport" && locale === "en-US") {
+        expect(presence.map((record) => record.value)).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ displayName: "Lin Yuanzhou" }),
+          ]),
+        );
+      }
       for (const rec of presence) {
         const value = rec.value as {
           avatar?: { id?: string };

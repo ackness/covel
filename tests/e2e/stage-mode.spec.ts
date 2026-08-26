@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { seedAppSettings, useServerWorlds } from "./helpers/player.js";
 
 /**
  * Stage view mode smoke — no LLM turn.
@@ -17,51 +18,52 @@ test.describe("Stage view mode", () => {
   test.use({ viewport: { width: 1280, height: 720 } });
 
   test.beforeEach(async ({ page }) => {
-    await page.addInitScript(() => {
-      localStorage.setItem(
-        "covel:settings",
-        JSON.stringify({
-          schemaVersion: 1,
-          savedAt: new Date().toISOString(),
-          entries: { "ui.onboardedVersion": 3, "ui.locale": "zh-CN" },
-        }),
-      );
-    });
+    await seedAppSettings(page);
+    await useServerWorlds(page);
   });
 
   test("haruka defaultViewMode:stage applies and the toggle switches", async ({
     page,
   }) => {
-    await enterFreshHarukaSession(page);
+    const sessionId = await enterFreshHarukaSession(page);
 
-    const stageToggle = page.getByRole("button", {
-      name: /舞台视图|Stage view/i,
-    });
-    const parsedToggle = page.getByRole("button", {
-      name: /解析视图|Parsed view/i,
-    });
+    try {
+      const stageToggle = page.getByRole("button", {
+        name: /舞台视图|Stage view/i,
+      });
+      const parsedToggle = page.getByRole("button", {
+        name: /解析视图|Parsed view/i,
+      });
 
-    // world.yaml `defaultViewMode: stage` → stage is the initial mode on mount.
-    await expect(stageToggle).toBeVisible({ timeout: 10_000 });
-    await expect(stageToggle).toHaveAttribute("data-state", "on");
+      // world.yaml `defaultViewMode: stage` → stage is the initial mode on mount.
+      await expect(stageToggle).toBeVisible({ timeout: 10_000 });
+      await expect(stageToggle).toHaveAttribute("data-state", "on");
 
-    // Toggle plumbing: parsed ↔ stage.
-    await parsedToggle.click();
-    await expect(stageToggle).toHaveAttribute("data-state", "off");
-    await expect(parsedToggle).toHaveAttribute("data-state", "on");
+      // Toggle plumbing: parsed ↔ stage.
+      await parsedToggle.click();
+      await expect(stageToggle).toHaveAttribute("data-state", "off");
+      await expect(parsedToggle).toHaveAttribute("data-state", "on");
 
-    await stageToggle.click();
-    await expect(stageToggle).toHaveAttribute("data-state", "on");
+      await stageToggle.click();
+      await expect(stageToggle).toHaveAttribute("data-state", "on");
 
-    await page.screenshot({ path: "debugs/e2e-logs/stage-toggle.png" });
+      await page.screenshot({ path: "debugs/e2e-logs/stage-toggle.png" });
+    } finally {
+      const cleanup = await page.request.delete(
+        `/api/sessions/${encodeURIComponent(sessionId)}`,
+      );
+      expect(cleanup.ok(), "stage test session cleanup failed").toBeTruthy();
+    }
   });
 });
 
-async function enterFreshHarukaSession(page: Page) {
+async function enterFreshHarukaSession(page: Page): Promise<string> {
   await page.goto("/session");
 
   const worldCard = page
-    .getByRole("heading", { name: /遥风学园|HARUKA-ACADEMY/i })
+    .getByRole("heading", {
+      name: /遥风学园・春日薄荷|Haruka Academy · Spring Mint/i,
+    })
     .locator("xpath=ancestor::article[1]");
   await expect(worldCard).toBeVisible({ timeout: 15_000 });
   await worldCard.click();
@@ -73,4 +75,7 @@ async function enterFreshHarukaSession(page: Page) {
   await startButton.click();
 
   await expect(page).toHaveURL(/sid=/, { timeout: 15_000 });
+  const sessionId = new URL(page.url()).searchParams.get("sid");
+  expect(sessionId).toBeTruthy();
+  return sessionId!;
 }

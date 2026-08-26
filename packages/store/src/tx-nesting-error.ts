@@ -5,10 +5,7 @@
  * issued from inside another `withTransaction` callback). This module produces a
  * single, consistent error message for that case across every backend.
  *
- * Browser-safe: this file MUST stay free of Node-only imports
- * (`node:async_hooks`, `node:fs`, …) because the browser `IdbStore` bundle
- * imports it. The Node-only AsyncLocalStorage guard lives in the sibling
- * `tx-nesting-guard.ts`, which IdbStore never imports.
+ * This helper stays dependency-free so every backend reports the same error.
  */
 
 /**
@@ -32,8 +29,8 @@ export function nestedWithTransactionError(
 }
 
 /**
- * Reason string for the single-connection serialized backends (Sqlite / Memory
- * / IndexedDB). These serialize concurrent `withTransaction` calls through a
+ * Reason string for the single-connection serialized backends (Sqlite / Memory).
+ * These serialize concurrent `withTransaction` calls through a
  * promise chain, so a nested call would queue behind — and therefore deadlock —
  * the very transaction that is awaiting it.
  */

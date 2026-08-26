@@ -44,3 +44,22 @@ export function isSameTrustedOrigin(
   if (!trusted) return false;
   return loopbackHttpOrigin(candidateUrl) === trusted;
 }
+
+const SPLASH_DATA_URL_PREFIX = "data:text/html;charset=utf-8,";
+
+/**
+ * The startup recovery page is a main-process-authored data document. Trust it
+ * only when the sender URL exactly matches the currently committed splash;
+ * callers must additionally require the sender to be the main frame.
+ */
+export function isSameStartupSplashDocument(
+  committedUrl: string | null | undefined,
+  candidateUrl: string | null | undefined,
+): boolean {
+  return Boolean(
+    committedUrl &&
+    candidateUrl &&
+    committedUrl.startsWith(SPLASH_DATA_URL_PREFIX) &&
+    candidateUrl === committedUrl,
+  );
+}

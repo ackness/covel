@@ -41,8 +41,9 @@ async function seedSession(store: DataStore, id: string): Promise<void> {
     status: "active",
     presetId: null,
     activePlugins: [],
-    turnCount: 0,
-    preGameCompleted: [],
+    phase: "setup",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     createdAt: now,
     updatedAt: now,
   });
@@ -62,14 +63,15 @@ function pluginDataRow(sessionId: string, key: string) {
   };
 }
 
-const backends: ReadonlyArray<[string, () => DataStore]> = [
-  ["MemoryStore", () => createMemoryStore()],
-  ["SqliteStore", makeSqliteStore],
-];
+const backends: ReadonlyArray<[string, () => DataStore | Promise<DataStore>]> =
+  [
+    ["MemoryStore", () => createMemoryStore()],
+    ["SqliteStore", makeSqliteStore],
+  ];
 
 describe.each(backends)("%s serialized write gate", (_name, makeStore) => {
   it("an outside write survives a concurrent transaction's rollback", async () => {
-    const store = makeStore();
+    const store = await makeStore();
     await seedSession(store, "sess-tx");
     await seedSession(store, "sess-other");
 
@@ -117,7 +119,7 @@ describe.each(backends)("%s serialized write gate", (_name, makeStore) => {
   });
 
   it("writes issued inside the callback still belong to the transaction", async () => {
-    const store = makeStore();
+    const store = await makeStore();
     await seedSession(store, "sess-tx");
 
     await expect(
@@ -135,7 +137,7 @@ describe.each(backends)("%s serialized write gate", (_name, makeStore) => {
   });
 
   it("a committed transaction still persists, and queued writes land after", async () => {
-    const store = makeStore();
+    const store = await makeStore();
     await seedSession(store, "sess-tx");
     await seedSession(store, "sess-other");
 

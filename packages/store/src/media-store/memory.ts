@@ -1,4 +1,5 @@
 import type { MediaRef, MediaRefRecord, MediaStore } from "@covel/shared";
+import { finalizeMediaCleanupResult } from "./cleanup-result.js";
 import {
   bytesToReadableStream,
   cleanupCandidates,
@@ -41,7 +42,7 @@ export function createMemoryMediaStore(): MediaStore {
       const bytes = await toBytes(blob);
       const id = sha256(bytes);
       const existing = assets.get(id);
-      if (existing) return existing.ref;
+      if (existing) return structuredClone(existing.ref);
       const ref: MediaRef = {
         id,
         mime,
@@ -53,7 +54,7 @@ export function createMemoryMediaStore(): MediaStore {
         ref,
         createdAt: new Date().toISOString(),
       });
-      return ref;
+      return structuredClone(ref);
     },
 
     async get(ref) {
@@ -132,6 +133,16 @@ export function createMemoryMediaStore(): MediaStore {
       refRows.delete(`${sessionId}\u0000${id}`);
     },
 
+    async releaseSession(sessionId) {
+      refs.delete(sessionId);
+      for (const [key, row] of refRows) {
+        if (row.sessionId === sessionId) refRows.delete(key);
+      }
+      for (const [id, owner] of owners) {
+        if (owner.sessionId === sessionId) owners.delete(id);
+      }
+    },
+
     async isReferencedBy(id, sessionId) {
       const owner = owners.get(id);
       if (owner?.sessionId === sessionId) return true;
@@ -148,13 +159,15 @@ export function createMemoryMediaStore(): MediaStore {
           ownerSessionId: owner?.sessionId ?? null,
           ownerPluginId: owner?.pluginId ?? null,
           createdAt: asset.createdAt,
-          ...(asset.ref.meta === undefined ? {} : { meta: asset.ref.meta }),
+          ...(asset.ref.meta === undefined
+            ? {}
+            : { meta: structuredClone(asset.ref.meta) }),
         };
       });
     },
 
     async listRefs() {
-      return [...refRows.values()];
+      return structuredClone([...refRows.values()]);
     },
 
     async listByMetadata(sessionId, filter) {
@@ -162,15 +175,26 @@ export function createMemoryMediaStore(): MediaStore {
     },
 
     async cleanup(protectedIds, policy) {
+      const inventory = await this.listAssets();
       const { result, idsToDelete } = cleanupCandidates(
-        await this.listAssets(),
+        inventory,
         protectedIds,
         policy,
       );
+      const deletedIds: string[] = [];
       if (!policy?.dryRun) {
         for (const id of idsToDelete) {
+          // Revalidate synchronously with deletion. MemoryMedia mutations do no
+          // asynchronous work after entry, so ownership/ref creation cannot
+          // interleave between this check and delete's map removals.
+          if (owners.has(id)) continue;
+          if ([...refs.values()].some((sessionRefs) => sessionRefs.has(id))) {
+            continue;
+          }
           await this.delete(id);
+          deletedIds.push(id);
         }
+        return finalizeMediaCleanupResult(result, inventory, deletedIds);
       }
       return result;
     },

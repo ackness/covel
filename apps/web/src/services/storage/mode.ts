@@ -1,4 +1,4 @@
-import { STORAGE_MODE_KEY } from "./legacy-keys.js";
+const STORAGE_MODE_KEY = "covel:storageMode";
 
 export type StorageMode = "local" | "remote";
 export type ServerStoreBackend = "memory" | "sqlite" | "pg";

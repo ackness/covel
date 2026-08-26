@@ -6,10 +6,9 @@ import {
   type CSSProperties,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Play, ArrowLeft, Loader2 } from "lucide-react";
+import { AlertCircle, Play, ArrowLeft, Loader2 } from "lucide-react";
 import * as api from "@/services/api.js";
 import { Button } from "@/components/ui/button.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import {
   Dialog,
@@ -55,6 +54,7 @@ export function SessionPrepScreen({
   packages,
   presets,
   llmConfig,
+  startError,
   onBack,
   onStart,
   onResume,
@@ -210,6 +210,9 @@ export function SessionPrepScreen({
     setIsStarting(true);
     try {
       await onStart(startPluginsPayload(selectedPluginIds));
+    } catch {
+      // startGameSession stores the actionable message in session state; keep
+      // this handler settled while the prep screen renders that message.
     } finally {
       setIsStarting(false);
     }
@@ -221,6 +224,9 @@ export function SessionPrepScreen({
       setResumingId(session.id);
       try {
         await onResume(session);
+      } catch {
+        // restoreSessionState reports the actionable error through session
+        // state (and transport failures already emit a global toast).
       } finally {
         setResumingId(null);
       }
@@ -234,11 +240,12 @@ export function SessionPrepScreen({
         open={settingsOpen}
         onOpenChange={handleSettingsOpenChange}
         initialKey={settingsInitialKey}
+        packages={packages}
       />
-      <ScrollArea className="w-full h-full">
+      <div className="h-full w-full overflow-y-auto overscroll-contain">
         <div className="mx-auto max-w-6xl px-4 md:px-8 py-5 md:py-8">
           <header
-            className="relative mb-6 overflow-hidden rounded-[var(--radius-card)] border border-border bg-card"
+            className="relative mb-6 overflow-hidden rounded-(--radius-card) border border-border bg-card"
             style={{ "--world-accent": visual.accent } as CSSProperties}
           >
             <img
@@ -260,7 +267,7 @@ export function SessionPrepScreen({
                   "linear-gradient(90deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.58) 48%, rgba(0,0,0,.22) 100%)",
               }}
             />
-            <div className="relative z-10 flex min-h-[236px] md:min-h-[252px] flex-col justify-between p-5 md:p-7 text-white">
+            <div className="relative z-10 flex min-h-59 md:min-h-63 flex-col justify-between p-5 md:p-7 text-white">
               <div className="flex items-center justify-between gap-4">
                 <Button
                   variant="ghost"
@@ -313,6 +320,23 @@ export function SessionPrepScreen({
             </div>
           </header>
 
+          {startError && (
+            <div
+              className="mb-5 flex items-start gap-2 rounded-(--radius-card) border border-destructive/50 bg-destructive/5 px-4 py-3 text-sm"
+              role="alert"
+            >
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <div className="min-w-0">
+                <p className="font-medium text-destructive">
+                  {t("session.startFailed", "Could not create session")}
+                </p>
+                <p className="mt-1 wrap-break-word text-xs text-muted-foreground">
+                  {startError}
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-5 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] lg:items-start">
             <section className="min-w-0 space-y-4">
               <WorldInfoCard
@@ -346,7 +370,7 @@ export function SessionPrepScreen({
               />
             </section>
 
-            <section className="min-w-0 space-y-4 lg:sticky lg:top-4">
+            <section className="min-w-0 space-y-4">
               <ModelsCard
                 resolvedSlots={resolvedSlots}
                 expanded={modelsExpanded}
@@ -390,7 +414,7 @@ export function SessionPrepScreen({
             </section>
           </div>
         </div>
-      </ScrollArea>
+      </div>
 
       <Dialog
         open={!!deleteTarget}

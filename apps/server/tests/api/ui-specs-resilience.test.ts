@@ -79,11 +79,17 @@ describe("GET /api/ui-specs — one bad runtime must not 500 the whole response"
     store = createMemoryStore();
     registry = createPluginRegistry();
     await store.createSession({
+      phase: "playing",
+      setupRuntimes: {},
+      metadata: {
+        approvalScopeNonce: globalThis.crypto.randomUUID(),
+        sessionIncarnationNonce: globalThis.crypto.randomUUID(),
+      },
       id: sessionId,
       worldId: null,
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
+      completedPlayerTurns: 1,
+
       presetId: null,
       activePlugins: ["good-plugin", "broken-plugin"],
       createdAt: new Date().toISOString(),

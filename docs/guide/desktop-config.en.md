@@ -29,15 +29,31 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
 
 Sidecar stderr is recorded as `error` by default. Recoverable framework warnings carry a `[covel:warn]` transport marker; collectors remove the marker and persist them at `warn`, so `policy: warn` scheduling diagnostics and automatic retries do not inflate error counts.
 
+The `/api/health` request is skipped by the Hono logger by default. Add
+comma-separated paths with `COVEL_LOG_QUIET_PATHS`. Business traces (LLM,
+proposal, and tool calls) stay in the `trace_events` database table rather
+than these log files. When running `pnpm dev:server`, stdout/stderr is also
+mirrored to `server.log`; set `COVEL_SERVER_LOG_FILE=""` to disable that
+mirror or provide an explicit path to override it.
+
+`settings.json` is atomically replaced through a same-directory temporary file and uses persistence `schemaVersion: 2` with a monotonic `revision`. A valid v1 bundle (which must contain object `entries`) is migrated in memory as revision 0 and written as v2 after the next successful save. Existing corrupt, unreadable, or future-version files are never treated as empty: reads fail with `settings_file_invalid`, and saves preserve the original file. Saves carry the loaded revision; an intervening write returns `409 settings_revision_conflict` without replacing the file.
+
 ## `~/.covel/config.toml`
 
 Seeded with a commented template on first launch. Fields:
 
 ```toml
+schema_version = 1
+
 [paths]
 # Data directory. Relative paths resolve against this file's directory;
 # absolute paths are used as-is. Default: ~/.covel/data
 # data_root = "/Volumes/External/covel-data"
+
+[network]
+# direct | system | http | socks
+proxy_mode = "direct"
+# proxy_url = "http://127.0.0.1:7890"
 
 [logging]
 # Single log-file cap (MB). Rolls over once exceeded.
@@ -47,7 +63,13 @@ max_size_mb = 10
 max_files   = 10
 ```
 
-Restart Covel after edits. **Changing `data_root` does NOT move old data** — the new location starts empty, and the old data and user worlds are left intact for you to migrate or ignore.
+Legacy files without `schema_version` are read as v1. The desktop UI and REST endpoints patch only the known fields above while preserving unknown fields, unknown sections, and existing comments; the complete TOML is parsed strictly before and after every write. A malformed file does not block startup (defaults are used with a warning), but it is never overwritten and must be repaired manually. Successful writes use a same-directory temporary file plus atomic rename and set mode `0600`.
+
+Manual edits require a Covel restart; saving under **Settings → Desktop → Network Proxy** applies immediately. `direct` bypasses proxies, `system` follows Electron's OS proxy resolution, `http` accepts HTTP(S) URLs, and `socks` accepts SOCKS5 URLs. A missing scheme is normalized to `http://` or `socks5://`. URLs may include `user:password@host`, so the file is tightened to mode `0600` when proxy settings are saved.
+
+The proxy covers framework-owned LLM calls and GitHub model-database updates. Third-party plugin `fetchWithRetry` remains direct with strict DNS/SSRF pinning.
+
+**Changing `data_root` does NOT move old data** — the new location starts empty, and the old data and user worlds are left intact for you to migrate or ignore.
 
 ## `~/.covel/keys.env`
 
@@ -66,9 +88,25 @@ See [`llm.toml.example`](../../llm.toml.example) at repo root. Each model role p
 
 The model settings are split into **Model Roles**, **Providers & Models**, and **Generation**. The provider catalogue uses a list-and-detail layout: configure an endpoint, protocol, key, and price multiplier once, then bulk-add any number of opaque model IDs. IDs containing `/`, such as `openai/gpt-5.6-sol`, are sent unchanged. Assign the provider and model separately under Model Roles; creating a custom preset is no longer required. Price multipliers default to `1` and scale reference prices in the debug cost estimate.
 
+Model settings persist `llm.providers` as the only source of truth. On startup, legacy `llm.customPresets` first migrates connection keys and model references and is removed only after every step succeeds. The legacy API facade and request custom-preset shape are compiled from providers instead of maintaining a second synchronized copy.
+
 ## Frontend entry point
 
-**Settings → Desktop** tab surfaces every path, opens folders in one click, and lets you change `data_root` via a picker — no need to hand-edit files unless you want to.
+**Settings → Desktop** surfaces every path, proxy selection, one-click folder actions, and the `data_root` picker.
+
+## Desktop REST authentication
+
+Packaged desktop sidecars generate a one-time bearer token at every launch and
+inject it as `COVEL_DESKTOP_REST_TOKEN`. Write endpoints (`/api/config/keys`,
+`/api/config/settings`, `/api/config/proxy`, `/api/config/data-root`, and
+`/api/config/open-folder`) and the local-config reads for settings/proxy
+require `Authorization: Bearer <token>`. `/api/config/info` and the provider
+name-only `/api/config/keys` response remain public. Development web/server
+mode keeps the token gate disabled when the variable is absent.
+
+The LLM page can reload `llm.toml` without restarting through
+`POST /api/llm-config/reload`. Parse errors fall back to the built-in `story`
+slot and are exposed in `GET /api/llm-config` and the Settings UI.
 
 ## Related docs
 

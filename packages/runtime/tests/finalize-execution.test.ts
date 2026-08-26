@@ -5,12 +5,16 @@
  * runtime results. Unlike the old per-runtime `commitAll`, it wraps the FULL
  * set of results in one `store.withTransaction`, so any proposal failure rolls
  * the whole turn back — a committed sibling included (the deliberate change).
- * These tests pin that boundary on the real MemoryStore (which rolls back via
- * snapshot restore) plus the degraded path for stores without transactions.
+ * These tests pin that boundary on the real MemoryStore, which rolls back via
+ * snapshot restore.
  */
 
 import { describe, it, expect } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
+import type { SuspensionRecord } from "@covel/store";
+import type { Proposal } from "@covel/shared";
+import { withPendingProposals } from "@covel/tools";
+import { createEventBus } from "@covel/events";
 import type { TurnEmitter } from "../src/trace/turn-emitter.js";
 import { finalizeExecution } from "../src/commit/finalize-execution.js";
 
@@ -41,6 +45,30 @@ function makeResult(runtimeId: string, output: ResultOutput) {
     toolCalls: [] as const,
     durationMs: 1,
     timestamp: new Date().toISOString(),
+  };
+}
+
+function makeSuspension(): SuspensionRecord {
+  return {
+    id: "suspension-finalize",
+    sessionId: SESSION_ID,
+    turnId: TURN_ID,
+    runtimeId: "rt-a",
+    pluginId: "rt-a",
+    reason: "wait",
+    resumeSchema: {},
+    pendingContinuation: {
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "player",
+        countPolicy: "complete-player-turn",
+        logicalTurnId: crypto.randomUUID(),
+      },
+      messages: [],
+      toolCallsSoFar: [],
+      pendingProposals: [],
+    },
+    createdAt: "2026-08-26T00:00:00.000Z",
   };
 }
 
@@ -88,17 +116,78 @@ async function commitStatusOf(store: DataStore): Promise<string | undefined> {
   return rows.find((r) => r.turnId === TURN_ID)?.commitStatus;
 }
 
-/** Strip `withTransaction` so finalize takes the degraded (no-rollback) path. */
-function withoutTransaction(store: DataStore): DataStore {
-  return new Proxy(store, {
-    get(target, prop, receiver) {
-      if (prop === "withTransaction") return undefined;
-      return Reflect.get(target, prop, receiver);
-    },
-  }) as DataStore;
-}
-
 describe("finalizeExecution", () => {
+  it("publishes turn.suspended only after its continuation commits", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    const eventBus = createEventBus();
+    const events: Array<{
+      type: string;
+      payload: Record<string, unknown>;
+    }> = [];
+    eventBus.onEmit((event) =>
+      events.push({ type: event.type, payload: event.payload }),
+    );
+
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("rt-a")],
+      results: [makeResult("rt-a", {})],
+      suspensions: [makeSuspension()],
+      turnIds: [TURN_ID],
+      eventBus,
+    });
+
+    expect(outcome.status).toBe("committed");
+    expect(await store.listSuspensions(SESSION_ID)).toHaveLength(1);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "turn.suspended",
+        payload: expect.objectContaining({
+          suspensionId: "suspension-finalize",
+        }),
+      }),
+    );
+  });
+
+  it("rolls a continuation back without publishing turn.suspended", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    const eventBus = createEventBus();
+    const events: Array<{
+      type: string;
+      payload: Record<string, unknown>;
+    }> = [];
+    eventBus.onEmit((event) =>
+      events.push({ type: event.type, payload: event.payload }),
+    );
+
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("rt-a")],
+      results: [makeResult("rt-a", badStatePatch())],
+      suspensions: [makeSuspension()],
+      turnIds: [TURN_ID],
+      eventBus,
+    });
+
+    expect(outcome.status).toBe("failed");
+    expect(await store.listSuspensions(SESSION_ID)).toHaveLength(0);
+    expect(events.map((event) => event.type)).not.toContain("turn.suspended");
+  });
+
   it("rolls the whole execution back when a later runtime's proposal fails", async () => {
     const store = createMemoryStore();
     await savePendingTurn(store);
@@ -107,6 +196,11 @@ describe("finalizeExecution", () => {
     // Runtime A commits a state.patch (fan-out buffered); runtime B's patch is
     // malformed and the handler rejects it with { committed: false }.
     const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a"), makeRuntime("rt-b")],
@@ -138,6 +232,11 @@ describe("finalizeExecution", () => {
     await savePendingTurn(store);
 
     const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a")],
@@ -180,6 +279,11 @@ describe("finalizeExecution", () => {
     await savePendingTurn(store);
 
     const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a")],
@@ -211,6 +315,11 @@ describe("finalizeExecution", () => {
     const { emitter, emits } = makeRecordingEmitter();
 
     const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a"), makeRuntime("rt-b")],
@@ -255,6 +364,11 @@ describe("finalizeExecution", () => {
     // Runtime A commits a narrative message; runtime B is rejected by the
     // validator (no throw). The rollback must still undo A's message.
     const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a", "story"), makeRuntime("rt-b")],
@@ -270,11 +384,65 @@ describe("finalizeExecution", () => {
     expect(await commitStatusOf(store)).toBe("failed");
   });
 
+  it("rolls back a buffered plugin-data delete when a sibling fails", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    const now = new Date().toISOString();
+    await store.setPluginData({
+      id: "plugin-row",
+      sessionId: SESSION_ID,
+      pluginId: "rt-a",
+      namespace: "entries",
+      key: "keep-me",
+      value: { intact: true },
+      createdAt: now,
+      updatedAt: now,
+    });
+    const output: ResultOutput = {};
+    withPendingProposals(output, [
+      {
+        id: "delete-proposal",
+        type: "plugin.data.delete",
+        source: { pluginId: "rt-a", runtimeId: "rt-a" },
+        turnId: TURN_ID,
+        sessionId: SESSION_ID,
+        payload: { namespace: "entries", key: "keep-me" },
+        timestamp: now,
+      } satisfies Proposal,
+    ]);
+
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("rt-a"), makeRuntime("rt-b")],
+      results: [
+        makeResult("rt-a", output),
+        makeResult("rt-b", badStatePatch()),
+      ],
+      turnIds: [TURN_ID],
+    });
+
+    expect(outcome.status).toBe("failed");
+    expect(
+      await store.getPluginData(SESSION_ID, "rt-a", "entries", "keep-me"),
+    ).not.toBeNull();
+  });
+
   it("rolls back the whole execution when extraInTx throws", async () => {
     const store = createMemoryStore();
     await savePendingTurn(store);
 
     const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
       store,
       sessionId: SESSION_ID,
       runtimes: [makeRuntime("rt-a", "story")],
@@ -290,49 +458,6 @@ describe("finalizeExecution", () => {
     // The proposal committed before extraInTx ran, but the throw rolls it back.
     expect(await store.listMessages(SESSION_ID)).toHaveLength(0);
     expect(await commitStatusOf(store)).toBe("failed");
-  });
-
-  it("degrades to one-at-a-time commits (no cross-runtime rollback) without withTransaction", async () => {
-    const store = createMemoryStore();
-    await savePendingTurn(store);
-    const degraded = withoutTransaction(store);
-
-    const outcome = await finalizeExecution({
-      store: degraded,
-      sessionId: SESSION_ID,
-      runtimes: [makeRuntime("rt-a", "story"), makeRuntime("rt-b")],
-      results: [
-        makeResult("rt-a", { narrativeOutput: "committed line" }),
-        makeResult("rt-b", badStatePatch()),
-      ],
-      turnIds: [TURN_ID],
-    });
-
-    expect(outcome.status).toBe("failed");
-    expect(outcome.failedProposals).toHaveLength(1);
-    // Degraded mode cannot roll back — runtime A's write survives the failure.
-    expect(await store.listMessages(SESSION_ID)).toHaveLength(1);
-    expect(await commitStatusOf(store)).toBe("failed");
-  });
-
-  it("commits cleanly on the degraded path when every proposal succeeds", async () => {
-    const store = createMemoryStore();
-    await savePendingTurn(store);
-    const degraded = withoutTransaction(store);
-
-    const outcome = await finalizeExecution({
-      store: degraded,
-      sessionId: SESSION_ID,
-      runtimes: [makeRuntime("rt-a")],
-      results: [makeResult("rt-a", statePatch("hp", 7))],
-      turnIds: [TURN_ID],
-    });
-
-    expect(outcome.status).toBe("committed");
-    expect((await store.getStateEntry(SESSION_ID, "stats", "hp"))?.value).toBe(
-      7,
-    );
-    expect(await commitStatusOf(store)).toBe("committed");
   });
 
   describe("job-status terminalisation", () => {

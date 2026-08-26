@@ -3,7 +3,7 @@
  * — character sprites/avatars (character-presence `presence`) and world
  * scene backdrops (scene-stage `scenes` registry) — as soon as the session
  * opens, instead of on first `<Media>` mount (StageView only mounts once
- * `turnCount >= 1`, so without this every image download starts after the
+ * `phase === "playing"`, so without this every image download starts after the
  * pre-game turn fully ends). World-package media bytes are imported into
  * the MediaStore at session creation, so pre-fetching during turn 0 is
  * pure cache warm-up: when the opening turn lands, backdrops and sprites

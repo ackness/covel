@@ -28,6 +28,15 @@ vi.mock("@/stores/session-store.js", () => ({
 vi.mock("@/services/api.js", () => ({
   postPluginRpc: vi.fn(() => Promise.resolve({ status: "ok" })),
 }));
+vi.mock("@/services/data-service.js", () => ({
+  getSessionWorkspace: () => ({
+    run: (
+      _sessionId: string,
+      _actionId: string,
+      mutate: () => Promise<unknown>,
+    ) => mutate(),
+  }),
+}));
 
 vi.mock("@/lib/toast-channel.js", () => ({
   emitToast: vi.fn(),

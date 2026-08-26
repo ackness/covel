@@ -32,6 +32,7 @@ describe("branch-reply manifest and UI loading", () => {
       // plugin-rpc manualTrigger regardless of the declared trigger type.
       trigger: { type: "auto" },
       capabilities: ["branch-reply", "prompt-history-rewriter"],
+      effects: { parallelSafe: true },
       ui: {
         message: ["./ui/branch-reply-block.json"],
       },

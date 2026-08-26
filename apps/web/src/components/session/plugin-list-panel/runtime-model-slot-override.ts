@@ -1,10 +1,11 @@
-import { useCallback, useRef, useState } from "react";
-import * as api from "@/services/api.js";
+import { useCallback, useEffect, useState } from "react";
+import type { RuntimeModelOverrideChange } from "./types.js";
 
 interface UseRuntimeModelSlotOverrideArgs {
   runtimeKey: string;
   sessionId?: string;
   runtimeModelOverrides?: Record<string, string>;
+  onChange?: RuntimeModelOverrideChange;
 }
 
 /**
@@ -15,27 +16,29 @@ export function useRuntimeModelSlotOverride({
   runtimeKey,
   sessionId,
   runtimeModelOverrides,
-}: UseRuntimeModelSlotOverrideArgs): [string, (newSlot: string) => void] {
-  const initialSlot = useRef(
-    runtimeKey ? (runtimeModelOverrides?.[runtimeKey] ?? "") : "",
-  );
-  const [boundSlot, setBoundSlot] = useState<string>(initialSlot.current);
+  onChange,
+}: UseRuntimeModelSlotOverrideArgs): [
+  string,
+  (newSlot: string) => void,
+  string | null,
+] {
+  const boundSlot = runtimeKey
+    ? (runtimeModelOverrides?.[runtimeKey] ?? "")
+    : "";
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => setError(null), [sessionId, runtimeKey]);
 
   const handleSlotChange = useCallback(
     (newSlot: string) => {
-      setBoundSlot(newSlot);
-      if (!sessionId || !runtimeKey) return;
-      const next: Record<string, string> = { ...runtimeModelOverrides };
-      if (newSlot) next[runtimeKey] = newSlot;
-      else delete next[runtimeKey];
-      void api
-        .updateSession(sessionId, { runtimeModelOverrides: next })
-        .catch(() => {
-          // Non-fatal: user can retry by changing the slot again.
-        });
+      setError(null);
+      if (!sessionId || !runtimeKey || !onChange) return;
+      void onChange(runtimeKey, newSlot).catch((reason: unknown) => {
+        setError(reason instanceof Error ? reason.message : String(reason));
+      });
     },
-    [sessionId, runtimeKey, runtimeModelOverrides],
+    [sessionId, runtimeKey, onChange],
   );
 
-  return [boundSlot, handleSlotChange];
+  return [boundSlot, handleSlotChange, error];
 }

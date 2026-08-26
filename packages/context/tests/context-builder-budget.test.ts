@@ -19,6 +19,7 @@ function makeTurnInput(): TurnInput {
     sessionId: "sess-1",
     turnId: "turn-1",
     playerMessage: "do something",
+    origin: "player",
   };
 }
 

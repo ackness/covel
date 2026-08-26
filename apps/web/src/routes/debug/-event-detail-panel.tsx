@@ -1,20 +1,21 @@
 import { useTranslation } from "react-i18next";
 import type * as api from "@/services/api.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { EventDetail } from "./-event-detail.js";
 
 export function EventDetailPanel({
   event,
+  relatedEvents = [],
   onClose,
 }: {
   event: api.TraceEvent;
+  relatedEvents?: readonly api.TraceEvent[];
   onClose: () => void;
 }) {
   const { t } = useTranslation();
 
   return (
-    <div className="w-80 flex-shrink-0 border-l border-border flex flex-col min-h-0 ui-rail">
-      <div className="px-3 py-2 border-b border-[var(--rule-color)] flex items-center justify-between">
+    <div className="w-96 lg:w-136 xl:w-2xl max-w-[55vw] shrink-0 border-l border-border flex flex-col min-h-0 ui-rail">
+      <div className="px-3 py-2 border-b border-(--rule-color) flex items-center justify-between">
         <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
           {t("debugger.eventDetail")}
         </h3>
@@ -25,9 +26,9 @@ export function EventDetailPanel({
           {t("debugger.close")}
         </button>
       </div>
-      <ScrollArea className="flex-1 min-h-0">
-        <EventDetail event={event} />
-      </ScrollArea>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <EventDetail event={event} relatedEvents={relatedEvents} />
+      </div>
     </div>
   );
 }

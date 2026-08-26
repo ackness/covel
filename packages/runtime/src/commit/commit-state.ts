@@ -27,11 +27,9 @@ export function createStateCommitHandlers(
       ),
     );
     if (invalid) return invalid;
-    // Update the current value AND append the change log, mirroring
-    // StateManager.setValue. Without the upsertStateEntry, a committed
-    // state.patch never changed the value that listStateEntries /
-    // getTableSnapshot / fork snapshots read — the write was lost to every
-    // current-value reader.
+    // Update the current value AND append the change log. Without the upsert,
+    // a committed state.patch would be invisible to listStateEntries and
+    // snapshot consumers.
     await store.upsertStateEntry({
       id: crypto.randomUUID(),
       sessionId: proposal.sessionId,

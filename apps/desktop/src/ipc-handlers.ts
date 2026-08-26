@@ -1,6 +1,4 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
-import fs from "node:fs";
-import path from "node:path";
 import { loadKeysEnv, saveKeysEnv } from "./env-files.js";
 import {
   importAsset,
@@ -9,8 +7,19 @@ import {
 } from "./import-assets.js";
 import { writeLog } from "./logging.js";
 import { writeDataRoot, type ensureUserPaths } from "./paths.js";
-import { buildAppMenu, getMainWindow, isTrustedFrameUrl } from "./windows.js";
+import {
+  buildAppMenu,
+  getMainWindow,
+  isTrustedFrameUrl,
+  isTrustedStartupFrameUrl,
+} from "./windows.js";
 import { setDesktopLocaleFromSettings, t } from "./main-i18n.js";
+import {
+  isSettingsEntries,
+  readSettingsBundle,
+  writeSettingsEntriesAtomic,
+} from "./settings-json.js";
+import type { SettingsPersistenceBundle } from "@covel/shared/settings-persistence";
 
 /**
  * Defense-in-depth: reject secret/config IPC unless the sender frame is
@@ -33,7 +42,47 @@ function isTrustedSender(
   return false;
 }
 
+function isTrustedRecoverySender(
+  event: Electron.IpcMainInvokeEvent,
+  channel: string,
+): boolean {
+  const frame = event.senderFrame;
+  const isMainFrame = frame !== null && frame === event.sender.mainFrame;
+  if (
+    isMainFrame &&
+    (isTrustedFrameUrl(frame.url) || isTrustedStartupFrameUrl(frame.url))
+  ) {
+    return true;
+  }
+  writeLog(
+    "warn",
+    `[ipc] blocked '${channel}' from untrusted recovery frame: ${frame?.url ?? "unknown"}`,
+  );
+  return false;
+}
+
 type DesktopPaths = ReturnType<typeof ensureUserPaths>;
+
+function isSidecarUnavailable(error: unknown): boolean {
+  return (
+    error instanceof TypeError ||
+    (error instanceof Error && error.name === "SidecarUnavailableError")
+  );
+}
+
+function revisionConflictResult(
+  error: unknown,
+): { ok: false; code: "settings_revision_conflict"; revision: number } | null {
+  const candidate = error as { code?: unknown; revision?: unknown };
+  return candidate?.code === "settings_revision_conflict" &&
+    typeof candidate.revision === "number"
+    ? {
+        ok: false,
+        code: "settings_revision_conflict",
+        revision: candidate.revision,
+      }
+    : null;
+}
 
 export interface DesktopIpcHandlersDeps {
   readonly paths: DesktopPaths;
@@ -45,10 +94,11 @@ export interface DesktopIpcHandlersDeps {
     | { readonly ok: true; readonly port: number }
     | { readonly ok: false; readonly port: number; readonly error: string }
   >;
-  readonly getSettingsViaSidecar: () => Promise<Record<string, unknown>>;
+  readonly getSettingsViaSidecar: () => Promise<SettingsPersistenceBundle>;
   readonly saveSettingsViaSidecar: (
     entries: Record<string, unknown>,
-  ) => Promise<void>;
+    expectedRevision: number,
+  ) => Promise<SettingsPersistenceBundle>;
   readonly saveKeysViaSidecar: (keys: Record<string, string>) => Promise<void>;
 }
 
@@ -90,12 +140,12 @@ export function registerDesktopIpcHandlers({
   // the same trusted-sender check the secret channels use — defense in depth
   // behind nav-pinning, so an untrusted frame can't drive restart/dir actions.
   ipcMain.handle("covel:retry-startup", (event) => {
-    if (!isTrustedSender(event, "covel:retry-startup")) return;
+    if (!isTrustedRecoverySender(event, "covel:retry-startup")) return;
     retryStartup();
   });
 
   ipcMain.handle("covel:open-logs-dir", async (event) => {
-    if (!isTrustedSender(event, "covel:open-logs-dir")) return;
+    if (!isTrustedRecoverySender(event, "covel:open-logs-dir")) return;
     await shell.openPath(paths.logsDir);
   });
 
@@ -105,7 +155,7 @@ export function registerDesktopIpcHandlers({
   });
 
   ipcMain.handle("covel:open-data-dir", async (event) => {
-    if (!isTrustedSender(event, "covel:open-data-dir")) return;
+    if (!isTrustedRecoverySender(event, "covel:open-data-dir")) return;
     await shell.openPath(paths.dataRoot);
   });
 
@@ -173,53 +223,55 @@ export function registerDesktopIpcHandlers({
   });
 
   // Settings.json round-trip — the unified SettingsStore's desktop backend.
-  // Read returns the `entries` map only; writes accept the full entries blob
-  // and rewrite the file atomically with a timestamp for audit purposes.
+  // Read/write preserve the versioned bundle so the renderer can use CAS.
   ipcMain.handle("covel:settings:load", (event) => {
-    if (!isTrustedSender(event, "covel:settings:load")) return {};
-    return getSettingsViaSidecar().catch(() => {
-      try {
-        const raw = fs.readFileSync(paths.userSettingsJsonPath, "utf-8");
-        const parsed = JSON.parse(raw) as {
-          entries?: Record<string, unknown>;
-        };
-        return parsed.entries ?? {};
-      } catch {
-        return {};
-      }
+    if (!isTrustedSender(event, "covel:settings:load")) return null;
+    return getSettingsViaSidecar().catch((error: unknown) => {
+      if (!isSidecarUnavailable(error)) throw error;
+      // A missing file is a fresh install, but an existing unreadable or
+      // malformed bundle must reject hydration. Returning `{}` here would let
+      // the next auto-save overwrite the only recoverable user settings.
+      return readSettingsBundle(paths.userSettingsJsonPath);
     });
   });
   ipcMain.handle("covel:settings:save", async (event, payload: unknown) => {
     if (!isTrustedSender(event, "covel:settings:save")) return { ok: false };
     if (!payload || typeof payload !== "object") return { ok: false };
-    const entries = payload as Record<string, unknown>;
+    const { entries, expectedRevision } = payload as {
+      entries?: unknown;
+      expectedRevision?: unknown;
+    };
+    if (
+      !isSettingsEntries(entries) ||
+      typeof expectedRevision !== "number" ||
+      !Number.isInteger(expectedRevision) ||
+      expectedRevision < 0
+    ) {
+      return { ok: false };
+    }
     try {
       try {
-        await saveSettingsViaSidecar(entries);
+        const bundle = await saveSettingsViaSidecar(entries, expectedRevision);
+        setDesktopLocaleFromSettings(entries);
+        Menu.setApplicationMenu(buildAppMenu());
+        return { ok: true, bundle };
       } catch (err) {
+        const conflict = revisionConflictResult(err);
+        if (conflict) return conflict;
+        if (!isSidecarUnavailable(err)) throw err;
         writeLog("warn", "settings:save sidecar fallback:", err);
-        fs.mkdirSync(path.dirname(paths.userSettingsJsonPath), {
-          recursive: true,
-        });
-        const bundle = {
-          schemaVersion: 1,
-          savedAt: new Date().toISOString(),
-          entries,
-        };
-        fs.writeFileSync(
+        const bundle = writeSettingsEntriesAtomic(
           paths.userSettingsJsonPath,
-          JSON.stringify(bundle, null, 2) + "\n",
-          { mode: 0o600 },
+          entries,
+          expectedRevision,
         );
-        // mode only applies on file creation; re-assert 0600 so an existing
-        // looser-permission settings.json (may carry secrets) gets tightened
-        // (audit M1). chmod is a no-op on Windows but does not throw.
-        fs.chmodSync(paths.userSettingsJsonPath, 0o600);
+        setDesktopLocaleFromSettings(entries);
+        Menu.setApplicationMenu(buildAppMenu());
+        return { ok: true, bundle };
       }
-      setDesktopLocaleFromSettings(entries);
-      Menu.setApplicationMenu(buildAppMenu());
-      return { ok: true };
     } catch (err) {
+      const conflict = revisionConflictResult(err);
+      if (conflict) return conflict;
       writeLog("error", "settings:save failed:", err);
       return { ok: false };
     }

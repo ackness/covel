@@ -7,15 +7,26 @@
  * `narrative.completed` persisted A's text under B's session id — permanent in
  * local/IDB mode.
  */
-import { describe, expect, it, vi } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as api from "@/services/api";
 import type { SseEnvelope } from "@/services/api";
 import {
   createSseEventHandler,
   type SseEventHandlerDeps,
 } from "../session-store/sse-handler.js";
-import { finalizeActionExecution } from "../session-store/runtime-rpc.js";
+import {
+  finalizeActionExecution,
+  runActionStream,
+} from "../session-store/runtime-rpc.js";
+import { useBuildSessionActions } from "../session-store/actions.js";
 import { initialState } from "../session-store/reducer.js";
+import type { SessionRuntimeRefs } from "../session-store/runtime-refs.js";
 import type { SessionAction } from "../session-store/types.js";
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
 
 function makeDeps(
   dispatch: (a: SessionAction) => void,
@@ -66,7 +77,7 @@ describe("sse-handler — foreign-session envelopes", () => {
     expect(addMessage).not.toHaveBeenCalled();
   });
 
-  it("still applies and persists an envelope for the loaded session", () => {
+  it("applies a loaded-session envelope without creating a local revision", () => {
     const dispatch = vi.fn();
     const addMessage = vi.fn().mockResolvedValue(undefined);
 
@@ -77,9 +88,7 @@ describe("sse-handler — foreign-session envelopes", () => {
     expect(dispatch.mock.calls.map(([a]) => a.type)).toContain(
       "COMPLETE_MESSAGE",
     );
-    expect(addMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: "sess-a", id: "msg-1" }),
-    );
+    expect(addMessage).not.toHaveBeenCalled();
   });
 
   it("does not drop events before a session is loaded", () => {
@@ -114,5 +123,123 @@ describe("finalizeActionExecution — stale stream", () => {
       "SET_EXECUTING",
       "FINALIZE_HANGING_RUNTIMES",
     ]);
+  });
+});
+
+describe("runtime RPC — originating session", () => {
+  it("does not report a stale action transport error in the new session", async () => {
+    vi.spyOn(api, "sendAction").mockImplementation(
+      (_request, _onEvent, onError) => {
+        onError?.(new Error("session A failed"));
+        return new AbortController();
+      },
+    );
+    const dispatch = vi.fn();
+
+    await runActionStream(
+      {
+        requestId: "req-1",
+        type: "send_message",
+        sessionId: "sess-a",
+        payload: { content: "hello" },
+      },
+      vi.fn(),
+      dispatch,
+      { sessionIdRef: { current: "sess-b" } },
+    ).catch(() => undefined);
+
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("drops stream events after the player switches sessions", async () => {
+    vi.spyOn(api, "sendAction").mockImplementation(
+      (_request, onEvent, _onError, onDone) => {
+        onEvent(narrativeCompleted("sess-a"));
+        onDone?.();
+        return new AbortController();
+      },
+    );
+    const handleSseEvent = vi.fn();
+
+    await runActionStream(
+      {
+        requestId: "req-1",
+        type: "send_message",
+        sessionId: "sess-a",
+        payload: { content: "hello" },
+      },
+      handleSseEvent,
+      vi.fn(),
+      { sessionIdRef: { current: "sess-b" } },
+    );
+
+    expect(handleSseEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not begin adventure when the overlay resolves after a switch", async () => {
+    let resolveOverlay!: (value: null) => void;
+    vi.spyOn(api, "getWorldOverlay").mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOverlay = resolve;
+      }),
+    );
+    const sendAction = vi.spyOn(api, "sendAction");
+    const dispatch = vi.fn();
+    const sessionIdRef = { current: "sess-a" as string | null };
+    const state = {
+      ...initialState,
+      world: {
+        id: "world-a",
+        name: "World A",
+        description: "",
+        createdAt: "2026-08-24T00:00:00.000Z",
+      },
+      session: {
+        id: "sess-a",
+        worldId: "world-a",
+        status: "active" as const,
+        phase: "setup" as const,
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
+        activePlugins: [],
+        locale: "en-US",
+        createdAt: "2026-08-24T00:00:00.000Z",
+        updatedAt: "2026-08-24T00:00:00.000Z",
+      },
+    };
+    const refs: SessionRuntimeRefs = {
+      stateRef: { current: state },
+      sessionIdRef,
+      runtimeKindRef: { current: new Map() },
+      deltaBufferRef: { current: new Map() },
+      deltaRafRef: { current: null },
+      lastBackfilledTurnIdRef: { current: null },
+    };
+    const { result } = renderHook(() =>
+      useBuildSessionActions({
+        state,
+        dispatch,
+        ds: {} as SseEventHandlerDeps["ds"],
+        workspace: {
+          hydrate: vi.fn(),
+          run: vi.fn(),
+          checkpoint: vi.fn(),
+        },
+        refs,
+        handleSseEvent: vi.fn(),
+      }),
+    );
+
+    act(() => result.current.beginAdventure());
+    sessionIdRef.current = "sess-b";
+    resolveOverlay(null);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sendAction).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: "SET_EXECUTING",
+      value: true,
+    });
   });
 });

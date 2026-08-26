@@ -9,13 +9,20 @@
 ```text
 worlds/my-world/
 ├── world.yaml
-├── WORLD.md
+├── WORLD.md                         # 默认世界观；也可用 WORLD.zh.md / WORLD.en.md
 ├── data/
 │   ├── world.data.yaml
 │   ├── dimensions.yaml
-│   └── characters/cast.json
+│   └── rules/                       # 可选：题材规则，导入 living-world-rules
+├── characters/
+│   └── main-cast.json
 └── media/
-    └── portraits/
+    ├── portraits.json               # 可选：立绘生成清单
+    ├── portraits/                   # 可选：角色立绘
+    ├── presence.json                # 可选：角色与立绘的内容寻址映射
+    ├── scenes.json                  # 可选：场景图生成清单
+    ├── scenes/                      # 可选：日 / 夜场景图
+    └── scenes.registry.json         # 可选：scene-stage 场景注册表
 ```
 
 `world.yaml`：
@@ -26,14 +33,14 @@ id: my-world
 name: 我的世界
 summary: 一个示例世界。
 defaultLocale: zh-CN
-requiredPlugins:
-  - pregame
-  - world-init
-  - char-creator
-recommendedPlugins:
-  - character-blueprint
 pluginPolicy:
   preset: traditional-story
+  requiredPlugins:
+    - pregame
+    - world-init
+    - char-creator
+  recommendedPlugins:
+    - character-blueprint
   preferTags:
     - mode:traditional-story
   avoidTags:
@@ -44,6 +51,17 @@ defaultViewMode: stage
 
 `worldData` path 相对 world root。
 
+### 两种完整内置示例
+
+世界包不必启用所有能力；应让题材决定插件组合与数据层。仓库内两个中文世界展示了两条互补路线：
+
+| 示例                    | 玩家体验                             | 主要能力                                                                                                                                                         | 适合参考的文件                                                                                                                    |
+| ----------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `worlds/mistport`       | 黑暗奇幻调查，行动与环境叙事为主     | 基于传统叙事的自定义 `mistport-investigation` 组合、按 locale 选择的世界观 / 角色 / 规则 / presence、题材记忆块、角色属性 schema、角色蓝图、立绘、潮汐与势力规则 | `world.yaml`、`WORLD.zh.md` / `WORLD.en.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/`                       |
+| `worlds/haruka-academy` | 校园群像恋爱，对话与视觉小说舞台为主 | `dialogue-mode` 策略、`defaultViewMode: stage`、关系数值、题材记忆块、角色蓝图、透明立绘 presence、地点对应的日 / 夜场景注册表、校园日程规则                     | `world.yaml`、`WORLD.md`、`data/dimensions.yaml`、`data/rules/`、`characters/`、`media/scenes.json`、`media/scenes.registry.json` |
+
+两者都把内容通过 `data/world.data.yaml` 接入同一导入协议，但不会为了展示能力而加入与题材无关的插件。开发新世界时，先复制更接近目标交互模式的结构，再按后文各 source 契约增减角色、规则或媒体层。
+
 `defaultViewMode`（可选）：会话首次进入 Playing 时的默认呈现模式。目前仅 `stage`（全屏舞台模式，见 [ui-panels.md](./ui-panels.md#舞台模式stage-view)）有效，其他值按 `parsed` 处理。它经 `world-seed-loader` 拼进 `WorldRecord.metadata.defaultViewMode`，前端仅在会话首挂载时用作初值——玩家在头部切换视图后即以玩家选择为准。
 
 > **请把 `requiredPlugins` / `recommendedPlugins` / `excludedPlugins` 写在 `pluginPolicy` 下**。写在顶层同样被接受，加载时**折叠进 `pluginPolicy`（去重合并）**，`WorldRecord.metadata` 只保留 `pluginPolicy` 作为插件选择的唯一来源；但顶层无法表达 `preset` / `packs` / `preferTags` 等场景意图。
@@ -52,7 +70,7 @@ defaultViewMode: stage
 
 | 字段                  | 说明                                                                                                                         |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `preset`              | 前端内置组合包 ID：`traditional-story`、`dialogue-mode`、`low-cost`。                                                        |
+| `preset`              | 默认选中的组合包 ID；可引用同一策略内的自定义 `packs[].id`，或内置的 `traditional-story`、`dialogue-mode`、`low-cost`。      |
 | `preferTags`          | 默认选中匹配这些插件 `tags` 的插件。                                                                                         |
 | `avoidTags`           | 默认关闭匹配这些插件 `tags` 的插件。                                                                                         |
 | `requireCapabilities` | 要求启用的机器能力标签。                                                                                                     |
@@ -124,7 +142,7 @@ sources:
 
   cast:
     kind: json
-    path: data/characters/cast.json
+    path: characters/main-cast.json
     schema: plugin://character-blueprint/blueprints
     to: plugin:character-blueprint/blueprints
     key: id
@@ -186,6 +204,47 @@ data/rules/tide-mystery.en.yaml
 | `lorebook`                         | session create | 直接写入 session lorebook                                                                  |
 | `characters`                       | session create | 直接 upsert session character                                                              |
 | `media` + `indexTo`                | session create | 导入媒体并把索引写入 `plugin_data`                                                         |
+
+### Lorebook 按玩家消息选择性注入
+
+`to: lorebook` 会在创建 session 时把 source 的每个值写成 lorebook 记录。适合大型世界设定的最小 descriptor：
+
+```yaml
+# world.yaml
+worldData: data/world.data.yaml
+```
+
+```yaml
+# data/world.data.yaml
+schemaVersion: 1
+sources:
+  lore:
+    kind: yaml
+    path: data/lorebook.yaml
+    to: lorebook
+    key: id
+```
+
+```yaml
+# data/lorebook.yaml
+- id: dragons
+  content: 龙族是远古时代最强大的种族……
+  strategy: selective
+  keys: [龙族, 龙鳞, Drakon]
+
+- id: core-rules
+  content: 本世界的魔法必须遵守等价交换。
+  strategy: constant
+```
+
+运行时边界：
+
+- `strategy: selective`（或 `kind: triggered`）只检查**当前玩家消息**；消息包含任一 `keys` 项时激活，大小写不敏感，按子串匹配。
+- `selective` 记录没有非空 `keys` 时不会激活。`constant` 每轮注入，不依赖 `keys`；省略 `strategy` / `kind` 时默认 `constant`。
+- 可选字段还包括 `position`、`insertionOrder`、`enabled` 和 `extra`。默认 `position` 是 `after_plugin`，默认 `enabled` 是 `true`。
+- `PLUGIN.md` 中的 Markdown 链接不会触发文件加载；`references/*.md` 及其自定义 `keywords` frontmatter 不是插件运行时契约。
+
+World Data 在 session 创建阶段导入。已有 session 需要通过本页的 `sync-data` 接口同步；先调用 `preflight` 可在写入前查看诊断。
 
 URI grammar：
 
@@ -303,7 +362,7 @@ sources:
 ```
 
 - `media` source 把 `media/portraits/` 下的图导入媒体库，按 **`sha256(内容)`** 寻址（与 `@covel/store` media-store 的 `sha256(bytes)` 一致），并把索引写进 `plugin_data[character-presence][assets]`。
-- `presence.json` 是 presence 记录数组，每条把 `characterId`（对上角色卡 `instantiate.characterId`，如 `npc-<id>`）的 `avatar` / `sprite` 指向那张图：
+- `presence.json` 是 presence 记录数组，每条把 `characterId` 对应角色的 `avatar` / `sprite` 指向那张图。前端按实例化 `CharacterRecord.id` 的精确值或 `-<characterId>` 后缀匹配：角色卡声明 `instantiate.characterId` 时应使用该值（如 `npc-<id>`）；未声明时可使用角色卡 `id`（`emberback` 即采用此形式）：
 
 ```json
 [

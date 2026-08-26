@@ -1,5 +1,5 @@
 import * as api from "@/services/api";
-import type { DataService } from "@/services/data-service.js";
+import type { DataService, SessionWorkspace } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
 import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
@@ -13,6 +13,7 @@ interface MutableRef<T> {
 
 interface RestoreSessionOptions {
   ds: DataService;
+  workspace: SessionWorkspace;
   dispatch: SessionDispatch;
   sessionIdRef: MutableRef<string | null>;
   worlds: readonly api.WorldRecord[];
@@ -115,12 +116,10 @@ async function restoreLocalFallback(
   sessionId: string,
   dispatch: SessionDispatch,
 ): Promise<void> {
-  const [messagesResult, patchesResult, stateSnapResult] =
-    await Promise.allSettled([
-      ds.listMessages(sessionId),
-      ds.listStatePatches(sessionId),
-      ds.loadStateSnapshot(sessionId),
-    ]);
+  const [messagesResult, patchesResult] = await Promise.allSettled([
+    ds.listMessages(sessionId),
+    ds.listStatePatches(sessionId),
+  ]);
 
   if (messagesResult.status === "fulfilled") {
     dispatch({
@@ -135,13 +134,6 @@ async function restoreLocalFallback(
       type: "LOAD_STATE_PATCHES",
       patches: patchesResult.value,
     });
-  }
-  if (stateSnapResult.status === "fulfilled" && stateSnapResult.value) {
-    const snapshotState = stateSnapResult.value.state as
-      Record<string, unknown> | undefined;
-    if (snapshotState) {
-      dispatch({ type: "SET_GAME_STATE", state: snapshotState });
-    }
   }
 }
 
@@ -165,28 +157,16 @@ async function restoreSubmittedBlocks(
   }
 }
 
-function migrateExecutionStep(raw: Record<string, unknown>): ExecutionStep {
-  const legacyType = raw.type as string | undefined;
-  const legacyStatus: ExecutionStep["status"] =
-    legacyType === "runtime.completed"
-      ? "completed"
-      : legacyType === "runtime.failed"
-        ? "failed"
-        : legacyType === "runtime.skipped"
-          ? "skipped"
-          : ((raw.status as ExecutionStep["status"] | undefined) ??
-            "completed");
+function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
   return {
     runtimeId: (raw.runtimeId as string) ?? "unknown",
     pluginId: (raw.pluginId as string) ?? "",
-    status: legacyStatus,
+    status: raw.status as ExecutionStep["status"],
     label: raw.label as string | undefined,
     detail: raw.detail as string | undefined,
     durationMs: raw.durationMs as number | undefined,
     turnId: raw.turnId as string | undefined,
-    startedAt:
-      (raw.startedAt as string | undefined) ??
-      (raw.timestamp as string | undefined),
+    startedAt: raw.startedAt as string | undefined,
   };
 }
 
@@ -199,16 +179,15 @@ async function restorePersistedExecutionSteps(
     const raw = (await ds.loadExecutionSteps(sessionId)) as Array<
       Record<string, unknown>
     >;
-    for (const step of raw.map(migrateExecutionStep)) {
+    for (const step of raw.map(toExecutionStep)) {
       dispatch({ type: "UPSERT_EXECUTION_STEP", step });
     }
   } catch {
-    // Legacy sessions may have no persisted execution step cache.
+    // Execution-step persistence is best-effort browser state.
   }
 }
 
 function refreshSessionSideData(
-  ds: DataService,
   sessionId: string,
   targetSessionId: string,
   sessionIdRef: MutableRef<string | null>,
@@ -231,20 +210,11 @@ function refreshSessionSideData(
       }
     })
     .catch(ignoreError("list suspensions on restore"));
-
-  ds.syncToServer(sessionId)
-    .then(() => {
-      if (sessionIdRef.current === targetSessionId) {
-        api.markServerAck();
-      }
-    })
-    .catch((err: unknown) => {
-      console.warn("[session] syncToServer failed:", err);
-    });
 }
 
 export async function restoreSessionState({
   ds,
+  workspace,
   dispatch,
   sessionIdRef,
   worlds,
@@ -252,16 +222,39 @@ export async function restoreSessionState({
 }: RestoreSessionOptions): Promise<void> {
   clearAllStreamingText();
   dispatch({ type: "RESET_SESSION" });
+  setActivePluginDataSession(null);
 
   const world = worlds.find((candidate) => candidate.id === session.worldId);
   if (world) {
     dispatch({ type: "SET_WORLD", world });
   }
-  dispatch({ type: "SET_SESSION", session });
 
   const targetSessionId = session.id;
   sessionIdRef.current = targetSessionId;
+
+  // Browser-private sessions only become executable after their durable
+  // checkpoint has rebuilt the ephemeral server workspace. Publishing the
+  // session first starts snapshot/plugin/SSE effects against an empty
+  // MemoryStore after every server restart, producing a burst of expected
+  // 404s and a transient broken UI. Remote mode implements this as a no-op.
+  try {
+    await workspace.hydrate(targetSessionId);
+  } catch (error) {
+    if (sessionIdRef.current === targetSessionId) {
+      sessionIdRef.current = null;
+      setActivePluginDataSession(null);
+      dispatch({
+        type: "SET_EXECUTION_ERROR",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
+  }
+  if (sessionIdRef.current !== targetSessionId) return;
+
+  api.markServerAck();
   setActivePluginDataSession(targetSessionId);
+  dispatch({ type: "SET_SESSION", session });
 
   const snapshotLoaded = await restoreServerSnapshot(session.id, dispatch);
   if (sessionIdRef.current !== targetSessionId) return;
@@ -277,11 +270,5 @@ export async function restoreSessionState({
   await restorePersistedExecutionSteps(ds, session.id, dispatch);
   if (sessionIdRef.current !== targetSessionId) return;
 
-  refreshSessionSideData(
-    ds,
-    session.id,
-    targetSessionId,
-    sessionIdRef,
-    dispatch,
-  );
+  refreshSessionSideData(session.id, targetSessionId, sessionIdRef, dispatch);
 }

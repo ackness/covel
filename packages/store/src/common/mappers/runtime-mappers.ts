@@ -10,6 +10,7 @@ import type {
   ToolCallRecordRow,
   TurnResultRecord,
 } from "../../types.js";
+import type { ExecutionOrigin } from "@covel/shared";
 import type { JsonReader } from "./json-reader.js";
 
 export interface TurnResultRow {
@@ -19,10 +20,9 @@ export interface TurnResultRow {
   runtimeResults: unknown;
   conflicts: unknown;
   auditResult: unknown;
-  /** Execution origin; NULL on rows written before the column existed. */
-  origin: string | null;
+  origin: string;
   parentTurnId: string | null;
-  commitStatus: string | null;
+  commitStatus: string;
   durationMs: number;
   createdAt: string;
 }
@@ -84,8 +84,33 @@ export interface InteractionRow {
   createdAt: string;
 }
 
-const TURN_ORIGINS = new Set(["player", "manual", "follower", "recursive"]);
-const COMMIT_STATUSES = new Set(["pending", "committed", "failed"]);
+const COMMIT_STATUSES = new Set<TurnResultRecord["commitStatus"]>([
+  "pending",
+  "committed",
+  "failed",
+]);
+const EXECUTION_ORIGINS = new Set<ExecutionOrigin>([
+  "player",
+  "continuation",
+  "manual",
+  "background",
+  "recursive",
+  "resume",
+]);
+
+function requireCommitStatus(status: string): TurnResultRecord["commitStatus"] {
+  if (!COMMIT_STATUSES.has(status as TurnResultRecord["commitStatus"])) {
+    throw new Error(`Invalid turn result commit status: ${status}`);
+  }
+  return status as TurnResultRecord["commitStatus"];
+}
+
+function requireExecutionOrigin(origin: string): ExecutionOrigin {
+  if (!EXECUTION_ORIGINS.has(origin as ExecutionOrigin)) {
+    throw new Error(`Invalid turn result origin: ${origin}`);
+  }
+  return origin as ExecutionOrigin;
+}
 
 export function toTurnResultRecord(
   row: TurnResultRow,
@@ -98,13 +123,9 @@ export function toTurnResultRecord(
     runtimeResults: json.readRequired(row.runtimeResults),
     conflicts: json.read(row.conflicts),
     auditResult: json.read(row.auditResult),
-    ...(row.origin && TURN_ORIGINS.has(row.origin)
-      ? { origin: row.origin as TurnResultRecord["origin"] }
-      : {}),
+    origin: requireExecutionOrigin(row.origin),
     ...(row.parentTurnId ? { parentTurnId: row.parentTurnId } : {}),
-    ...(row.commitStatus && COMMIT_STATUSES.has(row.commitStatus)
-      ? { commitStatus: row.commitStatus as TurnResultRecord["commitStatus"] }
-      : {}),
+    commitStatus: requireCommitStatus(row.commitStatus),
     durationMs: row.durationMs,
     createdAt: row.createdAt,
   };

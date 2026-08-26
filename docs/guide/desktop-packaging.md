@@ -1,17 +1,31 @@
-# Packaging & Signing — Covel Desktop
+# Packaging — Covel Desktop
 
-This document describes how to build signed, notarized Covel desktop artifacts. The official GitHub Release workflow publishes macOS Apple Silicon and Windows x64 artifacts; the local electron-builder config can still build Linux artifacts on its native platform.
+This document describes how to build Covel desktop artifacts. The official GitHub Release workflow intentionally publishes unsigned macOS Apple Silicon and Windows x64 artifacts because the project does not hold platform signing certificates. macOS Gatekeeper and Windows SmartScreen may therefore warn players on first launch. The local electron-builder config can still build Linux artifacts on its native platform.
 
 ## One-off prep
 
 1. Install the Node toolchain and dependencies at the repo root (`pnpm install`).
-2. Stage resources: `pnpm --filter @covel/desktop build` (produces `apps/desktop/dist/`, `apps/desktop/staging/`).
+2. Stage resources: `pnpm --filter @covel/desktop build` (produces `apps/desktop/dist/`, `apps/desktop/staging/`). A clean checkout copies the committed LiteLLM snapshot and verifies `node_modules/@covel/ai-provider/data/model-db.json` is present in staging. The build performs no model-database network request.
+
+The bundled snapshot is generated from the fixed LiteLLM commit declared in `packages/ai-provider/model-db-source.json`. To update it, change the 40-character revision and its commit timestamp, run `pnpm --filter @covel/ai-provider update-model-db`, review the generated JSON diff, and commit the manifest and snapshot together. Release preflight rejects an untracked snapshot or manifest, and the final installer verifier checks that the snapshot survives packaging. The Settings refresh action remains the opt-in path for downloading newer data into the user's configuration directory.
 
 Running `pnpm --filter @covel/desktop dist` after that invokes electron-builder.
 
 ## macOS
 
-### Required environment variables
+### Official unsigned build
+
+The committed config sets `mac.identity: null` and `mac.notarize: false`; release CI also sets `CSC_IDENTITY_AUTO_DISCOVERY=false`. No signing or Apple account secrets are required.
+
+```bash
+pnpm --filter @covel/desktop dist:mac
+```
+
+Artifacts land in `release/electron/` as `.dmg` and `.zip`. The current release config targets `arm64`. Because the app is unsigned and not notarized, players may need to confirm the first launch through macOS privacy and security controls.
+
+### Optional future signing
+
+If a future maintainer obtains an Apple Developer certificate, local signing uses the electron-builder variable names below. Official release CI does not consume them.
 
 | Var                           | Purpose                                                                                      |
 | ----------------------------- | -------------------------------------------------------------------------------------------- |
@@ -21,12 +35,13 @@ Running `pnpm --filter @covel/desktop dist` after that invokes electron-builder.
 | `APPLE_APP_SPECIFIC_PASSWORD` | [App-specific password](https://support.apple.com/en-us/102654) (NOT your Apple ID password) |
 | `APPLE_TEAM_ID`               | Developer Team ID (10-character, e.g. `ABCDE12345`)                                          |
 
-### Enable notarization
+To create a local signed and notarized build, replace `identity: null` with the intended Developer ID identity (or remove it to enable certificate discovery), then configure notarization:
 
 Edit `apps/desktop/electron-builder.yml`, change:
 
 ```yaml
 mac:
+  identity: null
   notarize: false
 ```
 
@@ -34,6 +49,7 @@ to:
 
 ```yaml
 mac:
+  identity: "Developer ID Application: Your Name (TEAMID)"
   notarize:
     teamId: "${env.APPLE_TEAM_ID}"
 ```
@@ -49,15 +65,25 @@ APPLE_TEAM_ID=ABCDE12345 \
   pnpm --filter @covel/desktop dist:mac
 ```
 
-Artifacts land in `release/electron/` as `.dmg` and `.zip`. The current release config targets `arm64`.
-
 ### Entitlements
 
 `apps/desktop/resources/entitlements.mac.plist` is required by the hardened runtime. It allows V8 JIT, Node sidecar spawning (`com.apple.security.cs.allow-dyld-environment-variables`), and loopback networking for the bundled API server. Do not strip entries without understanding why they are needed.
 
 ## Windows
 
-### Required environment variables
+### Official unsigned build
+
+Release CI sets `CSC_IDENTITY_AUTO_DISCOVERY=false` and does not provide certificate secrets.
+
+```bash
+pnpm --filter @covel/desktop dist:win
+```
+
+The NSIS installer and portable build land in `release/electron/`.
+
+### Optional future signing
+
+If a future maintainer obtains a Windows code-signing certificate, local builds can use these variables. Official release CI does not consume them.
 
 | Var                        | Purpose                                                                   |
 | -------------------------- | ------------------------------------------------------------------------- |
@@ -65,22 +91,18 @@ Artifacts land in `release/electron/` as `.dmg` and `.zip`. The current release 
 | `CSC_KEY_PASSWORD`         | Password for the `.pfx`                                                   |
 | `WIN_CSC_TIMESTAMP_SERVER` | Optional RFC 3161 timestamp URL (default `http://timestamp.digicert.com`) |
 
-### Build
-
 ```bash
 CSC_LINK=/path/to/cert.pfx \
 CSC_KEY_PASSWORD=... \
   pnpm --filter @covel/desktop dist:win
 ```
 
-NSIS installer + portable build land in `release/`.
-
 ### SmartScreen
 
-Until you have a purchased reputation (or an EV certificate), Windows SmartScreen will warn users on first launch. Options:
+Unsigned official builds trigger Windows SmartScreen on first launch. Options:
 
-1. Purchase an EV code-signing certificate from DigiCert / Sectigo / SSL.com
-2. Accept the "Run anyway" step in the SmartScreen dialog during early adoption
+1. Accept the "Run anyway" step in the SmartScreen dialog during early adoption.
+2. Add code signing in a future release after purchasing a suitable certificate.
 
 ## Linux
 
@@ -88,16 +110,17 @@ Until you have a purchased reputation (or an EV certificate), Windows SmartScree
 pnpm --filter @covel/desktop dist:linux
 ```
 
-Produces:
+Produces artifacts under `release/electron/`:
 
-- `Covel-<version>.AppImage` (portable, x64 and arm64)
-- `Covel-<version>.deb` (x64)
+- `Covel-electron-<version>-linux-x64.AppImage` and
+  `Covel-electron-<version>-linux-arm64.AppImage`
+- `Covel-electron-<version>-linux-x64.deb`
 
 GPG signing is not currently wired up. If required for distribution:
 
 ```bash
 # After building
-dpkg-sig --sign builder release/*.deb
+dpkg-sig --sign builder release/electron/*.deb
 ```
 
 ## Verifying a build locally
@@ -109,8 +132,8 @@ still lands on two files:
 1. **Phase 1** — the `afterAllArtifactBuild` hook
    (`apps/desktop/scripts/cleanup-artifacts.mjs`) drops only the auto-update metadata
    (`*.blockmap`, `latest-*.yml`, `builder-*.yml`). The `mac-arm64/`
-   unpacked dir survives so `apps/desktop/scripts/verify-release.mjs` (and any local
-   `codesign`) can inspect `Covel.app/Contents/Resources/...`.
+   unpacked dir survives so `apps/desktop/scripts/verify-release.mjs` can inspect
+   `Covel.app/Contents/Resources/...`.
 2. **Phase 2** — `node apps/desktop/scripts/cleanup-artifacts.mjs
 --strip-unpacked`, chained onto the root `build:electron` script
    _after_ `electron-builder` returns. This wipes `mac-arm64/` and the
@@ -121,18 +144,7 @@ still lands on two files:
    picks just the distributables (`.dmg` + `.zip` on macOS, `.exe` on
    Windows).
 
-```bash
-# macOS — between phase 1 and phase 2 the unpacked .app is still on disk:
-codesign --verify --deep --strict --verbose=2 "release/electron/mac-arm64/Covel.app"
-spctl --assess --verbose "release/electron/mac-arm64/Covel.app"
-
-# After `pnpm build:electron` (phase 2 has run), expand the zip first:
-unzip -q release/electron/Covel-electron-*-mac-arm64.zip -d /tmp/covel-verify
-codesign --verify --deep --strict --verbose=2 "/tmp/covel-verify/Covel.app"
-
-# Windows (PowerShell)
-Get-AuthenticodeSignature release\Covel-Setup-*.exe
-```
+Release CI verifies the unpacked application resources on each platform before uploading only the distributable files. Signature checks are intentionally absent while official builds are unsigned.
 
 ## Auto-update publishing
 
@@ -163,8 +175,8 @@ config above.
 - [ ] Run `pnpm release:preflight`
 - [ ] Run `pnpm lint` and `pnpm test` green
 - [ ] Run `pnpm --filter @covel/desktop build`
-- [ ] Sign + notarize per the instructions above
+- [ ] Confirm the release notes disclose that macOS and Windows artifacts are unsigned
 - [ ] Smoke test on a clean machine (not your dev machine)
 - [ ] Tag the release: `git tag v$(node -p "require('./apps/desktop/package.json').version")`
 - [ ] Push `main` and the `v*` tag; the release workflow publishes the GitHub Release
-- [ ] Verify the published release notes and `.dmg` / `.zip` assets
+- [ ] Verify the published release notes and `.dmg` / `.zip` / `.exe` assets

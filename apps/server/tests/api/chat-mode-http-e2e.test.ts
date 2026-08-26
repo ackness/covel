@@ -8,7 +8,6 @@ import type {
   LLMToolDefinition,
 } from "@covel/runtime";
 import type { LLMMessage } from "@covel/shared";
-import { deriveLegacyClockForSession } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
 import { loadSingleWorld } from "../../src/world-seed-loader.js";
@@ -266,21 +265,29 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
       updatedAt: now,
     });
 
-    const preGameCompleted = registry
-      .getActiveRuntimes(sessionId)
-      .filter(
-        (runtime) => runtime.priority !== undefined && runtime.priority <= 99,
-      )
-      .map((runtime) => runtime.name);
+    const completedSetup = Object.fromEntries(
+      registry
+        .getActiveRuntimes(sessionId)
+        .filter((runtime) => runtime.stage === "setup")
+        .map((runtime) => [
+          runtime.name,
+          {
+            state: "done" as const,
+            resolution: "completed" as const,
+            generation: 1,
+            attempts: 1,
+            completedAt: now,
+            pluginVersion: runtime.version ?? "0.0.0",
+          },
+        ]),
+    );
     // Simulate a session that has finished setup and is ready to play. Under
     // the scheduling redesign, "setup done" is expressed by phase:"playing" +
-    // completedPlayerTurns:0 (the Pre-Game floor) — the legacy turnCount:1 alone
-    // no longer flips the band, so we set the clock fields explicitly.
+    // Simulate the fully-settled current setup mirror and playing clock.
     await store.updateSession(sessionId, {
-      preGameCompleted,
-      turnCount: 1,
       phase: "playing",
       completedPlayerTurns: 0,
+      setupRuntimes: completedSetup,
       updatedAt: now,
     });
 
@@ -374,7 +381,6 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     expect(promptText?.value).toContain("神代澪");
 
     const finalSession = await store.getSession(sessionId);
-    // Legacy turnCount is derived from the clock (no longer a written column).
-    expect(deriveLegacyClockForSession(finalSession!).turnCount).toBe(3);
+    expect(finalSession?.completedPlayerTurns).toBe(3);
   });
 });

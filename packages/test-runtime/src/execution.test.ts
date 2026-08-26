@@ -97,8 +97,9 @@ async function createSessionStore() {
     id: SESSION_ID,
     locale: "zh-CN",
     status: "active",
-    turnCount: 1,
-    preGameCompleted: [],
+    phase: "playing",
+    completedPlayerTurns: 0,
+    setupRuntimes: {},
     activePlugins: [PLUGIN_ID],
     createdAt: now,
     updatedAt: now,
@@ -182,13 +183,16 @@ describe("test-runtime execution helpers", () => {
         loadedRuntime(async (ctx) => {
           received = ctx;
           return {
-            pluginData: [
-              {
-                namespace: "events",
-                key: "latest",
-                value: { topic: ctx.triggerEvent?.topic },
-              },
-            ],
+            outcome: "success",
+            effects: {
+              pluginData: [
+                {
+                  namespace: "events",
+                  key: "latest",
+                  value: { topic: ctx.triggerEvent?.topic ?? null },
+                },
+              ],
+            },
           };
         }, runtimeManifest),
       ],
@@ -311,7 +315,7 @@ describe("test-runtime execution helpers", () => {
       [
         RUNTIME_ID,
         loadedRuntime(
-          async () => ({ status: "failed", error: "reported failure" }),
+          async () => ({ outcome: "failed", error: "reported failure" }),
           runtimeManifest,
         ),
       ],
@@ -337,7 +341,7 @@ describe("test-runtime execution helpers", () => {
     expect(job.result).toMatchObject({
       status: "failed",
       error: "reported failure",
-      output: { status: "failed", error: "reported failure" },
+      output: { error: "reported failure" },
     });
     const row = await getJobRow(store, job.jobId);
     expect(row.value).toMatchObject({
@@ -355,7 +359,7 @@ describe("test-runtime execution helpers", () => {
         RUNTIME_ID,
         loadedRuntime(async (ctx) => {
           await ctx.recursiveCall({ playerMessage: "nested" });
-          return {};
+          return { outcome: "success", value: null };
         }, runtimeManifest),
       ],
     ]);

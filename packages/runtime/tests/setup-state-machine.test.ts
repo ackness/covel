@@ -48,8 +48,6 @@ async function setupSession(
     id,
     worldId: "w",
     status: "active",
-    turnCount: 0,
-    preGameCompleted: [],
     phase: "setup",
     completedPlayerTurns: 0,
     setupRuntimes,
@@ -73,6 +71,51 @@ const ran = (
 });
 
 describe("setup attempt ledger", () => {
+  it("writes a committed done mirror from the terminal ledger count", async () => {
+    const store = createMemoryStore();
+    const now = new Date().toISOString();
+    await setupSession(store, "s", {
+      "plug/setup": {
+        state: "pending",
+        pluginVersion: "2.0.0",
+        generation: 4,
+        attempts: 2,
+      },
+    });
+    for (const executionId of ["e1", "e2"]) {
+      await store.insertSetupAttempt({
+        sessionId: "s",
+        runtimeId: "plug/setup",
+        pluginVersion: "2.0.0",
+        generation: 4,
+        executionId,
+        state: "failed",
+        startedAt: now,
+        finishedAt: now,
+      });
+    }
+
+    await settleSetupRuntimes({
+      store,
+      sessionId: "s",
+      ran: [
+        ran({
+          executionId: "e3",
+          pluginVersion: "2.0.0",
+          generation: 4,
+          doneSignal: true,
+          ledgerState: "success",
+        }),
+      ],
+      committed: true,
+      now,
+    });
+
+    expect((await store.getSession("s"))!.setupRuntimes["plug/setup"]).toEqual(
+      mirrorSetupDone("2.0.0", now, 4, 3),
+    );
+  });
+
   it("counts each executionId once (idempotent re-settle)", async () => {
     const store = createMemoryStore();
     await setupSession(store, "s");
@@ -238,8 +281,6 @@ describe("main-loop dependency-cycle SCC", () => {
       id: "s",
       worldId: "w",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
       phase: "playing",
       completedPlayerTurns: 1,
       setupRuntimes: {},
@@ -293,7 +334,7 @@ describe("main-loop dependency-cycle SCC", () => {
       loadRuntime: async (m) => ({
         manifest: m,
         promptTemplate: "",
-        handler: async () => ({}),
+        handler: async () => ({ outcome: "success", value: {} }),
       }),
       llm: new NoopLLM(),
       store,
@@ -317,7 +358,7 @@ describe("main-loop dependency-cycle SCC", () => {
 
 describe("plugin version mismatch", () => {
   it("invalidates a prior done and bumps the generation", () => {
-    const doneV1 = mirrorSetupDone("1.0.0", new Date().toISOString());
+    const doneV1 = mirrorSetupDone("1.0.0", new Date().toISOString(), 1, 1);
     expect(isSetupDoneForVersion(doneV1, "1.0.0")).toBe(true);
     expect(isSetupDoneForVersion(doneV1, "2.0.0")).toBe(false);
     // Same version reuses the generation; a bump starts a fresh one.
@@ -334,11 +375,9 @@ describe("plugin version mismatch", () => {
       id: "s",
       worldId: "w",
       status: "active",
-      turnCount: 1,
-      preGameCompleted: [],
       phase: "playing",
       completedPlayerTurns: 1,
-      setupRuntimes: { "plug/setup": mirrorSetupDone("1.0.0", now) },
+      setupRuntimes: { "plug/setup": mirrorSetupDone("1.0.0", now, 1, 1) },
       activePlugins: ["plug"],
       createdAt: now,
       updatedAt: now,
@@ -409,7 +448,6 @@ describe("needs(scope: session) positive gate (setup selection)", () => {
       activeRuntimes: runtimes,
       manualRuntimeId: undefined,
       messageHistory: [],
-      preGameCompleted: [],
       runtimeTriggerCounts: new Map(),
       setupRuntimes,
       sessionId: "s-gate",
@@ -437,7 +475,7 @@ describe("needs(scope: session) positive gate (setup selection)", () => {
     // Producer done (and therefore itself no longer pending) → consumer runs.
     expect(
       select([producer, consumer], {
-        "prod/setup": mirrorSetupDone("1.0.0", now),
+        "prod/setup": mirrorSetupDone("1.0.0", now, 1, 1),
       }),
     ).toEqual(["cons/setup"]);
   });
@@ -454,13 +492,15 @@ describe("needs(scope: session) positive gate (setup selection)", () => {
 
     // One of two providers done → 'all' gate still closed.
     expect(
-      select([p1, p2, consumer], { "p1/setup": mirrorSetupDone("1.0.0", now) }),
+      select([p1, p2, consumer], {
+        "p1/setup": mirrorSetupDone("1.0.0", now, 1, 1),
+      }),
     ).toEqual(["p2/setup"]);
     // Both done → gate opens.
     expect(
       select([p1, p2, consumer], {
-        "p1/setup": mirrorSetupDone("1.0.0", now),
-        "p2/setup": mirrorSetupDone("1.0.0", now),
+        "p1/setup": mirrorSetupDone("1.0.0", now, 1, 1),
+        "p2/setup": mirrorSetupDone("1.0.0", now, 1, 1),
       }),
     ).toEqual(["cons/setup"]);
   });
@@ -474,7 +514,9 @@ describe("needs(scope: session) positive gate (setup selection)", () => {
     const now = new Date().toISOString();
 
     expect(
-      select([p1, p2, consumer], { "p1/setup": mirrorSetupDone("1.0.0", now) }),
+      select([p1, p2, consumer], {
+        "p1/setup": mirrorSetupDone("1.0.0", now, 1, 1),
+      }),
     ).toEqual(expect.arrayContaining(["p2/setup", "cons/setup"]));
   });
 

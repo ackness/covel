@@ -2,7 +2,13 @@ import { Children, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import { clsx } from "clsx";
-import * as Icons from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleCheck,
+  Sparkles,
+} from "lucide-react";
 import { resolveIcon, toTextArray, useI18nResolver } from "./helpers.js";
 import { useCollapsible } from "./use-collapsible.js";
 import {
@@ -24,7 +30,7 @@ export const Card: ComponentRenderer = ({ element, children }) => {
     const items = Children.toArray(children);
     const head = items[0];
     const rest = items.slice(1);
-    const Chevron = expanded ? Icons.ChevronDown : Icons.ChevronRight;
+    const Chevron = expanded ? ChevronDown : ChevronRight;
     body = (
       <>
         <div
@@ -63,7 +69,7 @@ export const Card: ComponentRenderer = ({ element, children }) => {
     // Used heavily by plugins for choice grids — needs comfortable padding
     // and inter-child spacing or the content reads as a wall of text.
     return (
-      <div className="px-3 py-3 space-y-2 border-l-2 border-[var(--rule-color)] hover:border-[var(--accent-primary)] transition-colors">
+      <div className="px-3 py-3 space-y-2 border-l-2 border-(--rule-color) hover:border-(--accent-primary) transition-colors">
         {body}
       </div>
     );
@@ -114,9 +120,9 @@ export const EntryCard: ComponentRenderer = ({ element }) => {
   const iconColorClass = externalColor
     ? `${categoryIconColors[externalColor] ?? "text-primary"}`
     : "text-primary";
-  const Chevron = expanded ? Icons.ChevronDown : Icons.ChevronRight;
-  const SparkleIcon = Icons.Sparkles;
-  const ActiveIcon = Icons.CircleCheck ?? Icons.Check;
+  const Chevron = expanded ? ChevronDown : ChevronRight;
+  const SparkleIcon = Sparkles;
+  const ActiveIcon = CircleCheck ?? Check;
 
   const showBody = !collapsible || expanded;
   const titleRowClass = clsx(

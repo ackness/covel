@@ -1,6 +1,7 @@
 import i18n from "@/i18n/index.js";
 import type { I18nText } from "@covel/shared";
 import { Badge } from "@/components/ui/badge.js";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
 import {
   Card,
   CardContent,
@@ -16,17 +17,7 @@ import {
  * first available value.
  */
 export function text(v: I18nText | undefined): string {
-  if (!v) return "";
-  if (typeof v === "string") return v;
-  const lang = i18n.language;
-  if (lang) {
-    const r = v as Record<string, string>;
-    if (r[lang]) return r[lang];
-    const prefix = lang.split("-")[0];
-    const fallback = Object.keys(r).find((k) => k.startsWith(prefix));
-    if (fallback) return r[fallback];
-  }
-  return Object.values(v)[0] ?? "";
+  return resolveDisplayText(v, i18n.language);
 }
 
 /** Translator function shared by every detail section. */

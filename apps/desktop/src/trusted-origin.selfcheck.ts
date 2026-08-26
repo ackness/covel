@@ -3,7 +3,11 @@
  * `tsx src/trusted-origin.selfcheck.ts` throws on the first failing assertion.
  */
 import assert from "node:assert/strict";
-import { isSameTrustedOrigin, loopbackHttpOrigin } from "./trusted-origin.js";
+import {
+  isSameStartupSplashDocument,
+  isSameTrustedOrigin,
+  loopbackHttpOrigin,
+} from "./trusted-origin.js";
 
 // loopbackHttpOrigin: only loopback http gets an origin back.
 assert.equal(
@@ -38,5 +42,17 @@ assert.equal(isSameTrustedOrigin(app, "data:text/html,x"), false);
 // (e.g. the data: splash is committed) — nothing is trusted.
 assert.equal(isSameTrustedOrigin("data:text/html,splash", app), false);
 assert.equal(isSameTrustedOrigin(undefined, app), false);
+
+const splash = "data:text/html;charset=utf-8,%3Ch1%3ECovel%3C%2Fh1%3E";
+assert.equal(isSameStartupSplashDocument(splash, splash), true);
+assert.equal(
+  isSameStartupSplashDocument(splash, `${splash}%3Cscript%3E`),
+  false,
+);
+assert.equal(
+  isSameStartupSplashDocument("data:text/html,x", "data:text/html,x"),
+  false,
+);
+assert.equal(isSameStartupSplashDocument(app, app), false);
 
 console.log("trusted-origin selfcheck: OK");

@@ -65,7 +65,7 @@ export function ExecutionFlowPreview({
                       className="inline-flex items-center gap-1.5 bg-muted/40 border border-border px-2 py-1 text-[10px]"
                       title={`${step.runtimeId} — ${step.trigger.type}`}
                     >
-                      <span className="font-medium truncate max-w-[120px]">
+                      <span className="font-medium truncate max-w-30">
                         {step.label}
                       </span>
                       {step.runtimeType === "agent" && (

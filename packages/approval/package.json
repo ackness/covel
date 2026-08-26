@@ -1,6 +1,6 @@
 {
   "name": "@covel/approval",
-  "version": "0.0.26",
+  "version": "0.0.27",
   "private": true,
   "type": "module",
   "exports": {
@@ -16,11 +16,10 @@
     "clean": "node ../../scripts/remove-paths.mjs dist"
   },
   "dependencies": {
-    "@covel/shared": "workspace:*",
-    "@covel/store": "workspace:*"
+    "@covel/shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

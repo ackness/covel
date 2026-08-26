@@ -1,5 +1,6 @@
+import type { FormData as UndiciFormData } from "undici";
 import type { ProviderConfig } from "../../types.js";
-import { createConnectPinnedDispatcher } from "./dns-safety.js";
+import { outboundFetch } from "../../outbound-network.js";
 import {
   computeBackoffMs,
   isRetriableStatus,
@@ -11,43 +12,11 @@ import {
 import { buildProviderUrl, validateBaseUrl } from "./url-safety.js";
 
 /**
- * Shared SSRF-pinned dispatcher for all core provider requests.
- * `validateBaseUrl` only string-checks the hostname; this dispatcher
- * additionally resolves A/AAAA at connect time and rejects private /
- * link-local / metadata answers (loopback stays allowed for local
- * Ollama-style hosts), closing the DNS-rebinding gap. Lazily created so
- * importing this module stays side-effect free.
- */
-let pinnedDispatcher: ReturnType<typeof createConnectPinnedDispatcher>;
-
-function getPinnedDispatcher(): ReturnType<
-  typeof createConnectPinnedDispatcher
-> {
-  pinnedDispatcher ??= createConnectPinnedDispatcher();
-  return pinnedDispatcher;
-}
-
-/**
- * fetch routed through the pinned dispatcher. Undici wraps connect-time
- * failures in a generic `TypeError: fetch failed`; surface the SSRF policy
- * error from the cause chain so callers see the actual rejection reason.
+ * Framework-owned requests use one npm Undici transport. Direct mode keeps
+ * DNS pinning; desktop proxy modes select a matching npm Undici ProxyAgent.
  */
 async function pinnedFetch(url: string, init: RequestInit): Promise<Response> {
-  try {
-    return await fetch(url, {
-      ...init,
-      dispatcher: getPinnedDispatcher(),
-    } as RequestInit);
-  } catch (error) {
-    for (
-      let cause: unknown = error, depth = 0;
-      cause instanceof Error && depth < 5;
-      cause = cause.cause, depth++
-    ) {
-      if (cause.message.startsWith("SSRF policy rejected")) throw cause;
-    }
-    throw error;
-  }
+  return outboundFetch(url, init);
 }
 
 function assertAllowedBaseUrl(
@@ -172,7 +141,7 @@ export async function getJson(
 export async function postFormData(
   config: ProviderConfig,
   path: string,
-  body: FormData,
+  body: UndiciFormData,
   signal?: AbortSignal,
 ): Promise<Response> {
   assertAllowedBaseUrl(config.baseUrl);
@@ -185,7 +154,7 @@ export async function postFormData(
         ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}),
         ...config.headers,
       },
-      body,
+      body: body as unknown as BodyInit,
       redirect: "manual",
       signal: signal ?? config.signal,
     }),

@@ -15,7 +15,10 @@ import {
   syncWorldDataForSession,
   preflightWorldDataForSession,
 } from "../../../world-data/session-import.js";
-import { checkSessionOwner } from "../session/session-guard.js";
+import {
+  checkSessionOwner,
+  withLockedSessionMutation,
+} from "../session/session-guard.js";
 import { type WorldEnv, formatWorldEntryContent } from "./shared.js";
 
 export const worldDataSyncRoutes = new Hono<WorldEnv>();
@@ -98,7 +101,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
     return c.json(errorBody("Session world mismatch"), 400);
   }
 
-  const runSyncData = () =>
+  const runSyncData = (liveSession: typeof session) =>
     syncWorldDataForSession({
       store,
       mediaStore,
@@ -110,9 +113,9 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
       dryRun: body.dryRun !== false,
       force: body.force === true,
       deferMediaFinalize: false,
-      locale: session.locale,
+      locale: liveSession.locale,
       preflight: {
-        activePlugins: session.activePlugins ?? [],
+        activePlugins: liveSession.activePlugins,
         registry: pluginRegistry,
       },
     });
@@ -122,11 +125,32 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
   // between the conflict scan and the apply transaction, and a `force: false`
   // sync would overwrite an edit it just declared unmodified.
   const sessionLock = c.get("sessionLock");
+  if (!sessionLock) {
+    return c.json(
+      errorBody("Session mutation lock is unavailable", {
+        code: "session_lock_unavailable",
+      }),
+      503,
+    );
+  }
   let result: Awaited<ReturnType<typeof syncWorldDataForSession>>;
   try {
-    result = sessionLock
-      ? await sessionLock.withLock(sessionId, runSyncData)
-      : await runSyncData();
+    const locked = await withLockedSessionMutation({
+      c,
+      store,
+      sessionLock,
+      sessionId,
+      expectedSession: session,
+      allowedStatuses: ["active"],
+      mutate: async (liveSession) => {
+        if (liveSession.worldId !== worldId) {
+          return c.json(errorBody("Session world mismatch"), 400);
+        }
+        return runSyncData(liveSession);
+      },
+    });
+    if (locked instanceof Response) return locked;
+    result = locked;
   } catch (err) {
     if (err instanceof WorldDataSyncConflictError) {
       return c.json(
@@ -181,18 +205,6 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   const denied = checkSessionOwner(c, session);
   if (denied) return denied;
 
-  // Discover world-data-provider plugin by capability (not hardcoded ID)
-  const worldDataPluginId = pluginRegistry.findPluginByCapability(
-    sessionId,
-    FrameworkCapability.WorldDataProvider,
-  );
-  if (!worldDataPluginId) {
-    return c.json(
-      errorBody("No world-data-provider plugin active in session"),
-      422,
-    );
-  }
-
   const meta = world.metadata as Record<string, unknown> | undefined;
   const dimensions = (meta?.dimensions ?? {}) as Record<string, unknown>;
 
@@ -212,6 +224,7 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
   // transaction makes the four phases all-or-nothing.
   const applyDimensionSync = async (
     s: import("@covel/store").StoreTransaction | typeof store,
+    worldDataPluginId: string,
   ): Promise<void> => {
     const existingRecords = await s.listPluginData(
       sessionId,
@@ -276,21 +289,56 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
     }
   };
 
-  const runSync = async (): Promise<void> => {
-    if (typeof store.withTransaction === "function") {
-      await store.withTransaction(applyDimensionSync);
-      return;
+  const runSync = async (
+    liveSession: typeof session,
+  ): Promise<Response | undefined> => {
+    if (liveSession.worldId !== id) {
+      return c.json(errorBody("Session not found or world mismatch"), 404);
     }
-    await applyDimensionSync(store);
+    if (typeof pluginRegistry.syncSessionActivations === "function") {
+      pluginRegistry.syncSessionActivations(
+        sessionId,
+        liveSession.activePlugins,
+      );
+    }
+    // Discover world-data-provider plugin by capability (not hardcoded ID)
+    // only after the persisted active set has been re-read under the lock.
+    const worldDataPluginId = pluginRegistry.findPluginByCapability(
+      sessionId,
+      FrameworkCapability.WorldDataProvider,
+    );
+    if (!worldDataPluginId) {
+      return c.json(
+        errorBody("No world-data-provider plugin active in session"),
+        422,
+      );
+    }
+    await store.withTransaction((tx) =>
+      applyDimensionSync(tx, worldDataPluginId),
+    );
+    return undefined;
   };
 
   const sessionLock = c.get("sessionLock");
+  if (!sessionLock) {
+    return c.json(
+      errorBody("Session mutation lock is unavailable", {
+        code: "session_lock_unavailable",
+      }),
+      503,
+    );
+  }
   try {
-    if (sessionLock) {
-      await sessionLock.withLock(sessionId, runSync);
-    } else {
-      await runSync();
-    }
+    const locked = await withLockedSessionMutation({
+      c,
+      store,
+      sessionLock,
+      sessionId,
+      expectedSession: session,
+      allowedStatuses: ["active"],
+      mutate: runSync,
+    });
+    if (locked instanceof Response) return locked;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(

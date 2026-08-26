@@ -35,21 +35,14 @@ rtk rg -n "ponytail:" apps packages plugins
 
 ## Server
 
-| Location                                                      | Ceiling                                                                                                | Upgrade trigger                                                                                  |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `apps/server/src/app.ts:245`                                  | Narrative budget resolution ignores per-session `runtime_model_overrides` and `X-Slot-Config` overlays | Wire the session's actual narrative slot when the budget needs to track it                       |
-| `apps/server/src/routes/api/actions.ts:551`                   | Scoped retry searches every persisted turn result                                                      | Add a keyed store getter when long sessions make the scan visible in traces                      |
-| `apps/server/src/routes/api/plugin-rpc.ts:257`                | RPC retry searches every persisted turn result                                                         | Add a keyed store getter when long sessions make the scan visible in traces                      |
-| `apps/server/src/routes/api/plugin-rpc/background-jobs.ts:56` | Four background jobs share one process-wide cap                                                        | Partition the cap when one session's burst starts starving others                                |
-| `apps/server/src/routes/api/plugin-rpc/jobs.ts:162`           | Boot scans all session plugin data to find orphaned jobs                                               | Add an indexed namespace query when plugin-data volume noticeably slows boot                     |
-| `apps/server/src/routes/api/turn-control.ts:7`                | An in-process map limits steer and abort to turns running on the same pod                              | Move control state to a shared bus when multi-pod deployments need cross-pod turn control        |
-| `apps/server/src/routes/api/bootstrap.ts:383`                 | A community wire-only plugin may never load its wire when its own runtime stays idle                   | Call `ensurePluginWires` from activation when the first wire-only community plugin is introduced |
-
-## Plugin loading
-
-| Location                                 | Ceiling                                                                                                                                                                                         | Upgrade trigger                                                                               |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `packages/plugin-loader/src/trust.ts:85` | `detectSource()` returns `community` unconditionally — the `official` trust tier is currently unreachable, and the `=== "official"` branches in `plugin-rpc.ts` / `session/plugins.ts` are dead | Reintroduce the whitelist when the first official plugin ships, and cover those branches then |
+| Location                                                      | Ceiling                                                                                                | Upgrade trigger                                                                           |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `apps/server/src/app.ts:245`                                  | Narrative budget resolution ignores per-session `runtime_model_overrides` and `X-Slot-Config` overlays | Wire the session's actual narrative slot when the budget needs to track it                |
+| `apps/server/src/routes/api/actions.ts:551`                   | Scoped retry searches every persisted turn result                                                      | Add a keyed store getter when long sessions make the scan visible in traces               |
+| `apps/server/src/routes/api/plugin-rpc.ts:257`                | RPC retry searches every persisted turn result                                                         | Add a keyed store getter when long sessions make the scan visible in traces               |
+| `apps/server/src/routes/api/plugin-rpc/background-jobs.ts:56` | Four background jobs share one process-wide cap                                                        | Partition the cap when one session's burst starts starving others                         |
+| `apps/server/src/routes/api/plugin-rpc/jobs.ts:162`           | Boot scans all session plugin data to find orphaned jobs                                               | Add an indexed namespace query when plugin-data volume noticeably slows boot              |
+| `apps/server/src/routes/api/turn-control.ts:7`                | An in-process map limits steer and abort to turns running on the same pod                              | Move control state to a shared bus when multi-pod deployments need cross-pod turn control |
 
 ## Web UI
 
@@ -70,4 +63,4 @@ rtk rg -n "ponytail:" apps packages plugins
 
 ---
 
-**26 markers, each with an upgrade trigger.**
+**24 markers, each with an upgrade trigger.**

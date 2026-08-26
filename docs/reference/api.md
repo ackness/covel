@@ -18,7 +18,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 | Memory     | `memory`        | 测试或一次性 demo，数据存于内存，重启丢失                                                                                |
 | PostgreSQL | `pg`            | 生产环境，需配置 `DATABASE_URL`；**多实例部署自动启用 `pg_advisory_lock` 分布式会话锁，跨 Node 进程对同一 session 互斥** |
 
-> **注意**: `@covel/store` 工厂也支持 `idb`，用于浏览器能力调用；常规服务器部署使用 `memory` / `sqlite` / `pg`。
+> **注意**: `idb` 不是 `@covel/store` 的 `DataStore` 后端；它仅用于浏览器端 MediaStore / BrowserVault 能力。常规服务器部署使用 `memory` / `sqlite` / `pg`。
 
 ### 错误响应约定（自 v0.0.5 起统一）
 
@@ -49,7 +49,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 ### 鉴权：Session owner token
 
-`POST /api/sessions` 创建会话时会铸造一个不可猜测的 **owner token**，仅在创建响应中返回一次（响应字段 `ownerToken`）；服务端只保存其 SHA-256 哈希（`session.metadata.ownerTokenHash`），任何读取端点都不会再泄露原始 token。
+`POST /api/sessions` 创建会话时会铸造一个不可猜测的 **owner token**，仅在创建响应中返回一次（响应字段 `ownerToken`）；服务端只保存其 SHA-256 哈希。owner hash、approval/session incarnation、lifecycle/delete lease 等框架私有 metadata 在 session CRUD、snapshot 与 `/state` 虚拟表响应中都会被剥离。
 
 **分层强制（tiered enforcement）**：
 
@@ -70,7 +70,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 **community server-code grant 是 session 授权、进程级生效**：
 
-审批本身按 `(sessionId, pluginId, action)` 记录，但它授权的动作是把插件的 server code `import()` 进 Node 进程。ESM 模块只加载一次，entry factory 也只跑一次（按 pluginId 记忆），所以第一个批准该插件的会话就把它注册的 tool / RPC handler / media wire 装进了**进程级**注册表——之后其他会话不必再批准即可看到这些注册项存在。
+审批本身按 `(sessionId, session incarnation, pluginId, action)` 记录；`session incarnation` 来自服务端私有的随机 metadata nonce（历史会话回退 owner-token hash），不会出现在 API 响应中。它授权的动作是把插件的 server code `import()` 进 Node 进程。ESM 模块只加载一次，entry factory 也只跑一次（按 pluginId 记忆），所以第一个批准该插件的会话就把它注册的 tool / RPC handler / media wire 装进了**进程级**注册表——之后其他会话不必再批准即可看到这些注册项存在。
 
 因此实际的边界分两层：
 
@@ -79,7 +79,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 | **代码加载 / 能力注册**                             | 进程级、一次性、不可撤销。任一会话批准即完成。                                                                                       |
 | **调用（RPC dispatch / runtime 加载 / hook 执行）** | 每次仍按发起会话查 grant。未批准的会话拿不到 `covel:plugin-server-code`、`runtime:<name>` 校验，hook 也会被跳过（返回 `continue`）。 |
 
-**revoke 边界**：`DELETE /api/sessions/:id/approvals`（以及禁用插件）按 `(session, plugin)` 前缀清除 session-cached 与一次性 grant，并取消待决审批。它**不会**卸载已导入的模块，也不会注销已注册的 tool / RPC handler / wire——JS 没有可靠的模块卸载。撤销之后该会话的后续 dispatch、runtime 加载和 hook 执行会重新被拒，但已经在进程内的代码要到重启才消失。进程重启则清空全部易失 grant（见 Snapshot / Fork 一节）。
+**revoke 边界**：`DELETE /api/sessions/:id/approvals`（以及禁用插件）在 session lock 内轮换持久化的 session/plugin 授权代次，再清除当前进程的 session-cached、一次性 grant 与待决审批。其他 Pod 即使仍持有旧内存 grant，也会因代次不匹配而拒绝；旧 approvalId 决策返回 `409 approval_scope_changed`。撤销**不会**卸载已导入模块，也不会注销已注册的 tool / RPC handler / wire——JS 没有可靠的模块卸载。已经在进程内的代码要到重启才消失；进程重启也会清空全部易失 grant（见 Snapshot / Fork 一节）。
 
 单运维方模型下这是可接受的：批准 community 代码等同于信任它在本进程内运行。多租户隔离需要真正的代码沙箱，尚未实现。
 
@@ -251,6 +251,24 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 | PATCH  | `/api/sessions/:id` | 更新会话字段（`status` / `runtimeModelOverrides`） |
 | DELETE | `/api/sessions/:id` | 删除会话                                           |
 
+### 浏览器私有工作区
+
+以下端点仅在 `STORE_BACKEND=memory` 的 browser-private profile 可用，并沿用
+session owner-token 鉴权。它们是 Web `LocalDataService` 的内部同步协议，不是
+通用远程存储 API。
+
+| 方法 | 路径                                   | 描述                                                                                                    |
+| ---- | -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| PUT  | `/api/sessions/:id/browser-checkpoint` | body `{ checkpoint }`；事务性替换临时 MemoryStore 工作区。拒绝过期 revision 与同 revision 的分叉 head。 |
+| POST | `/api/sessions/:id/browser-commit`     | body `{ actionId, baseRevision }`；导出下一版完整 checkpoint，重复 actionId 幂等返回同一 commit。       |
+
+`SessionCommit` 形状为
+`{ baseRevision, revision, actionId, checkpoint }`。非 MemoryStore 调用返回
+`409 browser_private_profile_required`；未先上传 checkpoint、revision 冲突也返回
+`409`。当前 `BrowserCheckpoint` 的 `schemaVersion` 为 `2`，会在边界校验必填
+session clock、规范 origin/commitStatus 与 snapshot schema；旧版本直接拒绝。
+checkpoint 不允许携带 provider key、owner token 或其他凭据。
+
 ### 会话快照
 
 | 方法 | 路径                         | 描述                                                                                                                           |
@@ -260,7 +278,7 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 > 快照的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载（长会话每次重连都全量读是原性能热点）。快照带 `messagesCursor`（`{createdAt,id} | null`）；前端聊天界面向上滚动时用它调 `GET /api/sessions/:id/messages/page` 增量补更旧消息。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
 >
-> 快照内嵌的 session 对象里，`turnCount` / `preGameCompleted` 同 `GET`/`POST /api/sessions` 一样，是由调度时钟（`phase` / `completedPlayerTurns` / `setupRuntimes`）在读取时派生的兼容字段，不是内核直接写入的持久列——响应形状不变，见「会话管理」章节 `POST /api/sessions` 的响应字段说明。
+> 快照内嵌的 session 对象包含与会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复与重连以这些字段为唯一进度来源。
 
 ### Turn 执行
 
@@ -290,7 +308,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 - `:runtimeId` 是完整 runtime id（`<pluginId>/<runtimeName>`，需 URL 编码）。
 - 幂等：`retry` 对已 `pending` 的目标、`waive` 对已 `waived` 的目标均为无副作用的 `200`。
 - 非 `blocked` 状态（如 `done{completed}` / `pending`）调用返回 `409`，并在 `error` 里说明只有 blocked 才能重试/跳过；`waive` 缺 `{ confirm: true }` 返回 `400 { code: "confirm_required" }`；未知会话返回 `404`。
-- 两个端点都会在写入 `setupRuntimes` 的同时按新镜像重新派生 `preGameCompleted`（waived 进入该集合、retried 退出），使旧内核读取保持一致；`phase` 的翻转仍由下一回合的 finalize 事务负责。
+- 两个端点只更新 `setupRuntimes`：`waive` 写入 `done{resolution:"waived"}`，`retry` 写回新的 `pending` generation；`phase` 的翻转仍由下一回合的 finalize 事务负责。
 
 ### 玩家交互
 
@@ -333,19 +351,14 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### 状态查询
 
-| 方法 | 路径                               | 描述                                     |
-| ---- | ---------------------------------- | ---------------------------------------- |
-| GET  | `/api/sessions/:id/state`          | 获取所有状态表                           |
-| GET  | `/api/sessions/:id/state-patches`  | 获取状态变更补丁列表                     |
-| GET  | `/api/sessions/:id/state-snapshot` | 获取完整状态快照                         |
-| PUT  | `/api/sessions/:id/state-snapshot` | **当前未实现** —— 返回 `501`，见下方说明 |
+| 方法 | 路径                              | 描述                 |
+| ---- | --------------------------------- | -------------------- |
+| GET  | `/api/sessions/:id/state`         | 获取所有状态表       |
+| GET  | `/api/sessions/:id/state-patches` | 获取状态变更补丁列表 |
 
-> **`PUT /api/sessions/:id/state-snapshot`（当前未实现；自 v0.0.5 明确返回 501）**：恢复状态快照需要 StateManager
-> 重建状态表，当前状态模型未暴露该能力。路由有意保留（而非删除）以保持契约可见、不丢失排期，
-> 当会话存在时返回
-> `501 { "error": "State snapshot restoration not implemented. State will be rebuilt from turn execution.", "code": "not_implemented" }`
-> ——返回 501 而非 200，以避免静默丢弃 POST 进来的状态。状态改为通过回合执行或
-> `POST /api/sessions/:id/snapshots/:sid/fork`（从快照分叉）重建。
+完整会话恢复使用 `GET /api/sessions/:id/snapshot`；物化存档、列表、读取与分叉使用
+`/api/sessions/:id/snapshot(s)` 路由（见 [Snapshot / Fork](#snapshot--fork)）。没有
+旧状态快照兼容端点。
 
 ### 消息历史
 
@@ -438,7 +451,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### Lorebook
 
-Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由插件通过 proposal commit 管道写入 store 层的 `lorebook_entries` 表，这些端点提供玩家 UI 与程序化读取视图，**不走提案系统**（单项 toggle/删除为 MVP 级别的直接写入）。
+Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由插件通过 proposal commit 管道写入 store 层的 `lorebook_entries` 表，这些端点提供玩家 UI 与程序化读取视图，**不走提案系统**（单项 toggle/删除为 MVP 级别的直接写入）。`entryId` 仅需在当前 session 内唯一；不同 session 可安全复用同一 ID。
 
 | 方法   | 路径                                  | 描述                                                            |
 | ------ | ------------------------------------- | --------------------------------------------------------------- |
@@ -479,6 +492,8 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 > **接入状态（2026-04-27）**：当前内置 Web UI 主要通过 `GET /api/sessions/:id/snapshot` 获取角色快照；本节 REST 端点保留为轻量读取/管理 API。插件 runtime 推荐使用 `create-character` / `update-character` / `list-characters` / `get-character` 工具维护角色。`POST /characters` 是兼容管理入口，后续若收敛角色写路径，应保持 URL/响应兼容并优先替换内部实现。
 
+角色 `id` 仅需在当前 session 内唯一；不同 session 可安全复用同一 ID。
+
 | 方法 | 路径                           | 描述             |
 | ---- | ------------------------------ | ---------------- |
 | GET  | `/api/sessions/:id/characters` | 获取会话角色列表 |
@@ -513,7 +528,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | GET  | `/api/model-db/lookup?model=xxx&provider=yyy&protocol=zzz` | 查找模型能力、匹配来源和价格性质         |
 | POST | `/api/model-db/refresh`                                    | 刷新模型数据库；hosted 需 operator token |
 
-`/api/model-db/lookup` 将 `model` 视为不透明 ID。响应中的 `matchedModelId`、`matchKind` 和 `candidates` 只解释能力资料如何匹配，不会改写实际请求 ID；`source` 为 `known`、`model-database` 或 `protocol-default`。`pricingKind=reference` 表示通过聚合服务商匹配到的是上游模型参考价，实际账单可能不同。`reasoning` 返回按上游模型家族识别的思考强度档位、默认值和家族名称，供生成参数界面使用。
+`POST /api/model-db/refresh` 在线获取 LiteLLM 最新数据，并在桌面/自部署环境中写入用户配置目录；该用户缓存会在后续启动时优先于安装包内的固定快照加载。`/api/model-db/lookup` 将 `model` 视为不透明 ID。响应中的 `matchedModelId`、`matchKind` 和 `candidates` 只解释能力资料如何匹配，不会改写实际请求 ID；`source` 为 `known`、`model-database` 或 `protocol-default`。`pricingKind=reference` 表示通过聚合服务商匹配到的是上游模型参考价，实际账单可能不同。`reasoning` 返回按上游模型家族识别的思考强度档位、默认值和家族名称，供生成参数界面使用。
 
 ### Trace 调试
 
@@ -530,7 +545,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | GET  | `/api/media/:id?token=<signed>`     | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                                                                                                                                     |
 | GET  | `/api/sessions/:id/media-token?id=` | 为指定 mediaId 颁发短时签名 token，供上面的下载端点使用                                                                                                                                                                           |
 | POST | `/api/media?sessionId=<id>`         | 玩家图片上传：原始字节 body（`Content-Type` = 文件 MIME，仅 `image/*`，≤20MB），内容寻址入库 + 记会话 owner/ref，返回 `{ id, mime, size }`。**`image/svg+xml` 一律 400 拒绝**——SVG 是可执行内容类型，内联渲染时会在应用源执行脚本 |
-| POST | `/api/media/cleanup`                | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes`                                                                                                                  |
+| POST | `/api/media/cleanup`                | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，demo 层需 operator token，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes`                                                                                        |
 
 ### 配置信息
 
@@ -547,6 +562,8 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                                                                                                     |
 | GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                                                                                                   |
 | PUT  | `/api/config/settings`         | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }`                                                                                         |
+| GET  | `/api/config/proxy`            | 仅桌面：读取核心出站请求的代理模式与生效状态；返回 `{ mode, url?, effective, systemAvailable }`                                                                     |
+| PUT  | `/api/config/proxy`            | 仅桌面：写入并热应用代理；body `{ mode: "direct"                                                                                                                    | "system" | "http" | "socks", url? }`。HTTP/S 与 SOCKS5 地址支持 URL 内认证信息 |
 | PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                                                                                                        |
 | POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                                                                                                        |
 
@@ -627,12 +644,12 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
     },
     "migrations": [
       {
-        "id": "browser:idb:unified-storage",
+        "id": "browser:idb:cache-media",
         "domain": "browser",
         "backend": "idb",
-        "version": 11,
+        "version": 1,
         "status": "managed-by-backend",
-        "description": "Browser-local data, media, app-KV, and render cache share the covel-browser IndexedDB schema."
+        "description": "Browser UI state and media caches use a lightweight IndexedDB schema; durable game data lives in the separate Dexie BrowserVault."
       }
     ]
   },
@@ -645,16 +662,16 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 }
 ```
 
-| 字段                                      | 说明                                                                                                   |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `bootId`                                  | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启                                              |
-| `storage.data.backend`                    | 当前服务端 DataStore 后端（`memory` / `sqlite` / `pg`）。默认 `sqlite`。                               |
-| `storage.data.frontendMode`               | 前端数据模式：`local` 使用浏览器 IndexedDB；`remote` 使用服务端 API，由服务端 `STORE_BACKEND` 持久化。 |
-| `storage.media`                           | 当前 MediaStore 的配置值、实际后端、启用状态和持久化状态。                                             |
-| `storage.migrations`                      | 已注册迁移域、版本和状态；SQL 迁移由服务端迁移流程执行，IDB 迁移由浏览器数据库升级回调执行。           |
-| `vector.capable`                          | 当前后端是否支持向量检索（受 store 类型 + 编译时 vector 扩展可用性影响）                               |
-| `vector.driver`                           | `sqlite-vec` / `pgvector` / `in-memory` / `external` / `none`                                          |
-| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量及对应物理表数量（每个模型一张表）                                          |
+| 字段                                      | 说明                                                                                                                 |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `bootId`                                  | 服务器启动 ID（UUID），每次重启变化，可用于检测服务器重启                                                            |
+| `storage.data.backend`                    | 当前服务端 DataStore 后端（`memory` / `sqlite` / `pg`）。默认 `sqlite`。                                             |
+| `storage.data.frontendMode`               | 前端数据模式：`local` 使用 Dexie BrowserVault checkpoint；`remote` 使用服务端 API，由服务端 `STORE_BACKEND` 持久化。 |
+| `storage.media`                           | 当前 MediaStore 的配置值、实际后端、启用状态和持久化状态。                                                           |
+| `storage.migrations`                      | 已注册迁移域、版本和状态；SQL 迁移由服务端迁移流程执行，IDB 迁移由浏览器数据库升级回调执行。                         |
+| `vector.capable`                          | 当前后端是否支持向量检索（受 store 类型 + 编译时 vector 扩展可用性影响）                                             |
+| `vector.driver`                           | `sqlite-vec` / `pgvector` / `in-memory` / `external` / `none`                                                        |
+| `vector.modelCount` / `vector.tableCount` | 已注册的 embedding 模型数量及对应物理表数量（每个模型一张表）                                                        |
 
 ---
 
@@ -968,8 +985,9 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
       "id": "mistport-a1b2c3d4",
       "worldId": "mistport",
       "status": "active",
-      "turnCount": 0,
-      "preGameCompleted": [],
+      "phase": "setup",
+      "completedPlayerTurns": 0,
+      "setupRuntimes": {},
       "locale": "zh-CN",
       "activePlugins": ["pregame", "narrator"],
       "createdAt": "2025-01-15T10:00:00.000Z",
@@ -1000,6 +1018,10 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | `plugins` | string[] | 否   | 要激活的插件 ID 列表                                          |
 | `id`      | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`） |
 
+客户端自定义 `id` 已存在时返回
+`409 { "error": "Session already exists: <id>", "code": "session_already_exists" }`。
+创建操作不会覆盖原会话，也不会把原会话的子记录解释为新会话数据。
+
 世界包字段会影响准备页和 session 初始化：
 
 - `metadata.requiredPlugins`：准备页锁定启用。
@@ -1016,12 +1038,13 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
   "worldId": "mistport",
   "locale": "zh-CN",
   "status": "active",
-  "turnCount": 0,
-  "preGameCompleted": [],
+  "phase": "setup",
+  "completedPlayerTurns": 0,
+  "setupRuntimes": {},
   "activePlugins": ["pregame", "narrator", "codex"],
   "createdAt": "2025-01-15T10:00:00.000Z",
   "updatedAt": "2025-01-15T10:00:00.000Z",
-  "metadata": { "ownerTokenHash": "<sha256-hex>" },
+  "metadata": {},
   "ownerToken": "e7b2c4d1-…"
 }
 ```
@@ -1030,13 +1053,9 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 - `ownerToken`(string) — 会话 owner token，**仅此一次返回**（服务端只存哈希）。`DEPLOYMENT_TIER=demo|commercial` 下所有会话作用域端点都要求携带它（见「鉴权」章节）；`self` 层级可忽略
 - `status`(`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态
-- `turnCount`(number) — 主循环轮数计数（从 0 开始）。调度重构后**由时钟派生**：`phase="setup"` 时为 0，`phase="playing"` 时为 `max(1, completedPlayerTurns)`
-- `preGameCompleted`(string[]) — 已完成 Pre-Game 初始化的 runtime id 集合（现由 `setupRuntimes` 中 `state="done"` 的条目派生并排序）
-- `phase`(可选,`'setup' \| 'playing'`) — 调度重构新增的 setup/主循环频段真相字段（会话激活集含 setup runtime 时初始为 `setup`，否则 `playing`；全部 setup runtime 完成后翻转为 `playing`）。旧会话缺省，首次回合时惰性回填。前端暂未消费
-- `completedPlayerTurns`(可选,number) — 已提交的主循环玩家逻辑回合数（setup 交互不计入）。由 finalize 事务内的 logical-turn ledger 幂等推进
-- `setupRuntimes`(可选,`Record<runtimeId, SetupRuntimeState>`) — 每个 setup runtime 的解析状态镜像。`SetupRuntimeState` 为三态联合：`pending{ generation, attempts, lastError? }`（尚未完成，`attempts` 为当代次终态非 suspended 的 attempt-ledger 计数）· `done{ resolution:"completed"|"waived", generation, attempts, completedAt, warning? }`（已完成，`waived` 为玩家跳过的降级完成）· `blocked{ generation, attempts, reason, blockedAt }`（耗尽 `maxTriggerCount` 预算仍未完成，把会话钉在 setup 频段，需经 `retry`/`waive` 端点解封）。各态均带 `pluginVersion`；插件版本变化会使旧 `done` 失效并以 `generation+1` 重跑
-
-> 三个新字段为**可选追加**，不破坏默认响应形状；`turnCount` / `preGameCompleted` 继续存在，仅改由上述三字段的公式派生。
+- `phase`(必填,`'setup' \| 'playing'`) — setup/主循环频段真相字段。会话激活集含 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后翻转为 `playing`
+- `completedPlayerTurns`(必填,number) — 已提交的主循环玩家逻辑回合数；setup 交互不计入，由 finalize 事务内的 logical-turn ledger 幂等推进
+- `setupRuntimes`(必填,`Record<runtimeId, SetupRuntimeState>`) — 每个 setup runtime 的解析状态镜像。`SetupRuntimeState` 为三态联合：`pending{ generation, attempts, lastError? }`（尚未完成，`attempts` 为当代次终态非 suspended 的 attempt-ledger 计数）· `done{ resolution:"completed"|"waived", generation, attempts, completedAt, warning? }`（`waived` 为玩家跳过的降级完成）· `blocked{ generation, attempts, reason, blockedAt }`（耗尽 `maxTriggerCount` 预算仍未完成，把会话钉在 setup 频段，需经 `retry`/`waive` 端点解封）。各态均带 `pluginVersion`；插件版本变化会使旧 `done` 失效并以 `generation+1` 重跑
 
 > **Session ID 格式**: 自动生成的 ID 格式为 `{worldId}-{uuid8}`（如 `mistport-a1b2c3d4`），使用 `crypto.randomUUID()` 后缀防止枚举。如未提供 worldId 则前缀为 `session`。
 
@@ -1057,12 +1076,12 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
   "id": "mistport-a1b2c3d4",
   "worldId": "mistport",
   "status": "active",
-  "turnCount": 3,
-  "preGameCompleted": [
-    "pregame",
-    "world-init/schema-gen",
-    "char-creator/player-init"
-  ],
+  "phase": "playing",
+  "completedPlayerTurns": 3,
+  "setupRuntimes": {
+    "pregame": { "state": "done", "resolution": "completed" },
+    "world-init/schema-gen": { "state": "done", "resolution": "completed" }
+  },
   "locale": "zh-CN",
   "activePlugins": ["pregame", "narrator"],
   "createdAt": "2025-01-15T10:00:00.000Z",
@@ -1103,7 +1122,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 **字段说明:**
 
-- `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。非合法枚举值返回 400。（注：运行频段真相由 `phase` / `completedPlayerTurns` / `setupRuntimes` 三字段承载，`turnCount` / `preGameCompleted` 由其派生——见 `POST /api/sessions` 响应字段说明；PATCH 不直接改写这些字段，它们只在 finalize 事务与惰性回填处写入。）
+- `status`(可选,`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态。非合法枚举值返回 400；`ended` 是终态，不能再 PATCH 回 `active` / `paused`（返回 `409 session_ended`）。`phase`、`completedPlayerTurns` 与 `setupRuntimes` 只由 finalize transaction 写入，PATCH 不可修改。
 - `runtimeModelOverrides`(可选,object) — Per-runtime 模型 slot 覆盖,key 为 runtime ID(`pluginId` 或 `pluginId/runtimeName`,必须匹配 `/^[a-z][a-z0-9-]*(?:\/[a-z][a-z0-9-]*)?$/`),value 为 `llm.toml` 中定义的 slot 名(如 `default` / `fast` / `balance`)。框架在每次 turn 执行前快照该字段,resolver 优先查找 session override → 然后 fallback 到 `manifest.model` → 最后 `default`。空对象 `{}` 清除所有覆盖。插件列表与 Session Prep 会暴露 runtime 的声明 slot；若声明 slot 未配置，UI 会提示补充 `[covel.<slot>]`，不会静默改绑到不相关的文本 slot。**Provider 与 API key 仍走前端 localStorage + `X-Provider-Keys` header,不入库,以保护隐私。**
 
 **校验规则(runtimeModelOverrides):**
@@ -1113,11 +1132,15 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 - 空字符串 key / 非字符串 value / 不匹配 pattern 的 key 会被静默剥离
 - 没传该字段 → 不动现有覆盖
 
-**响应 200:** 返回合并后的会话对象（含 `status` / `turnCount` / `preGameCompleted` / `runtimeModelOverrides`）。
+**响应 200:** 返回合并后的会话对象（含 `status`、current-only 时钟和 `runtimeModelOverrides`）。
 
 #### `DELETE /api/sessions/:id`
 
-删除一个游戏会话。
+删除一个游戏会话。删除先在 session lock 内暂停准入、写入删除代次并轮换授权作用域，再从持久化 `_jobs` 行枚举 `pending` runtime、等待对应 detached runtime lock 排空；随后在不持 advisory lock 的情况下运行 observe-only `SessionEnd`，最后短持 session lock 清理 MediaStore 的 owner/ref 并级联删除 DataStore。旧后台任务的最终 scope/status 检查会失败，不能在删除后写回孤儿记录。
+
+`SessionStart` / `SessionEnd` 运行期间 lifecycle mutation 返回 `409 session_lifecycle_busy`，调用方应在 hook 完成后重试；普通同 session API 不被 hook lease 阻塞。删除进行中返回 `409 session_deleting`。若 drain、媒体或数据库删除失败，会话保持 `paused`、授权代次保持轮换、删除 marker 保持有效，普通 mutation 继续 fail-closed；服务端记录一次性 retry nonce，下一次 `DELETE` 可接管且不会重复触发已完成的 `SessionEnd`。进程在错误恢复前崩溃时，10 分钟 deletion lease 到期后允许新 `DELETE` 接管。
+
+显式复用同一 ID 只有在旧行完全删除后才会成功；删除尚在 hook/drain 阶段时创建返回重复 ID 的 `409`，调用方应在 DELETE 成功后重试。MediaStore 的 session ownership/ref 会随删除清除，新 incarnation 不会继承旧媒体访问权。
 
 **参数:**
 
@@ -1153,7 +1176,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 **回合语义：**
 
 - 每个活跃 Runtime 按 stage 依次执行，stage 内独立 runtime 并行（依赖 `needs` / `after` / `inputs` 排序）
-- `session.turnCount`（由 `phase` / `completedPlayerTurns` 读时派生的 legacy 字段）表示主循环进度：setup 阶段的执行会保存 `turn_results`，但不会计入主循环轮数；`phase` 翻到 `playing` 后最低读出 `1`
+- `session.completedPlayerTurns` 表示已提交的主循环玩家进度：setup 阶段的执行会保存 `turn_results`，但不会计入；`phase` 翻到 `playing` 后由首个成功的 player logical turn 推进为 `1`
 - 服务端对每个 runtimeResult 运行 `processRuntimeResult` 提交管道：normalize → state.commit → 触发后续 SessionEvent
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `plugin-rpc` 的 `framework.submit-form` action 提交玩家响应
 
@@ -1288,7 +1311,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 统一的"结构化插件指令"通道。同时支持:
 
-1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 PLUGIN.md `rpc` 字段中声明的 RPC handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
+1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 `entry` 中通过 `covel.registerRpc` 注册的 handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
 2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
    - `'background'`: 立即返回 202 + `jobId`,后台通过 `setImmediate` 继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。
@@ -1349,7 +1372,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 **解析顺序(action 级):**
 
-1. 插件声明的 action(`manifest.rpc[action]`,通过 `pluginId` 命名空间隔离)
+1. 插件在 `entry` 中注册的 action(通过 `pluginId` 命名空间隔离)
 2. 框架默认 action(全局)——当前只注册了 `submit-form` 一个(`bootstrap/plugin-rpc-wiring.ts` 的 `registerFrameworkDefault`)
 
 **框架默认 action:**
@@ -1379,7 +1402,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
       "pluginId": "dashscope-image-gen",
       "status": "ok",
       "durationMs": 3421,
-      "output": {/* runtime final output (parsed envelope) */}
+      "output": {/* materialized runtime output */}
     }
   ],
   "durationMs": 3480
@@ -1388,7 +1411,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 **图像/媒体生成输出:**
 
-Function runtime 的完成态可返回 `assetGenerations[]`。每一项会被提交为 `asset.generate` proposal,并以 MediaRef 形式进入 trace / SSE / 视图层。
+Function handler 以 `HandlerResult.success.effects.assetGenerations[]` 返回媒体产出；API 的 runtime `output` 会物化该数组。每一项会被提交为 `asset.generate` proposal,并以 MediaRef 形式进入 trace / SSE / 视图层。
 
 ```json
 {
@@ -1422,7 +1445,7 @@ Function runtime 的完成态可返回 `assetGenerations[]`。每一项会被提
 
 Provider-specific wire responses such as OpenAI `b64_json`, SDK `base64`, or expiring remote image URLs are transient handler inputs. The handler must call `ctx.media.put()` for bytes/base64 or `ctx.media.ingestUrl()` for remote URLs before returning, then expose the generated media through `assetGenerations[].ref` and ref-only business records.
 
-For plugins with `capabilities: ["image-generation"]`, a successful completed runtime must return at least one valid `assetGenerations[]` entry. `pluginData` records in the `images` namespace must store `ref` records; completed outputs with old `url`, `base64`, or `dataUrl` image fields are reported as runtime errors.
+For plugins with `capabilities: ["image-generation"]`, a successful completed runtime must return at least one valid `assetGenerations[]` entry in `HandlerResult.success.effects`. `pluginData` records in the `images` namespace must store `ref` records; completed outputs with old `url`, `base64`, or `dataUrl` image fields are reported as runtime errors.
 
 **响应 202 — runtime 级,background 模式:**
 
@@ -1467,15 +1490,9 @@ value         : {
 }
 ```
 
-**崩溃恢复**：后台任务由进程内队列驱动，没有持久队列——进程在任务完成前退出，该行会永远停在
-`pending`。开机扫描按 `owner` 回收：`owner` 不等于当前进程（含老版本写下的、根本没有 `owner`
-的行）即判定为孤儿，立即置为 `status: "failed"` + `reason: "orphaned"`，并保留原 `payload` /
-`triggerEvent` 供插件 UI 或玩家发起重试。框架**不自动重跑**——重跑会二次计费（图像 / 语音生成），
-且请求级 `userSettings` 并未持久化在行上，重跑等于换参数重新扣费。
+**崩溃恢复**：后台任务由进程内队列驱动，没有持久队列。Memory / SQLite 单进程部署会在开机时按 `owner` 回收旧 `pending` 行，写为 `failed` + `reason: "orphaned"`，并保留 payload/triggerEvent 供 UI 或玩家重试；框架不会自动重跑，避免图像/语音二次计费。
 
-> 该判定假设**一个 store 对应一个服务进程**，对当前发布的所有部署形态（桌面、自部署）都成立。
-> 多实例共享一个数据库时它并不安全：新启动的实例会把其它实例正在执行的行读成孤儿并立即失败。
-> 上多实例前需要给 `owner` 配上租约（运行期续租的 `leaseExpiresAt`），判定改为"非本进程**且**已过期"。
+PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租约，新 Pod 无法区分“另一个 Pod 正在执行”和“旧 Pod 已崩溃”，贸然回收会把活任务误判失败。因此 Pod 崩溃留下的 PG `pending` 行目前会保留，直到玩家显式重试/清理；完整自动恢复仍需要持久队列或可续租的 `leaseExpiresAt`。
 
 每次写入都会通过 store-proxy 发出 `plugin-data.changed` SSE 事件(见 [protocol.md](./protocol.md)),前端据此刷新 loading / final UI。
 
@@ -1485,47 +1502,23 @@ value         : {
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | 400    | `pluginId` 缺失 / `action` 与 `runtimeId` 同时设置或同时缺失 / `RpcValidationError` / `plugin-mismatch`(runtimeId 不属于 pluginId) |
 | 404    | 会话不存在 / `unknown-action`(action 未注册) / `runtime-not-active`(runtimeId 未加载到该 session)                                  |
-| 429    | `queue-full`(community trust 的待批准队列满)                                                                                       |
+| 409    | `session-not-active` / `session-deleting` / `session-incarnation-changed` / `approval-scope-changed`                               |
+| 429    | `queue-full`(community 来源的待批准队列满)                                                                                         |
 | 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime-execution-failed` / `background-enqueue-failed` / `turn-commit-failed`    |
 
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
 > **提交结果是权威判据**：runtime 可能返回 `success` 而其 proposal 提交失败。此时同步 RPC 返回 `500 turn-commit-failed`，background job 标记 `failed`（`error` 说明失败的 proposal 数量），且**不会**调度该回合的 deferred follower —— 后续 follower 不应建立在已回滚的状态上。主回合路径（`POST /api/actions`）遵循同一规则。
 
-> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 声明尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin/official 的 entry 在 boot 时已运行，其未知 action 直接 404。
->
-> **community 插件的声明式 `manifest.rpc` action 同样两阶段**：dispatch 一个声明式 action 会动态 `import()` 该插件的 handler 模块，按同一定义它就是 server code。因此缺少 server-code grant 时，第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试才返回该 action 自身的审批。builtin/official 声明式 action 不受影响（照旧自动放行）。
+> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin 的 entry 在 boot 时已运行，其未知 action 直接 404。
 >
 > **community 插件 + `runtimeId`（runtime 模式）同样采用两阶段授权**：缺少 server-code grant 时第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试返回 `runtime:<runtimeId>` 审批；两个**精确** grant 同时存在，runtime 才会加载执行。entry import 也只认精确 `covel:plugin-server-code` grant，任意其他 action grant 不会解锁模块加载。revoke 按 `(session, plugin)` 前缀清除两类 grant。
-
-**插件 PLUGIN.md 中声明 RPC action:**
-
-```yaml
----
-name: my-plugin
-description: ...
-rpc:
-  regenerate:
-    handler: ./rpc/regenerate.js
-    input: ./rpc/regenerate.schema.json # 可选
-    description: 重新生成上一次叙事
-  cancel:
-    handler: ./rpc/cancel.js
-    trustLevel: builtin # 强制 builtin 信任
----
-```
-
-> Action 名不能以 `framework-` 开头(保留给框架默认 handler)。所有 action 名必须是 kebab-case。
-
-> Handler 是 `default export` 函数,签名 `(payload, context) => Promise<unknown>`。`context` 至少包含 `{ sessionId, pluginId, action, store }`。模块在首次调用时按需 `import()`。
-
-> RPC 分发一律同步返回。耗时工作走后台 job,进度经 `plugin-data.changed` SSE 推给前端(见 plugin-rpc 的 `mode: background`),没有流式 RPC 协议。
 
 ---
 
 ### RPC Approval 流程
 
-第三方插件(`community` 信任级别)的 RPC action 在执行前需要玩家显式批准,防止未审计的代码自动操作 session。
+第三方插件(`community` 来源)的 RPC action 在执行前需要玩家显式批准,防止未审计的代码自动操作 session。
 
 #### 流程
 
@@ -1539,7 +1532,7 @@ rpc:
                                                        │
                        ┌───────────────────────────────┤
                        │                               │
-              builtin/official                  community
+              builtin                         community
               + 不在 cache                        + 不在 cache
                        │                               │
                        ▼                               ▼
@@ -1631,10 +1624,11 @@ rpc:
 | ------ | ------------------------------------------------------------------------------------------------------- |
 | 400    | `decision` 字段缺失 / 非 `allow` 或 `deny` / `scope` 非法 / server-code 或 runtime 使用非 session scope |
 | 404    | `approvalId` 不存在或已被消费                                                                           |
+| 409    | approval 所属 session incarnation 已被 revoke、disable、delete 或同 ID 重建（`approval_scope_changed`） |
 
 #### `DELETE /api/sessions/:id/approvals`
 
-撤销该 session 已缓存、一次性和未决的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只撤销该插件的授权；省略则撤销整个 session 的全部授权。pending approval 按 `(session, plugin, action)` 去重；disable/冲突移除插件时也会撤销，旧 approvalId 无法在之后重新激活代码。
+撤销该 session 已缓存、一次性和未决的授权（community 插件 mid-session 收回）。可选 `?pluginId=<id>` 只轮换并撤销该插件的授权；省略则轮换整个 session 的授权 incarnation。pending approval 按 `(session incarnation, plugin, action, payload)` 去重；同一 action 的不同参数是不同的待决请求。disable/冲突移除插件时也会撤销，旧 approvalId 无法在之后重新激活代码。持久化代次使撤销对共享 PostgreSQL 的其他 Pod 同样生效。
 
 **查询参数:**
 
@@ -1650,17 +1644,16 @@ rpc:
 
 `cleared` 为清除的授权条目数（session-cached 与 one-time 授权合计）。
 
-#### 信任等级与 approval 行为
+#### 插件来源与 approval 行为
 
-| 信任等级    | 来源                        | Approval 行为                              |
+| 插件来源    | 来源                        | Approval 行为                              |
 | ----------- | --------------------------- | ------------------------------------------ |
 | `builtin`   | 框架自带 / 框架默认 handler | 永远直接执行                               |
-| `official`  | 维护团队白名单              | 永远直接执行                               |
 | `community` | 第三方,默认级别             | 每次都需要玩家批准,除非 session-cache 命中 |
 
-> One-time grant 的 TTL 为 60 秒。如果玩家批准后 60 秒内没有发起对应的 dispatch,grant 会过期,需要重新走 dialog 流程。
+> One-time grant 的 TTL 为 60 秒，且只能被与批准时**结构完全相同的 payload** 消费一次（对象 key 顺序不影响比较）。改参数重试不会复用旧 grant，而会重新走 approval 流程。如果玩家批准后 60 秒内没有发起对应的 dispatch，grant 会过期。
 
-> Approval 状态是**进程内 + 内存**,服务器重启后所有 pending / cache 全部清空。如果跨重启的持久化变得必要,可以把 gate 的状态写入 `plugin_data`(见 `packages/approval/src/rpc-approval.ts` 内联说明)。
+> Approval 的 pending / grant 内容仍是**进程内 + 内存**：服务器重启后全部清空，且一个 Pod 上批准的 grant 不会自动复制到另一个 Pod。持久化的是 session/plugin 的撤销代次，用于保证跨 Pod 的旧 grant 只能失效、绝不能误授权删除后同 ID 重建的会话。需要负载均衡下无重复弹窗时，仍需实现共享的 durable approval store。
 
 ---
 
@@ -1717,7 +1710,7 @@ rpc:
 
 #### `GET /api/plugins`
 
-列出所有已加载的插件。`name` 与 `description` 是 `I18nText`（可能是字符串或 `{ "<locale>": "..." }` 字典）。`capabilities` 为该插件所有 runtime 声明的 capability 并集；`tags` 是玩家/作者筛选标签；`relations` 是目录关系元数据；`outputKind` 取首个 runtime 的输出类别（`story` / `plugin` / `system`）；`source` 是框架根据加载路径派定的信任层级（`builtin` / `official` / `community`）。
+列出所有已加载的插件。`name` 与 `description` 是 `I18nText`（可能是字符串或 `{ "<locale>": "..." }` 字典）。`capabilities` 为该插件所有 runtime 声明的 capability 并集；`tags` 是玩家/作者筛选标签；`relations` 是目录关系元数据；`outputKind` 取首个 runtime 的输出类别（`story` / `plugin` / `system`）；`source` 是框架根据加载路径派定的插件来源（`builtin` / `community`）。
 
 UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` 派发，**不要**根据 `id` 字符串硬编码（违反框架/插件隔离规则）。
 
@@ -1882,6 +1875,10 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 启用一个插件。
 
+enable/disable 与同一 session 的其他写入共用 session lock，并在持锁后重新读取
+`activePlugins`。持久化成功后才更新进程内 registry，避免并发 lost update 和
+持久化失败造成的 registry/store 分裂。
+
 **请求体:**
 
 ```json
@@ -1920,7 +1917,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 ### 状态查询
 
-状态系统以结构化表格形式存储游戏世界的各类事实（如角色属性、世界状态、任务进度）。每个表由插件通过 StateManager 注册。
+状态系统以结构化表格形式存储游戏世界的各类事实（如角色属性、世界状态、任务进度）。服务端通过 `DataStore` 的状态表接口读取 schema、条目和变更记录；插件通过 `state.patch` proposal 提交状态变更。
 
 #### `GET /api/sessions/:id/state`
 
@@ -2036,6 +2033,10 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 ```
 
 `nextCursor` 指向本页最旧一条的位置，作为下一页（更旧）的 `before_*`；当返回条数少于 `limit`（已到历史开头）时为 `null`。
+
+#### `POST /api/sessions/:id/messages/sync`
+
+LocalDataService 将浏览器本地消息镜像到临时 server session。每条消息可带本地稳定的 `id` 与 `createdAt`；同一 session 内重复提交相同 `id` 会跳过，因此 restore / 网络重试不会重复追加整段历史。省略 `id` 的旧客户端仍会由服务端生成新 ID，不具备跨请求幂等性。整批写入在 session lock 与 DataStore transaction 内执行，任一新消息写入失败会回滚整批。
 
 ---
 
@@ -2202,8 +2203,7 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 #### `POST /api/sessions/:id/resume`
 
-用玩家提交的数据重新启动一个被 `suspend` 工具暂停的 runtime。
-请求**必须**带 `X-Provider-Keys` header（API key 不在服务端持久化，每次 resume 都要重新提供）。
+用玩家提交的数据重新启动一个暂停的 runtime。Agent runtime 从持久化的 tool-loop transcript 续跑；function runtime 直接重新调用 handler，并通过 `ctx.resumeData` / `ctx.resumedFromSuspensionId` 接收本次数据，不会误进入 agent LLM loop。浏览器客户端可带 `X-Provider-Keys` header 提供请求级 key 覆盖；desktop/self-host 客户端可省略该 header，沿用服务端启动时配置的 provider key。服务端不会通过此 API 回传密钥。
 
 **请求体:**
 
@@ -2216,6 +2216,8 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 服务器会用 `suspension.resumeSchema` 对 `data` 做完整 JSON Schema 校验（经 Ajv：enum、嵌套对象、min/max、minLength/maxLength、pattern、array items、oneOf/anyOf 等）；不匹配返回 `400`。
 
+暂停本身不完成逻辑玩家回合。runtime 先把 continuation 作为 execution-local artifact 返回；`finalizeExecution` 在 proposal、journal 与会话时钟的同一事务中保存 artifact，成功 commit 后才广播 `turn.suspended`。因此回滚不会遗留可恢复的 orphan continuation 或幽灵事件。原 execution 的 `logicalTurnId` / `countPolicy` 会随 continuation 持久化，成功 resume 在提交 proposal 的同一事务内计数一次。同一 logical turn 若有多个并行 suspension，等最后一个未解决 continuation 恢复后才计数；逻辑回合 ledger 保证重试不重复计数。
+
 **响应:**
 
 ```json
@@ -2224,12 +2226,12 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 **错误码:**
 
-| 状态  | 触发条件                                                                      |
-| ----- | ----------------------------------------------------------------------------- |
-| `400` | 缺少 `X-Provider-Keys`、JSON body 错误、`suspensionId` 缺失或 schema 校验失败 |
-| `404` | session、suspension 不存在，或 runtime manifest 找不到                        |
-| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）                           |
-| `500` | `resumeSuspendedRuntime()` 抛出错误                                           |
+| 状态  | 触发条件                                               |
+| ----- | ------------------------------------------------------ |
+| `400` | JSON body 错误、`suspensionId` 缺失或 schema 校验失败  |
+| `404` | session、suspension 不存在，或 runtime manifest 找不到 |
+| `409` | suspension 已 resolved（含并发 claim 竞争的失败方）    |
+| `500` | `resumeSuspendedRuntime()` 抛出错误                    |
 
 #### `GET /api/sessions/:id/suspensions`
 
@@ -2276,11 +2278,11 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 > **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
-物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取三种值：`auto`（按 checkpoint 节奏自动写入：`turnCount <= 1` 与每 `COVEL_SNAPSHOT_INTERVAL_TURNS`（默认 5）回合各写一份；resume 路径强制写入）、`manual`（`POST /snapshot` 显式创建）、`fork`（`POST /fork` 写到子 session 上记录来源）。
+物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取三种值：`auto`（`completedPlayerTurns <= 1` 时写入，之后每 `COVEL_SNAPSHOT_INTERVAL_TURNS`（默认 5）个已完成玩家回合写一份；resume 路径强制写入）、`manual`（`POST /snapshot` 显式创建）、`fork`（`POST /fork` 写到子 session 上记录来源）。
 
 #### `POST /api/sessions/:id/snapshot`
 
-从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、turnCount、preGameCompleted、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。payload 里的 `turnCount` / `preGameCompleted` 同样是物化时由 `phase` / `completedPlayerTurns` / `setupRuntimes` 派生写入，不是内核维护的独立持久列。
+从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、phase、completedPlayerTurns、setupRuntimes、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
 
 **响应:**
 
@@ -2292,12 +2294,15 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
     "turnId": "turn-42",
     "kind": "manual",
     "payload": {
-      "schemaVersion": 2,
+      "schemaVersion": 3,
       "turnId": "turn-42",
       "session": {
         "status": "active",
-        "turnCount": 42,
-        "preGameCompleted": ["world-init"],
+        "phase": "playing",
+        "completedPlayerTurns": 42,
+        "setupRuntimes": {
+          "world-init": { "state": "done", "resolution": "completed" }
+        },
         "locale": "zh-CN",
         "activePlugins": ["world-init", "narrator"],
         "presetId": "default",
@@ -2358,7 +2363,7 @@ Query 参数：`limit`（默认 50，最大 500）、`before_created_at` + `befo
 服务端会：
 
 1. 创建新 sessionId（`{worldId}-{uuid8}`）；
-2. 从 schema v2 snapshot payload 恢复 locale / activePlugins / status / turnCount / preGameCompleted / presetId / runtimeModelOverrides；历史 schema v1 快照缺少这些字段，读取时降级（upgrade-on-read）为父 session 的**当前**生命周期字段（即 v2 之前的 fork 行为）。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
+2. 从当前 schema v3 snapshot payload 恢复 locale / activePlugins / status / phase / completedPlayerTurns / setupRuntimes / presetId / runtimeModelOverrides。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
 3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session；
 4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
 5. 写入一个 `kind="fork"` 的快照到子 session，`parentId` 指向源 snapshot，供 provenance 追踪；
@@ -2586,19 +2591,20 @@ id: evt-002
 }
 ```
 
-支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_runtime`。
+支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_turn` · `retry_runtime`。
 
 | `payload` 字段    | 适用 `type`       | 说明                                                                                                                                                                                                                                                                |
 | ----------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `content`         | `send_message`    | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                                                                                                     |
 | `command`         | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                                                                                                |
 | `loreOverride`    | `start_session`   | 可选。Prep 页编辑后的世界文档；服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空。                                                                                                          |
-| `runtimeId`       | `retry_runtime`   | 可选。收窄重跑到指定 runtime（走 manual-trigger 路径）；缺省保持整回合重跑语义（M-07）。                                                                                                                                                                            |
+| —                 | `retry_turn`      | payload 必须为空；显式重跑整个主循环回合。                                                                                                                                                                                                                          |
+| `runtimeId`       | `retry_runtime`   | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                                                                                                          |
 | `retryFromTurnId` | `retry_runtime`   | 可选（需与 `runtimeId` 同用）。指定作为上下文种子的源回合：服务端加载该回合的 `turn_results` 工件播种执行，使被重试 runtime 的 `input.inject`/`needs` 按原回合叙事解析。缺省回退到最近一个 player-origin 工件。前端失败 chip 的重试按钮走这条路径（不删叙事消息）。 |
 
 **`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建请求的 `plugins` 数组决定；Web Prep 会先按 world `pluginPolicy` 计算默认选择，再把结果显式传给创建接口。服务端创建路由不读取 world policy，只补 builtin core、`requires` 关系并处理 conflicts。`start_session` 只负责在注册表里激活已持久化集合。空集合会被 **400** 拒绝（`Session has no active plugins. …`），不会回退到"激活全部已注册插件"；该回退会把玩家从未选择的社区插件及互斥叙事引擎同时拉进会话，并持久化到会话生命周期结束。
 
-**开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力回合是第一个计数的玩家回合（`completedPlayerTurns` 0 → 1）。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_runtime` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
+**开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力回合是第一个计数的玩家回合（`completedPlayerTurns` 0 → 1）。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_turn` / `retry_runtime` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
 
 > 玩家输入字段是 `payload.content`（`send_message`）/ `payload.command`（`execute_command`），没有别的别名。插件侧发事件请用 builtin `emit-event` 工具；未列出的 `type` 一律 400。
 
@@ -2693,7 +2699,7 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 }
 ```
 
-Web 前端根据 `/api/health.storage.data.frontendMode` 选择生成世界保存目标。`local` 模式使用 `saveTarget: "return-only"`，然后通过 `packages/store` 的 IndexedDB `DataStore.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。`remote` 模式使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。缺少 `frontendMode` 时使用 `server-file`。
+Web 前端根据 `/api/health.storage.data.frontendMode` 选择生成世界保存目标。`local` 模式使用 `saveTarget: "return-only"`，然后通过 Dexie `BrowserVault.upsertWorld()` 保存到用户浏览器，并把 `world.metadata.storage` 标注为 `{ "scope": "browser", "backend": "indexeddb", "durable": true }`。`remote` 模式使用 `saveTarget: "server-store"`，并通过服务端 `packages/store` 后端持久化。缺少 `frontendMode` 时使用 `server-file`。
 
 **响应 200:** SSE 帧。
 
@@ -2730,6 +2736,7 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
   },
   "events": [
     {
+      "id": "trace-event-001",
       "type": "runtime.started",
       "requestId": "",
       "traceId": "8f1c2d3e-…",
@@ -2738,7 +2745,18 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
       "flowId": "8f1c2d3e-…",
       "seq": 0,
       "timestamp": "2025-01-15T10:00:00.000Z",
-      "payload": {}
+      "diagnostic": {
+        "displayType": "runtime.started",
+        "severity": "info",
+        "runtimeId": "narrator",
+        "pluginId": "story",
+        "stage": "narrative"
+      },
+      "payload": {
+        "runtimeId": "narrator",
+        "pluginId": "story",
+        "stage": "narrative"
+      }
     }
   ]
 }
@@ -2746,6 +2764,26 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 
 - `discovery` — top-level plugin/runtime discovery snapshot (same shape the
   `/debug` page consumes); present on both trace endpoints.
+- `id` 是 `trace_events` 持久化行 ID；分页合并、事件选中和复制链接应优先使用
+  它，不要假设 `seq` 在 recorder 事件上非零或唯一。
+- `eventOrder` 是本次 API 响应中按 chronological record order 编排的单调位置（从
+  `0` 开始）。它不是数据库全局序号；分页时只保证页内稳定，不能跨页比较。
+- `diagnostic` 是服务端从事件 payload 提取的稳定调试摘要：始终包含
+  `displayType` / `severity`，并按事件提供 `runtimeId`、`pluginId`、`stage`、
+  `operation`、`provider`、`model`、`slot`、`attempt`、`durationMs`、`startedAt`、`error`
+  、`warning`、`tool` 与 `prompt`。失败详情位于 `diagnostic.error.{message,code?,details?}`；提示词
+  摘要位于 `diagnostic.prompt`，其中 `contentAvailable` 表示正文是否已记录，
+  `contentPath` 指向原始正文所在的 `payload.messages`（旧记录可能是
+  `payload.data.messages`）。原始 `payload` 保持不变以兼容现有消费者。
+- `diagnostic.severity` 为 `info`、`warning` 或 `error`；错误优先于慢调用警告。
+  成功的 LLM/gateway/utils/tool/runtime 调用或任务耗时达到 1000ms 时带有
+  `warning: { code: "slow", thresholdMs: 1000 }`。
+- `diagnostic.tool` 提供工具名、call ID、参数/结果是否存在及其原始 payload 路径，
+  并在可推断时给出 `success` 和 `durationMs`；参数与结果正文仍只保留在原始
+  `payload` 中。
+- `llm.calling` 额外提供 `payload.startedAt` / `diagnostic.startedAt` 作为真实模型请求
+  开始时间；顶层 `timestamp` 保持 trace 记录的持久化时间，`llm.responded.durationMs`
+  仍是耗时权威值。
 - `flowId` equals `traceId` for the event (protocol.md `flowId = traceId`).
 - `requestId` is reserved and currently emitted as `""` (no per-turn request id
   is threaded yet).
@@ -2759,7 +2797,7 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 ```json
 {
   "sessionId": "mistport-a1b2c3d4",
-  "turnCount": 3,
+  "completedPlayerTurns": 3,
   "discovery": {
     /* plugin/runtime discovery snapshot (same as /api/traces/:sessionId) */
   },
@@ -2825,8 +2863,9 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 
 | 条件                                                        | 行为                                                                                                                                              |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `COVEL_MEDIA_CLEANUP_ENABLED` 未设为 truthy（`true` / `1`） | 403 `{ "error": "cleanup endpoint disabled", "code": "forbidden" }`                                                                               |
 | `DEPLOYMENT_TIER=commercial`                                | 503 `{ "error": "cleanup endpoint not available in this deployment tier", "code": "unavailable" }` — 在管理员鉴权中间件就绪前永远不在商业部署可用 |
+| `DEPLOYMENT_TIER=demo` 且未提供正确 operator token          | 401 `{ "error": "Operator token required", "code": "operator_token_required" }`                                                                   |
+| `COVEL_MEDIA_CLEANUP_ENABLED` 未设为 truthy（`true` / `1`） | 403 `{ "error": "cleanup endpoint disabled", "code": "forbidden" }`                                                                               |
 | `dryRun:false` 且无 `X-Confirm-Cleanup: yes` 请求头         | 400 `{ "error": "confirmation header missing: …", "code": "invalid_request" }`                                                                    |
 | 同一时刻第二次并发请求                                      | 429 `{ "error": "Operation already in progress" }` (singleFlight)                                                                                 |
 | 任一会话的扫描行数超过 `scanLimit`（默认 1000）             | 400 `{ "error": "scan limit exceeded for session …", "code": "limit_exceeded" }`                                                                  |
@@ -2900,7 +2939,7 @@ Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 
 ### 事件类型枚举（`CovelEventType`）
 
-完整定义见 `packages/shared/src/types/protocol.ts`。所有 server→client 事件已收口为单一 discriminated union `CovelEvent`；`ProtocolEventType` 现为 `CovelEvent['type']` 的历史别名（保留向后兼容）。事件是否转发到 `/api/actions` 流由 `COVEL_EVENT_META[type].forwardToActionStream` 决定，转发白名单 `FORWARDED_EVENT_TYPES` 完全从该元数据派生。完整分类表见 [protocol.md § 一、事件类型](./protocol.md#一事件类型covelevent)。
+完整定义见 `packages/shared/src/types/protocol.ts`。所有 server→client 事件收口为单一 discriminated union `CovelEvent`，事件名类型直接使用 `CovelEventType`。事件是否转发到 `/api/actions` 流由 `COVEL_EVENT_META[type].forwardToActionStream` 决定，转发白名单 `FORWARDED_EVENT_TYPES` 完全从该元数据派生。完整分类表见 [protocol.md § 一、事件类型](./protocol.md#一事件类型covelevent)。
 
 | 类型                       | 分类         | 说明                                                                                            |
 | -------------------------- | ------------ | ----------------------------------------------------------------------------------------------- |
@@ -2925,7 +2964,7 @@ Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 | `asset.generated`          | 资产         | `asset.generate` proposal commit 后发出                                                         |
 | `world.dimensions.changed` | 世界         | 世界维度文件变更（热更新）                                                                      |
 | `plugin-data.changed`      | 插件数据     | `plugin-data-set` / DELETE / batch 等所有写路径                                                 |
-| `turn.suspended`           | 流程控制     | `suspend()` 工具序列化 pendingContinuation                                                      |
+| `turn.suspended`           | 流程控制     | `finalizeExecution` 成功提交 suspension artifact 后发出                                         |
 | `turn.resumed`             | 流程控制     | `POST /api/sessions/:id/resume` 重启 runtime                                                    |
 | `working_memory.changed`   | 流程控制     | `working_memory.set` proposal commit 后直接写入 `/api/actions`（commit-direct，不经转发白名单） |
 | `proposal.failed`          | 流程控制     | 单条 proposal 提交失败——显式上报而非静默丢弃，由提交方直接写入 action stream                    |
@@ -2972,7 +3011,7 @@ interface SseEnvelope {
 // /api/events/stream 命名事件帧的 data 形态
 interface ProtocolEvent {
   id: string;
-  type: ProtocolEventType;
+  type: CovelEventType;
   sessionId: string;
   turnId?: string;
   source?: { pluginId: string; runtimeId: string };
@@ -2993,7 +3032,7 @@ Covel 支持三种部署层级 (Deployment Tier)，每种层级使用不同的�
 
 - **服务器存储**: SQLite（默认，`./data/covel.db`）；可显式切换 Memory（仅用于一次性测试）
 - **前端存储**: 默认 remote 使用服务端 SQLite；local 模式使用浏览器 IndexedDB
-- **数据流**: remote 模式下前端通过 API 读写服务端 store；local 模式下业务记录持久保存在浏览器 `covel-browser` IndexedDB 中，并在执行 turn 前通过 `syncToServer()` 向本地服务器补齐临时执行上下文；生成世界等服务器能力通过 `return-only` 响应交给前端保存
+- **数据流**: remote 模式下前端通过 API 读写服务端 store；local 模式下业务记录以版本化 checkpoint 持久保存在 Dexie `covel-browser-vault` 中，执行前上传到临时 MemoryStore，执行后原子应用 `SessionCommit`；生成世界等服务器能力通过 `return-only` 响应交给前端保存
 - **API 密钥**: 用户自行管理，存储在浏览器 localStorage
 - **认证**: 无
 
@@ -3031,7 +3070,7 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 | 适用场景 | 测试 / 一次性 demo     | 单机部署（默认）                           | 生产环境                                                 |
 | 配置     | `STORE_BACKEND=memory` | 默认（`STORE_BACKEND=sqlite`，可显式指定） | `STORE_BACKEND=pg` + `DATABASE_URL`                      |
 
-> **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。每次 `/api/actions` / `/api/sessions/:id/resume` 都会在专用 PG 连接上拿到 `pg_advisory_lock(hash(sessionId))`，确保同一 session 在任意时刻只有一个 Node 进程执行 turn。Memory / SQLite 后端使用进程内 `Map` 锁，足以覆盖单进程场景。
+> **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。session 作用域 mutation、turn、resume、detached commit 等在专用 PG 连接上取得 advisory lock，确保同一 key 跨 Pod 串行；同一 async 分支的嵌套/批量 key 共用一条 reserved connection，避免 `max=1` 或多 key drain 耗尽连接池。Memory / SQLite 后端使用进程内 Promise-chain 锁，覆盖单进程场景。
 
 ### 关键环境变量
 

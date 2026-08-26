@@ -1,5 +1,20 @@
 import { createServer } from "node:net";
 
+/** Fetch with a hard per-request deadline so callers cannot leak hung sockets. */
+export async function fetchWithTimeout(
+  url: string,
+  timeoutMs: number,
+  fetchImpl: typeof fetch = fetch,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetchImpl(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Find a random free port. */
 export function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -30,7 +45,8 @@ export async function waitForServer(
   while (Date.now() < deadline) {
     onProgress?.(Date.now() - start, timeoutMs);
     try {
-      const res = await fetch(url);
+      const remaining = Math.max(1, deadline - Date.now());
+      const res = await fetchWithTimeout(url, Math.min(2_000, remaining));
       if (res.ok) return;
     } catch {
       // Not ready yet

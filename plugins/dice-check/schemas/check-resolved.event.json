@@ -12,7 +12,15 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["action", "roll", "total", "outcome"],
+        "required": [
+          "action",
+          "roll",
+          "modifier",
+          "dc",
+          "difficulty",
+          "total",
+          "outcome"
+        ],
         "properties": {
           "action": {
             "type": "string",

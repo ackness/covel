@@ -1,5 +1,6 @@
 import { SESSION_SCOPED_TABLES } from "../table-registry.js";
 import { mergeSessionPatch, normalizeSessionRecord } from "../types.js";
+import { SessionAlreadyExistsError } from "../errors.js";
 import {
   deleteArrayRowsBySession,
   deleteMapRowsBySession,
@@ -11,6 +12,9 @@ type SessionRow = { sessionId: string };
 export function createSessionMethods(state: MemoryState): MemoryStoreMethods {
   return {
     async createSession(session) {
+      if (state.sessions.has(session.id)) {
+        throw new SessionAlreadyExistsError(session.id);
+      }
       state.sessions.set(session.id, normalizeSessionRecord(session));
     },
 

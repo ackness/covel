@@ -6,7 +6,6 @@ import type {
 } from "../../types.js";
 import {
   id,
-  makeApproval,
   makeCharacter,
   makeEvent,
   makeInteractionRecord,
@@ -48,6 +47,24 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect(result).toEqual(session);
     });
 
+    it("rejects duplicate session ids without replacing existing data", async () => {
+      const original = makeSession({
+        id: "duplicate-session",
+        metadata: { owner: "original" },
+      });
+      await store.createSession(original);
+
+      await expect(
+        store.createSession({
+          ...original,
+          metadata: { owner: "replacement" },
+          updatedAt: ts(1),
+        }),
+      ).rejects.toThrow(/already exists/i);
+
+      expect(await store.getSession(original.id)).toEqual(original);
+    });
+
     it("should list all sessions", async () => {
       const s1 = makeSession();
       const s2 = makeSession();
@@ -59,22 +76,22 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect(list.map((s) => s.id)).toContain(s2.id);
     });
 
-    it("should update session status and turnCount", async () => {
+    it("should update session status and completed player turns", async () => {
       const session = makeSession({
         status: "active",
-        turnCount: 0,
-        preGameCompleted: [],
+        phase: "setup",
+        completedPlayerTurns: 0,
       });
       await store.createSession(session);
       const now = ts();
       await store.updateSession(session.id, {
         status: "ended",
-        turnCount: 5,
+        completedPlayerTurns: 5,
         updatedAt: now,
       });
       const result = await store.getSession(session.id);
       expect(result?.status).toBe("ended");
-      expect(result?.turnCount).toBe(5);
+      expect(result?.completedPlayerTurns).toBe(5);
       expect(result?.updatedAt).toBe(now);
     });
 
@@ -457,16 +474,6 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
     });
   });
 
-  describe("Approvals", () => {
-    it("should save and list approvals", async () => {
-      const approval = makeApproval({ sessionId: "sess-1" });
-      await store.saveApproval(approval);
-      const list = await store.listApprovals("sess-1");
-      expect(list).toHaveLength(1);
-      expect(list[0]).toEqual(approval);
-    });
-  });
-
   describe("Messages", () => {
     it("should add and list messages", async () => {
       const msg = makeMessage({ sessionId: "sess-1" });
@@ -591,6 +598,30 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
       expect(list).toHaveLength(1);
       expect(list[0].name).toBe("Dark Hero");
       expect(list[0].version).toBe(2);
+    });
+
+    it("isolates the same character id across sessions", async () => {
+      await store.upsertCharacter(
+        makeCharacter({
+          id: "shared-character",
+          sessionId: "sess-character-A",
+          name: "Character A",
+        }),
+      );
+      await store.upsertCharacter(
+        makeCharacter({
+          id: "shared-character",
+          sessionId: "sess-character-B",
+          name: "Character B",
+        }),
+      );
+
+      expect(await store.listCharacters("sess-character-A")).toMatchObject([
+        { id: "shared-character", name: "Character A" },
+      ]);
+      expect(await store.listCharacters("sess-character-B")).toMatchObject([
+        { id: "shared-character", name: "Character B" },
+      ]);
     });
 
     it("deletes a character by sessionId and id", async () => {

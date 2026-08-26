@@ -14,7 +14,7 @@ import { useMemo } from "react";
 import type { ComponentRenderer } from "@json-render/react";
 import { useStateStore } from "@json-render/react";
 import { clsx } from "clsx";
-import * as Icons from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   resolveActionParams,
   matchesPendingDraft,
@@ -89,7 +89,7 @@ export const Button: ComponentRenderer = ({ element, emit }) => {
     return false;
   }, [element.on, invokingMap, getState]);
 
-  const Loader = Icons.Loader2;
+  const Loader = Loader2;
 
   return (
     <button
@@ -101,13 +101,13 @@ export const Button: ComponentRenderer = ({ element, emit }) => {
       data-selected={isSelected ? "true" : undefined}
       data-pending={isPending ? "true" : undefined}
       className={clsx(
-        "font-medium rounded-[var(--radius-control)] transition-all text-left relative inline-flex items-center gap-1.5",
+        "font-medium rounded-(--radius-control) transition-all text-left relative inline-flex items-center gap-1.5",
         size === "compact"
           ? "px-2.5 py-1 text-[11px]"
           : "px-3.5 py-1.5 text-xs",
         !isSelected &&
           variant === "primary" &&
-          "bg-foreground text-[var(--surface-page)] hover:bg-foreground/90",
+          "bg-foreground text-(--surface-page) hover:bg-foreground/90",
         !isSelected &&
           variant === "default" &&
           "bg-transparent text-foreground border border-border hover:border-foreground/40 hover:bg-foreground/5",
@@ -116,9 +116,9 @@ export const Button: ComponentRenderer = ({ element, emit }) => {
           "bg-transparent text-muted-foreground border border-dashed border-border hover:border-foreground/40 hover:text-foreground",
         !isSelected &&
           variant === "danger" &&
-          "bg-[var(--accent-danger)] text-white hover:opacity-90",
+          "bg-(--accent-danger) text-white hover:opacity-90",
         isSelected &&
-          "bg-[color-mix(in_oklab,var(--accent-primary)_8%,transparent)] text-[var(--accent-primary)] border border-[var(--accent-primary)]",
+          "bg-[color-mix(in_oklab,var(--accent-primary)_8%,transparent)] text-(--accent-primary) border border-(--accent-primary)",
         isPending && "opacity-70 cursor-progress",
       )}
     >

@@ -15,6 +15,8 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { SettingsStore } from "../src/store.js";
 import type { SettingsBackendAdapter } from "../src/types.js";
+import { SettingsRevisionConflictError } from "../src/types.js";
+import type { SettingsPersistenceBundle } from "@covel/shared/settings-persistence";
 import { createMemoryAdapter } from "./test-adapter.js";
 
 const localeEntry = {
@@ -92,6 +94,91 @@ describe("set() rollback on a failed write", () => {
 });
 
 describe("failed hydration", () => {
+  it("coalesces concurrent and repeated init calls into one hydration", async () => {
+    let markLoadStarted!: () => void;
+    const loadStarted = new Promise<void>((resolve) => {
+      markLoadStarted = resolve;
+    });
+    let releaseLoad!: () => void;
+    const loadGate = new Promise<void>((resolve) => {
+      releaseLoad = resolve;
+    });
+    const adapter = createMemoryAdapter({ "ui.locale": "en-US" });
+    const load = vi.spyOn(adapter, "load").mockImplementation(async () => {
+      markLoadStarted();
+      await loadGate;
+      return { "ui.locale": "en-US" };
+    });
+    const loadSecrets = vi.spyOn(adapter, "loadSecrets");
+    const store = new SettingsStore(adapter);
+    store.register(localeEntry);
+
+    const first = store.init();
+    const second = store.init();
+    expect(second).toBe(first);
+    await loadStarted;
+    expect(store.isHydrated()).toBe(false);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(loadSecrets).toHaveBeenCalledTimes(1);
+
+    releaseLoad();
+    await Promise.all([first, second, store.ready()]);
+    expect(store.isHydrated()).toBe(true);
+    expect(store.get("ui.locale")).toBe("en-US");
+
+    const repeated = store.init();
+    expect(repeated).toBe(first);
+    await repeated;
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(loadSecrets).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses writes before init without touching persisted data", async () => {
+    const adapter = createMemoryAdapter({ "ui.locale": "en-US" });
+    const store = new SettingsStore(adapter);
+    store.register(localeEntry);
+
+    expect(store.isHydrated()).toBe(false);
+    await expect(store.set("ui.locale", "zh-CN")).rejects.toThrow(
+      /not initialized/,
+    );
+    await expect(store.clearAll()).rejects.toThrow(/not initialized/);
+    expect(adapter.readEntries()).toEqual({ "ui.locale": "en-US" });
+  });
+
+  it("refuses writes while init is still loading", async () => {
+    let releaseLoad!: () => void;
+    const loadGate = new Promise<void>((resolve) => {
+      releaseLoad = resolve;
+    });
+    let markLoadStarted!: () => void;
+    const loadStarted = new Promise<void>((resolve) => {
+      markLoadStarted = resolve;
+    });
+    const adapter = createMemoryAdapter({ "ui.locale": "en-US" });
+    vi.spyOn(adapter, "load").mockImplementation(async () => {
+      markLoadStarted();
+      await loadGate;
+      return { "ui.locale": "en-US" };
+    });
+    const store = new SettingsStore(adapter);
+    store.register(localeEntry);
+
+    const initializing = store.init();
+    await loadStarted;
+    expect(store.isHydrated()).toBe(false);
+    await expect(store.set("ui.locale", "zh-CN")).rejects.toThrow(
+      /not initialized/,
+    );
+    expect(adapter.readEntries()).toEqual({ "ui.locale": "en-US" });
+
+    releaseLoad();
+    await initializing;
+    expect(store.isHydrated()).toBe(true);
+    await store.set("ui.locale", "zh-CN");
+    expect(adapter.readEntries()).toEqual({ "ui.locale": "zh-CN" });
+  });
+
   it("boots on defaults but refuses to write, leaving storage intact", async () => {
     const adapter = failingLoadAdapter({
       "ui.locale": "en-US",
@@ -137,7 +224,218 @@ describe("failed hydration", () => {
   });
 });
 
+describe("versioned persistence", () => {
+  it("keeps legacy adapters compatible", async () => {
+    const adapter = createMemoryAdapter({ old: true });
+    const store = new SettingsStore(adapter);
+    await store.init();
+    await store.set("next", true);
+    expect(adapter.readEntries()).toEqual({ old: true, next: true });
+  });
+
+  it("rejects invalid registered values during hydration without writing", async () => {
+    const adapter = createMemoryAdapter({ "ui.locale": "invalid" });
+    const store = new SettingsStore(adapter);
+    store.register(localeEntry);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    await store.init();
+    expect(store.isHydrated()).toBe(false);
+    expect(store.get("ui.locale")).toBe("zh-CN");
+    expect(adapter.readEntries()).toEqual({ "ui.locale": "invalid" });
+    spy.mockRestore();
+  });
+
+  it("quarantines an invalid key registered after hydration", async () => {
+    const adapter = createMemoryAdapter({ "plugin.test.enabled": "no" });
+    const store = new SettingsStore(adapter);
+    await store.init();
+    store.register({
+      key: "plugin.test.enabled",
+      schema: z.boolean(),
+      default: false,
+      group: "plugin",
+      label: "Enabled",
+    });
+    expect(store.get("plugin.test.enabled")).toBe(false);
+    expect(store.has("plugin.test.enabled")).toBe(false);
+    await expect(store.set("other", true)).rejects.toThrow(/never loaded/);
+    expect(adapter.readEntries()).toEqual({ "plugin.test.enabled": "no" });
+  });
+
+  it("detects a second store's CAS conflict without overwriting it", async () => {
+    let bundle: SettingsPersistenceBundle = {
+      schemaVersion: 2,
+      revision: 0,
+      savedAt: "",
+      entries: {},
+    };
+    const versioned = (): SettingsBackendAdapter => ({
+      async load() {
+        return { ...bundle.entries };
+      },
+      async save() {},
+      async loadSecrets() {
+        return {};
+      },
+      async saveSecrets() {},
+      async loadWithRevision() {
+        return { ...bundle, entries: { ...bundle.entries } };
+      },
+      async saveWithRevision(entries, expectedRevision) {
+        if (bundle.revision !== expectedRevision) {
+          throw new SettingsRevisionConflictError(bundle.revision);
+        }
+        bundle = {
+          schemaVersion: 2,
+          revision: bundle.revision + 1,
+          savedAt: "now",
+          entries: { ...entries },
+        };
+        return bundle;
+      },
+    });
+    const first = new SettingsStore(versioned());
+    const second = new SettingsStore(versioned());
+    await Promise.all([first.init(), second.init()]);
+    await first.set("first", true);
+    await expect(second.set("second", true)).rejects.toBeInstanceOf(
+      SettingsRevisionConflictError,
+    );
+    expect(bundle.entries).toEqual({ first: true });
+    await expect(second.set("third", true)).rejects.toThrow(/never loaded/);
+  });
+
+  it("uses the revision returned by each queued save", async () => {
+    let bundle: SettingsPersistenceBundle = {
+      schemaVersion: 2,
+      revision: 0,
+      savedAt: "",
+      entries: {},
+    };
+    const expectedRevisions: number[] = [];
+    const adapter: SettingsBackendAdapter = {
+      async load() {
+        return { ...bundle.entries };
+      },
+      async save() {},
+      async loadSecrets() {
+        return {};
+      },
+      async saveSecrets() {},
+      async loadWithRevision() {
+        return { ...bundle, entries: { ...bundle.entries } };
+      },
+      async saveWithRevision(entries, expectedRevision) {
+        expectedRevisions.push(expectedRevision);
+        if (expectedRevision !== bundle.revision) {
+          throw new SettingsRevisionConflictError(bundle.revision);
+        }
+        bundle = {
+          schemaVersion: 2,
+          revision: bundle.revision + 1,
+          savedAt: "now",
+          entries: { ...entries },
+        };
+        return bundle;
+      },
+    };
+    const store = new SettingsStore(adapter);
+    await store.init();
+
+    await Promise.all([store.set("first", true), store.set("second", true)]);
+
+    expect(expectedRevisions).toEqual([0, 1]);
+    expect(bundle).toMatchObject({
+      revision: 2,
+      entries: { first: true, second: true },
+    });
+  });
+
+  it("observes fire-and-forget persistence failures", async () => {
+    const adapter = createMemoryAdapter();
+    const store = new SettingsStore(adapter);
+    await store.init();
+    vi.spyOn(adapter, "save").mockRejectedValueOnce(new Error("disk full"));
+    const errors: Error[] = [];
+    store.subscribePersistenceErrors((error) => errors.push(error));
+
+    void store.set("fire.and.forget", true);
+    await vi.waitFor(() => expect(errors).toHaveLength(1));
+
+    expect(errors[0]?.message).toBe("disk full");
+    expect(store.get("fire.and.forget")).toBeUndefined();
+  });
+});
+
 describe("concurrent writes", () => {
+  it("serialises full settings snapshots so an older save cannot win last", async () => {
+    let entries: Record<string, unknown> = {};
+    let saveCalls = 0;
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const adapter: SettingsBackendAdapter = {
+      async load() {
+        return {};
+      },
+      async save(next) {
+        saveCalls += 1;
+        if (saveCalls === 1) await firstGate;
+        entries = { ...next };
+      },
+      async loadSecrets() {
+        return {};
+      },
+      async saveSecrets() {},
+    };
+    const store = new SettingsStore(adapter);
+    await store.init();
+
+    const first = store.set("a.one", 1);
+    const second = store.set("a.two", 2);
+    await Promise.resolve();
+
+    expect(saveCalls).toBe(1);
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(entries).toEqual({ "a.one": 1, "a.two": 2 });
+  });
+
+  it("serialises full secret snapshots", async () => {
+    let secrets: Record<string, string> = {};
+    let saveCalls = 0;
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const adapter: SettingsBackendAdapter = {
+      async load() {
+        return {};
+      },
+      async save() {},
+      async loadSecrets() {
+        return {};
+      },
+      async saveSecrets(next) {
+        saveCalls += 1;
+        if (saveCalls === 1) await firstGate;
+        secrets = { ...next };
+      },
+    };
+    const store = new SettingsStore(adapter);
+    await store.init();
+
+    const first = store.set("keys.deepseek", "key-a");
+    const second = store.set("keys.openai", "key-b");
+    await Promise.resolve();
+
+    expect(saveCalls).toBe(1);
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(secrets).toEqual({ deepseek: "key-a", openai: "key-b" });
+  });
+
   it("does not let a failed write roll back a concurrent successful one", async () => {
     const adapter = createMemoryAdapter();
     const store = new SettingsStore(adapter);
@@ -154,18 +452,32 @@ describe("concurrent writes", () => {
 
     expect(results[0]?.status).toBe("rejected");
     expect(results[1]?.status).toBe("fulfilled");
-    // The point of the per-key undo: the rejected write must not erase the
-    // concurrent one that landed. A whole-map snapshot rollback did exactly
-    // that.
+    // The second full snapshot persisted both optimistic mutations, so memory
+    // must converge to that successful snapshot as well.
     expect(store.get("a.two")).toBe(2);
-    expect(store.has("a.one")).toBe(false);
-    // KNOWN, PRE-EXISTING: `save` writes a full snapshot, so the successful
-    // write persisted `a.one` too (it was still in the map when B serialised).
-    // Memory is authoritative and self-corrects on the next write. Fixing the
-    // disk divergence needs a write queue, which would defer the in-memory
-    // mutation and break synchronous read-after-write (`applyThemeSelection`
-    // does `void set(...)` then `get(...)` in the same tick).
+    expect(store.get("a.one")).toBe(1);
     expect(adapter.readEntries()).toEqual({ "a.one": 1, "a.two": 2 });
+  });
+
+  it("does not let an older failure roll back a newer write to the same key", async () => {
+    const adapter = createMemoryAdapter({ "ui.locale": "zh-CN" });
+    const store = new SettingsStore(adapter);
+    store.register(localeEntry);
+    await store.init();
+
+    vi.spyOn(adapter, "save").mockRejectedValueOnce(new Error("transient"));
+
+    const results = await Promise.allSettled([
+      store.set("ui.locale", "en-US"),
+      store.set("ui.locale", "zh-CN"),
+    ]);
+
+    expect(results.map((result) => result.status)).toEqual([
+      "rejected",
+      "fulfilled",
+    ]);
+    expect(store.get("ui.locale")).toBe("zh-CN");
+    expect(adapter.readEntries()).toEqual({ "ui.locale": "zh-CN" });
   });
 
   it("keeps read-after-write synchronous", async () => {

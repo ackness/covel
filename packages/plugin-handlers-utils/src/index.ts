@@ -8,7 +8,23 @@
  * internals, or framework components are referenced.
  */
 
-import type { Proposal, ProposalType } from "@covel/shared";
+import {
+  localeLanguage,
+  type Proposal,
+  type ProposalType,
+} from "@covel/shared";
+
+/**
+ * Bound provider work by a timeout while preserving the turn's cancellation
+ * signal. The returned signal aborts as soon as either source aborts.
+ */
+export function abortSignalWithTimeout(
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
 
 // ── String / list helpers ────────────────────────────────────────
 
@@ -208,8 +224,7 @@ export function pickLocaleText(
   zh: string,
   en: string,
 ): string {
-  const lang = typeof locale === "string" ? locale.split("-")[0] : "";
-  return lang === "zh" ? zh : en;
+  return localeLanguage(locale) === "zh" ? zh : en;
 }
 
 // ── Proposal factory ─────────────────────────────────────────────

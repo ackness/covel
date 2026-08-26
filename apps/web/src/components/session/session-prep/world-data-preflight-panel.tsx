@@ -106,7 +106,7 @@ export function WorldDataPreflightPanel({
                   item.level === "error" ? "text-destructive" : "text-amber-500"
                 }`}
               />
-              <span className="break-words [overflow-wrap:anywhere]">
+              <span className="wrap-break-word">
                 {item.sourceId ? `${item.sourceId}: ` : ""}
                 {item.message}
               </span>
@@ -124,7 +124,7 @@ export function WorldDataPreflightPanel({
               className="max-w-full text-[9px] font-mono"
               title={`${target.kind} ${target.target}${target.key ? `:${target.key}` : ""}`}
             >
-              <span className="truncate max-w-[220px]">
+              <span className="truncate max-w-55">
                 {target.target}
                 {target.key ? `:${target.key}` : ""}
               </span>

@@ -7,7 +7,12 @@ const OUTCOMES = new Set([
   "critical-success",
   "critical-failure",
 ]);
-const DIFFICULTIES = new Set(["easy", "normal", "hard", "extreme"]);
+const DIFFICULTY_DCS = Object.freeze({
+  easy: 8,
+  normal: 12,
+  hard: 16,
+  extreme: 20,
+});
 
 // Presentation is computed here so the json-render specs stay dumb: they just
 // bind label/color/critical fields off the stored record.
@@ -38,9 +43,9 @@ const OUTCOME_PRESENTATION = {
  * Record the `check.resolved` receipt batch emitted by the narrative engine.
  * The payload carries ALL checks of the turn in one `checks` array because
  * emit-event dedupes by topic per turn — a second emission would be dropped.
- * Tolerant at the trust boundary: emit-event validates payloads against the
- * event schema, but this handler still re-checks required fields so a stray
- * or hand-crafted event degrades to a skip instead of a crash.
+ * Defensive at the trust boundary: emit-event validates payloads against the
+ * event schema, and this handler additionally proves each receipt against the
+ * immutable pre-rolled pool and the deterministic check rules.
  *
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  */
@@ -52,12 +57,20 @@ export default async function handler(ctx) {
     data && typeof data === "object" && Array.isArray(data.checks)
       ? data.checks
       : [data];
-  const records = rawChecks.map(parseCheck).filter((record) => record !== null);
+  const previousChecks = await readTurnChecks(ctx);
+  const dice = await readDicePool(ctx);
+  const records = [];
+  for (const raw of rawChecks) {
+    const expectedRoll = dice[previousChecks.length + records.length];
+    if (expectedRoll === undefined) break;
+    const record = parseCheck(raw, expectedRoll);
+    if (record !== null) records.push(record);
+  }
   if (records.length === 0) {
     return {
-      status: "skipped",
-      reason:
-        "check.resolved payload carried no valid check (required per check: action, roll, total, outcome)",
+      outcome: "skipped",
+      skipReason:
+        "check.resolved payload carried no auditable check (roll must consume this turn's pre-rolled pool; modifier, total, difficulty, DC, and outcome must agree)",
     };
   }
 
@@ -74,64 +87,80 @@ export default async function handler(ctx) {
       rollText: buildRollText(record),
     };
   });
-  const previousChecks = await readTurnChecks(ctx);
-
   return {
-    status: "done",
-    pluginData: [
-      ...entries.map((entry) => ({
-        namespace: CHECKS_NAMESPACE,
-        key: `${ctx.turnId}-${entry.seq}`,
-        value: entry,
-      })),
-      {
-        // Message-slot data source: `__turnId` binds the block to this
-        // turn's message; `checks` is the array the block iterates.
-        namespace: MESSAGE_NAMESPACE,
-        key: ctx.turnId,
-        value: {
-          __turnId: ctx.turnId,
-          turnId: ctx.turnId,
-          checks: [...previousChecks, ...entries],
+    outcome: "success",
+    effects: {
+      pluginData: [
+        ...entries.map((entry) => ({
+          namespace: CHECKS_NAMESPACE,
+          key: `${ctx.turnId}-${entry.seq}`,
+          value: entry,
+        })),
+        {
+          // Message-slot data source: `__turnId` binds the block to this
+          // turn's message; `checks` is the array the block iterates.
+          namespace: MESSAGE_NAMESPACE,
+          key: ctx.turnId,
+          value: {
+            __turnId: ctx.turnId,
+            turnId: ctx.turnId,
+            checks: [...previousChecks, ...entries],
+          },
         },
-      },
-    ],
+      ],
+    },
   };
 }
 
 /**
- * Validate and normalize the event payload. Returns null when any required
- * field is missing or malformed; malformed OPTIONAL fields are dropped
- * silently instead of failing the whole receipt.
+ * Validate and normalize the event payload. Returns null when a required
+ * field is missing, malformed, or inconsistent with the pre-rolled die and
+ * deterministic check rules.
  *
  * @param {unknown} data
+ * @param {number} expectedRoll
  */
-function parseCheck(data) {
+function parseCheck(data, expectedRoll) {
   if (!data || typeof data !== "object") return null;
   const payload = /** @type {Record<string, unknown>} */ (data);
 
   const action =
     typeof payload.action === "string" ? payload.action.trim() : "";
   const roll = asInteger(payload.roll);
+  const modifier = asInteger(payload.modifier);
+  const dc = asInteger(payload.dc);
+  const difficulty =
+    typeof payload.difficulty === "string" &&
+    Object.hasOwn(DIFFICULTY_DCS, payload.difficulty)
+      ? payload.difficulty
+      : null;
   const total = asInteger(payload.total);
   const outcome = OUTCOMES.has(payload.outcome) ? payload.outcome : null;
-  if (!action || roll === null || roll < 1 || roll > 20 || total === null) {
+  if (
+    !action ||
+    roll !== expectedRoll ||
+    modifier === null ||
+    dc === null ||
+    difficulty === null ||
+    dc !== DIFFICULTY_DCS[difficulty] ||
+    total !== roll + modifier
+  ) {
     return null;
   }
-  if (!outcome) return null;
+  if (!outcome || outcome !== expectedOutcome(roll, total, dc)) return null;
 
-  const record = { action, roll, total, outcome };
+  const record = { action, roll, modifier, dc, difficulty, total, outcome };
   if (typeof payload.attribute === "string" && payload.attribute.trim()) {
     record.attribute = payload.attribute.trim();
   }
-  const modifier = asInteger(payload.modifier);
-  if (modifier !== null) record.modifier = modifier;
-  const dc = asInteger(payload.dc);
-  if (dc !== null) record.dc = dc;
-  if (DIFFICULTIES.has(payload.difficulty)) {
-    record.difficulty = payload.difficulty;
-  }
   return record;
+}
+
+/** @param {number} roll @param {number} total @param {number} dc */
+function expectedOutcome(roll, total, dc) {
+  if (roll === 20) return "critical-success";
+  if (roll === 1) return "critical-failure";
+  return total >= dc ? "success" : "failure";
 }
 
 /** @param {unknown} value */
@@ -185,4 +214,29 @@ async function readTurnChecks(ctx) {
   const value =
     row && typeof row === "object" && "checks" in row ? row : row?.value;
   return Array.isArray(value?.checks) ? value.checks : [];
+}
+
+/**
+ * Read the immutable pool pre-rolled by dice-check/roller for this turn.
+ * Missing or malformed audit data fails closed: a receipt cannot prove which
+ * die it consumed without the original pool.
+ *
+ * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
+ * @returns {Promise<ReadonlyArray<number>>}
+ */
+async function readDicePool(ctx) {
+  const inputDice = ctx.inputs?.dicePool?.value;
+  if (Array.isArray(inputDice)) return validDice(inputDice);
+  if (!ctx.pluginData?.get) return [];
+  const row = await ctx.pluginData.get("rolls", ctx.turnId);
+  const value =
+    row && typeof row === "object" && "dice" in row ? row : row?.value;
+  return Array.isArray(value?.dice) ? validDice(value.dice) : [];
+}
+
+/** @param {ReadonlyArray<unknown>} dice */
+function validDice(dice) {
+  return dice.every((die) => Number.isInteger(die) && die >= 1 && die <= 20)
+    ? dice
+    : [];
 }

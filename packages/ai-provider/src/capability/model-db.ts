@@ -18,6 +18,7 @@ import {
   modelLookupCandidateDetails,
   type ModelMatchKind,
 } from "./model-identity.js";
+import { outboundFetch } from "../outbound-network.js";
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -294,7 +295,7 @@ export async function fetchLiteLlmModels(
   const timeout = setTimeout(() => controller.abort(), 30_000);
   let res: Response;
   try {
-    res = await fetch(url, { signal: controller.signal });
+    res = await outboundFetch(url, { signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }

@@ -20,6 +20,7 @@ import {
   resolveSetupGeneration,
 } from "@covel/shared";
 import { executeParallel } from "../schedule/parallel-executor.js";
+import type { ParallelRuntimeIdentity } from "../schedule/parallel-executor.js";
 import { scheduleByDag } from "../schedule/dag-scheduler.js";
 import {
   applyHazardPolicy,
@@ -55,8 +56,11 @@ import {
 } from "./turn-executor-types.js";
 import { finalizeTurnResult } from "./turn-result-finalizer.js";
 import { attachExecutionJournal } from "../execution-journal.js";
-import { createExecutionContext } from "./execution-context.js";
-import { PLAYER_ABORT_REASON } from "./turn-control.js";
+import {
+  applySessionPhaseCountPolicy,
+  createExecutionContext,
+} from "./execution-context.js";
+import { isTurnExecutionAborted, PLAYER_ABORT_REASON } from "./turn-control.js";
 import { markPreGameCompletion } from "./pre-game-completion.js";
 import { schedulePostTurnMemoryUpdate } from "./post-turn-memory.js";
 import {
@@ -165,7 +169,7 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-function buildHookSettings(
+export function buildHookSettings(
   activeRuntimes: readonly RuntimeManifest[],
   allUserSettings: TurnInput["userSettings"],
 ): Readonly<Record<string, Readonly<Record<string, unknown>>>> {
@@ -197,10 +201,9 @@ async function executeTurnImpl(
   const maxSteps = options?.maxSteps ?? 10;
   const defaultTimeoutMs = options?.timeoutMs ?? 60000;
   const recursionDepth = options?.recursionDepth ?? 0;
-  // Single creation point for the run's identity. Origin is normalized here
-  // (legacy `follower` → `background`) and every kernel read below consults
-  // this, not the raw transitional `input.origin`.
-  const executionContext = createExecutionContext(input);
+  // Allocate identity before hooks run. Counting stays conservative until the
+  // authoritative persisted session phase is loaded below.
+  let executionContext = createExecutionContext(input);
   const executionFlags = input as RecursiveTurnInput;
   const shouldAppendPlayerMessage =
     !input.manualTrigger &&
@@ -260,6 +263,10 @@ async function executeTurnImpl(
     deps,
     shouldAppendPlayerMessage,
   });
+  executionContext = applySessionPhaseCountPolicy(
+    executionContext,
+    sessionState.phase,
+  );
   const {
     messageHistory,
     journalMessages,
@@ -293,7 +300,6 @@ async function executeTurnImpl(
   }
 
   let sessionMeta = sessionState.sessionMeta;
-  let preGameCompleted = sessionMeta.preGameCompleted;
   // Setup-band mirror frozen at execution start — drives setup scheduling (by
   // pending/blocked, not turn cadence), the attempt-ledger generation, and the
   // implicit per-plugin session gate below.
@@ -329,8 +335,6 @@ async function executeTurnImpl(
       }
       setupRuntimesSnapshot = patched;
       if (deps.store) {
-        // Setup mirror is the sole write surface; `preGameCompleted` derives
-        // from it at read time.
         await deps.store.updateSession(input.sessionId, {
           setupRuntimes: patched,
           updatedAt: now,
@@ -344,7 +348,6 @@ async function executeTurnImpl(
   const liveDoneSetup = initialDoneSetup(
     activeSetupRuntimes,
     setupRuntimesSnapshot,
-    preGameCompleted,
   );
   const pluginSetupReady = makePluginSetupReady(
     activeSetupRuntimes,
@@ -357,14 +360,12 @@ async function executeTurnImpl(
   });
   const { preGameRuntimes, isPreGamePending } = getPreGameRuntimeState(
     activeRuntimes,
-    preGameCompleted,
     sessionState.phase,
   );
   const { manualTarget, triggered, abortReason } = selectTriggeredRuntimes({
     activeRuntimes,
     manualRuntimeId: input.manualTrigger?.runtimeId,
     messageHistory: triggerMessageHistory,
-    preGameCompleted,
     runtimeTriggerCounts,
     setupRuntimes: setupRuntimesSnapshot,
     sessionId: input.sessionId,
@@ -410,9 +411,8 @@ async function executeTurnImpl(
   // 2. Schedule runtimes (stage-driven).
   //
   // Setup stage (`phase: setup`): the `stage === "setup"` runtimes, ordered by
-  // their declared edges plus a conservative legacy-order chain that keeps
-  // pregame → schema-gen serial (they have implicit write-ordering with no
-  // declared edge). player-init's `needs` order it after both in the same pass.
+  // declared DAG edges. Plugin manifests own every dependency and ordering
+  // decision; the framework adds no plugin-specific chain.
   //
   // Main loop: one DAG per stage (pre-turn → narrative → post-turn → audit),
   // concatenated in stage order so the executor's sequential group loop is the
@@ -509,25 +509,21 @@ async function executeTurnImpl(
     }
   };
 
-  const recordPreGameCompletion = async (): Promise<boolean> => {
-    const result = await markPreGameCompletion({
-      activeRuntimes,
+  const recordPreGameCompletion = (): boolean => {
+    const result = markPreGameCompletion({
       completedResults,
-      deps,
-      input,
       isPreGamePending,
+      isManualTrigger: input.manualTrigger !== undefined,
       preGameRuntimes,
-      preGameCompleted,
-      sessionMeta,
-      sessionContext,
-      refreshSessionContext,
+      setupRuntimes: setupRuntimesSnapshot,
     });
-    preGameCompleted = result.preGameCompleted;
-    sessionMeta = result.sessionMeta;
-    sessionContext = result.sessionContext;
     if (isPreGamePending && !input.manualTrigger) {
       observedSetupCompletion = true;
       Object.assign(setupNewlyDone, result.newlyDone);
+      setupRuntimesSnapshot = {
+        ...setupRuntimesSnapshot,
+        ...result.newlyDone,
+      };
       setupAllDone = result.allDone;
     }
     syncLiveDoneSetup();
@@ -553,6 +549,7 @@ async function executeTurnImpl(
   const invoke = (
     manifest: RuntimeManifest,
     triggerEvent: RuntimeInvocation["triggerEvent"],
+    identity?: ParallelRuntimeIdentity,
   ): Promise<RuntimeResult> =>
     executeOneRuntime({
       manifest,
@@ -575,8 +572,10 @@ async function executeTurnImpl(
       recursionDepth,
       executionId: executionContext.executionId,
       executionContext,
+      ...(identity ? { runId: identity.runId } : {}),
       executionStartedAt,
       pluginSetupReady,
+      setupRuntimeDone: (runtimeId) => liveDoneSetup.has(runtimeId),
       ...(isSetupRuntime(manifest)
         ? {
             setupGeneration: resolveSetupGeneration(
@@ -602,6 +601,8 @@ async function executeTurnImpl(
   // delete proposal before relying on rollback semantics.
   const playerAborted = (): boolean =>
     deps.turnControl?.signal?.aborted === true;
+  const executionAborted = (): boolean =>
+    isTurnExecutionAborted(deps.turnControl);
 
   // Disable a dependency-cycle SCC (and everything downstream of it): mark each
   // member skipped rather than falling back to a plain priority sort. The rest
@@ -631,13 +632,15 @@ async function executeTurnImpl(
   // main runtimes gate on this turn's fresh result. Same declared-edge setup
   // DAG as the setup phase. Blocked / done setup runtimes were already
   // filtered out by selectTriggeredRuntimes.
-  if (!isPreGamePending && !manualTarget && !playerAborted()) {
+  if (!isPreGamePending && !manualTarget && !executionAborted()) {
     const lateSetup = scheduledRuntimes.filter((rt) => isSetupRuntime(rt));
     const lateSetupPlan = scheduleByDag(lateSetup);
     for (const group of lateSetupPlan.groups) {
-      if (playerAborted()) break;
-      const results = await executeParallel(group.runtimes, (manifest) =>
-        invoke(manifest, undefined),
+      if (executionAborted()) break;
+      const results = await executeParallel(
+        group.runtimes,
+        (manifest, identity) => invoke(manifest, undefined, identity),
+        input.turnId,
       );
       for (const [name, result] of results) completedResults.set(name, result);
     }
@@ -646,16 +649,20 @@ async function executeTurnImpl(
   }
 
   for (const group of groups) {
-    if (playerAborted()) break;
-    const results = await executeParallel(group.runtimes, async (manifest) => {
-      const triggerEventForRuntime =
-        manualTarget &&
-        manualTriggerEventPayload &&
-        manifest.name === manualTarget.name
-          ? manualTriggerEventPayload
-          : undefined;
-      return invoke(manifest, triggerEventForRuntime);
-    });
+    if (executionAborted()) break;
+    const results = await executeParallel(
+      group.runtimes,
+      async (manifest, identity) => {
+        const triggerEventForRuntime =
+          manualTarget &&
+          manualTriggerEventPayload &&
+          manifest.name === manualTarget.name
+            ? manualTriggerEventPayload
+            : undefined;
+        return invoke(manifest, triggerEventForRuntime, identity);
+      },
+      input.turnId,
+    );
 
     // Merge results
     for (const [name, result] of results) {
@@ -664,9 +671,8 @@ async function executeTurnImpl(
   }
   emitCyclicSkips(cyclic);
 
-  // Record Pre-Game completion (updates preGameCompleted / sessionMeta /
-  // sessionContext and the setup-completion delta) before the event chain and
-  // finalize read them. Deliberate change (turn-wide transaction, Step 2): a
+  // Record setup completion before the event chain and finalizer read the
+  // mirror delta. Deliberate change (turn-wide transaction): a
   // request that finishes the last Pre-Game runtime no longer runs the main
   // loop in the SAME execution — the setup execution commits on its own and
   // the narrator (and other main-loop runtimes) run in a SEPARATE execution
@@ -676,7 +682,7 @@ async function executeTurnImpl(
   // player-visible gap: after this execution commits it chains one main-loop
   // turn on the same request (opening continuation), so the opening narrative
   // still arrives without an extra player message.
-  if (isPreGamePending) await recordPreGameCompletion();
+  if (isPreGamePending) recordPreGameCompletion();
 
   // Drop retry seeds BEFORE the event fan-out and the finalizer: seeds are
   // inject/needs context for the retried runtime only. runEventChain collects
@@ -687,21 +693,21 @@ async function executeTurnImpl(
     if (completedResults.get(name) === seed) completedResults.delete(name);
   }
 
-  const deferredFollowers = playerAborted()
+  const deferredFollowers = executionAborted()
     ? []
     : await runEventChain({
         activeRuntimes,
         completedResults,
-        executeRuntime: (manifest, triggerEvent) =>
-          invoke(manifest, triggerEvent),
+        executeRuntime: (manifest, triggerEvent, identity) =>
+          invoke(manifest, triggerEvent, identity),
         sessionId: input.sessionId,
+        turnId: input.turnId,
         turnNumber,
         logicalTurn,
         // Fan-out is the only place an `event` runtime can trigger, so its
-        // throttle gates only work if the real history reaches them. Same for
-        // the Pre-Game set: without it a completed setup runtime re-fires
-        // whenever its topic is emitted again.
-        preGameCompleted,
+        // throttle gates only work if the real history reaches them. The setup
+        // mirror prevents a completed setup runtime from re-firing.
+        setupRuntimes: setupRuntimesSnapshot,
         runtimeTriggerCounts,
         runtimeTurnsSinceLastTrigger: new Map(
           activeRuntimes.map((rt) => [
@@ -739,11 +745,9 @@ async function executeTurnImpl(
   // player retries or waives it (deliberate change from the old "advance past a
   // broken setup").
   //
-  // The session's `preGameCompleted` array accumulates these runtime IDs
-  // across turns (important — some plugins require multiple turns to hit
-  // their completion signal). When every Pre-Game runtime in the active
-  // set is in `preGameCompleted`, the kernel bumps `turnCount` from 0 → 1,
-  // moving scheduling into the main-loop band.
+  // The session's setup mirror accumulates these runtime resolutions across
+  // turns. Once every active setup runtime is done, the finalizer flips the
+  // authoritative phase to `playing`.
   //
   // IMPORTANT: plugins with a form-submission completion signal (like
   // player-init) MUST NOT report `preGameDone: true` in the "form shown"
@@ -754,7 +758,7 @@ async function executeTurnImpl(
   // the event chain and finalize reading a fresh Pre-Game / setup-completion
   // state; this one captures completion signals produced by event-chain
   // followers.
-  await recordPreGameCompletion();
+  recordPreGameCompletion();
 
   // Ledger entries for every setup runtime that ran this execution (both bands
   // + late-setup), handed to the finalizer for attempt terminalisation and the
@@ -768,9 +772,12 @@ async function executeTurnImpl(
   });
   for (const r of setupRan) {
     if (r.doneSignal && !(r.runtimeId in setupNewlyDone)) {
+      const previous = setupRuntimesSnapshot[r.runtimeId];
       setupNewlyDone[r.runtimeId] = mirrorSetupDone(
         r.pluginVersion,
         r.startedAt,
+        r.generation,
+        previous?.generation === r.generation ? previous.attempts + 1 : 1,
       );
     }
   }
@@ -816,7 +823,7 @@ async function executeTurnImpl(
     // outside the commit transaction. The commit-owning caller forwards this to
     // finalizeExecution.
     ...(setupRan.length > 0 ? { setupRan } : {}),
-    completeTurn: () => {
+    completeTurn: async () => {
       if (completionFired) return;
       completionFired = true;
       emitSubEvent(deps.eventBus, "game", "turn.completed", input.sessionId, {
@@ -827,14 +834,13 @@ async function executeTurnImpl(
       // The commit owner invokes this callback only after the transaction
       // lands. Refresh here so authoritative character/form facts include
       // writes produced by this turn instead of the pre-execution snapshot.
-      void refreshSessionContext().then((committedSessionContext) => {
-        schedulePostTurnMemoryUpdate({
-          input,
-          turnResult: baseResult,
-          deps,
-          coreMemoryBlocks,
-          sessionContext: committedSessionContext,
-        });
+      const committedSessionContext = await refreshSessionContext();
+      schedulePostTurnMemoryUpdate({
+        input,
+        turnResult: baseResult,
+        deps,
+        coreMemoryBlocks,
+        sessionContext: committedSessionContext,
       });
     },
   };

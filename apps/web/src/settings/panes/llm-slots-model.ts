@@ -18,7 +18,62 @@ const DEFAULT_LLM_SLOT_IDS = [
 export interface LlmSlotPresetCandidate {
   readonly id: string;
   readonly provider: string;
+  readonly model?: string;
   readonly isCustom?: boolean;
+}
+
+export function createProviderScopedModelChoices<
+  T extends LlmSlotPresetCandidate,
+>(args: {
+  readonly provider: string;
+  readonly presets: readonly T[];
+  readonly serverSlot?: {
+    readonly provider: string;
+    readonly model: string;
+  } | null;
+}): {
+  readonly presets: T[];
+  readonly includesServerBase: boolean;
+} {
+  const includesServerBase =
+    !!args.serverSlot && args.serverSlot.provider === args.provider;
+  return {
+    presets: args.presets.filter(
+      (preset) =>
+        preset.provider === args.provider &&
+        !(
+          includesServerBase &&
+          !preset.isCustom &&
+          preset.model === args.serverSlot?.model
+        ),
+    ),
+    includesServerBase,
+  };
+}
+
+export function bindSlotToProvider(args: {
+  readonly slotId: string;
+  readonly provider: string;
+  readonly slotConfig: Readonly<Record<string, SlotConfigEntry>>;
+  readonly presets: readonly LlmSlotPresetCandidate[];
+  readonly serverSlot?: { readonly provider: string } | null;
+}): Record<string, SlotConfigEntry> {
+  if (args.serverSlot?.provider === args.provider) {
+    const next = { ...args.slotConfig };
+    delete next[args.slotId];
+    return next;
+  }
+
+  const first = args.presets.find(
+    (preset) => preset.provider === args.provider,
+  );
+  if (!first) return { ...args.slotConfig };
+  return {
+    ...args.slotConfig,
+    [args.slotId]: first.isCustom
+      ? { modelRef: first.id }
+      : { presetId: first.id },
+  };
 }
 
 export function discoverRuntimeSlotIds(
