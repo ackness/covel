@@ -33,6 +33,7 @@
     "e2e:verify": "tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts",
     "test:runtime": "tsx packages/test-runtime/src/cli.ts",
     "validate:plugin": "tsx packages/plugin-loader/scripts/validate-manifest.ts",
+    "check:env": "node ./scripts/check-production-env.mjs",
     "create-plugin": "node scripts/create-plugin.js",
     "release:preflight": "node ./scripts/release-preflight.mjs",
     "preinstall": "npx only-allow@1.2.2 pnpm"

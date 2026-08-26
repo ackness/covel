@@ -2,6 +2,25 @@ import type { EnvVarDefinition } from "../types.js";
 
 export const FEATURE_ENV_VARS = [
   {
+    name: "COVEL_LLM_MAX_CONCURRENT",
+    group: "feature",
+    type: "integer",
+    status: "active",
+    defaultValue: "4",
+    description:
+      "Process-wide maximum concurrent LLM calls. Zero or a negative value disables the gate.",
+  },
+  {
+    name: "COVEL_EFFECTS_POLICY",
+    group: "feature",
+    type: "enum",
+    status: "active",
+    values: ["warn", "strict"],
+    defaultValue: "warn",
+    description:
+      "Policy for same-layer effects read/write hazards: warn preserves parallelism; strict serializes conflicting pairs.",
+  },
+  {
     name: "COVEL_COMPACTOR_CONTEXT_WINDOW",
     group: "feature",
     type: "integer",

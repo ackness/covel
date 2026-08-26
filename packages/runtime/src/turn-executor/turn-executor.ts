@@ -169,7 +169,7 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-function buildHookSettings(
+export function buildHookSettings(
   activeRuntimes: readonly RuntimeManifest[],
   allUserSettings: TurnInput["userSettings"],
 ): Readonly<Record<string, Readonly<Record<string, unknown>>>> {

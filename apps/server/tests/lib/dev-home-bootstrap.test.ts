@@ -124,6 +124,15 @@ describe("dev-home-bootstrap", () => {
     expect(process.env.SQLITE_PATH).toBeUndefined();
   });
 
+  it("accepts true as the desktop sidecar marker", async () => {
+    process.env.COVEL_DESKTOP_REST = "true";
+
+    const summary = await freshBootstrap();
+
+    expect(summary.applied).toBe(false);
+    expect(summary.skipReason).toBe("desktop-sidecar");
+  });
+
   it("is a no-op in production", async () => {
     process.env.NODE_ENV = "production";
 

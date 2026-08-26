@@ -632,6 +632,33 @@ export async function bootstrapApi(
     }
   }
 
+  // A request-scoped LLM overlay must drive all three consumers together:
+  // runtime calls, compaction calls, and the final hard-prune budget. Rebuild
+  // these lightweight facades after per-request middleware has replaced the
+  // adapter; registry-owned startup objects remain untouched.
+  app.use("*", async (c, next) => {
+    if (c.get("requestLlmOverridden")) {
+      const requestCapability = c.get("requestNarrativeCapability");
+      const requestBudgetSource = {
+        ...budgetSource,
+        ...(requestCapability
+          ? { resolveNarrativeBudget: () => requestCapability }
+          : {}),
+      };
+      c.set(
+        "compactorRunner",
+        createBootstrapCompactorRunner({
+          manifestCache,
+          store,
+          llmAdapter: c.get("llmAdapter"),
+          ...requestBudgetSource,
+        }),
+      );
+      c.set("turnContextBudget", createTurnContextBudget(requestBudgetSource));
+    }
+    await next();
+  });
+
   // 9. Mount routes — all under /api/ prefix
   // Session routes: frontend uses /api/sessions (plural) for all session operations
   app.route("/api/sessions", sessionRoutes);

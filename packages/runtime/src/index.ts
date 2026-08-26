@@ -26,6 +26,7 @@ export type { RuntimeExecuteFn } from "./schedule/parallel-executor.js";
 export {
   executeTurn,
   resumeSuspendedRuntime,
+  buildHookSettings,
 } from "./turn-executor/turn-executor.js";
 export type {
   AgentLoopDeps,

@@ -527,6 +527,9 @@ importers:
 
   packages/shared:
     dependencies:
+      smol-toml:
+        specifier: ^1.7.0
+        version: 1.7.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3

@@ -174,6 +174,21 @@ const TEST_MANIFEST: RuntimeManifest = {
   // runtimes produce `narrative.append` proposals — other kinds keep
   // their text internal to the RuntimeResult.
   outputKind: "story" as const,
+  userSettings: [
+    { key: "tone", type: "select", default: "manifest", label: "Tone" },
+    {
+      key: "detail",
+      type: "number",
+      default: 1,
+      label: "Detail",
+    },
+    {
+      key: "fallback",
+      type: "select",
+      default: "manifest-only",
+      label: "Fallback",
+    },
+  ],
 };
 
 function makeDefaultDeps(store: DataStore, overrides?: Partial<Deps>): Deps {
@@ -248,6 +263,61 @@ describe("Resume Routes", () => {
       });
 
       expect(res.status).toBe(200);
+    });
+
+    it("threads player, world, and manifest settings to resumed runtime hooks", async () => {
+      const worldId = `settings-world-${crypto.randomUUID()}`;
+      await store.updateSession("sess-1", { worldId });
+      await store.upsertWorld({
+        id: worldId,
+        name: "Test world",
+        description: "",
+        metadata: {
+          pluginSettings: { "test-plugin": { tone: "world", detail: 2 } },
+        },
+        createdAt: new Date().toISOString(),
+      });
+      await createSuspension(store);
+      const hookPipeline = createHookPipeline();
+      let runtimeInputSettings: unknown;
+      let hookSettings: unknown;
+      hookPipeline.register({
+        id: "test-plugin:PreRuntime:settings",
+        event: "PreRuntime",
+        pluginId: "test-plugin",
+        handler: async (ctx, payload) => {
+          runtimeInputSettings = payload.input.userSettings;
+          hookSettings = ctx.getOwnSettings?.();
+          return { action: "continue" };
+        },
+      });
+      const app = createTestApp(makeDefaultDeps(store, { hookPipeline }));
+      const playerSettings = Buffer.from(
+        JSON.stringify({ "test-plugin": { tone: "player" } }),
+        "utf8",
+      ).toString("base64");
+
+      const res = await app.request("/api/sessions/sess-1/resume", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Plugin-User-Settings": playerSettings,
+        },
+        body: JSON.stringify({
+          suspensionId: "susp-1",
+          data: { name: "Alice" },
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(runtimeInputSettings).toEqual({
+        "test-plugin": { tone: "player", detail: 2 },
+      });
+      expect(hookSettings).toEqual({
+        tone: "player",
+        detail: 2,
+        fallback: "manifest-only",
+      });
     });
 
     it("restores persisted plugin activations before scoping resume hooks", async () => {

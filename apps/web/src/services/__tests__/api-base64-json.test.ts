@@ -5,7 +5,12 @@
  * take down every AI request with a misleading transport error.
  */
 import { describe, expect, it } from "vitest";
-import { encodeBase64Json } from "../api/model-settings.js";
+import {
+  encodeBase64Json,
+  encodePluginUserSettingsHeader,
+  PluginUserSettingsHeaderTooLargeError,
+} from "../api/model-settings.js";
+import { PLUGIN_USER_SETTINGS_HEADER_MAX_BYTES } from "@covel/shared/plugin-user-settings-header";
 
 /** Mirror of the server's decode (`apps/server/src/lib/base64-json.ts`). */
 function decodeAsServerWould(header: string): unknown {
@@ -37,5 +42,30 @@ describe("encodeBase64Json", () => {
     const value = { slotPresetOverrides: { default: "custom_1" } };
 
     expect(encodeBase64Json(value)).toBe(btoa(JSON.stringify(value)));
+  });
+});
+
+describe("encodePluginUserSettingsHeader", () => {
+  it("accepts the encoded 8 KiB boundary and rejects the next payload", () => {
+    let length = 0;
+    while (
+      new TextEncoder().encode(
+        encodeBase64Json({ plugin: { value: "x".repeat(length) } }),
+      ).byteLength <= PLUGIN_USER_SETTINGS_HEADER_MAX_BYTES
+    ) {
+      length++;
+    }
+
+    expect(() =>
+      encodePluginUserSettingsHeader({
+        plugin: { value: "x".repeat(length - 1) },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      encodePluginUserSettingsHeader({ plugin: { value: "x".repeat(length) } }),
+    ).toThrow(PluginUserSettingsHeaderTooLargeError);
+    expect(() =>
+      encodePluginUserSettingsHeader({ plugin: { value: "x".repeat(length) } }),
+    ).toThrow(/plugin_user_settings_header_too_large|8 KiB/);
   });
 });

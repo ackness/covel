@@ -197,7 +197,10 @@ describe("config API env and file contracts", () => {
     const putRes = await app.request("/api/config/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entries: { theme: "dark", modelSlot: "story" } }),
+      body: JSON.stringify({
+        entries: { theme: "dark", modelSlot: "story" },
+        expectedRevision: 0,
+      }),
     });
     expect(putRes.status).toBe(200);
 
@@ -205,10 +208,25 @@ describe("config API env and file contracts", () => {
       await app.request("/api/config/settings")
     ).json()) as Record<string, unknown>;
     expect(getBody).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
+      revision: 1,
       entries: { theme: "dark", modelSlot: "story" },
     });
     expect(typeof getBody.savedAt).toBe("string");
+
+    const staleWrite = await app.request("/api/config/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        entries: { theme: "light" },
+        expectedRevision: 0,
+      }),
+    });
+    expect(staleWrite.status).toBe(409);
+    await expect(staleWrite.json()).resolves.toMatchObject({
+      code: "settings_revision_conflict",
+      details: { revision: 1 },
+    });
 
     fs.writeFileSync(path.join(tmpHome, "settings.json"), "{bad json");
     const malformedGet = await app.request("/api/config/settings");
@@ -220,7 +238,10 @@ describe("config API env and file contracts", () => {
     const overwrite = await app.request("/api/config/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entries: { theme: "light" } }),
+      body: JSON.stringify({
+        entries: { theme: "light" },
+        expectedRevision: 1,
+      }),
     });
     expect(overwrite.status).toBe(409);
     expect(fs.readFileSync(path.join(tmpHome, "settings.json"), "utf-8")).toBe(
@@ -258,6 +279,51 @@ describe("config API env and file contracts", () => {
     expect(configToml).toContain(
       `[paths]\ndata_root = ${JSON.stringify(absolutePath)}`,
     );
+  });
+
+  it("preserves config.toml text and refuses data_root patches on corrupt TOML", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    const configPath = path.join(tmpHome, "config.toml");
+    fs.writeFileSync(
+      configPath,
+      [
+        "# operator note",
+        "[paths]",
+        "data_root = '/old' # keep inline note",
+        "[custom]",
+        "enabled = true",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+    const app = buildApp(apiKeys);
+
+    const replacement = path.join(tmpHome, "next-data");
+    const ok = await app.request("/api/config/data-root", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: replacement }),
+    });
+    expect(ok.status).toBe(200);
+    const updated = fs.readFileSync(configPath, "utf-8");
+    expect(updated).toContain("# operator note");
+    expect(updated).toContain(
+      `data_root = ${JSON.stringify(replacement)} # keep inline note`,
+    );
+    expect(updated).toContain("[custom]\nenabled = true");
+
+    const corrupt = "[paths\ndata_root = 'recover-me'\n";
+    fs.writeFileSync(configPath, corrupt, "utf-8");
+    const rejected = await app.request("/api/config/data-root", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: path.join(tmpHome, "must-not-win") }),
+    });
+    expect(rejected.status).toBe(500);
+    await expect(rejected.json()).resolves.toMatchObject({
+      code: "config_write_failed",
+    });
+    expect(fs.readFileSync(configPath, "utf-8")).toBe(corrupt);
   });
 
   it("persists and hot-applies the compact desktop proxy setting", async () => {
@@ -309,6 +375,23 @@ describe("config API env and file contracts", () => {
 
     expect(res.status).toBe(400);
     expect(fs.existsSync(path.join(tmpHome, "config.toml"))).toBe(false);
+  });
+
+  it("refuses to hot-apply or overwrite proxy settings from corrupt TOML", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    const configPath = path.join(tmpHome, "config.toml");
+    const corrupt = "[network\nproxy_mode = 'direct'\n";
+    fs.writeFileSync(configPath, corrupt, "utf-8");
+    const app = buildApp(apiKeys);
+
+    const res = await app.request("/api/config/proxy", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "http", url: "127.0.0.1:7890" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(fs.readFileSync(configPath, "utf-8")).toBe(corrupt);
   });
 
   it("validates the proxy dispatcher before changing config.toml", async () => {
@@ -463,7 +546,10 @@ describe("config API env and file contracts", () => {
       const settingsRes = await app.request("/api/config/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entries: { theme: "dark" } }),
+        body: JSON.stringify({
+          entries: { theme: "dark" },
+          expectedRevision: 0,
+        }),
       });
       expect(settingsRes.status).toBe(401);
 

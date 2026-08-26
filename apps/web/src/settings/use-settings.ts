@@ -1,6 +1,10 @@
 import i18n from "i18next";
 import { useCallback, useSyncExternalStore } from "react";
-import type { SettingKey, SettingsStoreApi } from "@covel/settings";
+import {
+  SettingsRevisionConflictError,
+  type SettingKey,
+  type SettingsStoreApi,
+} from "@covel/settings";
 import { emitToast } from "@/lib/toast-channel.js";
 import { getSettings } from "./store.js";
 
@@ -28,6 +32,9 @@ export function useSetting<T>(
       try {
         await store.set<T>(key, next);
       } catch (err) {
+        // The store-level listener owns CAS conflicts so imperative
+        // fire-and-forget writes and widget writes share one notification.
+        if (err instanceof SettingsRevisionConflictError) return;
         emitToast(
           "error",
           i18n.t("settings.saveFailed", {

@@ -68,6 +68,15 @@ export const STORAGE_ENV_VARS = [
       "Max connections in the dedicated PG advisory session-lock pool. Each in-flight turn holds one reserved connection; size at least at expected peak concurrent sessions per pod.",
   },
   {
+    name: "COVEL_PG_INGEST_LOCK_POOL_MAX",
+    group: "storage",
+    type: "integer",
+    status: "active",
+    defaultValue: "4",
+    description:
+      "Max connections in the dedicated PG advisory lock pool for semantic-memory ingestion.",
+  },
+  {
     name: "POSTGRES_USER",
     group: "storage",
     type: "string",

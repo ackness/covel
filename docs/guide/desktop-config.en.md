@@ -29,11 +29,15 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
 
 Sidecar stderr is recorded as `error` by default. Recoverable framework warnings carry a `[covel:warn]` transport marker; collectors remove the marker and persist them at `warn`, so `policy: warn` scheduling diagnostics and automatic retries do not inflate error counts.
 
+`settings.json` is atomically replaced through a same-directory temporary file and uses persistence `schemaVersion: 2` with a monotonic `revision`. A valid v1 bundle (which must contain object `entries`) is migrated in memory as revision 0 and written as v2 after the next successful save. Existing corrupt, unreadable, or future-version files are never treated as empty: reads fail with `settings_file_invalid`, and saves preserve the original file. Saves carry the loaded revision; an intervening write returns `409 settings_revision_conflict` without replacing the file.
+
 ## `~/.covel/config.toml`
 
 Seeded with a commented template on first launch. Fields:
 
 ```toml
+schema_version = 1
+
 [paths]
 # Data directory. Relative paths resolve against this file's directory;
 # absolute paths are used as-is. Default: ~/.covel/data
@@ -51,6 +55,8 @@ max_size_mb = 10
 # Total disk usage ≈ max_size_mb × max_files.
 max_files   = 10
 ```
+
+Legacy files without `schema_version` are read as v1. The desktop UI and REST endpoints patch only the known fields above while preserving unknown fields, unknown sections, and existing comments; the complete TOML is parsed strictly before and after every write. A malformed file does not block startup (defaults are used with a warning), but it is never overwritten and must be repaired manually. Successful writes use a same-directory temporary file plus atomic rename and set mode `0600`.
 
 Manual edits require a Covel restart; saving under **Settings → Desktop → Network Proxy** applies immediately. `direct` bypasses proxies, `system` follows Electron's OS proxy resolution, `http` accepts HTTP(S) URLs, and `socks` accepts SOCKS5 URLs. A missing scheme is normalized to `http://` or `socks5://`. URLs may include `user:password@host`, so the file is tightened to mode `0600` when proxy settings are saved.
 
@@ -74,6 +80,8 @@ The server scans every `*_API_KEY` entry and injects it into the matching provid
 See [`llm.toml.example`](../../llm.toml.example) at repo root. Each model role pairs a provider and model. The built-in fallback `story` role uses `deepseek-v4-flash`; filling `DEEPSEEK_API_KEY` in `keys.env` is enough to boot.
 
 The model settings are split into **Model Roles**, **Providers & Models**, and **Generation**. The provider catalogue uses a list-and-detail layout: configure an endpoint, protocol, key, and price multiplier once, then bulk-add any number of opaque model IDs. IDs containing `/`, such as `openai/gpt-5.6-sol`, are sent unchanged. Assign the provider and model separately under Model Roles; creating a custom preset is no longer required. Price multipliers default to `1` and scale reference prices in the debug cost estimate.
+
+Model settings persist `llm.providers` as the only source of truth. On startup, legacy `llm.customPresets` first migrates connection keys and model references and is removed only after every step succeeds. The legacy API facade and request custom-preset shape are compiled from providers instead of maintaining a second synchronized copy.
 
 ## Frontend entry point
 

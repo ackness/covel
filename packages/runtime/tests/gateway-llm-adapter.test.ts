@@ -26,6 +26,7 @@ describe("createGatewayAdapter target resolution", () => {
       apiKeys: { "deepseek-proxy": "request-key" },
       envApiKeys: { deepseek: "env-key" },
       slotOverrides,
+      capabilityOverridePolicy: "restrict-only",
     });
 
     expect(adapter.resolveTarget?.("story")).toEqual({
@@ -39,6 +40,7 @@ describe("createGatewayAdapter target resolution", () => {
           apiKeys: { "deepseek-proxy": "request-key" },
           envApiKeys: { deepseek: "env-key" },
           slotOverrides,
+          capabilityOverridePolicy: "restrict-only",
           fallbackTag: "text",
         },
       },

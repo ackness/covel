@@ -28,6 +28,11 @@ interface RecordedCall {
   slotOverrides: GenerateOptions extends { slotOverrides?: infer S }
     ? S
     : never;
+  capabilityOverridePolicy: GenerateOptions extends {
+    capabilityOverridePolicy?: infer P;
+  }
+    ? P
+    : never;
 }
 
 interface RecordedResolveSlotCall {
@@ -36,6 +41,11 @@ interface RecordedResolveSlotCall {
   envApiKeys: Record<string, string> | undefined;
   slotOverrides: GenerateOptions extends { slotOverrides?: infer S }
     ? S
+    : never;
+  capabilityOverridePolicy: GenerateOptions extends {
+    capabilityOverridePolicy?: infer P;
+  }
+    ? P
     : never;
 }
 
@@ -78,6 +88,7 @@ function createMockAi(): {
         apiKeys: options?.apiKeys,
         envApiKeys: options?.envApiKeys,
         slotOverrides: options?.slotOverrides,
+        capabilityOverridePolicy: options?.capabilityOverridePolicy,
       });
       return {
         text: "ok",
@@ -101,6 +112,7 @@ function createMockAi(): {
         apiKeys: options?.apiKeys,
         envApiKeys: options?.envApiKeys,
         slotOverrides: options?.slotOverrides,
+        capabilityOverridePolicy: options?.capabilityOverridePolicy,
       });
       return {
         presetId: presetId ?? "unknown",
@@ -110,6 +122,12 @@ function createMockAi(): {
         apiKey: "mock-key",
         model: "mock-model",
         tag: "image",
+        capability: {
+          input: ["text"],
+          output: ["text"],
+          contextWindow: 100_000,
+          maxOutputTokens: 8_000,
+        },
         metadata: {},
       };
     },
@@ -377,11 +395,14 @@ describe("per-request LLM middleware", () => {
     });
     expect(res.status).toBe(200);
 
-    expect(resolveSlotCalls).toHaveLength(1);
-    expect(resolveSlotCalls[0].presetId).toBe("image");
-    expect(resolveSlotCalls[0].apiKeys).toEqual({ qwen: "sk-user-live" });
-    expect(resolveSlotCalls[0].envApiKeys).toEqual({ deepseek: "env-key" });
-    expect(resolveSlotCalls[0].slotOverrides).toMatchObject({
+    const imageCall = resolveSlotCalls.find(
+      (call) => call.presetId === "image",
+    );
+    expect(imageCall).toBeDefined();
+    expect(imageCall!.apiKeys).toEqual({ qwen: "sk-user-live" });
+    expect(imageCall!.envApiKeys).toEqual({ deepseek: "env-key" });
+    expect(imageCall!.capabilityOverridePolicy).toBe("full");
+    expect(imageCall!.slotOverrides).toMatchObject({
       slotPresetOverrides: { image: "custom_dashscope" },
       customPresets: [
         expect.objectContaining({
@@ -391,6 +412,71 @@ describe("per-request LLM middleware", () => {
         }),
       ],
     });
+  });
+
+  it("sanitizes operational capabilities and derives policy only from deployment tier", async () => {
+    const previousTier = process.env.DEPLOYMENT_TIER;
+    try {
+      const { ai, calls } = createMockAi();
+      const app = buildTestApp({
+        ai,
+        envApiKeys: {},
+        defaultAdapter: {
+          async generate() {
+            throw new Error("request adapter expected");
+          },
+        },
+      });
+      const header = b64({
+        capabilityOverridePolicy: "full",
+        capabilityOverrides: {
+          story: {
+            input: ["text", "bogus", "text"],
+            output: ["image"],
+            features: ["vision", "unknown"],
+            contextWindow: 200_000,
+            maxOutputTokens: 2_000_000,
+            pricing: { inputPerMToken: 0 },
+          },
+        },
+      });
+
+      process.env.DEPLOYMENT_TIER = "commercial";
+      await app.request("/echo", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "X-Slot-Config": header,
+        },
+        body: JSON.stringify({ model: "story" }),
+      });
+      expect(calls[0].capabilityOverridePolicy).toBe("restrict-only");
+      expect(calls[0].slotOverrides?.capabilityOverrides).toEqual({
+        story: {
+          input: ["text"],
+          output: ["image"],
+          features: ["vision"],
+          contextWindow: 200_000,
+        },
+      });
+      expect(
+        calls[0].slotOverrides?.capabilityOverrides?.story,
+      ).not.toHaveProperty("pricing");
+
+      process.env.DEPLOYMENT_TIER = "self";
+      await app.request("/echo", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "X-Slot-Config": header,
+        },
+        body: JSON.stringify({ model: "story" }),
+      });
+      expect(calls[1].capabilityOverridePolicy).toBe("full");
+    } finally {
+      if (previousTier === undefined) delete process.env.DEPLOYMENT_TIER;
+      else process.env.DEPLOYMENT_TIER = previousTier;
+    }
   });
 
   it("leaves the default pluginGateway in place when no headers are present", async () => {

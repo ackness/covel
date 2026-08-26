@@ -57,9 +57,70 @@ describe("json-file backend load contract", () => {
 });
 
 describe("json-file backend IPC write contract", () => {
+  it("uses the v2 bundle and expected revision over IPC", async () => {
+    const invoke = vi
+      .fn()
+      .mockImplementation((channel: string, payload?: unknown) => {
+        if (channel === "covel:settings:load") {
+          return Promise.resolve({
+            schemaVersion: 2,
+            revision: 4,
+            savedAt: "old",
+            entries: { old: true },
+          });
+        }
+        expect(payload).toEqual({
+          entries: { next: true },
+          expectedRevision: 4,
+        });
+        return Promise.resolve({
+          ok: true,
+          bundle: {
+            schemaVersion: 2,
+            revision: 5,
+            savedAt: "now",
+            entries: { next: true },
+          },
+        });
+      });
+    (globalThis as { covelIpc?: unknown }).covelIpc = { invoke };
+    const backend = createJsonFileBackend();
+
+    await expect(
+      backend.saveWithRevision!({ next: true }, 4),
+    ).resolves.toMatchObject({
+      revision: 5,
+      entries: { next: true },
+    });
+  });
+
+  it("turns an IPC revision conflict into the typed error", async () => {
+    (globalThis as { covelIpc?: unknown }).covelIpc = {
+      invoke: vi.fn().mockResolvedValue({
+        ok: false,
+        code: "settings_revision_conflict",
+        revision: 3,
+      }),
+    };
+    const backend = createJsonFileBackend();
+    await expect(backend.saveWithRevision!({}, 2)).rejects.toMatchObject({
+      code: "settings_revision_conflict",
+      currentRevision: 3,
+    });
+  });
+
   it("rejects when the main process reports a settings write failure", async () => {
     (globalThis as { covelIpc?: unknown }).covelIpc = {
-      invoke: vi.fn().mockResolvedValue({ ok: false }),
+      invoke: vi.fn().mockImplementation((channel: string) =>
+        channel === "covel:settings:load"
+          ? Promise.resolve({
+              schemaVersion: 2,
+              revision: 0,
+              savedAt: "",
+              entries: {},
+            })
+          : Promise.resolve({ ok: false }),
+      ),
     };
     const backend = createJsonFileBackend();
 

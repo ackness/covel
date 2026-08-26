@@ -23,6 +23,7 @@ import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 export interface ResumeSuspendedRuntimeOptions {
   readonly maxSteps?: number;
   readonly timeoutMs?: number;
+  readonly userSettings?: TurnInput["userSettings"];
 }
 
 /**
@@ -61,6 +62,7 @@ export async function resumeSuspendedRuntime(
     turnId: suspension.turnId,
     playerMessage: "",
     origin: "resume",
+    ...(options?.userSettings ? { userSettings: options.userSettings } : {}),
   };
 
   const postRuntimeOpts = {

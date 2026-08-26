@@ -48,6 +48,10 @@ import {
 } from "./windows.js";
 import { initDesktopI18n, t } from "./main-i18n.js";
 import { resolveSystemProxyRequest } from "./system-proxy.js";
+import {
+  parseSettingsPersistenceBundle,
+  type SettingsPersistenceBundle,
+} from "@covel/shared/settings-persistence";
 
 // ── Splash screen ──────────────────────────────────────────────
 
@@ -65,39 +69,78 @@ function captureStderrLine(line: string): void {
   writeServerStreamLine("stderr", line);
 }
 
+export class SidecarUnavailableError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "SidecarUnavailableError";
+  }
+}
+
+export class SidecarHttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: string,
+    readonly revision?: number,
+  ) {
+    super(message);
+    this.name = "SidecarHttpError";
+  }
+}
+
 async function requestSidecarConfig<T>(
   pathName: string,
   init?: RequestInit,
 ): Promise<T> {
-  if (serverPort <= 0) throw new Error("sidecar not ready");
-  const res = await fetch(`http://127.0.0.1:${serverPort}${pathName}`, {
-    ...init,
-    headers: {
-      ...init?.headers,
-      Authorization: `Bearer ${desktopRestToken}`,
-    },
-  });
+  if (serverPort <= 0) throw new SidecarUnavailableError("sidecar not ready");
+  let res: Response;
+  try {
+    res = await fetch(`http://127.0.0.1:${serverPort}${pathName}`, {
+      ...init,
+      headers: {
+        ...init?.headers,
+        Authorization: `Bearer ${desktopRestToken}`,
+      },
+    });
+  } catch (error) {
+    throw new SidecarUnavailableError("sidecar request failed", {
+      cause: error,
+    });
+  }
   if (!res.ok) {
-    throw new Error(`sidecar ${pathName} failed: ${res.status}`);
+    const body = (await res.json().catch(() => null)) as {
+      code?: unknown;
+      details?: { revision?: unknown };
+    } | null;
+    throw new SidecarHttpError(
+      res.status,
+      `sidecar ${pathName} failed: ${res.status}`,
+      typeof body?.code === "string" ? body.code : undefined,
+      typeof body?.details?.revision === "number"
+        ? body.details.revision
+        : undefined,
+    );
   }
   return (await res.json()) as T;
 }
 
-async function getSettingsViaSidecar(): Promise<Record<string, unknown>> {
-  const bundle = await requestSidecarConfig<{
-    entries?: Record<string, unknown>;
-  }>("/api/config/settings");
-  return bundle.entries ?? {};
+async function getSettingsViaSidecar(): Promise<SettingsPersistenceBundle> {
+  return parseSettingsPersistenceBundle(
+    await requestSidecarConfig<unknown>("/api/config/settings"),
+  );
 }
 
 async function saveSettingsViaSidecar(
   entries: Record<string, unknown>,
-): Promise<void> {
-  await requestSidecarConfig<{ ok?: boolean }>("/api/config/settings", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ entries }),
-  });
+  expectedRevision: number,
+): Promise<SettingsPersistenceBundle> {
+  return parseSettingsPersistenceBundle(
+    await requestSidecarConfig<unknown>("/api/config/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries, expectedRevision }),
+    }),
+  );
 }
 
 async function saveKeysViaSidecar(keys: Record<string, string>): Promise<void> {

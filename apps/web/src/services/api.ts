@@ -32,6 +32,7 @@ export {
   getProviderPriceMultiplier,
   getProviderPriceMultipliers,
   getProviderProfiles,
+  migrateLegacyProviderProfiles,
   getSlotConfig,
   removeCustomPreset,
   setCustomPresets,

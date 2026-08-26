@@ -1,5 +1,6 @@
 import type { ZodType } from "zod";
 import type { I18nText } from "@covel/shared";
+import type { SettingsPersistenceBundle } from "@covel/shared/settings-persistence";
 
 export type SettingKey = string;
 
@@ -52,9 +53,25 @@ export interface SettingsBackendAdapter {
   save(entries: Record<SettingKey, unknown>): Promise<void>;
   loadSecrets(): Promise<Record<string, string>>;
   saveSecrets(keys: Record<string, string>): Promise<void>;
+  /** Optional v2 persistence protocol. Legacy custom adapters remain valid. */
+  loadWithRevision?(): Promise<SettingsPersistenceBundle>;
+  saveWithRevision?(
+    entries: Record<SettingKey, unknown>,
+    expectedRevision: number,
+  ): Promise<SettingsPersistenceBundle>;
+}
+
+export class SettingsRevisionConflictError extends Error {
+  readonly code = "settings_revision_conflict";
+
+  constructor(readonly currentRevision: number) {
+    super(`Settings changed in another instance (revision ${currentRevision})`);
+    this.name = "SettingsRevisionConflictError";
+  }
 }
 
 export type SettingsListener = (value: unknown, key: SettingKey) => void;
+export type SettingsPersistenceErrorListener = (error: Error) => void;
 
 export interface SettingsStoreApi {
   get<T>(key: SettingKey): T;
@@ -71,6 +88,9 @@ export interface SettingsStoreApi {
   ): Promise<void>;
   subscribe<T>(key: SettingKey, handler: (value: T) => void): () => void;
   subscribeAll(handler: SettingsListener): () => void;
+  subscribePersistenceErrors(
+    handler: SettingsPersistenceErrorListener,
+  ): () => void;
   register<T>(entry: SettingEntry<T>): void;
   ready(): Promise<void>;
   /**

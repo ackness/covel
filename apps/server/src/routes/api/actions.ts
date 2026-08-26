@@ -42,8 +42,8 @@ import {
   resolveTurnCapabilityPluginIds,
   type TurnCapabilityPluginIds,
 } from "./turn-capabilities.js";
-import { decodePluginUserSettingsHeader } from "./plugin-rpc/body.js";
 import {
+  decodePluginUserSettingsHeader,
   mergePluginUserSettings,
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
@@ -110,6 +110,18 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   }
   const body = bodyResult.value;
   const { requestId, type, sessionId, locale, model, payload } = body;
+
+  // Enforce header transport limits before opening the SSE response or doing
+  // any session work. Malformed legacy values remain a no-settings request.
+  const decodedUserSettings = decodePluginUserSettingsHeader(
+    c.req.header("X-Plugin-User-Settings"),
+  );
+  if (!decodedUserSettings.ok) {
+    return c.json(
+      errorBody(decodedUserSettings.error, { code: decodedUserSettings.code }),
+      decodedUserSettings.status,
+    );
+  }
 
   const session = await store.getSession(sessionId);
   if (!session) {
@@ -496,9 +508,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             : null;
           const userSettings = mergePluginUserSettings(
             readWorldPluginSettings(world?.metadata),
-            decodePluginUserSettingsHeader(
-              c.req.header("X-Plugin-User-Settings"),
-            ),
+            decodedUserSettings.settings,
           );
 
           // retry_runtime reruns ONE

@@ -43,11 +43,9 @@ import {
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
 import type { RuntimeResult } from "@covel/shared";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
+import { validatePluginRpcBody } from "./plugin-rpc/body.js";
 import {
   decodePluginUserSettingsHeader,
-  validatePluginRpcBody,
-} from "./plugin-rpc/body.js";
-import {
   mergePluginUserSettings,
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
@@ -77,6 +75,19 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   const store = c.get("store");
   const executor = c.get("rpcExecutor");
   const sessionId = c.req.param("id");
+  const decodedUserSettings = decodePluginUserSettingsHeader(
+    c.req.header("X-Plugin-User-Settings"),
+  );
+  if (!decodedUserSettings.ok) {
+    return c.json(
+      {
+        status: "error",
+        error: decodedUserSettings.error,
+        code: decodedUserSettings.code,
+      },
+      decodedUserSettings.status,
+    );
+  }
 
   const session = await store.getSession(sessionId);
   if (!session) {
@@ -258,7 +269,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       : null;
     const userSettingsMap = mergePluginUserSettings(
       readWorldPluginSettings(world?.metadata),
-      decodePluginUserSettingsHeader(c.req.header("X-Plugin-User-Settings")),
+      decodedUserSettings.settings,
     );
 
     await prepareToolsForSession?.(sessionId);
