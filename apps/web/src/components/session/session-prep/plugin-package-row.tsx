@@ -134,7 +134,7 @@ export function PluginPackageRow({
 
   return (
     <div
-      className={`border px-3 py-2.5 transition-colors ${
+      className={`prep-plugin-row border px-3 py-2.5 transition-colors ${
         isSelected
           ? "border-primary/40 bg-primary/5"
           : "border-border bg-muted/20 opacity-60"

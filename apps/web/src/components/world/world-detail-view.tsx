@@ -3,7 +3,6 @@ import { ArrowLeft } from "lucide-react";
 import type { WorldRecord } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Separator } from "@/components/ui/separator.js";
 import { text } from "./world-detail/detail-primitives.js";
 import {
@@ -39,7 +38,7 @@ export function WorldDetailView({
     );
 
   return (
-    <ScrollArea className="h-full">
+    <div className="h-full overflow-y-auto overscroll-contain">
       <div className="space-y-6 p-4">
         {/* Header */}
         <div className="space-y-2">
@@ -113,6 +112,6 @@ export function WorldDetailView({
           </div>
         )}
       </div>
-    </ScrollArea>
+    </div>
   );
 }

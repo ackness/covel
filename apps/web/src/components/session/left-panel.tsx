@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { History, KeyRound, Plus, Trash2 } from "lucide-react";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -85,7 +84,7 @@ export function LeftPanel({
         </h2>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="flex flex-col">
           {/* ── Current Session ── */}
           <div className="ui-panel-section border-b border-border space-y-2">
@@ -190,7 +189,7 @@ export function LeftPanel({
             />
           </div>
         </div>
-      </ScrollArea>
+      </div>
 
       {/* ── Bottom Actions (sticky) ── */}
       <div className="ui-panel-footer border-t border-border shrink-0 space-y-2">

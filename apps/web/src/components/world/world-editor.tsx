@@ -20,7 +20,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import {
   Tabs,
   TabsContent,
@@ -152,7 +151,7 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
             ))}
           </TabsList>
 
-          <ScrollArea className="flex-1 mt-4">
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain">
             <TabsContent value="geography">
               <GeographyTab
                 dimensions={dimensions}
@@ -212,7 +211,7 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
                 t={t}
               />
             </TabsContent>
-          </ScrollArea>
+          </div>
         </Tabs>
       </CardContent>
     </Card>

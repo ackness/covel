@@ -8,7 +8,6 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import type { WorldRecord } from "@/services/api.js";
 import { WorldCard } from "@/components/world/world-card.js";
 
@@ -49,7 +48,7 @@ export function WorldListView({
   onDeleteWorld,
 }: WorldListViewProps) {
   return (
-    <ScrollArea className="w-full h-full">
+    <div className="h-full w-full overflow-y-auto overscroll-contain">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 md:px-10 py-5 md:py-8">
         {/* Editorial header */}
         <header className="grid grid-cols-1 md:grid-cols-12 gap-5 md:gap-8 items-end mb-7 md:mb-9">
@@ -210,6 +209,6 @@ export function WorldListView({
           )}
         </div>
       </div>
-    </ScrollArea>
+    </div>
   );
 }

@@ -226,15 +226,19 @@ export function DataSection({
   title,
   icon,
   children,
+  defaultExpanded = true,
 }: {
   title: string;
   icon: ReactNode;
   children: ReactNode;
+  defaultExpanded?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(defaultExpanded);
   return (
     <div className="border border-border">
       <button
+        type="button"
+        aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
         className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground ui-rail"
       >

@@ -443,7 +443,7 @@ export function CostPanel({
           {model.byTurn.map((tn) => (
             <div
               key={tn.turnId}
-              className="flex items-baseline justify-between gap-3 px-3 py-1.5 text-[11px]"
+              className="debug-compact-row flex items-baseline justify-between gap-3 px-3 py-1.5 text-[11px]"
             >
               <span className="font-mono text-foreground">
                 {t("debugger.turn", { count: tn.turnIndex })}

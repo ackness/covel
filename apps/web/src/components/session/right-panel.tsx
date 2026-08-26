@@ -7,7 +7,6 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { Badge } from "@/components/ui/badge.js";
 import { WorldDocumentPanel } from "./world-document-panel.js";
 import { PluginPanel } from "./plugin-panel.js";
@@ -291,7 +290,7 @@ export function RightPanel({
             })}
           </TabsList>
         </div>
-        <ScrollArea className="flex-1 min-h-0 min-w-0">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
           <TabsContent value="world" className="p-4 m-0 max-w-full">
             <div className="mb-4 flex min-w-0 items-center gap-2 border-b border-(--rule-color) pb-3">
               <BookOpen className="w-4 h-4 shrink-0 text-muted-foreground" />
@@ -423,7 +422,7 @@ export function RightPanel({
               </TabsContent>
             );
           })}
-        </ScrollArea>
+        </div>
       </Tabs>
       {storageStatus && (
         <div className="border-t border-border px-3 py-2 flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0 bg-[color-mix(in_oklab,var(--surface-rail)_82%,var(--surface-page))]">

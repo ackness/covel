@@ -567,6 +567,42 @@
   contain-intrinsic-size: auto 240px;
 }
 
+/*
+ * Session setup can render dozens of metadata-heavy plugin rows. Let the
+ * browser skip layout and paint for rows outside the page viewport while
+ * preserving their DOM state and native find/accessibility behavior.
+ */
+.prep-plugin-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 90px;
+}
+
+/* Long debugger and media lists use the same browser-native render skipping. */
+.debug-turn-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+}
+
+.debug-data-message {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+}
+
+.debug-compact-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 28px;
+}
+
+.image-gallery-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 420px;
+}
+
+.image-job-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 48px;
+}
+
 /* Meters / progress */
 .ui-meter-track {
   background: var(--color-muted);

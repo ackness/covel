@@ -298,7 +298,7 @@ export function StageView(props: StageViewProps): ReactElement {
       )}
 
       {/* History drawer — the full parsed chat, needs a bounded flex column
-          for its internal ScrollArea (flex-1 min-h-0). Zero out executionSteps
+          for its internal scroll viewport (flex-1 min-h-0). Zero out executionSteps
           / executionError so the drawer stays player-facing: the per-turn
           runtime timeline (dev timing chips) and the failed-turn banner belong
           on the stage itself, not in this narrative read-back. */}

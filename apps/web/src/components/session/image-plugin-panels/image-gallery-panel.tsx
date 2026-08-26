@@ -57,7 +57,7 @@ export function ImageGalleryPanel({ pluginId }: { pluginId: string }) {
           return (
             <div
               key={key}
-              className="rounded-lg border border-border bg-card/60 overflow-hidden"
+              className="image-gallery-row rounded-lg border border-border bg-card/60 overflow-hidden"
             >
               <button
                 type="button"

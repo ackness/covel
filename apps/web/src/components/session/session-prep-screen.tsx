@@ -9,7 +9,6 @@ import { useTranslation } from "react-i18next";
 import { AlertCircle, Play, ArrowLeft, Loader2 } from "lucide-react";
 import * as api from "@/services/api.js";
 import { Button } from "@/components/ui/button.js";
-import { ScrollArea } from "@/components/ui/scroll-area.js";
 import { SettingsDialog } from "@/settings/SettingsDialog.js";
 import {
   Dialog,
@@ -242,7 +241,7 @@ export function SessionPrepScreen({
         onOpenChange={handleSettingsOpenChange}
         initialKey={settingsInitialKey}
       />
-      <ScrollArea className="w-full h-full">
+      <div className="h-full w-full overflow-y-auto overscroll-contain">
         <div className="mx-auto max-w-6xl px-4 md:px-8 py-5 md:py-8">
           <header
             className="relative mb-6 overflow-hidden rounded-(--radius-card) border border-border bg-card"
@@ -370,7 +369,7 @@ export function SessionPrepScreen({
               />
             </section>
 
-            <section className="min-w-0 space-y-4 lg:sticky lg:top-4">
+            <section className="min-w-0 space-y-4">
               <ModelsCard
                 resolvedSlots={resolvedSlots}
                 expanded={modelsExpanded}
@@ -414,7 +413,7 @@ export function SessionPrepScreen({
             </section>
           </div>
         </div>
-      </ScrollArea>
+      </div>
 
       <Dialog
         open={!!deleteTarget}

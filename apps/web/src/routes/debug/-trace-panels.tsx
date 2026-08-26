@@ -116,7 +116,7 @@ export function TurnCard({
 
   return (
     <div
-      className={`border ${hasError ? "border-destructive/30" : "border-border"} bg-card`}
+      className={`debug-turn-card border ${hasError ? "border-destructive/30" : "border-border"} bg-card`}
     >
       <button
         onClick={onToggle}

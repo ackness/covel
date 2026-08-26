@@ -160,6 +160,42 @@ describe("mergeTurnPages", () => {
     expect(merged[0].events.map((e) => e.seq)).toEqual([1, 2, 3]);
   });
 
+  it("preserves the existing reference when a refresh has no new data", () => {
+    const current = [
+      pagedTurn("turn-stable", "10:00", "10:01", [
+        seqEvent("turn-stable", 1, "10:00"),
+        seqEvent("turn-stable", 2, "10:01"),
+      ]),
+    ];
+    const refreshed = [
+      pagedTurn("turn-stable", "10:00", "10:01", [
+        seqEvent("turn-stable", 1, "10:00"),
+        seqEvent("turn-stable", 2, "10:01"),
+      ]),
+    ];
+
+    expect(mergeTurnPages(current, refreshed)).toBe(current);
+  });
+
+  it("returns updated data when an event changes without changing identity", () => {
+    const currentEvent = seqEvent("turn-updated", 1, "10:00");
+    const updatedEvent = {
+      ...currentEvent,
+      payload: { status: "completed" },
+    };
+    const current = [
+      pagedTurn("turn-updated", "10:00", "10:01", [currentEvent]),
+    ];
+    const refreshed = [
+      pagedTurn("turn-updated", "10:00", "10:01", [updatedEvent]),
+    ];
+
+    const merged = mergeTurnPages(current, refreshed);
+
+    expect(merged).not.toBe(current);
+    expect(merged[0]?.events[0]).toEqual(updatedEvent);
+  });
+
   it("uses the persisted event id when lifecycle events share seq and timestamp", () => {
     const first = seqEvent("turn-stable", 0, "10:00");
     const second = {

@@ -158,6 +158,17 @@ describe("debug route components", () => {
       />,
     );
 
+    for (const section of [
+      /插件契约/,
+      /插件数据索引/,
+      /角色/,
+      /消息/,
+      /游戏状态/,
+      /执行步骤/,
+    ]) {
+      fireEvent.click(screen.getByRole("button", { name: section }));
+    }
+
     expect(screen.getByText("Mira")).toBeDefined();
     expect(screen.getByText("The door opens.")).toBeDefined();
     expect(screen.getAllByText("story-plugin").length).toBeGreaterThan(0);
