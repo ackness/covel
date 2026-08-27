@@ -285,6 +285,30 @@ export interface PluginDataSchemaDecl {
   readonly description?: string;
 }
 
+// ── World projections ─────────────────────────────────────
+
+/** One plugin-data destination produced by a world projection. */
+export interface WorldProjectionOutputDecl {
+  /** Plugin-owned destination namespace. */
+  readonly namespace: string;
+  /** Field in each projected record used as its plugin-data key. */
+  readonly key: string;
+}
+
+/**
+ * Plugin-owned projection from one declared world schema into plugin data.
+ * `handler` is metadata at manifest/registry time; loading or executing the
+ * module is the responsibility of the world-projection runner.
+ */
+export interface WorldProjectionDecl {
+  /** Source schema URI, for example `plugin://character-blueprint/blueprints`. */
+  readonly from: string;
+  /** Plugin-root-relative JavaScript handler module. */
+  readonly handler: string;
+  /** Named plugin-data destinations produced by the handler. */
+  readonly outputs: Readonly<Record<string, WorldProjectionOutputDecl>>;
+}
+
 // ── Event declarations ───────────────────────────────────────────
 
 /**
@@ -402,9 +426,7 @@ export interface PluginUserSettingSpec {
 // The hook event tuple, its derived union, the enforce group, and the
 // declaration shape now live in ./hooks.ts (single source of truth). They are
 // re-exported here so existing `@covel/shared` consumers and the types barrel
-// keep importing them from the same place. `HookDeclaration` is also imported
-// locally below because `RuntimeManifest.hooks` references it.
-import type { HookDeclaration } from "./hooks.js";
+// keep importing them from the same place.
 export { HOOK_EVENTS } from "./hooks.js";
 export type { HookEventName, HookEnforce, HookDeclaration } from "./hooks.js";
 
@@ -484,6 +506,12 @@ export const PLUGIN_SCOPED_FIELDS = {
   },
   /** Merged on namespace — the strictest of the set. */
   dataSchemas: {
+    merge: "keyed",
+    conflict: "throws — the plugin fails to register",
+    where: "packages/plugin-loader/src/registry.ts",
+  },
+  /** Merged on projection id; handlers remain declarative until execution. */
+  worldProjections: {
     merge: "keyed",
     conflict: "throws — the plugin fails to register",
     where: "packages/plugin-loader/src/registry.ts",
@@ -570,6 +598,8 @@ export interface PluginScopedManifestFields {
   readonly relations?: PluginRelations;
   /** Plugin-data schemas, merged on namespace — a divergent one throws. */
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
+  /** World projections, merged on projection id — a divergent one throws. */
+  readonly worldProjections?: Readonly<Record<string, WorldProjectionDecl>>;
   /** Domain events this plugin's runtime may emit via `emit-event`. */
   readonly events?: readonly PluginEventDecl[];
   /**

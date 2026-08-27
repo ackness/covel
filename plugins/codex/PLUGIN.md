@@ -21,30 +21,23 @@ tags:
   - ui:right-panel
 trigger:
   type: auto
-# Codex registers discoveries from the latest narrative — skip when the
-# active narrative engine failed, to avoid the LLM hallucinating entries
-# from an empty <narrator-output>. The upstream gate discovers the engine by
-# capability (narrative-engine → narrator in traditional, chat-mode-narrator
-# in dialogue) instead of naming one; the inject lists both known engines and
-# the absent one resolves to nothing.
-# Gate on the active narrative engine's success, discovered by capability.
-needs:
-  - capability: narrative-engine
+inputs:
+  worldIR:
+    from:
+      capability: world-ir-provider
+      cardinality: one
+    accepts: covel://world/ir/v1
+    required: true
 input:
   inject:
-    - kind: runtime
-      from: narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-    - kind: runtime
-      from: chat-mode-narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
     - kind: plugin-data
       namespace: entries
       as: "<existing-entries>"
       format: summary
       maxEntries: 100
+relations:
+  requires:
+    - world-ir
 entry: ./server/index.js
 tools:
   plugin:
@@ -68,9 +61,9 @@ postHistory:
 
 ## 输入
 
-### 本轮叙事
+### 本轮 WorldIR
 
-本轮叙事在 prompt 末尾的 `<narrator-output>` 块中（由框架 `input.inject` 自动注入，正文不再重复内联）。
+本轮叙事已由共享抽取 agent 转为 `covel://world/ir/v1`，位于 `<runtime-inputs>` 的 `worldIR.value`。优先查看 `entities` 与 `statements`，并用 `summary`、`events` 和 `relations` 补充证据。只根据 IR 中明确存在的信息登记，不能补回原文没有被抽取的细节。
 
 ### 已有图鉴条目
 
@@ -84,8 +77,8 @@ postHistory:
 
 ## 工作流程
 
-1. 仔细阅读 `<narrator-output>` 里的叙事
-2. 扫一遍 `<existing-entries>` 里的 entryId 与摘要，对叙事中出现的每个潜在发现做匹配
+1. 仔细阅读 `<runtime-inputs>` 中的 `worldIR.value`
+2. 扫一遍 `<existing-entries>` 里的 entryId 与摘要，对 WorldIR 中出现的每个潜在发现做匹配
 3. 按下面的"合格条目判定规则"挑出**最多 3 个**真正值得登记的新发现
 4. 如果一个新发现能匹配到 `<existing-entries>` 中的某个 entryId → 用 `update-codex-entry` 补充
 5. 如果是全新的发现 → 用 `unlock-codex-entries`（可一次批量）登记

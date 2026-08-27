@@ -20,6 +20,16 @@ export function composerInput(page: Page): Locator {
 }
 
 /**
+ * Return only interaction submits that can answer a currently visible block.
+ * Submitted blocks remain in the transcript with disabled buttons, and
+ * alternate views can retain hidden live blocks, so either condition alone can
+ * accidentally target stale UI.
+ */
+export function actionableInteractionSubmits(page: Page): Locator {
+  return page.locator('[data-testid="interaction-submit"]:enabled:visible');
+}
+
+/**
  * Keep player-facing E2E preferences isolated in the browser context.
  *
  * A desktop-capable server hydrates settings from its COVEL_HOME over REST,
@@ -125,7 +135,7 @@ export async function sendPlayerMessage(page: Page, text: string) {
 export async function expectPlayerCanAct(page: Page) {
   await waitForTurnIdle(page);
 
-  const mustAnswer = page.getByTestId("interaction-submit");
+  const mustAnswer = actionableInteractionSubmits(page);
   const hasMustAnswer = await mustAnswer
     .first()
     .isVisible()

@@ -16,12 +16,16 @@ import type { VisibleTurn } from "./-debug-page-model.js";
  * ID. Model attribution: `llm.responded` payloads carry no model id, so each
  * usage event is paired with the most recent `llm.calling` for the same
  * runtimeId within the turn (events are stored in emission order, and
- * calling/responded always pair up per call). `gateway.responded` carries a
- * slot (presetId), not a model — its usage stays unattributed and is excluded
- * from pricing, making the USD figure a lower bound when present.
+ * calling/responded always pair up per call). `gateway.responded` carries the
+ * provider/model actually used (including a fallback target); older rows that
+ * lack that identity remain unattributed and are excluded from pricing.
  *
  * Pricing comes from `/api/model-db/lookup` (LiteLLM-derived per-M-token
- * prices) via the existing `lookupModelCapability` service.
+ * prices) via the existing `lookupModelCapability` service. The model DB does
+ * not yet expose provider-specific cache read/write prices, so those token
+ * subsets are shown separately and excluded from the USD estimate. Missing
+ * input/output prices are also excluded component-wise, so a partial estimate
+ * is explicitly rendered as a lower bound.
  */
 
 /** Sentinel for usage that cannot be attributed to a concrete model id. */
@@ -30,6 +34,13 @@ export const UNKNOWN_MODEL = "(unknown)";
 interface Usage {
   readonly inputTokens: number;
   readonly outputTokens: number;
+  readonly cachedInputTokens: number;
+  readonly cacheWriteInputTokens: number;
+}
+
+function tokenCount(value: unknown): number {
+  const count = Number(value);
+  return Number.isSafeInteger(count) && count >= 0 ? count : 0;
 }
 
 function readUsage(event: api.TraceEvent): Usage | null {
@@ -37,11 +48,28 @@ function readUsage(event: api.TraceEvent): Usage | null {
     return null;
   }
   const usage = (event.payload as Record<string, unknown>).usage as
-    { inputTokens?: number; outputTokens?: number } | undefined;
+    | {
+        inputTokens?: number;
+        outputTokens?: number;
+        cachedInputTokens?: number;
+        cacheWriteInputTokens?: number;
+      }
+    | undefined;
   if (!usage) return null;
+  const inputTokens = tokenCount(usage.inputTokens);
+  const cachedInputTokens = Math.min(
+    inputTokens,
+    tokenCount(usage.cachedInputTokens),
+  );
+  const cacheWriteInputTokens = Math.min(
+    inputTokens - cachedInputTokens,
+    tokenCount(usage.cacheWriteInputTokens),
+  );
   return {
-    inputTokens: Number(usage.inputTokens) || 0,
-    outputTokens: Number(usage.outputTokens) || 0,
+    inputTokens,
+    outputTokens: tokenCount(usage.outputTokens),
+    cachedInputTokens,
+    cacheWriteInputTokens,
   };
 }
 
@@ -51,6 +79,8 @@ interface RuntimeAgg {
   calls: number;
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteInputTokens: number;
 }
 
 interface TurnAgg {
@@ -59,6 +89,8 @@ interface TurnAgg {
   calls: number;
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteInputTokens: number;
 }
 
 interface ModelAgg {
@@ -67,12 +99,16 @@ interface ModelAgg {
   calls: number;
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens: number;
+  cacheWriteInputTokens: number;
 }
 
 interface CostModel {
   readonly totalCalls: number;
   readonly totalInput: number;
   readonly totalOutput: number;
+  readonly totalCachedInput: number;
+  readonly totalCacheWriteInput: number;
   readonly byRuntime: readonly RuntimeAgg[];
   readonly byTurn: readonly TurnAgg[];
   readonly byModel: readonly ModelAgg[];
@@ -85,11 +121,15 @@ export function aggregate(turns: readonly VisibleTurn[]): CostModel {
   let totalCalls = 0;
   let totalInput = 0;
   let totalOutput = 0;
+  let totalCachedInput = 0;
+  let totalCacheWriteInput = 0;
 
   for (const { turn, turnIndex } of turns) {
     let turnCalls = 0;
     let turnInput = 0;
     let turnOutput = 0;
+    let turnCachedInput = 0;
+    let turnCacheWriteInput = 0;
     // Sequential pairing: remember the model announced by the latest
     // `llm.calling` per runtime so the next `llm.responded` inherits it.
     const lastTargetByRuntime = new Map<
@@ -117,7 +157,14 @@ export function aggregate(turns: readonly VisibleTurn[]): CostModel {
       const target =
         event.type === "llm.responded"
           ? lastTargetByRuntime.get(runtimeId)
-          : undefined;
+          : typeof payload.model === "string"
+            ? {
+                model: payload.model,
+                ...(typeof payload.provider === "string"
+                  ? { provider: payload.provider }
+                  : {}),
+              }
+            : undefined;
       const model = target?.model ?? UNKNOWN_MODEL;
       const modelKey = `${target?.provider ?? ""}\u0000${model}`;
       const prevModel = modelMap.get(modelKey);
@@ -127,6 +174,10 @@ export function aggregate(turns: readonly VisibleTurn[]): CostModel {
         calls: (prevModel?.calls ?? 0) + 1,
         inputTokens: (prevModel?.inputTokens ?? 0) + usage.inputTokens,
         outputTokens: (prevModel?.outputTokens ?? 0) + usage.outputTokens,
+        cachedInputTokens:
+          (prevModel?.cachedInputTokens ?? 0) + usage.cachedInputTokens,
+        cacheWriteInputTokens:
+          (prevModel?.cacheWriteInputTokens ?? 0) + usage.cacheWriteInputTokens,
       });
       // Immutable accumulate: replace the map entry with a fresh object
       // rather than mutating the stored one in place.
@@ -137,13 +188,21 @@ export function aggregate(turns: readonly VisibleTurn[]): CostModel {
         calls: (prev?.calls ?? 0) + 1,
         inputTokens: (prev?.inputTokens ?? 0) + usage.inputTokens,
         outputTokens: (prev?.outputTokens ?? 0) + usage.outputTokens,
+        cachedInputTokens:
+          (prev?.cachedInputTokens ?? 0) + usage.cachedInputTokens,
+        cacheWriteInputTokens:
+          (prev?.cacheWriteInputTokens ?? 0) + usage.cacheWriteInputTokens,
       });
       turnCalls += 1;
       turnInput += usage.inputTokens;
       turnOutput += usage.outputTokens;
+      turnCachedInput += usage.cachedInputTokens;
+      turnCacheWriteInput += usage.cacheWriteInputTokens;
       totalCalls += 1;
       totalInput += usage.inputTokens;
       totalOutput += usage.outputTokens;
+      totalCachedInput += usage.cachedInputTokens;
+      totalCacheWriteInput += usage.cacheWriteInputTokens;
     }
     if (turnCalls > 0) {
       byTurn.push({
@@ -152,6 +211,8 @@ export function aggregate(turns: readonly VisibleTurn[]): CostModel {
         calls: turnCalls,
         inputTokens: turnInput,
         outputTokens: turnOutput,
+        cachedInputTokens: turnCachedInput,
+        cacheWriteInputTokens: turnCacheWriteInput,
       });
     }
   }
@@ -162,7 +223,16 @@ export function aggregate(turns: readonly VisibleTurn[]): CostModel {
   const byModel = [...modelMap.values()].sort(
     (a, b) => b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens),
   );
-  return { totalCalls, totalInput, totalOutput, byRuntime, byTurn, byModel };
+  return {
+    totalCalls,
+    totalInput,
+    totalOutput,
+    totalCachedInput,
+    totalCacheWriteInput,
+    byRuntime,
+    byTurn,
+    byModel,
+  };
 }
 
 // ── Pricing ──────────────────────────────────────────────────────
@@ -230,15 +300,75 @@ function useModelPrices(
 }
 
 export function estimateCostUsd(
-  agg: Pick<ModelAgg, "inputTokens" | "outputTokens">,
+  agg: Pick<
+    ModelAgg,
+    | "inputTokens"
+    | "outputTokens"
+    | "cachedInputTokens"
+    | "cacheWriteInputTokens"
+  >,
   price: ModelPrice,
   multiplier = 1,
 ): number {
+  const inputTokens = tokenCount(agg.inputTokens);
+  const cachedInputTokens = Math.min(
+    inputTokens,
+    tokenCount(agg.cachedInputTokens),
+  );
+  const cacheWriteInputTokens = Math.min(
+    inputTokens - cachedInputTokens,
+    tokenCount(agg.cacheWriteInputTokens),
+  );
   return (
     multiplier *
-    ((agg.inputTokens / 1_000_000) * (price.inputPerMToken ?? 0) +
-      (agg.outputTokens / 1_000_000) * (price.outputPerMToken ?? 0))
+    (((inputTokens - cachedInputTokens - cacheWriteInputTokens) / 1_000_000) *
+      (price.inputPerMToken ?? 0) +
+      (tokenCount(agg.outputTokens) / 1_000_000) * (price.outputPerMToken ?? 0))
   );
+}
+
+export function estimateModelCost(
+  agg: Pick<
+    ModelAgg,
+    | "inputTokens"
+    | "outputTokens"
+    | "cachedInputTokens"
+    | "cacheWriteInputTokens"
+  >,
+  price: ModelPrice | null,
+  multiplier = 1,
+): { usd: number; pricedTokens: number; unpricedTokens: number } {
+  const inputTokens = tokenCount(agg.inputTokens);
+  const outputTokens = tokenCount(agg.outputTokens);
+  const cachedInputTokens = Math.min(
+    inputTokens,
+    tokenCount(agg.cachedInputTokens),
+  );
+  const cacheWriteInputTokens = Math.min(
+    inputTokens - cachedInputTokens,
+    tokenCount(agg.cacheWriteInputTokens),
+  );
+  const uncachedInputTokens =
+    inputTokens - cachedInputTokens - cacheWriteInputTokens;
+  if (!price) {
+    return {
+      usd: 0,
+      pricedTokens: 0,
+      unpricedTokens: inputTokens + outputTokens,
+    };
+  }
+  const pricedInput =
+    price.inputPerMToken === undefined ? 0 : uncachedInputTokens;
+  const pricedOutput = price.outputPerMToken === undefined ? 0 : outputTokens;
+  return {
+    usd: estimateCostUsd(agg, price, multiplier),
+    pricedTokens: pricedInput + pricedOutput,
+    unpricedTokens:
+      cachedInputTokens +
+      cacheWriteInputTokens +
+      (uncachedInputTokens - pricedInput) +
+      (outputTokens - pricedOutput),
+  };
 }
 
 function fmt(n: number): string {
@@ -283,17 +413,14 @@ export function CostPanel({
     for (const agg of model.byModel) {
       const priceKey = `${agg.provider ?? ""}\u0000${agg.model}`;
       const price = agg.model === UNKNOWN_MODEL ? null : prices[priceKey];
-      const tokens = agg.inputTokens + agg.outputTokens;
-      if (price) {
-        usd += estimateCostUsd(
-          agg,
-          price,
-          getProviderPriceMultiplier(agg.provider),
-        );
-        pricedTokens += tokens;
-      } else {
-        unpricedTokens += tokens;
-      }
+      const estimate = estimateModelCost(
+        agg,
+        price,
+        getProviderPriceMultiplier(agg.provider),
+      );
+      usd += estimate.usd;
+      pricedTokens += estimate.pricedTokens;
+      unpricedTokens += estimate.unpricedTokens;
     }
     return { usd, pricedTokens, unpricedTokens };
   }, [model.byModel, prices]);
@@ -350,6 +477,12 @@ export function CostPanel({
             label={t("debugger.cost.output", "Output")}
             value={fmt(model.totalOutput)}
           />
+          {(model.totalCachedInput > 0 || model.totalCacheWriteInput > 0) && (
+            <StatCard
+              label={t("debugger.cost.cache", "Cache read / write")}
+              value={`${fmt(model.totalCachedInput)} / ${fmt(model.totalCacheWriteInput)}`}
+            />
+          )}
           <StatCard
             label={t("debugger.cost.calls", "LLM calls")}
             value={fmt(model.totalCalls)}
@@ -367,6 +500,14 @@ export function CostPanel({
             "Token sums from llm.responded / gateway.responded. USD cost estimated from model-db prices; usage without a model id or price is excluded (cost shown as a lower bound).",
           )}
         </p>
+        {(model.totalCachedInput > 0 || model.totalCacheWriteInput > 0) && (
+          <p className="ui-meta text-[9px] text-muted-foreground/70">
+            {t(
+              "debugger.cost.cacheNote",
+              "Cache read/write tokens are included in input totals but excluded from USD until provider-specific cache prices are available.",
+            )}
+          </p>
+        )}
       </section>
 
       {/* By model */}
@@ -380,6 +521,7 @@ export function CostPanel({
               const priceKey = `${m.provider ?? ""}\u0000${m.model}`;
               const price = m.model === UNKNOWN_MODEL ? null : prices[priceKey];
               const multiplier = getProviderPriceMultiplier(m.provider);
+              const estimate = estimateModelCost(m, price, multiplier);
               return (
                 <div
                   key={priceKey}
@@ -392,8 +534,11 @@ export function CostPanel({
                   </span>
                   <span className="font-mono tabular-nums text-muted-foreground shrink-0">
                     {fmt(m.inputTokens)} → {fmt(m.outputTokens)} · {m.calls}× ·{" "}
+                    {m.cachedInputTokens > 0 || m.cacheWriteInputTokens > 0
+                      ? `${t("debugger.cost.cache", "cache")} ${fmt(m.cachedInputTokens)}/${fmt(m.cacheWriteInputTokens)} · `
+                      : ""}
                     {price
-                      ? `$${estimateCostUsd(m, price, multiplier).toFixed(4)}${multiplier !== 1 ? ` (×${multiplier})` : ""}`
+                      ? `${estimate.unpricedTokens > 0 ? "≥ " : "≈ "}$${estimate.usd.toFixed(4)}${multiplier !== 1 ? ` (×${multiplier})` : ""}`
                       : t("debugger.cost.noPrice", "no price")}
                   </span>
                 </div>

@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type * as api from "@/services/api.js";
-import { aggregate, estimateCostUsd, UNKNOWN_MODEL } from "../-cost-panel.js";
+import {
+  aggregate,
+  estimateCostUsd,
+  estimateModelCost,
+  UNKNOWN_MODEL,
+} from "../-cost-panel.js";
 import type { VisibleTurn } from "../-debug-page-model.js";
 
 function evt(type: string, payload: Record<string, unknown>): api.TraceEvent {
@@ -58,6 +63,8 @@ describe("cost-panel aggregate", () => {
 
     expect(m.totalInput).toBe(320);
     expect(m.totalOutput).toBe(140);
+    expect(m.totalCachedInput).toBe(0);
+    expect(m.totalCacheWriteInput).toBe(0);
     expect(m.totalCalls).toBe(3);
     // byRuntime sorted by total tokens desc — narrator (430) before guide (30).
     expect(m.byRuntime[0]!.runtimeId).toBe("narrator");
@@ -91,6 +98,29 @@ describe("cost-panel aggregate", () => {
     expect(m.totalInput).toBe(5);
     expect(m.byRuntime).toHaveLength(1);
     expect(m.byRuntime[0]!.runtimeId).toBe("img");
+  });
+
+  it("attributes gateway usage when the executed target is recorded", () => {
+    const model = aggregate([
+      turn(1, "turn-1", [
+        evt("gateway.responded", {
+          runtimeId: "extractor",
+          pluginId: "extractor",
+          model: "gpt-5-mini",
+          provider: "openai",
+          ...usage(25, 5),
+        }),
+      ]),
+    ]);
+
+    expect(model.byModel).toEqual([
+      expect.objectContaining({
+        model: "gpt-5-mini",
+        provider: "openai",
+        inputTokens: 25,
+        outputTokens: 5,
+      }),
+    ]);
   });
 
   it("returns an empty model when no usage events exist", () => {
@@ -160,11 +190,102 @@ describe("cost-panel aggregate", () => {
   });
 
   it("applies a decimal provider multiplier to estimated settlement", () => {
-    const usage = { inputTokens: 1_000_000, outputTokens: 500_000 };
+    const usage = {
+      inputTokens: 1_000_000,
+      outputTokens: 500_000,
+      cachedInputTokens: 0,
+      cacheWriteInputTokens: 0,
+    };
     const price = { inputPerMToken: 2, outputPerMToken: 4 };
 
     expect(estimateCostUsd(usage, price, 0.1)).toBeCloseTo(0.4);
     expect(estimateCostUsd(usage, price, 2.5)).toBeCloseTo(10);
+  });
+
+  it("tracks missing input/output prices and cache tokens as unpriced", () => {
+    const usage = {
+      inputTokens: 100,
+      outputTokens: 40,
+      cachedInputTokens: 30,
+      cacheWriteInputTokens: 10,
+    };
+
+    expect(estimateModelCost(usage, { inputPerMToken: 2 })).toMatchObject({
+      pricedTokens: 60,
+      unpricedTokens: 80,
+    });
+    expect(estimateModelCost(usage, { outputPerMToken: 4 })).toMatchObject({
+      pricedTokens: 40,
+      unpricedTokens: 100,
+    });
+    expect(
+      estimateModelCost(usage, {
+        inputPerMToken: 2,
+        outputPerMToken: 4,
+      }),
+    ).toMatchObject({ pricedTokens: 100, unpricedTokens: 40 });
+  });
+
+  it("tracks cache usage and excludes unknown cache rates from cost", () => {
+    const turns = [
+      turn(1, "turn-1", [
+        evt("llm.responded", {
+          runtimeId: "world-ir",
+          usage: {
+            inputTokens: 1_000_000,
+            outputTokens: 100_000,
+            cachedInputTokens: 600_000,
+            cacheWriteInputTokens: 100_000,
+          },
+        }),
+      ]),
+    ];
+
+    const model = aggregate(turns);
+    expect(model.totalInput).toBe(1_000_000);
+    expect(model.totalCachedInput).toBe(600_000);
+    expect(model.totalCacheWriteInput).toBe(100_000);
+    expect(model.byRuntime[0]).toMatchObject({
+      cachedInputTokens: 600_000,
+      cacheWriteInputTokens: 100_000,
+    });
+    expect(
+      estimateCostUsd(model.byModel[0]!, {
+        inputPerMToken: 2,
+        outputPerMToken: 4,
+      }),
+    ).toBeCloseTo(1);
+  });
+
+  it("sanitizes malformed trace counters and clamps cache subsets", () => {
+    const model = aggregate([
+      turn(1, "turn-1", [
+        evt("llm.responded", {
+          runtimeId: "bad",
+          usage: {
+            inputTokens: 10,
+            outputTokens: -1,
+            cachedInputTokens: 8,
+            cacheWriteInputTokens: 9,
+          },
+        }),
+      ]),
+    ]);
+
+    expect(model.totalOutput).toBe(0);
+    expect(model.totalCachedInput).toBe(8);
+    expect(model.totalCacheWriteInput).toBe(2);
+    expect(
+      estimateCostUsd(
+        {
+          inputTokens: 10,
+          outputTokens: -1,
+          cachedInputTokens: 8,
+          cacheWriteInputTokens: 9,
+        },
+        { inputPerMToken: 1_000_000, outputPerMToken: 1_000_000 },
+      ),
+    ).toBe(0);
   });
 
   it("groups unattributable usage under the unknown-model bucket", () => {

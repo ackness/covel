@@ -10,6 +10,8 @@ import {
   pluginRelationsSchema,
   hasIllegalDetachedContract,
   localeLanguage,
+  WORLD_IR_V1_JSON_SCHEMA,
+  WORLD_IR_V1_SCHEMA_URI,
 } from "@covel/shared";
 import type {
   PluginRelations,
@@ -307,6 +309,9 @@ async function loadOutputSchema(
   declaredPath: string | undefined,
 ): Promise<Readonly<Record<string, unknown>> | undefined> {
   if (declaredPath) {
+    if (declaredPath === WORLD_IR_V1_SCHEMA_URI) {
+      return WORLD_IR_V1_JSON_SCHEMA;
+    }
     const fullPath = path.resolve(runtimeDir, declaredPath);
     await assertInsideRoot(pluginRoot, fullPath, "Output schema");
     if (!(await fileExists(fullPath))) {
@@ -342,6 +347,9 @@ async function loadDeclaredSchema(
   declaredPath: string,
   label: string,
 ): Promise<Readonly<Record<string, unknown>> | undefined> {
+  if (declaredPath === WORLD_IR_V1_SCHEMA_URI) {
+    return WORLD_IR_V1_JSON_SCHEMA;
+  }
   const fullPath = path.resolve(runtimeDir, declaredPath);
   await assertInsideRoot(pluginRoot, fullPath, label);
   if (!(await fileExists(fullPath))) {

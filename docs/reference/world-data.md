@@ -153,19 +153,19 @@ sources:
 
 字段：
 
-| 字段      | 必填 | 可选值 / 格式                                                                          | 说明                                                                                      |
-| --------- | ---- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `kind`    | yes  | `yaml`、`json`、`markdown`、`text`、`media`                                            | source 读取器类型。                                                                       |
-| `path`    | yes  | 非空字符串                                                                             | 相对 descriptor root 的文件或目录。world 包相对 world root；override 相对 override root。 |
-| `schema`  | no   | `covel://world/dimensions`、`plugin://<pluginId>/<namespace>`、或本地 JSON Schema path | 校验用 schema。`plugin://...` 是 schema URI。                                             |
-| `to`      | yes  | 见 [Target URI](#target-uri)                                                           | 写入目标 URI。`plugin:<id>/<namespace>` 是 target URI。                                   |
-| `key`     | no   | 简单字段名，例如 `id`、`characterId`、`filename`                                       | 批量 source 的稳定 key。media 常用 `filename`。                                           |
-| `indexTo` | no\* | `plugin:<id>/<namespace>`                                                              | 仅 media source 使用，把媒体索引写入插件数据。**对 media source 实为必需**——见下。        |
-| `effects` | no   | `characters`                                                                           | 额外投影；当前 `characters` 会把角色蓝图或简洁角色记录实例化为角色。                      |
-| `after`   | no   | source id 或 source id 数组                                                            | source 顺序依赖。source id 必须先声明且满足命名规则。                                     |
-| `enabled` | no   | boolean                                                                                | `false` 会跳过该 source。                                                                 |
-| `locale`  | no   | 长度至少 2 的字符串                                                                    | source 对应的内容语言。                                                                   |
-| `merge`   | no   | `replace`、`skipExisting`                                                              | 写入冲突策略。                                                                            |
+| 字段      | 必填 | 可选值 / 格式                                                                                                 | 说明                                                                                      |
+| --------- | ---- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `kind`    | yes  | `yaml`、`json`、`markdown`、`text`、`media`                                                                   | source 读取器类型。                                                                       |
+| `path`    | yes  | 非空字符串                                                                                                    | 相对 descriptor root 的文件或目录。world 包相对 world root；override 相对 override root。 |
+| `schema`  | no   | `covel://world/dimensions`、`covel://world/ir/v1`、`plugin://<pluginId>/<namespace>`、或本地 JSON Schema path | 校验用 schema。`plugin://...` 是 schema URI。                                             |
+| `to`      | yes  | 见 [Target URI](#target-uri)                                                                                  | 写入目标 URI。`plugin:<id>/<namespace>` 是 target URI。                                   |
+| `key`     | no   | 简单字段名，例如 `id`、`characterId`、`filename`                                                              | 批量 source 的稳定 key。media 常用 `filename`。                                           |
+| `indexTo` | no\* | `plugin:<id>/<namespace>`                                                                                     | 仅 media source 使用，把媒体索引写入插件数据。**对 media source 实为必需**——见下。        |
+| `effects` | no   | `characters`、`projections`                                                                                   | 额外投影；`characters` 实例化角色，`projections` 调用已启用插件声明的纯投影。             |
+| `after`   | no   | source id 或 source id 数组                                                                                   | source 顺序依赖。source id 必须先声明且满足命名规则。                                     |
+| `enabled` | no   | boolean                                                                                                       | `false` 会跳过该 source。                                                                 |
+| `locale`  | no   | 长度至少 2 的字符串                                                                                           | source 对应的内容语言。                                                                   |
+| `merge`   | no   | `replace`、`skipExisting`                                                                                     | 写入冲突策略。                                                                            |
 
 > **media source 必须同时声明 `key` 和 `indexTo`**，否则整条 source 静默失效：
 >
@@ -254,6 +254,7 @@ URI grammar：
 | `plugin:<pluginId>/<namespace>+lorebook` | target URI | 同时写 `plugin_data` 和 lorebook。                                                                                                  |
 | `plugin://<pluginId>/<namespace>`        | schema URI | 用于 `schema` 字段，指向插件 `dataSchemas.<namespace>`。                                                                            |
 | `covel://world/dimensions`               | schema URI | 内置 world dimensions schema。                                                                                                      |
+| `covel://world/ir/v1`                    | schema URI | 内置、严格、版本化的插件中立 WorldIR envelope。                                                                                     |
 | `world:metadata.<path>`                  | target URI | path 只允许字母、数字、`_`、`.`、`-`；禁止 `__proto__`、`constructor`、`prototype`；当前拒绝 `world:metadata.characterBlueprints`。 |
 
 `plugin://...` 和 `plugin:...` 的用途不同：`schema` 说明“用哪个 schema 校验”，`to` 说明“写到哪里”。因此同一个 source 通常同时写：
@@ -274,6 +275,78 @@ to: plugin:character-blueprint/blueprints
 以上为 **error 级**（作者错误，阻断导入）。**目标插件是否在本 session 最终启用插件列表中**是玩家选择的结果，不算作者错误：`to: plugin:*` 目标未激活时该 source 整体跳过（warning 级诊断）；`indexTo` 目标未激活时媒体字节照常导入，仅跳过索引写入（warning 级）。世界给可选插件携带数据因此是安全的——玩家取消勾选对应插件不会导致建会话失败。
 
 world load 阶段只强校验内置 schema 和本地 schema；`plugin://...` schema 在 session import/preflight 阶段结合当前启用插件严格校验。
+
+## WorldIR 与插件投影
+
+`covel://world/ir/v1` 是插件中立的中间表示。它让 world 作者或上游抽取器只维护一份世界事实，再由各插件把相同输入转换成自己的 `dataSchemas` 记录。v1 envelope 顶层和每类记录都拒绝未知字段；插件专用扩展只能放在 `attributes` 中：
+
+```yaml
+schemaVersion: 1
+summary: 海滨校园中的人物、事件与规则。
+entities: []
+relations: []
+events: []
+statements:
+  - id: school-closing-time
+    type: rule
+    content: 学校每天十八点闭校。
+    attributes:
+      title: 闭校时间
+      kind: constant
+```
+
+四个数组始终存在：
+
+| 数组         | 必要字段                   | 用途                                                                       |
+| ------------ | -------------------------- | -------------------------------------------------------------------------- |
+| `entities`   | `id`、`type`               | 人物、地点、组织、物品等稳定实体，可带 `name`、`description`、`attributes` |
+| `relations`  | `id`、`type`、`from`、`to` | 实体间有向关系，可带 `description`、`attributes`                           |
+| `events`     | `id`、`type`               | 事件，可带 `participantIds`、`time`、`description`、`attributes`           |
+| `statements` | `id`、`type`、`content`    | 事实、规则、目标、任务或注释，可带 `subjectIds`、`attributes`              |
+
+source 只有显式声明 `effects: [projections]` 才运行插件投影：
+
+```yaml
+sources:
+  worldIr:
+    kind: yaml
+    path: data/world.ir.yaml
+    schema: covel://world/ir/v1
+    to: world:metadata.worldIr
+    effects:
+      - projections
+```
+
+导入器从 session 的最终启用插件中发现 `worldProjections`，按 `pluginId/projectionId` 稳定排序，并只执行 `from` 与 source schema 完全相同的声明。handler 接收：
+
+```ts
+{
+  value: WorldIRV1;
+  context: {
+    sessionId: string;
+    worldId: string;
+    sourceId: string;
+    locale?: string;
+    now: string;
+  };
+}
+```
+
+handler 必须返回以声明的 output id 为 key 的对象；每个 output 值可以是一条记录或记录数组。框架拒绝额外 output、缺失 key 字段、越界 handler 路径以及不符合目标 `dataSchemas` JSON Schema 的结果。每条投影记录仍走普通 planned write、事务、ledger 和 `sync-data`，并记录 `projection:<pluginId>/<projectionId>` provenance。没有匹配的已启用 projection 时，source 产生零条投影写入，不视为错误。
+
+执行边界：
+
+- `preflight` 只校验 source、声明、目标和 schema，**不 import 或执行 handler**；projection 的实际 output key 只能在 import/sync 后确定。
+- import/sync 只运行当前 session 已启用插件的匹配声明；单个 projection 失败只产生 warning，不阻断 canonical source 写入或其他插件的 projection。
+- 每个声明的 output 是独立一致性单元：任一 item 的 key/schema 无效时整组 output 延迟，不写入半新半旧的混合代次。sync 会保留该 output 上一次成功的 row 与 ledger；只有 handler 成功返回 `[]` 才表示权威空结果并允许删除旧 row。
+- builtin handler 可直接运行；community handler 需要该 session 的显式 server-code grant。会话创建前无法授予这项权限，因此 community projection 应在建会话后调用插件 enable（已在 active 列表也可重复调用）触发 `covel:plugin-server-code` 的 session-scope 审批，再通过 `sync-data` 补跑；未获 grant 时 importer 只发 warning，不会偷偷执行代码。
+- 每次调用使用独立 Worker 和结构化克隆输入，超时 1 秒，V8 old/young generation 上限分别为 128/32 MiB，stack 上限 4 MiB，JSON 输出上限 1 MiB，每个 output 上限 1000 条，每个 source 最多执行稳定排序后的前 32 个 projection。Worker 隔离用于限制状态串扰与资源滥用，**不是安全沙箱**；已批准代码仍可能访问 Node/网络能力。
+- handler 文件 digest、projection/output 身份与实际 item 都进入 ledger 的 source digest；只改 handler 不改 world source 时，下一次 sync 仍会识别变化。执行前后 digest 不一致时会丢弃该次结果，避免热更新竞态写入错误 provenance。
+- session 创建会先在锁和数据库事务之外读取 source、运行 projection 并生成不可变 plan，再在事务内原子应用，避免插件工作占用事务。sync 同样在 session mutation lock 外完成 plan 和 projection Worker；dry-run 不取写锁，实际写入只在短锁内重新校验 world、locale、active plugin 与审批 scope，然后完成冲突扫描和事务应用。
+
+开发工具和 Agent 可通过 `GET /api/framework/capabilities` 发现 `projections` effect、WorldIR URI 及其规范 JSON Schema 文档，再通过 `GET /api/plugins/:id/contract` 读取每个插件聚合后的 `worldProjections`。公开 discovery 只返回声明元数据，不暴露插件根路径或 handler 路径，也不能直接调用 handler。
+
+静态 world-data projection 与实时 story 管线使用同一 `covel://world/ir/v1` 数据契约，但执行机制不同：静态数据走上面的纯函数 handler；实时回合由 `world-ir` agent 把 `narrative-engine` 输出抽取一次，`codex`、`core-quest`、`affinity`、`inventory` 和 `npc-graph/extractor` 再通过 typed input 并行消费。共享抽取失败时，下游按 DAG gate 跳过，不影响本轮叙事成功提交。
 
 ## World-Init Schema Fast Path
 

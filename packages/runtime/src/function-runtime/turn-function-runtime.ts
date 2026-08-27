@@ -8,6 +8,7 @@ import type {
   ExecutionContext,
   InputSlot,
 } from "@covel/shared";
+import { validateWorldIRV1, WORLD_IR_V1_SCHEMA_URI } from "@covel/shared";
 import { attachExecutionJournal } from "../execution-journal.js";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
@@ -614,10 +615,22 @@ export async function executeFunctionRuntime({
       handlerOutcome.value,
       loaded.outputSchema,
     );
-    if (!validation.valid) {
-      const detail = (validation.errors ?? ["unknown schema validation error"])
-        .slice(0, 5)
-        .join("; ");
+    const semanticValidation =
+      validation.valid && loaded.outputSchema.$id === WORLD_IR_V1_SCHEMA_URI
+        ? validateWorldIRV1(handlerOutcome.value)
+        : undefined;
+    if (
+      !validation.valid ||
+      (semanticValidation && !semanticValidation.valid)
+    ) {
+      const errors = !validation.valid
+        ? (validation.errors ?? ["unknown schema validation error"])
+        : semanticValidation && !semanticValidation.valid
+          ? semanticValidation.errors.map(
+              (error) => `${error.path}: ${error.message}`,
+            )
+          : ["unknown semantic validation error"];
+      const detail = errors.slice(0, 5).join("; ");
       envelopeSchemaError = `output-schema-invalid: ${detail}`;
     }
   }

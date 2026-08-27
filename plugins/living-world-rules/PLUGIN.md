@@ -28,6 +28,14 @@ dataSchemas:
     acceptsWorldData: true
     schema: ./schemas/rules.schema.json
     description: Importable world info rules that can also project to lorebook.
+worldProjections:
+  rules-from-world-ir:
+    from: covel://world/ir/v1
+    handler: ./server/project-world-ir.js
+    outputs:
+      rules:
+        namespace: rules
+        key: id
 ui:
   right:
     - ./ui/living-world-rules-panel.json

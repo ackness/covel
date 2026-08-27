@@ -175,6 +175,64 @@ const authoringI18nDescriptionPositive: Fixture = {
   },
 };
 
+const emptyWorldProjectionRejections: readonly Fixture[] = [
+  {
+    name: "empty worldProjections map",
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      worldProjections: {},
+    },
+  },
+  {
+    name: "world projection without outputs",
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      worldProjections: {
+        facts: {
+          from: "covel://world/ir/v1",
+          handler: "server/project.js",
+          outputs: {},
+        },
+      },
+    },
+  },
+  {
+    name: "world projection with whitespace-only source schema",
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      worldProjections: {
+        facts: {
+          from: " ",
+          handler: "server/project.js",
+          outputs: {
+            facts: { namespace: "facts", key: "id" },
+          },
+        },
+      },
+    },
+  },
+];
+
+const caseInsensitiveProjectionPositive: Fixture = {
+  name: "mixed-case namespace and JavaScript handler path",
+  manifest: {
+    ...base,
+    stage: "post-turn",
+    worldProjections: {
+      facts: {
+        from: "covel://world/ir/v1",
+        handler: "Server/Project.JS",
+        outputs: {
+          facts: { namespace: "Facts", key: "id" },
+        },
+      },
+    },
+  },
+};
+
 // ── Authoring rejections ────────────────────────────────────────────
 
 const authoringStructuralRejections: readonly Fixture[] = [
@@ -345,6 +403,16 @@ describe("runtimeManifestInputSchema (compat superset)", () => {
     assertAccepted("input", compatNewPositive);
   });
 
+  it(`accepts ${caseInsensitiveProjectionPositive.name}`, () => {
+    assertAccepted("input", caseInsensitiveProjectionPositive);
+  });
+
+  for (const fixture of emptyWorldProjectionRejections) {
+    it(`rejects projection cardinality: ${fixture.name}`, () => {
+      assertRejected("input", fixture);
+    });
+  }
+
   for (const fixture of compatMalformedRejections) {
     it(`rejects malformed: ${fixture.name}`, () => {
       assertRejected("input", fixture);
@@ -361,6 +429,10 @@ describe("runtimeManifestAuthoringSchema (strict authoring)", () => {
     assertAccepted("authoring", authoringI18nDescriptionPositive);
   });
 
+  it(`accepts ${caseInsensitiveProjectionPositive.name}`, () => {
+    assertAccepted("authoring", caseInsensitiveProjectionPositive);
+  });
+
   it("rejects an empty i18n description map (Zod refine only)", () => {
     assertRejected("authoring", {
       name: "empty i18n description map",
@@ -373,6 +445,12 @@ describe("runtimeManifestAuthoringSchema (strict authoring)", () => {
       },
     });
   });
+
+  for (const fixture of emptyWorldProjectionRejections) {
+    it(`rejects projection cardinality: ${fixture.name}`, () => {
+      assertRejected("authoring", fixture);
+    });
+  }
 
   for (const fixture of authoringStructuralRejections) {
     it(`rejects (structural, JSON Schema agrees): ${fixture.name}`, () => {

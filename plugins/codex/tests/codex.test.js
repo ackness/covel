@@ -561,23 +561,16 @@ describe("codex plugin manifest", () => {
     expect(manifest.handler).toBeUndefined();
   });
 
-  it("should declare both narrative-engine runtime injects and the plugin-data inject", () => {
+  it("should consume typed WorldIR and inject existing plugin data", () => {
+    expect(manifest.inputs?.worldIR).toEqual({
+      from: { capability: "world-ir-provider", cardinality: "one" },
+      accepts: "covel://world/ir/v1",
+      required: true,
+    });
+    expect(manifest.relations?.requires).toContain("world-ir");
+
     const injects = manifest.input?.inject ?? [];
-    expect(injects).toHaveLength(3);
-
-    // Engine-agnostic : one runtime inject per known narrative engine;
-    // the absent engine resolves to nothing so exactly the active one fills
-    // the <narrator-output> block.
-    for (const engine of ["narrator", "chat-mode-narrator"]) {
-      expect(injects).toContainEqual({
-        kind: "runtime",
-        from: engine,
-        field: "narrativeOutput",
-        as: "<narrator-output>",
-      });
-    }
-
-    // Plus: plugin-data inject from its own `entries` namespace
+    expect(injects).toHaveLength(1);
     expect(injects).toContainEqual(
       expect.objectContaining({
         kind: "plugin-data",
@@ -607,14 +600,12 @@ describe("codex plugin manifest", () => {
     expect(loaded.promptTemplate).toContain("<existing-entries>");
   });
 
-  it("should have auto trigger (runs every turn after the narrative engine)", () => {
+  it("should have auto trigger and rely on its typed WorldIR DAG edge", () => {
     // Post 2026-04 refactor: codex runs every turn so no narrative is lost
-    // between discovery passes. Priority 600 plus the narrative-engine
-    // capability gate  ensure codex (and its peers guide / extractor /
-    // character-tracker) schedule after the active engine completes; on that
-    // layer the DAG scheduler executes them concurrently.
+    // between discovery passes. The typed worldIR binding creates both the
+    // same-turn dependency edge and the required failure gate.
     expect(manifest.trigger?.type).toBe("auto");
-    expect(manifest.needs).toEqual([{ capability: "narrative-engine" }]);
+    expect(manifest.needs).toBeUndefined();
   });
 
   it("should declare right panel UI spec", () => {

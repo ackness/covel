@@ -71,6 +71,7 @@ export type {
   LLMAdapter,
   LLMTargetIdentity,
   LLMMessage as LLMAdapterMessage,
+  LLMUsageSummary,
   LLMResponse,
   LLMStreamEvent,
   LLMToolCall,

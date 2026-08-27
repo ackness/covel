@@ -8,6 +8,9 @@ description:
   en: Tracks relationships between characters so the story stays consistent when people are mentioned again.
 pluginType: plugin
 entry: ./server/index.js
+relations:
+  requires:
+    - world-ir
 ---
 
 # Relationship Tracker

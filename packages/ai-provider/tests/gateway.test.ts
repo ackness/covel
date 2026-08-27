@@ -124,6 +124,8 @@ describe("gateway", () => {
 
     expect(result.text).toBe("stub response");
     expect(result.usage.inputTokens).toBe(10);
+    expect(result.model).toBe("test-model");
+    expect(result.provider).toBe("test");
   });
 
   it("streamText yields events", async () => {
@@ -208,6 +210,8 @@ describe("gateway", () => {
 
     expect(callCount).toBe(2);
     expect(result.text).toBe("backup response");
+    expect(result.model).toBe("backup-model");
+    expect(result.provider).toBe("backup-provider");
   });
 
   it("observes every concrete provider attempt in fallback order", async () => {

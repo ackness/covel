@@ -19,29 +19,23 @@ tags:
   - ui:message-block
 trigger:
   type: auto
-# The inventory ledger reads the latest narrative — skip when the active
-# narrative engine failed, to avoid the LLM hallucinating item changes from
-# an empty <narrator-output>. The gate discovers the engine by capability
-# (narrative-engine → narrator in traditional, chat-mode-narrator in
-# dialogue); the inject lists both known engines and the absent one
-# resolves to nothing.
-needs:
-  - capability: narrative-engine
+inputs:
+  worldIR:
+    from:
+      capability: world-ir-provider
+      cardinality: one
+    accepts: covel://world/ir/v1
+    required: true
 input:
   inject:
-    - kind: runtime
-      from: narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-    - kind: runtime
-      from: chat-mode-narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
     - kind: plugin-data
       namespace: items
       as: "<existing-inventory>"
       format: summary
       maxEntries: 80
+relations:
+  requires:
+    - world-ir
 entry: ./server/index.js
 tools:
   plugin:
@@ -71,9 +65,9 @@ postHistory:
 
 ## 输入
 
-### 本轮叙事
+### 本轮 WorldIR
 
-本轮叙事在 prompt 末尾的 `<narrator-output>` 块中（由框架 `input.inject` 自动注入）。
+本轮叙事已由共享抽取 agent 转为 `covel://world/ir/v1`，位于 `<runtime-inputs>` 的 `worldIR.value`。物品得失与装备变化主要在 `events[type=inventory_change]` 中；相关 item entities 和 attributes 提供名称、数量、operation 与证据。只记录 IR 明确表达为已经发生的变化。
 
 ### 当前背包
 
@@ -87,7 +81,7 @@ postHistory:
 
 ## 工作流程
 
-1. 仔细阅读 `<narrator-output>` 里的叙事
+1. 仔细阅读 `<runtime-inputs>` 中的 `worldIR.value`
 2. 对照 `<existing-inventory>`，找出本轮**明确发生**的物品变化
 3. 把所有变化合并成**一次** `update-inventory` 调用（`changes` 数组，最多 8 条）
 4. 如果本轮没有任何明确变化 → **直接结束，返回空字符串或 `{}`**，不要强行记录

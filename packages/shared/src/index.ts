@@ -90,6 +90,9 @@ export {
   outputConfigSchema,
   pluginDataSchemaDeclSchema,
   pluginDataSchemaMapSchema,
+  worldProjectionOutputDeclSchema,
+  worldProjectionDeclSchema,
+  worldProjectionMapSchema,
   toolsConfigSchema,
   hookDeclarationSchema,
   authorsNoteDeclSchema,
@@ -137,6 +140,15 @@ export {
 export type { WorldManifestInput } from "./schemas/world.js";
 
 export {
+  WORLD_IR_V1_SCHEMA_URI,
+  WORLD_IR_V1_JSON_SCHEMA,
+  worldIRJsonValueSchema,
+  worldIRV1EntitySchema,
+  worldIRV1RelationSchema,
+  worldIRV1EventSchema,
+  worldIRV1StatementSchema,
+  worldIRV1Schema,
+  validateWorldIRV1,
   worldDataSourceIdRegex,
   worldDataSourceIdSchema,
   worldDataSourceKindSchema,
@@ -152,6 +164,8 @@ export {
 } from "./schemas/world-data.js";
 
 export type {
+  WorldIRV1ValidationError,
+  WorldIRV1ValidationResult,
   WorldDataDescriptorInput,
   WorldDataDescriptorOverrideInput,
 } from "./schemas/world-data.js";

@@ -13,6 +13,7 @@
  */
 
 import type { PluginRuntimeGateway } from "@covel/plugin-loader";
+import type { LLMUsageSummary } from "@covel/shared";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { summarizeTraceError } from "./trace-error.js";
 
@@ -64,7 +65,9 @@ export function withGatewayTrace(
   async function traced<
     R extends {
       finishReason: string;
-      usage: { inputTokens: number; outputTokens: number };
+      usage: LLMUsageSummary;
+      model?: string;
+      provider?: string;
     },
   >(
     method: "generateText" | "generateObject",
@@ -80,6 +83,8 @@ export function withGatewayTrace(
         method,
         finishReason: result.finishReason,
         usage: result.usage,
+        ...(result.model ? { model: result.model } : {}),
+        ...(result.provider ? { provider: result.provider } : {}),
         durationMs: Date.now() - start,
       });
       return result;
@@ -163,6 +168,9 @@ export function withGatewayTrace(
           ...ctx,
           method: "transcribeAudio",
           textChars: result.text.length,
+          ...(result.usage ? { usage: result.usage } : {}),
+          ...(result.model ? { model: result.model } : {}),
+          ...(result.provider ? { provider: result.provider } : {}),
           durationMs: Date.now() - start,
         });
         return result;

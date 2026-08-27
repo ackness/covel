@@ -112,6 +112,7 @@ export interface PluginContract {
   };
   runtimes?: Array<Record<string, unknown>>;
   dataSchemas?: Record<string, unknown>;
+  worldProjections?: Record<string, unknown>;
 }
 
 export interface TraceDiscovery {

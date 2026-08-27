@@ -16,6 +16,7 @@ export type {
   LLMMessageContent,
   LLMMessage,
   LLMToolCall,
+  LLMUsageSummary,
   LLMResponse,
   LLMToolDefinition,
   LLMResponseFormat,

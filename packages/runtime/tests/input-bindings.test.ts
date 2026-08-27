@@ -11,6 +11,7 @@ import type {
   RuntimeResult,
   TurnInput,
 } from "@covel/shared";
+import { WORLD_IR_V1_JSON_SCHEMA, WORLD_IR_V1_SCHEMA_URI } from "@covel/shared";
 import {
   deriveActivation,
   hasIllegalDetachedContract,
@@ -495,6 +496,49 @@ describe("resolveInputBindings — accepts double layer", () => {
       ok: false,
       skipReason: "input-schema-invalid",
     });
+  });
+
+  it("rejects structurally valid WorldIR with dangling semantic references", async () => {
+    const invalidWorldIR = {
+      schemaVersion: 1,
+      entities: [{ id: "known", type: "character" }],
+      relations: [
+        {
+          id: "dangling",
+          type: "KNOWS",
+          from: "known",
+          to: "missing",
+        },
+      ],
+      events: [],
+      statements: [],
+    };
+    const res = await resolveInputBindings(
+      baseArgs({
+        manifest: rt("c/main", {
+          inputs: {
+            worldIR: {
+              from: { capability: "prov" },
+              accepts: WORLD_IR_V1_SCHEMA_URI,
+            },
+          },
+        }),
+        activeRuntimes: [provider],
+        completedResults: new Map([
+          ["p/gen", success("p/gen", invalidWorldIR)],
+        ]),
+        acceptsSchemas: { worldIR: WORLD_IR_V1_JSON_SCHEMA },
+        loadProducerSchema: async () => WORLD_IR_V1_JSON_SCHEMA,
+      }),
+    );
+
+    expect(res).toMatchObject({
+      ok: false,
+      skipReason: "input-schema-invalid",
+    });
+    expect(res.diagnostics.map((item) => item.message).join("\n")).toContain(
+      "does not exist",
+    );
   });
 });
 

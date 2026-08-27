@@ -4,8 +4,9 @@
 
 ## 运行时结构
 
-- `PLUGIN.md`：手动函数 runtime 和 world-data schema 声明。
+- `PLUGIN.md`：手动函数 runtime、world-data schema 和 WorldIR projection 声明。
 - `handler.js`：校验规则、保存规则，并发出 lorebook proposal。
+- `server/project-world-ir.js`：把 `covel://world/ir/v1` 中 `type: rule` 的 statements 纯转换为 `rules` 记录。
 - `schemas/rules.schema.json`：世界规则导入 schema。
 - `ui/living-world-rules-panel.json`：右侧规则列表面板。
 
@@ -14,6 +15,7 @@
 - 归一化规则写入 `plugin_data[living-world-rules][rules]`。
 - 发出 `lorebook.upsert` proposal，让规则影响后续提示词。
 - 通过 rule coordinate 控制规则进入提示词的位置。
+- WorldIR projection 只负责生成并校验 plugin-data；需要同时创建 lorebook 的 world 包仍应使用 `to: plugin:living-world-rules/rules+lorebook` 直接导入。projection output effects 会在后续独立扩展，不在纯转换 handler 中隐式执行。
 
 ## 开发
 

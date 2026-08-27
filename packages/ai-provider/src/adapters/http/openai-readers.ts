@@ -1,10 +1,29 @@
 import type { UsageSummary } from "../../types.js";
+import {
+  normalizeTokenUsage,
+  readOptionalTokenCount,
+  readTokenCount,
+} from "../usage.js";
 
 /** Narrow an unknown value to a plain object, or `undefined` otherwise. */
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function readOpenAiUsageDetails(
+  value: unknown,
+): Pick<UsageSummary, "cachedInputTokens" | "cacheWriteInputTokens"> {
+  const details = asRecord(value);
+  const cachedInputTokens = readOptionalTokenCount(details?.cached_tokens);
+  const cacheWriteInputTokens = readOptionalTokenCount(
+    details?.cache_write_tokens,
+  );
+  return {
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+    ...(cacheWriteInputTokens !== undefined ? { cacheWriteInputTokens } : {}),
+  };
 }
 
 /** `payload.choices[0]` as an object, or `undefined` if absent/malformed. */
@@ -30,10 +49,22 @@ export function readOpenAiChatUsage(
   payload: Record<string, unknown>,
 ): UsageSummary {
   const usage = payload.usage as Record<string, unknown> | undefined;
-  return {
-    inputTokens: Number(usage?.prompt_tokens ?? 0),
-    outputTokens: Number(usage?.completion_tokens ?? 0),
-  };
+  return normalizeTokenUsage({
+    inputTokens: readTokenCount(usage?.prompt_tokens),
+    outputTokens: readTokenCount(usage?.completion_tokens),
+    ...readOpenAiUsageDetails(usage?.prompt_tokens_details),
+  });
+}
+
+export function readOpenAiResponsesUsage(
+  payload: Record<string, unknown> | undefined,
+): UsageSummary {
+  const usage = asRecord(payload?.usage);
+  return normalizeTokenUsage({
+    inputTokens: readTokenCount(usage?.input_tokens),
+    outputTokens: readTokenCount(usage?.output_tokens),
+    ...readOpenAiUsageDetails(usage?.input_tokens_details),
+  });
 }
 
 export function readOpenAiChatStreamDelta(

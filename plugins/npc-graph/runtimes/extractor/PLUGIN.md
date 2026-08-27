@@ -23,25 +23,17 @@ trigger:
   type: scheduled
   interval: 1
   cooldownTurns: 1
-# Engine-agnostic extraction. The upstream gate discovers the active
-# narrative engine by capability (narrative-engine → narrator in traditional,
-# chat-mode-narrator in dialogue) instead of naming one, so the extractor
-# runs in either mode and still skips when that engine failed. The inject
-# lists both known engines; the absent one resolves to nothing, so exactly
-# the active engine's fresh prose fills <narrator-output>.
-# Gate on the active narrative engine's success, discovered by capability.
-needs:
-  - capability: narrative-engine
+# Typed WorldIR input is both the same-turn DAG edge and failure gate. Selecting
+# by capability keeps this runtime independent from the concrete extractor id.
+inputs:
+  worldIR:
+    from:
+      capability: world-ir-provider
+      cardinality: one
+    accepts: covel://world/ir/v1
+    required: true
 input:
   inject:
-    - kind: runtime
-      from: narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-    - kind: runtime
-      from: chat-mode-narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
     # Existing graph injected at prompt-build time (own plugin_data), removing
     # the mandatory per-turn list-npc-graph round-trip — same pattern codex /
     # character-tracker use. The upsert tool works name-first (it maps names →
@@ -78,9 +70,9 @@ postHistory:
 
 你是 NPC 关系图谱分析师（NPC Graph Analyst）。你的任务是持续维护一张会话级的人物-关系图：从叙事中识别新出现的人物、群体和势力，更新它们之间的关系事实。
 
-## 叙事上下文
+## WorldIR 上下文
 
-本轮叙事在 prompt 末尾的 `<narrator-output>` 块中（由框架 `input.inject` 自动注入，正文不再重复内联）。
+本轮叙事已由共享抽取 agent 转为 `covel://world/ir/v1`，位于 `<runtime-inputs>` 的 `worldIR.value`。`entities` 提供本轮涉及的人物、群体和势力，`relations` 提供明确关系变化，`events`、`statements` 与 `summary` 提供事实证据。只处理这份 IR 明确表达的新信息。
 
 ## 已有图谱（已自动注入）
 
@@ -106,7 +98,7 @@ postHistory:
 ## 工作流
 
 1. **读取**：查看已注入的 `<existing-npcs>` 与 `<existing-relations>`（无需工具调用）
-2. **比对**：对照 `<narrator-output>` 中出现的人物和互动
+2. **比对**：对照 `<runtime-inputs>` 中 `worldIR.value` 的人物和互动
 3. **抽取**：
    - 对**新出现**的人物/群体/势力 → 登记为新节点
    - 对已有节点的**新发现** → 在 attributes 中补充
@@ -116,7 +108,7 @@ postHistory:
 
 ## 硬规则
 
-- **只抽取本轮 `<narrator-output>` 明确提供的新事实**；历史消息只用于消歧和确认规范姓名，不能把旧内容重复当成本轮更新
+- **只抽取本轮 `worldIR.value` 明确提供的新事实**；历史消息只用于消歧和确认规范姓名，不能把旧内容重复当成本轮更新
 - 只有称谓而没有可确认姓名的角色（如“班长”“老师”“店员”）不创建节点；若上下文已给出规范姓名，使用规范姓名作为 `name`，称谓仅放入 aliases/attributes，绝不另建“某某老师”节点
 - 含姓氏的称谓（如“小野寺老师”）也不是独立规范姓名；无法可靠对应到已有实名角色时宁可跳过，等待后续信息，不猜测、不重复建人
 - 每个 edge 的 `fact` 必须是**完整的一句话**，包含主语、谓语和必要的宾语，便于后续语义检索。例如：

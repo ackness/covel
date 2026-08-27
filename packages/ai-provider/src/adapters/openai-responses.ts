@@ -6,6 +6,7 @@ import {
   iterateSsePayloads,
   assertSuccess,
   createStructuredOutputError,
+  readOpenAiResponsesUsage,
   readResponsesOutputText,
   readResponsesStreamFunctionCallAdded,
   readResponsesStreamFunctionCallArgsDelta,
@@ -80,6 +81,19 @@ function mapResponseStatus(status: unknown): string {
       return "error";
     default:
       return "stop";
+  }
+}
+
+function terminalResponseStatus(eventType: unknown): string | undefined {
+  switch (eventType) {
+    case "response.completed":
+      return "completed";
+    case "response.incomplete":
+      return "incomplete";
+    case "response.failed":
+      return "failed";
+    default:
+      return undefined;
   }
 }
 
@@ -195,14 +209,10 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
 
-      const genTextUsage = payload.usage as Record<string, unknown> | undefined;
       return {
         text: readResponsesOutputText(payload),
         finishReason: mapResponseStatus(payload.status),
-        usage: {
-          inputTokens: Number(genTextUsage?.input_tokens ?? 0),
-          outputTokens: Number(genTextUsage?.output_tokens ?? 0),
-        },
+        usage: readOpenAiResponsesUsage(payload),
       };
     },
 
@@ -233,14 +243,10 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         throw createStructuredOutputError("openai-responses");
       }
 
-      const genObjUsage = payload.usage as Record<string, unknown> | undefined;
       return {
         object: validation.data,
         finishReason: mapResponseStatus(payload.status),
-        usage: {
-          inputTokens: Number(genObjUsage?.input_tokens ?? 0),
-          outputTokens: Number(genObjUsage?.output_tokens ?? 0),
-        },
+        usage: readOpenAiResponsesUsage(payload),
       };
     },
 
@@ -319,16 +325,14 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           toolCallAcc.set(argsDone.itemId, existing);
         }
 
-        if (payload.type === "response.completed") {
+        const terminalStatus = terminalResponseStatus(payload.type);
+        if (terminalStatus) {
           const responseObj = payload.response as
             Record<string, unknown> | undefined;
-          const responseUsage = responseObj?.usage as
-            Record<string, unknown> | undefined;
-          usage = {
-            inputTokens: Number(responseUsage?.input_tokens ?? 0),
-            outputTokens: Number(responseUsage?.output_tokens ?? 0),
-          };
-          streamFinishReason = mapResponseStatus(responseObj?.status);
+          usage = readOpenAiResponsesUsage(responseObj);
+          streamFinishReason = mapResponseStatus(
+            responseObj?.status ?? terminalStatus,
+          );
         }
       }
 

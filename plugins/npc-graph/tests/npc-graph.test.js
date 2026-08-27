@@ -129,6 +129,12 @@ describe("npc-graph manifests", () => {
     expect(extractor.tools?.plugin).toContain("list-npc-graph");
     expect(extractor.trigger?.type).toBe("scheduled");
     expect(extractor.trigger?.interval).toBe(1);
+    expect(extractor.needs).toBeUndefined();
+    expect(extractor.inputs?.worldIR).toEqual({
+      from: { capability: "world-ir-provider", cardinality: "one" },
+      accepts: "covel://world/ir/v1",
+      required: true,
+    });
   });
 
   it("extractor drops the never-used generic plugin-data builtin tools", () => {

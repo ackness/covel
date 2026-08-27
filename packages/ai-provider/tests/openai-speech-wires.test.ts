@@ -100,7 +100,7 @@ describe("openai-transcription wire", () => {
   it("POSTs /audio/transcriptions as FormData and parses text + usage", async () => {
     const fn = mockTranscriptionFetch({
       text: "hello world",
-      usage: { prompt_tokens: 7, completion_tokens: 3 },
+      usage: { type: "tokens", input_tokens: 7, output_tokens: 3 },
     });
 
     const result = await openAiTranscriptionWire.transcribe(config, {
@@ -154,6 +154,20 @@ describe("openai-transcription wire", () => {
     });
 
     expect(result.text).toBe("no usage");
+    expect(result.usage).toBeNull();
+  });
+
+  it("keeps duration-billed transcription usage out of token accounting", async () => {
+    mockTranscriptionFetch({
+      text: "duration billed",
+      usage: { type: "duration", seconds: 12.5 },
+    });
+
+    const result = await openAiTranscriptionWire.transcribe(config, {
+      model: "whisper-1",
+      audio: { data: new Uint8Array([1]), mimeType: "audio/mpeg" },
+    });
+
     expect(result.usage).toBeNull();
   });
 });

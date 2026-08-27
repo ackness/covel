@@ -90,29 +90,32 @@ describe("normalize golden (bundled plugin set)", () => {
     ]);
   });
 
-  it("parallelizes the post-turn stage (independent narrative downstreams)", async () => {
+  it("runs the shared WorldIR extractor before structured post-turn consumers", async () => {
     const manifests = await loadAllManifests();
     const specs = specById(manifests.map(normalizeRuntimeManifest));
     const postTurn = manifests.filter(
       (m) => specs.get(m.name)?.stage === "post-turn",
     );
-    // Every post-turn runtime depends only on the narrative engine, which sits
-    // in the earlier `narrative` stage (out of this stage's DAG scope). So they
-    // form a single parallel level, ordered by name for a stable trace.
+    // Raw narrative consumers stay in the first level. Structured state
+    // consumers depend on the shared world-ir provider and form a second
+    // parallel level, so one extraction is reused instead of each plugin
+    // independently parsing the same story text.
     const levels = levelsOf(postTurn);
-    expect(levels).toHaveLength(1);
-    // One level, ordered by name (a stable trace order; the level runs parallel).
+    expect(levels).toHaveLength(2);
     expect(levels[0]).toEqual([
-      "affinity",
       "branch-reply",
       "char-creator/character-tracker",
+      "guide",
+      "mimo-tts/auto-narrate",
+      "scene-prompts",
+      "world-ir",
+    ]);
+    expect(levels[1]).toEqual([
+      "affinity",
       "codex",
       "core-quest",
-      "guide",
       "inventory",
-      "mimo-tts/auto-narrate",
       "npc-graph/extractor",
-      "scene-prompts",
     ]);
   });
 
@@ -156,19 +159,59 @@ describe("normalize golden (bundled plugin set)", () => {
     expect(narrator.stage).toBe("narrative");
     expect(requireSpec(specs, "chat-mode-narrator").stage).toBe("narrative");
 
-    // post-turn `needs: [{capability}]` runtimes — the capability entry
-    // appears exactly once in the normalized spec.
+    // Raw-text post-turn consumers still bind directly to the narrative
+    // engine. They remain independent of the structured extraction branch.
     for (const id of [
       "guide",
-      "codex",
-      "npc-graph/extractor",
       "char-creator/character-tracker",
-      "scene-prompts",
+      "mimo-tts/auto-narrate",
     ]) {
       const spec = requireSpec(specs, id);
       expect(spec.stage).toBe("post-turn");
       expect(spec.deps.needs).toEqual([{ capability: "narrative-engine" }]);
     }
+
+    const worldIr = requireSpec(specs, "world-ir");
+    expect(worldIr.stage).toBe("post-turn");
+    expect(manifestOf(manifests, "world-ir").capabilities).toContain(
+      "world-ir-provider",
+    );
+    expect(worldIr.bindings.narrative).toMatchObject({
+      from: { capability: "narrative-engine", cardinality: "one" },
+      select: "/narrativeOutput",
+      required: true,
+    });
+
+    // Structured consumers use only the typed WorldIR slot. The binding is
+    // both the DAG edge and the same-turn failure gate.
+    for (const id of [
+      "affinity",
+      "codex",
+      "core-quest",
+      "inventory",
+      "npc-graph/extractor",
+    ]) {
+      const spec = requireSpec(specs, id);
+      expect(spec.stage).toBe("post-turn");
+      expect(spec.deps.needs).toEqual([]);
+      expect(spec.bindings.worldIR).toMatchObject({
+        from: { capability: "world-ir-provider", cardinality: "one" },
+        accepts: "covel://world/ir/v1",
+        required: true,
+      });
+    }
+
+    // scene-prompts uses a required typed binding instead of duplicating the
+    // same dependency in `needs`; the binding supplies both its DAG edge and
+    // same-turn gate.
+    const scenePrompts = requireSpec(specs, "scene-prompts");
+    expect(scenePrompts.stage).toBe("post-turn");
+    expect(scenePrompts.deps.needs).toEqual([]);
+    expect(scenePrompts.bindings.narrative).toMatchObject({
+      from: { capability: "narrative-engine", cardinality: "one" },
+      select: "/narrativeOutput",
+      required: true,
+    });
 
     // branch-reply: post-turn with a typed `inputs.narrative` binding. No
     // `needs`; the binding is the ordering edge. `required: false` keeps

@@ -23,6 +23,7 @@ import {
   extractParameterOverrides,
   mediaRefFallbackText,
 } from "./common.js";
+import { readTokenCount } from "./usage.js";
 
 import type {
   ModelRequestContext,
@@ -36,6 +37,7 @@ const OPENAI_PROTECTED_KEYS = new Set([
   "model",
   "messages",
   "stream",
+  "stream_options",
   "max_tokens",
   "response_format",
   // `input` is protected for embeddings — it is built from params.values.
@@ -254,6 +256,10 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         model: params.model,
         messages: serializeMessages(messages),
         stream: true,
+        // OpenAI Chat only includes a final usage chunk when this option is
+        // explicit. Compatible providers that support usage follow the same
+        // shape; malformed/absent counters remain safely normalized to zero.
+        stream_options: { include_usage: true },
         ...sanitizeOpenAiMetadata(params.providerRequestMetadata),
         ...extractOpenAiParameterOverrides(
           params.providerRequestMetadata,
@@ -307,11 +313,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         }
 
         if (payload.usage && typeof payload.usage === "object") {
-          const usageObj = payload.usage as Record<string, unknown>;
-          usage = {
-            inputTokens: Number(usageObj.prompt_tokens ?? 0),
-            outputTokens: Number(usageObj.completion_tokens ?? 0),
-          };
+          usage = readOpenAiChatUsage(payload);
         }
 
         const reason = readOpenAiChatStreamFinishReason(payload);
@@ -366,9 +368,9 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           (entry: { embedding: number[] }) => entry.embedding,
         ),
         usage: {
-          inputTokens: Number(
+          inputTokens: readTokenCount(
             (payload.usage as Record<string, unknown> | undefined)
-              ?.prompt_tokens ?? 0,
+              ?.prompt_tokens,
           ),
           outputTokens: 0,
         },

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
+  actionableInteractionSubmits,
   composerInput,
   expectPlayerCanAct,
   seedAppSettings,
@@ -366,8 +367,8 @@ test.describe("AI World Generation", () => {
     // stable data-testid — the label is LLM-generated (e.g. "觉醒·踏入云海"), so
     // neither text-matching nor position (`.last()` grabs the execution-timeline
     // indicator) reliably finds it.
-    const submitBtn = page.getByTestId("interaction-submit");
-    await expect(submitBtn.first()).toBeVisible({ timeout: 5_000 });
+    const submitBtn = actionableInteractionSubmits(page);
+    await expect(submitBtn.last()).toBeVisible({ timeout: 5_000 });
 
     // ── Fill the form and submit ──
     for (let i = 0; i < textFieldCount; i++) {

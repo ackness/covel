@@ -335,7 +335,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | GET    | `/api/plugins`                | 列出所有已加载插件                                                                                                                                                                                                                                      |
 | GET    | `/api/plugins/:id`            | 获取插件详情                                                                                                                                                                                                                                            |
 | DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。错误码：鉴权失败 `401/403`、id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
-| GET    | `/api/plugins/:id/contract`   | 获取插件完整开发契约（含 `dataSchemas` / plugin-data namespace 契约）                                                                                                                                                                                   |
+| GET    | `/api/plugins/:id/contract`   | 获取插件完整开发契约（含 `dataSchemas` / `worldProjections` / plugin-data namespace 契约）                                                                                                                                                              |
 | GET    | `/api/plugin-flows`           | 框架编排的 pre-game 流程预览数据（插件列表 + 分段步骤），供准备页可视化                                                                                                                                                                                 |
 
 ### 拖拽导入（Install）
@@ -888,7 +888,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 #### `POST /api/worlds/:id/world-data/preflight`
 
-只读预检 worldData 导入计划。请求可以传 `sessionId` 使用现有 session 的插件列表，也可以传 `plugins` 预检创建 session 前的插件选择。
+只读预检 worldData 导入计划。请求可以传 `sessionId` 使用现有 session 的**持久 activePlugins**（此时请求里的 `plugins` 会被忽略），也可以只传 `plugins` 预检创建 session 前的插件选择。预检不会 import 或执行 `worldProjections` handler，因此 projection output 不计入 `planned` / `targets`；响应会用 warning 说明执行已推迟到 import/sync。
 
 **请求体:**
 
@@ -925,6 +925,8 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 #### `POST /api/worlds/:id/sync-data`
 
 同步已有 session 中由 worldData importer 管理的数据。默认 dry-run；传 `dryRun:false` 才写入。同步只处理 `world_data_import_ledger.managed=true` 的 row，并用 `valueHash` 检测玩家或插件是否修改过目标数据。
+
+source 读取、schema 校验与 projection Worker 在 session 写锁外完成；dry-run 全程只读。实际写入取得短锁后会重新校验 world、locale、active plugin 与审批 scope，计划准备期间这些字段发生变化时返回 `409`（`world_data_sync_plan_stale`）。
 
 **请求体:**
 
@@ -1677,6 +1679,9 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
       "inputInjectKinds": ["runtime", "plugin-data", "runtime-export"],
       "uiSlots": ["right", "message", "left"]
     },
+    "scheduling": {
+      "effectsPolicy": "warn"
+    },
     "pluginData": {
       "scope": "(sessionId, pluginId, namespace, key)",
       "reservedNamespaces": [
@@ -1691,6 +1696,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
       ]
     },
     "worldData": {
+      "effects": ["characters", "projections"],
       "targetUris": [
         "world:metadata.<path>",
         "plugin:<pluginId>/<namespace>",
@@ -1698,9 +1704,16 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
       ],
       "schemaUris": [
         "covel://world/dimensions",
+        "covel://world/ir/v1",
         "plugin://<pluginId>/<namespace>",
         "<local-json-schema-path>"
-      ]
+      ],
+      "schemas": {
+        "covel://world/ir/v1": {
+          "$id": "covel://world/ir/v1",
+          "type": "object"
+        }
+      }
     }
   }
 }
@@ -1792,7 +1805,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 #### `GET /api/plugins/:id/contract`
 
-返回单个插件从 `PLUGIN.md` manifest 聚合出的开发契约。多 runtime 插件会把所有 runtime 合并为 plugin-level 视图，同时保留 `runtimes[]` 明细。该端点用于回答“这个插件声明了哪些 capabilities、工具、RPC action、UI slot、`dataSchemas` 和 plugin-data namespace”。
+返回单个插件从 `PLUGIN.md` manifest 聚合出的开发契约。多 runtime 插件会把所有 runtime 合并为 plugin-level 视图，同时保留 `runtimes[]` 明细。该端点用于回答“这个插件声明了哪些 capabilities、工具、RPC action、UI slot、`dataSchemas`、`worldProjections` 和 plugin-data namespace”。
 
 **响应节选:**
 
@@ -1809,6 +1822,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
       "schema": "./schemas/entries.schema.json"
     }
   },
+  "worldProjections": {},
   "tools": {
     "builtin": [],
     "local": [{ "runtimeId": "codex", "name": "unlock-codex-entries" }]
@@ -1822,6 +1836,20 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
     {
       "id": "codex",
       "runtimeType": "agent",
+      "after": [],
+      "needs": [],
+      "inputs": {
+        "worldIR": {
+          "from": { "capability": "world-ir-provider", "cardinality": "one" },
+          "accepts": "covel://world/ir/v1",
+          "required": true
+        }
+      },
+      "effects": {
+        "reads": ["plugin-data:self:entries"],
+        "writes": ["plugin-data:self:entries"],
+        "parallelSafe": false
+      },
       "readablePluginDataNamespaces": ["entries"],
       "writablePluginDataNamespaces": ["entries"],
       "input": {
@@ -1838,7 +1866,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 }
 ```
 
-`declaredPluginDataNamespaces` 来自 `dataSchemas` 和 `input.inject: plugin-data`。运行时动态 key（如 `entries/<entryId>`、`images/<turnId>`）不会在这里枚举；需要结合 schema、插件文档或 `_index` 端点查看当前 session 的实际 key。
+`declaredPluginDataNamespaces` 来自 `dataSchemas` 和 `input.inject: plugin-data`。`runtimes[].after` / `needs` 暴露归一化依赖，`runtimes[].inputs` 原样暴露 typed binding 的来源、cardinality、JSON Pointer、schema 与 required gate，`runtimes[].effects` 暴露调度器实际使用的归一化 read/write set。`GET /api/framework/capabilities` 的 `framework.scheduling.effectsPolicy` 同时公开当前 `warn` / `strict` 策略；Agent 可以据此重建同轮 DAG 与 hazard 串行层，而不需要解析 Markdown prompt。`worldProjections` 是机器可读的插件级转换目录，外部工具和 Agent 可以据此规划 WorldIR fan-out；公开响应不暴露插件 `rootPath` 或 projection `handler`，handler 只能由 world-data importer 在 import/sync 中按权限执行，不能通过该只读 discovery 端点直接调用。运行时动态 key（如 `entries/<entryId>`、`images/<turnId>`）不会在这里枚举；需要结合 schema、插件文档或 `_index` 端点查看当前 session 的实际 key。
 
 ---
 

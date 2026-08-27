@@ -27,6 +27,12 @@ const pluginRelativeJsonSchemaPath = z
       "schema must be a plugin-relative .json path (no leading `/`, no `..` segments)",
   });
 
+/** Public framework schemas may be referenced by URI without plugin copies. */
+const runtimeJsonSchemaReference = z.union([
+  pluginRelativeJsonSchemaPath,
+  z.literal("covel://world/ir/v1"),
+]);
+
 /** capability cardinality — `one` (any single provider) or `all` (every provider). */
 export const dependencyCardinalitySchema = z.enum(["one", "all"]);
 
@@ -170,7 +176,7 @@ export const runtimeExportInjectDeclSchema = z
     name: bindingNameSchema,
     from: bindingSourceSchema,
     recordAs: z.string().min(1),
-    accepts: pluginRelativeJsonSchemaPath.optional(),
+    accepts: runtimeJsonSchemaReference.optional(),
     required: z.boolean().optional(),
   })
   .strict();
@@ -195,7 +201,7 @@ export const inputToolDeclSchema = z
 export const inputConfigSchema = z
   .object({
     /** Runtime-dir-relative JSON Schema path validating the activation payload. */
-    schema: pluginRelativeJsonSchemaPath.optional(),
+    schema: runtimeJsonSchemaReference.optional(),
     inject: z.array(inputInjectDeclSchema).optional(),
     tools: z.array(inputToolDeclSchema).optional(),
   })
@@ -207,7 +213,10 @@ export const outputKindSchema = z.enum(["story", "plugin", "system"]);
 
 export const outputConfigSchema = z
   .object({
-    schema: z.string().optional(),
+    // Compatibility: output schema declarations historically allowed any
+    // string and the loader enforced containment. Keep that surface while
+    // resolving known public schema URIs before path handling.
+    schema: z.string().min(1).optional(),
     recordAs: z.string().optional(),
   })
   .strict();
@@ -218,7 +227,7 @@ const pluginDataNamespaceSchema = z
   .string()
   .min(1)
   .max(64)
-  .regex(/^[a-z][a-z0-9_-]*$/i, {
+  .regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/, {
     message:
       "namespace must be a short identifier (letters, digits, underscore, hyphen)",
   });
@@ -316,9 +325,56 @@ export const postHistoryDeclSchema = z
 const pluginRelativeJsPath = z
   .string()
   .min(1)
-  .regex(/^(?!\/)(?!.*\/\.\.\/)(?!\.\.\/)[a-z0-9_./-]+\.[mc]?js$/i, {
+  .regex(/^(?!\/)(?!.*\/\.\.\/)(?!\.\.\/)[a-zA-Z0-9_./-]+\.[mMcC]?[jJ][sS]$/, {
     message:
       "handler must be a plugin-relative .js/.mjs/.cjs path (no leading `/`, no `..` segments)",
+  });
+
+// ── World projections ─────────────────────────────────────
+
+const worldProjectionIdSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9_-]*$/, {
+    message:
+      "projection/output id must start with a lowercase letter and contain only lowercase letters/digits/underscore/hyphen",
+  });
+
+const worldProjectionKeyFieldSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/, {
+    message:
+      "key must be a field name starting with a letter and containing only letters/digits/underscore/hyphen",
+  });
+
+export const worldProjectionOutputDeclSchema = z
+  .object({
+    namespace: pluginDataNamespaceSchema,
+    key: worldProjectionKeyFieldSchema,
+  })
+  .strict();
+
+const worldProjectionOutputsSchema = z
+  .record(worldProjectionIdSchema, worldProjectionOutputDeclSchema)
+  .refine((outputs) => Object.keys(outputs).length > 0, {
+    message: "outputs must declare at least one destination",
+  });
+
+export const worldProjectionDeclSchema = z
+  .object({
+    from: z.string().trim().min(1).regex(/\S/),
+    handler: pluginRelativeJsPath,
+    outputs: worldProjectionOutputsSchema,
+  })
+  .strict();
+
+export const worldProjectionMapSchema = z
+  .record(worldProjectionIdSchema, worldProjectionDeclSchema)
+  .refine((projections) => Object.keys(projections).length > 0, {
+    message: "worldProjections must declare at least one projection",
   });
 
 const i18nTextLoose = z.union([z.string(), z.record(z.string(), z.string())]);
@@ -491,7 +547,7 @@ export const runtimeBindingSchema = z
     from: bindingSourceSchema,
     select: jsonPointerSchema.optional(),
     required: z.boolean().optional(),
-    accepts: pluginRelativeJsonSchemaPath.optional(),
+    accepts: runtimeJsonSchemaReference.optional(),
   })
   .strict();
 
@@ -819,6 +875,7 @@ const runtimeManifestCommonShape = {
   input: inputConfigSchema.optional(),
   output: outputConfigSchema.optional(),
   dataSchemas: pluginDataSchemaMapSchema.optional(),
+  worldProjections: worldProjectionMapSchema.optional(),
   /** Domain events this plugin's runtime may emit via `emit-event`. */
   events: z.array(pluginEventDeclSchema).optional(),
   i18n: z.record(z.string(), z.string()).optional(),

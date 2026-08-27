@@ -8,13 +8,11 @@ import {
   stageRank,
   type PluginDataSchemaDecl,
   type RuntimeManifest,
+  type WorldProjectionDecl,
+  worldProjectionMapSchema,
 } from "@covel/shared";
 import type { EventBus } from "@covel/events";
-import type {
-  PluginRegistryEntry,
-  PluginSummary,
-  RegistryChangeEvent,
-} from "./types.js";
+import type { PluginRegistryEntry, RegistryChangeEvent } from "./types.js";
 
 function isSameDataSchema(
   a: PluginDataSchemaDecl,
@@ -55,6 +53,90 @@ function mergeDataSchemas(
   }
 
   return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function isSameWorldProjection(
+  a: WorldProjectionDecl,
+  b: WorldProjectionDecl,
+): boolean {
+  if (a.from !== b.from || a.handler !== b.handler) return false;
+  const aOutputIds = Object.keys(a.outputs).sort();
+  const bOutputIds = Object.keys(b.outputs).sort();
+  if (
+    aOutputIds.length !== bOutputIds.length ||
+    aOutputIds.some((id, index) => id !== bOutputIds[index])
+  ) {
+    return false;
+  }
+  return aOutputIds.every((id) => {
+    const aOutput = a.outputs[id];
+    const bOutput = b.outputs[id];
+    return (
+      aOutput !== undefined &&
+      bOutput !== undefined &&
+      aOutput.namespace === bOutput.namespace &&
+      aOutput.key === bOutput.key
+    );
+  });
+}
+
+function mergeWorldProjections(
+  entry: PluginRegistryEntry,
+): Readonly<Record<string, WorldProjectionDecl>> | undefined {
+  if (entry.worldProjections) {
+    return worldProjectionMapSchema.parse(entry.worldProjections);
+  }
+
+  const manifests = entry.manifests ?? (entry.manifest ? [entry.manifest] : []);
+  const merged: Record<string, WorldProjectionDecl> = {};
+
+  for (const parsed of manifests) {
+    const projections = parsed.manifest.worldProjections;
+    if (!projections) continue;
+    for (const [projectionId, projection] of Object.entries(projections)) {
+      const existing = merged[projectionId];
+      if (existing && !isSameWorldProjection(existing, projection)) {
+        throw new Error(
+          `Conflicting worldProjections declaration for projection "${projectionId}" in plugin "${entry.id}"`,
+        );
+      }
+      merged[projectionId] = projection;
+    }
+  }
+
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+function validateWorldProjectionTargets(
+  pluginId: string,
+  dataSchemas: Readonly<Record<string, PluginDataSchemaDecl>> | undefined,
+  projections: Readonly<Record<string, WorldProjectionDecl>> | undefined,
+): void {
+  for (const [projectionId, projection] of Object.entries(projections ?? {})) {
+    for (const [outputId, output] of Object.entries(projection.outputs)) {
+      const schema = dataSchemas?.[output.namespace];
+      if (!schema) {
+        throw new Error(
+          `worldProjections declaration "${projectionId}" output "${outputId}" in plugin "${pluginId}" targets undeclared dataSchemas namespace "${output.namespace}"`,
+        );
+      }
+      if (!schema.acceptsWorldData) {
+        throw new Error(
+          `worldProjections declaration "${projectionId}" output "${outputId}" in plugin "${pluginId}" targets namespace "${output.namespace}" that does not accept world data`,
+        );
+      }
+    }
+  }
+}
+
+function deepFreezeJson<T>(value: T): T {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>)) {
+      deepFreezeJson(child);
+    }
+    Object.freeze(value);
+  }
+  return value;
 }
 
 export interface PluginRegistryOptions {
@@ -138,7 +220,15 @@ export function createPluginRegistry(
   return {
     register(entry: PluginRegistryEntry): void {
       const dataSchemas = mergeDataSchemas(entry);
-      entries.set(entry.id, dataSchemas ? { ...entry, dataSchemas } : entry);
+      const worldProjections = mergeWorldProjections(entry);
+      validateWorldProjectionTargets(entry.id, dataSchemas, worldProjections);
+      entries.set(entry.id, {
+        ...entry,
+        ...(dataSchemas ? { dataSchemas: deepFreezeJson(dataSchemas) } : {}),
+        ...(worldProjections
+          ? { worldProjections: deepFreezeJson(worldProjections) }
+          : {}),
+      });
       emit({ type: "plugin-registered", pluginId: entry.id });
     },
 

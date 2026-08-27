@@ -60,7 +60,7 @@
     "entry": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?!\\/)(?!.*\\/\\.\\.\\/)(?!\\.\\.\\/)[a-z0-9_./-]+\\.[mc]?js$"
+      "pattern": "^(?!\\/)(?!.*\\/\\.\\.\\/)(?!\\.\\.\\/)[a-zA-Z0-9_./-]+\\.[mMcC]?[jJ][sS]$"
     },
     "model": {
       "type": "string"
@@ -306,9 +306,17 @@
             "type": "boolean"
           },
           "accepts": {
-            "type": "string",
-            "minLength": 1,
-            "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$"
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$"
+              },
+              {
+                "type": "string",
+                "const": "covel://world/ir/v1"
+              }
+            ]
           }
         },
         "required": ["from"],
@@ -463,9 +471,17 @@
       "type": "object",
       "properties": {
         "schema": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$"
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$"
+            },
+            {
+              "type": "string",
+              "const": "covel://world/ir/v1"
+            }
+          ]
         },
         "inject": {
           "type": "array",
@@ -572,9 +588,17 @@
                     "minLength": 1
                   },
                   "accepts": {
-                    "type": "string",
-                    "minLength": 1,
-                    "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^(?!\\/)(?!.*(?:^|\\/)\\.\\.(?:\\/|$))[a-z0-9_./-]+\\.json$"
+                      },
+                      {
+                        "type": "string",
+                        "const": "covel://world/ir/v1"
+                      }
+                    ]
                   },
                   "required": {
                     "type": "boolean"
@@ -611,7 +635,8 @@
       "type": "object",
       "properties": {
         "schema": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
         },
         "recordAs": {
           "type": "string"
@@ -625,7 +650,7 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 64,
-        "pattern": "^[a-z][a-z0-9_-]*$"
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
       },
       "additionalProperties": {
         "type": "object",
@@ -634,7 +659,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 64,
-            "pattern": "^[a-z][a-z0-9_-]*$"
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
           },
           "schemaVersion": {
             "type": "integer",
@@ -656,6 +681,62 @@
         "required": ["schemaVersion", "acceptsWorldData", "schema"],
         "additionalProperties": false
       }
+    },
+    "worldProjections": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "handler": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!\\/)(?!.*\\/\\.\\.\\/)(?!\\.\\.\\/)[a-zA-Z0-9_./-]+\\.[mMcC]?[jJ][sS]$"
+          },
+          "outputs": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[a-z][a-z0-9_-]*$"
+            },
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "namespace": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+                },
+                "key": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64,
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+                }
+              },
+              "required": ["namespace", "key"],
+              "additionalProperties": false
+            },
+            "minProperties": 1
+          }
+        },
+        "required": ["from", "handler", "outputs"],
+        "additionalProperties": false
+      },
+      "minProperties": 1
     },
     "events": {
       "type": "array",

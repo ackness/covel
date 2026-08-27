@@ -180,12 +180,31 @@ describe("Plugin Routes", () => {
             },
           ],
         },
+        inputs: {
+          worldIR: {
+            from: {
+              capability: "world-ir-provider",
+              cardinality: "one",
+            },
+            accepts: "covel://world/ir/v1",
+            required: true,
+          },
+        },
         dataSchemas: {
           images: {
             namespace: "images",
             schemaVersion: 1,
             acceptsWorldData: true,
             schema: "./schemas/images.json",
+          },
+        },
+        worldProjections: {
+          "images-from-world-ir": {
+            from: "covel://world/ir/v1",
+            handler: "./server/project-world-ir.js",
+            outputs: {
+              images: { namespace: "images", key: "id" },
+            },
           },
         },
         ui: { right: ["./ui/panel.json"], message: ["./ui/message.json"] },
@@ -213,6 +232,14 @@ describe("Plugin Routes", () => {
             schema: "./schemas/images.json",
           },
         },
+        worldProjections: {
+          "images-from-world-ir": {
+            from: "covel://world/ir/v1",
+            outputs: {
+              images: { namespace: "images", key: "id" },
+            },
+          },
+        },
       });
       // Entry-registered tools are declared by name; there is no on-disk path.
       expect(body.tools.local).toEqual([
@@ -221,8 +248,25 @@ describe("Plugin Routes", () => {
       expect(body.runtimes[0]).toMatchObject({
         id: "my-plugin/runner",
         runtimeType: "function",
+        after: [],
+        needs: [],
+        inputs: {
+          worldIR: {
+            from: {
+              capability: "world-ir-provider",
+              cardinality: "one",
+            },
+            accepts: "covel://world/ir/v1",
+            required: true,
+          },
+        },
         readablePluginDataNamespaces: ["images"],
         writablePluginDataNamespaces: ["images"],
+        effects: {
+          reads: ["plugin-data:self:images"],
+          writes: ["ui:message", "ui:right"],
+          parallelSafe: false,
+        },
       });
     });
 
@@ -243,12 +287,32 @@ describe("Plugin Routes", () => {
         "message",
         "left",
       ]);
+      expect(body.framework.scheduling.effectsPolicy).toBe(
+        process.env.COVEL_EFFECTS_POLICY === "strict" ? "strict" : "warn",
+      );
       expect(body.framework.pluginData.writePaths).toContain(
         "function-output:pluginData[]",
       );
       expect(body.framework.worldData.targetUris).toContain(
         "plugin:<pluginId>/<namespace>",
       );
+      expect(body.framework.worldData.effects).toContain("projections");
+      expect(body.framework.worldData.schemaUris).toContain(
+        "covel://world/ir/v1",
+      );
+      expect(
+        body.framework.worldData.schemas["covel://world/ir/v1"],
+      ).toMatchObject({
+        $id: "covel://world/ir/v1",
+        type: "object",
+        required: [
+          "schemaVersion",
+          "entities",
+          "relations",
+          "events",
+          "statements",
+        ],
+      });
       expect(body.framework.proposals.pluginDataTypes).toEqual([
         "plugin.data",
         "plugin.data.batch",

@@ -46,7 +46,12 @@ describe("withGatewayTrace", () => {
       generateText: async () => ({
         text: "hello",
         finishReason: "stop",
-        usage: { inputTokens: 10, outputTokens: 5 },
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          cachedInputTokens: 8,
+          cacheWriteInputTokens: 2,
+        },
       }),
     });
 
@@ -61,7 +66,12 @@ describe("withGatewayTrace", () => {
     const responded = events[1]!.payload;
     expect(responded.method).toBe("generateText");
     expect(responded.finishReason).toBe("stop");
-    expect(responded.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
+    expect(responded.usage).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      cachedInputTokens: 8,
+      cacheWriteInputTokens: 2,
+    });
     expect(typeof responded.durationMs).toBe("number");
     // Trace context is carried on every event.
     expect(responded.runtimeId).toBe("r1");
@@ -108,6 +118,34 @@ describe("withGatewayTrace", () => {
       "gateway.responded",
     ]);
     expect(events[0]!.payload.method).toBe("generateObject");
+  });
+
+  it("records the executed target identity and transcription usage", async () => {
+    const { emitter, events } = captureEmitter();
+    const traced = withGatewayTrace(
+      makeGateway({
+        transcribeAudio: async () => ({
+          text: "hello",
+          usage: { inputTokens: 7, outputTokens: 3 },
+          model: "gpt-4o-transcribe",
+          provider: "openai",
+          warnings: [],
+        }),
+      }),
+      emitter,
+      ctx,
+    );
+
+    await traced.transcribeAudio!({
+      audio: { data: new Uint8Array([1, 2]), mimeType: "audio/wav" },
+    });
+
+    expect(events[1]?.payload).toMatchObject({
+      method: "transcribeAudio",
+      usage: { inputTokens: 7, outputTokens: 3 },
+      model: "gpt-4o-transcribe",
+      provider: "openai",
+    });
   });
 
   it("resolveSlot passes through and emits nothing (no provider call)", async () => {

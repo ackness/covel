@@ -14,6 +14,7 @@ import type {
   LLMStreamEvent,
   LLMTargetIdentity,
   LLMToolDefinition,
+  LLMUsageSummary,
 } from "./llm-adapter.js";
 
 /**
@@ -133,7 +134,7 @@ export interface GatewayLike {
   ): Promise<{
     text: string;
     finishReason: string;
-    usage: { inputTokens: number; outputTokens: number };
+    usage: LLMUsageSummary;
     toolCalls?: Array<{ id: string; name: string; arguments: string }>;
     reasoningContent?: string;
   }>;
@@ -175,7 +176,7 @@ export interface GatewayLike {
     name?: string;
     arguments?: string;
     reasoningContent?: string;
-    usage?: { inputTokens: number; outputTokens: number };
+    usage?: LLMUsageSummary;
   }>;
 }
 
@@ -278,10 +279,7 @@ export function createGatewayAdapter(
             : result.finishReason === "length"
               ? "length"
               : "stop",
-        usage: {
-          inputTokens: result.usage.inputTokens,
-          outputTokens: result.usage.outputTokens,
-        },
+        usage: result.usage,
         ...(result.reasoningContent
           ? { reasoningContent: result.reasoningContent }
           : {}),

@@ -1,0 +1,6 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Narrative text consumed by world-ir",
+  "type": "string",
+  "minLength": 1
+}

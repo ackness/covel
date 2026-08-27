@@ -24,6 +24,7 @@ export type {
   LLMMessageContent,
   LLMMessage,
   LLMToolCall,
+  LLMUsageSummary,
   LLMResponse,
   LLMToolDefinition,
   LLMResponseFormat,
@@ -46,6 +47,15 @@ export type {
 } from "./world-data.js";
 
 export type {
+  WorldIRJsonValue,
+  WorldIRV1,
+  WorldIRV1Entity,
+  WorldIRV1Relation,
+  WorldIRV1Event,
+  WorldIRV1Statement,
+} from "./world-ir.js";
+
+export type {
   PluginType,
   FrameworkCapabilityTag,
   FrameworkRuntimeCapabilityTag,
@@ -59,6 +69,8 @@ export type {
   InputConfig,
   OutputConfig,
   PluginDataSchemaDecl,
+  WorldProjectionDecl,
+  WorldProjectionOutputDecl,
   PluginEventDecl,
   PluginUserSettingSpec,
   ToolsConfig,

@@ -1,4 +1,4 @@
-import type { MediaRef } from "@covel/shared";
+import type { LLMUsageSummary, MediaRef } from "@covel/shared";
 import type { ZodType } from "zod";
 import type { ReasoningEffort } from "./reasoning-effort.js";
 
@@ -320,10 +320,8 @@ export interface TextMessage {
   reasoningContent?: string;
 }
 
-export interface UsageSummary {
-  inputTokens: number;
-  outputTokens: number;
-}
+/** Provider-layer name for the framework's canonical usage accounting ABI. */
+export type UsageSummary = LLMUsageSummary;
 
 export interface TextGenerationResult {
   text: string;

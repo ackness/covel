@@ -43,7 +43,8 @@ import { signMediaTokenForSession } from "../../middleware/media-token.js";
 import {
   cleanupWorldDataMediaRefs,
   finalizeWorldDataMediaRefs,
-  importWorldDataForSession,
+  applyPreparedWorldDataImportForSession,
+  prepareWorldDataImportForSession,
   type WorldDataImportedMediaRef,
 } from "../../world-data/session-import.js";
 import {
@@ -427,6 +428,26 @@ sessionRoutes.post("/", async (c) => {
     },
   };
 
+  // Planning reads world files and may run approved/builtin projection code.
+  // Do that before taking the session lock or opening the DB transaction; the
+  // prepared plan is immutable input to the atomic write phase below.
+  const preparedWorldData = await prepareWorldDataImportForSession({
+    sessionId: id,
+    worldId: rawWorldId,
+    worldsDirs,
+    covelHome,
+    mediaStore: c.get("mediaStore"),
+    now,
+    locale: session.locale,
+    preflight: {
+      activePlugins: plugins,
+      registry: pluginRegistry,
+    },
+  });
+  const preparedMediaRefs = preparedWorldData.imported
+    ? preparedWorldData.mediaRefs
+    : [];
+
   const sessionLock = c.get("sessionLock");
   // Keep the persistent commit, media finalisation and process-local registry
   // update atomic with delete/recreate. Plugin hooks run after releasing this
@@ -442,19 +463,13 @@ sessionRoutes.post("/", async (c) => {
     try {
       importedMediaRefs = await store.withTransaction(async (tx) => {
         await tx.createSession(session);
-        const importedWorldData = await importWorldDataForSession({
+        const importedWorldData = await applyPreparedWorldDataImportForSession({
           store: tx,
           mediaStore: c.get("mediaStore"),
           sessionId: id,
           worldId: rawWorldId,
-          worldsDirs,
-          covelHome,
           now,
-          locale: session.locale,
-          preflight: {
-            activePlugins: plugins,
-            registry: pluginRegistry,
-          },
+          prepared: preparedWorldData,
           deferMediaFinalize: true,
         });
         if (!importedWorldData.imported) {
@@ -466,6 +481,13 @@ sessionRoutes.post("/", async (c) => {
         return importedWorldData.mediaRefs;
       });
     } catch (error) {
+      // Media materialization intentionally happens before the transaction.
+      // If createSession or a later transactional fallback fails before the
+      // prepared importer can return its refs, compensate them here.
+      await cleanupWorldDataMediaRefs({
+        mediaStore: c.get("mediaStore"),
+        refs: preparedMediaRefs,
+      });
       if (error instanceof SessionAlreadyExistsError) {
         return c.json(errorBody(error.message, { code: error.code }), 409);
       }

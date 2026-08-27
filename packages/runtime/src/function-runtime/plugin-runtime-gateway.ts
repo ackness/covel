@@ -18,6 +18,7 @@ import type {
   PluginRuntimeGateway,
   ResolvedSlotForPlugin,
 } from "@covel/plugin-loader";
+import type { LLMUsageSummary } from "@covel/shared";
 import type { ZodType } from "zod";
 import type {
   CapabilityOverridePolicy,
@@ -55,7 +56,9 @@ export interface FullGatewayLike {
   ): Promise<{
     text: string;
     finishReason: string;
-    usage: { inputTokens: number; outputTokens: number };
+    usage: LLMUsageSummary;
+    model?: string;
+    provider?: string;
   }>;
 
   generateObject<T>(
@@ -69,7 +72,9 @@ export interface FullGatewayLike {
   ): Promise<{
     object: T;
     finishReason: string;
-    usage: { inputTokens: number; outputTokens: number };
+    usage: LLMUsageSummary;
+    model?: string;
+    provider?: string;
   }>;
 
   resolveSlot(
@@ -134,6 +139,9 @@ export interface FullGatewayLike {
     options?: FullGatewayOptions,
   ): Promise<{
     text: string;
+    usage?: LLMUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
 }
@@ -202,6 +210,8 @@ export function createPluginRuntimeGateway(
         text: result.text,
         finishReason: result.finishReason,
         usage: result.usage,
+        ...(result.model ? { model: result.model } : {}),
+        ...(result.provider ? { provider: result.provider } : {}),
       };
     },
 
@@ -219,10 +229,7 @@ export function createPluginRuntimeGateway(
     }): Promise<{
       readonly object: T;
       readonly finishReason: string;
-      readonly usage: {
-        readonly inputTokens: number;
-        readonly outputTokens: number;
-      };
+      readonly usage: LLMUsageSummary;
     }> {
       if (!config?.toZodSchema) {
         throw new Error(
@@ -260,6 +267,8 @@ export function createPluginRuntimeGateway(
         object: result.object,
         finishReason: result.finishReason,
         usage: result.usage,
+        ...(result.model ? { model: result.model } : {}),
+        ...(result.provider ? { provider: result.provider } : {}),
       };
     },
 
@@ -344,7 +353,13 @@ export function createPluginRuntimeGateway(
           ...(input.signal ? { signal: input.signal } : {}),
         },
       );
-      return { text: result.text, warnings: result.warnings };
+      return {
+        text: result.text,
+        usage: result.usage,
+        ...(result.model ? { model: result.model } : {}),
+        ...(result.provider ? { provider: result.provider } : {}),
+        warnings: result.warnings,
+      };
     };
   }
 

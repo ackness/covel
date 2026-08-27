@@ -87,13 +87,13 @@ Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填
 
 调度以**命名 stage**（`setup` / `pre-turn` / `narrative` / `post-turn` / `audit`）为一级分组，stage 之间是**严格屏障**——上一 stage 全部 runtime 结束（成功/失败/skip 均计入）才进入下一 stage。同一 stage 内部由 **DAG 调度器** 依据每个 runtime 的 `needs` / `after` / `inputs` 绑定与 `input.inject[].from` 推导——无环依赖的 runtime 自动归入同一层并发执行，独立 runtime 之间**同层并行**，`name` 只做并列时的稳定排序 tiebreaker。
 
-`needs` 的每一项可以是 **runtime id 字符串**（该 runtime 必须本回合成功，缺席=skip，绝不当作成功），或 **`{ capability: <name> }`**（本回合在场的某个声明该 capability 的 runtime 成功即满足；零个在场提供者=不满足→skip）。capability 形态让一个下游插件按 capability 发现"当前模式的提供者"，无需写死具体插件名 —— 例如 `guide`/`scene-prompts` 用 `{ capability: narrative-engine }` 同时适配 `narrator`（传统模式）与 `chat-mode-narrator`（对话模式）。两个叙事引擎都在 `capabilities` 里声明了 `narrative-engine`。
+`needs` 的每一项可以是 **runtime id 字符串**（该 runtime 必须本回合成功，缺席=skip，绝不当作成功），或 **`{ capability: <name> }`**（本回合在场的某个声明该 capability 的 runtime 成功即满足；零个在场提供者=不满足→skip）。capability 形态让一个下游插件按能力发现"当前模式的提供者"，无需写死具体插件名。`guide` 使用 capability `needs`；需要实际传值时优先使用 typed `inputs`，例如 `scene-prompts` 从 `narrative-engine` 选择 `/narrativeOutput`。`narrator` 与 `chat-mode-narrator` 都声明了该 capability。
 
-| Stage       | Runtime                                                                                                                                                                             | 说明                                                                                                                                                                                               |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pre-turn`  | `npc-graph/rag-retriever` · `dice-check/roller` · `scene-cast`                                                                                                                      | narrator 的依赖上游（function runtime，无 LLM）                                                                                                                                                    |
-| `narrative` | `narrator` · `chat-mode-narrator`                                                                                                                                                   | 主叙事生成器（互斥，二选一激活）                                                                                                                                                                   |
-| `post-turn` | `guide` · `codex` · `core-quest` · `affinity` · `inventory` · `npc-graph/extractor` · `char-creator/character-tracker` · `scene-prompts` · `mimo-tts/auto-narrate` · `branch-reply` | 除 `branch-reply` 外都以 `{ capability: narrative-engine }` 依赖当前模式的叙事引擎（`branch-reply` 无 `needs`，按 `narrativeOutput` 非空这一契约自行发现叙事）；彼此独立 → **同 stage 内并行执行** |
+| Stage       | Runtime                                                                                                                                                                                                         | 说明                                                                                                                                                                  |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pre-turn`  | `npc-graph/rag-retriever` · `dice-check/roller` · `scene-cast`                                                                                                                                                  | narrator 的依赖上游（function runtime，无 LLM）                                                                                                                       |
+| `narrative` | `narrator` · `chat-mode-narrator`                                                                                                                                                                               | 主叙事生成器（互斥，二选一激活）                                                                                                                                      |
+| `post-turn` | 第一层：`world-ir` · `guide` · `char-creator/character-tracker` · `scene-prompts` · `mimo-tts/auto-narrate` · `branch-reply`；第二层：`codex` · `core-quest` · `affinity` · `inventory` · `npc-graph/extractor` | 第一层从 `narrative-engine` 取本轮叙事；第二层以必需 typed input 消费 `world-ir-provider`。同层无依赖者并行，WorldIR 失败只 skip 第二层，不回滚叙事和其他第一层插件。 |
 
 `setup` stage（会话 `phase === "setup"` 时运行）走：`pregame → world-init/schema-gen → char-creator/player-init`，顺序完全由声明边决定：`world-init/schema-gen` 声明弱排序 `after: [pregame]`（pregame 失败不拦 schema 生成）；`char-creator/player-init` 声明 turn-scoped `needs: [pregame, world-init/schema-gen]`（`needs` 既是同一 pass 内的 DAG 边、也是同回合门控），并通过 `input.inject` 读取 schema-gen output 的 `worldSchema`。DAG 顺序只保证上游结果可见；未提交的 proposal store write 要到 finalizer transaction 后才可读取，因此同轮数据传递必须使用 runtime output/inputs。三者均为 `stage: setup` + `trigger: auto`（`maxTriggerCount` 为重试预算）。
 
@@ -125,17 +125,18 @@ Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填
 | scene-stage/seed                     | plugin      | `setup`                    | auto（maxTriggerCount=1）                                                  | —         | 开局把注册表首个场景写入 `stage/current`，为叙事整局不发 `scene.set` 兜底                      |
 | narrator                             | core-plugin | `narrative`                | auto                                                                       | `story`   | 主叙事生成器                                                                                   |
 | chat-mode-narrator                   | plugin      | `narrative`                | auto                                                                       | `story`   | 对话 / 舞台模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）                     |
+| world-ir                             | plugin      | `post-turn`                | auto（typed input: capability narrative-engine）                           | `plugin`  | 一次性把本轮叙事抽取为 `covel://world/ir/v1`，供多个状态插件复用                               |
 | guide                                | plugin      | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | 行动引导 + 聊天内建议面                                                                        |
-| codex                                | plugin      | `post-turn`                | auto（每轮，紧跟 narrator 之后）                                           | `plugin`  | 知识图鉴系统（agent runtime）                                                                  |
-| core-quest                           | plugin      | `post-turn`                | auto（needs: capability narrative-engine）                                 | `plugin`  | 任务日志：从叙事登记/推进结构化任务（agent runtime）                                           |
-| affinity                             | plugin      | `post-turn`                | auto（needs: capability narrative-engine）                                 | `plugin`  | 玩家↔NPC 数值好感度跟踪（agent runtime）                                                       |
-| inventory                            | plugin      | `post-turn`                | auto（needs: capability narrative-engine）                                 | `plugin`  | 行囊台账：从叙事记录物品得失与装备变化（agent runtime）                                        |
+| codex                                | plugin      | `post-turn`                | auto（typed input: capability world-ir-provider）                          | `plugin`  | 知识图鉴系统（agent runtime）                                                                  |
+| core-quest                           | plugin      | `post-turn`                | auto（typed input: capability world-ir-provider）                          | `plugin`  | 任务日志：从叙事登记/推进结构化任务（agent runtime）                                           |
+| affinity                             | plugin      | `post-turn`                | auto（typed input: capability world-ir-provider）                          | `plugin`  | 玩家↔NPC 数值好感度跟踪（agent runtime）                                                       |
+| inventory                            | plugin      | `post-turn`                | auto（typed input: capability world-ir-provider）                          | `plugin`  | 行囊台账：从叙事记录物品得失与装备变化（agent runtime）                                        |
 | npc-graph/extractor                  | plugin      | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 关系图抽取器                                                                               |
 | char-creator/character-tracker       | core-plugin | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 发现 + 角色状态跟踪                                                                        |
 | scene-prompts                        | plugin      | `post-turn`                | scheduled（interval=1）                                                    | `plugin`  | 前情衔接、当前决策与玩家口吻短回复                                                             |
 | character-blueprint                  | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 可复用角色蓝图；`dataSchemas` blueprints/characters 接收世界导入                               |
 | character-presence                   | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                      |
-| living-world-rules                   | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；`dataSchemas` rules                                 |
+| living-world-rules                   | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；支持 WorldIR → rules 投影                           |
 | branch-reply                         | plugin      | `post-turn`                | auto（每回合播种）+ manual（重生成/采纳）                                  | —         | 回复候选 + `prompt-history-rewriter`（自动播种叙事原文，重生成走 LLM；投影历史折叠已采纳回合） |
 | scene-stage/background-gen           | plugin      | 无（event，不设 stage）    | event（topic: `scene-stage.generate.requested`，`execution: background`）  | —         | 后台增量生成缺失的场景背景图（`ctx.images`），产出 `asset.generate`                            |
 | dashscope-image-gen/prompt-generator | plugin      | —                          | manual（右侧「生成图片」按钮）                                             | `default` | 剧情插图提示词 agent，发 `image.generate.requested` 唤醒生成 follower                          |
@@ -288,18 +289,18 @@ Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填
 
 ### npc-graph/extractor
 
-| 字段         | 值                                                                                                                                                                                                                                                                                                                                                                      |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`                                                                                                                                                                                                                                                                                                                                                                |
-| runtimeType  | `agent`（LLM 驱动）                                                                                                                                                                                                                                                                                                                                                     |
-| stage        | `post-turn`（与 guide / codex / character-tracker 同 stage 并行执行）                                                                                                                                                                                                                                                                                                   |
-| capabilities | `[npc-graph, relationship-tracking]`                                                                                                                                                                                                                                                                                                                                    |
-| trigger      | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                                                                                                                                                                          |
-| needs        | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip                                                                                                                                                                                                                                                                                  |
-| input.inject | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）；`plugin-data[nodes]` → `<existing-npcs>`、`plugin-data[edges]` → `<existing-relations>`（`format: summary`，现有图在构建 prompt 时注入，免去每轮 `list-npc-graph` 往返 —— 同 codex `<existing-entries>` 模式；工具 name-first，LLM 只需看见图，不需携带 id） |
-| model slot   | `plugin`                                                                                                                                                                                                                                                                                                                                                                |
-| tools.plugin | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（现有图已注入，仅在需要某关系完整 fact 时按需调用）                                                                                                                                                                                                                                                               |
-| ui.right     | `./ui/npc-graph-panel.json`                                                                                                                                                                                                                                                                                                                                             |
+| 字段         | 值                                                                                                                                                                                                                     |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                                                                                                                                                               |
+| runtimeType  | `agent`（LLM 驱动）                                                                                                                                                                                                    |
+| stage        | `post-turn`（与 guide / codex / character-tracker 同 stage 并行执行）                                                                                                                                                  |
+| capabilities | `[npc-graph, relationship-tracking]`                                                                                                                                                                                   |
+| trigger      | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                         |
+| inputs       | `worldIR` ← capability `world-ir-provider`，`accepts: covel://world/ir/v1`，`required: true`；该 typed input 同时形成 DAG 边和失败 gate                                                                                |
+| input.inject | `plugin-data[nodes]` → `<existing-npcs>`、`plugin-data[edges]` → `<existing-relations>`（`format: summary`，现有图在构建 prompt 时注入，免去每轮 `list-npc-graph` 往返；工具 name-first，LLM 只需看见图，不需携带 id） |
+| model slot   | `plugin`                                                                                                                                                                                                               |
+| tools.plugin | `upsert-npc-graph`（批量写节点+边）、`list-npc-graph`（现有图已注入，仅在需要某关系完整 fact 时按需调用）                                                                                                              |
+| ui.right     | `./ui/npc-graph-panel.json`                                                                                                                                                                                            |
 
 **职责**: 维护一张会话级的人物-关系图。从叙事文本中抽取 NPC 节点（individual / group / faction）、它们的关系（信任、结盟、欠债、背叛等）以及每条关系的自然语言事实，持久化到 `plugin_data` 的 `nodes`、`edges`、`index`、`meta` 四个 namespace。
 
@@ -382,6 +383,32 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 ---
 
+## world-ir
+
+⚪ optional · 🧠 uses LLM
+
+**Quick use**：多个后处理插件都要理解同一段叙事时，先用一个共享 agent 抽取插件中立事实，避免每个插件各自重新解析完整原文。
+
+**路径**: `plugins/world-ir/`
+
+| 字段         | 值                                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------------------ |
+| stage        | `post-turn`                                                                                            |
+| trigger      | `auto`                                                                                                 |
+| inputs       | `narrative` ← capability `narrative-engine` 的 `/narrativeOutput`，本地字符串 schema，`required: true` |
+| output       | `schema: covel://world/ir/v1`，`recordAs: world-ir-v1`                                                 |
+| capabilities | `[world-ir-provider]`                                                                                  |
+| relations    | `provides: [world-ir-provider]`                                                                        |
+| tools        | 无；直接返回严格 JSON                                                                                  |
+
+`world-ir` 只抽取本轮明确事实，输出 `summary`、`entities`、`relations`、`events`、`statements`。框架先做 JSON Schema 校验，再做全局 id 唯一、entity 引用完整、深度和节点预算等语义校验；非法输出使本 runtime 失败，下游必需输入随即 skip，但本轮 story 与无关插件仍可提交。
+
+`codex`、`core-quest`、`affinity`、`inventory` 和 `npc-graph` 都声明 `relations.requires: [world-ir]`，所以当前插件选择器会自动补齐内置 provider；运行时依赖则按 `world-ir-provider` capability 解析，不在调度器里绑定具体 runtime id。这里刻意区分“包安装依赖”和“同轮数据依赖”：当前 `relations.requires` 仍是具体插件 id，因此替换内置 extractor 需要同时调整消费者的包关系（或后续引入 capability-aware 的目录选择策略），不能只多启用一个同 capability provider；否则 `cardinality: one` 会把多个 provider 诊断为歧义。
+
+成本模型不是“让五个不同 system prompt 共享同一个 provider prefix cache”——不同前缀通常无法跨插件命中。这里采用更稳定的共享计算：完整叙事只做一次通用抽取，下游读取更短的同构 JSON，各自只做领域决策。provider cache 命中/写入量通过 `cachedInputTokens` / `cacheWriteInputTokens` 单独观测，不与总输入 token 重复计数。
+
+---
+
 ## codex
 
 ⚪ optional · 🧠 uses LLM
@@ -390,19 +417,20 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 **路径**: `plugins/codex/`
 
-| 字段         | 值                                                                                                                                                                                                 |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`（可禁用）                                                                                                                                                                                 |
-| stage        | `post-turn`                                                                                                                                                                                        |
-| runtimeType  | `agent`（默认，LLM 驱动）                                                                                                                                                                          |
-| trigger      | `auto`（每轮触发；`needs: [{ capability: narrative-engine }]` 保证在当前模式的叙事引擎失败时 skip，不会用空 `<narrator-output>` 幻觉）                                                             |
-| model        | `plugin`                                                                                                                                                                                           |
-| tools.plugin | `unlock-codex-entries`, `update-codex-entry`                                                                                                                                                       |
-| ui.right     | `./ui/codex-panel.json`                                                                                                                                                                            |
-| ui.message   | `./ui/codex-message.json`                                                                                                                                                                          |
-| input.inject | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）<br>`plugin-data[entries]` → `<existing-entries>`（`format: summary`，`maxEntries: 100`） |
+| 字段         | 值                                                                                           |
+| ------------ | -------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用）                                                                           |
+| stage        | `post-turn`                                                                                  |
+| runtimeType  | `agent`（默认，LLM 驱动）                                                                    |
+| trigger      | `auto`（每轮触发）                                                                           |
+| inputs       | `worldIR` ← capability `world-ir-provider`，`accepts: covel://world/ir/v1`，`required: true` |
+| model        | `plugin`                                                                                     |
+| tools.plugin | `unlock-codex-entries`, `update-codex-entry`                                                 |
+| ui.right     | `./ui/codex-panel.json`                                                                      |
+| ui.message   | `./ui/codex-message.json`                                                                    |
+| input.inject | `plugin-data[entries]` → `<existing-entries>`（`format: summary`，`maxEntries: 100`）        |
 
-**职责**: 分析叙事文本，识别并登记本轮出现的知识条目（地点 / 人物 / 势力 / 物品 / 技能 / 传闻 / 怪物）。对"没有新发现"的回合直接结束。prompt 里同时看到本轮叙事 `<narrator-output>` 和已登记条目 `<existing-entries>`，所以 LLM 一次调用即可决定是 `unlock-codex-entries`（新增）还是 `update-codex-entry`（补充已有），无需额外调用 `plugin-data-list` 往返。
+**职责**: 从 `<runtime-inputs>.worldIR.value` 识别并登记本轮出现的知识条目（地点 / 人物 / 势力 / 物品 / 技能 / 传闻 / 怪物）。对"没有新发现"的回合直接结束。prompt 同时看到共享 WorldIR 和已登记条目 `<existing-entries>`，所以 LLM 一次调用即可决定是 `unlock-codex-entries`（新增）还是 `update-codex-entry`（补充已有），无需额外调用 `plugin-data-list` 往返。
 
 **数据持久化**: `unlock-codex-entries` 批量写入 `plugin_data[entries]`；`update-codex-entry` 读取指定 `entryId`（就是 plugin-data 的 key，形如 `codex-xxx`）并按 append-only 语义合并内容、合并标签、可选升级 `rarity`。
 
@@ -420,19 +448,20 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 **路径**: `plugins/core-quest/`
 
-| 字段         | 值                                                                                                                                                                            |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`（可禁用）                                                                                                                                                            |
-| stage        | `post-turn`                                                                                                                                                                   |
-| trigger      | `auto`；`needs: [{ capability: narrative-engine }]`                                                                                                                           |
-| model        | `plugin`                                                                                                                                                                      |
-| outputKind   | `system`                                                                                                                                                                      |
-| entry        | `./server/index.js`                                                                                                                                                           |
-| tools.plugin | `upsert-quests`                                                                                                                                                               |
-| input.inject | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明）；`plugin-data[quests]` → `<existing-quests>`（`format: summary`，`maxEntries: 50`） |
-| dataSchemas  | `quests`（schemaVersion 1，acceptsWorldData，schema URI `plugin://core-quest/quests`）                                                                                        |
-| ui.right     | `quest-log-panel.json` — 任务面板（进行中含 objectives 勾选清单 / 已完成 / 已失败）                                                                                           |
-| ui.message   | `quest-changes-block.json` — 本回合任务变更块                                                                                                                                 |
+| 字段         | 值                                                                                           |
+| ------------ | -------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用）                                                                           |
+| stage        | `post-turn`                                                                                  |
+| trigger      | `auto`                                                                                       |
+| inputs       | `worldIR` ← capability `world-ir-provider`，`accepts: covel://world/ir/v1`，`required: true` |
+| model        | `plugin`                                                                                     |
+| outputKind   | `system`                                                                                     |
+| entry        | `./server/index.js`                                                                          |
+| tools.plugin | `upsert-quests`                                                                              |
+| input.inject | `plugin-data[quests]` → `<existing-quests>`（`format: summary`，`maxEntries: 50`）           |
+| dataSchemas  | `quests`（schemaVersion 1，acceptsWorldData，schema URI `plugin://core-quest/quests`）       |
+| ui.right     | `quest-log-panel.json` — 任务面板（进行中含 objectives 勾选清单 / 已完成 / 已失败）          |
+| ui.message   | `quest-changes-block.json` — 本回合任务变更块                                                |
 
 **职责**：只记录叙事明确出现的任务信号——不发明任务、每回合新任务 ≤3、目标勾选与完成/失败必须有叙事证据、无信号回合不调工具。`upsert-quests`（≤5/次）按 name 归一化合并：已有任务提供字段覆盖，objectives 依次按稳定 `id`、规范化 text、保守语义匹配更新勾选，命中后保留已有目标原文，未命中才追加；世界预置任务（`<existing-quests>` 已注入）只推进不重建。变更摘要写 `message` namespace 驱动消息块。
 
@@ -448,19 +477,20 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 **路径**: `plugins/affinity/`
 
-| 字段         | 值                                                                                                                                     |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`（可禁用）                                                                                                                     |
-| stage        | `post-turn`                                                                                                                            |
-| trigger      | `auto`；`needs: [{ capability: narrative-engine }]`                                                                                    |
-| model        | `plugin`                                                                                                                               |
-| outputKind   | `system`                                                                                                                               |
-| entry        | `./server/index.js`                                                                                                                    |
-| tools.plugin | `update-affinity`                                                                                                                      |
-| input.inject | 双引擎 `narrativeOutput` → `<narrator-output>`；`plugin-data[affinity]` → `<existing-affinity>`（`format: summary`，`maxEntries: 50`） |
-| dataSchemas  | `affinity`（schemaVersion 1，acceptsWorldData，schema URI `plugin://affinity/affinity`）                                               |
-| ui.right     | `affinity-panel.json` — 好感面板（score 双向条 + tier 徽标 + 最近变化原因）                                                            |
-| ui.message   | `affinity-toast.json` — 变更 toast（"莉安 +5（你替她挡了债主）"式）                                                                    |
+| 字段         | 值                                                                                           |
+| ------------ | -------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用）                                                                           |
+| stage        | `post-turn`                                                                                  |
+| trigger      | `auto`                                                                                       |
+| inputs       | `worldIR` ← capability `world-ir-provider`，`accepts: covel://world/ir/v1`，`required: true` |
+| model        | `plugin`                                                                                     |
+| outputKind   | `system`                                                                                     |
+| entry        | `./server/index.js`                                                                          |
+| tools.plugin | `update-affinity`                                                                            |
+| input.inject | `plugin-data[affinity]` → `<existing-affinity>`（`format: summary`，`maxEntries: 50`）       |
+| dataSchemas  | `affinity`（schemaVersion 1，acceptsWorldData，schema URI `plugin://affinity/affinity`）     |
+| ui.right     | `affinity-panel.json` — 好感面板（score 双向条 + tier 徽标 + 最近变化原因）                  |
+| ui.message   | `affinity-toast.json` — 变更 toast（"莉安 +5（你替她挡了债主）"式）                          |
 
 **职责**：只对叙事中玩家与 NPC 的明确互动记 delta（日常 ±1..5、重大事件至多 ±20；只为有名字且发生实际互动的 NPC 建条目）。`update-affinity`（≤5/次）按 name 归一化去重：不存在则以 score=0 创建后应用 delta，score 累计 clamp [-100,100]，按阈值派生 6 档 tier（≤-60 敌视 / -59..-20 冷淡 / -19..19 中立 / 20..59 友好 / 60..84 亲密 / ≥85 挚爱，`tierLabel` 为 I18nText），history 保留最近 10 条。
 
@@ -478,20 +508,21 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 **路径**: `plugins/inventory/`
 
-| 字段         | 值                                                                                                                                   |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| pluginType   | `plugin`（可禁用）                                                                                                                   |
-| stage        | `post-turn`                                                                                                                          |
-| trigger      | `auto`；`needs: [{ capability: narrative-engine }]`                                                                                  |
-| model        | `plugin`                                                                                                                             |
-| outputKind   | `system`                                                                                                                             |
-| entry        | `./server/index.js`                                                                                                                  |
-| tools.plugin | `update-inventory`                                                                                                                   |
-| rpc          | `item-op`（entry 注册）——玩家侧装备/卸下/丢弃，面板逐物品按钮经 `invokePluginAction` 触发；丢弃与工具 remove-to-zero 同款墓碑语义    |
-| input.inject | 双引擎 `narrativeOutput` → `<narrator-output>`；`plugin-data[items]` → `<existing-inventory>`（`format: summary`，`maxEntries: 80`） |
-| dataSchemas  | `items`（schemaVersion 1，acceptsWorldData，schema URI `plugin://inventory/items`）                                                  |
-| ui.right     | `inventory-panel.json` — 行囊面板（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`）                                     |
-| ui.message   | `inventory-message.json` — 得失 toast（"+ 铁剑 ×1 / − 火把 ×2"式）                                                                   |
+| 字段         | 值                                                                                                                                |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`（可禁用）                                                                                                                |
+| stage        | `post-turn`                                                                                                                       |
+| trigger      | `auto`                                                                                                                            |
+| inputs       | `worldIR` ← capability `world-ir-provider`，`accepts: covel://world/ir/v1`，`required: true`                                      |
+| model        | `plugin`                                                                                                                          |
+| outputKind   | `system`                                                                                                                          |
+| entry        | `./server/index.js`                                                                                                               |
+| tools.plugin | `update-inventory`                                                                                                                |
+| rpc          | `item-op`（entry 注册）——玩家侧装备/卸下/丢弃，面板逐物品按钮经 `invokePluginAction` 触发；丢弃与工具 remove-to-zero 同款墓碑语义 |
+| input.inject | `plugin-data[items]` → `<existing-inventory>`（`format: summary`，`maxEntries: 80`）                                              |
+| dataSchemas  | `items`（schemaVersion 1，acceptsWorldData，schema URI `plugin://inventory/items`）                                               |
+| ui.right     | `inventory-panel.json` — 行囊面板（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`）                                  |
+| ui.message   | `inventory-message.json` — 得失 toast（"+ 铁剑 ×1 / − 火把 ×2"式）                                                                |
 
 **职责**：只记录叙事明确的获得/失去/消耗/装备变化——不发明物品，大宗模糊描述（"一堆金币"）合理量化并在 description 注明估算，货币也是物品（tag `currency`）。**玩家侧操作刻意只到装备位与丢弃**：`item-op` RPC 管 equip/unequip/drop（装备是玩家的配置选择，不经叙事），而"使用物品"必须走故事输入——静默扣数量的"使用"按钮会绕过叙事引擎。`update-inventory`（≤8/次）按 name 归一化到稳定短 id：`add` 叠加数量、`remove` 减量至 0 时墓碑化（`quantity: 0, removed: true`——proposal 管线暂无 plugin-data 删除类型，UI 隐藏墓碑，同名再获得复活同一记录）、`set` 局部更新、`equip`/`unequip` 切装备位；对不存在条目的 `remove` 容错 skip。得失摘要写 `message` namespace（key = turnId）。
 
@@ -610,7 +641,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 **职责**: Covel 首个消费 hook 生命周期的「跨切面框架能力插件」示例。维护每会话的进程内 token 计数：
 
-- `PostLLMResponse`（`enforce: post`）累加每次 LLM 调用的 `usage`，纯观察不改写；
+- `PostLLMResponse`（`enforce: post`）累加每次 LLM 调用的 `usage.inputTokens + usage.outputTokens`，纯观察不改写；`inputTokens` 已归一化为包含缓存读写的总输入，`cachedInputTokens` / `cacheWriteInputTokens` 只用于观测命中与写入比例，不重复计数；
 - `PreSchedule` 在软上限后把本回合 runtime 收窄为仅 `outputKind: "story"`（按字段判定，不硬编码插件 ID），跳过后台 LLM 生成；
 - `TurnStart`（`enforce: pre`）在硬上限 abort 整回合，`abortReason` 透传前端；
 - `SessionEnd` 清理该会话的计数桶，防止进程内 Map 泄漏。
@@ -747,7 +778,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 **路径**: `plugins/scene-stage/`
 
-多 runtime 插件。根 `PLUGIN.md` 只是插件级元信息（名称/描述/关联），不是可执行 runtime；四个真正被发现、调度的 runtime 都在 `runtimes/` 下（`discoverPlugins` 对声明了 `runtimes/` 的插件只扫描 `runtimes/*/PLUGIN.md`，根 `PLUGIN.md` 不参与调度）。`events[].schema` 与 `dataSchemas.*.schema` 仍按[插件根目录相对路径](#dataschemas)解析，因此四个 runtime 共享插件根的 `schemas/`；只有 `handler` 与 `ui.*` 相对各自 runtime 目录。`stage/current` 记录的构造集中在 `lib/stage-data.js`（`buildStageRecord` / `makeStageProposal`），resolver 与 seed 共用，避免两个写入方在字段上漂移。
+多 runtime 插件。根 `PLUGIN.md` 只是插件级元信息（名称/描述/关联），不是可执行 runtime；四个真正被发现、调度的 runtime 都在 `runtimes/` 下（`discoverPlugins` 对声明了 `runtimes/` 的插件只扫描 `runtimes/*/PLUGIN.md`，根 `PLUGIN.md` 不参与调度）。`events[].schema`、`dataSchemas.*.schema` 与 `worldProjections.*.handler` 仍按[插件根目录相对路径](#dataschemas)解析，因此四个 runtime 共享插件根的 `schemas/` 和 projection handler；只有 runtime 的 `handler` 与 `ui.*` 相对各自 runtime 目录。`stage/current` 记录的构造集中在 `lib/stage-data.js`（`buildStageRecord` / `makeStageProposal`），resolver 与 seed 共用，避免两个写入方在字段上漂移。
 
 ### scene-stage/resolver
 
@@ -906,16 +937,19 @@ Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direc
 
 **路径**: `plugins/living-world-rules/`
 
-| 字段         | 值                                 |
-| ------------ | ---------------------------------- |
-| pluginType   | `plugin`                           |
-| runtimeType  | `function`，`trigger: manual`      |
-| outputKind   | `system`                           |
-| capabilities | `[living-world-rules, world-info]` |
-| dataSchemas  | `rules`（acceptsWorldData）        |
-| ui.right     | `living-world-rules-panel.json`    |
+| 字段             | 值                                                       |
+| ---------------- | -------------------------------------------------------- |
+| pluginType       | `plugin`                                                 |
+| runtimeType      | `function`，`trigger: manual`                            |
+| outputKind       | `system`                                                 |
+| capabilities     | `[living-world-rules, world-info]`                       |
+| dataSchemas      | `rules`（acceptsWorldData）                              |
+| worldProjections | `rules-from-world-ir`（`covel://world/ir/v1` → `rules`） |
+| ui.right         | `living-world-rules-panel.json`                          |
 
 **职责**：规则 schema 见 `schemas/rules.schema.json`（`kind` / `category` / `budgetClass` / `coordinate` / `keys` / `insertionOrder`）。world 包用 `to: plugin:living-world-rules/rules+lorebook` 同时写规则与 lorebook。
+
+`rules-from-world-ir` 是公共 projection 契约的试点，只生成 `rules` plugin-data。需要让预置规则立即进入叙事 prompt 的 world 包当前仍使用上面的 `+lorebook` 直接导入；projection 的纯转换阶段不会隐式触发插件 runtime 或额外领域副作用。
 
 **`kind` → lorebook strategy 映射**：只有**带关键词的 `triggered`** 规则映射为 `selective`（按 `keys` 命中才注入）；`evolving` 与 `constant` 是常驻（`constant` strategy，每轮注入）。一条 `triggered` 规则若**未填关键词**会回退为常驻 `constant`，而不是静默永不生效——避免"面板显示 enabled、却从不进 prompt"的分裂。
 
@@ -1207,6 +1241,30 @@ schema: plugin://social-sim/relationships
 to: plugin:social-sim/relationships
 key: id
 ```
+
+### worldProjections
+
+`worldProjections` 声明插件如何把某个 world schema 的相同输入转换成插件自己的一个或多个 namespace。声明按 projection id 聚合到插件级 registry；多 runtime 重复声明完全一致时去重，任何冲突都会让插件注册失败。
+
+```yaml
+worldProjections:
+  relationships-from-world-ir:
+    from: covel://world/ir/v1
+    handler: ./server/project-world-ir.js
+    outputs:
+      relationships:
+        namespace: relationships
+        key: id
+```
+
+| 字段                     | 说明                                                                                                |
+| ------------------------ | --------------------------------------------------------------------------------------------------- |
+| `from`                   | 必填 source schema URI；只有与 source `schema` 完全相同才执行                                       |
+| `handler`                | 插件根目录相对 `.js` / `.mjs` / `.cjs` 模块，必须默认导出函数；绝对路径和 `..` 被拒绝               |
+| `outputs.<id>.namespace` | 只能写声明该 projection 的插件自己的 namespace，且该 namespace 必须由 `dataSchemas` 接受 world data |
+| `outputs.<id>.key`       | 从每条投影结果读取 plugin-data stable key 的字段名                                                  |
+
+projection handler 的契约是导入期纯转换，不参与 turn scheduler，也不会由框架注入 store、LLM 或工具上下文。preflight 只检查声明和目标，不执行模块；import 与 sync 在独立、限时、限内存的 Worker 中执行，因此同一输入必须产生同一输出，不能依赖模块内可变状态或自行写外部系统。Worker 不是权限沙箱，代码仍可访问 Node/网络能力；community handler 必须先取得 session-scope server-code approval。输入、返回格式、校验、ledger 与同步语义见 [World Data](world-data.md#worldir-与插件投影)。这使 framework 和 agent 都能通过声明发现转换能力，无需在内核按具体插件 ID 分支。
 
 ### events 声明与 advertiseEvents（统一事件发射层）
 
@@ -1592,6 +1650,27 @@ input:
       format: summary
       maxEntries: 100
 ```
+
+### inputs（类型化 runtime 数据流）
+
+`inputs` 用于声明同轮 runtime output 到下游 runtime 的显式数据边。它同时服务调度器、验证器和 Agent：调度器从 `from` 推导 DAG，验证器在调用下游前检查值，Agent 在 system prompt 的 `<runtime-inputs>` JSON 中读取带 provenance 的 slot。
+
+```yaml
+inputs:
+  worldIR:
+    from:
+      capability: world-ir-provider
+      cardinality: one
+    select: /someField # 可选 JSON Pointer；省略表示整个 output
+    accepts: covel://world/ir/v1 # schema URI 或插件内相对 JSON Schema
+    required: true
+```
+
+- `from` 可按 runtime id 或 capability 选择；`cardinality: one` 要求唯一来源，避免多个 provider 时静默选错。
+- `required: true` 表示来源缺席、失败、选择结果缺失或 schema 不通过时 skip 下游；这不是整回合失败，其他无关分支继续执行。
+- slot 形状为 `{ value, source }`；业务 agent 读取 `value`，`source` 只用于 provenance，不是故事事实。
+- `accepts` 支持插件内 JSON Schema，以及框架 schema URI（当前包括 `covel://world/ir/v1`）。runtime `output.schema` 使用相同 resolver；JSON Schema draft-07 与 2020-12 都可执行。
+- `output.recordAs` 把成功结果登记为可被 `runtime-export` 发现的 execution export；它不替代 typed input 的同轮 DAG 边。
 
 ### 调度阶段（Stage Bands）
 
