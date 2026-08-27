@@ -20,8 +20,8 @@ events:
   - topic: stage.direction
     schema: ./schemas/stage-direction.event.json
     description:
-      zh: "当角色登场、退场、换位、说话焦点或服装/表情/姿势发生变化时必须发射。一次调用携带完整 cues 数组，例如 {cues:[{type:'actor.enter',character:'朝仓凛',position:'left',outfit:'default',expression:'smile',pose:'default',focus:true,transition:'fade'}]}。无变化时不要发射。"
-      en: "Must emit when an actor enters, leaves, moves, gains focus, or changes outfit/expression/pose. Send every change in one cues array, for example {cues:[{type:'actor.enter',character:'Rin',position:'left',outfit:'default',expression:'smile',pose:'default',focus:true,transition:'fade'}]}. Do not emit when nothing changed."
+      zh: "当角色登场、退场、换位、说话焦点或服装/表情/姿势发生变化时必须发射。一次调用携带完整 cues 数组，例如 {cues:[{type:'actor.enter',character:'朝仓凛',position:'left',outfit:'default',expression:'smile',pose:'default',focus:true,transition:'fade'}]}。actor.leave 与 stage.clear 应指定离场 transition；无变化时不要发射。"
+      en: "Must emit when an actor enters, leaves, moves, gains focus, or changes outfit/expression/pose. Send every change in one cues array, for example {cues:[{type:'actor.enter',character:'Rin',position:'left',outfit:'default',expression:'smile',pose:'default',focus:true,transition:'fade'}]}. Specify an exit transition for actor.leave and stage.clear. Do not emit when nothing changed."
 ---
 
 The direction runtime is the authoritative, persistent actor layout for stage

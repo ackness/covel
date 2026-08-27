@@ -793,6 +793,8 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direction/current` 就以其为权威，包括 `actors: []` 的明确清空。尚未产生方向状态的旧世界继续使用 `scene-cast/active-cast`，因此无需迁移即可保持原行为。视觉请求的具体回退由 `character-presence.visuals` 负责。
 
+动作流实时预览会短暂保留 `actor.leave` 和 `stage.clear` 的目标角色，以播放指令指定的 `fade`、`slide-left`、`slide-right` 或 `dissolve` 离场动画；持久化的 `direction/current` 仍然只保存留在舞台上的角色。
+
 ### scene-stage/seed
 
 | 字段        | 值                                                     |

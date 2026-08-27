@@ -224,6 +224,22 @@ describe("computeSpriteSlots", () => {
     expect(lin?.active).toBe(true);
     expect(slots.map((s) => s.pos)).toEqual(["left", "right"]);
   });
+
+  it("moves focus to the first remaining actor while a leaver animates out", () => {
+    const presence = {
+      lin: { characterId: "lin", sprite: ref("lin-sprite") },
+      archivist: { characterId: "archivist", sprite: ref("archivist-sprite") },
+    };
+    const slots = computeSpriteSlots(
+      [
+        { id: "lin", name: "林月", exiting: true, transition: "fade" },
+        { id: "archivist", name: "档案员" },
+      ],
+      presence,
+    );
+    expect(slots[0]).toMatchObject({ exiting: true, active: false });
+    expect(slots[1]).toMatchObject({ active: true });
+  });
 });
 
 describe("resolveStageSpeakers", () => {
@@ -347,13 +363,48 @@ describe("applyStageDirectionPreview", () => {
     ]);
   });
 
-  it("supports an authoritative clear and ignores unresolved actors", () => {
+  it("previews an authoritative clear with exits and ignores unresolved actors", () => {
     expect(
       applyStageDirectionPreview([{ id: "rin", name: "朝仓凛" }], presence, [
         { type: "actor.update", character: "不存在", expression: "smile" },
         { type: "stage.clear" },
       ]),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        id: "rin",
+        name: "朝仓凛",
+        exiting: true,
+        transition: "fade",
+      },
+    ]);
+  });
+
+  it("keeps a leaving actor for the requested speculative exit animation", () => {
+    expect(
+      applyStageDirectionPreview(
+        [
+          { id: "rin", name: "朝仓凛", position: "left" },
+          { id: "kaho", name: "椎名夏帆", position: "right" },
+        ],
+        presence,
+        [
+          {
+            type: "actor.leave",
+            character: "朝仓凛",
+            transition: "slide-left",
+          },
+        ],
+      ),
+    ).toEqual([
+      {
+        id: "rin",
+        name: "朝仓凛",
+        position: "left",
+        exiting: true,
+        transition: "slide-left",
+      },
+      { id: "kaho", name: "椎名夏帆", position: "right" },
+    ]);
   });
 });
 

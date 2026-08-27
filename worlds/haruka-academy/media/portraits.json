@@ -45,7 +45,23 @@
       "characterId": "npc-shiina-kaho",
       "name": "椎名夏帆",
       "filename": "shiina-kaho.png",
-      "subject": "a breezy easygoing teenage girl, a light-music-club guitarist, school uniform worn a little loosely with a soft cardigan, light wavy hair, an acoustic guitar slung on a strap, a casual confident relaxed grin"
+      "subject": "a breezy easygoing teenage girl, a light-music-club guitarist, school uniform worn a little loosely with a soft cardigan, light wavy hair, an acoustic guitar slung on a strap, a casual confident relaxed grin",
+      "visual": {
+        "id": "uniform-relaxed",
+        "outfit": "uniform",
+        "expression": "relaxed",
+        "pose": "guitar"
+      },
+      "variants": [
+        {
+          "id": "uniform-concerned",
+          "filename": "shiina-kaho-uniform-concerned.png",
+          "outfit": "uniform",
+          "expression": "concerned",
+          "pose": "guitar",
+          "subject": "the same light-music-club guitarist in her school uniform and cream cardigan, holding the same acoustic guitar, both eyes open with a quietly attentive concerned expression"
+        }
+      ]
     },
     {
       "id": "shiraishi-yuma",
@@ -66,14 +82,46 @@
       "characterId": "npc-onodera-chihiro",
       "name": "小野寺千寻",
       "filename": "onodera-chihiro.png",
-      "subject": "a gentle young woman teacher in her late twenties, a soft cardigan over a blouse, loosely tied hair, holding a piece of chalk and a worn paperback, a warm patient unhurried smile"
+      "subject": "a gentle young woman teacher in her late twenties, a soft cardigan over a blouse, loosely tied hair, holding a piece of chalk and a worn paperback, a warm patient unhurried smile",
+      "visual": {
+        "id": "teacher-warm",
+        "outfit": "teacher",
+        "expression": "warm",
+        "pose": "book"
+      },
+      "variants": [
+        {
+          "id": "casual-gentle",
+          "filename": "onodera-chihiro-casual-gentle.png",
+          "outfit": "casual",
+          "expression": "gentle",
+          "pose": "book",
+          "subject": "the same gentle young teacher in a pale sage spring coat, cream blouse and long navy skirt, carrying a small brown shoulder bag and the same worn paperback, with a warm relaxed smile"
+        }
+      ]
     },
     {
       "id": "morikawa-souta",
       "characterId": "npc-morikawa-souta",
       "name": "森川奏太",
       "filename": "morikawa-souta.png",
-      "subject": "an outgoing cheerful teenage boy, a band drummer, school uniform with sleeves rolled up, short spiky hair, a pair of drumsticks twirled in one hand, a big friendly open grin"
+      "subject": "an outgoing cheerful teenage boy, a band drummer, school uniform with sleeves rolled up, short spiky hair, a pair of drumsticks twirled in one hand, a big friendly open grin",
+      "visual": {
+        "id": "uniform-cheerful",
+        "outfit": "uniform",
+        "expression": "cheerful",
+        "pose": "drumsticks"
+      },
+      "variants": [
+        {
+          "id": "rehearsal-focused",
+          "filename": "morikawa-souta-rehearsal-focused.png",
+          "outfit": "rehearsal",
+          "expression": "focused",
+          "pose": "drumsticks",
+          "subject": "the same band drummer in a navy T-shirt, open light gray overshirt and dark casual trousers, holding the same drumsticks with a focused confident closed-mouth smile"
+        }
+      ]
     },
     {
       "id": "toujou-akane",

@@ -83,6 +83,8 @@ export function StageSprites({
           // top for the residual glow/shadow overlap at lane edges.
           className="ui-stage-sprite absolute bottom-0 h-[92%] px-1 transition-[left,width] duration-500 ease-out"
           data-transition={slot.transition ?? "fade"}
+          data-phase={slot.exiting ? "exit" : "present"}
+          aria-hidden={slot.exiting || undefined}
           style={{
             left: `${lanes[index].leftPct}%`,
             width: `${lanes[index].widthPct}%`,
@@ -92,7 +94,7 @@ export function StageSprites({
           <div
             className={clsx(
               "flex h-full w-full items-end justify-center transition-[filter,transform] duration-300 ease-out",
-              slot.active
+              slot.active && !slot.exiting
                 ? "ui-stage-sprite-active"
                 : "ui-stage-sprite-inactive",
             )}

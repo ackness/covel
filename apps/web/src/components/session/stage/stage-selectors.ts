@@ -129,6 +129,7 @@ export interface StageSpriteSlot {
   readonly variantId?: string;
   readonly framing?: CharacterVisualFraming;
   readonly transition?: StageTransition;
+  readonly exiting?: boolean;
   readonly active: boolean;
   readonly pos: SpritePosition;
 }
@@ -304,7 +305,7 @@ export function computeSpriteSlots(
   presenceMap: Readonly<Record<string, PresenceRecord | undefined>>,
   stations?: ReadonlyMap<string, SpritePosition>,
 ): StageSpriteSlot[] {
-  const primaryId = speakers[0]?.id;
+  const primaryId = speakers.find((speaker) => !speaker.exiting)?.id;
   const staged = speakers.slice(0, MAX_SPRITE_SLOTS);
   const resolved =
     stations ??
@@ -323,6 +324,7 @@ export function computeSpriteSlots(
       ...(visual?.variantId ? { variantId: visual.variantId } : {}),
       ...(visual?.stage ? { framing: visual.stage } : {}),
       ...(speaker.transition ? { transition: speaker.transition } : {}),
+      ...(speaker.exiting ? { exiting: true } : {}),
       active: speaker.id === primaryId,
       pos: speaker.position ?? resolved.get(speaker.id) ?? "center",
     };
@@ -584,8 +586,8 @@ export function mergeChoices(
  * scene-prompts regenerates — drop them so the stage never offers phrases from
  * a past turn. Returns the namespace untouched when the stamp is fresh, absent,
  * or uncomparable (no current turn yet) — the latter two keep back-compat with
- * pre-`__turnId` data. Interaction choices and the ✎ entry are unaffected
- * (they don't live in this namespace).
+ * pre-`__turnId` data. Interaction choices and the inline composer are
+ * unaffected (they don't live in this namespace).
  */
 export function filterStalePrompts(
   promptsNamespace: Readonly<Record<string, unknown>>,

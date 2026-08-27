@@ -31,6 +31,9 @@ export interface StageSpeaker {
   readonly visual?: CharacterVisualRequest;
   readonly position?: SpritePosition;
   readonly transition?: StageTransition;
+  /** Speculative preview marker. Durable direction state removes departed
+   * actors; the preview keeps them for one CSS exit animation. */
+  readonly exiting?: boolean;
 }
 
 export interface StageDirectionActor {
@@ -277,7 +280,14 @@ export function applyStageDirectionPreview(
     const cue = rawCue as Readonly<Record<string, unknown>>;
     const type = cue.type;
     if (type === "stage.clear") {
-      actors = [];
+      const transition = isStageTransition(cue.transition)
+        ? cue.transition
+        : "fade";
+      actors = actors.map((actor) => ({
+        ...actor,
+        exiting: true,
+        transition,
+      }));
       continue;
     }
 
@@ -286,10 +296,19 @@ export function applyStageDirectionPreview(
     const index = actors.findIndex((actor) => actor.id === matched.id);
 
     if (type === "actor.leave") {
-      if (index >= 0) actors.splice(index, 1);
+      if (index >= 0) {
+        actors[index] = {
+          ...actors[index],
+          exiting: true,
+          transition: isStageTransition(cue.transition)
+            ? cue.transition
+            : (actors[index].transition ?? "fade"),
+        };
+      }
       continue;
     }
     if (type === "actor.focus") {
+      if (index >= 0 && actors[index].exiting) continue;
       if (index > 0) {
         actors = [actors[index], ...actors.filter((_, i) => i !== index)];
       }

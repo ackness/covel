@@ -62,7 +62,11 @@
     stage.direction；同一轮全部变化放在一个 cues
     数组，没有对应视觉变体时省略视觉字段，由框架显示默认立绘。朝仓凛默认 variantId 为
     uniform-playful；她放下玩笑认真倾听或决定压下新闻时可使用 expression: serious 或 variantId:
-    uniform-serious。
+    uniform-serious。椎名夏帆认真倾听社团问题时可使用 expression: concerned 或 variantId:
+    uniform-concerned；森川奏太在轻音部排练时使用 outfit: rehearsal 或 variantId:
+    rehearsal-focused；小野寺千寻在商店街、海堤等校外场景使用 outfit: casual 或 variantId:
+    casual-gentle。角色离开画面时，离开左侧的角色优先使用 slide-left，离开右侧的角色优先使用
+    slide-right，其余使用 fade 或 dissolve；stage.clear 也应指定合适的 transition。
   kind: constant
   category: scene
   enabled: true

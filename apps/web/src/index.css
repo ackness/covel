@@ -918,6 +918,68 @@
   animation: none;
 }
 
+@keyframes ui-stage-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes ui-stage-slide-to-left {
+  from {
+    opacity: 1;
+    translate: 0 0;
+  }
+  to {
+    opacity: 0;
+    translate: -7% 0;
+  }
+}
+
+@keyframes ui-stage-slide-to-right {
+  from {
+    opacity: 1;
+    translate: 0 0;
+  }
+  to {
+    opacity: 0;
+    translate: 7% 0;
+  }
+}
+
+@keyframes ui-stage-dissolve-out {
+  from {
+    opacity: 1;
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    filter: blur(8px);
+  }
+}
+
+.ui-stage-sprite[data-phase="exit"][data-transition="fade"] {
+  animation: ui-stage-fade-out 300ms ease-in both;
+}
+
+.ui-stage-sprite[data-phase="exit"][data-transition="slide-left"] {
+  animation: ui-stage-slide-to-left 320ms ease-in both;
+}
+
+.ui-stage-sprite[data-phase="exit"][data-transition="slide-right"] {
+  animation: ui-stage-slide-to-right 320ms ease-in both;
+}
+
+.ui-stage-sprite[data-phase="exit"][data-transition="dissolve"] {
+  animation: ui-stage-dissolve-out 360ms ease-in both;
+}
+
+.ui-stage-sprite[data-phase="exit"][data-transition="none"] {
+  opacity: 0;
+}
+
 /* Active/inactive treatment lives on the sprite's *inner* element (never
    the animated outer wrapper above) so it doesn't fight the entrance
    animation for control of `transform`. */

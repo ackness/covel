@@ -41,6 +41,8 @@ npx tsx scripts/generate-portraits.mjs emberback
 npx tsx scripts/generate-portraits.mjs mistport --slot gpt-image-2 --concurrency 6 --only iron-meg --force
 # 只打印 prompt 队列，不出图、不联网
 npx tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
+# 精确重跑一个角色变体
+npx tsx scripts/generate-portraits.mjs haruka-academy --only shiina-kaho:uniform-concerned --force
 ```
 
 流程：读该世界 `portraits.json` → 展开每个角色的默认图和可选 `variants[]` → 逐图合成 `prefix+subject+suffix` → **并发** POST → PNG 存到 `worlds/<world>/media/portraits/<filename>`。已存在文件默认跳过，失败直接重跑（只补缺的）。`--only <character-id>` 会包含该角色全部变体；`--only <character-id>:<variant-id>` 只生成一个变体。
