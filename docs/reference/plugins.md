@@ -132,7 +132,7 @@ Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填
 | inventory                            | plugin      | `post-turn`                | auto（needs: capability narrative-engine）                                 | `plugin`  | 行囊台账：从叙事记录物品得失与装备变化（agent runtime）                                        |
 | npc-graph/extractor                  | plugin      | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 关系图抽取器                                                                               |
 | char-creator/character-tracker       | core-plugin | `post-turn`                | scheduled（interval=1, cooldown=1）                                        | `plugin`  | NPC 发现 + 角色状态跟踪                                                                        |
-| scene-prompts                        | plugin      | `post-turn`                | scheduled（interval=1）                                                    | `plugin`  | 对话模式玩家口吻短回复                                                                         |
+| scene-prompts                        | plugin      | `post-turn`                | scheduled（interval=1）                                                    | `plugin`  | 前情衔接、当前决策与玩家口吻短回复                                                             |
 | character-blueprint                  | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 可复用角色蓝图；`dataSchemas` blueprints/characters 接收世界导入                               |
 | character-presence                   | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 角色头像 / 立绘 / 语音媒体；`dataSchemas` presence/assets                                      |
 | living-world-rules                   | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；`dataSchemas` rules                                 |
@@ -836,22 +836,23 @@ Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direc
 
 **路径**: `plugins/scene-prompts/`
 
-| 字段         | 值                                                                                                      |
-| ------------ | ------------------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`                                                                                                |
-| stage        | `post-turn`                                                                                             |
-| runtimeType  | `agent`（model `plugin`）                                                                               |
-| trigger      | `scheduled`，`interval: 1`（无 `cooldownTurns`——每个玩家回合都出快捷回复）                              |
-| outputKind   | `system`                                                                                                |
-| capabilities | `[scene-prompts]`（舞台 choices 层按此能力发现，非硬编码插件 id）                                       |
-| tags         | `mode:dialogue` · `role:quick-reply`                                                                    |
-| input.inject | `chat-mode-narrator` + `narrator` → `narrativeOutput` → `<narrator-output>`                             |
-| needs        | `[{ capability: narrative-engine }]` — 引擎无关，按 capability 发现当前模式的叙事引擎；两种模式下都可用 |
-| tools.plugin | `generate-scene-prompts`                                                                                |
-| ui.message   | `scene-prompts-block.json`                                                                              |
-| effects      | `parallelSafe: true`；仅写本插件数据，message block 是声明式投影，可与同层独立 block 并行               |
+| 字段         | 值                                                                                                                                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                                                                                                                                  |
+| stage        | `post-turn`                                                                                                                                                                               |
+| runtimeType  | `agent`（model `plugin`）                                                                                                                                                                 |
+| trigger      | `scheduled`，`interval: 1`（无 `cooldownTurns`——每个玩家回合都出快捷回复）                                                                                                                |
+| outputKind   | `system`                                                                                                                                                                                  |
+| capabilities | `[scene-prompts]`（舞台 choices 层按此能力发现，非硬编码插件 id）                                                                                                                         |
+| tags         | `mode:dialogue` · `role:quick-reply`                                                                                                                                                      |
+| inputs       | `narrative.from: { capability: narrative-engine, cardinality: one }`，选择 `/narrativeOutput`，`required: true`，并用字符串 schema 校验；agent 从 `<runtime-inputs>.narrative.value` 读取 |
+| tools.plugin | `generate-scene-prompts`                                                                                                                                                                  |
+| ui.message   | `scene-prompts-block.json`                                                                                                                                                                |
+| effects      | `parallelSafe: true`；仅写本插件数据，message block 是声明式投影，可与同层独立 block 并行                                                                                                 |
 
 **写入契约**：`generate-scene-prompts` 用一个 `plugin.data.batch` 原子写入 message namespace：`__turnId`、`scene`、`recap`、`decision` 与固定槽位 `prompt1..6{Text,Label,Icon,Color}`。`recap` 只概括已确认事实和玩家明确表达的意图、承诺或约定；`decision` 明确这些选项正在回答的一个当前问题。舞台用 `__turnId` 丢弃上一轮残留数据，并把摘要、问题、选项和自由输入渲染成一个决策面板；这不是第二次 LLM 调用。
+
+**Agent 调度契约**：必需的 typed input 同时形成 post-turn DAG 边和成功门控，因此叙事引擎失败、缺失或输出不满足 schema 时不会让 scene-prompts 盲猜。来源按 `narrative-engine` capability 发现，不枚举 `narrator` / `chat-mode-narrator` id，第三方叙事器只要遵守 `narrativeOutput: string` 契约即可接入。`requireToolUse` 纠正只写散文而不调工具的漂移；`completeAfterTools` 在一次成功工具调用后结束 runtime。
 
 ---
 

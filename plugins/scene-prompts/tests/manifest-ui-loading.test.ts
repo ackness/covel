@@ -66,24 +66,18 @@ describe("scene-prompts manifest and UI loading", () => {
         type: "scheduled",
         interval: 1,
       },
-      // Engine-agnostic: gates on the narrative-engine capability and injects
-      // from both known engines so it works under either narrator.
-      needs: [{ capability: "narrative-engine" }],
-      input: {
-        inject: [
-          {
-            kind: "runtime",
-            from: "chat-mode-narrator",
-            field: "narrativeOutput",
-            as: "<narrator-output>",
+      // Engine-agnostic: the required typed binding is both the DAG gate and
+      // the prompt input, so third-party narrative providers work by capability.
+      inputs: {
+        narrative: {
+          from: {
+            capability: "narrative-engine",
+            cardinality: "one",
           },
-          {
-            kind: "runtime",
-            from: "narrator",
-            field: "narrativeOutput",
-            as: "<narrator-output>",
-          },
-        ],
+          select: "/narrativeOutput",
+          accepts: "./schemas/narrative-output.schema.json",
+          required: true,
+        },
       },
       ui: {
         message: ["./ui/scene-prompts-block.json"],
@@ -91,10 +85,15 @@ describe("scene-prompts manifest and UI loading", () => {
     });
 
     const loaded = await loadRuntime(discovery!, "scene-prompts");
-    // Engine-agnostic body: it references the injected <narrator-output> block
-    // (filled from whichever narrative engine is active) instead of hardcoding
-    // a single engine's `{{ inputs.<engine>... }}` template path.
-    expect(loaded.promptTemplate).toContain("<narrator-output>");
+    // Engine-agnostic body reads the capability-bound runtime input instead of
+    // hardcoding a particular narrative runtime id.
+    expect(loaded.promptTemplate).toContain("<runtime-inputs>");
+    expect(loaded.promptTemplate).toContain("`narrative.value`");
+    expect(loaded.promptTemplate).toContain("`recap` 用 1-3 句、20-240 个字符");
+    expect(loaded.promptTemplate).toContain("只写叙事或对话中已经确认的事实");
+    expect(loaded.promptTemplate).toContain(
+      "`decision` 用 8-120 个字符写出玩家当前需要回应的一个问题或决策点",
+    );
     expect(loaded.uiSpecs?.message).toHaveLength(1);
     expect(loaded.uiSpecs?.message?.[0]).toMatchObject({
       id: "scene-prompts",
@@ -103,6 +102,23 @@ describe("scene-prompts manifest and UI loading", () => {
         component: "Stack",
       },
     });
+  });
+
+  it("keeps the localized agent workflow aligned with the canonical tool contract", async () => {
+    const discoveries = await discoverPlugins(pluginsDir);
+    const discovery = discoveries.find(
+      (candidate) => candidate.id === "scene-prompts",
+    );
+    const loaded = await loadRuntime(discovery!, "scene-prompts", "en-US");
+
+    expect(loaded.promptTemplate).toContain("<runtime-inputs>");
+    expect(loaded.promptTemplate).toContain("`recap`");
+    expect(loaded.promptTemplate).toContain("`decision`");
+    const localizedPostHistory = JSON.stringify(loaded.manifest.postHistory);
+    expect(localizedPostHistory).toContain("Do not call `runtime-done`");
+    expect(localizedPostHistory).not.toContain(
+      "immediately call `runtime-done`",
+    );
   });
 
   it("keeps scene prompt choices guide-like without per-card send buttons", async () => {
@@ -134,5 +150,7 @@ describe("scene-prompts manifest and UI loading", () => {
     expect(actions).toContain("draftMessage");
     expect(actions).not.toContain("sendMessage");
     expect(labels).not.toContainEqual({ zh: "发送", en: "Send" });
+    expect(JSON.stringify(ui)).toContain('"$state":"/recap"');
+    expect(JSON.stringify(ui)).toContain('"$state":"/decision"');
   });
 });

@@ -2,16 +2,15 @@
  * Full-screen visual-novel stage (viewMode: "stage"). Composes the five stage
  * layers over a shared plugin-data feed and owns the small amount of
  * cross-layer state the pieces can't hold themselves: which turn's text is
- * fully read (gates the choice overlay), whether the dialog is in free-text
- * input mode (toggled from the sibling choice overlay), auto-play, and the
- * history / pending-form modals.
+ * fully read (switches narrative into the unified decision panel), auto-play,
+ * and the history / pending-form modals.
  *
  * Absolute-positioned layers stack inside a `relative` bounded container in
  * DOM order Backdrop → Sprites → Hud → Dialog → Choices (z-index banded on
  * the components). Data all arrives through `usePluginNamespace`, so the
  * component stays thin — the real logic lives in `stage-selectors`.
  */
-import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, Loader2 } from "lucide-react";
 import {
@@ -45,7 +44,6 @@ import {
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
-  mergeChoices,
   pluginIdForCapability,
   resolveStageSpeakers,
   STAGE_CAPABILITIES,
@@ -201,24 +199,23 @@ export function StageView(props: StageViewProps): ReactElement {
   const liveStoryText = useStreamingText(storyMsg?.id ?? "");
   const storyText = storyMsg ? (liveStoryText ?? storyMsg.content) : "";
   const storyTurnId = storyMsg?.turnId;
+  const storyKey = storyMsg ? (storyTurnId ?? storyMsg.id) : undefined;
   const isStreaming =
     executing && (storyMsg?.id.startsWith("stream_") ?? false);
 
   // ── Cross-layer state ─────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false);
-  const [inputMode, setInputMode] = useState(false);
-  const [allRead, setAllRead] = useState(false);
+  // A story already present when Stage mounts has been read in another view or
+  // before a restore. Mark it read instead of replaying old text from scratch.
+  // New story keys naturally fall back to the narrative dialog until it calls
+  // `onAllRead`; no reset effect (and no first-render race) is required.
+  const [readStoryKey, setReadStoryKey] = useState<string | undefined>(
+    () => storyKey,
+  );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [dismissedFormIds, setDismissedFormIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-
-  // New turn: the dialog re-types (its own typewriter resets on turnId), so
-  // reset "fully read" here too. Leaving input mode avoids a stale composer.
-  useEffect(() => {
-    setAllRead(false);
-    setInputMode(false);
-  }, [storyTurnId]);
 
   const interactionChoices = useMemo(
     () => extractInteractionChoices(messages, submittedBlockIds),
@@ -235,15 +232,14 @@ export function StageView(props: StageViewProps): ReactElement {
     [promptsNamespace, storyTurnId],
   );
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
-  // The overlay always carries the free-input entry; only *real* choice items
-  // (interaction choices / scene-prompts) justify dimming the sprites.
-  const hasChoiceItems = useMemo(
-    () =>
-      mergeChoices(interactionChoices, freshPrompts, locale).items.length > 0,
-    [interactionChoices, freshPrompts, locale],
-  );
-
-  const choicesVisible = allRead && !executing && !inputMode;
+  const allRead = Boolean(storyKey && readStoryKey === storyKey);
+  // Keep the submitted decision visible, disabled and with progress feedback,
+  // until the next narrative actually has text. This avoids a blank dialog
+  // flash while the streaming placeholder exists but has no first delta yet.
+  const waitingForNarrative =
+    executing && storyText.trim().length === 0 && readStoryKey !== undefined;
+  const choicesVisible = allRead || waitingForNarrative;
+  const dialogVisible = !choicesVisible && storyText.trim().length > 0;
 
   return (
     <div
@@ -259,7 +255,7 @@ export function StageView(props: StageViewProps): ReactElement {
         speakers={speakers}
         presence={presence}
         sessionId={session.id}
-        dimmed={choicesVisible && hasChoiceItems}
+        dimmed={choicesVisible}
         retainWhenEmpty={
           directionCurrent === undefined && directionPreview === undefined
         }
@@ -274,34 +270,31 @@ export function StageView(props: StageViewProps): ReactElement {
         onToggleImmersive={onToggleImmersive}
         onExit={() => onViewModeChange("parsed")}
       />
-      <StageDialog
-        turnId={storyTurnId}
-        storyText={storyText}
-        streamEnded={!isStreaming}
-        speakerName={speakers[0]?.name}
-        autoPlay={autoPlay}
-        reducedMotion={reducedMotion}
-        inputMode={inputMode}
-        onInputModeChange={setInputMode}
-        onAllRead={() => setAllRead(true)}
-        onSendMessage={onSendMessage}
-      />
+      {dialogVisible && (
+        <StageDialog
+          turnId={storyTurnId}
+          storyText={storyText}
+          streamEnded={!isStreaming}
+          speakerName={speakers[0]?.name}
+          autoPlay={autoPlay}
+          reducedMotion={reducedMotion}
+          onAllRead={() => setReadStoryKey(storyKey)}
+        />
+      )}
       <StageChoices
         visible={choicesVisible}
+        executing={executing}
         interactionChoices={interactionChoices}
         promptsNamespace={freshPrompts}
         locale={locale}
         onSubmitInteraction={onSubmitInteraction}
         onSendMessage={onSendMessage}
-        onFreeInput={() => setInputMode(true)}
       />
 
-      {/* Thinking indicator — between choice submit and the first stream delta
-          the dialog just holds the previous line with no cue that a turn is
-          running (narrator can take tens of seconds). Surface a quiet pill in
-          the choice band so the player knows the scene is being generated.
-          Hidden once deltas arrive: the typewriter itself is then the feedback. */}
-      {executing && !isStreaming && (
+      {/* Initial generation has no previous decision panel to carry forward.
+          Surface a quiet status pill until the first narrative delta arrives;
+          subsequent turns show the disabled decision panel as feedback. */}
+      {executing && !choicesVisible && storyText.trim().length === 0 && (
         <div
           className="pointer-events-none absolute inset-x-0 bottom-32 z-30 flex justify-center px-4 md:bottom-40"
           data-testid="stage-thinking"

@@ -347,22 +347,24 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 `viewMode: "stage"` 是消息区之外的第四个呈现档（与 `parsed` / `detailed` / `raw` 并列，头部 `GameViewHeader` 的 Toggle 切换）。它把消息区三件（`ChatMessages` + `PendingDraftsBar` + `MessageComposer`）整体替换成全屏舞台（视觉小说式：场景背景 + 立绘 + 打字机对话框），`GameViewHeader` 保留。
 
-- **渲染条件**：`viewMode === "stage" && session.completedPlayerTurns >= 1`。setup 阶段（`completedPlayerTurns === 0`）即使处于 stage 档也走原有消息流（角色创建 / begin-adventure 不受影响）。
+- **渲染条件**：`viewMode === "stage" && (session.phase === "playing" || hasSubmittedForm(...))`。角色创建表单仍在原消息流完成；提交后立即进入舞台，并在首段叙事到达前显示生成状态。
 - **初值**：世界包 `world.yaml` 顶层 `defaultViewMode: stage`（→ `WorldRecord.metadata.defaultViewMode`）让会话**首挂载**即进舞台；玩家在头部切换后以玩家选择为准（无持久化）。见 [world-data.md](./world-data.md#world-package)。
 
 ### 层级与数据源
 
 五层绝对定位、`z-index` 分档，DOM 顺序 Backdrop → Sprites → Hud → Dialog → Choices，全部套在一个 `relative` 有界容器里。数据全部经 `usePluginNamespace(pluginId, namespace)` 读取（`StageView` 保持薄，逻辑在 `stage-selectors.ts`）：
 
-| 层           | 数据源                                                                                        | 选择器                                                              |
-| ------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| **Backdrop** | `("scene-stage","stage")["current"]`                                                          | `resolveBackdrop`（四档回退，见下）                                 |
-| **Sprites**  | `("scene-cast","active-cast")["current"].speakers` × `("character-presence","presence")`      | `computeSpriteSlots`（站位/高亮，无立绘则过滤）                     |
-| **Hud**      | `("scene-stage","stage")["current"]`（`name` / `variant` / `sourceLabel` / `source`）         | —（无状态，按钮回调上抛）                                           |
-| **Dialog**   | 最新 `kind === "story"` 消息的 `content`                                                      | `use-typewriter`（流式驱动、`\n\n` 分段、▼ 暂停）                   |
-| **Choices**  | 未提交的 choice 类 interaction block + `("scene-prompts","message")` 的 `prompt{N}Text/Label` | `extractInteractionChoices` + `mergeChoices`（末位追加 ✎ 自由输入） |
+| 层           | 数据源                                                                                                      | 选择器                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Backdrop** | `("scene-stage","stage")["current"]`                                                                        | `resolveBackdrop`（四档回退，见下）                                        |
+| **Sprites**  | `("scene-cast","active-cast")["current"].speakers` × `("character-presence","presence")`                    | `computeSpriteSlots`（站位/高亮，无立绘则过滤）                            |
+| **Hud**      | `("scene-stage","stage")["current"]`（`name` / `variant` / `sourceLabel` / `source`）                       | —（无状态，按钮回调上抛）                                                  |
+| **Dialog**   | 最新 `kind === "story"` 消息的 `content`                                                                    | `use-typewriter`（流式驱动、`\n\n` 分段、▼ 暂停）                          |
+| **Choices**  | 未提交的 choice 类 interaction block + scene-prompts message namespace 的 `scene/recap/decision/prompt{N}*` | `extractInteractionChoices` + `mergeChoices`（保留问题分组并统一自由输入） |
 
-“流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`；打字机读完（`done`）且 `!executing` 才浮现选择肢。
+“流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`。新叙事由 `StageDialog` 打字展示；读完后，同一位置切换为统一决策面板，依次显示场景、与当前回应有关的前情摘要、当前问题、分组选项和行内自由输入。提交后面板保持禁用并显示生成状态，直到下一段叙事出现首个非空内容，避免旧对话框或空白面板闪回。恢复会话或从其他视图切入时，挂载前已经存在的最新叙事视为已读，不会重新打字。
+
+scene-prompts 数据既可能从当前 SSE 实时到达，也可能在会话恢复时从 `/plugin-data` 拉取。恢复水合必须同时写入 session reducer 与 `usePluginNamespace` 订阅的 external store；否则解析消息能看到数据，而舞台选择层仍会读到空 namespace。
 
 ### 背景回退链（`resolveBackdrop`）
 

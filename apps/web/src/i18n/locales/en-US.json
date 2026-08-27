@@ -1128,6 +1128,8 @@
     "inputPlaceholder": "Type your response…",
     "inputSendHint": "Enter to send · Shift+Enter for a new line · Esc to cancel",
     "freeInputLabel": "✎ Write your own…",
+    "decisionFallback": "What will you do next?",
+    "sendLabel": "Send response",
     "thinkingLabel": "Weaving the scene…",
     "advanceLabel": "Continue the dialogue"
   },

@@ -4,8 +4,8 @@ displayName:
   zh: 场景快捷回复
   en: Scene Prompts
 description:
-  zh: 根据当前场景给出几句可直接采用的行动短句。
-  en: Suggests short actions that fit the current scene and can be used right away.
+  zh: 衔接相关前情，明确当前决策，并给出可直接采用的行动短句。
+  en: Recaps relevant context, states the current decision, and suggests ready-to-use actions.
 pluginType: plugin
 stage: post-turn
 model: plugin
@@ -31,25 +31,19 @@ tags:
 trigger:
   type: scheduled
   interval: 1
-# Engine-agnostic guidance. The upstream gate discovers the active narrative
-# engine by capability (narrative-engine → chat-mode-narrator in dialogue,
-# narrator in traditional) instead of naming one, so the same plugin gates
-# correctly in either mode and still skips when that engine failed. The inject
-# lists both known engines; the absent one resolves to nothing, so exactly the
-# active engine's fresh prose fills <narrator-output>.
-# Gate on the active narrative engine's success, discovered by capability.
-needs:
-  - capability: narrative-engine
-input:
-  inject:
-    - kind: runtime
-      from: chat-mode-narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-    - kind: runtime
-      from: narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
+# Bind the current narrative by capability instead of enumerating known engine
+# ids. `required: true` is both the same-turn gate and the DAG edge; `accepts`
+# rejects a provider that advertises the capability but violates its output
+# contract. Agent prompts receive the provenance-wrapped value in
+# `<runtime-inputs>` at `narrative.value`.
+inputs:
+  narrative:
+    from:
+      capability: narrative-engine
+      cardinality: one
+    select: "/narrativeOutput"
+    accepts: ./schemas/narrative-output.schema.json
+    required: true
 entry: ./server/index.js
 tools:
   plugin:
@@ -65,16 +59,19 @@ postHistory:
   role: system
   content: |
     本 runtime 工作流：
-    - 必须且只调用一次 `generate-scene-prompts`，根据最新叙事生成场景化玩家行动短句
+    - 必须完成且只完成一次成功的 `generate-scene-prompts` 调用，根据最新叙事生成前情摘要、当前决策和场景化玩家行动短句
+    - 如果工具返回参数校验错误，修正参数后重试；成功后不要重复调用
     - 工具成功后框架会自动结束 runtime，不要再调用 `runtime-done`
     - 调用工具前后都不要输出额外文本
 ---
 
-你是 Scene Prompts agent。你的任务是在叙事推进后，为玩家提供一组可直接作为下一条玩家消息的场景化短句。
+你是 Scene Prompts agent。你的任务是在叙事推进后，简要衔接此前信息，并为玩家提供一组可直接作为下一条玩家消息的场景化短句。
 
 ## 当前叙事结果
 
-最新一轮叙事见上方 `<narrator-output>` 区块（由当前模式的叙事引擎注入）。工具调用流程见结尾的强制两步说明。
+最新一轮叙事由框架按 `narrative-engine` capability 绑定，见 prompt 中的 `<runtime-inputs>` JSON：读取 `narrative.value`，不要把 `source` 元数据写进玩家可见内容。如果该必需输入缺失或不符合字符串 schema，调度器会在调用你之前跳过或拒绝本 runtime。
+
+会话历史、压缩摘要与工作记忆也由框架放在你的上下文中。生成 `recap` 时只选取和眼前回应直接相关的内容；当前叙事与较新的玩家消息优先，不能把其他 runtime 的工作指令当成故事事实。
 
 ## 提示类型
 
@@ -86,6 +83,9 @@ postHistory:
 ## 生成规则
 
 - `scene` 用 4-16 个字概括当前场景或决策点
+- `recap` 用 1-3 句、20-240 个字符概括与当前回应有关的此前信息、本轮变化和玩家已明确作出的约定
+- `recap` 只写叙事或对话中已经确认的事实和玩家明确表达的意图、承诺或约定，不推测隐藏动机，不补写未发生的事件
+- `decision` 用 8-120 个字符写出玩家当前需要回应的一个问题或决策点，让玩家清楚选项是在回答什么
 - `prompts` 生成 3-6 条，每条 8-45 个字
 - 每条提示都必须是玩家可以直接发送的第一人称或祈使行动文本
 - 优先覆盖当前叙事里的关键对象、地点、角色、危险、线索
