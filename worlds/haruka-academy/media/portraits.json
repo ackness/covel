@@ -4,8 +4,8 @@
   "style": {
     "direction": "anime visual-novel character sprite (GalGame tachi-e), soft cel-shading",
     "background": "transparent",
-    "prefix": "Character sprite for a visual novel, clean anime style, soft cel-shading, crisp lineart, gentle pastel spring palette, warm soft afternoon daylight, seaside Japanese high-school slice-of-life mood, half-body bust, isolated character sprite on a transparent background, ",
-    "suffix": ", wholesome and teen-appropriate, clean and bright, consistent art style, one single character, centered composition, GalGame tachi-e",
+    "prefix": "Character sprite for a visual novel, clean anime style, soft cel-shading, crisp lineart, gentle pastel spring palette, warm soft afternoon daylight, seaside Japanese high-school slice-of-life mood, vertical 2:3 three-quarter standing portrait framed from head to mid-thigh, isolated character sprite on a transparent background, ",
+    "suffix": ", wholesome and teen-appropriate, clean and bright, consistent art style, one single character, centered composition, character silhouette fills 88-94% of the canvas height, GalGame tachi-e",
     "negative": "photorealistic, realism, 3d render, dark, gritty, horror, oversaturated, text, caption, signature, watermark, logo, frame, multiple people, crowd, extra fingers, extra limbs, deformed hands, distorted face, nsfw, suggestive, background scenery, gradient background"
   },
   "defaults": { "size": "1024x1536", "quality": "medium", "mime": "image/png" },
@@ -22,7 +22,23 @@
       "characterId": "npc-asakura-rin",
       "name": "朝仓凛",
       "filename": "asakura-rin.png",
-      "subject": "a lively bright teenage girl, a school news-club reporter, the same school uniform with a small press armband, short reddish bobbed hair, holding a little notebook and a compact camera, a playful teasing wink and grin"
+      "subject": "a lively bright teenage girl, a school news-club reporter, the same school uniform with a small press armband, short reddish bobbed hair, holding a little notebook and a compact camera, a playful teasing wink and grin",
+      "visual": {
+        "id": "uniform-playful",
+        "outfit": "uniform",
+        "expression": "playful",
+        "pose": "default"
+      },
+      "variants": [
+        {
+          "id": "uniform-serious",
+          "filename": "asakura-rin-uniform-serious.png",
+          "outfit": "uniform",
+          "expression": "serious",
+          "pose": "default",
+          "subject": "the same lively school news-club reporter with short reddish bobbed hair, navy school uniform, press armband, compact camera and reporter notebook, both eyes open with an attentive thoughtful serious expression, listening carefully"
+        }
+      ]
     },
     {
       "id": "shiina-kaho",

@@ -210,6 +210,7 @@ export type {
   CovelEventType,
   CovelEventMeta,
   CovelEventPayload,
+  DomainEventPreviewedPayload,
 } from "./protocol.js";
 
 export {

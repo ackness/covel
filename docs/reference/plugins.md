@@ -19,6 +19,7 @@
 - [`dice-check/roller`](#dice-checkroller) — 骰子判定预掷骰池（function，注入叙事引擎）
 - [`scene-cast`](#scene-cast) — 对话模式当前场景演员（function）
 - [`scene-stage/resolver`](#scene-stageresolver) — 场景/昼夜解析（event 触发，消费 `scene.set`，无 stage）
+- [`scene-stage/direction`](#scene-stagedirection) — 角色登退场、站位、焦点与视觉变体调度（event 触发，消费 `stage.direction`）
 
 ### narrative 阶段
 
@@ -34,7 +35,7 @@
 - [`inventory`](#inventory) — 行囊/物品台账 agent
 - [`npc-graph/extractor`](#npc-graphextractor) — NPC 关系图抽取 agent
 - [`char-creator/character-tracker`](#char-creatorcharacter-tracker) — NPC 发现与状态跟踪 agent
-- [`scene-prompts`](#scene-prompts) — 对话模式玩家口吻短回复 agent
+- [`scene-prompts`](#scene-prompts) — 对话模式前情衔接与玩家口吻短回复 agent
 - [`mimo-tts/auto-narrate`](#mimo-tts) — 叙事旁白自动 TTS（function，`ctx.speech`）
 - [`dice-check/recorder`](#dice-checkrecorder) — 判定回执记录（event 触发，消费 `check.resolved`，无 stage）
 - [`scene-stage/background-gen`](#scene-stagebackground-gen) — 场景背景后台增量生成（event 触发，无 stage，`execution: background`）
@@ -120,6 +121,7 @@ Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填
 | dice-check/recorder                  | plugin      | 无（event，不设 stage）    | event（topic: `check.resolved`）                                           | —         | 记录叙事发回的批量判定回执，驱动消息区 🎲 结果块与「判定记录」面板                             |
 | scene-cast                           | plugin      | `pre-turn`                 | scheduled（interval=1，function）                                          | —         | 对话模式当前场景演员，注入 `activeCastContext`                                                 |
 | scene-stage/resolver                 | plugin      | 无（event，不设 stage）    | event（topic: `scene.set`）                                                | —         | 场景/昼夜解析，写 `stage/current`；未命中注册表时向 background-gen 发内部信令                  |
+| scene-stage/direction                | plugin      | 无（event，不设 stage）    | event（topic: `stage.direction`）                                          | —         | 角色登退场、站位、焦点与视觉变体调度，写 `direction/current`                                   |
 | scene-stage/seed                     | plugin      | `setup`                    | auto（maxTriggerCount=1）                                                  | —         | 开局把注册表首个场景写入 `stage/current`，为叙事整局不发 `scene.set` 兜底                      |
 | narrator                             | core-plugin | `narrative`                | auto                                                                       | `story`   | 主叙事生成器                                                                                   |
 | chat-mode-narrator                   | plugin      | `narrative`                | auto                                                                       | `story`   | 对话 / 舞台模式叙事器（`conflicts: narrator`，`requires` 场景/角色子系统）                     |
@@ -745,7 +747,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 **路径**: `plugins/scene-stage/`
 
-多 runtime 插件。根 `PLUGIN.md` 只是插件级元信息（名称/描述/关联），不是可执行 runtime；三个真正被发现、调度的 runtime 都在 `runtimes/` 下（`discoverPlugins` 对声明了 `runtimes/` 的插件只扫描 `runtimes/*/PLUGIN.md`，根 `PLUGIN.md` 不参与调度）。`events[].schema` 与 `dataSchemas.*.schema` 仍按[插件根目录相对路径](#dataschemas)解析，因此三个 runtime 共享插件根的 `schemas/`；只有 `handler` 与 `ui.*` 相对各自 runtime 目录。`stage/current` 记录的构造集中在 `lib/stage-data.js`（`buildStageRecord` / `makeStageProposal`），resolver 与 seed 共用，避免两个写入方在字段上漂移。
+多 runtime 插件。根 `PLUGIN.md` 只是插件级元信息（名称/描述/关联），不是可执行 runtime；四个真正被发现、调度的 runtime 都在 `runtimes/` 下（`discoverPlugins` 对声明了 `runtimes/` 的插件只扫描 `runtimes/*/PLUGIN.md`，根 `PLUGIN.md` 不参与调度）。`events[].schema` 与 `dataSchemas.*.schema` 仍按[插件根目录相对路径](#dataschemas)解析，因此四个 runtime 共享插件根的 `schemas/`；只有 `handler` 与 `ui.*` 相对各自 runtime 目录。`stage/current` 记录的构造集中在 `lib/stage-data.js`（`buildStageRecord` / `makeStageProposal`），resolver 与 seed 共用，避免两个写入方在字段上漂移。
 
 ### scene-stage/resolver
 
@@ -771,6 +773,25 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 | `maxGeneratedScenes` | `number` | `10`   | 0–50（step 1）——单会话增量生成场景数上限 |
 
 **职责**：narrator（或对话模式叙事器）经 `emit-event` 发射 `scene.set` 后，同回合触发本 runtime：读自身 `scenes` namespace（世界注册表）与 `stage/current`（上一状态），按精确名 / `locationRef` → 归一化子串 → 会话内已生成场景的顺序匹配 `location`。命中写 `stage/current`（`source: "world" | "session"`）；同 `sceneId` 且同 `variant` 时 no-op（不写不发 SSE，防抖）——但上一状态为 `source: "pending"` 时不视为 no-op：生成失败后重发的 `scene.set` 会重新发内部信令重试（成功场景的重复计费由 background-gen 的已生成检查防住）。未命中按 `autoGenerateScenes` + `maxGeneratedScenes` 门控：放行则 `source: "pending"` 并发内部信令请求 `background-gen`，门控不过或已达会话帽则 `source: "none"`。昼夜变体缺夜图时 `resolved` 回退日图。`stage/current` 额外写 `sourceLabel`（`I18nText`，`source` 对应的展示文案，如 `pending` → "背景生成中…"）与 `variantLabel`（`I18nText`，昼夜文案 `day` → "白天" / `night` → "夜晚"），面板直接渲染，无需按枚举值自行翻译。
+
+### scene-stage/direction
+
+| 字段         | 值                                                                                              |
+| ------------ | ----------------------------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                                        |
+| runtimeType  | `function`（无 LLM）                                                                            |
+| handler      | `./runtimes/direction/handler.js`                                                               |
+| stage        | 无（`event` 触发不设 `stage`）                                                                  |
+| trigger      | `event`，topic `stage.direction`                                                                |
+| outputKind   | `system`                                                                                        |
+| capabilities | `[stage-direction]`                                                                             |
+| tags         | `mode:dialogue` · `role:scene-state` · `role:character` · `cost:function`                       |
+| events       | 消费 `stage.direction`，单次载荷为 1–12 条 `cues`                                               |
+| output       | `direction/current`，持久化至多 4 名演员的焦点、站位、过渡与 `variantId/outfit/expression/pose` |
+
+**职责**：把传统 Galgame 的导演指令从“由当前说话者猜画面”提升为持久状态。叙事器在角色登场、更新、退场、焦点切换或清空舞台时发射一次 `stage.direction`，并把同一轮所有变化合并进 `cues[]`。角色通过完整名称、角色 id 或唯一部分名称解析；无法唯一解析的指令被忽略并写入 diagnostics，不会误操作其他角色。显式站位冲突时新角色占据该站位，旧角色退回自动站位。
+
+Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direction/current` 就以其为权威，包括 `actors: []` 的明确清空。尚未产生方向状态的旧世界继续使用 `scene-cast/active-cast`，因此无需迁移即可保持原行为。视觉请求的具体回退由 `character-presence.visuals` 负责。
 
 ### scene-stage/seed
 
@@ -809,7 +830,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 ⚪ optional · 🧠 uses LLM
 
-**Quick use**：对话模式版的 `guide`——读 `chat-mode-narrator` 输出，给玩家三四个"像玩家自己会说的话"的快捷回复，而非系统按钮口吻。
+**Quick use**：对话模式版的 `guide`——读当前叙事与已投影的历史/摘要，在同一次 agent 调用里生成前情衔接、当前决策问题，以及三到六个“像玩家自己会说的话”的快捷回复。
 
 **路径**: `plugins/scene-prompts/`
 
@@ -827,6 +848,8 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 | tools.plugin | `generate-scene-prompts`                                                                                |
 | ui.message   | `scene-prompts-block.json`                                                                              |
 | effects      | `parallelSafe: true`；仅写本插件数据，message block 是声明式投影，可与同层独立 block 并行               |
+
+**写入契约**：`generate-scene-prompts` 用一个 `plugin.data.batch` 原子写入 message namespace：`__turnId`、`scene`、`recap`、`decision` 与固定槽位 `prompt1..6{Text,Label,Icon,Color}`。`recap` 只概括已确认事实和玩家明确表达的意图、承诺或约定；`decision` 明确这些选项正在回答的一个当前问题。舞台用 `__turnId` 丢弃上一轮残留数据，并把摘要、问题、选项和自由输入渲染成一个决策面板；这不是第二次 LLM 调用。
 
 ---
 
@@ -868,7 +891,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 | dataSchemas  | `presence`（acceptsWorldData）· `assets`（acceptsWorldData，媒体索引） |
 | ui.right     | `character-presence-panel.json`                                        |
 
-**职责**：`presence` 记录把 `characterId` 的 `avatar` / `sprite` / `voice` 指向内容寻址的媒体；媒体本体存媒体库，记录只放 `{ id(sha256), mime, size }`。无媒体时优雅降级（面板在、图为空）。交付契约见 [world-data.md Character Presence Portraits](world-data.md#character-presence-portraits)。
+**职责**：`presence` 记录把 `characterId` 的 `avatar` / `sprite` / `voice` 指向内容寻址的媒体；可选 `visuals` 目录用 `variants[]` 表达同一角色的服装、表情、姿势与舞台取景参数。解析顺序为精确 `variantId` → `outfit + expression + pose` → 默认姿势 → 中性表情 → 目录默认 → 首个变体 → 旧 `sprite` → `avatar`。媒体本体存媒体库，记录只放 `{ id(sha256), mime, size }`。无媒体时优雅降级（面板在、图为空）。交付契约见 [world-data.md Character Presence Portraits](world-data.md#character-presence-portraits)。
 
 ---
 

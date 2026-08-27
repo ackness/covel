@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
+import { useDomainEventPreview } from "@/stores/domain-event-preview-store.js";
 import { useStreamingText } from "@/stores/streaming-text-store.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type {
@@ -39,14 +40,19 @@ import { StageHud } from "./StageHud.js";
 import { StageDialog } from "./StageDialog.js";
 import { StageChoices } from "./StageChoices.js";
 import {
+  applySceneSetPreview,
+  applyStageDirectionPreview,
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
   mergeChoices,
   pluginIdForCapability,
+  resolveStageSpeakers,
   STAGE_CAPABILITIES,
   type PresenceRecord,
   type StageCurrentRecord,
+  type StageDirectionRecord,
+  type StageSceneRegistry,
   type StageSpeaker,
 } from "./stage-selectors.js";
 
@@ -136,19 +142,56 @@ export function StageView(props: StageViewProps): ReactElement {
     pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.prompts) ?? "";
   const presenceId =
     pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.presence) ?? "";
+  const stageDirectionId =
+    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.direction) ?? "";
 
   const sceneCurrent = usePluginNamespace(sceneStageId, "stage")["current"] as
     StageCurrentRecord | undefined;
+  const sceneRegistry = usePluginNamespace(sceneStageId, "scenes")[
+    "scene-registry"
+  ] as StageSceneRegistry | undefined;
   const activeCast = usePluginNamespace(sceneCastId, "active-cast")[
     "current"
   ] as { speakers?: readonly StageSpeaker[] } | undefined;
-  const speakers = activeCast?.speakers ?? [];
+  const directionCurrent = usePluginNamespace(stageDirectionId, "direction")[
+    "current"
+  ] as StageDirectionRecord | undefined;
   const promptsNamespace = usePluginNamespace(scenePromptsId, "message");
   // Mirror portrait-gallery-panel: the presence namespace is consumed as a
   // characterId-keyed record of `{ sprite, avatar, ... }`.
   const presence = usePluginNamespace(presenceId, "presence") as Readonly<
     Record<string, PresenceRecord | undefined>
   >;
+  const directionPreview = useDomainEventPreview(session.id, "stage.direction");
+  const scenePreview = useDomainEventPreview(session.id, "scene.set");
+  const effectiveSceneCurrent = useMemo(() => {
+    if (!scenePreview || sceneCurrent?.turnId === scenePreview.turnId) {
+      return sceneCurrent;
+    }
+    return applySceneSetPreview(
+      sceneCurrent,
+      sceneRegistry,
+      scenePreview.data,
+      scenePreview.turnId,
+    );
+  }, [sceneCurrent, sceneRegistry, scenePreview]);
+  const speakers = useMemo(() => {
+    const committed = resolveStageSpeakers(
+      directionCurrent,
+      activeCast?.speakers ?? [],
+    );
+    if (
+      !directionPreview ||
+      directionCurrent?.turnId === directionPreview.turnId
+    ) {
+      return committed;
+    }
+    return applyStageDirectionPreview(
+      committed,
+      presence,
+      directionPreview.data.cues,
+    );
+  }, [directionCurrent, activeCast, directionPreview, presence]);
 
   // ── Latest story text + stream state ──────────────────────────
   // Streaming tokens no longer live in `messages[].content` — the placeholder
@@ -208,7 +251,7 @@ export function StageView(props: StageViewProps): ReactElement {
       data-testid="stage-view"
     >
       <StageBackdrop
-        sceneCurrent={sceneCurrent}
+        sceneCurrent={effectiveSceneCurrent}
         world={world}
         sessionId={session.id}
       />
@@ -217,9 +260,12 @@ export function StageView(props: StageViewProps): ReactElement {
         presence={presence}
         sessionId={session.id}
         dimmed={choicesVisible && hasChoiceItems}
+        retainWhenEmpty={
+          directionCurrent === undefined && directionPreview === undefined
+        }
       />
       <StageHud
-        sceneCurrent={sceneCurrent}
+        sceneCurrent={effectiveSceneCurrent}
         locale={locale}
         autoPlay={autoPlay}
         immersive={immersive}

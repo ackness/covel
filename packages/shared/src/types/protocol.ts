@@ -209,6 +209,17 @@ export interface ProposalFailedPayload {
   readonly error: string;
 }
 
+/** A validated domain event exposed to the active action stream immediately
+ * after `emit-event` succeeds. This is presentation-only speculative state:
+ * durable consumers still run through the normal event chain and commit. */
+export interface DomainEventPreviewedPayload {
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly toolCallId: string;
+  readonly topic: string;
+  readonly data: Readonly<Record<string, unknown>>;
+}
+
 export type CovelEvent =
   // Narrative
   | {
@@ -269,6 +280,10 @@ export type CovelEvent =
   // Records / events
   | { readonly type: "record.updated"; readonly payload: CovelEventPayload }
   | { readonly type: "event.emitted"; readonly payload: EventEmittedPayload }
+  | {
+      readonly type: "domain-event.previewed";
+      readonly payload: DomainEventPreviewedPayload;
+    }
   // World
   | {
       readonly type: "world.dimensions.changed";
@@ -418,6 +433,7 @@ export const COVEL_EVENT_META = {
   "asset.generated": { forwardToActionStream: false },
   "record.updated": { forwardToActionStream: false },
   "event.emitted": { forwardToActionStream: false },
+  "domain-event.previewed": { forwardToActionStream: true },
   "world.dimensions.changed": { forwardToActionStream: true },
   "plugin-data.changed": { forwardToActionStream: true },
   "character.upserted": { forwardToActionStream: true },

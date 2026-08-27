@@ -83,6 +83,45 @@ describe("character-presence handler", () => {
     expect(proposals[0].payload.key).toBe("npc:archivist-1");
   });
 
+  it("normalizes visual variants and stage framing", async () => {
+    const result = await handler(
+      ctx({
+        presence: {
+          schemaVersion: 1,
+          characterId: "mentor-lin",
+          sprite: avatar,
+          visuals: {
+            defaultVariant: "uniform-neutral",
+            variants: [
+              {
+                id: "uniform-neutral",
+                outfit: "uniform",
+                expression: "neutral",
+                pose: "default",
+                sprite: { id: "e".repeat(64), mime: "image/png", size: 2222 },
+                stage: { scale: 1.05, offsetX: -3, offsetY: 2 },
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(getPendingProposals(result)[0].payload.value.visuals).toEqual({
+      defaultVariant: "uniform-neutral",
+      variants: [
+        {
+          id: "uniform-neutral",
+          outfit: "uniform",
+          expression: "neutral",
+          pose: "default",
+          sprite: { id: "e".repeat(64), mime: "image/png", size: 2222 },
+          stage: { scale: 1.05, offsetX: -3, offsetY: 2 },
+        },
+      ],
+    });
+  });
+
   it("accepts structured presence form payloads", async () => {
     const result = await handler(
       ctx({
@@ -195,6 +234,23 @@ describe("character-presence handler", () => {
         }),
       ),
     ).rejects.toThrow("presence.media keys must be 1-64 safe characters");
+
+    await expect(
+      handler(
+        ctx({
+          presence: {
+            schemaVersion: 1,
+            characterId: "mentor-lin",
+            visuals: {
+              defaultVariant: "missing",
+              variants: [{ id: "default", sprite: avatar }],
+            },
+          },
+        }),
+      ),
+    ).rejects.toThrow(
+      "presence.visuals.defaultVariant must reference an existing variant id",
+    );
 
     await expect(
       handler(

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { WorldVisual } from "@/lib/world-visuals.js";
 import {
+  applySceneSetPreview,
+  applyStageDirectionPreview,
   assignStations,
   computeSpriteLanes,
   computeSpriteSlots,
@@ -12,6 +14,7 @@ import {
   mergeChoices,
   pluginIdForCapability,
   resolveBackdrop,
+  resolveStageSpeakers,
   type SpritePosition,
   type StageCurrentRecord,
   type StageSpeaker,
@@ -71,6 +74,62 @@ describe("resolveBackdrop", () => {
       kind: "hero",
       ref: worldVisual.image,
     });
+  });
+});
+
+describe("applySceneSetPreview", () => {
+  const registry = {
+    scenes: [
+      {
+        sceneId: "classroom",
+        name: "二年 B 组",
+        locationRef: "教室",
+        day: ref("classroom-day"),
+        night: ref("classroom-night"),
+      },
+    ],
+  };
+
+  it("switches to imported day/night art immediately", () => {
+    expect(
+      applySceneSetPreview(
+        undefined,
+        registry,
+        { location: "二年 B 组", timeOfDay: "night" },
+        "turn-2",
+      ),
+    ).toMatchObject({
+      sceneId: "classroom",
+      name: "二年 B 组",
+      variant: "night",
+      source: "world",
+      resolved: ref("classroom-night"),
+      turnId: "turn-2",
+    });
+  });
+
+  it("uses normalized locationRef matching", () => {
+    expect(
+      applySceneSetPreview(undefined, registry, {
+        location: " 教 室 ",
+        timeOfDay: "day",
+      }),
+    ).toMatchObject({ resolved: ref("classroom-day") });
+  });
+
+  it("keeps the previous frame while an unknown scene awaits resolution", () => {
+    const previous: StageCurrentRecord = {
+      sceneId: "classroom",
+      name: "二年 B 组",
+      source: "world",
+      resolved: ref("classroom-day"),
+    };
+    expect(
+      applySceneSetPreview(previous, registry, {
+        location: "学生会室",
+        timeOfDay: "day",
+      }),
+    ).toMatchObject({ name: "学生会室", source: "pending" });
   });
 });
 
@@ -167,6 +226,137 @@ describe("computeSpriteSlots", () => {
   });
 });
 
+describe("resolveStageSpeakers", () => {
+  const fallback: StageSpeaker[] = [{ id: "legacy-rin", name: "朝仓凛" }];
+
+  it("uses scene-cast until direction state exists", () => {
+    expect(resolveStageSpeakers(undefined, fallback)).toEqual(fallback);
+  });
+
+  it("treats an explicit empty actor list as an authoritative stage clear", () => {
+    expect(resolveStageSpeakers({ actors: [] }, fallback)).toEqual([]);
+  });
+
+  it("moves the focused actor first and preserves visual requests", () => {
+    expect(
+      resolveStageSpeakers(
+        {
+          actors: [
+            {
+              characterId: "rin",
+              displayName: "朝仓凛",
+              position: "left",
+              visual: { outfit: "uniform", expression: "neutral" },
+            },
+            {
+              characterId: "kaho",
+              displayName: "椎名夏帆",
+              active: true,
+              position: "right",
+              transition: "dissolve",
+              visual: { variantId: "summer-smile" },
+            },
+          ],
+        },
+        fallback,
+      ),
+    ).toEqual([
+      {
+        id: "kaho",
+        name: "椎名夏帆",
+        position: "right",
+        transition: "dissolve",
+        visual: { variantId: "summer-smile" },
+      },
+      {
+        id: "rin",
+        name: "朝仓凛",
+        position: "left",
+        visual: { outfit: "uniform", expression: "neutral" },
+      },
+    ]);
+  });
+
+  it("drops duplicate or invalid explicit positions for automatic placement", () => {
+    expect(
+      resolveStageSpeakers(
+        {
+          actors: [
+            { characterId: "a", displayName: "A", position: "left" },
+            { characterId: "b", displayName: "B", position: "left" },
+            { characterId: "c", displayName: "C", position: "ceiling" },
+          ],
+        },
+        fallback,
+      ),
+    ).toEqual([
+      { id: "a", name: "A", position: "left" },
+      { id: "b", name: "B" },
+      { id: "c", name: "C" },
+    ]);
+  });
+});
+
+describe("applyStageDirectionPreview", () => {
+  const presence = {
+    rin: { characterId: "rin", displayName: "朝仓凛" },
+    kaho: { characterId: "kaho", displayName: "椎名夏帆" },
+  };
+
+  it("applies enter, visual, position and focus cues before commit", () => {
+    const result = applyStageDirectionPreview(
+      [
+        {
+          id: "rin",
+          name: "朝仓凛",
+          position: "left",
+          visual: { variantId: "uniform-playful", outfit: "uniform" },
+        },
+      ],
+      presence,
+      [
+        {
+          type: "actor.update",
+          character: "凛",
+          expression: "surprised",
+        },
+        {
+          type: "actor.enter",
+          character: "椎名夏帆",
+          position: "right",
+          variantId: "summer-smile",
+          transition: "slide-right",
+          focus: true,
+        },
+      ],
+    );
+    expect(result).toEqual([
+      {
+        id: "kaho",
+        name: "椎名夏帆",
+        position: "right",
+        visual: { variantId: "summer-smile" },
+        transition: "slide-right",
+      },
+      {
+        id: "rin",
+        name: "朝仓凛",
+        position: "left",
+        visual: { outfit: "uniform", expression: "surprised" },
+      },
+    ]);
+  });
+
+  it("supports an authoritative clear and ignores unresolved actors", () => {
+    expect(
+      applyStageDirectionPreview([{ id: "rin", name: "朝仓凛" }], presence, [
+        { type: "actor.update", character: "不存在", expression: "smile" },
+        { type: "stage.clear" },
+      ]),
+    ).toEqual([]);
+  });
+});
+
 describe("assignStations", () => {
   const empty: ReadonlyMap<string, SpritePosition> = new Map();
   const at = (m: ReadonlyMap<string, SpritePosition>, id: string) => m.get(id);
@@ -256,12 +446,11 @@ describe("computeSpriteLanes", () => {
     ]);
   });
 
-  it("the active speaker's lane is wider, lanes still tile the stage", () => {
-    const lanes = computeSpriteLanes(["left", "center", "right"], 1);
-    // Weighted 1.4 : 1 — active share = 1.4/3.4, others 1/3.4.
-    expect(lanes[1].widthPct).toBeCloseTo((1.4 / 3.4) * 100, 6);
-    expect(lanes[0].widthPct).toBeCloseTo((1 / 3.4) * 100, 6);
-    expect(lanes[2].widthPct).toBeCloseTo((1 / 3.4) * 100, 6);
+  it("speaker focus does not change lane geometry", () => {
+    const lanes = computeSpriteLanes(["left", "center", "right"]);
+    expect(lanes[0].widthPct).toBeCloseTo(100 / 3, 6);
+    expect(lanes[1].widthPct).toBeCloseTo(100 / 3, 6);
+    expect(lanes[2].widthPct).toBeCloseTo(100 / 3, 6);
     // Contiguous, no overlap: each lane starts where the previous ends.
     expect(lanes[0].leftPct).toBeCloseTo(0, 6);
     expect(lanes[1].leftPct).toBeCloseTo(lanes[0].widthPct, 6);
@@ -272,8 +461,8 @@ describe("computeSpriteLanes", () => {
     expect(lanes[2].leftPct + lanes[2].widthPct).toBeCloseTo(100, 6);
   });
 
-  it("a solo active speaker keeps the capped centered lane", () => {
-    expect(computeSpriteLanes(["center"], 0)).toEqual([
+  it("a solo speaker keeps the capped centered lane", () => {
+    expect(computeSpriteLanes(["center"])).toEqual([
       { leftPct: 20, widthPct: 60 },
     ]);
   });
@@ -441,6 +630,8 @@ describe("mergeChoices", () => {
   it("orders interaction choices before scene-prompts, unpacking prompt{N} by ascending N", () => {
     const prompts = {
       scene: "library",
+      recap: "You followed the archivist into the restricted library.",
+      decision: "What will you investigate first?",
       prompt2Text: "追问档案员",
       prompt2Label: { zh: "追问", en: "Ask" },
       prompt1Text: "环顾四周",
@@ -457,7 +648,50 @@ describe("mergeChoices", () => {
     const promptItems = merged.items.filter((i) => i.kind === "prompt");
     expect(promptItems.map((i) => i.label)).toEqual(["环顾四周", "追问档案员"]);
     expect(promptItems[0]).toMatchObject({ description: "观察" });
+    expect(merged.context).toEqual({
+      scene: "library",
+      recap: "You followed the archivist into the restricted library.",
+      // A pending interaction is authoritative over a generated question.
+      decision: "How do you respond?",
+    });
+    expect(merged.groups).toHaveLength(2);
+    expect(merged.groups[0]).toMatchObject({
+      id: "interaction:block-1",
+      prompt: "How do you respond?",
+    });
+    expect(merged.groups[1]).toMatchObject({
+      id: "scene-prompts",
+      prompt: "What will you investigate first?",
+    });
     expect(merged.twoColumn).toBe(false);
+  });
+
+  it("uses scene-prompts context when no interaction question is pending", () => {
+    const merged = mergeChoices(
+      [],
+      {
+        scene: { zh: "雨夜校舍", en: "Rainy school" },
+        recap: {
+          zh: "你答应放学后去旧校舍找她。",
+          en: "You agreed to meet her.",
+        },
+        decision: {
+          zh: "你要从哪一侧进入？",
+          en: "Which side will you enter?",
+        },
+        prompt1Text: "从亮着灯的正门进去",
+      },
+      "zh-CN",
+    );
+
+    expect(merged.context).toEqual({
+      scene: "雨夜校舍",
+      recap: "你答应放学后去旧校舍找她。",
+      decision: "你要从哪一侧进入？",
+    });
+    expect(merged.groups).toEqual([
+      expect.objectContaining({ id: "scene-prompts", prompt: undefined }),
+    ]);
   });
 
   it("skips empty prompt slots", () => {

@@ -14,7 +14,7 @@
 | ----------------------------- | ----------------- | ------------------------------------------------------------------------------- | ---------------------------- |
 | **emberback** Emberback Relay | 科幻边疆·时间谜团 | 明亮复古科幻冒险海报、暖色硬边日光、奶油/陶土/钴蓝纯色背景、实用型工作服        | 全身立绘、清晰剪影、纯色背景 |
 | **mistport** 雾港·裂潮纪      | 黑暗奇幻·悬疑     | fog-noir 写实绘画感、冷灰/青/锈的去饱和、海雾体积光、低调戏剧打光、哥特港口氛围 | 半身胸像、3/4 侧、灰雾背景   |
-| **haruka-academy** 遥风学园   | 校园恋爱·日常     | 动漫视觉小说立绘（GalGame 拔模/tachi-e）、柔和赛璐珞、春日粉彩、暖光、海边校园  | 半身胸像、柔和渐变背景       |
+| **haruka-academy** 遥风学园   | 校园恋爱·日常     | 动漫视觉小说立绘（GalGame 拔模/tachi-e）、柔和赛璐珞、春日粉彩、暖光、海边校园  | 2:3 头至大腿、透明背景       |
 
 > 三套风格**刻意不同**——明亮科幻海报、雾港写实、校园动漫——每个世界**内部**则严格同风格（靠共享 prefix/suffix）。
 
@@ -43,7 +43,7 @@ npx tsx scripts/generate-portraits.mjs mistport --slot gpt-image-2 --concurrency
 npx tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
 ```
 
-流程：读该世界 `portraits.json` → 逐角色合成 `prefix+subject+suffix` → **并发** POST → PNG 存到 `worlds/<world>/media/portraits/<filename>`。已存在文件默认跳过，失败直接重跑（只补缺的）。
+流程：读该世界 `portraits.json` → 展开每个角色的默认图和可选 `variants[]` → 逐图合成 `prefix+subject+suffix` → **并发** POST → PNG 存到 `worlds/<world>/media/portraits/<filename>`。已存在文件默认跳过，失败直接重跑（只补缺的）。`--only <character-id>` 会包含该角色全部变体；`--only <character-id>:<variant-id>` 只生成一个变体。
 
 默认参数（可在 `portraits.json` 的 `defaults` 调）：`size 1024x1536`（竖构图立绘）、`quality medium`、`png`。
 
@@ -54,7 +54,7 @@ npx tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
 - `media` source：导入 `media/portraits/` 下的图，按 **sha256 内容寻址**存入媒体库，`to: media` + `indexTo: plugin:character-presence/assets`；
 - `presence` source（`media/presence.json`）：把与实例化角色匹配的 `characterId` 的 `avatar` / `sprite` 指向上面导入的媒体（`mediaRef.id` = 该图的 sha256）。
 
-`presence.json` 由 `scripts/emit-presence.mjs <world>` 从 `portraits/` 目录按 sha256 自动生成：
+`presence.json` 由 `scripts/emit-presence.mjs <world>` 从 `portraits/` 目录按 sha256 自动生成。角色条目可用 `visual` 描述默认图的 `id/outfit/expression/pose/stage`，并用 `variants[]` 添加同角色的其他服装、表情和姿势；脚本会写成 `character-presence.visuals` 目录，同时保留旧 `avatar` / `sprite`：
 
 ```bash
 node scripts/emit-presence.mjs mistport

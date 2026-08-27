@@ -853,33 +853,88 @@
   }
 }
 
+@keyframes ui-stage-slide-from-left {
+  from {
+    opacity: 0;
+    translate: -5% 0;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes ui-stage-slide-from-right {
+  from {
+    opacity: 0;
+    translate: 5% 0;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes ui-stage-dissolve-in {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
 .ui-stage-crossfade {
   animation: ui-stage-fade-in 600ms ease-out both;
 }
 
-.ui-stage-sprite {
+.ui-stage-sprite[data-transition="fade"] {
   animation: ui-stage-rise-in 300ms ease-out both;
+}
+
+.ui-stage-sprite[data-transition="slide-left"],
+.ui-stage-visual[data-transition="slide-left"] {
+  animation: ui-stage-slide-from-left 300ms ease-out both;
+}
+
+.ui-stage-sprite[data-transition="slide-right"],
+.ui-stage-visual[data-transition="slide-right"] {
+  animation: ui-stage-slide-from-right 300ms ease-out both;
+}
+
+.ui-stage-sprite[data-transition="dissolve"],
+.ui-stage-visual[data-transition="dissolve"] {
+  animation: ui-stage-dissolve-in 360ms ease-out both;
+}
+
+.ui-stage-visual[data-transition="fade"] {
+  animation: ui-stage-fade-in 240ms ease-out both;
+}
+
+.ui-stage-sprite[data-transition="none"],
+.ui-stage-visual[data-transition="none"] {
+  animation: none;
 }
 
 /* Active/inactive treatment lives on the sprite's *inner* element (never
    the animated outer wrapper above) so it doesn't fight the entrance
    animation for control of `transform`. */
 .ui-stage-sprite-active {
-  transform: scale(1.05);
+  transform: scale(1.02);
   transform-origin: bottom center;
   filter: drop-shadow(
     0 0 28px color-mix(in oklab, var(--accent-primary) 55%, transparent)
   );
 }
 
-/* Inactive sprites scale *down* with feet planted (bottom origin): with
-   `object-contain` lanes a tall inactive sprite can out-height a wide active
-   one, so the down-scale keeps the speaker the dominant figure regardless of
-   image aspect ratios. */
+/* Keep focus subtle: equal lanes preserve stable character size while scale,
+   brightness and saturation identify the current speaker. */
 .ui-stage-sprite-inactive {
-  transform: scale(0.93);
+  transform: scale(0.96);
   transform-origin: bottom center;
-  filter: brightness(0.55) saturate(0.6);
+  filter: brightness(0.72) saturate(0.8);
 }
 
 /* Silhouette standee for a speaking character with no sprite/avatar yet — a

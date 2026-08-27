@@ -445,6 +445,17 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           durationMs,
           approvalStatus,
         );
+        if (context.emitter && emittedEvents && emittedEvents.length > 0) {
+          for (const event of emittedEvents) {
+            await context.emitter.emit("domain-event.previewed", {
+              runtimeId: context.runtimeId,
+              pluginId: context.pluginId,
+              toolCallId: call.toolCallId,
+              topic: event.topic,
+              data: event.data,
+            });
+          }
+        }
         return {
           toolCallId: call.toolCallId,
           name: call.name,

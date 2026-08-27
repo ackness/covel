@@ -14,7 +14,14 @@ import type { MediaRef } from "@covel/shared";
 import { listPluginData } from "@/services/api/plugin-data.js";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { resolveMediaSrc } from "@/lib/media-resolve.js";
-import { usePluginNamespace } from "@/stores/plugin-data-store.js";
+import {
+  collectCharacterVisualRefs,
+  type PresenceRecord,
+} from "@/lib/character-visuals.js";
+import {
+  loadPluginDataForSession,
+  usePluginNamespace,
+} from "@/stores/plugin-data-store.js";
 import {
   pluginIdForCapability,
   STAGE_CAPABILITIES,
@@ -59,10 +66,7 @@ export function useStageMediaPreload(
   useEffect(() => {
     const refs: MediaRef[] = [];
     for (const value of Object.values(presence)) {
-      const record = value as
-        { sprite?: unknown; avatar?: unknown } | undefined;
-      if (isMediaRef(record?.sprite)) refs.push(record.sprite);
-      if (isMediaRef(record?.avatar)) refs.push(record.avatar);
+      refs.push(...collectCharacterVisualRefs(value as PresenceRecord));
     }
     void warmRefs(sessionId, refs, warmed.current);
   }, [sessionId, presence]);
@@ -75,6 +79,10 @@ export function useStageMediaPreload(
     listPluginData(sessionId, sceneStageId, "scenes")
       .then((rows) => {
         if (cancelled) return;
+        // The same fetch also hydrates the registry slice used by the
+        // scene.set preview selector, so a validated location change can
+        // resolve world art immediately instead of waiting for commit.
+        loadPluginDataForSession(sessionId, sceneStageId, "scenes", rows);
         const refs: MediaRef[] = [];
         for (const row of rows) {
           const scenes = (row.value as { scenes?: unknown } | null)?.scenes;

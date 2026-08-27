@@ -4,12 +4,14 @@
 
 ## 运行时结构
 
-- `PLUGIN.md`：插件级元信息（名称/描述/关联），本身不是可执行 runtime——`runtimes/` 下才是实际发现、调度的三个 runtime。
+- `PLUGIN.md`：插件级元信息（名称/描述/关联），本身不是可执行 runtime——`runtimes/` 下才是实际发现、调度的四个 runtime。
 - `runtimes/resolver/PLUGIN.md` + `handler.js` + `ui/scene-stage-panel.json`：事件触发函数 runtime（消费 `scene.set`），场景匹配与舞台状态写入，声明右侧只读场景面板。
+- `runtimes/direction/PLUGIN.md` + `handler.js`：消费 `stage.direction`，持久化角色登退场、站位、焦点及视觉变体请求到 `direction/current`。
 - `runtimes/background-gen/PLUGIN.md` + `handler.js`：后台函数 runtime，消费内部信令 `scene-stage.generate.requested`，调用 `ctx.images` 增量生成缺失的场景背景。
 - `runtimes/seed/PLUGIN.md` + `handler.js`：`stage: setup` 函数 runtime，开局把注册表第一个场景写入 `stage/current`，为"叙事整局不发 `scene.set`"兜底。
 - `lib/stage-data.js`：三个 runtime 共享的 namespace/key 常量、`source`/变体文案映射，以及 `stage/current` 记录的唯一构造入口（`buildStageRecord` / `makeStageProposal`）。
 - `schemas/scene-set.event.json`：`scene.set` 载荷校验。
+- `schemas/stage-direction.event.json`：`stage.direction` 批量 cues 载荷校验。
 - `schemas/generate-requested.event.json`：`scene-stage.generate.requested` 载荷校验（内部信令，`advertise: false`，不进 `<available-events>` 目录）。
 - `schemas/scenes.schema.json`：`scenes` namespace 校验，对齐世界包导入的场景注册表形状（`schemaVersion` + `registryId` + `style` + `scenes[]`）。
 
@@ -20,6 +22,7 @@
 - `scenes` namespace（`dataSchemas.scenes`，`acceptsWorldData: true`）：从世界包导入的场景注册表，key 为固定值 `scene-registry`，一行文档即整份 registry。
 - `stage/current`：解析后的当前场景状态（场景 id、名称、昼夜变体、来源、日/夜 `MediaRef`、解析后的展示图）。命中注册表或会话内已生成的场景时写入 `source: "world" | "session"`；未命中且门控放行时写入 `source: "pending"` 并向 `background-gen` 发内部事件；门控不放行则 `source: "none"`。同时写入 `sourceLabel`（`I18nText`，`source` 的展示文案，例如 `pending` → "背景生成中…"）与 `variantLabel`（`I18nText`，昼夜文案）供只读面板直接渲染——json-render spec 不支持按枚举值条件选文案，翻译需在 handler 侧算好（对齐 `scene-cast` 的 `signalView()`/`reasonLabel` 做法）。
 - `stage/generated`：会话内已增量生成的场景索引，供 `background-gen` 记账、场景解析器做会话内命中匹配、以及 `maxGeneratedScenes` 帽计数。
+- `direction/current`：权威角色舞台状态。`actors[]` 记录角色、焦点、显式站位与 `variantId/outfit/expression/pose` 请求；`actors: []` 表示明确清空。未产生该记录时 Web 继续回退到 `scene-cast/active-cast`。
 - **开场种子**：`scene.set` 的唯一发射方是叙事 LLM（事件目录的【必做】指示是提示词约束，不是保证）。整局不发时 `resolver` 作为 `event` 触发的 runtime 永远不跑，舞台恒空。`seed` runtime 在 `stage: setup` 跑一次补上这条下限：`stage/current` 已存在（恢复会话、setup 重试）或世界没有场景注册表时跳过，否则按白天变体写入注册表第一个场景。它跑在任何叙事输出之前，因此不与 LLM 发的 `scene.set` 竞争——两者若落在同一回合，事件扇出顺序不定，后写的会盖掉正确场景。
 
 ## userSettings

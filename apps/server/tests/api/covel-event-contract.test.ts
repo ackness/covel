@@ -34,6 +34,7 @@ describe("CovelEvent contract", () => {
       "asset.progress",
       "block.emitted",
       "character.upserted",
+      "domain-event.previewed",
       "gateway.calling",
       "gateway.failed",
       "gateway.responded",
@@ -124,6 +125,12 @@ describe("CovelEvent contract", () => {
     // forwarding whitelist.
     expect(COVEL_EVENT_META[wm].forwardToActionStream).toBe(false);
     expect(FORWARDED_EVENT_TYPES.has(wm)).toBe(false);
+  });
+
+  it("forwards speculative domain event previews to the active action stream", () => {
+    const preview: CovelEventType = "domain-event.previewed";
+    expect(COVEL_EVENT_META[preview].forwardToActionStream).toBe(true);
+    expect(FORWARDED_EVENT_TYPES.has(preview)).toBe(true);
   });
 
   it("trace and hooks are subscribable topics (drift fix)", () => {

@@ -371,10 +371,29 @@ sources:
     "characterId": "npc-kamishiro-mio",
     "displayName": "神代澪",
     "avatar": { "id": "<sha256-of-png>", "mime": "image/png", "size": 2155557 },
-    "sprite": { "id": "<sha256-of-png>", "mime": "image/png", "size": 2155557 }
+    "sprite": { "id": "<sha256-of-png>", "mime": "image/png", "size": 2155557 },
+    "visuals": {
+      "defaultVariant": "uniform-neutral",
+      "variants": [
+        {
+          "id": "uniform-neutral",
+          "outfit": "uniform",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "<sha256-of-png>",
+            "mime": "image/png",
+            "size": 2155557
+          },
+          "stage": { "scale": 1, "offsetX": 0, "offsetY": 0 }
+        }
+      ]
+    }
   }
 ]
 ```
+
+`visuals` 是 schema v1 的可选增量字段，旧的 `avatar` / `sprite` 仍保持兼容。每个 variant 必须有唯一 `id` 和 `sprite`，可用安全键标注 `outfit`、`expression`、`pose`；`stage.scale`（0.5–2）和 `offsetX/offsetY`（-100–100，百分比）用于校正不同裁切源图的屏幕大小和基线。舞台按精确 variant id、语义组合、目录默认、旧 sprite/avatar 的顺序回退，所以剧情请求了尚未制作的表情时仍会显示角色，不会空白。`scripts/emit-presence.mjs` 默认给每个角色生成一个 `default/default/neutral/default` 变体；作者可在生成结果上继续添加服装和表情图。
 
 `mediaRef.id` 必须是该图内容的 **64 位小写 sha256**——media source 导入后媒体库以同一 sha256 寻址，二者相等才能解析到资产。手算易错，仓库提供 `scripts/emit-presence.mjs <world>`，从 `media/portraits/` 自动生成 `presence.json`（**重生成立绘后必须重跑刷新哈希**）。
 

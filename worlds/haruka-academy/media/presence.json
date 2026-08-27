@@ -12,6 +12,22 @@
       "id": "f0e5e9fa37c6f4a8e730881e0e9118c59f5efe987628cda89a5a1ea23d16756e",
       "mime": "image/png",
       "size": 1817975
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "f0e5e9fa37c6f4a8e730881e0e9118c59f5efe987628cda89a5a1ea23d16756e",
+            "mime": "image/png",
+            "size": 1817975
+          }
+        }
+      ]
     }
   },
   {
@@ -19,14 +35,41 @@
     "characterId": "npc-asakura-rin",
     "displayName": "朝仓凛",
     "avatar": {
-      "id": "1a631166756391f7a7dd68796fa63eec62d64d85777cfbcc0819b86a75d093bf",
+      "id": "b5c93566c001a14dbcdac5d921e7d08219373894081e9d5536d140ef19b258a5",
       "mime": "image/png",
-      "size": 1551015
+      "size": 1715034
     },
     "sprite": {
-      "id": "1a631166756391f7a7dd68796fa63eec62d64d85777cfbcc0819b86a75d093bf",
+      "id": "b5c93566c001a14dbcdac5d921e7d08219373894081e9d5536d140ef19b258a5",
       "mime": "image/png",
-      "size": 1551015
+      "size": 1715034
+    },
+    "visuals": {
+      "defaultVariant": "uniform-playful",
+      "variants": [
+        {
+          "id": "uniform-playful",
+          "outfit": "uniform",
+          "expression": "playful",
+          "pose": "default",
+          "sprite": {
+            "id": "b5c93566c001a14dbcdac5d921e7d08219373894081e9d5536d140ef19b258a5",
+            "mime": "image/png",
+            "size": 1715034
+          }
+        },
+        {
+          "id": "uniform-serious",
+          "outfit": "uniform",
+          "expression": "serious",
+          "pose": "default",
+          "sprite": {
+            "id": "86c219d0457f052456bef18ff1ae6f6512441f9c4cfbc2f4f78995f41f1ccf08",
+            "mime": "image/png",
+            "size": 1156296
+          }
+        }
+      ]
     }
   },
   {
@@ -34,14 +77,30 @@
     "characterId": "npc-shiina-kaho",
     "displayName": "椎名夏帆",
     "avatar": {
-      "id": "902688fc86a9ca767a7684545cee1f54d7a84cb783281001b37819627afb2191",
+      "id": "b711c8a5ee140d9571caf694446cef49eff9ba00d564f4f13a2a25d8690aa659",
       "mime": "image/png",
-      "size": 1867968
+      "size": 2109660
     },
     "sprite": {
-      "id": "902688fc86a9ca767a7684545cee1f54d7a84cb783281001b37819627afb2191",
+      "id": "b711c8a5ee140d9571caf694446cef49eff9ba00d564f4f13a2a25d8690aa659",
       "mime": "image/png",
-      "size": 1867968
+      "size": 2109660
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "b711c8a5ee140d9571caf694446cef49eff9ba00d564f4f13a2a25d8690aa659",
+            "mime": "image/png",
+            "size": 2109660
+          }
+        }
+      ]
     }
   },
   {
@@ -57,6 +116,22 @@
       "id": "71a88467a52f0e7c5db4ffd1794b6107803ec9aa8af5f07af425d524a053643b",
       "mime": "image/png",
       "size": 1628878
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "71a88467a52f0e7c5db4ffd1794b6107803ec9aa8af5f07af425d524a053643b",
+            "mime": "image/png",
+            "size": 1628878
+          }
+        }
+      ]
     }
   },
   {
@@ -72,6 +147,22 @@
       "id": "80ba29c18fc69335689bd2c6352ca75a154af1c65266e397061e021b021119ce",
       "mime": "image/png",
       "size": 1914443
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "80ba29c18fc69335689bd2c6352ca75a154af1c65266e397061e021b021119ce",
+            "mime": "image/png",
+            "size": 1914443
+          }
+        }
+      ]
     }
   },
   {
@@ -79,14 +170,30 @@
     "characterId": "npc-onodera-chihiro",
     "displayName": "小野寺千寻",
     "avatar": {
-      "id": "7bab86321e6f5d925df7d48620e3b1b30441ef44033c13cf780af2f18bb44ebe",
+      "id": "4e9fa095de7732c33f8880a99f60b78de4b4f5b220f44ee1fdb692228bef4e46",
       "mime": "image/png",
-      "size": 1632888
+      "size": 1318815
     },
     "sprite": {
-      "id": "7bab86321e6f5d925df7d48620e3b1b30441ef44033c13cf780af2f18bb44ebe",
+      "id": "4e9fa095de7732c33f8880a99f60b78de4b4f5b220f44ee1fdb692228bef4e46",
       "mime": "image/png",
-      "size": 1632888
+      "size": 1318815
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "4e9fa095de7732c33f8880a99f60b78de4b4f5b220f44ee1fdb692228bef4e46",
+            "mime": "image/png",
+            "size": 1318815
+          }
+        }
+      ]
     }
   },
   {
@@ -94,14 +201,30 @@
     "characterId": "npc-morikawa-souta",
     "displayName": "森川奏太",
     "avatar": {
-      "id": "e9d917b87877480b4ec5b8be84bcebf6bbbfc65e92e09556f8f141b301d82efb",
+      "id": "2b1c852f0b4f7390b3af65ad74daa20b24cf3c27643fc5605b5b5f68e90e3216",
       "mime": "image/png",
-      "size": 1663132
+      "size": 1126325
     },
     "sprite": {
-      "id": "e9d917b87877480b4ec5b8be84bcebf6bbbfc65e92e09556f8f141b301d82efb",
+      "id": "2b1c852f0b4f7390b3af65ad74daa20b24cf3c27643fc5605b5b5f68e90e3216",
       "mime": "image/png",
-      "size": 1663132
+      "size": 1126325
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "2b1c852f0b4f7390b3af65ad74daa20b24cf3c27643fc5605b5b5f68e90e3216",
+            "mime": "image/png",
+            "size": 1126325
+          }
+        }
+      ]
     }
   },
   {
@@ -117,6 +240,22 @@
       "id": "9f8ad968fd0e05374a5ca4fbaf12d004a98d4dccc405c2b9685028444be67961",
       "mime": "image/png",
       "size": 2010039
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "9f8ad968fd0e05374a5ca4fbaf12d004a98d4dccc405c2b9685028444be67961",
+            "mime": "image/png",
+            "size": 2010039
+          }
+        }
+      ]
     }
   }
 ]

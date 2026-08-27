@@ -24,6 +24,9 @@ export interface StageSpritesProps {
   readonly sessionId: string;
   /** Choice overlay open — pull focus off the sprites (classic VN dim). */
   readonly dimmed?: boolean;
+  /** Legacy scene-cast may briefly report no speakers between turns. An
+   * authoritative stage-direction `actors: []` instead means clear now. */
+  readonly retainWhenEmpty?: boolean;
 }
 
 export function StageSprites({
@@ -31,6 +34,7 @@ export function StageSprites({
   presence,
   sessionId,
   dimmed = false,
+  retainWhenEmpty = true,
 }: StageSpritesProps): ReactElement {
   // Sticky stations: characters keep their spot while on stage; salience
   // only moves the highlight. The memory map lives in a ref updated during
@@ -49,14 +53,13 @@ export function StageSprites({
   // everyone out, until a turn with a real cast replaces it.
   const lastSlotsRef = useRef(fresh);
   if (fresh.length > 0) lastSlotsRef.current = fresh;
-  const sticky = fresh.length === 0 && lastSlotsRef.current.length > 0;
+  if (!retainWhenEmpty && fresh.length === 0) lastSlotsRef.current = [];
+  const sticky =
+    retainWhenEmpty && fresh.length === 0 && lastSlotsRef.current.length > 0;
   const slots = sticky
     ? lastSlotsRef.current.map((slot) => ({ ...slot, active: false }))
     : fresh;
-  const lanes = computeSpriteLanes(
-    slots.map((slot) => slot.pos),
-    slots.findIndex((slot) => slot.active),
-  );
+  const lanes = computeSpriteLanes(slots.map((slot) => slot.pos));
 
   return (
     <div
@@ -75,11 +78,11 @@ export function StageSprites({
           // web rules) — ≤4 absolutely-positioned sprites moving once per
           // enter/leave; FLIP/transform plumbing isn't worth it. The global
           // prefers-reduced-motion block collapses it. Lanes change on cast
-          // membership changes (assignStations) and on speaker switches (the
-          // active lane is wider), so this reads as "stepping aside" / focus
-          // shifting, never as drift. Active speaker sits on top for the
-          // residual glow/shadow overlap at lane edges.
+          // membership changes (assignStations), never on speaker switches;
+          // focus changes stay within each stable lane. Active speaker sits on
+          // top for the residual glow/shadow overlap at lane edges.
           className="ui-stage-sprite absolute bottom-0 h-[92%] px-1 transition-[left,width] duration-500 ease-out"
+          data-transition={slot.transition ?? "fade"}
           style={{
             left: `${lanes[index].leftPct}%`,
             width: `${lanes[index].widthPct}%`,
@@ -95,14 +98,25 @@ export function StageSprites({
             )}
           >
             {slot.ref ? (
-              <Media
-                src={slot.ref}
-                sessionId={sessionId}
-                alt={slot.displayName}
-                fit="contain"
-                rounded="none"
-                maxHeight="100%"
-              />
+              <div
+                key={`${slot.variantId ?? slot.ref.id}:${slot.transition ?? "fade"}`}
+                className="ui-stage-visual flex h-full w-full items-end justify-center"
+                style={{
+                  transform: `translate(${slot.framing?.offsetX ?? 0}%, ${slot.framing?.offsetY ?? 0}%) scale(${slot.framing?.scale ?? 1})`,
+                  transformOrigin: "bottom center",
+                }}
+                data-visual-variant={slot.variantId}
+                data-transition={slot.transition ?? "fade"}
+              >
+                <Media
+                  src={slot.ref}
+                  sessionId={sessionId}
+                  alt={slot.displayName}
+                  fit="contain"
+                  rounded="none"
+                  maxHeight="100%"
+                />
+              </div>
             ) : (
               // No sprite/avatar yet — a name-initial standee keeps the
               // speaker on stage so the dialog nameplate matches someone.
