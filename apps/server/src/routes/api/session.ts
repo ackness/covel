@@ -85,7 +85,10 @@ import {
   buildSessionPatchUpdates,
   parseCreateSessionBody,
 } from "./session/request-helpers.js";
-import { importWorldCharacterBlueprints } from "./session/world-character-blueprints.js";
+import {
+  importWorldCharacterBlueprints,
+  importWorldEmbeddedLorebook,
+} from "./session/world-character-blueprints.js";
 
 type Env = {
   Variables: {
@@ -477,6 +480,7 @@ sessionRoutes.post("/", async (c) => {
             activePlugins: plugins,
             registry: pluginRegistry,
           });
+          await importWorldEmbeddedLorebook(tx, id, rawWorldId, now);
         }
         return importedWorldData.mediaRefs;
       });

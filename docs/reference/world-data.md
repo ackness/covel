@@ -51,6 +51,12 @@ defaultViewMode: stage
 
 `worldData` path 相对 world root。
 
+### AI 生成包的便携文本回退
+
+AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/lorebook.yaml`，并和 dimensions 一起写入 `data/world.data.yaml`。文件型世界在创建 session 时始终按 descriptor 导入。
+
+`server-store` 与浏览器本地世界没有可长期读取的包目录。生成接口在临时目录完成同样的解析和校验后，把角色放入 `WorldRecord.metadata.characterBlueprints`，把资料库与规则放入 `WorldRecord.metadata.embeddedLorebook`。session 创建仅在没有导入文件 worldData 时使用这份回退；因此同一世界不会重复导入。便携回退只承载文本内容，图片仍必须使用 media source、真实文件和内容寻址索引。
+
 ### 两种完整内置示例
 
 世界包不必启用所有能力；应让题材决定插件组合与数据层。仓库内两个中文世界展示了两条互补路线：

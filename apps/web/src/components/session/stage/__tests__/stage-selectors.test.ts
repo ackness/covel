@@ -7,6 +7,7 @@ import {
   assignStations,
   computeSpriteLanes,
   computeSpriteSlots,
+  deriveDecisionRecapFallback,
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
@@ -782,6 +783,38 @@ describe("mergeChoices", () => {
     const merged = mergeChoices(manyInteraction, prompts, "zh-CN");
     expect(merged.items).toHaveLength(7);
     expect(merged.twoColumn).toBe(true);
+  });
+});
+
+describe("deriveDecisionRecapFallback", () => {
+  it("normalizes a short current story for legacy prompt rows", () => {
+    expect(
+      deriveDecisionRecapFallback(
+        "纸还在你手里。\n\n被划掉的那半句，你其实认得字。",
+      ),
+    ).toBe("纸还在你手里。 被划掉的那半句，你其实认得字。");
+  });
+
+  it("keeps the latest complete sentences within the decision-panel limit", () => {
+    expect(
+      deriveDecisionRecapFallback(
+        "你走进教室。凛把采访本推到桌边。澪问你放学后是否需要带路。窗外又传来吉他声。",
+        28,
+      ),
+    ).toBe("澪问你放学后是否需要带路。窗外又传来吉他声。");
+  });
+
+  it("keeps a closing quote with the sentence it belongs to", () => {
+    expect(
+      deriveDecisionRecapFallback(
+        "凛问：『你会先回应谁？』夏帆没理，只比了个『等你』的口型。纸还在你手里。",
+        32,
+      ),
+    ).toBe("夏帆没理，只比了个『等你』的口型。纸还在你手里。");
+  });
+
+  it("returns undefined for an empty story", () => {
+    expect(deriveDecisionRecapFallback(" \n ")).toBeUndefined();
   });
 });
 

@@ -13,7 +13,7 @@ import {
  *   1. Navigate to world selection screen
  *   2. Click "AI 创建世界" to open the generator dialog
  *   3. Enter a world prompt (or click an example)
- *   4. Click "生成世界" to start generation
+ *   4. Review the package plan and click "开始构筑" to start generation
  *   5. Wait for SSE progress: generating → validating → saving → done
  *   6. Verify the new world appears in the world list
  *   7. Verify the world has dimensions via API
@@ -86,7 +86,7 @@ test.describe("AI World Generation", () => {
 
     // ── Click generate ──
     const generateBtn = dialog.locator("button", {
-      hasText: /生成世界|Generate/i,
+      hasText: /开始构筑|Start Building|生成世界|Generate/i,
     });
     await expect(generateBtn).toBeEnabled();
     await generateBtn.click();
@@ -225,6 +225,16 @@ test.describe("AI World Generation", () => {
     // point at is deleted right after generation, so retaining them would leave
     // dangling references.
     expect(metadata?.dimensions).toBeTruthy();
+    expect(metadata?.generatedPackageSummary).toMatchObject({
+      characters: expect.any(Number),
+      lorebook: expect.any(Number),
+      rules: expect.any(Number),
+    });
+    expect(
+      (metadata?.generatedPackageSummary as { characters: number }).characters,
+    ).toBeGreaterThanOrEqual(3);
+    expect(Array.isArray(metadata?.characterBlueprints)).toBe(true);
+    expect(Array.isArray(metadata?.embeddedLorebook)).toBe(true);
 
     // At minimum, geography and tone should be generated
     const dimKeys = Object.keys(dims!);

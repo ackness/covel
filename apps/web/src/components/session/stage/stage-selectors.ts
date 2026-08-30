@@ -446,6 +446,45 @@ export function hasSubmittedForm(
   );
 }
 
+const FALLBACK_RECAP_MAX_CHARS = 180;
+const FALLBACK_RECAP_MAX_SENTENCES = 3;
+
+/**
+ * Derive a compact, deterministic context excerpt for legacy prompt data that
+ * predates scene-prompts' `recap` field. This is deliberately a fallback, not
+ * an LLM summary: prefer the latest complete sentences and keep the decision
+ * panel bounded even when the story message is long.
+ */
+export function deriveDecisionRecapFallback(
+  storyText: string,
+  maxChars = FALLBACK_RECAP_MAX_CHARS,
+): string | undefined {
+  const normalized = storyText.replace(/\s+/gu, " ").trim();
+  if (!normalized || maxChars <= 0) return undefined;
+  if (maxChars === 1) return "…";
+  if (normalized.length <= maxChars) return normalized;
+
+  const sentences =
+    normalized
+      .match(/[^。！？!?]+(?:[。！？!?]+[”’」』）》】]?|$)/gu)
+      ?.map((value) => value.trim()) ?? [];
+  let recap = "";
+  let sentenceCount = 0;
+  for (let index = sentences.length - 1; index >= 0; index -= 1) {
+    const sentence = sentences[index];
+    if (!sentence) continue;
+    const candidate = `${sentence}${recap}`;
+    if (candidate.length > maxChars) {
+      if (!recap) return `…${sentence.slice(-(maxChars - 1))}`;
+      break;
+    }
+    recap = candidate;
+    sentenceCount += 1;
+    if (sentenceCount >= FALLBACK_RECAP_MAX_SENTENCES) break;
+  }
+  return recap || `…${normalized.slice(-(maxChars - 1))}`;
+}
+
 /** A single renderable entry in the stage choice overlay. */
 export type StageChoiceItem =
   | {

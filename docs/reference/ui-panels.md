@@ -362,7 +362,7 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 | **Dialog**   | 最新 `kind === "story"` 消息的 `content`                                                                    | `use-typewriter`（流式驱动、`\n\n` 分段、▼ 暂停）                          |
 | **Choices**  | 未提交的 choice 类 interaction block + scene-prompts message namespace 的 `scene/recap/decision/prompt{N}*` | `extractInteractionChoices` + `mergeChoices`（保留问题分组并统一自由输入） |
 
-“流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`。新叙事由 `StageDialog` 打字展示；读完后，同一位置切换为统一决策面板，依次显示场景、与当前回应有关的前情摘要、当前问题、分组选项和行内自由输入。提交后面板保持禁用并显示生成状态，直到下一段叙事出现首个非空内容，避免旧对话框或空白面板闪回。恢复会话或从其他视图切入时，挂载前已经存在的最新叙事视为已读，不会重新打字。
+“流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`。新叙事由 `StageDialog` 打字展示；读完后，同一位置切换为统一决策面板，依次显示场景、“当前信息”摘要、“现在需要决定”的问题、分组选项和行内自由输入。提交后面板保持禁用并显示生成状态，直到下一段叙事出现首个非空内容，避免旧对话框或空白面板闪回。恢复会话或从其他视图切入时，挂载前已经存在的最新叙事视为已读，不会重新打字。旧版 scene-prompts 行没有 `recap/decision` 时，面板从最新 story 提取最多三句、180 字符的情境回顾，并用 `scene` 生成带上下文的决策问题；新数据始终优先使用 agent 生成字段。
 
 scene-prompts 数据既可能从当前 SSE 实时到达，也可能在会话恢复时从 `/plugin-data` 拉取。恢复水合必须同时写入 session reducer 与 `usePluginNamespace` 订阅的 external store；否则解析消息能看到数据，而舞台选择层仍会读到空 namespace。
 

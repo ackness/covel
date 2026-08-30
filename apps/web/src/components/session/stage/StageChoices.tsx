@@ -18,6 +18,8 @@ export interface StageChoicesProps {
   readonly executing: boolean;
   readonly interactionChoices: readonly StageInteractionChoice[];
   readonly promptsNamespace: Readonly<Record<string, unknown>>;
+  /** Current-story fallback for legacy scene-prompts rows without `recap`. */
+  readonly fallbackRecap?: string;
   readonly locale: string;
   readonly onSubmitInteraction?: (
     blockId: string,
@@ -42,6 +44,7 @@ export function StageChoices({
   executing,
   interactionChoices,
   promptsNamespace,
+  fallbackRecap,
   locale,
   onSubmitInteraction,
   onSendMessage,
@@ -90,7 +93,12 @@ export function StageChoices({
   };
 
   const itemOrder = new Map(items.map((item, index) => [item.id, index]));
-  const decision = context.decision ?? t("stage.decisionFallback");
+  const recap = context.recap ?? fallbackRecap;
+  const decision =
+    context.decision ??
+    (context.scene
+      ? t("stage.decisionFromScene", { scene: context.scene })
+      : t("stage.decisionFallback"));
 
   return (
     <div
@@ -106,19 +114,24 @@ export function StageChoices({
                   {context.scene}
                 </p>
               )}
-              {context.recap && (
-                <p className="whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
-                  {context.recap}
-                </p>
+              {recap && (
+                <div>
+                  <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                    {t("stage.recapLabel")}
+                  </p>
+                  <p className="whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                    {recap}
+                  </p>
+                </div>
               )}
-              <p
-                className={clsx(
-                  "font-medium leading-relaxed",
-                  context.recap ? "mt-2 text-sm" : "text-sm",
-                )}
-              >
-                {decision}
-              </p>
+              <div className={recap ? "mt-2" : undefined}>
+                <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                  {t("stage.decisionLabel")}
+                </p>
+                <p className="text-sm font-medium leading-relaxed">
+                  {decision}
+                </p>
+              </div>
             </div>
             {executing && (
               <span

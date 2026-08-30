@@ -1,9 +1,10 @@
 /**
- * World package generator — uses LLM to create world.yaml + WORLD.md,
- * validates against worldManifestSchema, and writes a worldData descriptor.
+ * World package generator — uses an LLM to create the manifest, lore, and
+ * requested portable supplements, then validates and writes a worldData package.
  *
  * Only requires a concept string. The LLM autonomously decides
- * all details (id, name, tags, dimensions, lore).
+ * all unspecified details while an optional brief constrains the experience
+ * preset and supplemental package content.
  */
 
 import { mkdir, writeFile } from "node:fs/promises";
@@ -24,6 +25,10 @@ import {
   normalizeLoreDocument,
 } from "./validation-helpers.js";
 import { writeWorldDataFiles } from "./world-writer.js";
+import {
+  applyCreationBriefToManifest,
+  normalizeGeneratedPackage,
+} from "./package-processor.js";
 
 const MAX_RETRIES = 2;
 const DEFAULT_ATTEMPT_TIMEOUT_MS = 150_000;
@@ -40,7 +45,7 @@ export async function createWorld(
   options: CreateWorldOptions,
 ): Promise<CreateResult> {
   const locale = options.locale ?? "zh-CN";
-  const prompt = await buildWorldPrompt(options.concept, locale);
+  const prompt = await buildWorldPrompt(options.concept, locale, options.brief);
   log(
     options,
     "info",
@@ -71,7 +76,8 @@ export async function createWorld(
               content:
                 `Your previous answer could not be imported:\n${lastErrors.join("\n")}\n\n` +
                 `Regenerate the full package now. Start the answer with ===WORLD_YAML=== on the first line, ` +
-                `then ===WORLD_MD===, then ===END===. Do not use markdown code fences or any extra prose.`,
+                `then ===WORLD_MD===, then ===WORLD_PACKAGE_YAML===, then ===END===. ` +
+                `Do not use markdown code fences or any extra prose.`,
             },
           ]
         : [{ role: "user" as const, content: options.concept }]),
@@ -161,6 +167,8 @@ export async function createWorld(
       parsed.yaml.length,
       "loreLength=",
       parsed.lore.length,
+      "packageLength=",
+      parsed.packageYaml?.length ?? 0,
     );
 
     // Parse and validate YAML
@@ -196,6 +204,51 @@ export async function createWorld(
     const repairs = normalizeGeneratedManifest(yamlData);
     if (repairs.length > 0) {
       log(options, "info", "applied YAML repair:", repairs.join("; "));
+    }
+
+    const briefErrors = applyCreationBriefToManifest(yamlData, options.brief);
+    if (briefErrors.length > 0) {
+      lastErrors = briefErrors;
+      log(
+        options,
+        "warn",
+        "attempt",
+        attempt + 1,
+        "creation brief requirements failed with",
+        lastErrors.length,
+        "errors",
+      );
+      continue;
+    }
+
+    let rawPackage: unknown = {};
+    if (parsed.packageYaml) {
+      try {
+        rawPackage = parseYaml(parsed.packageYaml);
+      } catch (err) {
+        lastErrors = [
+          `Invalid WORLD_PACKAGE_YAML: ${err instanceof Error ? err.message : String(err)}`,
+        ];
+        log(options, "warn", "package YAML parse failed:", lastErrors[0]);
+        continue;
+      }
+    }
+    const generatedPackage = normalizeGeneratedPackage(
+      rawPackage,
+      options.brief,
+    );
+    if (generatedPackage.errors.length > 0) {
+      lastErrors = generatedPackage.errors;
+      log(
+        options,
+        "warn",
+        "attempt",
+        attempt + 1,
+        "package content failed with",
+        lastErrors.length,
+        "errors",
+      );
+      continue;
     }
 
     const validation = validateWorldManifest(yamlData);
@@ -242,7 +295,11 @@ export async function createWorld(
     const writtenFiles: string[] = [];
 
     // If dimensions are inline, write them through worldData and rewrite manifest.
-    const dimFiles = await writeWorldDataFiles(worldDir, yamlData);
+    const dimFiles = await writeWorldDataFiles(
+      worldDir,
+      yamlData,
+      generatedPackage.content,
+    );
     if (dimFiles.length > 0) {
       log(options, "info", "wrote worldData files", dimFiles);
       writtenFiles.push(...dimFiles.map((f) => `${id}/${f}`));
@@ -268,6 +325,7 @@ export async function createWorld(
       success: true,
       files: writtenFiles,
       id,
+      packageContent: generatedPackage.content,
     };
   }
 

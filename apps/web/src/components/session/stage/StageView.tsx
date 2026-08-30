@@ -41,6 +41,7 @@ import { StageChoices } from "./StageChoices.js";
 import {
   applySceneSetPreview,
   applyStageDirectionPreview,
+  deriveDecisionRecapFallback,
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
@@ -232,6 +233,10 @@ export function StageView(props: StageViewProps): ReactElement {
     [promptsNamespace, storyTurnId],
   );
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
+  const fallbackRecap = useMemo(
+    () => deriveDecisionRecapFallback(storyText),
+    [storyText],
+  );
   const allRead = Boolean(storyKey && readStoryKey === storyKey);
   // Keep the submitted decision visible, disabled and with progress feedback,
   // until the next narrative actually has text. This avoids a blank dialog
@@ -286,6 +291,7 @@ export function StageView(props: StageViewProps): ReactElement {
         executing={executing}
         interactionChoices={interactionChoices}
         promptsNamespace={freshPrompts}
+        fallbackRecap={fallbackRecap}
         locale={locale}
         onSubmitInteraction={onSubmitInteraction}
         onSendMessage={onSendMessage}

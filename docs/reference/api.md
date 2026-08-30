@@ -1031,6 +1031,7 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 - `metadata.excludedPlugins`：准备页默认关闭。
 - `metadata.pluginPolicy`：准备页组合包策略。可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`；写在 `metadata` 顶层的同名三组字段也会参与合并。
 - `metadata.characterBlueprints`：创建 session 时自动导入到 `character-blueprint` 插件数据，并实例化为 NPC character。
+- `metadata.embeddedLorebook`：没有文件型 worldData 时导入为 session lorebook；AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。
 
 **响应:**
 
@@ -2687,7 +2688,7 @@ interface SseEnvelope {
 
 #### `POST /api/ai/generate-world`
 
-AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、dimensions、lore）。服务器会把模型输出的 `dimensions` 写入 `data/dimensions.yaml`，生成 `data/world.data.yaml` descriptor，并在 `world.yaml` 中写入 `worldData: data/world.data.yaml`。
+AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tags、dimensions、lore，并可同时创作主要角色、资料库、世界规则、题材记忆与开局配置。服务器把文本内容写成标准世界包：`data/dimensions.yaml`、`characters/main-cast.json`、`data/lorebook.yaml` 和 `data/world.data.yaml` descriptor。
 
 这个接口使用 SSE 返回进度和最终世界。客户端通过 `fetch()` + `ReadableStream` 解析 `data: {...}\n\n` 帧。
 
@@ -2698,7 +2699,12 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
   "concept": "一个被永恒暴风雪笼罩的冰封大陆",
   "locale": "zh-CN",
   "model": "deepseek-v4-flash",
-  "saveTarget": "server-file"
+  "saveTarget": "server-file",
+  "brief": {
+    "experienceMode": "traditional-story",
+    "content": ["characters", "lorebook", "rules", "memory", "opening-kit"],
+    "additionalInstructions": "让三个主要角色共同隐瞒一次失败的远征。"
+  }
 }
 ```
 
@@ -2708,6 +2714,15 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 | `locale`     | string | 否   | 语言区域，默认 `zh-CN`                                |
 | `model`      | string | 否   | 覆盖 LLM 模型                                         |
 | `saveTarget` | string | 否   | 保存目标，默认 `server-file`。可选值见下表            |
+| `brief`      | object | 否   | 结构化创作简报；旧客户端省略时保持基础生成行为        |
+
+`brief`：
+
+| 字段                     | 类型     | 说明                                                                          |
+| ------------------------ | -------- | ----------------------------------------------------------------------------- |
+| `experienceMode`         | string   | `traditional-story` 或 `dialogue-mode`；后者同时生成 `defaultViewMode: stage` |
+| `content`                | string[] | 可选 `characters`、`lorebook`、`rules`、`memory`、`opening-kit`               |
+| `additionalInstructions` | string   | 世界包补充要求（最多 2000 字符），如角色关系、禁忌、节奏或需要避开的内容      |
 
 | `saveTarget`   | 保存位置                              | 持久性来源                     | 适用场景                                                       |
 | -------------- | ------------------------------------- | ------------------------------ | -------------------------------------------------------------- |
@@ -2715,7 +2730,7 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 | `server-store` | 服务端 `DataStore.upsertWorld()`      | `STORE_BACKEND=sqlite` 或 `pg` | 自部署 Web 服务希望复用服务端数据库，并避免长期保留世界包文件  |
 | `return-only`  | SSE 响应体                            | 调用方自行保存                 | 浏览器本地 IndexedDB、预览生成结果、公开服务避免写服务端持久层 |
 
-`server-store` 和 `return-only` 会先把世界包写入临时目录做校验，然后删除临时目录。因为当前 `worldData` 文件导入依赖包内相对路径，这两个模式保存的 `WorldRecord.metadata` 会移除 `worldDataPath`、`worldData` 和 `dimensionSources`，保留已经归一化到 `metadata.dimensions` 的世界维度数据。
+`server-store` 和 `return-only` 会先把世界包写入临时目录做校验，然后删除临时目录。这两个模式保存的 `WorldRecord.metadata` 会移除文件路径型 `worldDataPath`、`worldData`、`dimensionSources` 和 `characterBlueprintSources`，保留已归一化的 `metadata.dimensions`，并用 `metadata.characterBlueprints` 与 `metadata.embeddedLorebook` 携带经过校验的角色/资料/规则文本。创建 session 时，文件世界优先走 descriptor；没有世界包目录时走这份便携内容，避免数据库和浏览器本地世界丢失补充内容。
 
 响应里的 `world.metadata.storage` 标注真实保存位置：
 
@@ -2741,7 +2756,7 @@ data: {"type":"progress","phase":"saving"}
 data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","metadata":{"storage":{"scope":"server","backend":"file","durable":true}}}}
 ```
 
-**响应 422:** `{ "error": "World generation failed", "details": [...] }`
+生成开始后的模型、校验或写入失败通过 HTTP 200 SSE 帧返回：`data: {"type":"error","message":"..."}`。请求体不合法则在开始流式响应前返回 HTTP 400 标准错误 envelope。
 
 **响应 400:** `{ "error": "concept (string) is required" }` 或 `{ "error": "saveTarget must be \"server-file\", \"server-store\", or \"return-only\"" }`
 

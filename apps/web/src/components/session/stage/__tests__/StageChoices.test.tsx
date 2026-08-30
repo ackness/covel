@@ -38,6 +38,8 @@ describe("StageChoices", () => {
     expect(
       screen.getByText("你要直接推门，还是先确认里面的人？"),
     ).toBeDefined();
+    expect(screen.getByText("当前信息")).toBeDefined();
+    expect(screen.getByText("现在需要决定")).toBeDefined();
     expect(screen.getByTestId("stage-decision-input")).toBeDefined();
 
     fireEvent.click(screen.getByText("我先贴近门缝听清脚步声"));
@@ -91,6 +93,28 @@ describe("StageChoices", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onSendMessage).toHaveBeenCalledWith("我先查看窗外");
     expect((input as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("uses the current story and scene to contextualize legacy prompt data", () => {
+    render(
+      <StageChoices
+        {...baseProps}
+        fallbackRecap="纸还在你手里。被划掉的那半句，你其实认得字。"
+        promptsNamespace={{
+          scene: "开学第一天：先回应谁",
+          prompt1Text: "先问凛刚才记下了什么",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("当前信息")).toBeDefined();
+    expect(
+      screen.getByText("纸还在你手里。被划掉的那半句，你其实认得字。"),
+    ).toBeDefined();
+    expect(screen.getByText("现在需要决定")).toBeDefined();
+    expect(
+      screen.getByText("围绕「开学第一天：先回应谁」，你准备怎么回应？"),
+    ).toBeDefined();
   });
 
   it("locks choices and the composer while the next turn is running", () => {

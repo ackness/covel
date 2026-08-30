@@ -7,14 +7,23 @@ Prefer concise fields that validate on the first attempt.
 
 {{ concept }}
 
+## Creation Brief
+
+Treat this as the author's binding package plan. Do not mention it in world
+content.
+
+{{ creationBrief }}
+
 ## Output Format
 
-Return EXACTLY two sections with these delimiters:
+Return EXACTLY three sections with these delimiters:
 
 ===WORLD_YAML===
 <complete world.yaml>
 ===WORLD_MD===
 <complete WORLD.md lore document>
+===WORLD_PACKAGE_YAML===
+<portable text package data>
 ===END===
 
 ## world.yaml Schema
@@ -34,8 +43,19 @@ tags: [<you decide genre tags>]
 requiredPlugins: [] # list plugin IDs the world depends on (if any)
 recommendedPlugins: [] # list plugin IDs that enhance the world (if any)
 pluginPolicy:
-  preset: traditional-story # traditional-story or dialogue-mode
+  preset: traditional-story # MUST match the Creation Brief experience preset
   preferTags: [] # optional plugin catalogue tags such as mode:dialogue
+
+# Include only when the Creation Brief requests genre memory.
+memoryBlocks:
+  - label: <unique snake_case label>
+    displayName: <short display name>
+    extractionHint: <what the memory agent must keep current>
+    icon: <optional Lucide icon name>
+    maxChars: 2400
+
+# Set to stage only for dialogue-mode; omit for traditional-story.
+defaultViewMode: stage
 
 dimensions:
   geography:
@@ -110,6 +130,62 @@ Start with exactly one H1: "# <world name>".
 Include setting overview, factions, power system, daily life, and 3 adventure hooks.
 Anchor the lore around one core anomaly or pressure mechanism that makes this world distinctive.
 
+## WORLD_PACKAGE_YAML
+
+This section carries optional text content that ships with the world package.
+Always include all three top-level arrays. Use `[]` when the Creation Brief says
+OMIT. Never add other top-level fields.
+
+```yaml
+characters:
+  - schemaVersion: 1
+    id: <stable ASCII id>
+    name: <display name>
+    role: npc
+    type: npc
+    description: <specific role in the current crisis>
+    aliases: [<optional aliases>]
+    tags: [<faction/role tags>]
+    attributes:
+      faction: <faction>
+      role: <social/story role>
+      location: <opening location>
+    persona:
+      summary: <dramatic function and contradiction>
+      traits: [<2-4 traits>]
+      goals: [<1-3 goals>]
+      fears: [<1-2 fears>]
+      secrets: [<one actionable secret>]
+      voice: <speech pattern>
+    dialogueExamples:
+      - user: <short prompt>
+        character: <in-character reply>
+    scenarioDefaults:
+      opening: <where/how they enter the opening crisis>
+      location: <location>
+      relationships:
+        <other character id>: <relationship>
+    rules:
+      - id: <character rule id>
+        text: <behavior/evolution boundary>
+        priority: 10
+    instantiate:
+      characterId: <npc-prefixed id>
+      type: npc
+lorebook:
+  - id: <stable ASCII id>
+    content: <self-contained setting fact>
+    strategy: <constant|selective>
+    keys: [<required for selective entries>]
+    position: after_plugin
+rules:
+  - id: <stable ASCII id>
+    content: <durable consequence or narrative constraint>
+    strategy: <constant|selective>
+    keys: [<required for selective entries>]
+    position: before_plugin
+```
+
 ## Rules
 
 - The first line of the answer must be exactly ===WORLD_YAML===.
@@ -124,4 +200,4 @@ Anchor the lore around one core anomaly or pressure mechanism that makes this wo
 - Avoid literal generic names built only from genre nouns. Coin proper nouns with a local cultural or historical reason.
 - The openingScenario and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.
 - The openingScenario must present an immediate choice or tension tied to that crisis.
-- Do NOT output anything except the two delimited sections.
+- Do NOT output anything except the three delimited sections.

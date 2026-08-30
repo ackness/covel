@@ -55,6 +55,16 @@ export type {
   WorldIRV1Statement,
 } from "./world-ir.js";
 
+export {
+  WORLD_EXPERIENCE_MODES,
+  WORLD_PACKAGE_CONTENT_KINDS,
+} from "./world-generation.js";
+export type {
+  WorldCreationBrief,
+  WorldExperienceMode,
+  WorldPackageContentKind,
+} from "./world-generation.js";
+
 export type {
   PluginType,
   FrameworkCapabilityTag,

@@ -107,6 +107,11 @@ describe("world API mapping", () => {
       undefined,
       {
         saveTarget: "return-only",
+        brief: {
+          experienceMode: "dialogue-mode",
+          content: ["characters", "rules"],
+          additionalInstructions: "Keep the cast morally ambiguous.",
+        },
       },
     );
 
@@ -123,6 +128,10 @@ describe("world API mapping", () => {
       prompt: "idea",
       locale: "zh-CN",
       saveTarget: "return-only",
+      brief: {
+        experienceMode: "dialogue-mode",
+        content: ["characters", "rules"],
+      },
     });
   });
 
