@@ -1326,5 +1326,83 @@
     "empty": "No character blueprints yet",
     "instantiated": "Instantiated",
     "blueprintOnly": "Blueprint only"
+  },
+  "worldImport": {
+    "eyebrow": "World Import · Review Desk",
+    "metaVersion": "Contract version {{version}}",
+    "action": {
+      "save": "Save draft",
+      "export": "Export JSON"
+    },
+    "reset": {
+      "action": "Reset to fixture",
+      "confirmTitle": "Reset to fixture?",
+      "confirmMessage": "Discards your saved draft edits and restores the original fixture content. This cannot be undone."
+    },
+    "savedAt": "Saved at {{time}}",
+    "notSavedYet": "Not saved yet",
+    "unsaved": "Unsaved changes",
+    "status": {
+      "loading": "Loading import draft…",
+      "error": "Failed to load the import draft",
+      "retry": "Retry"
+    },
+    "stats": {
+      "total": "Entries",
+      "sourceBacked": "Source-backed",
+      "aiInferred": "AI inferred",
+      "conflict": "Conflict"
+    },
+    "export": {
+      "conflictWarning": "Heads up: {{count}} conflict(s) are still unresolved."
+    },
+    "filter": {
+      "all": "All"
+    },
+    "category": {
+      "character": "Characters",
+      "faction": "Factions",
+      "location": "Locations",
+      "item": "Items",
+      "rule": "Rules",
+      "power_system": "Power systems",
+      "event": "Events",
+      "relation": "Relations"
+    },
+    "provenance": {
+      "source-backed": "Source-backed",
+      "ai-inferred": "AI inferred",
+      "conflict": "Conflict"
+    },
+    "list": {
+      "empty": "No entries in this category."
+    },
+    "detail": {
+      "noSelection": "Select an entry on the left to inspect sources and edit.",
+      "name": "Name",
+      "aliases": "Aliases",
+      "aliasItem": "Alias {{index}}",
+      "removeAlias": "Remove alias {{index}}",
+      "addAlias": "Add alias",
+      "content": "Content",
+      "sourceRefs": "Source locators",
+      "noSourceRefs": "No source references — this entry is fully AI inferred.",
+      "userEdited": "Edited"
+    },
+    "conflict": {
+      "title": "Conflict resolution",
+      "notes": "Conflict notes",
+      "markResolved": "Mark conflict resolved",
+      "unmark": "Unmark resolution",
+      "resolved": "Resolved"
+    },
+    "ai": {
+      "title": "AI inference",
+      "accept": "Accept AI inference",
+      "accepted": "Accepted",
+      "delete": "Delete AI inference",
+      "deleteConfirmTitle": "Delete this AI inference?",
+      "deleteConfirmMessage": "Entry \"{{name}}\" will be removed. It cannot be recovered after saving, unless you reset to the fixture."
+    }
   }
 }

@@ -1326,5 +1326,83 @@
     "empty": "暂无角色蓝图",
     "instantiated": "已生成角色",
     "blueprintOnly": "仅蓝图"
+  },
+  "worldImport": {
+    "eyebrow": "世界导入 · 审阅台",
+    "metaVersion": "契约版本 {{version}}",
+    "action": {
+      "save": "保存草稿",
+      "export": "导出 JSON"
+    },
+    "reset": {
+      "action": "重置为 fixture",
+      "confirmTitle": "重置为 fixture?",
+      "confirmMessage": "将丢弃已保存的草稿修改,恢复为导入 fixture 的原始内容。此操作不可撤销。"
+    },
+    "savedAt": "已保存于 {{time}}",
+    "notSavedYet": "尚未保存",
+    "unsaved": "有未保存的修改",
+    "status": {
+      "loading": "正在加载导入草稿…",
+      "error": "加载导入草稿失败",
+      "retry": "重试"
+    },
+    "stats": {
+      "total": "条目总数",
+      "sourceBacked": "原文支持",
+      "aiInferred": "AI 推断",
+      "conflict": "存在冲突"
+    },
+    "export": {
+      "conflictWarning": "导出前请注意:仍有 {{count}} 个冲突未标记解决。"
+    },
+    "filter": {
+      "all": "全部"
+    },
+    "category": {
+      "character": "人物",
+      "faction": "势力",
+      "location": "地点",
+      "item": "物品",
+      "rule": "规则",
+      "power_system": "力量体系",
+      "event": "事件",
+      "relation": "关系"
+    },
+    "provenance": {
+      "source-backed": "原文支持",
+      "ai-inferred": "AI 推断",
+      "conflict": "存在冲突"
+    },
+    "list": {
+      "empty": "该类别暂无条目"
+    },
+    "detail": {
+      "noSelection": "从左侧选择一个条目,查看来源并编辑。",
+      "name": "名称",
+      "aliases": "别名",
+      "aliasItem": "别名 {{index}}",
+      "removeAlias": "删除别名 {{index}}",
+      "addAlias": "添加别名",
+      "content": "内容",
+      "sourceRefs": "来源定位",
+      "noSourceRefs": "无来源引用——该条目完全来自 AI 推断。",
+      "userEdited": "已人工编辑"
+    },
+    "conflict": {
+      "title": "冲突处理",
+      "notes": "冲突说明",
+      "markResolved": "标记冲突已解决",
+      "unmark": "取消解决标记",
+      "resolved": "已解决"
+    },
+    "ai": {
+      "title": "AI 推断处理",
+      "accept": "接受 AI 推断",
+      "accepted": "已接受",
+      "delete": "删除 AI 推断",
+      "deleteConfirmTitle": "删除这条 AI 推断?",
+      "deleteConfirmMessage": "将删除条目「{{name}}」。保存后不可恢复;可通过重置为 fixture 找回。"
+    }
   }
 }

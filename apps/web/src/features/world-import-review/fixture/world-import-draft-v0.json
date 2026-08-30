@@ -1,0 +1,159 @@
+{
+  "version": "v0",
+  "id": "world-import-fixture-longzu-v0",
+  "title": "龙族 I · 火之晨曦 — 世界导入草稿(审阅用 Fixture)",
+  "sources": [
+    {
+      "id": "src-longzu-book1-txt",
+      "title": "龙族 I · 火之晨曦(Owner 提供 TXT)",
+      "locatorHint": "章节名 + 段落位置"
+    }
+  ],
+  "summary": "从《龙族 I》正文整理出的卡塞尔学院世界观草稿:包含 2009 年入学窗口的人物、势力、地点、物品、规则、力量体系与关键事件。本文件仅为 UI 开发用的代表性 fixture,内容为示意整理,不代表 Canon Corpus 的最终结论。",
+  "entries": [
+    {
+      "id": "char-lu-mingfei",
+      "type": "character",
+      "name": "路明非",
+      "aliases": ["路少爷"],
+      "content": "2009 年的普通高三学生,成绩平平,寄住在叔叔婶婶家中。收到卡塞尔学院的录取邮件后进入学院,入学评估中表现出意料之外的血统反应。",
+      "provenanceStatus": "source-backed",
+      "sourceRefs": [
+        {
+          "sourceId": "src-longzu-book1-txt",
+          "locator": "第一章 · 卡塞尔学院的邀请函",
+          "quote": "电子邮件只有短短几行……欢迎路明非同学加入卡塞尔学院。"
+        }
+      ],
+      "userEdited": false
+    },
+    {
+      "id": "char-nono",
+      "type": "character",
+      "name": "诺诺",
+      "aliases": ["陈墨瞳", "Nono"],
+      "content": "卡塞尔学院的高年级学生,诺诺是她在学院里的通用称呼。性格张扬,是新生眼中的传奇人物。",
+      "provenanceStatus": "source-backed",
+      "sourceRefs": [
+        {
+          "sourceId": "src-longzu-book1-txt",
+          "locator": "第二章 · 学院初见",
+          "quote": "所有人都叫她诺诺。"
+        }
+      ],
+      "userEdited": false
+    },
+    {
+      "id": "faction-dragon-research",
+      "type": "faction",
+      "name": "龙类研究会",
+      "aliases": [],
+      "content": "【AI 推断】正文多处提到学院内存在研究龙类历史与血统的学生团体,但未出现明确组织名。此处暂定名\"龙类研究会\",等待 Owner 对照原文确认或改名。",
+      "provenanceStatus": "ai-inferred",
+      "sourceRefs": [],
+      "userEdited": false
+    },
+    {
+      "id": "rule-blood-suppression",
+      "type": "rule",
+      "name": "血统压制",
+      "aliases": [],
+      "content": "混血种的言灵强度受血统纯度影响;高血统者对低血统者存在直觉层面的压制。",
+      "provenanceStatus": "conflict",
+      "sourceRefs": [
+        {
+          "sourceId": "src-longzu-book1-txt",
+          "locator": "第三章 · 血统评估",
+          "quote": "评级越高的学生,能使用的言灵越强。"
+        },
+        {
+          "sourceId": "src-longzu-book1-txt",
+          "locator": "第五章 · 训练场对峙",
+          "quote": "决定胜负的从来不只是血统评级。"
+        }
+      ],
+      "conflictNotes": "两处来源对\"血统评级是否决定言灵强度\"的表述不一致:一处强调评级决定强度,另一处给出反例暗示还存在其他因素。需要 Owner 裁决该规则在游戏世界中的确切表述。",
+      "userEdited": false
+    },
+    {
+      "id": "location-kassel-academy",
+      "type": "location",
+      "name": "卡塞尔学院",
+      "aliases": ["Cassel College"],
+      "content": "坐落于芝加哥郊外的混血种精英学院,对外以私立名校作为掩护。学院内设有图书馆、训练场与学生社团设施。",
+      "provenanceStatus": "source-backed",
+      "sourceRefs": [
+        {
+          "sourceId": "src-longzu-book1-txt",
+          "locator": "第一章 · 卡塞尔学院的邀请函",
+          "quote": "学校位于芝加哥的郊外。"
+        }
+      ],
+      "userEdited": false
+    },
+    {
+      "id": "item-murasame",
+      "type": "item",
+      "name": "村雨",
+      "aliases": ["Murasame"],
+      "content": "一柄日本刀,平常以普通刀具的形态随身携带,在战斗中会显露锋芒。持有者日常将它带在身边。",
+      "provenanceStatus": "source-backed",
+      "sourceRefs": [
+        {
+          "sourceId": "src-longzu-book1-txt",
+          "locator": "第四章 · 执行部报到",
+          "quote": "他随身带着那把叫\"村雨\"的刀。"
+        }
+      ],
+      "userEdited": false
+    },
+    {
+      "id": "power-yanling",
+      "type": "power_system",
+      "name": "言灵",
+      "aliases": ["Yanling"],
+      "content": "混血种发动血统之力的统一体系,以\"言灵\"为单位释放能力。每个言灵有各自的名称、效果与代价,强度与使用者的血统评级相关(见规则条目\"血统压制\"的冲突)。",
+      "provenanceStatus": "source-backed",
+      "sourceRefs": [
+        {
+          "sourceId": "src-longzu-book1-txt",
+          "locator": "第三章 · 血统评估",
+          "quote": "他们把这种能力称为言灵。"
+        }
+      ],
+      "userEdited": false
+    },
+    {
+      "id": "event-admission-2009",
+      "type": "event",
+      "name": "路明非收到录取通知",
+      "aliases": [],
+      "content": "2009 年,路明非在自己家的电脑上收到卡塞尔学院的录取邮件,这封邮件把他从普通高中生的轨道上拉进了混血种的世界。",
+      "provenanceStatus": "source-backed",
+      "sourceRefs": [
+        {
+          "sourceId": "src-longzu-book1-txt",
+          "locator": "第一章 · 卡塞尔学院的邀请函",
+          "quote": "2009 年的那个夏天,这封邮件改变了一切。"
+        }
+      ],
+      "userEdited": false
+    },
+    {
+      "id": "relation-lu-nono",
+      "type": "relation",
+      "name": "路明非 → 诺诺:单向关注",
+      "aliases": [],
+      "content": "【AI 推断】路明非在入学前后多次注意到诺诺,并以她作为自己在学院中的目标之一。推断为单向的关注/憧憬关系,原文未出现双方关系的明确表述。",
+      "provenanceStatus": "ai-inferred",
+      "sourceRefs": [
+        {
+          "sourceId": "src-longzu-book1-txt",
+          "locator": "第二章 · 学院初见",
+          "quote": "他在人群里第一眼就看到了她。"
+        }
+      ],
+      "userEdited": false
+    }
+  ]
+}
