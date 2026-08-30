@@ -154,35 +154,26 @@ function createWorldDimensionGetTool(
 ): ToolModule {
   return tool({
     name: "world-dimension-get",
-    description:
-      "按需读取当前 session 绑定世界的结构化维度数据。优先读取 world-data-provider 插件已同步的 entries，其次回退到 world.metadata.dimensions。支持按 dimension + path 精确读取嵌套字段，适合在 function calling 中按需取世界设定。",
+    description: "读取当前世界的结构化维度；可用 path 精确查询嵌套字段。",
     parameters: z.object({
       queries: z
         .array(
           z.object({
-            dimension: z
-              .enum(dimensionKeys)
-              .describe(
-                "世界维度键，例如 geography、factions、powerSystem、tone",
-              ),
+            dimension: z.enum(dimensionKeys).describe("世界维度键"),
             path: z
               .string()
               .min(1)
               .optional()
-              .describe(
-                '可选字段路径，例如 "regions[0].name"、"contentRating"',
-              ),
+              .describe('可选路径，如 "regions[0].name"'),
           }),
         )
         .min(1)
         .max(20)
-        .describe("要查询的维度字段列表"),
+        .describe("查询列表"),
       resolveI18n: z
         .boolean()
         .default(true)
-        .describe(
-          "是否将 i18n 文本对象按 session locale 解析为字符串，默认 true",
-        ),
+        .describe("按 session locale 解析 i18n；默认 true"),
     }),
     execute: async (params, context) => {
       let sessionCache: SessionLike | null | undefined;
@@ -270,7 +261,7 @@ function createWorldDimensionGetTool(
         if (!loaded) {
           results.push({
             dimension: query.dimension,
-            path: query.path,
+            ...(query.path === undefined ? {} : { path: query.path }),
             found: false,
             source: null,
             value: null,
@@ -287,7 +278,7 @@ function createWorldDimensionGetTool(
         if (!raw.found) {
           results.push({
             dimension: query.dimension,
-            path: query.path,
+            ...(query.path === undefined ? {} : { path: query.path }),
             found: false,
             source: loaded.source,
             value: null,
@@ -302,7 +293,7 @@ function createWorldDimensionGetTool(
           : raw.value;
         results.push({
           dimension: query.dimension,
-          path: query.path,
+          ...(query.path === undefined ? {} : { path: query.path }),
           found: true,
           source: loaded.source,
           value,

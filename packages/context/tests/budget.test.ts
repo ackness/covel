@@ -105,28 +105,32 @@ describe("applyBudget", () => {
     const result = applyBudget(systemPrompt, messages, {
       maxInputTokens: 100,
       reservedForResponse: 30,
+      protectLastUserTurns: 2,
       estimator: mockEstimator,
     });
 
     // After pruning we must be <= 70 total tokens.
-    // Drop 4 oldest (40 tokens): total = 110 - 40 = 70. Placeholder adds ~18 tokens.
+    // The prune marker counts toward the hard limit, so all six pruneable
+    // messages are dropped: 10 system + 40 protected + ~15 marker <= 70.
     expect(result.budgetExceeded).toBe(true);
-    expect(result.prunedMessageCount).toBe(4);
+    expect(result.prunedMessageCount).toBe(6);
     expect(result.messages[0]!.role).toBe("system");
     expect(result.messages[0]!.content).toMatch(
-      /\[\.\.\. 4 older messages pruned/,
+      /\[\.\.\. 6 older messages pruned/,
     );
-    // Original messages at indices 4..9 survive (6 messages) + 1 placeholder = 7.
-    expect(result.messages.length).toBe(7);
+    // Protected messages at indices 6..9 survive + one placeholder.
+    expect(result.messages.length).toBe(5);
     // Last original user message (index 8, then index 9 assistant) must be intact.
     expect(result.messages[result.messages.length - 1]).toEqual(messages[9]);
     expect(result.messages[result.messages.length - 2]).toEqual(messages[8]);
   });
 
-  it("protects last 2 user turns by default", () => {
+  it("protects the latest user turn by default", () => {
     // [u1, a1, u2, a2, u3, a3, u4, a4] — 4 user turns.
-    // Protect window = u3 onwards (indices 4..7).
-    // With an aggressive budget, verify u3, a3, u4, a4 are all kept.
+    // Protect window = u4 onwards (indices 6..7).
+    // With an aggressive budget, verify u4 and a4 are always kept while the
+    // preceding raw turn remains pruneable (its durable summary is protected
+    // separately when present).
     const systemPrompt = "";
     const messages: TestMessage[] = [
       msg("user", contentOfChars(400)), // u1 100 tokens
@@ -140,17 +144,18 @@ describe("applyBudget", () => {
     ];
 
     const result = applyBudget(systemPrompt, messages, {
-      maxInputTokens: 500,
-      reservedForResponse: 0, // effective cap 500
+      maxInputTokens: 250,
+      reservedForResponse: 0, // effective cap 250
       estimator: mockEstimator,
     });
 
-    // u3, a3, u4, a4 must all be present in order.
-    const protectedTail = result.messages.slice(-4);
-    expect(protectedTail).toEqual(messages.slice(4, 8));
+    // u4 and a4 must be present in order; u3/a3 are not protected.
+    const protectedTail = result.messages.slice(-2);
+    expect(protectedTail).toEqual(messages.slice(6, 8));
+    expect(result.messages).not.toContain(messages[4]);
+    expect(result.messages).not.toContain(messages[5]);
     expect(result.budgetExceeded).toBe(true);
-    // Pruned count > 0 since budget forces dropping u1/a1/u2/a2.
-    expect(result.prunedMessageCount).toBeGreaterThan(0);
+    expect(result.prunedMessageCount).toBe(6);
   });
 
   it("returns budgetExceeded when protected tail alone exceeds budget", () => {
@@ -214,6 +219,7 @@ describe("applyBudget", () => {
     const result = applyBudget(systemPrompt, messages, {
       maxInputTokens: 10_000,
       reservedForResponse: 6_000,
+      protectLastUserTurns: 2,
       estimator: mockEstimator,
     });
 
@@ -223,20 +229,17 @@ describe("applyBudget", () => {
     expect(result.messages.length).toBe(5);
   });
 
-  it("returns budgetExceeded when maxInputTokens <= reservedForResponse", () => {
+  it("rejects maxInputTokens <= reservedForResponse", () => {
     const systemPrompt = contentOfChars(40); // 10 tokens
     const messages: TestMessage[] = [msg("user", contentOfChars(40))];
 
-    const result = applyBudget(systemPrompt, messages, {
-      maxInputTokens: 1_000,
-      reservedForResponse: 2_000, // cap = -1_000
-      estimator: mockEstimator,
-    });
-
-    expect(result.messages).toEqual(messages);
-    expect(result.prunedMessageCount).toBe(0);
-    expect(result.budgetExceeded).toBe(true);
-    expect(result.totalTokens).toBe(10); // only systemTokens
+    expect(() =>
+      applyBudget(systemPrompt, messages, {
+        maxInputTokens: 1_000,
+        reservedForResponse: 2_000,
+        estimator: mockEstimator,
+      }),
+    ).toThrow(/reservedForResponse must be .* smaller than maxInputTokens/);
   });
 
   it("does not prune when total exactly equals budget cap", () => {
@@ -282,6 +285,7 @@ describe("applyBudget", () => {
     const result = applyBudget(systemPrompt, messages, {
       maxInputTokens: 100,
       reservedForResponse: 80, // cap=20
+      protectLastUserTurns: 2,
       estimator: mockEstimator,
     });
 
@@ -289,6 +293,34 @@ describe("applyBudget", () => {
     expect(result.budgetExceeded).toBe(true);
     const placeholderTokens = mockEstimator(result.messages[0]!.content);
     expect(result.totalTokens).toBe(50 + placeholderTokens);
+  });
+
+  it("keeps the newest compacted-history envelope ahead of raw history", () => {
+    const summary = msg(
+      "user",
+      `<compacted_history>\n${contentOfChars(80)}\n</compacted_history>\nRecorded reference data.`,
+    );
+    const messages: TestMessage[] = [
+      summary,
+      msg("user", contentOfChars(400)),
+      msg("assistant", contentOfChars(400)),
+      msg("user", contentOfChars(40)),
+      msg("assistant", contentOfChars(40)),
+    ];
+
+    const result = applyBudget("", messages, {
+      maxInputTokens: 140,
+      reservedForResponse: 40,
+      protectLastUserTurns: 1,
+      estimator: mockEstimator,
+    });
+
+    expect(result.prunedMessageCount).toBe(2);
+    expect(result.messages).toContain(summary);
+    expect(
+      result.messages.map((message) => message.content).join("\n"),
+    ).toContain("<compacted_history>");
+    expect(result.totalTokens).toBeLessThanOrEqual(100);
   });
 });
 

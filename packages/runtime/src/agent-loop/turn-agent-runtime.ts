@@ -10,9 +10,11 @@ import { attachExecutionJournal } from "../execution-journal.js";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
+  applyBudget,
   buildContext,
   buildContextAsync,
   needsAsyncBuild,
+  resolveBudgetOptions,
 } from "@covel/context";
 import type {
   CoreMemoryBlockView,
@@ -42,6 +44,12 @@ import {
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
 
+export interface AgentCompactionRefresh {
+  readonly compacted: boolean;
+  readonly messageHistory: readonly import("@covel/store").TurnMessageRecord[];
+  readonly sessionSummaries: readonly import("@covel/store").SessionSummaryRecord[];
+}
+
 export interface ExecuteAgentRuntimeOptions {
   readonly manifest: RuntimeManifest;
   readonly input: TurnInput;
@@ -66,6 +74,14 @@ export interface ExecuteAgentRuntimeOptions {
   readonly hookPipeline: HookPipeline | undefined;
   readonly sessionSummaries:
     readonly import("@covel/store").SessionSummaryRecord[] | undefined;
+  /**
+   * Turn-scoped compaction barrier. The first assembled agent prompt supplies
+   * the real system prompt used for threshold estimation. When compaction
+   * occurs, the caller returns refreshed durable history for one rebuild.
+   */
+  readonly prepareCompactedContext?: (
+    systemPromptPreview: string,
+  ) => Promise<AgentCompactionRefresh>;
   readonly workingMemory:
     readonly import("@covel/context").WorkingMemoryEntry[] | undefined;
   readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
@@ -94,6 +110,7 @@ export async function executeAgentRuntime({
   sessionMeta,
   hookPipeline,
   sessionSummaries,
+  prepareCompactedContext,
   workingMemory,
   coreMemoryBlocks,
   sessionContext,
@@ -172,7 +189,8 @@ export async function executeAgentRuntime({
   // own state via plugin-data injects, and never read another plugin's output
   // from history. Conservative: player/system messages and prose from any
   // runtime are kept — only structured-looking output is dropped.
-  const filteredHistory = filterRuntimeHistory(messageHistory, manifest.name);
+  let effectiveMessageHistory = messageHistory;
+  let effectiveSessionSummaries = sessionSummaries ?? [];
 
   // Surface player-authored plugin settings to agent prompts as
   // `{{ userSettings.<key> }}`. Merge with manifest defaults so templates
@@ -192,40 +210,57 @@ export async function executeAgentRuntime({
         )
       : undefined;
 
-  const buildParams = {
-    promptTemplate: loaded.promptTemplate,
-    manifest,
-    // Segments 9/10 (Author's Note + Post-History) read authorsNote/postHistory
-    // from activeManifests. Use the locale-resolved `loaded.manifest` (parsed
-    // from PLUGIN.<locale>.md) so an en session gets the localized notes, while
-    // `manifest` (the canonical registry manifest) still drives inject/execution
-    // semantics — avoids any PLUGIN.en.md frontmatter drift leaking into scheduling.
-    activeManifests: [loaded.manifest],
-    turnInput: input,
-    completedResults,
-    messageHistory: filteredHistory,
-    sessionMeta,
-    summaries: sessionSummaries ?? [],
-    workingMemory: workingMemory ?? [],
-    coreMemoryBlocks: coreMemoryBlocks ?? [],
-    // Thread the unified snapshot into context building so templates can
-    // read structured session data via `world`, `session`, and `player`.
-    ...(sessionContext ? { sessionContext } : {}),
-    ...(agentUserSettings ? { userSettings: agentUserSettings } : {}),
-    ...(eventCatalogText ? { eventCatalogText } : {}),
-    ...(activation ? { activation } : {}),
-    ...(inputs && Object.keys(inputs).length > 0 ? { inputSlots: inputs } : {}),
-    ...(exportSlots && Object.keys(exportSlots).length > 0
-      ? { exportSlots }
-      : {}),
-    ...(budgetEligible
-      ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
-      : {}),
-  } as const;
+  const assembleContext = () => {
+    const buildParams = {
+      promptTemplate: loaded.promptTemplate,
+      manifest,
+      // Segments 9/10 (Author's Note + Post-History) read authorsNote/postHistory
+      // from activeManifests. Use the locale-resolved `loaded.manifest` (parsed
+      // from PLUGIN.<locale>.md) so an en session gets the localized notes, while
+      // `manifest` (the canonical registry manifest) still drives inject/execution
+      // semantics — avoids any PLUGIN.en.md frontmatter drift leaking into scheduling.
+      activeManifests: [loaded.manifest],
+      turnInput: input,
+      completedResults,
+      messageHistory: filterRuntimeHistory(
+        effectiveMessageHistory,
+        manifest.name,
+      ),
+      sessionMeta,
+      summaries: effectiveSessionSummaries,
+      workingMemory: workingMemory ?? [],
+      coreMemoryBlocks: coreMemoryBlocks ?? [],
+      // Thread the unified snapshot into context building so templates can
+      // read structured session data via `world`, `session`, and `player`.
+      ...(sessionContext ? { sessionContext } : {}),
+      ...(agentUserSettings ? { userSettings: agentUserSettings } : {}),
+      ...(eventCatalogText ? { eventCatalogText } : {}),
+      ...(activation ? { activation } : {}),
+      ...(inputs && Object.keys(inputs).length > 0
+        ? { inputSlots: inputs }
+        : {}),
+      ...(exportSlots && Object.keys(exportSlots).length > 0
+        ? { exportSlots }
+        : {}),
+      ...(budgetEligible
+        ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
+        : {}),
+    } as const;
 
-  const assembled = needsAsyncBuild({ manifest })
-    ? await buildContextAsync({ ...buildParams, store: deps.store })
-    : buildContext(buildParams);
+    return needsAsyncBuild({ manifest })
+      ? buildContextAsync({ ...buildParams, store: deps.store })
+      : Promise.resolve(buildContext(buildParams));
+  };
+
+  let assembled = await assembleContext();
+  if (prepareCompactedContext) {
+    const refreshed = await prepareCompactedContext(assembled.systemPrompt);
+    if (refreshed.compacted) {
+      effectiveMessageHistory = refreshed.messageHistory;
+      effectiveSessionSummaries = refreshed.sessionSummaries;
+      assembled = await assembleContext();
+    }
+  }
 
   // A prune means this runtime's prompt lost history to fit the slot window —
   // the single place that knows it, so record it before the hook chain can
@@ -260,10 +295,37 @@ export async function executeAgentRuntime({
     },
   );
 
+  // Hooks may append or rewrite prompt content after the assembler's budget
+  // pass. Re-run the same hard budget against the final shaped request; if
+  // the protected tail alone cannot fit, fail explicitly instead of sending
+  // an oversized request and relying on a provider-specific window.
+  const finalContext = budgetEligible
+    ? applyBudget(shapedContext.systemPrompt, shapedContext.messages, {
+        ...deps.contextBudget!,
+        estimator: deps.estimator!,
+      })
+    : undefined;
+  if (finalContext && deps.contextBudget) {
+    const limits = resolveBudgetOptions(deps.contextBudget);
+    const inputLimit = limits.maxInputTokens - limits.reservedForResponse;
+    if (finalContext.totalTokens > inputLimit) {
+      throw new RangeError(
+        `Context budget exceeded after PostContextAssembly for runtime "${manifest.name}": estimated ${finalContext.totalTokens} input tokens, limit ${inputLimit}`,
+      );
+    }
+    if (finalContext.prunedMessageCount > 0 && deps.emitter) {
+      await deps.emitter.emit("context.pruned", {
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        prunedMessageCount: finalContext.prunedMessageCount,
+      });
+    }
+  }
+
   // Build LLM messages
   const messages: LLMMessage[] = [
     { role: "system", content: shapedContext.systemPrompt },
-    ...shapedContext.messages,
+    ...(finalContext?.messages ?? shapedContext.messages),
   ];
 
   const toolLoop = await runAgentToolLoop({
@@ -277,6 +339,9 @@ export async function executeAgentRuntime({
     maxSteps,
     timeoutMs,
     messages,
+    ...(budgetEligible
+      ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
+      : {}),
     hookPipeline,
     startTime,
     runId,

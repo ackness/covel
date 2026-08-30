@@ -145,4 +145,76 @@ describe("saveAutoSnapshot throttling", () => {
       DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS,
     );
   });
+
+  it("captures exactly the summaries referenced by messages through the cursor", async () => {
+    const store = await makeStore(DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS);
+    const now = new Date().toISOString();
+    await store.saveSessionSummary({
+      id: "summary-required",
+      sessionId: "sess-throttle",
+      turnRangeStart: "turn-1",
+      turnRangeEnd: "turn-1",
+      content: "Required history.",
+      focusSections: ["history"],
+      createdAt: now,
+    });
+    await store.saveSessionSummary({
+      id: "summary-orphan",
+      sessionId: "sess-throttle",
+      turnRangeStart: "turn-old",
+      turnRangeEnd: "turn-old",
+      content: "Not referenced by the captured message prefix.",
+      focusSections: [],
+      createdAt: now,
+    });
+    await store.appendTurnMessage({
+      id: "tm-compacted",
+      sessionId: "sess-throttle",
+      turnId: "turn-1",
+      sourceType: "runtime",
+      role: "assistant",
+      content: "Preserved raw history.",
+      order: 0,
+      createdAt: now,
+      compactedAtTurnId: "summary-required",
+    });
+
+    const saved = await saveAutoSnapshot({
+      store,
+      sessionId: "sess-throttle",
+      turnId: "turn-ckpt",
+      intervalTurns: DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS,
+    });
+
+    expect(saved?.payload.sessionSummaries).toEqual([
+      expect.objectContaining({ id: "summary-required" }),
+    ]);
+  });
+
+  it("refuses to capture a compaction tag whose summary is missing", async () => {
+    const store = await makeStore(DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS);
+    await store.appendTurnMessage({
+      id: "tm-orphan-tag",
+      sessionId: "sess-throttle",
+      turnId: "turn-1",
+      sourceType: "runtime",
+      role: "assistant",
+      content: "This raw content must not be hidden by a snapshot.",
+      order: 0,
+      createdAt: new Date().toISOString(),
+      compactedAtTurnId: "missing-summary",
+    });
+
+    await expect(
+      saveAutoSnapshot({
+        store,
+        sessionId: "sess-throttle",
+        turnId: "turn-ckpt",
+        intervalTurns: DEFAULT_AUTO_SNAPSHOT_INTERVAL_TURNS,
+      }),
+    ).rejects.toThrow(
+      "Turn messages reference missing session summary while building snapshot: missing-summary",
+    );
+    expect(await store.listSnapshots("sess-throttle")).toEqual([]);
+  });
 });

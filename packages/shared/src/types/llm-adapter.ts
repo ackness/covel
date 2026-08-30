@@ -154,6 +154,8 @@ export interface LLMAdapter {
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
     readonly responseFormat?: LLMResponseFormat;
+    /** Hard per-request generation limit forwarded to the provider wire. */
+    readonly maxOutputTokens?: number;
     /** Synchronously reports each concrete provider attempt made by a gateway. */
     readonly onTargetAttempt?: (target: LLMTargetIdentity) => void;
     /**
@@ -172,6 +174,8 @@ export interface LLMAdapter {
     readonly model?: string;
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
+    /** @see generate.maxOutputTokens */
+    readonly maxOutputTokens?: number;
     /** @see generate.onTargetAttempt */
     readonly onTargetAttempt?: (target: LLMTargetIdentity) => void;
     /** @see generate.signal */

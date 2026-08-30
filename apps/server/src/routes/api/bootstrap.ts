@@ -84,6 +84,30 @@ import {
   verifyResolvedSessionRead,
 } from "./session/session-guard.js";
 
+type ResolvedTextBudget = NonNullable<ReturnType<ResolveNarrativeBudgetFn>>;
+
+function narrowTextBudgets(
+  ...budgets: readonly (ResolvedTextBudget | undefined)[]
+): ResolvedTextBudget | undefined {
+  const contextWindows = budgets.flatMap((budget) =>
+    budget?.contextWindow !== undefined ? [budget.contextWindow] : [],
+  );
+  const maxOutputTokens = budgets.flatMap((budget) =>
+    budget?.maxOutputTokens !== undefined ? [budget.maxOutputTokens] : [],
+  );
+  if (contextWindows.length === 0 && maxOutputTokens.length === 0) {
+    return undefined;
+  }
+  return {
+    ...(contextWindows.length > 0
+      ? { contextWindow: Math.min(...contextWindows) }
+      : {}),
+    ...(maxOutputTokens.length > 0
+      ? { maxOutputTokens: Math.min(...maxOutputTokens) }
+      : {}),
+  };
+}
+
 // ── Bootstrap config ─────────────────────────────────────────────
 
 export interface ApiBootstrapConfig {
@@ -182,10 +206,9 @@ export interface ApiBootstrapConfig {
   readonly mediaBackend?: MediaStoreBackend;
   readonly vectorBackend?: VectorBackend;
   /**
-   * Live view of the main narrative slot's model budget (contextWindow /
-   * maxOutputTokens), built by the composition root against the AI
-   * registries. Drives the compaction threshold and the prompt-assembly
-   * hard prune. Absent (tests, minimal harnesses) → fixed fallback window.
+   * Live conservative text-slot budget (contextWindow / maxOutputTokens),
+   * built by the composition root against the AI registries. Drives the
+   * compaction threshold and hard prune. Absent → fixed fallback window.
    */
   readonly resolveNarrativeBudget?: ResolveNarrativeBudgetFn;
 }
@@ -642,7 +665,13 @@ export async function bootstrapApi(
       const requestBudgetSource = {
         ...budgetSource,
         ...(requestCapability
-          ? { resolveNarrativeBudget: () => requestCapability }
+          ? {
+              resolveNarrativeBudget: () =>
+                narrowTextBudgets(
+                  budgetSource.resolveNarrativeBudget?.(),
+                  requestCapability,
+                ),
+            }
           : {}),
       };
       c.set(

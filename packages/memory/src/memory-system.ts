@@ -31,6 +31,7 @@ import {
   createVectorIngestor,
   type VectorIngestor,
 } from "./vector-ingest.js";
+import { trackMemoryBackgroundTask } from "./background-tasks.js";
 
 export interface CreateMemorySystemOptions {
   readonly coreMemory?: CoreMemoryConfig;
@@ -130,7 +131,10 @@ export function createMemorySystem(
     archival,
 
     async ingest(sessionId) {
-      return ingestor.ingest(sessionId);
+      return trackMemoryBackgroundTask(ingestor.ingest(sessionId), {
+        kind: "vector-ingest",
+        sessionId,
+      });
     },
   };
 }

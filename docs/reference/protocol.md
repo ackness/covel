@@ -288,7 +288,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 >
 > `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` trace 插件自带 wire 的 provider HTTP 调用（`ctx.utils.fetchWithRetry`，图像生成插件走的路径，由 `withUtilsTrace` 在 function-runtime / agent-guard 注入处包裹）。`forwardToActionStream: false`——polling 可能高频，故仅经 trace_events + 订阅通道驱动 `/debug`，不进 action 流。负载仅含 host / method / status / durationMs（**绝不含完整 URL、query、api key**，PII 保护）。
 >
-> `context.pruned`（TurnEmitter，`packages/runtime/src/agent-loop/turn-agent-runtime.ts`）在某个 runtime 的 prompt 组装触发预算硬裁剪时发出一次，负载为 `{ runtimeId, pluginId, prunedMessageCount }`。`forwardToActionStream: false`——仅进 trace_events / 订阅通道，让 `/debug` 能解释「这一回合掉了历史」，玩家侧的 action 流不受影响。
+> `context.pruned`（TurnEmitter）在 prompt 初次组装、`PostContextAssembly` 改写后或 tool loop 某一步的实际请求触发预算硬裁剪时发出，负载为 `{ runtimeId, pluginId, prunedMessageCount }`；同一 runtime 一回合可能出现多次。`forwardToActionStream: false`——仅进 trace_events / 订阅通道，让 `/debug` 能解释「哪一步掉了历史」，玩家侧 action 流不受影响。若受保护尾部、压缩摘要、工具 schema 与响应 schema 本身已经无法装入预算，runtime 会在调用 provider 前显式失败。
 
 ## 二、命令类型（CommandType）
 

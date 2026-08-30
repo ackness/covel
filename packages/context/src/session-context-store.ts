@@ -74,6 +74,11 @@ export interface SessionContextStore {
     messageIds: readonly string[],
     summaryId: string,
   ): Promise<void>;
+  retagCompactedTurnMessages(
+    sessionId: string,
+    summaryId: string,
+  ): Promise<void>;
+  deleteSessionSummaries(sessionId: string): Promise<void>;
   addTraceEvent(record: TraceEventRecord): Promise<void>;
 
   /**

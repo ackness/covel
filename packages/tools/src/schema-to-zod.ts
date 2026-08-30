@@ -107,15 +107,19 @@ function attributeToZod(attr: AttributeDefinition): ZodType {
 }
 
 /**
- * Build a human-readable description per attribute — combines `name` with
- * any category / constraint hints so the LLM sees both the label and the
- * structural expectation in the field description. Kept short: the attribute
- * description itself is the primary source for longer prose.
+ * Build a compact human-readable description per attribute. The JSON schema
+ * already carries type/range/enum structure; repeating each world's full
+ * prose description in both create-character and update-character made those
+ * two tool definitions exceed small model windows before any history was
+ * added. Keep the localized label, category, and terse structural hints only.
  */
 function attrDescribe(attr: AttributeDefinition): string {
   // `name` / `description` may be i18n records; flatten to a plain label for
   // the LLM-facing field description (no locale → first available value).
-  const parts: string[] = [resolveI18nText(attr.name) ?? ""];
+  const parts: string[] = [
+    resolveI18nText(attr.name) ?? "",
+    `[${attr.category}]`,
+  ];
 
   switch (attr.type) {
     case "number": {
@@ -136,7 +140,5 @@ function attrDescribe(attr: AttributeDefinition): string {
       break;
   }
 
-  const desc = resolveI18nText(attr.description);
-  if (desc) parts.push(`— ${desc}`);
   return parts.join(" ");
 }

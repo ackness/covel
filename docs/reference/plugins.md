@@ -239,11 +239,11 @@ Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填
 | outputKind      | `story`（输出显示在主聊天区）                                                                                                              |
 | model           | `story`                                                                                                                                    |
 | capabilities    | `[narrative, narrative-engine]`                                                                                                            |
-| tools.builtin   | `world-dimension-get`、`emit-event`                                                                                                        |
+| tools.builtin   | `world-dimension-get`、`memory-search`、`emit-event`                                                                                       |
 | advertiseEvents | `true`（segment 5 注入 `<available-events>` 目录）                                                                                         |
 | input.inject    | `npc-graph/rag-retriever` → `npcContext` → `<npc-relationships>`；`dice-check/roller` → `checkContext` → `<check-results>`（缺席解析为空） |
 
-**职责**: 根据玩家输入、世界观和历史上下文生成主线叙事。输出 `narrativeOutput` 字段供其他插件引用；需要精确世界字段时调用 `world-dimension-get` 按需读取。
+**职责**: 根据玩家输入、世界观和历史上下文生成主线叙事。输出 `narrativeOutput` 字段供其他插件引用；需要精确世界字段时调用 `world-dimension-get` 按需读取；玩家追问已离开窗口的旧事件时可调用 `memory-search` 检索 recall / archival 记忆。
 
 **上下文变量**:
 
@@ -542,17 +542,18 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 ### char-creator/player-init
 
-| 字段         | 值                                                                                                                     |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| pluginType   | `core-plugin`（不可禁用）                                                                                              |
-| stage        | `setup`                                                                                                                |
-| runtimeType  | `agent`（默认，LLM 生成开场表单；guard 命中时跳过）                                                                    |
-| trigger      | `auto`（`guard` 门控）                                                                                                 |
-| needs        | `[pregame, world-init/schema-gen]`（turn-scoped：既是同 pass 的 DAG 边，也是同回合上游门控）                           |
-| input.inject | `world-init/schema-gen.worldSchema` → `<same-turn-world-schema>`；同轮结构化 schema 优先，已提交的 `world.schema` 兜底 |
-| guard        | `./guard.js` — 若 player 已存在或已收到表单提交则 skip LLM                                                             |
-| model        | `plugin`                                                                                                               |
-| ui.right     | `../../ui/character-panel.json`                                                                                        |
+| 字段               | 值                                                                                                                     |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| pluginType         | `core-plugin`（不可禁用）                                                                                              |
+| stage              | `setup`                                                                                                                |
+| runtimeType        | `agent`（默认，LLM 生成开场表单；guard 命中时跳过）                                                                    |
+| trigger            | `auto`（`guard` 门控）                                                                                                 |
+| needs              | `[pregame, world-init/schema-gen]`（turn-scoped：既是同 pass 的 DAG 边，也是同回合上游门控）                           |
+| input.inject       | `world-init/schema-gen.worldSchema` → `<same-turn-world-schema>`；同轮结构化 schema 优先，已提交的 `world.schema` 兜底 |
+| guard              | `./guard.js` — 若 player 已存在或已收到表单提交则 skip LLM                                                             |
+| completeAfterTools | `[create-form]` — 表单创建成功即结束 runtime，不为调用 `runtime-done` 再消耗一次模型请求                               |
+| model              | `plugin`                                                                                                               |
+| ui.right           | `../../ui/character-panel.json`                                                                                        |
 
 **两步流程**（第 1 步由 LLM agent 完成，第 2 步由 `guard.js` 确定性完成）：
 
@@ -571,15 +572,16 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 ### char-creator/character-tracker
 
-| 字段          | 值                                                                                                                                                                                                                                                                                           |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| pluginType    | `core-plugin`                                                                                                                                                                                                                                                                                |
-| stage         | `post-turn`（与 guide / codex / extractor 同 stage 并行）                                                                                                                                                                                                                                    |
-| trigger       | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                                                                                               |
-| model         | `plugin`                                                                                                                                                                                                                                                                                     |
-| tools.builtin | `create-character`, `update-character`, `get-character`（`get-character` 仅在注入名册被截断时按需调用；不声明 `list-characters`——名册已由 `<existing-characters>` 注入）                                                                                                                     |
-| input.inject  | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）；`plugin-data[characters]` → `<existing-characters>`（`format: summary`，现有角色名册在构建 prompt 时注入，免去每轮 `list-characters` 往返 —— 同 codex `<existing-entries>` 模式） |
-| needs         | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip                                                                                                                                                                                                       |
+| 字段               | 值                                                                                                                                                                                                                                                                                           |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pluginType         | `core-plugin`                                                                                                                                                                                                                                                                                |
+| stage              | `post-turn`（与 guide / codex / extractor 同 stage 并行）                                                                                                                                                                                                                                    |
+| trigger            | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                                                                                               |
+| model              | `plugin`                                                                                                                                                                                                                                                                                     |
+| tools.builtin      | `create-character`, `update-character`, `get-character`；高频 `update-character` 直接广播，`create-character` / `get-character` 通过 `tools.defer` + `search-tools` 按需激活（不声明 `list-characters`——名册已由 `<existing-characters>` 注入）                                              |
+| completeAfterTools | `[create-character, update-character]` — 同一响应批次中的写入全部成功后直接结束，不额外请求 `runtime-done`                                                                                                                                                                                   |
+| input.inject       | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）；`plugin-data[characters]` → `<existing-characters>`（`format: summary`，现有角色名册在构建 prompt 时注入，免去每轮 `list-characters` 往返 —— 同 codex `<existing-entries>` 模式） |
+| needs              | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip                                                                                                                                                                                                       |
 
 **职责**: 每轮扫描 narrator 输出，发现新的有名字 NPC → `create-character(type="npc")`；检测叙事中的角色状态变化（受伤、死亡、装备、关系）→ `update-character(fields: {...})`。工作流：
 
@@ -723,7 +725,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 | capabilities    | `[narrative, chat-mode, narrative-engine]`                                                                                                                                           |
 | tags            | `mode:dialogue` · `role:narrator`                                                                                                                                                    |
 | relations       | `conflicts: narrator`；`requires: scene-cast, scene-stage, scene-prompts, character-blueprint, character-presence, living-world-rules, branch-reply`                                 |
-| tools.builtin   | `emit-event`                                                                                                                                                                         |
+| tools.builtin   | `world-dimension-get`、`memory-search`、`emit-event`                                                                                                                                 |
 | advertiseEvents | `true`（segment 5 注入 `<available-events>` 目录）                                                                                                                                   |
 | input.inject    | `scene-cast/activeCastContext` → `<active-cast>`；`npc-graph/rag-retriever/npcContext` → `<npc-relationships>`；`dice-check/roller/checkContext` → `<check-results>`（缺席解析为空） |
 
@@ -736,7 +738,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 > 上场角色数由 **scene-cast** 的 `activeSpeakerCount` 控制（它是实际裁剪 cast 的插件）——userSettings 按声明插件作用域隔离，所以这个旋钮必须挂在 scene-cast 上。chat-mode-narrator 的 prompt 以注入的 `<active-cast>` 实际人数为准，不再自带该设置（修复了"narrator 被告知 N、cast 却恒为 2"的分裂大脑）。
 
-**职责**：启用时 `relations.conflicts` 自动顶替 `narrator`，`relations.requires` 自动拉起整套对话子系统。是 `dialogue-mode` preset 的核心。
+**职责**：启用时 `relations.conflicts` 自动顶替 `narrator`，`relations.requires` 自动拉起整套对话子系统。是 `dialogue-mode` preset 的核心；常驻 prompt 使用短世界摘要，精确世界字段由 `world-dimension-get` 按需读取；玩家追问已离开窗口的旧对话、承诺或线索时可调用 `memory-search` 检索 recall / archival 记忆。
 
 ---
 

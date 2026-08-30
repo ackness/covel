@@ -36,6 +36,16 @@ export { DEFAULT_CORE_MEMORY_BLOCKS } from "./types.js";
 
 export type { EmbedFn } from "./vector-common.js";
 
+export {
+  awaitPendingMemoryBackgroundTasks,
+  pendingMemoryBackgroundTaskCount,
+} from "./background-tasks.js";
+export type {
+  MemoryBackgroundDrainResult,
+  MemoryBackgroundTaskInfo,
+  MemoryBackgroundTaskKind,
+} from "./background-tasks.js";
+
 // ── Memory system facade ─────────────────────────────────────────
 export { createMemorySystem } from "./memory-system.js";
 export type { CreateMemorySystemOptions } from "./memory-system.js";

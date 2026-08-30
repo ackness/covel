@@ -111,7 +111,7 @@ flowchart TB
       direction TB
       G1["guard? (agent runtime)"] --> G2["SSE: runtime.started"]
       G2 --> G3["PreRuntime hook"]
-      G3 --> G4["buildContext<br/>PLUGIN.md + 注入块 + 消息历史<br/>→ PostContextAssembly hook(改写 systemPrompt/历史)"]
+      G3 --> G4["buildContext<br/>PLUGIN.md + 注入块 + 消息历史<br/>→ 首个 agent 按真实 system prompt 压缩并重建<br/>→ PostContextAssembly hook 后再次预算"]
       G4 --> G5["LLM + ToolExecutor loop<br/>每次调用: PreLLMCall → LLM → PostLLMResponse<br/>每个工具: PreToolUse → execute → PostToolUse(可 terminate)"]
       G5 --> G6["normalizeOutput → Proposal[]"]
       G6 --> G7["PostRuntime hook"]

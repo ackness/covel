@@ -573,6 +573,10 @@ export function renderCoreMemory(
     | readonly { label: string; content: string; displayName?: I18nText }[]
     | undefined,
   locale?: string,
+  budget?: {
+    readonly maxTokens: number;
+    readonly estimator: (text: string) => number;
+  },
 ): string {
   if (!blocks || blocks.length === 0) return "";
 
@@ -585,7 +589,7 @@ export function renderCoreMemory(
   // so no block vocabulary is hardcoded here — the raw label is the fallback.
   const header =
     localeLanguage(locale) === "en" ? "[Core Memory]" : "[核心记忆]";
-  const sections = nonEmpty.map((b) => {
+  const sectionInputs = nonEmpty.map((b) => {
     const label = resolveI18nText(b.displayName, locale) ?? b.label;
     // a core-memory block is DATA that the model itself wrote in
     // an earlier turn (the memory updater persists model output). Both halves
@@ -598,10 +602,78 @@ export function renderCoreMemory(
     // Unsafe labels fall back to a generic tag rather than throwing: a bad
     // label must not take down the whole prompt build.
     const tag = /^[a-zA-Z0-9_-]+$/.test(b.label) ? b.label : "memory-block";
-    return `<${tag}>\n# ${escapeXmlContent(label)}\n${escapeXmlContent(b.content)}\n</${tag}>`;
+    return {
+      tag,
+      label: escapeXmlContent(label),
+      content: escapeXmlContent(b.content),
+    };
   });
 
-  return `${header}\n${sections.join("\n\n")}`;
+  const renderSections = (contentTokenCap?: number): string => {
+    const sections = sectionInputs.map((input) => {
+      const content =
+        contentTokenCap === undefined
+          ? input.content
+          : truncateMemoryContent(
+              input.content,
+              contentTokenCap,
+              budget!.estimator,
+            );
+      return `<${input.tag}>\n# ${input.label}\n${content}\n</${input.tag}>`;
+    });
+    return `${header}\n${sections.join("\n\n")}`;
+  };
+
+  const full = renderSections();
+  if (!budget || budget.estimator(full) <= budget.maxTokens) return full;
+
+  // Apply one shared per-block cap. Short blocks keep their full content and
+  // the remaining allowance flows to longer blocks as the cap rises, so every
+  // declared memory category stays visible without letting total core memory
+  // grow unbounded as worlds add blocks.
+  let low = 0;
+  let high = Math.max(
+    ...sectionInputs.map((input) => budget.estimator(input.content)),
+  );
+  let best = renderSections(0);
+  while (low <= high) {
+    const cap = Math.floor((low + high) / 2);
+    const candidate = renderSections(cap);
+    if (budget.estimator(candidate) <= budget.maxTokens) {
+      best = candidate;
+      low = cap + 1;
+    } else {
+      high = cap - 1;
+    }
+  }
+  return best;
+}
+
+const MEMORY_TRUNCATION_MARKER = "… [truncated]";
+
+function truncateMemoryContent(
+  content: string,
+  maxTokens: number,
+  estimator: (text: string) => number,
+): string {
+  if (estimator(content) <= maxTokens) return content;
+  if (maxTokens <= 0) return "";
+  if (estimator(MEMORY_TRUNCATION_MARKER) >= maxTokens) return "…";
+
+  let low = 0;
+  let high = content.length;
+  let best = MEMORY_TRUNCATION_MARKER;
+  while (low <= high) {
+    const end = Math.floor((low + high) / 2);
+    const candidate = `${content.slice(0, end).trimEnd()}${MEMORY_TRUNCATION_MARKER}`;
+    if (estimator(candidate) <= maxTokens) {
+      best = candidate;
+      low = end + 1;
+    } else {
+      high = end - 1;
+    }
+  }
+  return best;
 }
 
 /**

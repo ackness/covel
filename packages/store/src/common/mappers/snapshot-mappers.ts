@@ -58,6 +58,14 @@ function requireSnapshotPayload(value: unknown): SnapshotPayload {
     );
   }
   requireRecord(payload.session, "snapshot session");
+  if (
+    payload.sessionSummaries !== undefined &&
+    !Array.isArray(payload.sessionSummaries)
+  ) {
+    throw new Error(
+      "Invalid snapshot payload sessionSummaries: expected array",
+    );
+  }
   return payload as unknown as SnapshotPayload;
 }
 

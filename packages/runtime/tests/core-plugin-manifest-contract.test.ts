@@ -79,6 +79,7 @@ describe("core plugin manifest contract", () => {
       model: "plugin",
       guard: "./guard.js",
       trigger: { type: "auto" },
+      completeAfterTools: ["create-form"],
       // Turn-scoped needs carry both the intra-stage order and the same-turn
       // gate; the explicit stage picks the band.
       needs: ["pregame", "world-init/schema-gen"],
@@ -110,6 +111,7 @@ describe("core plugin manifest contract", () => {
     const manifests = await loadRuntimeManifests();
     const retriever = requireRuntime(manifests, "npc-graph/rag-retriever");
     const narrator = requireRuntime(manifests, "narrator");
+    const chatModeNarrator = requireRuntime(manifests, "chat-mode-narrator");
     const rawDownstreamIds = ["guide", "char-creator/character-tracker"];
     const structuredDownstreamIds = [
       "codex",
@@ -157,6 +159,12 @@ describe("core plugin manifest contract", () => {
     ]);
     expect(narrator.tools?.builtin).toEqual([
       "world-dimension-get",
+      "memory-search",
+      "emit-event",
+    ]);
+    expect(chatModeNarrator.tools?.builtin).toEqual([
+      "world-dimension-get",
+      "memory-search",
       "emit-event",
     ]);
 

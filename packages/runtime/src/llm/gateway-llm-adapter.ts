@@ -129,6 +129,8 @@ export interface GatewayLike {
       signal?: AbortSignal;
       slotOverrides?: SlotOverridesInput;
       capabilityOverridePolicy?: CapabilityOverridePolicy;
+      /** Request-hard generation limit; gateway applies it after metadata. */
+      parameterOverrides?: { maxOutputTokens?: number };
       onTargetAttempt?: (target: LLMTargetIdentity) => void;
     },
   ): Promise<{
@@ -166,6 +168,8 @@ export interface GatewayLike {
       signal?: AbortSignal;
       slotOverrides?: SlotOverridesInput;
       capabilityOverridePolicy?: CapabilityOverridePolicy;
+      /** @see generateText options.parameterOverrides */
+      parameterOverrides?: { maxOutputTokens?: number };
       onTargetAttempt?: (target: LLMTargetIdentity) => void;
     },
   ): AsyncIterable<{
@@ -259,6 +263,13 @@ export function createGatewayAdapter(
           ...(config?.capabilityOverridePolicy
             ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
             : {}),
+          ...(params.maxOutputTokens !== undefined
+            ? {
+                parameterOverrides: {
+                  maxOutputTokens: params.maxOutputTokens,
+                },
+              }
+            : {}),
           ...(params.signal ? { signal: params.signal } : {}),
           ...(params.onTargetAttempt
             ? { onTargetAttempt: params.onTargetAttempt }
@@ -309,6 +320,13 @@ export function createGatewayAdapter(
             : {}),
           ...(config?.capabilityOverridePolicy
             ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
+            : {}),
+          ...(params.maxOutputTokens !== undefined
+            ? {
+                parameterOverrides: {
+                  maxOutputTokens: params.maxOutputTokens,
+                },
+              }
             : {}),
           ...(params.signal ? { signal: params.signal } : {}),
           ...(params.onTargetAttempt

@@ -7,14 +7,14 @@ describe("createTurnContextBudget", () => {
       contextWindowOverride: 8000,
       resolveNarrativeBudget: () => ({
         contextWindow: 128_000,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 1024,
       }),
     });
 
     expect(budget.maxInputTokens).toBe(8000);
     // reservedForResponse still comes from capability — the override only
     // pins the window.
-    expect(budget.reservedForResponse).toBe(8192);
+    expect(budget.reservedForResponse).toBe(1024);
   });
 
   it("derives window and reserve from the narrative slot capability", () => {
@@ -46,4 +46,26 @@ describe("createTurnContextBudget", () => {
     window = 1_000_000;
     expect(budget.maxInputTokens).toBe(1_000_000);
   });
+
+  it.each([
+    ["non-positive window", { contextWindow: 0, maxOutputTokens: 1 }],
+    [
+      "reserve equal to window",
+      { contextWindow: 8_000, maxOutputTokens: 8_000 },
+    ],
+    [
+      "reserve larger than window",
+      { contextWindow: 8_000, maxOutputTokens: 8_001 },
+    ],
+  ])(
+    "rejects %s instead of silently producing an unusable budget",
+    (_label, values) => {
+      const budget = createTurnContextBudget({
+        resolveNarrativeBudget: () => values,
+      });
+
+      expect(() => budget.maxInputTokens).toThrow(RangeError);
+      expect(() => budget.reservedForResponse).toThrow(RangeError);
+    },
+  );
 });

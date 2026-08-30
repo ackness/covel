@@ -980,6 +980,52 @@ describe("resumeSuspendedRuntime", () => {
     );
   });
 
+  it("re-applies the context budget after a resumed tool step grows the transcript", async () => {
+    const suspensionId = await createTestSuspension("tc-budget-resume");
+    let attempts = 0;
+    let firstMaxOutputTokens: number | undefined;
+    const llm: LLMAdapter = {
+      async generate(params) {
+        attempts += 1;
+        firstMaxOutputTokens ??= params.maxOutputTokens;
+        return {
+          content: null,
+          toolCalls: [
+            {
+              id: "tc-large-resume",
+              name: "mark",
+              arguments: JSON.stringify({ note: "x".repeat(3_000) }),
+            },
+          ],
+          finishReason: "tool_calls",
+          usage: { inputTokens: 5, outputTokens: 5 },
+        };
+      },
+    };
+    const manifest = makeManifest();
+    const loaded: LoadedRuntime = { manifest, promptTemplate: "" };
+    const suspension = await store.getSuspension(suspensionId);
+    const deps: TurnExecutorDeps = {
+      loadRuntime: async () => loaded,
+      llm,
+      store,
+      toolExecutor: mockToolExecutor,
+      eventBus,
+      estimator: (text) => text.length,
+      contextBudget: {
+        maxInputTokens: 1_000,
+        reservedForResponse: 100,
+        protectLastUserTurns: 1,
+      },
+    };
+
+    await expect(
+      resumeSuspendedRuntime(suspension!, { name: "Budget" }, manifest, deps),
+    ).rejects.toThrow(/Context budget exceeded before LLM call/);
+    expect(attempts).toBe(1);
+    expect(firstMaxOutputTokens).toBe(100);
+  });
+
   it("fires PreLLMCall / PostLLMResponse hooks on the resume path", async () => {
     const suspensionId = await createTestSuspension("tc-resume-hooks");
 

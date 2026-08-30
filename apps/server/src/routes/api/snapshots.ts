@@ -30,6 +30,7 @@ import type {
   CharacterRecord,
   StateEntryRecord,
   PluginDataRecord,
+  SessionSummaryRecord,
   SuspensionRecord,
   WorkingMemoryRecord,
   TurnMessageRecord,
@@ -481,7 +482,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             >();
             for (const exp of parentExports) {
               if (exp.committedAt > snapshot.createdAt) continue;
-              const key = `${exp.producerRuntimeId} ${exp.recordAs}`;
+              const key = `${exp.producerRuntimeId}\u0000${exp.recordAs}`;
               const prev = visibleLatest.get(key);
               if (!prev || exp.revision > prev.revision) {
                 visibleLatest.set(key, exp);
@@ -538,6 +539,26 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             // messages silently when the cursor id could not be found. Now the
             // missing cursor surfaces as a 409 so callers can decide how to recover
             // rather than inheriting an unbounded prefix.
+            //
+            // Current v3 payloads carry the summaries referenced at capture
+            // time. Re-mint those ids and rewrite each copied message tag.
+            // Legacy v3 payloads have no sessionSummaries field; their raw
+            // message content is still present, so clear every compaction tag
+            // rather than hiding history behind a missing summary.
+            const capturedSummaries = snapshot.payload.sessionSummaries;
+            const capturedSummaryById = new Map(
+              (capturedSummaries ?? []).map(
+                (summary) => [summary.id, summary] as const,
+              ),
+            );
+            const capturedMessageSummaryIds =
+              capturedSummaries === undefined
+                ? undefined
+                : snapshot.payload.compactedMessageSummaryIds;
+            const summaryIdMap = new Map<string, string>();
+            const childSessionSummaries: SessionSummaryRecord[] = [];
+            const childCompactedMessageSummaryIds: Record<string, string> = {};
+            let childMessagesCursor = "";
             if (snapshot.payload.messagesCursor !== "") {
               const parentMessages = await tx.listTurnMessages(parentSessionId);
               const cursorIdx = parentMessages.findIndex(
@@ -549,12 +570,46 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               }
               for (let i = 0; i <= cursorIdx; i++) {
                 const m = parentMessages[i]!;
+                let compactedAtTurnId: string | undefined;
+                const capturedSummaryId =
+                  capturedSummaries === undefined
+                    ? undefined
+                    : (capturedMessageSummaryIds?.[m.id] ??
+                      (capturedMessageSummaryIds === undefined
+                        ? m.compactedAtTurnId
+                        : undefined));
+                if (capturedSummaryId !== undefined) {
+                  const capturedSummary =
+                    capturedSummaryById.get(capturedSummaryId);
+                  if (capturedSummary) {
+                    let childSummaryId = summaryIdMap.get(capturedSummary.id);
+                    if (!childSummaryId) {
+                      childSummaryId = randomUUID();
+                      summaryIdMap.set(capturedSummary.id, childSummaryId);
+                      const childSummary: SessionSummaryRecord = {
+                        ...capturedSummary,
+                        id: childSummaryId,
+                        sessionId: childSessionId,
+                      };
+                      await tx.saveSessionSummary(childSummary);
+                      childSessionSummaries.push(childSummary);
+                    }
+                    compactedAtTurnId = childSummaryId;
+                  }
+                }
+                const childMessageId = randomUUID();
                 const copy: TurnMessageRecord = {
                   ...m,
-                  id: randomUUID(),
+                  id: childMessageId,
                   sessionId: childSessionId,
+                  compactedAtTurnId,
                 };
                 await tx.appendTurnMessage(copy);
+                if (compactedAtTurnId !== undefined) {
+                  childCompactedMessageSummaryIds[childMessageId] =
+                    compactedAtTurnId;
+                }
+                childMessagesCursor = copy.id;
               }
             }
 
@@ -566,7 +621,12 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               turnId: snapshot.turnId,
               kind: "fork",
               parentId: snapshot.id,
-              payload: snapshot.payload,
+              payload: {
+                ...snapshot.payload,
+                sessionSummaries: childSessionSummaries,
+                compactedMessageSummaryIds: childCompactedMessageSummaryIds,
+                messagesCursor: childMessagesCursor,
+              },
               createdAt: now,
             };
             await tx.saveSnapshot(built);

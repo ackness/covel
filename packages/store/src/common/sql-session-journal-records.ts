@@ -20,7 +20,16 @@
  *    return unified across both backends.
  */
 
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+} from "drizzle-orm";
 import type { Column, Table } from "drizzle-orm";
 
 import {
@@ -107,6 +116,7 @@ export type SqlSessionJournalRecords = Pick<
   | "getTurnMessageStats"
   | "listRecentTurnMessages"
   | "tagTurnMessagesCompacted"
+  | "retagCompactedTurnMessages"
   | "savePlayerInput"
   | "listPlayerInputs"
   | "saveSessionSummary"
@@ -259,6 +269,20 @@ export function createSqlSessionJournalRecords(
         and(
           eq(turnMessages.sessionId, sessionId),
           inArray(turnMessages.id, [...messageIds]),
+        ),
+      );
+    },
+
+    async retagCompactedTurnMessages(
+      sessionId: string,
+      summaryId: string,
+    ): Promise<void> {
+      await runner.update(
+        turnMessages,
+        { compactedAtTurnId: summaryId },
+        and(
+          eq(turnMessages.sessionId, sessionId),
+          isNotNull(turnMessages.compactedAtTurnId),
         ),
       );
     },

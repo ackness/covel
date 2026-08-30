@@ -101,7 +101,7 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
     expect(state.turnNumber).toBe(1);
   });
 
-  it("re-reads the uncompacted suffix after compaction actually runs", async () => {
+  it("defers compaction until an agent supplies its assembled system prompt", async () => {
     const base = await makeStore();
     const { store, counts } = countingStore(base);
     const deps = {
@@ -121,10 +121,11 @@ describe("loadTurnSessionState read dedup (audit R-13)", () => {
       shouldAppendPlayerMessage: true,
     });
 
-    // One initial read + the post-compaction reload; the stats aggregate
-    // still runs exactly once and the full log is never read.
+    // Session loading performs one bounded read. Compaction now happens at the
+    // first real agent assembly, where its system prompt is available, rather
+    // than here with an empty preview.
     expect(counts()).toEqual({
-      listUncompactedTurnMessages: 2,
+      listUncompactedTurnMessages: 1,
       getTurnMessageStats: 1,
     });
   });

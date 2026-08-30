@@ -510,6 +510,8 @@ interface UIRenderPart {
 
 ### create-character
 
+`create-character` 与 `update-character` 的 LLM wire schema 把 `fields` 保持为紧凑对象，不在两份工具定义中重复整个世界属性表。权威 id、类型、范围、enum、默认值和说明仍保存在会话 world schema；执行边界按该 schema 合并默认值、校验并返回 warning。这样 8k 等小窗口 slot 不会仅因角色属性较多就被两份重复 JSON Schema 占满。
+
 创建一个新的角色记录（玩家、NPC 或同伴）。同 session 内同 `(name, type)` 会自动去重 —— 返回已存在的角色 id，不会创建重复项。
 
 | 参数        | 类型                    | 必需 | 描述                                                      |

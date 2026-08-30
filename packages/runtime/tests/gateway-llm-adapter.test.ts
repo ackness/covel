@@ -90,6 +90,32 @@ describe("createGatewayAdapter target resolution", () => {
     expect(observed).toEqual([{ provider: "backup", model: "backup-model" }]);
   });
 
+  it("forwards maxOutputTokens as a request-hard parameter override", async () => {
+    const optionsSeen: Array<Parameters<GatewayLike["generateText"]>[1]> = [];
+    const gateway: GatewayLike = {
+      resolveSlot() {
+        return { provider: "qwen", model: "qwen-test" };
+      },
+      async generateText(_input, options) {
+        optionsSeen.push(options);
+        return {
+          text: "ok",
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    };
+
+    await createGatewayAdapter(gateway).generate({
+      messages: [{ role: "user", content: "hi" }],
+      maxOutputTokens: 1024,
+    });
+
+    expect(optionsSeen[0]?.parameterOverrides).toEqual({
+      maxOutputTokens: 1024,
+    });
+  });
+
   it("preserves prompt cache usage from the gateway", async () => {
     const gateway: GatewayLike = {
       resolveSlot() {
@@ -162,5 +188,32 @@ describe("createGatewayAdapter target resolution", () => {
         },
       },
     ]);
+  });
+
+  it("forwards maxOutputTokens to streamed gateway calls", async () => {
+    let streamOptions: Parameters<NonNullable<GatewayLike["streamText"]>>[1];
+    const gateway: GatewayLike = {
+      resolveSlot() {
+        return { provider: "qwen", model: "qwen-test" };
+      },
+      async generateText() {
+        throw new Error("unused");
+      },
+      async *streamText(_input, options) {
+        streamOptions = options;
+        yield { type: "done", finishReason: "stop" };
+      },
+    };
+
+    for await (const _event of createGatewayAdapter(gateway).stream!({
+      messages: [{ role: "user", content: "hi" }],
+      maxOutputTokens: 512,
+    })) {
+      // exhaust stream
+    }
+
+    expect(streamOptions!.parameterOverrides).toEqual({
+      maxOutputTokens: 512,
+    });
   });
 });

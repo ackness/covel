@@ -71,6 +71,9 @@ export function buildWorldContextView(input: BuildViewInput): WorldContextView {
 
   return {
     id,
+    name: worldRecord?.name,
+    description: worldRecord?.description,
+    tags: worldRecord?.tags,
     lore: worldRecord?.lore,
     tone,
     openingScenario,

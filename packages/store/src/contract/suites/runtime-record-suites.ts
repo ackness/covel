@@ -1081,6 +1081,37 @@ export function registerRuntimeRecordStoreSuites(
       expect(messages[0].compactedAtTurnId).toBeUndefined();
     });
 
+    it("retagCompactedTurnMessages only repoints already-compacted rows in the session", async () => {
+      const old = makeTurnMessage({
+        sessionId: "sess-retag",
+        id: id(),
+        compactedAtTurnId: "summary-old",
+      });
+      const fresh = makeTurnMessage({ sessionId: "sess-retag", id: id() });
+      const other = makeTurnMessage({
+        sessionId: "sess-retag-other",
+        id: id(),
+        compactedAtTurnId: "summary-other",
+      });
+      await store.appendTurnMessage(old);
+      await store.appendTurnMessage(fresh);
+      await store.appendTurnMessage(other);
+
+      await store.retagCompactedTurnMessages("sess-retag", "summary-merged");
+
+      const messages = await store.listTurnMessages("sess-retag");
+      expect(
+        messages.find((message) => message.id === old.id)?.compactedAtTurnId,
+      ).toBe("summary-merged");
+      expect(
+        messages.find((message) => message.id === fresh.id)?.compactedAtTurnId,
+      ).toBeUndefined();
+      expect(
+        (await store.listTurnMessages("sess-retag-other"))[0]
+          ?.compactedAtTurnId,
+      ).toBe("summary-other");
+    });
+
     it("should not tag messages from other sessions", async () => {
       const m1 = makeTurnMessage({ sessionId: "sess-tag-a", id: id() });
       const m2 = makeTurnMessage({ sessionId: "sess-tag-b", id: id() });

@@ -13,6 +13,7 @@ import {
   createMemoryStore,
   type DataStore,
   type MediaStore,
+  type SnapshotPayload,
 } from "@covel/store";
 import { createEventBus, type EventBus } from "@covel/events";
 import type { SubscriptionEvent } from "@covel/shared";
@@ -961,6 +962,227 @@ describe("Snapshot routes", () => {
       const childMessages = await store.listTurnMessages(childId);
       expect(childMessages).toHaveLength(1);
       expect(childMessages[0]!.content).toBe("The story begins.");
+    });
+
+    it("copies and remaps only summaries referenced through the snapshot cursor", async () => {
+      const app = createTestApp(store);
+      await store.appendTurnMessage({
+        id: "sess-1-tm-before-cursor",
+        sessionId: "sess-1",
+        turnId: "turn-1",
+        sourceType: "player",
+        role: "user",
+        content: "A second pre-snapshot message.",
+        order: 1,
+        createdAt: "2098-01-01T00:00:00.000Z",
+      });
+      await store.saveSessionSummary({
+        id: "summary-before-cursor",
+        sessionId: "sess-1",
+        turnRangeStart: "turn-1",
+        turnRangeEnd: "turn-1",
+        content: "The story began and the player responded.",
+        focusSections: ["story"],
+        createdAt: "2098-01-01T00:00:01.000Z",
+      });
+      await store.tagTurnMessagesCompacted(
+        "sess-1",
+        ["sess-1-tm-1", "sess-1-tm-before-cursor"],
+        "summary-before-cursor",
+      );
+      const snapId = await createParentSnapshot(store, app);
+      const parentSnapshot = await store.getSnapshot(snapId);
+      expect(parentSnapshot?.payload.sessionSummaries).toEqual([
+        expect.objectContaining({ id: "summary-before-cursor" }),
+      ]);
+
+      // This message and summary post-date the snapshot and must not cross the
+      // cursor even though they exist by the time the fork reads the parent.
+      await store.appendTurnMessage({
+        id: "sess-1-tm-after-cursor",
+        sessionId: "sess-1",
+        turnId: "turn-2",
+        sourceType: "runtime",
+        role: "assistant",
+        content: "Post-snapshot content.",
+        order: 2,
+        createdAt: "2099-01-01T00:00:00.000Z",
+      });
+      await store.saveSessionSummary({
+        id: "summary-after-cursor",
+        sessionId: "sess-1",
+        turnRangeStart: "turn-2",
+        turnRangeEnd: "turn-2",
+        content: "This summary is outside the snapshot cursor.",
+        focusSections: [],
+        createdAt: "2099-01-01T00:00:01.000Z",
+      });
+      await store.tagTurnMessagesCompacted(
+        "sess-1",
+        ["sess-1-tm-after-cursor"],
+        "summary-after-cursor",
+      );
+
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as {
+        sessionId: string;
+        forkSnapshotId: string;
+      };
+      const childMessages = await store.listTurnMessages(body.sessionId);
+      const childSummaries = await store.listSessionSummaries(body.sessionId);
+
+      expect(childMessages).toHaveLength(2);
+      expect(childSummaries).toHaveLength(1);
+      expect(childSummaries[0]).toMatchObject({
+        sessionId: body.sessionId,
+        content: "The story began and the player responded.",
+      });
+      expect(childSummaries[0]!.id).not.toBe("summary-before-cursor");
+      expect(childMessages.map((message) => message.compactedAtTurnId)).toEqual(
+        [childSummaries[0]!.id, childSummaries[0]!.id],
+      );
+      expect(
+        childMessages.every(
+          (message) =>
+            message.compactedAtTurnId === undefined ||
+            childSummaries.some(
+              (summary) => summary.id === message.compactedAtTurnId,
+            ),
+        ),
+      ).toBe(true);
+
+      // Parent references remain untouched, while the child fork snapshot is
+      // itself reusable: it points at child ids and the child's last message.
+      expect(
+        (await store.listTurnMessages("sess-1"))[0]!.compactedAtTurnId,
+      ).toBe("summary-before-cursor");
+      const childForkSnapshot = await store.getSnapshot(body.forkSnapshotId);
+      expect(childForkSnapshot?.payload.sessionSummaries).toEqual(
+        childSummaries,
+      );
+      expect(childForkSnapshot?.payload.messagesCursor).toBe(
+        childMessages[childMessages.length - 1]!.id,
+      );
+    });
+
+    it("forks the snapshot-time summary after the parent rolls its summary", async () => {
+      const app = createTestApp(store);
+      await store.saveSessionSummary({
+        id: "summary-at-snapshot",
+        sessionId: "sess-1",
+        turnRangeStart: "turn-1",
+        turnRangeEnd: "turn-1",
+        content: "History at the snapshot instant.",
+        focusSections: ["story"],
+        createdAt: "2098-01-01T00:00:00.000Z",
+      });
+      await store.tagTurnMessagesCompacted(
+        "sess-1",
+        ["sess-1-tm-1"],
+        "summary-at-snapshot",
+      );
+      const snapId = await createParentSnapshot(store, app);
+
+      // A later rolling compaction replaces the summary and retags the same
+      // historical message. The older snapshot must remain time-consistent.
+      await store.deleteSessionSummaries("sess-1");
+      await store.saveSessionSummary({
+        id: "summary-after-snapshot",
+        sessionId: "sess-1",
+        turnRangeStart: "turn-1",
+        turnRangeEnd: "turn-2",
+        content: "Newer rolling history that the snapshot must not observe.",
+        focusSections: ["story"],
+        createdAt: "2099-01-01T00:00:00.000Z",
+      });
+      await store.retagCompactedTurnMessages(
+        "sess-1",
+        "summary-after-snapshot",
+      );
+
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as {
+        sessionId: string;
+        forkSnapshotId: string;
+      };
+      const childMessages = await store.listTurnMessages(body.sessionId);
+      const childSummaries = await store.listSessionSummaries(body.sessionId);
+
+      expect(childSummaries).toHaveLength(1);
+      expect(childSummaries[0]).toMatchObject({
+        sessionId: body.sessionId,
+        content: "History at the snapshot instant.",
+      });
+      expect(childMessages[0]!.compactedAtTurnId).toBe(childSummaries[0]!.id);
+      expect(
+        (await store.getSnapshot(body.forkSnapshotId))?.payload
+          .compactedMessageSummaryIds,
+      ).toEqual({ [childMessages[0]!.id]: childSummaries[0]!.id });
+    });
+
+    it("restores legacy v3 snapshots from raw messages when summaries are absent", async () => {
+      const app = createTestApp(store);
+      await store.saveSessionSummary({
+        id: "legacy-summary",
+        sessionId: "sess-1",
+        turnRangeStart: "turn-1",
+        turnRangeEnd: "turn-1",
+        content: "Legacy compacted history.",
+        focusSections: [],
+        createdAt: new Date().toISOString(),
+      });
+      await store.tagTurnMessagesCompacted(
+        "sess-1",
+        ["sess-1-tm-1"],
+        "legacy-summary",
+      );
+      const snapId = await createParentSnapshot(store, app);
+      const stored = (await store.getSnapshot(snapId))!;
+      const {
+        sessionSummaries: _legacySummaryOmission,
+        compactedMessageSummaryIds: _legacyMappingOmission,
+        ...legacyPayload
+      } = stored.payload;
+      await store.saveSnapshot({
+        ...stored,
+        payload: legacyPayload as SnapshotPayload,
+      });
+
+      const res = await app.request("/api/sessions/sess-1/fork", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fromSnapshotId: snapId }),
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as {
+        sessionId: string;
+        forkSnapshotId: string;
+      };
+      const childMessages = await store.listTurnMessages(body.sessionId);
+
+      expect(childMessages).toHaveLength(1);
+      expect(childMessages[0]).toMatchObject({
+        content: "The story begins.",
+        compactedAtTurnId: undefined,
+      });
+      expect(await store.listSessionSummaries(body.sessionId)).toEqual([]);
+      expect(
+        (await store.getSnapshot(body.forkSnapshotId))?.payload
+          .sessionSummaries,
+      ).toEqual([]);
+      expect(
+        (await store.listTurnMessages("sess-1"))[0]!.compactedAtTurnId,
+      ).toBe("legacy-summary");
     });
 
     it("emits state.snapshot.created (kind=fork) and session.forked on fork", async () => {

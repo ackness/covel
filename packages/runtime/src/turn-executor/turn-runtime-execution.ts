@@ -35,7 +35,10 @@ import {
   type TurnExecutorDeps,
   type TurnExecutorOptions,
 } from "./turn-executor-types.js";
-import { executeAgentRuntime } from "../agent-loop/turn-agent-runtime.js";
+import {
+  executeAgentRuntime,
+  type AgentCompactionRefresh,
+} from "../agent-loop/turn-agent-runtime.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { executeAgentGuard } from "../agent-loop/turn-agent-guard.js";
 import { combineAbortSignals } from "./turn-control.js";
@@ -82,6 +85,9 @@ export interface RuntimeInvocation {
   readonly hookPipeline: HookPipeline | undefined;
   readonly sessionSummaries:
     readonly import("@covel/store").SessionSummaryRecord[] | undefined;
+  readonly prepareCompactedContext?: (
+    systemPromptPreview: string,
+  ) => Promise<AgentCompactionRefresh>;
   readonly workingMemory:
     readonly import("@covel/context").WorkingMemoryEntry[] | undefined;
   readonly coreMemoryBlocks: readonly CoreMemoryBlockView[] | undefined;
@@ -149,6 +155,7 @@ export async function executeOneRuntime(
     sessionMeta,
     hookPipeline,
     sessionSummaries,
+    prepareCompactedContext,
     workingMemory,
     coreMemoryBlocks,
     sessionContext,
@@ -690,6 +697,7 @@ export async function executeOneRuntime(
       sessionMeta,
       hookPipeline,
       sessionSummaries,
+      prepareCompactedContext,
       workingMemory,
       coreMemoryBlocks,
       sessionContext,

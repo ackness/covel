@@ -35,6 +35,8 @@ describe("provider parameter overrides", () => {
         model: "gpt-4o",
         messages: [{ role: "user", content: "hi", toolCalls: undefined }],
         providerRequestMetadata: {
+          // Free-form metadata cannot override the request-hard limit below.
+          max_tokens: 999,
           parameterOverrides: {
             temperature: 0.25,
             topP: 0.85,

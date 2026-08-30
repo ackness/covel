@@ -257,6 +257,11 @@ export interface ContextBuildParams {
 /** Structured world data exposed to plugin templates as `{{ world.* }}`. */
 export interface WorldContextView {
   readonly id: string;
+  /** Short display name suitable for stable prompt headers. */
+  readonly name?: string;
+  /** Concise world summary; prefer this over embedding the full lore each turn. */
+  readonly description?: string;
+  readonly tags?: readonly string[];
   readonly lore?: string;
   readonly tone?: string;
   readonly openingScenario?: string;

@@ -22,7 +22,7 @@
  * the current user message, and any depth/post-history prompt contributions.
  */
 
-import { applyBudget } from "./budget.js";
+import { applyBudget, resolveBudgetOptions } from "./budget.js";
 import {
   assemblePromptVariables,
   buildCurrentTurnUserMessage,
@@ -258,9 +258,24 @@ function buildPromptSegmentsCommon(
     );
 
   // Segment 2 — Core Memory (Letta-style) + Working Memory
+  const coreMemoryBudget =
+    params.estimator && params.contextBudget
+      ? (() => {
+          const limits = resolveBudgetOptions(params.contextBudget);
+          const inputLimit = limits.maxInputTokens - limits.reservedForResponse;
+          return {
+            estimator: params.estimator!,
+            maxTokens: Math.min(
+              2_048,
+              Math.max(256, Math.floor(inputLimit * 0.15)),
+            ),
+          };
+        })()
+      : undefined;
   const coreMemory = renderCoreMemory(
     params.coreMemoryBlocks,
     params.turnInput.locale,
+    coreMemoryBudget,
   );
   const workingMemory = [coreMemory, renderWorkingMemory(params.workingMemory)]
     .filter(Boolean)

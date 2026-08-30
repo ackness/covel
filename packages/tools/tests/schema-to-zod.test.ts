@@ -127,7 +127,7 @@ describe("buildFieldsZodFromSchema", () => {
 });
 
 describe("buildSessionCharacterWriteTools", () => {
-  it("emits a create-character tool whose jsonSchema reflects the session schema", () => {
+  it("keeps create-character fields compact instead of duplicating the session schema", () => {
     const [createTool] = buildSessionCharacterWriteTools(
       stubStore,
       {},
@@ -145,23 +145,18 @@ describe("buildSessionCharacterWriteTools", () => {
       "type",
     ]);
 
-    // The fields property is an object with named keys per attribute
+    // Runtime validation still uses the stored schema, but the wire contract
+    // stays bounded instead of repeating every attribute here and in update.
     const fields = props.fields as {
       type: string;
-      properties: Record<string, unknown>;
+      additionalProperties: Record<string, unknown>;
     };
     expect(fields.type).toBe("object");
-    expect(Object.keys(fields.properties).sort()).toEqual([
-      "awakened",
-      "equipment",
-      "hp",
-      "powerTier",
-      "relationships",
-      "skills",
-    ]);
+    expect(fields.additionalProperties).toEqual({});
+    expect(fields).not.toHaveProperty("properties");
   });
 
-  it("emits an update-character tool with the same schema-aware fields shape", () => {
+  it("keeps update-character fields compact as well", () => {
     const [, updateTool] = buildSessionCharacterWriteTools(
       stubStore,
       {},
@@ -172,21 +167,17 @@ describe("buildSessionCharacterWriteTools", () => {
     const props = schema.properties as Record<string, Record<string, unknown>>;
     const fields = props.fields as {
       type: string;
-      properties: Record<string, unknown>;
+      additionalProperties: Record<string, unknown>;
     };
     expect(fields.type).toBe("object");
-    // hp keeps its numeric bounds in the update path too
-    expect(fields.properties.hp).toMatchObject({
-      type: "number",
-      minimum: 0,
-      maximum: 100,
-    });
+    expect(fields.additionalProperties).toEqual({});
+    expect(fields).not.toHaveProperty("properties");
   });
 });
 
 describe("i18n attribute labels", () => {
-  // A world may ship bilingual labels; the LLM-facing field description must
-  // flatten the i18n record to a plain string, never `[object Object]`.
+  // A world may ship bilingual labels; the compact LLM-facing field
+  // description must flatten the name while omitting the long prose body.
   const i18nSchema: CharacterAttributeSchema = {
     version: 1,
     attributes: [
@@ -200,7 +191,7 @@ describe("i18n attribute labels", () => {
     ],
   };
 
-  it("flattens i18n name/description into the field description string", () => {
+  it("flattens the i18n name into a compact field description", () => {
     const z = buildFieldsZodFromSchema(i18nSchema)!;
     type Z4 = { toJSONSchema(): Record<string, unknown> };
     const json = (z as unknown as Z4).toJSONSchema();
@@ -208,7 +199,8 @@ describe("i18n attribute labels", () => {
     const desc = props.faction.description as string;
 
     expect(desc).toContain("门派");
-    expect(desc).toContain("所属门派");
+    expect(desc).toContain("[social]");
+    expect(desc).not.toContain("所属门派");
     expect(desc).not.toContain("[object Object]");
   });
 });

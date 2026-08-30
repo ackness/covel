@@ -44,6 +44,7 @@ export interface RequestLLMResponseOptions {
   readonly effectiveModel: string | undefined;
   readonly toolDefs: readonly LLMToolDefinition[] | undefined;
   readonly responseFormat: LLMResponseFormat | undefined;
+  readonly maxOutputTokens?: number;
   readonly retryPolicy: RetryPolicy;
   readonly deadline: number;
   readonly useStreaming: boolean;
@@ -68,6 +69,7 @@ export async function requestLLMResponse(
     effectiveModel,
     toolDefs,
     responseFormat,
+    maxOutputTokens,
     retryPolicy,
     deadline,
     useStreaming,
@@ -90,6 +92,7 @@ export async function requestLLMResponse(
     messages,
     tools: toolDefs,
     responseFormat,
+    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     policy: retryPolicy,
     deadline,
     onQueueWait,
@@ -168,6 +171,7 @@ async function requestNonStreaming(
     effectiveModel,
     toolDefs,
     responseFormat,
+    maxOutputTokens,
     retryPolicy,
     deadline,
   } = opts;
@@ -189,6 +193,7 @@ async function requestNonStreaming(
       effectiveModel,
       toolDefs,
       responseFormat,
+      maxOutputTokens,
       retryPolicy,
       deadline,
       resolvedModel: callParams.resolvedModel,
@@ -204,6 +209,7 @@ async function malformedToolArgsFallback(args: {
   effectiveModel: string | undefined;
   toolDefs: readonly LLMToolDefinition[];
   responseFormat: LLMResponseFormat | undefined;
+  maxOutputTokens: number | undefined;
   retryPolicy: RetryPolicy;
   deadline: number;
   resolvedModel: string | undefined;
@@ -216,6 +222,7 @@ async function malformedToolArgsFallback(args: {
     effectiveModel,
     toolDefs,
     responseFormat,
+    maxOutputTokens,
     retryPolicy,
     deadline,
     resolvedModel,
@@ -247,6 +254,7 @@ async function malformedToolArgsFallback(args: {
       messages,
       tools: toolDefs,
       responseFormat,
+      ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
       onTargetAttempt: (target) => {
         actualTarget = target;
       },

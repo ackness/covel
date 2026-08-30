@@ -135,31 +135,22 @@ function makeCharacterUpsertProposal(
 // ── create-character ─────────────────────────────────────────────
 
 const CREATE_DESCRIPTION =
-  "创建一个新的角色记录（玩家、NPC 或同伴）。角色写入 characters 表并镜像到插件的 plugin-data 供侧边栏面板订阅。\n" +
-  "\n" +
-  "**fields 约束**（重要）：键名必须严格使用 `<world-schema>` 中声明的 `attributes[*].id`。未声明的键会被保存但会触发 schema warning——LLM 会在返回结果里看到警告并应在下一次调用时自行修正。\n" +
-  "\n" +
-  "**类型对齐**：number 类型的键必须写数字（不是字符串）、enum 键必须在 options 内、array/object/map 类型不要退化成裸字符串。如果世界观里出现了 schema 没覆盖的机制，优先扩展 schema（通过 set-world-schema）而不是把它塞进 fields 的无名键。\n" +
-  "\n" +
-  "同 session 内同 (name, type) 会自动去重——返回已存在的角色，不会创建重复项。";
+  "创建角色；同 session 的同名同类型会去重。fields 按世界 schema 合并默认值并返回校验 warning。";
 
 function createCreateCharacterTool(
   store: CharacterStore,
   deps: CharacterToolDeps,
-  schema: CharacterAttributeSchema | null = null,
 ): ToolModule {
   return tool({
     name: "create-character",
     description: CREATE_DESCRIPTION,
     parameters: z.object({
-      name: z.string().min(1).describe("角色名称（必须非空）"),
+      name: z.string().min(1).describe("角色名"),
       type: characterTypeSchema,
-      description: z.string().optional().describe("角色简短描述"),
-      fields: buildFieldsZod(schema)
+      description: z.string().optional().describe("简短描述"),
+      fields: buildFieldsZod(null)
         .optional()
-        .describe(
-          "角色属性键值对。键名必须是 world schema 中声明的 attribute id；未知键会触发 warning。",
-        ),
+        .describe("可选属性；使用 world schema attribute id"),
     }),
     execute: async (params, context) => {
       const now = new Date().toISOString();
@@ -236,34 +227,21 @@ function createCreateCharacterTool(
 // ── update-character ─────────────────────────────────────────────
 
 const UPDATE_DESCRIPTION =
-  "更新已有角色的描述和/或属性字段。字段按 shallow merge 合并进现有 fields（新键覆盖旧键），version 自动 +1。适用于状态变化、装备变更、受伤、死亡标记等。必须先通过 list-characters 或 get-character 获取目标角色 id。\n" +
-  "\n" +
-  "**fields 约束**（重要）：键名必须严格使用 `<world-schema>` 中声明的 `attributes[*].id`。未声明的键会被保存但会触发 schema warning——看到警告请在下一次调用时改正或先扩展 schema（set-world-schema），不要继续写无名键。number 必须写数字、enum 必须在 options 内、array/object/map 类型保持结构。";
+  "按 id 更新角色；description 替换，fields shallow merge，version 自动 +1。只传明确变化。";
 
 function createUpdateCharacterTool(
   store: CharacterStore,
   deps: CharacterToolDeps,
-  schema: CharacterAttributeSchema | null = null,
 ): ToolModule {
   return tool({
     name: "update-character",
     description: UPDATE_DESCRIPTION,
     parameters: z.object({
-      id: z
-        .string()
-        .min(1)
-        .describe(
-          "要更新的角色 id（由 create-character 或 list-characters 返回）",
-        ),
-      description: z
-        .string()
+      id: z.string().min(1).describe("角色 id"),
+      description: z.string().optional().describe("新描述；省略则保留"),
+      fields: buildFieldsZod(null)
         .optional()
-        .describe("新的描述（可选，未传则保留原值）"),
-      fields: buildFieldsZod(schema)
-        .optional()
-        .describe(
-          "要合并的字段键值对（shallow merge）。键名必须是 world schema 中声明的 attribute id；未知键会触发 warning。",
-        ),
+        .describe("属性 patch；使用 world schema attribute id"),
     }),
     execute: async (params, context) => {
       const all = await mergeCharacterViews(store, context);
@@ -484,9 +462,10 @@ export function createCharacterTools(
 }
 
 /**
- * Build session-specific variants of `create-character` / `update-character`
- * whose `fields` Zod is derived from the supplied schema — LLM sees named,
- * correctly-typed keys instead of the generic `Record<string, unknown>`.
+ * Build session write-tool variants. The LLM-facing `fields` schema stays a
+ * compact generic object: duplicating a world's complete attribute schema in
+ * both create + update definitions can consume thousands of tokens. Execution
+ * still loads the authoritative session schema for defaults and validation.
  *
  * Read tools (`list-characters`, `get-character`) are schema-independent so
  * they're not rebuilt here; callers keep using the globally-registered
@@ -495,10 +474,10 @@ export function createCharacterTools(
 export function buildSessionCharacterWriteTools(
   store: CharacterStore,
   deps: CharacterToolDeps,
-  schema: CharacterAttributeSchema,
+  _schema: CharacterAttributeSchema,
 ): readonly ToolModule[] {
   return [
-    createCreateCharacterTool(store, deps, schema),
-    createUpdateCharacterTool(store, deps, schema),
+    createCreateCharacterTool(store, deps),
+    createUpdateCharacterTool(store, deps),
   ];
 }

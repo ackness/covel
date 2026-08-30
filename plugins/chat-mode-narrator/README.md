@@ -7,6 +7,8 @@
 - `PLUGIN.md`：单 agent runtime 和玩家可调设置。
 - 依赖 `scene-cast` 提供当前在场角色上下文。
 - 可读取 `npc-graph/rag-retriever` 提供的人物关系上下文。
+- 常驻 prompt 只使用世界名称、简介和标签；可调用 `world-dimension-get` 按需读取精确世界字段。
+- 可调用 `memory-search` 检索已离开当前窗口的旧对话、承诺和线索。
 - `advertiseEvents: true`，可调用 `emit-event` 发射当前会话已声明的领域事件。
 
 ## 数据与行为

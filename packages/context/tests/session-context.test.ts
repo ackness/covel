@@ -225,6 +225,8 @@ describe("buildSessionContextSnapshot — world context", () => {
     });
 
     expect(snapshot.world.id).toBe("w1");
+    expect(snapshot.world.name).toBe(world.name);
+    expect(snapshot.world.description).toBe(world.description);
     expect(snapshot.world.lore).toBe("The land of Ash");
     expect(snapshot.world.tone).toBe("noir");
     expect(snapshot.world.openingScenario).toBe("You wake in a cell");
