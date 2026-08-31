@@ -1,11 +1,11 @@
 {
   "world": "emberback",
-  "note": "Generation manifest for Emberback Relay's English-language main cast. Keep the set bright, graphic, practical, and visually separate from Mistport's dark fog-noir portraits.",
+  "note": "Generation manifest for Emberback Relay's English-language main cast. Keep the set bright, graphic, practical, and grounded in character-specific frontier environments, visually separate from Mistport's dark fog-noir portraits.",
   "style": {
-    "direction": "Sunlit retro-frontier science fiction, graphic painterly adventure poster",
+    "direction": "Sunlit retro-frontier science fiction, graphic painterly adventure poster with character-specific environmental vignettes",
     "prefix": "Full-body character portrait for a narrative RPG, sunlit retro-frontier science fiction, graphic painterly adventure illustration with a screen-printed poster sensibility, one single character, clean strong silhouette, warm direct light and crisp cool rim light, grounded workwear, ceramic heat guards, tactile fabric, natural anatomy, face readable as a small avatar, optimistic lived-in technology, ",
-    "suffix": ", simple flat saturated background with no scenery, full body visible from head to boots, energetic natural stance, consistent bright adventure-poster style",
-    "negative": "black background, dark fog, mist, rain, gothic, medieval fantasy, East Asian historical clothing, steampunk gears, neon cyberpunk, bulky spacesuit, military armor, glamour pose, text, caption, signature, watermark, logo, frame, multiple people, extra limbs, extra fingers, distorted hands, distorted face, cropped head, cropped feet, nsfw"
+    "suffix": ", full body visible from head to boots, energetic natural stance, believable contact shadow under both boots, restrained foreground-midground-background depth, environment softer and lower contrast than the character, uncluttered tonal halo behind the face and key silhouette, consistent bright adventure-poster style",
+    "negative": "flat background, solid color background, studio seamless, high-contrast clutter behind face, black background, dark fog, mist, rain, gothic, medieval fantasy, East Asian historical clothing, steampunk gears, neon cyberpunk, sterile spaceship, bulky spacesuit, military armor, glamour pose, text, caption, signature, watermark, logo, frame, multiple people, extra limbs, extra fingers, distorted hands, distorted face, cropped head, cropped feet, nsfw"
   },
   "defaults": {
     "size": "1024x1536",
@@ -18,21 +18,21 @@
       "characterId": "tomas-reed",
       "name": "Tomas Reed",
       "filename": "tomas-reed.png",
-      "subject": "a weathered Latino man in his late fifties, lean build, silver-streaked dark hair, short practical beard, calm brown eyes and approachable dry humor, cream and cobalt mechanic coveralls with rolled sleeves, mustard utility harness, ceramic shoulder plates, compact analog field radio, holding a slim signal probe and an enamel coffee mug, flat warm-cream background"
+      "subject": "a weathered Latino man in his late fifties, lean build, silver-streaked dark hair, short practical beard, calm brown eyes and approachable dry humor, cream and cobalt mechanic coveralls with rolled sleeves, mustard utility harness, ceramic shoulder plates, compact analog field radio, holding a slim signal probe and an enamel coffee mug, inside a lived-in Emberback signal workshop carved into a rust-red ridge, layered cream ceramic wall panels, cobalt analog consoles, worn workbench edges, cable conduits, and a distant sunlit relay mast visible through a narrow opening"
     },
     {
       "id": "june-okafor",
       "characterId": "june-okafor",
       "name": "June Okafor",
       "filename": "june-okafor.png",
-      "subject": "a dark-skinned Black woman in her early thirties, athletic build, short natural curls, lively intelligent eyes and a broad confident grin, teal sun jacket, ochre utility trousers, cream ceramic heat guards, coral scarf streaming to one side, amber goggles on her forehead, navigation tablet under one arm and crawler keys raised in one hand, flat terracotta-orange background"
+      "subject": "a dark-skinned Black woman in her early thirties, athletic build, short natural curls, lively intelligent eyes and a broad confident grin, teal sun jacket, ochre utility trousers, cream ceramic heat guards, coral scarf streaming to one side, amber goggles on her forehead, navigation tablet under one arm and crawler keys raised in one hand, at an open-sided Sunrunner crawler staging yard on a rust-red ridge, partially seen solar crawler, low charging gantry, distant relay dishes, layered mesas, pale-cyan horizon, diagonal awning shadows, and windblown dust ribbons echoing the scarf's motion"
     },
     {
       "id": "mina-park",
       "characterId": "mina-park",
       "name": "Dr. Mina Park",
       "filename": "mina-park.png",
-      "subject": "an East Asian woman in her early forties, compact build, chin-length black hair tucked behind one ear, observant eyes and a reserved skeptical expression, mustard insulated field coat with cream panels, dark teal base layer, rust-red utility sash, lightweight ice-dust boots, holding a portable spectrum analyzer and narrow sample case, flat deep-cobalt-blue background"
+      "subject": "an East Asian woman in her early forties, compact build, chin-length black hair tucked behind one ear, observant eyes and a reserved skeptical expression, mustard insulated field coat with cream panels, dark teal base layer, rust-red utility sash, lightweight ice-dust boots, holding a portable spectrum analyzer and narrow sample case, on a high Nightglass observation platform with cream ceramic deck panels, dark teal rails, slim sensor vanes, a distant relay tower above rust-red terrain, cobalt Crownfire clouds, a narrow amber-white horizon, and subtle luminous atmospheric bands suggesting anomalous radio echoes"
     }
   ]
 }
