@@ -81,14 +81,16 @@ export function SocialStructureTab({ dimensions, onChange, t }: TabProps) {
         </div>
         {(ss.classes ?? []).map((cls, ci) => (
           <div key={ci} className="flex items-start gap-2">
-            <div className="flex-1 grid grid-cols-3 gap-2">
+            <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_6rem]">
               <input
+                aria-label={`${t("world.name")} ${ci + 1}`}
                 className={inputCls}
                 placeholder={t("world.name")}
                 value={text(cls.name)}
                 onChange={(e) => updateClass(ci, { name: e.target.value })}
               />
               <input
+                aria-label={`${t("world.description")} ${ci + 1}`}
                 className={inputCls}
                 placeholder={t("world.description")}
                 value={text(cls.description)}
@@ -97,7 +99,8 @@ export function SocialStructureTab({ dimensions, onChange, t }: TabProps) {
                 }
               />
               <input
-                className="w-24 border border-border bg-background px-3 py-2 text-sm"
+                aria-label={`${t("world.rank")} ${ci + 1}`}
+                className="w-full border border-border bg-background px-3 py-2 text-sm"
                 type="number"
                 placeholder={t("world.rank")}
                 value={cls.rank ?? ""}
@@ -108,7 +111,12 @@ export function SocialStructureTab({ dimensions, onChange, t }: TabProps) {
                 }
               />
             </div>
-            <Button variant="ghost" size="icon" onClick={() => removeClass(ci)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("world.remove")}
+              onClick={() => removeClass(ci)}
+            >
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
@@ -125,20 +133,31 @@ export function SocialStructureTab({ dimensions, onChange, t }: TabProps) {
           </Button>
         </div>
         {(ss.races ?? []).map((race, ri) => (
-          <div key={ri} className="flex items-center gap-2">
-            <input
-              className={inputCls}
-              placeholder={t("world.name")}
-              value={text(race.name)}
-              onChange={(e) => updateRace(ri, { name: e.target.value })}
-            />
-            <input
-              className={inputCls}
-              placeholder={t("world.description")}
-              value={text(race.description)}
-              onChange={(e) => updateRace(ri, { description: e.target.value })}
-            />
-            <Button variant="ghost" size="icon" onClick={() => removeRace(ri)}>
+          <div key={ri} className="flex items-start gap-2">
+            <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+              <input
+                aria-label={`${t("world.name")} ${ri + 1}`}
+                className={inputCls}
+                placeholder={t("world.name")}
+                value={text(race.name)}
+                onChange={(e) => updateRace(ri, { name: e.target.value })}
+              />
+              <input
+                aria-label={`${t("world.description")} ${ri + 1}`}
+                className={inputCls}
+                placeholder={t("world.description")}
+                value={text(race.description)}
+                onChange={(e) =>
+                  updateRace(ri, { description: e.target.value })
+                }
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("world.remove")}
+              onClick={() => removeRace(ri)}
+            >
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
@@ -147,8 +166,9 @@ export function SocialStructureTab({ dimensions, onChange, t }: TabProps) {
 
       {/* Notes */}
       <div className="space-y-1">
-        <Label>{t("world.notes")}</Label>
+        <Label htmlFor="world-social-notes">{t("world.notes")}</Label>
         <textarea
+          id="world-social-notes"
           className={textareaCls}
           value={text(ss.notes)}
           onChange={(e) => setSs({ ...ss, notes: e.target.value })}

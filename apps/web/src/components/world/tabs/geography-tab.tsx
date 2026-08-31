@@ -68,8 +68,11 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
     <div className="space-y-6">
       {/* Overview */}
       <div className="space-y-2">
-        <Label>{t("world.geographyOverview")}</Label>
+        <Label htmlFor="world-geography-overview">
+          {t("world.geographyOverview")}
+        </Label>
         <textarea
+          id="world-geography-overview"
           className={textareaCls}
           value={text(geo.overview)}
           onChange={(e) => setGeo({ ...geo, overview: e.target.value })}
@@ -95,24 +98,31 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={t("world.remove")}
                 onClick={() => removeRegion(ri)}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
-                <Label>{t("world.name")}</Label>
+                <Label htmlFor={`world-region-${ri}-name`}>
+                  {t("world.name")}
+                </Label>
                 <input
+                  id={`world-region-${ri}-name`}
                   className={inputCls}
                   value={text(region.name)}
                   onChange={(e) => updateRegion(ri, { name: e.target.value })}
                 />
               </div>
               <div className="space-y-1">
-                <Label>{t("world.climate")}</Label>
+                <Label htmlFor={`world-region-${ri}-climate`}>
+                  {t("world.climate")}
+                </Label>
                 <input
+                  id={`world-region-${ri}-climate`}
                   className={inputCls}
                   value={text(region.climate)}
                   onChange={(e) =>
@@ -123,8 +133,11 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
             </div>
 
             <div className="space-y-1">
-              <Label>{t("world.description")}</Label>
+              <Label htmlFor={`world-region-${ri}-description`}>
+                {t("world.description")}
+              </Label>
               <textarea
+                id={`world-region-${ri}-description`}
                 className={textareaCls}
                 value={text(region.description)}
                 onChange={(e) =>
@@ -147,26 +160,33 @@ export function GeographyTab({ dimensions, onChange, t }: TabProps) {
                 </Button>
               </div>
               {(region.landmarks ?? []).map((lm, li) => (
-                <div key={li} className="flex items-center gap-2">
-                  <input
-                    className={inputCls}
-                    placeholder={t("world.name")}
-                    value={text(lm.name)}
-                    onChange={(e) =>
-                      updateLandmark(ri, li, { name: e.target.value })
-                    }
-                  />
-                  <input
-                    className={inputCls}
-                    placeholder={t("world.description")}
-                    value={text(lm.description)}
-                    onChange={(e) =>
-                      updateLandmark(ri, li, { description: e.target.value })
-                    }
-                  />
+                <div key={li} className="flex items-start gap-2">
+                  <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2">
+                    <input
+                      aria-label={`${t("world.name")} ${li + 1}`}
+                      className={inputCls}
+                      placeholder={t("world.name")}
+                      value={text(lm.name)}
+                      onChange={(e) =>
+                        updateLandmark(ri, li, { name: e.target.value })
+                      }
+                    />
+                    <input
+                      aria-label={`${t("world.description")} ${li + 1}`}
+                      className={inputCls}
+                      placeholder={t("world.description")}
+                      value={text(lm.description)}
+                      onChange={(e) =>
+                        updateLandmark(ri, li, {
+                          description: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
                   <Button
                     variant="ghost"
                     size="icon"
+                    aria-label={t("world.remove")}
                     onClick={() => removeLandmark(ri, li)}
                   >
                     <Trash2 className="h-4 w-4" />

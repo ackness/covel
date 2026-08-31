@@ -17,10 +17,11 @@ export function DebugToolbar({
   const { t } = useTranslation();
 
   return (
-    <div className="shrink-0 h-9 px-4 border-b border-(--rule-color) ui-rail flex items-center gap-4 overflow-x-auto">
+    <div className="shrink-0 min-h-10 px-3 border-b border-(--rule-color) ui-rail flex items-center gap-3 overflow-x-auto sm:px-4 sm:gap-4">
       <div className="flex items-center gap-1 shrink-0 border-r border-(--rule-color) pr-3">
         <button
           onClick={() => onDebugViewChange("traces")}
+          aria-pressed={debugView === "traces"}
           className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${
             debugView === "traces"
               ? "border-primary/40 bg-primary/10 text-foreground"
@@ -31,6 +32,7 @@ export function DebugToolbar({
         </button>
         <button
           onClick={() => onDebugViewChange("data")}
+          aria-pressed={debugView === "data"}
           className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${
             debugView === "data"
               ? "border-primary/40 bg-primary/10 text-foreground"
@@ -41,6 +43,7 @@ export function DebugToolbar({
         </button>
         <button
           onClick={() => onDebugViewChange("cost")}
+          aria-pressed={debugView === "cost"}
           className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${
             debugView === "cost"
               ? "border-primary/40 bg-primary/10 text-foreground"
@@ -55,6 +58,7 @@ export function DebugToolbar({
           <Filter className="w-3 h-3 text-muted-foreground shrink-0" />
           <button
             onClick={() => onFilterCategoryChange(null)}
+            aria-pressed={filterCategory === null}
             className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors shrink-0 ${
               filterCategory === null
                 ? "border-primary/40 bg-primary/10 text-foreground"
@@ -73,6 +77,7 @@ export function DebugToolbar({
                     filterCategory === category ? null : category,
                   )
                 }
+                aria-pressed={filterCategory === category}
                 className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors shrink-0 flex items-center gap-1 ${
                   filterCategory === category
                     ? `${style.border} ${style.bg} ${style.color}`

@@ -30,10 +30,11 @@ export function PluginFilterBar({
             "session.searchPlugins",
             "Search plugins, tags, capabilities",
           )}
+          aria-label={t("session.searchPlugins")}
         />
       </div>
       {availablePluginTags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
           {availablePluginTags.map((tag) => (
             <button
               key={tag}
@@ -44,6 +45,7 @@ export function PluginFilterBar({
                   : "border-border text-muted-foreground hover:text-foreground"
               }`}
               onClick={() => onTogglePluginTag(tag)}
+              aria-pressed={activePluginTags.has(tag)}
             >
               {tag}
             </button>

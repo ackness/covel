@@ -1,11 +1,27 @@
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useInView } from "@/hooks/use-in-view";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 export function DemoSection() {
   const { t } = useTranslation();
+  const prefersReducedMotion = useMediaQuery(
+    "(prefers-reduced-motion: reduce)",
+  );
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [containerRef, inView] = useInView<HTMLDivElement>({
     threshold: 0.25,
   });
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (prefersReducedMotion) {
+      video.pause();
+      return;
+    }
+    void video.play().catch(() => undefined);
+  }, [prefersReducedMotion]);
 
   return (
     <section
@@ -44,12 +60,13 @@ export function DemoSection() {
         >
           {/* See Hero.tsx — the MP4 is the same recording at ~1/8 the bytes. */}
           <video
+            ref={videoRef}
             className="w-full h-auto block"
             src="/media/demo.mp4"
             poster="/media/demo-poster.jpg"
             width={1152}
             height={720}
-            autoPlay
+            autoPlay={!prefersReducedMotion}
             muted
             loop
             playsInline

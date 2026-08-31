@@ -170,7 +170,7 @@ function RootLayout() {
             className={`w-full flex h-full items-center justify-between ${isMacDesktop ? "pl-22 pr-4 md:pr-6" : "px-4 md:px-6"}`}
           >
             <nav
-              className="hidden md:flex items-center gap-1 text-xs font-medium"
+              className="hidden lg:flex items-center gap-1 text-xs font-medium"
               style={isElectron ? noDragStyle : undefined}
               aria-label={t("nav.primary", "Primary")}
             >
@@ -216,7 +216,7 @@ function RootLayout() {
                     ? t("onboarding.localeEn", "Switch to English")
                     : t("onboarding.localeZh", "Switch to Chinese")
                 }
-                className="hidden md:flex items-center justify-center h-9 min-w-9 px-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-muted/40 transition-colors rounded-(--radius-control)"
+                className="hidden lg:flex items-center justify-center h-9 min-w-9 px-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-muted/40 transition-colors rounded-(--radius-control)"
               >
                 {locale === "zh-CN" ? "EN" : "ZH"}
               </button>
@@ -224,14 +224,14 @@ function RootLayout() {
                 <Button
                   variant="default"
                   asChild
-                  className="hidden md:flex h-9 ml-1.5 px-4 text-[11px] font-semibold uppercase tracking-widest rounded-(--radius-control)"
+                  className="hidden lg:flex h-9 ml-1.5 px-4 text-[11px] font-semibold uppercase tracking-widest rounded-(--radius-control)"
                 >
                   <Link to="/session">
                     {t("nav.getStarted", "Get Started")}
                   </Link>
                 </Button>
               )}
-              {/* The desktop nav and the language toggle are both `md:` only,
+              {/* The desktop nav and the language toggle are both `lg:` only,
                   so on a phone this dialog is the ONLY way to reach worlds /
                   session / plugins / debug or switch language. Radix Dialog
                   brings the focus trap, Escape handling and aria-modal that a
@@ -242,7 +242,7 @@ function RootLayout() {
                     variant="ghost"
                     size="icon"
                     aria-label={t("nav.primary", "Primary")}
-                    className="md:hidden h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control)"
+                    className="lg:hidden h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control)"
                   >
                     <Menu className="h-4 w-4" />
                   </Button>

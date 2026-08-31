@@ -147,7 +147,9 @@ export function SessionPluginItem({
               className="ui-input-shell min-w-0 shrink mr-2 max-w-35 text-[9px] bg-background border border-border px-1 py-0.5 disabled:opacity-50"
             >
               <option value="">
-                {plugin.model ? `auto · ${plugin.model}` : "auto"}
+                {plugin.model
+                  ? t("plugin.autoWithModel", { model: plugin.model })
+                  : t("plugin.autoSlot")}
               </option>
               {resolvedSlots.map((slot) => (
                 <option key={slot.slotId} value={slot.slotId}>
@@ -164,7 +166,7 @@ export function SessionPluginItem({
                 "Configure model slots in llm.toml to override",
               )}
             >
-              no slots
+              {t("plugin.noSlots")}
             </span>
           ))}
         {overrideError && (

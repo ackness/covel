@@ -144,9 +144,16 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
         <Tabs defaultValue="geography" className="flex flex-col h-full">
           <TabsList className="flex flex-wrap h-auto gap-1">
             {TABS.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5">
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                aria-label={t(tab.labelKey)}
+                className="gap-1.5"
+              >
                 {tab.icon}
-                <span className="hidden sm:inline">{t(tab.labelKey)}</span>
+                <span aria-hidden="true" className="hidden sm:inline">
+                  {t(tab.labelKey)}
+                </span>
               </TabsTrigger>
             ))}
           </TabsList>

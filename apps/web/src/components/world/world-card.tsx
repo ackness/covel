@@ -53,8 +53,7 @@ export function WorldCard({
   return (
     <article
       aria-busy={isEntering}
-      onClick={() => onEnter(world.id)}
-      className={`group relative min-h-80 md:min-h-83 cursor-pointer overflow-hidden rounded-(--radius-card) border border-border bg-card transition-all hover:border-primary/40 ${
+      className={`group relative min-h-80 md:min-h-83 overflow-hidden rounded-(--radius-card) border border-border bg-card transition-all hover:border-primary/40 ${
         isEntering ? "opacity-100" : ""
       } ${dimmed ? "opacity-30 pointer-events-none" : ""}`}
       style={
@@ -178,13 +177,16 @@ export function WorldCard({
                 </button>
               )}
             </div>
-            <span
-              className="ui-meta inline-flex items-center gap-1.5 transition-all group-hover:gap-2.5"
+            <button
+              type="button"
+              onClick={() => onEnter(world.id)}
+              disabled={dimmed}
+              className="ui-btn ui-btn-quiet h-8 border-white/12 bg-black/12 px-2.5 text-white transition-all hover:bg-white/10"
               style={{ color: "var(--world-accent)" }}
             >
               {t("session.enter", "Enter")}
               <ArrowRight className="w-3 h-3" />
-            </span>
+            </button>
           </div>
         </div>
       </div>

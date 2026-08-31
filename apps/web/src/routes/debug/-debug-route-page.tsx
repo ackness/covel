@@ -145,6 +145,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
             size="sm"
             className={`h-7 px-2 text-[11px] gap-1 ${autoRefresh ? "text-emerald-500" : "text-muted-foreground"}`}
             onClick={() => setAutoRefresh((value) => !value)}
+            aria-pressed={autoRefresh}
           >
             <Radio
               className={`w-3 h-3 ${autoRefresh ? "animate-pulse" : ""}`}
@@ -157,6 +158,8 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
             className="h-7 px-2 text-[11px] text-muted-foreground"
             onClick={loadTraces}
             disabled={loading}
+            aria-label={t("debugger.refresh")}
+            title={t("debugger.refresh")}
           >
             <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
           </Button>
@@ -206,7 +209,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
         </div>
       )}
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden sm:flex-row">
         <SessionSidebar
           sessions={sessions}
           selectedSessionId={selectedSessionId}
@@ -221,7 +224,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
             onFilterCategoryChange={setFilterCategory}
           />
 
-          <div className="flex flex-1 min-h-0 overflow-hidden">
+          <div className="relative flex flex-1 min-h-0 overflow-hidden">
             {debugView === "data" ? (
               <SessionDataView
                 selectedSessionId={selectedSessionId}

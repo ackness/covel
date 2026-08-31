@@ -20,8 +20,9 @@ export function WorldDimensionSection({
     <div className="space-y-2">
       <button
         type="button"
-        className="flex w-full items-center gap-2 py-1 text-sm font-semibold hover:opacity-80"
+        className="flex min-h-10 w-full items-center gap-2 rounded-(--radius-control) px-2 text-sm font-semibold transition-colors hover:bg-muted/40"
         onClick={() => setExpanded((prev) => !prev)}
+        aria-expanded={expanded}
       >
         <ChevronRight
           className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`}

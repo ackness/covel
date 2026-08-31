@@ -14,6 +14,7 @@
 
 import { fireEvent, render, screen, act } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import i18n from "@/i18n/index.js";
 import { WorldSelectScreen } from "../world-select-screen.js";
 import type { WorldRecord } from "@/services/api.js";
 
@@ -55,7 +56,9 @@ describe("world select — entering a world", () => {
     const onSelectWorld = vi.fn();
     renderScreen(onSelectWorld);
 
-    fireEvent.click(screen.getByText("遥风学园"));
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("session.enter") }),
+    );
 
     expect(onSelectWorld).toHaveBeenCalledWith("haruka-academy");
   });
@@ -67,7 +70,9 @@ describe("world select — entering a world", () => {
     // exact state that used to be unrecoverable.
     const { container } = renderScreen(() => {});
 
-    fireEvent.click(screen.getByText("遥风学园"));
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("session.enter") }),
+    );
     expect(container.querySelector('article[aria-busy="true"]')).not.toBeNull();
 
     act(() => {

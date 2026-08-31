@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ArrowRight, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import {
   Dialog,
@@ -18,7 +19,11 @@ import * as api from "@/services/api.js";
 import type { WorldRecord, PackageSummary } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
-import { prioritizeWorldsByLocale } from "@/lib/world-locale.js";
+import {
+  isWorldLocaleMismatch,
+  prioritizeWorldsByLocale,
+  worldLanguage,
+} from "@/lib/world-locale.js";
 import i18n from "@/i18n";
 
 type ViewMode = "list" | "detail" | "edit";
@@ -93,6 +98,7 @@ export function WorldSelectScreen({
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
   const [generatorOpen, setGeneratorOpen] = useState(false);
   const [enteringWorldId, setEnteringWorldId] = useState<string | null>(null);
+  const [pendingWorldId, setPendingWorldId] = useState<string | null>(null);
   const [deletingWorldId, setDeletingWorldId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -104,10 +110,24 @@ export function WorldSelectScreen({
   // spun forever, every other card went `pointer-events-none`, and there was
   // no error and no way back short of a reload. Selecting a world is two
   // dispatches — nothing worth deferring behind a frame that may never come.
-  function handleEnterWorld(worldId: string) {
+  const activeLocale =
+    translation.resolvedLanguage ?? translation.language ?? undefined;
+
+  function enterWorld(worldId: string) {
     if (enteringWorldId) return;
+    setPendingWorldId(null);
     setEnteringWorldId(worldId);
     onSelectWorld(worldId);
+  }
+
+  function handleEnterWorld(worldId: string) {
+    if (enteringWorldId) return;
+    const world = worlds.find((item) => item.id === worldId);
+    if (world && isWorldLocaleMismatch(world.locale, activeLocale)) {
+      setPendingWorldId(worldId);
+      return;
+    }
+    enterWorld(worldId);
   }
 
   // A successful selection unmounts this screen, so the flag disappears with
@@ -173,6 +193,101 @@ export function WorldSelectScreen({
   const deletingWorld = deletingWorldId
     ? worlds.find((world) => world.id === deletingWorldId)
     : null;
+  const pendingWorld = pendingWorldId
+    ? worlds.find((world) => world.id === pendingWorldId)
+    : null;
+
+  function localeName(locale: string | undefined): string {
+    const language = worldLanguage(locale);
+    if (language === "en") return t("world.languageEnglish", "English");
+    if (language === "zh") return t("world.languageChinese", "Chinese");
+    return locale ?? "";
+  }
+
+  const localeMismatchDialog = (
+    <Dialog
+      open={pendingWorld !== null}
+      onOpenChange={(open) => {
+        if (!open) setPendingWorldId(null);
+      }}
+    >
+      <DialogContent
+        className="max-w-[calc(100vw-2rem)] gap-5 p-5 sm:max-w-lg sm:p-6"
+        showCloseButton={false}
+      >
+        <div className="flex items-start gap-3.5">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-(--radius-control) border border-primary/25 bg-primary/10 text-primary">
+            <Languages className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1 space-y-2 text-left">
+            <p className="ui-eyebrow text-[10px] text-primary">
+              {t("world.localeMismatchEyebrow", "Language notice")}
+            </p>
+            <DialogTitle className="text-xl leading-tight">
+              {pendingWorld
+                ? t("world.localeMismatchTitle", {
+                    language: localeName(pendingWorld.locale),
+                    defaultValue: "Continue with a {{language}} world?",
+                  })
+                : null}
+            </DialogTitle>
+            <DialogDescription className="max-w-md leading-relaxed">
+              {pendingWorld
+                ? t("world.localeMismatchDesc", {
+                    name: text(pendingWorld.name, activeLocale),
+                    worldLanguage: localeName(pendingWorld.locale),
+                    interfaceLanguage: localeName(activeLocale),
+                    defaultValue:
+                      '"{{name}}" is written in {{worldLanguage}}, while Covel is currently displayed in {{interfaceLanguage}}.',
+                  })
+                : null}
+            </DialogDescription>
+          </div>
+        </div>
+
+        {pendingWorld && (
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-(--radius-card) border border-(--rule-color) bg-muted/30 px-4 py-3">
+            <div className="min-w-0">
+              <p className="ui-meta text-[9px] text-muted-foreground">
+                {t("world.localeMismatchInterface", "Interface")}
+              </p>
+              <p className="mt-1 truncate text-sm font-medium">
+                {localeName(activeLocale)}
+              </p>
+            </div>
+            <ArrowRight className="size-4 text-muted-foreground/60" />
+            <div className="min-w-0 text-right">
+              <p className="ui-meta text-[9px] text-muted-foreground">
+                {t("world.localeMismatchWorld", "World content")}
+              </p>
+              <p className="mt-1 truncate text-sm font-medium text-primary">
+                {localeName(pendingWorld.locale)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col-reverse gap-2 border-t border-(--rule-color) pt-4 sm:flex-row sm:justify-end">
+          <Button variant="outline" onClick={() => setPendingWorldId(null)}>
+            {t("common.cancel", "Cancel")}
+          </Button>
+          <Button
+            onClick={() => {
+              if (pendingWorld) enterWorld(pendingWorld.id);
+            }}
+          >
+            {pendingWorld
+              ? t("world.localeMismatchContinue", {
+                  language: localeName(pendingWorld.locale),
+                  defaultValue: "Continue in {{language}}",
+                })
+              : null}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   const deleteDialog = (
     <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
       <DialogContent
@@ -227,6 +342,7 @@ export function WorldSelectScreen({
   if (mode === "detail" && selectedWorld) {
     return (
       <>
+        {localeMismatchDialog}
         {deleteDialog}
         <WorldDetailView
           world={selectedWorld}
@@ -254,6 +370,7 @@ export function WorldSelectScreen({
 
   return (
     <div className="flex h-full w-full overflow-hidden">
+      {localeMismatchDialog}
       {deleteDialog}
       <SettingsDialog
         open={settingsOpen}

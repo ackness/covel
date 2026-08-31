@@ -20,6 +20,11 @@ import type {
   PluginLoadError,
   SessionPluginInfo,
 } from "@/services/api.js";
+import {
+  formatSessionDate,
+  sessionStatusLabel,
+  sessionTurnLabel,
+} from "@/lib/session-display.js";
 
 export interface LeftPanelProps {
   session: SessionRecord;
@@ -58,7 +63,7 @@ export function LeftPanel({
   onResetSession,
   onTogglePlugin,
 }: LeftPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [deleteTarget, setDeleteTarget] = useState<SessionRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -95,7 +100,8 @@ export function LeftPanel({
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${session ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`}
                 />
                 <Badge variant="secondary" className="ui-chip text-[10px]">
-                  {session.status} · turn {session.completedPlayerTurns}
+                  {sessionStatusLabel(t, session.status)} ·{" "}
+                  {sessionTurnLabel(t, session.completedPlayerTurns)}
                 </Badge>
               </div>
               <Button
@@ -139,14 +145,21 @@ export function LeftPanel({
                       >
                         <span className="block truncate">{s.id}</span>
                         <span className="text-[10px] text-muted-foreground">
-                          {s.status} · turn {s.completedPlayerTurns} ·{" "}
-                          {new Date(s.createdAt).toLocaleString()}
+                          {sessionStatusLabel(t, s.status)} ·{" "}
+                          {sessionTurnLabel(t, s.completedPlayerTurns)} ·{" "}
+                          {formatSessionDate(
+                            s.createdAt,
+                            i18n.resolvedLanguage ?? i18n.language,
+                          )}
                         </span>
                       </button>
                       <button
                         onClick={() => setDeleteTarget(s)}
                         className="shrink-0 p-1.5 text-muted-foreground hover:text-destructive transition-colors"
                         title={t("common.delete", "Delete")}
+                        aria-label={t("session.deleteSessionAria", {
+                          id: s.id,
+                        })}
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>

@@ -5,14 +5,18 @@ import type { CollapsibleCardHeaderProps } from "./types.js";
 export function CollapsibleCardHeader({
   expanded,
   onToggle,
+  contentId,
   children,
   summary,
 }: CollapsibleCardHeaderProps) {
   return (
     <CardHeader className="px-4 py-3 pb-2">
       <button
+        type="button"
         className="w-full flex items-center justify-between text-left"
         onClick={onToggle}
+        aria-expanded={expanded}
+        aria-controls={contentId}
       >
         <CardTitle className="flex items-center gap-2 text-sm">
           {children}

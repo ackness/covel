@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WorldRecord } from "@/services/api.js";
 import {
+  isWorldLocaleMismatch,
   prioritizeWorldsByLocale,
   worldLanguage,
   worldLanguageBadge,
@@ -69,5 +70,12 @@ describe("world locale presentation", () => {
     expect(worldLanguageBadge("en-US")).toBe("EN");
     expect(worldLanguageBadge("zh-CN")).toBe("ZH");
     expect(worldLanguageBadge("fr-FR")).toBeNull();
+  });
+
+  it("detects primary-language mismatches without flagging regional variants", () => {
+    expect(isWorldLocaleMismatch("en-US", "zh-CN")).toBe(true);
+    expect(isWorldLocaleMismatch("ja-JP", "zh-CN")).toBe(true);
+    expect(isWorldLocaleMismatch("zh-Hans", "zh-CN")).toBe(false);
+    expect(isWorldLocaleMismatch(undefined, "zh-CN")).toBe(false);
   });
 });

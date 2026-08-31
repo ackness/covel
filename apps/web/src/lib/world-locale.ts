@@ -33,6 +33,20 @@ export function prioritizeWorldsByLocale(
   return [...preferred, ...remaining];
 }
 
+/**
+ * Whether selecting a world would make its content language differ from the
+ * active interface language. Compare primary language subtags so regional
+ * variants such as zh-CN and zh-Hans remain compatible.
+ */
+export function isWorldLocaleMismatch(
+  worldLocale: string | undefined,
+  interfaceLocale: string | undefined,
+): boolean {
+  const world = localeLanguage(worldLocale);
+  const current = localeLanguage(interfaceLocale);
+  return world !== undefined && current !== undefined && world !== current;
+}
+
 export function worldLanguageBadge(locale: string | undefined): string | null {
   const language = worldLanguage(locale);
   if (language === "en") return "EN";

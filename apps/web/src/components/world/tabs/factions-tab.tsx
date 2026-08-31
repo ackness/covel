@@ -72,25 +72,32 @@ export function FactionsTab({ dimensions, onChange, t }: TabProps) {
             <Button
               variant="ghost"
               size="icon"
+              aria-label={t("world.remove")}
               onClick={() => removeFaction(fi)}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1">
-              <Label>{t("world.name")}</Label>
+              <Label htmlFor={`world-faction-${fi}-name`}>
+                {t("world.name")}
+              </Label>
               <input
+                id={`world-faction-${fi}-name`}
                 className={inputCls}
                 value={text(faction.name)}
                 onChange={(e) => updateFaction(fi, { name: e.target.value })}
               />
             </div>
             <div className="space-y-1">
-              <Label>{t("world.factionType")}</Label>
+              <Label htmlFor={`world-faction-${fi}-type`}>
+                {t("world.factionType")}
+              </Label>
               <select
-                className={selectCls}
+                id={`world-faction-${fi}-type`}
+                className={`${selectCls} w-full`}
                 value={faction.type}
                 onChange={(e) =>
                   updateFaction(fi, { type: e.target.value as FactionType })
@@ -106,8 +113,11 @@ export function FactionsTab({ dimensions, onChange, t }: TabProps) {
           </div>
 
           <div className="space-y-1">
-            <Label>{t("world.description")}</Label>
+            <Label htmlFor={`world-faction-${fi}-description`}>
+              {t("world.description")}
+            </Label>
             <textarea
+              id={`world-faction-${fi}-description`}
               className={textareaCls}
               value={text(faction.description)}
               onChange={(e) =>
@@ -116,11 +126,14 @@ export function FactionsTab({ dimensions, onChange, t }: TabProps) {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="space-y-1">
-              <Label>{t("world.influence")}</Label>
+              <Label htmlFor={`world-faction-${fi}-influence`}>
+                {t("world.influence")}
+              </Label>
               <select
-                className={selectCls}
+                id={`world-faction-${fi}-influence`}
+                className={`${selectCls} w-full`}
                 value={faction.influence}
                 onChange={(e) =>
                   updateFaction(fi, {
@@ -136,16 +149,22 @@ export function FactionsTab({ dimensions, onChange, t }: TabProps) {
               </select>
             </div>
             <div className="space-y-1">
-              <Label>{t("world.leader")}</Label>
+              <Label htmlFor={`world-faction-${fi}-leader`}>
+                {t("world.leader")}
+              </Label>
               <input
+                id={`world-faction-${fi}-leader`}
                 className={inputCls}
                 value={text(faction.leader)}
                 onChange={(e) => updateFaction(fi, { leader: e.target.value })}
               />
             </div>
             <div className="space-y-1">
-              <Label>{t("world.headquarters")}</Label>
+              <Label htmlFor={`world-faction-${fi}-headquarters`}>
+                {t("world.headquarters")}
+              </Label>
               <input
+                id={`world-faction-${fi}-headquarters`}
                 className={inputCls}
                 value={text(faction.headquarters)}
                 onChange={(e) =>

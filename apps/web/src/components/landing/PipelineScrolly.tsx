@@ -195,15 +195,16 @@ export function PipelineScrolly({ scrollRoot }: Props) {
           </div>
 
           {/* Scrolling text steps. */}
-          <ol className="md:col-span-6 md:order-1 space-y-[40vh] md:space-y-[55vh] py-[15vh]">
+          <ol className="space-y-12 py-4 md:col-span-6 md:order-1 md:space-y-[55vh] md:py-[15vh]">
             {STEPS.map((step, i) => {
               const isActive = i === active;
               return (
                 <li
                   key={step.key}
                   ref={setStepRef(i)}
-                  className="transition-opacity duration-300"
-                  style={{ opacity: isActive ? 1 : 0.45 }}
+                  className={`opacity-100 transition-opacity duration-300 ${
+                    isActive ? "md:opacity-100" : "md:opacity-45"
+                  }`}
                 >
                   <div className="flex items-baseline gap-4 mb-4">
                     <span className="ui-eyebrow text-primary">

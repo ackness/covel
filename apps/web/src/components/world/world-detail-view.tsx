@@ -52,14 +52,21 @@ export function WorldDetailView({
 
   return (
     <div className="h-full overflow-y-auto overscroll-contain">
-      <div className="space-y-6 p-4">
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-5 sm:px-6 md:px-8 md:py-8">
         {/* Header */}
         <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={onClose}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label={t("world.backToList")}
+            >
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <h2 className="text-lg font-bold flex-1">{text(world.name)}</h2>
+            <h2 className="min-w-0 flex-1 text-lg font-bold">
+              {text(world.name)}
+            </h2>
             {languageBadge && languageName && (
               <Badge
                 variant="outline"
@@ -84,7 +91,7 @@ export function WorldDetailView({
             )}
           </div>
           {world.tags && world.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 pl-10">
+            <div className="flex flex-wrap gap-1 sm:pl-10">
               {world.tags.map((tag) => (
                 <Badge key={tag} variant="secondary" className="text-xs">
                   {tag}
@@ -96,7 +103,7 @@ export function WorldDetailView({
 
         {/* Description */}
         {world.description && (
-          <p className="text-sm text-muted-foreground wrap-break-word">
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground wrap-break-word">
             {text(world.description)}
           </p>
         )}

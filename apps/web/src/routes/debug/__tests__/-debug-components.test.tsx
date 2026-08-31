@@ -12,6 +12,7 @@ import { DebugToolbar } from "../-debug-toolbar.js";
 import { EventDetailPanel } from "../-event-detail-panel.js";
 import { getVisibleTurns } from "../-debug-page-model.js";
 import { SessionDataView } from "../-session-data-view.js";
+import { SessionSidebar } from "../-session-sidebar.js";
 import { TraceTimeline } from "../-trace-timeline.js";
 
 afterEach(() => {
@@ -69,9 +70,39 @@ describe("debug route components", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "会话数据" }));
     expect(onDebugViewChange).toHaveBeenCalledWith("data");
+    expect(
+      screen.getByRole("button", { name: "追踪" }).getAttribute("aria-pressed"),
+    ).toBe("true");
 
     fireEvent.click(screen.getByRole("button", { name: "工具" }));
     expect(onFilterCategoryChange).toHaveBeenCalledWith("tool");
+  });
+
+  it("localizes session status metadata in the responsive sidebar", () => {
+    const { container } = render(
+      <SessionSidebar
+        sessions={[
+          {
+            id: "session-a",
+            worldId: "world-a",
+            status: "active",
+            locale: "zh-CN",
+            activePlugins: [],
+            createdAt: "2026-05-11T00:00:00.000Z",
+            updatedAt: "2026-05-11T00:00:00.000Z",
+            phase: "playing",
+            completedPlayerTurns: 2,
+            setupRuntimes: {},
+          },
+        ]}
+        selectedSessionId="session-a"
+        onSelectSession={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("进行中 · 第 2 回合")).toBeDefined();
+    expect(container.firstElementChild?.className).toContain("w-full");
+    expect(container.firstElementChild?.className).toContain("sm:w-56");
   });
 
   it("renders snapshot data and trace discovery without route state", () => {

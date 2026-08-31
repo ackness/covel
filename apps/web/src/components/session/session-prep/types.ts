@@ -22,6 +22,7 @@ export type PrepSectionStatus = "idle" | "loading" | "success" | "error";
 export interface CollapsibleCardHeaderProps {
   expanded: boolean;
   onToggle: () => void;
+  contentId: string;
   children: ReactNode;
   summary?: ReactNode;
 }

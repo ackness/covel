@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { fmtTime } from "./-debug-helpers.js";
 import type { DebugPageData } from "./-debug-page-data.js";
+import { sessionStatusLabel, sessionTurnLabel } from "@/lib/session-display.js";
 
 export function SessionSidebar({
   sessions,
@@ -15,7 +16,7 @@ export function SessionSidebar({
   const { t } = useTranslation();
 
   return (
-    <div className="w-56 shrink-0 border-r border-(--rule-color) flex flex-col min-h-0 ui-rail">
+    <div className="h-28 w-full shrink-0 border-b border-(--rule-color) flex flex-col min-h-0 ui-rail sm:h-auto sm:w-56 sm:border-b-0 sm:border-r">
       <div className="px-3 py-2 border-b border-(--rule-color)">
         <h2 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
           {t("debugger.sessions")}
@@ -52,7 +53,8 @@ export function SessionSidebar({
               </div>
               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                 <Badge variant="secondary" className="text-[9px] h-4 px-1">
-                  {session.status} · t{session.completedPlayerTurns}
+                  {sessionStatusLabel(t, session.status)} ·{" "}
+                  {sessionTurnLabel(t, session.completedPlayerTurns)}
                 </Badge>
                 <span title={session.createdAt}>
                   {fmtTime(session.createdAt, {

@@ -152,7 +152,12 @@ export function PluginSelectionCard({
       <CollapsibleCardHeader
         expanded={expanded}
         onToggle={onToggleExpanded}
-        summary={`${selectedPluginIds.length}/${packages.length} ${t("session.pluginsSelected", "plugins selected")} · ${totalRuntimes} runtimes`}
+        contentId="plugin-selection-card-content"
+        summary={t("session.pluginsSelectionSummary", {
+          selectedCount: selectedPluginIds.length,
+          pluginCount: packages.length,
+          runtimeCount: totalRuntimes,
+        })}
       >
         <Puzzle className="w-4 h-4" />
         {t("session.plugins", "Plugins & Runtimes")}
@@ -161,7 +166,10 @@ export function PluginSelectionCard({
         </Badge>
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent className="space-y-4 px-4 pb-4">
+        <CardContent
+          id="plugin-selection-card-content"
+          className="space-y-4 px-4 pb-4"
+        >
           <div className="space-y-1.5">
             <PluginPackSelector
               pluginPacks={pluginPacks}

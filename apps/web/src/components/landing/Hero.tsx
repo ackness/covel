@@ -1,12 +1,28 @@
 import { Link } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowRight, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useMediaQuery } from "@/hooks/use-media-query";
 
 const REPO_URL = "https://github.com/ackness/covel";
 
 export function Hero() {
   const { t } = useTranslation();
+  const prefersReducedMotion = useMediaQuery(
+    "(prefers-reduced-motion: reduce)",
+  );
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (prefersReducedMotion) {
+      video.pause();
+      return;
+    }
+    void video.play().catch(() => undefined);
+  }, [prefersReducedMotion]);
 
   return (
     <section
@@ -38,19 +54,20 @@ export function Hero() {
             width={1536}
             height={1024}
             loading="lazy"
-            className="h-full w-full object-cover opacity-35 mix-blend-screen"
+            className="absolute inset-0 h-full w-full object-cover opacity-35 mix-blend-screen"
             draggable={false}
             style={{ filter: "saturate(0.8) contrast(1.1)" }}
           />
           {/* H.264 rather than the 10 MB GIF `build-media` also produces:
               same frames, ~8× smaller, and it decodes on the GPU. */}
           <video
-            className="h-full w-full object-cover opacity-60"
+            ref={videoRef}
+            className="absolute inset-0 h-full w-full object-cover opacity-60"
             src="/media/demo.mp4"
             poster="/media/demo-poster.jpg"
             width={1152}
             height={720}
-            autoPlay
+            autoPlay={!prefersReducedMotion}
             muted
             loop
             playsInline
