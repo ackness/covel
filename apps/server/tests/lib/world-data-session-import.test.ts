@@ -1659,6 +1659,7 @@ sources: {}
     ];
 
     for (const [worldId, locale, portraitCount] of [
+      ["emberback", "en-US", 3],
       ["mistport", "zh-CN", 7],
       ["mistport", "en-US", 7],
       ["haruka-academy", "zh-CN", 8],

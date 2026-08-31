@@ -4,14 +4,30 @@
     "characterId": "tomas-reed",
     "displayName": "Tomas Reed",
     "avatar": {
-      "id": "2688c22d1e55992225982c90e48f23355edea4a8b21fd27c78aec386b4ad6a36",
+      "id": "dd81c31f686ea81b88653994e83e8483c972d65c899b8f06b3d2959b67cf14bc",
       "mime": "image/png",
-      "size": 1873983
+      "size": 2935965
     },
     "sprite": {
-      "id": "2688c22d1e55992225982c90e48f23355edea4a8b21fd27c78aec386b4ad6a36",
+      "id": "dd81c31f686ea81b88653994e83e8483c972d65c899b8f06b3d2959b67cf14bc",
       "mime": "image/png",
-      "size": 1873983
+      "size": 2935965
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "dd81c31f686ea81b88653994e83e8483c972d65c899b8f06b3d2959b67cf14bc",
+            "mime": "image/png",
+            "size": 2935965
+          }
+        }
+      ]
     }
   },
   {
@@ -19,14 +35,30 @@
     "characterId": "june-okafor",
     "displayName": "June Okafor",
     "avatar": {
-      "id": "74886a063d6a6b8faa6448ead29108af7183be589ee30ee0082a5ab282a6d372",
+      "id": "386ffcb3ba777fb4fd32b5598bd6b9efdcc6d6bcc4dae46a2a49967301bd66e0",
       "mime": "image/png",
-      "size": 2108434
+      "size": 2737684
     },
     "sprite": {
-      "id": "74886a063d6a6b8faa6448ead29108af7183be589ee30ee0082a5ab282a6d372",
+      "id": "386ffcb3ba777fb4fd32b5598bd6b9efdcc6d6bcc4dae46a2a49967301bd66e0",
       "mime": "image/png",
-      "size": 2108434
+      "size": 2737684
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "386ffcb3ba777fb4fd32b5598bd6b9efdcc6d6bcc4dae46a2a49967301bd66e0",
+            "mime": "image/png",
+            "size": 2737684
+          }
+        }
+      ]
     }
   },
   {
@@ -34,14 +66,30 @@
     "characterId": "mina-park",
     "displayName": "Dr. Mina Park",
     "avatar": {
-      "id": "b4597cd505d9bc2c4b8f58712450f699457e85f9fc3b37d215ae7bf6d86d981b",
+      "id": "7bf0214d351bdf85033bd1b0150dc6bbd039825c70c893403a5d44cc12f282c3",
       "mime": "image/png",
-      "size": 1767555
+      "size": 2575029
     },
     "sprite": {
-      "id": "b4597cd505d9bc2c4b8f58712450f699457e85f9fc3b37d215ae7bf6d86d981b",
+      "id": "7bf0214d351bdf85033bd1b0150dc6bbd039825c70c893403a5d44cc12f282c3",
       "mime": "image/png",
-      "size": 1767555
+      "size": 2575029
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "7bf0214d351bdf85033bd1b0150dc6bbd039825c70c893403a5d44cc12f282c3",
+            "mime": "image/png",
+            "size": 2575029
+          }
+        }
+      ]
     }
   }
 ]
