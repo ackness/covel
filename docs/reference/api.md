@@ -1145,6 +1145,8 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 
 显式复用同一 ID 只有在旧行完全删除后才会成功；删除尚在 hook/drain 阶段时创建返回重复 ID 的 `409`，调用方应在 DELETE 成功后重试。MediaStore 的 session ownership/ref 会随删除清除，新 incarnation 不会继承旧媒体访问权。
 
+升级前创建、尚未包含私有 incarnation metadata 的历史 session 仍可删除。服务端仅在请求隔离检查中使用其既有 owner hash 或持久化的 `(id, createdAt)` 作为兼容身份；当前创建路径仍始终铸造随机 incarnation nonce，同 ID 重建不会继承历史身份。
+
 **参数:**
 
 | 参数 | 位置 | 说明    |

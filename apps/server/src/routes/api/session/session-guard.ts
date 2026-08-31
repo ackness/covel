@@ -109,13 +109,26 @@ export function mintSessionApprovalScope(): string {
   return randomUUID();
 }
 
-/** Stable identity used to reject stale mutations after same-id recreation. */
+/**
+ * Stable identity used to reject stale mutations after same-id recreation.
+ *
+ * Sessions created before incarnation metadata was introduced still need to
+ * remain deletable after an in-place upgrade. Their owner hash is already a
+ * private, immutable random value; rows old enough to lack that hash fall back
+ * to their persisted id/creation time. Every current create path mints an
+ * incarnation nonce, so a recreated current row can never compare equal to a
+ * legacy row through either compatibility branch.
+ */
 export function sessionIncarnationIdentity(session: SessionRecord): string {
   const nonce = session.metadata?.[SESSION_INCARNATION_KEY];
   if (typeof nonce === "string" && nonce.length > 0) {
     return `incarnation:${nonce}`;
   }
-  throw new Error(`Session ${session.id} is missing incarnation metadata`);
+  const ownerHash = session.metadata?.[SESSION_OWNER_TOKEN_HASH_KEY];
+  if (typeof ownerHash === "string" && ownerHash.length > 0) {
+    return `legacy-owner:${ownerHash}`;
+  }
+  return `legacy-created:${session.id}:${session.createdAt}`;
 }
 
 /**

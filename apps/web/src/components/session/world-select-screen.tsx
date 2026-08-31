@@ -95,6 +95,7 @@ export function WorldSelectScreen({
   const [enteringWorldId, setEnteringWorldId] = useState<string | null>(null);
   const [deletingWorldId, setDeletingWorldId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Entering a world used to defer the actual navigation to
   // `requestAnimationFrame`, so the busy state could paint one frame first.
@@ -154,7 +155,8 @@ export function WorldSelectScreen({
   }
 
   async function handleDeleteConfirm() {
-    if (!deletingWorldId) return;
+    if (!deletingWorldId || deleting) return;
+    setDeleting(true);
     try {
       await api.deleteWorld(deletingWorldId);
       onWorldDeleted?.(deletingWorldId);
@@ -162,23 +164,81 @@ export function WorldSelectScreen({
     } catch {
       // toast already shown by api request handler
     } finally {
+      setDeleting(false);
       setDeletingWorldId(null);
       setDeleteConfirmOpen(false);
     }
   }
 
+  const deletingWorld = deletingWorldId
+    ? worlds.find((world) => world.id === deletingWorldId)
+    : null;
+  const deleteDialog = (
+    <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+      <DialogContent
+        className="max-w-sm"
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" || deleting) return;
+          event.preventDefault();
+          void handleDeleteConfirm();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>
+            {t("world.deleteConfirmTitle", "Delete world?")}
+          </DialogTitle>
+          <DialogDescription>
+            {t(
+              "world.deleteConfirmDesc",
+              'This will permanently delete "{{name}}". This action cannot be undone.',
+              {
+                name: deletingWorld
+                  ? text(deletingWorld.name)
+                  : deletingWorldId,
+              },
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end gap-2 mt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={deleting}
+            onClick={() => setDeleteConfirmOpen(false)}
+          >
+            {t("common.cancel", "Cancel")}
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={deleting}
+            aria-keyshortcuts="Enter"
+            onClick={() => void handleDeleteConfirm()}
+          >
+            {deleting
+              ? t("common.deleting", "Deleting...")
+              : t("world.deleteConfirmAction", "Delete")}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+
   if (mode === "detail" && selectedWorld) {
     return (
-      <WorldDetailView
-        world={selectedWorld}
-        onClose={handleBack}
-        onEdit={handleEditFromDetail}
-        onDelete={
-          isWorldDeletable(selectedWorld)
-            ? () => handleDeleteFromDetail(selectedWorld.id)
-            : undefined
-        }
-      />
+      <>
+        {deleteDialog}
+        <WorldDetailView
+          world={selectedWorld}
+          onClose={handleBack}
+          onEdit={handleEditFromDetail}
+          onDelete={
+            isWorldDeletable(selectedWorld)
+              ? () => handleDeleteFromDetail(selectedWorld.id)
+              : undefined
+          }
+        />
+      </>
     );
   }
 
@@ -192,48 +252,9 @@ export function WorldSelectScreen({
     );
   }
 
-  const deletingWorld = deletingWorldId
-    ? worlds.find((w) => w.id === deletingWorldId)
-    : null;
-
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              {t("world.deleteConfirmTitle", "Delete world?")}
-            </DialogTitle>
-            <DialogDescription>
-              {t(
-                "world.deleteConfirmDesc",
-                'This will permanently delete "{{name}}". This action cannot be undone.',
-                {
-                  name: deletingWorld
-                    ? text(deletingWorld.name)
-                    : deletingWorldId,
-                },
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2 mt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDeleteConfirmOpen(false)}
-            >
-              {t("common.cancel", "Cancel")}
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={handleDeleteConfirm}
-            >
-              {t("world.deleteConfirmAction", "Delete")}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {deleteDialog}
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={onSettingsOpenChange}

@@ -63,12 +63,28 @@ describe("world select — deleting player-created worlds", () => {
     });
   });
 
-  it("offers the same delete action from custom-world details", () => {
+  it("confirms world deletion with Enter", async () => {
+    const deleteWorld = vi.spyOn(api, "deleteWorld").mockResolvedValue();
+    const onWorldDeleted = renderScreen();
+
+    fireEvent.click(screen.getByRole("button", { name: "删除世界" }));
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" });
+
+    await waitFor(() => {
+      expect(deleteWorld).toHaveBeenCalledTimes(1);
+      expect(deleteWorld).toHaveBeenCalledWith("custom");
+      expect(onWorldDeleted).toHaveBeenCalledWith("custom");
+    });
+  });
+
+  it("opens the same delete confirmation from custom-world details", () => {
     renderScreen();
 
     const detailButtons = screen.getAllByRole("button", { name: "查看详情" });
     fireEvent.click(detailButtons[1]!);
 
-    expect(screen.getByRole("button", { name: "删除世界" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "删除世界" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByText("删除世界？")).toBeTruthy();
   });
 });

@@ -22,6 +22,7 @@ This release turns the stage view, plugin UI, world data, and runtime context in
 
 ### Fixed
 
+- **Player-created worlds and their old sessions remain deletable after upgrade.** Sessions saved before incarnation metadata existed now use a stable compatibility identity during guarded deletion instead of failing with a 500; world and session confirmation dialogs also accept `Enter` as the confirm shortcut.
 - **Default Playwright runs are isolated and deterministic.** They use dedicated ports and a temporary MemoryStore, never reuse stale development servers, clean up their process trees, and require an explicit opt-in before calling live providers.
 - **Long-running memory and runtime work handles cancellation, retries, deadlines, and automatic snapshots consistently.** Failed or resumed executions keep their relevant context without duplicating stale session reads or losing trace identity.
 
