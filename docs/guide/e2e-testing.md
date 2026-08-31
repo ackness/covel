@@ -7,8 +7,6 @@
 
 ```bash
 pnpm install
-cp llm.toml.example llm.toml
-cp .env.llm.example .env.llm
 pnpm e2e
 ```
 
@@ -21,10 +19,20 @@ pnpm exec playwright test tests/e2e/game-session.spec.ts --grep "restore"
 pnpm exec playwright test --project=chromium tests/e2e/i18n.spec.ts
 ```
 
-`pnpm e2e` 使用 Playwright。未设置 `E2E_BASE_URL` 时，Playwright 会自动执行
-`pnpm dev`，等待 `http://localhost:3001/api/health` 可用后开始测试；**页面导航则指向
-Vite 的 `http://localhost:5173`**（`pnpm dev` 下 server 不服务 SPA，3001 的页面路由是裸
-404；`/api/*` 由 Vite 代理回 3001）。
+默认套件不访问真实模型。需要验证会产生 provider 请求和费用的 AI 世界生成、三回合游戏
+流程时显式启用：
+
+```bash
+cp llm.toml.example llm.toml
+cp .env.llm.example .env.llm
+LIVE_LLM_ENABLED=1 pnpm e2e
+```
+
+`pnpm e2e` 使用 Playwright。未设置 `E2E_BASE_URL` 时，Playwright 会启动一套隔离的
+测试服务：Vite 使用 `http://127.0.0.1:5181`，runtime server 使用
+`http://127.0.0.1:3101`，并强制使用临时 MemoryStore。测试不会复用 `pnpm dev` 的
+5173/3001 进程，结束后会回收两棵进程树，因此旧 Vite 缓存和本地 SQLite 数据都不会
+污染结果。`/api/*` 由测试 Vite 代理到 3101。
 
 如果你已经启动了服务，显式指定 **Vite** 地址：
 
@@ -33,8 +41,10 @@ pnpm dev
 E2E_BASE_URL=http://localhost:5173 pnpm e2e
 ```
 
-只有跑 **served-static 构建**（设了 `SERVE_STATIC` 的生产 / Docker 栈，SPA 由 server 自己
-托管）时才该指向 3001。
+显式设置 `E2E_BASE_URL` 后，Playwright 不再启动或回收任何服务。运行完整套件时，目标
+server 必须使用 `STORE_BACKEND=memory`；只有不含 browser-checkpoint 用例的子集才可以
+指向 SQLite/PostgreSQL。跑 **served-static 构建**（设了 `SERVE_STATIC` 的生产 / Docker
+栈，SPA 由 server 自己托管）时，base URL 可以直接指向 server。
 
 需要交互式调试时使用：
 
@@ -91,13 +101,14 @@ npx tsx --env-file=.env --env-file=.env.llm \
 
 ## 环境变量
 
-| 变量                    | 默认值                  | 说明                                                           |
-| ----------------------- | ----------------------- | -------------------------------------------------------------- |
-| `E2E_BASE_URL`          | `http://localhost:5173` | Playwright 页面导航地址（Vite）。设了它就不再自动起 `pnpm dev` |
-| `E2E_MODEL_SLOT`        | `e2e`                   | `scripts/e2e-plugin-verify.ts` 使用的 slot                     |
-| `COVEL_STORY_BASE_URL`  | 仅登记、未读取          | 不会覆盖 slot；代理地址应直接写入 `llm.toml`                   |
-| `COVEL_PLUGIN_BASE_URL` | 仅登记、未读取          | 不会覆盖 slot；代理地址应直接写入 `llm.toml`                   |
-| `CI`                    | `false`                 | CI 模式下 Playwright 启用重试并限制 worker                     |
+| 变量                    | 默认值                  | 说明                                                      |
+| ----------------------- | ----------------------- | --------------------------------------------------------- |
+| `E2E_BASE_URL`          | `http://127.0.0.1:5181` | Playwright 页面导航地址；设值表示使用调用方管理的外部环境 |
+| `E2E_MODEL_SLOT`        | `e2e`                   | `scripts/e2e-plugin-verify.ts` 使用的 slot                |
+| `LIVE_LLM_ENABLED`      | `false`                 | 显式启用会访问真实 provider 的 Playwright/Vitest 流程     |
+| `COVEL_STORY_BASE_URL`  | 仅登记、未读取          | 不会覆盖 slot；代理地址应直接写入 `llm.toml`              |
+| `COVEL_PLUGIN_BASE_URL` | 仅登记、未读取          | 不会覆盖 slot；代理地址应直接写入 `llm.toml`              |
+| `CI`                    | `false`                 | CI 模式下 Playwright 启用重试并限制 worker                |
 
 ## PostgreSQL 模式
 
@@ -127,11 +138,12 @@ pnpm docker:down
 
 ## 失败排查
 
-- **端口已占用或页面打不开**：默认 Vite 是 `5173`、API 是 `3001`。运行
-  `pnpm stop` 后重试；若已有服务，设置 `E2E_BASE_URL` 指向实际的 SPA 地址。
-  设置该变量后 Playwright 不会自动启动 `pnpm dev`。
-- **API health 等待超时**：确认 `http://localhost:3001/api/health` 可访问；若使用
-  PostgreSQL，先运行 `pnpm db:up` 再运行 `pnpm dev:pg`。
+- **端口已占用或页面打不开**：默认测试 Vite 是 `5181`、API 是 `3101`，且启用
+  `strictPort`，不会静默漂移到错误服务。停止占用端口的进程后重试；若要使用自己启动的
+  SPA，设置 `E2E_BASE_URL`，并自行保证后端类型符合目标 spec。
+- **API health 等待超时**：默认运行检查 `http://127.0.0.1:3101/api/health`；外部环境则
+  检查其实际 runtime 地址。PostgreSQL 流程先运行 `pnpm db:up` 和 `pnpm dev:pg`，再以
+  `E2E_BASE_URL` 指向对应 SPA，并排除只支持 MemoryStore 的 spec。
 - **模型/角色创建失败**：浏览器 live spec 使用应用配置的 `story` / `plugin` 等用途；
   `scripts/e2e-plugin-verify.ts` 才默认使用 `e2e`（或 `E2E_MODEL_SLOT`）。分别确认所需
   slot 存在且 `.env.llm` 已提供对应 key。

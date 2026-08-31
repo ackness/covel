@@ -7,6 +7,10 @@ import {
   waitForTurnIdle,
 } from "./helpers/player.js";
 
+const liveLlmEnabled = /^(1|true|yes|on)$/i.test(
+  process.env.LIVE_LLM_ENABLED ?? "",
+);
+
 /**
  * AI World Generation E2E — tests the full flow:
  *
@@ -21,6 +25,10 @@ import {
  */
 
 test.describe("AI World Generation", () => {
+  test.skip(
+    !liveLlmEnabled,
+    "Set LIVE_LLM_ENABLED=1 to run provider-backed browser tests",
+  );
   test.describe.configure({ mode: "serial" });
   test.use({ viewport: { width: 1280, height: 720 } });
   test.setTimeout(600_000); // 10 min — world gen + game start with LLM calls
@@ -113,38 +121,43 @@ test.describe("AI World Generation", () => {
     await expect(cancelBtn).toBeVisible();
 
     // ── Wait for completion ──
-    // The done indicator shows briefly (800ms) then dialog auto-closes.
-    // To avoid a race condition, wait for EITHER the done indicator OR the dialog closing.
-    // The dialog closing is the reliable signal that generation succeeded.
-    try {
-      const doneIndicator = dialog.locator(
-        "text=/世界创建完成|创建完成|World created/i",
-      );
-      await expect(doneIndicator.first()).toBeVisible({ timeout: 240_000 });
+    // A full three-attempt provider retry can exceed four minutes. Poll all
+    // terminal signals together so an error is reported immediately and the
+    // brief done indicator cannot race the dialog auto-close.
+    const doneIndicator = dialog
+      .locator("text=/世界创建完成|创建完成|World created/i")
+      .first();
+    const errorIndicator = dialog
+      .locator("text=/生成失败|Generation failed|LLM error|timeout/i")
+      .first();
+    let terminalState = "pending";
+    await expect
+      .poll(
+        async () => {
+          if (await dialog.isHidden()) terminalState = "dialog-closed";
+          else if (await errorIndicator.isVisible()) terminalState = "error";
+          else if ((await updatedWorldCount(page)) === initialWorldCount + 1)
+            terminalState = "world-created";
+          else if (await doneIndicator.isVisible()) terminalState = "done";
+          else terminalState = "pending";
+          return terminalState;
+        },
+        { timeout: 420_000, intervals: [1_000] },
+      )
+      .not.toBe("pending");
+
+    if (terminalState === "error") {
+      const errorText = await dialog.textContent();
+      throw new Error(`World generation failed: ${errorText}`);
+    }
+    if (terminalState === "done") {
       console.log("Phase: done (saw indicator)!");
       await page.screenshot({ path: "tests/e2e/artifacts/world-gen-done.png" });
-      // Wait for dialog to auto-close
-      await expect(dialog).toBeHidden({ timeout: 5_000 });
-    } catch {
-      // If we missed the done indicator, check if dialog already closed (generation succeeded)
-      if (await dialog.isHidden()) {
-        console.log("Phase: done (dialog already closed)!");
-      } else if ((await updatedWorldCount(page)) === initialWorldCount + 1) {
-        console.log("Phase: done (world list already updated)!");
-        await expect(dialog).toBeHidden({ timeout: 10_000 });
-      } else {
-        // Check for error state
-        const errorEl = dialog
-          .locator("text=/生成失败|Generation failed|LLM error|timeout/i")
-          .first();
-        if (await errorEl.isVisible({ timeout: 5_000 }).catch(() => false)) {
-          const errorText = await dialog.textContent();
-          throw new Error(`World generation failed: ${errorText}`);
-        }
-        throw new Error(
-          "World generation timed out — dialog still open with no done/error state",
-        );
-      }
+    } else {
+      console.log(`Phase: done (${terminalState})!`);
+    }
+    if (await dialog.isVisible()) {
+      await expect(dialog).toBeHidden({ timeout: 10_000 });
     }
     console.log("Dialog closed");
 

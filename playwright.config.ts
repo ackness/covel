@@ -1,12 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// `pnpm dev` serves the web SPA from Vite (5173) and proxies `/api/*` to the
-// runtime server (3001). The server itself only serves the built SPA when
-// SERVE_STATIC is set (production/Docker), so in dev every page route on 3001
-// is a bare 404 — point page navigation at Vite. API-only tests use relative
-// `/api/*` paths, which Vite proxies to 3001. Override via E2E_BASE_URL when
-// running against a served-static build (e.g. the Docker stack).
-const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+// Keep the default E2E stack isolated from `pnpm dev`: reusing a long-running
+// Vite process can retain a stale dependency-optimization failure, and the
+// deterministic browser-checkpoint specs require the browser-private
+// MemoryStore profile rather than the normal SQLite development default.
+const e2eWebOrigin = "http://127.0.0.1:5181";
+const e2eServerOrigin = "http://127.0.0.1:3101";
+const baseURL = process.env.E2E_BASE_URL ?? e2eWebOrigin;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -28,13 +28,31 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  /* Start the Docker stack before tests if not already running */
+  // An explicit base URL means the caller owns the target environment. The
+  // default path starts fresh, dedicated processes and always tears them down.
   webServer: process.env.E2E_BASE_URL
     ? undefined
-    : {
-        command: "pnpm dev",
-        url: "http://localhost:3001/api/health",
-        reuseExistingServer: true,
-        timeout: 60_000,
-      },
+    : [
+        {
+          command: "pnpm --filter @covel/server dev",
+          env: {
+            STORE_BACKEND: "memory",
+            SERVER_PORT: "3101",
+            CORS_ORIGIN: e2eWebOrigin,
+          },
+          url: `${e2eServerOrigin}/api/health`,
+          reuseExistingServer: false,
+          gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
+          timeout: 60_000,
+        },
+        {
+          command:
+            "pnpm --filter @covel/web dev --host 127.0.0.1 --port 5181 --strictPort",
+          env: { RUNTIME_PORT: "3101" },
+          url: e2eWebOrigin,
+          reuseExistingServer: false,
+          gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
+          timeout: 60_000,
+        },
+      ],
 });

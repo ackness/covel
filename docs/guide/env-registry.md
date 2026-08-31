@@ -59,7 +59,7 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 | `VECTOR_BACKEND`                                      | `embedded`                      | 向量能力（`embedded` / `none` / `external`）           |
 | `COVEL_LLM_RETRY_DISABLED`                            | `false`                         | 设为 `1` 时关闭 provider HTTP 重试                     |
 | `COVEL_TRACE_TRUNCATE`                                | `false` / `planned`             | 计划中的 trace payload 截断开关，当前不可依赖          |
-| `E2E_BASE_URL` / `E2E_MODEL_SLOT`                     | `http://localhost:5173` / `e2e` | Playwright 地址及插件验证脚本 slot                     |
+| `E2E_BASE_URL` / `E2E_MODEL_SLOT`                     | `http://127.0.0.1:5181` / `e2e` | Playwright 外部环境覆盖地址及插件验证脚本 slot         |
 | `COVEL_PG_PREFLIGHT_HOST` / `COVEL_PG_PREFLIGHT_PORT` | `127.0.0.1` / `5432`            | `dev:pg` 启动前的 TCP 检查目标                         |
 | `COVEL_PG_PREFLIGHT_SKIP`                             | `false`                         | 设为 `1` 跳过 `dev:pg` TCP 检查                        |
 | `RUNTIME_HOST` / `RUNTIME_PORT`                       | `127.0.0.1` / `3001`            | Vite 开发代理的 server 目标                            |
@@ -70,7 +70,7 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` 只由 Electron
 打包工具读取，详见 [`desktop-packaging.md`](./desktop-packaging.md)。
 
-> Registry 元数据尚有两处待代码侧收敛：`E2E_BASE_URL` 登记为 `http://localhost:3001`，但 `playwright.config.ts` 的实际默认值是 `http://localhost:5173`；`COVEL_PG_PREFLIGHT_SKIP` 已由 `scripts/dev-pg-preflight.mjs` 读取，但 registry 状态仍标为 `documented`。本页按实际运行行为列值。
+> Registry 元数据仍有一处待代码侧收敛：`COVEL_PG_PREFLIGHT_SKIP` 已由 `scripts/dev-pg-preflight.mjs` 读取，但 registry 状态仍标为 `documented`。本页按实际运行行为列值。
 
 ## 迁移规则
 

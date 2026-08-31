@@ -6,8 +6,9 @@ export const TEST_ENV_VARS = [
     group: "test",
     type: "url",
     status: "active",
-    defaultValue: "http://localhost:3001",
-    description: "Playwright base URL override.",
+    defaultValue: "http://127.0.0.1:5181",
+    description:
+      "Playwright base URL override; when omitted, Playwright starts its isolated local stack.",
   },
   {
     name: "E2E_MODEL_SLOT",

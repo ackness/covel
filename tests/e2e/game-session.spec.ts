@@ -9,6 +9,10 @@ import {
   waitForTurnIdle,
 } from "./helpers/player.js";
 
+const liveLlmEnabled = /^(1|true|yes|on)$/i.test(
+  process.env.LIVE_LLM_ENABLED ?? "",
+);
+
 /**
  * Real game session E2E — 3 rounds of interaction:
  *
@@ -24,6 +28,10 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("Game Session — 3 Round Flow", () => {
+  test.skip(
+    !liveLlmEnabled,
+    "Set LIVE_LLM_ENABLED=1 to run provider-backed browser tests",
+  );
   test.use({ viewport: { width: 1280, height: 720 } });
   test.setTimeout(600_000); // 10 min for 3 rounds of LLM calls
   let hasProviderKeys = false;
