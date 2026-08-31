@@ -125,11 +125,119 @@ function normalizePresence(value) {
       ...(base.voice !== undefined
         ? { voice: normalizeMediaRef(base.voice, "presence.voice") }
         : {}),
+      ...(base.visuals !== undefined
+        ? { visuals: normalizeVisuals(base.visuals) }
+        : {}),
       ...(base.media !== undefined
         ? { media: normalizeMediaMap(base.media) }
         : {}),
     }),
   });
+}
+
+function normalizeVisuals(value) {
+  if (!isRecord(value) || !Array.isArray(value.variants)) {
+    throw new Error("presence.visuals.variants must be an array");
+  }
+  if (value.variants.length < 1 || value.variants.length > 64) {
+    throw new Error("presence.visuals.variants must contain 1-64 entries");
+  }
+
+  const variants = value.variants.map((variant, index) =>
+    normalizeVisualVariant(variant, index),
+  );
+  const ids = new Set();
+  for (const variant of variants) {
+    if (ids.has(variant.id)) {
+      throw new Error(
+        `presence.visuals variant id must be unique: ${variant.id}`,
+      );
+    }
+    ids.add(variant.id);
+  }
+
+  const defaultVariant = optionalVisualKey(
+    value.defaultVariant,
+    "presence.visuals.defaultVariant",
+  );
+  if (defaultVariant && !ids.has(defaultVariant)) {
+    throw new Error(
+      "presence.visuals.defaultVariant must reference an existing variant id",
+    );
+  }
+  return {
+    ...(defaultVariant ? { defaultVariant } : {}),
+    variants,
+  };
+}
+
+function normalizeVisualVariant(value, index) {
+  if (!isRecord(value)) {
+    throw new Error(`presence.visuals.variants[${index}] must be an object`);
+  }
+  const prefix = `presence.visuals.variants[${index}]`;
+  const id = optionalVisualKey(value.id, `${prefix}.id`);
+  if (!id) throw new Error(`${prefix}.id must be a non-empty string`);
+  const outfit = optionalVisualKey(value.outfit, `${prefix}.outfit`);
+  const expression = optionalVisualKey(
+    value.expression,
+    `${prefix}.expression`,
+  );
+  const pose = optionalVisualKey(value.pose, `${prefix}.pose`);
+  return {
+    id,
+    ...(outfit ? { outfit } : {}),
+    ...(expression ? { expression } : {}),
+    ...(pose ? { pose } : {}),
+    sprite: normalizeMediaRef(value.sprite, `${prefix}.sprite`),
+    ...(value.stage !== undefined
+      ? { stage: normalizeStageFraming(value.stage, `${prefix}.stage`) }
+      : {}),
+  };
+}
+
+function optionalVisualKey(value, field) {
+  if (value === undefined || value === null) return undefined;
+  if (
+    typeof value !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/.test(value)
+  ) {
+    throw new Error(`${field} must be a 1-64 character safe identifier`);
+  }
+  return value;
+}
+
+function normalizeStageFraming(value, field) {
+  if (!isRecord(value)) throw new Error(`${field} must be an object`);
+  const scale = optionalBoundedNumber(value.scale, `${field}.scale`, 0.5, 2);
+  const offsetX = optionalBoundedNumber(
+    value.offsetX,
+    `${field}.offsetX`,
+    -100,
+    100,
+  );
+  const offsetY = optionalBoundedNumber(
+    value.offsetY,
+    `${field}.offsetY`,
+    -100,
+    100,
+  );
+  return {
+    ...(scale !== undefined ? { scale } : {}),
+    ...(offsetX !== undefined ? { offsetX } : {}),
+    ...(offsetY !== undefined ? { offsetY } : {}),
+  };
+}
+
+function optionalBoundedNumber(value, field, min, max) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${field} must be a finite number`);
+  }
+  if (value < min || value > max) {
+    throw new Error(`${field} must be between ${min} and ${max}`);
+  }
+  return value;
 }
 
 function normalizeMediaMap(value) {

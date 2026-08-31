@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import * as api from "@/services/api";
 import type { DataService } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
+import { loadPluginDataForSession } from "@/stores/plugin-data-store.js";
 import type { SessionDispatch, SessionState } from "./types.js";
 
 export function useBootEffect(
@@ -50,7 +51,14 @@ export function useMessageUiSpecHydrationEffect(
           api
             .listPluginData(sessionId, pluginId, "message")
             .then((items) => {
-              if (cancelled || items.length === 0) return;
+              if (cancelled) return;
+              loadPluginDataForSession(
+                sessionId,
+                pluginId,
+                "message",
+                items.map((item) => ({ key: item.key, value: item.value })),
+              );
+              if (items.length === 0) return;
               dispatch({
                 type: "PLUGIN_DATA_CHANGED",
                 pluginId,

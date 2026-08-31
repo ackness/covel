@@ -4,7 +4,6 @@ import { ImageIcon, Loader2, Upload } from "lucide-react";
 import type { MediaRef } from "@covel/shared";
 import { Media } from "@/components/Media.js";
 import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
-import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
 import { useActiveSessionId } from "@/lib/catalog/session-context.js";
 import {
@@ -13,14 +12,11 @@ import {
 } from "@/services/api.js";
 import { getSessionWorkspace } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
-
-interface PresenceRecord {
-  readonly characterId?: string;
-  readonly displayName?: string;
-  readonly avatar?: unknown;
-  /** Optional full-body 立绘; rendered in preference to avatar when present. */
-  readonly sprite?: unknown;
-}
+import {
+  replaceDefaultCharacterVisual,
+  resolveCharacterVisual,
+  type PresenceRecord,
+} from "@/lib/character-visuals.js";
 
 interface PresenceEntry {
   readonly key: string;
@@ -77,6 +73,7 @@ export function PortraitGalleryPanel({ pluginId }: { pluginId: string }) {
                   : {}),
                 avatar: { id: ref.id, mime: ref.mime, size: ref.size },
                 sprite: { id: ref.id, mime: ref.mime, size: ref.size },
+                visuals: replaceDefaultCharacterVisual(entry.value, ref),
               },
             },
           }),
@@ -114,11 +111,7 @@ export function PortraitGalleryPanel({ pluginId }: { pluginId: string }) {
           // Prefer the dedicated full-body 立绘 (sprite) when a world ships one,
           // else fall back to the avatar — so the panel's "立绘" name is truthful
           // and the sprite field a world may provide is actually rendered.
-          const ref = isMediaRef(entry.value.sprite)
-            ? entry.value.sprite
-            : isMediaRef(entry.value.avatar)
-              ? entry.value.avatar
-              : null;
+          const ref = resolveCharacterVisual(entry.value)?.ref ?? null;
           const busy = uploadingKey === entry.key;
           return (
             <div key={entry.key} className="space-y-1">

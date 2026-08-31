@@ -31,6 +31,7 @@ import {
   resolveImageWire,
   reportResults,
 } from "./lib/image-gen-common.mjs";
+import { assertPortraitPng } from "./lib/png-image-validation.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const DEFAULT_SLOT = "gpt-image-2";
@@ -76,6 +77,20 @@ function buildPrompt(style, character, chroma = false) {
   return `${prefix}${character.subject}${suffix}${chromaPart}${negative ? `\n\nAvoid: ${negative}` : ""}`;
 }
 
+function portraitEntries(character) {
+  const variants = Array.isArray(character.variants) ? character.variants : [];
+  return [
+    { ...character, id: character.id, name: character.name },
+    ...variants.map((variant) => ({
+      ...character,
+      ...variant,
+      id: `${character.id}:${variant.id}`,
+      name: `${character.name} [${variant.id}]`,
+      subject: variant.subject ?? character.subject,
+    })),
+  ];
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.world) {
@@ -95,11 +110,16 @@ async function main() {
   const quality = args.quality || manifest.defaults?.quality || "medium";
   const style = manifest.style || {};
 
-  let chars = manifest.characters;
-  if (args.only) chars = chars.filter((c) => args.only.has(c.id));
-  if (args.limit) chars = chars.slice(0, args.limit);
+  let portraits = manifest.characters.flatMap(portraitEntries);
+  if (args.only) {
+    portraits = portraits.filter((portrait) => {
+      const characterId = portrait.id.split(":", 1)[0];
+      return args.only.has(portrait.id) || args.only.has(characterId);
+    });
+  }
+  if (args.limit) portraits = portraits.slice(0, args.limit);
 
-  const queue = chars.map((c) => ({
+  const queue = portraits.map((c) => ({
     id: c.id,
     name: c.name,
     filename: c.filename,
@@ -139,7 +159,7 @@ async function main() {
 
   // Filter out already-present files up front (unless --force).
   const todo = [];
-  for (const c of chars) {
+  for (const c of portraits) {
     if (!args.force && (await exists(path.join(outDir, c.filename)))) {
       console.log(`  ⏭  ${c.name} (${c.filename}) exists — skip`);
     } else {
@@ -166,6 +186,11 @@ async function main() {
         size,
         quality,
         background: args.chroma ? undefined : style.background,
+      });
+      assertPortraitPng(bytes, {
+        size,
+        background: args.chroma ? undefined : style.background,
+        label: c.filename,
       });
       await writeFile(path.join(outDir, c.filename), bytes);
       console.log(

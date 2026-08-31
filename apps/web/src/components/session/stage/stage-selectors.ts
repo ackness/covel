@@ -8,7 +8,33 @@ import type { StreamMessage } from "@/stores/session-store.js";
 import type { WorldVisual } from "@/lib/world-visuals.js";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
+import {
+  resolveCharacterVisual,
+  type CharacterVisualFraming,
+  type PresenceRecord,
+} from "@/lib/character-visuals.js";
 import { isPendingInteractionMessage } from "../game-view/interaction-blocks.js";
+import {
+  MAX_SPRITE_SLOTS,
+  type SpritePosition,
+  type StageCurrentRecord,
+  type StageSpeaker,
+  type StageTransition,
+} from "./stage-direction-selectors.js";
+
+export {
+  applySceneSetPreview,
+  applyStageDirectionPreview,
+  MAX_SPRITE_SLOTS,
+  resolveStageSpeakers,
+  type SpritePosition,
+  type StageCurrentRecord,
+  type StageDirectionActor,
+  type StageDirectionRecord,
+  type StageSceneRegistry,
+  type StageSpeaker,
+  type StageTransition,
+} from "./stage-direction-selectors.js";
 
 // ── Capability-driven plugin binding ────────────────────────────
 //
@@ -26,7 +52,26 @@ export const STAGE_CAPABILITIES = {
   cast: "scene-cast",
   prompts: "scene-prompts",
   presence: "character-presence",
+  direction: "stage-direction",
 } as const;
+
+/** Stable key for the story currently presented on stage. A turn id survives
+ * the streaming-placeholder to durable-message swap; the message id covers
+ * restored legacy rows without a turn id. */
+export function stageStoryKey(
+  message: Pick<StreamMessage, "id" | "turnId"> | undefined,
+): string | undefined {
+  return message ? (message.turnId ?? message.id) : undefined;
+}
+
+/** Durable history present when Stage mounts has already been read elsewhere.
+ * A streaming placeholder can also be present on the first render, but its
+ * partial narrative must still pass through the typewriter. */
+export function initialStageReadStoryKey(
+  message: Pick<StreamMessage, "id" | "turnId"> | undefined,
+): string | undefined {
+  return message?.id.startsWith("stream_") ? undefined : stageStoryKey(message);
+}
 
 interface CapabilityCarrier {
   readonly id: string;
@@ -59,19 +104,6 @@ export function pluginIdForCapability(
 
 // ── Backdrop (scene-stage `stage/current`) ──────────────────────
 
-/** Shape written by `scene-stage/resolver` to `(scene-stage, "stage")["current"]`. */
-export interface StageCurrentRecord {
-  readonly sceneId?: string;
-  readonly name?: string;
-  readonly variant?: "day" | "night";
-  readonly source?: "world" | "session" | "pending" | "none";
-  readonly sourceLabel?: unknown;
-  readonly resolved?: unknown;
-  readonly day?: unknown;
-  readonly night?: unknown;
-  readonly turnId?: string;
-}
-
 export type StageBackdropKind =
   "scene" | "previous-or-hero" | "hero" | "gradient";
 
@@ -103,22 +135,7 @@ export function resolveBackdrop(
 }
 
 // ── Sprites (scene-cast `active-cast` × character-presence `presence`) ──
-
-export interface StageSpeaker {
-  readonly id: string;
-  readonly name: string;
-}
-
-/** Presence record shape — mirrors `portrait-gallery-panel.tsx`'s local type. */
-export interface PresenceRecord {
-  readonly characterId?: string;
-  readonly displayName?: string;
-  readonly avatar?: unknown;
-  readonly sprite?: unknown;
-}
-
-export type SpritePosition =
-  "left" | "center-left" | "center" | "center-right" | "right";
+export type { PresenceRecord } from "@/lib/character-visuals.js";
 
 export interface StageSpriteSlot {
   readonly characterId: string;
@@ -127,6 +144,10 @@ export interface StageSpriteSlot {
    * layer renders a name-initial fallback card so the dialog nameplate never
    * points at an empty stage. */
   readonly ref: MediaRef | null;
+  readonly variantId?: string;
+  readonly framing?: CharacterVisualFraming;
+  readonly transition?: StageTransition;
+  readonly exiting?: boolean;
   readonly active: boolean;
   readonly pos: SpritePosition;
 }
@@ -151,10 +172,6 @@ const STATIONS_BY_COUNT: Readonly<Record<number, readonly SpritePosition[]>> = {
   3: ["left", "center", "right"],
   4: ["left", "center-left", "center-right", "right"],
 };
-
-// ponytail: stage real estate caps at 4 sprites (scene-cast's default/typical
-// activeSpeakerCount is 1-2); extend STATIONS_BY_COUNT if a world ever needs more.
-export const MAX_SPRITE_SLOTS = 4;
 
 /** Leftmost free station nearest to `target` (ties break left — the
  * left-to-right STATION_ORDER walk with a strict `<` guarantees it). */
@@ -237,42 +254,32 @@ export interface SpriteLane {
  * (non-transparent, scene-baked) card can't blanket the entire backdrop. */
 const MAX_SOLO_LANE_PCT = 60;
 
-/** Active speaker's lane share relative to the others'. Equal lanes let a
- * wide (width-bound, `object-contain`) speaker sprite render *smaller* than
- * tall neighbours; the extra share keeps the speaker visually dominant.
- * Must stay small enough that a 2-cast active lane (w/(w+1)) ≤ the solo cap. */
-const ACTIVE_LANE_WEIGHT = 1.4;
-
 /**
- * Lane geometry for the sprite layer: the stage splits into weighted lanes,
- * one per staged sprite, ordered left→right by station rank — the active
- * speaker (when there is one and the cast isn't solo) gets a wider share.
+ * Lane geometry for the sprite layer: the stage splits into equal lanes,
+ * one per staged sprite, ordered left→right by station rank.
  * Sprites render *contained inside* their lane box, so occlusion is
  * impossible by construction — sprite width is bounded by stage *width* (a
  * share of it), not by stage height × image aspect, which is what let wide
  * sprite cards swallow their neighbours whenever the stage got narrower.
+ * Speaker focus is a presentation concern (filter / subtle scale / z-index),
+ * not layout geometry: changing speakers must not make every sprite resize.
  *
  * Returns one lane per input position, aligned with input order. Assumes
  * positions are unique (guaranteed by `assignStations`).
  */
 export function computeSpriteLanes(
   positions: readonly SpritePosition[],
-  activeIndex = -1,
 ): SpriteLane[] {
   const count = positions.length;
   if (count === 0) return [];
-  const weights = positions.map((_, i) =>
-    i === activeIndex && count > 1 ? ACTIVE_LANE_WEIGHT : 1,
-  );
-  const total = weights.reduce((sum, w) => sum + w, 0);
+  const share = 100 / count;
 
   const byRank = positions
     .map((pos, i) => ({ i, station: STATION_ORDER.indexOf(pos) }))
     .sort((a, b) => a.station - b.station);
-  const lanes: SpriteLane[] = new Array(count);
+  const lanes = Array.from<SpriteLane>({ length: count });
   let cursor = 0;
   for (const { i } of byRank) {
-    const share = (weights[i] / total) * 100;
     const widthPct = Math.min(share, MAX_SOLO_LANE_PCT);
     lanes[i] = { leftPct: cursor + (share - widthPct) / 2, widthPct };
     cursor += share;
@@ -316,7 +323,7 @@ export function computeSpriteSlots(
   presenceMap: Readonly<Record<string, PresenceRecord | undefined>>,
   stations?: ReadonlyMap<string, SpritePosition>,
 ): StageSpriteSlot[] {
-  const primaryId = speakers[0]?.id;
+  const primaryId = speakers.find((speaker) => !speaker.exiting)?.id;
   const staged = speakers.slice(0, MAX_SPRITE_SLOTS);
   const resolved =
     stations ??
@@ -327,17 +334,17 @@ export function computeSpriteSlots(
 
   return staged.map((speaker) => {
     const presence = findPresence(presenceMap, speaker.id);
-    const ref = isMediaRef(presence?.sprite)
-      ? presence.sprite
-      : isMediaRef(presence?.avatar)
-        ? presence.avatar
-        : null;
+    const visual = resolveCharacterVisual(presence, speaker.visual);
     return {
       characterId: speaker.id,
       displayName: speaker.name,
-      ref,
+      ref: visual?.ref ?? null,
+      ...(visual?.variantId ? { variantId: visual.variantId } : {}),
+      ...(visual?.stage ? { framing: visual.stage } : {}),
+      ...(speaker.transition ? { transition: speaker.transition } : {}),
+      ...(speaker.exiting ? { exiting: true } : {}),
       active: speaker.id === primaryId,
-      pos: resolved.get(speaker.id) ?? "center",
+      pos: speaker.position ?? resolved.get(speaker.id) ?? "center",
     };
   });
 }
@@ -457,6 +464,45 @@ export function hasSubmittedForm(
   );
 }
 
+const FALLBACK_RECAP_MAX_CHARS = 180;
+const FALLBACK_RECAP_MAX_SENTENCES = 3;
+
+/**
+ * Derive a compact, deterministic context excerpt for legacy prompt data that
+ * predates scene-prompts' `recap` field. This is deliberately a fallback, not
+ * an LLM summary: prefer the latest complete sentences and keep the decision
+ * panel bounded even when the story message is long.
+ */
+export function deriveDecisionRecapFallback(
+  storyText: string,
+  maxChars = FALLBACK_RECAP_MAX_CHARS,
+): string | undefined {
+  const normalized = storyText.replace(/\s+/gu, " ").trim();
+  if (!normalized || maxChars <= 0) return undefined;
+  if (maxChars === 1) return "…";
+  if (normalized.length <= maxChars) return normalized;
+
+  const sentences =
+    normalized
+      .match(/[^。！？!?]+(?:[。！？!?]+[”’」』）》】]?|$)/gu) // i18n-allow -- locale-aware sentence punctuation
+      ?.map((value) => value.trim()) ?? [];
+  let recap = "";
+  let sentenceCount = 0;
+  for (let index = sentences.length - 1; index >= 0; index -= 1) {
+    const sentence = sentences[index];
+    if (!sentence) continue;
+    const candidate = `${sentence}${recap}`;
+    if (candidate.length > maxChars) {
+      if (!recap) return `…${sentence.slice(-(maxChars - 1))}`;
+      break;
+    }
+    recap = candidate;
+    sentenceCount += 1;
+    if (sentenceCount >= FALLBACK_RECAP_MAX_SENTENCES) break;
+  }
+  return recap || `…${normalized.slice(-(maxChars - 1))}`;
+}
+
 /** A single renderable entry in the stage choice overlay. */
 export type StageChoiceItem =
   | {
@@ -478,8 +524,24 @@ export type StageChoiceItem =
       readonly description?: string;
     };
 
+/** A choice source and the question its entries answer. */
+export interface StageChoiceGroup {
+  readonly id: string;
+  readonly prompt?: string;
+  readonly items: readonly StageChoiceItem[];
+}
+
+/** Context shown above the stage decision controls. */
+export interface StageDecisionContext {
+  readonly scene?: string;
+  readonly recap?: string;
+  readonly decision?: string;
+}
+
 export interface MergedChoices {
   readonly items: readonly StageChoiceItem[];
+  readonly groups: readonly StageChoiceGroup[];
+  readonly context: StageDecisionContext;
   readonly twoColumn: boolean;
 }
 
@@ -491,7 +553,8 @@ const TWO_COLUMN_THRESHOLD = 6;
 /**
  * Order: pending interaction choices, then scene-prompts short phrases
  * (unpacked from `prompt{N}Text/Label`, N sorted ascending, empty slots
- * skipped). The caller appends the "✎ free input" entry itself.
+ * skipped). Groups preserve the question each set answers; the flat `items`
+ * array remains available for layout and backwards-compatible consumers.
  *
  * ponytail: `prompt{N}Icon/Color` are left unpacked — v1 has no consumer for
  * them (plan's explicit scope cut); add when a component wants icon/color.
@@ -502,10 +565,13 @@ export function mergeChoices(
   locale: string,
 ): MergedChoices {
   const items: StageChoiceItem[] = [];
+  const groups: StageChoiceGroup[] = [];
+  const interactionPrompts: string[] = [];
 
   for (const block of interactionChoices) {
+    const groupItems: StageChoiceItem[] = [];
     for (const choice of block.choices) {
-      items.push({
+      const item: StageChoiceItem = {
         kind: "interaction",
         id: `${block.blockId}:${choice.id}`,
         label: choice.label,
@@ -515,23 +581,60 @@ export function mergeChoices(
         interactionId: block.interactionId,
         choiceId: choice.id,
         submitBehavior: block.submitBehavior,
+      };
+      items.push(item);
+      groupItems.push(item);
+    }
+    const prompt = block.prompt.trim() || undefined;
+    if (prompt) interactionPrompts.push(prompt);
+    if (groupItems.length > 0) {
+      groups.push({
+        id: `interaction:${block.blockId}`,
+        prompt,
+        items: groupItems,
       });
     }
   }
 
+  const promptItems: StageChoiceItem[] = [];
   for (let n = 1; n <= MAX_PROMPT_SLOTS; n += 1) {
     const text = promptsNamespace[`prompt${n}Text`];
     if (typeof text !== "string" || text.trim().length === 0) continue;
-    items.push({
+    const item: StageChoiceItem = {
       kind: "prompt",
       id: `prompt:${n}`,
-      label: text,
+      label: text.trim(),
       description:
         resolveI18n(promptsNamespace[`prompt${n}Label`], locale) || undefined,
+    };
+    items.push(item);
+    promptItems.push(item);
+  }
+
+  const scene = resolveI18n(promptsNamespace.scene, locale).trim() || undefined;
+  const recap = resolveI18n(promptsNamespace.recap, locale).trim() || undefined;
+  const generatedDecision =
+    resolveI18n(promptsNamespace.decision, locale).trim() || undefined;
+  const decision =
+    interactionPrompts.length === 1 ? interactionPrompts[0] : generatedDecision;
+
+  if (promptItems.length > 0) {
+    groups.push({
+      id: "scene-prompts",
+      prompt:
+        interactionChoices.length > 0 && generatedDecision !== decision
+          ? generatedDecision
+          : undefined,
+      items: promptItems,
     });
   }
 
-  return { items, twoColumn: items.length > TWO_COLUMN_THRESHOLD };
+  return {
+    items,
+    groups,
+    context: { scene, recap, decision },
+    twoColumn: items.length > TWO_COLUMN_THRESHOLD,
+  };
 }
 
 /**
@@ -540,8 +643,8 @@ export function mergeChoices(
  * scene-prompts regenerates — drop them so the stage never offers phrases from
  * a past turn. Returns the namespace untouched when the stamp is fresh, absent,
  * or uncomparable (no current turn yet) — the latter two keep back-compat with
- * pre-`__turnId` data. Interaction choices and the ✎ entry are unaffected
- * (they don't live in this namespace).
+ * pre-`__turnId` data. Interaction choices and the inline composer are
+ * unaffected (they don't live in this namespace).
  */
 export function filterStalePrompts(
   promptsNamespace: Readonly<Record<string, unknown>>,

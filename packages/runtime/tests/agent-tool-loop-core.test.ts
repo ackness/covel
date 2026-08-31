@@ -68,8 +68,12 @@ function makeExecutor() {
 /** Scripted LLM: returns queued responses in order; repeats the last one. */
 class ScriptedLLM implements LLMAdapter {
   calls = 0;
+  readonly requests: Parameters<LLMAdapter["generate"]>[0][] = [];
   constructor(private readonly script: LLMResponse[]) {}
-  async generate(): Promise<LLMResponse> {
+  async generate(
+    params: Parameters<LLMAdapter["generate"]>[0],
+  ): Promise<LLMResponse> {
+    this.requests.push(params);
     const r = this.script[Math.min(this.calls, this.script.length - 1)]!;
     this.calls++;
     return r;
@@ -114,6 +118,12 @@ async function run(opts: {
   deps?: Record<string, unknown>;
   maxSteps?: number;
   messages?: { role: string; content: string }[];
+  estimator?: (text: string) => number;
+  contextBudget?: {
+    maxInputTokens: number;
+    reservedForResponse?: number;
+    protectLastUserTurns?: number;
+  };
 }) {
   return (await runAgentToolLoop({
     executionContext: {
@@ -131,6 +141,9 @@ async function run(opts: {
       { role: "system", content: "sys" },
       { role: "user", content: "go" },
     ]) as never,
+    ...(opts.estimator && opts.contextBudget
+      ? { estimator: opts.estimator, contextBudget: opts.contextBudget }
+      : {}),
     hookPipeline: undefined,
     startTime: Date.now(),
     runId: "run-loop",
@@ -177,6 +190,109 @@ describe("runAgentToolLoop core", () => {
     const roles = messages.map((m) => m.role);
     expect(roles).toEqual(["system", "user", "assistant", "tool"]);
     expect(messages[3]!.content).toContain("marked:alpha");
+  });
+
+  it("re-budgets a grown tool transcript before each LLM call", async () => {
+    const llm = new ScriptedLLM([
+      toolCall("mark", { note: "x".repeat(3_000) }),
+      prose("must not be reached"),
+    ]);
+
+    await expect(
+      run({
+        llm,
+        maxSteps: 3,
+        estimator: (text) => text.length,
+        contextBudget: {
+          maxInputTokens: 1_000,
+          reservedForResponse: 100,
+          protectLastUserTurns: 1,
+        },
+        messages: [
+          { role: "system", content: "sys" },
+          { role: "user", content: "go" },
+        ],
+      }),
+    ).rejects.toThrow(/Context budget exceeded before LLM call/);
+    expect(llm.calls).toBe(1);
+    expect(llm.requests[0]?.maxOutputTokens).toBe(100);
+  });
+
+  it("truncates oversized read-tool results while preserving tool-call pairing", async () => {
+    const largeReadTool = tool({
+      name: "large-read",
+      description: "returns a large read-only result",
+      parameters: z.object({}),
+      async execute() {
+        return { _text: `prefix:${"R".repeat(3_000)}:suffix` };
+      },
+    });
+    const executor = createToolExecutor({
+      findTool: (name) => (name === "large-read" ? largeReadTool : undefined),
+    });
+    const llm = new ScriptedLLM([
+      toolCall("large-read", {}),
+      prose("after compacted result"),
+    ]);
+    const { emitter, types } = recordingEmitter();
+
+    const result = await run({
+      llm,
+      manifest: manifest({ tools: { plugin: ["large-read"] } }),
+      deps: { toolExecutor: executor, emitter },
+      maxSteps: 3,
+      estimator: (text) => text.length,
+      contextBudget: {
+        maxInputTokens: 1_000,
+        reservedForResponse: 100,
+        protectLastUserTurns: 1,
+      },
+    });
+
+    expect(result.finalContent).toBe("after compacted result");
+    expect(llm.calls).toBe(2);
+    const followUpToolMessage = llm.requests[1]!.messages.find(
+      (message) => message.role === "tool",
+    );
+    expect(followUpToolMessage?.content).toContain("prefix:");
+    expect(followUpToolMessage?.content).toContain(":suffix");
+    expect(followUpToolMessage?.content).toContain("tool result truncated");
+    expect(String(followUpToolMessage?.content).length).toBeLessThan(3_000);
+    expect(types).toContain("context.pruned");
+  });
+
+  it("temporarily truncates a durable summary when fixed per-call input leaves no other pruneable history", async () => {
+    const llm = new ScriptedLLM([prose("summary fallback worked")]);
+    const { emitter, types } = recordingEmitter();
+    const durableSummary =
+      `<compacted_history>\n${"older-fact ".repeat(80)}\n</compacted_history>\n` +
+      "The block above is durable reference data.";
+
+    const result = await run({
+      llm,
+      deps: { emitter },
+      estimator: (text) => text.length,
+      contextBudget: {
+        maxInputTokens: 700,
+        reservedForResponse: 100,
+        protectLastUserTurns: 1,
+      },
+      messages: [
+        { role: "system", content: "system prompt" },
+        { role: "user", content: durableSummary },
+        { role: "user", content: "current action" },
+      ],
+    });
+
+    expect(result.finalContent).toBe("summary fallback worked");
+    const sentSummary = llm.requests[0]!.messages.find((message) =>
+      String(message.content).includes("compacted history truncated"),
+    );
+    expect(sentSummary).toBeDefined();
+    expect(String(sentSummary?.content).length).toBeLessThan(
+      durableSummary.length,
+    );
+    expect(types).toContain("context.pruned");
   });
 
   it("completeAfterTools avoids a follow-up LLM call after a completing tool", async () => {

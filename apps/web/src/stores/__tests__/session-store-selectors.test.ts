@@ -28,6 +28,7 @@ function stateFor(
     booted: true,
     bootError: null,
     sessionPlugins: [],
+    sessionCommands: [],
     world: null,
     session: baseSession,
     messages: [],

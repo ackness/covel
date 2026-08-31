@@ -100,6 +100,8 @@ export interface CallLLMWithRetryParams {
   readonly messages: readonly LLMMessage[];
   readonly tools?: readonly LLMToolDefinition[];
   readonly responseFormat?: LLMResponseFormat;
+  /** Hard per-attempt provider generation limit. */
+  readonly maxOutputTokens?: number;
   readonly policy: RetryPolicy;
   /**
    * Called with the queue wait (ms) each time an attempt had to wait for an
@@ -217,6 +219,9 @@ export async function callLLMWithRetry(
         messages: attemptMessages,
         tools,
         responseFormat: params.responseFormat,
+        ...(params.maxOutputTokens !== undefined
+          ? { maxOutputTokens: params.maxOutputTokens }
+          : {}),
         signal,
         onTargetAttempt: trace.onTargetAttempt,
       });
@@ -371,6 +376,9 @@ export async function streamLLMWithRetry(
         model,
         messages: attemptMessages,
         tools,
+        ...(params.maxOutputTokens !== undefined
+          ? { maxOutputTokens: params.maxOutputTokens }
+          : {}),
         signal: callAborter.signal,
         onTargetAttempt: trace.onTargetAttempt,
       })) {

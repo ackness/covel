@@ -5,7 +5,8 @@ import { buildWorldContextView } from "../src/session-context-views.js";
 const worldRecord = {
   id: "w1",
   name: "W",
-  description: "",
+  description: "A concise setting summary",
+  tags: ["mystery", "fog"],
   createdAt: "2026-01-01T00:00:00.000Z",
   metadata: {
     dimensions: {
@@ -45,6 +46,9 @@ describe("buildWorldContextView i18n localization", () => {
     // tone / openingScenario (authored as i18n) now extract cleanly.
     expect(view.tone).toBe("压抑的雾港");
     expect(view.openingScenario).toBe("潮钟三鸣");
+    expect(view.name).toBe("W");
+    expect(view.description).toBe("A concise setting summary");
+    expect(view.tags).toEqual(["mystery", "fog"]);
   });
 
   it("does not leak a raw bilingual record into the dimensions", () => {

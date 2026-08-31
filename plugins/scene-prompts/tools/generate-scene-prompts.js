@@ -33,13 +33,29 @@ export default function ({ tool, z }) {
   return tool({
     name: "generate-scene-prompts",
     description:
-      "Generate scene-specific quick replies. Written to the message namespace; the frontend renders them via ui.message as prompt buttons the player can edit or send directly.",
+      "Summarize confirmed context and generate scene-specific quick replies. Written to the message namespace; the frontend renders the recap, current decision, and prompt buttons together.",
     parameters: z.object({
       scene: z
         .string()
         .min(1)
         .max(40)
         .describe("Title of the current scene or decision point"),
+      recap: z
+        .string()
+        .trim()
+        .min(20)
+        .max(240)
+        .describe(
+          "A 1-3 sentence recap using only confirmed facts and explicit player intentions, commitments, or agreements",
+        ),
+      decision: z
+        .string()
+        .trim()
+        .min(8)
+        .max(120)
+        .describe(
+          "The current question or decision the player needs to answer",
+        ),
       prompts: z
         .array(promptSchema)
         .min(3)
@@ -62,6 +78,8 @@ export default function ({ tool, z }) {
       const items = [
         { namespace: "message", key: "__turnId", value: context.turnId },
         { namespace: "message", key: "scene", value: params.scene },
+        { namespace: "message", key: "recap", value: params.recap },
+        { namespace: "message", key: "decision", value: params.decision },
       ];
 
       for (let i = 0; i < 6; i += 1) {
@@ -94,6 +112,8 @@ export default function ({ tool, z }) {
       return withPendingProposals(
         {
           scene: params.scene,
+          recap: params.recap,
+          decision: params.decision,
           prompts,
         },
         [makeProposal(context, now, "plugin.data.batch", { items })],

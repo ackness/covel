@@ -7,6 +7,7 @@
 import type { CharacterRecord, StateEntryRecord } from "./state-records.js";
 import type {
   LorebookEntryRecord,
+  SessionSummaryRecord,
   WorkingMemoryRecord,
 } from "./memory-records.js";
 import type { PluginDataRecord } from "./plugin-records.js";
@@ -37,6 +38,26 @@ interface SnapshotPayloadBase {
   readonly stateEntries: readonly StateEntryRecord[];
   readonly pluginData: readonly PluginDataRecord[];
   readonly workingMemory: readonly WorkingMemoryRecord[];
+  /**
+   * Compaction summaries referenced by messages at or before
+   * {@link messagesCursor}.
+   *
+   * Added compatibly to schema v3. Absence identifies a legacy v3 payload;
+   * fork restores those snapshots from the preserved raw message content and
+   * clears compaction tags instead of hiding history behind missing summaries.
+   */
+  readonly sessionSummaries?: readonly SessionSummaryRecord[];
+  /**
+   * Snapshot-time mapping from parent `turn_message.id` to the summary id that
+   * represented it. Message compaction tags are mutable because rolling
+   * summaries retag the historical prefix; retaining this exact mapping keeps
+   * a later fork pinned to the snapshot instant.
+   *
+   * Optional for compatibility with earlier schema-v3 payloads. When absent,
+   * fork falls back to the live message tags and safely preserves raw history
+   * if those tags no longer match the captured summaries.
+   */
+  readonly compactedMessageSummaryIds?: Readonly<Record<string, string>>;
   /**
    * Session-scoped lorebook entries. Captured from the
    * `lorebook_entries` table at snapshot time so forks can rehydrate the

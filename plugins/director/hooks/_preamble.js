@@ -12,29 +12,13 @@ import { pickLocaleText } from "@covel/plugin-handlers-utils";
 /** @type {string} */
 export const PREAMBLE_EN = [
   "[Director's Note — applies to this scene only]",
-  "You are directing this beat of the story. Before you write the prose, hold these directing principles:",
-  "",
-  "1. Open in motion. Drop the reader into an action, image, or line of dialogue already underway — never a status report.",
-  "2. Show through the senses. Anchor each beat in one or two concrete physical details rather than abstract summary.",
-  "3. Give the scene a shape. Build toward a single turn, reveal, or shift in tension, then end on a beat that invites the player's next move.",
-  "4. Keep characters in character. Let established voice, motive, and history steer every reaction.",
-  "5. Leave room for the player. Stop where their agency begins; never decide their choices for them.",
-  "",
-  "Honour the world's tone and the system instructions above — these notes refine delivery, they never override canon.",
+  "Open in motion or dialogue, ground the beat in one or two sensory details, and build toward one turn or reveal. Keep established motives and voices; stop where player agency begins. These notes refine delivery and never override canon or the instructions above.",
 ].join("\n");
 
 /** @type {string} */
 export const PREAMBLE_ZH = [
   "[导演笔记 — 仅适用于本场景]",
-  "你正在执导这一段故事。落笔之前，先记住这些导演原则：",
-  "",
-  "1. 在动作中开场。把读者直接带入一个正在进行的动作、画面或对白——绝不要从状态汇报开始。",
-  "2. 用感官呈现。每个节拍锚定在一两个具体的实感细节上，而非抽象概述。",
-  "3. 给场景一个形状。朝着单一的转折、揭示或张力变化推进，最后落在一个邀请玩家下一步行动的节拍上。",
-  "4. 让角色保持本色。让既定的口吻、动机与过往左右每一次反应。",
-  "5. 给玩家留出空间。在玩家的能动性开始处停笔，绝不替他们做决定。",
-  "",
-  "尊重世界基调与上方的系统指令——这些笔记只打磨呈现方式，绝不凌驾于设定之上。",
+  "从动作或对白开场，以一两处感官细节推进到单一转折或揭示。保持既定动机与口吻，在玩家能动性开始处停笔；本笔记只打磨呈现，不凌驾于设定或上方指令。",
 ].join("\n");
 
 /**

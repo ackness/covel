@@ -1,4 +1,9 @@
-import type { CursorPage } from "@covel/shared";
+import {
+  characterBlueprintToCharacterUpsert,
+  resolveI18nText,
+  type CharacterBlueprint,
+  type CursorPage,
+} from "@covel/shared";
 import type {
   BrowserCheckpoint,
   MessageRecord as StoreMessageRecord,
@@ -14,7 +19,6 @@ import type {
   WorldRecord,
 } from "../api.js";
 import i18n from "i18next";
-import { resolveI18nText } from "@covel/shared";
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
@@ -81,11 +85,114 @@ function jsonCheckpoint(checkpoint: BrowserCheckpoint): BrowserCheckpoint {
   return JSON.parse(JSON.stringify(checkpoint)) as BrowserCheckpoint;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizePortableCharacterBlueprint(
+  value: unknown,
+): CharacterBlueprint | null {
+  if (!isRecord(value) || value.schemaVersion !== 1) return null;
+  if (typeof value.id !== "string" || value.id.length === 0) return null;
+  if (typeof value.name !== "string" || value.name.length === 0) return null;
+  return value as unknown as CharacterBlueprint;
+}
+
+function portableWorldContent(
+  session: StoreSessionRecord,
+  world: StoreWorldRecord | null,
+  now: string,
+): Pick<BrowserCheckpoint, "characters" | "lorebookEntries"> {
+  const metadata = isRecord(world?.metadata) ? world.metadata : {};
+  const rawCharacters = Array.isArray(metadata.characterBlueprints)
+    ? metadata.characterBlueprints.slice(0, 64)
+    : [];
+  const characters = rawCharacters.flatMap((value) => {
+    const blueprint = normalizePortableCharacterBlueprint(value);
+    if (!blueprint) return [];
+    const baseId =
+      typeof blueprint.instantiate?.characterId === "string" &&
+      blueprint.instantiate.characterId.length > 0
+        ? blueprint.instantiate.characterId
+        : `char-${blueprint.id}`;
+    const scopedId = `${session.id}-${baseId}`;
+    const characterId =
+      scopedId.length <= 180 ? scopedId : `${session.id}-${blueprint.id}`;
+    const upsert = characterBlueprintToCharacterUpsert(blueprint, {
+      now,
+      characterId,
+    });
+    return [
+      {
+        id: upsert.id,
+        sessionId: session.id,
+        name: upsert.name,
+        type: upsert.type ?? "npc",
+        ...(upsert.description !== undefined
+          ? { description: upsert.description }
+          : {}),
+        ...(upsert.fields !== undefined ? { fields: upsert.fields } : {}),
+        version: upsert.version ?? 1,
+        createdAt: upsert.createdAt ?? now,
+        updatedAt: now,
+      },
+    ];
+  });
+
+  const rawLorebook = Array.isArray(metadata.embeddedLorebook)
+    ? metadata.embeddedLorebook.slice(0, 128)
+    : [];
+  const seenLoreIds = new Set<string>();
+  const lorebookEntries = rawLorebook.flatMap((value, index) => {
+    if (!isRecord(value)) return [];
+    if (
+      typeof value.id !== "string" ||
+      !value.id ||
+      seenLoreIds.has(value.id) ||
+      typeof value.content !== "string" ||
+      !value.content
+    ) {
+      return [];
+    }
+    seenLoreIds.add(value.id);
+    const keys = Array.isArray(value.keys)
+      ? value.keys
+          .filter((key): key is string => typeof key === "string")
+          .slice(0, 32)
+      : [];
+    return [
+      {
+        id: value.id,
+        sessionId: session.id,
+        pluginId: "world-data",
+        keys,
+        content: value.content,
+        strategy:
+          value.strategy === "selective"
+            ? ("selective" as const)
+            : ("constant" as const),
+        position:
+          value.position === "before_plugin" ? "before_plugin" : "after_plugin",
+        insertionOrder:
+          typeof value.insertionOrder === "number"
+            ? value.insertionOrder
+            : 100 + index,
+        enabled: value.enabled !== false,
+        ...(value.extra !== undefined ? { extra: value.extra } : {}),
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+  });
+  return { characters, lorebookEntries };
+}
+
 function initialCheckpoint(
   session: StoreSessionRecord,
   world: StoreWorldRecord | null,
 ): BrowserCheckpoint {
   const committedAt = new Date().toISOString();
+  const portableContent = portableWorldContent(session, world, committedAt);
   return jsonCheckpoint({
     schemaVersion: BROWSER_CHECKPOINT_SCHEMA_VERSION,
     sessionId: session.id,
@@ -101,10 +208,10 @@ function initialCheckpoint(
     interactions: [],
     events: [],
     traceEvents: [],
-    characters: [],
+    characters: portableContent.characters,
     pluginData: [],
     workingMemory: [],
-    lorebookEntries: [],
+    lorebookEntries: portableContent.lorebookEntries,
     sessionSummaries: [],
     playerInputs: [],
     suspensions: [],
@@ -245,6 +352,7 @@ export class LocalDataService implements DataService {
     };
     delete metadata.worldDataPath;
     delete metadata.worldData;
+    delete metadata.characterBlueprintSources;
     const record = {
       ...world,
       metadata,

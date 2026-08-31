@@ -285,6 +285,30 @@ export interface PluginDataSchemaDecl {
   readonly description?: string;
 }
 
+// ── World projections ─────────────────────────────────────
+
+/** One plugin-data destination produced by a world projection. */
+export interface WorldProjectionOutputDecl {
+  /** Plugin-owned destination namespace. */
+  readonly namespace: string;
+  /** Field in each projected record used as its plugin-data key. */
+  readonly key: string;
+}
+
+/**
+ * Plugin-owned projection from one declared world schema into plugin data.
+ * `handler` is metadata at manifest/registry time; loading or executing the
+ * module is the responsibility of the world-projection runner.
+ */
+export interface WorldProjectionDecl {
+  /** Source schema URI, for example `plugin://character-blueprint/blueprints`. */
+  readonly from: string;
+  /** Plugin-root-relative JavaScript handler module. */
+  readonly handler: string;
+  /** Named plugin-data destinations produced by the handler. */
+  readonly outputs: Readonly<Record<string, WorldProjectionOutputDecl>>;
+}
+
 // ── Event declarations ───────────────────────────────────────────
 
 /**
@@ -402,9 +426,7 @@ export interface PluginUserSettingSpec {
 // The hook event tuple, its derived union, the enforce group, and the
 // declaration shape now live in ./hooks.ts (single source of truth). They are
 // re-exported here so existing `@covel/shared` consumers and the types barrel
-// keep importing them from the same place. `HookDeclaration` is also imported
-// locally below because `RuntimeManifest.hooks` references it.
-import type { HookDeclaration } from "./hooks.js";
+// keep importing them from the same place.
 export { HOOK_EVENTS } from "./hooks.js";
 export type { HookEventName, HookEnforce, HookDeclaration } from "./hooks.js";
 
@@ -432,6 +454,71 @@ export interface UISpec {
   readonly message?: readonly string[];
   /** Left sidebar content specs. */
   readonly left?: readonly string[];
+}
+
+// ── Slash commands ──────────────────────────────────────────────
+
+/** Optional, server-authored environment facets a command handler may read. */
+export const SLASH_COMMAND_CONTEXT_SCOPES = [
+  "session",
+  "active-runtimes",
+  "models",
+] as const;
+
+export type SlashCommandContextScope =
+  (typeof SLASH_COMMAND_CONTEXT_SCOPES)[number];
+
+export type SlashCommandArgumentType =
+  "string" | "integer" | "number" | "boolean";
+
+/** One positional argument in a plugin-declared slash command. */
+export interface SlashCommandArgumentSpec {
+  readonly name: string;
+  readonly type?: SlashCommandArgumentType;
+  readonly description?: import("./world.js").I18nText;
+  readonly required?: boolean;
+  /** Collect all remaining argv values. Must be the last argument. */
+  readonly variadic?: boolean;
+  readonly choices?: readonly string[];
+}
+
+/**
+ * Player-facing command metadata declared by a plugin manifest.
+ *
+ * `action` names an RPC handler registered by the SAME plugin entry. The
+ * framework injects the owning plugin id; a manifest cannot dispatch into a
+ * different plugin or an arbitrary client function. Optional environment
+ * context is least-privilege and server-authored at execution time.
+ */
+export interface SlashCommandSpec {
+  /** Lowercase command name without the leading slash. */
+  readonly name: string;
+  readonly aliases?: readonly string[];
+  readonly description: import("./world.js").I18nText;
+  readonly arguments?: readonly SlashCommandArgumentSpec[];
+  readonly action: string;
+  /** Extra environment facets to inject. Omitted means no environment snapshot. */
+  readonly context?: readonly SlashCommandContextScope[];
+}
+
+/** Session-scoped command descriptor returned to the client. */
+export interface SessionSlashCommand extends SlashCommandSpec {
+  /** Stable dispatch id. Framework commands use `framework:<name>`. */
+  readonly id: string;
+  readonly pluginId: string;
+  readonly source: "framework" | "plugin";
+  readonly sourceLabel?: import("./world.js").I18nText;
+}
+
+/** Parsed, type-coerced invocation passed to the registered RPC handler. */
+export interface SlashCommandInvocation {
+  readonly command: string;
+  /** Canonical command text built from the resolved command name and typed args. */
+  readonly canonical: string;
+  /** Original composer text, or `canonical` for a structured UI invocation. */
+  readonly raw: string;
+  readonly argv: readonly string[];
+  readonly args: Readonly<Record<string, unknown>>;
 }
 
 // ── Runtime manifest ─────────────────────────────────────────────
@@ -482,8 +569,20 @@ export const PLUGIN_SCOPED_FIELDS = {
     conflict: "warn, first declaration wins",
     where: "apps/server/src/routes/misc-api/plugin-catalog.ts",
   },
+  /** Merged on command name; divergent declarations warn and keep the first. */
+  commands: {
+    merge: "keyed",
+    conflict: "warn, first declaration wins within one plugin",
+    where: "apps/server/src/routes/api/session/commands.ts",
+  },
   /** Merged on namespace — the strictest of the set. */
   dataSchemas: {
+    merge: "keyed",
+    conflict: "throws — the plugin fails to register",
+    where: "packages/plugin-loader/src/registry.ts",
+  },
+  /** Merged on projection id; handlers remain declarative until execution. */
+  worldProjections: {
     merge: "keyed",
     conflict: "throws — the plugin fails to register",
     where: "packages/plugin-loader/src/registry.ts",
@@ -570,6 +669,8 @@ export interface PluginScopedManifestFields {
   readonly relations?: PluginRelations;
   /** Plugin-data schemas, merged on namespace — a divergent one throws. */
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
+  /** World projections, merged on projection id — a divergent one throws. */
+  readonly worldProjections?: Readonly<Record<string, WorldProjectionDecl>>;
   /** Domain events this plugin's runtime may emit via `emit-event`. */
   readonly events?: readonly PluginEventDecl[];
   /**
@@ -583,6 +684,8 @@ export interface PluginScopedManifestFields {
    * single value and must declare it identically.
    */
   readonly userSettings?: readonly PluginUserSettingSpec[];
+  /** Player-facing slash commands contributed by this plugin. */
+  readonly commands?: readonly SlashCommandSpec[];
   /**
    * Core-memory block definitions contributed by this plugin (or world).
    *

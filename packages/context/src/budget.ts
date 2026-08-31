@@ -73,8 +73,10 @@ export interface BudgetOptions {
   readonly reservedForResponse?: number;
   /**
    * Number of trailing user messages (plus everything after them) that must
-   * never be pruned. Protects recent conversational context. Default 2.
-   * Matches OpenCode's "protect last 2 user turns" rule.
+   * never be pruned. Protects the current conversational context. Default 1.
+   * Older turns remain available through compacted-history envelopes; keeping
+   * two raw user turns here can make the summary + protected tail impossible
+   * to fit in small context windows.
    */
   readonly protectLastUserTurns?: number;
   /** Token estimator injected by the caller. */
@@ -94,7 +96,88 @@ export interface BudgetResult<M> {
 }
 
 const DEFAULT_RESERVED_FOR_RESPONSE = 4000;
-const DEFAULT_PROTECT_LAST_USER_TURNS = 2;
+const DEFAULT_PROTECT_LAST_USER_TURNS = 1;
+
+/** Normalized numeric limits shared by prompt assembly and runtime calls. */
+export interface ResolvedBudgetOptions {
+  readonly maxInputTokens: number;
+  readonly reservedForResponse: number;
+  readonly protectLastUserTurns: number;
+}
+
+/**
+ * Validate and normalize a budget before it is used for pruning or as a
+ * provider output limit. Invalid limits are configuration errors: silently
+ * returning an over-budget request only defers the failure to the provider.
+ */
+export function resolveBudgetOptions(
+  options: Omit<BudgetOptions, "estimator">,
+): ResolvedBudgetOptions {
+  const maxInputTokens = options.maxInputTokens;
+  const reservedForResponse =
+    options.reservedForResponse ?? DEFAULT_RESERVED_FOR_RESPONSE;
+  const protectLastUserTurns =
+    options.protectLastUserTurns ?? DEFAULT_PROTECT_LAST_USER_TURNS;
+
+  if (!Number.isInteger(maxInputTokens) || maxInputTokens <= 0) {
+    throw new RangeError(
+      `maxInputTokens must be a positive integer; received ${String(maxInputTokens)}`,
+    );
+  }
+  if (
+    !Number.isInteger(reservedForResponse) ||
+    reservedForResponse < 0 ||
+    reservedForResponse >= maxInputTokens
+  ) {
+    throw new RangeError(
+      `reservedForResponse must be a non-negative integer smaller than maxInputTokens (${maxInputTokens}); received ${String(reservedForResponse)}`,
+    );
+  }
+  if (!Number.isInteger(protectLastUserTurns) || protectLastUserTurns < 0) {
+    throw new RangeError(
+      `protectLastUserTurns must be a non-negative integer; received ${String(protectLastUserTurns)}`,
+    );
+  }
+
+  return { maxInputTokens, reservedForResponse, protectLastUserTurns };
+}
+
+function estimateMessageTokens<
+  M extends {
+    readonly role: string;
+    readonly content: string | readonly ContentPart[];
+  },
+>(message: M, estimator: TokenEstimator): number {
+  const extended = message as M & {
+    readonly name?: string;
+    readonly toolCallId?: string;
+    readonly toolCalls?: unknown;
+    readonly reasoningContent?: string;
+  };
+  const auxiliary = {
+    ...(extended.name ? { name: extended.name } : {}),
+    ...(extended.toolCallId ? { toolCallId: extended.toolCallId } : {}),
+    ...(extended.toolCalls ? { toolCalls: extended.toolCalls } : {}),
+    ...(extended.reasoningContent
+      ? { reasoningContent: extended.reasoningContent }
+      : {}),
+  };
+  return (
+    estimator(flattenContent(message.content)) +
+    (Object.keys(auxiliary).length > 0
+      ? estimator(JSON.stringify(auxiliary))
+      : 0)
+  );
+}
+
+function isCompactedHistoryEnvelope(message: {
+  readonly content: string | readonly ContentPart[];
+}): boolean {
+  return (
+    typeof message.content === "string" &&
+    message.content.trimStart().startsWith("<compacted_history>\n")
+  );
+}
 
 /**
  * Walk backwards through the message list and compute the index at which
@@ -147,28 +230,15 @@ export function applyBudget<
   messages: readonly M[],
   options: BudgetOptions,
 ): BudgetResult<M> {
-  const {
-    maxInputTokens,
-    reservedForResponse = DEFAULT_RESERVED_FOR_RESPONSE,
-    protectLastUserTurns = DEFAULT_PROTECT_LAST_USER_TURNS,
-    estimator,
-  } = options;
+  const { estimator } = options;
+  const { maxInputTokens, reservedForResponse, protectLastUserTurns } =
+    resolveBudgetOptions(options);
 
   const systemTokens = estimator(systemPrompt);
   const budgetCap = maxInputTokens - reservedForResponse;
 
-  // Caller misconfiguration — nothing sensible we can do.
-  if (budgetCap <= 0) {
-    return {
-      messages,
-      totalTokens: systemTokens,
-      prunedMessageCount: 0,
-      budgetExceeded: true,
-    };
-  }
-
   const messageTokens: number[] = messages.map((m) =>
-    estimator(flattenContent(m.content)),
+    estimateMessageTokens(m, estimator),
   );
   const messageTokensSum = messageTokens.reduce((acc, n) => acc + n, 0);
   let total = systemTokens + messageTokensSum;
@@ -191,13 +261,40 @@ export function applyBudget<
   );
 
   let prunedMessageCount = 0;
-  let firstSurvivorIndex = 0;
+  const prunedIndices = new Set<number>();
+
+  // Summaries are the only surviving representation of already-compacted raw
+  // history. Preserve every envelope ahead of raw messages so a hard-prune
+  // pass cannot immediately erase the records the compactor just persisted.
+  // If the summaries plus protected tail cannot fit, callers receive an
+  // over-cap total and must stop before issuing the provider request.
+  const preservedSummaryIndices = new Set<number>();
+  for (let i = 0; i < protectStartIndex; i++) {
+    if (isCompactedHistoryEnvelope(messages[i]!)) {
+      preservedSummaryIndices.add(i);
+    }
+  }
+
+  let pruneCursor = 0;
+  const pruneNext = (): boolean => {
+    while (
+      pruneCursor < protectStartIndex &&
+      preservedSummaryIndices.has(pruneCursor)
+    ) {
+      pruneCursor += 1;
+    }
+    if (pruneCursor >= protectStartIndex) return false;
+    total -= messageTokens[pruneCursor]!;
+    prunedIndices.add(pruneCursor);
+    pruneCursor += 1;
+    prunedMessageCount += 1;
+    return true;
+  };
 
   // Drain the pruneable prefix from the left until we fit or run out.
-  while (firstSurvivorIndex < protectStartIndex && total > budgetCap) {
-    total -= messageTokens[firstSurvivorIndex]!;
-    firstSurvivorIndex += 1;
-    prunedMessageCount += 1;
+  while (total > budgetCap && pruneNext()) {
+    // Continue until the request fits or only the preserved summary and
+    // protected tail remain.
   }
 
   // Tool-pair integrity: a `tool` message is only valid when the assistant
@@ -207,15 +304,21 @@ export function applyBudget<
   // the cut orphaned. Without this the whole pruning pass was unusable for
   // tool-declaring runtimes (i.e. every main agent), which is why they were
   // excluded from hard budget enforcement entirely.
-  while (
-    firstSurvivorIndex < messages.length &&
-    prunedMessageCount > 0 &&
-    messages[firstSurvivorIndex]!.role === "tool"
-  ) {
-    total -= messageTokens[firstSurvivorIndex]!;
-    firstSurvivorIndex += 1;
-    prunedMessageCount += 1;
-  }
+  const pruneOrphanedLeadingTools = (): void => {
+    while (
+      pruneCursor < messages.length &&
+      prunedMessageCount > 0 &&
+      messages[pruneCursor]!.role === "tool"
+    ) {
+      if (!prunedIndices.has(pruneCursor)) {
+        total -= messageTokens[pruneCursor]!;
+        prunedIndices.add(pruneCursor);
+        prunedMessageCount += 1;
+      }
+      pruneCursor += 1;
+    }
+  };
+  pruneOrphanedLeadingTools();
 
   // Nothing was actually prunable (protectLastUserTurns covered everything).
   if (prunedMessageCount === 0) {
@@ -227,8 +330,21 @@ export function applyBudget<
     };
   }
 
-  const survivors = messages.slice(firstSurvivorIndex);
-  const placeholderContent = `[... ${prunedMessageCount} older messages pruned to stay within token budget ...]`;
+  let placeholderContent = `[... ${prunedMessageCount} older messages pruned to stay within token budget ...]`;
+  let placeholderTokens = estimator(placeholderContent);
+
+  // The marker is part of the real request. Continue pruning if it is the
+  // difference between fitting and overflowing; previous behaviour tolerated
+  // this overshoot, which violates a hard context-window contract.
+  while (total + placeholderTokens > budgetCap && pruneNext()) {
+    placeholderContent = `[... ${prunedMessageCount} older messages pruned to stay within token budget ...]`;
+    placeholderTokens = estimator(placeholderContent);
+  }
+  pruneOrphanedLeadingTools();
+  placeholderContent = `[... ${prunedMessageCount} older messages pruned to stay within token budget ...]`;
+  placeholderTokens = estimator(placeholderContent);
+
+  const survivors = messages.filter((_, index) => !prunedIndices.has(index));
   // The placeholder is a synthetic message matching the caller's message
   // shape. The `as unknown as M` cast is unavoidable: `M` is a generic
   // constrained only to `{ role; content }`, so TypeScript can't prove a
@@ -239,10 +355,9 @@ export function applyBudget<
     content: placeholderContent,
   } as unknown as M;
 
-  // Placeholder counts against the budget so the caller sees a realistic
-  // figure. A small overshoot here is acceptable — one system message of
-  // ~30 characters won't meaningfully blow the budget.
-  total += estimator(placeholderContent);
+  // Placeholder counts against the budget so callers can reject the request
+  // when the protected content plus marker still cannot fit.
+  total += placeholderTokens;
 
   return {
     messages: [placeholder, ...survivors],

@@ -18,6 +18,8 @@
  *   - `community`: third-party, requires explicit per-action approval
  */
 
+import type { SlashCommandInvocation } from "./plugin.js";
+
 export type RpcTrustLevel = "builtin" | "community";
 
 /**
@@ -108,7 +110,68 @@ export interface PluginRpcRuntimeRequest {
   readonly retryFromTurnId?: string;
 }
 
-export type PluginRpcRequest = PluginRpcActionRequest | PluginRpcRuntimeRequest;
+/** Execute one server-discovered slash command from composer text. */
+export interface PluginRpcTextCommandRequest {
+  /** Stable id returned by the session command directory. */
+  readonly commandId: string;
+  /** Original composer input; parsed and validated again by the server. */
+  readonly input: string;
+  readonly args?: never;
+}
+
+/** Execute the same command from a plugin-owned structured UI action. */
+export interface PluginRpcStructuredCommandRequest {
+  /** Stable id built from the rendering plugin and canonical command name. */
+  readonly commandId: string;
+  /** Named arguments; validated against the server-selected command spec. */
+  readonly args: Readonly<Record<string, unknown>>;
+  readonly input?: never;
+}
+
+export type PluginRpcCommandRequest =
+  PluginRpcTextCommandRequest | PluginRpcStructuredCommandRequest;
+
+export type PluginRpcRequest =
+  PluginRpcActionRequest | PluginRpcRuntimeRequest | PluginRpcCommandRequest;
+
+export type RpcCommandSource = "composer" | "plugin-ui";
+
+/** Canonical command shape passed to handlers and written to command traces. */
+export interface RpcCommandInvocation extends SlashCommandInvocation {
+  readonly invocationId: string;
+  readonly commandId: string;
+  readonly source: RpcCommandSource;
+}
+
+export interface RpcCommandSessionEnvironment {
+  readonly id: string;
+  readonly worldId?: string;
+  readonly status: string;
+  readonly phase?: string;
+  readonly locale?: string;
+}
+
+export interface RpcCommandRuntimeEnvironment {
+  readonly id: string;
+  readonly pluginId: string;
+  readonly runtimeType: string;
+  readonly outputKind: string;
+  readonly stage?: string;
+  readonly capabilities: readonly string[];
+  /** Present only when the command declared the `models` context scope. */
+  readonly model?: {
+    readonly slot: string;
+    readonly resolved?: string;
+    readonly source: "session-override" | "manifest" | "default";
+  };
+}
+
+/** Least-privilege environment snapshot built for a command at dispatch time. */
+export interface RpcCommandEnvironment {
+  readonly capturedAt: string;
+  readonly session?: RpcCommandSessionEnvironment;
+  readonly activeRuntimes?: readonly RpcCommandRuntimeEnvironment[];
+}
 
 /**
  * Sync-mode response from `POST /api/sessions/:id/plugin-rpc?mode=sync`.
@@ -132,6 +195,8 @@ export type PluginRpcResponse =
   | {
       readonly status: "ok";
       readonly result?: unknown;
+      /** Post-dispatch snapshot, limited to the command's declared scopes. */
+      readonly environment?: RpcCommandEnvironment;
       readonly turnId?: string;
       readonly runtimeResults?: readonly PluginRpcRuntimeResultSummary[];
       readonly durationMs?: number;

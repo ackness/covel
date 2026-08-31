@@ -11,10 +11,15 @@
  * a tall portrait doesn't leave a wide empty dialog around it.
  */
 
-import { Download } from "lucide-react";
+import { Download, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { MediaRef } from "@covel/shared";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog.js";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
 import { Button } from "@/components/ui/button.js";
 import { Media } from "@/components/Media.js";
 import { downloadImage } from "@/components/session/image-plugin-panels/actions.js";
@@ -44,7 +49,10 @@ export function MediaPreviewDialog({
       open={mediaRef !== null}
       onOpenChange={(open) => !open && onClose()}
     >
-      <DialogContent className="flex w-auto max-w-[95vw] max-h-[92vh] flex-col gap-0 overflow-hidden p-0">
+      <DialogContent
+        showCloseButton={false}
+        className="flex w-auto max-w-[95vw] max-h-[92vh] flex-col gap-0 overflow-hidden p-0"
+      >
         {mediaRef ? (
           <>
             <div className="flex min-h-0 items-center justify-center bg-black/40 p-3">
@@ -58,9 +66,13 @@ export function MediaPreviewDialog({
                 maxHeight="76vh"
               />
             </div>
-            <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5">
+            <div className="flex items-center gap-3 border-t border-border px-4 py-2.5">
               <DialogTitle
-                className={title ? "truncate text-sm font-medium" : "sr-only"}
+                className={
+                  title
+                    ? "min-w-0 flex-1 truncate text-sm font-medium"
+                    : "sr-only"
+                }
               >
                 {title || t("common.preview", "Preview")}
               </DialogTitle>
@@ -79,6 +91,16 @@ export function MediaPreviewDialog({
                 <Download className="mr-1 h-3 w-3" />{" "}
                 {t("coreImage.panel.downloadImage", "Download")}
               </Button>
+              <DialogClose asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0"
+                  aria-label={t("common.close", "Close")}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </DialogClose>
             </div>
           </>
         ) : (

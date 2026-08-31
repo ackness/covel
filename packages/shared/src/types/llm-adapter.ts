@@ -46,14 +46,22 @@ export interface LLMToolCall {
   readonly arguments: string; // JSON string
 }
 
+/** Provider-reported token usage for one LLM call. */
+export interface LLMUsageSummary {
+  /** Total provider input tokens, including cache reads/writes. */
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  /** Cached subset of inputTokens, when reported. */
+  readonly cachedInputTokens?: number;
+  /** Cache-write subset of inputTokens, when reported. */
+  readonly cacheWriteInputTokens?: number;
+}
+
 export interface LLMResponse {
   readonly content: string | null;
   readonly toolCalls: readonly LLMToolCall[];
   readonly finishReason: "stop" | "tool_calls" | "length" | "error";
-  readonly usage: {
-    readonly inputTokens: number;
-    readonly outputTokens: number;
-  };
+  readonly usage: LLMUsageSummary;
   /**
    * Reasoning text emitted by providers in thinking mode. When present it
    * must be carried back on the assistant message for the next request in
@@ -90,10 +98,7 @@ export type LLMStreamEvent =
        * Token usage reported by the provider on stream completion. Optional
        * because not every adapter emits it; consumers default to 0/0.
        */
-      readonly usage?: {
-        readonly inputTokens: number;
-        readonly outputTokens: number;
-      };
+      readonly usage?: LLMUsageSummary;
     };
 
 /**
@@ -149,6 +154,8 @@ export interface LLMAdapter {
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
     readonly responseFormat?: LLMResponseFormat;
+    /** Hard per-request generation limit forwarded to the provider wire. */
+    readonly maxOutputTokens?: number;
     /** Synchronously reports each concrete provider attempt made by a gateway. */
     readonly onTargetAttempt?: (target: LLMTargetIdentity) => void;
     /**
@@ -167,6 +174,8 @@ export interface LLMAdapter {
     readonly model?: string;
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
+    /** @see generate.maxOutputTokens */
+    readonly maxOutputTokens?: number;
     /** @see generate.onTargetAttempt */
     readonly onTargetAttempt?: (target: LLMTargetIdentity) => void;
     /** @see generate.signal */

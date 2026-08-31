@@ -23,6 +23,7 @@ import {
   sameSourceDuplicateIdentity,
 } from "./identity.js";
 import { mediaMime } from "./media-handling.js";
+import { executeWorldProjections } from "./projections.js";
 import type {
   ImportPlan,
   MergeEvent,
@@ -265,6 +266,8 @@ export async function buildImportPlan(options: {
 }): Promise<ImportPlan> {
   const writes: PlannedWrite[] = [];
   const diagnostics: WorldDataDiagnostic[] = [];
+  const deferredProjectionOutputs: ImportPlan["deferredProjectionOutputs"][number][] =
+    [];
 
   const activePlugins = options.deps?.activePlugins;
 
@@ -284,23 +287,31 @@ export async function buildImportPlan(options: {
     // otherwise 500 on session creation the moment that plugin is
     // deselected. Data without a consumer is harmless to omit; authoring
     // errors (schema mismatch, non-accepting namespace) below stay errors.
-    if (
+    const skipPrimaryPluginTarget = Boolean(
       isPluginTarget(target) &&
       activePlugins &&
-      !activePlugins.includes(target.pluginId)
-    ) {
+      !activePlugins.includes(target.pluginId),
+    );
+    if (skipPrimaryPluginTarget && isPluginTarget(target)) {
       diagnostics.push({
         level: "warning",
         sourceId: source.id,
-        message: `worldData target plugin "${target.pluginId}" is not active for this session; source "${source.id}" skipped`,
+        message: `worldData target plugin "${target.pluginId}" is not active for this session; primary write for source "${source.id}" skipped`,
       });
-      continue;
     }
     const preflightedTargets = new Set<string>();
     for (const pluginTarget of derivedPluginTargetsForSource(
       source,
       options.deps,
     )) {
+      if (
+        skipPrimaryPluginTarget &&
+        isPluginTarget(target) &&
+        pluginTarget.pluginId === target.pluginId &&
+        pluginTarget.namespace === target.namespace
+      ) {
+        continue;
+      }
       const identity = `${pluginTarget.pluginId}/${pluginTarget.namespace}`;
       if (preflightedTargets.has(identity)) continue;
       preflightedTargets.add(identity);
@@ -317,10 +328,9 @@ export async function buildImportPlan(options: {
         });
       }
     }
-    const compatibilityDiagnostic = pluginSchemaTargetCompatibilityDiagnostic(
-      source,
-      target,
-    );
+    const compatibilityDiagnostic = skipPrimaryPluginTarget
+      ? null
+      : pluginSchemaTargetCompatibilityDiagnostic(source, target);
     if (compatibilityDiagnostic) {
       diagnostics.push(compatibilityDiagnostic);
       continue;
@@ -431,41 +441,93 @@ export async function buildImportPlan(options: {
       continue;
     }
 
-    await appendStructuredPlans({
-      writes,
-      diagnostics,
+    if (!skipPrimaryPluginTarget) {
+      await appendStructuredPlans({
+        writes,
+        diagnostics,
+        source,
+        target,
+        sourceDigest,
+        value: read.value,
+        sessionId: options.sessionId,
+        worldId: options.worldId,
+        now: options.now,
+        schema: resolvedSchema,
+        deps: options.deps,
+      });
+    }
+
+    const projections = await executeWorldProjections({
       source,
-      target,
       sourceDigest,
       value: read.value,
       sessionId: options.sessionId,
       worldId: options.worldId,
+      ...(options.locale ? { locale: options.locale } : {}),
       now: options.now,
-      schema: resolvedSchema,
       deps: options.deps,
     });
+    writes.push(...projections.writes);
+    diagnostics.push(...projections.diagnostics);
+    deferredProjectionOutputs.push(...projections.deferredProjectionOutputs);
   }
 
-  const sameSource = new Map<string, PlannedWrite>();
+  const sameSource = new Map<
+    string,
+    { readonly write: PlannedWrite; readonly index: number }
+  >();
+  const deduplicatedWrites: PlannedWrite[] = [];
   for (const write of writes) {
     const identity = sameSourceDuplicateIdentity(write);
-    if (!identity) continue;
+    if (!identity) {
+      deduplicatedWrites.push(write);
+      continue;
+    }
     const existing = sameSource.get(identity);
     if (existing) {
+      const existingProjection = existing.write.derivedFrom?.find((item) =>
+        item.startsWith("projection:"),
+      );
+      const currentProjection = write.derivedFrom?.find((item) =>
+        item.startsWith("projection:"),
+      );
+      if (existingProjection || currentProjection) {
+        // Projections are optional derived views. A duplicate key from a
+        // projection must not turn an otherwise valid canonical import into a
+        // session-blocking error. Canonical writes win; between projections,
+        // the first stable plugin/projection/output order wins.
+        const replaceExisting = Boolean(
+          existingProjection && !currentProjection,
+        );
+        if (replaceExisting) {
+          deduplicatedWrites[existing.index] = write;
+          sameSource.set(identity, { write, index: existing.index });
+        }
+        diagnostics.push({
+          level: "warning",
+          sourceId: write.source.id,
+          message: `worldData projection target/key collision in source "${write.source.id}": ${pluginWriteIdentity(write)}; ${replaceExisting ? "canonical write replaced the projection" : "later projection write skipped"}`,
+        });
+        continue;
+      }
       diagnostics.push({
         level: "error",
         sourceId: write.source.id,
         message: `duplicate worldData target/key in source "${write.source.id}": ${pluginWriteIdentity(write)}`,
       });
     } else {
-      sameSource.set(identity, write);
+      sameSource.set(identity, {
+        write,
+        index: deduplicatedWrites.length,
+      });
+      deduplicatedWrites.push(write);
     }
   }
 
   const byIdentity = new Map<string, PlannedWrite>();
   const mergeEvents: MergeEvent[] = [];
   const merged: PlannedWrite[] = [];
-  for (const write of writes) {
+  for (const write of deduplicatedWrites) {
     const identity = pluginWriteIdentity(write);
     if (!identity) {
       merged.push(write);
@@ -478,10 +540,28 @@ export async function buildImportPlan(options: {
       continue;
     }
     if (existing.source.id !== write.source.id) {
+      const existingProjection = existing.derivedFrom?.find((item) =>
+        item.startsWith("projection:"),
+      );
+      const currentProjection = write.derivedFrom?.find((item) =>
+        item.startsWith("projection:"),
+      );
+      if (!existingProjection && currentProjection) {
+        // A projection cannot shadow canonical authored data merely because
+        // its source appears later. This mirrors the same-source collision
+        // rule while preserving ordinary later-source overlay semantics for
+        // canonical/canonical and projection/projection pairs.
+        mergeEvents.push({
+          level: "warning",
+          sourceId: write.source.id,
+          message: `worldData projection ${identity} from source "${write.source.id}" was skipped because canonical source "${existing.source.id}" owns the same target/key`,
+        });
+        continue;
+      }
       mergeEvents.push({
         level: "warning",
         sourceId: write.source.id,
-        message: `worldData ${identity} from source "${write.source.id}" replaces source "${existing.source.id}"`,
+        message: `worldData ${identity} from source "${write.source.id}" replaces ${existingProjection && !currentProjection ? "projected " : ""}source "${existing.source.id}"`,
       });
       const index = merged.indexOf(existing);
       if (index >= 0) merged[index] = write;
@@ -489,5 +569,10 @@ export async function buildImportPlan(options: {
     }
   }
 
-  return { writes: merged, diagnostics, mergeEvents };
+  return {
+    writes: merged,
+    diagnostics,
+    mergeEvents,
+    deferredProjectionOutputs,
+  };
 }

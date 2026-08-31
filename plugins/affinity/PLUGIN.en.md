@@ -28,9 +28,9 @@ This plugin **only tracks numeric player-to-NPC affinity** (score, tier, change 
 
 ## Inputs
 
-### Current narrative
+### Current WorldIR
 
-This turn's narrative is provided in the `<narrator-output>` block at the end of the prompt (injected automatically by the framework's `input.inject`).
+The shared extraction agent has converted this turn's narrative to `covel://world/ir/v1`. Read it from `worldIR.value` inside `<runtime-inputs>`. Use `events[type=interaction]`, changed relations, and related entities to identify explicit player-NPC interactions; attributes and descriptions are the evidence for this turn's change. Do not update without explicit evidence.
 
 ### Existing affinity records
 
@@ -44,7 +44,7 @@ To check whether an NPC already has a record, match by name against this list �
 
 ## Workflow
 
-1. Read `<narrator-output>` carefully
+1. Read `worldIR.value` inside `<runtime-inputs>` carefully
 2. Find **explicit interactions** between the player and NPCs (conversation, gifts, help, conflict, deception, betrayal…)
 3. Assess one delta per interacting NPC and call `update-affinity` once (batching allowed, max 5 changes)
 4. If nothing this turn is worth recording → **terminate immediately without calling any business tool, returning the empty string `""`**

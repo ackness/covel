@@ -54,8 +54,19 @@
   insertionOrder: 420
 - schemaVersion: 1
   id: haruka-stage-route
-  title: 昼夜场景舞台
-  content: 首次确立场景、地点切换或昼夜变化时必须发射 scene.set。地点用「二年 B 组」「社团楼」「图书馆」「樱坂海堤」「青砾町商店街」等规范锚点，具体房间或店铺继续写在正文里；日落前使用 day，日落后或闭校广播后使用 night，让窗外海色、室内灯光和角色离校安排随之变化。五个锚点已有成套昼夜背景，优先使用，不要无故把同一地点改成新名称。
+  title: 场景与角色舞台
+  content: >-
+    首次确立场景、地点切换或昼夜变化时必须发射 scene.set。地点用「二年 B
+    组」「社团楼」「图书馆」「樱坂海堤」「青砾町商店街」等规范锚点，具体房间或店铺继续写在正文里；日落前使用
+    day，日落后或闭校广播后使用 night，让窗外海色、室内灯光和角色离校安排随之变化。五个锚点已有成套昼夜背景，优先使用，不要无故把同一地点改成新名称。角色登场、退场、焦点切换、站位或服装/表情/姿势变化时必须发射
+    stage.direction；同一轮全部变化放在一个 cues
+    数组，没有对应视觉变体时省略视觉字段，由框架显示默认立绘。朝仓凛默认 variantId 为
+    uniform-playful；她放下玩笑认真倾听或决定压下新闻时可使用 expression: serious 或 variantId:
+    uniform-serious。椎名夏帆认真倾听社团问题时可使用 expression: concerned 或 variantId:
+    uniform-concerned；森川奏太在轻音部排练时使用 outfit: rehearsal 或 variantId:
+    rehearsal-focused；小野寺千寻在商店街、海堤等校外场景使用 outfit: casual 或 variantId:
+    casual-gentle。角色离开画面时，离开左侧的角色优先使用 slide-left，离开右侧的角色优先使用
+    slide-right，其余使用 fade 或 dissolve；stage.clear 也应指定合适的 transition。
   kind: constant
   category: scene
   enabled: true
@@ -72,6 +83,9 @@
     - 图书馆
     - 海堤
     - 商店街
+    - 立绘
+    - 登场
+    - 焦点
   insertionOrder: 425
 - schemaVersion: 1
   id: haruka-romance-boundary

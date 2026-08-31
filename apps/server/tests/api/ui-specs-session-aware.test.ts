@@ -89,7 +89,7 @@ describe("GET /api/ui-specs session-aware filter", () => {
               pluginId: "codex",
               uiSpecs: {
                 right: [
-                  { id: "codex", label: "Codex", component: "Stack", view: {} },
+                  { id: "codex", label: "Codex", view: { component: "Stack" } },
                 ],
               },
             }),
@@ -113,7 +113,7 @@ describe("GET /api/ui-specs session-aware filter", () => {
               pluginId: "optional-plugin",
               uiSpecs: {
                 right: [
-                  { id: "opt", label: "Opt", component: "Stack", view: {} },
+                  { id: "opt", label: "Opt", view: { component: "Stack" } },
                 ],
               },
             }),

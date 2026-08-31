@@ -470,6 +470,33 @@ describe("vector recall (semantic)", () => {
       warn.mockRestore();
     }
   });
+
+  it("retries a transient embedding provider failure in the same sweep", async () => {
+    let attempts = 0;
+    const flaky: EmbedFn = async (texts) => {
+      attempts += 1;
+      if (attempts === 1) {
+        throw Object.assign(new Error("socket disconnected"), {
+          code: "UND_ERR_SOCKET",
+        });
+      }
+      return texts.map(embedText);
+    };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ingestor = createVectorIngestor({ store, embed: flaky });
+
+    try {
+      await expect(ingestor.ingest(sessionId)).resolves.toMatchObject({
+        recall: 3,
+      });
+      expect(attempts).toBe(2);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("retrying attempt 2"),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe("vector archival (semantic over lorebook + characters)", () => {

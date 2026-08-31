@@ -402,6 +402,7 @@ export function makeSnapshotPayload(
     stateEntries: [],
     pluginData: [],
     workingMemory: [],
+    sessionSummaries: [],
     lorebookEntries: [],
     suspensions: [],
     messagesCursor: "",

@@ -59,6 +59,23 @@ Manual function runtime for saving a character's presence refs.
       "mime": "image/png",
       "size": 5678
     },
+    "visuals": {
+      "defaultVariant": "uniform-neutral",
+      "variants": [
+        {
+          "id": "uniform-neutral",
+          "outfit": "uniform",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "mime": "image/png",
+            "size": 5678
+          },
+          "stage": { "scale": 1, "offsetX": 0, "offsetY": 0 }
+        }
+      ]
+    },
     "voice": {
       "id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "mime": "audio/wav",
@@ -82,3 +99,10 @@ Manual function runtime for saving a character's presence refs.
 Stores the normalized presence record under:
 
 `plugin_data[character-presence][presence][characterId]`
+
+`visuals` is optional and additive to schema v1. The stage resolves an exact
+`variantId` first, then `outfit + expression + pose`, then progressively falls
+back to the default pose, neutral expression, catalog default, first variant,
+legacy `sprite`, and finally `avatar`. Each variant may carry stage framing
+(`scale`, `offsetX`, `offsetY`) so differently cropped source art shares a
+consistent on-screen baseline.

@@ -6,6 +6,59 @@ import {
 import { PLUGIN_SCOPED_FIELDS } from "../src/types/plugin.js";
 
 describe("plugin manifest dataSchemas", () => {
+  it("accepts scoped slash commands and rejects malformed arguments", () => {
+    const manifest = runtimeManifestInputSchema.parse({
+      name: "command-plugin",
+      description: "Commands",
+      commands: [
+        {
+          name: "inspect",
+          aliases: ["i"],
+          description: { en: "Inspect runtime state", zh: "检查运行时状态" },
+          action: "inspect-state",
+          context: ["session", "active-runtimes", "models"],
+          arguments: [
+            { name: "runtime", type: "string", required: true },
+            { name: "details", type: "boolean" },
+          ],
+        },
+      ],
+    });
+
+    expect(manifest.commands?.[0]).toMatchObject({
+      name: "inspect",
+      action: "inspect-state",
+      context: ["session", "active-runtimes", "models"],
+    });
+    expect(() =>
+      runtimeManifestInputSchema.parse({
+        name: "bad-command-plugin",
+        description: "Bad commands",
+        commands: [
+          {
+            name: "Bad/Command",
+            description: "bad",
+            action: "inspect",
+          },
+        ],
+      }),
+    ).toThrow(/lowercase kebab-case/);
+    expect(() =>
+      runtimeManifestInputSchema.parse({
+        name: "bad-variadic-plugin",
+        description: "Bad commands",
+        commands: [
+          {
+            name: "inspect",
+            description: "bad",
+            action: "inspect",
+            arguments: [{ name: "rest", variadic: true }, { name: "after" }],
+          },
+        ],
+      }),
+    ).toThrow(/must be last/);
+  });
+
   it("accepts single-shot agent tool completion", () => {
     const manifest = runtimeManifestInputSchema.parse({
       name: "single-shot-tool-runtime",
@@ -96,6 +149,82 @@ describe("plugin manifest dataSchemas", () => {
     ).toThrow(/plugin-relative/);
   });
 
+  it("accepts strict plugin-scoped world projection declarations", () => {
+    const manifest = runtimeManifestInputSchema.parse({
+      name: "world-projector",
+      description: "Projects world characters into plugin data",
+      stage: "setup",
+      worldProjections: {
+        characters: {
+          from: "plugin://character-blueprint/blueprints",
+          handler: "server/project-characters.js",
+          outputs: {
+            characters: { namespace: "characters", key: "characterId" },
+          },
+        },
+      },
+    });
+
+    expect(manifest.worldProjections?.characters).toEqual({
+      from: "plugin://character-blueprint/blueprints",
+      handler: "server/project-characters.js",
+      outputs: {
+        characters: { namespace: "characters", key: "characterId" },
+      },
+    });
+  });
+
+  it("rejects unsafe or structurally invalid world projections", () => {
+    const base = {
+      name: "world-projector",
+      description: "Projects world data",
+      stage: "setup" as const,
+    };
+
+    expect(() =>
+      runtimeManifestInputSchema.parse({
+        ...base,
+        worldProjections: {
+          Characters: {
+            from: "plugin://characters",
+            handler: "server/project.js",
+            outputs: {
+              characters: { namespace: "characters", key: "characterId" },
+            },
+          },
+        },
+      }),
+    ).toThrow(/projection\/output id/);
+
+    expect(() =>
+      runtimeManifestInputSchema.parse({
+        ...base,
+        worldProjections: {
+          characters: {
+            from: "plugin://characters",
+            handler: "../outside/project.js",
+            outputs: {},
+          },
+        },
+      }),
+    ).toThrow(/plugin-relative/);
+
+    expect(() =>
+      runtimeManifestInputSchema.parse({
+        ...base,
+        worldProjections: {
+          characters: {
+            from: " ",
+            handler: "server/project.js",
+            outputs: {
+              characters: { namespace: "characters", key: "character.id" },
+            },
+          },
+        },
+      }),
+    ).toThrow();
+  });
+
   it("accepts catalogue tags and relation metadata", () => {
     const manifest = runtimeManifestInputSchema.parse({
       name: "dialogue-narrator",
@@ -167,6 +296,7 @@ describe("plugin-scoped field registry", () => {
   // silent edit to a merge rule shows up as a failing test.
   it("registers every field the manifest declares as plugin-scoped", () => {
     expect(Object.keys(PLUGIN_SCOPED_FIELDS).sort()).toEqual([
+      "commands",
       "dataSchemas",
       "displayName",
       "entry",
@@ -175,12 +305,14 @@ describe("plugin-scoped field registry", () => {
       "relations",
       "tags",
       "userSettings",
+      "worldProjections",
     ]);
   });
 
   it("keeps the strictest conflict rules where the framework enforces them", () => {
-    // dataSchemas is the only field that hard-fails; userSettings warns.
+    // Declarative data contracts fail closed; userSettings warns.
     expect(PLUGIN_SCOPED_FIELDS.dataSchemas.conflict).toMatch(/throw/i);
+    expect(PLUGIN_SCOPED_FIELDS.worldProjections.conflict).toMatch(/throw/i);
     expect(PLUGIN_SCOPED_FIELDS.userSettings.conflict).toMatch(/warn/i);
     // Entry modules are additive across declarations.
     expect(PLUGIN_SCOPED_FIELDS.entry.merge).toBe("union");

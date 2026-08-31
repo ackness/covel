@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "plugin://scene-stage/stage-direction.event",
+  "type": "object",
+  "required": ["cues"],
+  "properties": {
+    "cues": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/actorPatch" },
+          { "$ref": "#/$defs/actorLeave" },
+          { "$ref": "#/$defs/actorFocus" },
+          { "$ref": "#/$defs/stageClear" }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "safeKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "visualKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    },
+    "position": {
+      "enum": ["left", "center-left", "center", "center-right", "right"]
+    },
+    "transition": {
+      "enum": ["none", "fade", "slide-left", "slide-right", "dissolve"]
+    },
+    "actorPatch": {
+      "type": "object",
+      "required": ["type", "character"],
+      "properties": {
+        "type": { "enum": ["actor.enter", "actor.update"] },
+        "character": { "$ref": "#/$defs/safeKey" },
+        "position": { "$ref": "#/$defs/position" },
+        "variantId": { "$ref": "#/$defs/visualKey" },
+        "outfit": { "$ref": "#/$defs/visualKey" },
+        "expression": { "$ref": "#/$defs/visualKey" },
+        "pose": { "$ref": "#/$defs/visualKey" },
+        "focus": { "type": "boolean" },
+        "transition": { "$ref": "#/$defs/transition" }
+      },
+      "additionalProperties": false
+    },
+    "actorLeave": {
+      "type": "object",
+      "required": ["type", "character"],
+      "properties": {
+        "type": { "const": "actor.leave" },
+        "character": { "$ref": "#/$defs/safeKey" },
+        "transition": { "$ref": "#/$defs/transition" }
+      },
+      "additionalProperties": false
+    },
+    "actorFocus": {
+      "type": "object",
+      "required": ["type", "character"],
+      "properties": {
+        "type": { "const": "actor.focus" },
+        "character": { "$ref": "#/$defs/safeKey" }
+      },
+      "additionalProperties": false
+    },
+    "stageClear": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "stage.clear" },
+        "transition": { "$ref": "#/$defs/transition" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

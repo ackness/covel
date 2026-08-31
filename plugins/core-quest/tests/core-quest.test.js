@@ -717,7 +717,7 @@ describe("core-quest plugin manifest", () => {
     loaded = await loadRuntime(discovery, manifest.name);
   });
 
-  it("is a non-core post-turn agent runtime gated on the narrative engine", () => {
+  it("is a non-core post-turn agent runtime gated on typed WorldIR", () => {
     expect(manifest.pluginType).toBe("plugin");
     expect(manifest.name).toBe("core-quest");
     expect(manifest.stage).toBe("post-turn");
@@ -725,25 +725,18 @@ describe("core-quest plugin manifest", () => {
     expect(manifest.runtimeType).toBeUndefined();
     expect(manifest.handler).toBeUndefined();
     expect(manifest.trigger?.type).toBe("auto");
-    expect(manifest.needs).toEqual([{ capability: "narrative-engine" }]);
+    expect(manifest.needs).toBeUndefined();
+    expect(manifest.inputs?.worldIR).toEqual({
+      from: { capability: "world-ir-provider", cardinality: "one" },
+      accepts: "covel://world/ir/v1",
+      required: true,
+    });
+    expect(manifest.relations?.requires).toContain("world-ir");
   });
 
-  it("declares both narrative-engine runtime injects and the plugin-data inject", () => {
+  it("injects existing quest data without duplicating raw narrative", () => {
     const injects = manifest.input?.inject ?? [];
-    expect(injects).toHaveLength(3);
-
-    // Engine-agnostic: one runtime inject per known narrative engine; the
-    // absent engine resolves to nothing so exactly the active one fills
-    // the <narrator-output> block.
-    for (const engine of ["narrator", "chat-mode-narrator"]) {
-      expect(injects).toContainEqual({
-        kind: "runtime",
-        from: engine,
-        field: "narrativeOutput",
-        as: "<narrator-output>",
-      });
-    }
-
+    expect(injects).toHaveLength(1);
     expect(injects).toContainEqual(
       expect.objectContaining({
         kind: "plugin-data",

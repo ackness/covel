@@ -19,12 +19,65 @@
         "avatar": { "$ref": "#/$defs/mediaRef" },
         "sprite": { "$ref": "#/$defs/mediaRef" },
         "voice": { "$ref": "#/$defs/mediaRef" },
+        "visuals": { "$ref": "#/$defs/visuals" },
         "media": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/mediaRef" }
         }
       },
       "additionalProperties": true
+    },
+    "visuals": {
+      "type": "object",
+      "required": ["variants"],
+      "properties": {
+        "defaultVariant": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+        },
+        "variants": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/visualVariant" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "visualVariant": {
+      "type": "object",
+      "required": ["id", "sprite"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+        },
+        "outfit": { "$ref": "#/$defs/visualKey" },
+        "expression": { "$ref": "#/$defs/visualKey" },
+        "pose": { "$ref": "#/$defs/visualKey" },
+        "sprite": { "$ref": "#/$defs/mediaRef" },
+        "stage": { "$ref": "#/$defs/stageFraming" }
+      },
+      "additionalProperties": false
+    },
+    "visualKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]*$"
+    },
+    "stageFraming": {
+      "type": "object",
+      "properties": {
+        "scale": { "type": "number", "minimum": 0.5, "maximum": 2 },
+        "offsetX": { "type": "number", "minimum": -100, "maximum": 100 },
+        "offsetY": { "type": "number", "minimum": -100, "maximum": 100 }
+      },
+      "additionalProperties": false
     },
     "mediaRef": {
       "type": "object",

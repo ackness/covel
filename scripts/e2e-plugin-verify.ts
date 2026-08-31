@@ -43,6 +43,7 @@
  *   --turns <n>            Number of playing-phase turns to run after char-creation (default: 3)
  *   --runtime <id>         Filter output + assertions to this runtime only
  *   --plugin <id>          Filter output + assertions to this plugin only
+ *   --enable-plugins <ids> Enable comma-separated plugins before the first turn
  *   --player-message <str> Player text for each playing turn (default: cycles through built-ins)
  *   --form-values <json>   Default form field values (default: auto from field types)
  *   --timeout <seconds>    Per-turn SSE timeout (default: 300)
@@ -50,6 +51,11 @@
  *   --no-log               Disable log persistence
  *   --verbose              Print verbose SSE event log
  *   --keep                 Keep session after test (default: delete if passed)
+ *   --require-compaction   Fail unless context.compacted is observed
+ *   --require-summary-use  Fail unless a later LLM prompt contains <compacted_history>
+ *   --require-tools <ids>  Require comma-separated tool.completed names
+ *   --strict-traces        Fail on any *.failed/error LLM trace
+ *   --max-input-tokens <n> Fail when provider-reported input usage exceeds n
  *   --help                 Show this help
  *
  * Exit codes:
@@ -74,6 +80,7 @@ interface CliArgs {
   turns: number;
   runtimeFilter?: string;
   pluginFilter?: string;
+  enablePlugins: string[];
   playerMessage?: string;
   formValues: Record<string, string>;
   timeoutSec: number;
@@ -81,6 +88,11 @@ interface CliArgs {
   keep: boolean;
   logDir: string;
   logEnabled: boolean;
+  requireCompaction: boolean;
+  requireSummaryUse: boolean;
+  requireTools: string[];
+  strictTraces: boolean;
+  maxInputTokens?: number;
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -88,12 +100,17 @@ function parseArgs(argv: string[]): CliArgs {
     server: "http://localhost:3001/api",
     slot: process.env.E2E_MODEL_SLOT?.trim() || "e2e",
     turns: 3,
+    enablePlugins: [],
     formValues: {},
     timeoutSec: 300,
     verbose: false,
     keep: false,
     logDir: "debugs/e2e-logs",
     logEnabled: true,
+    requireCompaction: false,
+    requireSummaryUse: false,
+    requireTools: [],
+    strictTraces: false,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -123,6 +140,12 @@ function parseArgs(argv: string[]): CliArgs {
       case "--plugin":
         args.pluginFilter = next();
         break;
+      case "--enable-plugins":
+        args.enablePlugins = next()
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean);
+        break;
       case "--player-message":
         args.playerMessage = next();
         break;
@@ -148,6 +171,24 @@ function parseArgs(argv: string[]): CliArgs {
       case "--keep":
         args.keep = true;
         break;
+      case "--require-compaction":
+        args.requireCompaction = true;
+        break;
+      case "--require-summary-use":
+        args.requireSummaryUse = true;
+        break;
+      case "--require-tools":
+        args.requireTools = next()
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean);
+        break;
+      case "--strict-traces":
+        args.strictTraces = true;
+        break;
+      case "--max-input-tokens":
+        args.maxInputTokens = Number.parseInt(next(), 10);
+        break;
       default:
         throw new Error(`Unknown argument: ${arg}`);
     }
@@ -158,6 +199,12 @@ function parseArgs(argv: string[]): CliArgs {
   }
   if (args.turns < 0) throw new Error("--turns must be >= 0");
   if (args.timeoutSec <= 0) throw new Error("--timeout must be > 0");
+  if (
+    args.maxInputTokens !== undefined &&
+    (!Number.isInteger(args.maxInputTokens) || args.maxInputTokens <= 0)
+  ) {
+    throw new Error("--max-input-tokens must be > 0");
+  }
 
   return args;
 }
@@ -178,6 +225,7 @@ Options:
   --turns <n>             Playing-phase turns after char creation (default: 3)
   --runtime <id>          Filter output + assertions to this runtime only
   --plugin <id>           Filter output + assertions to this plugin only
+  --enable-plugins <ids>  Enable comma-separated plugins before the first turn
   --player-message <str>  Player text for each playing turn
   --form-values <json>    Default form field values
   --timeout <seconds>     Per-turn SSE timeout (default: 300)
@@ -185,6 +233,11 @@ Options:
   --no-log                Disable log persistence
   --verbose               Print verbose SSE event log
   --keep                  Keep session after test
+  --require-compaction    Require a context.compacted trace
+  --require-summary-use   Require <compacted_history> in a later LLM prompt
+  --require-tools <ids>   Require comma-separated tool.completed names
+  --strict-traces         Fail on any *.failed trace or error LLM response
+  --max-input-tokens <n>  Enforce provider-reported input usage ceiling
   --help                  Show this help
 `;
   console.log(help.trim());
@@ -1228,6 +1281,7 @@ interface MainState {
   sessionId: string | null;
   finalTurns: TurnRecord[];
   snapshot: unknown;
+  traces: unknown;
   pass: boolean;
   fatalError: Error | null;
 }
@@ -1245,6 +1299,7 @@ async function main(): Promise<void> {
     sessionId: null,
     finalTurns: [],
     snapshot: null,
+    traces: null,
     pass: false,
     fatalError: null,
   };
@@ -1274,6 +1329,9 @@ async function main(): Promise<void> {
       if (state.snapshot) {
         saveArtefact(sink, `${state.sessionId}-snapshot`, state.snapshot);
       }
+      if (state.traces) {
+        saveArtefact(sink, `${state.sessionId}-traces`, state.traces);
+      }
       const failedRuntimes = state.finalTurns.flatMap((t) =>
         t.runtimeResults
           .filter((r) => r.status === "failed")
@@ -1298,7 +1356,7 @@ async function main(): Promise<void> {
       console.log("  Artefacts:");
       console.log(`    log:      ${sink.logPath}`);
       console.log(
-        `    (turns / snapshot / failures / fatal written next to the log)`,
+        `    (turns / snapshot / traces / failures / fatal written next to the log)`,
       );
     } else if (sink) {
       console.log("");
@@ -1324,6 +1382,8 @@ async function runMain(
   kv("Turns", args.turns);
   kv("Runtime filter", args.runtimeFilter ?? "(none)");
   kv("Plugin filter", args.pluginFilter ?? "(none)");
+  kv("Enable plugins", args.enablePlugins.join(", ") || "(none)");
+  kv("Require tools", args.requireTools.join(", ") || "(none)");
   kv("Timeout", `${args.timeoutSec}s`);
   kv("Timestamp", new Date().toISOString());
   if (sink) kv("Log file", sink.logPath);
@@ -1423,19 +1483,38 @@ async function runMain(
   kv("Phase", session.phase);
   kv("Completed player turns", session.completedPlayerTurns);
 
+  let preparedSession = session;
+  for (const pluginId of args.enablePlugins) {
+    const enabled = await httpPost<{ ok: boolean; active: string[] }>(
+      args.server,
+      `/sessions/${session.id}/plugins/enable`,
+      { pluginId },
+    );
+    if (!enabled.ok) {
+      throw new Error(`failed to enable plugin ${pluginId}`);
+    }
+    kv(`Enabled plugin`, pluginId);
+  }
+  if (args.enablePlugins.length > 0) {
+    preparedSession = await httpGet<SessionRecord>(
+      args.server,
+      `/sessions/${session.id}`,
+    );
+  }
+
   // ── Phase 5: Turn execution ────────────────────────────────────
   section("Phase 5: Turn Execution");
 
   const ctx: PerTurnContext = {
     turnNumber: 0,
-    phase: session.phase,
-    completedPlayerTurns: session.completedPlayerTurns,
-    status: session.status,
+    phase: preparedSession.phase,
+    completedPlayerTurns: preparedSession.completedPlayerTurns,
+    status: preparedSession.status,
     flow,
     // Expectations are derived against the session's REAL active set (seeded
     // by the world manifest at create), not the global plugin pool. Read it
     // back from the create response, then refresh from each session re-fetch.
-    active: new Set(session.activePlugins ?? []),
+    active: new Set(preparedSession.activePlugins ?? []),
     scheduledOpportunity: new Set(),
     scheduledFired: new Set(),
     assertions,
@@ -1655,10 +1734,14 @@ async function runMain(
   // hook.fired) are reported, not required — hook.fired in particular fires
   // only when an active plugin declares a hook, which the default active set
   // does not. `args.server` already carries the `/api` prefix.
-  const tracesBody = await httpGet<{ events: Array<{ type: string }> }>(
-    args.server,
-    `/traces/${encodeURIComponent(session.id)}`,
-  );
+  const tracesBody = await httpGet<{
+    events: Array<{
+      eventOrder: number;
+      type: string;
+      payload: Record<string, unknown>;
+    }>;
+  }>(args.server, `/traces/${encodeURIComponent(session.id)}`);
+  state.traces = tracesBody;
   const seenTypes = new Set(tracesBody.events.map((e) => e.type));
   const hasActiveStory = flow.steps.some(
     (s) => ctx.active.has(s.pluginId) && s.isStoryRuntime,
@@ -1700,6 +1783,81 @@ async function runMain(
       missing.length === 0 ? "OK" : "MISSING"
     }; optional observed: ${seenInfo.join(", ") || "(none)"}`,
   );
+
+  if (args.requireCompaction) {
+    if (seenTypes.has("context.compacted")) {
+      assertions.pass("context compaction observed");
+    } else {
+      assertions.fail("required context.compacted trace missing");
+    }
+  }
+
+  if (args.requireSummaryUse) {
+    const firstCompactionOrder = tracesBody.events.find(
+      (event) => event.type === "context.compacted",
+    )?.eventOrder;
+    const summaryUsed = tracesBody.events.some(
+      (event) =>
+        firstCompactionOrder !== undefined &&
+        event.eventOrder > firstCompactionOrder &&
+        event.type === "llm.calling" &&
+        JSON.stringify(event.payload).includes("<compacted_history>"),
+    );
+    if (summaryUsed) assertions.pass("compacted summary used by LLM prompt");
+    else assertions.fail("no llm.calling prompt contained <compacted_history>");
+  }
+
+  for (const toolName of args.requireTools) {
+    const completed = tracesBody.events.some(
+      (event) =>
+        event.type === "tool.completed" && event.payload.toolName === toolName,
+    );
+    if (completed) assertions.pass(`required tool completed: ${toolName}`);
+    else assertions.fail(`required tool did not complete: ${toolName}`);
+  }
+
+  if (args.strictTraces) {
+    const failures = tracesBody.events.filter(
+      (event) =>
+        event.type.endsWith(".failed") ||
+        event.type === "error.occurred" ||
+        (event.type === "llm.responded" &&
+          event.payload.finishReason === "error"),
+    );
+    if (failures.length === 0) assertions.pass("no failure traces observed");
+    else {
+      for (const failure of failures) {
+        assertions.fail(
+          `${failure.type}: ${String(failure.payload.error ?? "unknown")}`,
+        );
+      }
+    }
+  }
+
+  if (args.maxInputTokens !== undefined) {
+    const measuredInputTokens = tracesBody.events.flatMap((event) => {
+      if (event.type !== "llm.responded") return [];
+      const usage = event.payload.usage;
+      if (!usage || typeof usage !== "object") return [];
+      const inputTokens = (usage as Record<string, unknown>).inputTokens;
+      return typeof inputTokens === "number" && Number.isFinite(inputTokens)
+        ? [inputTokens]
+        : [];
+    });
+    const overBudget = measuredInputTokens.filter(
+      (inputTokens) => inputTokens > args.maxInputTokens!,
+    );
+    if (measuredInputTokens.length === 0) {
+      assertions.fail("no provider-reported input token usage available");
+    } else if (overBudget.length === 0) {
+      assertions.pass(`all LLM inputs <= ${args.maxInputTokens}`);
+    } else {
+      const maxObserved = Math.max(...overBudget);
+      assertions.fail(
+        `${overBudget.length} LLM inputs exceeded ${args.maxInputTokens}; max=${maxObserved}`,
+      );
+    }
+  }
 
   // ── Phase 7: Summary ───────────────────────────────────────────
   section("Phase 7: Summary");

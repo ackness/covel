@@ -1,8 +1,20 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { SessionRecord } from "@/services/api.js";
+import type { SessionSlashCommand } from "@covel/shared";
 import { useGameViewComposer } from "../game-view/use-game-view-composer.js";
+
+const { postPluginRpcWithApproval } = vi.hoisted(() => ({
+  postPluginRpcWithApproval: vi.fn(async () => ({
+    status: "ok" as const,
+    result: { ok: true, message: "rolled" },
+  })),
+}));
+
+vi.mock("@/components/session/plugin-rpc-ui.js", () => ({
+  postPluginRpcWithApproval,
+}));
 
 // Composer availability is the player's core affordance, so it gets a
 // deterministic test rather than relying on the live-LLM e2e run.
@@ -16,6 +28,7 @@ const sessionMock = {
   cancelSuspension: vi.fn(),
   steerMessage: vi.fn(async () => true),
   abortActiveTurn: vi.fn(async () => {}),
+  loadSessionPlugins: vi.fn(async () => {}),
 };
 
 vi.mock("@/stores/session-store.js", () => ({
@@ -31,6 +44,7 @@ vi.mock("@/stores/session-store.js", () => ({
     cancelSuspension: sessionMock.cancelSuspension,
     steerMessage: sessionMock.steerMessage,
     abortActiveTurn: sessionMock.abortActiveTurn,
+    loadSessionPlugins: sessionMock.loadSessionPlugins,
   }),
 }));
 
@@ -70,10 +84,23 @@ const sessionRecord = (phase: "setup" | "playing"): SessionRecord => ({
   updatedAt: "2026-05-09T00:00:00.000Z",
 });
 
+const rollCommand: SessionSlashCommand = {
+  id: "dice-check:roll",
+  pluginId: "dice-check",
+  source: "plugin",
+  sourceLabel: "Dice Check",
+  name: "roll",
+  aliases: ["r"],
+  description: "Roll dice",
+  arguments: [{ name: "notation" }],
+  action: "roll",
+};
+
 const setup = (
   messages: StreamMessage[],
   executing = false,
   phase: "setup" | "playing" = "playing",
+  commands: readonly SessionSlashCommand[] = [],
 ) => {
   const onSendMessage = vi.fn();
   const view = renderHook(() =>
@@ -83,6 +110,7 @@ const setup = (
       executing,
       session: sessionRecord(phase),
       onSendMessage,
+      commands,
     }),
   );
   return { ...view, onSendMessage };
@@ -174,5 +202,51 @@ describe("useGameViewComposer", () => {
 
     expect(sessionMock.steerMessage).toHaveBeenCalledWith("等一下");
     expect(onSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("completes a partial slash command before executing it", () => {
+    const { result, onSendMessage } = setup([], false, "playing", [
+      rollCommand,
+    ]);
+
+    act(() => result.current.setInputValue("/ro"));
+    act(() => result.current.handleSubmit());
+
+    expect(result.current.inputValue).toBe("/roll ");
+    expect(postPluginRpcWithApproval).not.toHaveBeenCalled();
+    expect(onSendMessage).not.toHaveBeenCalled();
+  });
+
+  it("dispatches an exact command separately from drafts and the story turn", async () => {
+    sessionMock.pendingInteractionDrafts = [
+      { id: "d1", label: "wait", values: { text: "wait" } },
+    ];
+    const { result, onSendMessage } = setup([], false, "playing", [
+      rollCommand,
+    ]);
+
+    act(() => result.current.setInputValue("/roll 2d6"));
+    act(() => result.current.handleSubmit());
+
+    await waitFor(() =>
+      expect(postPluginRpcWithApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: "session-1",
+          request: { commandId: "dice-check:roll", input: "/roll 2d6" },
+        }),
+      ),
+    );
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(sessionMock.clearInteractionDrafts).not.toHaveBeenCalled();
+  });
+
+  it("keeps known commands out of mid-turn steer", async () => {
+    const { result } = setup([], true, "playing", [rollCommand]);
+
+    act(() => result.current.setInputValue("/r"));
+    act(() => result.current.handleSubmit());
+
+    await waitFor(() => expect(postPluginRpcWithApproval).toHaveBeenCalled());
+    expect(sessionMock.steerMessage).not.toHaveBeenCalled();
   });
 });

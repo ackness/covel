@@ -40,13 +40,9 @@ export function isRuntimeDoneSentinel(
 
 export const runtimeDoneTool: ToolModule = tool({
   name: "runtime-done",
-  description:
-    "Call this IMMEDIATELY after you have finished all required tool calls for this runtime. It exits the runtime without forcing another LLM round-trip. Do not write any terminator text — just call this tool.",
+  description: "Finish this runtime after all required tool calls.",
   parameters: z.object({
-    reason: z
-      .string()
-      .optional()
-      .describe("Optional short note for trace/debug."),
+    reason: z.string().optional().describe("Optional trace note."),
   }),
   execute: async ({ reason }) => {
     return { _covelRuntimeDone: true, reason } satisfies RuntimeDoneSentinel;

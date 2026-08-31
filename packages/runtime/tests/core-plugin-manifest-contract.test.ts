@@ -79,6 +79,7 @@ describe("core plugin manifest contract", () => {
       model: "plugin",
       guard: "./guard.js",
       trigger: { type: "auto" },
+      completeAfterTools: ["create-form"],
       // Turn-scoped needs carry both the intra-stage order and the same-turn
       // gate; the explicit stage picks the band.
       needs: ["pregame", "world-init/schema-gen"],
@@ -110,15 +111,22 @@ describe("core plugin manifest contract", () => {
     const manifests = await loadRuntimeManifests();
     const retriever = requireRuntime(manifests, "npc-graph/rag-retriever");
     const narrator = requireRuntime(manifests, "narrator");
-    const downstreamIds = [
-      "guide",
+    const chatModeNarrator = requireRuntime(manifests, "chat-mode-narrator");
+    const rawDownstreamIds = ["guide", "char-creator/character-tracker"];
+    const structuredDownstreamIds = [
       "codex",
       "npc-graph/extractor",
-      "char-creator/character-tracker",
+      "core-quest",
+      "affinity",
+      "inventory",
     ];
-    const downstreams = downstreamIds.map((id) =>
+    const rawDownstreams = rawDownstreamIds.map((id) =>
       requireRuntime(manifests, id),
     );
+    const structuredDownstreams = structuredDownstreamIds.map((id) =>
+      requireRuntime(manifests, id),
+    );
+    const worldIr = requireRuntime(manifests, "world-ir");
 
     expect(retriever).toMatchObject({
       pluginType: "plugin",
@@ -151,19 +159,26 @@ describe("core plugin manifest contract", () => {
     ]);
     expect(narrator.tools?.builtin).toEqual([
       "world-dimension-get",
+      "memory-search",
+      "emit-event",
+    ]);
+    expect(chatModeNarrator.tools?.builtin).toEqual([
+      "world-dimension-get",
+      "memory-search",
       "emit-event",
     ]);
 
-    for (const downstream of downstreams) {
+    for (const downstream of [
+      ...rawDownstreams,
+      worldIr,
+      ...structuredDownstreams,
+    ]) {
       expect(getRuntimeSpec(downstream).stage).toBe("post-turn");
     }
 
-    // Every narrator-downstream runtime is engine-agnostic : it gates
-    // on the `narrative-engine` capability (discovering whichever narrative
-    // engine the current mode loaded) and injects from both known engines so
-    // it works under narrator OR chat-mode-narrator. An exact `narrator`
-    // upstream would permanently skip these runtimes in dialogue mode.
-    for (const downstream of downstreams) {
+    // Presentation and tracker runtimes that still need the prose remain
+    // engine-agnostic raw narrative consumers.
+    for (const downstream of rawDownstreams) {
       expect(downstream.needs).toEqual([{ capability: "narrative-engine" }]);
       for (const engine of ["narrator", "chat-mode-narrator"]) {
         expect(downstream.input?.inject).toContainEqual({
@@ -174,7 +189,45 @@ describe("core plugin manifest contract", () => {
         });
       }
     }
-    expect(downstreams.map((manifest) => manifest.model)).toEqual([
+
+    // The shared extractor owns the only typed narrative-to-WorldIR
+    // conversion. State plugins consume its same-turn typed output and no
+    // longer duplicate raw narrator injections.
+    expect(worldIr.capabilities).toContain("world-ir-provider");
+    expect(worldIr.inputs?.narrative).toMatchObject({
+      from: { capability: "narrative-engine", cardinality: "one" },
+      select: "/narrativeOutput",
+      required: true,
+    });
+    expect(worldIr.output).toEqual({
+      schema: "covel://world/ir/v1",
+      recordAs: "world-ir-v1",
+    });
+    for (const downstream of structuredDownstreams) {
+      expect(downstream.needs).toBeUndefined();
+      expect(downstream.inputs?.worldIR).toMatchObject({
+        from: { capability: "world-ir-provider", cardinality: "one" },
+        accepts: "covel://world/ir/v1",
+        required: true,
+      });
+      expect(
+        downstream.input?.inject?.some(
+          (inject) =>
+            inject.kind === "runtime" &&
+            ["narrator", "chat-mode-narrator"].includes(inject.from),
+        ) ?? false,
+      ).toBe(false);
+    }
+
+    expect(
+      [...rawDownstreams, worldIr, ...structuredDownstreams].map(
+        (manifest) => manifest.model,
+      ),
+    ).toEqual([
+      "plugin",
+      "plugin",
+      "plugin",
+      "plugin",
       "plugin",
       "plugin",
       "plugin",

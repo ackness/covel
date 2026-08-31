@@ -197,12 +197,14 @@ export function createGatewaySlotResolution(
     presetId: string | undefined,
     options: GatewayOptions | undefined,
   ): ModelParameterOverrides | undefined {
-    if (options?.parameterOverrides) return options.parameterOverrides;
-    if (!presetId) return undefined;
-    const requestScoped =
-      options?.slotOverrides?.parameterOverrides?.[presetId];
-    if (requestScoped) return requestScoped;
-    return getSlotParameterOverrides(presetId);
+    const configured = presetId
+      ? (options?.slotOverrides?.parameterOverrides?.[presetId] ??
+        getSlotParameterOverrides(presetId))
+      : undefined;
+    const perCall = options?.parameterOverrides;
+    if (!configured) return perCall;
+    if (!perCall) return configured;
+    return { ...configured, ...perCall };
   }
 
   function withParameterOverrides(
@@ -212,9 +214,21 @@ export function createGatewaySlotResolution(
   ): Record<string, unknown> | undefined {
     const parameterOverrides = resolveParameterOverrides(presetId, options);
     if (!metadata && !parameterOverrides) return metadata;
+    const metadataOverrides =
+      metadata?.parameterOverrides !== null &&
+      typeof metadata?.parameterOverrides === "object" &&
+      !Array.isArray(metadata.parameterOverrides)
+        ? (metadata.parameterOverrides as Record<string, unknown>)
+        : undefined;
+    const mergedParameterOverrides =
+      metadataOverrides || parameterOverrides
+        ? { ...metadataOverrides, ...parameterOverrides }
+        : undefined;
     return {
       ...metadata,
-      ...(parameterOverrides ? { parameterOverrides } : {}),
+      ...(mergedParameterOverrides
+        ? { parameterOverrides: mergedParameterOverrides }
+        : {}),
     };
   }
 

@@ -8,15 +8,18 @@
  */
 
 import { Hono } from "hono";
+import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import { FrameworkCapability } from "@covel/shared";
 import { errorBody, readJsonBody } from "../../../api-error.js";
 import {
+  prepareWorldDataSyncForSession,
   WorldDataSyncConflictError,
   syncWorldDataForSession,
   preflightWorldDataForSession,
 } from "../../../world-data/session-import.js";
 import {
   checkSessionOwner,
+  sessionApprovalScope,
   withLockedSessionMutation,
 } from "../session/session-guard.js";
 import { type WorldEnv, formatWorldEntryContent } from "./shared.js";
@@ -52,11 +55,16 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
   if (session && session.worldId !== worldId) {
     return c.json(errorBody("Session world mismatch"), 400);
   }
-  const plugins = Array.isArray(body.plugins)
-    ? body.plugins.filter(
-        (pluginId): pluginId is string => typeof pluginId === "string",
-      )
-    : (session?.activePlugins ?? []);
+  // An existing session's plan must describe its persisted active set. Letting
+  // a request body replace it produced a plausible-but-false plan and could be
+  // used to probe code/contracts for plugins that were never activated.
+  const plugins = session
+    ? session.activePlugins
+    : Array.isArray(body.plugins)
+      ? body.plugins.filter(
+          (pluginId): pluginId is string => typeof pluginId === "string",
+        )
+      : [];
 
   const result = await preflightWorldDataForSession({
     sessionId,
@@ -101,24 +109,60 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
     return c.json(errorBody("Session world mismatch"), 400);
   }
 
+  const dryRun = body.dryRun !== false;
+  const now = new Date().toISOString();
+  const syncOptions = (liveSession: typeof session) => ({
+    store,
+    mediaStore,
+    sessionId,
+    worldId,
+    worldsDirs,
+    covelHome,
+    now,
+    dryRun,
+    force: body.force === true,
+    deferMediaFinalize: true,
+    locale: liveSession.locale,
+    preflight: {
+      activePlugins: liveSession.activePlugins,
+      registry: pluginRegistry,
+      canExecuteProjection: (pluginId: string) =>
+        c
+          .get("rpcApprovalGate")
+          .hasGrant(
+            liveSession.id,
+            pluginId,
+            COMMUNITY_SERVER_CODE_ACTION,
+            sessionApprovalScope(liveSession, pluginId),
+          ),
+    },
+  });
+
+  // Planning reads files and executes bounded projection workers. Keep that
+  // expensive, non-mutating phase outside the session lock; the locked phase
+  // below revalidates every session field that influenced the plan.
+  const prepared = await prepareWorldDataSyncForSession(syncOptions(session));
   const runSyncData = (liveSession: typeof session) =>
     syncWorldDataForSession({
-      store,
-      mediaStore,
-      sessionId,
-      worldId,
-      worldsDirs,
-      covelHome,
-      now: new Date().toISOString(),
-      dryRun: body.dryRun !== false,
-      force: body.force === true,
-      deferMediaFinalize: false,
-      locale: liveSession.locale,
-      preflight: {
-        activePlugins: liveSession.activePlugins,
-        registry: pluginRegistry,
-      },
+      ...syncOptions(liveSession),
+      prepared,
     });
+  const publicSyncResult = (
+    result: Awaited<ReturnType<typeof syncWorldDataForSession>>,
+  ) => ({
+    imported: result.imported,
+    dryRun: result.dryRun,
+    diagnostics: result.diagnostics,
+    planned: result.planned,
+    upserted: result.upserted,
+    deleted: result.deleted,
+    unchanged: result.unchanged,
+    conflicts: result.conflicts,
+  });
+
+  if (dryRun) {
+    return c.json(publicSyncResult(await runSyncData(session)));
+  }
 
   // Sync rewrites the session's importer-managed rows and compares them
   // against recorded hashes. Without the session lock a turn can edit a target
@@ -146,6 +190,29 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
         if (liveSession.worldId !== worldId) {
           return c.json(errorBody("Session world mismatch"), 400);
         }
+        const activePluginsUnchanged =
+          liveSession.activePlugins.length === session.activePlugins.length &&
+          liveSession.activePlugins.every(
+            (pluginId, index) => pluginId === session.activePlugins[index],
+          );
+        const approvalScopesUnchanged = session.activePlugins.every(
+          (pluginId) =>
+            sessionApprovalScope(liveSession, pluginId) ===
+            sessionApprovalScope(session, pluginId),
+        );
+        if (
+          liveSession.locale !== session.locale ||
+          !activePluginsUnchanged ||
+          !approvalScopesUnchanged
+        ) {
+          return c.json(
+            errorBody(
+              "Session plugins, locale, or approval scope changed while the world-data plan was prepared",
+              { code: "world_data_sync_plan_stale" },
+            ),
+            409,
+          );
+        }
         return runSyncData(liveSession);
       },
     });
@@ -164,16 +231,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
     throw err;
   }
 
-  return c.json({
-    imported: result.imported,
-    dryRun: result.dryRun,
-    diagnostics: result.diagnostics,
-    planned: result.planned,
-    upserted: result.upserted,
-    deleted: result.deleted,
-    unchanged: result.unchanged,
-    conflicts: result.conflicts,
-  });
+  return c.json(publicSyncResult(result));
 });
 
 // POST /worlds/:id/sync-dimensions — re-import world dimensions into a session's

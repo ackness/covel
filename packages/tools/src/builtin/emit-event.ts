@@ -31,8 +31,7 @@ export function createEmitEventTool(deps: {
 }): ToolModule {
   return tool({
     name: "emit-event",
-    description:
-      "Emit a domain event declared by an active plugin (see the advertised event directory in your context). One topic per call.",
+    description: "Emit one advertised domain-event topic.",
     parameters: z.object({
       topic: z.string(),
       data: z.record(z.string(), z.unknown()).default({}),

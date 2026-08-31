@@ -115,8 +115,8 @@ export function createGateway(deps: GatewayDependencies) {
         fallbackTag: "text",
         resolveTargets: (presetId) =>
           deps.presetRegistry.resolveTextTargetChain({ presetId }),
-        execute: async (target, resolved) =>
-          resolved.adapter.generateText(
+        execute: async (target, resolved) => {
+          const result = await resolved.adapter.generateText(
             configWithSignal(resolved.config, options),
             {
               model: targetModel(target),
@@ -130,7 +130,13 @@ export function createGateway(deps: GatewayDependencies) {
               ),
             },
             { profile: target.profile, preset: target.preset, mode: "text" },
-          ),
+          );
+          return {
+            ...result,
+            model: targetModel(target),
+            provider: targetProvider(target),
+          };
+        },
         resolveUsage: (r) => r.usage,
       },
       options,
@@ -171,10 +177,14 @@ export function createGateway(deps: GatewayDependencies) {
             },
             { profile: target.profile, preset: target.preset, mode: "object" },
           );
-          return result as {
-            object: TObject;
-            finishReason: string;
-            usage: UsageSummary;
+          return {
+            ...(result as {
+              object: TObject;
+              finishReason: string;
+              usage: UsageSummary;
+            }),
+            model: targetModel(target),
+            provider: targetProvider(target),
           };
         },
         resolveUsage: (r) => r.usage,

@@ -3,7 +3,9 @@
  */
 
 import type {
+  LLMUsageSummary,
   PluginDataSchemaDecl,
+  WorldProjectionDecl,
   PluginRelations,
   PluginTag,
   MediaRef,
@@ -104,10 +106,9 @@ export interface PluginRuntimeGateway {
   }): Promise<{
     readonly text: string;
     readonly finishReason: string;
-    readonly usage: {
-      readonly inputTokens: number;
-      readonly outputTokens: number;
-    };
+    readonly usage: LLMUsageSummary;
+    readonly model?: string;
+    readonly provider?: string;
   }>;
 
   generateObject<T = unknown>(input: {
@@ -124,10 +125,9 @@ export interface PluginRuntimeGateway {
   }): Promise<{
     readonly object: T;
     readonly finishReason: string;
-    readonly usage: {
-      readonly inputTokens: number;
-      readonly outputTokens: number;
-    };
+    readonly usage: LLMUsageSummary;
+    readonly model?: string;
+    readonly provider?: string;
   }>;
 
   /**
@@ -197,6 +197,9 @@ export interface PluginRuntimeGateway {
     signal?: AbortSignal;
   }): Promise<{
     text: string;
+    usage?: LLMUsageSummary | null;
+    model?: string;
+    provider?: string;
     warnings: readonly string[];
   }>;
 }
@@ -710,6 +713,8 @@ export interface PluginRegistryEntry {
   readonly manifests?: readonly ParsedPluginMd[];
   /** Plugin-level data schema declarations merged across all runtime manifests. */
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
+  /** Plugin-level world projections merged across all runtime manifests. */
+  readonly worldProjections?: Readonly<Record<string, WorldProjectionDecl>>;
   readonly loadedRuntimes: ReadonlyMap<string, LoadedRuntime>;
   readonly status: PluginEntryStatus;
   readonly error?: string;

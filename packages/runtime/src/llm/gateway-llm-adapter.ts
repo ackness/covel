@@ -14,6 +14,7 @@ import type {
   LLMStreamEvent,
   LLMTargetIdentity,
   LLMToolDefinition,
+  LLMUsageSummary,
 } from "./llm-adapter.js";
 
 /**
@@ -128,12 +129,14 @@ export interface GatewayLike {
       signal?: AbortSignal;
       slotOverrides?: SlotOverridesInput;
       capabilityOverridePolicy?: CapabilityOverridePolicy;
+      /** Request-hard generation limit; gateway applies it after metadata. */
+      parameterOverrides?: { maxOutputTokens?: number };
       onTargetAttempt?: (target: LLMTargetIdentity) => void;
     },
   ): Promise<{
     text: string;
     finishReason: string;
-    usage: { inputTokens: number; outputTokens: number };
+    usage: LLMUsageSummary;
     toolCalls?: Array<{ id: string; name: string; arguments: string }>;
     reasoningContent?: string;
   }>;
@@ -165,6 +168,8 @@ export interface GatewayLike {
       signal?: AbortSignal;
       slotOverrides?: SlotOverridesInput;
       capabilityOverridePolicy?: CapabilityOverridePolicy;
+      /** @see generateText options.parameterOverrides */
+      parameterOverrides?: { maxOutputTokens?: number };
       onTargetAttempt?: (target: LLMTargetIdentity) => void;
     },
   ): AsyncIterable<{
@@ -175,7 +180,7 @@ export interface GatewayLike {
     name?: string;
     arguments?: string;
     reasoningContent?: string;
-    usage?: { inputTokens: number; outputTokens: number };
+    usage?: LLMUsageSummary;
   }>;
 }
 
@@ -258,6 +263,13 @@ export function createGatewayAdapter(
           ...(config?.capabilityOverridePolicy
             ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
             : {}),
+          ...(params.maxOutputTokens !== undefined
+            ? {
+                parameterOverrides: {
+                  maxOutputTokens: params.maxOutputTokens,
+                },
+              }
+            : {}),
           ...(params.signal ? { signal: params.signal } : {}),
           ...(params.onTargetAttempt
             ? { onTargetAttempt: params.onTargetAttempt }
@@ -278,10 +290,7 @@ export function createGatewayAdapter(
             : result.finishReason === "length"
               ? "length"
               : "stop",
-        usage: {
-          inputTokens: result.usage.inputTokens,
-          outputTokens: result.usage.outputTokens,
-        },
+        usage: result.usage,
         ...(result.reasoningContent
           ? { reasoningContent: result.reasoningContent }
           : {}),
@@ -311,6 +320,13 @@ export function createGatewayAdapter(
             : {}),
           ...(config?.capabilityOverridePolicy
             ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
+            : {}),
+          ...(params.maxOutputTokens !== undefined
+            ? {
+                parameterOverrides: {
+                  maxOutputTokens: params.maxOutputTokens,
+                },
+              }
             : {}),
           ...(params.signal ? { signal: params.signal } : {}),
           ...(params.onTargetAttempt

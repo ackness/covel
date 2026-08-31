@@ -449,6 +449,15 @@ export interface TurnMessageStore {
     messageIds: readonly string[],
     summaryId: string,
   ): Promise<void>;
+  /**
+   * Repoint every already-compacted message in a session to a replacement
+   * rolling summary. Used when the compactor merges prior summaries so no
+   * message retains an orphaned summary id.
+   */
+  retagCompactedTurnMessages(
+    sessionId: string,
+    summaryId: string,
+  ): Promise<void>;
 }
 
 /** Player form-input records. Part of `sql-session-journal-records`. */

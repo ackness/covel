@@ -471,6 +471,98 @@ describe("Turn executor hook wire-in", () => {
       await executeTurn(makeTurnInput(), [makeManifest()], deps);
 
       expect(compactor.run).toHaveBeenCalledOnce();
+      expect(compactor.run.mock.calls[0]?.[1]).toContain("Say something.");
+    });
+
+    it("compacts the capability-projected history seen by agent prompts", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      const store = await createMainLoopStore("sess-hook-wire");
+      await store.appendTurnMessage({
+        id: "prior-runtime-0",
+        sessionId: "sess-hook-wire",
+        turnId: "prior-turn",
+        sourceType: "runtime",
+        sourceRuntimeId: "test-plugin",
+        role: "assistant",
+        content: "original rejected branch",
+        order: 1,
+        createdAt: "2024-01-01T00:00:01Z",
+      });
+      await store.setPluginData({
+        id: "accepted-prior-turn",
+        sessionId: "sess-hook-wire",
+        pluginId: "history-rewriter",
+        namespace: "turns",
+        key: "prior-turn",
+        value: {
+          turnId: "prior-turn",
+          runtimeId: "test-plugin",
+          status: "accepted",
+          acceptedText: "accepted branch",
+        },
+        createdAt: "2024-01-01T00:00:02Z",
+        updatedAt: "2024-01-01T00:00:02Z",
+      });
+      const compactor = {
+        run: vi.fn().mockResolvedValue({ compacted: false }),
+      };
+      const deps: TurnExecutorDeps = {
+        ...(await makeDeps(llm, pipeline, store)),
+        compactor,
+        capabilityPluginIds: {
+          promptHistoryRewriterPluginId: "history-rewriter",
+        },
+      };
+
+      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+
+      const compactedMessages = compactor.run.mock.calls[0]?.[2] as
+        Array<{ content: string }> | undefined;
+      expect(compactedMessages?.map((message) => message.content)).toContain(
+        "accepted branch",
+      );
+      expect(
+        compactedMessages?.map((message) => message.content),
+      ).not.toContain("original rejected branch");
+    });
+
+    it("rebuilds the first agent context from the newly persisted summary", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      const store = await createMainLoopStore("sess-hook-wire");
+      const compactor = {
+        run: vi.fn().mockImplementation(async () => {
+          await store.saveSessionSummary({
+            id: "summary-live-1",
+            sessionId: "sess-hook-wire",
+            turnRangeStart: "prior-turn",
+            turnRangeEnd: "prior-turn",
+            content: "The player already crossed the old bridge.",
+            focusSections: ["history"],
+            createdAt: new Date().toISOString(),
+          });
+          await store.tagTurnMessagesCompacted(
+            "sess-hook-wire",
+            ["prior-player-0"],
+            "summary-live-1",
+          );
+          return { compacted: true, summaryId: "summary-live-1" };
+        }),
+      };
+      const deps: TurnExecutorDeps = {
+        ...(await makeDeps(llm, pipeline, store)),
+        compactor,
+      };
+
+      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+
+      expect(result.runtimeResults[0]?.status).toBe("success");
+      const providerMessages = llm.calls[0]?.messages;
+      expect(JSON.stringify(providerMessages)).toContain("<compacted_history>");
+      expect(JSON.stringify(providerMessages)).toContain(
+        "The player already crossed the old bridge.",
+      );
     });
   });
 
@@ -566,6 +658,48 @@ describe("Turn executor hook wire-in", () => {
       // The payload still carries the assembled prompt/messages it always did.
       expect(typeof seenPayload?.systemPrompt).toBe("string");
       expect(Array.isArray(seenPayload?.messages)).toBe(true);
+    });
+
+    it("re-applies the hard budget after hook rewrites", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      pipeline.register({
+        id: "global:PostContextAssembly:oversized",
+        event: "PostContextAssembly",
+        handler: vi.fn().mockImplementation(
+          async (
+            _ctx,
+            payload: {
+              messages: ReadonlyArray<{ role: string; content: string }>;
+            },
+          ) => ({
+            action: "continue",
+            replace: {
+              messages: [
+                ...payload.messages,
+                { role: "system", content: "x".repeat(2_000) },
+              ],
+            },
+          }),
+        ),
+      });
+
+      const deps = {
+        ...(await makeDeps(llm, pipeline)),
+        estimator: (text: string) => text.length,
+        contextBudget: {
+          maxInputTokens: 1_000,
+          reservedForResponse: 100,
+          protectLastUserTurns: 1,
+        },
+      } satisfies TurnExecutorDeps;
+      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+
+      expect(result.runtimeResults[0]?.status).toBe("failed");
+      expect(result.runtimeResults[0]?.error).toMatch(
+        /Context budget exceeded after PostContextAssembly/,
+      );
+      expect(llm.calls).toHaveLength(0);
     });
   });
 

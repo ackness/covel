@@ -65,6 +65,35 @@ const WORLD_LORE = `# 测试世界
 2. 公会记录出现不存在的名字。
 3. 街区尽头的门只在雨夜打开。`;
 
+const WORLD_PACKAGE_YAML = `characters:
+  - schemaVersion: 1
+    id: bell-keeper
+    name: 守钟人
+    role: npc
+    description: 唯一记得真实时间的人。
+    attributes: { faction: 钟表公会, location: 中央钟楼 }
+  - schemaVersion: 1
+    id: rain-courier
+    name: 雨信使
+    role: companion
+    description: 在倒转的街巷间递送密信。
+    attributes: { faction: 无, location: 南街 }
+  - schemaVersion: 1
+    id: minute-thief
+    name: 窃分者
+    role: npc
+    description: 正在偷走全城最后一小时。
+    attributes: { faction: 逆针会, location: 地下机芯 }
+lorebook:
+  - { id: central-tower, content: 中央钟楼控制全城时间。, strategy: selective, keys: [钟楼, 时间] }
+  - { id: rain-streets, content: 雨水会显出被删除的街道。, strategy: selective, keys: [雨, 街道] }
+  - { id: clock-guild-fact, content: 钟表公会垄断校时权。, strategy: selective, keys: [公会, 校时] }
+  - { id: reverse-hour, content: 倒转之时会让记忆先于事件消失。, strategy: constant }
+rules:
+  - { id: time-cost, content: 每次改写时间都必须失去一段等长记忆。, strategy: constant }
+  - { id: rain-reveals, content: 被时间删除的痕迹只能在雨中出现。, strategy: constant }
+  - { id: clocks-disagree, content: 不同阵营的钟永远显示不同时间。, strategy: constant }`;
+
 class FixedLlm implements LLMAdapter {
   constructor(private readonly content: string) {}
 
@@ -269,6 +298,77 @@ dimensions:
     expect(dimensions).toContain("difficulty: adaptive");
     expect(dimensions).toContain("铜分: 3");
   });
+
+  it("writes requested portable world-package supplements", async () => {
+    const enrichedYaml = WORLD_YAML.replace(
+      "    openingScenario: 雨夜里，钟楼提前敲响，玩家必须选择追踪钟声或保护证人。",
+      `    openingScenario: 雨夜里，钟楼提前敲响，玩家必须选择追踪钟声或保护证人。
+    openingChips: [追踪钟声, 保护证人, 封锁钟楼]
+    startingResources:
+      铜分: 8
+      防水火柴: 2`,
+    ).concat(`
+memoryBlocks:
+  - label: time_debt
+    displayName: 时间债
+    extractionHint: 玩家改写时间付出的记忆与后果。
+  - label: erased_clues
+    displayName: 被删除的线索
+    extractionHint: 只在雨中显现、随后可能再次消失的证据。
+`);
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${enrichedYaml}\n===WORLD_MD===\n${WORLD_LORE}\n===WORLD_PACKAGE_YAML===\n${WORLD_PACKAGE_YAML}\n===END===`,
+      ),
+      concept: "雨中的倒转钟城",
+      outputDir: tmp,
+      attemptTimeoutMs: 5_000,
+      brief: {
+        experienceMode: "dialogue-mode",
+        content: ["characters", "lorebook", "rules", "memory", "opening-kit"],
+        additionalInstructions: "让角色彼此隐瞒一段共同历史。",
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.packageContent).toMatchObject({
+      characters: expect.arrayContaining([
+        expect.objectContaining({ id: "bell-keeper", name: "守钟人" }),
+      ]),
+      lorebook: expect.arrayContaining([
+        expect.objectContaining({ id: "central-tower" }),
+      ]),
+      rules: expect.arrayContaining([
+        expect.objectContaining({ id: "time-cost" }),
+      ]),
+    });
+    const manifest = await readFile(
+      path.join(tmp, "test-world", "world.yaml"),
+      "utf8",
+    );
+    const descriptor = await readFile(
+      path.join(tmp, "test-world", "data/world.data.yaml"),
+      "utf8",
+    );
+    const characters = JSON.parse(
+      await readFile(
+        path.join(tmp, "test-world", "characters/main-cast.json"),
+        "utf8",
+      ),
+    ) as unknown[];
+    const lorebook = await readFile(
+      path.join(tmp, "test-world", "data/lorebook.yaml"),
+      "utf8",
+    );
+    expect(manifest).toContain("preset: dialogue-mode");
+    expect(manifest).toContain("defaultViewMode: stage");
+    expect(manifest).toContain("characterBlueprintSources:");
+    expect(manifest).toContain("memoryBlocks:");
+    expect(descriptor).toContain("to: characters");
+    expect(descriptor).toContain("to: lorebook");
+    expect(characters).toHaveLength(3);
+    expect(lorebook).toContain("sourceKind: rule");
+  });
 });
 
 describe("buildWorldPrompt", () => {
@@ -281,5 +381,18 @@ describe("buildWorldPrompt", () => {
     expect(prompt).toContain(
       "The openingScenario and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.",
     );
+  });
+
+  it("turns the structured brief into binding package instructions", async () => {
+    const prompt = await buildWorldPrompt("雨中的倒转钟城", "zh-CN", {
+      experienceMode: "dialogue-mode",
+      content: ["characters", "rules"],
+      additionalInstructions: "不要使用救世主预言。",
+    });
+    expect(prompt).toContain("Experience preset: dialogue-mode");
+    expect(prompt).toContain("CREATE: 3-5 interconnected main character");
+    expect(prompt).toContain("OMIT: 4-8 focused setting entries");
+    expect(prompt).toContain("不要使用救世主预言。");
+    expect(prompt).toContain("===WORLD_PACKAGE_YAML===");
   });
 });

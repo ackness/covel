@@ -31,6 +31,7 @@ import {
   MEMORY_VECTOR_PLUGIN_ID,
   RECALL_NAMESPACE,
 } from "./vector-common.js";
+import { retryTransientProviderCall } from "./provider-retry.js";
 
 /** Outcome of one ingestion sweep. */
 export interface IngestResult {
@@ -212,7 +213,12 @@ async function ingestRecall(
     Boolean(String(m.content ?? "").trim());
   const embeddable = batch.filter(isEmbeddable);
   const vectors = embeddable.length
-    ? await embed(embeddable.map((m) => String(m.content)))
+    ? await embedWithRetry(
+        embed,
+        embeddable.map((m) => String(m.content)),
+        sessionId,
+        "recall",
+      )
     : [];
 
   let written = 0;
@@ -326,7 +332,12 @@ async function ingestArchival(
   if (changed.length === 0) return 0;
 
   const batch = changed.slice(0, MAX_INGEST_BATCH);
-  const vectors = await embed(batch.map((it) => it.text));
+  const vectors = await embedWithRetry(
+    embed,
+    batch.map((it) => it.text),
+    sessionId,
+    "archival",
+  );
 
   const nextHashes: ArchivalHashes = { ...hashes };
   let written = 0;
@@ -455,4 +466,21 @@ function warn(kind: string, sessionId: string, err: unknown): void {
       err instanceof Error ? err.message : String(err)
     }`,
   );
+}
+
+async function embedWithRetry(
+  embed: EmbedFn,
+  texts: readonly string[],
+  sessionId: string,
+  kind: "recall" | "archival",
+): Promise<readonly Float32Array[]> {
+  return retryTransientProviderCall(() => embed(texts), {
+    onRetry: (error, nextAttempt) => {
+      console.warn(
+        `[memory] vector ingest (${kind}) provider call failed for ${sessionId}; retrying attempt ${nextAttempt}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    },
+  });
 }

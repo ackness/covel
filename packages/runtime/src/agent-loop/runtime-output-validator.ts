@@ -12,7 +12,13 @@
  * and runs the PostRuntime hook) or `undefined` when the output is acceptable.
  */
 
-import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
+import {
+  validateWorldIRV1,
+  WORLD_IR_V1_SCHEMA_URI,
+  type RuntimeManifest,
+  type RuntimeResult,
+  type TurnInput,
+} from "@covel/shared";
 import type { ToolCallRecord } from "@covel/shared";
 import { validateOutput } from "@covel/tools";
 import { extractRequiredFields } from "../turn-executor/turn-output-helpers.js";
@@ -106,11 +112,20 @@ export function checkSchemaValidation(
     outputSchema,
   } = ctx;
   const validation = validateOutput(output, outputSchema);
-  if (validation.valid) return undefined;
-
-  const validationErrors = validation.errors ?? [
-    "unknown schema validation error",
-  ];
+  const semanticValidation =
+    validation.valid && outputSchema.$id === WORLD_IR_V1_SCHEMA_URI
+      ? validateWorldIRV1(output)
+      : undefined;
+  let validationErrors: readonly string[];
+  if (!validation.valid) {
+    validationErrors = validation.errors ?? ["unknown schema validation error"];
+  } else if (semanticValidation && !semanticValidation.valid) {
+    validationErrors = semanticValidation.errors.map(
+      (error) => `${error.path}: ${error.message}`,
+    );
+  } else {
+    return undefined;
+  }
   return {
     pluginId: manifest.pluginId,
     runtimeId: manifest.name,

@@ -20,6 +20,12 @@ import {
   extractParameterOverrides,
 } from "./common.js";
 import {
+  normalizeTokenUsage,
+  readOptionalTokenCount,
+  readTokenCount,
+  sumTokenCounts,
+} from "./usage.js";
+import {
   postJson,
   parseJson,
   iterateSsePayloads,
@@ -218,10 +224,26 @@ function resolveMaxTokens(context: ModelRequestContext | undefined): number {
 
 function readAnthropicUsage(payload: Record<string, unknown>): UsageSummary {
   const usage = payload.usage as Record<string, unknown> | undefined;
-  return {
-    inputTokens: Number(usage?.input_tokens ?? 0),
-    outputTokens: Number(usage?.output_tokens ?? 0),
-  };
+  const cachedInputTokens = readOptionalTokenCount(
+    usage?.cache_read_input_tokens,
+  );
+  const cacheWriteInputTokens = readOptionalTokenCount(
+    usage?.cache_creation_input_tokens,
+  );
+  // Anthropic reports uncached, cache-read, and cache-write input tokens as
+  // disjoint fields. Normalize inputTokens to the same inclusive total used
+  // by OpenAI so budgets and traces have one provider-independent meaning.
+  const inputTokens = sumTokenCounts(
+    readTokenCount(usage?.input_tokens),
+    cachedInputTokens ?? 0,
+    cacheWriteInputTokens ?? 0,
+  );
+  return normalizeTokenUsage({
+    inputTokens,
+    outputTokens: readTokenCount(usage?.output_tokens),
+    ...(cachedInputTokens !== undefined ? { cachedInputTokens } : {}),
+    ...(cacheWriteInputTokens !== undefined ? { cacheWriteInputTokens } : {}),
+  });
 }
 
 /**
@@ -425,8 +447,9 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
             payload.message as Record<string, unknown> | undefined
           )?.usage as Record<string, unknown> | undefined;
           if (msgUsage) {
+            const startUsage = readAnthropicUsage({ usage: msgUsage });
             usage = {
-              inputTokens: Number(msgUsage.input_tokens ?? 0),
+              ...startUsage,
               outputTokens: usage.outputTokens,
             };
           }
@@ -436,8 +459,11 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
           finishReason = String(delta?.stop_reason ?? finishReason);
           const usageObj = payload.usage as Record<string, unknown> | undefined;
           usage = {
-            inputTokens: usage.inputTokens,
-            outputTokens: Number(usageObj?.output_tokens ?? usage.outputTokens),
+            ...usage,
+            outputTokens: readTokenCount(
+              usageObj?.output_tokens,
+              usage.outputTokens,
+            ),
           };
         }
       }

@@ -26,8 +26,10 @@ const WORLD_MANIFEST_ROOT_KEYS = new Set([
   "memoryBlocks",
   "worldData",
   "characterBlueprintSources",
+  "characterAttributes",
   "dimensions",
   "dimensionSources",
+  "defaultViewMode",
 ]);
 
 const META_CONTENT_PATTERNS = [

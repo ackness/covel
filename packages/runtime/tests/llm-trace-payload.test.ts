@@ -147,6 +147,30 @@ describe("buildLlmRespondedSuccessPayload", () => {
     });
     expect(payload.streaming).toBe(true);
   });
+
+  it("keeps prompt cache usage in the responded trace", () => {
+    const payload = buildLlmRespondedSuccessPayload({
+      ...baseIdentity,
+      response: {
+        ...response,
+        usage: {
+          inputTokens: 10,
+          outputTokens: 5,
+          cachedInputTokens: 8,
+          cacheWriteInputTokens: 2,
+        },
+      },
+      durationMs: 10,
+      attempt: 0,
+    });
+
+    expect(payload.usage).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      cachedInputTokens: 8,
+      cacheWriteInputTokens: 2,
+    });
+  });
 });
 
 describe("buildLlmRespondedErrorPayload", () => {

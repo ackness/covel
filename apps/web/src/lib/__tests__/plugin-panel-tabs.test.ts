@@ -5,6 +5,7 @@ import {
   panelProviderLabel,
   planPluginPanelProviders,
   pluginShortLabel,
+  resolvePluginPanelTarget,
 } from "../plugin-panel-tabs.js";
 
 describe("plugin-panel tab helpers", () => {
@@ -153,5 +154,53 @@ describe("plugin-panel tab helpers", () => {
     expect(panelProviderLabel("missing", "image", [], plugins, "zh-CN")).toBe(
       "missing",
     );
+  });
+
+  it("targets the command owner's exact sub-panel inside a shared group", () => {
+    const groups = aggregateSpecsIntoGroups(
+      [
+        {
+          pluginId: "dice-a",
+          specs: [
+            {
+              id: "history",
+              label: "History A",
+              group: "dice",
+              view: { component: "Text" },
+            },
+          ],
+        },
+        {
+          pluginId: "dice-b",
+          specs: [
+            {
+              id: "history",
+              label: "History B",
+              group: "dice",
+              view: { component: "Text" },
+            },
+            {
+              id: "quick-roll",
+              label: "Quick Roll",
+              group: "dice",
+              view: { component: "Button" },
+            },
+          ],
+        },
+      ],
+      "en-US",
+    );
+
+    expect(resolvePluginPanelTarget(groups, "dice-b", "quick-roll")).toEqual({
+      groupId: "dice",
+      subPanelIndex: 2,
+    });
+    expect(resolvePluginPanelTarget(groups, "dice-b", "dice")).toEqual({
+      groupId: "dice",
+      subPanelIndex: 1,
+    });
+    expect(
+      resolvePluginPanelTarget(groups, "missing", "history"),
+    ).toBeUndefined();
   });
 });

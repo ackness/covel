@@ -28,6 +28,15 @@ describe("living-world-rules manifest and UI loading", () => {
       ui: {
         right: ["./ui/living-world-rules-panel.json"],
       },
+      worldProjections: {
+        "rules-from-world-ir": {
+          from: "covel://world/ir/v1",
+          handler: "./server/project-world-ir.js",
+          outputs: {
+            rules: { namespace: "rules", key: "id" },
+          },
+        },
+      },
     });
     expect(parsed.manifest.capabilities).toEqual(
       expect.arrayContaining(["living-world-rules", "world-info"]),

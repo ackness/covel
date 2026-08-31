@@ -19,29 +19,23 @@ tags:
   - ui:message-block
 trigger:
   type: auto
-# Affinity reads deltas out of the latest narrative — skip when the active
-# narrative engine failed, to avoid the LLM hallucinating changes from an
-# empty <narrator-output>. The upstream gate discovers the engine by
-# capability (narrative-engine → narrator in traditional, chat-mode-narrator
-# in dialogue) instead of naming one; the inject lists both known engines and
-# the absent one resolves to nothing.
-needs:
-  - capability: narrative-engine
+inputs:
+  worldIR:
+    from:
+      capability: world-ir-provider
+      cardinality: one
+    accepts: covel://world/ir/v1
+    required: true
 input:
   inject:
-    - kind: runtime
-      from: narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-    - kind: runtime
-      from: chat-mode-narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
     - kind: plugin-data
       namespace: affinity
       as: "<existing-affinity>"
       format: summary
       maxEntries: 50
+relations:
+  requires:
+    - world-ir
 entry: ./server/index.js
 tools:
   plugin:
@@ -79,9 +73,9 @@ postHistory:
 
 ## 输入
 
-### 本轮叙事
+### 本轮 WorldIR
 
-本轮叙事在 prompt 末尾的 `<narrator-output>` 块中（由框架 `input.inject` 自动注入）。
+本轮叙事已由共享抽取 agent 转为 `covel://world/ir/v1`，位于 `<runtime-inputs>` 的 `worldIR.value`。从 `events[type=interaction]`、关系变化和相关 entities 中判断玩家与 NPC 的明确互动；attributes 与 description 是本轮变化的证据。没有明确证据就不更新。
 
 ### 已有好感记录
 
@@ -95,7 +89,7 @@ postHistory:
 
 ## 工作流程
 
-1. 仔细阅读 `<narrator-output>` 里的叙事
+1. 仔细阅读 `<runtime-inputs>` 中的 `worldIR.value`
 2. 找出玩家与 NPC 之间的**明确互动**（对话、赠礼、帮助、冲突、欺骗、背叛……）
 3. 对每个发生互动的 NPC 评估一个 delta，调用一次 `update-affinity`（可批量，至多 5 条）
 4. 如果本轮没有任何值得记录的变化 → **不调用任何业务工具，直接结束，返回空字符串 `""`**

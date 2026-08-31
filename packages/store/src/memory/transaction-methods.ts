@@ -84,6 +84,7 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   saveInteractionRecord: ["interactionRecords"],
   appendTurnMessage: ["turnMessages"],
   tagTurnMessagesCompacted: ["turnMessages"],
+  retagCompactedTurnMessages: ["turnMessages"],
   savePlayerInput: ["playerInputs"],
   saveSessionSummary: ["sessionSummaries"],
   deleteSessionSummaries: ["sessionSummaries"],

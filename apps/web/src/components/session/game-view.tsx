@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "@tanstack/react-router";
 import { usePanelCollapse } from "./game-view/use-panel-collapse.js";
 import { useNavTabActivation } from "./game-view/use-nav-tab-activation.js";
 import {
@@ -38,6 +39,7 @@ import { PendingDraftsBar } from "./game-view/pending-drafts-bar.js";
 import { useGameViewComposer } from "./game-view/use-game-view-composer.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { ignoreError } from "@/lib/ignore-error.js";
+import { emitNavEvent } from "@/lib/nav-events.js";
 
 // ── Extracted Panel Components (see left-panel.tsx, right-panel.tsx) ──
 
@@ -75,6 +77,7 @@ export function GameView({ session }: GameViewProps) {
     packages,
     pluginLoadErrors,
     sessionPlugins,
+    sessionCommands,
     presets,
     llmConfig,
     statePatches,
@@ -84,6 +87,7 @@ export function GameView({ session }: GameViewProps) {
     submittedBlockValues,
   } = state;
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(
     presets,
     llmConfig,
@@ -109,6 +113,31 @@ export function GameView({ session }: GameViewProps) {
   // Publishes data-turn / data-session on <html> for theme CSS to hook into.
   useDocumentSessionState();
 
+  const handleCommandClientAction = useCallback(
+    (action: {
+      readonly type: string;
+      readonly pluginId?: string;
+      readonly panelId?: string;
+    }) => {
+      if (action.type === "open-debug") {
+        void navigate({ to: "/debug", search: { sid: session.id } });
+        return;
+      }
+      if (
+        action.type === "open-plugin-panel" &&
+        action.pluginId &&
+        action.panelId
+      ) {
+        emitNavEvent({
+          type: "open-plugin-panel",
+          pluginId: action.pluginId,
+          panelId: action.panelId,
+        });
+      }
+    },
+    [navigate, session.id],
+  );
+
   const {
     inputValue,
     setInputValue,
@@ -121,6 +150,12 @@ export function GameView({ session }: GameViewProps) {
     handleSubmit,
     handleAbort,
     handleKeyDown,
+    commandMatches,
+    commandMenuOpen,
+    selectedCommandIndex,
+    commandExecuting,
+    commandFeedback,
+    applyCommandCompletion,
     removeInteractionDraft,
     resumeSuspension,
     cancelSuspension,
@@ -130,6 +165,8 @@ export function GameView({ session }: GameViewProps) {
     executing,
     session,
     onSendMessage,
+    commands: sessionCommands,
+    onCommandClientAction: handleCommandClientAction,
   });
   const [suspensionsOpen, setSuspensionsOpen] = useState(false);
 
@@ -468,6 +505,12 @@ export function GameView({ session }: GameViewProps) {
                 onSubmit={handleSubmit}
                 onAbort={handleAbort}
                 onKeyDown={handleKeyDown}
+                commandMatches={commandMatches}
+                commandMenuOpen={commandMenuOpen}
+                selectedCommandIndex={selectedCommandIndex}
+                commandExecuting={commandExecuting}
+                commandFeedback={commandFeedback}
+                onCommandSelect={applyCommandCompletion}
               />
             </>
           )}

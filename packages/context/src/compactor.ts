@@ -8,22 +8,22 @@
  *   1. Partitions the message list into a "to-compact" prefix and a protected
  *      tail (last 2 user turns AND last 5 messages overall are always protected).
  *   2. Calls the `fast` slot LLM with a fixed framework system prompt and a
- *      user prompt built from the messages to compact.
- *   3. Persists a `SessionSummaryRecord` containing the generated summary.
- *   4. Tags the original messages with `compactedAtTurnId = summaryId` so the
- *      prompt-build path can substitute the summary in their place.
+ *      user prompt built from the prior rolling summary + messages to compact.
+ *   3. Persists one bounded `SessionSummaryRecord` for the whole compacted
+ *      prefix, replacing the prior summary atomically.
+ *   4. Retags the compacted prefix with the replacement summary id so the
+ *      prompt-build path never observes an orphan reference.
  *
  * The compactor does NOT read environment configuration itself. The caller
  * decides whether a compactor instance is available.
  *
  * Original messages are NEVER deleted. They are only tagged.
  *
- * Multi-round compaction: each round compacts only the uncompacted region
- * between the last already-tagged message and the protect boundary, so long
- * sessions keep compacting (round 2, 3, …) instead of stalling after the
- * first summary. The token estimate mirrors the effective prompt view
- * (summaries substitute their tagged raw messages — see
- * `message-insertion.ts`), not the raw history.
+ * Multi-round compaction: each round folds the new uncompacted region into the
+ * prior rolling summary. Summary count and summary token cost therefore stay
+ * bounded for the life of the session. The token estimate mirrors the
+ * effective prompt view (the summary substitutes its tagged raw messages —
+ * see `message-insertion.ts`), not the raw history.
  */
 
 import type { SimpleCompletionAdapter } from "@covel/shared";
@@ -106,6 +106,9 @@ export interface CompactorRunner {
 const DEFAULT_THRESHOLD = 0.6;
 const DEFAULT_PROTECT_LAST_USER_TURNS = 2;
 const DEFAULT_PROTECT_LAST_N_MESSAGES = 5;
+const SUMMARY_TOKEN_FRACTION = 0.04;
+const MIN_SUMMARY_TOKENS = 128;
+const MAX_SUMMARY_TOKENS = 1_024;
 
 /**
  * Default focus sections used when the caller does not supply any. The actual
@@ -146,15 +149,63 @@ async function buildCompactorSystemPrompt(
 function buildCompactorUserPrompt(
   messages: readonly TurnMessageRecord[],
   locale: "zh-CN" | "en-US",
+  priorSummaries: readonly SessionSummaryRecord[],
+  maxSummaryTokens: number,
 ): string {
   const formatted = messages
     .map((m) => `[${m.role}]: ${m.content}`)
     .join("\n\n");
+  const prior = priorSummaries
+    .map((summary) => summary.content)
+    .join("\n\n---\n\n");
 
   if (locale === "zh-CN") {
-    return `请将以下对话历史摘要化：\n\n${formatted}`;
+    return prior
+      ? `请把已有滚动摘要与新增对话合并成一份完整摘要，不能遗漏仍有效的名称、约定、位置、关系、状态和因果。最终摘要不超过约 ${maxSummaryTokens} tokens。\n\n<已有滚动摘要>\n${prior}\n</已有滚动摘要>\n\n<新增对话>\n${formatted}\n</新增对话>`
+      : `请将以下对话历史摘要化，最终摘要不超过约 ${maxSummaryTokens} tokens：\n\n${formatted}`;
   }
-  return `Please summarize the following conversation history:\n\n${formatted}`;
+  return prior
+    ? `Merge the existing rolling summary and new conversation into one complete summary. Preserve all still-valid names, agreements, locations, relationships, states, and causal links. Keep the final summary under approximately ${maxSummaryTokens} tokens.\n\n<existing_rolling_summary>\n${prior}\n</existing_rolling_summary>\n\n<new_conversation>\n${formatted}\n</new_conversation>`
+    : `Please summarize the following conversation history in approximately ${maxSummaryTokens} tokens or fewer:\n\n${formatted}`;
+}
+
+function resolveSummaryTokenBudget(contextWindow: number): number {
+  return Math.min(
+    MAX_SUMMARY_TOKENS,
+    Math.max(
+      MIN_SUMMARY_TOKENS,
+      Math.floor(contextWindow * SUMMARY_TOKEN_FRACTION),
+    ),
+  );
+}
+
+function boundSummaryContent(
+  content: string,
+  maxTokens: number,
+  estimator: TokenEstimator,
+  locale: "zh-CN" | "en-US",
+): { readonly content: string; readonly truncated: boolean } {
+  const trimmed = content.trim();
+  if (estimator(trimmed) <= maxTokens) {
+    return { content: trimmed, truncated: false };
+  }
+
+  const marker =
+    locale === "zh-CN"
+      ? "\n[摘要已按上下文预算截断]"
+      : "\n[Summary truncated to context budget]";
+  let low = 0;
+  let high = trimmed.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = `${trimmed.slice(0, mid).trimEnd()}${marker}`;
+    if (estimator(candidate) <= maxTokens) low = mid;
+    else high = mid - 1;
+  }
+  return {
+    content: `${trimmed.slice(0, low).trimEnd()}${marker}`,
+    truncated: true,
+  };
 }
 
 /**
@@ -179,20 +230,24 @@ function computeProtectStart(
   // Absolute tail protection
   const tailProtect = Math.max(0, n - protectLastNMessages);
 
-  // User-turn protection
-  let userTurnProtect = n; // default: protect everything
-  let userSeen = 0;
-  for (let i = n - 1; i >= 0; i--) {
-    if (messages[i]!.role === "user") {
-      userSeen += 1;
-      if (userSeen >= protectLastNUserTurns) {
-        userTurnProtect = i;
-        break;
+  // User-turn protection. A zero count disables this rule, leaving only the
+  // absolute tail protection; without the explicit branch, the first user
+  // encountered satisfied `userSeen >= 0` and was accidentally protected.
+  let userTurnProtect = n;
+  if (protectLastNUserTurns > 0) {
+    let userSeen = 0;
+    for (let i = n - 1; i >= 0; i--) {
+      if (messages[i]!.role === "user") {
+        userSeen += 1;
+        if (userSeen >= protectLastNUserTurns) {
+          userTurnProtect = i;
+          break;
+        }
       }
     }
-  }
-  if (userSeen < protectLastNUserTurns) {
-    userTurnProtect = 0; // protect entire list
+    if (userSeen < protectLastNUserTurns) {
+      userTurnProtect = 0; // protect entire list
+    }
   }
 
   // The more conservative (earlier) boundary wins
@@ -253,12 +308,12 @@ export async function maybeCompact(
   // where compacted rows — and thus their summary references — are absent.
   // Every summary is part of the effective prompt view either way (see
   // message-insertion.ts), so a full history yields the identical total.
+  const existingSummaries = deps.store.listSessionSummaries
+    ? await deps.store.listSessionSummaries(sessionId)
+    : [];
   let summaryTokens = 0;
-  if (deps.store.listSessionSummaries) {
-    const summaries = await deps.store.listSessionSummaries(sessionId);
-    for (const s of summaries) {
-      summaryTokens += deps.estimator(s.content);
-    }
+  for (const summary of existingSummaries) {
+    summaryTokens += deps.estimator(summary.content);
   }
   const totalTokens = systemTokens + messageTokens + summaryTokens;
   const tokenThreshold = deps.contextWindow * threshold;
@@ -276,12 +331,8 @@ export async function maybeCompact(
 
   // Compaction window = uncompacted region between the last already-tagged
   // message and the protect boundary. Starting after the last tagged message
-  // (instead of index 0) lets later rounds pick up the fresh region; the old
-  // slice-from-0 + "already tagged → skip" guard stalled compaction forever
-  // after the first successful round.
-  // ponytail: each round adds one more summary block to the prompt view;
-  // rolling-merge of prior summaries into the new one is deferred until
-  // summary-block accumulation measurably matters.
+  // lets later rounds pick up only the fresh region; prior summaries are fed
+  // to the LLM separately and atomically replaced by the rolling result.
   const toCompact = messages.slice(lastCompactedIndex + 1, protectStart);
 
   // Nothing new to compact (protect window reaches the last boundary)
@@ -290,11 +341,18 @@ export async function maybeCompact(
   }
 
   // 3. Build prompts and call fast LLM
+  const maxSummaryTokens = resolveSummaryTokenBudget(deps.contextWindow);
+  const mergedFocusSections = [
+    ...new Set([
+      ...existingSummaries.flatMap((summary) => summary.focusSections),
+      ...focusSections,
+    ]),
+  ];
   let compactorSystemPrompt: string;
   try {
     compactorSystemPrompt = await buildCompactorSystemPrompt(
       locale,
-      focusSections,
+      mergedFocusSections,
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -303,7 +361,12 @@ export async function maybeCompact(
     );
     return { compacted: false };
   }
-  const compactorUserPrompt = buildCompactorUserPrompt(toCompact, locale);
+  const compactorUserPrompt = buildCompactorUserPrompt(
+    toCompact,
+    locale,
+    existingSummaries,
+    maxSummaryTokens,
+  );
 
   let summaryContent: string;
   try {
@@ -330,13 +393,21 @@ export async function maybeCompact(
     );
     return { compacted: false };
   }
+  const boundedSummary = boundSummaryContent(
+    summaryContent,
+    maxSummaryTokens,
+    deps.estimator,
+    locale,
+  );
+  summaryContent = boundedSummary.content;
 
   // 4. Persist the summary record
   const summaryId = crypto.randomUUID();
   const now = new Date().toISOString();
 
   // Determine turn range from the first/last messages in toCompact
-  const turnRangeStart = toCompact[0]!.turnId;
+  const turnRangeStart =
+    existingSummaries[0]?.turnRangeStart ?? toCompact[0]!.turnId;
   const turnRangeEnd = toCompact[toCompact.length - 1]!.turnId;
 
   const summaryRecord: SessionSummaryRecord = {
@@ -345,7 +416,7 @@ export async function maybeCompact(
     turnRangeStart,
     turnRangeEnd,
     content: summaryContent,
-    focusSections,
+    focusSections: mergedFocusSections,
     createdAt: now,
   };
 
@@ -361,10 +432,19 @@ export async function maybeCompact(
   const persistCompaction = async (
     store: Pick<
       typeof deps.store,
-      "saveSessionSummary" | "tagTurnMessagesCompacted"
+      | "deleteSessionSummaries"
+      | "retagCompactedTurnMessages"
+      | "saveSessionSummary"
+      | "tagTurnMessagesCompacted"
     >,
   ): Promise<void> => {
+    if (existingSummaries.length > 0) {
+      await store.deleteSessionSummaries(sessionId);
+    }
     await store.saveSessionSummary(summaryRecord);
+    if (existingSummaries.length > 0) {
+      await store.retagCompactedTurnMessages(sessionId, summaryId);
+    }
     await store.tagTurnMessagesCompacted(sessionId, messageIds, summaryId);
   };
 
@@ -385,7 +465,10 @@ export async function maybeCompact(
           (sum, m) => sum + deps.estimator(m.content),
           0,
         ),
-        focusSections,
+        focusSections: mergedFocusSections,
+        summariesMerged: existingSummaries.length,
+        summaryTokens: deps.estimator(summaryContent),
+        summaryTruncated: boundedSummary.truncated,
       },
       createdAt: now,
     });

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -14,10 +15,15 @@ import {
   type DataStore,
 } from "@covel/store";
 import {
+  applyPreparedWorldDataImportForSession,
+  finalizeWorldDataMediaRefs,
   WorldDataSyncConflictError,
   importWorldDataForSession,
+  prepareWorldDataImportForSession,
   syncWorldDataForSession,
 } from "../../src/world-data/session-import.js";
+import { loadWorldDataDescriptor } from "../../src/world-data/descriptor.js";
+import { collectMediaSourceFiles } from "../../src/world-data/media.js";
 
 const NOW = "2026-01-01T00:00:00.000Z";
 
@@ -300,7 +306,8 @@ sources:
     });
 
     const rows = await store.listPluginData("sess-1", "world-notes", "facts");
-    expect((rows[0]?.value as { content: string }).content).toBe(
+    expect(rows[0]).toBeDefined();
+    expect((rows[0]!.value as { content: string }).content).toBe(
       "The gate is locked.",
     );
   });
@@ -340,7 +347,8 @@ sources:
 
     expect(result.written).toBe(1);
     const rows = await store.listPluginData("sess-1", "world-notes", "facts");
-    expect((rows[0]?.value as { content: string }).content).toBe("闸门锁着。");
+    expect(rows[0]).toBeDefined();
+    expect((rows[0]!.value as { content: string }).content).toBe("闸门锁着。");
   });
 
   it("a malicious locale cannot escape the descriptor root (path traversal)", async () => {
@@ -378,7 +386,8 @@ sources:
 
     expect(result.written).toBe(1);
     const rows = await store.listPluginData("sess-1", "world-notes", "facts");
-    expect((rows[0]?.value as { content: string }).content).toBe("safe");
+    expect(rows[0]).toBeDefined();
+    expect((rows[0]!.value as { content: string }).content).toBe("safe");
   });
 
   it("rejects missing plugin schemas during preflight", async () => {
@@ -662,6 +671,112 @@ sources:
     ).rejects.toThrow(/source "facts" value failed schema validation/);
   });
 
+  it("supports explicit draft-07 world-local schemas", async () => {
+    const descriptor = `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/fact.json
+    schema: schemas/fact.schema.json
+    to: plugin:world-notes/facts
+    key: id
+`;
+    const { worldsDir, worldId } = await makeWorld({
+      id: "draft-seven-world",
+      descriptor,
+      files: {
+        "data/fact.json": JSON.stringify({
+          id: "legacy",
+          tuple: ["one"],
+        }),
+        "schemas/fact.schema.json": JSON.stringify({
+          $schema: "http://json-schema.org/draft-07/schema#",
+          type: "object",
+          required: ["id", "tuple"],
+          properties: {
+            id: { type: "string" },
+            tuple: {
+              type: "array",
+              items: [{ type: "string" }],
+              additionalItems: false,
+            },
+          },
+        }),
+      },
+    });
+
+    const result = await importWorldDataForSession({
+      store: await makeStore(["world-notes"]),
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: {
+        activePlugins: ["world-notes"],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    expect(result.written).toBe(1);
+  });
+
+  it("recompiles a world-local schema when the file changes", async () => {
+    const descriptor = `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/fact.json
+    schema: schemas/fact.schema.json
+    to: plugin:world-notes/facts
+    key: id
+`;
+    const initialSchema = {
+      $id: "https://covel.test/schemas/fact",
+      type: "object",
+      required: ["id"],
+      properties: { id: { type: "string" } },
+    };
+    const { worldsDir, worldId } = await makeWorld({
+      id: "schema-refresh-world",
+      descriptor,
+      files: {
+        "data/fact.json": JSON.stringify({ id: "fact" }),
+        "schemas/fact.schema.json": JSON.stringify(initialSchema),
+      },
+    });
+    const store = await makeStore(["world-notes"]);
+    const options = {
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      preflight: {
+        activePlugins: ["world-notes"],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    } as const;
+
+    await expect(importWorldDataForSession(options)).resolves.toMatchObject({
+      written: 1,
+    });
+    await writeFile(
+      path.join(worldsDir, worldId, "schemas/fact.schema.json"),
+      JSON.stringify({
+        ...initialSchema,
+        required: ["id", "newRequiredField"],
+        properties: {
+          ...initialSchema.properties,
+          newRequiredField: { type: "string" },
+        },
+      }),
+    );
+
+    await expect(importWorldDataForSession(options)).rejects.toThrow(
+      /failed schema validation/,
+    );
+  });
+
   it("rejects invalid covel world dimensions during session import", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
@@ -734,6 +849,82 @@ sources:
 
     expect(await mediaStore.listAssets()).toEqual([]);
     expect(await mediaStore.listRefs()).toEqual([]);
+  });
+
+  it("materializes prepared media before the database transaction", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  portraits:
+    kind: media
+    path: media/portraits
+    to: media
+    indexTo: plugin:character-presence/assets
+    key: filename
+`,
+      files: {
+        "media/portraits/mio.png": "png-ish",
+      },
+    });
+    const mediaStore = createMemoryMediaStore();
+    let transactionOpen = false;
+    const guardedMediaStore = new Proxy(mediaStore, {
+      get(target, prop, receiver) {
+        if (prop === "put") {
+          return async (...args: Parameters<typeof target.put>) => {
+            if (transactionOpen) {
+              throw new Error("media put ran inside the database transaction");
+            }
+            return target.put(...args);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const store = await makeStore(["character-presence"]);
+    const prepared = await prepareWorldDataImportForSession({
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      mediaStore: guardedMediaStore,
+      now: NOW,
+      preflight: {
+        activePlugins: ["character-presence"],
+        registry: registry({ "character-presence": ["assets"] }),
+      },
+    });
+    expect(await mediaStore.listAssets()).toHaveLength(1);
+
+    const imported = await store.withTransaction(async (tx) => {
+      transactionOpen = true;
+      try {
+        return await applyPreparedWorldDataImportForSession({
+          store: tx,
+          mediaStore: guardedMediaStore,
+          sessionId: "sess-1",
+          worldId,
+          now: NOW,
+          prepared,
+          deferMediaFinalize: true,
+        });
+      } finally {
+        transactionOpen = false;
+      }
+    });
+    await finalizeWorldDataMediaRefs({
+      mediaStore: guardedMediaStore,
+      refs: imported.mediaRefs,
+    });
+
+    expect(imported.written).toBe(1);
+    expect(
+      await store.getPluginData(
+        "sess-1",
+        "character-presence",
+        "assets",
+        "mio.png",
+      ),
+    ).toBeTruthy();
   });
 
   it("uses active character dataSchemas as character effect mirror targets", async () => {
@@ -1188,11 +1379,10 @@ sources:
       "assets",
       "mio.png",
     );
+    const mediaValue = mediaRowB?.value as
+      { ref?: { id?: unknown } } | undefined;
     const mediaId =
-      typeof (mediaRowB?.value as { ref?: { id?: unknown } } | undefined)?.ref
-        ?.id === "string"
-        ? (mediaRowB?.value as { ref: { id: string } }).ref.id
-        : undefined;
+      typeof mediaValue?.ref?.id === "string" ? mediaValue.ref.id : undefined;
     expect(mediaId).toEqual(expect.any(String));
     expect(await mediaStore.isReferencedBy(mediaId!, "sess-a")).toBe(true);
     expect(await mediaStore.isReferencedBy(mediaId!, "sess-b")).toBe(true);
@@ -1468,13 +1658,55 @@ sources: {}
       "scene-stage",
     ];
 
-    // haruka media = 8 portraits + 10 scene backdrops (scenes source has indexTo).
-    for (const [worldId, locale, portraitCount, mediaCount] of [
-      ["mistport", "zh-CN", 7, 7],
-      ["mistport", "en-US", 7, 7],
-      ["haruka-academy", "zh-CN", 8, 18],
+    for (const [worldId, locale, portraitCount] of [
+      ["emberback", "en-US", 3],
+      ["mistport", "zh-CN", 7],
+      ["mistport", "en-US", 7],
+      ["haruka-academy", "zh-CN", 8],
     ] as const) {
       const sessionId = `sess-portraits-${worldId}-${locale}`;
+      const worldRoot = path.join(worldsDir, worldId);
+      const descriptor = await loadWorldDataDescriptor({
+        worldRoot,
+        worldDataPath: "data/world.data.yaml",
+        worldId,
+      });
+      expect(
+        descriptor.diagnostics.filter(
+          (diagnostic) => diagnostic.level === "error",
+        ),
+      ).toEqual([]);
+      const mediaCollections = await Promise.all(
+        descriptor.sources
+          .filter((source) => source.descriptor.kind === "media")
+          .map((source) =>
+            collectMediaSourceFiles(
+              source,
+              path.resolve(
+                source.pathOrigin.descriptorRoot,
+                source.descriptor.path,
+              ),
+            ),
+          ),
+      );
+      expect(
+        mediaCollections.flatMap((collection) =>
+          collection.diagnostics.filter(
+            (diagnostic) => diagnostic.level === "error",
+          ),
+        ),
+      ).toEqual([]);
+      const expectedAssetIds = new Set(
+        await Promise.all(
+          mediaCollections
+            .flatMap((collection) => collection.files)
+            .map(async (file) =>
+              createHash("sha256")
+                .update(await readFile(file))
+                .digest("hex"),
+            ),
+        ),
+      );
       const store = createMemoryStore();
       const mediaStore = createMemoryMediaStore();
       await store.createSession({
@@ -1512,7 +1744,7 @@ sources: {}
       const assetIds = new Set(
         (await mediaStore.listAssets()).map((a) => a.id),
       );
-      expect(assetIds.size).toBe(mediaCount);
+      expect(assetIds).toEqual(expectedAssetIds);
 
       // Every character has a presence record whose avatar + sprite resolve to a
       // stored asset — i.e. the portrait actually displays for that character.
@@ -1626,7 +1858,8 @@ sources:
 
     // The racing edit survives — the sync rolled back rather than clobbering it.
     const row = await realGet("sess-1", "world-notes", "facts", "gate");
-    expect((row?.value as { content: string }).content).toBe("player edit");
+    expect(row).not.toBeNull();
+    expect((row!.value as { content: string }).content).toBe("player edit");
   });
 
   it("applies normally when nothing races", async () => {
@@ -1650,6 +1883,7 @@ sources:
       "facts",
       "gate",
     );
-    expect((row?.value as { content: string }).content).toBe("v2");
+    expect(row).not.toBeNull();
+    expect((row!.value as { content: string }).content).toBe("v2");
   });
 });

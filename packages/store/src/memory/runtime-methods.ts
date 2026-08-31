@@ -320,5 +320,17 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
         }
       }
     },
+
+    async retagCompactedTurnMessages(
+      sessionId: string,
+      summaryId: string,
+    ): Promise<void> {
+      for (let i = 0; i < state.turnMessages.length; i += 1) {
+        const msg = state.turnMessages[i]!;
+        if (msg.sessionId === sessionId && msg.compactedAtTurnId != null) {
+          state.turnMessages[i] = { ...msg, compactedAtTurnId: summaryId };
+        }
+      }
+    },
   };
 }

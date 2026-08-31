@@ -27,8 +27,13 @@ export {
 export type { PromptSegments } from "./prompt-assembler.js";
 
 // ── Token Budget ────────────────────────────────────────────────
-export { applyBudget, estimateTokens } from "./budget.js";
-export type { TokenEstimator, BudgetOptions, BudgetResult } from "./budget.js";
+export { applyBudget, estimateTokens, resolveBudgetOptions } from "./budget.js";
+export type {
+  TokenEstimator,
+  BudgetOptions,
+  BudgetResult,
+  ResolvedBudgetOptions,
+} from "./budget.js";
 
 // ── Prompt Loader ────────────────────────────────────────────────
 export { loadPrompt, interpolate, setPromptsRoot } from "./prompts-loader.js";

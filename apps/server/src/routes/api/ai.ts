@@ -1,7 +1,7 @@
 /**
  * API AI routes — LLM-driven generation endpoints.
  *
- * POST /ai/generate-world — Generate a world package from a one-line concept.
+ * POST /ai/generate-world — Generate a world package from a creative brief.
  * Streams Server-Sent Events so the UI can show phase progress
  * (generating → validating → saving) and receive the final WorldRecord.
  */
@@ -11,8 +11,13 @@ import { tmpdir } from "node:os";
 import path, { resolve } from "node:path";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { createWorld } from "@covel/create";
-import { readRuntimeEnv } from "@covel/shared";
+import { createWorld, type GeneratedWorldPackageContent } from "@covel/create";
+import {
+  readRuntimeEnv,
+  WORLD_EXPERIENCE_MODES,
+  WORLD_PACKAGE_CONTENT_KINDS,
+  type WorldCreationBrief,
+} from "@covel/shared";
 import type { LLMAdapter } from "@covel/runtime";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
@@ -88,6 +93,7 @@ function recordForStoreOnly(record: WorldRecord, saveTarget: SaveTarget) {
   delete metadata.dimensionSources;
   delete metadata.worldDataPath;
   delete metadata.worldData;
+  delete metadata.characterBlueprintSources;
   return {
     ...record,
     metadata: {
@@ -95,6 +101,97 @@ function recordForStoreOnly(record: WorldRecord, saveTarget: SaveTarget) {
       source: saveTarget === "server-store" ? "server-store" : "generated",
     },
   } satisfies WorldRecord;
+}
+
+function parseCreationBrief(value: unknown): {
+  value?: WorldCreationBrief;
+  error?: string;
+} {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { error: "brief must be an object" };
+  }
+  const raw = value as Record<string, unknown>;
+  const experienceMode = raw.experienceMode;
+  if (
+    experienceMode !== undefined &&
+    (typeof experienceMode !== "string" ||
+      !WORLD_EXPERIENCE_MODES.includes(
+        experienceMode as (typeof WORLD_EXPERIENCE_MODES)[number],
+      ))
+  ) {
+    return {
+      error: `brief.experienceMode must be one of ${WORLD_EXPERIENCE_MODES.join(", ")}`,
+    };
+  }
+  const content = raw.content;
+  if (
+    content !== undefined &&
+    (!Array.isArray(content) ||
+      content.some(
+        (item) =>
+          typeof item !== "string" ||
+          !WORLD_PACKAGE_CONTENT_KINDS.includes(
+            item as (typeof WORLD_PACKAGE_CONTENT_KINDS)[number],
+          ),
+      ))
+  ) {
+    return {
+      error: `brief.content entries must be one of ${WORLD_PACKAGE_CONTENT_KINDS.join(", ")}`,
+    };
+  }
+  const additionalInstructions = raw.additionalInstructions;
+  if (
+    additionalInstructions !== undefined &&
+    typeof additionalInstructions !== "string"
+  ) {
+    return { error: "brief.additionalInstructions must be a string" };
+  }
+  if (
+    typeof additionalInstructions === "string" &&
+    additionalInstructions.length > 2000
+  ) {
+    return {
+      error: "brief.additionalInstructions must be 2000 characters or fewer",
+    };
+  }
+  return {
+    value: {
+      ...(typeof experienceMode === "string" ? { experienceMode } : {}),
+      ...(Array.isArray(content)
+        ? { content: [...new Set(content as string[])] }
+        : {}),
+      ...(typeof additionalInstructions === "string"
+        ? { additionalInstructions: additionalInstructions.trim() }
+        : {}),
+    } as WorldCreationBrief,
+  };
+}
+
+function withGeneratedPackageMetadata(
+  record: WorldRecord,
+  packageContent: GeneratedWorldPackageContent | undefined,
+): WorldRecord {
+  if (!packageContent) return record;
+  const embeddedLorebook = [
+    ...packageContent.lorebook,
+    ...packageContent.rules,
+  ];
+  return {
+    ...record,
+    metadata: {
+      ...record.metadata,
+      ...(packageContent.characters.length > 0
+        ? { characterBlueprints: packageContent.characters }
+        : {}),
+      ...(embeddedLorebook.length > 0 ? { embeddedLorebook } : {}),
+      generatedPackageSummary: {
+        characters: packageContent.characters.length,
+        lorebook: packageContent.lorebook.length,
+        rules: packageContent.rules.length,
+      },
+    },
+  };
 }
 
 // POST /ai/generate-world
@@ -130,6 +227,10 @@ aiRoutes.post(
         400,
       );
     }
+    const brief = parseCreationBrief(body.brief);
+    if (brief.error) {
+      return c.json(errorBody(brief.error), 400);
+    }
 
     const env = readRuntimeEnv();
     const worldsDir =
@@ -160,6 +261,8 @@ aiRoutes.post(
           outputDir,
           model: typeof body.model === "string" ? body.model : undefined,
           locale: typeof body.locale === "string" ? body.locale : "zh-CN",
+          brief: brief.value,
+          signal: c.req.raw.signal,
           attemptTimeoutMs: GENERATE_WORLD_ATTEMPT_TIMEOUT_MS,
           logger: {
             info: (...args: unknown[]) => console.log("[createWorld]", ...args),
@@ -195,18 +298,22 @@ aiRoutes.post(
         // Reload the freshly written world.yaml into a WorldRecord and upsert
         // into the store so the listing endpoint immediately reflects it.
         const worldDir = path.join(outputDir, result.id);
-        const fileRecord = await loadSingleWorld(worldDir, {
+        const loadedRecord = await loadSingleWorld(worldDir, {
           source: saveTarget === "server-file" ? "generated-file" : "generated",
           storage: storageMetadata(saveTarget, env.storeBackend, worldsDir),
         });
 
-        if (!fileRecord) {
+        if (!loadedRecord) {
           await send({
             type: "error",
             message: `Generated world "${result.id}" failed post-write validation`,
           });
           return;
         }
+        const fileRecord = withGeneratedPackageMetadata(
+          loadedRecord,
+          result.packageContent,
+        );
 
         await send({ type: "progress", phase: "saving" });
         const record =

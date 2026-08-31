@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file. Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.28] - 2026-08-31
+
+This release turns the stage view, plugin UI, world data, and runtime context into one extensible interaction system: the same contextual plugin action can be discovered as a slash command, rendered as JSON UI, traced, and committed through a shared pipeline.
+
+### Added
+
+- **The stage view has a visual-novel direction system.** Plugins can publish contextual cast presence, sprite variants, entrances, exits, transitions, dialogue, and choices; Haruka Academy and Emberback include refreshed portrait-backed examples.
+- **Plugins can expose contextual slash commands and matching UI actions.** Commands such as dice rolls and inventory access declare arguments and context needs in the plugin manifest, while typed command traces give text and button invocations one log and replay format.
+- **JSON Render surfaces support typed plugin components, directives, slots, repeats, tabs, and development inspection.** The same plugin-owned action contract now works in panels, message blocks, stage choices, and command-driven navigation without framework branches for concrete plugin IDs.
+- **WorldIR provides one shared post-turn fact projection.** Quests, inventory, affinity, codex, relationships, and world rules can consume the same evidence instead of independently re-reading the narrative.
+- **World generation produces richer portable packs.** The builder can create plugin policy, character blueprints, lorebook content, dimensions, rules, memory blocks, and stage-aware settings through the same WorldData validation path used by authored worlds.
+
+### Changed
+
+- **Runtime context is fresher and more deterministic across long executions.** Session state reads are deduplicated, context budgets and compaction preserve authoritative world and memory views, model-slot overrides propagate consistently, and snapshots retain the inputs needed for inspection and retry.
+- **WorldData import uses schema-aware projections.** Canonical characters, lore, media, plugin namespaces, and WorldIR seeds are planned and synchronized through explicit targets with cross-source diagnostics.
+- **Stage choices and free-text actions share one contextual decision flow.** Suggested actions remain convenient UI shortcuts without blocking the composer, and plugin UI can open or focus its matching surface through the same command pipeline.
+
+### Fixed
+
+- **Default Playwright runs are isolated and deterministic.** They use dedicated ports and a temporary MemoryStore, never reuse stale development servers, clean up their process trees, and require an explicit opt-in before calling live providers.
+- **Long-running memory and runtime work handles cancellation, retries, deadlines, and automatic snapshots consistently.** Failed or resumed executions keep their relevant context without duplicating stale session reads or losing trace identity.
+
 ## [0.0.27] - 2026-08-26
 
 This is a large release that rebuilds core settings, session, storage, desktop-networking, world-localization, and release infrastructure while hardening the complete player flow.
@@ -967,7 +990,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.27...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.28...HEAD
+[0.0.28]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.28
 [0.0.27]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.27
 [0.0.26]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.26
 [0.0.25]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.25

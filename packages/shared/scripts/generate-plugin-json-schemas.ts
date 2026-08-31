@@ -15,6 +15,8 @@
  * (z.unknown, transforms) degrade to `{}` instead of throwing. Cross-field
  * superRefine constraints and array uniqueness are dropped by the generator —
  * they are recorded in each schema's `description` and enforced only by Zod.
+ * Object cardinality refinements that JSON Schema can express are restored by
+ * `restoreRepresentableConstraints` below.
  */
 
 import { writeFileSync } from "node:fs";
@@ -77,11 +79,37 @@ function toDocumentedJsonSchema(
     string,
     unknown
   >;
+  restoreRepresentableConstraints(generated);
   const description =
     `${doc.summary}\n\nEnforced by Zod but not representable in this JSON Schema ` +
     `(validate with the Zod schema for these):\n` +
     doc.constraints.map((c) => `- ${c}`).join("\n");
   return { $id: doc.id, title: doc.title, description, ...generated };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/**
+ * Zod emits record refinements as plain objects, even where draft-7 has an
+ * exact equivalent. Keep editor/Agent validation aligned with the loader for
+ * those representable constraints instead of documenting a false superset.
+ */
+function restoreRepresentableConstraints(
+  schema: Record<string, unknown>,
+): void {
+  const properties = asRecord(schema.properties);
+  const worldProjections = asRecord(properties?.worldProjections);
+  if (!worldProjections) return;
+  worldProjections.minProperties = 1;
+
+  const projection = asRecord(worldProjections.additionalProperties);
+  const projectionProperties = asRecord(projection?.properties);
+  const outputs = asRecord(projectionProperties?.outputs);
+  if (outputs) outputs.minProperties = 1;
 }
 
 export function buildManifestJsonSchemas(): {

@@ -8,10 +8,6 @@ import { applyBranchReplyAcceptedCandidates } from "@covel/context";
 import type { CoreMemoryBlockView } from "@covel/context";
 import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
-import {
-  runPreCompactionHook,
-  runPostCompactionHook,
-} from "../hooks/wire-helpers.js";
 
 export interface TurnSessionCharacter {
   readonly name: string;
@@ -98,40 +94,6 @@ export async function loadTurnSessionState(args: {
       createdAt: new Date().toISOString(),
     };
     journalMessages.push(playerMessage);
-  }
-
-  if (deps.compactor && deps.store && shouldAppendPlayerMessage) {
-    // Compact committed history only. The current player message remains in
-    // the execution journal until proposals commit, so a rolled-back turn can
-    // never enter a summary.
-    const freshMessages = messageHistory;
-    const hookOpts = {
-      pipeline: deps.hookPipeline,
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      eventBus: deps.eventBus,
-      emitter: deps.emitter,
-    };
-    // PreCompaction veto gate — a plugin can keep full history this turn.
-    const pre = await runPreCompactionHook(hookOpts, {
-      messageCount: freshMessages.length,
-    });
-    if (!pre.skip) {
-      const result = await deps.compactor.run(
-        input.sessionId,
-        "",
-        freshMessages,
-        input.locale,
-        deps.emitter?.traceId,
-      );
-      await runPostCompactionHook(hookOpts, {
-        compacted: result.compacted,
-        ...(result.summaryId ? { summaryId: result.summaryId } : {}),
-      });
-      messageHistory = await deps.store.listUncompactedTurnMessages(
-        input.sessionId,
-      );
-    }
   }
 
   // Trigger counts come only from committed history; this execution's journal

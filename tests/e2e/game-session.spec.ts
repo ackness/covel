@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
+  actionableInteractionSubmits,
   composerInput,
   expectPlayerCanAct,
   seedAppSettings,
@@ -7,6 +8,10 @@ import {
   sendPlayerMessage,
   waitForTurnIdle,
 } from "./helpers/player.js";
+
+const liveLlmEnabled = /^(1|true|yes|on)$/i.test(
+  process.env.LIVE_LLM_ENABLED ?? "",
+);
 
 /**
  * Real game session E2E — 3 rounds of interaction:
@@ -23,6 +28,10 @@ import {
 test.describe.configure({ mode: "serial" });
 
 test.describe("Game Session — 3 Round Flow", () => {
+  test.skip(
+    !liveLlmEnabled,
+    "Set LIVE_LLM_ENABLED=1 to run provider-backed browser tests",
+  );
   test.use({ viewport: { width: 1280, height: 720 } });
   test.setTimeout(600_000); // 10 min for 3 rounds of LLM calls
   let hasProviderKeys = false;
@@ -144,22 +153,21 @@ test.describe("Game Session — 3 Round Flow", () => {
  * The form may have single (name only) or multiple fields.
  */
 async function handleCharacterCreation(page: Page) {
-  const formInputs = page.locator("[id^=block-field-]");
+  const formInputs = page.locator(
+    "main input.ui-input-shell:enabled:visible, main textarea.ui-input-shell:enabled:visible",
+  );
   const count = await formInputs.count();
-  if (count === 0) return;
 
   for (let i = 0; i < count; i++) {
     const field = formInputs.nth(i);
-    if (!(await field.isVisible())) continue;
     const placeholder = (await field.getAttribute("placeholder")) ?? "";
     await field.fill(guessFieldValue(placeholder));
   }
 
   // Handle <select> dropdowns
-  const selects = page.locator("select");
+  const selects = page.locator("main select.ui-input-shell:enabled:visible");
   for (let i = 0; i < (await selects.count()); i++) {
     const sel = selects.nth(i);
-    if (!(await sel.isVisible())) continue;
     const options = sel.locator("option");
     if ((await options.count()) > 1) {
       const val = await options.nth(1).getAttribute("value");
@@ -168,14 +176,15 @@ async function handleCharacterCreation(page: Page) {
   }
 
   // Submit — target the stable data-testid, not the LLM-generated label.
-  const submitBtn = page.getByTestId("interaction-submit");
+  const submitBtn = actionableInteractionSubmits(page);
   if (
     await submitBtn
       .first()
       .isVisible()
       .catch(() => false)
   ) {
-    await submitBtn.first().click();
+    // The transcript is chronological; the last visible live block is current.
+    await submitBtn.last().click();
   }
 }
 

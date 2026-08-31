@@ -629,6 +629,61 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       // mirror — the framework no longer hardcodes a char-creator write.
     });
 
+    it("imports portable lorebook entries from a store-only generated world", async () => {
+      await store.upsertWorld({
+        id: "portable-generated-world",
+        name: "Portable Generated World",
+        description: "Test world",
+        metadata: {
+          source: "server-store",
+          embeddedLorebook: [
+            {
+              id: "always-on-rule",
+              content: "Every promise creates a visible silver thread.",
+              strategy: "constant",
+              position: "before_plugin",
+              extra: { sourceKind: "rule" },
+            },
+            {
+              id: "mirror-gate",
+              content: "The mirror gate opens only when addressed by name.",
+              strategy: "selective",
+              keys: ["mirror", "gate"],
+            },
+          ],
+        },
+        createdAt: new Date().toISOString(),
+      });
+
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: "sess-portable-generated",
+          worldId: "portable-generated-world",
+          plugins: ["narrator"],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(
+        store.listSessionLorebookEntries("sess-portable-generated"),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "always-on-rule",
+            strategy: "constant",
+            position: "before_plugin",
+          }),
+          expect.objectContaining({
+            id: "mirror-gate",
+            strategy: "selective",
+            keys: ["mirror", "gate"],
+          }),
+        ]),
+      );
+    });
+
     it("scopes imported blueprint character ids per session", async () => {
       await store.upsertWorld({
         id: "academy-world-scoped",

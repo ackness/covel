@@ -24,6 +24,7 @@ export type {
   LLMMessageContent,
   LLMMessage,
   LLMToolCall,
+  LLMUsageSummary,
   LLMResponse,
   LLMToolDefinition,
   LLMResponseFormat,
@@ -46,6 +47,25 @@ export type {
 } from "./world-data.js";
 
 export type {
+  WorldIRJsonValue,
+  WorldIRV1,
+  WorldIRV1Entity,
+  WorldIRV1Relation,
+  WorldIRV1Event,
+  WorldIRV1Statement,
+} from "./world-ir.js";
+
+export {
+  WORLD_EXPERIENCE_MODES,
+  WORLD_PACKAGE_CONTENT_KINDS,
+} from "./world-generation.js";
+export type {
+  WorldCreationBrief,
+  WorldExperienceMode,
+  WorldPackageContentKind,
+} from "./world-generation.js";
+
+export type {
   PluginType,
   FrameworkCapabilityTag,
   FrameworkRuntimeCapabilityTag,
@@ -59,8 +79,16 @@ export type {
   InputConfig,
   OutputConfig,
   PluginDataSchemaDecl,
+  WorldProjectionDecl,
+  WorldProjectionOutputDecl,
   PluginEventDecl,
   PluginUserSettingSpec,
+  SlashCommandArgumentSpec,
+  SlashCommandArgumentType,
+  SlashCommandContextScope,
+  SlashCommandInvocation,
+  SlashCommandSpec,
+  SessionSlashCommand,
   ToolsConfig,
   PluginRelations,
   PluginTag,
@@ -83,6 +111,7 @@ export {
   FrameworkRuntimeCapability,
   FRAMEWORK_KNOWN_CAPABILITIES,
   PLUGIN_SCOPED_FIELDS,
+  SLASH_COMMAND_CONTEXT_SCOPES,
 } from "./plugin.js";
 export { HOOK_EVENTS } from "./plugin.js";
 
@@ -210,6 +239,7 @@ export type {
   CovelEventType,
   CovelEventMeta,
   CovelEventPayload,
+  DomainEventPreviewedPayload,
 } from "./protocol.js";
 
 export {
@@ -274,11 +304,19 @@ export type {
   RpcTrustLevel,
   RpcHandlerStore,
   PluginRpcActionRequest,
+  PluginRpcCommandRequest,
+  PluginRpcStructuredCommandRequest,
+  PluginRpcTextCommandRequest,
   PluginRpcRequest,
   PluginRpcDeferredJob,
   PluginRpcResponse,
   PluginRpcRuntimeRequest,
   PluginRpcRuntimeResultSummary,
+  RpcCommandEnvironment,
+  RpcCommandInvocation,
+  RpcCommandRuntimeEnvironment,
+  RpcCommandSessionEnvironment,
+  RpcCommandSource,
 } from "./rpc.js";
 
 export type {
@@ -368,3 +406,8 @@ export type {
 } from "./handler-result.js";
 
 export type { RuntimeExportRecord } from "./runtime-exports.js";
+
+export {
+  PLUGIN_UI_COMPONENT_NAMES,
+  type PluginUiComponentName,
+} from "./plugin-ui.js";

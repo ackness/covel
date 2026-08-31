@@ -22,6 +22,18 @@ export function rewriteComponentToType(
         if (isRecord(child)) return rewriteComponentToType(child);
         return child;
       });
+    } else if (key === "slots" && isRecord(value)) {
+      result.slots = Object.fromEntries(
+        Object.entries(value).map(([slotName, slotChildren]) => [
+          slotName,
+          Array.isArray(slotChildren)
+            ? slotChildren.map((child) => {
+                if (isRecord(child)) return rewriteComponentToType(child);
+                return child;
+              })
+            : slotChildren,
+        ]),
+      );
     } else {
       result[key] = value;
     }
@@ -34,7 +46,17 @@ export function specUsesComponent(node: unknown, component: string): boolean {
   if (node.component === component || node.type === component) return true;
   const children = node.children;
   if (Array.isArray(children)) {
-    return children.some((child) => specUsesComponent(child, component));
+    if (children.some((child) => specUsesComponent(child, component))) {
+      return true;
+    }
+  }
+  const slots = node.slots;
+  if (isRecord(slots)) {
+    return Object.values(slots).some(
+      (slotChildren) =>
+        Array.isArray(slotChildren) &&
+        slotChildren.some((child) => specUsesComponent(child, component)),
+    );
   }
   return false;
 }

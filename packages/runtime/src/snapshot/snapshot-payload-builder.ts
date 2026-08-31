@@ -25,6 +25,7 @@ import type {
   StateEntryRecord,
   PluginDataRecord,
   WorkingMemoryRecord,
+  SessionSummaryRecord,
   LorebookEntryRecord,
   SuspensionRecord,
 } from "@covel/store";
@@ -82,6 +83,34 @@ export async function buildSnapshotPayload(
   const messagesCursor =
     turnMessages.length > 0 ? turnMessages[turnMessages.length - 1]!.id : "";
 
+  // Compaction summaries are part of the durable conversation state. Capture
+  // exactly the records referenced by the message prefix represented by this
+  // cursor; unrelated/orphan summaries must not leak into a fork. Conversely,
+  // a tag without its summary would hide raw history after restore, so fail the
+  // snapshot build instead of persisting an incomplete payload.
+  const requiredSummaryIds = new Set<string>();
+  const compactedMessageSummaryIds: Record<string, string> = {};
+  for (const message of turnMessages) {
+    if (message.compactedAtTurnId !== undefined) {
+      requiredSummaryIds.add(message.compactedAtTurnId);
+      compactedMessageSummaryIds[message.id] = message.compactedAtTurnId;
+    }
+  }
+  const allSessionSummaries = await store.listSessionSummaries(sessionId);
+  const summariesById = new Map(
+    allSessionSummaries.map((summary) => [summary.id, summary] as const),
+  );
+  const sessionSummaries: SessionSummaryRecord[] = [];
+  for (const summaryId of requiredSummaryIds) {
+    const summary = summariesById.get(summaryId);
+    if (!summary) {
+      throw new Error(
+        `Turn messages reference missing session summary while building snapshot: ${summaryId}`,
+      );
+    }
+    sessionSummaries.push(summary);
+  }
+
   // Session lorebook entries — FU-4 close-out. Only session-scoped entries
   // travel with the snapshot; world/plugin-level entries are re-resolved
   // from the package registry on the forked session.
@@ -118,6 +147,8 @@ export async function buildSnapshotPayload(
     stateEntries,
     pluginData,
     workingMemory,
+    sessionSummaries,
+    compactedMessageSummaryIds,
     lorebookEntries,
     suspensions,
     messagesCursor,

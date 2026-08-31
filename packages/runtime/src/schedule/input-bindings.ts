@@ -28,7 +28,12 @@ import type {
   InputSource,
   TurnInput,
 } from "@covel/shared";
-import { getRuntimeSpec, hasIllegalDetachedContract } from "@covel/shared";
+import {
+  getRuntimeSpec,
+  hasIllegalDetachedContract,
+  validateWorldIRV1,
+  WORLD_IR_V1_SCHEMA_URI,
+} from "@covel/shared";
 import { validateOutput } from "@covel/tools";
 
 export { hasIllegalDetachedContract };
@@ -40,6 +45,25 @@ import {
 import type { MediaCanonicalization } from "../media/canonicalize-media-refs.js";
 
 type Schema = Readonly<Record<string, unknown>>;
+
+function validateAcceptedValue(
+  value: unknown,
+  schema: Schema,
+): { readonly valid: boolean; readonly errors?: readonly string[] } {
+  const structural = validateOutput(value, schema);
+  if (!structural.valid || schema.$id !== WORLD_IR_V1_SCHEMA_URI) {
+    return structural;
+  }
+  const semantic = validateWorldIRV1(value);
+  return semantic.valid
+    ? { valid: true }
+    : {
+        valid: false,
+        errors: semantic.errors.map(
+          (error) => `${error.path}: ${error.message}`,
+        ),
+      };
+}
 
 /** Machine-readable skip reasons a binding gate can emit. */
 export type BindingSkipReason =
@@ -383,7 +407,7 @@ export async function resolveInputBindings(
       // Runtime full-schema check over the whole array (docs 02 §3.1).
       if (acceptsSchema) {
         const array = items.map((i) => i.value);
-        const validation = validateOutput(array, acceptsSchema);
+        const validation = validateAcceptedValue(array, acceptsSchema);
         if (!validation.valid) {
           diagnostics.push(
             diag(
@@ -439,7 +463,7 @@ export async function resolveInputBindings(
       value = c.value;
     }
     if (acceptsSchema) {
-      const validation = validateOutput(value, acceptsSchema);
+      const validation = validateAcceptedValue(value, acceptsSchema);
       if (!validation.valid) {
         diagnostics.push(
           diag(
@@ -574,7 +598,7 @@ export async function resolveExportBindings(
       // §3.1 / §3.4.4): a producer whose export shape the consumer cannot accept
       // (an incompatible schema digest manifests here) fails this validation.
       if (acceptsSchema) {
-        const validation = validateOutput(record.value, acceptsSchema);
+        const validation = validateAcceptedValue(record.value, acceptsSchema);
         if (!validation.valid) {
           diagnostics.push(
             diag(

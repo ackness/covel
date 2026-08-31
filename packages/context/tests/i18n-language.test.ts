@@ -18,4 +18,22 @@ describe("prompt locale normalization", () => {
       renderCoreMemory([{ label: "story", content: "Remember this" }], "EN_us"),
     ).toContain("[Core Memory]");
   });
+
+  it("bounds aggregate core memory while retaining every block envelope", () => {
+    const rendered = renderCoreMemory(
+      [
+        { label: "story", content: "a".repeat(400) },
+        { label: "scene", content: "b".repeat(400) },
+        { label: "clues", content: "c".repeat(400) },
+      ],
+      "en-US",
+      { maxTokens: 220, estimator: (text) => text.length },
+    );
+
+    expect(rendered.length).toBeLessThanOrEqual(220);
+    expect(rendered).toContain("<story>");
+    expect(rendered).toContain("<scene>");
+    expect(rendered).toContain("<clues>");
+    expect(rendered).toContain("[truncated]");
+  });
 });

@@ -24,6 +24,7 @@ export {
   readOpenAiChatText,
   readOpenAiChatToolCalls,
   readOpenAiChatUsage,
+  readOpenAiResponsesUsage,
   readResponsesOutputText,
   readResponsesStreamFunctionCallAdded,
   readResponsesStreamFunctionCallArgsDelta,

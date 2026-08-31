@@ -191,6 +191,103 @@ describe("PluginRegistry", () => {
       );
       expect(registry.get("world-data")).toBeUndefined();
     });
+
+    it("should merge identical runtime worldProjections onto the registry entry", () => {
+      const characters = {
+        from: "plugin://character-blueprint/blueprints",
+        handler: "server/project-characters.js",
+        outputs: {
+          characters: { namespace: "characters", key: "characterId" },
+        },
+      };
+      const entry = makeEntry("world-projector", {
+        dataSchemas: {
+          characters: {
+            namespace: "characters",
+            schemaVersion: 1,
+            acceptsWorldData: true,
+            schema: "./schemas/characters.schema.json",
+          },
+        },
+        manifests: [
+          makeParsedPluginMd("world-projector/setup", 50, {
+            worldProjections: { characters },
+          }),
+          makeParsedPluginMd("world-projector/audit", 1_100, {
+            worldProjections: { characters },
+          }),
+        ],
+      });
+
+      registry.register(entry);
+
+      expect(registry.get("world-projector")?.worldProjections).toEqual({
+        characters,
+      });
+      expect(
+        Object.isFrozen(
+          registry.get("world-projector")?.worldProjections?.characters
+            ?.outputs,
+        ),
+      ).toBe(true);
+    });
+
+    it("rejects projection outputs without an importable data schema", () => {
+      const entry = makeEntry("world-projector", {
+        worldProjections: {
+          facts: {
+            from: "covel://world/ir/v1",
+            handler: "server/project-facts.js",
+            outputs: { facts: { namespace: "facts", key: "id" } },
+          },
+        },
+      });
+
+      expect(() => registry.register(entry)).toThrow(
+        /targets undeclared dataSchemas namespace "facts"/,
+      );
+      expect(registry.get("world-projector")).toBeUndefined();
+    });
+
+    it("should fail closed on conflicting runtime worldProjections", () => {
+      const entry = makeEntry("world-projector", {
+        manifests: [
+          makeParsedPluginMd("world-projector/setup", 50, {
+            worldProjections: {
+              characters: {
+                from: "plugin://character-blueprint/blueprints",
+                handler: "server/project-characters.js",
+                outputs: {
+                  characters: {
+                    namespace: "characters",
+                    key: "characterId",
+                  },
+                },
+              },
+            },
+          }),
+          makeParsedPluginMd("world-projector/audit", 1_100, {
+            worldProjections: {
+              characters: {
+                from: "plugin://character-blueprint/blueprints",
+                handler: "server/project-characters-v2.js",
+                outputs: {
+                  characters: {
+                    namespace: "characters",
+                    key: "characterId",
+                  },
+                },
+              },
+            },
+          }),
+        ],
+      });
+
+      expect(() => registry.register(entry)).toThrow(
+        /Conflicting worldProjections declaration/,
+      );
+      expect(registry.get("world-projector")).toBeUndefined();
+    });
   });
 
   describe("getAll", () => {

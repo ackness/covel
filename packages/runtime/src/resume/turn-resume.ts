@@ -206,6 +206,9 @@ export async function resumeSuspendedRuntime(
     maxSteps,
     timeoutMs,
     messages,
+    ...(deps.estimator && deps.contextBudget
+      ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
+      : {}),
     hookPipeline,
     startTime,
     runId,

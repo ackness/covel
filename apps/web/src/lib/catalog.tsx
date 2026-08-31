@@ -11,6 +11,7 @@
  */
 
 import type { ComponentRenderer } from "@json-render/react";
+import type { PluginUiComponentName } from "@covel/shared";
 import { GraphCanvas } from "./graph-canvas.js";
 import {
   filterItems,
@@ -102,64 +103,66 @@ export const __filterContainerInternals = {
 // plain object literal would answer `"constructor"` with `Object` — React then
 // calls it, gets the props object back, and throws "Objects are not valid as a
 // React child". `"toString"` renders junk text the same way.
+const covelComponents = {
+  // Layout
+  Stack,
+  Row,
+  Grid,
+  Separator,
+  // Display
+  Text,
+  Badge,
+  Icon,
+  TagList,
+  Source,
+  BranchReplyCandidates,
+  Image: ImageComponent,
+  Media: MediaCatalogComponent,
+  AudioPlayer: AudioPlayerCatalogComponent,
+  ImageGallery,
+  ImageJobs,
+  PortraitGallery,
+  // Data
+  Card,
+  CardList,
+  EntryCard,
+  StatBar,
+  Progress,
+  Accordion,
+  Section,
+  JsonView,
+  CharacterBlueprintList,
+  SceneCastList,
+  CharacterFieldsView,
+  CharacterAvatar,
+  // Interactive
+  Button,
+  Input,
+  Textarea,
+  SearchInput,
+  Select,
+  Switch,
+  FilterBar,
+  Tabs,
+  FilterContainer,
+  // Form
+  Form,
+  FormHeader,
+  FormField,
+  SubmitButton,
+  // Message (chat area)
+  Prose,
+  PlayerMessage,
+  Alert,
+  // Visualization
+  GraphCanvas,
+  WorldDimensions,
+  // Multimodal (P0-b — SPEC §5.7)
+  AssetRender: AssetRenderCatalog,
+  AssetTurnSidebar: AssetTurnSidebarCatalog,
+} satisfies Record<PluginUiComponentName, ComponentRenderer>;
+
 export const covelRegistry: Record<string, ComponentRenderer> = Object.assign(
   Object.create(null) as Record<string, ComponentRenderer>,
-  {
-    // Layout
-    Stack,
-    Row,
-    Grid,
-    Separator,
-    // Display
-    Text,
-    Badge,
-    Icon,
-    TagList,
-    Source,
-    BranchReplyCandidates,
-    Image: ImageComponent,
-    Media: MediaCatalogComponent,
-    AudioPlayer: AudioPlayerCatalogComponent,
-    ImageGallery,
-    ImageJobs,
-    PortraitGallery,
-    // Data
-    Card,
-    CardList,
-    EntryCard,
-    StatBar,
-    Progress,
-    Accordion,
-    Section,
-    JsonView,
-    CharacterBlueprintList,
-    SceneCastList,
-    CharacterFieldsView,
-    CharacterAvatar,
-    // Interactive
-    Button,
-    Input,
-    Textarea,
-    SearchInput,
-    Select,
-    Switch,
-    FilterBar,
-    Tabs,
-    FilterContainer,
-    // Form
-    Form,
-    FormHeader,
-    FormField,
-    SubmitButton,
-    // Message (chat area)
-    Prose,
-    PlayerMessage,
-    Alert,
-    // Visualization
-    GraphCanvas,
-    WorldDimensions,
-    // Multimodal (P0-b — SPEC §5.7)
-    AssetRender: AssetRenderCatalog,
-    AssetTurnSidebar: AssetTurnSidebarCatalog,
-  },
+  covelComponents,
 );

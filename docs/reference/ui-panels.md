@@ -150,7 +150,7 @@ ui:
   [UI Components / Display](ui-components.md#display)
 - `dataSource.namespace` — 从 `pluginData[pluginId][namespace]` 读取数据
 - `emptyState.message` — 数据为空时显示的提示文字（见下方"空状态渲染"章节）
-- `view` — json-render nested spec，使用框架 catalog 中的组件（与 `_componentPath` 二选一：`.tsx`/`.js` 自定义组件由 loader 写入 `_componentPath`）
+- `view` — json-render nested spec，使用框架 catalog 中的组件。当前 Web UI 只执行这类声明式 spec；loader 仍会为 `.tsx`/`.js` 文件生成 `_componentPath` 兼容占位，但浏览器端不会加载或执行插件代码
 
 ### Spec 校验与版本
 
@@ -158,6 +158,8 @@ ui:
 
 - `specVersion` 可省略（按 v1 处理）。声明高于服务端支持版本（当前 `CURRENT_UI_SPEC_VERSION = 1`，见 `apps/server/src/routes/misc-api/ui-spec-schema.ts`）会被拒绝，旧服务端遇到新插件包时显式报错而非渲染坏面板。
 - 每个 spec 必须声明 `view`（对象）或 `_componentPath`（自定义组件）之一，否则校验失败。
+- `view` 会递归校验 `component` / `type`、`children`、命名 `slots`、`repeat` 与 `on` / `watch` action binding 包络。组件名必须来自共享的 `PLUGIN_UI_COMPONENT_NAMES`；未知组件在服务端即产生带路径的诊断。`props` 和 directive 表达式保持开放，由组件和 json-render 在运行时解析，以便插件扩展数据形状。
+- `_componentPath` 目前只保留 loader/server 的兼容性，不是 Web 插件执行入口。需要自定义能力时，应组合 catalog 组件并绑定 framework action；不要依赖浏览器动态执行插件 `.tsx` / `.js`。
 - **单个坏 spec 不污染整个响应**：校验失败的 spec 从对应 slot 中剔除，并在响应顶层 `diagnostics[]` 中给出具体诊断（`{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`）——指明哪个插件、哪个字段、什么问题，而非泛泛的 "Invalid panel spec"。
 - 前端（`right-panel.tsx`）在 dev 模式下把这些诊断打到 console；`plugin-panel.tsx` 的本地兜底消息也会带上 spec 名与具体原因（缺 `view` / `view` 非对象 / 转换失败）。
 
@@ -245,16 +247,59 @@ type I18nText = string | Record<LocaleTag, string>;
 
 ### json-render 绑定速查
 
-| 需求               | 写法                                                                          |
-| ------------------ | ----------------------------------------------------------------------------- |
-| 读状态             | `{ "$state": "/path" }`                                                       |
-| 读写状态           | `{ "$bindState": "/path" }`                                                   |
-| 迭代数组           | `repeat: { "statePath": "/path", "key": "id" }`（元素顶层字段，**非 props**） |
-| 读当前 item 字段   | `{ "$item": "field" }`（字段名不带前导斜杠）                                  |
-| 读写当前 item 字段 | `{ "$bindItem": "field" }`                                                    |
-| 当前 index         | `{ "$index": true }`                                                          |
+| 需求                   | 写法                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| 读状态                 | `{ "$state": "/path" }`                                                                   |
+| 读写状态               | `{ "$bindState": "/path" }`                                                               |
+| 迭代状态数组           | `repeat: { "statePath": "/path", "key": "id" }`（元素顶层字段，**非 props**）             |
+| 在 repeat 内迭代子数组 | `repeat: { "statePath": { "$item": "items" }, "key": "id" }`                              |
+| 读当前 item 字段       | `{ "$item": "field" }`（字段名不带前导斜杠）                                              |
+| 读写当前 item 字段     | `{ "$bindItem": "field" }`                                                                |
+| 当前 index             | `{ "$index": true }`                                                                      |
+| 命名插槽               | `"slots": { "header": [{ "component": "Text" }], "content": [{ "component": "Stack" }] }` |
+| 数值/文本动态处理      | `{ "$math": "add", "a": 1, "b": 2 }`、`{ "$concat": ["HP ", { "$state": "/hp" }] }`       |
 
-> ⚠️ `repeat` 只接受 `statePath`，不是 `$state`。字段名不能带前导斜杠（`$item: "key"` ✓，`$item: "/key"` ✗）。
+> ⚠️ `repeat.statePath` 接受绝对状态路径字符串，或嵌套 repeat 中的 `{ "$item": "field" }`；它不是 `{ "$state": ... }`。item 字段名不能带前导斜杠（`$item: "key"` ✓，`$item: "/key"` ✗）。
+
+### 标准 directives
+
+所有框架持有的 json-render Provider（右侧插件面板、插件消息面和 turn-bound 消息块）共享同一组 directives。directive 可以写在组件 props 的任意动态值位置，也可以写在 `on.<event>.params` 中；因此按钮与输入框触发的 action 会得到和显示内容一致的解析结果。
+
+| Directive    | 用途                                      |
+| ------------ | ----------------------------------------- |
+| `$format`    | number / date / currency / percent 格式化 |
+| `$math`      | 加减乘除、取模、min/max、取整和绝对值     |
+| `$concat`    | 拼接多个动态值                            |
+| `$count`     | 获取字符串或数组长度                      |
+| `$truncate`  | 截断文本                                  |
+| `$pluralize` | 按数量选择 zero / one / other 文案        |
+| `$join`      | 连接数组元素                              |
+
+`$t` 暂不开放。插件自然语言继续使用 `I18nText`，避免与现有 i18next locale 资源形成两套翻译源。
+
+```json
+{
+  "component": "Button",
+  "props": {
+    "label": { "$concat": ["Items: ", { "$count": { "$state": "/entries" } }] }
+  },
+  "on": {
+    "click": {
+      "action": "invokeCommand",
+      "params": {
+        "command": "bag",
+        "args": {
+          "pageSize": { "$math": "max", "a": 1, "b": { "$state": "/pageSize" } }
+        }
+      }
+    }
+  }
+}
+```
+
+### 开发调试
+
+开发构建只在当前激活的右侧插件面板挂载 json-render Devtools。按 `Cmd/Ctrl+Shift+J` 打开 Spec、State、Actions、Stream 和 Pick 调试面板；切换右侧子面板后检查目标也随之切换。消息流里的 surface 不挂 Devtools，避免多个实例争用快捷键。Devtools 通过开发环境动态 import 加载，不进入生产构建。
 
 ### 自动 `entries` 数组
 
@@ -347,22 +392,24 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 
 `viewMode: "stage"` 是消息区之外的第四个呈现档（与 `parsed` / `detailed` / `raw` 并列，头部 `GameViewHeader` 的 Toggle 切换）。它把消息区三件（`ChatMessages` + `PendingDraftsBar` + `MessageComposer`）整体替换成全屏舞台（视觉小说式：场景背景 + 立绘 + 打字机对话框），`GameViewHeader` 保留。
 
-- **渲染条件**：`viewMode === "stage" && session.completedPlayerTurns >= 1`。setup 阶段（`completedPlayerTurns === 0`）即使处于 stage 档也走原有消息流（角色创建 / begin-adventure 不受影响）。
+- **渲染条件**：`viewMode === "stage" && (session.phase === "playing" || hasSubmittedForm(...))`。角色创建表单仍在原消息流完成；提交后立即进入舞台，并在首段叙事到达前显示生成状态。
 - **初值**：世界包 `world.yaml` 顶层 `defaultViewMode: stage`（→ `WorldRecord.metadata.defaultViewMode`）让会话**首挂载**即进舞台；玩家在头部切换后以玩家选择为准（无持久化）。见 [world-data.md](./world-data.md#world-package)。
 
 ### 层级与数据源
 
 五层绝对定位、`z-index` 分档，DOM 顺序 Backdrop → Sprites → Hud → Dialog → Choices，全部套在一个 `relative` 有界容器里。数据全部经 `usePluginNamespace(pluginId, namespace)` 读取（`StageView` 保持薄，逻辑在 `stage-selectors.ts`）：
 
-| 层           | 数据源                                                                                        | 选择器                                                              |
-| ------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| **Backdrop** | `("scene-stage","stage")["current"]`                                                          | `resolveBackdrop`（四档回退，见下）                                 |
-| **Sprites**  | `("scene-cast","active-cast")["current"].speakers` × `("character-presence","presence")`      | `computeSpriteSlots`（站位/高亮，无立绘则过滤）                     |
-| **Hud**      | `("scene-stage","stage")["current"]`（`name` / `variant` / `sourceLabel` / `source`）         | —（无状态，按钮回调上抛）                                           |
-| **Dialog**   | 最新 `kind === "story"` 消息的 `content`                                                      | `use-typewriter`（流式驱动、`\n\n` 分段、▼ 暂停）                   |
-| **Choices**  | 未提交的 choice 类 interaction block + `("scene-prompts","message")` 的 `prompt{N}Text/Label` | `extractInteractionChoices` + `mergeChoices`（末位追加 ✎ 自由输入） |
+| 层           | 数据源                                                                                                      | 选择器                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| **Backdrop** | `("scene-stage","stage")["current"]`                                                                        | `resolveBackdrop`（四档回退，见下）                                        |
+| **Sprites**  | `("scene-cast","active-cast")["current"].speakers` × `("character-presence","presence")`                    | `computeSpriteSlots`（站位/高亮，无立绘则过滤）                            |
+| **Hud**      | `("scene-stage","stage")["current"]`（`name` / `variant` / `sourceLabel` / `source`）                       | —（无状态，按钮回调上抛）                                                  |
+| **Dialog**   | 最新 `kind === "story"` 消息的 `content`                                                                    | `use-typewriter`（流式驱动、`\n\n` 分段、▼ 暂停）                          |
+| **Choices**  | 未提交的 choice 类 interaction block + scene-prompts message namespace 的 `scene/recap/decision/prompt{N}*` | `extractInteractionChoices` + `mergeChoices`（保留问题分组并统一自由输入） |
 
-“流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`；打字机读完（`done`）且 `!executing` 才浮现选择肢。
+“流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`。新叙事由 `StageDialog` 打字展示；读完后，同一位置切换为统一决策面板，依次显示场景、“当前信息”摘要、“现在需要决定”的问题、分组选项和行内自由输入。提交后面板保持禁用并显示生成状态，直到下一段叙事出现首个非空内容，避免旧对话框或空白面板闪回。恢复会话或从其他视图切入时，挂载前已经存在的最新叙事视为已读，不会重新打字。旧版 scene-prompts 行没有 `recap/decision` 时，面板从最新 story 提取最多三句、180 字符的情境回顾，并用 `scene` 生成带上下文的决策问题；新数据始终优先使用 agent 生成字段。
+
+scene-prompts 数据既可能从当前 SSE 实时到达，也可能在会话恢复时从 `/plugin-data` 拉取。恢复水合必须同时写入 session reducer 与 `usePluginNamespace` 订阅的 external store；否则解析消息能看到数据，而舞台选择层仍会读到空 namespace。
 
 ### 背景回退链（`resolveBackdrop`）
 

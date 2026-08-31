@@ -209,6 +209,17 @@ export interface ProposalFailedPayload {
   readonly error: string;
 }
 
+/** A validated domain event exposed to the active action stream immediately
+ * after `emit-event` succeeds. This is presentation-only speculative state:
+ * durable consumers still run through the normal event chain and commit. */
+export interface DomainEventPreviewedPayload {
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly toolCallId: string;
+  readonly topic: string;
+  readonly data: Readonly<Record<string, unknown>>;
+}
+
 export type CovelEvent =
   // Narrative
   | {
@@ -269,6 +280,10 @@ export type CovelEvent =
   // Records / events
   | { readonly type: "record.updated"; readonly payload: CovelEventPayload }
   | { readonly type: "event.emitted"; readonly payload: EventEmittedPayload }
+  | {
+      readonly type: "domain-event.previewed";
+      readonly payload: DomainEventPreviewedPayload;
+    }
   // World
   | {
       readonly type: "world.dimensions.changed";
@@ -328,6 +343,11 @@ export type CovelEvent =
   | { readonly type: "hook.fired"; readonly payload: CovelEventPayload }
   | { readonly type: "hook.rewrote"; readonly payload: CovelEventPayload }
   | { readonly type: "hook.aborted"; readonly payload: CovelEventPayload }
+  // Slash-command lifecycle. Composer and plugin JSON-render UI actions share
+  // this exact trace shape; `payload.source` is the only entry-point marker.
+  | { readonly type: "command.invoked"; readonly payload: CovelEventPayload }
+  | { readonly type: "command.completed"; readonly payload: CovelEventPayload }
+  | { readonly type: "command.failed"; readonly payload: CovelEventPayload }
   // Recursive-runtime trace events (TurnEmitter). Subscription-channel only —
   // NOT forwarded to the action stream (forwardToActionStream: false), so they
   // never reach the frontend action handler. Listed here so every framework
@@ -418,6 +438,7 @@ export const COVEL_EVENT_META = {
   "asset.generated": { forwardToActionStream: false },
   "record.updated": { forwardToActionStream: false },
   "event.emitted": { forwardToActionStream: false },
+  "domain-event.previewed": { forwardToActionStream: true },
   "world.dimensions.changed": { forwardToActionStream: true },
   "plugin-data.changed": { forwardToActionStream: true },
   "character.upserted": { forwardToActionStream: true },
@@ -444,6 +465,10 @@ export const COVEL_EVENT_META = {
   "hook.fired": { forwardToActionStream: true },
   "hook.rewrote": { forwardToActionStream: true },
   "hook.aborted": { forwardToActionStream: true },
+  // Command lifecycle is consumed by traces/debug, not the gameplay stream.
+  "command.invoked": { forwardToActionStream: false },
+  "command.completed": { forwardToActionStream: false },
+  "command.failed": { forwardToActionStream: false },
   // Subscription-channel-only trace events — intentionally NOT forwarded to the
   // action stream (behaviour preserved from before they joined the union).
   "recursive.calling": { forwardToActionStream: false },

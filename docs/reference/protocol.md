@@ -56,11 +56,14 @@
 
 ### 状态事件
 
-| 事件类型         | 方向 | 描述         | 负载                                              |
-| ---------------- | ---- | ------------ | ------------------------------------------------- |
-| `state.changed`  | S→C  | 游戏状态变更 | `{ table, field, value, runtimeId, pluginId }`    |
-| `event.emitted`  | S→C  | 游戏业务事件 | `{ topic?, type?, eventType?, data?, pluginId? }` |
-| `record.updated` | S→C  | 长期记录更新 | `{ key, value, recordType, runtimeId, pluginId }` |
+| 事件类型                 | 方向 | 描述                   | 负载                                               |
+| ------------------------ | ---- | ---------------------- | -------------------------------------------------- |
+| `state.changed`          | S→C  | 游戏状态变更           | `{ table, field, value, runtimeId, pluginId }`     |
+| `event.emitted`          | S→C  | 已提交的游戏业务事件   | `{ topic?, type?, eventType?, data?, pluginId? }`  |
+| `domain-event.previewed` | S→C  | 已校验业务事件即时预览 | `{ runtimeId, pluginId, toolCallId, topic, data }` |
+| `record.updated`         | S→C  | 长期记录更新           | `{ key, value, recordType, runtimeId, pluginId }`  |
+
+`domain-event.previewed` 在 `emit-event` 工具完成 schema 校验并产出 `emittedEvents` 后立即发出，先于回合事件链和最终事务提交。它只允许驱动可撤销的表现层状态，不代表业务状态已经落库，也不满足 runtime binding/gate。Web 在 `execution.completed`、错误或 proposal 提交失败时清除同一回合预览；对应持久状态到达后以 `plugin-data.changed` 为准。这样舞台动画可在叙事流生成期间响应，同时保留整回合事务的原子性。
 
 ### 执行生命周期事件
 
@@ -275,6 +278,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 | `runtime.skipped`                                          | `apps/server/src/routes/api/actions.ts`                                                       | runtime 因 cooldown / startTurn / maxTriggerCount 被跳过              |
 | `character.upserted`                                       | `packages/runtime/src/commit/session-commit-emitter.ts`（`character.upsert` proposal commit） | 与 `record.updated` 平行的角色快照事件                                |
 | `tool.calling` / `tool.completed` / `tool.failed`          | TurnEmitter                                                                                   | LLM 工具调用 trace                                                    |
+| `domain-event.previewed`                                   | ToolExecutor（`emittedEvents` 成功后）                                                        | 可撤销表现层即时预览；不代表领域提交                                  |
 | `llm.calling` / `llm.responded` / `message.completed`      | TurnEmitter                                                                                   | LLM 调用 trace                                                        |
 | `block.emitted` / `state.patch.applied`                    | TurnEmitter                                                                                   | 块发出 / state patch 应用 trace                                       |
 | `hook.fired` / `hook.rewrote` / `hook.aborted`             | TurnEmitter                                                                                   | Hook 行为 trace                                                       |
@@ -284,7 +288,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 >
 > `utils.fetch.calling` / `utils.fetch.responded` / `utils.fetch.failed` trace 插件自带 wire 的 provider HTTP 调用（`ctx.utils.fetchWithRetry`，图像生成插件走的路径，由 `withUtilsTrace` 在 function-runtime / agent-guard 注入处包裹）。`forwardToActionStream: false`——polling 可能高频，故仅经 trace_events + 订阅通道驱动 `/debug`，不进 action 流。负载仅含 host / method / status / durationMs（**绝不含完整 URL、query、api key**，PII 保护）。
 >
-> `context.pruned`（TurnEmitter，`packages/runtime/src/agent-loop/turn-agent-runtime.ts`）在某个 runtime 的 prompt 组装触发预算硬裁剪时发出一次，负载为 `{ runtimeId, pluginId, prunedMessageCount }`。`forwardToActionStream: false`——仅进 trace_events / 订阅通道，让 `/debug` 能解释「这一回合掉了历史」，玩家侧的 action 流不受影响。
+> `context.pruned`（TurnEmitter）在 prompt 初次组装、`PostContextAssembly` 改写后或 tool loop 某一步的实际请求触发预算硬裁剪时发出，负载为 `{ runtimeId, pluginId, prunedMessageCount }`；同一 runtime 一回合可能出现多次。`forwardToActionStream: false`——仅进 trace_events / 订阅通道，让 `/debug` 能解释「哪一步掉了历史」，玩家侧 action 流不受影响。若受保护尾部、压缩摘要、工具 schema 与响应 schema 本身已经无法装入预算，runtime 会在调用 provider 前显式失败。
 
 ## 二、命令类型（CommandType）
 
@@ -317,7 +321,8 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 > 区分 chat turn 与 plugin runtime 调用：
 >
 > - 玩家发送的自然语言走 `/api/actions` `send_message`，触发 narrator 主链。
-> - 插件 UI 上的按钮走 `/api/sessions/:id/plugin-rpc`（见下方"插件 RPC"段），单次结构化调用，不会经过 narrator。
+> - 输入框先用 `GET /api/sessions/:id/plugins` 返回的会话命令目录匹配斜线命令。已知命令走 `/api/sessions/:id/plugin-rpc` 的 `{ commandId, input }` 变体，不经过 narrator；未知命令继续按原有 composer 规则处理（普通空闲提交走 `execute_command`），保留世界/旧插件对自由文本命令的兼容行为。
+> - 已声明 command 的插件 UI 按钮使用 JSON-RENDER `invokeCommand`，走 `/api/sessions/:id/plugin-rpc` 的 `{ commandId, args }` 变体，不经过 narrator，并与输入框命令共用参数校验、上下文、审批、handler 和 trace。其他自定义 UI action 才使用 `invokePluginAction`。
 
 ### 交互响应
 
@@ -334,13 +339,13 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ### 插件 RPC
 
-统一的"结构化插件指令"通道。同时承载 action 级与 runtime 级调用。Action 级单次 JSON,runtime 级按 `manifest.execution` 分 sync / background 两种响应。
+统一的"结构化插件指令"通道。同时承载 action 级、runtime 级和命令级调用。Action / command 级返回单次 JSON,runtime 级按 `manifest.execution` 分 sync / background 两种响应。
 
 | 命令         | 方法 | 端点                           | 响应           |
 | ------------ | ---- | ------------------------------ | -------------- |
 | `plugin.rpc` | POST | `/api/sessions/:id/plugin-rpc` | JSON 变体,见下 |
 
-**请求体(action 级或 runtime 级 二选一):**
+**请求体(action / runtime / command 级三选一):**
 
 ```json
 {
@@ -358,15 +363,31 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 }
 ```
 
+```json
+{
+  "commandId": "dice-check:roll",
+  "input": "/roll 2d6"
+}
+```
+
+```json
+{
+  "commandId": "dice-check:roll",
+  "args": { "notation": "2d6" }
+}
+```
+
+command 请求的 `input` 与 `args` 必须且只能提供一个。服务端将两者归一化为 `RpcCommandInvocation`，所以日志和后续 handler 以 `commandId + args` 识别同一业务操作；仅 `source` 保留 `composer | plugin-ui` 的入口差异。
+
 **响应分支:**
 
 | 状态码 | status                                                                                                                       | 触发                                                                                                                |
 | ------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 200    | `ok`                                                                                                                         | action 级成功 / runtime 级 sync 模式成功                                                                            |
-| 202    | `approval-required`                                                                                                          | community-trust 首次调用(action 或 runtime 级)                                                                      |
+| 200    | `ok`                                                                                                                         | action / command 级成功，或 runtime 级 sync 模式成功                                                                |
+| 202    | `approval-required`                                                                                                          | community-trust 首次调用(action、command 或 runtime 级)                                                             |
 | 202    | `accepted`                                                                                                                   | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
-| 400    | `error`                                                                                                                      | 缺字段 / action+runtimeId 互斥违反 / payload 校验失败 / `plugin-mismatch`                                           |
-| 404    | `error` (`code: "unknown-action"` / `"runtime-not-active"`)                                                                  | action 未注册 / runtimeId 未加载到该 session                                                                        |
+| 400    | `error`                                                                                                                      | 缺字段 / 三种 selector 互斥违反 / 参数或 payload 校验失败 / `plugin-mismatch`                                       |
+| 404    | `error` (`code: "unknown-action"` / `"runtime-not-active"` / `"command-not-active"`)                                         | action 未注册 / runtime 未加载 / command 不在当前会话目录                                                           |
 | 409    | `error` (`code: "approval-scope-changed"` / `"session-not-active"` / `"session-deleting"` / `"session-incarnation-changed"`) | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                  |
 | 429    | `error` (`code: "queue-full"`)                                                                                               | pending approvals 超过 cap                                                                                          |
 | 500    | `error` (`code: "runtime-execution-failed"` / `"background-enqueue-failed"`)                                                 | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
@@ -477,22 +498,29 @@ error.occurred        → executionError
 
 These events ride the standard SSE envelope and are also persisted into `trace_events`. They are emitted by the runtime's `TurnEmitter` (`packages/runtime/src/trace/turn-emitter.ts`), fanned out both to `trace_events` (for the `/api/traces` read API and the `/debug` inspector) and to the global `EventBus` (where the `/api/actions` SSE route re-forwards them through `FORWARDED_EVENT_TYPES` — the set derived from `COVEL_EVENT_META[type].forwardToActionStream`, replacing the former hand-written `FORWARDED_SUBTYPES`).
 
-| Type                  | Payload                                                                                                                                                                                                                                                                                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tool.calling`        | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }`                                                                                                                                                                                                                                                  |
-| `tool.completed`      | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }`                                                                                                                                                                                                                    |
-| `tool.failed`         | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }`                                                                                                                                                                                                                  |
-| `llm.calling`         | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, streaming? }`；`slot` 是 runtime 请求的 slot；生产 gateway 在调用前把它解析为 `model` / `provider` 目标身份。不支持 slot 解析的自定义 adapter 可省略 `provider`。                                                                     |
-| `llm.responded`       | `{ runtimeId, pluginId, text?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`                                                                                                                                                                                                                                             |
-| `message.completed`   | `{ runtimeId, pluginId, content, len, deltaCount }` — `deltaCount` is the number of upstream `narrative.delta` events the runtime produced. Frontend views aggregating live `narrative.delta` streams use a separate synthesized `_aggregated` field; the two are not interchangeable — `deltaCount` is the authoritative persisted count. |
-| `block.emitted`       | `{ runtimeId, pluginId, proposalId, source, block }`                                                                                                                                                                                                                                                                                       |
-| `ui.rendered`         | `{ runtimeId, pluginId, proposalId, source, render, block? }` — `/actions` SSE forwards this so chat can render committed `ui.render` blocks live; older trace-only payloads may omit `block`, in which case clients synthesize it from `render`.                                                                                          |
-| `state.patch.applied` | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }`                                                                                                                                                                                                                                                                |
-| `hook.fired`          | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }`                                                                                                                                                                                                                                                          |
-| `hook.rewrote`        | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }`                                                                                                                                                                                                                                                               |
-| `hook.aborted`        | `{ event, hookName, pluginId, runtimeId?, targetId?, reason, proposalType? }`                                                                                                                                                                                                                                                              |
+| Type                     | Payload                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tool.calling`           | `{ runtimeId, pluginId, toolName, toolCallId, label, arguments, source, approvalStatus }`                                                                                                                                                                                                                                                  |
+| `tool.completed`         | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }`                                                                                                                                                                                                                    |
+| `tool.failed`            | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }`                                                                                                                                                                                                                  |
+| `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }` — `emit-event` 校验成功后的临时表现层信号；持久业务状态仍由正常事件链提交。                                                                                                                                                                                                             |
+| `llm.calling`            | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, streaming? }`；`slot` 是 runtime 请求的 slot；生产 gateway 在调用前把它解析为 `model` / `provider` 目标身份。不支持 slot 解析的自定义 adapter 可省略 `provider`。                                                                     |
+| `llm.responded`          | `{ runtimeId, pluginId, text?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`；`usage` 为 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是 provider 报告的子集。                                                                          |
+| `gateway.responded`      | function-runtime gateway 的成功结果；文本/对象调用带 `{ runtimeId, pluginId, method, finishReason, usage, model?, provider?, durationMs }`，`model/provider` 是 fallback 后实际命中的目标。转写调用同样携带可用的 `usage/model/provider`；旧 trace 或不支持该元数据的自定义 gateway 可以省略。                                             |
+| `message.completed`      | `{ runtimeId, pluginId, content, len, deltaCount }` — `deltaCount` is the number of upstream `narrative.delta` events the runtime produced. Frontend views aggregating live `narrative.delta` streams use a separate synthesized `_aggregated` field; the two are not interchangeable — `deltaCount` is the authoritative persisted count. |
+| `block.emitted`          | `{ runtimeId, pluginId, proposalId, source, block }`                                                                                                                                                                                                                                                                                       |
+| `ui.rendered`            | `{ runtimeId, pluginId, proposalId, source, render, block? }` — `/actions` SSE forwards this so chat can render committed `ui.render` blocks live; older trace-only payloads may omit `block`, in which case clients synthesize it from `render`.                                                                                          |
+| `state.patch.applied`    | `{ runtimeId, pluginId, proposalId, patch: { packageName, summary, ops } }`                                                                                                                                                                                                                                                                |
+| `hook.fired`             | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }`                                                                                                                                                                                                                                                          |
+| `hook.rewrote`           | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }`                                                                                                                                                                                                                                                               |
+| `hook.aborted`           | `{ event, hookName, pluginId, runtimeId?, targetId?, reason, proposalType? }`                                                                                                                                                                                                                                                              |
+| `command.invoked`        | `{ invocationId, commandId, command, pluginId, action, source, canonical, raw, argv, args }`；输入框和 JSON-RENDER 使用同一结构。                                                                                                                                                                                                          |
+| `command.completed`      | `command.invoked` 的字段 + `{ durationMs, resultOk? }`。                                                                                                                                                                                                                                                                                   |
+| `command.failed`         | `command.invoked` 的字段 + `{ durationMs, error }`。                                                                                                                                                                                                                                                                                       |
 
 Delta narrative continues to ride `narrative.delta` for realtime UI; only `message.completed` is persisted to keep `trace_events` compact.
+
+`command.*` 由 action 级 command dispatcher 的 TurnEmitter 写入 `trace_events` 并发布到 `trace` 订阅 topic，`forwardToActionStream: false`，因此不会污染游戏 `/api/actions` 流。三个事件共享 `invocationId` 作为 `traceId/turnId`；日志不持久化完整 handler 返回值，只记录终态、耗时和可选 `resultOk`。`raw` / `args` 会按设计进入 trace，命令参数不得承载 API key、凭据或其他秘密。
 
 Payload notes:
 

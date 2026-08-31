@@ -38,10 +38,28 @@ const WORLD_MD = `# 生成世界
 2. 保护被追捕的钟匠。
 3. 关闭中央齿轮。`;
 
+const WORLD_PACKAGE_YAML = `characters:
+  - { schemaVersion: 1, id: keeper, name: 守钟人, role: npc }
+  - { schemaVersion: 1, id: courier, name: 信使, role: companion }
+  - { schemaVersion: 1, id: thief, name: 窃时者, role: npc }
+lorebook:
+  - { id: tower, content: 钟楼控制全城时间。, strategy: selective, keys: [钟楼] }
+  - { id: rain, content: 雨水显出被删除的道路。, strategy: selective, keys: [雨] }
+  - { id: guild, content: 公会垄断校时权。, strategy: selective, keys: [公会] }
+  - { id: reverse-hour, content: 倒转之时会先删除记忆。, strategy: constant }
+rules:
+  - { id: time-cost, content: 改写时间必须失去记忆。, strategy: constant }
+  - { id: rain-reveals, content: 被删除的痕迹只在雨中出现。, strategy: constant }
+  - { id: clocks-disagree, content: 不同阵营的钟显示不同时间。, strategy: constant }`;
+
 class FixedLlm implements LLMAdapter {
+  constructor(
+    private readonly content = `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===END===`,
+  ) {}
+
   async generate(): Promise<LLMResponse> {
     return {
-      content: `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===END===`,
+      content: this.content,
       toolCalls: [],
       finishReason: "stop",
       usage: { inputTokens: 1, outputTokens: 1 },
@@ -56,10 +74,13 @@ type Env = {
   };
 };
 
-function createTestApp(store: DataStore): Hono<Env> {
+function createTestApp(
+  store: DataStore,
+  llm: LLMAdapter = new FixedLlm(),
+): Hono<Env> {
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
-    c.set("llmAdapter", new FixedLlm());
+    c.set("llmAdapter", llm);
     c.set("store", store);
     await next();
   });
@@ -162,5 +183,66 @@ describe("ai world generation route", () => {
       durable: false,
     });
     expect(await store.getWorld("generated-world")).toBeNull();
+  });
+
+  it("embeds requested text supplements for store-only worlds without dangling paths", async () => {
+    app = createTestApp(
+      store,
+      new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_MD}\n===WORLD_PACKAGE_YAML===\n${WORLD_PACKAGE_YAML}\n===END===`,
+      ),
+    );
+    const res = await app.request("/api/ai/generate-world", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        concept: "生成完整钟城",
+        locale: "zh-CN",
+        saveTarget: "server-store",
+        brief: {
+          experienceMode: "traditional-story",
+          content: ["characters", "lorebook", "rules"],
+        },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const events = await readSseJson(res);
+    const done = events.find((event) => event.type === "done");
+    expect(done?.world.metadata).toMatchObject({
+      source: "server-store",
+      characterBlueprints: expect.arrayContaining([
+        expect.objectContaining({ id: "keeper" }),
+      ]),
+      embeddedLorebook: expect.arrayContaining([
+        expect.objectContaining({ id: "time-cost" }),
+      ]),
+      generatedPackageSummary: {
+        characters: 3,
+        lorebook: 4,
+        rules: 3,
+      },
+    });
+    expect(done?.world.metadata.worldDataPath).toBeUndefined();
+    expect(done?.world.metadata.characterBlueprintSources).toBeUndefined();
+  });
+
+  it("rejects unsupported world-package content options before streaming", async () => {
+    const res = await app.request("/api/ai/generate-world", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        concept: "生成世界",
+        brief: {
+          experienceMode: "traditional-story",
+          content: ["characters", "unknown-content"],
+        },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({
+      error: expect.stringContaining("brief.content"),
+    });
   });
 });

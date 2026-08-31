@@ -30,6 +30,8 @@ import {
   runTurnStartHook,
   runTurnStopHook,
   runPreScheduleHook,
+  runPreCompactionHook,
+  runPostCompactionHook,
 } from "../hooks/wire-helpers.js";
 import { emitSubEvent } from "./turn-runtime-helpers.js";
 import { __testOnly_parseFinalOutputEnvelope } from "./turn-output-helpers.js";
@@ -472,6 +474,73 @@ async function executeTurnImpl(
   const refreshSessionContext = async () =>
     (await loadSessionContext()) ?? sessionContext;
 
+  // Compaction needs the real assembled system prompt to make a meaningful
+  // threshold decision. The first agent runtime supplies that preview after
+  // assembly; all parallel/successive agents share this promise so hooks and
+  // the compactor run at most once per turn. The current player message stays
+  // in the execution journal and cannot enter a summary before commit.
+  let compactionPreparation:
+    | Promise<{
+        readonly compacted: boolean;
+        readonly messageHistory: readonly import("@covel/store").TurnMessageRecord[];
+        readonly sessionSummaries: readonly import("@covel/store").SessionSummaryRecord[];
+      }>
+    | undefined;
+  const prepareCompactedContext = (systemPromptPreview: string) => {
+    if (!compactionPreparation) {
+      compactionPreparation = (async () => {
+        const unchanged = {
+          compacted: false,
+          messageHistory: projectedPromptHistory,
+          sessionSummaries,
+        } as const;
+        if (!deps.compactor || !deps.store || !shouldAppendPlayerMessage) {
+          return unchanged;
+        }
+
+        const hookOpts = {
+          pipeline: deps.hookPipeline,
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          eventBus: deps.eventBus,
+          emitter: deps.emitter,
+        };
+        const pre = await runPreCompactionHook(hookOpts, {
+          messageCount: projectedPromptHistory.length,
+        });
+        if (pre.skip) return unchanged;
+
+        const result = await deps.compactor.run(
+          input.sessionId,
+          systemPromptPreview,
+          projectedPromptHistory,
+          input.locale,
+          deps.emitter?.traceId,
+        );
+        await runPostCompactionHook(hookOpts, {
+          compacted: result.compacted,
+          ...(result.summaryId ? { summaryId: result.summaryId } : {}),
+        });
+        if (!result.compacted) return unchanged;
+
+        const [freshMessages, freshSummaries] = await Promise.all([
+          deps.store.listUncompactedTurnMessages(input.sessionId),
+          deps.store.listSessionSummaries(input.sessionId),
+        ]);
+        return {
+          compacted: true,
+          messageHistory: await buildProjectedPromptHistory({
+            input,
+            deps,
+            messageHistory: freshMessages,
+          }),
+          sessionSummaries: freshSummaries,
+        };
+      })();
+    }
+    return compactionPreparation;
+  };
+
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
 
@@ -563,6 +632,9 @@ async function executeTurnImpl(
       sessionMeta,
       hookPipeline: deps.hookPipeline,
       sessionSummaries,
+      ...(deps.compactor && deps.store && shouldAppendPlayerMessage
+        ? { prepareCompactedContext }
+        : {}),
       workingMemory,
       coreMemoryBlocks,
       sessionContext,

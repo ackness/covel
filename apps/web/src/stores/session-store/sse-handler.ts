@@ -12,6 +12,11 @@ import {
   clearStreamingTextsForTurn,
 } from "@/stores/streaming-text-store.js";
 import {
+  applyDomainEventPreview,
+  clearDomainEventPreviews,
+  clearDomainEventPreviewsForTurn,
+} from "@/stores/domain-event-preview-store.js";
+import {
   reducePluginDataChanged,
   reduceTurnResumed,
   reduceTurnSuspended,
@@ -352,8 +357,10 @@ export function createSseEventHandler(
         }
         break;
       }
-      case "execution.started":
+      case "execution.started": {
+        if (currentSessionId) clearDomainEventPreviews(currentSessionId);
         break;
+      }
       case "runtime.started": {
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
         const pluginId = (payload.pluginId as string) ?? "";
@@ -412,6 +419,9 @@ export function createSseEventHandler(
       }
       case "execution.completed": {
         const committed = payload.committed !== false;
+        if (currentSessionId) {
+          clearDomainEventPreviewsForTurn(currentSessionId, turnId);
+        }
         // A turn aborted before producing output (e.g. cost-gate's hard budget
         // cap) carries an abortReason — surface it so the player isn't left with
         // a silent empty turn. A player-initiated abort is NOT an error: the
@@ -500,6 +510,33 @@ export function createSseEventHandler(
         }
         break;
       }
+      case "domain-event.previewed": {
+        const topic = payload.topic;
+        const data = payload.data;
+        if (
+          currentSessionId &&
+          typeof topic === "string" &&
+          data &&
+          typeof data === "object" &&
+          !Array.isArray(data)
+        ) {
+          applyDomainEventPreview(currentSessionId, {
+            ...(turnId ? { turnId } : {}),
+            ...(typeof payload.runtimeId === "string"
+              ? { runtimeId: payload.runtimeId }
+              : {}),
+            ...(typeof payload.pluginId === "string"
+              ? { pluginId: payload.pluginId }
+              : {}),
+            ...(typeof payload.toolCallId === "string"
+              ? { toolCallId: payload.toolCallId }
+              : {}),
+            topic,
+            data: data as Readonly<Record<string, unknown>>,
+          });
+        }
+        break;
+      }
       case "plugin-data.changed": {
         reducePluginDataChanged(deps.dispatch, payload);
         break;
@@ -545,6 +582,9 @@ export function createSseEventHandler(
         break;
       }
       case "error.occurred": {
+        if (currentSessionId) {
+          clearDomainEventPreviewsForTurn(currentSessionId, turnId);
+        }
         deps.dispatch({
           type: "SET_EXECUTION_ERROR",
           error: (payload.message as string) ?? "Execution failed",
@@ -561,6 +601,9 @@ export function createSseEventHandler(
       // visible failure instead of a silently incomplete turn (the server
       // also withholds turn.completed / auto-snapshot in this case).
       case "proposal.failed": {
+        if (currentSessionId) {
+          clearDomainEventPreviewsForTurn(currentSessionId, turnId);
+        }
         const proposalType = (payload.proposalType as string) ?? "proposal";
         const error = (payload.error as string) ?? "commit failed";
         deps.dispatch({
@@ -600,6 +643,11 @@ export function createSseEventHandler(
       case "hook.fired":
       case "hook.rewrote":
       case "hook.aborted":
+      // Command lifecycle is trace-only and never forwarded to this action
+      // stream; keep the closed event union exhaustive for future changes.
+      case "command.invoked":
+      case "command.completed":
+      case "command.failed":
       // Recursive-runtime trace events: subscription-channel only, never
       // forwarded to this action stream — listed for exhaustiveness only.
       case "recursive.calling":

@@ -10,6 +10,7 @@
  * is named instead of degrading to a generic "Invalid panel spec".
  */
 
+import { PLUGIN_UI_COMPONENT_NAMES } from "@covel/shared";
 import { z } from "zod";
 import type { UiSlotName } from "./shared.js";
 
@@ -23,6 +24,71 @@ import type { UiSlotName } from "./shared.js";
 const CURRENT_UI_SPEC_VERSION = 1;
 
 const i18nTextSchema = z.union([z.string(), z.record(z.string(), z.string())]);
+const componentNameSchema = z.enum(PLUGIN_UI_COMPONENT_NAMES);
+
+const actionBindingSchema: z.ZodType = z.lazy(() =>
+  z
+    .object({
+      action: z.string().min(1),
+      params: z.record(z.string(), z.unknown()).optional(),
+      confirm: z.unknown().optional(),
+      onSuccess: z.unknown().optional(),
+      onError: z.unknown().optional(),
+      preventDefault: z.boolean().optional(),
+    })
+    .passthrough(),
+);
+
+const actionBindingListSchema = z.union([
+  actionBindingSchema,
+  z.array(actionBindingSchema).min(1),
+]);
+
+/**
+ * Recursive shape accepted by the nested plugin authoring format. Props and
+ * dynamic expressions remain open for forward compatibility; the framework
+ * validates the security-relevant vocabulary and graph-bearing fields here.
+ */
+const uiViewNodeSchema: z.ZodType = z.lazy(() =>
+  z
+    .object({
+      component: componentNameSchema.optional(),
+      type: componentNameSchema.optional(),
+      props: z.record(z.string(), z.unknown()).optional(),
+      children: z.array(uiViewNodeSchema).optional(),
+      slots: z.record(z.string(), z.array(uiViewNodeSchema)).optional(),
+      on: z.record(z.string(), actionBindingListSchema).optional(),
+      watch: z.record(z.string(), actionBindingListSchema).optional(),
+      repeat: z
+        .object({
+          statePath: z.union([
+            z.string().min(1),
+            z.object({ $item: z.string() }),
+          ]),
+          key: z.string().min(1).optional(),
+        })
+        .passthrough()
+        .optional(),
+      visible: z.unknown().optional(),
+    })
+    .passthrough()
+    .superRefine((node, ctx) => {
+      if (!node.component && !node.type) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["component"],
+          message: "UI node must declare a registered `component` or `type`",
+        });
+      }
+      if (node.component && node.type && node.component !== node.type) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["type"],
+          message: "`component` and `type` must match when both are declared",
+        });
+      }
+    }),
+);
 
 /**
  * Validates the structural envelope of a UI spec. Unknown keys are ignored
@@ -57,7 +123,7 @@ const uiSpecSchema = z
       .optional(),
     emptyState: z.object({ message: i18nTextSchema.optional() }).optional(),
     alwaysRender: z.boolean().optional(),
-    view: z.record(z.string(), z.unknown()).optional(),
+    view: uiViewNodeSchema.optional(),
     _componentPath: z.string().min(1).optional(),
   })
   .superRefine((spec, ctx) => {

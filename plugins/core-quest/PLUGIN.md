@@ -19,29 +19,23 @@ tags:
   - ui:message-block
 trigger:
   type: auto
-# Quest signals are extracted from the latest narrative — skip when the
-# active narrative engine failed, to avoid the LLM hallucinating quests
-# from an empty <narrator-output>. The upstream gate discovers the engine
-# by capability (narrative-engine → narrator in traditional,
-# chat-mode-narrator in dialogue) instead of naming one; the inject lists
-# both known engines and the absent one resolves to nothing.
-needs:
-  - capability: narrative-engine
+inputs:
+  worldIR:
+    from:
+      capability: world-ir-provider
+      cardinality: one
+    accepts: covel://world/ir/v1
+    required: true
 input:
   inject:
-    - kind: runtime
-      from: narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
-    - kind: runtime
-      from: chat-mode-narrator
-      field: narrativeOutput
-      as: "<narrator-output>"
     - kind: plugin-data
       namespace: quests
       as: "<existing-quests>"
       format: summary
       maxEntries: 50
+relations:
+  requires:
+    - world-ir
 entry: ./server/index.js
 tools:
   plugin:
@@ -71,9 +65,9 @@ postHistory:
 
 ## 输入
 
-### 本轮叙事
+### 本轮 WorldIR
 
-本轮叙事在 prompt 末尾的 `<narrator-output>` 块中（由框架 `input.inject` 自动注入，正文不再重复内联）。
+本轮叙事已由共享抽取 agent 转为 `covel://world/ir/v1`，位于 `<runtime-inputs>` 的 `worldIR.value`。任务信号主要在 `statements[type=quest]` 与 `events[type=quest_change]` 中；`summary`、相关 `entities` 和 attributes 提供委托人、目标、状态、报酬与证据。只处理 IR 明确表达的变化。
 
 ### 已有任务
 
@@ -87,8 +81,8 @@ postHistory:
 
 ## 工作流程
 
-1. 仔细阅读 `<narrator-output>` 里的叙事
-2. 扫一遍 `<existing-quests>`，把叙事中出现的任务信号与已有任务按名字匹配
+1. 仔细阅读 `<runtime-inputs>` 中的 `worldIR.value`
+2. 扫一遍 `<existing-quests>`，把 WorldIR 中出现的任务信号与已有任务按名字匹配
 3. 按下面的判定规则挑出**最多 3 个**真正成立的新任务
 4. 新任务与已有任务的进展（目标勾选 / 完成 / 失败）合并成**一次** `upsert-quests` 调用提交
 5. 如果没有任何符合规则的任务信号 → **直接结束，返回空字符串或 `{}`**，不要强行记录

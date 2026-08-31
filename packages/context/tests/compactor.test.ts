@@ -68,7 +68,9 @@ function makeMinimalStore(): DataStore {
       summaries.push(s);
     }),
     listSessionSummaries: vi.fn(async () => [...summaries]),
-    deleteSessionSummaries: vi.fn(async () => {}),
+    deleteSessionSummaries: vi.fn(async () => {
+      summaries.splice(0, summaries.length);
+    }),
     tagTurnMessagesCompacted: vi.fn(
       async (
         _sessionId: string,
@@ -79,6 +81,15 @@ function makeMinimalStore(): DataStore {
           const msg = messages.get(msgId);
           if (msg) {
             messages.set(msgId, { ...msg, compactedAtTurnId: summaryId });
+          }
+        }
+      },
+    ),
+    retagCompactedTurnMessages: vi.fn(
+      async (_sessionId: string, summaryId: string) => {
+        for (const [id, message] of messages) {
+          if (message.compactedAtTurnId != null) {
+            messages.set(id, { ...message, compactedAtTurnId: summaryId });
           }
         }
       },
@@ -248,6 +259,27 @@ describe("maybeCompact", () => {
       expect(result.compacted).toBe(false);
     });
 
+    it("uses only the absolute tail when user-turn protection is disabled", async () => {
+      const messages = makeSimpleHistory(6);
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm,
+        contextWindow: 100,
+      };
+
+      await maybeCompact("sess-1", "", messages, deps, {
+        protectLastNMessages: 1,
+        protectLastNUserTurns: 0,
+      });
+
+      const taggedIds = vi.mocked(store.tagTurnMessagesCompacted).mock
+        .calls[0]?.[1];
+      expect(taggedIds).toEqual(
+        messages.slice(0, -1).map((message) => message.id),
+      );
+    });
+
     it("protects at least the specified number of user turns", async () => {
       // Build a history with 6 user messages
       const messages: TurnMessageRecord[] = [];
@@ -366,6 +398,33 @@ describe("maybeCompact", () => {
         ),
       ).toBe(false);
       expect(fastSlotLlm.complete).toHaveBeenCalledTimes(3);
+      expect(await store.listSessionSummaries("sess-1")).toHaveLength(1);
+      expect(store.deleteSessionSummaries).toHaveBeenCalledTimes(2);
+      expect(store.retagCompactedTurnMessages).toHaveBeenCalledTimes(2);
+    });
+
+    it("bounds the persisted rolling summary even when the provider overshoots", async () => {
+      const oversized = "长期摘要内容".repeat(2_000);
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm: makeFastLlm(oversized),
+        contextWindow: 1_000,
+      };
+
+      const result = await maybeCompact(
+        "sess-1",
+        "",
+        growHistory(0, 20),
+        deps,
+        opts,
+      );
+
+      expect(result.compacted).toBe(true);
+      const summaries = await store.listSessionSummaries("sess-1");
+      expect(summaries).toHaveLength(1);
+      expect(estimator(summaries[0]!.content)).toBeLessThanOrEqual(128);
+      expect(summaries[0]!.content).toContain("摘要已按上下文预算截断");
     });
 
     it("does not re-compact when nothing new arrived since the last round", async () => {

@@ -262,6 +262,7 @@ describe("builtin world dimension tools", () => {
         },
       }),
     );
+    expect(Object.hasOwn(result.results[0]!, "path")).toBe(false);
   });
 
   it("reports missing field paths without throwing", async () => {

@@ -30,6 +30,8 @@ import type {
   MemoryUpdaterConfig,
 } from "./types.js";
 import { DEFAULT_CORE_MEMORY_BLOCKS } from "./types.js";
+import { trackMemoryBackgroundTask } from "./background-tasks.js";
+import { retryTransientProviderCall } from "./provider-retry.js";
 
 /**
  * Build the memory-manager system prompt for a given block schema + locale.
@@ -181,11 +183,21 @@ export function createMemoryUpdater(
         .join("\n\n");
       const userPrompt = `## 当前记忆块\n${blockSection || "（全部为空，首次初始化）"}${authoritativeSection}\n\n## 本轮叙事\n${narrativeText}${toolSection}\n\n请输出需要更新的记忆块 JSON。`;
 
-      const response = await llm.complete({
-        systemPrompt: buildSystemPrompt(schema, lang, effectiveLocale),
-        messages: [{ role: "user", content: userPrompt }],
-        model: config?.modelSlot,
-      });
+      const response = await retryTransientProviderCall(
+        () =>
+          llm.complete({
+            systemPrompt: buildSystemPrompt(schema, lang, effectiveLocale),
+            messages: [{ role: "user", content: userPrompt }],
+            model: config?.modelSlot,
+          }),
+        {
+          onRetry: (error, nextAttempt) => {
+            console.warn(
+              `[memory] core update provider call failed for ${sessionId}; retrying attempt ${nextAttempt}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          },
+        },
+      );
 
       const parsed = parseBlockUpdates(response.content, validLabels);
       enforceAuthoritativePlayerProfile({
@@ -231,8 +243,12 @@ export function createMemoryUpdater(
           /* previous failure already reported to its caller */
         })
         .then(() => runUpdate(params));
+      const tracked = trackMemoryBackgroundTask(next, {
+        kind: "core-update",
+        sessionId: params.sessionId,
+      });
       // Store a promise that resolves regardless of success/failure.
-      const settled = next.then(
+      const settled = tracked.then(
         () => undefined,
         () => undefined,
       );
@@ -244,7 +260,7 @@ export function createMemoryUpdater(
           pending.delete(params.sessionId);
         }
       });
-      return next;
+      return tracked;
     },
     async awaitPending(sessionId: string): Promise<void> {
       const p = pending.get(sessionId);

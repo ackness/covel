@@ -3,7 +3,7 @@ export type WorldDataSourceKind =
 
 export type WorldDataMergeMode = "replace" | "skipExisting";
 
-export type WorldDataEffect = "characters";
+export type WorldDataEffect = "characters" | "projections";
 
 export type WorldDataKey = "id" | "characterId" | "filename" | string;
 

@@ -11,6 +11,7 @@ import {
   parseJson,
   postFormData,
 } from "../adapters/http.js";
+import { readTokenCount } from "../adapters/usage.js";
 
 async function transcribe(
   config: ProviderConfig,
@@ -49,12 +50,18 @@ async function transcribe(
     payload.usage && typeof payload.usage === "object"
       ? (payload.usage as Record<string, unknown>)
       : null;
+  const tokenUsage =
+    transcriptionUsage?.type === "duration" ? null : transcriptionUsage;
   return {
     text: String(payload.text ?? ""),
-    usage: transcriptionUsage
+    usage: tokenUsage
       ? {
-          inputTokens: Number(transcriptionUsage.prompt_tokens ?? 0),
-          outputTokens: Number(transcriptionUsage.completion_tokens ?? 0),
+          inputTokens: readTokenCount(
+            tokenUsage.input_tokens ?? tokenUsage.prompt_tokens,
+          ),
+          outputTokens: readTokenCount(
+            tokenUsage.output_tokens ?? tokenUsage.completion_tokens,
+          ),
         }
       : null,
     warnings: [],

@@ -56,42 +56,57 @@ npx tsx --env-file=.env --env-file=.env.llm \
 # 3. 只聚焦 guide 这一个插件的表现
 npx tsx --env-file=.env --env-file=.env.llm \
   scripts/e2e-plugin-verify.ts --plugin guide --turns 2
+
+# 4. 长时间运行 / 8k 上下文验收：要求发生压缩、后续消费摘要、无失败 trace，
+#    并校验 provider 上报的每次输入不超过 8192 token
+npx tsx --env-file=.env --env-file=.env.llm \
+  scripts/e2e-plugin-verify.ts --turns 20 \
+  --enable-plugins memory \
+  --require-compaction --require-summary-use \
+  --require-tools memory-search --strict-traces \
+  --max-input-tokens 8192
 ```
 
 ## 命令行参数
 
-| 参数                     | 默认                          | 说明                                                                                      |
-| ------------------------ | ----------------------------- | ----------------------------------------------------------------------------------------- |
-| `--server <url>`         | `http://localhost:3001/api`   | API base URL                                                                              |
-| `--slot <name>`          | `e2e`（或 `$E2E_MODEL_SLOT`） | 故事 runtime 使用的模型 slot。**只写 `[covel.xxx]` 中的 xxx 部分**，不是 `covel.xxx` 全名 |
-| `--world <id>`           | `/api/worlds` 返回的第一个    | 使用的世界包 id                                                                           |
-| `--turns <n>`            | `3`                           | 角色创建之后的 playing 轮数                                                               |
-| `--runtime <id>`         | —                             | 只聚焦某一个 runtime，其它依然会执行但不计入断言                                          |
-| `--plugin <id>`          | —                             | 只聚焦某一个 plugin                                                                       |
-| `--player-message <str>` | 内置话术循环                  | 每轮玩家输入文本                                                                          |
-| `--form-values <json>`   | 字段类型推断                  | 角色创建表单的默认填充值                                                                  |
-| `--timeout <seconds>`    | `300`                         | 每轮 SSE 超时                                                                             |
-| `--log-dir <path>`       | `debugs/e2e-logs`             | artefact 输出目录                                                                         |
-| `--no-log`               | —                             | 关闭日志落盘                                                                              |
-| `--verbose`              | —                             | 打印每个 SSE 事件                                                                         |
-| `--keep`                 | 失败才保留                    | 通过也保留会话以便检查                                                                    |
-| `--help` / `-h`          | —                             | 打印内置帮助                                                                              |
+| 参数                     | 默认                          | 说明                                                                                           |
+| ------------------------ | ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| `--server <url>`         | `http://localhost:3001/api`   | API base URL                                                                                   |
+| `--slot <name>`          | `e2e`（或 `$E2E_MODEL_SLOT`） | 故事 runtime 使用的模型 slot。**只写 `[covel.xxx]` 中的 xxx 部分**，不是 `covel.xxx` 全名      |
+| `--world <id>`           | `/api/worlds` 返回的第一个    | 使用的世界包 id                                                                                |
+| `--turns <n>`            | `3`                           | 角色创建之后的 playing 轮数                                                                    |
+| `--runtime <id>`         | —                             | 只聚焦某一个 runtime，其它依然会执行但不计入断言                                               |
+| `--plugin <id>`          | —                             | 只聚焦某一个 plugin                                                                            |
+| `--enable-plugins <ids>` | —                             | 建会话后、首轮前启用逗号分隔的插件 id；用于把 memory 等可选核心插件纳入长测                    |
+| `--player-message <str>` | 内置话术循环                  | 每轮玩家输入文本                                                                               |
+| `--form-values <json>`   | 字段类型推断                  | 角色创建表单的默认填充值                                                                       |
+| `--timeout <seconds>`    | `300`                         | 每轮 SSE 超时                                                                                  |
+| `--log-dir <path>`       | `debugs/e2e-logs`             | artefact 输出目录                                                                              |
+| `--no-log`               | —                             | 关闭日志落盘                                                                                   |
+| `--verbose`              | —                             | 打印每个 SSE 事件                                                                              |
+| `--keep`                 | 失败才保留                    | 通过也保留会话以便检查                                                                         |
+| `--require-compaction`   | —                             | 若整次运行未出现 `context.compacted` trace，则失败                                             |
+| `--require-summary-use`  | —                             | 若压缩后没有任何 `llm.calling` prompt 包含 `<compacted_history>`，则失败                       |
+| `--require-tools <ids>`  | —                             | 要求逗号分隔的每个工具至少出现一次成功的 `tool.completed` trace                                |
+| `--strict-traces`        | —                             | 遇到任意 `*.failed`、`error.occurred` 或错误 `llm.responded` trace 时失败                      |
+| `--max-input-tokens <n>` | —                             | 按 `llm.responded.payload.usage.inputTokens` 校验 provider 实际输入上限；完全缺失 usage 会失败 |
+| `--help` / `-h`          | —                             | 打印内置帮助                                                                                   |
 
-> `--plugin` / `--runtime` 是**观测+断言过滤器**，不是禁用开关：其它 runtime 仍会运行，保证 `input.inject` 依赖链完整。
+> `--plugin` / `--runtime` 是**观测+断言过滤器**，不是禁用开关：其它 runtime 仍会运行，保证 `input.inject` 依赖链完整。`--enable-plugins` 会真实修改测试会话的激活集。
 
 ## 执行流程（7 Phase）
 
 脚本把一次运行拆成 7 个阶段，每个 Phase 都会写出小节标题和带固定列宽的表格：
 
-| #   | Phase                      | 做了什么                                                                                                                                          |
-| --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Health Check**           | `GET /api/health`，确认 store backend 在线                                                                                                        |
-| 2   | **Plugin Flow Discovery**  | `GET /api/plugin-flows`，自动发现所有 plugin/runtime 及其 trigger 元数据                                                                          |
-| 3   | **World Selection**        | 挑选 `--world` 或第一个可用世界包                                                                                                                 |
-| 4   | **Session Creation**       | `POST /api/sessions` 建新会话，并读取世界策略选出的真实 `activePlugins`                                                                           |
-| 5   | **Turn Execution**         | 按 `setup → character_creation → playing×N` 顺序触发每一轮，逐轮对照 stage 调度期望                                                               |
-| 6   | **Final Session Snapshot** | `GET /api/sessions/:id/snapshot`（+ `GET /api/sessions/:id` 取权威 status）；断言 setup 运行时在 `setupRuntimes` 中为 `done`；校验 trace 类型覆盖 |
-| 7   | **Summary**                | 汇总 runtime/tool/assertion 成败 + scheduled 运行时的「≥1 次」断言，计算 `PASS`/`FAIL` 总结果                                                     |
+| #   | Phase                      | 做了什么                                                                                                                             |
+| --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | **Health Check**           | `GET /api/health`，确认 store backend 在线                                                                                           |
+| 2   | **Plugin Flow Discovery**  | `GET /api/plugin-flows`，自动发现所有 plugin/runtime 及其 trigger 元数据                                                             |
+| 3   | **World Selection**        | 挑选 `--world` 或第一个可用世界包                                                                                                    |
+| 4   | **Session Creation**       | `POST /api/sessions` 建新会话，按需启用 `--enable-plugins`，并读取最终真实 `activePlugins`                                           |
+| 5   | **Turn Execution**         | 按 `setup → character_creation → playing×N` 顺序触发每一轮，逐轮对照 stage 调度期望                                                  |
+| 6   | **Final Session Snapshot** | `GET /api/sessions/:id/snapshot`（+ `GET /api/sessions/:id` 取权威 status）；断言 setup 运行时；保存完整 trace，并执行长运行严格断言 |
+| 7   | **Summary**                | 汇总 runtime/tool/assertion 成败 + scheduled 运行时的「≥1 次」断言，计算 `PASS`/`FAIL` 总结果                                        |
 
 ### Phase 5 每轮产出
 

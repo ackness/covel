@@ -1,6 +1,8 @@
 import {
   COVEL_EVENT_META,
   PROPOSAL_TYPES,
+  WORLD_IR_V1_JSON_SCHEMA,
+  WORLD_IR_V1_SCHEMA_URI,
   getRuntimeSpec,
   inputInjectDeclSchema,
   outputKindSchema,
@@ -9,7 +11,13 @@ import {
   worldDataMergeModeSchema,
   worldDataSourceKindSchema,
 } from "@covel/shared";
-import type { RuntimeManifest, Stage } from "@covel/shared";
+import type {
+  DependencyRef,
+  EffectResource,
+  RuntimeManifest,
+  Stage,
+} from "@covel/shared";
+import { deriveEffects, resolveEffectsPolicy } from "@covel/runtime";
 import type {
   ParsedPluginMd,
   PluginRegistry,
@@ -37,6 +45,10 @@ export interface RuntimePluginContract {
   relations?: unknown;
   /** Named stage; absent for event/manual/UI-only runtimes. */
   stage?: Stage;
+  /** Weak ordering dependencies in the normalized runtime DAG. */
+  after: readonly DependencyRef[];
+  /** Success-gated dependencies in the normalized runtime DAG. */
+  needs: readonly DependencyRef[];
   trigger?: unknown;
   execution?: unknown;
   model?: unknown;
@@ -48,6 +60,14 @@ export interface RuntimePluginContract {
   input: {
     inject: unknown[];
     tools: unknown[];
+  };
+  /** Same-turn typed data bindings used to derive DAG edges and gates. */
+  inputs: Readonly<Record<string, unknown>>;
+  /** Normalized read/write sets used by the scheduler's hazard policy. */
+  effects: {
+    reads: readonly EffectResource[];
+    writes: readonly EffectResource[];
+    parallelSafe: boolean;
   };
   output: JsonRecord;
   dataSchemas: string[];
@@ -77,11 +97,21 @@ export interface PluginContract {
   runtimeCount: number;
   status: string;
   source?: string;
-  rootPath?: string;
   capabilities: string[];
   tags: string[];
   relations?: unknown;
   dataSchemas: Record<string, PluginDataSchemaContract>;
+  worldProjections: Readonly<
+    Record<
+      string,
+      {
+        readonly from: string;
+        readonly outputs: Readonly<
+          Record<string, { readonly namespace: string; readonly key: string }>
+        >;
+      }
+    >
+  >;
   declaredPluginDataNamespaces: string[];
   tools: {
     builtin: string[];
@@ -163,6 +193,7 @@ const WORLD_DATA_TARGET_URIS = [
 
 const WORLD_DATA_SCHEMA_URIS = [
   "covel://world/dimensions",
+  WORLD_IR_V1_SCHEMA_URI,
   "plugin://<pluginId>/<namespace>",
   "<local-json-schema-path>",
 ] as const;
@@ -211,6 +242,8 @@ function buildRuntimeContract(
   pluginId: string,
   manifest: RuntimeManifest,
 ): RuntimePluginContract {
+  const runtimeSpec = getRuntimeSpec(manifest);
+  const effects = deriveEffects(manifest);
   const dataSchemaNamespaces = Object.keys(manifest.dataSchemas ?? {});
   const pluginDataInjectNamespaces =
     manifest.input?.inject
@@ -231,9 +264,9 @@ function buildRuntimeContract(
     capabilities: [...(manifest.capabilities ?? [])],
     tags: [...(manifest.tags ?? [])],
     ...(manifest.relations ? { relations: manifest.relations } : {}),
-    ...(getRuntimeSpec(manifest).stage !== undefined
-      ? { stage: getRuntimeSpec(manifest).stage }
-      : {}),
+    ...(runtimeSpec.stage !== undefined ? { stage: runtimeSpec.stage } : {}),
+    after: [...runtimeSpec.deps.after],
+    needs: [...runtimeSpec.deps.needs],
     ...(manifest.trigger ? { trigger: manifest.trigger } : {}),
     ...(manifest.execution ? { execution: manifest.execution } : {}),
     ...(manifest.model ? { model: manifest.model } : {}),
@@ -244,6 +277,12 @@ function buildRuntimeContract(
     input: {
       inject: [...(manifest.input?.inject ?? [])],
       tools: [...(manifest.input?.tools ?? [])],
+    },
+    inputs: { ...manifest.inputs },
+    effects: {
+      reads: [...effects.reads].sort(),
+      writes: [...effects.writes].sort(),
+      parallelSafe: effects.parallelSafe,
     },
     output: (manifest.output ?? {}) as JsonRecord,
     dataSchemas: dataSchemaNamespaces,
@@ -284,7 +323,6 @@ export function buildPluginContract(
     runtimeCount: entry.summary.runtimeCount,
     status: entry.status,
     source: entry.source,
-    rootPath: entry.rootPath,
     capabilities: uniqueSorted(
       runtimes.flatMap((runtime) => runtime.capabilities),
     ),
@@ -294,6 +332,14 @@ export function buildPluginContract(
     ]),
     ...(entry.summary.relations ? { relations: entry.summary.relations } : {}),
     dataSchemas,
+    worldProjections: Object.fromEntries(
+      Object.entries(entry.worldProjections ?? {}).map(
+        ([projectionId, projection]) => [
+          projectionId,
+          { from: projection.from, outputs: projection.outputs },
+        ],
+      ),
+    ),
     declaredPluginDataNamespaces: uniqueSorted([
       ...Object.keys(dataSchemas),
       ...runtimes.flatMap((runtime) => runtime.writablePluginDataNamespaces),
@@ -339,6 +385,9 @@ export function buildFrameworkCapabilities(
         ),
         uiSlots: ["right", "message", "left"],
       },
+      scheduling: {
+        effectsPolicy: resolveEffectsPolicy(),
+      },
       pluginData: {
         scope: "(sessionId, pluginId, namespace, key)",
         reservedNamespaces: [
@@ -381,6 +430,9 @@ export function buildFrameworkCapabilities(
         effects: enumValues(worldDataEffectSchema),
         targetUris: WORLD_DATA_TARGET_URIS,
         schemaUris: WORLD_DATA_SCHEMA_URIS,
+        schemas: {
+          [WORLD_IR_V1_SCHEMA_URI]: WORLD_IR_V1_JSON_SCHEMA,
+        },
       },
     },
   };

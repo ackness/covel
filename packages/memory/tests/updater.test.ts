@@ -1,7 +1,11 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createMemoryUpdater } from "../src/updater.js";
 import { createMemoryManager } from "../src/core-memory.js";
 import type { CoreMemoryBlock, MemoryLLMAdapter } from "../src/types.js";
+import {
+  awaitPendingMemoryBackgroundTasks,
+  pendingMemoryBackgroundTaskCount,
+} from "../src/background-tasks.js";
 
 function createMockStore() {
   const records = new Map<string, any>();
@@ -297,6 +301,99 @@ describe("MemoryUpdater", () => {
     expect(result.error).toBe("LLM timeout");
   });
 
+  it("retries a transient provider failure and then persists the update", async () => {
+    let attempts = 0;
+    const llm: MemoryLLMAdapter = {
+      async complete() {
+        attempts += 1;
+        if (attempts === 1) {
+          throw Object.assign(new Error("socket disconnected"), {
+            code: "UND_ERR_SOCKET",
+          });
+        }
+        return { content: JSON.stringify({ scene: "重试后写入" }) };
+      },
+    };
+    const updater = createMemoryUpdater(manager, llm);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const result = await updater.updateAfterTurn({
+        sessionId: "sess-retry-success",
+        narrativeText: "...",
+        currentBlocks,
+      });
+
+      expect(attempts).toBe(2);
+      expect(result).toMatchObject({ updated: true, blocksChanged: ["scene"] });
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("retrying attempt 2"),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("honors the provider adapter's explicit retriable classification", async () => {
+    let attempts = 0;
+    const llm: MemoryLLMAdapter = {
+      async complete() {
+        attempts += 1;
+        if (attempts === 1) {
+          throw Object.assign(new Error("upstream provider error"), {
+            code: "PROVIDER_ERROR",
+            retriable: true,
+          });
+        }
+        return { content: "{}" };
+      },
+    };
+    const updater = createMemoryUpdater(manager, llm);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await updater.updateAfterTurn({
+        sessionId: "sess-provider-classification",
+        narrativeText: "...",
+        currentBlocks,
+      });
+      expect(attempts).toBe(2);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("bounds retries when a transient provider remains unavailable", async () => {
+    let attempts = 0;
+    const llm: MemoryLLMAdapter = {
+      async complete() {
+        attempts += 1;
+        throw Object.assign(new Error("provider timed out"), {
+          code: "ETIMEDOUT",
+        });
+      },
+    };
+    const updater = createMemoryUpdater(manager, llm);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const result = await updater.updateAfterTurn({
+        sessionId: "sess-retry-exhausted",
+        narrativeText: "...",
+        currentBlocks,
+      });
+
+      expect(attempts).toBe(3);
+      expect(result).toMatchObject({
+        updated: false,
+        error: "provider timed out",
+      });
+      expect(warn).toHaveBeenCalledTimes(2);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("should ignore invalid block labels in response", async () => {
     const llm = createMockLLM(
       JSON.stringify({
@@ -388,6 +485,48 @@ describe("MemoryUpdater", () => {
 
       // Each call must complete before the next starts — never interleaved.
       expect(order).toEqual(["start-1", "end-1", "start-2", "end-2"]);
+    });
+
+    it("awaits pending updater work across all sessions for shutdown", async () => {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const slowLlm: MemoryLLMAdapter = {
+        async complete() {
+          await held;
+          return { content: "{}" };
+        },
+      };
+      const updater = createMemoryUpdater(manager, slowLlm);
+
+      const first = updater.updateAfterTurn({
+        sessionId: "sess-drain-a",
+        narrativeText: "a",
+        currentBlocks,
+      });
+      const second = updater.updateAfterTurn({
+        sessionId: "sess-drain-b",
+        narrativeText: "b",
+        currentBlocks,
+      });
+      expect(pendingMemoryBackgroundTaskCount()).toBe(2);
+
+      let drained = false;
+      const drain = awaitPendingMemoryBackgroundTasks().then((result) => {
+        drained = true;
+        return result;
+      });
+      await Promise.resolve();
+      expect(drained).toBe(false);
+
+      release();
+      await expect(drain).resolves.toMatchObject({
+        awaited: 2,
+        rejected: 0,
+      });
+      await Promise.all([first, second]);
+      expect(pendingMemoryBackgroundTaskCount()).toBe(0);
     });
   });
 });

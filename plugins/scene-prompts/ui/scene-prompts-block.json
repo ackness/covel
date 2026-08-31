@@ -31,6 +31,24 @@
       {
         "component": "Text",
         "props": {
+          "content": { "$state": "/recap" },
+          "variant": "muted",
+          "size": "sm"
+        },
+        "visible": { "$state": "/recap" }
+      },
+      {
+        "component": "Text",
+        "props": {
+          "content": { "$state": "/decision" },
+          "weight": "bold",
+          "size": "sm"
+        },
+        "visible": { "$state": "/decision" }
+      },
+      {
+        "component": "Text",
+        "props": {
           "content": {
             "zh": "选择一个短句加入待发送区，再从底部统一发送。",
             "en": "Pick a prompt to queue it, then send from the composer below."

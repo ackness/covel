@@ -36,12 +36,14 @@ let sequence = 0;
 
 async function serviceWithWorld(
   worldId = "world-1",
+  metadata?: Record<string, unknown>,
 ): Promise<InstanceType<typeof LocalDataService>> {
   vault = new BrowserVault({ dbName: `local-session-sync-${++sequence}` });
   await vault.upsertWorld({
     id: worldId,
     name: "World",
     description: "",
+    metadata,
     createdAt: new Date().toISOString(),
   });
   return new LocalDataService(vault);
@@ -88,6 +90,68 @@ describe("LocalDataService browser-authoritative sync", () => {
     await expect(service.getSession(session.id)).resolves.toMatchObject({
       activePlugins: ["pregame", "world-init", "scene-stage"],
       locale: "en-US",
+    });
+  });
+
+  it("seeds portable generated characters and lorebook into a local checkpoint", async () => {
+    const service = await serviceWithWorld("portable-world", {
+      characterBlueprints: [
+        {
+          schemaVersion: 1,
+          id: "thread-keeper",
+          name: "Thread Keeper",
+          role: "npc",
+          description: "Keeps promises visible.",
+          instantiate: {
+            characterId: "npc-thread-keeper",
+            name: "Keeper of Threads",
+            type: "companion",
+            description: "Makes every promise visible.",
+            fields: { faction: "Silver House", trust: 20 },
+          },
+        },
+        {
+          id: "missing-schema-version",
+          name: "Invalid Blueprint",
+        },
+      ],
+      embeddedLorebook: [
+        {
+          id: "silver-threads",
+          content: "Every promise creates a visible silver thread.",
+          strategy: "constant",
+          position: "before_plugin",
+        },
+      ],
+    });
+
+    await service.createSession(
+      "portable-world",
+      undefined,
+      "sess-portable",
+      [],
+      "en-US",
+    );
+
+    await expect(
+      vault.getLatestCheckpoint("sess-portable"),
+    ).resolves.toMatchObject({
+      characters: [
+        {
+          id: "sess-portable-npc-thread-keeper",
+          name: "Keeper of Threads",
+          type: "companion",
+          description: "Makes every promise visible.",
+          fields: { faction: "Silver House", trust: 20 },
+        },
+      ],
+      lorebookEntries: [
+        {
+          id: "silver-threads",
+          strategy: "constant",
+          position: "before_plugin",
+        },
+      ],
     });
   });
 

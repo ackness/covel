@@ -175,6 +175,12 @@ importers:
       '@json-render/core':
         specifier: ^0.20.0
         version: 0.20.0(zod@4.4.3)
+      '@json-render/devtools-react':
+        specifier: 0.20.0
+        version: 0.20.0(react@19.2.8)(zod@4.4.3)
+      '@json-render/directives':
+        specifier: 0.20.0
+        version: 0.20.0(zod@4.4.3)
       '@json-render/react':
         specifier: ^0.20.0
         version: 0.20.0(react@19.2.8)(zod@4.4.3)
@@ -954,6 +960,18 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
+  plugins/world-ir:
+    devDependencies:
+      '@covel/plugin-loader':
+        specifier: workspace:*
+        version: link:../../packages/plugin-loader
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
 packages:
 
   '@asamuzakjp/css-color@6.0.7':
@@ -1522,6 +1540,19 @@ packages:
 
   '@json-render/core@0.20.0':
     resolution: {integrity: sha512-cXAXn7h3QaylefQgh85AEGPuVq4C8SJ3k9JqigWLJhaBSozF1Fmsrm43DP16RmkqNiVgj5pBRdmB48lEO5qlow==}
+    peerDependencies:
+      zod: ^4.0.0
+
+  '@json-render/devtools-react@0.20.0':
+    resolution: {integrity: sha512-82Ql9aZZXD+MrC6zAZjdS3FOwVDo+QkUwQCkaetNXbf6AYJHtrcPuZ9rxgZJyhMdf+44mCmepUFrPkF3v2wnxw==}
+    peerDependencies:
+      react: ^19.2.3
+
+  '@json-render/devtools@0.20.0':
+    resolution: {integrity: sha512-icMmtinhw9E7BHSFJlu6H+s1ZaKeZqhb7Zom2xKuP/SqGYQDiEg5BAZDAhGSiJa/8gI2Dz7wCz+V96C7ItCsdw==}
+
+  '@json-render/directives@0.20.0':
+    resolution: {integrity: sha512-SVKcYUBZbCP5OHUU0jObwFl1TNmUrUsJ+HF45crhY3V9c9q/Zs6OUOqwgPV7P9aYVKrk7JM1/vZzcjnsSPTeWg==}
     peerDependencies:
       zod: ^4.0.0
 
@@ -5709,6 +5740,26 @@ snapshots:
 
   '@json-render/core@0.20.0(zod@4.4.3)':
     dependencies:
+      zod: 4.4.3
+
+  '@json-render/devtools-react@0.20.0(react@19.2.8)(zod@4.4.3)':
+    dependencies:
+      '@json-render/core': 0.20.0(zod@4.4.3)
+      '@json-render/devtools': 0.20.0(zod@4.4.3)
+      '@json-render/react': 0.20.0(react@19.2.8)(zod@4.4.3)
+      react: 19.2.8
+    transitivePeerDependencies:
+      - zod
+
+  '@json-render/devtools@0.20.0(zod@4.4.3)':
+    dependencies:
+      '@json-render/core': 0.20.0(zod@4.4.3)
+    transitivePeerDependencies:
+      - zod
+
+  '@json-render/directives@0.20.0(zod@4.4.3)':
+    dependencies:
+      '@json-render/core': 0.20.0(zod@4.4.3)
       zod: 4.4.3
 
   '@json-render/react@0.20.0(react@19.2.8)(zod@4.4.3)':

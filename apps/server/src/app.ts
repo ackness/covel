@@ -52,6 +52,10 @@ import {
   readRuntimeEnv,
 } from "@covel/shared";
 import type { Sql } from "postgres";
+import {
+  awaitPendingMemoryBackgroundTasks,
+  pendingMemoryBackgroundTaskCount,
+} from "@covel/memory";
 
 /**
  * Merge `~/.covel/keys.env` (or `$COVEL_HOME/keys.env` when overridden)
@@ -248,21 +252,35 @@ const pluginUtils = {
 };
 const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
 
-// Live budget view of the main narrative slot ("default" when configured,
-// else the isDefault/first preset). Resolved per call — never cached — so
-// llm.toml hot-reloads propagate to compaction thresholds and prompt budget.
-// ponytail: ignores per-session runtime_model_overrides and X-Slot-Config
-// overlays; wire the session's actual narrative slot if that ever matters.
+// Conservative live budget across every enabled text preset. Runtime deps
+// currently carry one process/request-level budget, while a turn may execute
+// story, plugin, and fast slots; taking the smallest declared window and
+// output cap keeps all of them within bounds. Resolved per call so llm.toml
+// hot-reloads propagate without restarting the server.
 const resolveNarrativeBudget = () => {
-  const presetId = ai.slotRegistry.resolveSlot("default");
-  const capability = ai.presetRegistry.resolvePreset(presetId)?.capability;
-  if (!capability) return undefined;
+  const capabilities = ai.presetRegistry
+    .listPresets()
+    .filter(
+      (preset) => preset.enabled && preset.supportedModes.includes("text"),
+    )
+    .map((preset) => preset.capability);
+  const contextWindows = capabilities.flatMap((capability) =>
+    capability?.contextWindow !== undefined ? [capability.contextWindow] : [],
+  );
+  const maxOutputTokens = capabilities.flatMap((capability) =>
+    capability?.maxOutputTokens !== undefined
+      ? [capability.maxOutputTokens]
+      : [],
+  );
+  if (contextWindows.length === 0 && maxOutputTokens.length === 0) {
+    return undefined;
+  }
   return {
-    ...(capability.contextWindow !== undefined
-      ? { contextWindow: capability.contextWindow }
+    ...(contextWindows.length > 0
+      ? { contextWindow: Math.min(...contextWindows) }
       : {}),
-    ...(capability.maxOutputTokens !== undefined
-      ? { maxOutputTokens: capability.maxOutputTokens }
+    ...(maxOutputTokens.length > 0
+      ? { maxOutputTokens: Math.min(...maxOutputTokens) }
       : {}),
   };
 };
@@ -375,21 +393,23 @@ const stopWatchers = () => {
 // ── Graceful shutdown drain (audit R-11) ─────────────────────────
 // Ordered resource drain passed to registerGracefulShutdown() by index.ts and
 // run after the HTTP server stops accepting requests: stop watchers (no new
-// world reloads), flush pending eventBus persistence, then close the MediaStore,
-// DataStore, and dedicated PG lock pool. Each phase is time-boxed so one stuck
-// resource cannot eat the whole force-exit budget — a timed-out phase is
-// logged and skipped.
+// world reloads), flush post-turn memory work before its backing store closes,
+// flush pending eventBus persistence, then close the MediaStore, DataStore, and
+// dedicated PG lock pool. Each phase is time-boxed so one stuck resource cannot
+// eat the whole force-exit budget — a timed-out phase is logged and skipped.
 const DRAIN_PHASE_TIMEOUT_MS = 2_000;
+const MEMORY_DRAIN_TIMEOUT_MS = 5_000;
 
 async function drainPhase(
   name: string,
   run: () => Promise<unknown> | void,
+  timeoutMs = DRAIN_PHASE_TIMEOUT_MS,
 ): Promise<void> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(
-      () => reject(new Error(`timed out after ${DRAIN_PHASE_TIMEOUT_MS}ms`)),
-      DRAIN_PHASE_TIMEOUT_MS,
+      () => reject(new Error(`timed out after ${timeoutMs}ms`)),
+      timeoutMs,
     );
   });
   try {
@@ -406,6 +426,24 @@ async function drainPhase(
 
 export const drainServerResources = async (): Promise<void> => {
   await drainPhase("stop world watchers", () => stopWatchers());
+  await drainPhase(
+    "flush memory background tasks",
+    async () => {
+      const result = await awaitPendingMemoryBackgroundTasks();
+      if (result.rejected > 0) {
+        console.warn(
+          `[shutdown] ${result.rejected} memory background task(s) failed while draining: ${result.failures.join("; ")}`,
+        );
+      }
+    },
+    MEMORY_DRAIN_TIMEOUT_MS,
+  );
+  const memoryTasksStillPending = pendingMemoryBackgroundTaskCount();
+  if (memoryTasksStillPending > 0) {
+    console.warn(
+      `[shutdown] ${memoryTasksStillPending} memory background task(s) still pending; continuing resource shutdown`,
+    );
+  }
   await drainPhase("flush event bus", () => api.eventBus.flush());
   if (mediaStore?.close) {
     await drainPhase("close media store", () => mediaStore.close!());

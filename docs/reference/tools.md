@@ -35,7 +35,7 @@
 | generate-guide          | local   | guide         | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`            |
 | upsert-npc-graph        | local   | npc-graph     | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                        |
 | list-npc-graph          | local   | npc-graph     | auto-allow | 读取现有 NPC 图；图已注入 prompt，仅在需要某关系完整 `fact` 时按需调用                    |
-| generate-scene-prompts  | local   | scene-prompts | auto-allow | 写入对话模式的玩家口吻快捷回复                                                            |
+| generate-scene-prompts  | local   | scene-prompts | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                              |
 | upsert-quests           | local   | core-quest    | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）             |
 | update-affinity         | local   | affinity      | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）         |
 | update-inventory        | local   | inventory     | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）               |
@@ -509,6 +509,8 @@ interface UIRenderPart {
 ---
 
 ### create-character
+
+`create-character` 与 `update-character` 的 LLM wire schema 把 `fields` 保持为紧凑对象，不在两份工具定义中重复整个世界属性表。权威 id、类型、范围、enum、默认值和说明仍保存在会话 world schema；执行边界按该 schema 合并默认值、校验并返回 warning。这样 8k 等小窗口 slot 不会仅因角色属性较多就被两份重复 JSON Schema 占满。
 
 创建一个新的角色记录（玩家、NPC 或同伴）。同 session 内同 `(name, type)` 会自动去重 —— 返回已存在的角色 id，不会创建重复项。
 

@@ -37,7 +37,12 @@ import {
 } from "@/lib/plugin-panel-state.js";
 import { Button as UIButton } from "@/components/ui/button.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
+import { resolveDisplayText } from "@/lib/i18n-text.js";
+import { emitNavEvent } from "@/lib/nav-events.js";
+import { buildPluginCommandRequest } from "@/lib/plugin-command.js";
+import { covelDirectives } from "@/lib/json-render-directives.js";
 import { X } from "lucide-react";
+import { PluginJsonRenderDevtools } from "./json-render-devtools.js";
 
 export type PluginPanelStateCache = Map<string, StateStore>;
 
@@ -52,6 +57,7 @@ export interface PluginPanelProps {
   >;
   stateOverride?: Record<string, unknown>;
   interactionLocked?: boolean;
+  enableDevtools?: boolean;
 }
 
 function resolveEmptyMessage(value: unknown): string {
@@ -90,8 +96,9 @@ export function PluginPanel({
   handlers: explicitHandlers,
   stateOverride,
   interactionLocked = false,
+  enableDevtools = false,
 }: PluginPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const dataSource = spec.dataSource as Record<string, string> | undefined;
   const namespace = dataSource?.namespace ?? "default";
   const sourceKind = dataSource?.source;
@@ -194,7 +201,11 @@ export function PluginPanel({
   //     Plugin-declared `rpc` action handler (for custom server-side logic
   //     beyond runtime triggering).
   //
-  // Both forms emit a toast on error so the player never gets a silent
+  //   invokeCommand({ command, args? })
+  //     Runs a manifest-declared command through the same validation, context,
+  //     approval, handler, and trace pipeline as composer `/commands`.
+  //
+  // All forms emit a toast on error so the player never gets a silent
   // failure when their click went nowhere.
   //
   // When `postPluginRpc` returns `approval-required`, the panel
@@ -287,6 +298,73 @@ export function PluginPanel({
           markInvoking(`action:${action}`, false);
         }
       },
+      invokeCommand: async (params: Record<string, unknown>) => {
+        if (!sessionId) return;
+        const built = buildPluginCommandRequest(pluginId, params);
+        if (!built.ok) {
+          console.warn(`[PluginPanel] ${built.error}`);
+          emitToast("error", built.error);
+          return;
+        }
+        markInvoking(`command:${built.command}`, true);
+        try {
+          const response = await postPluginRpcWithApproval({
+            sessionId,
+            request: built.request,
+            pluginId,
+            actionLabel: `/${built.command}`,
+            confirm: requestConfirm,
+            t,
+          });
+          if (!response) return;
+          if (response.status === "error") {
+            emitToast("error", response.error);
+            return;
+          }
+          if (response.status !== "ok") return;
+
+          const result =
+            response.result && typeof response.result === "object"
+              ? (response.result as Record<string, unknown>)
+              : undefined;
+          const message = resolveDisplayText(
+            result?.message ?? result?.reason,
+            i18n.language,
+          );
+          if (result?.ok === false) {
+            emitToast(
+              "error",
+              message ||
+                t("session.commandFailed", { defaultValue: "Command failed." }),
+            );
+            return;
+          }
+          if (message) emitToast("info", message);
+
+          const clientAction = result?.clientAction;
+          if (
+            clientAction &&
+            typeof clientAction === "object" &&
+            !Array.isArray(clientAction)
+          ) {
+            const action = clientAction as Record<string, unknown>;
+            if (
+              action.type === "open-plugin-panel" &&
+              typeof action.panelId === "string"
+            ) {
+              emitNavEvent({
+                type: "open-plugin-panel",
+                pluginId,
+                panelId: action.panelId,
+              });
+            }
+          }
+        } catch (err) {
+          emitToast("error", err instanceof Error ? err.message : String(err));
+        } finally {
+          markInvoking(`command:${built.command}`, false);
+        }
+      },
     };
     if (onAction) {
       handlers.apiCall = async (params) => {
@@ -297,7 +375,7 @@ export function PluginPanel({
       };
     }
     return handlers;
-  }, [pluginId, sessionId, onAction, markInvoking, t]);
+  }, [i18n.language, pluginId, sessionId, onAction, markInvoking, t]);
 
   const handlers = explicitHandlers
     ? { ...defaultHandlers, ...explicitHandlers }
@@ -425,8 +503,10 @@ export function PluginPanel({
           registry={covelRegistry}
           store={stateStore}
           handlers={handlers}
+          directives={covelDirectives}
         >
           <Renderer spec={flatSpec} registry={covelRegistry} />
+          {enableDevtools ? <PluginJsonRenderDevtools spec={flatSpec} /> : null}
         </JSONUIProvider>
       </PluginSurfaceBoundary>
     </div>

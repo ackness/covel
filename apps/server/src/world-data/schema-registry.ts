@@ -1,23 +1,38 @@
 import { readFile } from "node:fs/promises";
-import {
-  Ajv2020,
-  type AnySchema,
-  type ValidateFunction,
-} from "ajv/dist/2020.js";
+import { Ajv, type AnySchema, type ValidateFunction } from "ajv";
+import { Ajv2020 } from "ajv/dist/2020.js";
 import {
   formatValidationErrors,
+  validateWorldIRV1,
   validateDimensions,
+  WORLD_IR_V1_SCHEMA_URI,
   type PluginDataSchemaDecl,
 } from "@covel/shared";
 import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
+import { sha256Hex } from "./digest.js";
 import { resolveContainedPath } from "./safe-path.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
 
 const PLUGIN_SCHEMA_URI_RE =
   /^plugin:\/\/([a-z][a-z0-9-]*)\/([a-z][a-zA-Z0-9_-]{0,63})$/;
 
-const ajv = new Ajv2020({ allErrors: true, strict: false });
-const validatorCache = new Map<string, ValidateFunction>();
+// Validators are recompiled when a schema file digest changes. Avoid Ajv's
+// process-global `$id` registration so a legitimate hot reload of the same
+// schema identity does not fail with "schema already exists".
+const ajvDraft7 = new Ajv({
+  allErrors: true,
+  strict: false,
+  addUsedSchema: false,
+});
+const ajvDraft2020 = new Ajv2020({
+  allErrors: true,
+  strict: false,
+  addUsedSchema: false,
+});
+const validatorCache = new Map<
+  string,
+  { readonly digest: string; readonly validate: ValidateFunction }
+>();
 
 export interface WorldDataSchemaRegistryDeps {
   readonly registry?: Pick<PluginRegistry, "get">;
@@ -33,9 +48,14 @@ export interface PluginWorldDataSchemaRef {
   readonly validate?: ValidateFunction;
 }
 
-export interface BuiltinWorldDataSchemaRef {
+export interface BuiltinDimensionsWorldDataSchemaRef {
   readonly kind: "builtin";
   readonly uri: "covel://world/dimensions";
+}
+
+export interface BuiltinWorldIRV1SchemaRef {
+  readonly kind: "builtin";
+  readonly uri: typeof WORLD_IR_V1_SCHEMA_URI;
 }
 
 export interface LocalWorldDataSchemaRef {
@@ -46,7 +66,8 @@ export interface LocalWorldDataSchemaRef {
 }
 
 export type WorldDataSchemaRef =
-  | BuiltinWorldDataSchemaRef
+  | BuiltinDimensionsWorldDataSchemaRef
+  | BuiltinWorldIRV1SchemaRef
   | PluginWorldDataSchemaRef
   | LocalWorldDataSchemaRef;
 
@@ -75,11 +96,23 @@ async function loadJsonSchemaValidator(options: {
   readonly cacheKey: string;
   readonly path: string;
 }): Promise<ValidateFunction> {
+  const text = await readFile(options.path, "utf-8");
+  const digest = sha256Hex(text);
   const cached = validatorCache.get(options.cacheKey);
-  if (cached) return cached;
-  const raw = JSON.parse(await readFile(options.path, "utf-8")) as AnySchema;
+  if (cached?.digest === digest) return cached.validate;
+  const raw = JSON.parse(text) as AnySchema;
+  const dialect =
+    typeof raw === "object" &&
+    raw !== null &&
+    "$schema" in raw &&
+    typeof raw.$schema === "string"
+      ? raw.$schema
+      : undefined;
+  const ajv = dialect?.includes("/draft/2020-12/schema")
+    ? ajvDraft2020
+    : ajvDraft7;
   const validate = ajv.compile(raw);
-  validatorCache.set(options.cacheKey, validate);
+  validatorCache.set(options.cacheKey, { digest, validate });
   return validate;
 }
 
@@ -149,6 +182,9 @@ export async function resolveWorldDataSchema(options: {
   if (uri === "covel://world/dimensions") {
     return { kind: "builtin", uri };
   }
+  if (uri === WORLD_IR_V1_SCHEMA_URI) {
+    return { kind: "builtin", uri };
+  }
 
   const pluginRef = parsePluginSchemaUri(uri);
   if (pluginRef) {
@@ -188,13 +224,19 @@ export function validateWorldDataSchemaValue(options: {
   readonly label?: string;
 }): WorldDataDiagnostic | null {
   if (options.schema.kind === "builtin") {
-    const validation = validateDimensions(options.value);
+    const validation =
+      options.schema.uri === WORLD_IR_V1_SCHEMA_URI
+        ? validateWorldIRV1(options.value)
+        : validateDimensions(options.value);
     if (validation.valid) return null;
     return {
       level: "error",
       sourceId: options.source.id,
       schema: options.schema.uri,
-      message: `invalid world dimensions:\n${formatValidationErrors(validation.errors ?? [])}`,
+      message:
+        options.schema.uri === WORLD_IR_V1_SCHEMA_URI
+          ? `invalid WorldIRV1:\n${formatValidationErrors(validation.errors ?? [])}`
+          : `invalid world dimensions:\n${formatValidationErrors(validation.errors ?? [])}`,
     };
   }
 
@@ -204,6 +246,6 @@ export function validateWorldDataSchemaValue(options: {
     level: "error",
     sourceId: options.source.id,
     schema: options.schema.uri,
-    message: `${options.label ?? "worldData value"} failed schema validation: ${ajv.errorsText(options.schema.validate.errors)}`,
+    message: `${options.label ?? "worldData value"} failed schema validation: ${ajvDraft7.errorsText(options.schema.validate.errors)}`,
   };
 }

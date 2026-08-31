@@ -1,6 +1,6 @@
 {
   "name": "@covel/web",
-  "version": "0.0.27",
+  "version": "0.0.28",
   "private": true,
   "deprecated": false,
   "type": "module",
@@ -21,6 +21,8 @@
     "@covel/shared": "workspace:*",
     "@covel/store": "workspace:*",
     "@json-render/core": "^0.20.0",
+    "@json-render/devtools-react": "0.20.0",
+    "@json-render/directives": "0.20.0",
     "@json-render/react": "^0.20.0",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-label": "^2.1.15",

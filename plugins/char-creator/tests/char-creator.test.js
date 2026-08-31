@@ -139,6 +139,14 @@ describe("char-creator plugin", () => {
           "get-character",
         ]),
       );
+      expect(manifest.completeAfterTools).toEqual([
+        "create-character",
+        "update-character",
+      ]);
+      expect(manifest.tools?.defer).toEqual([
+        "create-character",
+        "get-character",
+      ]);
     });
 
     it("does not declare list-characters — the roster is injected", () => {

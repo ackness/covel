@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
+import { clearDomainEventPreviews } from "@/stores/domain-event-preview-store.js";
 import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
 import {
   clearNarrativeDeltaBuffer,
@@ -36,6 +37,9 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
   useEffect(() => {
     const nextId = state.session?.id ?? null;
     if (sessionIdRef.current === nextId) return;
+    if (sessionIdRef.current) {
+      clearDomainEventPreviews(sessionIdRef.current);
+    }
     sessionIdRef.current = nextId;
     setActivePluginDataSession(nextId);
     clearNarrativeDeltaBuffer(deltaBufferRef, deltaRafRef);

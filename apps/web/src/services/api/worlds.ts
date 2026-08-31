@@ -1,4 +1,5 @@
 import { parseJsonSseData, readSseStream } from "../sse.js";
+import type { WorldCreationBrief } from "@covel/shared";
 import { operatorAuthHeaders } from "../session-credentials.js";
 import { buildAiHeaders } from "./model-settings.js";
 import { request } from "./request.js";
@@ -148,7 +149,10 @@ export function generateWorld(
   onEvent: (event: GenerateWorldEvent) => void,
   onError?: (err: Error) => void,
   onDone?: () => void,
-  options?: { saveTarget?: GeneratedWorldSaveTarget },
+  options?: {
+    saveTarget?: GeneratedWorldSaveTarget;
+    brief?: WorldCreationBrief;
+  },
 ): AbortController {
   const controller = new AbortController();
 
@@ -165,6 +169,7 @@ export function generateWorld(
           prompt,
           locale,
           saveTarget: options?.saveTarget,
+          brief: options?.brief,
         }),
         signal: controller.signal,
       });

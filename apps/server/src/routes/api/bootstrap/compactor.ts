@@ -3,6 +3,7 @@ import type { DataStore } from "@covel/store";
 import {
   estimateTokens,
   maybeCompact,
+  resolveBudgetOptions,
   type BudgetOptions,
   type CompactorLLMAdapter,
   type CompactorRunner,
@@ -21,9 +22,9 @@ const FALLBACK_CONTEXT_WINDOW = 32768;
 const DEFAULT_RESERVED_FOR_RESPONSE = 4000;
 
 /**
- * Live view of the main narrative slot's model budget. Implemented in the
- * composition root (app.ts) against the AI registries so llm.toml hot-reloads
- * are observed without a server restart — resolve on every call, never cache.
+ * Live conservative view of enabled text-slot model budgets. Implemented in
+ * the composition root (app.ts) against the AI registries so llm.toml
+ * hot-reloads are observed without a restart — resolve on every call.
  */
 export type ResolveNarrativeBudgetFn = () =>
   | {
@@ -38,13 +39,18 @@ interface BudgetSourceParams {
   readonly resolveNarrativeBudget?: ResolveNarrativeBudgetFn;
 }
 
-/** Resolution order: env override > slot model capability > fallback. */
-function resolveContextWindow(params: BudgetSourceParams): number {
-  return (
-    params.contextWindowOverride ??
-    params.resolveNarrativeBudget?.()?.contextWindow ??
-    FALLBACK_CONTEXT_WINDOW
-  );
+function resolveTurnBudget(
+  params: BudgetSourceParams,
+): ReturnType<typeof resolveBudgetOptions> {
+  const narrativeBudget = params.resolveNarrativeBudget?.();
+  return resolveBudgetOptions({
+    maxInputTokens:
+      params.contextWindowOverride ??
+      narrativeBudget?.contextWindow ??
+      FALLBACK_CONTEXT_WINDOW,
+    reservedForResponse:
+      narrativeBudget?.maxOutputTokens ?? DEFAULT_RESERVED_FOR_RESPONSE,
+  });
 }
 
 export interface CreateBootstrapCompactorRunnerParams extends BudgetSourceParams {
@@ -67,24 +73,29 @@ export function createBootstrapCompactorRunner(
   }
   const focusSections: readonly string[] = [...allSummaryFocus];
 
-  const fastSlotLlm: CompactorLLMAdapter = {
-    async complete(input) {
-      const response = await llmAdapter.generate({
-        model: "fast",
-        messages: [
-          { role: "system", content: input.systemPrompt },
-          ...input.messages.map((m) => ({
-            role: m.role as "user",
-            content: m.content,
-          })),
-        ],
-      });
-      return { content: response.content ?? "" };
-    },
-  };
-
   return {
     async run(sessionId, systemPromptPreview, messages, locale, traceId) {
+      // Resolve once per run so a hot reload cannot make the threshold use one
+      // capability while the provider call uses another. Compaction input and
+      // output share the same model context, so only the window left after the
+      // response reserve is available to the compactor prompt.
+      const budget = resolveTurnBudget(params);
+      const fastSlotLlm: CompactorLLMAdapter = {
+        async complete(input) {
+          const response = await llmAdapter.generate({
+            model: "fast",
+            maxOutputTokens: budget.reservedForResponse,
+            messages: [
+              { role: "system", content: input.systemPrompt },
+              ...input.messages.map((m) => ({
+                role: m.role as "user",
+                content: m.content,
+              })),
+            ],
+          });
+          return { content: response.content ?? "" };
+        },
+      };
       // The compactor only ships zh-CN / en-US prompt templates; map the
       // session locale by prefix (en* → en-US, else the zh-CN default).
       const compactorLocale =
@@ -97,8 +108,7 @@ export function createBootstrapCompactorRunner(
           store,
           estimator: estimateTokens,
           fastSlotLlm,
-          // Resolved per run so llm.toml hot-reloads take effect immediately.
-          contextWindow: resolveContextWindow(params),
+          contextWindow: budget.maxInputTokens - budget.reservedForResponse,
         },
         {
           focusSections,
@@ -120,13 +130,10 @@ export function createTurnContextBudget(
 ): Omit<BudgetOptions, "estimator"> {
   return {
     get maxInputTokens(): number {
-      return resolveContextWindow(params);
+      return resolveTurnBudget(params).maxInputTokens;
     },
     get reservedForResponse(): number {
-      return (
-        params.resolveNarrativeBudget?.()?.maxOutputTokens ??
-        DEFAULT_RESERVED_FOR_RESPONSE
-      );
+      return resolveTurnBudget(params).reservedForResponse;
     },
   };
 }

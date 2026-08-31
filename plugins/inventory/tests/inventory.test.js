@@ -538,30 +538,26 @@ describe("inventory plugin manifest", () => {
     loaded = await loadRuntime(discovery, manifest.name);
   });
 
-  it("is a non-core post-turn agent runtime gated on the narrative engine", () => {
+  it("is a non-core post-turn agent runtime gated on typed WorldIR", () => {
     expect(manifest.pluginType).toBe("plugin");
     expect(manifest.name).toBe("inventory");
     expect(manifest.stage).toBe("post-turn");
     expect(manifest.trigger?.type).toBe("auto");
-    expect(manifest.needs).toEqual([{ capability: "narrative-engine" }]);
+    expect(manifest.needs).toBeUndefined();
+    expect(manifest.inputs?.worldIR).toEqual({
+      from: { capability: "world-ir-provider", cardinality: "one" },
+      accepts: "covel://world/ir/v1",
+      required: true,
+    });
+    expect(manifest.relations?.requires).toContain("world-ir");
     // Agent runtime — no `runtimeType` field means default 'agent'
     expect(manifest.runtimeType).toBeUndefined();
     expect(manifest.handler).toBeUndefined();
   });
 
-  it("declares both narrative-engine injects and the plugin-data inject", () => {
+  it("injects existing inventory data without duplicating raw narrative", () => {
     const injects = manifest.input?.inject ?? [];
-    expect(injects).toHaveLength(3);
-
-    for (const engine of ["narrator", "chat-mode-narrator"]) {
-      expect(injects).toContainEqual({
-        kind: "runtime",
-        from: engine,
-        field: "narrativeOutput",
-        as: "<narrator-output>",
-      });
-    }
-
+    expect(injects).toHaveLength(1);
     expect(injects).toContainEqual(
       expect.objectContaining({
         kind: "plugin-data",
@@ -575,6 +571,16 @@ describe("inventory plugin manifest", () => {
 
   it("declares the update-inventory plugin tool", () => {
     expect(manifest.tools?.plugin).toEqual(["update-inventory"]);
+  });
+
+  it("declares the player-facing bag command", () => {
+    expect(manifest.commands).toEqual([
+      expect.objectContaining({
+        name: "bag",
+        aliases: ["inventory"],
+        action: "open-bag",
+      }),
+    ]);
   });
 
   it("accepts world data into the items namespace", () => {

@@ -8,7 +8,7 @@ import { describe, it, expect } from "vitest";
 import { ZodError, z } from "zod";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import type { ToolCallContext } from "../src/agent-loop/tool-executor.js";
-import { ToolValidationError } from "@covel/tools";
+import { ToolValidationError, withEmittedEvents } from "@covel/tools";
 import type { ToolModule } from "@covel/tools";
 import type { ApprovalPipeline } from "@covel/approval";
 import { makeEmitterSpy } from "./_helpers/emitter-spy.js";
@@ -58,6 +58,49 @@ describe("ToolExecutor trace emissions", () => {
       approvalStatus: "auto-allowed",
     });
     expect(typeof emitter.events[1].payload.durationMs).toBe("number");
+  });
+
+  it("previews validated domain events immediately after tool completion", async () => {
+    const emitter = makeEmitterSpy();
+    const mockTool = {
+      name: "emit-event",
+      description: "emit",
+      jsonSchema: {},
+      async execute() {
+        return withEmittedEvents({ _text: "emitted" }, [
+          {
+            topic: "stage.direction",
+            data: { cues: [{ type: "stage.clear" }] },
+          },
+        ]);
+      },
+    };
+    const executor = createToolExecutor({
+      findTool: () => mockTool as unknown as ToolModule,
+    });
+
+    const res = await executor.execute(
+      {
+        toolCallId: "c-preview",
+        name: "emit-event",
+        arguments: "{}",
+      },
+      { ...baseCtx, emitter },
+    );
+
+    expect(res.success).toBe(true);
+    expect(emitter.events.map((event) => event.type)).toEqual([
+      "tool.calling",
+      "tool.completed",
+      "domain-event.previewed",
+    ]);
+    expect(emitter.events[2].payload).toMatchObject({
+      runtimeId: "test-plugin/main",
+      pluginId: "test-plugin",
+      toolCallId: "c-preview",
+      topic: "stage.direction",
+      data: { cues: [{ type: "stage.clear" }] },
+    });
   });
 
   it("emits tool.failed with NOT_FOUND when tool missing", async () => {

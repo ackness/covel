@@ -314,7 +314,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 | 方法   | 路径                                  | 描述                                                                                               |
 | ------ | ------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action 级 / runtime 级，含 `submit-form`)                                        |
+| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action / runtime / command 级，含 `submit-form`)                                 |
 | GET    | `/api/sessions/:id/approvals`         | 列出该 session 的待批准 RPC 请求                                                                   |
 | DELETE | `/api/sessions/:id/approvals`         | 撤销该 session 的已缓存授权（`?pluginId=` 限定单插件），返回 `{ ok, cleared }`；下次调用重新弹审批 |
 | POST   | `/api/approvals/:approvalId/decision` | 提交玩家批准决定(allow/deny + once/session)                                                        |
@@ -335,7 +335,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | GET    | `/api/plugins`                | 列出所有已加载插件                                                                                                                                                                                                                                      |
 | GET    | `/api/plugins/:id`            | 获取插件详情                                                                                                                                                                                                                                            |
 | DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。错误码：鉴权失败 `401/403`、id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
-| GET    | `/api/plugins/:id/contract`   | 获取插件完整开发契约（含 `dataSchemas` / plugin-data namespace 契约）                                                                                                                                                                                   |
+| GET    | `/api/plugins/:id/contract`   | 获取插件完整开发契约（含 `dataSchemas` / `worldProjections` / plugin-data namespace 契约）                                                                                                                                                              |
 | GET    | `/api/plugin-flows`           | 框架编排的 pre-game 流程预览数据（插件列表 + 分段步骤），供准备页可视化                                                                                                                                                                                 |
 
 ### 拖拽导入（Install）
@@ -888,7 +888,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 #### `POST /api/worlds/:id/world-data/preflight`
 
-只读预检 worldData 导入计划。请求可以传 `sessionId` 使用现有 session 的插件列表，也可以传 `plugins` 预检创建 session 前的插件选择。
+只读预检 worldData 导入计划。请求可以传 `sessionId` 使用现有 session 的**持久 activePlugins**（此时请求里的 `plugins` 会被忽略），也可以只传 `plugins` 预检创建 session 前的插件选择。预检不会 import 或执行 `worldProjections` handler，因此 projection output 不计入 `planned` / `targets`；响应会用 warning 说明执行已推迟到 import/sync。
 
 **请求体:**
 
@@ -925,6 +925,8 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 #### `POST /api/worlds/:id/sync-data`
 
 同步已有 session 中由 worldData importer 管理的数据。默认 dry-run；传 `dryRun:false` 才写入。同步只处理 `world_data_import_ledger.managed=true` 的 row，并用 `valueHash` 检测玩家或插件是否修改过目标数据。
+
+source 读取、schema 校验与 projection Worker 在 session 写锁外完成；dry-run 全程只读。实际写入取得短锁后会重新校验 world、locale、active plugin 与审批 scope，计划准备期间这些字段发生变化时返回 `409`（`world_data_sync_plan_stale`）。
 
 **请求体:**
 
@@ -1029,6 +1031,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 - `metadata.excludedPlugins`：准备页默认关闭。
 - `metadata.pluginPolicy`：准备页组合包策略。可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`；写在 `metadata` 顶层的同名三组字段也会参与合并。
 - `metadata.characterBlueprints`：创建 session 时自动导入到 `character-blueprint` 插件数据，并实例化为 NPC character。
+- `metadata.embeddedLorebook`：没有文件型 worldData 时导入为 session lorebook；AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。
 
 **响应:**
 
@@ -1315,6 +1318,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
    - `'background'`: 立即返回 202 + `jobId`,后台通过 `setImmediate` 继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。
+3. **Command 级**: `{ commandId, input }` 或 `{ commandId, args }` — 前者来自输入框，后者来自插件 JSON-RENDER `invokeCommand`。两者执行会话命令目录中的同一个命令；服务端重新确认插件仍激活、验证并归一化参数，并从 manifest 决定 action 和可注入上下文。客户端不能提交 `pluginId`、`payload` 或扩大 context scope。
 
 **参数:**
 
@@ -1361,11 +1365,32 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 }
 ```
 
+或 command 级:
+
+```json
+{
+  "commandId": "dice-check:roll",
+  "input": "/roll 2d6"
+}
+```
+
+JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
+
+```json
+{
+  "commandId": "dice-check:roll",
+  "args": { "notation": "2d6" }
+}
+```
+
 | 字段                        | 类型          | 说明                                                                                                                                                                                                                                                                                                                                 |
 | --------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pluginId`                  | string        | 插件 ID(框架默认 handler 用 `framework` 占位即可)                                                                                                                                                                                                                                                                                    |
-| `action`                    | string(可选)  | RPC action 名,kebab-case。与 `runtimeId` 互斥                                                                                                                                                                                                                                                                                        |
-| `runtimeId`                 | string(可选)  | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` 互斥                                                                                                                                                                                                                                                                            |
+| `pluginId`                  | string(可选)  | action / runtime 模式的插件 ID(框架默认 handler 用 `framework` 占位)；command 模式禁止提交                                                                                                                                                                                                                                           |
+| `action`                    | string(可选)  | RPC action 名,kebab-case。与 `runtimeId` / `commandId` 互斥                                                                                                                                                                                                                                                                          |
+| `runtimeId`                 | string(可选)  | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` / `commandId` 互斥                                                                                                                                                                                                                                                              |
+| `commandId`                 | string(可选)  | 会话命令目录中的稳定 ID。与 `action` / `runtimeId` 互斥；command 模式不接受 `pluginId` / `payload`                                                                                                                                                                                                                                   |
+| `input`                     | string(可选)  | command 输入框模式的完整原始输入；与 `args` 必须且只能提供一个；服务端按命令声明再次分词、类型转换和校验                                                                                                                                                                                                                             |
+| `args`                      | object(可选)  | command JSON-RENDER 模式的命名参数；与 `input` 必须且只能提供一个；未知字段、类型、choices、required 与 variadic 都按服务端命令声明校验                                                                                                                                                                                              |
 | `payload`                   | unknown       | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload`                                                                                                                                                                                                                                        |
 | `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即写入 `_jobs` 占位并返回 202，随后在后台执行入口 runtime 与 follower，避免 UI 等 prompt LLM 完成后才出现任务。                                                                                                                                |
 | `retryFromTurnId`           | string(可选)  | 仅 runtime 级。带原回合上下文的重试：服务端加载该 turn 的持久化 `turn_results` 工件，把其中记录的 runtime 输出播种进本次执行的 completedResults——目标 runtime 的 `input.inject` / `needs` 按原回合叙事解析（裸 manual 触发这些解析为空）。种子只作上下文，不会被本次工件重复持久化。找不到该 turn 时 404（`retry-turn-not-found`）。 |
@@ -1373,13 +1398,14 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 **解析顺序(action 级):**
 
 1. 插件在 `entry` 中注册的 action(通过 `pluginId` 命名空间隔离)
-2. 框架默认 action(全局)——当前只注册了 `submit-form` 一个(`bootstrap/plugin-rpc-wiring.ts` 的 `registerFrameworkDefault`)
+2. 框架默认 action(全局)——包括 `submit-form` 与内置 `/debug` 使用的 `slash-debug` (`bootstrap/plugin-rpc-wiring.ts` 的 `registerFrameworkDefault`)
 
 **框架默认 action:**
 
 | Action        | 说明                                                                           |
 | ------------- | ------------------------------------------------------------------------------ |
 | `submit-form` | 绑定已提交 interaction，校验并幂等持久化玩家输入，再按 `{{字段}}` 填充自然语言 |
+| `slash-debug` | 读取 `/debug` 声明的 session/runtime/model 上下文并让客户端打开当前会话调试页  |
 
 **响应 200 — action 级:**
 
@@ -1389,6 +1415,8 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
   "result": {/* 取决于 handler */}
 }
 ```
+
+command 成功也使用同一信封；如果命令声明了 `context`，顶层 `environment` 是 action 完成后重新采集的最新、按 scope 裁剪的环境。handler 在 `ctx.environment` 中收到执行前快照，并在 `ctx.command` / payload 中收到同一个 `{ invocationId, commandId, command, canonical, raw, argv, args, source }`。输入框与 JSON-RENDER 入口分别标记 `source: "composer" | "plugin-ui"`，但共用 `commandId`、类型化 `args`、审批与 handler。
 
 **响应 200 — runtime 级,sync 模式:**
 
@@ -1677,6 +1705,9 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
       "inputInjectKinds": ["runtime", "plugin-data", "runtime-export"],
       "uiSlots": ["right", "message", "left"]
     },
+    "scheduling": {
+      "effectsPolicy": "warn"
+    },
     "pluginData": {
       "scope": "(sessionId, pluginId, namespace, key)",
       "reservedNamespaces": [
@@ -1691,6 +1722,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
       ]
     },
     "worldData": {
+      "effects": ["characters", "projections"],
       "targetUris": [
         "world:metadata.<path>",
         "plugin:<pluginId>/<namespace>",
@@ -1698,9 +1730,16 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
       ],
       "schemaUris": [
         "covel://world/dimensions",
+        "covel://world/ir/v1",
         "plugin://<pluginId>/<namespace>",
         "<local-json-schema-path>"
-      ]
+      ],
+      "schemas": {
+        "covel://world/ir/v1": {
+          "$id": "covel://world/ir/v1",
+          "type": "object"
+        }
+      }
     }
   }
 }
@@ -1792,7 +1831,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 #### `GET /api/plugins/:id/contract`
 
-返回单个插件从 `PLUGIN.md` manifest 聚合出的开发契约。多 runtime 插件会把所有 runtime 合并为 plugin-level 视图，同时保留 `runtimes[]` 明细。该端点用于回答“这个插件声明了哪些 capabilities、工具、RPC action、UI slot、`dataSchemas` 和 plugin-data namespace”。
+返回单个插件从 `PLUGIN.md` manifest 聚合出的开发契约。多 runtime 插件会把所有 runtime 合并为 plugin-level 视图，同时保留 `runtimes[]` 明细。该端点用于回答“这个插件声明了哪些 capabilities、工具、RPC action、UI slot、`dataSchemas`、`worldProjections` 和 plugin-data namespace”。
 
 **响应节选:**
 
@@ -1809,6 +1848,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
       "schema": "./schemas/entries.schema.json"
     }
   },
+  "worldProjections": {},
   "tools": {
     "builtin": [],
     "local": [{ "runtimeId": "codex", "name": "unlock-codex-entries" }]
@@ -1822,6 +1862,20 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
     {
       "id": "codex",
       "runtimeType": "agent",
+      "after": [],
+      "needs": [],
+      "inputs": {
+        "worldIR": {
+          "from": { "capability": "world-ir-provider", "cardinality": "one" },
+          "accepts": "covel://world/ir/v1",
+          "required": true
+        }
+      },
+      "effects": {
+        "reads": ["plugin-data:self:entries"],
+        "writes": ["plugin-data:self:entries"],
+        "parallelSafe": false
+      },
       "readablePluginDataNamespaces": ["entries"],
       "writablePluginDataNamespaces": ["entries"],
       "input": {
@@ -1838,7 +1892,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 }
 ```
 
-`declaredPluginDataNamespaces` 来自 `dataSchemas` 和 `input.inject: plugin-data`。运行时动态 key（如 `entries/<entryId>`、`images/<turnId>`）不会在这里枚举；需要结合 schema、插件文档或 `_index` 端点查看当前 session 的实际 key。
+`declaredPluginDataNamespaces` 来自 `dataSchemas` 和 `input.inject: plugin-data`。`runtimes[].after` / `needs` 暴露归一化依赖，`runtimes[].inputs` 原样暴露 typed binding 的来源、cardinality、JSON Pointer、schema 与 required gate，`runtimes[].effects` 暴露调度器实际使用的归一化 read/write set。`GET /api/framework/capabilities` 的 `framework.scheduling.effectsPolicy` 同时公开当前 `warn` / `strict` 策略；Agent 可以据此重建同轮 DAG 与 hazard 串行层，而不需要解析 Markdown prompt。`worldProjections` 是机器可读的插件级转换目录，外部工具和 Agent 可以据此规划 WorldIR fan-out；公开响应不暴露插件 `rootPath` 或 projection `handler`，handler 只能由 world-data importer 在 import/sync 中按权限执行，不能通过该只读 discovery 端点直接调用。运行时动态 key（如 `entries/<entryId>`、`images/<turnId>`）不会在这里枚举；需要结合 schema、插件文档或 `_index` 端点查看当前 session 的实际 key。
 
 ---
 
@@ -1846,13 +1900,25 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 #### `GET /api/sessions/:id/plugins`
 
-列出会话的活跃插件和所有可用插件。`available[]` 同样暴露插件 `capabilities`、`tags`、`relations`，供前端筛选和组合包状态说明使用。
+列出会话的活跃插件和所有可用插件。`available[]` 同样暴露插件 `capabilities`、`tags`、`relations`、`commands`，供前端筛选和组合包状态说明使用；顶层 `commands[]` 是已经按当前 `activePlugins` 过滤、并加入框架命令（如 `/debug`）的会话可执行目录。
 
 **响应:**
 
 ```json
 {
   "active": ["pregame", "narrator"],
+  "commands": [
+    {
+      "id": "framework:debug",
+      "pluginId": "framework",
+      "source": "framework",
+      "name": "debug",
+      "aliases": ["trace"],
+      "description": { "zh": "打开当前会话的调试与执行跟踪视图" },
+      "action": "slash-debug",
+      "context": ["session", "active-runtimes", "models"]
+    }
+  ],
   "available": [
     {
       "id": "narrator",
@@ -2282,7 +2348,7 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 
 #### `POST /api/sessions/:id/snapshot`
 
-从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、phase、completedPlayerTurns、setupRuntimes、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
+从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、phase、completedPlayerTurns、setupRuntimes、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、`sessionSummaries`（截至消息游标实际引用的压缩摘要）、`compactedMessageSummaryIds`（快照时刻的消息→摘要映射）、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。若消息的压缩标签引用了不存在的摘要，快照会拒绝创建，避免生成会在恢复时隐藏历史的不完整存档。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
 
 **响应:**
 
@@ -2312,6 +2378,8 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
       "stateEntries": [/* ... */],
       "pluginData": [/* ... */],
       "workingMemory": [/* ... */],
+      "sessionSummaries": [/* 当前消息前缀引用的 SessionSummaryRecord[] */],
+      "compactedMessageSummaryIds": { "tm_abc": "summary_xyz" },
       "lorebookEntries": [],
       "suspensions": [/* 未解决的 SuspensionRecord[] */],
       "messagesCursor": "tm_abc"
@@ -2365,7 +2433,7 @@ Query 参数：`limit`（默认 50，最大 500）、`before_created_at` + `befo
 1. 创建新 sessionId（`{worldId}-{uuid8}`）；
 2. 从当前 schema v3 snapshot payload 恢复 locale / activePlugins / status / phase / completedPlayerTurns / setupRuntimes / presetId / runtimeModelOverrides。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
 3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session；
-4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
+4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；按 `compactedMessageSummaryIds` 复制 `payload.sessionSummaries` 中快照时刻实际引用的压缩摘要，为子 session 重建摘要 ID，并重写消息上的 `compactedAtTurnId`。因此父会话后续滚动摘要和重标历史消息不会改变旧快照的分叉结果。早期 schema v3 payload 没有精确映射时回退到父消息当前标签；没有 `sessionSummaries` 时则保留原始消息正文并清除压缩标签，避免产生孤儿引用。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
 5. 写入一个 `kind="fork"` 的快照到子 session，`parentId` 指向源 snapshot，供 provenance 追踪；
 6. 在 eventBus 上广播 `session.forked`（SSE topic=`session`）。
 
@@ -2659,7 +2727,7 @@ interface SseEnvelope {
 
 #### `POST /api/ai/generate-world`
 
-AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、dimensions、lore）。服务器会把模型输出的 `dimensions` 写入 `data/dimensions.yaml`，生成 `data/world.data.yaml` descriptor，并在 `world.yaml` 中写入 `worldData: data/world.data.yaml`。
+AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tags、dimensions、lore，并可同时创作主要角色、资料库、世界规则、题材记忆与开局配置。服务器把文本内容写成标准世界包：`data/dimensions.yaml`、`characters/main-cast.json`、`data/lorebook.yaml` 和 `data/world.data.yaml` descriptor。
 
 这个接口使用 SSE 返回进度和最终世界。客户端通过 `fetch()` + `ReadableStream` 解析 `data: {...}\n\n` 帧。
 
@@ -2670,7 +2738,12 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
   "concept": "一个被永恒暴风雪笼罩的冰封大陆",
   "locale": "zh-CN",
   "model": "deepseek-v4-flash",
-  "saveTarget": "server-file"
+  "saveTarget": "server-file",
+  "brief": {
+    "experienceMode": "traditional-story",
+    "content": ["characters", "lorebook", "rules", "memory", "opening-kit"],
+    "additionalInstructions": "让三个主要角色共同隐瞒一次失败的远征。"
+  }
 }
 ```
 
@@ -2680,6 +2753,15 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 | `locale`     | string | 否   | 语言区域，默认 `zh-CN`                                |
 | `model`      | string | 否   | 覆盖 LLM 模型                                         |
 | `saveTarget` | string | 否   | 保存目标，默认 `server-file`。可选值见下表            |
+| `brief`      | object | 否   | 结构化创作简报；旧客户端省略时保持基础生成行为        |
+
+`brief`：
+
+| 字段                     | 类型     | 说明                                                                          |
+| ------------------------ | -------- | ----------------------------------------------------------------------------- |
+| `experienceMode`         | string   | `traditional-story` 或 `dialogue-mode`；后者同时生成 `defaultViewMode: stage` |
+| `content`                | string[] | 可选 `characters`、`lorebook`、`rules`、`memory`、`opening-kit`               |
+| `additionalInstructions` | string   | 世界包补充要求（最多 2000 字符），如角色关系、禁忌、节奏或需要避开的内容      |
 
 | `saveTarget`   | 保存位置                              | 持久性来源                     | 适用场景                                                       |
 | -------------- | ------------------------------------- | ------------------------------ | -------------------------------------------------------------- |
@@ -2687,7 +2769,7 @@ AI 生成世界包。LLM 自主决定世界的所有细节（id、name、tags、
 | `server-store` | 服务端 `DataStore.upsertWorld()`      | `STORE_BACKEND=sqlite` 或 `pg` | 自部署 Web 服务希望复用服务端数据库，并避免长期保留世界包文件  |
 | `return-only`  | SSE 响应体                            | 调用方自行保存                 | 浏览器本地 IndexedDB、预览生成结果、公开服务避免写服务端持久层 |
 
-`server-store` 和 `return-only` 会先把世界包写入临时目录做校验，然后删除临时目录。因为当前 `worldData` 文件导入依赖包内相对路径，这两个模式保存的 `WorldRecord.metadata` 会移除 `worldDataPath`、`worldData` 和 `dimensionSources`，保留已经归一化到 `metadata.dimensions` 的世界维度数据。
+`server-store` 和 `return-only` 会先把世界包写入临时目录做校验，然后删除临时目录。这两个模式保存的 `WorldRecord.metadata` 会移除文件路径型 `worldDataPath`、`worldData`、`dimensionSources` 和 `characterBlueprintSources`，保留已归一化的 `metadata.dimensions`，并用 `metadata.characterBlueprints` 与 `metadata.embeddedLorebook` 携带经过校验的角色/资料/规则文本。创建 session 时，文件世界优先走 descriptor；没有世界包目录时走这份便携内容，避免数据库和浏览器本地世界丢失补充内容。
 
 响应里的 `world.metadata.storage` 标注真实保存位置：
 
@@ -2713,7 +2795,7 @@ data: {"type":"progress","phase":"saving"}
 data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","metadata":{"storage":{"scope":"server","backend":"file","durable":true}}}}
 ```
 
-**响应 422:** `{ "error": "World generation failed", "details": [...] }`
+生成开始后的模型、校验或写入失败通过 HTTP 200 SSE 帧返回：`data: {"type":"error","message":"..."}`。请求体不合法则在开始流式响应前返回 HTTP 400 标准错误 envelope。
 
 **响应 400:** `{ "error": "concept (string) is required" }` 或 `{ "error": "saveTarget must be \"server-file\", \"server-store\", or \"return-only\"" }`
 

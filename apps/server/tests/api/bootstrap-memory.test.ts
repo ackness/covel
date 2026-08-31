@@ -3,6 +3,10 @@ import type { ParsedPluginMd } from "@covel/plugin-loader";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
 import type { RuntimeManifest } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
+import {
+  awaitPendingMemoryBackgroundTasks,
+  pendingMemoryBackgroundTaskCount,
+} from "@covel/memory";
 import { createBootstrapMemorySystem } from "../../src/routes/api/bootstrap/memory.js";
 
 function parsedManifest(
@@ -277,8 +281,18 @@ describe("createBootstrapMemorySystem", () => {
     });
 
     const embedCalls: string[][] = [];
+    let releaseEmbed!: () => void;
+    let markEmbedStarted!: () => void;
+    const embedStarted = new Promise<void>((resolve) => {
+      markEmbedStarted = resolve;
+    });
+    const embedReleased = new Promise<void>((resolve) => {
+      releaseEmbed = resolve;
+    });
     const embed = async (texts: readonly string[]): Promise<Float32Array[]> => {
       embedCalls.push([...texts]);
+      markEmbedStarted();
+      await embedReleased;
       return texts.map(() => new Float32Array(DIM).fill(0.1));
     };
 
@@ -294,14 +308,20 @@ describe("createBootstrapMemorySystem", () => {
 
     // The turn executor fires this post-turn; the bootstrap wrapper must also
     // kick a best-effort ingest sweep (fire-and-forget).
-    await result!.memorySystem.updater.updateAfterTurn({
+    const update = result!.memorySystem.updater.updateAfterTurn({
       sessionId,
       narrativeText: "the king summoned the council",
       currentBlocks: [],
     });
+    await embedStarted;
+    await update;
 
-    // Ingestion is fired without await — give the microtask queue a tick.
-    await new Promise((r) => setTimeout(r, 0));
+    // The core updater is done, but vector ingestion remains independently
+    // tracked so graceful shutdown can drain it without blocking the turn.
+    expect(pendingMemoryBackgroundTaskCount()).toBe(1);
+    const drain = awaitPendingMemoryBackgroundTasks();
+    releaseEmbed();
+    await expect(drain).resolves.toMatchObject({ awaited: 1, rejected: 0 });
 
     expect(embedCalls.length).toBeGreaterThan(0);
     // The seeded message must now be searchable as a recall vector.

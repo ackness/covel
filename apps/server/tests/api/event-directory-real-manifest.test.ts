@@ -2,8 +2,8 @@
  * Integration test: drive `createEventDirectory` off the *real* bundled
  * `plugins/scene-stage` manifest — discover → register → activate → directory,
  * the same chain `bootstrap.ts` wires. Pins two things a synthetic-manifest
- * unit test can't: (1) scene-stage's `scene.set` contract really resolves and
- * validates against its on-disk schema, and (2) the `advertise: false`
+ * unit test can't: (1) scene-stage's public event contracts really resolve and
+ * validate against their on-disk schemas, and (2) the `advertise: false`
  * internal topic (`scene-stage.generate.requested`) stays out of the catalogue
  * even after the events decl migrated onto the resolver runtime. A future
  * layout regression (schema path or decl location) fails here.
@@ -48,10 +48,11 @@ async function setupSceneStageDirectory() {
 }
 
 describe("event directory — real scene-stage manifest", () => {
-  it("advertises scene.set and hides the advertise:false internal topic", async () => {
+  it("advertises public stage topics and hides the internal topic", async () => {
     const directory = await setupSceneStageDirectory();
     const topics = await directory.listTopics(SESSION_ID);
     expect(topics).toContain("scene.set");
+    expect(topics).toContain("stage.direction");
     expect(topics).not.toContain("scene-stage.generate.requested");
   });
 
@@ -72,5 +73,30 @@ describe("event directory — real scene-stage manifest", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toContain("timeOfDay");
+  });
+
+  it("validates stage.direction cues against the on-disk schema", async () => {
+    const directory = await setupSceneStageDirectory();
+    const result = await directory.validate(SESSION_ID, "stage.direction", {
+      cues: [
+        {
+          type: "actor.enter",
+          character: "朝仓凛",
+          position: "left",
+          outfit: "uniform",
+          expression: "smile",
+          focus: true,
+        },
+      ],
+    });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("rejects an unknown stage.direction cue", async () => {
+    const directory = await setupSceneStageDirectory();
+    const result = await directory.validate(SESSION_ID, "stage.direction", {
+      cues: [{ type: "actor.teleport", character: "朝仓凛" }],
+    });
+    expect(result.ok).toBe(false);
   });
 });

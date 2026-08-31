@@ -573,7 +573,11 @@ export function useBuildSessionActions({
     try {
       const res = await api.listSessionPlugins(sid);
       if (sessionIdRef.current !== sid) return;
-      dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available });
+      dispatch({
+        type: "LOAD_SESSION_PLUGINS",
+        plugins: res.available,
+        commands: res.commands,
+      });
     } catch {
       // Non-critical: plugins panel is optional.
     }
