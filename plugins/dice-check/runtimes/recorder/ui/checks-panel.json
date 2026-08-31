@@ -2,6 +2,7 @@
   "id": "dice-check-panel",
   "label": { "zh": "判定记录", "en": "Check Log" },
   "icon": "dices",
+  "alwaysRender": true,
   "dataSource": { "namespace": "checks" },
   "emptyState": {
     "message": {
@@ -13,6 +14,63 @@
     "component": "Stack",
     "props": { "gap": "sm" },
     "children": [
+      {
+        "component": "Card",
+        "props": { "variant": "subtle" },
+        "children": [
+          {
+            "component": "Text",
+            "props": {
+              "content": {
+                "zh": "快速掷骰与输入 /roll 使用同一条命令管线。",
+                "en": "Quick rolls use the same command pipeline as /roll."
+              },
+              "variant": "muted",
+              "size": "xs"
+            }
+          },
+          {
+            "component": "Row",
+            "props": { "gap": "sm", "align": "center" },
+            "children": [
+              {
+                "component": "Button",
+                "props": {
+                  "label": { "zh": "掷 d20", "en": "Roll d20" },
+                  "variant": "primary",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "invokeCommand",
+                    "params": {
+                      "command": "roll",
+                      "args": { "notation": "1d20" }
+                    }
+                  }
+                }
+              },
+              {
+                "component": "Button",
+                "props": {
+                  "label": { "zh": "掷 2d6", "en": "Roll 2d6" },
+                  "variant": "default",
+                  "size": "compact"
+                },
+                "on": {
+                  "click": {
+                    "action": "invokeCommand",
+                    "params": {
+                      "command": "roll",
+                      "args": { "notation": "2d6" }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
       {
         "component": "CardList",
         "repeat": { "statePath": "/entries", "key": "key" },

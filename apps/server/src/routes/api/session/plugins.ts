@@ -5,6 +5,7 @@ import {
 } from "@covel/plugin-loader";
 import { FrameworkCapability, getRuntimeSpec } from "@covel/shared";
 import type { PluginRelations, Stage } from "@covel/shared";
+import { mergePluginCommands } from "./commands.js";
 
 export function isRequiredCorePlugin(entry: PluginRegistryEntry): boolean {
   const trust = getPluginTrustInfo(entry.id, entry.source);
@@ -310,6 +311,7 @@ export function buildAvailablePluginList(
     }
 
     const trust = getPluginTrustInfo(entry.id, entry.source);
+    const commands = mergePluginCommands(entry);
     return {
       id: entry.id,
       name: entry.summary.name,
@@ -326,6 +328,7 @@ export function buildAvailablePluginList(
       ...(entry.summary.relations
         ? { relations: entry.summary.relations }
         : {}),
+      ...(commands.length > 0 ? { commands } : {}),
       ...(runtimes.length > 0 ? { runtimes } : {}),
     };
   });

@@ -16,6 +16,7 @@ import {
   submitFormHandler,
   type PluginRpcRegistry,
   type RpcExecutor,
+  type RpcHandlerContext,
 } from "@covel/runtime";
 import { createRpcApprovalGate, type RpcApprovalGate } from "@covel/approval";
 import {
@@ -78,6 +79,11 @@ function setup(): {
     // covered by the bootstrap integration tests.
     c.set("pluginRegistry", pluginRegistry);
     c.set("sessionLock", sessionLock);
+    c.set(
+      "resolveModel",
+      (manifest: RuntimeManifest, override?: string) =>
+        `resolved:${override ?? manifest.model ?? "default"}`,
+    );
     await next();
   });
   app.route("/api/sessions", pluginRpcRoutes);
@@ -176,10 +182,11 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
   let app: Hono;
   let store: DataStore;
   let registry: PluginRpcRegistry;
+  let pluginRegistry: PluginRegistry;
   let sessionLock: SessionLock;
 
   beforeEach(async () => {
-    ({ app, store, registry, sessionLock } = setup());
+    ({ app, store, registry, pluginRegistry, sessionLock } = setup());
     await seedSession(store);
   });
 
@@ -250,6 +257,183 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     const body = (await res.json()) as { status: string; result: unknown };
     expect(body.status).toBe("ok");
     expect(body.result).toEqual({ echoed: { hello: "world" } });
+  });
+
+  it("resolves a command server-side and returns refreshed scoped context", async () => {
+    const runtime: RuntimeManifest = {
+      name: "inspector/story",
+      pluginId: "inspector",
+      description: "Inspector story runtime",
+      runtimeType: "agent",
+      outputKind: "story",
+      model: "story",
+      capabilities: ["narrative"],
+      commands: [
+        {
+          name: "inspect",
+          aliases: ["i"],
+          description: "Inspect the session",
+          arguments: [{ name: "depth", type: "integer", required: true }],
+          action: "inspect-state",
+          context: ["models"],
+        },
+      ],
+    };
+    const parsed = {
+      manifest: runtime,
+      promptTemplate: "",
+      rawFrontmatter: {},
+    };
+    pluginRegistry.register({
+      id: "inspector",
+      summary: {
+        id: "inspector",
+        name: "Inspector",
+        description: "Inspector",
+        pluginType: "plugin",
+        runtimeCount: 1,
+      },
+      manifest: parsed,
+      manifests: [parsed],
+      loadedRuntimes: new Map([
+        [runtime.name, { manifest: runtime, promptTemplate: "" }],
+      ]),
+      status: "registered",
+      source: "builtin",
+    } as PluginRegistryEntry);
+
+    const handlerContexts: RpcHandlerContext[] = [];
+    const handlerPayloads: unknown[] = [];
+    registry.registerPluginHandler(
+      "inspector",
+      "inspect-state",
+      async (payload, context) => {
+        handlerContexts.push(context);
+        handlerPayloads.push(payload);
+        if (context.command?.source === "composer") {
+          await store.updateSession("sess-rpc-1", {
+            runtimeModelOverrides: { "inspector/story": "after" },
+          });
+        }
+        return { ok: true };
+      },
+      {},
+      "builtin",
+    );
+    await store.updateSession("sess-rpc-1", {
+      activePlugins: ["inspector"],
+      runtimeModelOverrides: { "inspector/story": "before" },
+    });
+
+    const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        commandId: "inspector:inspect",
+        input: "/i 3",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(handlerPayloads[0]).toMatchObject({
+      command: "inspect",
+      commandId: "inspector:inspect",
+      canonical: "/inspect 3",
+      raw: "/i 3",
+      argv: ["3"],
+      args: { depth: 3 },
+      source: "composer",
+    });
+    expect(handlerContexts[0]?.environment?.session).toBeUndefined();
+    expect(handlerContexts[0]?.environment?.activeRuntimes?.[0]?.model).toEqual(
+      {
+        slot: "before",
+        resolved: "resolved:before",
+        source: "session-override",
+      },
+    );
+    const body = (await res.json()) as {
+      environment?: {
+        activeRuntimes?: Array<{ model?: { slot: string; resolved?: string } }>;
+      };
+    };
+    expect(body.environment?.activeRuntimes?.[0]?.model).toMatchObject({
+      slot: "after",
+      resolved: "resolved:after",
+    });
+
+    const uiRes = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        commandId: "inspector:inspect",
+        args: { depth: 3 },
+      }),
+    });
+    expect(uiRes.status).toBe(200);
+    expect(handlerPayloads[1]).toMatchObject({
+      command: "inspect",
+      commandId: "inspector:inspect",
+      canonical: "/inspect 3",
+      raw: "/inspect 3",
+      argv: ["3"],
+      args: { depth: 3 },
+      source: "plugin-ui",
+    });
+    expect(handlerContexts[1]?.command).toEqual(handlerPayloads[1]);
+    expect(handlerPayloads[1]).toMatchObject({
+      canonical: (handlerPayloads[0] as { canonical: string }).canonical,
+      args: (handlerPayloads[0] as { args: unknown }).args,
+    });
+
+    const commandEvents = (await store.listTraceEvents("sess-rpc-1")).filter(
+      (event) => event.type.startsWith("command."),
+    );
+    expect(
+      commandEvents.map((event) => ({
+        type: event.type,
+        source: (event.payload as { source?: string }).source,
+        commandId: (event.payload as { commandId?: string }).commandId,
+      })),
+    ).toEqual([
+      {
+        type: "command.invoked",
+        source: "composer",
+        commandId: "inspector:inspect",
+      },
+      {
+        type: "command.completed",
+        source: "composer",
+        commandId: "inspector:inspect",
+      },
+      {
+        type: "command.invoked",
+        source: "plugin-ui",
+        commandId: "inspector:inspect",
+      },
+      {
+        type: "command.completed",
+        source: "plugin-ui",
+        commandId: "inspector:inspect",
+      },
+    ]);
+    expect(commandEvents[0]?.traceId).toBe(
+      (commandEvents[0]?.payload as { invocationId?: string }).invocationId,
+    );
+    expect(commandEvents[0]?.traceId).not.toBe(commandEvents[2]?.traceId);
+  });
+
+  it("rejects commands that are not in the current active-plugin directory", async () => {
+    const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        commandId: "inactive:inspect",
+        input: "/inspect",
+      }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ code: "command-not-active" });
   });
 
   it("rejects an action paused while it waits for the session lock", async () => {

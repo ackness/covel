@@ -321,7 +321,8 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 > 区分 chat turn 与 plugin runtime 调用：
 >
 > - 玩家发送的自然语言走 `/api/actions` `send_message`，触发 narrator 主链。
-> - 插件 UI 上的按钮走 `/api/sessions/:id/plugin-rpc`（见下方"插件 RPC"段），单次结构化调用，不会经过 narrator。
+> - 输入框先用 `GET /api/sessions/:id/plugins` 返回的会话命令目录匹配斜线命令。已知命令走 `/api/sessions/:id/plugin-rpc` 的 `{ commandId, input }` 变体，不经过 narrator；未知命令继续按原有 composer 规则处理（普通空闲提交走 `execute_command`），保留世界/旧插件对自由文本命令的兼容行为。
+> - 已声明 command 的插件 UI 按钮使用 JSON-RENDER `invokeCommand`，走 `/api/sessions/:id/plugin-rpc` 的 `{ commandId, args }` 变体，不经过 narrator，并与输入框命令共用参数校验、上下文、审批、handler 和 trace。其他自定义 UI action 才使用 `invokePluginAction`。
 
 ### 交互响应
 
@@ -338,13 +339,13 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ### 插件 RPC
 
-统一的"结构化插件指令"通道。同时承载 action 级与 runtime 级调用。Action 级单次 JSON,runtime 级按 `manifest.execution` 分 sync / background 两种响应。
+统一的"结构化插件指令"通道。同时承载 action 级、runtime 级和命令级调用。Action / command 级返回单次 JSON,runtime 级按 `manifest.execution` 分 sync / background 两种响应。
 
 | 命令         | 方法 | 端点                           | 响应           |
 | ------------ | ---- | ------------------------------ | -------------- |
 | `plugin.rpc` | POST | `/api/sessions/:id/plugin-rpc` | JSON 变体,见下 |
 
-**请求体(action 级或 runtime 级 二选一):**
+**请求体(action / runtime / command 级三选一):**
 
 ```json
 {
@@ -362,15 +363,31 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 }
 ```
 
+```json
+{
+  "commandId": "dice-check:roll",
+  "input": "/roll 2d6"
+}
+```
+
+```json
+{
+  "commandId": "dice-check:roll",
+  "args": { "notation": "2d6" }
+}
+```
+
+command 请求的 `input` 与 `args` 必须且只能提供一个。服务端将两者归一化为 `RpcCommandInvocation`，所以日志和后续 handler 以 `commandId + args` 识别同一业务操作；仅 `source` 保留 `composer | plugin-ui` 的入口差异。
+
 **响应分支:**
 
 | 状态码 | status                                                                                                                       | 触发                                                                                                                |
 | ------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 200    | `ok`                                                                                                                         | action 级成功 / runtime 级 sync 模式成功                                                                            |
-| 202    | `approval-required`                                                                                                          | community-trust 首次调用(action 或 runtime 级)                                                                      |
+| 200    | `ok`                                                                                                                         | action / command 级成功，或 runtime 级 sync 模式成功                                                                |
+| 202    | `approval-required`                                                                                                          | community-trust 首次调用(action、command 或 runtime 级)                                                             |
 | 202    | `accepted`                                                                                                                   | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
-| 400    | `error`                                                                                                                      | 缺字段 / action+runtimeId 互斥违反 / payload 校验失败 / `plugin-mismatch`                                           |
-| 404    | `error` (`code: "unknown-action"` / `"runtime-not-active"`)                                                                  | action 未注册 / runtimeId 未加载到该 session                                                                        |
+| 400    | `error`                                                                                                                      | 缺字段 / 三种 selector 互斥违反 / 参数或 payload 校验失败 / `plugin-mismatch`                                       |
+| 404    | `error` (`code: "unknown-action"` / `"runtime-not-active"` / `"command-not-active"`)                                         | action 未注册 / runtime 未加载 / command 不在当前会话目录                                                           |
 | 409    | `error` (`code: "approval-scope-changed"` / `"session-not-active"` / `"session-deleting"` / `"session-incarnation-changed"`) | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                  |
 | 429    | `error` (`code: "queue-full"`)                                                                                               | pending approvals 超过 cap                                                                                          |
 | 500    | `error` (`code: "runtime-execution-failed"` / `"background-enqueue-failed"`)                                                 | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
@@ -497,8 +514,13 @@ These events ride the standard SSE envelope and are also persisted into `trace_e
 | `hook.fired`             | `{ event, hookName, pluginId, runtimeId?, targetId?, targetType, proposalType? }`                                                                                                                                                                                                                                                          |
 | `hook.rewrote`           | `{ event, hookName, pluginId, runtimeId?, targetId?, diff?, proposalType? }`                                                                                                                                                                                                                                                               |
 | `hook.aborted`           | `{ event, hookName, pluginId, runtimeId?, targetId?, reason, proposalType? }`                                                                                                                                                                                                                                                              |
+| `command.invoked`        | `{ invocationId, commandId, command, pluginId, action, source, canonical, raw, argv, args }`；输入框和 JSON-RENDER 使用同一结构。                                                                                                                                                                                                          |
+| `command.completed`      | `command.invoked` 的字段 + `{ durationMs, resultOk? }`。                                                                                                                                                                                                                                                                                   |
+| `command.failed`         | `command.invoked` 的字段 + `{ durationMs, error }`。                                                                                                                                                                                                                                                                                       |
 
 Delta narrative continues to ride `narrative.delta` for realtime UI; only `message.completed` is persisted to keep `trace_events` compact.
+
+`command.*` 由 action 级 command dispatcher 的 TurnEmitter 写入 `trace_events` 并发布到 `trace` 订阅 topic，`forwardToActionStream: false`，因此不会污染游戏 `/api/actions` 流。三个事件共享 `invocationId` 作为 `traceId/turnId`；日志不持久化完整 handler 返回值，只记录终态、耗时和可选 `resultOk`。`raw` / `args` 会按设计进入 trace，命令参数不得承载 API key、凭据或其他秘密。
 
 Payload notes:
 

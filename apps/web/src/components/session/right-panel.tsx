@@ -25,6 +25,7 @@ import {
   groupShortLabel,
   panelProviderLabel,
   planPluginPanelProviders,
+  resolvePluginPanelTarget,
   type PluginPanelTabGroup,
 } from "@/lib/plugin-panel-tabs.js";
 import { loadPluginData } from "@/stores/plugin-data-store.js";
@@ -117,6 +118,10 @@ export function RightPanel({
     Record<string, number>
   >({});
   const [activeTab, setActiveTab] = useState("world");
+  const [pendingPluginPanelTarget, setPendingPluginPanelTarget] = useState<{
+    readonly pluginId: string;
+    readonly panelId: string;
+  } | null>(null);
   const { state: sessionState } = useSession();
   const activePluginKey = useMemo(
     () =>
@@ -175,9 +180,35 @@ export function RightPanel({
           group.subPanels.some((sub) => sub.icon === "image"),
         );
         if (target) setActiveTab(`plugin-${target.id}`);
+      } else if (
+        typeof event === "object" &&
+        event.type === "open-plugin-panel"
+      ) {
+        setPendingPluginPanelTarget({
+          pluginId: event.pluginId,
+          panelId: event.panelId,
+        });
       }
     });
   }, [pluginTabGroups]);
+
+  // Command results may arrive before /api/ui-specs. Keep the intent pending
+  // and replay it once the command owner's exact sub-panel becomes available.
+  useEffect(() => {
+    if (!pendingPluginPanelTarget) return;
+    const target = resolvePluginPanelTarget(
+      pluginTabGroups,
+      pendingPluginPanelTarget.pluginId,
+      pendingPluginPanelTarget.panelId,
+    );
+    if (!target) return;
+    setActivePluginSubTab((prev) => ({
+      ...prev,
+      [target.groupId]: target.subPanelIndex,
+    }));
+    setActiveTab(`plugin-${target.groupId}`);
+    setPendingPluginPanelTarget(null);
+  }, [pendingPluginPanelTarget, pluginTabGroups]);
 
   // Load plugin panel specs from /api/ui-specs and seed plugin-data-store.
   useEffect(() => {

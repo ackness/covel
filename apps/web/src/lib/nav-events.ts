@@ -7,7 +7,15 @@
  * the topbar dispatches by name.
  */
 
-export type NavEvent = "open-plugins" | "open-images" | "open-database";
+export type NavEvent =
+  | "open-plugins"
+  | "open-images"
+  | "open-database"
+  | {
+      readonly type: "open-plugin-panel";
+      readonly pluginId: string;
+      readonly panelId: string;
+    };
 
 type Listener = (event: NavEvent) => void;
 

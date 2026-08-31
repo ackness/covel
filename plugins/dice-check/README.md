@@ -4,16 +4,18 @@
 
 ## 运行时结构
 
-- `PLUGIN.md`：包级摘要（非 runtime）。
+- `PLUGIN.md`：包级摘要与 server entry，注册玩家侧掷骰 action。
+- `rpc/roll.js`：`/roll [notation]`（别名 `/r`）命令处理器；接受 1-100 颗、2-1000 面的 `NdM` 骰式，缺省为 `1d20`。
 - `runtimes/roller/`：pre-turn function runtime，每回合用 `node:crypto` 预掷 3 个 d20，输出 `checkContext`（骰池 + 判定规则 markdown）供叙事引擎注入。
 - `runtimes/recorder/`：event function runtime，订阅 `check.resolved` 回执并落库。
 - `schemas/check-resolved.event.json`：判定回执 payload schema（emit-event 按它校验）。payload 是批量形（`{ checks: [...] }`，1-3 项）——`emit-event` 对同 topic 每回合去重，逐次发射会丢第二条，因此整回合的判定合并进一次发射。
 - `runtimes/recorder/ui/check-message.json`：消息区判定结果块（🎲 行动 → 骰式 → 成败配色，critical 强调）。
-- `runtimes/recorder/ui/checks-panel.json`：右侧「判定记录」面板（倒序）。
+- `runtimes/recorder/ui/checks-panel.json`：右侧「判定记录」面板（倒序），提供 d20 / 2d6 快速按钮；按钮通过 JSON-RENDER `invokeCommand` 复用 `/roll`，不另建 action 旁路。
 
 ## 数据与行为
 
 - 骰池通过 roller 的 `dice` runtime output 在同回合绑定给 recorder（`inputs.dicePool`），同时把审计轨写入 `plugin_data[dice-check][rolls]`（key = turnId，`{ dice: [n1, n2, n3] }`）；后者到 turn finalizer 才提交，供事后审计与重试兜底。
+- 玩家从输入框执行 `/roll` 或点击快速掷骰按钮，都会归一化为同一个 `dice-check:roll` 命令并由 RPC 返回结果；命令生命周期写入统一 `command.*` trace，但不写入 `rolls` namespace，避免与回合预掷审计轨混用。
 - 判定回执写入 `plugin_data[dice-check][checks]`（key = `<turnId>-<序号>`，含展示字段）。
 - 本回合判定数组写入 `plugin_data[dice-check][message]`（key = turnId，值带 `__turnId`，消息层 block 数据源）。
 - 回执批量逐项校验：按顺序匹配本回合预掷骰池，并验证 `total = roll + modifier`、difficulty 对应 DC、天然 1/20 和 `total vs DC` 对应 outcome；无效项跳过、有效项照常落库，缺少预掷审计轨时整体 fail-closed。

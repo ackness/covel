@@ -81,6 +81,7 @@ import {
   resolveSessionPlugins,
   unknownPluginIds,
 } from "./session/plugins.js";
+import { buildSessionCommandList } from "./session/commands.js";
 import {
   buildSessionPatchUpdates,
   parseCreateSessionBody,
@@ -1194,8 +1195,9 @@ sessionRoutes.get("/:id/plugins", async (c) => {
       }
     }
     const available = buildAvailablePluginList(active, pluginRegistry);
+    const commands = buildSessionCommandList(active, pluginRegistry);
 
-    return c.json({ active, available });
+    return c.json({ active, available, commands });
   });
 });
 

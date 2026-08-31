@@ -343,6 +343,11 @@ export type CovelEvent =
   | { readonly type: "hook.fired"; readonly payload: CovelEventPayload }
   | { readonly type: "hook.rewrote"; readonly payload: CovelEventPayload }
   | { readonly type: "hook.aborted"; readonly payload: CovelEventPayload }
+  // Slash-command lifecycle. Composer and plugin JSON-render UI actions share
+  // this exact trace shape; `payload.source` is the only entry-point marker.
+  | { readonly type: "command.invoked"; readonly payload: CovelEventPayload }
+  | { readonly type: "command.completed"; readonly payload: CovelEventPayload }
+  | { readonly type: "command.failed"; readonly payload: CovelEventPayload }
   // Recursive-runtime trace events (TurnEmitter). Subscription-channel only —
   // NOT forwarded to the action stream (forwardToActionStream: false), so they
   // never reach the frontend action handler. Listed here so every framework
@@ -460,6 +465,10 @@ export const COVEL_EVENT_META = {
   "hook.fired": { forwardToActionStream: true },
   "hook.rewrote": { forwardToActionStream: true },
   "hook.aborted": { forwardToActionStream: true },
+  // Command lifecycle is consumed by traces/debug, not the gameplay stream.
+  "command.invoked": { forwardToActionStream: false },
+  "command.completed": { forwardToActionStream: false },
+  "command.failed": { forwardToActionStream: false },
   // Subscription-channel-only trace events — intentionally NOT forwarded to the
   // action stream (behaviour preserved from before they joined the union).
   "recursive.calling": { forwardToActionStream: false },

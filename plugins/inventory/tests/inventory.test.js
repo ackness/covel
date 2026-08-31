@@ -573,6 +573,16 @@ describe("inventory plugin manifest", () => {
     expect(manifest.tools?.plugin).toEqual(["update-inventory"]);
   });
 
+  it("declares the player-facing bag command", () => {
+    expect(manifest.commands).toEqual([
+      expect.objectContaining({
+        name: "bag",
+        aliases: ["inventory"],
+        action: "open-bag",
+      }),
+    ]);
+  });
+
   it("accepts world data into the items namespace", () => {
     const schema = manifest.dataSchemas?.items;
     expect(schema).toBeDefined();

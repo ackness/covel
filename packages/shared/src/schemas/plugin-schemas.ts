@@ -8,6 +8,11 @@ import { z } from "zod";
 import { HOOK_EVENTS } from "../types/hooks.js";
 import { STAGE_ORDER } from "../types/runtime-scheduling.js";
 import type { EffectResource } from "../types/runtime-scheduling.js";
+import { slashCommandSpecSchema } from "./slash-command-schema.js";
+export {
+  slashCommandArgumentSpecSchema,
+  slashCommandSpecSchema,
+} from "./slash-command-schema.js";
 
 // ── Shared path & scheduling primitives ──────────────────────────
 // Hoisted so the Input section (runtime-export inject, data bindings) and the
@@ -881,6 +886,7 @@ const runtimeManifestCommonShape = {
   i18n: z.record(z.string(), z.string()).optional(),
   ui: uiSpecSchema.optional(),
   userSettings: z.array(pluginUserSettingSpecSchema).optional(),
+  commands: z.array(slashCommandSpecSchema).max(32).optional(),
   summaryFocus: z.array(z.string()).optional(),
   authorsNote: authorsNoteDeclSchema.optional(),
   postHistory: postHistoryDeclSchema.optional(),

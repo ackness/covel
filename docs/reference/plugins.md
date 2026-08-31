@@ -355,15 +355,16 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 
 ### dice-check/roller
 
-| 字段         | 值                             |
-| ------------ | ------------------------------ |
-| pluginType   | `plugin`                       |
-| runtimeType  | `function`（无 LLM）           |
-| handler      | `./runtimes/roller/handler.js` |
-| stage        | `pre-turn`                     |
-| trigger      | `scheduled`，`interval: 1`     |
-| outputKind   | `system`                       |
-| capabilities | `[dice-check, check-context]`  |
+| 字段         | 值                                                 |
+| ------------ | -------------------------------------------------- |
+| pluginType   | `plugin`                                           |
+| runtimeType  | `function`（无 LLM）                               |
+| handler      | `./runtimes/roller/handler.js`                     |
+| stage        | `pre-turn`                                         |
+| trigger      | `scheduled`，`interval: 1`                         |
+| outputKind   | `system`                                           |
+| capabilities | `[dice-check, check-context]`                      |
+| commands     | `/roll [notation]`（alias `/r`，无额外环境上下文） |
 
 **职责**：每回合用 `node:crypto` 预掷 3 个 d20，输出 `checkContext`（骰池 + 判定规则 markdown），narrator / chat-mode-narrator 经 `input.inject` 注入为 `<check-results>`（插件缺席时解析为空，叙事按一般逻辑处理）；骰池审计轨写 `plugin_data[rolls]`（key = turnId）。判定规则：骰值 + 角色卡数值属性修正 vs 难度 DC（轻松 8 / 普通 12 / 困难 16 / 极难 20），天然 20 大成功、天然 1 大失败。
 
@@ -519,6 +520,7 @@ namespace="meta"   key=ontology   value=NpcGraphOntology
 | entry        | `./server/index.js`                                                                                                               |
 | tools.plugin | `update-inventory`                                                                                                                |
 | rpc          | `item-op`（entry 注册）——玩家侧装备/卸下/丢弃，面板逐物品按钮经 `invokePluginAction` 触发；丢弃与工具 remove-to-zero 同款墓碑语义 |
+| commands     | `/bag`（alias `/inventory`，打开当前已加载的行囊面板；无额外环境上下文）                                                          |
 | input.inject | `plugin-data[items]` → `<existing-inventory>`（`format: summary`，`maxEntries: 80`）                                              |
 | dataSchemas  | `items`（schemaVersion 1，acceptsWorldData，schema URI `plugin://inventory/items`）                                               |
 | ui.right     | `inventory-panel.json` — 行囊面板（已装备分组 + 背包列表，数量徽标 + tags pill，`alwaysRender`）                                  |
@@ -1215,6 +1217,84 @@ tools:
   builtin: # builtin 启用列表（不变）
     - plugin-data-get
 ```
+
+### commands（输入框斜线命令）
+
+插件可以在 runtime 的 `PLUGIN.md` frontmatter 声明玩家可发现的斜线命令，并在该插件的 `entry` 中注册对应 RPC action。框架不按插件 ID 写分支：`GET /api/sessions/:id/plugins` 只聚合当前会话已启用插件的声明，输入框据此匹配、补全和展示参数；执行时输入框提交 `{ commandId, input }`，插件 JSON-RENDER UI 提交 `{ commandId, args }`，服务端都再次从当前会话目录解析 action、参数和上下文权限。
+
+```yaml
+commands:
+  - name: inspect # 不含前导 /
+    aliases: [i]
+    description:
+      zh: 检查当前叙事运行环境
+      en: Inspect the current story environment
+    arguments: # 按位置解析
+      - name: depth
+        type: integer # string | integer | number | boolean
+        required: false
+        description: 检查深度
+    action: inspect-state # 必须由同一插件的 entry 注册
+    context: [session, active-runtimes, models]
+```
+
+```js
+// server/index.js
+export default function (covel) {
+  covel.registerRpc("inspect-state", async (payload, ctx) => ({
+    ok: true,
+    message: `active runtimes: ${ctx.environment?.activeRuntimes?.length ?? 0}`,
+    data: {
+      invocation: payload, // RpcCommandInvocation，见下文
+      environment: ctx.environment,
+    },
+  }));
+}
+```
+
+命令字段：
+
+| 字段               | 规则                                                                            |
+| ------------------ | ------------------------------------------------------------------------------- |
+| `name` / `aliases` | 小写字母开头，只允许小写字母、数字、`-`；单条命令内不可重复                     |
+| `description`      | `I18nText`，用于补全菜单                                                        |
+| `arguments[]`      | 位置参数；支持 `required`、字符串 `choices` 和仅能位于末尾的 `variadic`         |
+| `action`           | kebab-case RPC action；只能解析到声明命令的同一插件，不能借 manifest 跨插件调用 |
+| `context`          | 可选的附加环境权限；省略或 `[]` 表示不构建环境快照                              |
+
+`context` 使用最小权限模型：
+
+| scope             | handler 中新增的 `ctx.environment` 内容                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `session`         | `id`、`worldId`、`status`、`phase`、`locale`                                                                                    |
+| `active-runtimes` | 当前会话激活 runtime 的 `id`、`pluginId`、类型、stage、outputKind、capabilities                                                 |
+| `models`          | 包含 `active-runtimes`，并为每个 runtime 增加当前 slot、服务端解析后的 model ID 与来源（session override / manifest / default） |
+
+无论是否声明额外 scope，RPC handler 都继续获得基础 `ctx.sessionId`、`ctx.pluginId`、`ctx.locale` 和既有的 `ctx.store` 视图（community handler 的 plugin-data 访问按自身插件隔离）；`context` 不控制这些既有 RPC 能力。环境快照不包含 provider key、prompt、用户设置或任意 plugin-data。handler 看到的是**执行前**快照；响应的顶层 `environment` 是 handler 完成后重新读取 session、同步激活 runtime 并解析模型所得的**执行后**快照，因此切换 story model、启停 runtime 的命令不会把旧上下文回给客户端。
+
+参数仅使用一个小型 shell-like tokenizer：支持空格、单/双引号和反斜杠转义，不执行变量展开、命令替换、glob 或任意代码。多个 runtime 声明同名且定义一致的命令会合并；定义不一致时服务端警告并稳定采用先发现的声明。多 runtime 插件应把命令声明放在实际 runtime 的 `PLUGIN.md`，共享的 `entry` 仍只需注册一次。
+
+同一命令也可以直接绑定到插件 JSON-RENDER UI。使用宿主 handler `invokeCommand`，只声明规范命令名和命名参数；宿主会把当前渲染 spec 的 `pluginId` 注入 `commandId`，UI 不能指定或跳转到其他插件命名空间：
+
+```json
+{
+  "component": "Button",
+  "props": { "label": { "zh": "掷 2d6", "en": "Roll 2d6" } },
+  "on": {
+    "click": {
+      "action": "invokeCommand",
+      "params": {
+        "command": "roll",
+        "args": { "notation": "2d6" }
+      }
+    }
+  }
+}
+```
+
+不要用 `invokePluginAction` 绕过已经声明为 command 的功能；该入口不会获得命令参数校验、命令上下文和命令审计事件。`invokeCommand` 与输入框会归一化为同一个 `RpcCommandInvocation`：`{ invocationId, commandId, command, canonical, raw, argv, args, source }`。`commandId + args` 是业务身份，`source` 仅区分 `composer | plugin-ui`；handler 从 payload 与 `ctx.command` 取得同一对象。两种入口共用审批、执行前上下文、handler 和执行后环境刷新。
+
+handler 返回值建议采用 `{ ok, message, data?, clientAction? }`。当前宿主只识别 `clientAction.type: "open-debug"` 和 `{ type: "open-plugin-panel", panelId }`；后者强制限定为命令所属插件，并会在 UI spec 尚未加载时暂存，加载后精确打开共享 group 内的目标子面板。第三方 action 仍沿用 plugin-rpc 的来源信任与审批机制。
 
 ### dataSchemas
 

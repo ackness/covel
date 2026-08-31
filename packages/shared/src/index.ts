@@ -16,6 +16,12 @@ export {
 } from "./utils/json-value.js";
 export { reservedPluginDataNamespaceError } from "./utils/plugin-data-namespace.js";
 export {
+  parseSlashCommandInvocation,
+  parseStructuredSlashCommandInvocation,
+  tokenizeSlashCommand,
+} from "./utils/slash-command.js";
+export type { SlashCommandParseResult } from "./utils/slash-command.js";
+export {
   SYSTEM_PROXY_IPC_VERSION,
   isSystemProxyResolveRequest,
   isSystemProxyResolveResponse,
@@ -109,6 +115,8 @@ export {
   runtimeBindingSchema,
   effectsDeclSchema,
   permissionsDeclSchema,
+  slashCommandArgumentSpecSchema,
+  slashCommandSpecSchema,
   validateRuntimeManifestSemantics,
 } from "./schemas/plugin.js";
 

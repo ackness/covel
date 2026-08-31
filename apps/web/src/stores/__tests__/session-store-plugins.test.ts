@@ -250,6 +250,7 @@ describe("loadSessionPlugins callback", () => {
   it("calls listSessionPlugins with the current sessionId", async () => {
     vi.mocked(apiMock.listSessionPlugins).mockResolvedValueOnce({
       active: ["narrator"],
+      commands: [],
       available: [{ id: "narrator", displayName: "Narrator", isActive: true }],
     });
 
@@ -261,6 +262,7 @@ describe("loadSessionPlugins callback", () => {
   it("returns available plugins list from the server response", async () => {
     const mockResponse = {
       active: ["narrator", "persona"],
+      commands: [],
       available: [
         { id: "narrator", displayName: "Narrator", isActive: true },
         { id: "persona", displayName: "Persona", isActive: true },

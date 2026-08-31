@@ -11,6 +11,20 @@ runtimeType: function
 handler: ./handler.js
 outputKind: system
 capabilities: [dice-check, check-context]
+commands:
+  - name: roll
+    aliases: [r]
+    description:
+      zh: 掷指定骰式，默认为 1d20。
+      en: Roll dice notation, defaulting to 1d20.
+    arguments:
+      - name: notation
+        type: string
+        description:
+          zh: NdM 格式的骰式，例如 2d6。
+          en: Dice notation in NdM form, such as 2d6.
+        required: false
+    action: roll
 tags:
   - role:dice
   - cost:function

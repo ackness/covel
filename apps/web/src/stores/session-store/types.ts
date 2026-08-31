@@ -111,6 +111,8 @@ export interface SessionState {
 
   /** Session-scoped plugin list (active + available). Loaded after session is set. */
   sessionPlugins: api.SessionPluginInfo[];
+  /** Framework + active-plugin slash command directory from the same snapshot. */
+  sessionCommands: import("@covel/shared").SessionSlashCommand[];
 
   // Active session
   world: api.WorldRecord | null;
@@ -275,7 +277,11 @@ export type SessionAction =
     }
   | { type: "SET_GAME_STATE"; state: Record<string, unknown> }
   | { type: "REMOVE_SESSION"; sessionId: string }
-  | { type: "LOAD_SESSION_PLUGINS"; plugins: api.SessionPluginInfo[] }
+  | {
+      type: "LOAD_SESSION_PLUGINS";
+      plugins: api.SessionPluginInfo[];
+      commands?: import("@covel/shared").SessionSlashCommand[];
+    }
   | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; isActive: boolean }
   | { type: "BACKFILL_TURN_ID"; turnId: string }
   | {
