@@ -218,7 +218,14 @@ export function LeftPanel({
           if (!open) setDeleteTarget(null);
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent
+          className="max-w-sm"
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || deleting) return;
+            event.preventDefault();
+            void handleConfirmDelete();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>
               {t("session.deleteConfirmTitle", "Delete Session")}
@@ -245,7 +252,8 @@ export function LeftPanel({
               variant="destructive"
               size="sm"
               disabled={deleting}
-              onClick={handleConfirmDelete}
+              aria-keyshortcuts="Enter"
+              onClick={() => void handleConfirmDelete()}
             >
               {deleting
                 ? t("common.deleting", "Deleting...")

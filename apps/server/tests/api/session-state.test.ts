@@ -274,6 +274,31 @@ describe("Session Routes", () => {
       expect(session).toBeNull();
     });
 
+    it("deletes a legacy session without incarnation metadata", async () => {
+      const sessionId = "legacy-player-world-session";
+      const now = new Date().toISOString();
+      await store.createSession({
+        id: sessionId,
+        worldId: "legacy-player-world",
+        status: "active",
+        phase: "playing",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
+        activePlugins: [],
+        locale: "zh-CN",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const res = await app.request(`/api/sessions/${sessionId}`, {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await json(res)).toMatchObject({ deleted: true });
+      expect(await store.getSession(sessionId)).toBeNull();
+    });
+
     it("returns 404 for unknown session", async () => {
       const res = await app.request("/api/sessions/nonexistent", {
         method: "DELETE",
