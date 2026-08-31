@@ -6,6 +6,59 @@ import {
 import { PLUGIN_SCOPED_FIELDS } from "../src/types/plugin.js";
 
 describe("plugin manifest dataSchemas", () => {
+  it("accepts scoped slash commands and rejects malformed arguments", () => {
+    const manifest = runtimeManifestInputSchema.parse({
+      name: "command-plugin",
+      description: "Commands",
+      commands: [
+        {
+          name: "inspect",
+          aliases: ["i"],
+          description: { en: "Inspect runtime state", zh: "检查运行时状态" },
+          action: "inspect-state",
+          context: ["session", "active-runtimes", "models"],
+          arguments: [
+            { name: "runtime", type: "string", required: true },
+            { name: "details", type: "boolean" },
+          ],
+        },
+      ],
+    });
+
+    expect(manifest.commands?.[0]).toMatchObject({
+      name: "inspect",
+      action: "inspect-state",
+      context: ["session", "active-runtimes", "models"],
+    });
+    expect(() =>
+      runtimeManifestInputSchema.parse({
+        name: "bad-command-plugin",
+        description: "Bad commands",
+        commands: [
+          {
+            name: "Bad/Command",
+            description: "bad",
+            action: "inspect",
+          },
+        ],
+      }),
+    ).toThrow(/lowercase kebab-case/);
+    expect(() =>
+      runtimeManifestInputSchema.parse({
+        name: "bad-variadic-plugin",
+        description: "Bad commands",
+        commands: [
+          {
+            name: "inspect",
+            description: "bad",
+            action: "inspect",
+            arguments: [{ name: "rest", variadic: true }, { name: "after" }],
+          },
+        ],
+      }),
+    ).toThrow(/must be last/);
+  });
+
   it("accepts single-shot agent tool completion", () => {
     const manifest = runtimeManifestInputSchema.parse({
       name: "single-shot-tool-runtime",
@@ -243,6 +296,7 @@ describe("plugin-scoped field registry", () => {
   // silent edit to a merge rule shows up as a failing test.
   it("registers every field the manifest declares as plugin-scoped", () => {
     expect(Object.keys(PLUGIN_SCOPED_FIELDS).sort()).toEqual([
+      "commands",
       "dataSchemas",
       "displayName",
       "entry",

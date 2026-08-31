@@ -4,8 +4,10 @@ import { JSONUIProvider, Renderer } from "@json-render/react";
 import { emitToast } from "@/lib/toast-channel.js";
 import { nestedToFlat } from "@json-render/core";
 import { covelRegistry } from "@/lib/catalog.js";
+import { covelDirectives } from "@/lib/json-render-directives.js";
 import { PluginSurfaceBoundary } from "@/components/error-boundary.js";
 import { messageToSpec, messageToSpecDisabled } from "@/lib/message-to-spec.js";
+import { rewriteComponentToType } from "@/lib/plugin-panel-spec.js";
 import type { StreamMessage } from "@/stores/session-store.js";
 import { useSessionActions } from "@/stores/session-store.js";
 import { PluginPanel } from "../plugin-panel.js";
@@ -113,6 +115,7 @@ export function UiRenderBlock({ block }: { block: Record<string, unknown> }) {
                 registry={covelRegistry}
                 initialState={{}}
                 handlers={{}}
+                directives={covelDirectives}
               >
                 <Renderer spec={nestedToFlat(spec)} registry={covelRegistry} />
               </JSONUIProvider>
@@ -136,7 +139,7 @@ function uiPartToSpec(
         : obj.component || obj.type
           ? obj
           : null;
-    if (nested) return normalizeNestedSpec(nested);
+    if (nested) return rewriteComponentToType(nested);
   }
 
   if (typeof content === "string" && content.trim()) {
@@ -147,23 +150,6 @@ function uiPartToSpec(
     type: "JsonView",
     props: { value: { type, content } },
   };
-}
-
-function normalizeNestedSpec(
-  node: Record<string, unknown>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(node)) {
-    if (key === "component") out.type = value;
-    else if (key === "children" && Array.isArray(value)) {
-      out.children = value.map((child) =>
-        child && typeof child === "object"
-          ? normalizeNestedSpec(child as Record<string, unknown>)
-          : child,
-      );
-    } else out[key] = value;
-  }
-  return out;
 }
 
 // Renders any block other than plugin_message using message-to-spec +
@@ -385,6 +371,7 @@ export function MessageBlockRenderer({
         registry={covelRegistry}
         initialState={initialFormState}
         handlers={handlers}
+        directives={covelDirectives}
         onStateChange={handleStateChange}
       >
         <Renderer spec={spec} registry={covelRegistry} />

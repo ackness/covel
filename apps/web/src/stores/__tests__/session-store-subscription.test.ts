@@ -39,6 +39,7 @@ describe("rehydrateSessionSideState", () => {
     vi.clearAllMocks();
     vi.mocked(api.listSessionPlugins).mockResolvedValue({
       active: ["p1"],
+      commands: [],
       available: [
         { id: "p1", displayName: "P1", isActive: true },
         { id: "off", displayName: "Off", isActive: false },

@@ -86,6 +86,7 @@ export const initialState: SessionState = {
   submittedBlockIds: new Set<string>(),
   submittedBlockValues: {},
   sessionPlugins: [],
+  sessionCommands: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -111,6 +112,7 @@ const SESSION_RESET: Partial<SessionState> = {
   submittedBlockIds: new Set<string>(),
   submittedBlockValues: {},
   sessionPlugins: [],
+  sessionCommands: [],
   messageUiSpecs: [],
   pendingInteractionDrafts: [],
   suspensions: [],
@@ -414,7 +416,11 @@ export function reducer(
     case "RESET_TO_WORLD_SELECT":
       return { ...state, ...SESSION_RESET, world: null, worldSessions: [] };
     case "LOAD_SESSION_PLUGINS":
-      return { ...state, sessionPlugins: action.plugins };
+      return {
+        ...state,
+        sessionPlugins: action.plugins,
+        sessionCommands: action.commands ?? state.sessionCommands,
+      };
     case "TOGGLE_SESSION_PLUGIN":
       return {
         ...state,

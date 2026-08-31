@@ -3,6 +3,7 @@ import type {
   I18nText,
   PluginRpcResponse,
   RuntimeResult,
+  SessionSlashCommand,
   SessionEvent,
   Stage,
 } from "@covel/shared";
@@ -74,6 +75,8 @@ export interface SessionPluginInfo {
       options?: string[];
     }
   >;
+  /** Slash commands declared by this plugin (active or inactive). */
+  commands?: readonly Omit<SessionSlashCommand, "id" | "pluginId" | "source">[];
   /**
    * Per-runtime breakdown so framework UI surfaces (e.g. inline action buttons
    * in the chat stream) can discover which runtime to invoke via plugin-rpc by
@@ -96,6 +99,8 @@ export interface SessionPluginInfo {
 export interface SessionPluginsResponse {
   active: string[];
   available: SessionPluginInfo[];
+  /** Framework + active-plugin command directory, resolved by the server. */
+  commands: SessionSlashCommand[];
 }
 
 /** Fetch the active + available plugins for a session. */
@@ -105,6 +110,7 @@ export async function listSessionPlugins(
   const raw = await request<{
     active: string[];
     available: Array<Record<string, unknown>>;
+    commands?: SessionSlashCommand[];
   }>(`/api/sessions/${encodeURIComponent(sessionId)}/plugins`);
   // Map API field `active` → frontend field `isActive`
   const available: SessionPluginInfo[] = raw.available.map((p) => ({
@@ -121,7 +127,7 @@ export async function listSessionPlugins(
     source: p.source as SessionPluginInfo["source"],
     runtimes: p.runtimes as SessionPluginInfo["runtimes"],
   })) as SessionPluginInfo[];
-  return { active: raw.active, available };
+  return { active: raw.active, available, commands: raw.commands ?? [] };
 }
 
 /** Enable a plugin for a session. Returns updated active list. */

@@ -58,8 +58,8 @@ export const Button: ComponentRenderer = ({ element, emit }) => {
 
   // ── In-flight feedback for plugin-rpc dispatch ─────────────────────
   //
-  // PluginPanel writes `/_invoking/<key>` whenever an `invokeRuntime` /
-  // `invokePluginAction` click is mid-flight. The button's click binding
+  // PluginPanel writes `/_invoking/<key>` whenever an `invokeRuntime`,
+  // `invokePluginAction`, or `invokeCommand` click is mid-flight. The binding
   // tells us which key it would set, so we can show a spinner exactly on
   // the button that fired the action — no risk of dimming the whole panel.
   const invokingMap =
@@ -84,6 +84,12 @@ export const Button: ComponentRenderer = ({ element, emit }) => {
         typeof resolved.action === "string"
       ) {
         if (invokingMap[`action:${resolved.action}`]) return true;
+      }
+      if (
+        binding.action === "invokeCommand" &&
+        typeof resolved.command === "string"
+      ) {
+        if (invokingMap[`command:${resolved.command}`]) return true;
       }
     }
     return false;

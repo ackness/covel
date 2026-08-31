@@ -7,6 +7,13 @@ description:
   zh: 每回合从叙事中记录明确的物品得失与装备变化，右栏随时可查背包。
   en: Records explicit item gains, losses, and equipment changes from each turn's narrative, with an always-available bag panel.
 pluginType: plugin
+commands:
+  - name: bag
+    aliases: [inventory]
+    description:
+      zh: 查看当前背包并打开行囊面板。
+      en: View the current bag and open the inventory panel.
+    action: open-bag
 stage: post-turn
 outputKind: system
 model: plugin

@@ -643,6 +643,11 @@ export function createSseEventHandler(
       case "hook.fired":
       case "hook.rewrote":
       case "hook.aborted":
+      // Command lifecycle is trace-only and never forwarded to this action
+      // stream; keep the closed event union exhaustive for future changes.
+      case "command.invoked":
+      case "command.completed":
+      case "command.failed":
       // Recursive-runtime trace events: subscription-channel only, never
       // forwarded to this action stream — listed for exhaustiveness only.
       case "recursive.calling":

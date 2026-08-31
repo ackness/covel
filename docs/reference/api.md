@@ -314,7 +314,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 | 方法   | 路径                                  | 描述                                                                                               |
 | ------ | ------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action 级 / runtime 级，含 `submit-form`)                                        |
+| POST   | `/api/sessions/:id/plugin-rpc`        | 统一插件 RPC 通道(action / runtime / command 级，含 `submit-form`)                                 |
 | GET    | `/api/sessions/:id/approvals`         | 列出该 session 的待批准 RPC 请求                                                                   |
 | DELETE | `/api/sessions/:id/approvals`         | 撤销该 session 的已缓存授权（`?pluginId=` 限定单插件），返回 `{ ok, cleared }`；下次调用重新弹审批 |
 | POST   | `/api/approvals/:approvalId/decision` | 提交玩家批准决定(allow/deny + once/session)                                                        |
@@ -1318,6 +1318,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
    - `'background'`: 立即返回 202 + `jobId`,后台通过 `setImmediate` 继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。
+3. **Command 级**: `{ commandId, input }` 或 `{ commandId, args }` — 前者来自输入框，后者来自插件 JSON-RENDER `invokeCommand`。两者执行会话命令目录中的同一个命令；服务端重新确认插件仍激活、验证并归一化参数，并从 manifest 决定 action 和可注入上下文。客户端不能提交 `pluginId`、`payload` 或扩大 context scope。
 
 **参数:**
 
@@ -1364,11 +1365,32 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 }
 ```
 
+或 command 级:
+
+```json
+{
+  "commandId": "dice-check:roll",
+  "input": "/roll 2d6"
+}
+```
+
+JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
+
+```json
+{
+  "commandId": "dice-check:roll",
+  "args": { "notation": "2d6" }
+}
+```
+
 | 字段                        | 类型          | 说明                                                                                                                                                                                                                                                                                                                                 |
 | --------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pluginId`                  | string        | 插件 ID(框架默认 handler 用 `framework` 占位即可)                                                                                                                                                                                                                                                                                    |
-| `action`                    | string(可选)  | RPC action 名,kebab-case。与 `runtimeId` 互斥                                                                                                                                                                                                                                                                                        |
-| `runtimeId`                 | string(可选)  | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` 互斥                                                                                                                                                                                                                                                                            |
+| `pluginId`                  | string(可选)  | action / runtime 模式的插件 ID(框架默认 handler 用 `framework` 占位)；command 模式禁止提交                                                                                                                                                                                                                                           |
+| `action`                    | string(可选)  | RPC action 名,kebab-case。与 `runtimeId` / `commandId` 互斥                                                                                                                                                                                                                                                                          |
+| `runtimeId`                 | string(可选)  | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` / `commandId` 互斥                                                                                                                                                                                                                                                              |
+| `commandId`                 | string(可选)  | 会话命令目录中的稳定 ID。与 `action` / `runtimeId` 互斥；command 模式不接受 `pluginId` / `payload`                                                                                                                                                                                                                                   |
+| `input`                     | string(可选)  | command 输入框模式的完整原始输入；与 `args` 必须且只能提供一个；服务端按命令声明再次分词、类型转换和校验                                                                                                                                                                                                                             |
+| `args`                      | object(可选)  | command JSON-RENDER 模式的命名参数；与 `input` 必须且只能提供一个；未知字段、类型、choices、required 与 variadic 都按服务端命令声明校验                                                                                                                                                                                              |
 | `payload`                   | unknown       | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload`                                                                                                                                                                                                                                        |
 | `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即写入 `_jobs` 占位并返回 202，随后在后台执行入口 runtime 与 follower，避免 UI 等 prompt LLM 完成后才出现任务。                                                                                                                                |
 | `retryFromTurnId`           | string(可选)  | 仅 runtime 级。带原回合上下文的重试：服务端加载该 turn 的持久化 `turn_results` 工件，把其中记录的 runtime 输出播种进本次执行的 completedResults——目标 runtime 的 `input.inject` / `needs` 按原回合叙事解析（裸 manual 触发这些解析为空）。种子只作上下文，不会被本次工件重复持久化。找不到该 turn 时 404（`retry-turn-not-found`）。 |
@@ -1376,13 +1398,14 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 **解析顺序(action 级):**
 
 1. 插件在 `entry` 中注册的 action(通过 `pluginId` 命名空间隔离)
-2. 框架默认 action(全局)——当前只注册了 `submit-form` 一个(`bootstrap/plugin-rpc-wiring.ts` 的 `registerFrameworkDefault`)
+2. 框架默认 action(全局)——包括 `submit-form` 与内置 `/debug` 使用的 `slash-debug` (`bootstrap/plugin-rpc-wiring.ts` 的 `registerFrameworkDefault`)
 
 **框架默认 action:**
 
 | Action        | 说明                                                                           |
 | ------------- | ------------------------------------------------------------------------------ |
 | `submit-form` | 绑定已提交 interaction，校验并幂等持久化玩家输入，再按 `{{字段}}` 填充自然语言 |
+| `slash-debug` | 读取 `/debug` 声明的 session/runtime/model 上下文并让客户端打开当前会话调试页  |
 
 **响应 200 — action 级:**
 
@@ -1392,6 +1415,8 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
   "result": {/* 取决于 handler */}
 }
 ```
+
+command 成功也使用同一信封；如果命令声明了 `context`，顶层 `environment` 是 action 完成后重新采集的最新、按 scope 裁剪的环境。handler 在 `ctx.environment` 中收到执行前快照，并在 `ctx.command` / payload 中收到同一个 `{ invocationId, commandId, command, canonical, raw, argv, args, source }`。输入框与 JSON-RENDER 入口分别标记 `source: "composer" | "plugin-ui"`，但共用 `commandId`、类型化 `args`、审批与 handler。
 
 **响应 200 — runtime 级,sync 模式:**
 
@@ -1875,13 +1900,25 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 #### `GET /api/sessions/:id/plugins`
 
-列出会话的活跃插件和所有可用插件。`available[]` 同样暴露插件 `capabilities`、`tags`、`relations`，供前端筛选和组合包状态说明使用。
+列出会话的活跃插件和所有可用插件。`available[]` 同样暴露插件 `capabilities`、`tags`、`relations`、`commands`，供前端筛选和组合包状态说明使用；顶层 `commands[]` 是已经按当前 `activePlugins` 过滤、并加入框架命令（如 `/debug`）的会话可执行目录。
 
 **响应:**
 
 ```json
 {
   "active": ["pregame", "narrator"],
+  "commands": [
+    {
+      "id": "framework:debug",
+      "pluginId": "framework",
+      "source": "framework",
+      "name": "debug",
+      "aliases": ["trace"],
+      "description": { "zh": "打开当前会话的调试与执行跟踪视图" },
+      "action": "slash-debug",
+      "context": ["session", "active-runtimes", "models"]
+    }
+  ],
   "available": [
     {
       "id": "narrator",

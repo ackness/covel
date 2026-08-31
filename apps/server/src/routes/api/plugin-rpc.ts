@@ -41,7 +41,12 @@ import {
   createTrustedHandlerStore,
 } from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
-import type { RuntimeResult } from "@covel/shared";
+import {
+  type PluginRpcCommandRequest,
+  type RpcCommandInvocation,
+  type RuntimeResult,
+  type SessionSlashCommand,
+} from "@covel/shared";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { validatePluginRpcBody } from "./plugin-rpc/body.js";
 import {
@@ -66,6 +71,12 @@ import {
   sessionApprovalScope,
   SESSION_DELETION_PENDING_KEY,
 } from "./session/session-guard.js";
+import {
+  buildCommandEnvironment,
+  parseSessionCommandInvocation,
+  resolveSessionCommand,
+} from "./session/commands.js";
+import { runTracedCommand } from "./plugin-rpc/command-trace.js";
 
 export const pluginRpcRoutes = new Hono();
 
@@ -127,6 +138,43 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     );
   }
   const body = bodyResult.body;
+
+  // Command mode resolves the client-supplied stable id against the current
+  // session directory. The server owns plugin/action/context selection and
+  // validates composer text or named UI args again; the client cannot expand a
+  // command's context scopes or dispatch it into another plugin.
+  let resolvedCommand: SessionSlashCommand | undefined;
+  let commandInvocation: RpcCommandInvocation | undefined;
+  const commandInvocationId = body.commandId ? crypto.randomUUID() : undefined;
+  if (body.commandId) {
+    resolvedCommand = resolveSessionCommand(
+      body.commandId,
+      session.activePlugins ?? [],
+      c.get("pluginRegistry"),
+    );
+    if (!resolvedCommand) {
+      return c.json(
+        {
+          status: "error",
+          error: `command "${body.commandId}" is not active in this session`,
+          code: "command-not-active",
+        },
+        404,
+      );
+    }
+    const parsed = parseSessionCommandInvocation(
+      resolvedCommand,
+      body as PluginRpcCommandRequest,
+      commandInvocationId!,
+    );
+    if (!parsed.ok) {
+      return c.json(
+        { status: "error", error: parsed.message, code: parsed.code },
+        400,
+      );
+    }
+    commandInvocation = parsed.invocation;
+  }
 
   // ── Runtime-level manual trigger ─────────────────────────────────
   //
@@ -593,8 +641,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // `pluginId === "framework"` for framework defaults. Plugin-declared
   // actions still use the real plugin ID.
   const FRAMEWORK_PLUGIN_SENTINEL = "framework";
-  const action = body.action!;
-  const pluginId = body.pluginId;
+  const action = resolvedCommand?.action ?? body.action!;
+  const pluginId = resolvedCommand?.pluginId ?? body.pluginId!;
+  const actionPayload = commandInvocation ?? body.payload;
   const registry = c.get("rpcRegistry");
   const gate = c.get("rpcApprovalGate");
   const approvalScope = sessionApprovalScope(session, pluginId);
@@ -643,7 +692,6 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       404,
     );
   }
-
   // Community modules execute in the server process and register global
   // capabilities. Hosted deployments therefore require the operator
   // credential in addition to the session owner token.
@@ -673,7 +721,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     sessionScope: approvalScope,
     pluginId,
     action: approvalAction,
-    payload: body.payload,
+    payload: actionPayload,
     trustLevel: entryTrust,
     description:
       approvalAction === COMMUNITY_SERVER_CODE_ACTION
@@ -730,7 +778,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       sessionScope: approvalScope,
       pluginId,
       action,
-      payload: body.payload,
+      payload: actionPayload,
       trustLevel: entryTrust,
       description: entryDescription,
     });
@@ -827,23 +875,117 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           409,
         );
       }
-      return executor.dispatch(
-        {
-          pluginId,
-          action,
-          payload: body.payload,
-        },
-        // session.locale lets framework defaults (submit-form) localize their
-        // produced narrative; resolution order request → session → world → app.
-        { sessionId, store: rpcStore, locale: liveSession.locale },
+      const liveActivePlugins = liveSession.activePlugins ?? [];
+      let liveCommand = resolvedCommand;
+      let liveInvocation = commandInvocation;
+      let activeRuntimes: readonly import("@covel/shared").RuntimeManifest[] =
+        [];
+      if (body.commandId) {
+        liveCommand = resolveSessionCommand(
+          body.commandId,
+          liveActivePlugins,
+          c.get("pluginRegistry"),
+        );
+        if (
+          !liveCommand ||
+          liveCommand.pluginId !== pluginId ||
+          liveCommand.action !== action
+        ) {
+          return c.json(
+            {
+              status: "error",
+              error: `command "${body.commandId}" changed while the request was waiting`,
+              code: "command-changed",
+            },
+            409,
+          );
+        }
+        const parsed = parseSessionCommandInvocation(
+          liveCommand,
+          body as PluginRpcCommandRequest,
+          commandInvocationId!,
+        );
+        if (!parsed.ok) {
+          return c.json(
+            { status: "error", error: parsed.message, code: parsed.code },
+            400,
+          );
+        }
+        liveInvocation = parsed.invocation;
+        const pluginRegistry = c.get("pluginRegistry");
+        pluginRegistry.syncSessionActivations(sessionId, liveActivePlugins);
+        activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
+      }
+      const environment = liveCommand
+        ? buildCommandEnvironment({
+            command: liveCommand,
+            session: liveSession,
+            activeRuntimes,
+            resolveModel: c.get("resolveModel"),
+          })
+        : undefined;
+      const dispatch = () =>
+        executor.dispatch(
+          {
+            pluginId,
+            action,
+            payload: liveInvocation ?? body.payload,
+          },
+          // session.locale lets framework defaults (submit-form) localize their
+          // produced narrative; resolution order request → session → world → app.
+          {
+            sessionId,
+            store: rpcStore,
+            locale: liveSession.locale,
+            ...(liveInvocation ? { command: liveInvocation } : {}),
+            ...(environment ? { environment } : {}),
+          },
+        );
+      const eventBus = c.get("eventBus");
+      const dispatched =
+        liveCommand && liveInvocation
+          ? await runTracedCommand({
+              store,
+              ...(eventBus ? { eventBus } : {}),
+              sessionId,
+              command: liveCommand,
+              invocation: liveInvocation,
+              dispatch,
+            })
+          : await dispatch();
+      if (!liveCommand) return { dispatched };
+
+      // Re-read after the handler: commands may change session model/runtime
+      // state through governed framework actions. The response snapshot is
+      // therefore the environment AFTER execution, while the handler saw the
+      // immutable pre-execution snapshot above.
+      const postSession = await store.getSession(sessionId);
+      if (!postSession) return { dispatched };
+      const pluginRegistry = c.get("pluginRegistry");
+      pluginRegistry.syncSessionActivations(
+        sessionId,
+        postSession.activePlugins ?? [],
       );
+      const postEnvironment = buildCommandEnvironment({
+        command: liveCommand,
+        session: postSession,
+        activeRuntimes: pluginRegistry.getActiveRuntimes(sessionId),
+        resolveModel: c.get("resolveModel"),
+      });
+      return { dispatched, environment: postEnvironment };
     };
     const actionSessionLock = c.get("sessionLock");
-    const dispatch = actionSessionLock
+    const dispatchResult = actionSessionLock
       ? await actionSessionLock.withLock(sessionId, dispatchAction)
       : await dispatchAction();
-    if (dispatch instanceof Response) return dispatch;
-    return c.json({ status: "ok", result: dispatch.result });
+    if (dispatchResult instanceof Response) return dispatchResult;
+    return c.json({
+      status: "ok",
+      result: dispatchResult.dispatched.result,
+      ...(dispatchResult.environment
+        ? { environment: dispatchResult.environment }
+        : {}),
+    });
   } catch (err) {
     if (err instanceof RpcValidationError) {
       return c.json({ status: "error", error: err.message }, 400);

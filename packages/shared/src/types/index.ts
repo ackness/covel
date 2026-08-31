@@ -83,6 +83,12 @@ export type {
   WorldProjectionOutputDecl,
   PluginEventDecl,
   PluginUserSettingSpec,
+  SlashCommandArgumentSpec,
+  SlashCommandArgumentType,
+  SlashCommandContextScope,
+  SlashCommandInvocation,
+  SlashCommandSpec,
+  SessionSlashCommand,
   ToolsConfig,
   PluginRelations,
   PluginTag,
@@ -105,6 +111,7 @@ export {
   FrameworkRuntimeCapability,
   FRAMEWORK_KNOWN_CAPABILITIES,
   PLUGIN_SCOPED_FIELDS,
+  SLASH_COMMAND_CONTEXT_SCOPES,
 } from "./plugin.js";
 export { HOOK_EVENTS } from "./plugin.js";
 
@@ -297,11 +304,19 @@ export type {
   RpcTrustLevel,
   RpcHandlerStore,
   PluginRpcActionRequest,
+  PluginRpcCommandRequest,
+  PluginRpcStructuredCommandRequest,
+  PluginRpcTextCommandRequest,
   PluginRpcRequest,
   PluginRpcDeferredJob,
   PluginRpcResponse,
   PluginRpcRuntimeRequest,
   PluginRpcRuntimeResultSummary,
+  RpcCommandEnvironment,
+  RpcCommandInvocation,
+  RpcCommandRuntimeEnvironment,
+  RpcCommandSessionEnvironment,
+  RpcCommandSource,
 } from "./rpc.js";
 
 export type {
@@ -391,3 +406,8 @@ export type {
 } from "./handler-result.js";
 
 export type { RuntimeExportRecord } from "./runtime-exports.js";
+
+export {
+  PLUGIN_UI_COMPONENT_NAMES,
+  type PluginUiComponentName,
+} from "./plugin-ui.js";

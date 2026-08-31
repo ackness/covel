@@ -197,7 +197,11 @@ function refreshSessionSideData(
     .listSessionPlugins(sessionId)
     .then((res) => {
       if (sessionIdRef.current === targetSessionId) {
-        dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available });
+        dispatch({
+          type: "LOAD_SESSION_PLUGINS",
+          plugins: res.available,
+          commands: res.commands,
+        });
       }
     })
     .catch(ignoreError("list session plugins on restore"));

@@ -90,6 +90,7 @@ function createSubscriptionEventHandler(
               options.dispatch({
                 type: "LOAD_SESSION_PLUGINS",
                 plugins: res.available,
+                commands: res.commands,
               });
             })
             .catch(ignoreError("reload session plugins on plugin toggle"));
@@ -160,7 +161,11 @@ export async function rehydrateSessionSideState(
     .listSessionPlugins(sessionId)
     .then(async (res) => {
       if (!isCurrent()) return;
-      dispatch({ type: "LOAD_SESSION_PLUGINS", plugins: res.available });
+      dispatch({
+        type: "LOAD_SESSION_PLUGINS",
+        plugins: res.available,
+        commands: res.commands,
+      });
       const rowsByPlugin = await Promise.all(
         res.active.map(async (pluginId) => ({
           pluginId,

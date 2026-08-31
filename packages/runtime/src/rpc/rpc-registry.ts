@@ -6,7 +6,12 @@
  * handlers, while framework defaults are registered eagerly at bootstrap.
  */
 
-import type { RpcHandlerStore, RpcTrustLevel } from "@covel/shared";
+import type {
+  RpcCommandEnvironment,
+  RpcCommandInvocation,
+  RpcHandlerStore,
+  RpcTrustLevel,
+} from "@covel/shared";
 
 /**
  * Trust ranking — higher rank = more permissive (auto-allows the call).
@@ -78,6 +83,13 @@ export interface RpcHandlerContext {
    * Flows in via `...context` spread in the rpc-executor — no executor change.
    */
   readonly locale?: string;
+  /** Present only for first-class slash-command dispatches. */
+  readonly command?: RpcCommandInvocation;
+  /**
+   * Server-authored and limited to the command manifest's declared scopes.
+   * Ordinary action/runtime RPCs and context-free commands leave it absent.
+   */
+  readonly environment?: RpcCommandEnvironment;
   /** SSE push (no-op for sync mode). */
   readonly emit?: (event: { type: string; data: unknown }) => void;
 }

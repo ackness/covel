@@ -7,6 +7,7 @@ import type { PluginRpcRequest, PluginRpcResponse } from "./types.js";
 //
 //   Action-level:  { pluginId, action, payload }
 //   Runtime-level: { pluginId, runtimeId, payload }
+//   Command-level: { commandId, input } | { commandId, args }
 //
 // Responses carry a `status` discriminator:
 //   - 'ok'                - sync result or action-level completion

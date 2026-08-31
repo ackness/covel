@@ -37,6 +37,11 @@ export interface PluginPanelProviderPlan {
   }[];
 }
 
+export interface PluginPanelTarget {
+  readonly groupId: string;
+  readonly subPanelIndex: number;
+}
+
 export function pluginShortLabel(
   pluginId: string,
   sessionPlugins: readonly {
@@ -153,6 +158,30 @@ export function planPluginPanelProviders(
     ...(activeProviderId ? { activeProviderId } : {}),
     activeProviderSubs,
   };
+}
+
+/** Resolve only panels owned by the command's plugin, including shared groups. */
+export function resolvePluginPanelTarget(
+  groups: readonly PluginPanelTabGroup[],
+  pluginId: string,
+  panelId: string,
+): PluginPanelTarget | undefined {
+  for (const group of groups) {
+    const exactIndex = group.subPanels.findIndex(
+      (panel) => panel.pluginId === pluginId && panel.id === panelId,
+    );
+    if (exactIndex >= 0) {
+      return { groupId: group.id, subPanelIndex: exactIndex };
+    }
+  }
+  const group = groups.find((candidate) => candidate.id === panelId);
+  if (!group) return undefined;
+  const pluginIndex = group.subPanels.findIndex(
+    (panel) => panel.pluginId === pluginId,
+  );
+  return pluginIndex >= 0
+    ? { groupId: group.id, subPanelIndex: pluginIndex }
+    : undefined;
 }
 
 export function panelProviderLabel(

@@ -20,15 +20,18 @@ Reference for the json-render components available to plugin UI specs. This page
 
 ## Data bindings cheat sheet
 
-| Need                    | Write                                                                                                                        |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Read state              | `{ "$state": "/path" }`                                                                                                      |
-| Two-way bind state      | `{ "$bindState": "/path" }`                                                                                                  |
-| Iterate array           | `repeat: { "statePath": "/path", "key": "id" }`                                                                              |
-| Current item field      | `{ "$item": "field" }`                                                                                                       |
-| Two-way bind item field | `{ "$bindItem": "field" }`                                                                                                   |
-| Current index           | `{ "$index": true }`                                                                                                         |
-| Resolve i18n            | pass any `I18nText` value (`{ "zh": "…", "en": "…" }`) to any `content` / `label` / `placeholder` / `title` / `message` prop |
+| Need                      | Write                                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Read state                | `{ "$state": "/path" }`                                                                                                      |
+| Two-way bind state        | `{ "$bindState": "/path" }`                                                                                                  |
+| Iterate array             | `repeat: { "statePath": "/path", "key": "id" }`                                                                              |
+| Iterate nested item array | `repeat: { "statePath": { "$item": "items" }, "key": "id" }`                                                                 |
+| Current item field        | `{ "$item": "field" }`                                                                                                       |
+| Two-way bind item field   | `{ "$bindItem": "field" }`                                                                                                   |
+| Current index             | `{ "$index": true }`                                                                                                         |
+| Named child regions       | `slots: { "header": [{ "component": "Text" }], "content": [{ "component": "Stack" }] }`                                      |
+| Transform a value         | `$format`, `$math`, `$concat`, `$count`, `$truncate`, `$pluralize`, or `$join` (also valid in action params)                 |
+| Resolve i18n              | pass any `I18nText` value (`{ "zh": "…", "en": "…" }`) to any `content` / `label` / `placeholder` / `title` / `message` prop |
 
 ## Components
 
@@ -135,6 +138,6 @@ catalog icon (panel tabs use `HelpCircle` as their fallback).
 
 48 components total as of this writing. Authoritative inventory: the exported `covelRegistry` in `apps/web/src/lib/catalog.tsx`; renderer implementations live under `apps/web/src/lib/catalog/`. If you add a new component:
 
-1. Register it in `covelRegistry` with a short doc comment above the renderer.
+1. Add its exact name to `PLUGIN_UI_COMPONENT_NAMES` in `packages/shared/src/types/plugin-ui.ts`, then register its renderer in `covelRegistry`. The typed registry makes a missing or extra mapping fail TypeScript checks.
 2. Add a row here in the matching section.
 3. If it accepts user-facing strings, make sure they flow through `resolveI18n` / `useI18nResolver()` so locale switching re-renders the subtree.
