@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. Follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Packaged desktop apps now notify players when a newer stable Covel release is available.** The startup check uses the configured direct, system, HTTP(S), or SOCKS5 proxy route; players can open GitHub Releases or ignore that version without enabling automatic installation.
+
 ## [0.0.28] - 2026-08-31
 
 This release turns the stage view, plugin UI, world data, and runtime context into one extensible interaction system: the same contextual plugin action can be discovered as a slash command, rendered as JSON UI, traced, and committed through a shared pipeline.

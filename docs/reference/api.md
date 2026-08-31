@@ -564,6 +564,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | PUT  | `/api/config/settings`         | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }`                                                                                         |
 | GET  | `/api/config/proxy`            | 仅桌面：读取核心出站请求的代理模式与生效状态；返回 `{ mode, url?, effective, systemAvailable }`                                                                     |
 | PUT  | `/api/config/proxy`            | 仅桌面：写入并热应用代理；body `{ mode: "direct"                                                                                                                    | "system" | "http" | "socks", url? }`。HTTP/S 与 SOCKS5 地址支持 URL 内认证信息 |
+| GET  | `/api/app-update/latest`       | 仅桌面：通过当前代理查询 GitHub 最新稳定 Release；返回 `{ version, name, publishedAt }`                                                                             |
 | PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                                                                                                        |
 | POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                                                                                                        |
 

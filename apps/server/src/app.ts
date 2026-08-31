@@ -36,6 +36,7 @@ import { createWorldFileWatcher } from "./world-file-watcher.js";
 import { createModelDbRoutes } from "./routes/model-db.js";
 import { createMiscApiRoutes } from "./routes/misc-api.js";
 import { createConfigApiRoutes } from "./routes/config-api.js";
+import { createAppUpdateRoutes } from "./routes/app-update.js";
 import { createPerRequestLlmMiddleware } from "./middleware/per-request-llm.js";
 import { createRequestBodyLimitMiddleware } from "./middleware/request-body-limit.js";
 import {
@@ -466,6 +467,7 @@ app.route("/", api.app);
 app.route("/", createModelDbRoutes(ai));
 app.route("/", createMiscApiRoutes(ai, api.registry, store, sessionLock));
 app.route("/", createConfigApiRoutes({ apiKeys }));
+app.route("/", createAppUpdateRoutes());
 
 // ── Static file serving (production) ─────────────────────────────
 if (env.serveStatic) {
