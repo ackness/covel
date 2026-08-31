@@ -448,6 +448,7 @@ export function RightPanel({
                     pluginId={currentSub.pluginId}
                     spec={currentSub.spec}
                     stateCache={pluginPanelStateCacheRef.current}
+                    enableDevtools={import.meta.env.DEV}
                   />
                 )}
               </TabsContent>

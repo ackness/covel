@@ -40,7 +40,9 @@ import { requestConfirm } from "@/lib/confirm-channel.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { emitNavEvent } from "@/lib/nav-events.js";
 import { buildPluginCommandRequest } from "@/lib/plugin-command.js";
+import { covelDirectives } from "@/lib/json-render-directives.js";
 import { X } from "lucide-react";
+import { PluginJsonRenderDevtools } from "./json-render-devtools.js";
 
 export type PluginPanelStateCache = Map<string, StateStore>;
 
@@ -55,6 +57,7 @@ export interface PluginPanelProps {
   >;
   stateOverride?: Record<string, unknown>;
   interactionLocked?: boolean;
+  enableDevtools?: boolean;
 }
 
 function resolveEmptyMessage(value: unknown): string {
@@ -93,6 +96,7 @@ export function PluginPanel({
   handlers: explicitHandlers,
   stateOverride,
   interactionLocked = false,
+  enableDevtools = false,
 }: PluginPanelProps) {
   const { t, i18n } = useTranslation();
   const dataSource = spec.dataSource as Record<string, string> | undefined;
@@ -499,8 +503,10 @@ export function PluginPanel({
           registry={covelRegistry}
           store={stateStore}
           handlers={handlers}
+          directives={covelDirectives}
         >
           <Renderer spec={flatSpec} registry={covelRegistry} />
+          {enableDevtools ? <PluginJsonRenderDevtools spec={flatSpec} /> : null}
         </JSONUIProvider>
       </PluginSurfaceBoundary>
     </div>

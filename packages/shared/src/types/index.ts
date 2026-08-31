@@ -406,3 +406,8 @@ export type {
 } from "./handler-result.js";
 
 export type { RuntimeExportRecord } from "./runtime-exports.js";
+
+export {
+  PLUGIN_UI_COMPONENT_NAMES,
+  type PluginUiComponentName,
+} from "./plugin-ui.js";
