@@ -45,8 +45,10 @@ import {
   extractInteractionChoices,
   extractPendingFormMessages,
   filterStalePrompts,
+  initialStageReadStoryKey,
   pluginIdForCapability,
   resolveStageSpeakers,
+  stageStoryKey,
   STAGE_CAPABILITIES,
   type PresenceRecord,
   type StageCurrentRecord,
@@ -200,7 +202,7 @@ export function StageView(props: StageViewProps): ReactElement {
   const liveStoryText = useStreamingText(storyMsg?.id ?? "");
   const storyText = storyMsg ? (liveStoryText ?? storyMsg.content) : "";
   const storyTurnId = storyMsg?.turnId;
-  const storyKey = storyMsg ? (storyTurnId ?? storyMsg.id) : undefined;
+  const storyKey = stageStoryKey(storyMsg);
   const isStreaming =
     executing && (storyMsg?.id.startsWith("stream_") ?? false);
 
@@ -210,8 +212,8 @@ export function StageView(props: StageViewProps): ReactElement {
   // before a restore. Mark it read instead of replaying old text from scratch.
   // New story keys naturally fall back to the narrative dialog until it calls
   // `onAllRead`; no reset effect (and no first-render race) is required.
-  const [readStoryKey, setReadStoryKey] = useState<string | undefined>(
-    () => storyKey,
+  const [readStoryKey, setReadStoryKey] = useState<string | undefined>(() =>
+    initialStageReadStoryKey(storyMsg),
   );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [dismissedFormIds, setDismissedFormIds] = useState<ReadonlySet<string>>(

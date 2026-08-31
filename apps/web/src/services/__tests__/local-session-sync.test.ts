@@ -104,8 +104,15 @@ describe("LocalDataService browser-authoritative sync", () => {
           description: "Keeps promises visible.",
           instantiate: {
             characterId: "npc-thread-keeper",
+            name: "Keeper of Threads",
+            type: "companion",
+            description: "Makes every promise visible.",
             fields: { faction: "Silver House", trust: 20 },
           },
+        },
+        {
+          id: "missing-schema-version",
+          name: "Invalid Blueprint",
         },
       ],
       embeddedLorebook: [
@@ -132,7 +139,9 @@ describe("LocalDataService browser-authoritative sync", () => {
       characters: [
         {
           id: "sess-portable-npc-thread-keeper",
-          name: "Thread Keeper",
+          name: "Keeper of Threads",
+          type: "companion",
+          description: "Makes every promise visible.",
           fields: { faction: "Silver House", trust: 20 },
         },
       ],

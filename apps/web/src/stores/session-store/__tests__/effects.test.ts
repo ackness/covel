@@ -67,6 +67,22 @@ describe("useMessageUiSpecHydrationEffect", () => {
     });
   });
 
+  it("clears a cached message namespace when the server has no rows", async () => {
+    api.fetchUiSpecs.mockResolvedValue(messageSpecs);
+    api.listPluginData.mockResolvedValue([]);
+
+    renderHook(() => useMessageUiSpecHydrationEffect("sess-a", vi.fn()));
+
+    await waitFor(() => {
+      expect(pluginStore.loadPluginDataForSession).toHaveBeenCalledWith(
+        "sess-a",
+        "scene-prompts",
+        "message",
+        [],
+      );
+    });
+  });
+
   it("drops message rows that resolve after switching sessions", async () => {
     let releaseRows!: (rows: unknown[]) => void;
     api.fetchUiSpecs.mockImplementation(async (sessionId: string) =>

@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest";
-import { createTurnContextBudget } from "../../src/routes/api/bootstrap/compactor.js";
+import { describe, it, expect, vi } from "vitest";
+import type { LLMAdapter, LLMResponse } from "@covel/runtime";
+import { createMemoryStore, type TurnMessageRecord } from "@covel/store";
+import {
+  createBootstrapCompactorRunner,
+  createTurnContextBudget,
+} from "../../src/routes/api/bootstrap/compactor.js";
 
 describe("createTurnContextBudget", () => {
   it("prefers the explicit env override over capability", () => {
@@ -68,4 +73,45 @@ describe("createTurnContextBudget", () => {
       expect(() => budget.reservedForResponse).toThrow(RangeError);
     },
   );
+});
+
+describe("createBootstrapCompactorRunner", () => {
+  it("triggers against input capacity after reserving the configured response budget", async () => {
+    const store = createMemoryStore();
+    const generate = vi.fn(async (): Promise<LLMResponse> => ({
+      content: "bounded summary",
+      toolCalls: [],
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    }));
+    const llmAdapter: LLMAdapter = { generate };
+    const messages: TurnMessageRecord[] = Array.from(
+      { length: 10 },
+      (_, index) => ({
+        id: `message-${index}`,
+        sessionId: "session-1",
+        turnId: `turn-${index}`,
+        role: index % 2 === 0 ? "user" : "assistant",
+        content: "x".repeat(200),
+        createdAt: new Date(index).toISOString(),
+      }),
+    );
+
+    const runner = createBootstrapCompactorRunner({
+      manifestCache: new Map(),
+      store,
+      llmAdapter,
+      resolveNarrativeBudget: () => ({
+        contextWindow: 1_000,
+        maxOutputTokens: 400,
+      }),
+    });
+
+    const result = await runner.run("session-1", "", messages, "en-US");
+
+    expect(result.compacted).toBe(true);
+    expect(generate).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "fast", maxOutputTokens: 400 }),
+    );
+  });
 });

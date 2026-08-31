@@ -230,20 +230,24 @@ function computeProtectStart(
   // Absolute tail protection
   const tailProtect = Math.max(0, n - protectLastNMessages);
 
-  // User-turn protection
-  let userTurnProtect = n; // default: protect everything
-  let userSeen = 0;
-  for (let i = n - 1; i >= 0; i--) {
-    if (messages[i]!.role === "user") {
-      userSeen += 1;
-      if (userSeen >= protectLastNUserTurns) {
-        userTurnProtect = i;
-        break;
+  // User-turn protection. A zero count disables this rule, leaving only the
+  // absolute tail protection; without the explicit branch, the first user
+  // encountered satisfied `userSeen >= 0` and was accidentally protected.
+  let userTurnProtect = n;
+  if (protectLastNUserTurns > 0) {
+    let userSeen = 0;
+    for (let i = n - 1; i >= 0; i--) {
+      if (messages[i]!.role === "user") {
+        userSeen += 1;
+        if (userSeen >= protectLastNUserTurns) {
+          userTurnProtect = i;
+          break;
+        }
       }
     }
-  }
-  if (userSeen < protectLastNUserTurns) {
-    userTurnProtect = 0; // protect entire list
+    if (userSeen < protectLastNUserTurns) {
+      userTurnProtect = 0; // protect entire list
+    }
   }
 
   // The more conservative (earlier) boundary wins

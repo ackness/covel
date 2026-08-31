@@ -55,6 +55,24 @@ export const STAGE_CAPABILITIES = {
   direction: "stage-direction",
 } as const;
 
+/** Stable key for the story currently presented on stage. A turn id survives
+ * the streaming-placeholder to durable-message swap; the message id covers
+ * restored legacy rows without a turn id. */
+export function stageStoryKey(
+  message: Pick<StreamMessage, "id" | "turnId"> | undefined,
+): string | undefined {
+  return message ? (message.turnId ?? message.id) : undefined;
+}
+
+/** Durable history present when Stage mounts has already been read elsewhere.
+ * A streaming placeholder can also be present on the first render, but its
+ * partial narrative must still pass through the typewriter. */
+export function initialStageReadStoryKey(
+  message: Pick<StreamMessage, "id" | "turnId"> | undefined,
+): string | undefined {
+  return message?.id.startsWith("stream_") ? undefined : stageStoryKey(message);
+}
+
 interface CapabilityCarrier {
   readonly id: string;
   readonly isActive?: boolean;
@@ -466,7 +484,7 @@ export function deriveDecisionRecapFallback(
 
   const sentences =
     normalized
-      .match(/[^。！？!?]+(?:[。！？!?]+[”’」』）》】]?|$)/gu)
+      .match(/[^。！？!?]+(?:[。！？!?]+[”’」』）》】]?|$)/gu) // i18n-allow -- locale-aware sentence punctuation
       ?.map((value) => value.trim()) ?? [];
   let recap = "";
   let sentenceCount = 0;

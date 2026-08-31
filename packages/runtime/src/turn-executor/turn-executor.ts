@@ -506,14 +506,14 @@ async function executeTurnImpl(
           emitter: deps.emitter,
         };
         const pre = await runPreCompactionHook(hookOpts, {
-          messageCount: messageHistory.length,
+          messageCount: projectedPromptHistory.length,
         });
         if (pre.skip) return unchanged;
 
         const result = await deps.compactor.run(
           input.sessionId,
           systemPromptPreview,
-          messageHistory,
+          projectedPromptHistory,
           input.locale,
           deps.emitter?.traceId,
         );

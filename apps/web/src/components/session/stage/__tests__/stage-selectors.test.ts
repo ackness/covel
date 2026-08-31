@@ -12,10 +12,12 @@ import {
   extractPendingFormMessages,
   filterStalePrompts,
   hasSubmittedForm,
+  initialStageReadStoryKey,
   mergeChoices,
   pluginIdForCapability,
   resolveBackdrop,
   resolveStageSpeakers,
+  stageStoryKey,
   type SpritePosition,
   type StageCurrentRecord,
   type StageSpeaker,
@@ -28,6 +30,27 @@ const worldVisual: WorldVisual = {
 };
 
 const ref = (id: string) => ({ id, mime: "image/png", size: 100 });
+
+describe("stage story identity", () => {
+  it("keeps streaming and durable messages in one turn on the same key", () => {
+    expect(
+      stageStoryKey({ id: "stream_turn-1_narrator", turnId: "turn-1" }),
+    ).toBe("turn-1");
+    expect(stageStoryKey({ id: "message-1", turnId: "turn-1" })).toBe("turn-1");
+  });
+
+  it("does not mark a streaming placeholder read on the first stage render", () => {
+    expect(
+      initialStageReadStoryKey({
+        id: "stream_turn-1_narrator",
+        turnId: "turn-1",
+      }),
+    ).toBeUndefined();
+    expect(
+      initialStageReadStoryKey({ id: "message-1", turnId: "turn-1" }),
+    ).toBe("turn-1");
+  });
+});
 
 describe("resolveBackdrop", () => {
   it("有图: a resolved MediaRef renders the scene", () => {
@@ -378,6 +401,31 @@ describe("applyStageDirectionPreview", () => {
         transition: "fade",
       },
     ]);
+  });
+
+  it("admits new actors after a full stage is cleared in the same event", () => {
+    const fullStage = ["a", "b", "c", "d"].map((id) => ({
+      id,
+      name: id.toUpperCase(),
+    }));
+    const result = applyStageDirectionPreview(
+      fullStage,
+      {
+        ...presence,
+        newcomer: { characterId: "newcomer", displayName: "Newcomer" },
+      },
+      [
+        { type: "stage.clear", transition: "fade" },
+        { type: "actor.enter", character: "Newcomer", focus: true },
+      ],
+    );
+
+    expect(result).toHaveLength(4);
+    expect(result[0]).toMatchObject({
+      id: "newcomer",
+      name: "Newcomer",
+    });
+    expect(result.filter((actor) => actor.exiting)).toHaveLength(3);
   });
 
   it("keeps a leaving actor for the requested speculative exit animation", () => {

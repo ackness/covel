@@ -259,6 +259,27 @@ describe("maybeCompact", () => {
       expect(result.compacted).toBe(false);
     });
 
+    it("uses only the absolute tail when user-turn protection is disabled", async () => {
+      const messages = makeSimpleHistory(6);
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm,
+        contextWindow: 100,
+      };
+
+      await maybeCompact("sess-1", "", messages, deps, {
+        protectLastNMessages: 1,
+        protectLastNUserTurns: 0,
+      });
+
+      const taggedIds = vi.mocked(store.tagTurnMessagesCompacted).mock
+        .calls[0]?.[1];
+      expect(taggedIds).toEqual(
+        messages.slice(0, -1).map((message) => message.id),
+      );
+    });
+
     it("protects at least the specified number of user turns", async () => {
       // Build a history with 6 user messages
       const messages: TurnMessageRecord[] = [];

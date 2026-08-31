@@ -51,13 +51,14 @@ export function useMessageUiSpecHydrationEffect(
           api
             .listPluginData(sessionId, pluginId, "message")
             .then((items) => {
-              if (cancelled || items.length === 0) return;
+              if (cancelled) return;
               loadPluginDataForSession(
                 sessionId,
                 pluginId,
                 "message",
                 items.map((item) => ({ key: item.key, value: item.value })),
               );
+              if (items.length === 0) return;
               dispatch({
                 type: "PLUGIN_DATA_CHANGED",
                 pluginId,

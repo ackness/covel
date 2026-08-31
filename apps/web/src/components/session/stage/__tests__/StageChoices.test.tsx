@@ -77,6 +77,26 @@ describe("StageChoices", () => {
     );
   });
 
+  it("clears an abandoned draft when a suggested reply is selected", () => {
+    const onSendMessage = vi.fn();
+    render(
+      <StageChoices
+        {...baseProps}
+        promptsNamespace={{ prompt1Text: "继续追问" }}
+        onSendMessage={onSendMessage}
+      />,
+    );
+
+    const input = screen.getByTestId(
+      "stage-decision-input",
+    ) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "这是已放弃的草稿" } });
+    fireEvent.click(screen.getByRole("button", { name: "继续追问" }));
+
+    expect(onSendMessage).toHaveBeenCalledWith("继续追问");
+    expect(input.value).toBe("");
+  });
+
   it("shows a contextual fallback with inline free input when no plugin suggestions exist", () => {
     const onSendMessage = vi.fn();
     render(

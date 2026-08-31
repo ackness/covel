@@ -474,6 +474,59 @@ describe("Turn executor hook wire-in", () => {
       expect(compactor.run.mock.calls[0]?.[1]).toContain("Say something.");
     });
 
+    it("compacts the capability-projected history seen by agent prompts", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      const store = await createMainLoopStore("sess-hook-wire");
+      await store.appendTurnMessage({
+        id: "prior-runtime-0",
+        sessionId: "sess-hook-wire",
+        turnId: "prior-turn",
+        sourceType: "runtime",
+        sourceRuntimeId: "test-plugin",
+        role: "assistant",
+        content: "original rejected branch",
+        order: 1,
+        createdAt: "2024-01-01T00:00:01Z",
+      });
+      await store.setPluginData({
+        id: "accepted-prior-turn",
+        sessionId: "sess-hook-wire",
+        pluginId: "history-rewriter",
+        namespace: "turns",
+        key: "prior-turn",
+        value: {
+          turnId: "prior-turn",
+          runtimeId: "test-plugin",
+          status: "accepted",
+          acceptedText: "accepted branch",
+        },
+        createdAt: "2024-01-01T00:00:02Z",
+        updatedAt: "2024-01-01T00:00:02Z",
+      });
+      const compactor = {
+        run: vi.fn().mockResolvedValue({ compacted: false }),
+      };
+      const deps: TurnExecutorDeps = {
+        ...(await makeDeps(llm, pipeline, store)),
+        compactor,
+        capabilityPluginIds: {
+          promptHistoryRewriterPluginId: "history-rewriter",
+        },
+      };
+
+      await executeTurn(makeTurnInput(), [makeManifest()], deps);
+
+      const compactedMessages = compactor.run.mock.calls[0]?.[2] as
+        Array<{ content: string }> | undefined;
+      expect(compactedMessages?.map((message) => message.content)).toContain(
+        "accepted branch",
+      );
+      expect(
+        compactedMessages?.map((message) => message.content),
+      ).not.toContain("original rejected branch");
+    });
+
     it("rebuilds the first agent context from the newly persisted summary", async () => {
       const llm = new SimpleMockLLM();
       const pipeline = createHookPipeline();

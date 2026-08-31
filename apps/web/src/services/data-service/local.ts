@@ -1,4 +1,9 @@
-import type { CursorPage } from "@covel/shared";
+import {
+  characterBlueprintToCharacterUpsert,
+  resolveI18nText,
+  type CharacterBlueprint,
+  type CursorPage,
+} from "@covel/shared";
 import type {
   BrowserCheckpoint,
   MessageRecord as StoreMessageRecord,
@@ -14,7 +19,6 @@ import type {
   WorldRecord,
 } from "../api.js";
 import i18n from "i18next";
-import { resolveI18nText } from "@covel/shared";
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
@@ -85,6 +89,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function normalizePortableCharacterBlueprint(
+  value: unknown,
+): CharacterBlueprint | null {
+  if (!isRecord(value) || value.schemaVersion !== 1) return null;
+  if (typeof value.id !== "string" || value.id.length === 0) return null;
+  if (typeof value.name !== "string" || value.name.length === 0) return null;
+  return value as unknown as CharacterBlueprint;
+}
+
 function portableWorldContent(
   session: StoreSessionRecord,
   world: StoreWorldRecord | null,
@@ -95,36 +108,32 @@ function portableWorldContent(
     ? metadata.characterBlueprints.slice(0, 64)
     : [];
   const characters = rawCharacters.flatMap((value) => {
-    if (!isRecord(value)) return [];
-    if (typeof value.id !== "string" || typeof value.name !== "string") {
-      return [];
-    }
-    const instantiate = isRecord(value.instantiate) ? value.instantiate : {};
+    const blueprint = normalizePortableCharacterBlueprint(value);
+    if (!blueprint) return [];
     const baseId =
-      typeof instantiate.characterId === "string"
-        ? instantiate.characterId
-        : `char-${value.id}`;
+      typeof blueprint.instantiate?.characterId === "string" &&
+      blueprint.instantiate.characterId.length > 0
+        ? blueprint.instantiate.characterId
+        : `char-${blueprint.id}`;
     const scopedId = `${session.id}-${baseId}`;
-    const fields =
-      instantiate.fields ?? value.fields ?? value.attributes ?? undefined;
+    const characterId =
+      scopedId.length <= 180 ? scopedId : `${session.id}-${blueprint.id}`;
+    const upsert = characterBlueprintToCharacterUpsert(blueprint, {
+      now,
+      characterId,
+    });
     return [
       {
-        id: scopedId.length <= 180 ? scopedId : `${session.id}-${value.id}`,
+        id: upsert.id,
         sessionId: session.id,
-        name:
-          typeof instantiate.name === "string" ? instantiate.name : value.name,
-        type:
-          typeof instantiate.type === "string"
-            ? instantiate.type
-            : typeof value.role === "string"
-              ? value.role
-              : "npc",
-        ...(typeof value.description === "string"
-          ? { description: value.description }
+        name: upsert.name,
+        type: upsert.type ?? "npc",
+        ...(upsert.description !== undefined
+          ? { description: upsert.description }
           : {}),
-        ...(fields !== undefined ? { fields } : {}),
-        version: 1,
-        createdAt: now,
+        ...(upsert.fields !== undefined ? { fields: upsert.fields } : {}),
+        version: upsert.version ?? 1,
+        createdAt: upsert.createdAt ?? now,
         updatedAt: now,
       },
     ];

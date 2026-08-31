@@ -39,20 +39,6 @@ interface BudgetSourceParams {
   readonly resolveNarrativeBudget?: ResolveNarrativeBudgetFn;
 }
 
-/** Resolution order: env override > slot model capability > fallback. */
-function resolveContextWindow(params: BudgetSourceParams): number {
-  const contextWindow =
-    params.contextWindowOverride ??
-    params.resolveNarrativeBudget?.()?.contextWindow ??
-    FALLBACK_CONTEXT_WINDOW;
-  if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
-    throw new RangeError(
-      `contextWindow must be a positive integer; received ${String(contextWindow)}`,
-    );
-  }
-  return contextWindow;
-}
-
 function resolveTurnBudget(
   params: BudgetSourceParams,
 ): ReturnType<typeof resolveBudgetOptions> {
@@ -87,26 +73,29 @@ export function createBootstrapCompactorRunner(
   }
   const focusSections: readonly string[] = [...allSummaryFocus];
 
-  const fastSlotLlm: CompactorLLMAdapter = {
-    async complete(input) {
-      const budget = resolveTurnBudget(params);
-      const response = await llmAdapter.generate({
-        model: "fast",
-        maxOutputTokens: budget.reservedForResponse,
-        messages: [
-          { role: "system", content: input.systemPrompt },
-          ...input.messages.map((m) => ({
-            role: m.role as "user",
-            content: m.content,
-          })),
-        ],
-      });
-      return { content: response.content ?? "" };
-    },
-  };
-
   return {
     async run(sessionId, systemPromptPreview, messages, locale, traceId) {
+      // Resolve once per run so a hot reload cannot make the threshold use one
+      // capability while the provider call uses another. Compaction input and
+      // output share the same model context, so only the window left after the
+      // response reserve is available to the compactor prompt.
+      const budget = resolveTurnBudget(params);
+      const fastSlotLlm: CompactorLLMAdapter = {
+        async complete(input) {
+          const response = await llmAdapter.generate({
+            model: "fast",
+            maxOutputTokens: budget.reservedForResponse,
+            messages: [
+              { role: "system", content: input.systemPrompt },
+              ...input.messages.map((m) => ({
+                role: m.role as "user",
+                content: m.content,
+              })),
+            ],
+          });
+          return { content: response.content ?? "" };
+        },
+      };
       // The compactor only ships zh-CN / en-US prompt templates; map the
       // session locale by prefix (en* → en-US, else the zh-CN default).
       const compactorLocale =
@@ -119,8 +108,7 @@ export function createBootstrapCompactorRunner(
           store,
           estimator: estimateTokens,
           fastSlotLlm,
-          // Resolved per run so llm.toml hot-reloads take effect immediately.
-          contextWindow: resolveContextWindow(params),
+          contextWindow: budget.maxInputTokens - budget.reservedForResponse,
         },
         {
           focusSections,

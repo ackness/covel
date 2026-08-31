@@ -78,6 +78,7 @@ export function StageChoices({
 
   const handleSelect = (item: StageChoiceItem) => {
     if (executing) return;
+    setDraft("");
     if (item.kind === "interaction") {
       void onSubmitInteraction?.(
         item.blockId,

@@ -312,35 +312,89 @@ describe("gateway + slotOverrides", () => {
     ).toBe(100_000);
   });
 
-  it("lets top-level parameter overrides win over request-scoped slot overrides", async () => {
+  it("merges top-level parameter overrides over request-scoped slot defaults", async () => {
     const { gateway, calls } = setup();
-
-    await gateway.generateText(
-      {
-        presetId: "story",
-        messages: [{ role: "user", content: "hi" }],
-      },
-      {
-        parameterOverrides: {
-          temperature: 0.1,
-          maxOutputTokens: 128,
-        },
-        slotOverrides: {
-          parameterOverrides: {
-            story: {
-              temperature: 0.9,
-              maxOutputTokens: 999,
-            },
-          },
-        },
-      },
-    );
-
-    expect(calls).toHaveLength(1);
-    expect(calls[0].providerRequestMetadata).toMatchObject({
+    const input = {
+      presetId: "story",
+      messages: [{ role: "user" as const, content: "hi" }],
+    };
+    const options = {
       parameterOverrides: {
         temperature: 0.1,
         maxOutputTokens: 128,
+      },
+      slotOverrides: {
+        parameterOverrides: {
+          story: {
+            temperature: 0.9,
+            topP: 0.7,
+            maxOutputTokens: 999,
+          },
+        },
+      },
+    };
+
+    await gateway.generateText(input, options);
+    for await (const _event of gateway.streamText(input, options)) {
+      // exhaust stream
+    }
+
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      expect(call.providerRequestMetadata).toMatchObject({
+        parameterOverrides: {
+          temperature: 0.1,
+          topP: 0.7,
+          maxOutputTokens: 128,
+        },
+      });
+    }
+  });
+
+  it("preserves provider parameter defaults when applying a per-call output limit", async () => {
+    const calls: AdapterCall[] = [];
+    const providerRegistry = createProviderRegistry({
+      providers: {
+        deepseek: {
+          adapter: createRecordingAdapter("deepseek", calls),
+          defaults: {
+            baseUrl: "https://api.deepseek.com",
+            protocol: "openai-chat-v1",
+          },
+        },
+      },
+    });
+    const presetRegistry = createPresetRegistry({
+      profiles,
+      presets: [
+        {
+          ...basePresets[0],
+          providerRequestMetadata: {
+            parameterOverrides: { temperature: 0.35, topP: 0.8 },
+          },
+        },
+      ],
+    });
+    const slotRegistry = createSlotRegistry({ presetRegistry });
+    slotRegistry.configure({
+      slots: { story: { slotId: "story", presetId: "ds-chat", tag: "text" } },
+    });
+    const gateway = createGateway({
+      providerRegistry,
+      presetRegistry,
+      slotRegistry,
+    });
+
+    await gateway.generateText(
+      { presetId: "story", messages: [{ role: "user", content: "hi" }] },
+      { parameterOverrides: { maxOutputTokens: 256 } },
+    );
+
+    expect(calls[0]?.providerRequestMetadata).toMatchObject({
+      parameterOverrides: {
+        temperature: 0.35,
+        topP: 0.8,
+        maxOutputTokens: 256,
       },
     });
   });

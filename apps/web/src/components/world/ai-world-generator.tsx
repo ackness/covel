@@ -61,6 +61,7 @@ export function AiWorldGenerator({
   const [serverStorageMode, setServerStorageMode] = useState<StorageMode>();
   const abortRef = useRef<AbortController | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const generationRef = useRef(0);
 
   const resetForm = useCallback(() => {
     setPrompt("");
@@ -71,6 +72,7 @@ export function AiWorldGenerator({
 
   useEffect(
     () => () => {
+      generationRef.current += 1;
       abortRef.current?.abort();
       if (timerRef.current) clearTimeout(timerRef.current);
     },
@@ -91,35 +93,47 @@ export function AiWorldGenerator({
 
   const handleGenerate = useCallback(() => {
     if (!prompt.trim()) return;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = undefined;
+    }
+    const generation = ++generationRef.current;
     setPhase("generating");
     setError(null);
 
     const handleEvent = (event: GenerateWorldEvent) => {
+      if (generation !== generationRef.current) return;
       switch (event.type) {
         case "progress":
           setPhase(event.phase);
           break;
         case "done":
+          abortRef.current = null;
           void (async () => {
             try {
               const world =
                 getStorageMode() === "local"
                   ? await getDataService().saveGeneratedWorld(event.world)
                   : event.world;
+              if (generation !== generationRef.current) return;
               setPhase("done");
               onWorldCreated(world);
               timerRef.current = setTimeout(() => {
+                if (generation !== generationRef.current) return;
+                timerRef.current = undefined;
                 setPhase("idle");
                 resetForm();
                 onOpenChange(false);
               }, 900);
             } catch (err) {
+              if (generation !== generationRef.current) return;
               setPhase("error");
               setError(err instanceof Error ? err.message : String(err));
             }
           })();
           break;
         case "error":
+          abortRef.current = null;
           setPhase("error");
           setError(event.message);
           break;
@@ -131,6 +145,8 @@ export function AiWorldGenerator({
       i18n.language,
       handleEvent,
       (err) => {
+        if (generation !== generationRef.current) return;
+        abortRef.current = null;
         setPhase("error");
         setError(err.message);
       },
@@ -159,8 +175,13 @@ export function AiWorldGenerator({
   ]);
 
   const handleCancel = useCallback(() => {
+    generationRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = undefined;
+    }
     setPhase("idle");
     setError(null);
   }, []);
