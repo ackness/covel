@@ -20,6 +20,31 @@ describe("world data schemas", () => {
     expect(result.success).toBe(true);
   });
 
+  it("canonicalizes locale fields and rejects path-like locale input", () => {
+    const canonical = worldManifestSchema.safeParse({
+      schemaVersion: "1",
+      id: "locale-world",
+      name: "Locale World",
+      summary: "Locale test",
+      defaultLocale: " ru_ru ",
+      supportedLocales: ["ru_ru", "zh_hant_tw"],
+    });
+    expect(canonical.success).toBe(true);
+    if (canonical.success) {
+      expect(canonical.data.defaultLocale).toBe("ru-RU");
+      expect(canonical.data.supportedLocales).toEqual(["ru-RU", "zh-Hant-TW"]);
+    }
+
+    const traversal = worldManifestSchema.safeParse({
+      schemaVersion: "1",
+      id: "unsafe-world",
+      name: "Unsafe World",
+      summary: "Unsafe locale",
+      defaultLocale: "x/../../../docs/reference/i18n",
+    });
+    expect(traversal.success).toBe(false);
+  });
+
   it("allows world.yaml to declare pluginPolicy presets and tag preferences", () => {
     const result = worldManifestSchema.safeParse({
       schemaVersion: "1.0",

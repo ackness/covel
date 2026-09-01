@@ -101,9 +101,9 @@ builtin `memory` 插件声明默认四块（`story_state` / `character_relations
 
 CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，**以及** 工具/hook handler `.js` 里 `label:` / `title:` / `placeholder:` 的裸 CJK 字面量。但工具/handler **写入 plugin_data 或 prompt 的运行时文案**仍需作者自觉处理，否则 en 会话会看到中文：
 
-- **写给前端展示的标签**（如徽标 label）：存成 `I18nText` 对象 `{ zh, en }`，前端的 `Badge`/`Text` 等组件经 `resolveI18n` 按 locale 解析。例：`scene-prompts` 的 `prompt{N}Label`、`guide` 的 `category{N}Label`。
+- **写给前端展示的标签**（如徽标 label）：存成 `I18nText` 对象（目标 locale + English fallback），前端的 `Badge`/`Text` 等组件经 `resolveI18n` 按 locale 解析。例：`scene-prompts` 的 `prompt{N}Label`、`guide` 的 `category{N}Label`。
 - **写给模型 / 通知的纯文本**（如 prompt 前言、欢迎通知）：用 `ctx.locale`（function runtime）或 hook payload 的 `locale` 在写入时解析成单一语言。例：`director` 的导演前言、`pregame` 的欢迎语。
-- **agent runtime 的 `PLUGIN.md` 正文**（agent skill prompt）按 locale 解析 `PLUGIN.<locale>.md` → `PLUGIN.md`。正文含 CJK 的 agent 插件应配套提供 `PLUGIN.en.md`（如 `narrator` / `chat-mode-narrator`），否则 en 会话喂给模型的是中文指令。
+- **agent runtime 的 `PLUGIN.md` 正文**（agent skill prompt）按 exact locale → script 兼容的 primary language → English → canonical `PLUGIN.md` 解析。新增俄语可提供 `PLUGIN.ru-RU.md` 或 `PLUGIN.ru.md`；至少提供 `PLUGIN.en.md`（如 `narrator` / `chat-mode-narrator`），确保其他目标语言在缺少专属翻译时不会直接收到中文指令。`zh-Hant` 不会命中简体中文的 `PLUGIN.zh.md`。
 
 > **`PLUGIN.<locale>.md` 只能翻译，不能改契约。** 语言变体的正文和自然语言字段（`description` / `displayName` / `label` / `authorsNote.content` / `postHistory.content` / `i18n` 等）取自变体文件；`stage`、`needs`、`trigger`、`capabilities`、`tags`、`tools`、`input.inject`、`dataSchemas`、超时参数等**结构字段一律取自 canonical `PLUGIN.md`**。loader 每次加载语言变体时都会比对，逐字段报告差异并用 canonical 值覆盖（`[plugin-loader] … locale variant diverges from PLUGIN.md on non-translatable field(s) …`）。
 >

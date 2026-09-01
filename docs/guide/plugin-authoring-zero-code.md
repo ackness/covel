@@ -531,7 +531,7 @@ userSettings:
 | `select`   | 下拉选择     | `options`（必需）    |
 | `slot`     | 模型槽选择器 | —                    |
 
-字段说明：`key` 用作存储键（`/^[a-zA-Z][a-zA-Z0-9_-]*$/`）；`label` / `description` 是 `I18nText`（`string` 或 `{ zh, en }`）；`default` 可省（如 cost-gate 靠 env 兜底）。声明的 `min` / `max` / `options` 会进 schema 校验——越界值会被拒，不只是 UI 提示。
+字段说明：`key` 用作存储键（`/^[a-zA-Z][a-zA-Z0-9_-]*$/`）；`label` / `description` 是 `I18nText`（`string` 或由安全、可 canonicalize 的 locale identifier 组成的 map，并提供 English fallback）；`default` 可省（如 cost-gate 靠 env 兜底）。声明的 `min` / `max` / `options` 会进 schema 校验——越界值会被拒，不只是 UI 提示。
 
 框架会**自动**把每条注册成 `plugin.<pluginId>.<key>` 并渲染成对应控件，零前端代码。runtime 里读取：agent 用 `{{ userSettings.<key> }}` 模板变量；function/hook 用 `ctx.userSettings` / `ctx.getOwnSettings()`。
 

@@ -18,6 +18,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkLocaleCatalogs } from "./check-locale-catalogs.mjs";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 const WEB_ROOT = resolve(HERE, "..");
@@ -45,7 +46,6 @@ const WHITELIST_PREFIXES = [
   "src/services/data-service/seed-worlds.ts", // bilingual I18nText seed data
   "src/settings/navigation.ts", // bilingual group/subgroup labels
   "src/settings/registry/", // bilingual SettingEntry registries (core, llm, keys)
-  "src/theme-system/registry.ts", // bilingual appearance/theme registry
   "src/theme-system/token-schema.ts", // bilingual adjustable-token declaration table
 ];
 
@@ -216,9 +216,13 @@ function scanFile(filePath) {
 // The CJK scan cannot see this class of bug: a `t("some.key", "English
 // default")` whose key was never added to the locale files has no CJK in it,
 // so the gate passed while zh-CN players silently read English. Collect the
-// statically-analysable keys and require both locales to define them.
+// statically-analysable keys and require every shipped catalog to define them.
 
-const LOCALE_FILES = ["zh-CN", "en-US"];
+const LOCALES_ROOT = resolve(SRC_ROOT, "i18n/locales");
+const LOCALE_FILES = readdirSync(LOCALES_ROOT)
+  .filter((name) => name.endsWith(".json"))
+  .map((name) => name.slice(0, -".json".length))
+  .sort();
 // Only literal single-argument keys — `t(\`prefix.${x}\`)` is deliberately
 // skipped rather than guessed at.
 const T_CALL_REGEX = /\bt\(\s*"([A-Za-z0-9_.]+)"/g;
@@ -257,7 +261,7 @@ function collectUsedKeys(files) {
 function checkMissingKeys(files) {
   const defined = {};
   for (const locale of LOCALE_FILES) {
-    const path = resolve(SRC_ROOT, "i18n/locales", `${locale}.json`);
+    const path = resolve(LOCALES_ROOT, `${locale}.json`);
     defined[locale] = flattenKeys(
       JSON.parse(readFileSync(path, "utf8")),
       "",
@@ -298,6 +302,13 @@ function main() {
     console.error(
       `${where}: i18n key "${key}" is not defined in ${missing.join(", ")}`,
     );
+  }
+
+  const catalogProblems = checkLocaleCatalogs(LOCALES_ROOT);
+  for (const problem of catalogProblems) {
+    total += 1;
+    // eslint-disable-next-line no-console
+    console.error(`src/i18n/locales: ${problem}`);
   }
 
   if (total > 0) {

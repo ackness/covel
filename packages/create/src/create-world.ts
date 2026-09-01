@@ -11,9 +11,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
+  canonicalizeLocale,
+  DEFAULT_LOCALE,
   validateWorldManifest,
   formatValidationErrors,
-  localeLanguage,
 } from "@covel/shared";
 import type { CreateWorldOptions, CreateResult } from "./types.js";
 import { buildWorldPrompt } from "./prompts.js";
@@ -44,7 +45,7 @@ function log(
 export async function createWorld(
   options: CreateWorldOptions,
 ): Promise<CreateResult> {
-  const locale = options.locale ?? "zh-CN";
+  const locale = canonicalizeLocale(options.locale) ?? DEFAULT_LOCALE;
   const prompt = await buildWorldPrompt(options.concept, locale, options.brief);
   log(
     options,
@@ -284,7 +285,6 @@ export async function createWorld(
 
     // Extract id from validated data
     const id = yamlData.id as string;
-    const lang = localeLanguage(locale) ?? "zh";
     log(options, "info", `validation passed id=${id}`);
 
     // Write files
@@ -311,11 +311,11 @@ export async function createWorld(
     writtenFiles.push(`${id}/world.yaml`);
 
     await writeFile(
-      path.join(worldDir, `WORLD.${lang}.md`),
+      path.join(worldDir, `WORLD.${locale}.md`),
       normalizedLore,
       "utf-8",
     );
-    writtenFiles.push(`${id}/WORLD.${lang}.md`);
+    writtenFiles.push(`${id}/WORLD.${locale}.md`);
     await writeFile(path.join(worldDir, "WORLD.md"), normalizedLore, "utf-8");
     writtenFiles.push(`${id}/WORLD.md`);
 

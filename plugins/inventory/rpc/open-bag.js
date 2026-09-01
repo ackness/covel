@@ -1,8 +1,6 @@
-const NAMESPACE = "items";
+import { pickLocaleText } from "@covel/plugin-handlers-utils";
 
-function isEnglish(locale) {
-  return typeof locale === "string" && locale.toLowerCase().startsWith("en");
-}
+const NAMESPACE = "items";
 
 /**
  * Player-facing `/bag` command action.
@@ -20,9 +18,11 @@ export default async function openBag(_payload, ctx) {
     const value = row?.value;
     return value && typeof value === "object" && value.removed !== true;
   }).length;
-  const message = isEnglish(ctx.locale)
-    ? `Your bag contains ${itemCount} item ${itemCount === 1 ? "entry" : "entries"}.`
-    : `行囊中有 ${itemCount} 项物品。`;
+  const message = pickLocaleText(
+    ctx.locale,
+    `行囊中有 ${itemCount} 项物品。`,
+    `Your bag contains ${itemCount} item ${itemCount === 1 ? "entry" : "entries"}.`,
+  );
 
   return {
     ok: true,

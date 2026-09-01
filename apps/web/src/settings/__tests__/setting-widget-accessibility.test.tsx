@@ -98,4 +98,71 @@ describe("SettingWidget accessible labels", () => {
       "setting-demo.slider-number",
     ]);
   });
+
+  it("uses catalog text for framework settings and preserves plugin I18nText", async () => {
+    await i18n.changeLanguage("ru-RU");
+    render(
+      <>
+        <SettingWidget
+          entry={entry("ui.appearance", "Appearance", "text", {
+            description:
+              "Choose the active interface style. Imported custom themes appear here automatically.",
+          })}
+        />
+        <SettingWidget
+          entry={entry("ui.scheme", "Color scheme", "select", {
+            options: [
+              { value: "light", label: "Light" },
+              { value: "dark", label: "Dark" },
+            ],
+          })}
+        />
+        <SettingWidget
+          entry={entry(
+            "ui.chatMessageWindow",
+            "Chat window message limit",
+            "number",
+            { default: 2000 },
+          )}
+        />
+        <SettingWidget
+          entry={entry("ui.locale", "Plugin fallback", "text", {
+            pluginId: "demo",
+            label: {
+              "en-US": "Plugin label",
+              "ru-RU": "Метка плагина",
+            },
+          })}
+        />
+        <SettingWidget
+          entry={entry("plugin.mode", "Plugin mode", "select", {
+            pluginId: "demo",
+            options: [
+              {
+                value: "story",
+                label: {
+                  "en-US": "Story",
+                  "ru-RU": "История",
+                },
+              },
+            ],
+          })}
+        />
+      </>,
+    );
+
+    expect(screen.getByLabelText("Оформление")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Выберите стиль интерфейса. Импортированные пользовательские темы появятся здесь автоматически.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Светлая" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Тёмная" })).toBeTruthy();
+    expect(
+      screen.getByLabelText("Ограничение сообщений в окне чата"),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Метка плагина")).toBeTruthy();
+    expect(screen.getByRole("option", { name: "История" })).toBeTruthy();
+  });
 });

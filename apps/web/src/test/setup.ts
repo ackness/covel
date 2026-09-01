@@ -5,8 +5,9 @@
 // as "en-US", which would flip every I18nText-dependent snapshot test to
 // English. Tests that need a specific locale should set it explicitly; we
 // default to zh-CN so historical Chinese assertions keep working.
-import i18n from "@/i18n";
+import i18n, { i18nReady } from "@/i18n";
 
 // Force i18n back to zh-CN in case i18n/index.ts already ran (which is likely,
 // because vitest may load the module graph before setupFiles execute).
-void i18n.changeLanguage("zh-CN");
+await i18nReady;
+await i18n.changeLanguage("zh-CN");

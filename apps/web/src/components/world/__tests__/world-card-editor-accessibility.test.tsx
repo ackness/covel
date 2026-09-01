@@ -39,6 +39,7 @@ describe("WorldCard", () => {
         isEntering={false}
         dimmed={false}
         storageLabel="Built-in"
+        interfaceLocale="en-US"
         t={i18n.t}
         onEnter={onEnter}
         onViewDetails={onViewDetails}

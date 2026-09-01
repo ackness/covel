@@ -3,7 +3,9 @@ import type {
   SettingGroup,
   SettingsStoreApi,
 } from "@covel/settings";
-import { resolveI18nText, type I18nText } from "@covel/shared";
+import { DEFAULT_LOCALE, resolveI18nText, type I18nText } from "@covel/shared";
+import i18n from "@/i18n";
+import { resolveSettingEntryText } from "./framework-i18n.js";
 
 export type NavNodeKind = "group" | "plugin" | "subgroup";
 
@@ -26,9 +28,7 @@ const GROUP_ORDER: SettingGroup[] = [
 ];
 
 const PACKAGES_NODE_ID = "packages";
-const PACKAGES_LABEL = { "zh-CN": "导入包", "en-US": "Import Packages" };
 const APPEARANCE_NODE_ID = "appearance";
-const APPEARANCE_LABEL = { "zh-CN": "外观", "en-US": "Appearance" };
 
 /**
  * Theme keys are registered under `general` so the store owns their values,
@@ -42,42 +42,31 @@ const APPEARANCE_KEYS = new Set([
   "ui.themeManager",
 ]);
 const OPERATOR_ACCESS_NODE_ID = "operator-access";
-const OPERATOR_ACCESS_LABEL = {
-  "zh-CN": "运维访问",
-  "en-US": "Operator Access",
-};
-
-const GROUP_LABELS: Record<SettingGroup, { "zh-CN": string; "en-US": string }> =
-  {
-    general: { "zh-CN": "通用", "en-US": "General" },
-    llm: { "zh-CN": "模型", "en-US": "LLM" },
-    plugin: { "zh-CN": "插件", "en-US": "Plugins" },
-    desktop: { "zh-CN": "桌面", "en-US": "Desktop" },
-    data: { "zh-CN": "数据", "en-US": "Data" },
+function navigationLabels(locale: string) {
+  const t = i18n.getFixedT(locale);
+  return {
+    groups: {
+      general: t("settings.groupGeneral", "General"),
+      llm: t("settings.groupLlm", "LLM"),
+      plugin: t("settings.groupPlugins", "Plugins"),
+      desktop: t("settings.groupDesktop", "Desktop"),
+      data: t("settings.groupData", "Data"),
+    } satisfies Record<SettingGroup, string>,
+    llmSubnodes: [
+      { id: "llm.slots", label: t("settings.llmSlots", "Model Roles") },
+      {
+        id: "llm.providers",
+        label: t("settings.llmPresets", "Providers & Models"),
+      },
+      {
+        id: "llm.advanced",
+        label: t("settings.llmAdvanced", "Generation"),
+      },
+    ],
+    appearance: t("settings.appearanceNavLabel", "Appearance"),
+    operatorAccess: t("settings.operatorAccessNavLabel", "Operator Access"),
+    packages: t("settings.packages.navLabel", "Import Packages"),
   };
-
-const LLM_SUBNODES: Array<{
-  id: string;
-  label: { "zh-CN": string; "en-US": string };
-}> = [
-  {
-    id: "llm.slots",
-    label: { "zh-CN": "用途分配", "en-US": "Model Roles" },
-  },
-  {
-    id: "llm.providers",
-    label: { "zh-CN": "服务商与模型", "en-US": "Providers & Models" },
-  },
-  {
-    id: "llm.advanced",
-    label: { "zh-CN": "生成参数", "en-US": "Generation" },
-  },
-];
-
-function groupLabel(group: SettingGroup, locale: string): string {
-  return (
-    resolveI18nText(GROUP_LABELS[group], locale) ?? GROUP_LABELS[group]["zh-CN"]
-  );
 }
 
 interface BuildNavOptions {
@@ -98,7 +87,8 @@ export function buildNavTree(
   store: SettingsStoreApi,
   opts: BuildNavOptions = {},
 ): NavNode[] {
-  const locale = opts.locale ?? "zh-CN";
+  const locale = opts.locale ?? DEFAULT_LOCALE;
+  const labels = navigationLabels(locale);
   const all = store.listEntries();
   const byGroup = new Map<SettingGroup, SettingEntry[]>();
   for (const e of all) {
@@ -112,14 +102,14 @@ export function buildNavTree(
     if (group === "llm") {
       nodes.push({
         id: "llm",
-        label: groupLabel("llm", locale),
+        label: labels.groups.llm,
         kind: "group",
         children: [],
       });
-      for (const sub of LLM_SUBNODES) {
+      for (const sub of labels.llmSubnodes) {
         nodes.push({
           id: sub.id,
-          label: resolveI18nText(sub.label, locale) ?? sub.label["zh-CN"],
+          label: sub.label,
           kind: "subgroup",
           parentId: "llm",
           children: [],
@@ -136,7 +126,7 @@ export function buildNavTree(
       if (byPlugin.size > 0) {
         nodes.push({
           id: "plugin",
-          label: groupLabel("plugin", locale),
+          label: labels.groups.plugin,
           kind: "group",
           children: [],
         });
@@ -156,7 +146,7 @@ export function buildNavTree(
       if (opts.includeDesktop) {
         nodes.push({
           id: "desktop",
-          label: groupLabel("desktop", locale),
+          label: labels.groups.desktop,
           kind: "group",
           children: entries,
         });
@@ -164,7 +154,7 @@ export function buildNavTree(
     } else if (group === "data") {
       nodes.push({
         id: "data",
-        label: groupLabel("data", locale),
+        label: labels.groups.data,
         kind: "group",
         children: entries,
       });
@@ -173,23 +163,21 @@ export function buildNavTree(
       if (generalEntries.length > 0) {
         nodes.push({
           id: group,
-          label: groupLabel(group, locale),
+          label: labels.groups.general,
           kind: "group",
           children: generalEntries,
         });
       }
       nodes.push({
         id: APPEARANCE_NODE_ID,
-        label:
-          resolveI18nText(APPEARANCE_LABEL, locale) ??
-          APPEARANCE_LABEL["zh-CN"],
+        label: labels.appearance,
         kind: "group",
         children: [],
       });
     } else if (entries.length > 0) {
       nodes.push({
         id: group,
-        label: groupLabel(group, locale),
+        label: labels.groups[group],
         kind: "group",
         children: entries,
       });
@@ -201,16 +189,14 @@ export function buildNavTree(
   // default Settings pane; those servers simply ignore the optional header.
   nodes.push({
     id: OPERATOR_ACCESS_NODE_ID,
-    label:
-      resolveI18nText(OPERATOR_ACCESS_LABEL, locale) ??
-      OPERATOR_ACCESS_LABEL["zh-CN"],
+    label: labels.operatorAccess,
     kind: "group",
     children: [],
   });
   // Virtual node for package import (UI-only, no registered SettingEntry).
   nodes.push({
     id: PACKAGES_NODE_ID,
-    label: resolveI18nText(PACKAGES_LABEL, locale) ?? PACKAGES_LABEL["zh-CN"],
+    label: labels.packages,
     kind: "group",
     children: [],
   });
@@ -222,7 +208,7 @@ export { APPEARANCE_NODE_ID, OPERATOR_ACCESS_NODE_ID, PACKAGES_NODE_ID };
 export function filterNav(
   nodes: NavNode[],
   query: string,
-  locale = "zh-CN",
+  locale: string = DEFAULT_LOCALE,
 ): NavNode[] {
   const q = query.trim().toLowerCase();
   if (!q) return nodes;
@@ -230,7 +216,7 @@ export function filterNav(
   const result = nodes.filter((node) => {
     const labelHit = node.label.toLowerCase().includes(q);
     const childHit = node.children.some((e) =>
-      (e.key + " " + (resolveI18nText(e.label, locale) ?? ""))
+      (e.key + " " + resolveSettingEntryText(e, "label", locale))
         .toLowerCase()
         .includes(q),
     );

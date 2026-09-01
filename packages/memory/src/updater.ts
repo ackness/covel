@@ -18,7 +18,13 @@
  * rather than free-form LLM editing.
  */
 
-import { localeLanguage, resolveI18nText } from "@covel/shared";
+import {
+  canonicalizeLocale,
+  DEFAULT_LOCALE,
+  isDefaultLocale,
+  localeDisplayName,
+  resolveI18nText,
+} from "@covel/shared";
 import type {
   CoreMemoryBlock,
   CoreMemoryBlockSchema,
@@ -43,6 +49,8 @@ function buildSystemPrompt(
   lang: "zh" | "en",
   locale: string,
 ): string {
+  const canonicalLocale = canonicalizeLocale(locale) ?? DEFAULT_LOCALE;
+  const languageInstruction = `[LANGUAGE] Write all natural-language memory content in ${localeDisplayName(canonicalLocale)} (${canonicalLocale}).`;
   if (lang === "zh") {
     const descriptions = blocks
       .map(
@@ -68,7 +76,9 @@ ${descriptions}
 
 \`\`\`json
 { "<块标签>": "<该块的完整新内容>" }
-\`\`\``;
+\`\`\`
+
+${languageInstruction}`;
   }
 
   const descriptions = blocks
@@ -95,7 +105,9 @@ Example output (replace with actual block labels):
 
 \`\`\`json
 { "<block_label>": "<complete new content for that block>" }
-\`\`\``;
+\`\`\`
+
+${languageInstruction}`;
 }
 
 export function createMemoryUpdater(
@@ -113,7 +125,7 @@ export function createMemoryUpdater(
   }): Promise<MemoryUpdateResult>;
   awaitPending(sessionId: string): Promise<void>;
 } {
-  const resolvedLocale = config?.locale ?? "zh-CN";
+  const resolvedLocale = config?.locale ?? DEFAULT_LOCALE;
   const staticSchema = config?.blocks ?? DEFAULT_CORE_MEMORY_BLOCKS;
 
   // Per-session pending-promise map. Tracks the most recent in-flight
@@ -139,7 +151,7 @@ export function createMemoryUpdater(
       locale,
     } = params;
     const effectiveLocale = locale ?? resolvedLocale;
-    const lang = localeLanguage(effectiveLocale) === "zh" ? "zh" : "en";
+    const lang = isDefaultLocale(effectiveLocale) ? "zh" : "en";
 
     // Resolve the block schema for this session (plugin blocks merged with the
     // session's world-declared blocks) so world memory dimensions are extracted
@@ -148,7 +160,9 @@ export function createMemoryUpdater(
     const validLabels = new Set<string>(schema.map((b) => b.label));
 
     const toolSection = toolCallSummaries?.length
-      ? `\n\n## 本轮工具调用摘要\n${toolCallSummaries.join("\n")}`
+      ? lang === "zh"
+        ? `\n\n## 本轮工具调用摘要\n${toolCallSummaries.join("\n")}`
+        : `\n\n## Tool call summaries\n${toolCallSummaries.join("\n")}`
       : "";
 
     const authoritativeSection = buildAuthoritativeFactsSection(
@@ -181,7 +195,10 @@ export function createMemoryUpdater(
         .filter((b) => b.content.trim())
         .map((b) => `[${b.label}]\n${b.content}`)
         .join("\n\n");
-      const userPrompt = `## 当前记忆块\n${blockSection || "（全部为空，首次初始化）"}${authoritativeSection}\n\n## 本轮叙事\n${narrativeText}${toolSection}\n\n请输出需要更新的记忆块 JSON。`;
+      const userPrompt =
+        lang === "zh"
+          ? `## 当前记忆块\n${blockSection || "（全部为空，首次初始化）"}${authoritativeSection}\n\n## 本轮叙事\n${narrativeText}${toolSection}\n\n请输出需要更新的记忆块 JSON。`
+          : `## Current memory blocks\n${blockSection || "(all empty; first initialization)"}${authoritativeSection}\n\n## Current turn narrative\n${narrativeText}${toolSection}\n\nOutput the memory block updates as JSON.`;
 
       const response = await retryTransientProviderCall(
         () =>

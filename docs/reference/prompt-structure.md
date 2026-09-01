@@ -120,10 +120,12 @@ Anthropic adapter 会把 sentinel 转成 `cache_control: { type: "ephemeral" }` 
 
 `prompts/server` 是服务端外置 prompt 模板目录，当前使用路径：
 
-- `compactor.zh.md` / `compactor.en.md`：`packages/context/src/compactor.ts` 通过 `loadPrompt("server", "compactor", locale)` 加载。
-- `generate-world.md`：`packages/create/src/prompts.ts` 通过 `loadPrompt("server", "generate-world")` 加载。
+- `compactor.<locale>.md`：`packages/context/src/compactor.ts` 通过 `loadPrompt("server", "compactor", locale)` 加载；当前含 `zh` / `en` / `ru`，`compactor.md` 是 canonical English fallback。
+- `generate-world.<locale>.md`：`packages/create/src/prompts.ts` 通过 `loadPrompt("server", "generate-world", locale)` 加载；仓库当前只有 canonical `generate-world.md`，贡献者可按需加入 locale 变体。
 
-Prompt 根目录由 `COVEL_PROMPTS_DIR` 覆盖；未设置时 `prompts-loader` 会从包路径向上查找仓库根目录下的 `prompts/`。
+两者都按 exact locale → script 兼容的 primary language → English locale/language → canonical 文件解析。`zh-Hant` 不会命中简体中文的 `zh` 文件。
+
+Prompt 根目录由 `COVEL_PROMPTS_DIR` 覆盖；未设置时 `prompts-loader` 会从包路径向上查找仓库根目录下的 `prompts/`。覆盖值替换整个 prompt root，不是按文件叠加；自维护目录必须包含应用会加载的 canonical 文件。locale 会在进入文件路径前统一 canonicalize，非法值不会参与路径查找。
 
 ## 7. 相关实现
 

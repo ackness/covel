@@ -7,6 +7,12 @@
  * validation rule and the error message that quotes it.
  */
 
+import {
+  canonicalizeLocale,
+  DEFAULT_LOCALE,
+  LOCALE_CODE_RE,
+} from "@covel/shared";
+
 /** World id: 1–64 chars, alnum + `_` + `-`, case-insensitive. */
 export const SAFE_WORLD_ID_RE = /^[a-z0-9_-]{1,64}$/i;
 
@@ -20,21 +26,25 @@ export const SAFE_WORLD_ID_DESC = "/^[a-z0-9_-]{1,64}$/i";
 export const SAFE_SESSION_ID_DESC = "/^[a-z0-9_-]{1,128}$/i";
 
 /**
- * Locale tag: a simplified BCP-47 shape — a 2–3 letter primary subtag with an
- * optional single region/variant subtag (`zh`, `en-US`, `pt-BR`). Deliberately
- * strict: the value flows into locale-variant file-path construction
- * (`<name>.<lang>.<ext>`) and into localized prompt text, so it must never carry
- * `/`, `.`, whitespace, or attacker-controlled text.
+ * Locale tag: a canonicalizable BCP 47 tag inside the shared filesystem-safe
+ * lexical and length envelope (`zh`, `en-US`, `sr-Latn-RS`, Unicode extension
+ * tags, etc.). It flows into locale-variant file paths and localized prompts,
+ * so `/`, `.`, whitespace, and attacker-controlled prose are rejected.
  */
-export const SAFE_LOCALE_RE = /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/i;
+export const SAFE_LOCALE_RE = LOCALE_CODE_RE;
 
 /**
- * Normalize an untrusted `locale` input to a safe value: the input when it
- * matches {@link SAFE_LOCALE_RE}, otherwise the fallback (default `zh-CN`).
+ * Normalize an untrusted `locale` input to its canonical safe value, otherwise
+ * use the canonical fallback or registry default.
  * Never returns attacker-controlled text.
  */
-export function normalizeLocale(value: unknown, fallback = "zh-CN"): string {
-  return typeof value === "string" && SAFE_LOCALE_RE.test(value)
-    ? value
-    : fallback;
+export function normalizeLocale(
+  value: unknown,
+  fallback: string = DEFAULT_LOCALE,
+): string {
+  return (
+    (typeof value === "string" ? canonicalizeLocale(value) : undefined) ??
+    canonicalizeLocale(fallback) ??
+    DEFAULT_LOCALE
+  );
 }

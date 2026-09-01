@@ -180,9 +180,9 @@ sources:
 >
 > 声明的 `indexTo` 插件未被玩家启用是另一回事：那属于 warning 级降级，字节照常导入、只跳过索引写入。
 
-### Locale 变体解析（`<name>.<lang>.<ext>`）
+### Locale 变体解析（`<name>.<locale>.<ext>`）
 
-导入器按**会话 locale** 解析 source 文件，沿用 `WORLD.md` / 外部 dimension 的双语约定：对每个 source 的 `path`，先尝试 `<name>.<lang>.<ext>`（`lang` 为 locale 主子标签，`en-US` → `en`），命中则用之，否则回退到声明的 `path`。
+导入器按**会话 locale** 解析 source 文件，沿用 `WORLD.md` / 外部 dimension 约定：对每个 source 的 `path`，依次尝试 `<name>.<exact-locale>.<ext>`、script 兼容的 `<name>.<primary-language>.<ext>`，命中则用之，否则回退到声明的 `path`。例如 `ru-RU` 依次尝试 `main-cast.ru-RU.json`、`main-cast.ru.json`、`main-cast.json`；`zh-Hant-TW` 不会尝试默认推断为 Hans 的 `main-cast.zh.json`。
 
 ```
 characters/main-cast.json      # 默认（作者语言）

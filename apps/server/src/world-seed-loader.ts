@@ -23,7 +23,7 @@ import {
   validateDimensionData,
   formatValidationErrors,
   DIMENSION_KEYS,
-  localeLanguage,
+  localeLookupCandidates,
   resolveI18nText,
 } from "@covel/shared";
 import type { MemoryBlockSchema } from "@covel/shared";
@@ -44,30 +44,39 @@ function resolveText(
 }
 
 /**
- * Read locale-aware WORLD.md lore file.
- * Priority: WORLD.<lang>.md → WORLD.md → ''
+ * Resolve a locale-aware file inside the world directory.
+ * Priority: exact canonical locale → compatible primary language → base file.
  */
+async function resolveLocaleFilePath(
+  worldDir: string,
+  relativePath: string,
+  defaultLocale?: string,
+): Promise<string | null> {
+  const parsed = path.parse(relativePath);
+  for (const locale of localeLookupCandidates(defaultLocale)) {
+    const localePath = path.join(
+      parsed.dir,
+      `${parsed.name}.${locale}${parsed.ext}`,
+    );
+    const safePath = await resolveSafePath(worldDir, localePath);
+    if (safePath && (await fileExists(safePath))) return safePath;
+  }
+
+  const safePath = await resolveSafePath(worldDir, relativePath);
+  return safePath && (await fileExists(safePath)) ? safePath : null;
+}
+
+/** Read locale-aware WORLD.md lore without allowing the locale into a path. */
 async function readLore(
   worldDir: string,
   defaultLocale?: string,
 ): Promise<string> {
-  const lang = localeLanguage(defaultLocale);
-
-  // Try locale-specific first
-  if (lang) {
-    const localePath = path.join(worldDir, `WORLD.${lang}.md`);
-    if (await fileExists(localePath)) {
-      return readFile(localePath, "utf-8");
-    }
-  }
-
-  // Fallback to default WORLD.md
-  const defaultPath = path.join(worldDir, "WORLD.md");
-  if (await fileExists(defaultPath)) {
-    return readFile(defaultPath, "utf-8");
-  }
-
-  return "";
+  const resolvedPath = await resolveLocaleFilePath(
+    worldDir,
+    "WORLD.md",
+    defaultLocale,
+  );
+  return resolvedPath ? readFile(resolvedPath, "utf-8") : "";
 }
 
 /**
@@ -85,7 +94,7 @@ async function resolveSafePath(
 
 /**
  * Resolve a locale-aware dimension file path.
- * Priority: <name>.<lang>.<ext> → <name>.<ext> (same as WORLD.md resolution)
+ * Priority: exact locale → compatible primary language → declared file.
  *
  * Example: geography.yaml with defaultLocale="zh-CN"
  *   → tries geography.zh.yaml first, then geography.yaml
@@ -95,28 +104,7 @@ async function resolveLocaleDimensionPath(
   relativePath: string,
   defaultLocale?: string,
 ): Promise<string | null> {
-  const lang = localeLanguage(defaultLocale);
-
-  if (lang) {
-    const parsed = path.parse(relativePath);
-    // e.g., "./dimensions/geography.yaml" → "./dimensions/geography.zh.yaml"
-    const localePath = path.join(
-      parsed.dir,
-      `${parsed.name}.${lang}${parsed.ext}`,
-    );
-    const safePath = await resolveSafePath(worldDir, localePath);
-    if (safePath && (await fileExists(safePath))) {
-      return safePath;
-    }
-  }
-
-  // Fallback to original path
-  const safePath = await resolveSafePath(worldDir, relativePath);
-  if (safePath && (await fileExists(safePath))) {
-    return safePath;
-  }
-
-  return null;
+  return resolveLocaleFilePath(worldDir, relativePath, defaultLocale);
 }
 
 /**

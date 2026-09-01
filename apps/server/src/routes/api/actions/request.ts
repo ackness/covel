@@ -1,3 +1,5 @@
+import { canonicalizeLocale } from "@covel/shared";
+
 /**
  * Runtime contract for POST /api/actions.
  *
@@ -43,7 +45,6 @@ export type ActionRequestValidation =
   | { readonly ok: false; readonly error: string };
 
 const ACTION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
-const LOCALE_PATTERN = /^[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*$/;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -129,17 +130,25 @@ export function validateActionRequest(raw: unknown): ActionRequestValidation {
       error: `Unknown action request field: ${unknownTopLevel}`,
     };
   }
+  const locale =
+    typeof raw.locale === "string" ? canonicalizeLocale(raw.locale) : undefined;
+  const localeError =
+    raw.locale === undefined
+      ? undefined
+      : typeof raw.locale !== "string" || !locale
+        ? "locale has an invalid format"
+        : undefined;
   const commonError =
     validateString(raw.requestId, "requestId", 128, ACTION_ID_PATTERN) ??
     validateString(raw.sessionId, "sessionId", 256, ACTION_ID_PATTERN) ??
-    validateOptionalString(raw.locale, "locale", 64, LOCALE_PATTERN) ??
+    localeError ??
     validateOptionalModel(raw.model);
   if (commonError) return { ok: false, error: commonError };
 
   const base = {
     requestId: raw.requestId as string,
     sessionId: raw.sessionId as string,
-    ...(raw.locale !== undefined ? { locale: raw.locale as string } : {}),
+    ...(locale !== undefined ? { locale } : {}),
     ...(raw.model !== undefined ? { model: raw.model as string } : {}),
   };
   const payload = raw.payload ?? {};

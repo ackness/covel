@@ -3,6 +3,13 @@ import type {
   WorldCreationBrief,
   WorldPackageContentKind,
 } from "@covel/shared";
+import {
+  canonicalizeLocale,
+  DEFAULT_LOCALE,
+  localeDisplayName,
+  localeRegistry,
+  resolveI18nText,
+} from "@covel/shared";
 
 /**
  * Load the externalized system prompt for LLM-driven world generation.
@@ -15,13 +22,20 @@ export async function buildWorldPrompt(
   locale: string,
   brief?: WorldCreationBrief,
 ): Promise<string> {
-  const lang =
-    locale === "zh-CN" ? "中文" : locale === "en-US" ? "English" : locale;
+  const canonicalLocale = canonicalizeLocale(locale) ?? DEFAULT_LOCALE;
+  const definition = localeRegistry.resolve(canonicalLocale);
+  const lang = definition
+    ? (resolveI18nText(definition.label, canonicalLocale) ?? definition.code)
+    : localeDisplayName(canonicalLocale);
 
-  const template = await loadPrompt("server", "generate-world");
+  const template = await loadPrompt(
+    "server",
+    "generate-world",
+    canonicalLocale,
+  );
   return interpolate(template, {
     concept,
-    locale,
+    locale: canonicalLocale,
     language: lang,
     creationBrief: formatCreationBrief(brief),
   });

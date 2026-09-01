@@ -3,6 +3,109 @@ import { createMemoryStore } from "../../../packages/store/src/index.ts";
 import guard from "../guard.js";
 
 describe("world-init guard", () => {
+  it("derives dynamic schema text from the session locale with English fallback", async () => {
+    const store = createMemoryStore();
+    const now = new Date().toISOString();
+    await store.upsertWorld({
+      id: "localized-world",
+      name: "Localized",
+      description: "Localized dimensions",
+      createdAt: now,
+      metadata: {
+        dimensions: {
+          economy: {
+            currencies: [
+              {
+                name: { ja: "円", "en-US": "Yen", "zh-CN": "金币" },
+              },
+            ],
+          },
+          powerSystem: {
+            name: {
+              ja: "魔法階級",
+              "en-US": "Magic rank",
+              "zh-CN": "境界",
+            },
+            tiers: [
+              {
+                name: {
+                  ja: "見習い",
+                  "en-US": "Apprentice",
+                  "zh-CN": "学徒",
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    for (const [locale, expected] of [
+      [
+        "ja-JP",
+        {
+          currency: "円",
+          currencyDescription: "Amount of 円 held",
+          power: "魔法階級",
+          tier: "見習い",
+        },
+      ],
+      [
+        "zh-Hant-TW",
+        {
+          currency: "Yen",
+          currencyDescription: "Amount of Yen held",
+          power: "Magic rank",
+          tier: "Apprentice",
+        },
+      ],
+    ] as const) {
+      const sessionId = `sess-${locale}`;
+      await store.createSession({
+        id: sessionId,
+        worldId: "localized-world",
+        status: "active",
+        phase: "setup",
+        completedPlayerTurns: 0,
+        setupRuntimes: {},
+        locale,
+        activePlugins: [],
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const result = await guard({
+        sessionId,
+        turnId: "turn-1",
+        pluginId: "world-init",
+        playerMessage: "",
+        locale,
+        store,
+      });
+      const attributes = (
+        result.worldSchema as {
+          "character-attributes": {
+            attributes: Array<Record<string, unknown>>;
+          };
+        }
+      )["character-attributes"].attributes;
+      const currency = attributes.find((attribute) => attribute.id === "gold");
+      const power = attributes.find(
+        (attribute) => attribute.id === "powerTier",
+      );
+
+      expect(currency).toMatchObject({
+        name: expected.currency,
+        description: expected.currencyDescription,
+      });
+      expect(power).toMatchObject({
+        name: expected.power,
+        options: [expected.tier],
+        description: `${expected.power} level`,
+      });
+    }
+  });
+
   it("skips schema-only reuse and imports world dimensions for a fresh session", async () => {
     const store = createMemoryStore();
     const now = new Date().toISOString();

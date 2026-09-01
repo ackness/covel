@@ -1,28 +1,54 @@
-import i18n from "i18next";
+import i18n, { type BackendModule } from "i18next";
 import { initReactI18next } from "react-i18next";
-import zhCN from "./locales/zh-CN.json";
-import enUS from "./locales/en-US.json";
-import { DEFAULT_LOCALE, resolveInitialLocale } from "./locale-detector";
-
-const resources = {
-  "zh-CN": { translation: zhCN },
-  "en-US": { translation: enUS },
-};
+import {
+  localeRegistry,
+  supportedLocales,
+  webLocaleCatalog,
+} from "./catalog-registry.js";
+import { resolveInitialLocale } from "./locale-detector";
 
 const initialLocale = resolveInitialLocale();
 
-i18n.use(initReactI18next).init({
-  resources,
-  lng: initialLocale,
-  fallbackLng: DEFAULT_LOCALE,
-  supportedLngs: ["zh-CN", "en-US"],
-  interpolation: {
-    escapeValue: false,
+const catalogBackend: BackendModule = {
+  type: "backend",
+  init() {},
+  read(language, namespace, callback) {
+    if (namespace !== "translation") {
+      callback(new Error(`Unsupported i18n namespace: ${namespace}`), false);
+      return;
+    }
+    void webLocaleCatalog.loadCatalog(language).then(
+      (catalog) => callback(null, catalog),
+      (error: unknown) =>
+        callback(error instanceof Error ? error : String(error), false),
+    );
   },
-});
+};
+
+export const i18nReady = i18n
+  .use(catalogBackend)
+  .use(initReactI18next)
+  .init({
+    lng: initialLocale,
+    fallbackLng: localeRegistry.fallbackLocale,
+    supportedLngs: supportedLocales,
+    load: "currentOnly",
+    ns: ["translation"],
+    defaultNS: "translation",
+    interpolation: {
+      escapeValue: false,
+    },
+  });
 
 if (typeof document !== "undefined") {
   document.documentElement.lang = initialLocale;
 }
+
+export {
+  localeDefinitions,
+  localeRegistry,
+  supportedLocales,
+} from "./catalog-registry.js";
+export type { SupportedLocale } from "./catalog-registry.js";
 
 export default i18n;

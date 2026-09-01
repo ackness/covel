@@ -28,6 +28,7 @@ import {
   uniqueIndex,
   customType,
 } from "drizzle-orm/pg-core";
+import { DEFAULT_LOCALE } from "@covel/shared";
 
 const bytea = customType<{ data: Buffer | null }>({
   dataType() {
@@ -55,7 +56,7 @@ export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
   worldId: text("world_id"),
   status: text("status").notNull().default("active"),
-  locale: text("locale").notNull().default("zh-CN"),
+  locale: text("locale").notNull().default(DEFAULT_LOCALE),
   activePlugins: jsonb("active_plugins").notNull().default([]), // JSON array
   metadata: jsonb("metadata"), // JSON
   createdAt: text("created_at").notNull(),

@@ -771,6 +771,10 @@ importers:
         version: 4.1.11(@opentelemetry/api@1.9.0)(@types/node@26.2.0)(@vitest/coverage-v8@4.1.11)(jsdom@30.0.1(@noble/hashes@2.3.0))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
   plugins/dice-check:
+    dependencies:
+      '@covel/plugin-handlers-utils':
+        specifier: workspace:*
+        version: link:../../packages/plugin-handlers-utils
     devDependencies:
       vitest:
         specifier: ^4.1.11
@@ -949,6 +953,9 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
+      '@covel/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@covel/tools':
         specifier: workspace:*
         version: link:../../packages/tools

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { SettingsStoreApi } from "@covel/settings";
+import i18n from "@/i18n";
 import {
   buildNavTree,
   filterNav,
@@ -11,6 +12,10 @@ const emptyStore = {
 } as unknown as SettingsStoreApi;
 
 describe("operator access settings navigation", () => {
+  afterEach(async () => {
+    await i18n.changeLanguage("zh-CN");
+  });
+
   it("exposes the browser credential pane in every locale", () => {
     const english = buildNavTree(emptyStore, { locale: "en-US" });
     const chinese = buildNavTree(emptyStore, { locale: "zh-CN" });
@@ -29,6 +34,21 @@ describe("operator access settings navigation", () => {
     expect(filterNav(nodes, "operator", "en-US")).toEqual([
       expect.objectContaining({ id: OPERATOR_ACCESS_NODE_ID }),
     ]);
+  });
+
+  it("derives fixed navigation labels from the selected catalog", async () => {
+    await i18n.changeLanguage("ru-RU");
+    const nodes = buildNavTree(emptyStore, { locale: "ru-RU" });
+
+    expect(nodes.find((node) => node.id === "appearance")?.label).toBe(
+      "Оформление",
+    );
+    expect(
+      nodes.find((node) => node.id === OPERATOR_ACCESS_NODE_ID)?.label,
+    ).toBe("Доступ оператора");
+    expect(nodes.find((node) => node.id === "packages")?.label).toBe(
+      "Импорт пакетов",
+    );
   });
 
   it("uses localized plugin names while keeping plugin ids stable", () => {

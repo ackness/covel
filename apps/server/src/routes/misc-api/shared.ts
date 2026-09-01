@@ -1,5 +1,6 @@
 import { resolve, relative } from "node:path";
 import {
+  DEFAULT_LOCALE,
   FrameworkCapability,
   readRuntimeEnv,
   resolveI18nText,
@@ -42,7 +43,10 @@ export function resolvePluginsDirs(): readonly string[] {
   return dirs;
 }
 
-export function textValue(value: unknown, locale = "zh-CN"): string {
+export function textValue(
+  value: unknown,
+  locale: string = DEFAULT_LOCALE,
+): string {
   if (typeof value === "string") return value;
   if (value && typeof value === "object") {
     const localized = Object.fromEntries(

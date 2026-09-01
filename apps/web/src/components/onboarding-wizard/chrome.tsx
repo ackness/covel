@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
+import { resolveI18nText } from "@covel/shared";
+import { localeDefinitions } from "@/i18n/catalog-registry.js";
 import { TOTAL_STEPS } from "./constants.js";
 import type { LocaleControlsProps, OnboardingStep } from "./types.js";
 
@@ -7,32 +9,21 @@ export function LocaleToggle({ locale, setLocale }: LocaleControlsProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="absolute top-3 left-3 sm:top-6 sm:left-6 flex items-center gap-1 text-[10px] font-medium uppercase tracking-widest z-10">
-      <button
-        type="button"
-        onClick={() => setLocale("zh-CN")}
-        className={`px-2 py-1 border transition-colors ${
-          locale === "zh-CN"
-            ? "border-primary text-primary"
-            : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
-        }`}
-        aria-label={t("onboarding.localeZh", "Switch to Chinese")}
+    <label className="absolute top-3 left-3 sm:top-6 sm:left-6 z-10">
+      <span className="sr-only">{t("onboarding.language", "Language")}</span>
+      <select
+        value={locale}
+        onChange={(event) => setLocale(event.target.value)}
+        aria-label={t("onboarding.language", "Language")}
+        className="h-8 max-w-44 rounded-(--radius-control) border border-zinc-700 bg-zinc-950 px-2 text-[10px] font-medium tracking-wider text-zinc-300 outline-none transition-colors hover:border-primary/50 focus:border-primary"
       >
-        {"\u4E2D"}
-      </button>
-      <button
-        type="button"
-        onClick={() => setLocale("en-US")}
-        className={`px-2 py-1 border transition-colors ${
-          locale === "en-US"
-            ? "border-primary text-primary"
-            : "border-zinc-700 text-zinc-500 hover:text-zinc-300"
-        }`}
-        aria-label={t("onboarding.localeEn", "Switch to English")}
-      >
-        EN
-      </button>
-    </div>
+        {localeDefinitions.map((definition) => (
+          <option key={definition.code} value={definition.code}>
+            {resolveI18nText(definition.label, locale) ?? definition.code}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

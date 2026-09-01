@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { localeLanguage } from "@covel/shared";
+import { localeLookupCandidates } from "@covel/shared";
 import { parse as parseYaml } from "yaml";
 import { resolveContainedPath } from "./safe-path.js";
 import type { OrderedWorldDataSource, WorldDataDiagnostic } from "./types.js";
@@ -10,12 +10,10 @@ const MAX_TEXT_BYTES = 1 * 1024 * 1024;
 
 /**
  * Resolve a source file with locale awareness, mirroring the WORLD.md /
- * dimension convention: try `<name>.<lang>.<ext>` (e.g. `main-cast.en.json`)
- * before the declared `<name>.<ext>`, where `lang` is the session locale's
- * primary subtag (`en-US` → `en`). Lets a world ship a per-locale variant of
- * any worldData source (character cast, rules/lorebook, …) that the importer
- * picks for the session's locale, falling back to the authored default. Returns
- * the resolved absolute path, or `null` when neither exists / escapes root.
+ * dimension convention: try the exact canonical locale, then a compatible
+ * primary-language short key, before the declared `<name>.<ext>`. Lets a world
+ * ship a per-locale variant of any worldData source while preventing locale
+ * strings from becoming unchecked path fragments.
  */
 async function resolveSourcePath(
   source: OrderedWorldDataSource,
@@ -23,12 +21,11 @@ async function resolveSourcePath(
 ): Promise<string | null> {
   const root = source.pathOrigin.descriptorRoot;
   const declared = source.descriptor.path;
-  const lang = localeLanguage(locale);
-  if (lang) {
+  for (const candidateLocale of localeLookupCandidates(locale)) {
     const parsed = path.parse(declared);
     const variant = path.join(
       parsed.dir,
-      `${parsed.name}.${lang}${parsed.ext}`,
+      `${parsed.name}.${candidateLocale}${parsed.ext}`,
     );
     // resolveContainedPath returns null when the variant doesn't exist, so a
     // hit means the file is present, contained, and not a symlink.

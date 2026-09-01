@@ -22,6 +22,7 @@ export interface WorldListViewProps {
   enteringWorldId: string | null;
   /** Resolve a storage label for a world (Built-in / Server / Browser …). */
   storageLabel: (world: WorldRecord) => string;
+  interfaceLocale: string;
   onOpenGenerator: () => void;
   onOpenSettings: () => void;
   onEnterWorld: (worldId: string) => void;
@@ -41,6 +42,7 @@ export function WorldListView({
   enabledPluginCount,
   enteringWorldId,
   storageLabel,
+  interfaceLocale,
   onOpenGenerator,
   onOpenSettings,
   onEnterWorld,
@@ -144,6 +146,7 @@ export function WorldListView({
                   isEntering={isEntering}
                   dimmed={dimmed}
                   storageLabel={storageLabel(world)}
+                  interfaceLocale={interfaceLocale}
                   t={t}
                   onEnter={onEnterWorld}
                   onViewDetails={onViewDetails}

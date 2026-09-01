@@ -84,7 +84,7 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 
 `世界` 是 activity bar 中**框架自持**的 Tab，与插件驱动的 Tab 并列但不受 `/api/ui-specs` 影响：
 
-- **数据源**：当前 session 的 `WorldRecord.lore`（即 `worlds/<id>/WORLD.md`，按 `defaultLocale` 解析 `WORLD.<lang>.md` → `WORLD.md`），由 `world-seed-loader` 在启动时写入 store。
+- **数据源**：当前 session 的 `WorldRecord.lore`（即 `worlds/<id>/WORLD.md`，按 `defaultLocale` 解析 exact locale → script 兼容主语言 → canonical `WORLD.md`），由 `world-seed-loader` 在启动时写入 store。
 - **交互**：以 Markdown 渲染（`@/components/ui/markdown`，`react-markdown` + `remark-gfm`）。`lore` 为空时回退展示 `description`，再为空展示 `worldDocumentEmpty` 文案。
 - **实现**：`apps/web/src/components/session/world-document-panel.tsx`，在 `right-panel.tsx` 中以 `world` Tab 挂载，由 `game-view.tsx` 注入当前 `world: WorldRecord | null` prop。
 - **隔离规则**：Tab 代码属于框架，仅依赖 `WorldRecord` 公开字段，不感知任何插件 ID。
@@ -194,7 +194,7 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 
 **优先级**：`emptyState.message`（spec 声明）> 自动回退（`${panelLabel} 暂无数据，等待游戏推进……`）
 
-**消息格式**：必须使用 I18nText 对象（至少包含 `zh` + `en` 两种 locale）；见下方「插件 UI 文本 I18nText 规范」：
+**消息格式**：必须使用 I18nText 对象（目标 locale + English fallback；中文可选）；见下方「插件 UI 文本 I18nText 规范」：
 
 ```json
 "emptyState": {
@@ -224,8 +224,8 @@ activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。�
 type I18nText = string | Record<LocaleTag, string>;
 ```
 
-- 合法 locale key：`zh`、`zh-CN`、`zh-TW`、`en`、`en-US`、`en-GB`。统一解析契约和完整回退顺序见 [Internationalization](./i18n.md)；组件不得自行判断 locale。
-- **必须同时提供中文与英文**：只有英文 key（`en` 或 `en-US`）存在时，中文回退才能切回；反之亦然。
+- 合法 locale key 使用 BCP 47 风格，例如 `zh`、`en-US`、`ru-RU`、`sr-Latn`、`zh-Hant-TW`。统一解析契约和完整回退顺序见 [Internationalization](./i18n.md)；组件不得自行判断 locale。
+- **必须提供 English fallback**：目标 locale 可以是 `zh`、`ru` 或其他语言；中文不再是必需项。
 - 单一纯字符串**仅限**以下场景：value 不是自然语言（ID / 图标名 / 路径 / URL / 状态值），或者已经是翻译后的英文短语且被所有 locale 共用（如 `"NEW"`、`"Ping"`）。
 - 禁止出现孤立的纯中文字符串。CI 脚本 `scripts/check-plugin-i18n.mjs` 会拒绝任何未被 I18nText 对象包裹的 CJK 字面量。
 

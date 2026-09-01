@@ -17,6 +17,7 @@ import {
   slugifyThemeId,
 } from "@/theme-system/theme-export.js";
 import { TOKEN_GROUPS, type TokenGroup } from "@/theme-system/token-schema.js";
+import { localizeTokenGroups } from "@/theme-system/i18n.js";
 import {
   APPEARANCE_TOKENS_KEY,
   clearOverrides,
@@ -55,6 +56,10 @@ export function AppearancePane() {
 
   const customCount = countOverrides(overrides);
   const activeScheme: ThemeScheme = scheme === "light" ? "light" : "dark";
+  const localizedTokenGroups = useMemo(
+    () => localizeTokenGroups(TOKEN_GROUPS, i18n.language, t),
+    [i18n.language, t],
+  );
 
   const [themeName, setThemeName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -241,7 +246,7 @@ export function AppearancePane() {
       </div>
 
       <div className="space-y-2">
-        {TOKEN_GROUPS.map((group, index) => (
+        {localizedTokenGroups.map((group, index) => (
           <TokenGroupSection
             key={group.id}
             group={group}

@@ -4,7 +4,7 @@ import {
   type WorkingMemoryEntry,
 } from "@covel/context";
 import type { SessionSummaryRecord, WorkingMemoryRecord } from "@covel/store";
-import type { TurnInput } from "@covel/shared";
+import { DEFAULT_LOCALE, type TurnInput } from "@covel/shared";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import type { CoreMemoryBlock } from "./session-state.js";
 
@@ -88,7 +88,7 @@ export async function refreshSessionContextSnapshot(args: {
   try {
     const sessionRecord = await deps.store.getSession(input.sessionId);
     return await buildSessionContextSnapshot(deps.store, input.sessionId, {
-      locale: input.locale ?? "zh-CN",
+      locale: input.locale ?? DEFAULT_LOCALE,
       turnNumber,
       worldId: sessionRecord?.worldId ?? undefined,
       worldDataPluginId: deps.capabilityPluginIds?.worldDataPluginId,

@@ -63,8 +63,8 @@ describe("world select — locale preference", () => {
       "中文世界二",
       "English World",
     ]);
-    expect(screen.getByTitle("世界语言：英文").textContent).toBe("EN");
-    expect(screen.getAllByTitle("世界语言：中文")).toHaveLength(2);
+    expect(screen.getByTitle("世界语言：英语").textContent).toBe("EN");
+    expect(screen.getAllByTitle("世界语言：简体中文")).toHaveLength(2);
 
     await act(async () => {
       await i18n.changeLanguage("en-US");
@@ -78,7 +78,9 @@ describe("world select — locale preference", () => {
       ]);
     });
     expect(screen.getByTitle("World language: English").textContent).toBe("EN");
-    expect(screen.getAllByTitle("World language: Chinese")).toHaveLength(2);
+    expect(
+      screen.getAllByTitle("World language: Chinese (Simplified)"),
+    ).toHaveLength(2);
   });
 
   it("asks for confirmation before entering a mismatched world", async () => {
@@ -100,14 +102,14 @@ describe("world select — locale preference", () => {
     expect(onSelectWorld).not.toHaveBeenCalled();
     expect(
       screen.getByRole("heading", {
-        name: "要进入英文世界吗？",
+        name: "要进入英语世界吗？",
       }),
     ).toBeTruthy();
-    expect(screen.getByText(/以英文内容为主/)).toBeTruthy();
+    expect(screen.getByText(/以英语内容为主/)).toBeTruthy();
     expect(screen.getByText("当前界面")).toBeTruthy();
     expect(screen.getByText("世界内容")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "以英文继续" }));
+    fireEvent.click(screen.getByRole("button", { name: "以英语继续" }));
     expect(onSelectWorld).toHaveBeenCalledWith("english-world");
   });
 });

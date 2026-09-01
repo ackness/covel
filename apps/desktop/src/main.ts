@@ -587,7 +587,7 @@ app.on("before-quit", () => {
 
 app.whenReady().then(async () => {
   const paths = ensureUserPaths();
-  initDesktopI18n(paths.userSettingsJsonPath);
+  initDesktopI18n(paths.userSettingsJsonPath, app.getLocale());
   initPersistentLog(paths.logsDir, paths.logRotation, app.getVersion());
   registerDesktopIpcHandlers({
     paths,

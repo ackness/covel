@@ -170,7 +170,7 @@ function TokenInput({
           labelId={labelId}
           onPreview={onPreview}
           onReset={onReset}
-          options={FONT_STACKS}
+          options={spec.options ?? FONT_STACKS}
           previewFont
         />
       );

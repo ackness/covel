@@ -1,4 +1,5 @@
 import i18n from "@/i18n";
+import { DEFAULT_LOCALE } from "@covel/shared";
 import type * as api from "@/services/api.js";
 import {
   Activity,
@@ -226,7 +227,7 @@ export function fmtTime(iso: string, opts: FmtTimeOptions = {}): string {
       date.getDate() === now.getDate();
     const sameYear = date.getFullYear() === now.getFullYear();
 
-    const locale = i18n.language || "zh-CN";
+    const locale = i18n.language || DEFAULT_LOCALE;
     const timeOpts: Intl.DateTimeFormatOptions = withMillis
       ? { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" }
       : { hour12: false, hour: "2-digit", minute: "2-digit" };

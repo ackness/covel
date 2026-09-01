@@ -4,7 +4,7 @@ import { Eye, Trash2, ArrowRight } from "lucide-react";
 import type { WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { worldVisual } from "@/lib/world-visuals.js";
-import { worldLanguage, worldLanguageBadge } from "@/lib/world-locale.js";
+import { worldLanguageBadge, worldLanguageName } from "@/lib/world-locale.js";
 import { isWorldDeletable } from "./world-deletion.js";
 
 export interface WorldCardProps {
@@ -17,6 +17,7 @@ export interface WorldCardProps {
   dimmed: boolean;
   /** Resolved storage label (e.g. "Built-in", "Server file"). */
   storageLabel: string;
+  interfaceLocale: string;
   t: TFunction;
   onEnter: (worldId: string) => void;
   onViewDetails: (e: React.MouseEvent, worldId: string) => void;
@@ -34,22 +35,15 @@ export function WorldCard({
   isEntering,
   dimmed,
   storageLabel,
+  interfaceLocale,
   t,
   onEnter,
   onViewDetails,
   onDelete,
 }: WorldCardProps) {
   const visual = worldVisual(world);
-  const language = worldLanguage(world.locale);
-  const languageCode = worldLanguageBadge(world.locale);
-  const languageBadge =
-    language === "zh" ? t("world.languageBadgeChinese", "ZH") : languageCode;
-  const languageName =
-    language === "en"
-      ? t("world.languageEnglish", "English")
-      : language === "zh"
-        ? t("world.languageChinese", "Chinese")
-        : null;
+  const languageBadge = worldLanguageBadge(world.locale);
+  const languageName = worldLanguageName(world.locale, interfaceLocale);
   return (
     <article
       aria-busy={isEntering}

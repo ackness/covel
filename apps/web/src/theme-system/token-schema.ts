@@ -13,6 +13,8 @@ export type TokenControl =
   "color" | "length" | "number" | "font" | "select" | "css";
 
 export interface TokenOption {
+  /** Stable catalog id; distinct from the CSS value and preserved across translations. */
+  readonly id?: string;
   readonly value: string;
   readonly label: I18nText;
 }
@@ -54,53 +56,70 @@ export interface TokenGroup {
  */
 export const FONT_STACKS: readonly TokenOption[] = [
   {
+    id: "sans",
     value: "Inter, ui-sans-serif, system-ui, sans-serif",
     label: { "zh-CN": "无衬线", "en-US": "Sans" },
   },
   {
+    id: "serif-display",
     value: "Fraunces, Newsreader, ui-serif, Georgia, serif",
     label: { "zh-CN": "衬线 / 展示体", "en-US": "Serif / Display" },
   },
   {
+    id: "monospace",
     value: '"Geist Mono", ui-monospace, Menlo, Consolas, monospace',
     label: { "zh-CN": "等宽", "en-US": "Monospace" },
   },
   {
+    id: "songti",
     value: '"Songti SC", "Song", STSong, SimSun, "Noto Serif CJK SC", serif',
     label: { "zh-CN": "宋体", "en-US": "Songti (CJK serif)" },
   },
   {
+    id: "kaiti",
     value: '"Kaiti SC", STKaiti, KaiTi, "Noto Serif CJK SC", serif',
     label: { "zh-CN": "楷体", "en-US": "Kaiti (CJK brush)" },
   },
   {
+    id: "heiti-pingfang",
     value:
       '"Heiti SC", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
     label: { "zh-CN": "黑体 / 苹方", "en-US": "Heiti / PingFang" },
   },
   {
+    id: "yuanti",
     value: '"Yuanti SC", "Yuanti TC", "Hiragino Maru Gothic ProN", sans-serif',
     label: { "zh-CN": "圆体", "en-US": "Yuanti (rounded CJK)" },
   },
   {
+    id: "system-ui",
     value: "ui-sans-serif, system-ui, -apple-system, sans-serif",
     label: { "zh-CN": "系统界面字体", "en-US": "System UI" },
   },
 ];
 
 const WEIGHT_OPTIONS: readonly TokenOption[] = [
-  { value: "300", label: "300 · Light" },
-  { value: "400", label: "400 · Regular" },
-  { value: "500", label: "500 · Medium" },
-  { value: "600", label: "600 · Semibold" },
-  { value: "700", label: "700 · Bold" },
+  { id: "300", value: "300", label: "300 · Light" },
+  { id: "400", value: "400", label: "400 · Regular" },
+  { id: "500", value: "500", label: "500 · Medium" },
+  { id: "600", value: "600", label: "600 · Semibold" },
+  { id: "700", value: "700", label: "700 · Bold" },
 ];
 
 const TRANSFORM_OPTIONS: readonly TokenOption[] = [
-  { value: "none", label: { "zh-CN": "原样", "en-US": "None" } },
-  { value: "uppercase", label: { "zh-CN": "全大写", "en-US": "Uppercase" } },
-  { value: "lowercase", label: { "zh-CN": "全小写", "en-US": "Lowercase" } },
+  { id: "none", value: "none", label: { "zh-CN": "原样", "en-US": "None" } },
   {
+    id: "uppercase",
+    value: "uppercase",
+    label: { "zh-CN": "全大写", "en-US": "Uppercase" },
+  },
+  {
+    id: "lowercase",
+    value: "lowercase",
+    label: { "zh-CN": "全小写", "en-US": "Lowercase" },
+  },
+  {
+    id: "capitalize",
     value: "capitalize",
     label: { "zh-CN": "首字母大写", "en-US": "Capitalize" },
   },
@@ -113,23 +132,31 @@ const TRANSFORM_OPTIONS: readonly TokenOption[] = [
  * data-URLs would blow the settings blob past localStorage limits.
  */
 export const AMBIENCE_PRESETS: readonly TokenOption[] = [
-  { value: "none", label: { "zh-CN": "无（纯色）", "en-US": "None (flat)" } },
   {
+    id: "none",
+    value: "none",
+    label: { "zh-CN": "无（纯色）", "en-US": "None (flat)" },
+  },
+  {
+    id: "warm-wash",
     value:
       "radial-gradient(ellipse at 80% -10%, oklch(70% 0.12 60 / 0.18), transparent 60%), radial-gradient(ellipse at -10% 110%, oklch(70% 0.10 230 / 0.14), transparent 55%)",
     label: { "zh-CN": "暖阳晕染", "en-US": "Warm wash" },
   },
   {
+    id: "night-glow",
     value:
       "radial-gradient(ellipse at 50% -20%, oklch(60% 0.14 265 / 0.22), transparent 65%)",
     label: { "zh-CN": "夜幕辉光", "en-US": "Night glow" },
   },
   {
+    id: "neon-drift",
     value:
       "linear-gradient(160deg, oklch(65% 0.13 320 / 0.16), transparent 45%), linear-gradient(20deg, oklch(65% 0.13 200 / 0.14), transparent 50%)",
     label: { "zh-CN": "霓虹斜光", "en-US": "Neon drift" },
   },
   {
+    id: "hatch-texture",
     value:
       "repeating-linear-gradient(45deg, oklch(50% 0.02 60 / 0.05) 0 2px, transparent 2px 8px)",
     label: { "zh-CN": "细纹肌理", "en-US": "Hatch texture" },
@@ -137,16 +164,23 @@ export const AMBIENCE_PRESETS: readonly TokenOption[] = [
 ];
 
 const SHADOW_PRESETS: readonly TokenOption[] = [
-  { value: "none", label: { "zh-CN": "无阴影", "en-US": "None" } },
   {
+    id: "none",
+    value: "none",
+    label: { "zh-CN": "无阴影", "en-US": "None" },
+  },
+  {
+    id: "hairline",
     value: "0 1px 0 var(--color-border)",
     label: { "zh-CN": "细线（印刷感）", "en-US": "Hairline" },
   },
   {
+    id: "soft-lift",
     value: "0 6px 24px -18px rgb(15 23 42 / 0.18)",
     label: { "zh-CN": "柔和浮起", "en-US": "Soft lift" },
   },
   {
+    id: "deep-drop",
     value: "0 18px 40px -24px rgb(15 23 42 / 0.35)",
     label: { "zh-CN": "强投影", "en-US": "Deep drop" },
   },
@@ -401,9 +435,21 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
         label: { "zh-CN": "分隔线样式", "en-US": "Rule style" },
         control: "select",
         options: [
-          { value: "solid", label: { "zh-CN": "实线", "en-US": "Solid" } },
-          { value: "dashed", label: { "zh-CN": "虚线", "en-US": "Dashed" } },
-          { value: "dotted", label: { "zh-CN": "点线", "en-US": "Dotted" } },
+          {
+            id: "solid",
+            value: "solid",
+            label: { "zh-CN": "实线", "en-US": "Solid" },
+          },
+          {
+            id: "dashed",
+            value: "dashed",
+            label: { "zh-CN": "虚线", "en-US": "Dashed" },
+          },
+          {
+            id: "dotted",
+            value: "dotted",
+            label: { "zh-CN": "点线", "en-US": "Dotted" },
+          },
         ],
       },
     ],
@@ -481,14 +527,28 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
         label: { "zh-CN": "混合模式", "en-US": "Blend mode" },
         control: "select",
         options: [
-          { value: "normal", label: { "zh-CN": "正常", "en-US": "Normal" } },
           {
+            id: "normal",
+            value: "normal",
+            label: { "zh-CN": "正常", "en-US": "Normal" },
+          },
+          {
+            id: "multiply",
             value: "multiply",
             label: { "zh-CN": "正片叠底", "en-US": "Multiply" },
           },
-          { value: "screen", label: { "zh-CN": "滤色", "en-US": "Screen" } },
-          { value: "overlay", label: { "zh-CN": "叠加", "en-US": "Overlay" } },
           {
+            id: "screen",
+            value: "screen",
+            label: { "zh-CN": "滤色", "en-US": "Screen" },
+          },
+          {
+            id: "overlay",
+            value: "overlay",
+            label: { "zh-CN": "叠加", "en-US": "Overlay" },
+          },
+          {
+            id: "soft-light",
             value: "soft-light",
             label: { "zh-CN": "柔光", "en-US": "Soft light" },
           },
