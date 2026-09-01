@@ -179,7 +179,7 @@ export function StageChoices({
                               !onSubmitInteraction)
                           }
                           onClick={() => handleSelect(item)}
-                          className="ui-stage-choice-item rounded-(--radius-control) border border-border/60 bg-background/35 px-3.5 py-2 text-left text-sm transition-colors hover:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50"
+                          className="ui-stage-choice-item min-h-11 rounded-(--radius-control) border border-border/60 bg-background/35 px-3.5 py-2 text-left text-sm transition-colors hover:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50"
                           style={{
                             animationDelay: `${index * STAGGER_STEP_MS}ms`,
                           }}
@@ -217,14 +217,14 @@ export function StageChoices({
             placeholder={t("stage.inputPlaceholder")}
             aria-label={t("stage.inputPlaceholder")}
             data-testid="stage-decision-input"
-            className="max-h-24 min-h-9 flex-1 resize-none rounded-(--radius-control) border border-border/60 bg-background/35 px-3 py-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50"
+            className="max-h-24 min-h-11 flex-1 resize-none rounded-(--radius-control) border border-border/60 bg-background/35 px-3 py-2 text-base outline-none transition-colors placeholder:text-muted-foreground focus:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50 md:text-sm"
           />
           <button
             type="button"
             onClick={submitDraft}
             disabled={executing || !draft.trim()}
             aria-label={t("stage.sendLabel")}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-(--radius-control) bg-(--accent-primary) text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-(--radius-control) bg-(--accent-primary) text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
           >
             {executing ? (
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />

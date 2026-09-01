@@ -169,6 +169,8 @@ export function GameView({ session }: GameViewProps) {
     onCommandClientAction: handleCommandClientAction,
   });
   const [suspensionsOpen, setSuspensionsOpen] = useState(false);
+  const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
+  const [mobileRightOpen, setMobileRightOpen] = useState(false);
 
   // Load session-scoped plugin list whenever the session changes.
   useEffect(() => {
@@ -177,8 +179,8 @@ export function GameView({ session }: GameViewProps) {
     );
   }, [session.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const isMobile = useMediaQuery("(max-width: 768px)");
-  const isTablet = useMediaQuery("(max-width: 1024px)");
+  const isMobile = useMediaQuery("(max-width: 767.98px)");
+  const isTablet = useMediaQuery("(max-width: 1023.98px)");
 
   const {
     leftPanelRef,
@@ -251,10 +253,19 @@ export function GameView({ session }: GameViewProps) {
   useNavTabActivation({
     rightPanelRef,
     onOpenPlugins: () => settings.openWithKey("plugin"),
+    onOpenContext: isMobile ? () => setMobileRightOpen(true) : undefined,
   });
 
-  const direction = isMobile ? "vertical" : "horizontal";
+  const direction = "horizontal";
   const visual = worldVisual(world);
+  const leftCollapsed = isMobile ? !mobileLeftOpen : isLeftCollapsed;
+  const rightCollapsed = isMobile ? !mobileRightOpen : isRightCollapsed;
+  const handleToggleLeft = isMobile
+    ? () => setMobileLeftOpen((open) => !open)
+    : toggleLeftPanel;
+  const handleToggleRight = isMobile
+    ? () => setMobileRightOpen((open) => !open)
+    : toggleRightPanel;
 
   // Remember how the player left the rails — collapsed, or dragged to a
   // particular width. Mobile and desktop keep separate layouts: the mobile
@@ -304,6 +315,46 @@ export function GameView({ session }: GameViewProps) {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={mobileLeftOpen} onOpenChange={setMobileLeftOpen}>
+        <DialogContent className="bottom-3 left-3 right-3 top-auto h-[min(88dvh,48rem)] w-auto max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden p-0">
+          <DialogTitle className="sr-only">
+            {t("session.config", "Studio Config")}
+          </DialogTitle>
+          <LeftPanel
+            session={session}
+            isLeftCollapsed={!mobileLeftOpen}
+            showSessionList={showSessionList}
+            otherSessions={otherSessions}
+            enabledPackages={enabledPackages}
+            pluginLoadErrors={pluginLoadErrors}
+            sessionPlugins={sessionPlugins}
+            executing={executing}
+            resolvedSlots={resolvedSlots}
+            onToggleLeftPanel={() => setMobileLeftOpen(false)}
+            onToggleSessionList={handleToggleSessionList}
+            onSwitchSession={onSwitchSession}
+            onDeleteSession={onDeleteSession}
+            onCloseSessionList={() => setShowSessionList(false)}
+            onOpenSettings={() => settings.setOpen(true)}
+            onResetSession={onResetSession}
+            onTogglePlugin={onTogglePlugin}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={mobileRightOpen} onOpenChange={setMobileRightOpen}>
+        <DialogContent className="bottom-3 left-3 right-3 top-auto h-[min(88dvh,48rem)] w-auto max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden p-0">
+          <DialogTitle className="sr-only">
+            {t("session.toggleContextPanel")}
+          </DialogTitle>
+          <RightPanel
+            sessionId={session.id}
+            world={world}
+            statePatches={statePatches}
+          />
+        </DialogContent>
+      </Dialog>
+
       <ResizablePanelGroup
         id="game-layout"
         orientation={direction}
@@ -315,68 +366,43 @@ export function GameView({ session }: GameViewProps) {
         {/* Collapsed by default on every viewport: the rail holds studio
             configuration (plugin toggles, model slots), not anything the
             player acts on mid-story. The header toggle brings it back. */}
-        <ResizablePanel
-          id="left-panel"
-          panelRef={leftPanelRef}
-          defaultSize="0%"
-          minSize="15%"
-          maxSize={isMobile ? "80%" : "40%"}
-          collapsible={true}
-          collapsedSize="0%"
-          onResize={handleLeftResize}
-          className="ui-rail flex flex-col min-h-0 min-w-0"
-        >
-          <LeftPanel
-            session={session}
-            isLeftCollapsed={isLeftCollapsed}
-            showSessionList={showSessionList}
-            otherSessions={otherSessions}
-            enabledPackages={enabledPackages}
-            pluginLoadErrors={pluginLoadErrors}
-            sessionPlugins={sessionPlugins}
-            executing={executing}
-            resolvedSlots={resolvedSlots}
-            onToggleLeftPanel={toggleLeftPanel}
-            onToggleSessionList={handleToggleSessionList}
-            onSwitchSession={onSwitchSession}
-            onDeleteSession={onDeleteSession}
-            onCloseSessionList={() => setShowSessionList(false)}
-            onOpenSettings={() => settings.setOpen(true)}
-            onResetSession={onResetSession}
-            onTogglePlugin={onTogglePlugin}
-          />
-        </ResizablePanel>
-
-        <ResizableHandle
-          withHandle
-          orientation={direction}
-          className={isLeftCollapsed ? "hidden" : ""}
-        />
-
-        {/* Mobile: Right panel before center */}
-        {isMobile && (
+        {!isMobile && (
           <>
             <ResizablePanel
-              id="right-panel-mobile"
-              panelRef={rightPanelRef}
+              id="left-panel"
+              panelRef={leftPanelRef}
               defaultSize="0%"
-              minSize="20%"
-              maxSize="80%"
+              minSize="15%"
+              maxSize="40%"
               collapsible={true}
               collapsedSize="0%"
-              onResize={handleRightResize}
+              onResize={handleLeftResize}
               className="ui-rail flex flex-col min-h-0 min-w-0"
             >
-              <RightPanel
-                sessionId={session.id}
-                world={world}
-                statePatches={statePatches}
+              <LeftPanel
+                session={session}
+                isLeftCollapsed={isLeftCollapsed}
+                showSessionList={showSessionList}
+                otherSessions={otherSessions}
+                enabledPackages={enabledPackages}
+                pluginLoadErrors={pluginLoadErrors}
+                sessionPlugins={sessionPlugins}
+                executing={executing}
+                resolvedSlots={resolvedSlots}
+                onToggleLeftPanel={toggleLeftPanel}
+                onToggleSessionList={handleToggleSessionList}
+                onSwitchSession={onSwitchSession}
+                onDeleteSession={onDeleteSession}
+                onCloseSessionList={() => setShowSessionList(false)}
+                onOpenSettings={() => settings.setOpen(true)}
+                onResetSession={onResetSession}
+                onTogglePlugin={onTogglePlugin}
               />
             </ResizablePanel>
             <ResizableHandle
               withHandle
               orientation={direction}
-              className={isRightCollapsed ? "hidden" : ""}
+              className={isLeftCollapsed ? "hidden" : ""}
             />
           </>
         )}
@@ -385,7 +411,7 @@ export function GameView({ session }: GameViewProps) {
         <ResizablePanel
           id="center-panel"
           defaultSize={isMobile ? "100%" : "55%"}
-          minSize={isMobile ? "20%" : "30%"}
+          minSize={isMobile ? "100%" : "30%"}
           className="relative flex flex-col min-w-0 min-h-0 overflow-hidden"
           style={
             {
@@ -424,11 +450,11 @@ export function GameView({ session }: GameViewProps) {
                 world={world}
                 executing={executing}
                 viewMode={viewMode}
-                isLeftCollapsed={isLeftCollapsed}
-                isRightCollapsed={isRightCollapsed}
+                isLeftCollapsed={leftCollapsed}
+                isRightCollapsed={rightCollapsed}
                 onViewModeChange={handleViewModeChange}
-                onToggleLeftPanel={toggleLeftPanel}
-                onToggleRightPanel={toggleRightPanel}
+                onToggleLeftPanel={handleToggleLeft}
+                onToggleRightPanel={handleToggleRight}
                 onOpenSettings={() => settings.setOpen(true)}
                 onOpenSuspensions={() => setSuspensionsOpen(true)}
                 onBackToWorldSelect={onBackToWorldSelect}
@@ -527,9 +553,9 @@ export function GameView({ session }: GameViewProps) {
             <ResizablePanel
               id="right-panel"
               panelRef={rightPanelRef}
-              defaultSize="25%"
-              minSize="20%"
-              maxSize="50%"
+              defaultSize="22%"
+              minSize="18%"
+              maxSize="42%"
               collapsible={true}
               collapsedSize="0%"
               onResize={handleRightResize}

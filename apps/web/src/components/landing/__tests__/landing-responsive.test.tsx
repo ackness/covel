@@ -72,8 +72,8 @@ describe("landing responsive media", () => {
       .map((heading) => heading.closest("li"));
     const textSteps = container.querySelector("ol.space-y-12");
 
-    expect(textSteps?.className).toContain("md:space-y-[55vh]");
-    expect(textSteps?.className).not.toContain("space-y-[40vh]");
+    expect(textSteps?.className).toContain("md:space-y-[42vh]");
+    expect(textSteps?.className).not.toContain("md:space-y-[55vh]");
     expect(steps).toHaveLength(6);
     expect(steps.every((step) => step?.classList.contains("opacity-100"))).toBe(
       true,

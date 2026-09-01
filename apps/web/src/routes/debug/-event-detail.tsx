@@ -48,7 +48,7 @@ export function EventDetail({
           {displayType}
           {toolInvocation?.name ? ` · ${toolInvocation.name}` : ""}
         </span>
-        <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+        <span className="ml-auto font-mono text-xs text-muted-foreground">
           #{event.seq}
         </span>
       </div>
@@ -56,17 +56,17 @@ export function EventDetail({
       {error && (
         <section className="border border-destructive/30 bg-destructive/5 p-3 space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-[9px] font-semibold uppercase tracking-widest text-destructive flex items-center gap-1">
+            <h4 className="text-xs font-semibold uppercase tracking-widest text-destructive flex items-center gap-1">
               <AlertTriangle className="w-3 h-3" /> {t("debugger.errorDetail")}
             </h4>
             <CopyButton value={formatValue(error)} label={t("common.copy")} />
           </div>
           {error.code && (
-            <div className="font-mono text-[10px] text-destructive/80">
+            <div className="font-mono text-xs text-destructive/80">
               {error.code}
             </div>
           )}
-          <pre className="whitespace-pre-wrap wrap-break-word font-mono text-[11px] leading-relaxed text-foreground select-text">
+          <pre className="whitespace-pre-wrap wrap-break-word font-mono text-xs leading-relaxed text-foreground select-text">
             {error.message}
           </pre>
           {error.details != null && (
@@ -77,11 +77,11 @@ export function EventDetail({
 
       {!error && diagnostic?.warning?.code === "slow" && (
         <section className="border border-amber-500/30 bg-amber-500/5 p-3 space-y-1">
-          <h4 className="text-[9px] font-semibold uppercase tracking-widest text-amber-500 flex items-center gap-1">
+          <h4 className="text-xs font-semibold uppercase tracking-widest text-amber-500 flex items-center gap-1">
             <AlertTriangle className="w-3 h-3" />
             {t("debugger.slowWarning")}
           </h4>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t("debugger.slowWarningDetail", {
               duration: diagnostic.durationMs ?? 0,
               threshold: diagnostic.warning.thresholdMs,
@@ -175,7 +175,7 @@ export function EventDetail({
       {renderStructuredData(displayType, data, diagnostic, toolInvocation, t)}
 
       <details className="group">
-        <summary className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1 cursor-pointer">
+        <summary className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1 cursor-pointer">
           <FileJson className="w-3 h-3" /> {t("debugger.rawPayload")}
         </summary>
         <div className="relative">
@@ -203,7 +203,7 @@ function renderStructuredData(
     const tools = Array.isArray(data.tools) ? data.tools : [];
     return (
       <section className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className="border border-blue-500/20 bg-blue-500/5 px-1.5 py-0.5">
             {t("debugger.promptMessages", { count: messages.length })}
           </span>
@@ -215,7 +215,7 @@ function renderStructuredData(
           </span>
           <span>{t("debugger.promptTools", { count: tools.length })}</span>
           {diagnostic?.prompt?.contentPath && (
-            <span className="font-mono text-[9px] opacity-70">
+            <span className="font-mono text-xs opacity-70">
               {diagnostic.prompt.contentPath}
             </span>
           )}
@@ -231,10 +231,10 @@ function renderStructuredData(
             return (
               <div
                 key={index}
-                className={`border p-3 text-[10px] ${roleStyle(role)}`}
+                className={`border p-3 text-xs ${roleStyle(role)}`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-mono font-bold text-[9px] uppercase">
+                  <span className="font-mono font-bold text-xs uppercase">
                     {role} · #{index + 1}
                   </span>
                   <CopyButton
@@ -243,7 +243,7 @@ function renderStructuredData(
                   />
                 </div>
                 {toolCallId != null && (
-                  <div className="mt-1 font-mono text-[9px] text-muted-foreground">
+                  <div className="mt-1 font-mono text-xs text-muted-foreground">
                     toolCallId: {String(toolCallId)}
                   </div>
                 )}
@@ -254,7 +254,7 @@ function renderStructuredData(
                 )}
                 {messageToolCalls != null && (
                   <div className="mt-2 border-t border-border/40 pt-2">
-                    <div className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       {t("debugger.messageToolCalls")}
                     </div>
                     <CodeBlock value={messageToolCalls} className="max-h-64" />
@@ -267,7 +267,7 @@ function renderStructuredData(
 
         {tools.length > 0 && (
           <details>
-            <summary className="cursor-pointer text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               {t("debugger.availableTools", { count: tools.length })}
             </summary>
             <CodeBlock value={tools} className="mt-1 max-h-80" />
@@ -280,10 +280,10 @@ function renderStructuredData(
   if (type === "gateway.calling") {
     return (
       <section className="border border-amber-500/20 bg-amber-500/5 p-3 space-y-1">
-        <h4 className="text-[9px] font-semibold uppercase tracking-widest text-amber-500">
+        <h4 className="text-xs font-semibold uppercase tracking-widest text-amber-500">
           {t("debugger.promptSummary")}
         </h4>
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {t("debugger.promptContentUnavailable", {
             count: diagnostic?.prompt?.messageCount ?? data.messageCount ?? 0,
             chars: diagnostic?.prompt?.promptChars ?? data.promptChars ?? 0,
@@ -298,7 +298,7 @@ function renderStructuredData(
     const toolCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [];
     return (
       <section className="space-y-3">
-        <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground">
+        <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           {usage && (
             <>
               <span>
@@ -322,7 +322,7 @@ function renderStructuredData(
         )}
         {toolCalls.length > 0 && (
           <section className="space-y-2">
-            <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+            <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1">
               <Wrench className="w-3 h-3" />
               {t("debugger.toolCalls", { count: toolCalls.length })}
             </h4>
@@ -455,7 +455,7 @@ function ToolInvocationDetail({
     <section className="border border-violet-500/25 bg-violet-500/5 p-3 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-[9px] font-semibold uppercase tracking-widest text-violet-500">
+          <div className="text-xs font-semibold uppercase tracking-widest text-violet-500">
             {t("debugger.toolInvocation")}
           </div>
           <div className="mt-1 font-mono text-xs font-semibold break-all">
@@ -464,12 +464,12 @@ function ToolInvocationDetail({
               : t("debugger.unknownTool")}
           </div>
           {invocation.callId && (
-            <div className="mt-1 font-mono text-[9px] text-muted-foreground break-all">
+            <div className="mt-1 font-mono text-xs text-muted-foreground break-all">
               callId: {invocation.callId}
             </div>
           )}
         </div>
-        <div className={`font-mono text-[9px] ${statusClass}`}>
+        <div className={`font-mono text-xs ${statusClass}`}>
           {t(`debugger.toolStatus.${invocation.status}`)}
           {invocation.durationMs != null ? ` · ${invocation.durationMs}ms` : ""}
         </div>
@@ -512,11 +512,11 @@ function ToolCallCard({
     <div className="border border-violet-500/20 bg-violet-500/5 p-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <div className="font-mono text-[11px] font-semibold">
+          <div className="font-mono text-xs font-semibold">
             {name ? `${name}()` : t("debugger.unknownTool")}
           </div>
           {callId && (
-            <div className="mt-0.5 font-mono text-[9px] text-muted-foreground">
+            <div className="mt-0.5 font-mono text-xs text-muted-foreground">
               callId: {callId}
             </div>
           )}
@@ -547,7 +547,7 @@ function DetailSection({
   return (
     <section>
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+        <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1">
           {icon} {title}
         </h4>
         <CopyButton value={formatValue(value)} label={copyLabel} />
@@ -566,7 +566,7 @@ function CodeBlock({
 }) {
   return (
     <pre
-      className={`text-[10px] font-mono text-foreground/85 bg-muted/20 border border-border p-2.5 overflow-auto whitespace-pre-wrap wrap-break-word leading-relaxed select-text ${className}`}
+      className={`text-xs font-mono text-foreground/85 bg-muted/20 border border-border p-2.5 overflow-auto whitespace-pre-wrap wrap-break-word leading-relaxed select-text ${className}`}
     >
       {formatValue(value)}
     </pre>
@@ -587,7 +587,7 @@ function CopyButton({
       type="button"
       title={label}
       aria-label={label}
-      className={`inline-flex items-center gap-1 border border-border bg-background/80 px-1.5 py-0.5 text-[9px] text-muted-foreground hover:text-foreground ${className}`}
+      className={`inline-flex items-center gap-1 border border-border bg-background/80 px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground ${className}`}
       onClick={() => {
         void navigator.clipboard?.writeText(value).catch(() => undefined);
       }}
@@ -609,7 +609,7 @@ function MetaField({
 }) {
   if (!value) return null;
   return (
-    <div className="flex items-start gap-2 text-[10px] min-w-0">
+    <div className="flex items-start gap-2 text-xs min-w-0">
       <span className="text-muted-foreground shrink-0 min-w-24">{label}</span>
       <span
         className={`min-w-0 break-all select-text ${mono ? "font-mono" : ""} text-foreground`}

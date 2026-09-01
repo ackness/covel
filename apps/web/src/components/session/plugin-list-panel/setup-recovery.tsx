@@ -70,7 +70,7 @@ export function SetupRecovery({
       <div className="w-full flex items-center gap-1.5 px-2.5 pb-2">
         <Badge
           variant="destructive"
-          className="text-[9px] px-1.5 py-0 h-4 shrink-0"
+          className="text-xs px-1.5 py-0 h-4 shrink-0"
         >
           {t("plugin.setupBlocked", "Setup failed")}
         </Badge>
@@ -78,7 +78,7 @@ export function SetupRecovery({
           type="button"
           disabled={pending}
           onClick={() => apply(retrySetupRuntime)}
-          className="text-[10px] leading-none px-1.5 py-1 rounded border border-border hover:bg-muted disabled:opacity-50"
+          className="text-xs leading-none px-1.5 py-1 rounded border border-border hover:bg-muted disabled:opacity-50"
         >
           {t("plugin.setupRetry", "Retry")}
         </button>
@@ -86,7 +86,7 @@ export function SetupRecovery({
           type="button"
           disabled={pending}
           onClick={() => apply(waiveSetupRuntime)}
-          className="text-[10px] leading-none px-1.5 py-1 rounded border border-border hover:bg-muted disabled:opacity-50"
+          className="text-xs leading-none px-1.5 py-1 rounded border border-border hover:bg-muted disabled:opacity-50"
         >
           {t("plugin.setupWaive", "Skip this step")}
         </button>
@@ -95,7 +95,7 @@ export function SetupRecovery({
   }
   if (isWaived) {
     return (
-      <span className="w-full px-2.5 pb-2 text-[10px] text-muted-foreground italic">
+      <span className="w-full px-2.5 pb-2 text-xs text-muted-foreground italic">
         {t("plugin.setupWaived", "Running in degraded mode")}
       </span>
     );

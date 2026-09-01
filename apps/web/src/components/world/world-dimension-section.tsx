@@ -12,7 +12,7 @@ export function WorldDimensionSection({
   title,
   icon: Icon,
   children,
-  defaultExpanded = true,
+  defaultExpanded = false,
 }: WorldDimensionSectionProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
 

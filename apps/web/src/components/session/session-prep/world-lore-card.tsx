@@ -43,7 +43,7 @@ export function WorldLoreCard({
         <FileText className="w-4 h-4" />
         {t("session.worldLore", "World Document")}
         {isModified && (
-          <Badge variant="secondary" className="text-[10px] ml-1">
+          <Badge variant="secondary" className="text-xs ml-1">
             {t("session.modified")}
           </Badge>
         )}

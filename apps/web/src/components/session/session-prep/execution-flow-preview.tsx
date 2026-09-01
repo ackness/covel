@@ -23,12 +23,12 @@ export function ExecutionFlowPreview({
   return (
     <div className="space-y-2 pt-2 border-t border-dashed border-border">
       <div className="space-y-0.5">
-        <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1.5">
           <Zap className="w-3 h-3" />
           {t("session.executionFlow", "Execution Flow")}
         </h4>
         <p
-          className="text-[10px] text-muted-foreground/70 leading-snug"
+          className="text-xs text-muted-foreground/70 leading-snug"
           title={t(
             "session.executionFlowTitle",
             "Plugins run stage by stage each turn: setup, then pre-turn, narrative, and post-turn.",
@@ -49,7 +49,7 @@ export function ExecutionFlowPreview({
           if (stepsInSegment.length === 0) return null;
           return (
             <div key={segment.id}>
-              <div className="text-[9px] text-muted-foreground/70 uppercase tracking-widest mb-0.5">
+              <div className="text-xs text-muted-foreground/70 uppercase tracking-widest mb-0.5">
                 {resolveI18n(segment.labelText, i18n.language) || segment.label}
               </div>
               <div className="flex flex-wrap gap-1">
@@ -62,7 +62,7 @@ export function ExecutionFlowPreview({
                   return (
                     <div
                       key={step.runtimeId}
-                      className="inline-flex items-center gap-1.5 bg-muted/40 border border-border px-2 py-1 text-[10px]"
+                      className="inline-flex items-center gap-1.5 bg-muted/40 border border-border px-2 py-1 text-xs"
                       title={`${step.runtimeId} — ${step.trigger.type}`}
                     >
                       <span className="font-medium truncate max-w-30">

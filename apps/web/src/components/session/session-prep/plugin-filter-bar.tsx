@@ -34,12 +34,12 @@ export function PluginFilterBar({
         />
       </div>
       {availablePluginTags.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
+        <div className="flex gap-1.5 overflow-x-auto overscroll-x-contain pb-1 pr-8">
           {availablePluginTags.map((tag) => (
             <button
               key={tag}
               type="button"
-              className={`border px-2 py-0.5 text-[10px] transition-colors ${
+              className={`min-h-8 shrink-0 border px-2.5 text-xs transition-colors ${
                 activePluginTags.has(tag)
                   ? "border-primary/50 bg-primary/10 text-foreground"
                   : "border-border text-muted-foreground hover:text-foreground"

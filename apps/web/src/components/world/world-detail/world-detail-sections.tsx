@@ -39,7 +39,11 @@ export function GeographySection({
   t: DetailTranslate;
 }) {
   return (
-    <WorldDimensionSection title={t("world.geography")} icon={MapPin}>
+    <WorldDimensionSection
+      title={t("world.geography")}
+      icon={MapPin}
+      defaultExpanded
+    >
       {geo.overview && (
         <p className="mb-3 text-sm text-muted-foreground">
           {text(geo.overview)}

@@ -81,9 +81,7 @@ export function LeftPanel({
   return (
     <>
       <div className="ui-panel-header px-3 flex items-center gap-2">
-        <span className="ui-meta text-[10px] text-muted-foreground">
-          § STUDIO
-        </span>
+        <span className="ui-meta text-xs text-muted-foreground">§ STUDIO</span>
         <h2 className="ui-title text-sm font-medium whitespace-nowrap truncate">
           {t("session.config", "Studio Config")}
         </h2>
@@ -99,7 +97,7 @@ export function LeftPanel({
                 <div
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${session ? "bg-green-500 animate-pulse" : "bg-muted-foreground"}`}
                 />
-                <Badge variant="secondary" className="ui-chip text-[10px]">
+                <Badge variant="secondary" className="ui-chip text-xs">
                   {sessionStatusLabel(t, session.status)} ·{" "}
                   {sessionTurnLabel(t, session.completedPlayerTurns)}
                 </Badge>
@@ -107,14 +105,14 @@ export function LeftPanel({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground"
                 onClick={onToggleSessionList}
                 title={t("session.switchSession")}
               >
                 <History className="w-3 h-3" />
               </Button>
             </div>
-            <p className="text-[11px] font-mono text-muted-foreground break-all leading-relaxed">
+            <p className="text-xs font-mono text-muted-foreground break-all leading-relaxed">
               {session.id}
             </p>
           </div>
@@ -122,11 +120,11 @@ export function LeftPanel({
           {/* ── Session List (expandable) ── */}
           {showSessionList && (
             <div className="px-3 py-2.5 border-b border-border space-y-1.5 bg-muted/20">
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {t("session.sessions")}
               </h3>
               {otherSessions.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground italic">
+                <p className="text-xs text-muted-foreground italic">
                   {t("session.noOtherSessions")}
                 </p>
               ) : (
@@ -141,10 +139,10 @@ export function LeftPanel({
                           onSwitchSession(s);
                           onCloseSessionList();
                         }}
-                        className="flex-1 text-left px-2 py-1.5 text-[11px] font-mono truncate min-w-0"
+                        className="flex-1 text-left px-2 py-1.5 text-xs font-mono truncate min-w-0"
                       >
                         <span className="block truncate">{s.id}</span>
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           {sessionStatusLabel(t, s.status)} ·{" "}
                           {sessionTurnLabel(t, s.completedPlayerTurns)} ·{" "}
                           {formatSessionDate(
@@ -172,7 +170,7 @@ export function LeftPanel({
 
           {/* ── Models ── */}
           <div className="ui-panel-section border-b border-border space-y-3">
-            <h3 className="ui-eyebrow text-[11px]">
+            <h3 className="ui-eyebrow text-xs">
               {t("session.activeModels", "Models")}
             </h3>
             <ActiveModelSlots slots={resolvedSlots} variant="compact" />
@@ -180,7 +178,7 @@ export function LeftPanel({
 
           {/* ── Plugins ── */}
           <div className="ui-panel-section border-b border-border space-y-3">
-            <h3 className="ui-eyebrow text-[11px] flex items-center justify-between">
+            <h3 className="ui-eyebrow text-xs flex items-center justify-between">
               <span>{t("session.plugins", "Plugins")}</span>
               {enabledPackages.length > 0 && (
                 <span className="ml-1 font-normal text-muted-foreground">

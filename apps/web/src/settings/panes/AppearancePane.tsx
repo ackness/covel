@@ -229,6 +229,7 @@ export function AppearancePane() {
           ref={fileRef}
           type="file"
           accept=".json"
+          aria-label={t("appearance.importTheme")}
           className="hidden"
           onChange={(event) => void handleImport(event)}
         />

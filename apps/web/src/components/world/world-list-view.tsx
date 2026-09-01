@@ -74,7 +74,7 @@ export function WorldListView({
           </div>
 
           {/* Compact action rail keeps creation and setup nearby without pushing worlds down. */}
-          <aside className="md:col-span-5 grid grid-cols-2 md:grid-cols-1 lg:grid-cols-2 gap-2.5">
+          <aside className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:col-span-5 md:grid-cols-1 lg:grid-cols-2">
             <button
               type="button"
               onClick={onOpenGenerator}
@@ -119,7 +119,7 @@ export function WorldListView({
                   <p className="text-[13px] sm:text-sm font-medium leading-snug line-clamp-2">
                     {t("session.configureKeys", "API keys & presets")}
                   </p>
-                  <p className="text-[11px] text-muted-foreground/80 truncate">
+                  <p className="text-xs text-muted-foreground truncate">
                     {primarySlotLabel ??
                       t("session.noModelsConfigured", "No model configured")}
                   </p>
@@ -132,7 +132,7 @@ export function WorldListView({
 
         {/* World list — cover-led plates with the same action surface. */}
         {worlds.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
             {worlds.map((world, index) => {
               const isEntering = enteringWorldId === world.id;
               const dimmed = enteringWorldId !== null && !isEntering;

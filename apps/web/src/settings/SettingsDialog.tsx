@@ -125,7 +125,7 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[80vh] w-[calc(100%-1rem)] max-w-4xl gap-0 p-0 flex flex-col">
+      <DialogContent className="flex h-[min(90dvh,56rem)] w-[calc(100%-1rem)] max-w-5xl flex-col gap-0 p-0">
         <DialogHeader className="px-4 sm:px-6 pt-5 pb-4 border-b border-(--rule-color)">
           <DialogTitle className="flex items-baseline gap-3">
             <span className="ui-meta text-[10px] text-muted-foreground">
@@ -232,7 +232,7 @@ export function SettingsDialog({
           </aside>
           <section
             ref={contentRef}
-            className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 ui-scroll"
+            className="ui-scroll min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8"
           >
             {renderPane(selectedNode, t)}
           </section>

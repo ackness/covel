@@ -32,7 +32,7 @@ export function WorldInfoCard({
         <MapIcon className="w-4 h-4" />
         {text(world.name)}
         {world.tags && world.tags.length > 0 && (
-          <Badge variant="outline" className="text-[10px] ml-1">
+          <Badge variant="outline" className="text-xs ml-1">
             {t("session.tagsCount", { count: world.tags.length })}
           </Badge>
         )}
@@ -59,7 +59,7 @@ export function WorldInfoCard({
               {world.tags && world.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {world.tags.map((tag) => (
-                    <Badge key={tag} variant="outline" className="text-[10px]">
+                    <Badge key={tag} variant="outline" className="text-xs">
                       {tag}
                     </Badge>
                   ))}

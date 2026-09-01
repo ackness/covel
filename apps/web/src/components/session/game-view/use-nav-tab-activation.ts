@@ -7,6 +7,8 @@ export interface NavTabActivationOptions {
   rightPanelRef: React.RefObject<PanelImperativeHandle | null>;
   /** Open the plugin settings surface (topbar "open-plugins" event). */
   onOpenPlugins: () => void;
+  /** Open the mobile context drawer when no resizable rail is mounted. */
+  onOpenContext?: () => void;
 }
 
 /**
@@ -21,11 +23,16 @@ export interface NavTabActivationOptions {
 export function useNavTabActivation({
   rightPanelRef,
   onOpenPlugins,
+  onOpenContext,
 }: NavTabActivationOptions): void {
   useEffect(() => {
     return onNavEvent((event) => {
       if (event === "open-plugins") {
         onOpenPlugins();
+        return;
+      }
+      if (onOpenContext) {
+        onOpenContext();
         return;
       }
       const panel = rightPanelRef.current;

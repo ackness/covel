@@ -37,14 +37,14 @@ export function Hero() {
           height={1024}
           loading="eager"
           fetchPriority="high"
-          className="absolute inset-0 h-full w-full object-cover opacity-45 md:opacity-60"
+          className="absolute inset-0 h-full w-full object-cover opacity-30 md:opacity-45 dark:opacity-45 dark:md:opacity-60"
           draggable={false}
         />
         <div
           className="absolute inset-0"
           style={{
             background:
-              "linear-gradient(90deg, var(--surface-app) 0%, color-mix(in oklab, var(--surface-app) 84%, transparent) 36%, color-mix(in oklab, var(--surface-app) 48%, transparent) 72%, color-mix(in oklab, var(--surface-app) 72%, transparent) 100%)",
+              "linear-gradient(90deg, var(--surface-app) 0%, color-mix(in oklab, var(--surface-app) 90%, transparent) 36%, color-mix(in oklab, var(--surface-app) 25%, transparent) 55%, transparent 72%)",
           }}
         />
         <div className="absolute right-0 top-0 hidden h-full w-full md:block md:w-[60%] overflow-hidden">
@@ -54,7 +54,7 @@ export function Hero() {
             width={1536}
             height={1024}
             loading="lazy"
-            className="absolute inset-0 h-full w-full object-cover opacity-35 mix-blend-screen"
+            className="absolute inset-0 h-full w-full object-cover opacity-22 mix-blend-multiply dark:opacity-35 dark:mix-blend-screen"
             draggable={false}
             style={{ filter: "saturate(0.8) contrast(1.1)" }}
           />
@@ -62,7 +62,7 @@ export function Hero() {
               same frames, ~8× smaller, and it decodes on the GPU. */}
           <video
             ref={videoRef}
-            className="absolute inset-0 h-full w-full object-cover opacity-60"
+            className="absolute inset-0 h-full w-full object-cover opacity-78 dark:opacity-65"
             src="/media/demo.mp4"
             poster="/media/demo-poster.jpg"
             width={1152}
@@ -82,18 +82,18 @@ export function Hero() {
             className="absolute inset-0"
             style={{
               background:
-                "linear-gradient(90deg, var(--surface-app) 0%, color-mix(in oklab, var(--surface-app) 82%, transparent) 28%, color-mix(in oklab, var(--surface-app) 36%, transparent) 68%, color-mix(in oklab, var(--surface-app) 62%, transparent) 100%)",
+                "linear-gradient(90deg, var(--surface-app) 0%, color-mix(in oklab, var(--surface-app) 86%, transparent) 22%, color-mix(in oklab, var(--surface-app) 20%, transparent) 42%, transparent 62%)",
             }}
           />
           <div
-            className="absolute inset-x-0 top-0 h-32"
+            className="absolute inset-x-0 top-0 h-16"
             style={{
               background:
                 "linear-gradient(180deg, var(--surface-app) 0%, transparent 100%)",
             }}
           />
           <div
-            className="absolute inset-x-0 bottom-0 h-32"
+            className="absolute inset-x-0 bottom-0 h-16"
             style={{
               background:
                 "linear-gradient(0deg, var(--surface-app) 0%, transparent 100%)",
@@ -148,7 +148,7 @@ export function Hero() {
         </div>
 
         <div className="flex items-end justify-between gap-6">
-          <p className="ui-eyebrow text-muted-foreground/70 max-w-xs hidden md:block">
+          <p className="ui-eyebrow text-muted-foreground max-w-xs hidden md:block">
             {t(
               "home.heroFootnote",
               "Trigger → Context → LLM → Tool loop → Proposal → Commit → Render. Scroll to follow a single turn.",

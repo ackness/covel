@@ -144,7 +144,7 @@ function RootLayout() {
     <>
       <ToastHost />
       <ConfirmHost />
-      <div className="h-screen w-full bg-background text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex flex-col overflow-hidden">
+      <div className="h-screen w-full bg-transparent text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex flex-col overflow-hidden">
         <header
           className={`ui-panel-header relative shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? "h-12" : "h-16"}`}
           style={isElectron ? dragStyle : undefined}
@@ -153,7 +153,7 @@ function RootLayout() {
               padding on the inner row doesn't shift it off centre. */}
           <Link
             to="/"
-            className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ui-title flex items-center gap-2 tracking-tight pointer-events-auto ${isSession ? "text-lg" : "text-2xl"}`}
+            className={`ui-brand-title absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ui-title flex items-center gap-2 tracking-tight pointer-events-auto ${isSession ? "text-lg" : "text-2xl"}`}
             style={isElectron ? noDragStyle : undefined}
           >
             <img
@@ -185,11 +185,11 @@ function RootLayout() {
                     aria-current={isActive ? "page" : undefined}
                     className={`relative h-8 px-3 transition-colors rounded-(--radius-control) ${
                       isActive
-                        ? "text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-primary/10 text-foreground"
+                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                     } ${
                       item.disabled
-                        ? "text-muted-foreground/75 cursor-not-allowed hover:text-muted-foreground/75"
+                        ? "cursor-not-allowed opacity-55 hover:bg-transparent hover:text-muted-foreground"
                         : ""
                     }`}
                   >
@@ -242,7 +242,7 @@ function RootLayout() {
                     variant="ghost"
                     size="icon"
                     aria-label={t("nav.primary", "Primary")}
-                    className="lg:hidden h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control)"
+                    className="h-10 w-10 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control) lg:hidden"
                   >
                     <Menu className="h-4 w-4" />
                   </Button>
@@ -298,7 +298,7 @@ function RootLayout() {
           </AppErrorBoundary>
         </main>
 
-        {!isHome && (
+        {!isHome && !isSession && (
           <footer
             className={`ui-panel-footer shrink-0 border-t border-border transition-all ${isSession ? "py-1.5" : "py-8"}`}
           >
@@ -313,9 +313,7 @@ function RootLayout() {
                 ></span>
                 <span>Covel Studio</span>
               </div>
-              <div
-                className={`ui-eyebrow text-muted-foreground ${isSession ? "text-[10px]" : "text-xs"}`}
-              >
+              <div className="ui-eyebrow text-muted-foreground text-xs">
                 &copy; {new Date().getFullYear()} Covel Framework.
               </div>
             </div>

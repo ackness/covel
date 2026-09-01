@@ -18,14 +18,14 @@ export function SessionSidebar({
   return (
     <div className="h-28 w-full shrink-0 border-b border-(--rule-color) flex flex-col min-h-0 ui-rail sm:h-auto sm:w-56 sm:border-b-0 sm:border-r">
       <div className="px-3 py-2 border-b border-(--rule-color)">
-        <h2 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           {t("debugger.sessions")}
         </h2>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="p-1.5 space-y-0.5">
           {sessions.length === 0 && (
-            <p className="text-[11px] text-muted-foreground italic px-2 py-3">
+            <p className="text-xs text-muted-foreground italic px-2 py-3">
               {t("debugger.noSessions")}
             </p>
           )}
@@ -33,7 +33,10 @@ export function SessionSidebar({
             <button
               key={session.id}
               onClick={() => onSelectSession(session.id)}
-              className={`w-full text-left px-2.5 py-2 text-[11px] border transition-colors ${
+              aria-current={
+                selectedSessionId === session.id ? "page" : undefined
+              }
+              className={`w-full text-left px-2.5 py-2 text-xs border transition-colors ${
                 selectedSessionId === session.id
                   ? "border-primary/40 bg-primary/5 text-foreground"
                   : "border-transparent hover:border-border hover:bg-muted/20 text-muted-foreground"
@@ -47,12 +50,10 @@ export function SessionSidebar({
                       : "bg-zinc-400"
                   }`}
                 />
-                <span className="font-mono truncate text-[10px]">
-                  {session.id}
-                </span>
+                <span className="font-mono truncate text-xs">{session.id}</span>
               </div>
-              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                <Badge variant="secondary" className="text-[9px] h-4 px-1">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Badge variant="secondary" className="text-xs h-4 px-1">
                   {sessionStatusLabel(t, session.status)} ·{" "}
                   {sessionTurnLabel(t, session.completedPlayerTurns)}
                 </Badge>

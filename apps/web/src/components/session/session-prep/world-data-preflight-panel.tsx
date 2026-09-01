@@ -53,7 +53,7 @@ export function WorldDataPreflightPanel({
     <div className="space-y-2 border-t border-dashed border-border pt-3">
       <div className="flex items-center gap-2">
         <Database className="w-3.5 h-3.5 text-muted-foreground" />
-        <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
           {t("session.worldDataPreflight.title", "World Data")}
         </h4>
         <Badge
@@ -62,7 +62,7 @@ export function WorldDataPreflightPanel({
               ? "destructive"
               : "secondary"
           }
-          className="text-[9px] ml-auto"
+          className="text-xs ml-auto"
         >
           {status === "loading" && (
             <Loader2 className="w-2.5 h-2.5 mr-1 animate-spin" />
@@ -72,12 +72,12 @@ export function WorldDataPreflightPanel({
       </div>
 
       {status === "error" && (
-        <div className="flex items-center justify-between gap-3 text-[11px] text-destructive">
+        <div className="flex items-center justify-between gap-3 text-xs text-destructive">
           <span className="truncate">{error}</span>
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 text-[10px]"
+            className="h-6 text-xs"
             onClick={onRetry}
           >
             {t("session.worldDataPreflight.retry", "Retry")}
@@ -86,7 +86,7 @@ export function WorldDataPreflightPanel({
       )}
 
       {status === "success" && result?.imported === false && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {t(
             "session.worldDataPreflight.emptyDetail",
             "This world has no worldData import plan.",
@@ -99,7 +99,7 @@ export function WorldDataPreflightPanel({
           {visibleDiagnostics.map((item, index) => (
             <div
               key={`${item.sourceId ?? "world"}-${index}`}
-              className="flex items-start gap-1.5 text-[11px] text-muted-foreground"
+              className="flex items-start gap-1.5 text-xs text-muted-foreground"
             >
               <AlertTriangle
                 className={`w-3 h-3 mt-0.5 shrink-0 ${
@@ -121,7 +121,7 @@ export function WorldDataPreflightPanel({
             <Badge
               key={`${target.target}-${target.key ?? index}`}
               variant="outline"
-              className="max-w-full text-[9px] font-mono"
+              className="max-w-full text-xs font-mono"
               title={`${target.kind} ${target.target}${target.key ? `:${target.key}` : ""}`}
             >
               <span className="truncate max-w-55">
@@ -131,7 +131,7 @@ export function WorldDataPreflightPanel({
             </Badge>
           ))}
           {moreTargets > 0 && (
-            <Badge variant="outline" className="text-[9px]">
+            <Badge variant="outline" className="text-xs">
               {t("session.worldDataPreflight.moreTargets", {
                 count: moreTargets,
                 defaultValue: "{{count}} more",

@@ -38,7 +38,7 @@ export function ModelsCard({
       >
         <Cpu className="w-4 h-4" />
         {t("session.activeModels", "Active Models")}
-        <Badge variant="secondary" className="text-[10px] ml-1">
+        <Badge variant="secondary" className="text-xs ml-1">
           {resolvedSlots.length}
         </Badge>
       </CollapsibleCardHeader>

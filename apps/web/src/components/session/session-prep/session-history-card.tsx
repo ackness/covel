@@ -45,7 +45,7 @@ export function SessionHistoryCard({
       >
         <History className="w-4 h-4" />
         {t("session.history", "Previous Sessions")}
-        <Badge variant="secondary" className="text-[10px] ml-1">
+        <Badge variant="secondary" className="text-xs ml-1">
           {activeSessions.length}
         </Badge>
       </CollapsibleCardHeader>
@@ -72,11 +72,11 @@ export function SessionHistoryCard({
                     {session.id.slice(0, 16)}
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-xs">
                       {sessionStatusLabel(t, session.status)} ·{" "}
                       {sessionTurnLabel(t, session.completedPlayerTurns)}
                     </Badge>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {formatSessionDate(
                         session.createdAt,
                         i18n.resolvedLanguage ?? i18n.language,

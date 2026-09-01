@@ -54,6 +54,19 @@ export function TurnCard({
     () => deriveRuntimesFromTurn(turn.events),
     [turn.events],
   );
+  const filteredRuntimes = useMemo(
+    () =>
+      filterCategory
+        ? runtimes.filter((runtime) =>
+            runtime.events.some(
+              (event) =>
+                categorize(getDisplayType(event)) === filterCategory ||
+                categorize(event.type) === filterCategory,
+            ),
+          )
+        : runtimes,
+    [filterCategory, runtimes],
+  );
 
   const errorEvents = useMemo(
     () => turn.events.filter((event) => getTraceError(event) != null),
@@ -120,7 +133,8 @@ export function TurnCard({
     >
       <button
         onClick={onToggle}
-        className="w-full px-3 py-2 flex items-center gap-3 text-left hover:bg-muted/10 transition-colors"
+        aria-expanded={expanded}
+        className="flex w-full flex-wrap items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted/10 sm:flex-nowrap"
       >
         {expanded ? (
           <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -135,10 +149,10 @@ export function TurnCard({
                 <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0 text-violet-500">
                   {t("debugger.pluginInvocation")}
                 </span>
-                <span className="font-mono text-[10px] text-violet-500/80 shrink-0 truncate">
+                <span className="font-mono text-xs text-violet-500/80 shrink-0 truncate">
                   {manualTrigger.runtimeId}
                 </span>
-                <span className="font-mono text-[10px] text-muted-foreground/60 truncate">
+                <span className="font-mono text-xs text-muted-foreground/60 truncate">
                   {turn.turnId}
                 </span>
               </>
@@ -147,7 +161,7 @@ export function TurnCard({
                 <span className="font-display font-bold text-xs uppercase tracking-wider shrink-0">
                   {t("debugger.turn", { count: turnIndex })}
                 </span>
-                <span className="font-mono text-[10px] text-muted-foreground truncate">
+                <span className="font-mono text-xs text-muted-foreground truncate">
                   {turn.turnId}
                 </span>
               </>
@@ -155,7 +169,7 @@ export function TurnCard({
           </div>
           {firstErrorEvent && firstError && (
             <div
-              className={`mt-1 flex items-center gap-1.5 min-w-0 text-[10px] ${hasError ? "text-destructive" : "text-amber-500"}`}
+              className={`mt-1 flex items-center gap-1.5 min-w-0 text-xs ${hasError ? "text-destructive" : "text-amber-500"}`}
             >
               <XCircle className="w-3 h-3 shrink-0" />
               <span className="font-mono shrink-0">
@@ -173,19 +187,19 @@ export function TurnCard({
           )}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {runtimes.length > 0 && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] border border-border bg-muted/10 text-muted-foreground">
+        <div className="flex w-full items-center justify-end gap-2 pl-6 sm:w-auto sm:shrink-0 sm:pl-0">
+          {filteredRuntimes.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs border border-border bg-muted/10 text-muted-foreground">
               <Activity className="w-2.5 h-2.5" />
-              {t("debugger.nRuntimes", { count: runtimes.length })}
-              {runtimes.some((runtime) => runtime.status === "failed") && (
-                <XCircle className="w-2.5 h-2.5 text-destructive" />
-              )}
+              {t("debugger.nRuntimes", { count: filteredRuntimes.length })}
+              {filteredRuntimes.some(
+                (runtime) => runtime.status === "failed",
+              ) && <XCircle className="w-2.5 h-2.5 text-destructive" />}
             </span>
           )}
 
           {promptCount > 0 && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] border border-amber-500/20 bg-amber-500/5 text-amber-500">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs border border-amber-500/20 bg-amber-500/5 text-amber-500">
               <Zap className="w-2.5 h-2.5" />
               {t("debugger.promptCount", { count: promptCount })}
             </span>
@@ -195,7 +209,7 @@ export function TurnCard({
             variant={
               hasError ? "destructive" : isCompleted ? "secondary" : "outline"
             }
-            className="text-[9px] h-4"
+            className="text-xs h-4"
           >
             {hasError
               ? t("debugger.error")
@@ -204,7 +218,7 @@ export function TurnCard({
                 : t("debugger.running")}
           </Badge>
 
-          <span className="text-[10px] text-muted-foreground font-mono">
+          <span className="text-xs text-muted-foreground font-mono">
             {fmtTime(turn.startedAt)}
           </span>
         </div>
@@ -212,12 +226,12 @@ export function TurnCard({
 
       {expanded && (
         <div className="border-t border-border">
-          {runtimes.length > 0 && (
+          {filteredRuntimes.length > 0 && (
             <div className="px-3 py-2 space-y-1 border-b border-(--rule-color) ui-rail">
-              <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">
+              <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">
                 {t("debugger.runtimes")}
               </h4>
-              {runtimes.map((runtime) => {
+              {filteredRuntimes.map((runtime) => {
                 const runtimeKey = `${turn.turnId}:${runtime.runtimeId}`;
                 return (
                   <RuntimeRow
@@ -236,9 +250,9 @@ export function TurnCard({
 
           {orphanEvents.length > 0 && (
             <div className="divide-y divide-border/50">
-              {runtimes.length > 0 && (
+              {filteredRuntimes.length > 0 && (
                 <div className="px-3 py-1.5 ui-rail">
-                  <h4 className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
+                  <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                     {t("debugger.flowEvents")}
                   </h4>
                 </div>
@@ -253,8 +267,8 @@ export function TurnCard({
               ))}
             </div>
           )}
-          {orphanEvents.length === 0 && runtimes.length === 0 && (
-            <div className="px-3 py-4 text-center text-[11px] text-muted-foreground italic">
+          {orphanEvents.length === 0 && filteredRuntimes.length === 0 && (
+            <div className="px-3 py-4 text-center text-xs text-muted-foreground italic">
               {t("debugger.noEventsMatchingFilter")}
             </div>
           )}
@@ -339,6 +353,7 @@ function RuntimeRow({
     >
       <button
         onClick={onToggle}
+        aria-expanded={expanded}
         className="w-full px-2.5 py-1.5 flex items-center gap-2 text-left hover:bg-muted/10 transition-colors"
       >
         {expanded ? (
@@ -358,29 +373,29 @@ function RuntimeRow({
         />
 
         <div className="flex-1 min-w-0">
-          <div className="font-mono text-[11px] font-medium truncate">
+          <div className="font-mono text-xs font-medium truncate">
             {runtime.label}
           </div>
           {(runtime.pluginId !== runtime.runtimeId || runtime.stage) && (
-            <div className="mt-0.5 font-mono text-[9px] text-muted-foreground truncate">
+            <div className="mt-0.5 font-mono text-xs text-muted-foreground truncate">
               {[runtime.pluginId, runtime.stage].filter(Boolean).join(" · ")}
             </div>
           )}
           {toolNames.length > 0 && (
-            <div className="mt-0.5 font-mono text-[9px] text-violet-500/80 truncate">
+            <div className="mt-0.5 font-mono text-xs text-violet-500/80 truncate">
               {toolNames.map((name) => `${name}()`).join(" · ")}
             </div>
           )}
           {errors[0] && (
             <div
-              className={`mt-0.5 text-[9px] truncate ${runtime.status === "failed" ? "text-destructive" : "text-amber-500"}`}
+              className={`mt-0.5 text-xs truncate ${runtime.status === "failed" ? "text-destructive" : "text-amber-500"}`}
             >
               {getDisplayType(errors[0].event)}: {errors[0].error.message}
             </div>
           )}
         </div>
 
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground shrink-0">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
           {llmCalls > 0 && (
             <span className="flex items-center gap-0.5">
               <Zap className="w-2.5 h-2.5 text-amber-500" />
@@ -467,18 +482,18 @@ function EventRow({
       )}
 
       <span
-        className={`font-mono text-[10px] ${error ? "text-destructive" : warning ? "text-amber-500" : style.color} shrink-0 min-w-30`}
+        className={`font-mono text-xs ${error ? "text-destructive" : warning ? "text-amber-500" : style.color} shrink-0 min-w-30`}
       >
         {displayType}
       </span>
 
       {detail && (
-        <span className="text-[10px] text-muted-foreground truncate flex-1 min-w-0">
+        <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">
           {detail}
         </span>
       )}
 
-      <span className="text-[9px] text-muted-foreground/60 font-mono shrink-0 ml-auto">
+      <span className="text-xs text-muted-foreground/60 font-mono shrink-0 ml-auto">
         {fmtTime(operationStartedAt ?? event.timestamp)}
       </span>
     </button>

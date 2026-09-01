@@ -351,6 +351,7 @@ export function LlmPresetsPane() {
           ref={fileRef}
           type="file"
           accept=".json"
+          aria-label={t("settings.import")}
           className="hidden"
           onChange={handleImport}
         />

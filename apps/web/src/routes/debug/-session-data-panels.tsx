@@ -20,7 +20,7 @@ export function FrameworkDiscoveryPanel({
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
         <DiscoveryMetric
           label={t("debugger.discovery.manifest", "manifest")}
           values={[
@@ -97,12 +97,12 @@ export function PluginContractsPanel({
                 {plugin.id}
               </span>
               {plugin.status && (
-                <Badge variant="outline" className="text-[9px]">
+                <Badge variant="outline" className="text-xs">
                   {plugin.status}
                 </Badge>
               )}
               {plugin.runtimeCount != null && (
-                <Badge variant="secondary" className="text-[9px]">
+                <Badge variant="secondary" className="text-xs">
                   {t("debugger.discovery.runtimeCount", {
                     count: plugin.runtimeCount,
                     defaultValue: "{{count}} runtime",
@@ -111,7 +111,7 @@ export function PluginContractsPanel({
               )}
             </div>
             {pluginDescription && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {pluginDescription}
               </p>
             )}
@@ -169,7 +169,7 @@ export function PluginDataIndexPanel({
               <span className="text-xs font-semibold font-mono">
                 {entry.pluginId}
               </span>
-              <Badge variant="outline" className="text-[9px]">
+              <Badge variant="outline" className="text-xs">
                 {t("debugger.discovery.namespaces", {
                   count: entry.namespaces.length,
                   defaultValue: "{{count}} namespaces",
@@ -183,17 +183,17 @@ export function PluginDataIndexPanel({
                   className="bg-muted/10 border border-border/60 p-2"
                 >
                   <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <span className="text-[11px] font-mono">
+                    <span className="text-xs font-mono">
                       {namespace.namespace}
                     </span>
-                    <Badge variant="secondary" className="text-[9px]">
+                    <Badge variant="secondary" className="text-xs">
                       {t("debugger.discovery.keys", {
                         count: namespace.count,
                         defaultValue: "{{count}} keys",
                       })}
                     </Badge>
                     {namespace.latestUpdatedAt && (
-                      <span className="text-[9px] text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {fmtTime(namespace.latestUpdatedAt, {
                           withMillis: false,
                           alwaysDate: true,
@@ -205,10 +205,10 @@ export function PluginDataIndexPanel({
                     {namespace.keys.map((key) => (
                       <div
                         key={key.key}
-                        className="flex items-center justify-between gap-2 text-[10px] font-mono text-muted-foreground"
+                        className="flex items-center justify-between gap-2 text-xs font-mono text-muted-foreground"
                       >
                         <span className="truncate">{key.key}</span>
-                        <Badge variant="outline" className="text-[9px]">
+                        <Badge variant="outline" className="text-xs">
                           {key.valueType}
                         </Badge>
                       </div>
@@ -241,7 +241,7 @@ export function DataSection({
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground ui-rail"
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground ui-rail"
       >
         {expanded ? (
           <ChevronDown className="w-3 h-3" />
@@ -258,7 +258,7 @@ export function DataSection({
 
 export function JsonBlock({ data }: { data: unknown }) {
   return (
-    <pre className="text-[10px] font-mono text-muted-foreground bg-muted/10 p-2 overflow-x-auto whitespace-pre-wrap break-all">
+    <pre className="text-xs font-mono text-muted-foreground bg-muted/10 p-2 overflow-x-auto whitespace-pre-wrap break-all">
       {JSON.stringify(data, null, 2)}
     </pre>
   );
@@ -274,12 +274,12 @@ function DiscoveryMetric({
   const { t } = useTranslation();
   return (
     <div className="border border-border/60 bg-muted/10 p-2 min-w-0">
-      <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">
+      <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
         {label}
       </div>
       <div className="flex flex-wrap gap-1">
         {values.length === 0 ? (
-          <span className="text-[10px] text-muted-foreground italic">
+          <span className="text-xs text-muted-foreground italic">
             {t("debugger.discovery.empty", "empty")}
           </span>
         ) : (
@@ -287,7 +287,7 @@ function DiscoveryMetric({
             <Badge
               key={value}
               variant="outline"
-              className="text-[9px] max-w-full truncate"
+              className="text-xs max-w-full truncate"
             >
               {value}
             </Badge>

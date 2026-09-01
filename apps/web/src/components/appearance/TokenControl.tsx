@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RotateCcw } from "lucide-react";
 import { resolveI18nText } from "@covel/shared";
@@ -75,6 +75,7 @@ export function TokenControl({
   const committed = override ?? themeDefault;
   const { value, preview } = useLiveValue(spec, committed, onCommit);
   const label = resolveI18nText(spec.label, i18n.language) ?? spec.name;
+  const labelId = useId();
   const hint = spec.hint ? resolveI18nText(spec.hint, i18n.language) : null;
 
   return (
@@ -90,7 +91,9 @@ export function TokenControl({
               style={{ background: "var(--accent-primary)" }}
             />
           )}
-          <span className="text-xs font-medium truncate">{label}</span>
+          <span id={labelId} className="text-xs font-medium truncate">
+            {label}
+          </span>
         </div>
         {hint && (
           <p className="ui-meta normal-case tracking-normal text-[10px] leading-relaxed">
@@ -103,6 +106,7 @@ export function TokenControl({
         <TokenInput
           spec={spec}
           value={value}
+          labelId={labelId}
           onPreview={preview}
           onReset={onReset}
         />
@@ -124,22 +128,46 @@ export function TokenControl({
 interface TokenInputProps {
   readonly spec: TokenSpec;
   readonly value: string;
+  readonly labelId: string;
   readonly onPreview: (value: string) => void;
   readonly onReset: () => void;
 }
 
-function TokenInput({ spec, value, onPreview, onReset }: TokenInputProps) {
+function TokenInput({
+  spec,
+  value,
+  labelId,
+  onPreview,
+  onReset,
+}: TokenInputProps) {
   switch (spec.control) {
     case "color":
-      return <ColorInput spec={spec} value={value} onPreview={onPreview} />;
+      return (
+        <ColorInput value={value} labelId={labelId} onPreview={onPreview} />
+      );
     case "length":
-      return <LengthInput spec={spec} value={value} onPreview={onPreview} />;
+      return (
+        <LengthInput
+          spec={spec}
+          value={value}
+          labelId={labelId}
+          onPreview={onPreview}
+        />
+      );
     case "number":
-      return <NumberInput spec={spec} value={value} onPreview={onPreview} />;
+      return (
+        <NumberInput
+          spec={spec}
+          value={value}
+          labelId={labelId}
+          onPreview={onPreview}
+        />
+      );
     case "font":
       return (
         <PresetInput
           value={value}
+          labelId={labelId}
           onPreview={onPreview}
           onReset={onReset}
           options={FONT_STACKS}
@@ -150,6 +178,7 @@ function TokenInput({ spec, value, onPreview, onReset }: TokenInputProps) {
       return (
         <PresetInput
           value={value}
+          labelId={labelId}
           onPreview={onPreview}
           onReset={onReset}
           options={spec.options ?? []}
@@ -157,7 +186,14 @@ function TokenInput({ spec, value, onPreview, onReset }: TokenInputProps) {
       );
     case "select":
     default:
-      return <SelectInput spec={spec} value={value} onPreview={onPreview} />;
+      return (
+        <SelectInput
+          spec={spec}
+          value={value}
+          labelId={labelId}
+          onPreview={onPreview}
+        />
+      );
   }
 }
 
@@ -165,37 +201,31 @@ const FIELD_CLASS =
   "border border-(--rule-color) bg-(--surface-page) px-2 py-1 text-[11px] font-mono outline-none focus:ring-1 focus:ring-(--accent-primary) rounded-(--radius-control)";
 
 function ColorInput({
-  spec,
   value,
+  labelId,
   onPreview,
 }: {
-  spec: TokenSpec;
   value: string;
+  labelId: string;
   onPreview: (value: string) => void;
 }) {
-  const { i18n } = useTranslation();
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
   const swatch = toSwatchHex(value) ?? "#000000";
   const valid = !text.trim() || isValidCssColor(text);
-  // Both fields carry the token's own name: a shared literal meant a screen
-  // reader announced the same word for all 48 swatches, with no way to tell
-  // the page background from the danger accent.
-  const label = resolveI18nText(spec.label, i18n.language) ?? spec.name;
-
   return (
     <div className="flex items-center gap-1.5">
       <input
         type="color"
         value={swatch}
         onChange={(event) => onPreview(event.target.value)}
-        aria-label={label}
+        aria-labelledby={labelId}
         className="h-6 w-8 cursor-pointer border border-(--rule-color) bg-transparent p-0.5 rounded-(--radius-control)"
       />
       <input
         type="text"
         value={text}
-        aria-label={label}
+        aria-labelledby={labelId}
         spellCheck={false}
         onChange={(event) => {
           setText(event.target.value);
@@ -213,10 +243,12 @@ function ColorInput({
 function LengthInput({
   spec,
   value,
+  labelId,
   onPreview,
 }: {
   spec: TokenSpec;
   value: string;
+  labelId: string;
   onPreview: (value: string) => void;
 }) {
   const unit = spec.unit ?? "rem";
@@ -236,6 +268,7 @@ function LengthInput({
         max={max}
         step={step}
         value={amount}
+        aria-labelledby={labelId}
         disabled={parsed === null}
         onChange={(event) =>
           onPreview(formatLength(Number(event.target.value), unit))
@@ -245,6 +278,7 @@ function LengthInput({
       <input
         type="text"
         value={value}
+        aria-labelledby={labelId}
         spellCheck={false}
         onChange={(event) => onPreview(event.target.value)}
         className={`${FIELD_CLASS} w-20 text-center`}
@@ -256,10 +290,12 @@ function LengthInput({
 function NumberInput({
   spec,
   value,
+  labelId,
   onPreview,
 }: {
   spec: TokenSpec;
   value: string;
+  labelId: string;
   onPreview: (value: string) => void;
 }) {
   const min = spec.min ?? 0;
@@ -276,6 +312,7 @@ function NumberInput({
         max={max}
         step={step}
         value={amount}
+        aria-labelledby={labelId}
         onChange={(event) => onPreview(event.target.value)}
         className="w-28 accent-(--accent-primary)"
       />
@@ -289,10 +326,12 @@ function NumberInput({
 function SelectInput({
   spec,
   value,
+  labelId,
   onPreview,
 }: {
   spec: TokenSpec;
   value: string;
+  labelId: string;
   onPreview: (value: string) => void;
 }) {
   const { i18n } = useTranslation();
@@ -301,6 +340,7 @@ function SelectInput({
 
   return (
     <select
+      aria-labelledby={labelId}
       value={known ? value.trim() : ""}
       onChange={(event) => onPreview(event.target.value)}
       className={`${FIELD_CLASS} w-40`}
@@ -327,12 +367,14 @@ function SelectInput({
  */
 function PresetInput({
   value,
+  labelId,
   onPreview,
   onReset,
   options,
   previewFont = false,
 }: {
   value: string;
+  labelId: string;
   onPreview: (value: string) => void;
   onReset: () => void;
   options: readonly { value: string; label: unknown }[];
@@ -346,6 +388,7 @@ function PresetInput({
   return (
     <div className="flex items-center gap-1.5">
       <select
+        aria-labelledby={labelId}
         value={matched?.value ?? ""}
         onChange={(event) => {
           if (!event.target.value) {
@@ -366,6 +409,7 @@ function PresetInput({
       </select>
       <input
         type="text"
+        aria-labelledby={labelId}
         value={text}
         spellCheck={false}
         onChange={(event) => {

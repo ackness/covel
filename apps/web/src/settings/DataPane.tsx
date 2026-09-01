@@ -125,6 +125,7 @@ export function DataPane() {
           ref={fileRef}
           type="file"
           accept="application/json"
+          aria-label={t("settings.importChoose")}
           className="hidden"
           onChange={handleFile}
         />

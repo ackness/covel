@@ -17,12 +17,12 @@ export function DebugToolbar({
   const { t } = useTranslation();
 
   return (
-    <div className="shrink-0 min-h-10 px-3 border-b border-(--rule-color) ui-rail flex items-center gap-3 overflow-x-auto sm:px-4 sm:gap-4">
-      <div className="flex items-center gap-1 shrink-0 border-r border-(--rule-color) pr-3">
+    <div className="ui-rail flex shrink-0 flex-col gap-2 border-b border-(--rule-color) p-2 sm:min-h-12 sm:flex-row sm:items-center sm:px-4">
+      <div className="grid shrink-0 grid-cols-3 gap-1 sm:flex sm:border-r sm:border-(--rule-color) sm:pr-3">
         <button
           onClick={() => onDebugViewChange("traces")}
           aria-pressed={debugView === "traces"}
-          className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${
+          className={`min-h-8 border px-3 text-xs uppercase tracking-wider transition-colors ${
             debugView === "traces"
               ? "border-primary/40 bg-primary/10 text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -33,7 +33,7 @@ export function DebugToolbar({
         <button
           onClick={() => onDebugViewChange("data")}
           aria-pressed={debugView === "data"}
-          className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${
+          className={`min-h-8 border px-3 text-xs uppercase tracking-wider transition-colors ${
             debugView === "data"
               ? "border-primary/40 bg-primary/10 text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -44,7 +44,7 @@ export function DebugToolbar({
         <button
           onClick={() => onDebugViewChange("cost")}
           aria-pressed={debugView === "cost"}
-          className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors ${
+          className={`min-h-8 border px-3 text-xs uppercase tracking-wider transition-colors ${
             debugView === "cost"
               ? "border-primary/40 bg-primary/10 text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -54,42 +54,47 @@ export function DebugToolbar({
         </button>
       </div>
       {debugView === "traces" && (
-        <>
-          <Filter className="w-3 h-3 text-muted-foreground shrink-0" />
-          <button
-            onClick={() => onFilterCategoryChange(null)}
-            aria-pressed={filterCategory === null}
-            className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors shrink-0 ${
-              filterCategory === null
-                ? "border-primary/40 bg-primary/10 text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t("debugger.all")}
-          </button>
-          {(Object.keys(CATEGORY_STYLES) as EventCategory[]).map((category) => {
-            const style = CATEGORY_STYLES[category];
-            return (
-              <button
-                key={category}
-                onClick={() =>
-                  onFilterCategoryChange(
-                    filterCategory === category ? null : category,
-                  )
-                }
-                aria-pressed={filterCategory === category}
-                className={`px-2 py-0.5 text-[10px] uppercase tracking-wider border transition-colors shrink-0 flex items-center gap-1 ${
-                  filterCategory === category
-                    ? `${style.border} ${style.bg} ${style.color}`
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <style.icon className="w-2.5 h-2.5" />
-                {t(`debugger.category.${category}`, category)}
-              </button>
-            );
-          })}
-        </>
+        <div className="relative flex min-w-0 items-center gap-2">
+          <Filter className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overscroll-x-contain pr-8">
+            <button
+              onClick={() => onFilterCategoryChange(null)}
+              aria-pressed={filterCategory === null}
+              className={`min-h-8 shrink-0 border px-3 text-xs uppercase tracking-wider transition-colors ${
+                filterCategory === null
+                  ? "border-primary/40 bg-primary/10 text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t("debugger.all")}
+            </button>
+            {(Object.keys(CATEGORY_STYLES) as EventCategory[]).map(
+              (category) => {
+                const style = CATEGORY_STYLES[category];
+                return (
+                  <button
+                    key={category}
+                    onClick={() =>
+                      onFilterCategoryChange(
+                        filterCategory === category ? null : category,
+                      )
+                    }
+                    aria-pressed={filterCategory === category}
+                    className={`flex min-h-8 shrink-0 items-center gap-1 border px-3 text-xs uppercase tracking-wider transition-colors ${
+                      filterCategory === category
+                        ? `${style.border} ${style.bg} ${style.color}`
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <style.icon className="h-3 w-3" />
+                    {t(`debugger.category.${category}`, category)}
+                  </button>
+                );
+              },
+            )}
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-linear-to-l from-(--surface-rail) to-transparent" />
+        </div>
       )}
     </div>
   );
