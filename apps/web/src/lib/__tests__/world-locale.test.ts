@@ -5,6 +5,7 @@ import {
   prioritizeWorldsByLocale,
   worldLanguage,
   worldLanguageBadge,
+  worldLanguageName,
 } from "../world-locale.js";
 
 function world(id: string, locale?: string): WorldRecord {
@@ -25,7 +26,10 @@ describe("world locale presentation", () => {
     ["zh", "zh"],
     ["zh-CN", "zh"],
     ["zh_Hans", "zh"],
-    ["ja-JP", null],
+    ["ja-JP", "ja"],
+    ["not a locale", null],
+    ["../../etc", null],
+    [`en-${"abcde-".repeat(20)}abcde`, null],
     ["", null],
     [undefined, null],
   ] as const)("normalizes %s to %s", (locale, expected) => {
@@ -57,25 +61,62 @@ describe("world locale presentation", () => {
     const worlds = [
       world("en", "en-US"),
       world("zh-one", "zh-CN"),
+      world("zh-traditional", "zh-TW"),
       world("unknown"),
       world("zh-two", "zh"),
     ];
 
     expect(
       prioritizeWorldsByLocale(worlds, "zh-CN").map(({ id }) => id),
-    ).toEqual(["zh-one", "zh-two", "en", "unknown"]);
+    ).toEqual(["zh-one", "zh-two", "en", "zh-traditional", "unknown"]);
+  });
+
+  it("groups regions only when their likely scripts match", () => {
+    const worlds = [
+      world("traditional", "zh-TW"),
+      world("british", "en-GB"),
+      world("simplified", "zh-SG"),
+      world("american", "en-US"),
+    ];
+
+    expect(
+      prioritizeWorldsByLocale(worlds, "zh-CN").map(({ id }) => id),
+    ).toEqual(["simplified", "traditional", "british", "american"]);
+    expect(
+      prioritizeWorldsByLocale(worlds, "en-AU").map(({ id }) => id),
+    ).toEqual(["british", "american", "traditional", "simplified"]);
   });
 
   it("provides concise language badges", () => {
     expect(worldLanguageBadge("en-US")).toBe("EN");
     expect(worldLanguageBadge("zh-CN")).toBe("ZH");
-    expect(worldLanguageBadge("fr-FR")).toBeNull();
+    expect(worldLanguageBadge("ru-RU")).toBe("RU");
+    expect(worldLanguageBadge("fr-FR")).toBe("FR");
+    expect(worldLanguageBadge("../../etc")).toBeNull();
+  });
+
+  it("prioritizes and names a third locale without a code branch", () => {
+    const worlds = [world("en", "en-US"), world("ru", "ru-RU")];
+    expect(
+      prioritizeWorldsByLocale(worlds, "ru-RU").map(({ id }) => id),
+    ).toEqual(["ru", "en"]);
+    expect(worldLanguageName("ru-RU", "en-US")).toBe("Russian");
+    expect(worldLanguageName("ru-RU", "ru-RU")).toBe("Русский");
+    expect(worldLanguageName("not a locale", "en-US")).toBeNull();
   });
 
   it("detects primary-language mismatches without flagging regional variants", () => {
     expect(isWorldLocaleMismatch("en-US", "zh-CN")).toBe(true);
     expect(isWorldLocaleMismatch("ja-JP", "zh-CN")).toBe(true);
     expect(isWorldLocaleMismatch("zh-Hans", "zh-CN")).toBe(false);
+    expect(isWorldLocaleMismatch("zh-SG", "zh-CN")).toBe(false);
+    expect(isWorldLocaleMismatch("zh-TW", "zh-CN")).toBe(true);
+    expect(isWorldLocaleMismatch("zh-Hant", "zh-CN")).toBe(true);
+    expect(isWorldLocaleMismatch("en-GB", "en-US")).toBe(false);
+    expect(isWorldLocaleMismatch("../../etc", "zh-CN")).toBe(false);
+    expect(
+      isWorldLocaleMismatch(`en-${"abcde-".repeat(20)}abcde`, "zh-CN"),
+    ).toBe(false);
     expect(isWorldLocaleMismatch(undefined, "zh-CN")).toBe(false);
   });
 });

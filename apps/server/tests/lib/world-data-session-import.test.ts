@@ -271,7 +271,7 @@ sources:
     expect(await store.listWorldDataImportLedger("sess-1")).toHaveLength(2);
   });
 
-  it("imports the locale variant <name>.<lang>.<ext> when the session locale matches", async () => {
+  it("prefers an exact locale source variant before the short key", async () => {
     const { worldsDir, worldId } = await makeWorld({
       descriptor: `schemaVersion: 1
 sources:
@@ -286,6 +286,9 @@ sources:
           { id: "gate", content: "闸门锁着。" },
         ]),
         "data/facts.en.json": JSON.stringify([
+          { id: "gate", content: "Generic English gate." },
+        ]),
+        "data/facts.en-US.json": JSON.stringify([
           { id: "gate", content: "The gate is locked." },
         ]),
       },
@@ -310,6 +313,44 @@ sources:
     expect((rows[0]!.value as { content: string }).content).toBe(
       "The gate is locked.",
     );
+  });
+
+  it("does not load a Simplified Chinese source variant for zh-Hant", async () => {
+    const { worldsDir, worldId } = await makeWorld({
+      descriptor: `schemaVersion: 1
+sources:
+  facts:
+    kind: json
+    path: data/facts.json
+    to: plugin:world-notes/facts
+    key: id
+`,
+      files: {
+        "data/facts.json": JSON.stringify([
+          { id: "gate", content: "canonical" },
+        ]),
+        "data/facts.zh.json": JSON.stringify([
+          { id: "gate", content: "simplified" },
+        ]),
+      },
+    });
+    const store = await makeStore(["world-notes"]);
+
+    await importWorldDataForSession({
+      store,
+      sessionId: "sess-1",
+      worldId,
+      worldsDirs: [worldsDir],
+      now: NOW,
+      locale: "zh-Hant-TW",
+      preflight: {
+        activePlugins: ["world-notes"],
+        registry: registry({ "world-notes": ["facts"] }),
+      },
+    });
+
+    const rows = await store.listPluginData("sess-1", "world-notes", "facts");
+    expect((rows[0]!.value as { content: string }).content).toBe("canonical");
   });
 
   it("falls back to the declared source when no locale variant exists", async () => {
@@ -367,10 +408,8 @@ sources:
     });
     const store = await makeStore(["world-notes"]);
 
-    // A locale crafted to try to walk out of the world root via the
-    // `<name>.<lang>.<ext>` variant. `lang` = locale.split("-")[0], and the
-    // resolved variant is contained-checked, so this must safely fall back to
-    // the declared source, not read outside the root or error.
+    // Invalid/path-like locale input yields no variant candidates and safely
+    // falls back to the contained declared source.
     const result = await importWorldDataForSession({
       store,
       sessionId: "sess-1",

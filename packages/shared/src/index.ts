@@ -4,10 +4,28 @@ export * from "./types/index.js";
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from "./utils/deep-merge.js";
 export {
+  DEFAULT_FALLBACK_LOCALE,
+  DEFAULT_LOCALE,
+  LOCALE_CODE_RE,
+  LOCALE_DEFINITIONS,
+  MAX_LOCALE_CODE_LENGTH,
+  SUPPORTED_LOCALES,
+  canonicalizeLocale,
+  defineLocaleRegistry,
+  isDefaultLocale,
+  isLocaleCode,
+  localeDisplayName,
   localeLanguage,
-  resolveI18nText,
-  resolveI18nDeep,
-} from "./utils/i18n.js";
+  localeLookupCandidates,
+  localeRegistry,
+  localesShareLanguageAndScript,
+  normalizeLocale,
+} from "./utils/locale-registry.js";
+export type {
+  LocaleDefinition,
+  SupportedLocale,
+} from "./utils/locale-registry.js";
+export { resolveI18nText, resolveI18nDeep } from "./utils/i18n.js";
 export { collectMediaRefIds } from "./utils/media-ref-scan.js";
 export {
   assertJsonValue,

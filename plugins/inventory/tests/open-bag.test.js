@@ -72,4 +72,14 @@ describe("inventory open-bag command", () => {
     expect(result.message).toBe("Your bag contains 0 item entries.");
     expect(result.data.itemCount).toBe(0);
   });
+
+  it("uses English fallback outside the explicit Simplified Chinese aliases", async () => {
+    for (const locale of ["ru-RU", "ja-JP", "zh-Hant-TW", "zh-TW"]) {
+      const result = await openBag({}, makeCtx([], locale));
+      expect(result.message).toBe("Your bag contains 0 item entries.");
+    }
+
+    const simplified = await openBag({}, makeCtx([], "zh-Hans"));
+    expect(simplified.message).toBe("行囊中有 0 项物品。");
+  });
 });

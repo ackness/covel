@@ -26,7 +26,13 @@
  * see `message-insertion.ts`), not the raw history.
  */
 
-import type { SimpleCompletionAdapter } from "@covel/shared";
+import {
+  canonicalizeLocale,
+  DEFAULT_LOCALE,
+  resolveI18nText,
+  type I18nText,
+  type SimpleCompletionAdapter,
+} from "@covel/shared";
 import type {
   SessionContextStore,
   SessionSummaryRecord,
@@ -34,6 +40,7 @@ import type {
 } from "./session-context-store.js";
 import type { TokenEstimator } from "./budget.js";
 import { loadPrompt, interpolate } from "./prompts-loader.js";
+import { resolveLocaleLanguageName } from "./prompt-internals.js";
 
 // ── Public types ────────────────────────────────────────────────
 
@@ -63,7 +70,7 @@ export interface CompactorOptions {
   readonly protectLastNMessages?: number;
   /** Deduped list of focus sections from active plugins' summaryFocus fields. */
   readonly focusSections?: readonly string[];
-  readonly locale?: "zh-CN" | "en-US";
+  readonly locale?: string;
   /**
    * The current turn's traceId. When set, the `context.compacted` trace event
    * is filed under it so it is queryable alongside the rest of the turn instead
@@ -115,16 +122,65 @@ const MAX_SUMMARY_TOKENS = 1_024;
  * text is locale-aware so the summary LLM gets a sensible bullet list to expand
  * on.
  */
-const DEFAULT_FOCUS_SECTIONS: Record<"zh-CN" | "en-US", readonly string[]> = {
-  "zh-CN": ["关键事件", "人物关系", "环境状态"],
-  "en-US": ["Key events", "Character relationships", "World state"],
-};
+const DEFAULT_FOCUS_SECTIONS: readonly I18nText[] = [
+  {
+    "zh-CN": "关键事件",
+    "en-US": "Key events",
+    "ru-RU": "Ключевые события",
+  },
+  {
+    "zh-CN": "人物关系",
+    "en-US": "Character relationships",
+    "ru-RU": "Отношения персонажей",
+  },
+  {
+    "zh-CN": "环境状态",
+    "en-US": "World state",
+    "ru-RU": "Состояние мира",
+  },
+];
+
+const COMPACTOR_TEXT = {
+  mergeSummary: {
+    "zh-CN":
+      "请把已有滚动摘要与新增对话合并成一份完整摘要，不能遗漏仍有效的名称、约定、位置、关系、状态和因果。最终摘要不超过约 {{ maxSummaryTokens }} tokens。\n\n<已有滚动摘要>\n{{ prior }}\n</已有滚动摘要>\n\n<新增对话>\n{{ messages }}\n</新增对话>",
+    "en-US":
+      "Merge the existing rolling summary and new conversation into one complete summary. Preserve all still-valid names, agreements, locations, relationships, states, and causal links. Keep the final summary under approximately {{ maxSummaryTokens }} tokens.\n\n<existing_rolling_summary>\n{{ prior }}\n</existing_rolling_summary>\n\n<new_conversation>\n{{ messages }}\n</new_conversation>",
+    "ru-RU":
+      "Объедини существующее накопительное резюме и новый диалог в одно полное резюме. Сохрани все по-прежнему актуальные имена, договорённости, места, отношения, состояния и причинно-следственные связи. Итоговое резюме должно занимать не более примерно {{ maxSummaryTokens }} токенов.\n\n<existing_rolling_summary>\n{{ prior }}\n</existing_rolling_summary>\n\n<new_conversation>\n{{ messages }}\n</new_conversation>",
+  },
+  summarize: {
+    "zh-CN":
+      "请将以下对话历史摘要化，最终摘要不超过约 {{ maxSummaryTokens }} tokens：\n\n{{ messages }}",
+    "en-US":
+      "Please summarize the following conversation history in approximately {{ maxSummaryTokens }} tokens or fewer:\n\n{{ messages }}",
+    "ru-RU":
+      "Кратко изложи следующую историю диалога, уложившись примерно в {{ maxSummaryTokens }} токенов:\n\n{{ messages }}",
+  },
+  truncated: {
+    "zh-CN": "\n[摘要已按上下文预算截断]",
+    "en-US": "\n[Summary truncated to context budget]",
+    "ru-RU": "\n[Резюме обрезано по бюджету контекста]",
+  },
+} as const satisfies Record<string, I18nText>;
+
+function compactorText(
+  key: keyof typeof COMPACTOR_TEXT,
+  locale: string,
+): string {
+  return (
+    resolveI18nText(COMPACTOR_TEXT[key], locale) ??
+    resolveI18nText(COMPACTOR_TEXT[key], "en-US") ??
+    ""
+  );
+}
 
 /**
  * Build the framework system prompt for the summary LLM call.
  *
- * The template lives at `prompts/server/compactor.{zh,en}.md` and is loaded
- * via `loadPrompt()` so prompt edits do not require a rebuild.
+ * The template lives at `prompts/server/compactor.<locale>.md`, with an English
+ * canonical fallback, and is loaded via `loadPrompt()` so prompt edits do not
+ * require a rebuild.
  *
  * The single template variable is `{{ sections }}`. To preserve the
  * pre-externalization rendering (one section per bullet line), we join the
@@ -132,15 +188,21 @@ const DEFAULT_FOCUS_SECTIONS: Record<"zh-CN" | "en-US", readonly string[]> = {
  * template lines up with the first item.
  */
 async function buildCompactorSystemPrompt(
-  locale: "zh-CN" | "en-US",
+  locale: string,
   focusSections: readonly string[],
 ): Promise<string> {
   const effective =
-    focusSections.length > 0 ? focusSections : DEFAULT_FOCUS_SECTIONS[locale];
+    focusSections.length > 0
+      ? focusSections
+      : DEFAULT_FOCUS_SECTIONS.map(
+          (section) => resolveI18nText(section, locale) ?? "",
+        );
   const template = await loadPrompt("server", "compactor", locale);
-  return interpolate(template, {
+  const canonicalLocale = canonicalizeLocale(locale) ?? DEFAULT_LOCALE;
+  const languageName = resolveLocaleLanguageName(canonicalLocale);
+  return `${interpolate(template, {
     sections: effective.join("\n- "),
-  }).trimEnd();
+  }).trimEnd()}\n\n[LANGUAGE] Write all natural-language summary content in ${languageName} (${canonicalLocale}).`;
 }
 
 /**
@@ -148,7 +210,7 @@ async function buildCompactorSystemPrompt(
  */
 function buildCompactorUserPrompt(
   messages: readonly TurnMessageRecord[],
-  locale: "zh-CN" | "en-US",
+  locale: string,
   priorSummaries: readonly SessionSummaryRecord[],
   maxSummaryTokens: number,
 ): string {
@@ -159,14 +221,14 @@ function buildCompactorUserPrompt(
     .map((summary) => summary.content)
     .join("\n\n---\n\n");
 
-  if (locale === "zh-CN") {
-    return prior
-      ? `请把已有滚动摘要与新增对话合并成一份完整摘要，不能遗漏仍有效的名称、约定、位置、关系、状态和因果。最终摘要不超过约 ${maxSummaryTokens} tokens。\n\n<已有滚动摘要>\n${prior}\n</已有滚动摘要>\n\n<新增对话>\n${formatted}\n</新增对话>`
-      : `请将以下对话历史摘要化，最终摘要不超过约 ${maxSummaryTokens} tokens：\n\n${formatted}`;
-  }
-  return prior
-    ? `Merge the existing rolling summary and new conversation into one complete summary. Preserve all still-valid names, agreements, locations, relationships, states, and causal links. Keep the final summary under approximately ${maxSummaryTokens} tokens.\n\n<existing_rolling_summary>\n${prior}\n</existing_rolling_summary>\n\n<new_conversation>\n${formatted}\n</new_conversation>`
-    : `Please summarize the following conversation history in approximately ${maxSummaryTokens} tokens or fewer:\n\n${formatted}`;
+  return interpolate(
+    compactorText(prior ? "mergeSummary" : "summarize", locale),
+    {
+      prior,
+      messages: formatted,
+      maxSummaryTokens,
+    },
+  );
 }
 
 function resolveSummaryTokenBudget(contextWindow: number): number {
@@ -183,17 +245,14 @@ function boundSummaryContent(
   content: string,
   maxTokens: number,
   estimator: TokenEstimator,
-  locale: "zh-CN" | "en-US",
+  locale: string,
 ): { readonly content: string; readonly truncated: boolean } {
   const trimmed = content.trim();
   if (estimator(trimmed) <= maxTokens) {
     return { content: trimmed, truncated: false };
   }
 
-  const marker =
-    locale === "zh-CN"
-      ? "\n[摘要已按上下文预算截断]"
-      : "\n[Summary truncated to context budget]";
+  const marker = compactorText("truncated", locale);
   let low = 0;
   let high = trimmed.length;
   while (low < high) {
@@ -286,7 +345,7 @@ export async function maybeCompact(
   const protectLastNMessages =
     opts?.protectLastNMessages ?? DEFAULT_PROTECT_LAST_N_MESSAGES;
   const focusSections = opts?.focusSections ?? [];
-  const locale = opts?.locale ?? "zh-CN";
+  const locale = opts?.locale ?? DEFAULT_LOCALE;
 
   // 1. Estimate tokens from the effective prompt view. Already-compacted raw
   //    messages are substituted by their summary at prompt-build time (see

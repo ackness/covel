@@ -6,13 +6,13 @@
  *   - Scans plugins/**\/ui/*.json and templates/**\/ui/*.json, including
  *     nested runtime ui directories.
  *   - Bare CJK strings are rejected. Wrap them as I18nText objects.
- *   - I18nText objects should include both zh/zh-CN and en/en-US/en-GB.
+ *   - I18nText objects may use any locale and must include an English fallback.
  *
  * PLUGIN.md frontmatter:
  *   - Scans user-visible fields such as description, displayName, label,
  *     title, placeholder, and options[].label/description.
  *   - Bare CJK strings in those fields are rejected.
- *   - I18nText objects should include both Chinese and English locales.
+ *   - I18nText objects may use any locale and must include an English fallback.
  *
  * Exit code: 0 = OK, 1 = violations found.
  */
@@ -20,6 +20,10 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
+import {
+  canonicalizeLocale,
+  localeLanguage,
+} from "../packages/shared/src/index.ts";
 
 const CJK_REGEX = /[\u3400-\u4dbf\u4e00-\u9fff]/;
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -46,32 +50,33 @@ const USER_VISIBLE_KEYS = new Set([
 // ever appears. Keep empty by default.
 const EXEMPT_PREFIXES = [];
 
-function isChineseLocaleKey(key) {
-  return key === "zh" || key === "zh-CN";
+const LANGUAGE_NAMES = new Intl.DisplayNames(["en"], {
+  type: "language",
+  fallback: "none",
+});
+
+function isLocaleKey(key) {
+  const canonical = canonicalizeLocale(key);
+  const language = localeLanguage(canonical);
+  if (!language) return false;
+  try {
+    return LANGUAGE_NAMES.of(language) !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 function isEnglishLocaleKey(key) {
-  return key === "en" || key === "en-US" || key === "en-GB";
-}
-
-function hasLocaleKey(keys) {
-  return keys.some(isChineseLocaleKey) || keys.some(isEnglishLocaleKey);
+  return isLocaleKey(key) && localeLanguage(key) === "en";
 }
 
 function isI18nTextObject(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const keys = Object.keys(value);
   if (keys.length === 0) return false;
-  if (!hasLocaleKey(keys)) return false;
-  return keys.every((key) => typeof value[key] === "string");
-}
-
-function localeCoverage(value) {
-  const keys = Object.keys(value);
-  return {
-    hasZh: keys.some(isChineseLocaleKey),
-    hasEn: keys.some(isEnglishLocaleKey),
-  };
+  return keys.every(
+    (key) => isLocaleKey(key) && typeof value[key] === "string",
+  );
 }
 
 function pathToString(pathStack) {
@@ -139,6 +144,12 @@ function isPluginHandlerJsFile(rel) {
 const HANDLER_LABEL_RE =
   /\b(label|title|placeholder|tooltip)\s*:\s*(["'`])((?:(?!\2).)*)\2/g;
 
+// Locale branching must go through the shared resolver/default-locale helper.
+// Prefix/split checks silently treat every new locale as one of two languages
+// and can cross script boundaries such as zh-Hant -> zh-Hans.
+const UNSAFE_HANDLER_LOCALE_BRANCH_RE =
+  /\b(?:ctx\.)?locale\b[^\n]{0,160}(?:\.startsWith\(\s*["'`][a-z]{2}|\.split\(\s*["'`][-_])/gi;
+
 function checkHandlerJsFiles() {
   const files = collectFiles(isPluginHandlerJsFile);
   let totalViolations = 0;
@@ -153,7 +164,14 @@ function checkHandlerJsFiles() {
       if (!CJK_REGEX.test(literal)) continue;
       totalViolations += 1;
       console.error(
-        `${rel}: \`${key}: "${literal.slice(0, 60)}"\` is a bare-CJK display label written from a handler - store it as an I18nText object { zh, en } so the frontend resolves the locale.`,
+        `${rel}: \`${key}: "${literal.slice(0, 60)}"\` is a bare-CJK display label written from a handler - store it as an I18nText object with the target locale and an English fallback so the frontend resolves the locale.`,
+      );
+    }
+    UNSAFE_HANDLER_LOCALE_BRANCH_RE.lastIndex = 0;
+    while ((match = UNSAFE_HANDLER_LOCALE_BRANCH_RE.exec(text)) !== null) {
+      totalViolations += 1;
+      console.error(
+        `${rel}: unsafe locale prefix/split branch "${match[0].slice(0, 120)}" - use @covel/shared locale helpers, resolveI18nText(), or @covel/plugin-handlers-utils pickLocaleText().`,
       );
     }
   }
@@ -189,8 +207,7 @@ function reportBareCjk(violations, pathStack, value, context) {
 }
 
 function reportIncompleteLocale(violations, pathStack, value, context) {
-  const { hasZh, hasEn } = localeCoverage(value);
-  if (hasZh && hasEn) return;
+  if (Object.keys(value).some(isEnglishLocaleKey)) return;
   violations.push({
     kind: "incomplete-locale",
     path: pathStack.slice(),
@@ -285,12 +302,12 @@ function printViolation(rel, violation) {
   const sample = violation.value.slice(0, 120);
   if (violation.kind === "bare-cjk") {
     console.error(
-      `${rel}: "${pathStr}" contains bare CJK string "${sample}" in ${violation.context} - wrap it in { "zh": "...", "en": "..." }`,
+      `${rel}: "${pathStr}" contains bare CJK string "${sample}" in ${violation.context} - wrap it in an I18nText object with the target locale and an English fallback`,
     );
     return;
   }
   console.error(
-    `${rel}: "${pathStr}" is an I18nText object without both Chinese and English locales: ${sample}`,
+    `${rel}: "${pathStr}" is an I18nText object without an English fallback locale: ${sample}`,
   );
 }
 

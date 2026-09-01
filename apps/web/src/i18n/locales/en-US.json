@@ -647,6 +647,38 @@
     "groupPlugins": "Plugins",
     "groupDesktop": "Desktop",
     "groupData": "Data",
+    "appearanceNavLabel": "Appearance",
+    "operatorAccessNavLabel": "Operator Access",
+    "frameworkEntries": {
+      "uiAppearance": {
+        "label": "Appearance",
+        "description": "Choose the active interface style. Imported custom themes appear here automatically."
+      },
+      "uiScheme": {
+        "label": "Color scheme",
+        "description": "Choose light or dark. Single-scheme themes automatically lock to the supported mode."
+      },
+      "uiThemeManager": {
+        "label": "Theme Library",
+        "description": "Import, remove, and reuse custom theme packages."
+      },
+      "uiLocale": { "label": "Interface Language" },
+      "chatMessageWindow": { "label": "Chat window message limit" },
+      "onboardedVersion": { "label": "Onboarding version" },
+      "llmSlotConfig": {
+        "label": "Model role assignments",
+        "description": "Choose a provider and model for each model role"
+      },
+      "llmProviders": { "label": "Providers and models" },
+      "llmProviderPriceMultipliers": {
+        "label": "Provider price multipliers"
+      },
+      "llmParamOverrides": { "label": "Parameter overrides" },
+      "llmCapabilityOverrides": { "label": "Capability overrides" },
+      "llmPrepRuntimeBindings": {
+        "label": "Prep-phase runtime bindings"
+      }
+    },
     "operatorAccessTitle": "Hosted operator access",
     "operatorAccessConfigured": "Configured",
     "operatorAccessUnconfigured": "Not configured",
@@ -897,7 +929,280 @@
     "saveThemeFailed": "Could not save the theme.",
     "export": "Export",
     "import": "Import",
-    "importInvalid": "Could not parse the appearance file. Expected exported JSON."
+    "importTheme": "Import theme file",
+    "importInvalid": "Could not parse the appearance file. Expected exported JSON.",
+    "tokenEditor": {
+      "groups": {
+        "story": {
+          "label": "Narrative",
+          "description": "Typography of the story column — where you spend your reading time."
+        },
+        "interface-type": {
+          "label": "Interface type",
+          "description": "Typefaces and sizes for titles, labels and metadata."
+        },
+        "surfaces": {
+          "label": "Surfaces",
+          "description": "Background of each layer, from the page down to a single card."
+        },
+        "colors": {
+          "label": "Text & edges",
+          "description": "Body colour, secondary text, and dividing rules."
+        },
+        "accents": {
+          "label": "Accents",
+          "description": "Status colours: success, warning, danger."
+        },
+        "ambience": {
+          "label": "Ambience",
+          "description": "The full-page backdrop layer and its grain."
+        },
+        "shape": {
+          "label": "Shape & depth",
+          "description": "Corner radii and shadow strength."
+        },
+        "layout": {
+          "label": "Layout",
+          "description": "Width, height and padding of each panel."
+        }
+      },
+      "tokens": {
+        "--story-font-family": {
+          "label": "Body typeface",
+          "options": {
+            "sans": "Sans",
+            "serif-display": "Serif / Display",
+            "monospace": "Monospace",
+            "songti": "Songti (CJK serif)",
+            "kaiti": "Kaiti (CJK brush)",
+            "heiti-pingfang": "Heiti / PingFang",
+            "yuanti": "Yuanti (rounded CJK)",
+            "system-ui": "System UI"
+          }
+        },
+        "--story-font-size": {
+          "label": "Body size"
+        },
+        "--story-line-height": {
+          "label": "Line height"
+        },
+        "--story-font-weight": {
+          "label": "Weight",
+          "options": {
+            "300": "300 · Light",
+            "400": "400 · Regular",
+            "500": "500 · Medium",
+            "600": "600 · Semibold",
+            "700": "700 · Bold"
+          }
+        },
+        "--story-letter-spacing": {
+          "label": "Letter spacing"
+        },
+        "--story-max-width": {
+          "label": "Column width",
+          "hint": "Maximum line length. Narrower reads easier."
+        },
+        "--font-sans": {
+          "label": "Base UI typeface",
+          "hint": "Buttons, menus, forms — every interface element.",
+          "options": {
+            "sans": "Sans",
+            "serif-display": "Serif / Display",
+            "monospace": "Monospace",
+            "songti": "Songti (CJK serif)",
+            "kaiti": "Kaiti (CJK brush)",
+            "heiti-pingfang": "Heiti / PingFang",
+            "yuanti": "Yuanti (rounded CJK)",
+            "system-ui": "System UI"
+          }
+        },
+        "--title-font-family": {
+          "label": "Title typeface",
+          "options": {
+            "sans": "Sans",
+            "serif-display": "Serif / Display",
+            "monospace": "Monospace",
+            "songti": "Songti (CJK serif)",
+            "kaiti": "Kaiti (CJK brush)",
+            "heiti-pingfang": "Heiti / PingFang",
+            "yuanti": "Yuanti (rounded CJK)",
+            "system-ui": "System UI"
+          }
+        },
+        "--title-font-weight": {
+          "label": "Title weight",
+          "options": {
+            "300": "300 · Light",
+            "400": "400 · Regular",
+            "500": "500 · Medium",
+            "600": "600 · Semibold",
+            "700": "700 · Bold"
+          }
+        },
+        "--title-letter-spacing": {
+          "label": "Title spacing"
+        },
+        "--title-text-transform": {
+          "label": "Title case",
+          "options": {
+            "none": "None",
+            "uppercase": "Uppercase",
+            "lowercase": "Lowercase",
+            "capitalize": "Capitalize"
+          }
+        },
+        "--meta-font-family": {
+          "label": "Metadata typeface",
+          "options": {
+            "sans": "Sans",
+            "serif-display": "Serif / Display",
+            "monospace": "Monospace",
+            "songti": "Songti (CJK serif)",
+            "kaiti": "Kaiti (CJK brush)",
+            "heiti-pingfang": "Heiti / PingFang",
+            "yuanti": "Yuanti (rounded CJK)",
+            "system-ui": "System UI"
+          }
+        },
+        "--meta-font-size": {
+          "label": "Metadata size"
+        },
+        "--eyebrow-font-size": {
+          "label": "Eyebrow size"
+        },
+        "--eyebrow-letter-spacing": {
+          "label": "Eyebrow spacing"
+        },
+        "--color-background": {
+          "label": "App background",
+          "hint": "The base background nearly every region inherits from."
+        },
+        "--surface-page": {
+          "label": "Page surface",
+          "hint": "The reading surface; follows the app background unless set."
+        },
+        "--surface-rail": {
+          "label": "Side rails"
+        },
+        "--surface-inset": {
+          "label": "Inset blocks"
+        },
+        "--surface-elevated": {
+          "label": "Cards"
+        },
+        "--surface-dialog": {
+          "label": "Dialogs"
+        },
+        "--surface-player": {
+          "label": "Player message"
+        },
+        "--color-foreground": {
+          "label": "Primary text"
+        },
+        "--color-muted-foreground": {
+          "label": "Muted text"
+        },
+        "--color-primary": {
+          "label": "Primary"
+        },
+        "--rule-color": {
+          "label": "Rule colour"
+        },
+        "--rule-thickness": {
+          "label": "Rule thickness"
+        },
+        "--rule-style": {
+          "label": "Rule style",
+          "options": {
+            "solid": "Solid",
+            "dashed": "Dashed",
+            "dotted": "Dotted"
+          }
+        },
+        "--accent-primary": {
+          "label": "Accent"
+        },
+        "--accent-secondary": {
+          "label": "Secondary"
+        },
+        "--accent-success": {
+          "label": "Success"
+        },
+        "--accent-warning": {
+          "label": "Warning"
+        },
+        "--accent-danger": {
+          "label": "Danger"
+        },
+        "--ambience-image": {
+          "label": "Backdrop",
+          "hint": "Pick a preset, or write any CSS background value such as url(https://…/bg.jpg).",
+          "options": {
+            "none": "None (flat)",
+            "warm-wash": "Warm wash",
+            "night-glow": "Night glow",
+            "neon-drift": "Neon drift",
+            "hatch-texture": "Hatch texture"
+          }
+        },
+        "--ambience-opacity": {
+          "label": "Backdrop opacity"
+        },
+        "--ambience-blend": {
+          "label": "Blend mode",
+          "options": {
+            "normal": "Normal",
+            "multiply": "Multiply",
+            "screen": "Screen",
+            "overlay": "Overlay",
+            "soft-light": "Soft light"
+          }
+        },
+        "--noise-opacity": {
+          "label": "Grain"
+        },
+        "--radius-card": {
+          "label": "Card radius"
+        },
+        "--radius-control": {
+          "label": "Control radius"
+        },
+        "--radius-dialog": {
+          "label": "Dialog radius"
+        },
+        "--shadow-card": {
+          "label": "Card shadow",
+          "options": {
+            "none": "None",
+            "hairline": "Hairline",
+            "soft-lift": "Soft lift",
+            "deep-drop": "Deep drop"
+          }
+        },
+        "--rail-width-left": {
+          "label": "Left rail width"
+        },
+        "--rail-width-right": {
+          "label": "Right rail width"
+        },
+        "--session-column-max-width": {
+          "label": "Session column width"
+        },
+        "--composer-max-width": {
+          "label": "Composer width"
+        },
+        "--panel-header-height": {
+          "label": "Panel header height"
+        },
+        "--panel-section-padding-x": {
+          "label": "Panel padding X"
+        },
+        "--panel-section-padding-y": {
+          "label": "Panel padding Y"
+        }
+      }
+    }
   },
   "plugin": {
     "runtimes": "Runtimes",

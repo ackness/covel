@@ -1,4 +1,4 @@
-import type { I18nText } from "@covel/shared";
+import { DEFAULT_LOCALE, type I18nText } from "@covel/shared";
 import type { PackageSummary, WorldRecord } from "@/services/api.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 
@@ -126,7 +126,10 @@ function i18nAllText(value: unknown): string {
   return "";
 }
 
-export function textValue(value: unknown, locale = "zh-CN"): string {
+export function textValue(
+  value: unknown,
+  locale: string = DEFAULT_LOCALE,
+): string {
   return resolveDisplayText(value, locale);
 }
 

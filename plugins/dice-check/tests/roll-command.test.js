@@ -117,4 +117,18 @@ describe("dice-check roll command", () => {
     expect(en).toMatchObject({ ok: false, data: { code: "invalid-sides" } });
     expect(en.message).toContain("Die sides");
   });
+
+  it("uses English fallback for non-default and Traditional Chinese locales", async () => {
+    for (const locale of ["ru-RU", "ja-JP", "zh-Hant-TW", "zh-TW"]) {
+      const result = await roll({ args: { notation: "bad" } }, { locale });
+      expect(result.message).toContain("Use NdM dice notation");
+      expect(result.message).not.toContain("请使用");
+    }
+
+    const simplified = await roll(
+      { args: { notation: "bad" } },
+      { locale: "zh-Hans" },
+    );
+    expect(simplified.message).toContain("请使用");
+  });
 });

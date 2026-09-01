@@ -67,12 +67,9 @@ function registerAppearanceEntry(store: SettingsStoreApi): void {
     default: DEFAULT_APPEARANCE,
     group: "general",
     widget: "select",
-    label: { "zh-CN": "外观", "en-US": "Appearance" },
-    description: {
-      "zh-CN": "选择当前界面风格。导入的自定义主题会自动出现在这里。",
-      "en-US":
-        "Choose the active interface style. Imported custom themes appear here automatically.",
-    },
+    label: "Appearance",
+    description:
+      "Choose the active interface style. Imported custom themes appear here automatically.",
     options,
   });
 }
@@ -84,20 +81,17 @@ function registerSchemeEntry(store: SettingsStoreApi): void {
     default: DEFAULT_COLOR_SCHEME,
     group: "general",
     widget: "select",
-    label: { "zh-CN": "颜色模式", "en-US": "Color scheme" },
-    description: {
-      "zh-CN": "选择亮色或暗色。只支持单一模式的主题会自动锁定到可用模式。",
-      "en-US":
-        "Choose light or dark. Single-scheme themes automatically lock to the supported mode.",
-    },
+    label: "Color scheme",
+    description:
+      "Choose light or dark. Single-scheme themes automatically lock to the supported mode.",
     options: [
       {
         value: "light",
-        label: { "zh-CN": "亮色", "en-US": "Light" },
+        label: "Light",
       },
       {
         value: "dark",
-        label: { "zh-CN": "暗色", "en-US": "Dark" },
+        label: "Dark",
       },
     ],
   });
@@ -110,11 +104,8 @@ function registerThemeManagerEntry(store: SettingsStoreApi): void {
     default: 1,
     group: "general",
     widget: "custom",
-    label: { "zh-CN": "主题库", "en-US": "Theme Library" },
-    description: {
-      "zh-CN": "导入、删除和复用自定义主题包。",
-      "en-US": "Import, remove, and reuse custom theme packages.",
-    },
+    label: "Theme Library",
+    description: "Import, remove, and reuse custom theme packages.",
   });
 }
 

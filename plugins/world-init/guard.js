@@ -1,4 +1,5 @@
 import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
+import { resolveI18nText } from "@covel/shared";
 
 /**
  * guard.js — Pre-execution gate for schema-gen runtime.
@@ -21,9 +22,10 @@ import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
  * avoids an LLM call by inferring sensible attributes from world data.
  *
  * @param {Record<string, unknown>} dimensions
+ * @param {string | undefined} locale
  * @returns {Array<Record<string, unknown>>}
  */
-function deriveSchema(dimensions) {
+function deriveSchema(dimensions, locale) {
   /** @type {Array<Record<string, unknown>>} */
   // Attribute name/description are I18nText ({ "zh-CN", "en-US" }) so the
   // display layer resolves them per session locale (character-schema.ts types
@@ -114,9 +116,8 @@ function deriveSchema(dimensions) {
   const firstCurrency = economy?.currencies?.[0];
   if (firstCurrency) {
     const currName =
-      typeof firstCurrency.name === "object"
-        ? (firstCurrency.name["zh-CN"] ?? firstCurrency.name["en-US"] ?? "货币")
-        : (firstCurrency.name ?? "货币");
+      resolveI18nText(firstCurrency.name, locale) ??
+      pick(locale, "货币", "Currency");
     attrs.push({
       id: "gold",
       name: currName,
@@ -124,7 +125,11 @@ function deriveSchema(dimensions) {
       min: 0,
       defaultValue: 0,
       category: "stats",
-      description: `持有的${currName}数量`,
+      description: pick(
+        locale,
+        `持有的${currName}数量`,
+        `Amount of ${currName} held`,
+      ),
     });
   } else {
     attrs.push({
@@ -143,18 +148,14 @@ function deriveSchema(dimensions) {
     const tierOptions = powerSystem.tiers
       .map((/** @type {any} */ t) => {
         const n = t.name;
-        return typeof n === "object"
-          ? (n["zh-CN"] ?? n["en-US"] ?? JSON.stringify(n))
-          : String(n ?? "");
+        return resolveI18nText(n, locale) ?? "Tier";
       })
       .filter(Boolean);
 
     if (tierOptions.length > 0) {
       const psName = powerSystem.name;
       const attrName =
-        typeof psName === "object"
-          ? (psName["zh-CN"] ?? psName["en-US"] ?? "境界")
-          : (psName ?? "境界");
+        resolveI18nText(psName, locale) ?? pick(locale, "境界", "Power tier");
       attrs.push({
         id: "powerTier",
         name: attrName,
@@ -162,7 +163,7 @@ function deriveSchema(dimensions) {
         options: tierOptions,
         defaultValue: tierOptions[0],
         category: "abilities",
-        description: `${attrName}等级`,
+        description: pick(locale, `${attrName}等级`, `${attrName} level`),
       });
     }
   }
@@ -317,7 +318,7 @@ export default async function guard(ctx) {
 
         // No declared attributes (2a would have returned) — infer generic
         // attributes from world data so no LLM call is needed.
-        const attributes = deriveSchema(dimensions);
+        const attributes = deriveSchema(dimensions, locale);
 
         await s.setPluginData({
           id: crypto.randomUUID(),

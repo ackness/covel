@@ -30,7 +30,7 @@ import {
   syncThemeRegistry,
   THEME_SCHEME_KEY,
 } from "@/theme-system/registry.js";
-import i18n from "@/i18n";
+import i18n, { i18nReady } from "@/i18n";
 import type { SupportedLocale } from "@/i18n/locale-detector";
 import "@/i18n";
 import "@/index.css";
@@ -71,12 +71,14 @@ function syncNextThemesStorage(scheme: ColorScheme): void {
   window.localStorage.setItem("covel:scheme", scheme);
 }
 
-// Boot order: probe desktop mode FIRST — the settings backend choice
+// Boot order: load the detected locale catalog, then probe desktop mode — the
+// settings backend choice
 // (localStorage vs ~/.covel via IPC/REST) depends on its result — then
 // hydrate the settings store so appearance / locale apply without a flash,
 // then run the rest of the bootstrap in parallel. The probe is one same-origin
 // fetch (skipped entirely under Electron IPC) and non-fatal on failure.
-probeDesktopMode()
+i18nReady
+  .then(() => probeDesktopMode())
   .then(() => initSettings())
   .then(() => migrateLegacyProviderProfiles())
   .then(async () => {
@@ -88,8 +90,9 @@ probeDesktopMode()
     applyColorScheme(initialScheme);
     syncNextThemesStorage(initialScheme);
     const initialLocale = store.get<SupportedLocale>("ui.locale");
-    if (i18n.language !== initialLocale)
-      void i18n.changeLanguage(initialLocale);
+    if (i18n.language !== initialLocale) {
+      await i18n.changeLanguage(initialLocale);
+    }
     if (typeof document !== "undefined") {
       document.documentElement.lang = initialLocale;
     }

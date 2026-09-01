@@ -19,8 +19,9 @@
  * Locale resolution order (matches the spec in CLAUDE.md):
  *   1. exact match           — `compactor.zh-CN.md`
  *   2. language fallback     — `compactor.zh.md`
- *   3. no-locale default     — `compactor.md`
- *   4. error                 — throws
+ *   3. registry fallback     — `compactor.en-US.md` / `compactor.en.md`
+ *   4. no-locale default     — `compactor.md`
+ *   5. error                 — throws
  *
  * Templates use the same `{{ variable }}` syntax as `interpolateTemplate`.
  * The `interpolate` helper exported here is a thin shim that flattens a
@@ -31,7 +32,12 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { localeLanguage, readRuntimeEnv } from "@covel/shared";
+import {
+  canonicalizeLocale,
+  localeLookupCandidates,
+  localeRegistry,
+  readRuntimeEnv,
+} from "@covel/shared";
 
 import { interpolateTemplate } from "./prompt-internals.js";
 
@@ -96,22 +102,33 @@ async function findPromptsRoot(): Promise<string> {
 /**
  * Build the ordered list of file basenames to try for the given locale.
  *
- * For `zh-CN`: `['<name>.zh-CN.md', '<name>.zh.md', '<name>.md']`
- * For `en-US`: `['<name>.en-US.md', '<name>.en.md', '<name>.md']`
+ * For `zh-CN`: exact, language, registry fallbacks, then canonical default.
+ * For `ru-RU`: `ru-RU`, `ru`, `en-US`, `en`, then the locale-less default.
  * For undefined locale: `['<name>.md']`
  */
 function localeCandidates(name: string, locale?: string): string[] {
   if (!locale) return [`${name}.md`];
 
-  const lang = localeLanguage(locale)!;
+  const canonicalLocale = canonicalizeLocale(locale);
+  if (!canonicalLocale) {
+    throw new Error(`[loadPrompt] Invalid locale: ${JSON.stringify(locale)}`);
+  }
+
   const seen = new Set<string>();
   const out: string[] = [];
 
-  for (const candidate of [
-    `${name}.${locale}.md`,
-    `${name}.${lang}.md`,
-    `${name}.md`,
-  ]) {
+  const locales = [
+    canonicalLocale,
+    ...localeRegistry.fallbackLocalesFor(canonicalLocale),
+  ];
+  const candidates = locales.flatMap((candidateLocale) =>
+    localeLookupCandidates(candidateLocale).map(
+      (candidate) => `${name}.${candidate}.md`,
+    ),
+  );
+  candidates.push(`${name}.md`);
+
+  for (const candidate of candidates) {
     if (!seen.has(candidate)) {
       seen.add(candidate);
       out.push(candidate);

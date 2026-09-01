@@ -246,7 +246,7 @@ describe("submitFormHandler (Epic A)", () => {
     ).toBe("Result: 取消");
   });
 
-  it("falls back to zh-CN labels for an unsupported locale (no undefined deref)", async () => {
+  it("falls back to English labels for an unsupported locale", async () => {
     await seedInteraction(store, {
       interactionId: "cf-5",
       type: "confirmation",
@@ -263,7 +263,27 @@ describe("submitFormHandler (Epic A)", () => {
         },
         "fr-FR",
       ),
-    ).toBe("Result: 确认");
+    ).toBe("Result: Confirm");
+  });
+
+  it("fills confirmation labels in ru-RU", async () => {
+    await seedInteraction(store, {
+      interactionId: "cf-ru",
+      type: "confirmation",
+      prompt: "Продолжить?",
+      narrativeTemplate: "Результат: {{confirmed}}",
+    });
+    expect(
+      await submitOne(
+        store,
+        {
+          interactionId: "cf-ru",
+          type: "confirmation",
+          values: { confirmed: true },
+        },
+        "ru-RU",
+      ),
+    ).toBe("Результат: Подтвердить");
   });
 
   // ── fallbackNarrative (no matching template) ────────────────────

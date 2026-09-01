@@ -13,6 +13,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { createWorld, type GeneratedWorldPackageContent } from "@covel/create";
 import {
+  DEFAULT_LOCALE,
   readRuntimeEnv,
   WORLD_EXPERIENCE_MODES,
   WORLD_PACKAGE_CONTENT_KINDS,
@@ -24,6 +25,7 @@ import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { loadSingleWorld } from "../../world-seed-loader.js";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { checkHostedOperator } from "./session/session-guard.js";
+import { normalizeLocale } from "../../lib/validators.js";
 
 type Env = {
   Variables: {
@@ -260,7 +262,7 @@ aiRoutes.post(
           concept: (concept as string).trim(),
           outputDir,
           model: typeof body.model === "string" ? body.model : undefined,
-          locale: typeof body.locale === "string" ? body.locale : "zh-CN",
+          locale: normalizeLocale(body.locale, DEFAULT_LOCALE),
           brief: brief.value,
           signal: c.req.raw.signal,
           attemptTimeoutMs: GENERATE_WORLD_ATTEMPT_TIMEOUT_MS,

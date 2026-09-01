@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -170,6 +170,29 @@ describe("createWorld", () => {
     expect(descriptor).toContain("schema: covel://world/dimensions");
     expect(descriptor).toContain("to: world:metadata.dimensions");
     expect(dimensions).toContain("geography:");
+  });
+
+  it("writes an exact canonical locale lore variant without crossing scripts", async () => {
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+      ),
+      concept: "繁體世界",
+      locale: "zh_hant_tw",
+      outputDir: tmp,
+      attemptTimeoutMs: 5_000,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.files).toContain("test-world/WORLD.zh-Hant-TW.md");
+    expect(result.files).toContain("test-world/WORLD.md");
+    expect(result.files).not.toContain("test-world/WORLD.zh.md");
+    await expect(
+      access(path.join(tmp, "test-world", "WORLD.zh-Hant-TW.md")),
+    ).resolves.toBeUndefined();
+    await expect(
+      access(path.join(tmp, "test-world", "WORLD.zh.md")),
+    ).rejects.toThrow();
   });
 
   it("writes full lore when the model omits the trailing end delimiter", async () => {

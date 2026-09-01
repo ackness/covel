@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import { DEFAULT_LOCALE } from "@covel/shared";
 import { Badge } from "@/components/ui/badge.js";
 import i18n from "@/i18n";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
@@ -311,5 +312,5 @@ function stringArray(value: unknown): string[] {
 }
 
 function displayText(value: unknown): string {
-  return resolveDisplayText(value, i18n.language || "zh-CN");
+  return resolveDisplayText(value, i18n.language || DEFAULT_LOCALE);
 }

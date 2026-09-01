@@ -22,9 +22,10 @@ import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 import {
   isWorldLocaleMismatch,
   prioritizeWorldsByLocale,
-  worldLanguage,
+  worldLanguageName,
 } from "@/lib/world-locale.js";
 import i18n from "@/i18n";
+import { DEFAULT_FALLBACK_LOCALE } from "@covel/shared";
 
 type ViewMode = "list" | "detail" | "edit";
 
@@ -198,10 +199,7 @@ export function WorldSelectScreen({
     : null;
 
   function localeName(locale: string | undefined): string {
-    const language = worldLanguage(locale);
-    if (language === "en") return t("world.languageEnglish", "English");
-    if (language === "zh") return t("world.languageChinese", "Chinese");
-    return locale ?? "";
+    return worldLanguageName(locale, activeLocale) ?? locale ?? "";
   }
 
   const localeMismatchDialog = (
@@ -386,6 +384,7 @@ export function WorldSelectScreen({
       <WorldListView
         worlds={prioritizedWorlds}
         t={t}
+        interfaceLocale={activeLocale ?? DEFAULT_FALLBACK_LOCALE}
         primarySlotLabel={primarySlotLabel}
         enabledPluginCount={enabledPluginCount}
         enteringWorldId={enteringWorldId}

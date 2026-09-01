@@ -7,7 +7,11 @@ import type {
   InputSlot,
 } from "@covel/shared";
 import { attachExecutionJournal } from "../execution-journal.js";
-import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
+import {
+  DEFAULT_LOCALE,
+  getRuntimeSpec,
+  stageMessageOrder,
+} from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
   applyBudget,
@@ -206,7 +210,7 @@ export async function executeAgentRuntime({
     manifest.advertiseEvents === true && deps.eventDirectory
       ? await deps.eventDirectory.catalogText(
           input.sessionId,
-          input.locale ?? "zh-CN",
+          input.locale ?? DEFAULT_LOCALE,
         )
       : undefined;
 

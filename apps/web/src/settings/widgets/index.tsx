@@ -6,9 +6,12 @@ import {
   type SettingEntry,
   type WidgetKind,
 } from "@covel/settings";
-import { resolveI18nText } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
+import {
+  resolveSettingEntryText,
+  resolveSettingOptionText,
+} from "../framework-i18n.js";
 import { useSetting } from "../use-settings.js";
 
 function inferWidget(entry: SettingEntry): WidgetKind {
@@ -64,11 +67,11 @@ function FieldShell({
         htmlFor={controlId}
         className="text-xs uppercase tracking-widest text-muted-foreground"
       >
-        {resolveI18nText(entry.label, locale) ?? ""}
+        {resolveSettingEntryText(entry, "label", locale)}
       </Label>
       {entry.description && (
         <p className="text-[11px] text-muted-foreground">
-          {resolveI18nText(entry.description, locale) ?? ""}
+          {resolveSettingEntryText(entry, "description", locale)}
         </p>
       )}
       {children}
@@ -165,7 +168,7 @@ function SelectWidget({ entry }: { entry: SettingEntry }) {
       >
         {(entry.options ?? []).map((opt) => (
           <option key={opt.value} value={opt.value}>
-            {resolveI18nText(opt.label, i18n.language) ?? ""}
+            {resolveSettingOptionText(entry, opt, i18n.language)}
           </option>
         ))}
       </select>

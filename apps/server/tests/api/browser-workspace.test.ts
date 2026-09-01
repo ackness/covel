@@ -139,4 +139,40 @@ describe("browser-private workspace exchange", () => {
 
     expect((await upload({ ...first, actionId: "local-b" })).status).toBe(409);
   });
+
+  it("rejects path-like checkpoint locales before persisting them", async () => {
+    const browser = createMemoryStore();
+    await seed(browser);
+    const checkpoint = await exportSessionCheckpoint(browser, SESSION_ID, {
+      revision: 1,
+      actionId: "unsafe-locale",
+    });
+
+    const response = await upload({
+      ...checkpoint,
+      session: { ...checkpoint.session, locale: "x/../../../README" },
+    });
+
+    expect(response.status).toBe(400);
+    expect((await store.getSession(SESSION_ID))?.locale).toBe("zh-CN");
+  });
+
+  it("canonicalizes checkpoint session locales", async () => {
+    const browser = createMemoryStore();
+    await seed(browser);
+    const checkpoint = await exportSessionCheckpoint(browser, SESSION_ID, {
+      revision: 1,
+      actionId: "canonical-locale",
+    });
+
+    expect(
+      (
+        await upload({
+          ...checkpoint,
+          session: { ...checkpoint.session, locale: " ru_ru " },
+        })
+      ).status,
+    ).toBe(200);
+    expect((await store.getSession(SESSION_ID))?.locale).toBe("ru-RU");
+  });
 });

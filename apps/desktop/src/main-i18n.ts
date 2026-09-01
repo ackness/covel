@@ -1,12 +1,15 @@
-import { app } from "electron";
 import fs from "node:fs";
-import { localeLanguage } from "@covel/shared";
+import {
+  canonicalizeLocale,
+  DEFAULT_FALLBACK_LOCALE,
+  localeRegistry,
+} from "@covel/shared";
 
-export type DesktopLocale = "zh-CN" | "en-US";
+export type DesktopLocale = string;
 
 type Messages = Record<string, string>;
 
-const messages: Record<DesktopLocale, Messages> = {
+const messages: Readonly<Record<string, Messages | undefined>> = {
   "en-US": {
     "startup.portConflict.title": "Port conflict",
     "startup.portConflict.hint":
@@ -142,16 +145,83 @@ const messages: Record<DesktopLocale, Messages> = {
     "import.unsupportedSource": "不支持的来源，请选择文件夹或 .zip 文件",
     "import.failedWithReason": "导入失败：{reason}",
   },
+  "ru-RU": {
+    "startup.portConflict.title": "Конфликт портов",
+    "startup.portConflict.hint":
+      "Требуемый порт занят другим процессом. Закройте другие экземпляры Covel или перезагрузите компьютер.",
+    "startup.permissionDenied.title": "Доступ запрещён",
+    "startup.permissionDenied.hint":
+      "Covel не удалось получить доступ к требуемой папке. Убедитесь, что у приложения есть разрешение на запись в папку данных.",
+    "startup.timeout.title": "Истекло время ожидания сервера",
+    "startup.timeout.hint":
+      "Запуск серверной части занял слишком много времени. Проверьте журналы. Причиной может быть отсутствие llm.toml или медленная работа диска.",
+    "startup.missingFile.title": "Файл не найден",
+    "startup.missingFile.hint":
+      "Отсутствует необходимый встроенный файл. Возможно, приложение установлено с ошибками. Переустановите его.",
+    "startup.failed.title": "Не удалось запустить приложение",
+    "startup.status.initializing": "Инициализация...",
+    "startup.status.loading": "Загрузка...",
+    "startup.status.startingServer": "Запуск сервера...",
+    "startup.status.loadingPlugins": "Загрузка плагинов...",
+    "startup.status.initializingDatabase": "Инициализация базы данных...",
+    "startup.status.almostReady": "Почти готово...",
+    "startup.status.ready": "Готово!",
+    "splash.retry": "Повторить",
+    "splash.viewLogs": "Просмотреть журналы",
+    "splash.openLogsFolder": "Открыть папку журналов",
+    "splash.openDataFolder": "Открыть папку данных",
+    "menu.about": "О Covel",
+    "menu.settings": "Настройки...",
+    "menu.file": "Файл",
+    "menu.newWorld": "Новый мир",
+    "menu.importPlugin": "Импортировать плагин...",
+    "menu.importWorld": "Импортировать мир...",
+    "menu.exportChat": "Экспортировать чат...",
+    "menu.edit": "Правка",
+    "menu.view": "Вид",
+    "menu.actualSize": "Фактический размер",
+    "menu.documentation": "Документация",
+    "menu.inspectElement": "Исследовать элемент",
+    "dialog.open": "Открыть",
+    "dialog.cancel": "Отмена",
+    "dialog.externalLink.title": "Открыть внешнюю ссылку?",
+    "dialog.externalLink.message": "Открыть {host} в браузере?",
+    "dialog.externalLink.detail":
+      "{url}\n\nЭта ссылка использует незашифрованный протокол http. Продолжайте, только если доверяете источнику.",
+    "dialog.dataDir.title": "Выберите папку данных Covel",
+    "dialog.importPlugin.title": "Импорт плагина",
+    "dialog.importWorld.title": "Импорт пакета мира",
+    "dialog.filter.zipArchives": "ZIP-архивы",
+    "dialog.filter.allFiles": "Все файлы",
+    "update.title": "Доступно обновление Covel",
+    "update.message": "Доступна версия Covel {version}",
+    "update.detail":
+      "Вы используете версию {currentVersion}. Откройте страницу выпусков на GitHub, чтобы скачать новую версию, или пропустите это обновление.",
+    "update.openRelease": "Открыть страницу загрузки",
+    "update.ignoreVersion": "Пропустить эту версию",
+    "import.cancelled": "Отменено",
+    "import.invalidPayload": "Недопустимые данные",
+    "import.sourcePathRequired": "sourcePath должен быть строкой",
+    "import.noSourcePath": "Путь к источнику не указан",
+    "import.sourceMissing": "Источник не существует: {sourcePath}",
+    "import.pluginMissingManifest": "В папке отсутствует PLUGIN.md",
+    "import.worldMissingManifest": "В папке отсутствует world.yaml",
+    "import.alreadyExists": "Уже существует: {name}",
+    "import.pluginZipMissingManifest": "В ZIP-архиве отсутствует PLUGIN.md",
+    "import.worldZipMissingManifest": "В ZIP-архиве отсутствует world.yaml",
+    "import.unsupportedSource":
+      "Неподдерживаемый источник (ожидается папка или ZIP-файл)",
+    "import.failedWithReason": "Не удалось импортировать: {reason}",
+  },
 };
 
-let currentLocale: DesktopLocale = "en-US";
+let currentLocale: DesktopLocale = DEFAULT_FALLBACK_LOCALE;
 
-function normalizeLocale(value: unknown): DesktopLocale | null {
+export function normalizeDesktopLocale(value: unknown): DesktopLocale | null {
   if (typeof value !== "string") return null;
-  const language = localeLanguage(value);
-  if (language === "zh") return "zh-CN";
-  if (language === "en") return "en-US";
-  return null;
+  const canonicalLocale = canonicalizeLocale(value);
+  if (!canonicalLocale) return null;
+  return localeRegistry.match(canonicalLocale)?.code ?? canonicalLocale;
 }
 
 function readSettingsLocale(settingsJsonPath: string): DesktopLocale | null {
@@ -163,19 +233,22 @@ function readSettingsLocale(settingsJsonPath: string): DesktopLocale | null {
     const entries = parsed.entries ?? {};
     const nestedUi = entries.ui as { locale?: unknown } | undefined;
     return (
-      normalizeLocale(entries["ui.locale"]) ?? normalizeLocale(nestedUi?.locale)
+      normalizeDesktopLocale(entries["ui.locale"]) ??
+      normalizeDesktopLocale(nestedUi?.locale)
     );
   } catch {
     return null;
   }
 }
 
-function systemLocale(): DesktopLocale {
-  return normalizeLocale(app.getLocale()) ?? "en-US";
-}
-
-export function initDesktopI18n(settingsJsonPath: string): DesktopLocale {
-  currentLocale = readSettingsLocale(settingsJsonPath) ?? systemLocale();
+export function initDesktopI18n(
+  settingsJsonPath: string,
+  systemLocale: unknown,
+): DesktopLocale {
+  currentLocale =
+    readSettingsLocale(settingsJsonPath) ??
+    normalizeDesktopLocale(systemLocale) ??
+    DEFAULT_FALLBACK_LOCALE;
   return currentLocale;
 }
 
@@ -184,8 +257,8 @@ export function setDesktopLocaleFromSettings(
 ): DesktopLocale {
   const nestedUi = entries.ui as { locale?: unknown } | undefined;
   currentLocale =
-    normalizeLocale(entries["ui.locale"]) ??
-    normalizeLocale(nestedUi?.locale) ??
+    normalizeDesktopLocale(entries["ui.locale"]) ??
+    normalizeDesktopLocale(nestedUi?.locale) ??
     currentLocale;
   return currentLocale;
 }
@@ -199,7 +272,9 @@ export function t(
   params: Record<string, string | number> = {},
 ): string {
   const template =
-    messages[currentLocale][key] ?? messages["en-US"][key] ?? key;
+    messages[currentLocale]?.[key] ??
+    messages[DEFAULT_FALLBACK_LOCALE]?.[key] ??
+    key;
   return template.replace(/\{(\w+)\}/g, (match, name: string) => {
     const value = params[name];
     return value === undefined ? match : String(value);

@@ -99,6 +99,59 @@ describe("MemoryUpdater", () => {
     expect(scene!.content).toBe("百灵沼泽入口，黄昏时分");
   });
 
+  it("uses the English framework prompt fallback for a Russian session", async () => {
+    let captured: Parameters<MemoryLLMAdapter["complete"]>[0] | undefined;
+    const llm: MemoryLLMAdapter = {
+      async complete(request) {
+        captured = request;
+        return { content: "{}" };
+      },
+    };
+    const updater = createMemoryUpdater(manager, llm);
+
+    await updater.updateAfterTurn({
+      sessionId: "sess-ru",
+      narrativeText: "Игрок вошёл в порт.",
+      toolCallSummaries: ["Updated location"],
+      currentBlocks,
+      locale: "ru-RU",
+    });
+
+    expect(captured?.systemPrompt).toContain("You are a memory manager");
+    expect(captured?.systemPrompt).toContain("[LANGUAGE]");
+    expect(captured?.systemPrompt).toContain("ru-RU");
+    const userPrompt = String(captured?.messages[0]?.content ?? "");
+    expect(userPrompt).toContain("## Current memory blocks");
+    expect(userPrompt).toContain("## Tool call summaries");
+    expect(userPrompt).not.toContain("## 当前记忆块");
+  });
+
+  it("uses the English framework skeleton while targeting zh-Hant output", async () => {
+    let captured: Parameters<MemoryLLMAdapter["complete"]>[0] | undefined;
+    const llm: MemoryLLMAdapter = {
+      async complete(request) {
+        captured = request;
+        return { content: "{}" };
+      },
+    };
+    const updater = createMemoryUpdater(manager, llm);
+
+    await updater.updateAfterTurn({
+      sessionId: "sess-zh-hant",
+      narrativeText: "玩家進入港口。",
+      toolCallSummaries: ["更新位置"],
+      currentBlocks,
+      locale: "zh-Hant-TW",
+    });
+
+    expect(captured?.systemPrompt).toContain("You are a memory manager");
+    expect(captured?.systemPrompt).not.toContain("你是一个记忆管理器");
+    expect(captured?.systemPrompt).toContain("zh-Hant-TW");
+    const userPrompt = String(captured?.messages[0]?.content ?? "");
+    expect(userPrompt).toContain("## Current memory blocks");
+    expect(userPrompt).not.toContain("## 当前记忆块");
+  });
+
   it("injects committed character and form values as authoritative facts", async () => {
     let captured: Parameters<MemoryLLMAdapter["complete"]>[0] | undefined;
     const llm: MemoryLLMAdapter = {

@@ -9,6 +9,8 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Menu } from "lucide-react";
+import { resolveI18nText } from "@covel/shared";
+import { localeDefinitions } from "@/i18n/catalog-registry.js";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -136,10 +138,6 @@ function RootLayout() {
   const isElectron = ipc !== null;
   const isMacDesktop = isElectron && ipc?.platform === "darwin";
 
-  const toggleLocale = () => {
-    setLocale(locale === "zh-CN" ? "en-US" : "zh-CN");
-  };
-
   return (
     <>
       <ToastHost />
@@ -209,17 +207,24 @@ function RootLayout() {
               style={isElectron ? noDragStyle : undefined}
             >
               <ThemeToggle />
-              <button
-                onClick={toggleLocale}
-                aria-label={
-                  locale === "zh-CN"
-                    ? t("onboarding.localeEn", "Switch to English")
-                    : t("onboarding.localeZh", "Switch to Chinese")
-                }
-                className="hidden lg:flex items-center justify-center h-9 min-w-9 px-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-muted/40 transition-colors rounded-(--radius-control)"
-              >
-                {locale === "zh-CN" ? "EN" : "ZH"}
-              </button>
+              <label className="hidden lg:block">
+                <span className="sr-only">
+                  {t("onboarding.language", "Language")}
+                </span>
+                <select
+                  value={locale}
+                  onChange={(event) => setLocale(event.target.value)}
+                  aria-label={t("onboarding.language", "Language")}
+                  className="h-9 max-w-40 rounded-(--radius-control) border border-border bg-transparent px-2 text-[11px] font-semibold text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus:border-primary"
+                >
+                  {localeDefinitions.map((definition) => (
+                    <option key={definition.code} value={definition.code}>
+                      {resolveI18nText(definition.label, locale) ??
+                        definition.code}
+                    </option>
+                  ))}
+                </select>
+              </label>
               {!isSession && (
                 <Button
                   variant="default"
@@ -273,18 +278,24 @@ function RootLayout() {
                         {item.label}
                       </button>
                     ))}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMobileNavOpen(false);
-                        toggleLocale();
-                      }}
-                      className="h-11 px-2 mt-1 border-t border-border text-left text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {locale === "zh-CN"
-                        ? t("onboarding.localeEn", "Switch to English")
-                        : t("onboarding.localeZh", "Switch to Chinese")}
-                    </button>
+                    <label className="mt-1 flex min-h-11 items-center gap-3 border-t border-border px-2 text-sm text-muted-foreground">
+                      <span>{t("onboarding.language", "Language")}</span>
+                      <select
+                        value={locale}
+                        onChange={(event) => {
+                          setLocale(event.target.value);
+                          setMobileNavOpen(false);
+                        }}
+                        className="ml-auto max-w-48 rounded-(--radius-control) border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-primary"
+                      >
+                        {localeDefinitions.map((definition) => (
+                          <option key={definition.code} value={definition.code}>
+                            {resolveI18nText(definition.label, locale) ??
+                              definition.code}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </nav>
                 </DialogContent>
               </Dialog>

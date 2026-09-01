@@ -9,7 +9,7 @@
  */
 
 import {
-  localeLanguage,
+  isDefaultLocale,
   type Proposal,
   type ProposalType,
 } from "@covel/shared";
@@ -210,10 +210,9 @@ export function assertEntityEnvelope(
 }
 
 /**
- * Pick the string matching a session locale's language. Prefix-matches the
- * language subtag (`zh-CN` → `zh`) and returns `en` for any non-`zh` or
- * undefined locale. Extracted from the byte-identical `pick(locale, zh, en)`
- * previously copied across plugin handlers/guards.
+ * Pick the Simplified Chinese string only for the registered default locale
+ * or one of its explicit aliases. Other scripts and unregistered locales use
+ * the English framework fallback.
  *
  * @param locale - Session locale, e.g. `"zh-CN"`, `"en"`, or `undefined`.
  * @param zh - Chinese string.
@@ -224,7 +223,7 @@ export function pickLocaleText(
   zh: string,
   en: string,
 ): string {
-  return localeLanguage(locale) === "zh" ? zh : en;
+  return isDefaultLocale(locale) ? zh : en;
 }
 
 // ── Proposal factory ─────────────────────────────────────────────

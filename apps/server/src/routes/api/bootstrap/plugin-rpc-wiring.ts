@@ -6,6 +6,7 @@ import {
   type PluginRpcRegistry,
   type RpcExecutor,
 } from "@covel/runtime";
+import { isDefaultLocale } from "@covel/shared";
 
 export interface BootstrapPluginRpc {
   readonly rpcRegistry: PluginRpcRegistry;
@@ -31,14 +32,14 @@ export function createBootstrapPluginRpc(): BootstrapPluginRpc {
         )
         .map((runtime) => runtime.model?.resolved ?? runtime.model?.slot)
         .filter((model): model is string => Boolean(model));
-      const english = context.locale?.toLowerCase().startsWith("en") === true;
+      const chinese = isDefaultLocale(context.locale);
       const modelSummary =
-        [...new Set(storyModels)].join(", ") || (english ? "default" : "默认");
+        [...new Set(storyModels)].join(", ") || (chinese ? "默认" : "default");
       return {
         ok: true,
-        message: english
-          ? `Debug context ready: ${runtimes.length} active runtime(s), story model ${modelSummary}.`
-          : `调试上下文已就绪：${runtimes.length} 个活跃 runtime，story model 为 ${modelSummary}。`,
+        message: chinese
+          ? `调试上下文已就绪：${runtimes.length} 个活跃 runtime，story model 为 ${modelSummary}。`
+          : `Debug context ready: ${runtimes.length} active runtime(s), story model ${modelSummary}.`,
         data: context.environment,
         clientAction: { type: "open-debug" },
       };

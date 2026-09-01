@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Separator } from "@/components/ui/separator.js";
 import { text } from "./world-detail/detail-primitives.js";
-import { worldLanguage, worldLanguageBadge } from "@/lib/world-locale.js";
+import { worldLanguageBadge, worldLanguageName } from "@/lib/world-locale.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import {
   GeographySection,
@@ -33,18 +33,13 @@ export function WorldDetailView({
   onEdit,
   onDelete,
 }: WorldDetailViewProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const dims = world.dimensions;
-  const language = worldLanguage(world.locale);
-  const languageCode = worldLanguageBadge(world.locale);
-  const languageBadge =
-    language === "zh" ? t("world.languageBadgeChinese", "ZH") : languageCode;
-  const languageName =
-    language === "en"
-      ? t("world.languageEnglish", "English")
-      : language === "zh"
-        ? t("world.languageChinese", "Chinese")
-        : world.locale;
+  const languageBadge = worldLanguageBadge(world.locale);
+  const languageName = worldLanguageName(
+    world.locale,
+    i18n.resolvedLanguage ?? i18n.language,
+  );
   const visual = worldVisual(world);
 
   const hasDimensions =

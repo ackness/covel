@@ -11,6 +11,96 @@ async function makeTempWorld(): Promise<string> {
 }
 
 describe("world data loader", () => {
+  it("loads exact locale lore and dimension variants before short keys", async () => {
+    const root = await makeTempWorld();
+    await mkdir(path.join(root, "dimensions"), { recursive: true });
+    await writeFile(
+      path.join(root, "world.yaml"),
+      `schemaVersion: "1"
+id: russian-world
+name: Russian World
+summary: Locale variants
+defaultLocale: ru_ru
+supportedLocales: [ru_ru]
+dimensionSources:
+  tone: dimensions/tone.yaml
+`,
+    );
+    await writeFile(path.join(root, "WORLD.md"), "canonical lore");
+    await writeFile(path.join(root, "WORLD.ru.md"), "short Russian lore");
+    await writeFile(path.join(root, "WORLD.ru-RU.md"), "exact Russian lore");
+    await writeFile(
+      path.join(root, "dimensions/tone.yaml"),
+      "genres: [canonical]\ncontentRating: teen\n",
+    );
+    await writeFile(
+      path.join(root, "dimensions/tone.ru.yaml"),
+      "genres: [short]\ncontentRating: teen\n",
+    );
+    await writeFile(
+      path.join(root, "dimensions/tone.ru-RU.yaml"),
+      "genres: [exact]\ncontentRating: teen\n",
+    );
+
+    const record = await loadSingleWorld(root);
+
+    expect(record?.locale).toBe("ru-RU");
+    expect(record?.lore).toBe("exact Russian lore");
+    expect(record?.metadata?.dimensions).toMatchObject({
+      tone: { genres: ["exact"] },
+    });
+  });
+
+  it("does not load Simplified Chinese short-key files for zh-Hant", async () => {
+    const root = await makeTempWorld();
+    await mkdir(path.join(root, "dimensions"), { recursive: true });
+    await writeFile(
+      path.join(root, "world.yaml"),
+      `schemaVersion: "1"
+id: traditional-world
+name: Traditional World
+summary: Script-safe variants
+defaultLocale: zh-Hant-TW
+dimensionSources:
+  tone: dimensions/tone.yaml
+`,
+    );
+    await writeFile(path.join(root, "WORLD.md"), "canonical lore");
+    await writeFile(path.join(root, "WORLD.zh.md"), "simplified lore");
+    await writeFile(
+      path.join(root, "dimensions/tone.yaml"),
+      "genres: [canonical]\ncontentRating: teen\n",
+    );
+    await writeFile(
+      path.join(root, "dimensions/tone.zh.yaml"),
+      "genres: [simplified]\ncontentRating: teen\n",
+    );
+
+    const record = await loadSingleWorld(root);
+
+    expect(record?.lore).toBe("canonical lore");
+    expect(record?.metadata?.dimensions).toMatchObject({
+      tone: { genres: ["canonical"] },
+    });
+  });
+
+  it("rejects a path-like defaultLocale before reading locale files", async () => {
+    const root = await makeTempWorld();
+    await writeFile(
+      path.join(root, "world.yaml"),
+      `schemaVersion: "1"
+id: unsafe-world
+name: Unsafe World
+summary: Unsafe locale
+defaultLocale: x/../../../docs/reference/i18n
+`,
+    );
+
+    const record = await loadSingleWorld(root);
+
+    expect(record).toBeNull();
+  });
+
   it("passes pluginPolicy from world.yaml into world metadata", async () => {
     const root = await makeTempWorld();
     await writeFile(

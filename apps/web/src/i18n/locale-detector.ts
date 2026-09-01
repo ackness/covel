@@ -1,19 +1,34 @@
-import { localeLanguage } from "@covel/shared";
+import {
+  canonicalizeLocale,
+  DEFAULT_FALLBACK_LOCALE,
+  DEFAULT_LOCALE,
+  localeLanguage,
+} from "@covel/shared";
+import { localeRegistry, type SupportedLocale } from "./catalog-registry.js";
+
+export type { SupportedLocale } from "./catalog-registry.js";
+export { DEFAULT_LOCALE };
 
 /**
  * Locale constants and type guards. Storage moved to the unified
  * SettingsStore (`ui.locale`) — this module no longer reads or writes
  * localStorage directly.
  */
-export type SupportedLocale = "zh-CN" | "en-US";
-
-export const DEFAULT_LOCALE: SupportedLocale = "zh-CN";
-
 function detectFromNavigator(): SupportedLocale | null {
   if (typeof navigator === "undefined") return null;
-  const language = localeLanguage(navigator.language);
-  if (language === "zh") return "zh-CN";
-  if (language === "en") return "en-US";
+  const candidate = navigator.language;
+  const matched = localeRegistry.match(candidate);
+  if (matched) return matched.code;
+
+  // An unsupported script of the default language must not silently collapse
+  // to that default (for example Traditional Chinese -> Simplified Chinese).
+  const canonical = canonicalizeLocale(candidate);
+  if (
+    canonical &&
+    localeLanguage(canonical) === localeLanguage(DEFAULT_LOCALE)
+  ) {
+    return DEFAULT_FALLBACK_LOCALE;
+  }
   return null;
 }
 

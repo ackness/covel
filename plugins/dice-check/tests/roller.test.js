@@ -36,7 +36,7 @@ describe("dice-check roller handler", () => {
 
   it("returns a non-empty checkContext containing the check rules", async () => {
     // Arrange
-    const ctx = makeCtx();
+    const ctx = makeCtx({ locale: "zh-CN" });
 
     // Act
     const result = await handler(ctx);
@@ -90,5 +90,16 @@ describe("dice-check roller handler", () => {
     expect(result.value.checkContext).toContain("critical success");
     expect(result.value.checkContext).toContain("check.resolved");
     expect(result.value.checkContext).not.toContain("大成功");
+  });
+
+  it("uses English rules for non-default and Traditional Chinese locales", async () => {
+    for (const locale of ["ru-RU", "ja-JP", "zh-Hant-TW", "zh-TW"]) {
+      const result = await handler(makeCtx({ locale }));
+      expect(result.value.checkContext).toContain("critical success");
+      expect(result.value.checkContext).not.toContain("大成功");
+    }
+
+    const simplified = await handler(makeCtx({ locale: "zh-Hans" }));
+    expect(simplified.value.checkContext).toContain("大成功");
   });
 });
