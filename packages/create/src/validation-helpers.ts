@@ -43,12 +43,8 @@ const META_CONTENT_PATTERNS = [
   /\btest(?:ing)?\b/iu,
   /\bvalidation\b/iu,
   /\bprompt\b/iu,
-  /\bmodel\b/iu,
-  /\bcost\b/iu,
   /\bcheap\b/iu,
   /\be2e\b/iu,
-  /\bapi\b/iu,
-  /\bframework\b/iu,
 ];
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -219,7 +215,7 @@ export function findLoreQualityErrors(lore: string): string[] {
   }
   const forbidden = META_CONTENT_PATTERNS.find((pattern) => pattern.test(lore));
   if (forbidden) {
-    errors.push("WORLD.md contains meta/test/model/cost wording");
+    errors.push("WORLD.md contains meta/test wording");
   }
   const numberedHooks = lore.match(/^\s*\d+\.\s+/gmu)?.length ?? 0;
   if (numberedHooks < 3) {

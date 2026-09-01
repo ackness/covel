@@ -376,7 +376,7 @@ describe("buildWorldPrompt", () => {
     const prompt = await buildWorldPrompt("低成本快速验证世界", "zh-CN");
     expect(prompt).toContain('Start with exactly one H1: "# <world name>".');
     expect(prompt).toContain(
-      "Never mention tests, validation, prompts, models, cost, cheapness, speed, e2e, API, or framework internals",
+      "Never describe world content as a test or validation fixture, a prompt or model output, an e2e/API example, or an internal framework artifact",
     );
     expect(prompt).toContain(
       "The openingScenario and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.",
