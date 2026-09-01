@@ -64,9 +64,9 @@ test.describe("Game Session — 3 Round Flow", () => {
     await page.goto("/session");
     await selectWorldByText(page, /mistport|雾港/i);
 
-    const startButton = page.locator("button", {
-      hasText: /start game|开始游戏/i,
-    });
+    const startButton = page
+      .getByRole("button", { name: /^(start game|开始游戏)$/i })
+      .first();
     await expect(startButton).toBeVisible({ timeout: 10_000 });
     await startButton.click();
 

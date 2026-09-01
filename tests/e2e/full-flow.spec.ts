@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { seedAppSettings } from "./helpers/player.js";
+import { seedAppSettings, selectWorldByText } from "./helpers/player.js";
 
 // Run serially to avoid rate-limiting from the server
 test.describe.configure({ mode: "serial" });
@@ -106,13 +106,7 @@ test.describe("Covel Full Flow", () => {
   test("select world → session prep screen", async ({ page }) => {
     await page.goto("/session");
 
-    const worldCard = page
-      .getByRole("heading", {
-        name: /雾港・裂潮纪|Mistport Chronicles/i,
-      })
-      .locator("xpath=ancestor::article[1]");
-    await expect(worldCard).toBeVisible({ timeout: 15_000 });
-    await worldCard.click();
+    await selectWorldByText(page, /雾港・裂潮纪|Mistport Chronicles/i);
 
     // Prep screen should show world info and action buttons
     await expect(
@@ -140,20 +134,17 @@ test.describe("Covel Full Flow", () => {
     await expect.poll(() => html.getAttribute("class")).not.toBe(initialClass);
   });
 
-  test("language toggle switches locale", async ({ page }) => {
+  test("language selector switches locale", async ({ page }) => {
     await page.goto("/");
 
-    // Language toggle: a <button> in header with exactly "EN" or "ZH"
-    const langButton = page.locator("header button", {
-      hasText: /^(EN|ZH)$/,
+    const localeSelect = page.getByRole("combobox", {
+      name: /language|语言/i,
     });
-    await expect(langButton).toBeVisible();
-
-    const initialText = await langButton.textContent();
-    await langButton.click();
+    await expect(localeSelect).toBeVisible();
+    await expect(localeSelect).toHaveValue("zh-CN");
+    await localeSelect.selectOption("en-US");
 
     await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
-    await expect(langButton).toHaveText(/^ZH$/);
-    expect(initialText).toBe("EN");
+    await expect(localeSelect).toHaveValue("en-US");
   });
 });

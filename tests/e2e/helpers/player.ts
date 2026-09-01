@@ -101,7 +101,7 @@ export async function useServerWorlds(page: Page) {
 export async function selectWorldByText(page: Page, text: RegExp) {
   const worldCard = page.locator("article").filter({ hasText: text }).first();
   await expect(worldCard).toBeVisible({ timeout: 15_000 });
-  await worldCard.click();
+  await worldCard.getByRole("button", { name: /enter|进入/i }).click();
 }
 
 /**
