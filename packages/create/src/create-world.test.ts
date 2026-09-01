@@ -231,6 +231,32 @@ describe("createWorld", () => {
     expect(lore).not.toContain("快速验证");
   });
 
+  it("accepts legitimate world lore using natural vocabulary (framework, model, cost)", async () => {
+    const validEnglishLore = `# The Floating Isles of Aetheria
+
+The technomantic framework powers the levitation engines across the archipelago. The senate operates on an ancient democratic model, and the cost of forbidden magic is paid in memories.
+
+1. Investigate the fluctuations in the energy matrix.
+2. Recover the lost catalyst from the lower depths.
+3. Protect the archivist from sky pirates.`;
+
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${validEnglishLore}`,
+      ),
+      concept: "The Floating Isles",
+      outputDir: tmp,
+      attemptTimeoutMs: 5_000,
+    });
+
+    expect(result.success).toBe(true);
+    const lore = await readFile(
+      path.join(tmp, "test-world", "WORLD.md"),
+      "utf8",
+    );
+    expect(lore).toBe(validEnglishLore);
+  });
+
   it("repairs common low-cost model formatting issues before validation", async () => {
     const malformed = `schemaVersion: 1
 id: test-world
