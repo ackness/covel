@@ -4,9 +4,25 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.29] - 2026-09-02
+
+This release adds Russian across the application, makes source-distributed Web locales catalog-driven, improves AI world-generation recovery, refreshes responsive and themed interfaces, and lets packaged desktop apps notify players about newer releases.
+
 ### Added
 
+- **Russian is now a first-class application locale.** The Web catalog, language selectors, settings, browser detection, Electron-native messages, compactor prompts, plugin/world content resolution, and locale-aware validation all support `ru-RU` with an explicit English fallback.
+- **Web locale integration is catalog-driven.** A complete canonical BCP 47 JSON catalog can join a source build without editing framework unions or switcher components; the shared locale registry supplies labels, aliases, script-safe matching, and ordered fallbacks, while new tooling scaffolds and validates contributed catalogs.
 - **Packaged desktop apps now notify players when a newer stable Covel release is available.** The startup check uses the configured direct, system, HTTP(S), or SOCKS5 proxy route; players can open GitHub Releases or ignore that version without enabling automatic installation.
+
+### Changed
+
+- **Responsive and themed interfaces are more consistent across the complete player flow.** Landing, world selection and editing, session preparation, gameplay panels, settings, and debugger surfaces now adapt more reliably to narrow screens, keyboard navigation, long localized text, and custom theme tokens.
+- **Localized framework and package content follows one resolver contract.** UI fields, plugin manifests, world variants, prompts, memory summaries, and runtime-generated labels use canonical locale matching with script-safe language variants and English fallback instead of Chinese/English branches.
+
+### Fixed
+
+- **AI-created worlds no longer reject ordinary lore vocabulary such as `framework`, `model`, `cost`, or `api`.** Validation now targets explicit generation-meta phrases, and a package whose lore alone needs cleanup repairs `WORLD.md` without discarding its already-valid manifest and supplemental content ([#50](https://github.com/ackness/covel/issues/50)).
+- **Locale switching remains stable across reloads and more than two languages.** Settings validation, browser defaults, header and onboarding selectors, and lazy catalog loading all derive from the active Web locale registry ([#51](https://github.com/ackness/covel/issues/51)).
 
 ## [0.0.28] - 2026-08-31
 
@@ -997,7 +1013,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.28...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.29...HEAD
+[0.0.29]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.29
 [0.0.28]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.28
 [0.0.27]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.27
 [0.0.26]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.26

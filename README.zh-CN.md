@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.28-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.28)
+[![Version](https://img.shields.io/badge/version-v0.0.29-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.29)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **当前公开版本：v0.0.28**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，且尚未签名；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
+> **当前公开版本：v0.0.29**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，且尚未签名；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
 
 ## 亮点
 
