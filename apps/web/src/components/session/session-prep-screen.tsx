@@ -112,7 +112,7 @@ export function SessionPrepScreen({
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
   const [loreExpanded, setLoreExpanded] = useState(false);
   const [modelsExpanded, setModelsExpanded] = useState(false);
-  const [pluginSectionExpanded, setPluginSectionExpanded] = useState(true);
+  const [pluginSectionExpanded, setPluginSectionExpanded] = useState(false);
   const [existingSessions, setExistingSessions] = useState<api.SessionRecord[]>(
     [],
   );
@@ -235,7 +235,7 @@ export function SessionPrepScreen({
   );
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
+    <div className="relative flex h-full w-full overflow-hidden">
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={handleSettingsOpenChange}
@@ -243,7 +243,7 @@ export function SessionPrepScreen({
         packages={packages}
       />
       <div className="h-full w-full overflow-y-auto overscroll-contain">
-        <div className="mx-auto max-w-6xl px-4 md:px-8 py-5 md:py-8">
+        <div className="mx-auto max-w-6xl px-4 pb-24 pt-5 md:px-8 md:py-8">
           <header
             className="relative mb-6 overflow-hidden rounded-(--radius-card) border border-border bg-card"
             style={{ "--world-accent": visual.accent } as CSSProperties}
@@ -267,12 +267,17 @@ export function SessionPrepScreen({
                   "linear-gradient(90deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.58) 48%, rgba(0,0,0,.22) 100%)",
               }}
             />
+            <div
+              aria-hidden="true"
+              className="absolute left-0 top-0 h-1 w-28"
+              style={{ background: "var(--world-accent)" }}
+            />
             <div className="relative z-10 flex min-h-59 md:min-h-63 flex-col justify-between p-5 md:p-7 text-white">
               <div className="flex items-center justify-between gap-4">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 border border-white/12 bg-black/18 px-3 text-white/78 hover:bg-white/10 hover:text-white"
+                  className="h-10 border border-white/18 bg-black/28 px-3 text-white/85 hover:bg-white/12 hover:text-white"
                   onClick={onBack}
                 >
                   <ArrowLeft className="w-4 h-4" />
@@ -280,11 +285,7 @@ export function SessionPrepScreen({
                 </Button>
                 <Button
                   size="sm"
-                  className="h-9 shrink-0 px-5 font-bold uppercase tracking-widest"
-                  style={{
-                    background: "var(--world-accent)",
-                    color: "black",
-                  }}
+                  className="h-10 shrink-0 px-5 font-bold uppercase tracking-widest"
                   disabled={isStarting}
                   onClick={() => void handleStart()}
                 >
@@ -309,7 +310,7 @@ export function SessionPrepScreen({
                   <p className="ui-eyebrow mb-3 text-white/58">
                     {t("session.preparation", "Session Setup")}
                   </p>
-                  <h1 className="ui-title text-4xl md:text-6xl leading-[.95] text-white">
+                  <h1 className="ui-title text-3xl sm:text-4xl md:text-6xl leading-[.98] text-white">
                     {text(world.name)}
                   </h1>
                   <p className="mt-4 max-w-xl text-sm md:text-base leading-relaxed text-white/72">
@@ -338,7 +339,7 @@ export function SessionPrepScreen({
           )}
 
           <div className="grid gap-5 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] lg:items-start">
-            <section className="min-w-0 space-y-4">
+            <section className="order-2 min-w-0 space-y-4 lg:order-1">
               <WorldInfoCard
                 world={world}
                 expanded={worldInfoExpanded}
@@ -370,7 +371,7 @@ export function SessionPrepScreen({
               />
             </section>
 
-            <section className="min-w-0 space-y-4">
+            <section className="order-1 min-w-0 space-y-4 lg:order-2">
               <ModelsCard
                 resolvedSlots={resolvedSlots}
                 expanded={modelsExpanded}
@@ -414,6 +415,23 @@ export function SessionPrepScreen({
             </section>
           </div>
         </div>
+      </div>
+
+      <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border bg-background/92 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
+        <Button
+          className="h-12 w-full font-semibold uppercase tracking-wider shadow-(--shadow-pop)"
+          disabled={isStarting}
+          onClick={() => void handleStart()}
+        >
+          {isStarting ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Play className="mr-2 h-4 w-4" />
+          )}
+          {isStarting
+            ? t("session.startingGame", "Creating…")
+            : t("session.startGame", "Start Game")}
+        </Button>
       </div>
 
       <Dialog

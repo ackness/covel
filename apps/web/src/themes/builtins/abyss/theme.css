@@ -15,13 +15,13 @@ html[data-theme="abyss"] {
   --color-secondary: oklch(18% 0.024 270);
   --color-secondary-foreground: oklch(85% 0.015 80);
   --color-muted: oklch(16% 0.024 270);
-  --color-muted-foreground: oklch(60% 0.024 270);
+  --color-muted-foreground: oklch(68% 0.024 270);
   --color-accent: oklch(70% 0.13 300);
-  --color-accent-foreground: oklch(92% 0.012 80);
-  --color-destructive: oklch(60% 0.18 25);
-  --color-destructive-foreground: oklch(92% 0.01 80);
-  --color-border: oklch(24% 0.026 270 / 0.6);
-  --color-input: oklch(24% 0.026 270 / 0.6);
+  --color-accent-foreground: oklch(14% 0.022 270);
+  --color-destructive: oklch(68% 0.18 25);
+  --color-destructive-foreground: oklch(14% 0.022 270);
+  --color-border: oklch(32% 0.026 270 / 0.75);
+  --color-input: oklch(32% 0.026 270 / 0.75);
   --color-ring: oklch(72% 0.16 300 / 0.55);
 
   --radius-sm: 0.125rem;
@@ -49,7 +49,7 @@ html[data-theme="abyss"] {
   --surface-empty: color-mix(in oklab, var(--color-muted) 70%, transparent);
   --border-subtle: color-mix(in oklab, var(--color-border) 70%, transparent);
 
-  --rule-color: oklch(24% 0.026 270);
+  --rule-color: oklch(32% 0.026 270);
   --rule-strong-color: oklch(58% 0.04 270);
   --rule-style: solid;
 
@@ -71,7 +71,7 @@ html[data-theme="abyss"] {
       oklch(50% 0.14 230 / 0.14),
       transparent 55%
     );
-  --noise-opacity: 0.06;
+  --noise-opacity: 0;
 
   --radius-card: var(--radius-md);
   --radius-control: var(--radius-sm);
@@ -85,13 +85,13 @@ html[data-theme="abyss"] {
   --session-column-max-width: 50rem;
 
   --eyebrow-font-family: var(--font-mono);
-  --eyebrow-font-size: 0.625rem;
+  --eyebrow-font-size: 0.6875rem;
   --eyebrow-font-weight: 400;
   --eyebrow-letter-spacing: 0.18em;
   --eyebrow-text-transform: uppercase;
 
   --title-font-family: var(--font-serif);
-  --title-font-style: italic;
+  --title-font-style: normal;
   --title-font-weight: 400;
   --title-letter-spacing: -0.005em;
   --title-text-transform: none;
@@ -110,26 +110,28 @@ html[data-theme="abyss"] {
   font-feature-settings: "ss01", "cv11", "kern", "liga";
 }
 
-html[data-theme="abyss"] .ui-message-row {
-  align-items: flex-start;
-}
+@layer components {
+  html[data-theme="abyss"] .ui-message-row {
+    align-items: flex-start;
+  }
 
-html[data-theme="abyss"] .ui-player-message-row {
-  justify-content: flex-start;
-}
+  html[data-theme="abyss"] .ui-player-message-row {
+    justify-content: flex-start;
+  }
 
-html[data-theme="abyss"] .ui-message-player {
-  background: transparent;
-  color: var(--color-foreground);
-  border-width: 0 0 0 2px;
-  border-color: var(--accent-primary);
-  border-radius: 0;
-  max-width: var(--story-max-width);
-  padding: 0.25rem 0 0.25rem 0.875rem;
-}
+  html[data-theme="abyss"] .ui-message-player {
+    background: transparent;
+    color: var(--color-foreground);
+    border-width: 0 0 0 2px;
+    border-color: var(--accent-primary);
+    border-radius: 0;
+    max-width: var(--story-max-width);
+    padding: 0.25rem 0 0.25rem 0.875rem;
+  }
 
-/* Abyss: bands have a glow on the marker bar */
-html[data-theme="abyss"] .ui-band::before {
-  box-shadow: 0 0 18px 0 var(--accent-primary);
-  opacity: 0.85;
+  /* Abyss: bands have a glow on the marker bar */
+  html[data-theme="abyss"] .ui-band::before {
+    box-shadow: 0 0 18px 0 var(--accent-primary);
+    opacity: 0.85;
+  }
 }

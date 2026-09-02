@@ -123,12 +123,12 @@ export function SessionDataView({
                       <span className="text-xs font-semibold">
                         {character.name}
                       </span>
-                      <Badge variant="outline" className="text-[9px]">
+                      <Badge variant="outline" className="text-xs">
                         {character.type}
                       </Badge>
                     </div>
                     {character.description && (
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {character.description}
                       </p>
                     )}
@@ -151,23 +151,23 @@ export function SessionDataView({
                 snapshotData.messages.map((message) => (
                   <div
                     key={message.id}
-                    className={`debug-data-message border p-2 text-[11px] ${
+                    className={`debug-data-message border p-2 text-xs ${
                       message.role === "user"
                         ? "border-blue-500/20 bg-blue-500/5"
                         : "border-border"
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
-                      <Badge variant="outline" className="text-[9px]">
+                      <Badge variant="outline" className="text-xs">
                         {message.role}
                       </Badge>
                       {message.kind && (
-                        <Badge variant="outline" className="text-[9px]">
+                        <Badge variant="outline" className="text-xs">
                           {message.kind}
                         </Badge>
                       )}
                       {message.runtimeId && (
-                        <span className="text-[9px] text-muted-foreground font-mono">
+                        <span className="text-xs text-muted-foreground font-mono">
                           {message.runtimeId}
                         </span>
                       )}
@@ -177,7 +177,7 @@ export function SessionDataView({
                         {message.content}
                       </p>
                     ) : message.block ? (
-                      <Badge variant="outline" className="text-[9px]">
+                      <Badge variant="outline" className="text-xs">
                         {t("debugger.blockType")}:{" "}
                         {
                           (message.block as Record<string, unknown>)
@@ -217,9 +217,9 @@ export function SessionDataView({
                 snapshotData.executionSteps.map((step, index) => (
                   <div
                     key={index}
-                    className="debug-compact-row flex items-center gap-2 text-[11px] font-mono py-0.5"
+                    className="debug-compact-row flex items-center gap-2 text-xs font-mono py-0.5"
                   >
-                    <Badge variant="outline" className="text-[9px] shrink-0">
+                    <Badge variant="outline" className="text-xs shrink-0">
                       {step.type}
                     </Badge>
                     <span className="text-muted-foreground truncate">
@@ -228,7 +228,7 @@ export function SessionDataView({
                     </span>
                     {(step.payload as Record<string, unknown>)?.durationMs !=
                       null && (
-                      <span className="text-[9px] text-muted-foreground shrink-0">
+                      <span className="text-xs text-muted-foreground shrink-0">
                         {
                           (step.payload as Record<string, unknown>)
                             .durationMs as number

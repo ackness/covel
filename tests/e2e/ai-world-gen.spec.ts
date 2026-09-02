@@ -292,12 +292,15 @@ test.describe("AI World Generation", () => {
       .locator("article")
       .filter({ hasText: `· ${createdWorldId}` });
     await expect(createdWorldCard.first()).toBeVisible({ timeout: 10_000 });
-    await createdWorldCard.first().click();
+    await createdWorldCard
+      .first()
+      .getByRole("button", { name: /enter|进入/i })
+      .click();
 
     // Verify prep screen
-    const startButton = page.locator("button", {
-      hasText: /start game|开始游戏/i,
-    });
+    const startButton = page
+      .getByRole("button", { name: /^(start game|开始游戏)$/i })
+      .first();
     await expect(startButton).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(createdWorldName!).first()).toBeVisible({
       timeout: 5_000,

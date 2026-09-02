@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -107,24 +107,6 @@ class FixedLlm implements LLMAdapter {
   }
 }
 
-class SequenceLlm implements LLMAdapter {
-  public calls = 0;
-
-  constructor(private readonly contents: readonly string[]) {}
-
-  async generate(): Promise<LLMResponse> {
-    const content =
-      this.contents[Math.min(this.calls, this.contents.length - 1)]!;
-    this.calls += 1;
-    return {
-      content,
-      toolCalls: [],
-      finishReason: "stop",
-      usage: { inputTokens: 0, outputTokens: 0 },
-    };
-  }
-}
-
 describe("createWorld", () => {
   let tmp = "";
 
@@ -172,6 +154,29 @@ describe("createWorld", () => {
     expect(dimensions).toContain("geography:");
   });
 
+  it("writes an exact canonical locale lore variant without crossing scripts", async () => {
+    const result = await createWorld({
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+      ),
+      concept: "繁體世界",
+      locale: "zh_hant_tw",
+      outputDir: tmp,
+      attemptTimeoutMs: 5_000,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.files).toContain("test-world/WORLD.zh-Hant-TW.md");
+    expect(result.files).toContain("test-world/WORLD.md");
+    expect(result.files).not.toContain("test-world/WORLD.zh.md");
+    await expect(
+      access(path.join(tmp, "test-world", "WORLD.zh-Hant-TW.md")),
+    ).resolves.toBeUndefined();
+    await expect(
+      access(path.join(tmp, "test-world", "WORLD.zh.md")),
+    ).rejects.toThrow();
+  });
+
   it("writes full lore when the model omits the trailing end delimiter", async () => {
     const result = await createWorld({
       llm: new FixedLlm(
@@ -206,29 +211,6 @@ describe("createWorld", () => {
       "utf8",
     );
     expect(lore.startsWith("# 测试世界\n")).toBe(true);
-  });
-
-  it("retries when WORLD.md contains meta generation wording", async () => {
-    const llm = new SequenceLlm([
-      `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n# 测试世界\n\n这是一个低成本快速验证用的世界。\n\n1. 钩子一。\n2. 钩子二。\n3. 钩子三。`,
-      `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n# 测试世界\n\n钟楼在雨夜提前敲响，所有街区必须在下一声钟响前选择阵营。\n\n1. 钩子一。\n2. 钩子二。\n3. 钩子三。`,
-    ]);
-
-    const result = await createWorld({
-      llm,
-      concept: "测试世界",
-      outputDir: tmp,
-      attemptTimeoutMs: 5_000,
-    });
-
-    expect(result.success).toBe(true);
-    expect(llm.calls).toBe(2);
-    const lore = await readFile(
-      path.join(tmp, "test-world", "WORLD.md"),
-      "utf8",
-    );
-    expect(lore).not.toContain("低成本");
-    expect(lore).not.toContain("快速验证");
   });
 
   it("repairs common low-cost model formatting issues before validation", async () => {
@@ -376,7 +358,10 @@ describe("buildWorldPrompt", () => {
     const prompt = await buildWorldPrompt("低成本快速验证世界", "zh-CN");
     expect(prompt).toContain('Start with exactly one H1: "# <world name>".');
     expect(prompt).toContain(
-      "Never mention tests, validation, prompts, models, cost, cheapness, speed, e2e, API, or framework internals",
+      "Never expose the generation process or describe world content as a test fixture, prompt/model output, evaluation artifact, or framework implementation example",
+    );
+    expect(prompt).toContain(
+      "Technical vocabulary is allowed when it belongs to the fictional setting",
     );
     expect(prompt).toContain(
       "The openingScenario and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.",

@@ -6,6 +6,7 @@
  */
 
 import { z } from "zod";
+import { canonicalizeLocale } from "../utils/locale-registry.js";
 
 // ── Common ──────────────────────────────────────────────────────
 
@@ -14,6 +15,13 @@ export const i18nTextSchema = z.union([
   z.string(),
   z.record(z.string(), z.string()),
 ]);
+
+const localeCodeSchema = z
+  .string()
+  .refine((value) => canonicalizeLocale(value) !== undefined, {
+    message: "must be a safe canonicalizable locale code",
+  })
+  .transform((value) => canonicalizeLocale(value)!);
 
 // ── Geography ───────────────────────────────────────────────────
 
@@ -346,8 +354,8 @@ export const worldManifestSchema = z
     name: i18nTextSchema,
     version: z.string().optional(),
     summary: i18nTextSchema,
-    defaultLocale: z.string().min(2),
-    supportedLocales: z.array(z.string()).min(1).optional(),
+    defaultLocale: localeCodeSchema,
+    supportedLocales: z.array(localeCodeSchema).min(1).optional(),
     tags: z.array(z.string()).optional(),
     requiredPlugins: z.array(z.string()).optional(),
     recommendedPlugins: z.array(z.string()).optional(),

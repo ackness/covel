@@ -10,7 +10,7 @@ import {
  * Covers:
  *   1. unified settings storage drives initial language on load
  *   2. empty settings storage falls back to registry default
- *   3. header toggle persists across reload
+ *   3. header selector supports a third locale and persists across reload
  */
 
 test.describe.configure({ mode: "serial" });
@@ -53,21 +53,27 @@ test.describe("Locale preference", () => {
     await context.close();
   });
 
-  test("header toggle persists across reload", async ({ page }) => {
+  test("header selector supports a third locale and persists across reload", async ({
+    page,
+  }) => {
     await seedBrowserSettings(page, {
       "ui.onboardedVersion": 3,
       "ui.locale": "zh-CN",
     });
     await page.goto("/");
 
-    const toggle = page.locator("header button", { hasText: /^EN$/ });
-    await expect(toggle).toBeVisible();
-    await toggle.click();
+    const localeSelect = page.getByRole("combobox", {
+      name: /language|语言|язык/i,
+    });
+    await expect(localeSelect).toBeVisible();
+    await expect(localeSelect.locator("option")).toHaveCount(3);
+    await localeSelect.selectOption("ru-RU");
 
-    await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ru-RU");
 
     // Force a fresh document — the stored locale should survive
     await page.reload();
-    await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ru-RU");
+    await expect(localeSelect).toHaveValue("ru-RU");
   });
 });

@@ -64,6 +64,10 @@ export function SettingsDialog({
     [store],
   );
 
+  useEffect(() => {
+    setQuery("");
+  }, [i18n.language]);
+
   const tree = useMemo(
     () =>
       buildNavTree(store, {
@@ -80,10 +84,11 @@ export function SettingsDialog({
     [tree, query, i18n.language],
   );
 
-  const firstSelectable = useMemo(
-    () => filtered.find((n) => n.id !== "llm" && n.id !== "plugin") ?? null,
+  const selectableNodes = useMemo(
+    () => filtered.filter(isSelectable),
     [filtered],
   );
+  const firstSelectable = selectableNodes[0] ?? null;
 
   const [selected, setSelected] = useState<string>("");
   const contentRef = useRef<HTMLElement>(null);
@@ -120,8 +125,8 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[80vh] p-0 gap-0 flex flex-col">
-        <DialogHeader className="px-6 pt-5 pb-4 border-b border-(--rule-color)">
+      <DialogContent className="flex h-[min(90dvh,56rem)] w-[calc(100%-1rem)] max-w-5xl flex-col gap-0 p-0">
+        <DialogHeader className="px-4 sm:px-6 pt-5 pb-4 border-b border-(--rule-color)">
           <DialogTitle className="flex items-baseline gap-3">
             <span className="ui-meta text-[10px] text-muted-foreground">
               § SETTINGS
@@ -135,43 +140,79 @@ export function SettingsDialog({
             {t("settings.title")}
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col sm:flex-row overflow-hidden">
           <aside
-            className="w-56 shrink-0 border-r border-(--rule-color) flex flex-col"
+            className="w-full sm:w-56 shrink-0 border-b sm:border-b-0 sm:border-r border-(--rule-color) flex flex-col"
             style={{ background: "var(--surface-rail)" }}
           >
             <div className="p-3 border-b border-(--rule-color) flex items-center gap-2">
               <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <label htmlFor="settings-search" className="sr-only">
+                {t("settings.searchPlaceholder")}
+              </label>
               <input
+                id="settings-search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t("settings.searchPlaceholder")}
                 className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground min-w-0"
               />
             </div>
-            <nav className="flex-1 overflow-y-auto py-2 ui-scroll">
+            <div className="p-3 sm:hidden">
+              <label htmlFor="settings-section" className="sr-only">
+                {t("settings.title")}
+              </label>
+              <select
+                id="settings-section"
+                value={selectedNode?.id ?? ""}
+                disabled={selectableNodes.length === 0}
+                onChange={(event) => setSelected(event.target.value)}
+                className="w-full rounded-(--radius-control) border border-(--rule-color) bg-(--surface-page) px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-(--accent-primary)"
+              >
+                {selectableNodes.length === 0 && (
+                  <option value="">{t("settings.noResults", { query })}</option>
+                )}
+                {selectableNodes.map((node) => (
+                  <option key={node.id} value={node.id}>
+                    {node.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <nav
+              aria-label={t("settings.title")}
+              className="hidden sm:block flex-1 overflow-y-auto py-2 ui-scroll"
+            >
               {filtered.map((node) => {
                 const selectable = isSelectable(node);
                 const indent = node.parentId ? "pl-9 " : "pl-4 ";
                 const isHeader = node.kind === "group" && !selectable;
                 const isSelected = selected === node.id;
+                if (isHeader) {
+                  return (
+                    <h3
+                      key={node.id}
+                      className="ui-meta pl-4 pr-4 pt-4 pb-1 text-[10px] text-muted-foreground"
+                    >
+                      {node.label}
+                    </h3>
+                  );
+                }
                 return (
                   <button
                     key={node.id}
                     type="button"
-                    disabled={isHeader}
                     onClick={() => setSelected(node.id)}
+                    aria-current={isSelected ? "page" : undefined}
                     className={
                       "w-full text-left pr-4 py-1.5 text-xs transition-colors relative " +
                       indent +
-                      (isHeader
-                        ? "ui-meta text-[10px] text-muted-foreground pt-4 pb-1"
-                        : isSelected
-                          ? "text-foreground font-medium"
-                          : "text-muted-foreground hover:text-foreground")
+                      (isSelected
+                        ? "text-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground")
                     }
                   >
-                    {isSelected && !isHeader && (
+                    {isSelected && (
                       <span
                         aria-hidden
                         className="absolute left-0 top-0 bottom-0 w-0.75"
@@ -191,7 +232,7 @@ export function SettingsDialog({
           </aside>
           <section
             ref={contentRef}
-            className="flex-1 overflow-y-auto p-6 ui-scroll"
+            className="ui-scroll min-h-0 flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8"
           >
             {renderPane(selectedNode, t)}
           </section>

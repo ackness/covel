@@ -75,7 +75,7 @@ export function PluginItem({
             <Badge
               variant="outline"
               className={[
-                "ui-chip text-[9px] px-1.5 py-0 h-4 shrink-0",
+                "ui-chip text-xs px-1.5 py-0 h-4 shrink-0",
                 sessionPlugin.source === "builtin"
                   ? "border-primary/40 bg-primary/10 text-primary"
                   : "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -96,7 +96,7 @@ export function PluginItem({
           {mainRuntime && stageLabel(mainRuntime.stage, t) && (
             <Badge
               variant="secondary"
-              className="ui-chip text-[9px] px-1.5 py-0 h-4 shrink-0"
+              className="ui-chip text-xs px-1.5 py-0 h-4 shrink-0"
             >
               {stageLabel(mainRuntime.stage, t)}
             </Badge>
@@ -148,7 +148,7 @@ export function PluginItem({
       />
 
       {primaryRuntime && (
-        <div className="px-2.5 pb-1 -mt-0.5 flex items-center gap-1 text-[9px] text-muted-foreground/80">
+        <div className="px-2.5 pb-1 -mt-0.5 flex items-center gap-1 text-xs text-muted-foreground/80">
           <Cpu className="w-2.5 h-2.5" />
           {resolvedSlots && resolvedSlots.length > 0 ? (
             (() => {
@@ -183,19 +183,19 @@ export function PluginItem({
       {expanded && (
         <div className="px-3 pb-2.5 pt-0.5 space-y-2 border-t border-border bg-muted/20">
           {description && (
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               {description}
             </p>
           )}
 
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {pkg.version && <span>v{pkg.version}</span>}
             {pkg.author && <span>{pkg.author}</span>}
           </div>
 
           {runtimes.length > 0 && (
             <div className="space-y-1">
-              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 <Zap className="w-3 h-3" />
                 {t("plugin.runtimes", "Runtimes")}
               </div>
@@ -203,7 +203,7 @@ export function PluginItem({
                 {runtimes.map((rt) => (
                   <div
                     key={rt.id}
-                    className="flex items-center gap-2 text-[10px] text-muted-foreground pl-1"
+                    className="flex items-center gap-2 text-xs text-muted-foreground pl-1"
                   >
                     <span className="font-mono">{rt.id}</span>
                     <Badge
@@ -233,7 +233,7 @@ export function PluginItem({
 
           {tools.length > 0 && (
             <div className="space-y-1">
-              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 <Wrench className="w-3 h-3" />
                 {t("plugin.tools", "Tools")}
                 <span className="font-normal">({tools.length})</span>
@@ -243,7 +243,7 @@ export function PluginItem({
                   <Badge
                     key={tool.id}
                     variant="outline"
-                    className="text-[9px] px-1.5 py-0 h-4 font-mono"
+                    className="text-xs px-1.5 py-0 h-4 font-mono"
                   >
                     {tool.id}
                   </Badge>
@@ -254,7 +254,7 @@ export function PluginItem({
 
           {requires.length > 0 && (
             <div className="space-y-1">
-              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 <Link className="w-3 h-3" />
                 {t("plugin.requires", "Requires")}
               </div>
@@ -263,7 +263,7 @@ export function PluginItem({
                   <Badge
                     key={dep}
                     variant="secondary"
-                    className="text-[9px] px-1.5 py-0 h-4"
+                    className="text-xs px-1.5 py-0 h-4"
                   >
                     {dep}
                   </Badge>
@@ -274,7 +274,7 @@ export function PluginItem({
 
           {primaryRuntime && resolvedSlots && resolvedSlots.length > 0 && (
             <div className="space-y-1">
-              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 <Cpu className="w-3 h-3" />
                 {t("plugin.modelBinding", "Model")}
               </div>
@@ -282,7 +282,7 @@ export function PluginItem({
                 value={boundSlot}
                 onChange={(e) => handleSlotChange(e.target.value)}
                 disabled={executing}
-                className="w-full text-[10px] bg-background border border-border rounded px-1.5 py-1 disabled:opacity-50"
+                className="w-full text-xs bg-background border border-border rounded px-1.5 py-1 disabled:opacity-50"
               >
                 <option value="">
                   {primaryRuntime.model
@@ -299,7 +299,7 @@ export function PluginItem({
                   ))}
               </select>
               {boundSlot && (
-                <p className="text-[9px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t(
                     "plugin.modelOverrideHint",
                     "Override active — next turn will use this model",
@@ -308,7 +308,7 @@ export function PluginItem({
               )}
               {overrideError && (
                 <span
-                  className="text-[9px] text-destructive"
+                  className="text-xs text-destructive"
                   role="alert"
                   title={overrideError}
                 >

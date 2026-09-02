@@ -48,6 +48,7 @@ import {
 } from "./windows.js";
 import { initDesktopI18n, t } from "./main-i18n.js";
 import { resolveSystemProxyRequest } from "./system-proxy.js";
+import { showAppUpdateNotification } from "./app-update-notification.js";
 import {
   parseSettingsPersistenceBundle,
   type SettingsPersistenceBundle,
@@ -586,7 +587,7 @@ app.on("before-quit", () => {
 
 app.whenReady().then(async () => {
   const paths = ensureUserPaths();
-  initDesktopI18n(paths.userSettingsJsonPath);
+  initDesktopI18n(paths.userSettingsJsonPath, app.getLocale());
   initPersistentLog(paths.logsDir, paths.logRotation, app.getVersion());
   registerDesktopIpcHandlers({
     paths,
@@ -624,6 +625,14 @@ app.whenReady().then(async () => {
       await devStartup(paths);
     } else {
       await productionStartup(paths);
+      void showAppUpdateNotification({
+        currentVersion: app.getVersion(),
+        stateFile: path.join(paths.covelHome, "app-update.json"),
+        fetchLatestRelease: () =>
+          requestSidecarConfig("/api/app-update/latest"),
+      }).catch((error: unknown) => {
+        writeLog("warn", "Could not show app update notification:", error);
+      });
     }
   } catch (err) {
     writeLog("error", "Fatal:", err);

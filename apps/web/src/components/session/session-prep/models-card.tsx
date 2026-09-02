@@ -27,6 +27,7 @@ export function ModelsCard({
       <CollapsibleCardHeader
         expanded={expanded}
         onToggle={onToggle}
+        contentId="models-card-content"
         summary={
           resolvedSlots.length > 0
             ? t("session.slotsConfigured", {
@@ -37,12 +38,12 @@ export function ModelsCard({
       >
         <Cpu className="w-4 h-4" />
         {t("session.activeModels", "Active Models")}
-        <Badge variant="secondary" className="text-[10px] ml-1">
+        <Badge variant="secondary" className="text-xs ml-1">
           {resolvedSlots.length}
         </Badge>
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent className="space-y-2 px-4 pb-4">
+        <CardContent id="models-card-content" className="space-y-2 px-4 pb-4">
           <ActiveModelSlots slots={resolvedSlots} />
           <Button
             variant="ghost"

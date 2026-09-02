@@ -29,8 +29,9 @@ export function ToneTab({ dimensions, onChange, t }: TabProps) {
     <div className="space-y-6">
       {/* Genres (comma-separated) */}
       <div className="space-y-1">
-        <Label>{t("world.genres")}</Label>
+        <Label htmlFor="world-tone-genres">{t("world.genres")}</Label>
         <input
+          id="world-tone-genres"
           className={inputCls}
           value={tone.genres.join(", ")}
           onChange={(e) =>
@@ -47,9 +48,12 @@ export function ToneTab({ dimensions, onChange, t }: TabProps) {
 
       {/* Content Rating */}
       <div className="space-y-1">
-        <Label>{t("world.contentRating")}</Label>
+        <Label htmlFor="world-tone-content-rating">
+          {t("world.contentRating")}
+        </Label>
         <select
-          className={selectCls}
+          id="world-tone-content-rating"
+          className={`${selectCls} w-full`}
           value={tone.contentRating}
           onChange={(e) =>
             setTone({
@@ -68,8 +72,11 @@ export function ToneTab({ dimensions, onChange, t }: TabProps) {
 
       {/* Narrative Style */}
       <div className="space-y-1">
-        <Label>{t("world.narrativeStyle")}</Label>
+        <Label htmlFor="world-tone-narrative-style">
+          {t("world.narrativeStyle")}
+        </Label>
         <textarea
+          id="world-tone-narrative-style"
           className={textareaCls}
           value={
             typeof tone.narrativeStyle === "string" ? tone.narrativeStyle : ""
@@ -80,8 +87,9 @@ export function ToneTab({ dimensions, onChange, t }: TabProps) {
 
       {/* Themes (comma-separated) */}
       <div className="space-y-1">
-        <Label>{t("world.themes")}</Label>
+        <Label htmlFor="world-tone-themes">{t("world.themes")}</Label>
         <input
+          id="world-tone-themes"
           className={inputCls}
           value={(tone.themes ?? []).join(", ")}
           onChange={(e) =>

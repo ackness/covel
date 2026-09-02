@@ -64,11 +64,8 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
     default: {},
     group: "llm",
     widget: "custom",
-    label: { "zh-CN": "用途分配", "en-US": "Model role assignments" },
-    description: {
-      "zh-CN": "为每种模型用途选择服务商和模型",
-      "en-US": "Choose a provider and model for each model role",
-    },
+    label: "Model role assignments",
+    description: "Choose a provider and model for each model role",
   });
 
   store.register({
@@ -77,7 +74,7 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
     default: [],
     group: "llm",
     widget: "custom",
-    label: { "zh-CN": "服务商与模型", "en-US": "Providers and models" },
+    label: "Providers and models",
   });
 
   store.register({
@@ -86,7 +83,7 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
     default: {},
     group: "llm",
     widget: "custom",
-    label: { "zh-CN": "服务商价格倍率", "en-US": "Provider price multipliers" },
+    label: "Provider price multipliers",
   });
 
   store.register({
@@ -95,7 +92,7 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
     default: {},
     group: "llm",
     widget: "custom",
-    label: { "zh-CN": "参数覆盖", "en-US": "Parameter overrides" },
+    label: "Parameter overrides",
   });
 
   store.register({
@@ -104,7 +101,7 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
     default: {},
     group: "llm",
     widget: "custom",
-    label: { "zh-CN": "能力覆盖", "en-US": "Capability overrides" },
+    label: "Capability overrides",
   });
 
   // Prep-phase runtime bindings. Keyed by worldId; transient — the real
@@ -115,9 +112,6 @@ export function registerLlmSettings(store: SettingsStoreApi): void {
     default: {},
     group: "llm",
     widget: "custom",
-    label: {
-      "zh-CN": "准备阶段 Runtime 绑定",
-      "en-US": "Prep-phase runtime bindings",
-    },
+    label: "Prep-phase runtime bindings",
   });
 }

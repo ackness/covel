@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SettingsStoreApi } from "@covel/settings";
+import { localeDefinitions, localeRegistry } from "@/i18n/catalog-registry.js";
 import { resolveInitialLocale } from "@/i18n/locale-detector.js";
 import { registerThemeSettings } from "@/theme-system/settings.js";
 
@@ -9,7 +10,11 @@ import { registerThemeSettings } from "@/theme-system/settings.js";
 export function registerCoreSettings(store: SettingsStoreApi): void {
   store.register({
     key: "ui.locale",
-    schema: z.enum(["zh-CN", "en-US"]),
+    schema: z
+      .string()
+      .refine((value) => localeRegistry.codes.some((code) => code === value), {
+        message: "Unsupported or non-canonical locale",
+      }),
     // Browser-language detection only reaches the player through this default:
     // `main.tsx` applies the store value unconditionally after hydration, so a
     // hardcoded "zh-CN" here meant an English browser flashed English and then
@@ -18,17 +23,11 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     default: resolveInitialLocale(),
     group: "general",
     widget: "select",
-    label: { "zh-CN": "语言", "en-US": "Language" },
-    options: [
-      {
-        value: "zh-CN",
-        label: { "zh-CN": "简体中文", "en-US": "Chinese (Simplified)" },
-      },
-      {
-        value: "en-US",
-        label: { "zh-CN": "English", "en-US": "English" },
-      },
-    ],
+    label: "Interface Language",
+    options: localeDefinitions.map(({ code, label }) => ({
+      value: code,
+      label,
+    })),
   });
 
   registerThemeSettings(store);
@@ -39,10 +38,7 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     default: 2000,
     group: "general",
     widget: "number",
-    label: {
-      "zh-CN": "聊天窗口消息上限",
-      "en-US": "Chat window message limit",
-    },
+    label: "Chat window message limit",
   });
 
   store.register({
@@ -51,6 +47,6 @@ export function registerCoreSettings(store: SettingsStoreApi): void {
     default: 0,
     group: "general",
     widget: "number",
-    label: { "zh-CN": "Onboarding 版本", "en-US": "Onboarding version" },
+    label: "Onboarding version",
   });
 }

@@ -196,7 +196,7 @@ rules:
 - startingResources values must be numbers.
 - Enum values must exactly match one listed option.
 - Be creative and specific. Avoid generic fantasy tropes.
-- Do not copy meta wording from the concept into the setting. Never mention tests, validation, prompts, models, cost, cheapness, speed, e2e, API, or framework internals in world content.
+- Never expose the generation process or describe world content as a test fixture, prompt/model output, evaluation artifact, or framework implementation example. Technical vocabulary is allowed when it belongs to the fictional setting.
 - Avoid literal generic names built only from genre nouns. Coin proper nouns with a local cultural or historical reason.
 - The openingScenario and all 3 adventure hooks must revolve around the same current crisis or pressure mechanism.
 - The openingScenario must present an immediate choice or tension tied to that crisis.

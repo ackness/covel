@@ -1,5 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
-import { seedAppSettings, useServerWorlds } from "./helpers/player.js";
+import {
+  seedAppSettings,
+  selectWorldByText,
+  useServerWorlds,
+} from "./helpers/player.js";
 
 /**
  * Stage view mode smoke — no LLM turn.
@@ -60,17 +64,14 @@ test.describe("Stage view mode", () => {
 async function enterFreshHarukaSession(page: Page): Promise<string> {
   await page.goto("/session");
 
-  const worldCard = page
-    .getByRole("heading", {
-      name: /遥风学园・春日薄荷|Haruka Academy · Spring Mint/i,
-    })
-    .locator("xpath=ancestor::article[1]");
-  await expect(worldCard).toBeVisible({ timeout: 15_000 });
-  await worldCard.click();
+  await selectWorldByText(
+    page,
+    /遥风学园・春日薄荷|Haruka Academy · Spring Mint/i,
+  );
 
-  const startButton = page.locator("button", {
-    hasText: /start game|开始游戏/i,
-  });
+  const startButton = page
+    .getByRole("button", { name: /^(start game|开始游戏)$/i })
+    .first();
   await expect(startButton).toBeVisible({ timeout: 10_000 });
   await startButton.click();
 

@@ -52,6 +52,21 @@ export function parseWorldOutput(
   };
 }
 
+export function parseWorldLoreRepairOutput(raw: string): string | null {
+  const cleaned = raw.trim();
+  const loreMarker = findSectionMarker(cleaned, "WORLD_MD");
+  if (loreMarker !== 0) return null;
+
+  const loreStart = loreMarker + markerLength("WORLD_MD");
+  const endMarker = findSectionMarker(cleaned, "END", loreStart);
+  if (endMarker < 0) return null;
+  const trailing = cleaned.slice(endMarker + markerLength("END")).trim();
+  if (trailing) return null;
+
+  const lore = stripFence(cleaned.slice(loreStart, endMarker)).trim();
+  return lore || null;
+}
+
 function findSectionMarker(
   value: string,
   marker: "WORLD_YAML" | "WORLD_MD" | "WORLD_PACKAGE_YAML" | "END",

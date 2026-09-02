@@ -4,6 +4,11 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Card, CardContent } from "@/components/ui/card.js";
 import type * as api from "@/services/api.js";
+import {
+  formatSessionDate,
+  sessionStatusLabel,
+  sessionTurnLabel,
+} from "@/lib/session-display.js";
 import { CollapsibleCardHeader } from "./collapsible-card-header.js";
 
 interface SessionHistoryCardProps {
@@ -24,7 +29,7 @@ export function SessionHistoryCard({
   resumingId,
   onRequestDelete,
 }: SessionHistoryCardProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   if (activeSessions.length === 0) return null;
 
@@ -33,18 +38,22 @@ export function SessionHistoryCard({
       <CollapsibleCardHeader
         expanded={expanded}
         onToggle={onToggle}
+        contentId="session-history-content"
         summary={t("session.historySummary", {
           count: activeSessions.length,
         })}
       >
         <History className="w-4 h-4" />
         {t("session.history", "Previous Sessions")}
-        <Badge variant="secondary" className="text-[10px] ml-1">
+        <Badge variant="secondary" className="text-xs ml-1">
           {activeSessions.length}
         </Badge>
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent className="space-y-2 px-4 pb-4">
+        <CardContent
+          id="session-history-content"
+          className="space-y-2 px-4 pb-4"
+        >
           {activeSessions.map((session) => (
             <div
               key={session.id}
@@ -63,11 +72,15 @@ export function SessionHistoryCard({
                     {session.id.slice(0, 16)}
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <Badge variant="outline" className="text-[10px]">
-                      {session.status} · t{session.completedPlayerTurns}
+                    <Badge variant="outline" className="text-xs">
+                      {sessionStatusLabel(t, session.status)} ·{" "}
+                      {sessionTurnLabel(t, session.completedPlayerTurns)}
                     </Badge>
-                    <span className="text-[10px] text-muted-foreground">
-                      {new Date(session.createdAt).toLocaleString("zh-CN")}
+                    <span className="text-xs text-muted-foreground">
+                      {formatSessionDate(
+                        session.createdAt,
+                        i18n.resolvedLanguage ?? i18n.language,
+                      )}
                     </span>
                   </div>
                 </div>
@@ -91,6 +104,9 @@ export function SessionHistoryCard({
                   variant="ghost"
                   size="sm"
                   className="text-xs text-muted-foreground hover:text-destructive h-8 w-8 p-0"
+                  aria-label={t("session.deleteSessionAria", {
+                    id: session.id.slice(0, 16),
+                  })}
                   onClick={(event) => {
                     event.stopPropagation();
                     onRequestDelete(session);

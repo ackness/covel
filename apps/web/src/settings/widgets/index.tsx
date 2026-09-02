@@ -6,9 +6,12 @@ import {
   type SettingEntry,
   type WidgetKind,
 } from "@covel/settings";
-import { resolveI18nText } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
+import {
+  resolveSettingEntryText,
+  resolveSettingOptionText,
+} from "../framework-i18n.js";
 import { useSetting } from "../use-settings.js";
 
 function inferWidget(entry: SettingEntry): WidgetKind {
@@ -48,21 +51,27 @@ export function SettingWidget({ entry }: { entry: SettingEntry }) {
 
 function FieldShell({
   entry,
+  controlId,
   children,
 }: {
   entry: SettingEntry;
+  controlId?: string;
   children: React.ReactNode;
 }) {
   const { i18n } = useTranslation();
   const locale = i18n.language;
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs uppercase tracking-widest text-muted-foreground">
-        {resolveI18nText(entry.label, locale) ?? ""}
+      <Label
+        id={settingLabelId(entry.key)}
+        htmlFor={controlId}
+        className="text-xs uppercase tracking-widest text-muted-foreground"
+      >
+        {resolveSettingEntryText(entry, "label", locale)}
       </Label>
       {entry.description && (
         <p className="text-[11px] text-muted-foreground">
-          {resolveI18nText(entry.description, locale) ?? ""}
+          {resolveSettingEntryText(entry, "description", locale)}
         </p>
       )}
       {children}
@@ -70,11 +79,21 @@ function FieldShell({
   );
 }
 
+function settingControlId(key: string, suffix?: string): string {
+  return `setting-${key}${suffix ? `-${suffix}` : ""}`;
+}
+
+function settingLabelId(key: string): string {
+  return `${settingControlId(key)}-label`;
+}
+
 function TextWidget({ entry }: { entry: SettingEntry }) {
   const [value, setValue] = useSetting<string>(entry.key);
+  const controlId = settingControlId(entry.key);
   return (
-    <FieldShell entry={entry}>
+    <FieldShell entry={entry} controlId={controlId}>
       <input
+        id={controlId}
         type="text"
         value={value ?? ""}
         onChange={(e) => void setValue(e.target.value)}
@@ -86,9 +105,11 @@ function TextWidget({ entry }: { entry: SettingEntry }) {
 
 function NumberWidget({ entry }: { entry: SettingEntry }) {
   const [value, setValue] = useSetting<number>(entry.key);
+  const controlId = settingControlId(entry.key);
   return (
-    <FieldShell entry={entry}>
+    <FieldShell entry={entry} controlId={controlId}>
       <input
+        id={controlId}
         type="number"
         min={entry.min}
         max={entry.max}
@@ -108,9 +129,11 @@ function NumberWidget({ entry }: { entry: SettingEntry }) {
 
 function ToggleWidget({ entry }: { entry: SettingEntry }) {
   const [value, setValue] = useSetting<boolean>(entry.key);
+  const controlId = settingControlId(entry.key);
   return (
-    <FieldShell entry={entry}>
+    <FieldShell entry={entry} controlId={controlId}>
       <button
+        id={controlId}
         type="button"
         role="switch"
         aria-checked={value}
@@ -134,16 +157,18 @@ function ToggleWidget({ entry }: { entry: SettingEntry }) {
 function SelectWidget({ entry }: { entry: SettingEntry }) {
   const [value, setValue] = useSetting<string>(entry.key);
   const { i18n } = useTranslation();
+  const controlId = settingControlId(entry.key);
   return (
-    <FieldShell entry={entry}>
+    <FieldShell entry={entry} controlId={controlId}>
       <select
+        id={controlId}
         value={value ?? ""}
         onChange={(e) => void setValue(e.target.value)}
         className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
       >
         {(entry.options ?? []).map((opt) => (
           <option key={opt.value} value={opt.value}>
-            {resolveI18nText(opt.label, i18n.language) ?? ""}
+            {resolveSettingOptionText(entry, opt, i18n.language)}
           </option>
         ))}
       </select>
@@ -156,10 +181,13 @@ function SliderWidget({ entry }: { entry: SettingEntry }) {
   const min = entry.min ?? 0;
   const max = entry.max ?? 1;
   const step = entry.step ?? 0.1;
+  const rangeId = settingControlId(entry.key);
+  const numberId = settingControlId(entry.key, "number");
   return (
-    <FieldShell entry={entry}>
+    <FieldShell entry={entry} controlId={rangeId}>
       <div className="flex items-center gap-2">
         <input
+          id={rangeId}
           type="range"
           min={min}
           max={max}
@@ -169,6 +197,8 @@ function SliderWidget({ entry }: { entry: SettingEntry }) {
           className="flex-1"
         />
         <input
+          id={numberId}
+          aria-labelledby={settingLabelId(entry.key)}
           type="number"
           min={min}
           max={max}
@@ -190,10 +220,12 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
   const [value, setValue] = useSetting<string>(entry.key);
   const [visible, setVisible] = useState(false);
   const serverManaged = isServerManagedSecret(value);
+  const controlId = settingControlId(entry.key);
   return (
-    <FieldShell entry={entry}>
+    <FieldShell entry={entry} controlId={controlId}>
       <div className="flex gap-1">
         <input
+          id={controlId}
           type={visible ? "text" : "password"}
           value={serverManaged ? "" : (value ?? "")}
           onChange={(e) => void setValue(e.target.value)}
@@ -238,9 +270,11 @@ function SecretWidget({ entry }: { entry: SettingEntry }) {
 
 function TextareaWidget({ entry }: { entry: SettingEntry }) {
   const [value, setValue] = useSetting<string>(entry.key);
+  const controlId = settingControlId(entry.key);
   return (
-    <FieldShell entry={entry}>
+    <FieldShell entry={entry} controlId={controlId}>
       <textarea
+        id={controlId}
         value={value ?? ""}
         onChange={(e) => void setValue(e.target.value)}
         rows={4}

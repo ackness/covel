@@ -5,6 +5,7 @@ import { text } from "@/components/world/editor-helpers.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import type * as api from "@/services/api.js";
 import { CollapsibleCardHeader } from "./collapsible-card-header.js";
+import { useTranslation } from "react-i18next";
 
 interface WorldInfoCardProps {
   world: api.WorldRecord;
@@ -17,6 +18,7 @@ export function WorldInfoCard({
   expanded,
   onToggle,
 }: WorldInfoCardProps) {
+  const { t } = useTranslation();
   const visual = worldVisual(world);
 
   return (
@@ -24,18 +26,19 @@ export function WorldInfoCard({
       <CollapsibleCardHeader
         expanded={expanded}
         onToggle={onToggle}
+        contentId="world-info-card-content"
         summary={text(world.description) || undefined}
       >
         <MapIcon className="w-4 h-4" />
         {text(world.name)}
         {world.tags && world.tags.length > 0 && (
-          <Badge variant="outline" className="text-[10px] ml-1">
-            {world.tags.length} tags
+          <Badge variant="outline" className="text-xs ml-1">
+            {t("session.tagsCount", { count: world.tags.length })}
           </Badge>
         )}
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent className="px-4 pb-4">
+        <CardContent id="world-info-card-content" className="px-4 pb-4">
           <div className="grid gap-4 sm:grid-cols-[11rem_1fr]">
             <div className="relative aspect-4/3 overflow-hidden rounded-(--radius-card) border border-border bg-muted">
               <img
@@ -56,7 +59,7 @@ export function WorldInfoCard({
               {world.tags && world.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {world.tags.map((tag) => (
-                    <Badge key={tag} variant="outline" className="text-[10px]">
+                    <Badge key={tag} variant="outline" className="text-xs">
                       {tag}
                     </Badge>
                   ))}

@@ -78,23 +78,30 @@ export function EconomyTab({ dimensions, onChange, t }: TabProps) {
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={t("world.remove")}
                 onClick={() => removeCurrency(ci)}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-1">
-                <Label>{t("world.name")}</Label>
+                <Label htmlFor={`world-currency-${ci}-name`}>
+                  {t("world.name")}
+                </Label>
                 <input
+                  id={`world-currency-${ci}-name`}
                   className={inputCls}
                   value={text(cur.name)}
                   onChange={(e) => updateCurrency(ci, { name: e.target.value })}
                 />
               </div>
               <div className="space-y-1">
-                <Label>{t("world.symbol")}</Label>
+                <Label htmlFor={`world-currency-${ci}-symbol`}>
+                  {t("world.symbol")}
+                </Label>
                 <input
+                  id={`world-currency-${ci}-symbol`}
                   className={inputCls}
                   value={cur.symbol ?? ""}
                   onChange={(e) =>
@@ -103,8 +110,11 @@ export function EconomyTab({ dimensions, onChange, t }: TabProps) {
                 />
               </div>
               <div className="space-y-1">
-                <Label>{t("world.description")}</Label>
+                <Label htmlFor={`world-currency-${ci}-description`}>
+                  {t("world.description")}
+                </Label>
                 <input
+                  id={`world-currency-${ci}-description`}
                   className={inputCls}
                   value={text(cur.description)}
                   onChange={(e) =>
@@ -129,6 +139,7 @@ export function EconomyTab({ dimensions, onChange, t }: TabProps) {
         {(eco.resources ?? []).map((res, ri) => (
           <div key={ri} className="flex items-center gap-2">
             <input
+              aria-label={`${t("world.resources")} ${ri + 1}`}
               className={inputCls}
               value={text(res)}
               onChange={(e) => updateResource(ri, e.target.value)}
@@ -136,6 +147,7 @@ export function EconomyTab({ dimensions, onChange, t }: TabProps) {
             <Button
               variant="ghost"
               size="icon"
+              aria-label={t("world.remove")}
               onClick={() => removeResource(ri)}
             >
               <Trash2 className="h-4 w-4" />
@@ -146,8 +158,11 @@ export function EconomyTab({ dimensions, onChange, t }: TabProps) {
 
       {/* Trade Notes */}
       <div className="space-y-1">
-        <Label>{t("world.tradeNotes")}</Label>
+        <Label htmlFor="world-economy-trade-notes">
+          {t("world.tradeNotes")}
+        </Label>
         <textarea
+          id="world-economy-trade-notes"
           className={textareaCls}
           value={text(eco.tradeNotes)}
           onChange={(e) => setEco({ ...eco, tradeNotes: e.target.value })}

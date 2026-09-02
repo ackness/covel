@@ -29,6 +29,7 @@ import {
   BadgeList,
   type DetailTranslate,
 } from "./detail-primitives.js";
+import { worldEnumLabel } from "./enum-labels.js";
 
 export function GeographySection({
   geo,
@@ -38,7 +39,11 @@ export function GeographySection({
   t: DetailTranslate;
 }) {
   return (
-    <WorldDimensionSection title={t("world.geography")} icon={MapPin}>
+    <WorldDimensionSection
+      title={t("world.geography")}
+      icon={MapPin}
+      defaultExpanded
+    >
       {geo.overview && (
         <p className="mb-3 text-sm text-muted-foreground">
           {text(geo.overview)}
@@ -90,10 +95,10 @@ export function FactionsSection({
               <div className="flex items-center gap-2">
                 <DetailCardTitle>{text(faction.name)}</DetailCardTitle>
                 <Badge variant="secondary" className="text-xs">
-                  {faction.type}
+                  {worldEnumLabel(t, "factionType", faction.type)}
                 </Badge>
                 <Badge variant="outline" className="text-xs">
-                  {faction.influence}
+                  {worldEnumLabel(t, "influence", faction.influence)}
                 </Badge>
               </div>
             }
@@ -117,7 +122,7 @@ export function FactionsSection({
                 {faction.relations.map((rel, j) => (
                   <li key={j}>
                     <Badge variant="outline" className="mr-1 text-xs">
-                      {rel.type}
+                      {worldEnumLabel(t, "relation", rel.type)}
                     </Badge>
                     {rel.targetId}
                     {rel.description ? ` — ${text(rel.description)}` : ""}
@@ -144,7 +149,9 @@ export function PowerSystemSection({
       <div className="space-y-2 text-sm">
         <div className="flex items-center gap-2">
           <span className="font-medium">{text(ps.name)}</span>
-          <Badge variant="secondary">{ps.type}</Badge>
+          <Badge variant="secondary">
+            {worldEnumLabel(t, "powerType", ps.type)}
+          </Badge>
         </div>
         <p className="text-muted-foreground">{text(ps.description)}</p>
         {ps.rules.length > 0 && (
@@ -195,7 +202,7 @@ export function HistorySection({
                 variant={evt.significance === "major" ? "default" : "outline"}
                 className="text-xs"
               >
-                {evt.significance}
+                {worldEnumLabel(t, "significance", evt.significance)}
               </Badge>
               <p className="text-muted-foreground">{text(evt.description)}</p>
             </div>
@@ -306,11 +313,11 @@ export function ToneSection({
         <div className="flex flex-wrap gap-1">
           {tone.genres.map((g, i) => (
             <Badge key={i} variant="secondary" className="text-xs">
-              {g}
+              {text(g)}
             </Badge>
           ))}
           <Badge variant="default" className="text-xs">
-            {tone.contentRating}
+            {worldEnumLabel(t, "rating", tone.contentRating)}
           </Badge>
         </div>
         {tone.narrativeStyle && (
@@ -339,12 +346,12 @@ export function MechanicsSection({
         <div className="flex flex-wrap gap-1">
           {mechanics.combatStyle && (
             <Badge variant="secondary" className="text-xs">
-              {mechanics.combatStyle}
+              {worldEnumLabel(t, "combat", mechanics.combatStyle)}
             </Badge>
           )}
           {mechanics.difficulty && (
             <Badge variant="outline" className="text-xs">
-              {mechanics.difficulty}
+              {worldEnumLabel(t, "difficulty", mechanics.difficulty)}
             </Badge>
           )}
         </div>

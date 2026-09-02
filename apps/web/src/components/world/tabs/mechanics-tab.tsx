@@ -69,11 +69,14 @@ export function MechanicsTab({ dimensions, onChange, t }: TabProps) {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1">
-          <Label>{t("world.combatStyle")}</Label>
+          <Label htmlFor="world-mechanics-combat-style">
+            {t("world.combatStyle")}
+          </Label>
           <select
-            className={selectCls}
+            id="world-mechanics-combat-style"
+            className={`${selectCls} w-full`}
             value={mech.combatStyle ?? "narrative"}
             onChange={(e) =>
               setMech({ ...mech, combatStyle: e.target.value as CombatStyle })
@@ -87,9 +90,12 @@ export function MechanicsTab({ dimensions, onChange, t }: TabProps) {
           </select>
         </div>
         <div className="space-y-1">
-          <Label>{t("world.difficulty")}</Label>
+          <Label htmlFor="world-mechanics-difficulty">
+            {t("world.difficulty")}
+          </Label>
           <select
-            className={selectCls}
+            id="world-mechanics-difficulty"
+            className={`${selectCls} w-full`}
             value={mech.difficulty ?? "normal"}
             onChange={(e) =>
               setMech({
@@ -108,8 +114,11 @@ export function MechanicsTab({ dimensions, onChange, t }: TabProps) {
       </div>
 
       <div className="space-y-1">
-        <Label>{t("world.skillSystem")}</Label>
+        <Label htmlFor="world-mechanics-skill-system">
+          {t("world.skillSystem")}
+        </Label>
         <textarea
+          id="world-mechanics-skill-system"
           className={textareaCls}
           value={text(mech.skillSystem)}
           onChange={(e) => setMech({ ...mech, skillSystem: e.target.value })}
@@ -128,6 +137,7 @@ export function MechanicsTab({ dimensions, onChange, t }: TabProps) {
         {(mech.customRules ?? []).map((rule, ri) => (
           <div key={ri} className="flex items-center gap-2">
             <input
+              aria-label={`${t("world.customRules")} ${ri + 1}`}
               className={inputCls}
               value={text(rule)}
               onChange={(e) => updateCustomRule(ri, e.target.value)}
@@ -135,6 +145,7 @@ export function MechanicsTab({ dimensions, onChange, t }: TabProps) {
             <Button
               variant="ghost"
               size="icon"
+              aria-label={t("world.remove")}
               onClick={() => removeCustomRule(ri)}
             >
               <Trash2 className="h-4 w-4" />

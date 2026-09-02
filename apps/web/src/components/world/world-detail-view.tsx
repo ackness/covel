@@ -1,11 +1,13 @@
 import { useTranslation } from "react-i18next";
+import type { CSSProperties } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import type { WorldRecord } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { Separator } from "@/components/ui/separator.js";
 import { text } from "./world-detail/detail-primitives.js";
-import { worldLanguage, worldLanguageBadge } from "@/lib/world-locale.js";
+import { worldLanguageBadge, worldLanguageName } from "@/lib/world-locale.js";
+import { worldVisual } from "@/lib/world-visuals.js";
 import {
   GeographySection,
   FactionsSection,
@@ -31,18 +33,14 @@ export function WorldDetailView({
   onEdit,
   onDelete,
 }: WorldDetailViewProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const dims = world.dimensions;
-  const language = worldLanguage(world.locale);
-  const languageCode = worldLanguageBadge(world.locale);
-  const languageBadge =
-    language === "zh" ? t("world.languageBadgeChinese", "ZH") : languageCode;
-  const languageName =
-    language === "en"
-      ? t("world.languageEnglish", "English")
-      : language === "zh"
-        ? t("world.languageChinese", "Chinese")
-        : world.locale;
+  const languageBadge = worldLanguageBadge(world.locale);
+  const languageName = worldLanguageName(
+    world.locale,
+    i18n.resolvedLanguage ?? i18n.language,
+  );
+  const visual = worldVisual(world);
 
   const hasDimensions =
     dims &&
@@ -52,51 +50,93 @@ export function WorldDetailView({
 
   return (
     <div className="h-full overflow-y-auto overscroll-contain">
-      <div className="space-y-6 p-4">
-        {/* Header */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h2 className="text-lg font-bold flex-1">{text(world.name)}</h2>
-            {languageBadge && languageName && (
-              <Badge
-                variant="outline"
-                title={t("world.languageLabel", {
-                  language: languageName,
-                  defaultValue: "World language: {{language}}",
-                })}
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-5 sm:px-6 md:px-8 md:py-8">
+        <header
+          className="relative min-h-64 overflow-hidden rounded-(--radius-card) border border-border bg-card"
+          style={{ "--world-accent": visual.accent } as CSSProperties}
+        >
+          <img
+            src={visual.image}
+            alt=""
+            aria-hidden="true"
+            width={1536}
+            height={1024}
+            loading="eager"
+            className="absolute inset-0 h-full w-full object-cover"
+            draggable={false}
+          />
+          <div className="absolute inset-0 bg-linear-to-r from-black/85 via-black/62 to-black/24" />
+          <div className="relative z-10 flex min-h-64 flex-col justify-between gap-8 p-5 text-white sm:p-7">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                aria-label={t("world.backToList")}
+                className="h-10 border border-white/18 bg-black/28 px-3 text-white hover:bg-white/12 hover:text-white"
               >
-                {languageBadge}
-              </Badge>
-            )}
-            {onEdit && (
-              <Button variant="outline" size="sm" onClick={onEdit}>
-                {t("common.edit")}
+                <ArrowLeft className="h-4 w-4" />
+                <span>{t("world.backToList")}</span>
               </Button>
-            )}
-            {onDelete && (
-              <Button variant="destructive" size="sm" onClick={onDelete}>
-                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                {t("world.delete", "Delete world")}
-              </Button>
-            )}
-          </div>
-          {world.tags && world.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 pl-10">
-              {world.tags.map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs">
-                  {tag}
+              <div className="flex-1" />
+              {languageBadge && languageName && (
+                <Badge
+                  variant="outline"
+                  className="border-white/25 bg-black/24 text-white"
+                  title={t("world.languageLabel", {
+                    language: languageName,
+                    defaultValue: "World language: {{language}}",
+                  })}
+                >
+                  {languageBadge}
                 </Badge>
-              ))}
+              )}
+              {onEdit && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-10 border-white/25 bg-black/24 text-white hover:bg-white/12 hover:text-white"
+                  onClick={onEdit}
+                >
+                  {t("common.edit")}
+                </Button>
+              )}
+              {onDelete && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-10"
+                  onClick={onDelete}
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  {t("world.delete", "Delete world")}
+                </Button>
+              )}
             </div>
-          )}
-        </div>
+            <div className="max-w-3xl space-y-4">
+              <h1 className="ui-title text-3xl leading-none text-white sm:text-5xl">
+                {text(world.name)}
+              </h1>
+              {world.tags && world.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {world.tags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="secondary"
+                      className="border-white/15 bg-white/12 text-xs text-white"
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
 
         {/* Description */}
         {world.description && (
-          <p className="text-sm text-muted-foreground wrap-break-word">
+          <p className="max-w-3xl text-base leading-relaxed text-muted-foreground wrap-break-word">
             {text(world.description)}
           </p>
         )}

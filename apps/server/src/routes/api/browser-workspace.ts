@@ -1,10 +1,12 @@
 import { Hono } from "hono";
+import { canonicalizeLocale } from "@covel/shared";
 import {
   BrowserSyncValidationError,
   RevisionConflictError,
   exportSessionCheckpoint,
   replaceSessionFromCheckpoint,
   validateBrowserCheckpoint,
+  type BrowserCheckpoint,
   type DataStore,
   type SessionCommit,
 } from "@covel/store";
@@ -24,6 +26,32 @@ interface WorkspaceHead {
   revision: number;
   actionId: string;
   readonly commits: Map<string, SessionCommit>;
+}
+
+function canonicalizeCheckpointLocales(
+  checkpoint: BrowserCheckpoint,
+): BrowserCheckpoint | undefined {
+  const sessionLocale = canonicalizeLocale(checkpoint.session.locale);
+  if (!sessionLocale) return undefined;
+
+  const snapshots: BrowserCheckpoint["snapshots"][number][] = [];
+  for (const snapshot of checkpoint.snapshots) {
+    const locale = canonicalizeLocale(snapshot.payload.session.locale);
+    if (!locale) return undefined;
+    snapshots.push({
+      ...snapshot,
+      payload: {
+        ...snapshot.payload,
+        session: { ...snapshot.payload.session, locale },
+      },
+    });
+  }
+
+  return {
+    ...checkpoint,
+    session: { ...checkpoint.session, locale: sessionLocale },
+    snapshots,
+  };
 }
 
 const MAX_CACHED_ACTIONS = 16;
@@ -72,7 +100,13 @@ export function createBrowserWorkspaceRoutes(): Hono<Env> {
 
     let checkpoint;
     try {
-      checkpoint = validateBrowserCheckpoint(parsed.body.checkpoint);
+      const validated = validateBrowserCheckpoint(parsed.body.checkpoint);
+      checkpoint = canonicalizeCheckpointLocales(validated);
+      if (!checkpoint) {
+        throw new BrowserSyncValidationError(
+          "checkpoint session locale must be a valid BCP 47 locale",
+        );
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Invalid browser checkpoint";

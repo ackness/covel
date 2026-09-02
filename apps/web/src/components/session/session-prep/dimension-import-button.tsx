@@ -68,7 +68,7 @@ export function DimensionImportButton({ worldId }: DimensionImportButtonProps) {
       </Button>
       {message && (
         <span
-          className={`text-[10px] ${status === "error" ? "text-destructive" : "text-muted-foreground"}`}
+          className={`text-xs ${status === "error" ? "text-destructive" : "text-muted-foreground"}`}
         >
           {message}
         </span>

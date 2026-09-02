@@ -62,21 +62,21 @@ html[data-theme="aurora"] {
   --color-secondary: oklch(24% 0.045 270);
   --color-secondary-foreground: oklch(90% 0.015 250);
   --color-muted: oklch(24% 0.04 268);
-  --color-muted-foreground: oklch(66% 0.03 255);
+  --color-muted-foreground: oklch(72% 0.03 255);
   --color-accent: oklch(72% 0.16 305);
   --color-accent-foreground: oklch(15% 0.03 265);
-  --color-destructive: oklch(64% 0.2 25);
-  --color-destructive-foreground: oklch(97% 0.01 250);
-  --color-border: oklch(34% 0.05 268);
-  --color-input: oklch(34% 0.05 268);
+  --color-destructive: oklch(70% 0.2 25);
+  --color-destructive-foreground: oklch(15% 0.03 265);
+  --color-border: oklch(40% 0.05 268);
+  --color-input: oklch(40% 0.05 268);
   --color-ring: oklch(80% 0.14 185 / 0.55);
 
   /* Translucent surfaces — required for backdrop-filter to read as glass. */
   --surface-page: oklch(12% 0.028 265);
-  --surface-rail: color-mix(in oklab, oklch(22% 0.045 268) 55%, transparent);
-  --surface-inset: color-mix(in oklab, oklch(18% 0.04 265) 70%, transparent);
-  --surface-elevated: color-mix(in oklab, oklch(25% 0.05 270) 55%, transparent);
-  --surface-dialog: color-mix(in oklab, oklch(20% 0.045 268) 82%, transparent);
+  --surface-rail: color-mix(in oklab, oklch(22% 0.045 268) 72%, transparent);
+  --surface-inset: color-mix(in oklab, oklch(18% 0.04 265) 82%, transparent);
+  --surface-elevated: color-mix(in oklab, oklch(25% 0.05 270) 72%, transparent);
+  --surface-dialog: color-mix(in oklab, oklch(20% 0.045 268) 90%, transparent);
   --surface-player: color-mix(in oklab, oklch(80% 0.14 185) 12%, transparent);
 
   --surface-app: var(--surface-page);
@@ -85,7 +85,7 @@ html[data-theme="aurora"] {
   --surface-empty: color-mix(in oklab, oklch(22% 0.04 268) 45%, transparent);
   --border-subtle: color-mix(in oklab, var(--color-border) 55%, transparent);
 
-  --rule-color: color-mix(in oklab, oklch(70% 0.08 250) 22%, transparent);
+  --rule-color: color-mix(in oklab, oklch(70% 0.08 250) 30%, transparent);
   --rule-strong-color: oklch(70% 0.1 250);
   --rule-style: solid;
   --rule-thickness: 1px;
@@ -163,101 +163,103 @@ html[data-theme="aurora"] body::after {
 }
 
 /* ── Glass surfaces ──────────────────────────────────────────────── */
-html[data-theme="aurora"] .ui-rail,
-html[data-theme="aurora"] .ui-panel-header,
-html[data-theme="aurora"] .ui-card-surface,
-html[data-theme="aurora"] .ui-dialog-shell {
-  backdrop-filter: blur(22px) saturate(1.5);
-  -webkit-backdrop-filter: blur(22px) saturate(1.5);
-}
+@layer components {
+  html[data-theme="aurora"] .ui-rail,
+  html[data-theme="aurora"] .ui-panel-header,
+  html[data-theme="aurora"] .ui-card-surface,
+  html[data-theme="aurora"] .ui-dialog-shell {
+    backdrop-filter: blur(22px) saturate(1.5);
+    -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  }
 
-html[data-theme="aurora"] .ui-card-surface {
-  border: 1px solid var(--rule-color);
-  transition:
-    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 220ms ease,
-    border-color 220ms ease;
-}
+  html[data-theme="aurora"] .ui-card-surface {
+    border: 1px solid var(--rule-color);
+    transition:
+      transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 220ms ease,
+      border-color 220ms ease;
+  }
 
-html[data-theme="aurora"] .ui-card-surface:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in oklab, var(--accent-primary) 45%, transparent);
-  box-shadow:
-    var(--shadow-card),
-    0 0 24px -6px color-mix(in oklab, var(--accent-primary) 40%, transparent);
-}
+  html[data-theme="aurora"] .ui-card-surface:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in oklab, var(--accent-primary) 45%, transparent);
+    box-shadow:
+      var(--shadow-card),
+      0 0 24px -6px color-mix(in oklab, var(--accent-primary) 40%, transparent);
+  }
 
-/* ── Messages rise in as they arrive ─────────────────────────────── */
-html[data-theme="aurora"] .ui-message-row {
-  animation: aurora-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
+  /* ── Messages rise in as they arrive ─────────────────────────────── */
+  html[data-theme="aurora"] .ui-message-row {
+    animation: aurora-rise 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
 
-html[data-theme="aurora"] .ui-message-player {
-  border-left-width: 2px;
-  border-radius: 0 var(--radius-control) var(--radius-control) 0;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
+  html[data-theme="aurora"] .ui-message-player {
+    border-left-width: 2px;
+    border-radius: 0 var(--radius-control) var(--radius-control) 0;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
 
-/* ── Composer ────────────────────────────────────────────────────── */
-html[data-theme="aurora"] .ui-composer-input {
-  backdrop-filter: blur(18px) saturate(1.3);
-  -webkit-backdrop-filter: blur(18px) saturate(1.3);
-  transition:
-    border-color 200ms ease,
-    box-shadow 200ms ease;
-}
+  /* ── Composer ────────────────────────────────────────────────────── */
+  html[data-theme="aurora"] .ui-composer-input {
+    backdrop-filter: blur(18px) saturate(1.3);
+    -webkit-backdrop-filter: blur(18px) saturate(1.3);
+    transition:
+      border-color 200ms ease,
+      box-shadow 200ms ease;
+  }
 
-html[data-theme="aurora"] .ui-composer-input:focus-within {
-  border-color: color-mix(in oklab, var(--accent-primary) 60%, transparent);
-  box-shadow: 0 0 0 3px var(--color-ring);
-}
+  html[data-theme="aurora"] .ui-composer-input:focus-within {
+    border-color: color-mix(in oklab, var(--accent-primary) 60%, transparent);
+    box-shadow: 0 0 0 3px var(--color-ring);
+  }
 
-/* ── Turn-state driven effects ───────────────────────────────────────
+  /* ── Turn-state driven effects ───────────────────────────────────────
    `data-turn` is published on <html> by the framework (idle / executing /
    waiting / error), which is what lets pure CSS react to the game. */
-html[data-theme="aurora"][data-turn="executing"] body::after {
-  opacity: 0.85;
-  animation-duration: 14s;
-}
-
-html[data-theme="aurora"][data-turn="executing"] .ui-composer-input {
-  border-color: color-mix(in oklab, var(--accent-secondary) 55%, transparent);
-  animation: aurora-breathe 2.4s ease-in-out infinite;
-}
-
-html[data-theme="aurora"][data-turn="waiting"] .ui-composer-input {
-  border-color: color-mix(in oklab, var(--accent-warning) 65%, transparent);
-  box-shadow: 0 0 22px -8px
-    color-mix(in oklab, var(--accent-warning) 70%, transparent);
-}
-
-html[data-theme="aurora"][data-turn="error"] .ui-composer-input {
-  border-color: var(--accent-danger);
-  animation: aurora-alarm 1.6s ease-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html[data-theme="aurora"][data-turn="executing"] .ui-composer-input,
-  html[data-theme="aurora"][data-turn="error"] .ui-composer-input {
-    animation: none;
+  html[data-theme="aurora"][data-turn="executing"] body::after {
+    opacity: 0.85;
+    animation-duration: 14s;
   }
-}
 
-/* ── Details ─────────────────────────────────────────────────────── */
-html[data-theme="aurora"] .ui-chip {
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
+  html[data-theme="aurora"][data-turn="executing"] .ui-composer-input {
+    border-color: color-mix(in oklab, var(--accent-secondary) 55%, transparent);
+    animation: aurora-breathe 2.4s ease-in-out infinite;
+  }
 
-html[data-theme="aurora"] .ui-title {
-  background: linear-gradient(
-    100deg,
-    var(--color-foreground) 20%,
-    var(--accent-primary) 55%,
-    var(--accent-secondary) 85%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  html[data-theme="aurora"][data-turn="waiting"] .ui-composer-input {
+    border-color: color-mix(in oklab, var(--accent-warning) 65%, transparent);
+    box-shadow: 0 0 22px -8px
+      color-mix(in oklab, var(--accent-warning) 70%, transparent);
+  }
+
+  html[data-theme="aurora"][data-turn="error"] .ui-composer-input {
+    border-color: var(--accent-danger);
+    animation: aurora-alarm 1.6s ease-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html[data-theme="aurora"][data-turn="executing"] .ui-composer-input,
+    html[data-theme="aurora"][data-turn="error"] .ui-composer-input {
+      animation: none;
+    }
+  }
+
+  /* ── Details ─────────────────────────────────────────────────────── */
+  html[data-theme="aurora"] .ui-chip {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  html[data-theme="aurora"] .ui-brand-title {
+    background: linear-gradient(
+      100deg,
+      var(--color-foreground) 20%,
+      var(--accent-primary) 55%,
+      var(--accent-secondary) 85%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
 }

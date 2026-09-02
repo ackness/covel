@@ -61,7 +61,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
       >
         <div className="flex items-center gap-3">
           <h1 className="flex items-baseline gap-3">
-            <span className="ui-meta text-[10px] text-muted-foreground">
+            <span className="ui-meta text-xs text-muted-foreground">
               § TRACE
             </span>
             <span className="ui-title text-sm font-semibold tracking-tight">
@@ -72,7 +72,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
           {selectedSessionId && (
             <Badge
               variant="outline"
-              className="font-mono text-[10px]"
+              className="font-mono text-xs"
               title={
                 isPartial
                   ? t(
@@ -93,10 +93,10 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
           )}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="hidden md:flex items-center gap-1.5 border-r border-(--rule-color) pr-3 text-[10px] text-muted-foreground">
-            <span className="ui-meta text-[9px]">{t("debugger.sessions")}</span>
+          <div className="hidden md:flex items-center gap-1.5 border-r border-(--rule-color) pr-3 text-xs text-muted-foreground">
+            <span className="ui-meta text-xs">{t("debugger.sessions")}</span>
             <span className="font-mono text-foreground">{sessions.length}</span>
-            <span className="ui-meta text-[9px]">
+            <span className="ui-meta text-xs">
               {t("debugger.view", "View")}
             </span>
             <span className="font-mono text-foreground uppercase">
@@ -107,7 +107,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-[11px] text-muted-foreground gap-1"
+              className="h-8 gap-1 px-2.5 text-xs text-muted-foreground"
               onClick={openSelectedSession}
             >
               <Gamepad2 className="w-3 h-3" />
@@ -119,7 +119,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-[11px] text-muted-foreground gap-1"
+                className="h-8 gap-1 px-2.5 text-xs text-muted-foreground"
                 onClick={loadOlder}
                 disabled={loadingOlder}
               >
@@ -131,7 +131,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 px-2 text-[11px] text-muted-foreground gap-1"
+                className="h-8 gap-1 px-2.5 text-xs text-muted-foreground"
                 onClick={loadAll}
                 disabled={loading}
               >
@@ -143,8 +143,9 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
           <Button
             variant="ghost"
             size="sm"
-            className={`h-7 px-2 text-[11px] gap-1 ${autoRefresh ? "text-emerald-500" : "text-muted-foreground"}`}
+            className={`h-8 gap-1 px-2.5 text-xs ${autoRefresh ? "text-(--accent-success)" : "text-muted-foreground"}`}
             onClick={() => setAutoRefresh((value) => !value)}
+            aria-pressed={autoRefresh}
           >
             <Radio
               className={`w-3 h-3 ${autoRefresh ? "animate-pulse" : ""}`}
@@ -154,9 +155,11 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 px-2 text-[11px] text-muted-foreground"
+            className="h-8 px-2.5 text-xs text-muted-foreground"
             onClick={loadTraces}
             disabled={loading}
+            aria-label={t("debugger.refresh")}
+            title={t("debugger.refresh")}
           >
             <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
           </Button>
@@ -165,9 +168,9 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
 
       {selectedSessionId && (
         <div className="shrink-0 border-b border-(--rule-color) bg-[color-mix(in_oklab,var(--surface-page)_82%,var(--surface-inset))] px-4 py-2">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[10px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-muted-foreground">
             <span className="inline-flex min-w-0 items-center gap-1.5">
-              <span className="ui-meta text-[9px]">
+              <span className="ui-meta text-xs">
                 {t("debugger.session", "Session")}
               </span>
               <span className="truncate font-mono text-foreground">
@@ -196,7 +199,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
                 <span>{t("debugger.windowedBadge", "Partial window")}</span>
               </span>
             )}
-            {filterCategory && (
+            {debugView === "traces" && filterCategory && (
               <span className="inline-flex items-center gap-1.5">
                 <Filter className="h-3 w-3 text-muted-foreground" />
                 <span>{t(`debugger.category.${filterCategory}`)}</span>
@@ -206,7 +209,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
         </div>
       )}
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden sm:flex-row">
         <SessionSidebar
           sessions={sessions}
           selectedSessionId={selectedSessionId}
@@ -221,7 +224,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
             onFilterCategoryChange={setFilterCategory}
           />
 
-          <div className="flex flex-1 min-h-0 overflow-hidden">
+          <div className="relative flex flex-1 min-h-0 overflow-hidden">
             {debugView === "data" ? (
               <SessionDataView
                 selectedSessionId={selectedSessionId}

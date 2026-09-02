@@ -23,6 +23,7 @@ import {
   primaryKey,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { DEFAULT_LOCALE } from "@covel/shared";
 
 // ── Worlds (not session-scoped) ─────────────────────────────────
 
@@ -44,7 +45,7 @@ export const sessions = sqliteTable("sessions", {
   id: text("id").primaryKey(),
   worldId: text("world_id"),
   status: text("status").notNull().default("active"),
-  locale: text("locale").notNull().default("zh-CN"),
+  locale: text("locale").notNull().default(DEFAULT_LOCALE),
   activePlugins: text("active_plugins").notNull().default("[]"),
   metadata: text("metadata"), // JSON
   createdAt: text("created_at").notNull(),

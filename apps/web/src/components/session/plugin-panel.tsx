@@ -60,32 +60,8 @@ export interface PluginPanelProps {
   enableDevtools?: boolean;
 }
 
-function resolveEmptyMessage(value: unknown): string {
-  if (!value) return "";
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed !== "" ? trimmed : "";
-  }
-  if (typeof value === "object") {
-    const obj = value as Record<string, string>;
-    const candidates = [
-      obj["zh"],
-      obj["zh-CN"],
-      obj["en"],
-      ...Object.values(obj),
-    ];
-    for (const candidate of candidates) {
-      if (
-        candidate &&
-        typeof candidate === "string" &&
-        candidate.trim() !== ""
-      ) {
-        return candidate;
-      }
-    }
-    return "";
-  }
-  return String(value);
+function resolveEmptyMessage(value: unknown, locale: string): string {
+  return resolveDisplayText(value, locale).trim();
 }
 
 export function PluginPanel({
@@ -99,6 +75,7 @@ export function PluginPanel({
   enableDevtools = false,
 }: PluginPanelProps) {
   const { t, i18n } = useTranslation();
+  const activeLocale = i18n.resolvedLanguage ?? i18n.language;
   const dataSource = spec.dataSource as Record<string, string> | undefined;
   const namespace = dataSource?.namespace ?? "default";
   const sourceKind = dataSource?.source;
@@ -388,7 +365,7 @@ export function PluginPanel({
     // only fires for specs that passed the envelope check but whose `view`
     // still cannot be converted to a json-render tree.
     const specLabel =
-      resolveEmptyMessage(spec.label) ||
+      resolveEmptyMessage(spec.label, activeLocale) ||
       (typeof spec.id === "string" ? spec.id : pluginId);
     const view = spec.view;
     // Sibling namespace, not `plugin.invalidPanelSpec.*`: that key is already a
@@ -429,8 +406,8 @@ export function PluginPanel({
   const isEmpty = !alwaysRender && Object.keys(data).length === 0;
   if (isEmpty) {
     const emptySpec = spec.emptyState as Record<string, unknown> | undefined;
-    const customMsg = resolveEmptyMessage(emptySpec?.message);
-    const label = resolveEmptyMessage(spec.label) || pluginId;
+    const customMsg = resolveEmptyMessage(emptySpec?.message, activeLocale);
+    const label = resolveEmptyMessage(spec.label, activeLocale) || pluginId;
     const emptyMsg = customMsg || t("plugin.emptyPlaceholder", { label });
     return (
       <div className="px-4 pt-6">
@@ -497,7 +474,7 @@ export function PluginPanel({
         </div>
       )}
       <PluginSurfaceBoundary
-        surfaceLabel={resolveEmptyMessage(spec.label) || pluginId}
+        surfaceLabel={resolveEmptyMessage(spec.label, activeLocale) || pluginId}
       >
         <JSONUIProvider
           registry={covelRegistry}

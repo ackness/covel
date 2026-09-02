@@ -7,9 +7,14 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import matter from "gray-matter";
 import {
+  DEFAULT_FALLBACK_LOCALE,
+  DEFAULT_LOCALE,
+  canonicalizeLocale,
+  localeLookupCandidates,
+  localeRegistry,
   pluginRelationsSchema,
   hasIllegalDetachedContract,
-  localeLanguage,
+  normalizeLocale,
   WORLD_IR_V1_JSON_SCHEMA,
   WORLD_IR_V1_SCHEMA_URI,
 } from "@covel/shared";
@@ -33,32 +38,54 @@ import { reconcileLocalizedManifest } from "./localized-manifest.js";
 /**
  * Resolve a locale-aware PLUGIN.md path.
  *
- * Resolution order (e.g., locale = "en-US"):
- *   1. PLUGIN.en-US.md  (exact locale)
- *   2. PLUGIN.en.md     (language only)
- *   3. PLUGIN.md         (default fallback)
+ * Resolution order (e.g., locale = "ru-RU"):
+ *   1. PLUGIN.ru-RU.md  (exact locale)
+ *   2. PLUGIN.ru.md     (language only)
+ *   3. PLUGIN.en-US.md / PLUGIN.en.md (English fallback)
+ *   4. PLUGIN.md        (canonical fallback)
  *
- * Returns the path of the first existing file, or the default PLUGIN.md.
+ * The registered default locale and its explicit aliases use PLUGIN.md before
+ * English so the historical canonical prompt remains unchanged for zh-CN.
  */
-/** Only allow safe BCP-47-like locale tags in filesystem paths. */
-const SAFE_LOCALE_RE = /^[a-zA-Z]{2,8}(-[a-zA-Z0-9]{2,8})*$/;
+function localeVariantNames(locale: string): string[] {
+  return localeLookupCandidates(locale).map(
+    (candidate) => `PLUGIN.${candidate}.md`,
+  );
+}
+
+function isDefaultLocaleOrAlias(locale: string): boolean {
+  const defaultDefinition = localeRegistry.get(DEFAULT_LOCALE);
+  if (normalizeLocale(locale) === normalizeLocale(DEFAULT_LOCALE)) return true;
+  return (
+    defaultDefinition?.aliases?.some(
+      (alias) =>
+        canonicalizeLocale(alias) !== undefined &&
+        normalizeLocale(canonicalizeLocale(alias)!) === normalizeLocale(locale),
+    ) ?? false
+  );
+}
 
 async function resolveLocalizedPluginMd(
   dir: string,
   locale?: string,
 ): Promise<string> {
   const base = path.join(dir, "PLUGIN.md");
-  if (!locale || !SAFE_LOCALE_RE.test(locale)) return base;
+  const canonicalLocale = canonicalizeLocale(locale);
+  if (!canonicalLocale) return base;
 
-  // Try exact locale: PLUGIN.en-US.md
-  const exact = path.join(dir, `PLUGIN.${locale}.md`);
-  if (await fileExists(exact)) return exact;
+  const requestedNames = localeVariantNames(canonicalLocale);
+  for (const name of requestedNames) {
+    const candidate = path.join(dir, name);
+    if (await fileExists(candidate)) return candidate;
+  }
 
-  // Try language prefix: PLUGIN.en.md
-  const lang = localeLanguage(locale);
-  if (lang !== locale) {
-    const langPath = path.join(dir, `PLUGIN.${lang}.md`);
-    if (await fileExists(langPath)) return langPath;
+  if (isDefaultLocaleOrAlias(canonicalLocale)) return base;
+
+  const fallbackLocale = canonicalizeLocale(DEFAULT_FALLBACK_LOCALE)!;
+  for (const name of localeVariantNames(fallbackLocale)) {
+    if (requestedNames.includes(name)) continue;
+    const candidate = path.join(dir, name);
+    if (await fileExists(candidate)) return candidate;
   }
 
   return base;

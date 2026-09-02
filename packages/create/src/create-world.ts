@@ -11,19 +11,25 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
+  canonicalizeLocale,
+  DEFAULT_LOCALE,
   validateWorldManifest,
   formatValidationErrors,
-  localeLanguage,
 } from "@covel/shared";
+import type { LLMResponse } from "@covel/shared";
 import type { CreateWorldOptions, CreateResult } from "./types.js";
 import { buildWorldPrompt } from "./prompts.js";
 import { parseWorldOutput } from "./lore-processor.js";
 import {
+  findLoreMetaErrors,
   findLoreQualityErrors,
+  findLoreStructureErrors,
   isRecord,
   normalizeGeneratedManifest,
   normalizeLoreDocument,
 } from "./validation-helpers.js";
+import { requestLlmResponse } from "./llm-request.js";
+import { repairWorldLore } from "./lore-repair.js";
 import { writeWorldDataFiles } from "./world-writer.js";
 import {
   applyCreationBriefToManifest,
@@ -44,7 +50,7 @@ function log(
 export async function createWorld(
   options: CreateWorldOptions,
 ): Promise<CreateResult> {
-  const locale = options.locale ?? "zh-CN";
+  const locale = canonicalizeLocale(options.locale) ?? DEFAULT_LOCALE;
   const prompt = await buildWorldPrompt(options.concept, locale, options.brief);
   log(
     options,
@@ -83,49 +89,21 @@ export async function createWorld(
         : [{ role: "user" as const, content: options.concept }]),
     ];
 
-    let response;
+    let response: LLMResponse;
+    let attemptSignal: AbortSignal;
     try {
       const timeout = AbortSignal.timeout(
         options.attemptTimeoutMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS,
       );
-      const signal = options.signal
+      attemptSignal = options.signal
         ? AbortSignal.any([options.signal, timeout])
         : timeout;
-      if (options.llm.stream) {
-        let content = "";
-        let finishReason: "stop" | "tool_calls" | "length" | "error" = "stop";
-        let reasoningContent = "";
-        for await (const event of options.llm.stream({
-          model: options.model,
-          messages,
-          signal,
-        })) {
-          if (event.type === "text-delta") {
-            content += event.textDelta;
-          } else if (event.type === "done") {
-            finishReason =
-              event.finishReason === "tool_calls" ||
-              event.finishReason === "length" ||
-              event.finishReason === "error"
-                ? event.finishReason
-                : "stop";
-            reasoningContent = event.reasoningContent ?? "";
-          }
-        }
-        response = {
-          content: content || null,
-          toolCalls: [],
-          finishReason,
-          usage: { inputTokens: 0, outputTokens: 0 },
-          ...(reasoningContent ? { reasoningContent } : {}),
-        };
-      } else {
-        response = await options.llm.generate({
-          model: options.model,
-          messages,
-          signal,
-        });
-      }
+      response = await requestLlmResponse({
+        llm: options.llm,
+        model: options.model,
+        messages,
+        signal: attemptSignal,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       log(options, "error", `LLM generate() threw: ${msg}`);
@@ -266,25 +244,82 @@ export async function createWorld(
       continue;
     }
 
-    const normalizedLore = normalizeLoreDocument(parsed.lore, yamlData, locale);
-    const loreQualityErrors = findLoreQualityErrors(normalizedLore);
-    if (loreQualityErrors.length > 0) {
-      lastErrors = loreQualityErrors;
+    let normalizedLore = normalizeLoreDocument(parsed.lore, yamlData, locale);
+    const loreStructureErrors = findLoreStructureErrors(normalizedLore);
+    if (loreStructureErrors.length > 0) {
+      lastErrors = loreStructureErrors;
       log(
         options,
         "warn",
         "attempt",
         attempt + 1,
-        "lore quality failed with",
-        loreQualityErrors.length,
+        "lore structure failed with",
+        loreStructureErrors.length,
         "errors",
       );
       continue;
     }
 
+    const loreMetaErrors = findLoreMetaErrors(normalizedLore);
+    if (loreMetaErrors.length > 0) {
+      log(
+        options,
+        "warn",
+        "attempt",
+        attempt + 1,
+        "explicit lore meta wording detected; requesting targeted repair",
+      );
+      const repairStart = Date.now();
+      try {
+        const repair = await repairWorldLore({
+          llm: options.llm,
+          model: options.model,
+          locale,
+          lore: normalizedLore,
+          errors: loreMetaErrors,
+          signal: attemptSignal,
+        });
+        if (!repair.success) {
+          const repairError = `WORLD.md targeted repair failed: ${repair.error}`;
+          lastErrors = [...loreMetaErrors, repairError];
+          log(options, "warn", repairError);
+          continue;
+        }
+
+        const repairedLore = normalizeLoreDocument(
+          repair.lore,
+          yamlData,
+          locale,
+        );
+        const repairedErrors = findLoreQualityErrors(repairedLore);
+        if (repairedErrors.length > 0) {
+          lastErrors = repairedErrors;
+          log(
+            options,
+            "warn",
+            "targeted WORLD.md repair remained invalid with",
+            repairedErrors.length,
+            "errors",
+          );
+          continue;
+        }
+        normalizedLore = repairedLore;
+        log(
+          options,
+          "info",
+          `targeted WORLD.md repair succeeded in ${Date.now() - repairStart}ms`,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const repairError = `WORLD.md targeted repair LLM error: ${msg}`;
+        lastErrors = [...loreMetaErrors, repairError];
+        log(options, "error", repairError);
+        continue;
+      }
+    }
+
     // Extract id from validated data
     const id = yamlData.id as string;
-    const lang = localeLanguage(locale) ?? "zh";
     log(options, "info", `validation passed id=${id}`);
 
     // Write files
@@ -311,11 +346,11 @@ export async function createWorld(
     writtenFiles.push(`${id}/world.yaml`);
 
     await writeFile(
-      path.join(worldDir, `WORLD.${lang}.md`),
+      path.join(worldDir, `WORLD.${locale}.md`),
       normalizedLore,
       "utf-8",
     );
-    writtenFiles.push(`${id}/WORLD.${lang}.md`);
+    writtenFiles.push(`${id}/WORLD.${locale}.md`);
     await writeFile(path.join(worldDir, "WORLD.md"), normalizedLore, "utf-8");
     writtenFiles.push(`${id}/WORLD.md`);
 

@@ -16,7 +16,7 @@ import {
 } from "vitest";
 import { maybeCompact } from "../src/compactor.js";
 import type { CompactorDeps, CompactorLLMAdapter } from "../src/compactor.js";
-import { setPromptsRoot } from "../src/prompts-loader.js";
+import { loadPrompt, setPromptsRoot } from "../src/prompts-loader.js";
 import type {
   DataStore,
   StoreTransaction,
@@ -602,6 +602,26 @@ describe("maybeCompact", () => {
       };
       expect(callArgs.systemPrompt).toMatch(/summarizer/i);
     });
+
+    it("uses ru-RU prompts and localized default focus sections", async () => {
+      const messages = makeSimpleHistory(20);
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm,
+        contextWindow: 1_000,
+      };
+
+      await maybeCompact("sess-ru", "", messages, deps, { locale: "ru-RU" });
+
+      const callArgs = (fastSlotLlm.complete as ReturnType<typeof vi.fn>).mock
+        .calls[0]![0] as {
+        systemPrompt: string;
+        messages: Array<{ role: string; content: string }>;
+      };
+      expect(callArgs.systemPrompt).toContain("Ключевые события");
+      expect(callArgs.messages[0]!.content).toContain("Кратко изложи");
+    });
   });
 
   describe("prompt externalization (loadPrompt)", () => {
@@ -661,6 +681,52 @@ describe("maybeCompact", () => {
         systemPrompt: string;
       };
       expect(callArgs.systemPrompt).toContain("<<EN-FIXTURE>>");
+    });
+
+    it("uses the registry English fallback for an unregistered locale", async () => {
+      const messages = makeSimpleHistory(20);
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm,
+        contextWindow: 1_000,
+      };
+
+      await maybeCompact("sess-1", "", messages, deps, { locale: "ja-JP" });
+
+      const callArgs = (fastSlotLlm.complete as ReturnType<typeof vi.fn>).mock
+        .calls[0]![0] as {
+        systemPrompt: string;
+      };
+      expect(callArgs.systemPrompt).toContain("<<EN-FIXTURE>>");
+      expect(callArgs.systemPrompt).toContain("日本語");
+      expect(callArgs.systemPrompt).toContain("ja-JP");
+    });
+
+    it("does not use a Simplified Chinese short-key prompt for zh-Hant", async () => {
+      const messages = makeSimpleHistory(20);
+      const deps: CompactorDeps = {
+        store,
+        estimator,
+        fastSlotLlm,
+        contextWindow: 1_000,
+      };
+
+      await maybeCompact("sess-1", "", messages, deps, {
+        locale: "zh-Hant-TW",
+      });
+
+      const callArgs = (fastSlotLlm.complete as ReturnType<typeof vi.fn>).mock
+        .calls[0]![0] as { systemPrompt: string };
+      expect(callArgs.systemPrompt).toContain("<<EN-FIXTURE>>");
+      expect(callArgs.systemPrompt).not.toContain("【ZH-FIXTURE】");
+      expect(callArgs.systemPrompt).toContain("zh-Hant-TW");
+    });
+
+    it("rejects a path-like locale before constructing prompt paths", async () => {
+      await expect(
+        loadPrompt("server", "compactor", "x/../../../README"),
+      ).rejects.toThrow("Invalid locale");
     });
 
     it("interpolates focusSections into the {{ sections }} template variable", async () => {

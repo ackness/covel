@@ -80,8 +80,11 @@ export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
     <div className="space-y-6">
       {/* Opening Scenario */}
       <div className="space-y-1">
-        <Label>{t("world.openingScenario")}</Label>
+        <Label htmlFor="world-starting-opening-scenario">
+          {t("world.openingScenario")}
+        </Label>
         <textarea
+          id="world-starting-opening-scenario"
           className={textareaCls}
           value={text(sc.openingScenario)}
           onChange={(e) => setSc({ ...sc, openingScenario: e.target.value })}
@@ -90,8 +93,11 @@ export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
 
       {/* Starting Location */}
       <div className="space-y-1">
-        <Label>{t("world.startingLocation")}</Label>
+        <Label htmlFor="world-starting-location">
+          {t("world.startingLocation")}
+        </Label>
         <input
+          id="world-starting-location"
           className={inputCls}
           value={text(sc.startingLocation)}
           onChange={(e) => setSc({ ...sc, startingLocation: e.target.value })}
@@ -110,6 +116,7 @@ export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
         {(sc.playerConstraints ?? []).map((c, ci) => (
           <div key={ci} className="flex items-center gap-2">
             <input
+              aria-label={`${t("world.playerConstraints")} ${ci + 1}`}
               className={inputCls}
               value={text(c)}
               onChange={(e) => updateConstraint(ci, e.target.value)}
@@ -117,6 +124,7 @@ export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
             <Button
               variant="ghost"
               size="icon"
+              aria-label={t("world.remove")}
               onClick={() => removeConstraint(ci)}
             >
               <Trash2 className="h-4 w-4" />
@@ -135,25 +143,30 @@ export function StartingConditionsTab({ dimensions, onChange, t }: TabProps) {
           </Button>
         </div>
         {resourceEntries.map(([key, value], ri) => (
-          <div key={ri} className="flex items-center gap-2">
-            <input
-              className={inputCls}
-              placeholder={t("world.key")}
-              value={key}
-              onChange={(e) => updateResourceKey(key, e.target.value)}
-            />
-            <input
-              className="w-32 border border-border bg-background px-3 py-2 text-sm"
-              type="number"
-              placeholder={t("world.value")}
-              value={value}
-              onChange={(e) =>
-                updateResourceValue(key, Number(e.target.value) || 0)
-              }
-            />
+          <div key={ri} className="flex items-start gap-2">
+            <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_8rem]">
+              <input
+                aria-label={`${t("world.key")} ${ri + 1}`}
+                className={inputCls}
+                placeholder={t("world.key")}
+                value={key}
+                onChange={(e) => updateResourceKey(key, e.target.value)}
+              />
+              <input
+                aria-label={`${t("world.value")} ${ri + 1}`}
+                className="w-full border border-border bg-background px-3 py-2 text-sm"
+                type="number"
+                placeholder={t("world.value")}
+                value={value}
+                onChange={(e) =>
+                  updateResourceValue(key, Number(e.target.value) || 0)
+                }
+              />
+            </div>
             <Button
               variant="ghost"
               size="icon"
+              aria-label={t("world.remove")}
               onClick={() => removeResourceEntry(key)}
             >
               <Trash2 className="h-4 w-4" />

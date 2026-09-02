@@ -4,7 +4,7 @@ import { Eye, Trash2, ArrowRight } from "lucide-react";
 import type { WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { worldVisual } from "@/lib/world-visuals.js";
-import { worldLanguage, worldLanguageBadge } from "@/lib/world-locale.js";
+import { worldLanguageBadge, worldLanguageName } from "@/lib/world-locale.js";
 import { isWorldDeletable } from "./world-deletion.js";
 
 export interface WorldCardProps {
@@ -17,6 +17,7 @@ export interface WorldCardProps {
   dimmed: boolean;
   /** Resolved storage label (e.g. "Built-in", "Server file"). */
   storageLabel: string;
+  interfaceLocale: string;
   t: TFunction;
   onEnter: (worldId: string) => void;
   onViewDetails: (e: React.MouseEvent, worldId: string) => void;
@@ -34,27 +35,19 @@ export function WorldCard({
   isEntering,
   dimmed,
   storageLabel,
+  interfaceLocale,
   t,
   onEnter,
   onViewDetails,
   onDelete,
 }: WorldCardProps) {
   const visual = worldVisual(world);
-  const language = worldLanguage(world.locale);
-  const languageCode = worldLanguageBadge(world.locale);
-  const languageBadge =
-    language === "zh" ? t("world.languageBadgeChinese", "ZH") : languageCode;
-  const languageName =
-    language === "en"
-      ? t("world.languageEnglish", "English")
-      : language === "zh"
-        ? t("world.languageChinese", "Chinese")
-        : null;
+  const languageBadge = worldLanguageBadge(world.locale);
+  const languageName = worldLanguageName(world.locale, interfaceLocale);
   return (
     <article
       aria-busy={isEntering}
-      onClick={() => onEnter(world.id)}
-      className={`group relative min-h-80 md:min-h-83 cursor-pointer overflow-hidden rounded-(--radius-card) border border-border bg-card transition-all hover:border-primary/40 ${
+      className={`group relative min-h-80 md:min-h-83 overflow-hidden rounded-(--radius-card) border border-border bg-card transition-all hover:border-primary/40 ${
         isEntering ? "opacity-100" : ""
       } ${dimmed ? "opacity-30 pointer-events-none" : ""}`}
       style={
@@ -101,7 +94,7 @@ export function WorldCard({
 
       <div className="relative z-10 flex min-h-80 md:min-h-83 flex-col justify-between p-5 md:p-6 text-white">
         <div className="flex items-start justify-between gap-4">
-          <span className="ui-meta text-[10px] text-white/62 tabular-nums">
+          <span className="ui-meta text-[11px] text-white/78 tabular-nums">
             № {String(index + 1).padStart(2, "0")} · {world.id}
           </span>
           <div className="flex items-center gap-1.5">
@@ -117,7 +110,7 @@ export function WorldCard({
               </span>
             )}
             <span
-              className="ui-tag border-white/18 bg-black/18 text-white/70 backdrop-blur-sm"
+              className="ui-tag border-white/22 bg-black/24 text-white/82 backdrop-blur-sm"
               title={t("session.worldStorage", "World storage")}
             >
               {storageLabel}
@@ -142,13 +135,13 @@ export function WorldCard({
             {(world.tags ?? []).slice(0, 5).map((tag) => (
               <span
                 key={tag}
-                className="ui-tag border-white/16 bg-black/20 text-white/62 backdrop-blur-sm"
+                className="ui-tag border-white/20 bg-black/24 text-white/80 backdrop-blur-sm"
               >
                 {tag}
               </span>
             ))}
             {(world.tags?.length ?? 0) > 5 && (
-              <span className="ui-meta text-[10px] text-white/54 self-center">
+              <span className="ui-meta text-[11px] text-white/76 self-center">
                 +{(world.tags?.length ?? 0) - 5}
               </span>
             )}
@@ -160,7 +153,7 @@ export function WorldCard({
                 type="button"
                 onClick={(e) => onViewDetails(e, world.id)}
                 aria-label={t("world.viewDetails", "View details")}
-                className="ui-btn ui-btn-quiet h-8 w-8 border-white/12 bg-black/12 p-0 text-white/72 hover:bg-white/10 hover:text-white"
+                className="ui-btn ui-btn-quiet h-10 w-10 border-white/16 bg-black/20 p-0 text-white/82 hover:bg-white/12 hover:text-white md:h-8 md:w-8"
               >
                 <Eye className="w-3.5 h-3.5" />
               </button>
@@ -169,7 +162,7 @@ export function WorldCard({
                   type="button"
                   onClick={(e) => onDelete(e, world.id)}
                   aria-label={t("world.delete", "Delete world")}
-                  className="ui-btn ui-btn-quiet h-8 gap-1.5 border-white/12 bg-black/12 px-2.5 text-white/72 hover:text-(--accent-danger)"
+                  className="ui-btn ui-btn-quiet h-10 gap-1.5 border-white/16 bg-black/20 px-3 text-white/82 hover:text-(--accent-danger) md:h-8 md:px-2.5"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span className="text-[11px]">
@@ -178,13 +171,16 @@ export function WorldCard({
                 </button>
               )}
             </div>
-            <span
-              className="ui-meta inline-flex items-center gap-1.5 transition-all group-hover:gap-2.5"
+            <button
+              type="button"
+              onClick={() => onEnter(world.id)}
+              disabled={dimmed}
+              className="ui-btn ui-btn-quiet h-10 border-white/16 bg-black/20 px-3.5 text-white transition-all hover:bg-white/12 md:h-8 md:px-2.5"
               style={{ color: "var(--world-accent)" }}
             >
               {t("session.enter", "Enter")}
               <ArrowRight className="w-3 h-3" />
-            </span>
+            </button>
           </div>
         </div>
       </div>

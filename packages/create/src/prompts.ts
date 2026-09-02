@@ -3,6 +3,13 @@ import type {
   WorldCreationBrief,
   WorldPackageContentKind,
 } from "@covel/shared";
+import {
+  canonicalizeLocale,
+  DEFAULT_LOCALE,
+  localeDisplayName,
+  localeRegistry,
+  resolveI18nText,
+} from "@covel/shared";
 
 /**
  * Load the externalized system prompt for LLM-driven world generation.
@@ -15,16 +22,43 @@ export async function buildWorldPrompt(
   locale: string,
   brief?: WorldCreationBrief,
 ): Promise<string> {
-  const lang =
-    locale === "zh-CN" ? "中文" : locale === "en-US" ? "English" : locale;
+  const promptLocale = resolvePromptLocale(locale);
 
-  const template = await loadPrompt("server", "generate-world");
+  const template = await loadPrompt(
+    "server",
+    "generate-world",
+    promptLocale.locale,
+  );
   return interpolate(template, {
     concept,
-    locale,
-    language: lang,
+    locale: promptLocale.locale,
+    language: promptLocale.language,
     creationBrief: formatCreationBrief(brief),
   });
+}
+
+export async function buildWorldLoreRepairPrompt(
+  locale: string,
+): Promise<string> {
+  const promptLocale = resolvePromptLocale(locale);
+  const template = await loadPrompt(
+    "server",
+    "repair-world-lore",
+    promptLocale.locale,
+  );
+  return interpolate(template, promptLocale);
+}
+
+function resolvePromptLocale(locale: string): {
+  locale: string;
+  language: string;
+} {
+  const canonicalLocale = canonicalizeLocale(locale) ?? DEFAULT_LOCALE;
+  const definition = localeRegistry.resolve(canonicalLocale);
+  const language = definition
+    ? (resolveI18nText(definition.label, canonicalLocale) ?? definition.code)
+    : localeDisplayName(canonicalLocale);
+  return { locale: canonicalLocale, language };
 }
 
 function requestedLine(

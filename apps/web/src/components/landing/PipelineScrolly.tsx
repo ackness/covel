@@ -126,7 +126,7 @@ export function PipelineScrolly({ scrollRoot }: Props) {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12">
           {/* Sticky panel — visualisation. */}
           <div className="md:col-span-6 md:order-2">
-            <div className="md:sticky md:top-24 md:h-[60vh] flex items-center justify-center">
+            <div className="md:sticky md:top-24 md:h-[55vh] flex items-center justify-center">
               <div
                 className="relative w-full aspect-square max-w-md rounded-(--radius-card) border border-border bg-card overflow-hidden"
                 style={{
@@ -154,7 +154,7 @@ export function PipelineScrolly({ scrollRoot }: Props) {
                             : isPast
                               ? "color-mix(in oklab, var(--color-primary) 4%, var(--surface-panel-strong))"
                               : "var(--surface-panel-strong)",
-                          opacity: isActive ? 1 : isPast ? 0.85 : 0.55,
+                          opacity: isActive ? 1 : isPast ? 0.9 : 0.72,
                         }}
                       >
                         <div className="flex items-center justify-between">
@@ -195,15 +195,16 @@ export function PipelineScrolly({ scrollRoot }: Props) {
           </div>
 
           {/* Scrolling text steps. */}
-          <ol className="md:col-span-6 md:order-1 space-y-[40vh] md:space-y-[55vh] py-[15vh]">
+          <ol className="space-y-12 py-4 md:col-span-6 md:order-1 md:space-y-[42vh] md:py-[12vh]">
             {STEPS.map((step, i) => {
               const isActive = i === active;
               return (
                 <li
                   key={step.key}
                   ref={setStepRef(i)}
-                  className="transition-opacity duration-300"
-                  style={{ opacity: isActive ? 1 : 0.45 }}
+                  className={`opacity-100 transition-opacity duration-300 ${
+                    isActive ? "md:opacity-100" : "md:opacity-65"
+                  }`}
                 >
                   <div className="flex items-baseline gap-4 mb-4">
                     <span className="ui-eyebrow text-primary">

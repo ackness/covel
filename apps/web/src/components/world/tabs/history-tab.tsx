@@ -50,40 +50,57 @@ export function HistoryTab({ dimensions, onChange, t }: TabProps) {
             <span className="text-sm font-medium">
               {text(ev.name) || `${t("world.history")} #${ei + 1}`}
             </span>
-            <Button variant="ghost" size="icon" onClick={() => removeEvent(ei)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("world.remove")}
+              onClick={() => removeEvent(ei)}
+            >
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
 
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <div className="space-y-1">
-              <Label>{t("world.era")}</Label>
+              <Label htmlFor={`world-history-${ei}-era`}>
+                {t("world.era")}
+              </Label>
               <input
+                id={`world-history-${ei}-era`}
                 className={inputCls}
                 value={text(ev.era)}
                 onChange={(e) => updateEvent(ei, { era: e.target.value })}
               />
             </div>
             <div className="space-y-1">
-              <Label>{t("world.year")}</Label>
+              <Label htmlFor={`world-history-${ei}-year`}>
+                {t("world.year")}
+              </Label>
               <input
+                id={`world-history-${ei}-year`}
                 className={inputCls}
                 value={text(ev.year)}
                 onChange={(e) => updateEvent(ei, { year: e.target.value })}
               />
             </div>
             <div className="space-y-1">
-              <Label>{t("world.name")}</Label>
+              <Label htmlFor={`world-history-${ei}-name`}>
+                {t("world.name")}
+              </Label>
               <input
+                id={`world-history-${ei}-name`}
                 className={inputCls}
                 value={text(ev.name)}
                 onChange={(e) => updateEvent(ei, { name: e.target.value })}
               />
             </div>
             <div className="space-y-1">
-              <Label>{t("world.significance")}</Label>
+              <Label htmlFor={`world-history-${ei}-significance`}>
+                {t("world.significance")}
+              </Label>
               <select
-                className={selectCls}
+                id={`world-history-${ei}-significance`}
+                className={`${selectCls} w-full`}
                 value={ev.significance}
                 onChange={(e) =>
                   updateEvent(ei, {
@@ -101,8 +118,11 @@ export function HistoryTab({ dimensions, onChange, t }: TabProps) {
           </div>
 
           <div className="space-y-1">
-            <Label>{t("world.description")}</Label>
+            <Label htmlFor={`world-history-${ei}-description`}>
+              {t("world.description")}
+            </Label>
             <textarea
+              id={`world-history-${ei}-description`}
               className={textareaCls}
               value={text(ev.description)}
               onChange={(e) => updateEvent(ei, { description: e.target.value })}

@@ -119,101 +119,114 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
   }
 
   return (
-    <Card className="flex flex-col h-full">
-      <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
-        <CardTitle>{t("world.dimensions")}</CardTitle>
-        <div className="flex items-center gap-2">
-          {error && <span className="text-sm text-destructive">{error}</span>}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onCancel}
-            disabled={saving}
-          >
-            <X className="mr-1 h-4 w-4" />
-            {t("common.cancel")}
-          </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving}>
-            <Save className="mr-1 h-4 w-4" />
-            {saving ? t("common.loading") : t("common.save")}
-          </Button>
-        </div>
-      </CardHeader>
-
-      <CardContent className="flex-1 overflow-hidden">
-        <Tabs defaultValue="geography" className="flex flex-col h-full">
-          <TabsList className="flex flex-wrap h-auto gap-1">
-            {TABS.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5">
-                {tab.icon}
-                <span className="hidden sm:inline">{t(tab.labelKey)}</span>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain">
-            <TabsContent value="geography">
-              <GeographyTab
-                dimensions={dimensions}
-                onChange={setDimensions}
-                t={t}
-              />
-            </TabsContent>
-            <TabsContent value="factions">
-              <FactionsTab
-                dimensions={dimensions}
-                onChange={setDimensions}
-                t={t}
-              />
-            </TabsContent>
-            <TabsContent value="powerSystem">
-              <PowerSystemTab
-                dimensions={dimensions}
-                onChange={setDimensions}
-                t={t}
-              />
-            </TabsContent>
-            <TabsContent value="history">
-              <HistoryTab
-                dimensions={dimensions}
-                onChange={setDimensions}
-                t={t}
-              />
-            </TabsContent>
-            <TabsContent value="economy">
-              <EconomyTab
-                dimensions={dimensions}
-                onChange={setDimensions}
-                t={t}
-              />
-            </TabsContent>
-            <TabsContent value="socialStructure">
-              <SocialStructureTab
-                dimensions={dimensions}
-                onChange={setDimensions}
-                t={t}
-              />
-            </TabsContent>
-            <TabsContent value="tone">
-              <ToneTab dimensions={dimensions} onChange={setDimensions} t={t} />
-            </TabsContent>
-            <TabsContent value="mechanics">
-              <MechanicsTab
-                dimensions={dimensions}
-                onChange={setDimensions}
-                t={t}
-              />
-            </TabsContent>
-            <TabsContent value="startingConditions">
-              <StartingConditionsTab
-                dimensions={dimensions}
-                onChange={setDimensions}
-                t={t}
-              />
-            </TabsContent>
+    <div className="h-full overflow-hidden bg-background p-3 sm:p-5 md:p-8">
+      <Card className="mx-auto flex h-full max-w-6xl flex-col overflow-hidden">
+        <CardHeader className="sticky top-0 z-10 flex-row flex-wrap items-center justify-between gap-3 space-y-0 border-b border-border bg-card pb-4">
+          <CardTitle>{t("world.dimensions")}</CardTitle>
+          <div className="flex items-center gap-2">
+            {error && <span className="text-sm text-destructive">{error}</span>}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCancel}
+              disabled={saving}
+            >
+              <X className="mr-1 h-4 w-4" />
+              {t("common.cancel")}
+            </Button>
+            <Button size="sm" onClick={handleSave} disabled={saving}>
+              <Save className="mr-1 h-4 w-4" />
+              {saving ? t("common.loading") : t("common.save")}
+            </Button>
           </div>
-        </Tabs>
-      </CardContent>
-    </Card>
+        </CardHeader>
+
+        <CardContent className="min-h-0 flex-1 overflow-hidden pt-4">
+          <Tabs defaultValue="geography" className="flex flex-col h-full">
+            <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto overscroll-x-contain">
+              {TABS.map((tab) => (
+                <TabsTrigger
+                  key={tab.id}
+                  value={tab.id}
+                  aria-label={t(tab.labelKey)}
+                  className="shrink-0 gap-1.5"
+                >
+                  {tab.icon}
+                  <span aria-hidden="true" className="hidden sm:inline">
+                    {t(tab.labelKey)}
+                  </span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            <div className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <TabsContent value="geography">
+                <GeographyTab
+                  dimensions={dimensions}
+                  onChange={setDimensions}
+                  t={t}
+                />
+              </TabsContent>
+              <TabsContent value="factions">
+                <FactionsTab
+                  dimensions={dimensions}
+                  onChange={setDimensions}
+                  t={t}
+                />
+              </TabsContent>
+              <TabsContent value="powerSystem">
+                <PowerSystemTab
+                  dimensions={dimensions}
+                  onChange={setDimensions}
+                  t={t}
+                />
+              </TabsContent>
+              <TabsContent value="history">
+                <HistoryTab
+                  dimensions={dimensions}
+                  onChange={setDimensions}
+                  t={t}
+                />
+              </TabsContent>
+              <TabsContent value="economy">
+                <EconomyTab
+                  dimensions={dimensions}
+                  onChange={setDimensions}
+                  t={t}
+                />
+              </TabsContent>
+              <TabsContent value="socialStructure">
+                <SocialStructureTab
+                  dimensions={dimensions}
+                  onChange={setDimensions}
+                  t={t}
+                />
+              </TabsContent>
+              <TabsContent value="tone">
+                <ToneTab
+                  dimensions={dimensions}
+                  onChange={setDimensions}
+                  t={t}
+                />
+              </TabsContent>
+              <TabsContent value="mechanics">
+                <MechanicsTab
+                  dimensions={dimensions}
+                  onChange={setDimensions}
+                  t={t}
+                />
+              </TabsContent>
+              <TabsContent value="startingConditions">
+                <StartingConditionsTab
+                  dimensions={dimensions}
+                  onChange={setDimensions}
+                  t={t}
+                />
+              </TabsContent>
+            </div>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

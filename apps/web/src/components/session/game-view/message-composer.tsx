@@ -178,7 +178,7 @@ export function MessageComposer({
                         : t("session.inputPlaceholderAny", "Send a message...")
               }
               disabled={composerDisabled || commandExecuting}
-              className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-sm outline-none disabled:opacity-50 placeholder:text-muted-foreground"
+              className="flex-1 min-w-0 px-3.5 py-2.5 bg-transparent text-base outline-none disabled:opacity-50 placeholder:text-muted-foreground md:text-sm"
             />
             {executing && onAbort && (
               <button

@@ -388,6 +388,7 @@ function ParameterCard({
           className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
         />
         <input
+          aria-label={t(definition.labelKey, definition.fallbackLabel)}
           type="number"
           min={definition.min}
           max={definition.max}
@@ -463,6 +464,7 @@ function MaxOutputTokensCard({
       </div>
       <div className="flex items-center gap-3">
         <input
+          aria-label={t("settings.maxOutputTokens", "Max output tokens")}
           type="number"
           min={1}
           max={modelLimit}

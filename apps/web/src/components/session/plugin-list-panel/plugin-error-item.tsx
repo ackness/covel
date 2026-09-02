@@ -22,7 +22,7 @@ export function PluginErrorItem({ error }: PluginErrorItemProps) {
         </span>
         <Badge
           variant="destructive"
-          className="text-[9px] px-1.5 py-0 h-4 shrink-0"
+          className="text-xs px-1.5 py-0 h-4 shrink-0"
         >
           Error
         </Badge>
@@ -32,7 +32,7 @@ export function PluginErrorItem({ error }: PluginErrorItemProps) {
         <div className="px-3 pb-2.5 pt-1 border-t border-destructive/20">
           <ul className="space-y-0.5">
             {error.errors.map((msg, i) => (
-              <li key={i} className="text-[10px] text-destructive/80 font-mono">
+              <li key={i} className="text-xs text-destructive/80 font-mono">
                 • {msg}
               </li>
             ))}

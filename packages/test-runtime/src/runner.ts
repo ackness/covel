@@ -1,5 +1,9 @@
 import fs from "node:fs";
-import type { RuntimeResult, TurnInput } from "@covel/shared";
+import {
+  DEFAULT_LOCALE,
+  type RuntimeResult,
+  type TurnInput,
+} from "@covel/shared";
 import { createMemoryMediaStore, createMemoryStore } from "@covel/store";
 import type { RunRuntimeDebugOptions } from "./types.js";
 import {
@@ -108,7 +112,7 @@ export async function runRuntimeDebug(
   const pluginsDir = expandPath(options.pluginsDir ?? defaultPluginsDir());
   const sessionId = options.sessionId ?? `debug-${Date.now().toString(36)}`;
   const turnId = `turn-${Date.now().toString(36)}`;
-  const locale = options.locale ?? "zh-CN";
+  const locale = options.locale ?? DEFAULT_LOCALE;
   const store = createMemoryStore();
   const mediaStore = options.mediaStore ?? createMemoryMediaStore();
 

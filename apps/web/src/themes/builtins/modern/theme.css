@@ -15,13 +15,13 @@ html[data-theme="modern"] {
   --color-secondary: oklch(94% 0.006 240);
   --color-secondary-foreground: oklch(20% 0.018 240);
   --color-muted: oklch(94% 0.006 240);
-  --color-muted-foreground: oklch(46% 0.016 240);
+  --color-muted-foreground: oklch(42% 0.016 240);
   --color-accent: oklch(70% 0.13 200);
   --color-accent-foreground: oklch(18% 0.014 240);
   --color-destructive: oklch(56% 0.2 25);
   --color-destructive-foreground: oklch(99% 0.002 240);
-  --color-border: oklch(88% 0.008 240);
-  --color-input: oklch(88% 0.008 240);
+  --color-border: oklch(84% 0.008 240);
+  --color-input: oklch(84% 0.008 240);
   --color-ring: oklch(48% 0.13 240 / 0.45);
 
   --radius-sm: 0.125rem;
@@ -50,7 +50,7 @@ html[data-theme="modern"] {
   --surface-empty: color-mix(in oklab, var(--color-muted) 65%, transparent);
   --border-subtle: color-mix(in oklab, var(--color-border) 72%, transparent);
 
-  --rule-color: oklch(86% 0.01 240);
+  --rule-color: oklch(82% 0.01 240);
   --rule-strong-color: oklch(28% 0.02 240);
   --rule-style: solid;
 
@@ -86,7 +86,7 @@ html[data-theme="modern"] {
   --session-column-max-width: 56rem;
 
   --eyebrow-font-family: var(--font-mono);
-  --eyebrow-font-size: 0.6875rem;
+  --eyebrow-font-size: 0.75rem;
   --eyebrow-font-weight: 500;
   --eyebrow-letter-spacing: 0.16em;
   --eyebrow-text-transform: uppercase;
@@ -110,23 +110,25 @@ html[data-theme="modern"] {
 }
 
 /* Modern emphasizes the print-number marker meta */
-html[data-theme="modern"] .ui-section-head {
-  border-top: 1px solid var(--rule-strong-color);
-  padding-top: 0.5rem;
-}
+@layer components {
+  html[data-theme="modern"] .ui-section-head {
+    border-top: 1px solid var(--rule-strong-color);
+    padding-top: 0.5rem;
+  }
 
-html[data-theme="modern"] .ui-message-row {
-  align-items: flex-start;
-}
+  html[data-theme="modern"] .ui-message-row {
+    align-items: flex-start;
+  }
 
-html[data-theme="modern"] .ui-message-player {
-  background: transparent;
-  color: var(--color-foreground);
-  border-width: 0 0 0 2px;
-  border-color: var(--accent-secondary);
-  border-radius: 0;
-  max-width: var(--story-max-width);
-  padding: 0.25rem 0 0.25rem 0.875rem;
+  html[data-theme="modern"] .ui-message-player {
+    background: transparent;
+    color: var(--color-foreground);
+    border-width: 0 0 0 2px;
+    border-color: var(--accent-secondary);
+    border-radius: 0;
+    max-width: var(--story-max-width);
+    padding: 0.25rem 0 0.25rem 0.875rem;
+  }
 }
 
 /* ── Dark scheme ─────────────────────────────────────────────── */
@@ -143,13 +145,13 @@ html[data-theme="modern"].dark {
   --color-secondary: oklch(20% 0.022 240);
   --color-secondary-foreground: oklch(92% 0.008 240);
   --color-muted: oklch(20% 0.022 240);
-  --color-muted-foreground: oklch(62% 0.018 240);
+  --color-muted-foreground: oklch(68% 0.018 240);
   --color-accent: oklch(72% 0.13 200);
   --color-accent-foreground: oklch(15% 0.018 240);
-  --color-destructive: oklch(62% 0.2 25);
-  --color-destructive-foreground: oklch(96% 0.005 240);
-  --color-border: oklch(26% 0.022 240);
-  --color-input: oklch(26% 0.022 240);
+  --color-destructive: oklch(68% 0.2 25);
+  --color-destructive-foreground: oklch(15% 0.018 240);
+  --color-border: oklch(31% 0.022 240);
+  --color-input: oklch(31% 0.022 240);
   --color-ring: oklch(72% 0.13 200 / 0.5);
 
   --surface-page: oklch(13% 0.016 240);
@@ -163,7 +165,7 @@ html[data-theme="modern"].dark {
     transparent
   );
 
-  --rule-color: oklch(28% 0.022 240);
+  --rule-color: oklch(34% 0.022 240);
   --rule-strong-color: oklch(64% 0.018 240);
 
   --accent-primary: oklch(72% 0.13 200);
@@ -182,7 +184,7 @@ html[data-theme="modern"].dark {
       oklch(60% 0.16 250 / 0.08),
       transparent 50%
     );
-  --noise-opacity: 0.04;
+  --noise-opacity: 0;
 
   --shadow-card: 0 1px 0 var(--color-border);
   --shadow-dialog: 0 28px 80px -36px rgb(0 0 0 / 0.65);

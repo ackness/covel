@@ -1,4 +1,5 @@
 import {
+  DEFAULT_LOCALE,
   characterBlueprintToCharacterUpsert,
   resolveI18nText,
   type CharacterBlueprint,
@@ -412,7 +413,7 @@ export class LocalDataService implements DataService {
       id: _id ?? humanSessionId(),
       worldId,
       status: "active",
-      locale: locale ?? "zh-CN",
+      locale: locale ?? DEFAULT_LOCALE,
       phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
@@ -428,7 +429,7 @@ export class LocalDataService implements DataService {
       phase: "setup",
       completedPlayerTurns: 0,
       setupRuntimes: {},
-      locale: locale ?? "zh-CN",
+      locale: locale ?? DEFAULT_LOCALE,
       activePlugins: _plugins ?? [],
       presetId,
       metadata: presetId ? { presetId } : undefined,

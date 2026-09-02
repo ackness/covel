@@ -88,13 +88,13 @@ function PluginPackSelector({
               </span>
               <Badge
                 variant={isActive ? "secondary" : "outline"}
-                className="text-[9px] shrink-0"
+                className="text-xs shrink-0"
               >
                 {pack.plugins.length}
               </Badge>
             </div>
             {pack.description && (
-              <p className="mt-1 text-[10px] text-muted-foreground line-clamp-2">
+              <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
                 {pack.descriptionKey
                   ? t(
                       pack.descriptionKey,
@@ -152,16 +152,24 @@ export function PluginSelectionCard({
       <CollapsibleCardHeader
         expanded={expanded}
         onToggle={onToggleExpanded}
-        summary={`${selectedPluginIds.length}/${packages.length} ${t("session.pluginsSelected", "plugins selected")} · ${totalRuntimes} runtimes`}
+        contentId="plugin-selection-card-content"
+        summary={t("session.pluginsSelectionSummary", {
+          selectedCount: selectedPluginIds.length,
+          pluginCount: packages.length,
+          runtimeCount: totalRuntimes,
+        })}
       >
         <Puzzle className="w-4 h-4" />
         {t("session.plugins", "Plugins & Runtimes")}
-        <Badge variant="secondary" className="text-[10px] ml-1">
+        <Badge variant="secondary" className="text-xs ml-1">
           {selectedPluginIds.length}/{packages.length}
         </Badge>
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent className="space-y-4 px-4 pb-4">
+        <CardContent
+          id="plugin-selection-card-content"
+          className="space-y-4 px-4 pb-4"
+        >
           <div className="space-y-1.5">
             <PluginPackSelector
               pluginPacks={pluginPacks}
@@ -179,10 +187,10 @@ export function PluginSelectionCard({
             {pluginGroups.map((group) => (
               <div key={group.id} className="space-y-1.5">
                 <div className="flex items-center justify-between gap-3 pt-2">
-                  <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
                     {group.label}
                   </h4>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {group.packages.length}
                   </span>
                 </div>

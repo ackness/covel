@@ -30,6 +30,7 @@ export function WorldLoreCard({
       <CollapsibleCardHeader
         expanded={expanded}
         onToggle={onToggle}
+        contentId="world-lore-card-content"
         summary={
           isModified
             ? t("session.modified")
@@ -42,18 +43,22 @@ export function WorldLoreCard({
         <FileText className="w-4 h-4" />
         {t("session.worldLore", "World Document")}
         {isModified && (
-          <Badge variant="secondary" className="text-[10px] ml-1">
+          <Badge variant="secondary" className="text-xs ml-1">
             {t("session.modified")}
           </Badge>
         )}
       </CollapsibleCardHeader>
       {expanded && (
-        <CardContent className="space-y-3 px-4 pb-4">
+        <CardContent
+          id="world-lore-card-content"
+          className="space-y-3 px-4 pb-4"
+        >
           <textarea
             value={loreValue}
             onChange={(event) => onLoreChange(event.target.value)}
             className="w-full min-h-75 bg-background border border-border px-4 py-3 text-sm font-mono leading-relaxed outline-none focus:ring-1 focus:ring-primary resize-y"
             placeholder={t("session.lorePlaceholder")}
+            aria-label={t("session.worldLore", "World Document")}
           />
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
@@ -65,6 +70,7 @@ export function WorldLoreCard({
             </span>
             {isModified && (
               <button
+                type="button"
                 className="text-xs text-muted-foreground hover:text-primary underline"
                 onClick={onResetLore}
               >

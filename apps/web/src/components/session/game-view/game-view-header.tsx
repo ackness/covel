@@ -61,7 +61,7 @@ export function GameViewHeader({
         <Button
           variant="ghost"
           size="icon"
-          className={`h-7 w-7 shrink-0 border border-border/80 ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
+          className={`h-10 w-10 shrink-0 border border-border/80 md:h-7 md:w-7 ${!isLeftCollapsed && "bg-accent text-accent-foreground"}`}
           onClick={onToggleLeftPanel}
           aria-label={t("session.toggleStoryPanel")}
           title={t("session.toggleStoryPanel")}
@@ -96,7 +96,7 @@ export function GameViewHeader({
             pressed={viewMode === "parsed"}
             onPressedChange={() => onViewModeChange("parsed")}
             size="sm"
-            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page)"
+            className="h-10 rounded-none border-0 px-3 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page) md:h-7 md:px-2"
             aria-label={t("session.viewParsedAria")}
             title={t("session.viewParsed")}
           >
@@ -106,7 +106,7 @@ export function GameViewHeader({
             pressed={viewMode === "detailed"}
             onPressedChange={() => onViewModeChange("detailed")}
             size="sm"
-            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page)"
+            className="hidden h-10 rounded-none border-0 px-3 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page) sm:inline-flex md:h-7 md:px-2"
             aria-label={t("session.viewDetailedAria")}
             title={t("session.viewDetailed")}
           >
@@ -116,7 +116,7 @@ export function GameViewHeader({
             pressed={viewMode === "raw"}
             onPressedChange={() => onViewModeChange("raw")}
             size="sm"
-            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page)"
+            className="hidden h-10 rounded-none border-0 px-3 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page) sm:inline-flex md:h-7 md:px-2"
             aria-label={t("session.viewRawAria")}
             title={t("session.viewRaw")}
           >
@@ -126,7 +126,7 @@ export function GameViewHeader({
             pressed={viewMode === "stage"}
             onPressedChange={() => onViewModeChange("stage")}
             size="sm"
-            className="rounded-none border-0 h-7 px-2 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page)"
+            className="h-10 rounded-none border-0 px-3 data-[state=on]:bg-foreground data-[state=on]:text-(--surface-page) md:h-7 md:px-2"
             aria-label={t("session.viewStageAria")}
             title={t("session.viewStage")}
           >
@@ -137,7 +137,7 @@ export function GameViewHeader({
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 shrink-0"
+          className="h-10 w-10 shrink-0 md:h-7 md:w-7"
           onClick={onOpenSettings}
           aria-label={t("nav.settings")}
           title={t("nav.settings")}
@@ -177,7 +177,7 @@ export function GameViewHeader({
         <Button
           variant="ghost"
           size="icon"
-          className={`h-7 w-7 shrink-0 ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
+          className={`h-10 w-10 shrink-0 md:h-7 md:w-7 ${!isRightCollapsed && "bg-accent text-accent-foreground"}`}
           onClick={onToggleRightPanel}
           aria-label={t("session.toggleContextPanel")}
           title={t("session.toggleContextPanel")}

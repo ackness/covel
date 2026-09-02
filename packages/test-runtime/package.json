@@ -1,6 +1,6 @@
 {
   "name": "@covel/test-runtime",
-  "version": "0.0.28",
+  "version": "0.0.29",
   "private": true,
   "type": "module",
   "bin": {

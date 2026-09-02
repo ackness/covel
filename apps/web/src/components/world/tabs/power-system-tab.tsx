@@ -68,19 +68,23 @@ export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1">
-          <Label>{t("world.name")}</Label>
+          <Label htmlFor="world-power-system-name">{t("world.name")}</Label>
           <input
+            id="world-power-system-name"
             className={inputCls}
             value={text(ps.name)}
             onChange={(e) => setPs({ ...ps, name: e.target.value })}
           />
         </div>
         <div className="space-y-1">
-          <Label>{t("world.powerType")}</Label>
+          <Label htmlFor="world-power-system-type">
+            {t("world.powerType")}
+          </Label>
           <select
-            className={selectCls}
+            id="world-power-system-type"
+            className={`${selectCls} w-full`}
             value={ps.type}
             onChange={(e) =>
               setPs({ ...ps, type: e.target.value as PowerSystemType })
@@ -96,8 +100,11 @@ export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
       </div>
 
       <div className="space-y-1">
-        <Label>{t("world.description")}</Label>
+        <Label htmlFor="world-power-system-description">
+          {t("world.description")}
+        </Label>
         <textarea
+          id="world-power-system-description"
           className={textareaCls}
           value={text(ps.description)}
           onChange={(e) => setPs({ ...ps, description: e.target.value })}
@@ -116,11 +123,17 @@ export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
         {ps.rules.map((rule, ri) => (
           <div key={ri} className="flex items-center gap-2">
             <input
+              aria-label={`${t("world.rules")} ${ri + 1}`}
               className={inputCls}
               value={text(rule)}
               onChange={(e) => updateRule(ri, e.target.value)}
             />
-            <Button variant="ghost" size="icon" onClick={() => removeRule(ri)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("world.remove")}
+              onClick={() => removeRule(ri)}
+            >
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
@@ -137,23 +150,32 @@ export function PowerSystemTab({ dimensions, onChange, t }: TabProps) {
           </Button>
         </div>
         {(ps.tiers ?? []).map((tier, ti) => (
-          <div key={ti} className="flex items-center gap-2">
-            <input
-              className={inputCls}
-              placeholder={t("world.name")}
-              value={text(tier.name)}
-              onChange={(e) => updateTier(ti, { name: e.target.value })}
-            />
-            <input
-              className="w-24 border border-border bg-background px-3 py-2 text-sm"
-              type="number"
-              placeholder={t("world.rank")}
-              value={tier.rank}
-              onChange={(e) =>
-                updateTier(ti, { rank: Number(e.target.value) || 0 })
-              }
-            />
-            <Button variant="ghost" size="icon" onClick={() => removeTier(ti)}>
+          <div key={ti} className="flex items-start gap-2">
+            <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_6rem]">
+              <input
+                aria-label={`${t("world.name")} ${ti + 1}`}
+                className={inputCls}
+                placeholder={t("world.name")}
+                value={text(tier.name)}
+                onChange={(e) => updateTier(ti, { name: e.target.value })}
+              />
+              <input
+                aria-label={`${t("world.rank")} ${ti + 1}`}
+                className="w-full border border-border bg-background px-3 py-2 text-sm"
+                type="number"
+                placeholder={t("world.rank")}
+                value={tier.rank}
+                onChange={(e) =>
+                  updateTier(ti, { rank: Number(e.target.value) || 0 })
+                }
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("world.remove")}
+              onClick={() => removeTier(ti)}
+            >
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>

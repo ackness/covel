@@ -792,7 +792,7 @@ my-plugin/
 
 ## 8. 插件国际化（i18n）
 
-**所有面向玩家的 UI 字符串必须用 `I18nText` 对象（至少 `zh` + `en`）。** 详情见 [docs/reference/ui-panels.md 的「插件 UI 文本 I18nText 规范」](../reference/ui-panels.md#插件-ui-文本-i18ntext-规范)。
+**所有面向玩家的 UI 字符串必须用 `I18nText` 对象（目标 locale + English fallback；中文可选）。** 详情见 [docs/reference/ui-panels.md 的「插件 UI 文本 I18nText 规范」](../reference/ui-panels.md#插件-ui-文本-i18ntext-规范)。
 
 适用范围：
 
@@ -804,7 +804,7 @@ my-plugin/
 
 无需 i18n 的情形：纯标识符（`icon` 名称、`iconColor`、状态字符串、图像 URL）、多 locale 共用的短词（`"Ping"`、`"NEW"`）、数值或布尔常量。
 
-**回退逻辑**：`resolveI18n(value, locale)` 优先匹配当前 locale，其次语言前缀（`zh-CN` → `zh`），再退到 `en-US` / `en`，最后取对象中任一字符串。切换语言时，json-render 子树会通过 `useI18nResolver()` 自动重渲染。
+**回退逻辑**：`resolveI18n(value, locale)` 优先匹配当前 locale，其次语言前缀（`ru-RU` → `ru`），再按共享 Locale Registry 的 fallback chain（内置最终回退 English），最后取对象中任一字符串。切换语言时，json-render 子树会通过 `useI18nResolver()` 自动重渲染。
 
 **合规脚本**：
 
@@ -819,11 +819,11 @@ my-plugin/
 // ✗ 裸中文会被扫描拒绝
 { "content": "已收录到图鉴" }
 
-// ✗ 只有中文 locale，切到 en 时不会回退到 zh
-{ "label": { "zh": "世界" } }
+// ✗ 只有目标 locale，没有 canonical English fallback
+{ "label": { "ru": "Мир" } }
 
-// ✓ zh + en 双 key
-{ "label": { "zh": "世界", "en": "World" } }
+// ✓ 目标 locale + English fallback；中文并非必需
+{ "label": { "ru": "Мир", "en": "World" } }
 
 // ✓ 纯标识符（非自然语言），允许单字符串
 { "icon": "book-open" }

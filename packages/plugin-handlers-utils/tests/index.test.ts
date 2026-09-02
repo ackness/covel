@@ -46,8 +46,11 @@ describe("splitList", () => {
 });
 
 describe("pickLocaleText", () => {
-  it("uses the shared primary-language normalization", () => {
+  it("uses Simplified Chinese only for the default locale and aliases", () => {
     expect(pickLocaleText("ZH_cn", "中文", "English")).toBe("中文");
+    expect(pickLocaleText("zh-Hans", "中文", "English")).toBe("中文");
+    expect(pickLocaleText("zh-Hant-TW", "中文", "English")).toBe("English");
+    expect(pickLocaleText("zh-TW", "中文", "English")).toBe("English");
     expect(pickLocaleText("en_GB", "中文", "English")).toBe("English");
     expect(pickLocaleText(undefined, "中文", "English")).toBe("English");
   });

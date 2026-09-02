@@ -6,7 +6,12 @@
  * `{ pluginId: "framework", action: "submit-form" }`.
  */
 
-import type { InteractionType } from "@covel/shared";
+import {
+  DEFAULT_LOCALE,
+  resolveI18nText,
+  type I18nText,
+  type InteractionType,
+} from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import type { RpcHandler, RpcHandlerContext } from "../rpc/rpc-registry.js";
 
@@ -60,8 +65,8 @@ export const VALID_TYPES = new Set<InteractionType>([
 /**
  * Localized labels for player-input narrative filling. The confirmation values
  * and fallback prefixes were previously hardcoded Chinese; they now resolve by
- * locale. Unknown / missing locale falls back to zh-CN so existing zh-CN output
- * stays byte-for-byte identical.
+ * locale. A missing locale keeps the historical zh-CN default; an unsupported
+ * locale follows the shared English fallback contract.
  */
 interface SubmitFormLabels {
   readonly confirm: string;
@@ -72,33 +77,55 @@ interface SubmitFormLabels {
   readonly cancelledPrefix: string;
 }
 
-const SUBMIT_FORM_LABELS: Record<string, SubmitFormLabels> = {
-  "zh-CN": {
-    confirm: "确认",
-    cancel: "取消",
-    formPrefix: "[玩家输入]",
-    choicePrefix: "[玩家选择]",
-    confirmedPrefix: "[玩家确认]",
-    cancelledPrefix: "[玩家取消]",
+const SUBMIT_FORM_LABELS = {
+  confirm: { "zh-CN": "确认", "en-US": "Confirm", "ru-RU": "Подтвердить" },
+  cancel: { "zh-CN": "取消", "en-US": "Cancel", "ru-RU": "Отмена" },
+  formPrefix: {
+    "zh-CN": "[玩家输入]",
+    "en-US": "[Player input]",
+    "ru-RU": "[Ввод игрока]",
   },
-  "en-US": {
-    confirm: "Confirm",
-    cancel: "Cancel",
-    formPrefix: "[Player input]",
-    choicePrefix: "[Player choice]",
-    confirmedPrefix: "[Player confirmed]",
-    cancelledPrefix: "[Player cancelled]",
+  choicePrefix: {
+    "zh-CN": "[玩家选择]",
+    "en-US": "[Player choice]",
+    "ru-RU": "[Выбор игрока]",
   },
-};
+  confirmedPrefix: {
+    "zh-CN": "[玩家确认]",
+    "en-US": "[Player confirmed]",
+    "ru-RU": "[Игрок подтвердил]",
+  },
+  cancelledPrefix: {
+    "zh-CN": "[玩家取消]",
+    "en-US": "[Player cancelled]",
+    "ru-RU": "[Игрок отменил]",
+  },
+} as const satisfies Record<keyof SubmitFormLabels, I18nText>;
 
-/** Resolve labels for a locale, falling back to zh-CN (byte-compatible default). */
+function resolveLabel(value: I18nText, locale: string): string {
+  return resolveI18nText(value, locale) ?? "";
+}
+
+/** Resolve labels through the shared locale fallback chain. */
 function resolveLabels(locale?: string): SubmitFormLabels {
-  // `??` (nullish) not `||`: only an absent/unknown locale falls back, and the
-  // locale guard avoids indexing the record with `undefined`.
-  return (
-    (locale ? SUBMIT_FORM_LABELS[locale] : undefined) ??
-    SUBMIT_FORM_LABELS["zh-CN"]!
-  );
+  const effectiveLocale = locale ?? DEFAULT_LOCALE;
+  return {
+    confirm: resolveLabel(SUBMIT_FORM_LABELS.confirm, effectiveLocale),
+    cancel: resolveLabel(SUBMIT_FORM_LABELS.cancel, effectiveLocale),
+    formPrefix: resolveLabel(SUBMIT_FORM_LABELS.formPrefix, effectiveLocale),
+    choicePrefix: resolveLabel(
+      SUBMIT_FORM_LABELS.choicePrefix,
+      effectiveLocale,
+    ),
+    confirmedPrefix: resolveLabel(
+      SUBMIT_FORM_LABELS.confirmedPrefix,
+      effectiveLocale,
+    ),
+    cancelledPrefix: resolveLabel(
+      SUBMIT_FORM_LABELS.cancelledPrefix,
+      effectiveLocale,
+    ),
+  };
 }
 
 function findCommittedInteraction(

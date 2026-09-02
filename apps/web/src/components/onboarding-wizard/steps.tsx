@@ -7,6 +7,8 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { resolveI18nText } from "@covel/shared";
+import { localeDefinitions } from "@/i18n/catalog-registry.js";
 import { Button } from "@/components/ui/button.js";
 import { Label } from "@/components/ui/label.js";
 import type { PresetSummary } from "@/services/api.js";
@@ -48,27 +50,21 @@ export function WelcomeStep({ locale, setLocale, onNext }: WelcomeStepProps) {
         <Label className="ui-eyebrow text-[10px]">
           {t("onboarding.language", "Language")}
         </Label>
-        <div className="flex items-center justify-center gap-2">
-          <button
-            onClick={() => setLocale("zh-CN")}
-            className={`rounded-(--radius-control) px-4 py-2 text-xs font-medium border transition-colors ${
-              locale === "zh-CN"
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border text-muted-foreground hover:border-primary/40"
-            }`}
-          >
-            {"\u4E2D\u6587"}
-          </button>
-          <button
-            onClick={() => setLocale("en-US")}
-            className={`rounded-(--radius-control) px-4 py-2 text-xs font-medium border transition-colors ${
-              locale === "en-US"
-                ? "border-primary bg-primary/10 text-primary"
-                : "border-border text-muted-foreground hover:border-primary/40"
-            }`}
-          >
-            English
-          </button>
+        <div className="flex max-h-32 flex-wrap items-center justify-center gap-2 overflow-y-auto">
+          {localeDefinitions.map((definition) => (
+            <button
+              key={definition.code}
+              type="button"
+              onClick={() => setLocale(definition.code)}
+              className={`rounded-(--radius-control) px-4 py-2 text-xs font-medium border transition-colors ${
+                locale === definition.code
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary/40"
+              }`}
+            >
+              {resolveI18nText(definition.label, locale) ?? definition.code}
+            </button>
+          ))}
         </div>
       </div>
 

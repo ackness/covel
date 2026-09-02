@@ -137,7 +137,7 @@ export function PluginPackageRow({
       className={`prep-plugin-row border px-3 py-2.5 transition-colors ${
         isSelected
           ? "border-primary/40 bg-primary/5"
-          : "border-border bg-muted/20 opacity-60"
+          : "border-border bg-muted/15"
       }`}
     >
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
@@ -147,14 +147,14 @@ export function PluginPackageRow({
           aria-checked={isSelected}
           disabled={isLocked}
           title={isLocked ? t("plugin.locked") : undefined}
-          className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border-2 border-transparent transition-colors ${
+          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent transition-colors after:absolute after:-inset-2.5 after:content-[''] ${
             isSelected ? "bg-primary" : "bg-input"
           } ${isLocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
           onClick={() => !isLocked && onTogglePlugin(pkg.name)}
         >
           <span
-            className={`pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-sm transition ${
-              isSelected ? "translate-x-3" : "translate-x-0"
+            className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-background shadow-sm transition ${
+              isSelected ? "translate-x-4" : "translate-x-0"
             }`}
           />
         </button>
@@ -165,24 +165,24 @@ export function PluginPackageRow({
         {isCore && (
           <span
             title={t("plugin.locked")}
-            className="inline-flex items-center gap-0.5 text-[9px] text-muted-foreground/70 shrink-0"
+            className="inline-flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground"
           >
             <Lock className="w-3 h-3" />
             <span className="hidden sm:inline">{t("plugin.core", "core")}</span>
           </span>
         )}
         {runtimes[0] && stageLabel(runtimes[0].stage, t) && (
-          <Badge variant="outline" className="text-[9px] shrink-0">
+          <Badge variant="outline" className="shrink-0 text-xs">
             {stageLabel(runtimes[0].stage, t)}
           </Badge>
         )}
         {runtimes[0]?.kind && (
-          <Badge variant="secondary" className="text-[9px] shrink-0">
+          <Badge variant="secondary" className="shrink-0 text-xs">
             {runtimes[0].kind === "agent" ? "LLM" : "Fn"}
           </Badge>
         )}
         {tools.length > 0 && (
-          <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground shrink-0">
+          <span className="flex shrink-0 items-center gap-0.5 text-xs text-muted-foreground">
             <Wrench className="w-2.5 h-2.5" />
             {tools.length}
           </span>
@@ -201,7 +201,7 @@ export function PluginPackageRow({
                   event.target.value,
                 )
               }
-              className="min-w-25 shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-60"
+              className="min-w-25 shrink text-xs bg-background border border-border rounded px-2 py-1 max-w-60"
               aria-label={t(
                 "plugin.modelBindingAria",
                 "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
@@ -239,13 +239,13 @@ export function PluginPackageRow({
           )}
       </div>
       {description && (
-        <p className="text-[11px] text-muted-foreground mt-1.5 ml-9 line-clamp-2">
+        <p className="text-xs text-muted-foreground mt-1.5 ml-9 line-clamp-2">
           {description}
         </p>
       )}
       <div className="mt-1.5 ml-9 flex flex-wrap gap-1">
         {reason && (
-          <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">
+          <Badge variant="secondary" className="text-xs px-1.5 py-0 h-4">
             {reason}
           </Badge>
         )}
@@ -253,21 +253,21 @@ export function PluginPackageRow({
           <Badge
             key={tag}
             variant="outline"
-            className="text-[9px] px-1.5 py-0 h-4 text-muted-foreground"
+            className="text-xs px-1.5 py-0 h-4 text-muted-foreground"
           >
             {tag}
           </Badge>
         ))}
       </div>
       {isSelected && providerSlotSetting && (
-        <div className="mt-2.5 ml-9 flex flex-wrap items-center gap-2.5 text-[11px] text-muted-foreground min-w-0">
+        <div className="mt-2.5 ml-9 flex flex-wrap items-center gap-2.5 text-xs text-muted-foreground min-w-0">
           <KeyRound className="w-3 h-3 shrink-0" />
           <span className="font-medium shrink-0">
             {t("plugin.providerSlot", "provider slot")}
           </span>
           <Badge
             variant={providerSlotMissing ? "destructive" : "outline"}
-            className="text-[10px] px-1.5 py-0.5 h-5 shrink-0"
+            className="text-xs px-1.5 py-0.5 h-5 shrink-0"
             title={
               providerSlotMissing
                 ? t("plugin.providerSlotMissingTitle", {
@@ -289,7 +289,7 @@ export function PluginPackageRow({
           {providerSlotOverridden && (
             <Badge
               variant="secondary"
-              className="text-[9px] px-1.5 py-0 h-4 shrink-0"
+              className="text-xs px-1.5 py-0 h-4 shrink-0"
             >
               {t("plugin.providerSlotOverridden", "overridden")}
             </Badge>
@@ -300,7 +300,7 @@ export function PluginPackageRow({
             <select
               value={providerSlotOverride ?? ""}
               onChange={(event) => handleProviderSlotChange(event.target.value)}
-              className="ml-auto min-w-30 shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-70"
+              className="ml-auto min-w-30 shrink text-xs bg-background border border-border rounded px-2 py-1 max-w-70"
               aria-label={t(
                 "plugin.providerSlotOverrideAria",
                 "Override which configured slot this plugin's provider uses. Leave at default unless you have a reason to change it.",
@@ -342,7 +342,7 @@ export function PluginPackageRow({
               return (
                 <div
                   key={binding.qualifiedId}
-                  className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-muted-foreground min-w-0"
+                  className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground min-w-0"
                 >
                   <Cpu className="w-3 h-3 shrink-0" />
                   <span
@@ -353,7 +353,7 @@ export function PluginPackageRow({
                   </span>
                   <Badge
                     variant={missingDefault ? "destructive" : "outline"}
-                    className="text-[10px] px-1.5 py-0.5 h-5 shrink-0"
+                    className="text-xs px-1.5 py-0.5 h-5 shrink-0"
                     title={
                       missingDefault
                         ? t("plugin.slotMissingTitle", {
@@ -371,7 +371,7 @@ export function PluginPackageRow({
                       : `default: ${declaredSlot}`}
                   </Badge>
                   {missingDefault && (
-                    <code className="text-[10px] text-muted-foreground/80 bg-muted px-1.5 py-0.5 rounded shrink-0">
+                    <code className="text-xs text-muted-foreground/80 bg-muted px-1.5 py-0.5 rounded shrink-0">
                       [covel.{declaredSlot}]
                     </code>
                   )}
@@ -384,7 +384,7 @@ export function PluginPackageRow({
                           event.target.value,
                         )
                       }
-                      className="ml-auto min-w-30 shrink text-[11px] bg-background border border-border rounded px-2 py-1 max-w-70"
+                      className="ml-auto min-w-30 shrink text-xs bg-background border border-border rounded px-2 py-1 max-w-70"
                       aria-label={t(
                         "plugin.modelBindingAria",
                         "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
@@ -418,7 +418,7 @@ export function PluginPackageRow({
                     </select>
                   ) : selectedSlot ? (
                     <span
-                      className="ml-auto truncate text-[11px]"
+                      className="ml-auto truncate text-xs"
                       title={
                         formatSlotLabel(selectedSlot) ?? selectedSlot.slotId
                       }

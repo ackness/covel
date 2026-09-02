@@ -75,6 +75,56 @@ English prompt body.
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("PLUGIN.en.md"));
     warn.mockRestore();
   });
+
+  it("uses the English prompt fallback when the requested locale is missing", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const discovery: PluginDiscoveryResult = {
+      id: "demo",
+      rootPath: dir,
+      pluginMdPaths: [path.join(dir, "PLUGIN.md")],
+      isMultiRuntime: false,
+    } as PluginDiscoveryResult;
+
+    const loaded = await loadRuntime(discovery, "demo", "ru-RU");
+
+    expect(loaded.promptTemplate).toContain("English prompt body.");
+    expect(loaded.promptTemplate).not.toContain("中文提示词");
+    warn.mockRestore();
+  });
+
+  it("does not cross from Traditional Chinese to a Simplified short-key prompt", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await fs.writeFile(
+      path.join(dir, "PLUGIN.zh.md"),
+      CANONICAL.replace("中文提示词。", "简体短键提示词。"),
+    );
+    const discovery: PluginDiscoveryResult = {
+      id: "demo",
+      rootPath: dir,
+      pluginMdPaths: [path.join(dir, "PLUGIN.md")],
+      isMultiRuntime: false,
+    } as PluginDiscoveryResult;
+
+    const loaded = await loadRuntime(discovery, "demo", "zh-Hant-TW");
+
+    expect(loaded.promptTemplate).toContain("English prompt body.");
+    expect(loaded.promptTemplate).not.toContain("简体短键提示词。");
+    warn.mockRestore();
+  });
+
+  it("keeps the canonical prompt for the default locale and its aliases", async () => {
+    const discovery: PluginDiscoveryResult = {
+      id: "demo",
+      rootPath: dir,
+      pluginMdPaths: [path.join(dir, "PLUGIN.md")],
+      isMultiRuntime: false,
+    } as PluginDiscoveryResult;
+
+    for (const locale of ["zh-CN", "zh", "zh-Hans"]) {
+      const loaded = await loadRuntime(discovery, "demo", locale);
+      expect(loaded.promptTemplate).toContain("中文提示词。");
+    }
+  });
 });
 
 describe("reconcileLocalizedManifest omitted fields", () => {

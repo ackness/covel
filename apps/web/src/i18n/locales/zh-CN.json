@@ -208,6 +208,10 @@
     "lorePlaceholder": "用 Markdown 输入世界传说...",
     "switchSession": "切换会话",
     "currentWorld": "当前会话",
+    "statusActive": "进行中",
+    "statusPaused": "已暂停",
+    "statusEnded": "已结束",
+    "turnCount": "第 {{count}} 回合",
     "sessions": "会话",
     "noOtherSessions": "没有其他会话",
     "startingUp": "正在启动...",
@@ -244,6 +248,7 @@
     "autoAssign": "自动分配",
     "deleteConfirmTitle": "删除会话",
     "deleteConfirmDesc": "此操作将永久删除该会话及其所有数据（消息、游戏状态等），无法撤销。",
+    "deleteSessionAria": "删除会话 {{id}}",
     "slotsConfigured": "{{count}} 个模型用途已配置",
     "slotsUnconfigured": "未配置",
     "bindingsAllBound": "全部已绑定",
@@ -252,6 +257,8 @@
     "loreSummary": "{{count}} 字符",
     "loreSummaryHint": "{{count}} 字符 · 点此编辑世界观文档",
     "pluginsSummary": "{{pluginCount}} 个插件，共 {{runtimeCount}} 个运行任务",
+    "pluginsSelectionSummary": "已选择 {{selectedCount}}/{{pluginCount}} 个插件 · 共 {{runtimeCount}} 个运行任务",
+    "tagsCount": "{{count}} 个标签",
     "pluginsSelected": "个插件已选择",
     "searchPlugins": "搜索插件、标签、能力",
     "pluginGroups": {
@@ -523,6 +530,12 @@
     "languageEnglish": "英文",
     "languageChinese": "中文",
     "languageBadgeChinese": "中文",
+    "localeMismatchEyebrow": "语言提示",
+    "localeMismatchTitle": "要进入{{language}}世界吗？",
+    "localeMismatchDesc": "「{{name}}」以{{worldLanguage}}内容为主，而 Covel 当前使用{{interfaceLanguage}}界面。",
+    "localeMismatchInterface": "当前界面",
+    "localeMismatchWorld": "世界内容",
+    "localeMismatchContinue": "以{{language}}继续",
     "delete": "删除世界",
     "deleteConfirmTitle": "删除世界？",
     "deleteConfirmDesc": "将永久删除「{{name}}」及其关联的所有会话数据，此操作无法撤销。",
@@ -634,6 +647,34 @@
     "groupPlugins": "插件",
     "groupDesktop": "桌面",
     "groupData": "数据",
+    "appearanceNavLabel": "外观",
+    "operatorAccessNavLabel": "运维访问",
+    "frameworkEntries": {
+      "uiAppearance": {
+        "label": "外观风格",
+        "description": "选择界面风格；导入的自定义主题会自动显示在这里。"
+      },
+      "uiScheme": {
+        "label": "配色模式",
+        "description": "选择浅色或深色；仅支持单一模式的主题会自动锁定为对应模式。"
+      },
+      "uiThemeManager": {
+        "label": "主题库",
+        "description": "导入、移除并复用自定义主题包。"
+      },
+      "uiLocale": { "label": "界面语言" },
+      "chatMessageWindow": { "label": "聊天窗口消息上限" },
+      "onboardedVersion": { "label": "Onboarding 版本" },
+      "llmSlotConfig": {
+        "label": "用途分配",
+        "description": "为每种模型用途选择服务商和模型"
+      },
+      "llmProviders": { "label": "服务商与模型" },
+      "llmProviderPriceMultipliers": { "label": "服务商价格倍率" },
+      "llmParamOverrides": { "label": "参数覆盖" },
+      "llmCapabilityOverrides": { "label": "能力覆盖" },
+      "llmPrepRuntimeBindings": { "label": "准备阶段 Runtime 绑定" }
+    },
     "operatorAccessTitle": "托管服务运维访问",
     "operatorAccessConfigured": "已配置",
     "operatorAccessUnconfigured": "未配置",
@@ -884,7 +925,280 @@
     "saveThemeFailed": "主题保存失败。",
     "export": "导出",
     "import": "导入",
-    "importInvalid": "外观文件无法解析，请确认是导出的 JSON。"
+    "importTheme": "导入主题文件",
+    "importInvalid": "外观文件无法解析，请确认是导出的 JSON。",
+    "tokenEditor": {
+      "groups": {
+        "story": {
+          "label": "叙事正文",
+          "description": "游戏正文的排版。你在这里花的时间最多。"
+        },
+        "interface-type": {
+          "label": "界面文字",
+          "description": "标题、标签与元信息的字体与字号。"
+        },
+        "surfaces": {
+          "label": "区域背景",
+          "description": "界面各层的底色，从整页到单个卡片。"
+        },
+        "colors": {
+          "label": "文字与描边",
+          "description": "正文颜色、次要文字、分隔线。"
+        },
+        "accents": {
+          "label": "强调色",
+          "description": "状态与提示色：成功、警告、危险。"
+        },
+        "ambience": {
+          "label": "氛围背景",
+          "description": "铺满整页的背景图层与颗粒质感。"
+        },
+        "shape": {
+          "label": "形状与投影",
+          "description": "圆角大小与阴影强度。"
+        },
+        "layout": {
+          "label": "区域尺寸",
+          "description": "各个面板的宽度、高度与内边距。"
+        }
+      },
+      "tokens": {
+        "--story-font-family": {
+          "label": "正文字体",
+          "options": {
+            "sans": "无衬线",
+            "serif-display": "衬线 / 展示体",
+            "monospace": "等宽",
+            "songti": "宋体",
+            "kaiti": "楷体",
+            "heiti-pingfang": "黑体 / 苹方",
+            "yuanti": "圆体",
+            "system-ui": "系统界面字体"
+          }
+        },
+        "--story-font-size": {
+          "label": "正文字号"
+        },
+        "--story-line-height": {
+          "label": "行高"
+        },
+        "--story-font-weight": {
+          "label": "字重",
+          "options": {
+            "300": "300 · Light",
+            "400": "400 · Regular",
+            "500": "500 · Medium",
+            "600": "600 · Semibold",
+            "700": "700 · Bold"
+          }
+        },
+        "--story-letter-spacing": {
+          "label": "字距"
+        },
+        "--story-max-width": {
+          "label": "正文栏宽",
+          "hint": "每行的最大宽度，窄栏更易读。"
+        },
+        "--font-sans": {
+          "label": "界面基础字体",
+          "hint": "按钮、菜单、表单等所有界面元素。",
+          "options": {
+            "sans": "无衬线",
+            "serif-display": "衬线 / 展示体",
+            "monospace": "等宽",
+            "songti": "宋体",
+            "kaiti": "楷体",
+            "heiti-pingfang": "黑体 / 苹方",
+            "yuanti": "圆体",
+            "system-ui": "系统界面字体"
+          }
+        },
+        "--title-font-family": {
+          "label": "标题字体",
+          "options": {
+            "sans": "无衬线",
+            "serif-display": "衬线 / 展示体",
+            "monospace": "等宽",
+            "songti": "宋体",
+            "kaiti": "楷体",
+            "heiti-pingfang": "黑体 / 苹方",
+            "yuanti": "圆体",
+            "system-ui": "系统界面字体"
+          }
+        },
+        "--title-font-weight": {
+          "label": "标题字重",
+          "options": {
+            "300": "300 · Light",
+            "400": "400 · Regular",
+            "500": "500 · Medium",
+            "600": "600 · Semibold",
+            "700": "700 · Bold"
+          }
+        },
+        "--title-letter-spacing": {
+          "label": "标题字距"
+        },
+        "--title-text-transform": {
+          "label": "标题大小写",
+          "options": {
+            "none": "原样",
+            "uppercase": "全大写",
+            "lowercase": "全小写",
+            "capitalize": "首字母大写"
+          }
+        },
+        "--meta-font-family": {
+          "label": "元信息字体",
+          "options": {
+            "sans": "无衬线",
+            "serif-display": "衬线 / 展示体",
+            "monospace": "等宽",
+            "songti": "宋体",
+            "kaiti": "楷体",
+            "heiti-pingfang": "黑体 / 苹方",
+            "yuanti": "圆体",
+            "system-ui": "系统界面字体"
+          }
+        },
+        "--meta-font-size": {
+          "label": "元信息字号"
+        },
+        "--eyebrow-font-size": {
+          "label": "眉标字号"
+        },
+        "--eyebrow-letter-spacing": {
+          "label": "眉标字距"
+        },
+        "--color-background": {
+          "label": "整体底色",
+          "hint": "应用的基础背景，绝大多数区域由它决定。"
+        },
+        "--surface-page": {
+          "label": "页面底色",
+          "hint": "正文页面的底色，未单独设置时跟随整体底色。"
+        },
+        "--surface-rail": {
+          "label": "侧栏"
+        },
+        "--surface-inset": {
+          "label": "凹陷区块"
+        },
+        "--surface-elevated": {
+          "label": "卡片 / 浮层"
+        },
+        "--surface-dialog": {
+          "label": "对话框"
+        },
+        "--surface-player": {
+          "label": "玩家发言"
+        },
+        "--color-foreground": {
+          "label": "主文字"
+        },
+        "--color-muted-foreground": {
+          "label": "次要文字"
+        },
+        "--color-primary": {
+          "label": "主色"
+        },
+        "--rule-color": {
+          "label": "分隔线颜色"
+        },
+        "--rule-thickness": {
+          "label": "分隔线粗细"
+        },
+        "--rule-style": {
+          "label": "分隔线样式",
+          "options": {
+            "solid": "实线",
+            "dashed": "虚线",
+            "dotted": "点线"
+          }
+        },
+        "--accent-primary": {
+          "label": "强调主色"
+        },
+        "--accent-secondary": {
+          "label": "次强调色"
+        },
+        "--accent-success": {
+          "label": "成功"
+        },
+        "--accent-warning": {
+          "label": "警告"
+        },
+        "--accent-danger": {
+          "label": "危险"
+        },
+        "--ambience-image": {
+          "label": "背景图层",
+          "hint": "可选预设，或填入任意 CSS 背景值，例如 url(https://…/bg.jpg)。",
+          "options": {
+            "none": "无（纯色）",
+            "warm-wash": "暖阳晕染",
+            "night-glow": "夜幕辉光",
+            "neon-drift": "霓虹斜光",
+            "hatch-texture": "细纹肌理"
+          }
+        },
+        "--ambience-opacity": {
+          "label": "背景强度"
+        },
+        "--ambience-blend": {
+          "label": "混合模式",
+          "options": {
+            "normal": "正常",
+            "multiply": "正片叠底",
+            "screen": "滤色",
+            "overlay": "叠加",
+            "soft-light": "柔光"
+          }
+        },
+        "--noise-opacity": {
+          "label": "颗粒质感"
+        },
+        "--radius-card": {
+          "label": "卡片圆角"
+        },
+        "--radius-control": {
+          "label": "控件圆角"
+        },
+        "--radius-dialog": {
+          "label": "对话框圆角"
+        },
+        "--shadow-card": {
+          "label": "卡片阴影",
+          "options": {
+            "none": "无阴影",
+            "hairline": "细线（印刷感）",
+            "soft-lift": "柔和浮起",
+            "deep-drop": "强投影"
+          }
+        },
+        "--rail-width-left": {
+          "label": "左侧栏宽度"
+        },
+        "--rail-width-right": {
+          "label": "右侧栏宽度"
+        },
+        "--session-column-max-width": {
+          "label": "会话栏宽度"
+        },
+        "--composer-max-width": {
+          "label": "输入框宽度"
+        },
+        "--panel-header-height": {
+          "label": "面板标题高度"
+        },
+        "--panel-section-padding-x": {
+          "label": "面板横向留白"
+        },
+        "--panel-section-padding-y": {
+          "label": "面板纵向留白"
+        }
+      }
+    }
   },
   "plugin": {
     "runtimes": "运行任务",
@@ -909,6 +1223,8 @@
     "modelOverrideFailed": "保存失败",
     "defaultSlot": "默认",
     "autoSlot": "自动（系统默认）",
+    "autoWithModel": "自动 · {{model}}",
+    "noSlots": "无可用模型用途",
     "config": "配置",
     "loadError": "加载失败",
     "unknownError": "未知错误",

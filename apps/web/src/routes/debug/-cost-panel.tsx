@@ -378,7 +378,7 @@ function fmt(n: number): string {
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5 border border-(--rule-color) px-3 py-2 min-w-28">
-      <span className="ui-meta text-[9px] text-muted-foreground uppercase tracking-wider">
+      <span className="ui-meta text-xs text-muted-foreground uppercase tracking-wider">
         {label}
       </span>
       <span className="font-mono text-base tabular-nums text-foreground">
@@ -427,7 +427,7 @@ export function CostPanel({
 
   if (model.totalCalls === 0) {
     return (
-      <div className="flex flex-1 items-center justify-center text-[11px] text-muted-foreground">
+      <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
         {t("debugger.cost.noData", "No token usage recorded for this session.")}
       </div>
     );
@@ -437,13 +437,13 @@ export function CostPanel({
     <div className="flex-1 overflow-auto p-4 space-y-6">
       {/* 聚合合计：窗口化后标题明确「当前窗口」而非「会话合计」，避免静默失真 */}
       <section className="space-y-2">
-        <h2 className="ui-meta text-[10px] uppercase tracking-wider text-muted-foreground">
+        <h2 className="ui-meta text-xs uppercase tracking-wider text-muted-foreground">
           {isPartial
             ? t("debugger.cost.windowTitle", "Loaded window")
             : t("debugger.cost.session", "Session total")}
         </h2>
         {isPartial && (
-          <div className="flex flex-wrap items-center gap-2 border border-amber-500/40 bg-amber-500/5 px-3 py-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+          <div className="flex flex-wrap items-center gap-2 border border-amber-500/40 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-600 dark:text-amber-400">
             <span>
               {t(
                 "debugger.cost.partialNote",
@@ -494,14 +494,14 @@ export function CostPanel({
             />
           )}
         </div>
-        <p className="ui-meta text-[9px] text-muted-foreground/70">
+        <p className="ui-meta text-xs text-muted-foreground/70">
           {t(
             "debugger.cost.note",
             "Token sums from llm.responded / gateway.responded. USD cost estimated from model-db prices; usage without a model id or price is excluded (cost shown as a lower bound).",
           )}
         </p>
         {(model.totalCachedInput > 0 || model.totalCacheWriteInput > 0) && (
-          <p className="ui-meta text-[9px] text-muted-foreground/70">
+          <p className="ui-meta text-xs text-muted-foreground/70">
             {t(
               "debugger.cost.cacheNote",
               "Cache read/write tokens are included in input totals but excluded from USD until provider-specific cache prices are available.",
@@ -513,7 +513,7 @@ export function CostPanel({
       {/* By model */}
       {model.byModel.length > 0 && (
         <section className="space-y-2">
-          <h2 className="ui-meta text-[10px] uppercase tracking-wider text-muted-foreground">
+          <h2 className="ui-meta text-xs uppercase tracking-wider text-muted-foreground">
             {t("debugger.cost.byModel", "By model")}
           </h2>
           <div className="border border-(--rule-color) divide-y divide-(--rule-color)">
@@ -525,7 +525,7 @@ export function CostPanel({
               return (
                 <div
                   key={priceKey}
-                  className="flex items-baseline justify-between gap-3 px-3 py-1.5 text-[11px]"
+                  className="flex items-baseline justify-between gap-3 px-3 py-1.5 text-xs"
                 >
                   <span className="font-mono truncate text-foreground">
                     {m.model === UNKNOWN_MODEL
@@ -550,7 +550,7 @@ export function CostPanel({
 
       {/* By runtime */}
       <section className="space-y-2">
-        <h2 className="ui-meta text-[10px] uppercase tracking-wider text-muted-foreground">
+        <h2 className="ui-meta text-xs uppercase tracking-wider text-muted-foreground">
           {t("debugger.cost.byRuntime", "By runtime")}
         </h2>
         <div className="space-y-1.5">
@@ -559,7 +559,7 @@ export function CostPanel({
             const pct = Math.round((tokens / maxRuntimeTokens) * 100);
             return (
               <div key={r.runtimeId} className="space-y-0.5">
-                <div className="flex items-baseline justify-between gap-3 text-[11px]">
+                <div className="flex items-baseline justify-between gap-3 text-xs">
                   <span className="font-mono truncate text-foreground">
                     {r.runtimeId}
                   </span>
@@ -581,14 +581,14 @@ export function CostPanel({
 
       {/* By turn */}
       <section className="space-y-2">
-        <h2 className="ui-meta text-[10px] uppercase tracking-wider text-muted-foreground">
+        <h2 className="ui-meta text-xs uppercase tracking-wider text-muted-foreground">
           {t("debugger.cost.byTurn", "By turn")}
         </h2>
         <div className="border border-(--rule-color) divide-y divide-(--rule-color)">
           {model.byTurn.map((tn) => (
             <div
               key={tn.turnId}
-              className="debug-compact-row flex items-baseline justify-between gap-3 px-3 py-1.5 text-[11px]"
+              className="debug-compact-row flex items-baseline justify-between gap-3 px-3 py-1.5 text-xs"
             >
               <span className="font-mono text-foreground">
                 {t("debugger.turn", { count: tn.turnIndex })}

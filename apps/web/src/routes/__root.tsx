@@ -9,6 +9,8 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Menu } from "lucide-react";
+import { resolveI18nText } from "@covel/shared";
+import { localeDefinitions } from "@/i18n/catalog-registry.js";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -136,15 +138,11 @@ function RootLayout() {
   const isElectron = ipc !== null;
   const isMacDesktop = isElectron && ipc?.platform === "darwin";
 
-  const toggleLocale = () => {
-    setLocale(locale === "zh-CN" ? "en-US" : "zh-CN");
-  };
-
   return (
     <>
       <ToastHost />
       <ConfirmHost />
-      <div className="h-screen w-full bg-background text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex flex-col overflow-hidden">
+      <div className="h-screen w-full bg-transparent text-foreground font-sans selection:bg-primary selection:text-primary-foreground flex flex-col overflow-hidden">
         <header
           className={`ui-panel-header relative shrink-0 z-50 border-b border-border/80 backdrop-blur-md transition-all ${isSession ? "h-12" : "h-16"}`}
           style={isElectron ? dragStyle : undefined}
@@ -153,7 +151,7 @@ function RootLayout() {
               padding on the inner row doesn't shift it off centre. */}
           <Link
             to="/"
-            className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ui-title flex items-center gap-2 tracking-tight pointer-events-auto ${isSession ? "text-lg" : "text-2xl"}`}
+            className={`ui-brand-title absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 ui-title flex items-center gap-2 tracking-tight pointer-events-auto ${isSession ? "text-lg" : "text-2xl"}`}
             style={isElectron ? noDragStyle : undefined}
           >
             <img
@@ -170,7 +168,7 @@ function RootLayout() {
             className={`w-full flex h-full items-center justify-between ${isMacDesktop ? "pl-22 pr-4 md:pr-6" : "px-4 md:px-6"}`}
           >
             <nav
-              className="hidden md:flex items-center gap-1 text-xs font-medium"
+              className="hidden lg:flex items-center gap-1 text-xs font-medium"
               style={isElectron ? noDragStyle : undefined}
               aria-label={t("nav.primary", "Primary")}
             >
@@ -185,11 +183,11 @@ function RootLayout() {
                     aria-current={isActive ? "page" : undefined}
                     className={`relative h-8 px-3 transition-colors rounded-(--radius-control) ${
                       isActive
-                        ? "text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
+                        ? "bg-primary/10 text-foreground"
+                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                     } ${
                       item.disabled
-                        ? "text-muted-foreground/75 cursor-not-allowed hover:text-muted-foreground/75"
+                        ? "cursor-not-allowed opacity-55 hover:bg-transparent hover:text-muted-foreground"
                         : ""
                     }`}
                   >
@@ -209,29 +207,36 @@ function RootLayout() {
               style={isElectron ? noDragStyle : undefined}
             >
               <ThemeToggle />
-              <button
-                onClick={toggleLocale}
-                aria-label={
-                  locale === "zh-CN"
-                    ? t("onboarding.localeEn", "Switch to English")
-                    : t("onboarding.localeZh", "Switch to Chinese")
-                }
-                className="hidden md:flex items-center justify-center h-9 min-w-9 px-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-muted/40 transition-colors rounded-(--radius-control)"
-              >
-                {locale === "zh-CN" ? "EN" : "ZH"}
-              </button>
+              <label className="hidden lg:block">
+                <span className="sr-only">
+                  {t("onboarding.language", "Language")}
+                </span>
+                <select
+                  value={locale}
+                  onChange={(event) => setLocale(event.target.value)}
+                  aria-label={t("onboarding.language", "Language")}
+                  className="h-9 max-w-40 rounded-(--radius-control) border border-border bg-transparent px-2 text-[11px] font-semibold text-muted-foreground outline-none transition-colors hover:border-primary/40 hover:text-primary focus:border-primary"
+                >
+                  {localeDefinitions.map((definition) => (
+                    <option key={definition.code} value={definition.code}>
+                      {resolveI18nText(definition.label, locale) ??
+                        definition.code}
+                    </option>
+                  ))}
+                </select>
+              </label>
               {!isSession && (
                 <Button
                   variant="default"
                   asChild
-                  className="hidden md:flex h-9 ml-1.5 px-4 text-[11px] font-semibold uppercase tracking-widest rounded-(--radius-control)"
+                  className="hidden lg:flex h-9 ml-1.5 px-4 text-[11px] font-semibold uppercase tracking-widest rounded-(--radius-control)"
                 >
                   <Link to="/session">
                     {t("nav.getStarted", "Get Started")}
                   </Link>
                 </Button>
               )}
-              {/* The desktop nav and the language toggle are both `md:` only,
+              {/* The desktop nav and the language toggle are both `lg:` only,
                   so on a phone this dialog is the ONLY way to reach worlds /
                   session / plugins / debug or switch language. Radix Dialog
                   brings the focus trap, Escape handling and aria-modal that a
@@ -242,7 +247,7 @@ function RootLayout() {
                     variant="ghost"
                     size="icon"
                     aria-label={t("nav.primary", "Primary")}
-                    className="md:hidden h-9 w-9 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control)"
+                    className="h-10 w-10 text-muted-foreground hover:text-primary hover:bg-muted/40 rounded-(--radius-control) lg:hidden"
                   >
                     <Menu className="h-4 w-4" />
                   </Button>
@@ -273,18 +278,24 @@ function RootLayout() {
                         {item.label}
                       </button>
                     ))}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMobileNavOpen(false);
-                        toggleLocale();
-                      }}
-                      className="h-11 px-2 mt-1 border-t border-border text-left text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {locale === "zh-CN"
-                        ? t("onboarding.localeEn", "Switch to English")
-                        : t("onboarding.localeZh", "Switch to Chinese")}
-                    </button>
+                    <label className="mt-1 flex min-h-11 items-center gap-3 border-t border-border px-2 text-sm text-muted-foreground">
+                      <span>{t("onboarding.language", "Language")}</span>
+                      <select
+                        value={locale}
+                        onChange={(event) => {
+                          setLocale(event.target.value);
+                          setMobileNavOpen(false);
+                        }}
+                        className="ml-auto max-w-48 rounded-(--radius-control) border border-border bg-background px-2 py-1 text-foreground outline-none focus:border-primary"
+                      >
+                        {localeDefinitions.map((definition) => (
+                          <option key={definition.code} value={definition.code}>
+                            {resolveI18nText(definition.label, locale) ??
+                              definition.code}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </nav>
                 </DialogContent>
               </Dialog>
@@ -298,7 +309,7 @@ function RootLayout() {
           </AppErrorBoundary>
         </main>
 
-        {!isHome && (
+        {!isHome && !isSession && (
           <footer
             className={`ui-panel-footer shrink-0 border-t border-border transition-all ${isSession ? "py-1.5" : "py-8"}`}
           >
@@ -313,9 +324,7 @@ function RootLayout() {
                 ></span>
                 <span>Covel Studio</span>
               </div>
-              <div
-                className={`ui-eyebrow text-muted-foreground ${isSession ? "text-[10px]" : "text-xs"}`}
-              >
+              <div className="ui-eyebrow text-muted-foreground text-xs">
                 &copy; {new Date().getFullYear()} Covel Framework.
               </div>
             </div>

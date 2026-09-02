@@ -14,6 +14,7 @@ On first launch the desktop app creates `~/.covel/`. Config and user plugins liv
   llm.toml                   ← LLM slot config (provider / model / baseUrl)
   keys.env                   ← provider API keys, plain KEY=VALUE lines
   settings.json              ← front-end preferences (unified SettingsStore: locale / appearance / slot overrides / per-plugin settings)
+  app-update.json            ← ignored desktop app release
   plugins/                   ← user plugins (merged on top of bundled cores)
 
 <data_root>/                 ← default ~/.covel/data; redirectable
@@ -67,7 +68,11 @@ Legacy files without `schema_version` are read as v1. The desktop UI and REST en
 
 Manual edits require a Covel restart; saving under **Settings → Desktop → Network Proxy** applies immediately. `direct` bypasses proxies, `system` follows Electron's OS proxy resolution, `http` accepts HTTP(S) URLs, and `socks` accepts SOCKS5 URLs. A missing scheme is normalized to `http://` or `socks5://`. URLs may include `user:password@host`, so the file is tightened to mode `0600` when proxy settings are saved.
 
-The proxy covers framework-owned LLM calls and GitHub model-database updates. Third-party plugin `fetchWithRetry` remains direct with strict DNS/SSRF pinning.
+The proxy covers framework-owned LLM calls, GitHub model-database updates, and desktop app version checks. Third-party plugin `fetchWithRetry` remains direct with strict DNS/SSRF pinning.
+
+## New-version prompt
+
+Packaged desktop apps query the latest stable GitHub Release through `GET /api/app-update/latest` once per launch. The sidecar performs this request through the selected direct, system, HTTP(S), or SOCKS5 route. When the GitHub SemVer is newer, a platform-native dialog lets the player open the fixed Covel GitHub Releases page or ignore that version. Ignored versions are recorded in a separate `app-update.json`, avoiding SettingsStore revision conflicts, and remain quiet until a higher release appears. A failed check is logged without delaying startup, and no file is downloaded or installed automatically.
 
 **Changing `data_root` does NOT move old data** — the new location starts empty, and the old data and user worlds are left intact for you to migrate or ignore.
 
@@ -99,7 +104,8 @@ Model settings persist `llm.providers` as the only source of truth. On startup, 
 Packaged desktop sidecars generate a one-time bearer token at every launch and
 inject it as `COVEL_DESKTOP_REST_TOKEN`. Write endpoints (`/api/config/keys`,
 `/api/config/settings`, `/api/config/proxy`, `/api/config/data-root`, and
-`/api/config/open-folder`) and the local-config reads for settings/proxy
+`/api/config/open-folder`) and the local-config or outbound reads for
+settings/proxy/app updates
 require `Authorization: Bearer <token>`. `/api/config/info` and the provider
 name-only `/api/config/keys` response remain public. Development web/server
 mode keeps the token gate disabled when the variable is absent.

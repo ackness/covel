@@ -1,6 +1,6 @@
 {
   "name": "@covel/web",
-  "version": "0.0.28",
+  "version": "0.0.29",
   "private": true,
   "deprecated": false,
   "type": "module",
@@ -11,7 +11,7 @@
     "generate:routes": "tsr generate",
     "lint": "tsc --noEmit && node ./scripts/check-tailwind-canonical.mjs",
     "lint:tailwind": "node ./scripts/check-tailwind-canonical.mjs",
-    "check:i18n": "node ./scripts/check-no-chinese-literal.mjs",
+    "check:i18n": "node --import tsx ./scripts/check-no-chinese-literal.mjs && node --import tsx --test ./scripts/locale-tools.test.mjs",
     "build:media": "node ./scripts/build-media.mjs",
     "test": "vitest run",
     "test:watch": "vitest"

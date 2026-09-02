@@ -26,7 +26,7 @@ export interface CreateWorldOptions {
   readonly brief?: WorldCreationBrief;
   /** Optional abort signal for cancelling slow provider calls. */
   readonly signal?: AbortSignal;
-  /** Per-attempt provider timeout in milliseconds. */
+  /** Per-attempt generation timeout; a targeted lore repair shares this budget. */
   readonly attemptTimeoutMs?: number;
   /** Optional logger for recording generation progress. */
   readonly logger?: CreateWorldLogger;

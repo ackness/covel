@@ -221,7 +221,7 @@ export function AiWorldGenerator({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-h-[92vh] overflow-hidden p-0 sm:max-w-5xl">
+      <DialogContent className="max-h-[92dvh] w-[calc(100%-1rem)] overflow-hidden p-0 sm:max-w-5xl">
         <div className="flex items-center justify-between border-b border-border bg-muted/25 py-3 pr-14 pl-5">
           <div className="flex min-w-0 items-center gap-3">
             <span className="relative flex h-9 w-9 items-center justify-center rounded-full bg-primary/12 text-primary">
@@ -244,7 +244,7 @@ export function AiWorldGenerator({
           </span>
         </div>
 
-        <div className="max-h-[calc(92vh-64px)] overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+        <div className="max-h-[calc(92dvh-64px)] overflow-y-auto overscroll-contain px-5 pt-5 pb-24 sm:px-6 sm:pb-6">
           <DialogHeader className="space-y-2 text-left">
             <DialogTitle className="font-display text-2xl leading-tight font-bold tracking-tight md:text-3xl">
               {t(
@@ -335,7 +335,7 @@ export function AiWorldGenerator({
             />
           </div>
 
-          <div className="sticky bottom-0 z-10 -mx-5 mt-5 flex items-center justify-between gap-3 border-t border-border bg-background/95 px-5 pt-4 pb-1 backdrop-blur sm:-mx-6 sm:px-6">
+          <div className="sticky bottom-0 z-10 -mx-5 -mb-20 mt-5 flex items-center justify-between gap-3 border-t border-border bg-background/95 px-5 pt-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:-mb-2 sm:px-6">
             <p className="hidden max-w-xl text-[11px] leading-relaxed text-muted-foreground sm:block">
               {t(
                 "world.aiPortableHint",

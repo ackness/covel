@@ -58,14 +58,14 @@ export function SessionPluginItem({
           </span>
           <Badge
             variant="destructive"
-            className="text-[9px] px-1.5 py-0 h-4 shrink-0"
+            className="text-xs px-1.5 py-0 h-4 shrink-0"
           >
             {t("plugin.loadError", "Load Error")}
           </Badge>
         </button>
         {expanded && (
           <div className="px-3 pb-2.5 pt-1 border-t border-destructive/20">
-            <p className="text-[10px] text-destructive/80 font-mono whitespace-pre-wrap break-all">
+            <p className="text-xs text-destructive/80 font-mono whitespace-pre-wrap break-all">
               {plugin.error ?? t("plugin.unknownError", "Unknown error")}
             </p>
           </div>
@@ -113,14 +113,14 @@ export function SessionPluginItem({
           {stageLabel(plugin.stage, t) && (
             <Badge
               variant="secondary"
-              className="ui-chip text-[9px] px-1.5 py-0 h-4 shrink-0"
+              className="ui-chip text-xs px-1.5 py-0 h-4 shrink-0"
             >
               {stageLabel(plugin.stage, t)}
             </Badge>
           )}
           <Badge
             variant="outline"
-            className="ui-chip text-[9px] px-1 py-0 h-4 shrink-0"
+            className="ui-chip text-xs px-1 py-0 h-4 shrink-0"
           >
             {runtimeLabel}
           </Badge>
@@ -144,10 +144,12 @@ export function SessionPluginItem({
                 "Override active — next turn will use this model",
               )}
               aria-label={t("plugin.modelBinding", "Model")}
-              className="ui-input-shell min-w-0 shrink mr-2 max-w-35 text-[9px] bg-background border border-border px-1 py-0.5 disabled:opacity-50"
+              className="ui-input-shell min-w-0 shrink mr-2 max-w-35 text-xs bg-background border border-border px-1 py-0.5 disabled:opacity-50"
             >
               <option value="">
-                {plugin.model ? `auto · ${plugin.model}` : "auto"}
+                {plugin.model
+                  ? t("plugin.autoWithModel", { model: plugin.model })
+                  : t("plugin.autoSlot")}
               </option>
               {resolvedSlots.map((slot) => (
                 <option key={slot.slotId} value={slot.slotId}>
@@ -158,18 +160,18 @@ export function SessionPluginItem({
             </select>
           ) : (
             <span
-              className="shrink-0 mr-2 text-[9px] text-muted-foreground italic"
+              className="shrink-0 mr-2 text-xs text-muted-foreground italic"
               title={t(
                 "plugin.slotsMissing",
                 "Configure model slots in llm.toml to override",
               )}
             >
-              no slots
+              {t("plugin.noSlots")}
             </span>
           ))}
         {overrideError && (
           <span
-            className="mr-2 text-[9px] text-destructive"
+            className="mr-2 text-xs text-destructive"
             role="alert"
             title={overrideError}
           >
@@ -216,18 +218,18 @@ export function SessionPluginItem({
       {expanded && (
         <div className="px-3 pb-2.5 pt-1 space-y-2 border-t border-border bg-muted/20">
           {description && (
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               {description}
             </p>
           )}
 
           <div className="flex flex-wrap gap-1">
             {plugin.model && (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+              <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
                 model: {plugin.model}
               </Badge>
             )}
-            <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+            <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
               trigger: {triggerLabel}
               {plugin.trigger?.interval ? ` (${plugin.trigger.interval})` : ""}
               {plugin.trigger?.maxTriggerCount
@@ -235,7 +237,7 @@ export function SessionPluginItem({
                 : ""}
             </Badge>
             {plugin.pluginType && (
-              <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4">
+              <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
                 {plugin.pluginType}
               </Badge>
             )}
@@ -243,7 +245,7 @@ export function SessionPluginItem({
 
           {allTools.length > 0 && (
             <div className="space-y-1">
-              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 <Wrench className="w-3 h-3" />
                 Tools ({allTools.length})
               </div>
@@ -252,7 +254,7 @@ export function SessionPluginItem({
                   <Badge
                     key={tool}
                     variant="outline"
-                    className="text-[9px] px-1.5 py-0 h-4 font-mono"
+                    className="text-xs px-1.5 py-0 h-4 font-mono"
                   >
                     {tool}
                   </Badge>
@@ -263,14 +265,14 @@ export function SessionPluginItem({
 
           {configFields.length > 0 && (
             <div className="space-y-1.5">
-              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 <Zap className="w-3 h-3" />
                 {t("plugin.config", "Config")}
               </div>
               {configFields.map(([key, field]) => (
                 <div
                   key={key}
-                  className="flex items-center justify-between gap-2 text-[10px]"
+                  className="flex items-center justify-between gap-2 text-xs"
                 >
                   <span className="text-muted-foreground">
                     {field.label ?? key}
@@ -282,7 +284,7 @@ export function SessionPluginItem({
                   </span>
                   <Badge
                     variant="outline"
-                    className="text-[9px] px-1.5 py-0 h-4 font-mono shrink-0"
+                    className="text-xs px-1.5 py-0 h-4 font-mono shrink-0"
                   >
                     {field.options
                       ? String(field.default ?? field.options[0])
