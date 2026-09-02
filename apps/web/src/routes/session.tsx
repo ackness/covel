@@ -52,8 +52,11 @@ function SessionPage() {
     addWorldLocal,
     removeWorldLocal,
   } = useSession();
-  const settings = useSettingsDialog();
-  const { resolvedSlots } = useSlotConfig(state.presets, state.llmConfig);
+  const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(
+    state.presets,
+    state.llmConfig,
+  );
+  const settings = useSettingsDialog(refreshSlots);
   const { sid } = Route.useSearch();
   const navigate = useNavigate();
   const autoResumeAttempted = useRef(false);

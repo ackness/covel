@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { useSetting } from "@/settings/use-settings.js";
 import {
   getSlotConfig,
   getCustomPresets,
@@ -48,23 +49,32 @@ export function formatSlotLabel(
 }
 
 /**
- * Hook that reads slot config + custom presets from localStorage,
- * merged with server presets and llm.toml slot definitions.
- * Call `refresh()` to re-read after SettingsDialog closes.
+ * Hook that reactively reads slot config + custom presets from SettingsStore,
+ * merged with server presets and llm.toml slot definitions. `refresh()` is
+ * retained for close-time invalidation, before an async persistence event has
+ * reached SettingsStore subscribers.
  */
 export function useSlotConfig(
   serverPresets: PresetSummary[],
   llmConfig?: LlmConfigResponse | null,
 ) {
   const [version, setVersion] = useState(0);
+  const [slotConfigSnapshot] =
+    useSetting<Record<string, SlotConfigEntry>>("llm.slotConfig");
+  const [providerProfilesSnapshot] = useSetting<unknown>("llm.providers");
+  const [legacyPresetsSnapshot] = useSetting<unknown>("llm.customPresets");
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- version in deps triggers recalc on refresh()
-  const slotConfig = useMemo(() => getSlotConfig(), [version]);
+  const slotConfig = useMemo(
+    () => getSlotConfig(),
+    [slotConfigSnapshot, version],
+  );
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- version in deps triggers recalc on refresh()
-  const customPresets = useMemo(() => getCustomPresets(), [version]);
+  const customPresets = useMemo(
+    () => getCustomPresets(),
+    [providerProfilesSnapshot, legacyPresetsSnapshot, version],
+  );
 
   const allPresets = useMemo(() => {
     const customs: PresetSummary[] = customPresets.map((p) => ({
