@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { setPromptsRoot } from "@covel/context";
-import { buildWorldPrompt } from "./prompts.js";
+import { buildWorldLoreRepairPrompt, buildWorldPrompt } from "./prompts.js";
 
 describe("world creation locale", () => {
   let temporaryPromptsRoot: string | undefined;
@@ -29,6 +29,12 @@ describe("world creation locale", () => {
 
     expect(prompt).toContain("zh-CN");
     expect(prompt).not.toContain("../../../README");
+  });
+
+  it("uses the canonical locale label in the lore repair prompt", async () => {
+    const prompt = await buildWorldLoreRepairPrompt("ru_ru");
+
+    expect(prompt).toContain("Русский (`ru-RU`)");
   });
 
   it("loads an exact-locale framework prompt when one is provided", async () => {

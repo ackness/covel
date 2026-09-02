@@ -32,19 +32,21 @@ const WORLD_MANIFEST_ROOT_KEYS = new Set([
   "defaultViewMode",
 ]);
 
-const META_CONTENT_PATTERNS = [
-  /测试用/u,
+// Keep these contextual: isolated vocabulary such as "model" or "API" can be valid lore.
+const EXPLICIT_META_CONTENT_PATTERNS = [
+  /测试用(?:的)?(?:世界|内容|文档|数据|场景)/u,
   /测试目的/u,
-  /低成本/u,
-  /快速验证/u,
-  /提示词/u,
-  /模型/u,
+  /快速验证(?:用)?(?:的)?(?:世界|内容|文档|方案)/u,
+  /提示词(?:中|里|内容|要求|指令|输出)/u,
+  /(?:语言模型|大模型|AI\s*模型)(?:生成|输出)/iu,
+  /模型(?:生成|输出|内部)/u,
   /框架内部/u,
-  /\btest(?:ing)?\b/iu,
-  /\bvalidation\b/iu,
-  /\bprompt\b/iu,
-  /\bcheap\b/iu,
+  /\b(?:test|testing|validation)\s+(?:fixture|purpose|artifact|content|dataset)\b/iu,
+  /\b(?:prompt|model)\s+(?:generation|output|instructions?|internals?)\b/iu,
+  /\b(?:generated|written|created|produced)\s+by\s+(?:an?\s+)?(?:ai|llm|language model)\b/iu,
+  /\b(?:low[- ]?cost|cheap)\s+(?:llm|api|generation|tokens?)\b/iu,
   /\be2e\b/iu,
+  /\bframework\s+internals?\b/iu,
 ];
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -209,17 +211,26 @@ export function normalizeLoreDocument(
 }
 
 export function findLoreQualityErrors(lore: string): string[] {
+  return [...findLoreStructureErrors(lore), ...findLoreMetaErrors(lore)];
+}
+
+export function findLoreStructureErrors(lore: string): string[] {
   const errors: string[] = [];
   if (!/^#\s+\S/m.test(lore)) {
     errors.push("WORLD.md must start with an H1 title");
-  }
-  const forbidden = META_CONTENT_PATTERNS.find((pattern) => pattern.test(lore));
-  if (forbidden) {
-    errors.push("WORLD.md contains meta/test wording");
   }
   const numberedHooks = lore.match(/^\s*\d+\.\s+/gmu)?.length ?? 0;
   if (numberedHooks < 3) {
     errors.push("WORLD.md must include 3 numbered adventure hooks");
   }
   return errors;
+}
+
+export function findLoreMetaErrors(lore: string): string[] {
+  const forbidden = EXPLICIT_META_CONTENT_PATTERNS.some((pattern) =>
+    pattern.test(lore),
+  );
+  return forbidden
+    ? ["WORLD.md contains explicit generation meta wording"]
+    : [];
 }

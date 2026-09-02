@@ -2732,6 +2732,8 @@ interface SseEnvelope {
 
 AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tags、dimensions、lore，并可同时创作主要角色、资料库、世界规则、题材记忆与开局配置。服务器把文本内容写成标准世界包：`data/dimensions.yaml`、`characters/main-cast.json`、`data/lorebook.yaml` 和 `data/world.data.yaml` descriptor。
 
+生成结果先执行确定性的结构校验。YAML、世界清单、补充内容或 `WORLD.md` 结构不合法时，下一轮重新生成完整世界包；只有 `WORLD.md` 命中明确的测试、提示词或模型输出等生成过程泄漏时，服务端才在同一轮内请求一次仅包含 lore 的定向修复，并复用已经通过校验的 manifest 与补充内容。定向修复仍不合法、响应格式错误或超时时，才回退到下一轮完整生成；校验完成前不会写入半成品。
+
 这个接口使用 SSE 返回进度和最终世界。客户端通过 `fetch()` + `ReadableStream` 解析 `data: {...}\n\n` 帧。
 
 **请求体:**
