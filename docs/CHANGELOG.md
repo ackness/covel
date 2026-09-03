@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.30] - 2026-09-03
+
+This release moves eligible media follow-up work into durable background jobs, exposes effective runtime model routing in the UI, and converts structured plugin agents to bounded atomic Function Calling workflows for faster, more reliable world and story updates.
+
 ### Added
 
 - **Safe post-turn function runtimes can finish beyond the foreground turn barrier.** Plugin manifests can opt in with `turnCompletion.mode: detached` plus queue/execution deadlines, serial overlap, and stale-result rejection. The scheduler freezes source-turn inputs, falls back to foreground execution with diagnostics when a declaration is unsafe, and validates actual effects again before commit. `mimo-tts/auto-narrate` is the first bundled runtime using this path.
@@ -1031,7 +1035,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.29...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.30...HEAD
+[0.0.30]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.30
 [0.0.29]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.29
 [0.0.28]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.28
 [0.0.27]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.27
