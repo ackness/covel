@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Safe post-turn function runtimes can finish beyond the foreground turn barrier.** Plugin manifests can opt in with `turnCompletion.mode: detached` plus queue/execution deadlines, serial overlap, and stale-result rejection. The scheduler freezes source-turn inputs, falls back to foreground execution with diagnostics when a declaration is unsafe, and validates actual effects again before commit. `mimo-tts/auto-narrate` is the first bundled runtime using this path.
+- **Scheduler-detached work has durable lifecycle APIs and events.** `_runtime_jobs` stores CAS-leased jobs on the active DataStore backend while snapshots and browser checkpoints omit control-plane rows; clients can list, cancel, or explicitly retry jobs and receive `runtime.deferred` plus origin-turn-aware `job-status.updated` events.
+
+### Changed
+
+- **A player turn no longer waits for eligible media follow-up work.** Queued job creation commits atomically with the source turn, while background execution runs outside the main session lock and rechecks session/plugin incarnation, version, lease ownership, and declared effects before committing. Restart recovery resumes unclaimed queued work, but terminalizes expired queues and expired in-flight leases without replaying potentially billable provider calls.
+
 ## [0.0.29] - 2026-09-02
 
 This release adds Russian across the application, makes source-distributed Web locales catalog-driven, improves AI world-generation recovery, refreshes responsive and themed interfaces, and lets packaged desktop apps notify players about newer releases.

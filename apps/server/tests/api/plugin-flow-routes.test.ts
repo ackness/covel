@@ -89,6 +89,12 @@ describe("plugin flow routes", () => {
       capabilities: ["narrative"],
       tags: ["mode:dialogue", "role:narrator"],
       relations: { provides: ["narrative-engine"] },
+      turnCompletion: {
+        mode: "detached",
+        maxQueueMs: 30_000,
+        overlap: "serial",
+        stalePolicy: "reject",
+      },
     };
     const parsed: ParsedPluginMd = {
       manifest,
@@ -132,6 +138,7 @@ describe("plugin flow routes", () => {
           trigger: { type?: string; interval?: number };
           tags?: string[];
           relations?: Record<string, unknown>;
+          turnCompletion?: { mode: string; maxQueueMs?: number };
         }>;
       }>;
     };
@@ -158,5 +165,11 @@ describe("plugin flow routes", () => {
       "mode:dialogue",
       "role:narrator",
     ]);
+    expect(pkg?.runtimes?.[0]?.turnCompletion).toEqual({
+      mode: "detached",
+      maxQueueMs: 30_000,
+      overlap: "serial",
+      stalePolicy: "reject",
+    });
   });
 });

@@ -66,6 +66,11 @@ describe("parsePluginMd", () => {
       expect(spec.declaredTrigger.type).toBe("auto");
       expect(spec.stage).toBeUndefined();
       expect(spec.legacyOrder).toBeUndefined();
+      expect(spec.turnCompletionPolicy).toEqual({
+        mode: "await",
+        overlap: "serial",
+        stalePolicy: "reject",
+      });
     });
   });
 
@@ -600,6 +605,105 @@ describe("parsePluginMd", () => {
       );
 
       expect(result.manifest.timeoutMs).toBe(180000);
+    });
+  });
+
+  describe("turnCompletion: staged runtime barrier", () => {
+    it("parses and normalizes a detached post-turn runtime", () => {
+      const content = md(
+        [
+          "name: test-detached-runtime",
+          "description: Runtime that does not block its source turn",
+          "stage: post-turn",
+          "turnCompletion:",
+          "  mode: detached",
+          "  maxQueueMs: 30000",
+          "  maxExecutionMs: 90000",
+          "  overlap: serial",
+          "  stalePolicy: reject",
+        ].join("\n"),
+        "\nBody text.\n",
+      );
+
+      const { manifest } = parsePluginMd(
+        content,
+        "plugins/test-detached-runtime/PLUGIN.md",
+      );
+
+      expect(manifest.turnCompletion).toEqual({
+        mode: "detached",
+        maxQueueMs: 30_000,
+        maxExecutionMs: 90_000,
+        overlap: "serial",
+        stalePolicy: "reject",
+      });
+      expect(normalizeRuntimeManifest(manifest).turnCompletionPolicy).toEqual({
+        mode: "detached",
+        maxQueueMs: 30_000,
+        maxExecutionMs: 90_000,
+        overlap: "serial",
+        stalePolicy: "reject",
+      });
+    });
+
+    it("keeps legacy execution background orthogonal to the turn barrier", () => {
+      const content = md(
+        [
+          "name: test-manual-runtime",
+          "description: Existing background RPC runtime",
+          "trigger:",
+          "  type: manual",
+          "execution: background",
+        ].join("\n"),
+        "\nBody text.\n",
+      );
+
+      const { manifest } = parsePluginMd(
+        content,
+        "plugins/test-manual-runtime/PLUGIN.md",
+      );
+      const spec = normalizeRuntimeManifest(manifest);
+
+      expect(spec.backgroundWhenDetached).toBe(true);
+      expect(spec.turnCompletionPolicy.mode).toBe("await");
+    });
+
+    it.each(["pre-turn", "narrative", "setup"])(
+      "rejects detached mode in %s",
+      (stage) => {
+        const content = md(
+          [
+            "name: test-unsafe-detached",
+            "description: Unsafe detached stage",
+            `stage: ${stage}`,
+            "turnCompletion:",
+            "  mode: detached",
+          ].join("\n"),
+          "\nBody text.\n",
+        );
+
+        expect(() =>
+          parsePluginMd(content, "plugins/test-unsafe-detached/PLUGIN.md"),
+        ).toThrow(/post-turn.*audit/);
+      },
+    );
+
+    it("rejects story output for a detached runtime", () => {
+      const content = md(
+        [
+          "name: test-story-detached",
+          "description: Unsafe detached story",
+          "stage: post-turn",
+          "outputKind: story",
+          "turnCompletion:",
+          "  mode: detached",
+        ].join("\n"),
+        "\nBody text.\n",
+      );
+
+      expect(() =>
+        parsePluginMd(content, "plugins/test-story-detached/PLUGIN.md"),
+      ).toThrow(/outputKind 'story'/);
     });
   });
 

@@ -32,6 +32,25 @@ export function createPluginDataMethods(
       }
     },
 
+    async compareAndSetPluginData(record, expectedUpdatedAt) {
+      const key = pluginDataKey(
+        record.sessionId,
+        record.pluginId,
+        record.namespace,
+        record.key,
+      );
+      const existing = state.pluginData.get(key);
+      if (
+        expectedUpdatedAt === null
+          ? existing !== undefined
+          : existing?.updatedAt !== expectedUpdatedAt
+      ) {
+        return false;
+      }
+      state.pluginData.set(key, record);
+      return true;
+    },
+
     async getPluginData(sessionId, pluginId, namespace, key) {
       return (
         state.pluginData.get(

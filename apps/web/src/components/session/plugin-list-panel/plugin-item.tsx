@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ChevronRight,
+  Clock,
   Cpu,
   Link,
   Lock,
@@ -203,7 +204,7 @@ export function PluginItem({
                 {runtimes.map((rt) => (
                   <div
                     key={rt.id}
-                    className="flex items-center gap-2 text-xs text-muted-foreground pl-1"
+                    className="flex min-w-0 flex-wrap items-center gap-2 pl-1 text-xs text-muted-foreground"
                   >
                     <span className="font-mono">{rt.id}</span>
                     <Badge
@@ -224,6 +225,18 @@ export function PluginItem({
                       <span className="text-muted-foreground/60">
                         @ {rt.model}
                       </span>
+                    )}
+                    {rt.turnCompletion?.mode === "detached" && (
+                      <Badge
+                        variant="outline"
+                        className="h-4 max-w-full gap-1 border-sky-500/30 bg-sky-500/10 px-1.5 text-[9px] text-sky-700 dark:text-sky-300"
+                        title={t("plugin.turnCompletionDetached")}
+                      >
+                        <Clock className="h-2.5 w-2.5 shrink-0" />
+                        <span className="truncate">
+                          {t("plugin.turnCompletionDetached")}
+                        </span>
+                      </Badge>
                     )}
                   </div>
                 ))}

@@ -284,6 +284,14 @@ checkpoint 不允许携带 provider key、owner token 或其他凭据。
 
 回合执行的唯一入口是 [`POST /api/actions`](#post-apiactions)（SSE 桥接），没有 session 级的回合端点。
 
+安全叶节点若声明 `turnCompletion.mode: detached`，会在原始回合事务中进入 durable 队列，回合无需等待其完成：
+
+| 方法 | 路径                                           | 描述                                                             |
+| ---- | ---------------------------------------------- | ---------------------------------------------------------------- |
+| GET  | `/api/sessions/:id/runtime-jobs`               | 列出该 session 的 staged detached jobs，不返回内部冻结 `payload` |
+| POST | `/api/sessions/:id/runtime-jobs/:jobId/cancel` | 取消仍处于 `queued/claimed/running` 的 job                       |
+| POST | `/api/sessions/:id/runtime-jobs/:jobId/retry`  | 对失败类终态显式创建新的 queued job；返回 202 和新 `jobId`       |
+
 ### 回合中控制（W4）
 
 | 方法 | 路径                      | 描述                                                                                                                                |
@@ -1185,6 +1193,54 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - `session.completedPlayerTurns` 表示已提交的主循环玩家进度：setup 阶段的执行会保存 `turn_results`，但不会计入；`phase` 翻到 `playing` 后由首个成功的 player logical turn 推进为 `1`
 - 服务端对每个 runtimeResult 运行 `processRuntimeResult` 提交管道：normalize → state.commit → 触发后续 SessionEvent
 - 如果某个 Runtime 的输出包含 `pendingInputs`，需要通过 `plugin-rpc` 的 `framework.submit-form` action 提交玩家响应
+- `turnCompletion.mode: detached` 只会对通过安全检查的 `post-turn` / `audit` function 叶节点生效；其上游结果、来源 execution、模型和设置在原始回合冻结，queued 记录与原始回合原子提交。静态不安全的声明保留前台执行并产生诊断
+
+---
+
+### Staged Runtime 后台作业
+
+这组端点管理 scheduler 因 `turnCompletion.mode: detached` 创建的 `_runtime_jobs`，与 plugin-rpc 的 legacy `execution: background` / `_jobs` 协议正交。沿用 session owner-token 鉴权。成功作业的 `result` 包含后台 turn/execution/runtime 身份、耗时和 runtime `output`；内部冻结输入与设置位于 `payload`，任何响应都不会返回该字段。
+
+#### `GET /api/sessions/:id/runtime-jobs`
+
+按 `enqueuedAt, jobId` 返回所有作业。公开对象包含 `jobId/pluginId/runtimeId/status/origin/enqueuedAt/updatedAt/attempt`、期限/lease 时间、后台 turn/execution 身份以及终态 `result/error/reason`；不会返回内部 `payload`，因此不泄露冻结输入、user settings 或审批代次。
+
+```json
+{
+  "jobs": [
+    {
+      "schemaVersion": 1,
+      "jobId": "job-uuid",
+      "pluginId": "mimo-tts",
+      "runtimeId": "mimo-tts/auto-narrate",
+      "status": "running",
+      "origin": {
+        "activation": "stage",
+        "sourceTurnId": "turn-uuid",
+        "sourceExecutionId": "execution-uuid",
+        "sourceRuntimeId": "mimo-tts/auto-narrate"
+      },
+      "enqueuedAt": "2026-09-03T06:00:00.000Z",
+      "updatedAt": "2026-09-03T06:00:01.000Z",
+      "attempt": 1,
+      "maxQueueMs": 120000,
+      "maxExecutionMs": 120000
+    }
+  ]
+}
+```
+
+`status` 完整枚举为 `queued | claimed | running | committing | succeeded | failed | timed_out | cancelled | stale | orphaned`。`succeeded.result` 是后台 turn/execution/runtime 摘要，不是插件领域数据的副本；领域数据以 proposal commit 后的标准 API/SSE 为准。
+
+#### `POST /api/sessions/:id/runtime-jobs/:jobId/cancel`
+
+在 session lock 内将 `queued/claimed/running` CAS 到 `cancelled`，随后发 `job-status.updated`。成功返回 `{ job }`；不存在、已进入 `committing` 或已经终态时返回 `409`、`code: "runtime_job_not_cancellable"`。取消是控制面终态：已开始的 provider 调用可能只能协作式停止，但其迟到结果无法再进入 commit。
+
+#### `POST /api/sessions/:id/runtime-jobs/:jobId/retry`
+
+只接受 `failed/timed_out/cancelled/stale/orphaned`，并要求 session 仍为 active。显式重试保留冻结的原始输入和稳定设置，刷新当前 session incarnation、插件 approval scope、locale 与 runtime model overrides，创建**新的** `jobId` 和 queued status；原终态不变。成功返回 `202 { job }`，不可重试返回 `409`、`code: "runtime_job_not_retryable"`。未 claim 的普通 queued 作业可在重启后继续执行，但框架不会自动 replay 失败类终态，以免重复调用已经计费但未成功落库的 provider 工作。
+
+作业由 CAS claim + renewable lease 驱动，默认 worker 并发为 4，同一 `(session, plugin, runtime)` 串行。`maxQueueMs` 约束排队时间，`maxExecutionMs` 约束 claim 后控制面执行时间；重启后会继续 claim 合法 queued 作业，过期排队项置为 `timed_out`、过期在途 lease 置为 `orphaned`。提交前再次检查 session active/incarnation、插件 approval scope/version 和实际 proposal effects；session/plugin 身份检查失败落 `stale`（`reason: commit-barrier-rejected`），effect 或领域提交失败落 `failed`，两者都不会写入领域状态。
 
 ---
 
@@ -1705,6 +1761,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
       "outputKinds": ["story", "plugin", "system"],
       "runtimeTypes": ["agent", "function"],
       "executionModes": ["sync", "background"],
+      "turnCompletionModes": ["await", "detached"],
       "inputInjectKinds": ["runtime", "plugin-data", "runtime-export"],
       "uiSlots": ["right", "message", "left"]
     },
@@ -1715,6 +1772,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
       "scope": "(sessionId, pluginId, namespace, key)",
       "reservedNamespaces": [
         "_jobs",
+        "_runtime_jobs",
         "_logs",
         "__ui_right__",
         "__ui_message__"
@@ -1895,7 +1953,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 }
 ```
 
-`declaredPluginDataNamespaces` 来自 `dataSchemas` 和 `input.inject: plugin-data`。`runtimes[].after` / `needs` 暴露归一化依赖，`runtimes[].inputs` 原样暴露 typed binding 的来源、cardinality、JSON Pointer、schema 与 required gate，`runtimes[].effects` 暴露调度器实际使用的归一化 read/write set。`GET /api/framework/capabilities` 的 `framework.scheduling.effectsPolicy` 同时公开当前 `warn` / `strict` 策略；Agent 可以据此重建同轮 DAG 与 hazard 串行层，而不需要解析 Markdown prompt。`worldProjections` 是机器可读的插件级转换目录，外部工具和 Agent 可以据此规划 WorldIR fan-out；公开响应不暴露插件 `rootPath` 或 projection `handler`，handler 只能由 world-data importer 在 import/sync 中按权限执行，不能通过该只读 discovery 端点直接调用。运行时动态 key（如 `entries/<entryId>`、`images/<turnId>`）不会在这里枚举；需要结合 schema、插件文档或 `_index` 端点查看当前 session 的实际 key。
+`declaredPluginDataNamespaces` 来自 `dataSchemas` 和 `input.inject: plugin-data`。`runtimes[].after` / `needs` 暴露归一化依赖，`runtimes[].inputs` 原样暴露 typed binding 的来源、cardinality、JSON Pointer、schema 与 required gate，`runtimes[].effects` 暴露调度器实际使用的归一化 read/write set，`runtimes[].turnCompletion` 始终返回 effective policy：普通 runtime 为 `{ mode: "await" }`，detached runtime 另含 `maxQueueMs/maxExecutionMs/overlap/stalePolicy`。`GET /api/framework/capabilities` 的 `framework.scheduling.effectsPolicy` 同时公开当前 `warn` / `strict` 策略；Agent 可以据此重建同轮 DAG 与 hazard 串行层，而不需要解析 Markdown prompt。`worldProjections` 是机器可读的插件级转换目录，外部工具和 Agent 可以据此规划 WorldIR fan-out；公开响应不暴露插件 `rootPath` 或 projection `handler`，handler 只能由 world-data importer 在 import/sync 中按权限执行，不能通过该只读 discovery 端点直接调用。运行时动态 key（如 `entries/<entryId>`、`images/<turnId>`）不会在这里枚举；需要结合 schema、插件文档或 `_index` 端点查看当前 session 的实际 key。
 
 ---
 
@@ -1939,6 +1997,8 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
   ]
 }
 ```
+
+`available[].runtimes[].turnCompletion` 返回与全局插件/flow discovery 相同的 effective policy：未声明或未启用后台屏障时是 `{ "mode": "await" }`；detached 声明会附带期限与 `serial/reject` 策略。客户端应把它当作展示/诊断元数据，真正是否后台化仍由每回合活跃 DAG 的安全检查决定。
 
 #### `POST /api/sessions/:id/plugins/enable`
 
@@ -3042,6 +3102,7 @@ Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 | `session.forked`           | 会话         | `POST /api/sessions/:id/fork` 物化子 session 后发出                                             |
 | `execution.started`        | 执行生命周期 | Turn 执行开始                                                                                   |
 | `runtime.started`          | 执行生命周期 | 单个 Runtime 开始执行                                                                           |
+| `runtime.deferred`         | 执行生命周期 | staged runtime 已随原始回合提交并进入后台；payload 含 `jobId/sourceTurnId`                      |
 | `runtime.completed`        | 执行生命周期 | 单个 Runtime 执行完成                                                                           |
 | `runtime.failed`           | 执行生命周期 | Runtime 执行失败                                                                                |
 | `execution.completed`      | 执行生命周期 | Turn 执行完成                                                                                   |

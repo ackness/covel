@@ -37,6 +37,7 @@ const {
   enableSessionPlugin,
   disableSessionPlugin,
   listPackages,
+  fetchPluginFlows,
 } = apiModule;
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -118,6 +119,36 @@ describe("listSessionPlugins", () => {
     mockFetchOnce({ code: "NOT_FOUND" }, 404);
 
     await expect(listSessionPlugins("bad-id")).rejects.toThrow("API 404");
+  });
+
+  it("defaults missing runtime turnCompletion to await and preserves detached", async () => {
+    mockFetchOnce({
+      active: ["media"],
+      available: [
+        {
+          id: "media",
+          name: "Media",
+          active: true,
+          runtimes: [
+            { id: "media/fast" },
+            {
+              id: "media/render",
+              turnCompletion: { mode: "detached", maxQueueMs: 5_000 },
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await listSessionPlugins("session-123");
+
+    expect(result.available[0]?.runtimes?.[0]?.turnCompletion).toEqual({
+      mode: "await",
+    });
+    expect(result.available[0]?.runtimes?.[1]?.turnCompletion).toEqual({
+      mode: "detached",
+      maxQueueMs: 5_000,
+    });
   });
 });
 
@@ -274,6 +305,58 @@ describe("listPackages", () => {
     expect(result.packages[0]?.runtimes?.[0]?.tags).toEqual([
       "mode:traditional-story",
       "role:narrator",
+    ]);
+    expect(result.packages[0]?.runtimes?.[0]?.turnCompletion).toEqual({
+      mode: "await",
+    });
+  });
+
+  it("preserves detached package and flow policies", async () => {
+    mockFetchOnce({
+      packages: [
+        {
+          name: "tts",
+          enabled: true,
+          runtimes: [
+            {
+              id: "tts/auto",
+              kind: "function",
+              trigger: { type: "auto" },
+              turnCompletion: { mode: "detached", maxQueueMs: 10_000 },
+            },
+          ],
+        },
+      ],
+      loadErrors: [],
+    });
+    const packages = await listPackages();
+    expect(packages.packages[0]?.runtimes?.[0]?.turnCompletion).toEqual({
+      mode: "detached",
+      maxQueueMs: 10_000,
+    });
+
+    mockFetchOnce({
+      segments: [{ id: "post-turn", label: "Post-Turn" }],
+      steps: [
+        {
+          pluginId: "tts",
+          runtimeId: "tts/auto",
+          runtimeName: "auto",
+          segmentId: "post-turn",
+          turnCompletion: { mode: "detached" },
+        },
+        {
+          pluginId: "audit",
+          runtimeId: "audit",
+          runtimeName: "audit",
+          segmentId: "post-turn",
+        },
+      ],
+    });
+    const flow = await fetchPluginFlows();
+    expect(flow.steps.map((step) => step.turnCompletion.mode)).toEqual([
+      "detached",
+      "await",
     ]);
   });
 });

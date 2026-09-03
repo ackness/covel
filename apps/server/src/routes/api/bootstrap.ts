@@ -26,7 +26,12 @@ import {
 } from "@covel/events";
 import type { DataStore, StoreBackend } from "@covel/store";
 import type { LLMAdapter } from "@covel/runtime";
-import { createHookPipeline, createModelResolver } from "@covel/runtime";
+import {
+  createHookPipeline,
+  createModelResolver,
+  planTurnDetachment,
+} from "@covel/runtime";
+import { estimateTokens } from "@covel/context";
 import type { CompactorRunner } from "@covel/context";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 
@@ -59,10 +64,22 @@ import type { MediaStore } from "@covel/store";
 import type { MediaStoreBackend, VectorBackend } from "@covel/store";
 import { resumeRoutes } from "./resume.js";
 import { maybeSweepExpiredSuspensions } from "./suspension-sweep.js";
-import { sweepStalePendingJobs } from "./plugin-rpc/jobs.js";
+import {
+  recoverExpiredRuntimeJobs,
+  sweepStalePendingJobs,
+} from "./plugin-rpc/jobs.js";
+import {
+  createRuntimeJobWorker,
+  parseStagedRuntimeJobPayload,
+  RuntimeJobNoLongerCurrentError,
+  type RuntimeJobWorker,
+} from "./plugin-rpc/runtime-job-worker.js";
+import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
+import { resolveTurnCapabilityPluginIds } from "./turn-capabilities.js";
 import { snapshotRoutes } from "./snapshots.js";
 import { lorebookRoutes } from "./lorebook.js";
 import { runtimeOutputRoutes } from "./runtime-outputs.js";
+import { runtimeJobRoutes } from "./runtime-jobs.js";
 import { pluginRpcRoutes } from "./plugin-rpc.js";
 import { approvalRoutes, sessionApprovalRoutes } from "./approvals.js";
 import { createBrowserWorkspaceRoutes } from "./browser-workspace.js";
@@ -81,6 +98,7 @@ import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 import {
   sessionApprovalScope,
+  sessionIncarnationIdentity,
   verifyResolvedSessionRead,
 } from "./session/session-guard.js";
 
@@ -219,6 +237,7 @@ export interface ApiBootstrapResult {
   readonly store: DataStore;
   readonly eventBus: EventBus;
   readonly compactorRunner: CompactorRunner;
+  readonly runtimeJobWorker: RuntimeJobWorker;
   /**
    * Refresh the per-session tool override cache for `(create|update)-character`
    * so the next `executeTurn` exposes schema-typed `fields` to the LLM.
@@ -304,6 +323,16 @@ export async function bootstrapApi(
       ),
     );
   }
+
+  // Durable staged-runtime jobs use renewable leases, so the sweep is safe on
+  // every backend, including multiple PostgreSQL Pods. Expired work becomes a
+  // terminal audit record and is never silently re-billed.
+  void recoverExpiredRuntimeJobs(store).catch((err: unknown) =>
+    console.warn(
+      "[runtime-job-sweep] startup sweep failed:",
+      err instanceof Error ? err.message : String(err),
+    ),
+  );
 
   const { registry, discoveryMap, manifestCache } =
     await discoverAndRegisterPlugins({
@@ -589,6 +618,139 @@ export async function bootstrapApi(
     }
   }
 
+  const runtimeJobWorker = createRuntimeJobWorker({
+    store,
+    eventBus,
+    execute: async (job, control) => {
+      const payload = parseStagedRuntimeJobPayload(job.payload);
+      if (
+        !payload ||
+        payload.descriptor.jobId !== job.jobId ||
+        payload.descriptor.pluginId !== job.pluginId ||
+        payload.descriptor.runtimeId !== job.runtimeId
+      ) {
+        throw new Error("invalid detached runtime job payload");
+      }
+      const live = await store.getSession(job.sessionId);
+      if (!live || live.status !== "active") {
+        throw new RuntimeJobNoLongerCurrentError();
+      }
+      if (
+        sessionIncarnationIdentity(live) !==
+          payload.expectedSessionIncarnation ||
+        sessionApprovalScope(live, job.pluginId) !==
+          payload.expectedApprovalScope
+      ) {
+        throw new RuntimeJobNoLongerCurrentError();
+      }
+
+      registry.syncSessionActivations(job.sessionId, live.activePlugins);
+      const activeRuntimes = registry.getActiveRuntimes(job.sessionId);
+      const target = activeRuntimes.find(
+        (runtime) => runtime.name === job.runtimeId,
+      );
+      if (
+        !target ||
+        target.pluginId !== job.pluginId ||
+        target.version !== payload.descriptor.pluginVersion ||
+        !planTurnDetachment(activeRuntimes).eligibleRuntimeIds.has(
+          job.runtimeId,
+        )
+      ) {
+        throw new RuntimeJobNoLongerCurrentError();
+      }
+
+      const runner = createPluginRpcRuntimeTurnRunner({
+        store,
+        eventBus,
+        sessionLock,
+        sessionId: job.sessionId,
+        session: {
+          locale: payload.locale,
+          ...(payload.runtimeModelOverrides
+            ? { runtimeModelOverrides: payload.runtimeModelOverrides }
+            : {}),
+        },
+        activeRuntimes,
+        approvalScopes: new Map([
+          [job.pluginId, payload.expectedApprovalScope],
+        ]),
+        deps: {
+          loadRuntime: (manifest, locale) =>
+            loadRuntimeFn(manifest, locale, job.sessionId),
+          llm: config.llmAdapter,
+          ...(config.pluginGateway ? { gateway: config.pluginGateway } : {}),
+          ...(config.pluginUtils ? { utils: config.pluginUtils } : {}),
+          getPluginSource,
+          ...(config.mediaStore ? { mediaStore: config.mediaStore } : {}),
+          toolExecutor,
+          resolveModel,
+          compactor: compactorRunner,
+          estimator: estimateTokens,
+          contextBudget: turnContextBudget,
+          ...(bootstrapMemory
+            ? { memorySystem: bootstrapMemory.memorySystem }
+            : {}),
+          capabilityPluginIds: resolveTurnCapabilityPluginIds(
+            registry,
+            job.sessionId,
+          ),
+          eventDirectory,
+        },
+        hookPipeline,
+      });
+      const backgroundTurnId = crypto.randomUUID();
+      const outcome = await runner.runDetachedStage({
+        descriptor: payload.descriptor,
+        backgroundTurnId,
+        expectedSessionIncarnation: payload.expectedSessionIncarnation,
+        ...(payload.userSettings ? { userSettings: payload.userSettings } : {}),
+        ...(payload.modelOverride
+          ? { modelOverride: payload.modelOverride }
+          : {}),
+        ...(payload.runtimeModelOverrides
+          ? { runtimeModelOverrides: payload.runtimeModelOverrides }
+          : {}),
+        beforeCommit: control.beforeCommit,
+        beforeExecute: control.assertCurrent,
+        executionSignal: control.signal,
+      });
+      const runtimeResult = outcome.turnResult.runtimeResults.find(
+        (result) => result.runtimeId === job.runtimeId,
+      );
+      if (runtimeResult?.status !== "success") {
+        throw new Error(
+          runtimeResult?.error ??
+            `detached runtime ended with ${runtimeResult?.status ?? "no result"}`,
+        );
+      }
+      const runtimeOutput = runtimeResult.output;
+      if (
+        runtimeOutput?.status === "failed" ||
+        (typeof runtimeOutput?.error === "string" && runtimeOutput.error)
+      ) {
+        throw new Error(
+          typeof runtimeOutput.error === "string"
+            ? runtimeOutput.error
+            : "detached runtime reported a failed business result",
+        );
+      }
+      if (!outcome.commit.committed) {
+        throw new Error("detached runtime proposals did not commit");
+      }
+      return {
+        result: {
+          turnId: outcome.turnResult.turnId,
+          executionId: outcome.turnResult.executionContext.executionId,
+          runtimeId: runtimeResult.runtimeId,
+          durationMs: runtimeResult.durationMs,
+          output: runtimeResult.output,
+        },
+      };
+    },
+  });
+  runtimeJobWorker.wake();
+
   // 9. Create app with dependency injection middleware
   const app = new Hono();
 
@@ -621,6 +783,7 @@ export async function bootstrapApi(
     c.set("rpcRegistry", rpcRegistry);
     c.set("rpcApprovalGate", rpcApprovalGate);
     c.set("sessionLock", sessionLock);
+    c.set("runtimeJobWorker", runtimeJobWorker);
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("clearSessionToolOverrides", clearSessionToolOverrides);
     c.set("getPluginSource", getPluginSource);
@@ -700,6 +863,7 @@ export async function bootstrapApi(
   app.route("/api/sessions", snapshotRoutes); // state snapshots + fork
   app.route("/api/sessions", lorebookRoutes); // session-level lorebook viewer
   app.route("/api/sessions", runtimeOutputRoutes); // translation-layer observability
+  app.route("/api/sessions", runtimeJobRoutes); // scheduler-detached runtime jobs
   app.route("/api/sessions", pluginRpcRoutes); // plugin RPC channel
   app.route("/api/sessions", turnControlRoutes); // mid-turn steer / abort
   app.route("/api/sessions", sessionTurnRoutes); // turn_results artifact listing
@@ -732,6 +896,7 @@ export async function bootstrapApi(
     store,
     eventBus,
     compactorRunner,
+    runtimeJobWorker,
     prepareToolsForSession,
   };
 }

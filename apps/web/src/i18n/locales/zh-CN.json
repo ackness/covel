@@ -217,6 +217,9 @@
     "startingUp": "正在启动...",
     "retryFrom": "从 {{label}} 重试",
     "executionSummary": "执行 · {{count}} 个运行任务",
+    "backgroundTask": "后台任务",
+    "backgroundRunning": "后台运行中",
+    "backgroundCount": "{{count}} 个后台任务",
     "executionFlow": "执行流程",
     "executionFlowHint": "回合内的执行顺序 — 越靠前的阶段越先跑。",
     "executionFlowTitle": "插件每回合按阶段依次执行：开场准备、叙事前、叙事、叙事后。",
@@ -1249,6 +1252,8 @@
     "runtimeDefaultSummaryWithModel": "插件默认用途 · {{slot}} · {{model}}",
     "runtimeDefaultMissing": "插件默认用途 · {{slot}}（缺少配置）",
     "invalidPanelSpec": "面板规范无效",
+    "turnCompletionDetached": "不阻塞当前回合",
+    "turnCompletionAwait": "等待完成后结束回合",
     "source": {
       "builtin": {
         "label": "核心",

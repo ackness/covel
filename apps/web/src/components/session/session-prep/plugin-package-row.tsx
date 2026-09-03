@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Cpu, KeyRound, Lock, Wrench } from "lucide-react";
+import { Clock, Cpu, KeyRound, Lock, Wrench } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
@@ -64,6 +64,9 @@ export function PluginPackageRow({
     ),
   });
   const runtimes = pkg.runtimes ?? [];
+  const hasDetachedRuntime = runtimes.some(
+    (runtime) => runtime.turnCompletion?.mode === "detached",
+  );
   const tools = pkg.tools ?? [];
   const pluginBindings = bindingState.entries.filter(
     (entry) => entry.pluginId === pkg.name,
@@ -179,6 +182,18 @@ export function PluginPackageRow({
         {runtimes[0]?.kind && (
           <Badge variant="secondary" className="shrink-0 text-xs">
             {runtimes[0].kind === "agent" ? "LLM" : "Fn"}
+          </Badge>
+        )}
+        {hasDetachedRuntime && (
+          <Badge
+            variant="outline"
+            className="max-w-full shrink-0 gap-1 border-sky-500/30 bg-sky-500/10 text-xs text-sky-700 dark:text-sky-300"
+            title={t("plugin.turnCompletionDetached")}
+          >
+            <Clock className="h-3 w-3 shrink-0" />
+            <span className="hidden sm:inline">
+              {t("session.backgroundTask")}
+            </span>
           </Badge>
         )}
         {tools.length > 0 && (

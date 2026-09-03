@@ -29,6 +29,19 @@ inputs:
     required: false
 execution: sync
 timeoutMs: 90000
+turnCompletion:
+  mode: detached
+  maxQueueMs: 120000
+  maxExecutionMs: 120000
+  overlap: serial
+  stalePolicy: reject
+effects:
+  reads: []
+  writes:
+    - assets:*
+    - media:*
+    - plugin-data:self:tracks
+    - plugin-data:self:message
 trigger:
   type: auto
 userSettings:

@@ -175,6 +175,11 @@ export async function executeOneRuntime(
       rawDelta: RecursiveCallDelta,
       opts?: { readonly reason?: string },
     ): Promise<NestedTurnResult> => {
+      if (input.detachedStage) {
+        throw new Error(
+          `recursiveCall is not available to detached stage runtime "${manifest.name}"`,
+        );
+      }
       const maxDepth =
         manifest.maxRecursionDepth ?? turnOptions?.maxRecursionDepth ?? 10;
       const nextDepth = recursionDepth + 1;

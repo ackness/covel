@@ -3,6 +3,7 @@ import {
   PROPOSAL_TYPES,
   WORLD_IR_V1_JSON_SCHEMA,
   WORLD_IR_V1_SCHEMA_URI,
+  effectiveTurnCompletion,
   getRuntimeSpec,
   inputInjectDeclSchema,
   outputKindSchema,
@@ -14,6 +15,7 @@ import {
 import type {
   DependencyRef,
   EffectResource,
+  EffectiveTurnCompletion,
   RuntimeManifest,
   Stage,
 } from "@covel/shared";
@@ -51,6 +53,8 @@ export interface RuntimePluginContract {
   needs: readonly DependencyRef[];
   trigger?: unknown;
   execution?: unknown;
+  /** Effective foreground-turn completion policy (always present). */
+  turnCompletion: EffectiveTurnCompletion;
   model?: unknown;
   tools: {
     builtin: string[];
@@ -269,6 +273,7 @@ function buildRuntimeContract(
     needs: [...runtimeSpec.deps.needs],
     ...(manifest.trigger ? { trigger: manifest.trigger } : {}),
     ...(manifest.execution ? { execution: manifest.execution } : {}),
+    turnCompletion: effectiveTurnCompletion(manifest),
     ...(manifest.model ? { model: manifest.model } : {}),
     tools: {
       builtin: [...(manifest.tools?.builtin ?? [])],
@@ -378,6 +383,7 @@ export function buildFrameworkCapabilities(
         outputKinds: enumValues(outputKindSchema),
         runtimeTypes: ["agent", "function"],
         executionModes: ["sync", "background"],
+        turnCompletionModes: ["await", "detached"],
         // Derived from the inject discriminated union so a new kind
         // (e.g. runtime-export) can never go missing from the advert.
         inputInjectKinds: inputInjectDeclSchema.options.map(
@@ -392,6 +398,7 @@ export function buildFrameworkCapabilities(
         scope: "(sessionId, pluginId, namespace, key)",
         reservedNamespaces: [
           "_jobs",
+          "_runtime_jobs",
           "_logs",
           "__ui_right__",
           "__ui_message__",

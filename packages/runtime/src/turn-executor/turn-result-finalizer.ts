@@ -1,4 +1,5 @@
 import type {
+  DeferredRuntimeJob,
   ExecutionContext,
   InteractionPayload,
   PendingInputInfo,
@@ -16,6 +17,7 @@ export interface FinalizeTurnResultParams {
   readonly startTime: number;
   readonly completedResults: ReadonlyMap<string, RuntimeResult>;
   readonly deferredFollowers: NonNullable<TurnResult["deferredFollowers"]>;
+  readonly deferredRuntimeJobs: readonly DeferredRuntimeJob[];
   readonly deps: TurnExecutorDeps;
   readonly turnNumber: number;
   /**
@@ -122,6 +124,7 @@ export async function finalizeTurnResult({
   startTime,
   completedResults,
   deferredFollowers,
+  deferredRuntimeJobs,
   deps,
   turnNumber,
   nestedRuntimeResults,
@@ -139,6 +142,7 @@ export async function finalizeTurnResult({
     durationMs: Date.now() - startTime,
     timestamp: new Date().toISOString(),
     ...(deferredFollowers.length > 0 ? { deferredFollowers } : {}),
+    ...(deferredRuntimeJobs.length > 0 ? { deferredRuntimeJobs } : {}),
   };
   await persistTurnResult(
     turnResult,

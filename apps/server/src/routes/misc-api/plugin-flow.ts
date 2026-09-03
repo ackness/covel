@@ -3,8 +3,13 @@ import {
   loadPluginManifest,
   loadPluginSummary,
 } from "@covel/plugin-loader";
-import type { I18nText, Stage } from "@covel/shared";
-import { getRuntimeSpec, stageRank, STAGE_ORDER } from "@covel/shared";
+import type { EffectiveTurnCompletion, I18nText, Stage } from "@covel/shared";
+import {
+  effectiveTurnCompletion,
+  getRuntimeSpec,
+  stageRank,
+  STAGE_ORDER,
+} from "@covel/shared";
 import { resolve } from "node:path";
 import {
   docPathFromAbsolute,
@@ -84,6 +89,7 @@ export async function buildPluginFlowResponse() {
     uiSlots: string[];
     docPath: string;
     isStoryRuntime: boolean;
+    turnCompletion: EffectiveTurnCompletion;
   }> = [];
   for (const discovery of discoveries) {
     const [summary, manifests] = await Promise.all([
@@ -162,6 +168,7 @@ export async function buildPluginFlowResponse() {
         uiSlots: uiSlotsOf(manifest),
         docPath,
         isStoryRuntime: isStoryRuntime(manifest),
+        turnCompletion: effectiveTurnCompletion(manifest),
       });
     }
   }

@@ -86,7 +86,10 @@ export {
   stageMessageOrder,
   getRuntimeSpec,
   hasIllegalDetachedContract,
+  isTurnDetachedRuntime,
+  effectiveTurnCompletion,
 } from "./scheduling/normalize.js";
+export type { EffectiveTurnCompletion } from "./scheduling/normalize.js";
 export { mirrorSetupDone } from "./scheduling/session-clock.js";
 export type { SessionClock } from "./scheduling/session-clock.js";
 export {
@@ -128,6 +131,7 @@ export {
   runtimeManifestAuthoringSchema,
   authoringTriggerConfigSchema,
   stageSchema,
+  turnCompletionConfigSchema,
   afterRefSchema,
   needsRefSchema,
   runtimeBindingSchema,

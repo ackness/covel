@@ -26,6 +26,7 @@ export const SUBSCRIPTION_TOPICS = [
   "system",
   "trace",
   "hooks",
+  "job",
 ] as const;
 
 export type SubscriptionTopic = (typeof SUBSCRIPTION_TOPICS)[number];

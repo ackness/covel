@@ -8,6 +8,7 @@
  */
 
 import type {
+  DeferredRuntimeJob,
   RuntimeManifest,
   RuntimeResult,
   SetupRuntimeState,
@@ -63,6 +64,7 @@ import {
   createExecutionContext,
 } from "./execution-context.js";
 import { isTurnExecutionAborted, PLAYER_ABORT_REASON } from "./turn-control.js";
+import { planTurnDetachment } from "../schedule/turn-completion.js";
 import { markPreGameCompletion } from "./pre-game-completion.js";
 import { schedulePostTurnMemoryUpdate } from "./post-turn-memory.js";
 import {
@@ -199,16 +201,20 @@ async function executeTurnImpl(
   // Frozen execution-start instant: pins `atOrBefore` on every recordAs export
   // read so this execution sees a stable snapshot of committed exports even if a
   // producer publishes a new revision while the turn is still running (02 §3.4.2).
-  const executionStartedAt = new Date().toISOString();
+  const executionStartedAt =
+    input.detachedStage?.sourceExecutionStartedAt ?? new Date().toISOString();
   const maxSteps = options?.maxSteps ?? 10;
   const defaultTimeoutMs = options?.timeoutMs ?? 60000;
   const recursionDepth = options?.recursionDepth ?? 0;
+  const targetedRuntimeId =
+    input.detachedStage?.runtimeId ?? input.manualTrigger?.runtimeId;
   // Allocate identity before hooks run. Counting stays conservative until the
   // authoritative persisted session phase is loaded below.
   let executionContext = createExecutionContext(input);
   const executionFlags = input as RecursiveTurnInput;
   const shouldAppendPlayerMessage =
     !input.manualTrigger &&
+    !input.detachedStage &&
     !executionFlags.suppressPlayerMessage &&
     input.playerMessage.length > 0;
 
@@ -318,7 +324,7 @@ async function executeTurnImpl(
       return st !== "done" && st !== "blocked";
     });
     const cycles = detectSetupSessionCycles(pendingSetup);
-    if (cycles.size > 0 && !input.manualTrigger) {
+    if (cycles.size > 0 && !targetedRuntimeId) {
       const now = new Date().toISOString();
       const patched: Record<string, SetupRuntimeState> = {
         ...setupRuntimesSnapshot,
@@ -366,7 +372,7 @@ async function executeTurnImpl(
   );
   const { manualTarget, triggered, abortReason } = selectTriggeredRuntimes({
     activeRuntimes,
-    manualRuntimeId: input.manualTrigger?.runtimeId,
+    manualRuntimeId: targetedRuntimeId,
     messageHistory: triggerMessageHistory,
     runtimeTriggerCounts,
     setupRuntimes: setupRuntimesSnapshot,
@@ -449,6 +455,24 @@ async function executeTurnImpl(
         code: d.code,
         message: d.message,
         ...(d.data !== undefined ? { data: d.data } : {}),
+      },
+    );
+  }
+  const detachmentPlan = input.detachedStage
+    ? { eligibleRuntimeIds: new Set<string>(), diagnostics: [] }
+    : planTurnDetachment(scheduledRuntimes);
+  for (const diagnostic of detachmentPlan.diagnostics) {
+    const message = `runtime "${diagnostic.runtimeId}" remains in the foreground: ${diagnostic.reason}`;
+    console.warn(`[covel:warn] [turn-executor] ${message}`);
+    emitSubEvent(
+      deps.eventBus,
+      "runtime",
+      "scheduling.hazard",
+      input.sessionId,
+      {
+        code: "detached-runtime-ineligible",
+        message,
+        data: { runtimeId: diagnostic.runtimeId },
       },
     );
   }
@@ -543,6 +567,7 @@ async function executeTurnImpl(
 
   // 3. Execute each group
   const completedResults = new Map<string, RuntimeResult>();
+  const deferredRuntimeJobs: DeferredRuntimeJob[] = [];
 
   // Retry seeding (manual retry of a failed runtime): pre-populate the map
   // with the original turn's recorded outputs so the target's `input.inject`
@@ -550,8 +575,12 @@ async function executeTurnImpl(
   // pre-finalize cleanup below drops any seed that a real execution did not
   // overwrite this turn.
   const retrySeeds = new Map<string, RuntimeResult>();
-  for (const seed of input.manualTrigger?.retrySeedResults ?? []) {
-    if (seed.runtimeId === input.manualTrigger?.runtimeId) continue;
+  const seededResults =
+    input.detachedStage?.upstreamResults ??
+    input.manualTrigger?.retrySeedResults ??
+    [];
+  for (const seed of seededResults) {
+    if (seed.runtimeId === targetedRuntimeId) continue;
     completedResults.set(seed.runtimeId, seed);
     retrySeeds.set(seed.runtimeId, seed);
   }
@@ -722,8 +751,31 @@ async function executeTurnImpl(
 
   for (const group of groups) {
     if (executionAborted()) break;
+    // A detached runtime observes the same visible set it would have seen at
+    // the start of this DAG level. Results from foreground siblings in this
+    // level are deliberately excluded because they used to run in parallel.
+    const frozenUpstreamResults = [...completedResults.values()];
+    const foregroundRuntimes = group.runtimes.filter(
+      (manifest) => !detachmentPlan.eligibleRuntimeIds.has(manifest.name),
+    );
+    for (const manifest of group.runtimes) {
+      if (!detachmentPlan.eligibleRuntimeIds.has(manifest.name)) continue;
+      deferredRuntimeJobs.push({
+        jobId: crypto.randomUUID(),
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        sourceTurnId: input.turnId,
+        sourceExecutionId: executionContext.executionId,
+        sourceExecutionStartedAt: executionStartedAt,
+        ...(executionContext.logicalTurnId
+          ? { sourceLogicalTurnId: executionContext.logicalTurnId }
+          : {}),
+        ...(manifest.version ? { pluginVersion: manifest.version } : {}),
+        upstreamResults: frozenUpstreamResults,
+      });
+    }
     const results = await executeParallel(
-      group.runtimes,
+      foregroundRuntimes,
       async (manifest, identity) => {
         const triggerEventForRuntime =
           manualTarget &&
@@ -855,12 +907,19 @@ async function executeTurnImpl(
   }
   if (setupRan.length > 0) observedSetupCompletion = true;
 
+  const canPublishDeferredJobs =
+    !executionAborted() &&
+    ![...completedResults.values()].some(
+      (result) => result.status === "suspended",
+    );
+
   const baseResult = await finalizeTurnResult({
     input,
     executionContext,
     startTime,
     completedResults,
     deferredFollowers,
+    deferredRuntimeJobs: canPublishDeferredJobs ? deferredRuntimeJobs : [],
     deps,
     turnNumber,
     nestedRuntimeResults,

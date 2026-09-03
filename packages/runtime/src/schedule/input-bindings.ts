@@ -164,6 +164,12 @@ export function deriveActivation(
       }
     | undefined,
 ): RuntimeActivation {
+  if (
+    input.detachedStage !== undefined &&
+    input.detachedStage.runtimeId === manifest.name
+  ) {
+    return { source: "stage", detached: true, payload: null };
+  }
   const backgroundWhenDetached =
     getRuntimeSpec(manifest).backgroundWhenDetached;
   if (triggerEvent !== undefined) {
@@ -260,9 +266,10 @@ export async function resolveInputBindings(
   if (bindingEntries.length === 0) {
     return { ok: true, slots: {}, diagnostics };
   }
-  // A detached activation carrying turn bindings is rejected for this
-  // activation (the spec stays valid for its non-detached activations).
-  if (activation.detached) {
+  // Event/manual detached activations have no same-turn visible set. A
+  // scheduler-deferred stage activation is different: its worker rehydrates
+  // the immutable source execution results before resolving these bindings.
+  if (activation.detached && activation.source !== "stage") {
     return {
       ok: false,
       skipReason: "invalid-detached-contract",

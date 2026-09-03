@@ -4,6 +4,10 @@ import {
   mergeGameStateForReplacement,
   rebuildGameStateFromPatches,
 } from "./game-state.js";
+import {
+  buildDurableRuntimeJobExecutionStep,
+  buildLegacyJobExecutionStep,
+} from "./execution-steps.js";
 import { applyPluginMessageSurface } from "./plugin-message-surface.js";
 import type {
   AssetProgressEvent,
@@ -13,6 +17,22 @@ import type {
 } from "./types.js";
 
 const EXEC_STEPS_MAX = 500;
+
+function upsertExecutionStep(
+  steps: SessionState["executionSteps"],
+  step: SessionState["executionSteps"][number],
+): SessionState["executionSteps"] {
+  const key = `${step.turnId ?? "__no_turn__"}|${step.runtimeId}`;
+  const idx = steps.findIndex(
+    (item) => `${item.turnId ?? "__no_turn__"}|${item.runtimeId}` === key,
+  );
+  const next = [...steps];
+  if (idx >= 0) next[idx] = { ...next[idx], ...step };
+  else next.push(step);
+  return next.length > EXEC_STEPS_MAX
+    ? next.slice(next.length - EXEC_STEPS_MAX)
+    : next;
+}
 
 /** Streaming-placeholder id convention shared with the renderer. */
 const STREAM_ID_PREFIX = "stream_";
@@ -337,21 +357,10 @@ export function reducer(
       // skipped / etc happen in place — missed runtime.completed no longer
       // leaves the chip spinning. New turn creates a new row; existing turn's
       // row is merged so we keep label/startedAt while overwriting status.
-      const key = `${action.step.turnId ?? "__no_turn__"}|${action.step.runtimeId}`;
-      const idx = state.executionSteps.findIndex(
-        (s) => `${s.turnId ?? "__no_turn__"}|${s.runtimeId}` === key,
-      );
-      const next = [...state.executionSteps];
-      if (idx >= 0) {
-        next[idx] = { ...next[idx], ...action.step };
-      } else {
-        next.push(action.step);
-      }
-      const capped =
-        next.length > EXEC_STEPS_MAX
-          ? next.slice(next.length - EXEC_STEPS_MAX)
-          : next;
-      return { ...state, executionSteps: capped };
+      return {
+        ...state,
+        executionSteps: upsertExecutionStep(state.executionSteps, action.step),
+      };
     }
     case "LOAD_EXECUTION_STEPS":
       return { ...state, executionSteps: action.steps };
@@ -364,13 +373,15 @@ export function reducer(
       // pretending work is in progress.
       const anyRunning = state.executionSteps.some(
         (s) =>
-          s.status === "running" || s.status === "llm" || s.status === "tool",
+          !s.detached &&
+          (s.status === "running" || s.status === "llm" || s.status === "tool"),
       );
       if (!anyRunning) return state;
       return {
         ...state,
         executionSteps: state.executionSteps.map((s) =>
-          s.status === "running" || s.status === "llm" || s.status === "tool"
+          !s.detached &&
+          (s.status === "running" || s.status === "llm" || s.status === "tool")
             ? { ...s, status: "failed", detail: s.detail ?? action.reason }
             : s,
         ),
@@ -466,6 +477,38 @@ export function reducer(
         ...state,
         pluginData: action.pluginData,
       };
+      for (const [pluginId, namespaces] of Object.entries(action.pluginData)) {
+        for (const [jobId, value] of Object.entries(namespaces._jobs ?? {})) {
+          const step = buildLegacyJobExecutionStep(pluginId, jobId, value);
+          if (step) {
+            nextState = {
+              ...nextState,
+              executionSteps: upsertExecutionStep(
+                nextState.executionSteps,
+                step,
+              ),
+            };
+          }
+        }
+        for (const [jobId, value] of Object.entries(
+          namespaces._runtime_jobs ?? {},
+        )) {
+          const step = buildDurableRuntimeJobExecutionStep(
+            pluginId,
+            jobId,
+            value,
+          );
+          if (step) {
+            nextState = {
+              ...nextState,
+              executionSteps: upsertExecutionStep(
+                nextState.executionSteps,
+                step,
+              ),
+            };
+          }
+        }
+      }
       for (const entry of nextState.messageUiSpecs) {
         nextState = applyPluginMessageSurface(nextState, entry.pluginId);
       }
@@ -484,10 +527,33 @@ export function reducer(
         }
         pluginNs[change.namespace] = ns;
       }
-      const nextState = {
+      let nextState: SessionState = {
         ...state,
         pluginData: { ...prev, [pluginId]: pluginNs },
       };
+      for (const change of changes) {
+        if (
+          (change.namespace !== "_jobs" &&
+            change.namespace !== "_runtime_jobs") ||
+          change.operation === "delete"
+        ) {
+          continue;
+        }
+        const step =
+          change.namespace === "_runtime_jobs"
+            ? buildDurableRuntimeJobExecutionStep(
+                pluginId,
+                change.key,
+                change.value,
+              )
+            : buildLegacyJobExecutionStep(pluginId, change.key, change.value);
+        if (step) {
+          nextState = {
+            ...nextState,
+            executionSteps: upsertExecutionStep(nextState.executionSteps, step),
+          };
+        }
+      }
       // If any change touched namespace="message", refresh the synthesized
       // plugin_message surface for this plugin so chat can render it via json-render.
       if (changes.some((c) => c.namespace === "message")) {

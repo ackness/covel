@@ -93,6 +93,7 @@ export interface SessionPluginInfo {
     capabilities?: string[];
     tags?: string[];
     relations?: Record<string, unknown>;
+    turnCompletion?: import("./types.js").TurnCompletionSummary;
   }>;
 }
 
@@ -125,7 +126,18 @@ export async function listSessionPlugins(
     relations: p.relations as Record<string, unknown> | undefined,
     pluginType: p.pluginType as string | undefined,
     source: p.source as SessionPluginInfo["source"],
-    runtimes: p.runtimes as SessionPluginInfo["runtimes"],
+    runtimes: Array.isArray(p.runtimes)
+      ? (p.runtimes as Array<Record<string, unknown>>).map((runtime) => ({
+          ...runtime,
+          turnCompletion:
+            (runtime.turnCompletion as { mode?: string } | undefined)?.mode ===
+            "detached"
+              ? (runtime.turnCompletion as NonNullable<
+                  SessionPluginInfo["runtimes"]
+                >[number]["turnCompletion"])
+              : { mode: "await" },
+        }))
+      : undefined,
   })) as SessionPluginInfo[];
   return { active: raw.active, available, commands: raw.commands ?? [] };
 }

@@ -25,6 +25,7 @@ interface RuntimeStatus {
     | "running"
     | "llm"
     | "tool"
+    | "deferred"
     | "completed"
     | "failed"
     | "skipped"
@@ -34,6 +35,9 @@ interface RuntimeStatus {
   toolName?: string;
   /** Duration in milliseconds (only set when completed or failed). */
   durationMs?: number;
+  detached?: boolean;
+  jobState?: string;
+  progress?: number;
 }
 
 function deriveStatuses(
@@ -70,6 +74,9 @@ function deriveStatuses(
     detail: step.detail,
     toolName: step.toolName,
     durationMs: step.durationMs,
+    detached: step.detached,
+    jobState: step.jobState,
+    progress: step.progress,
   }));
 }
 
@@ -81,6 +88,8 @@ function StatusIcon({ status }: { status: RuntimeStatus["status"] }) {
       return <Zap className="w-3 h-3 animate-pulse text-amber-500" />;
     case "tool":
       return <Wrench className="w-3 h-3 animate-pulse text-violet-500" />;
+    case "deferred":
+      return <Clock className="w-3 h-3 animate-pulse text-sky-500" />;
     case "completed":
       return <CheckCircle2 className="w-3 h-3 text-green-500" />;
     case "failed":
@@ -127,29 +136,47 @@ function RuntimeChip({
   onRetry?: (runtimeId: string) => void;
   retryFromLabel: string;
 }) {
+  const { t } = useTranslation();
   const isActive =
-    rt.status === "running" || rt.status === "llm" || rt.status === "tool";
+    rt.status === "running" ||
+    rt.status === "llm" ||
+    rt.status === "tool" ||
+    rt.status === "deferred";
 
   return (
     <span
       className={
         "group inline-flex max-w-full flex-wrap items-center gap-1 px-2 py-0.5 text-[11px] border transition-colors " +
         "ui-chip " +
-        (isActive
-          ? "border-primary/30 bg-primary/5 text-foreground"
-          : rt.status === "failed"
-            ? "border-destructive/30 bg-destructive/5 text-destructive"
-            : rt.status === "skipped"
-              ? "border-border/40 bg-muted/20 text-muted-foreground/70 italic"
-              : rt.status === "suspended"
-                ? "border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-400"
-                : "border-border/50 bg-muted/30 text-muted-foreground")
+        (rt.status === "deferred"
+          ? "border-sky-500/35 bg-sky-500/5 text-foreground"
+          : isActive
+            ? "border-primary/30 bg-primary/5 text-foreground"
+            : rt.status === "failed"
+              ? "border-destructive/30 bg-destructive/5 text-destructive"
+              : rt.status === "skipped"
+                ? "border-border/40 bg-muted/20 text-muted-foreground/70 italic"
+                : rt.status === "suspended"
+                  ? "border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-400"
+                  : "border-border/50 bg-muted/30 text-muted-foreground")
       }
     >
       <StatusIcon status={rt.status} />
       <span className="font-medium truncate max-w-30 ui-chip-name">
         {rt.label}
       </span>
+      {rt.detached && (
+        <span className="rounded-sm border border-sky-500/25 bg-sky-500/10 px-1 text-[9px] leading-3 text-sky-700 dark:text-sky-300">
+          {rt.status === "deferred"
+            ? t("session.backgroundRunning")
+            : t("session.backgroundTask")}
+        </span>
+      )}
+      {rt.status === "deferred" && rt.progress != null && (
+        <span className="text-[10px] tabular-nums text-sky-700 dark:text-sky-300">
+          {Math.max(0, Math.min(100, Math.round(rt.progress)))}%
+        </span>
+      )}
       {rt.status === "tool" && rt.toolName && (
         <span className="text-[10px] text-muted-foreground truncate max-w-35 font-mono">
           {rt.toolName}
@@ -313,8 +340,14 @@ export function ExecutionTimeline({
         const isLatest = group.turnId === latestTurnId;
         const active = statuses.find(
           (r) =>
-            r.status === "running" || r.status === "llm" || r.status === "tool",
+            r.status === "running" ||
+            r.status === "llm" ||
+            r.status === "tool" ||
+            r.status === "deferred",
         );
+        const activeBackgroundCount = statuses.filter(
+          (runtime) => runtime.status === "deferred",
+        ).length;
         const allDone = !executing || !isLatest ? !active : false;
         const canRetry = allDone && isLatest && !!onRetryRuntime;
         const failures = statuses.filter(
@@ -346,6 +379,13 @@ export function ExecutionTimeline({
                 <span className="text-[9px] text-muted-foreground/50 font-mono">
                   #{turnNumber}
                 </span>
+                {activeBackgroundCount > 0 && (
+                  <span className="rounded-full border border-sky-500/25 bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-medium normal-case tracking-normal text-sky-700 dark:text-sky-300">
+                    {t("session.backgroundCount", {
+                      count: activeBackgroundCount,
+                    })}
+                  </span>
+                )}
               </button>
               {isLatest && onRetryAll && allDone && (
                 <button

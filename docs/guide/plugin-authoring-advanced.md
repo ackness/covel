@@ -670,6 +670,37 @@ handler: ./handler.js
 
 **事件链 chain:** 无论 sync 还是 background,runtime emit 的 `event.emit` proposal 都会触发同一 turn 内订阅该 topic 的下游 runtime(同一事件的多个订阅者按 `name` 定序),不需要额外协调。这让"按钮 → prompt-generator (agent) → image-generator (function, background)"这种多步 pipeline 完全声明式。
 
+### `turnCompletion: await` vs `turnCompletion: detached`
+
+`execution` 控制 manual/event 激活，`turnCompletion` 控制 stage scheduler 的前台完成屏障，两者互不替代。长耗时、没有前台消费者的 `post-turn` / `audit` function runtime 可以申请后台化：
+
+```yaml
+runtimeType: function
+stage: post-turn
+timeoutMs: 90000
+turnCompletion:
+  mode: detached
+  maxQueueMs: 120000
+  maxExecutionMs: 120000
+  overlap: serial
+  stalePolicy: reject
+effects:
+  reads: []
+  writes:
+    - assets:*
+    - media:*
+    - plugin-data:self:tracks
+```
+
+- `mode` 缺省 `await`。`detached` 通过检查后，原始回合只等待任务随领域写入一起持久化，不等待 handler；`maxQueueMs` 管排队，`maxExecutionMs` 管 claim 后的后台作业期限，runtime 自身仍受 `timeoutMs` 和 `ctx.signal` 约束。
+- 首版 `overlap` 只有 `serial`、`stalePolicy` 只有 `reject`。同一 session/runtime 串行；session incarnation、插件审批代次或插件版本变化后，旧任务不能开始或提交。
+- 后台输入是原始 DAG 层开始时冻结的 `RuntimeResult[]`、模型和设置快照。不要在 handler 中假定它代表任务真正执行时的最新会话状态。
+- 声明只是 opt-in。当前只接受 function、安全叶节点、显式且隔离的 effects；`recordAs`、event、live plugin-data prompt inject、story/interaction/state 等跨回合可观察写入不安全。静态检查失败会保留前台执行并发出诊断；实际 proposal 还要经过提交前 effect guard。
+- durable 记录位于框架保留的 `_runtime_jobs`，使用 CAS lease 和 `queued → claimed → running → committing → succeeded` 状态机，失败终态包括 `failed / timed_out / cancelled / stale / orphaned`。进程重启会继续执行未过期且从未 claim 的 queued 作业；超时队列和过期在途 lease 会进入失败终态，绝不自动重放可能已经计费的工作。
+- 入队时 `/api/actions` 与持久订阅都会收到 `runtime.deferred`；之后 `job-status.updated.data.originTurnId` 把 running、成功、失败或取消状态归属回原始 turn。插件不得直接读写 `_runtime_jobs`。
+
+第一份内置参考实现是 `plugins/mimo-tts/runtimes/auto-narrate/PLUGIN.md`。完整安全边界和字段表见 [plugins.md #turnCompletion](../reference/plugins.md#turncompletion调度-runtime-的回合完成屏障)。
+
 ### 完整示例: 两段式图像生成插件
 
 ```yaml
@@ -854,7 +885,9 @@ inputs: # 读同回合上游数据的唯一通道
 const narrative = ctx.inputs?.narrative?.value as string | undefined;
 ```
 
-**③ 进度:用 `ctx.progress.report`。** 长任务(图像 / TTS 生成)的实时进度走 job-status 通道:`ctx.progress.report(...)` 判空 + 吞异常(见上文调度 ctx API 小节)。durable 产出仍走返回值 / proposal——进度只是观测,不落游戏状态。该通道与 `plugin-data` 的 `_jobs` 占位行并存,前端面板仍读占位行时可两边同写。
+**③ 进度:用 `ctx.progress.report`。** 长任务(图像 / TTS 生成)的实时进度走 job-status 通道:`ctx.progress.report(...)` 判空 + 吞异常(见上文调度 ctx API 小节)。durable 产出仍走返回值 / proposal——进度只是观测,不落游戏状态。manual/event background 通道仍可与 `plugin-data` 的 `_jobs` 占位行并存；stage detached 的 `_runtime_jobs` 由框架独占，插件不应两边同写控制状态。
+
+**④ 确认是否真的需要 detached。** 只有不会影响本回合或下一回合调度结果的 function 叶节点才声明 `turnCompletion.mode: detached`。媒体衍生产物通常合适；世界状态、任务、角色、记忆及其他 runtime 依赖的输出继续用默认 `await`。
 
 ---
 

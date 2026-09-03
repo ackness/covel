@@ -143,7 +143,7 @@ Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填
 | dashscope-image-gen/image-generator  | plugin      | 无（event，不设 stage）    | event（topic: `image.generate.requested`，`execution: background`）        | —         | DashScope wan2.x 生成插图（`ctx.images`），产出 `asset.generate` + 画廊记录                    |
 | openai-image-gen/prompt-generator    | plugin      | —                          | manual（右侧「生成图片」按钮）                                             | `default` | 剧情插图提示词 agent，发 `openai-image.generate.requested`                                     |
 | openai-image-gen/image-generator     | plugin      | 无（event，不设 stage）    | event（topic: `openai-image.generate.requested`，`execution: background`） | —         | OpenAI 兼容生成插图（`ctx.images`），产出 `asset.generate` + 画廊记录                          |
-| mimo-tts/auto-narrate                | plugin      | `post-turn`                | auto（`needs: capability narrative-engine`）                               | —         | 叙事旁白自动 TTS（`ctx.speech`，MiMo wire）；每回合写「朗读」按钮的消息层锚点                  |
+| mimo-tts/auto-narrate                | plugin      | `post-turn`                | auto（`needs: capability narrative-engine`，`turnCompletion: detached`）   | —         | 叙事旁白自动 TTS（`ctx.speech`，MiMo wire）；冻结本轮叙事后转入后台，不阻塞下一次玩家操作      |
 | mimo-tts/manual-narrate              | plugin      | —                          | manual（消息内「朗读」按钮，`execution: background`）                      | —         | 按钮 payload 指定段落的手动 TTS（`ctx.speech`）                                                |
 | memory                               | core-plugin | —                          | UI-only（无 runtime）                                                      | —         | 长期记忆摘要面板 + 通过 `memoryBlocks` 声明默认核心记忆块（剧情/角色关系/场景/玩家状态）       |
 | cost-gate                            | plugin      | —                          | hook-only（opt-in，默认禁用）                                              | —         | 跨切面：每会话 token 预算门控（hooks：PostLLMResponse/PreSchedule/TurnStart/SessionEnd）       |
@@ -1056,18 +1056,19 @@ Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direc
 
 ### mimo-tts/auto-narrate
 
-| 字段         | 值                                                                                  |
-| ------------ | ----------------------------------------------------------------------------------- |
-| pluginType   | `plugin`                                                                            |
-| runtimeType  | `function`（无 LLM，调用 `ctx.speech.generate`）                                    |
-| stage        | `post-turn`                                                                         |
-| trigger      | `auto`；`needs: [{ capability: narrative-engine }]`                                 |
-| inputs       | `narrative` ← capability `narrative-engine` 的 `/narrativeOutput`（引擎无关）       |
-| capabilities | `[tts, narrative-audio]`                                                            |
-| userSettings | `enabled`（关掉只停自动合成）· `modelPresetId` · `voice` · `format` · `maxChars` 等 |
-| ui.right     | `audio-tab.json`（AudioPlayer playlist）                                            |
+| 字段           | 值                                                                                  |
+| -------------- | ----------------------------------------------------------------------------------- |
+| pluginType     | `plugin`                                                                            |
+| runtimeType    | `function`（无 LLM，调用 `ctx.speech.generate`）                                    |
+| stage          | `post-turn`                                                                         |
+| trigger        | `auto`；`needs: [{ capability: narrative-engine }]`                                 |
+| inputs         | `narrative` ← capability `narrative-engine` 的 `/narrativeOutput`（引擎无关）       |
+| turnCompletion | `detached` · `maxQueueMs: 120000` · `maxExecutionMs: 120000` · `serial` / `reject`  |
+| capabilities   | `[tts, narrative-audio]`                                                            |
+| userSettings   | `enabled`（关掉只停自动合成）· `modelPresetId` · `voice` · `format` · `maxChars` 等 |
+| ui.right       | `audio-tab.json`（AudioPlayer playlist）                                            |
 
-**职责**：读本轮叙事 → `ctx.speech.generate()`（wire 分发、MediaStore 持久化、promptHash 去重在框架侧）→ 写 `tracks` 记录 + `assetGenerations[]`。**每回合（含 `enabled: false` 时）**写 `message` namespace 的 `{ turnId, text }` 记录——这是「朗读」按钮的消息层锚点与 payload 来源（消息层 spec 依赖该 namespace 才渲染）。
+**职责**：在前台回合提交时冻结本轮叙事输入并原子写入 `_runtime_jobs`，随后由后台 worker 执行 `ctx.speech.generate()`（wire 分发、MediaStore 持久化、promptHash 去重在框架侧）→ 写 `tracks` 记录 + `assetGenerations[]`。前台收到 `runtime.deferred` 后即可结束回合并接受下一次玩家操作；任务进度与终态通过 `job-status.updated` 归属回原始 turn。**每回合（含 `enabled: false` 时）**写 `message` namespace 的 `{ turnId, text }` 记录——这是「朗读」按钮的消息层锚点与 payload 来源（消息层 spec 依赖该 namespace 才渲染）。
 
 ### mimo-tts/manual-narrate
 
@@ -1488,6 +1489,8 @@ outputKind: story
 
 仅在通过 `POST /api/sessions/:id/plugin-rpc` 的 `runtimeId` 分支手动触发时生效；调度器驱动的 runtime 忽略此字段。
 
+它与下节的 `turnCompletion` **正交**：`execution: background` 控制 manual/event 激活是否脱离 RPC 请求；`turnCompletion.mode: detached` 控制 stage scheduler 是否等待该 runtime。不要用其中一个字段代替另一个。
+
 | 值             | 含义                                                                                                                                                                                                                       |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sync`（默认） | 同步执行:HTTP 请求阻塞到 runtime 完成,返回 `runtimeResults` 汇总 JSON。适合可以秒级完成的 runtime(prompt 生成、状态校验等)                                                                                                 |
@@ -1510,6 +1513,57 @@ execution: background # wan2.x 文生图需要几十秒,不阻塞 UI
 ```
 
 详细 RPC 流程见 [api.md #post-apisessionsidplugin-rpc](api.md#post-apisessionsidplugin-rpc)。
+
+### turnCompletion（调度 runtime 的回合完成屏障）
+
+`turnCompletion` 只控制 scheduler 驱动的 staged runtime。缺省为 `mode: await`，即 runtime 仍在前台 DAG 内执行并阻塞 `execution.completed`。`mode: detached` 是显式 opt-in 请求：安全检查通过后，框架在原始回合事务中持久化冻结输入和作业记录，原始回合不等待 provider 工作即可完成。
+
+```yaml
+runtimeType: function
+stage: post-turn
+timeoutMs: 90000
+turnCompletion:
+  mode: detached
+  maxQueueMs: 120000
+  maxExecutionMs: 120000
+  overlap: serial
+  stalePolicy: reject
+effects:
+  reads: []
+  writes:
+    - assets:*
+    - media:*
+    - plugin-data:self:tracks
+```
+
+| 字段             | 当前取值 / 缺省       | 语义                                                                                                      |
+| ---------------- | --------------------- | --------------------------------------------------------------------------------------------------------- |
+| `mode`           | `await` / `detached`  | 是否进入前台完成屏障；省略整个对象或省略 `mode` 均为 `await`                                              |
+| `maxQueueMs`     | 正整数，可选          | 从原始回合入队到成功 claim 的最长时间；到期成为 `timed_out`，不会调用 provider                            |
+| `maxExecutionMs` | 正整数，可选          | claim 后后台控制面的最长执行时间；到期后拒绝迟到提交。它不替代 runtime 自身的 `timeoutMs` 和协作式取消    |
+| `overlap`        | 仅 `serial`，缺省同值 | 同一 `(session, plugin, runtime)` 的任务按原始回合顺序串行；不同 runtime 可受 worker 全局并发上限并发执行 |
+| `stalePolicy`    | 仅 `reject`，缺省同值 | session incarnation、插件审批代次或插件版本变化时拒绝执行/提交，不把旧结果写进新上下文                    |
+
+声明是请求，不是安全证明。首版只有满足以下条件的 runtime 才会实际后台化：
+
+- `runtimeType: function`，且 stage 为 `post-turn` 或 `audit`；`story` 输出在 manifest 加载阶段直接拒绝。
+- 在本次活跃 DAG 中是安全叶节点：没有其他前台 runtime 通过 `needs`、`after`、`inputs` 或 runtime inject 消费它。
+- 声明显式 `effects`，读写只涉及 `assets:*`、`media:*`、本插件 `plugin-data`、`ui:*` 或声明的 HTTPS origin（`http:https://...`）；不能声明 `recordAs`、事件发射、`advertiseEvents` 或 live plugin-data prompt inject。
+- 实际 proposal 在提交前还会再次经过 effect guard；未声明 namespace、框架保留 namespace及 state/character/interaction/event 等非白名单写入都会使作业失败。
+
+静态检查不通过时，runtime **不会丢失**，而是留在原前台 DAG 执行并产生调度诊断。后台任务读取的是原始 DAG 层级开始时冻结的上游 `RuntimeResult[]`、模型/设置快照和来源 execution 身份；它不会在稍后的新回合重新解析“当前最新输入”。原始回合结果和 `_runtime_jobs` queued 记录在同一个 `finalizeExecution` transaction 中提交，任一侧失败都会一起回滚。
+
+`_runtime_jobs` 是框架独占的 durable source of truth，状态机为：
+
+```text
+queued -> claimed -> running -> committing -> succeeded
+   |         |          |           |
+   +---------+----------+-----------+-> failed | timed_out | cancelled | stale | orphaned
+```
+
+worker 以 CAS claim 和可续租 lease 防止多 Pod 重复执行，默认全局并发为 4、同 runtime 串行。启动时会继续执行未过期且从未 claim 的 `queued` 作业；排队超时任务置为 `timed_out`，lease 已过期的在途任务置为 `orphaned`，失败终态**不会自动重放**可能已经计费的调用。完成结果写入 job 的 `result`，失败写 `reason/error`；`cancelled` 是控制面的终态，不允许迟到结果复活。当前枚举故意闭合，未来增加 overlap/stale 策略或终态时必须扩展 manifest schema、discovery、状态迁移、协议、Web 恢复和各存储后端测试，不能静默重解释现有值。
+
+内置首个 opt-in 是 `mimo-tts/auto-narrate`。涉及世界状态、角色、任务、记忆或被其他 runtime 消费的 post-turn runtime 应继续使用 `await`。
 
 ### capabilities
 
@@ -1849,6 +1903,14 @@ Covel 的核心设计原则是**插件承载游戏逻辑，框架提供原语和
 ### 新增 frontmatter 字段
 
 当框架需要区分插件行为时，应在 `RuntimeManifest` 中添加通用字段（如 `outputKind`、`capabilities`），而非在框架代码中添加条件分支。
+
+manifest 字段演进必须同时考虑作者输入、loader 归一化、生成的 JSON Schema、discovery 摘要、运行时消费方、文档和测试：
+
+- **新增**：优先增加带安全默认值的可选字段；旧 host 不理解新调度语义时必须 fail closed，不能把控制字段藏进可忽略的扩展对象。`turnCompletion` 使用嵌套对象，后续策略可在不扩张顶层命名空间的前提下增加。
+- **修改或重命名**：只在 loader 边界短期接受旧名称，归一化后仅保留规范名称；同时出现新旧名称时应拒绝，且不能静默重解释既有枚举值。
+- **删除**：先迁移仓库内 manifest 和消费方，再经过明确的弃用周期；删除已有字段或枚举值属于 manifest 契约的破坏性变更。strict authoring schema 应继续拒绝未知字段，避免拼写错误被当作向前兼容。
+
+对 `turnCompletion` 增加 `overlap`、`stalePolicy` 或终态时，还必须同步合法状态迁移、持久化恢复、SSE 投影和各存储后端测试；仅更新 schema 不足以形成可用契约。
 
 ### 延迟工具加载：`tools.defer`
 

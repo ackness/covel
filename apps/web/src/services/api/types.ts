@@ -115,6 +115,18 @@ export interface RuntimeSummary {
   capabilities?: string[];
   tags?: string[];
   relations?: Record<string, unknown>;
+  /** Whether this staged runtime blocks the foreground turn from completing. */
+  turnCompletion?: TurnCompletionSummary;
+}
+
+/** Effective runtime completion policy returned by discovery APIs. */
+export interface TurnCompletionSummary {
+  mode: "await" | "detached";
+  /** Maximum time the detached job may wait before it starts. */
+  maxQueueMs?: number;
+  maxExecutionMs?: number;
+  overlap?: "serial";
+  stalePolicy?: "reject";
 }
 
 export interface ToolSummary {

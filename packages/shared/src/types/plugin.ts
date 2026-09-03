@@ -51,6 +51,31 @@ export interface TriggerConfig {
   readonly startTurn?: number;
 }
 
+// ── Turn completion policy ────────────────────────────────────────
+
+/** Whether a staged runtime participates in the foreground turn barrier. */
+export type TurnCompletionMode = "await" | "detached";
+
+/**
+ * Author-declared policy for staged runtimes. `detached` lets the foreground
+ * turn complete after this runtime has been durably queued; it does not change
+ * manual/event activation, which continues to use {@link RuntimeManifest.execution}.
+ *
+ * The initial contract intentionally exposes only fail-closed policies. More
+ * overlap and stale-result modes can be added without adding top-level flags.
+ */
+export interface TurnCompletionConfig {
+  readonly mode?: TurnCompletionMode;
+  /** Maximum time the job may remain queued before it expires. */
+  readonly maxQueueMs?: number;
+  /** Maximum time a claimed detached execution may run before it expires. */
+  readonly maxExecutionMs?: number;
+  /** Same-runtime detached jobs are serialized in source-turn order. */
+  readonly overlap?: "serial";
+  /** A result based on a stale session revision must not commit. */
+  readonly stalePolicy?: "reject";
+}
+
 // ── Input declarations ───────────────────────────────────────────
 
 /**
@@ -891,6 +916,13 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    * Ignored for runtimes triggered by the normal per-turn scheduler.
    */
   readonly execution?: "sync" | "background";
+  /**
+   * Controls whether a scheduler-driven runtime blocks foreground turn
+   * completion. Defaults to `{ mode: 'await' }`. The loader currently permits
+   * `detached` only for `post-turn` / `audit` runtimes whose output is not
+   * `story`; cross-runtime DAG eligibility is validated by the scheduler.
+   */
+  readonly turnCompletion?: TurnCompletionConfig;
   /**
    * When true, the session-level event directory (aggregated across all
    * active runtimes' `events` declarations) is rendered into this runtime's

@@ -17,6 +17,7 @@ import type {
   RuntimeExportBinding,
   Stage,
   TriggerSpec,
+  TurnCompletionPolicy,
 } from "../types/runtime-scheduling.js";
 import { STAGE_ORDER } from "../types/runtime-scheduling.js";
 import type { RuntimeManifest } from "../types/plugin.js";
@@ -61,6 +62,23 @@ function collectExportBindings(
   return result;
 }
 
+function normalizeTurnCompletionPolicy(
+  manifest: RuntimeManifest,
+): TurnCompletionPolicy {
+  const declared = manifest.turnCompletion;
+  return {
+    mode: declared?.mode ?? "await",
+    ...(declared?.maxQueueMs !== undefined
+      ? { maxQueueMs: declared.maxQueueMs }
+      : {}),
+    ...(declared?.maxExecutionMs !== undefined
+      ? { maxExecutionMs: declared.maxExecutionMs }
+      : {}),
+    overlap: declared?.overlap ?? "serial",
+    stalePolicy: declared?.stalePolicy ?? "reject",
+  };
+}
+
 /**
  * Normalize one runtime manifest into the loader-level IR node.
  *
@@ -78,6 +96,8 @@ export function normalizeRuntimeManifest(
 
   const trigger = declaredTrigger(manifest, derivedFrom);
 
+  const turnCompletionPolicy = normalizeTurnCompletionPolicy(manifest);
+
   if (manifest.execution === "background") derivedFrom.push("execution");
 
   const needs: readonly DependencyRef[] = manifest.needs ?? [];
@@ -90,6 +110,7 @@ export function normalizeRuntimeManifest(
     pluginId: manifest.pluginId,
     declaredTrigger: trigger,
     backgroundWhenDetached: manifest.execution === "background",
+    turnCompletionPolicy,
     ...(stage !== undefined ? { stage } : {}),
     deps: {
       after: manifest.after ?? [],
@@ -116,6 +137,11 @@ export function normalizeRuntimeManifest(
   };
 }
 
+/** Whether a normalized staged runtime may run beyond the foreground barrier. */
+export function isTurnDetachedRuntime(spec: NormalizedRuntimeSpec): boolean {
+  return spec.turnCompletionPolicy.mode === "detached";
+}
+
 /**
  * Memoized `normalizeRuntimeManifest`. A manifest object is immutable for the
  * lifetime of the registry that owns it, so the derived spec is cached per
@@ -133,6 +159,41 @@ export function getRuntimeSpec(
   const spec = normalizeRuntimeManifest(manifest);
   specCache.set(manifest, spec);
   return spec;
+}
+
+/** Public discovery view of the normalized turn-completion policy. */
+export type EffectiveTurnCompletion =
+  | { readonly mode: "await" }
+  | {
+      readonly mode: "detached";
+      readonly maxQueueMs?: number;
+      readonly maxExecutionMs?: number;
+      readonly overlap: "serial";
+      readonly stalePolicy: "reject";
+    };
+
+/**
+ * Project one effective policy for API/discovery consumers. Keeping this next
+ * to normalization makes future policy fields a single shared change instead
+ * of a set of subtly divergent route-local serializers.
+ */
+export function effectiveTurnCompletion(
+  manifest: RuntimeManifest,
+): EffectiveTurnCompletion {
+  const policy = getRuntimeSpec(manifest).turnCompletionPolicy;
+  return policy.mode === "detached"
+    ? {
+        mode: "detached",
+        ...(policy.maxQueueMs !== undefined
+          ? { maxQueueMs: policy.maxQueueMs }
+          : {}),
+        ...(policy.maxExecutionMs !== undefined
+          ? { maxExecutionMs: policy.maxExecutionMs }
+          : {}),
+        overlap: policy.overlap,
+        stalePolicy: policy.stalePolicy,
+      }
+    : { mode: "await" };
 }
 
 /**

@@ -21,7 +21,12 @@ import {
   reduceTurnResumed,
   reduceTurnSuspended,
 } from "./event-reducers.js";
-import { createExecutionStepUpdate } from "./execution-steps.js";
+import {
+  buildDeferredExecutionStep,
+  buildJobStatusExecutionStep,
+  createExecutionStepUpdate,
+  runtimeJobCorrelationId,
+} from "./execution-steps.js";
 import { upsertGameStateCharacter } from "./game-state.js";
 import type {
   AssetProgressEvent,
@@ -166,6 +171,7 @@ function addBlockMessageFromSse(
 }
 
 function toRuntimeCompletedStatus(rawStatus: unknown): ExecutionStep["status"] {
+  if (rawStatus === "deferred") return "deferred";
   if (rawStatus === "suspended") return "suspended";
   if (rawStatus === "skipped") return "skipped";
   if (rawStatus === "failed") return "failed";
@@ -233,12 +239,27 @@ export function createSseEventHandler(
     // checked: every union member must be either handled or explicitly
     // ignored, and genuinely unknown wire strings fall through to
     // `assertNeverEvent` (warn — never silently dropped).
-    const eventType: CovelEventType = envelope.type as CovelEventType;
-
     if (turnId && turnId !== deps.lastBackfilledTurnIdRef.current) {
       deps.lastBackfilledTurnIdRef.current = turnId;
       deps.dispatch({ type: "BACKFILL_TURN_ID", turnId });
     }
+
+    // Compat boundary: rollout can deliver the new event before the web app's
+    // generated CovelEvent union is upgraded. Handle the additive wire value
+    // explicitly, then keep exhaustive checking for the remaining vocabulary.
+    if (envelope.type === "runtime.deferred") {
+      const step = buildDeferredExecutionStep(
+        payload,
+        turnId,
+        envelope.timestamp,
+      );
+      if (step) deps.dispatch({ type: "UPSERT_EXECUTION_STEP", step });
+      return;
+    }
+    const eventType = envelope.type as Exclude<
+      CovelEventType,
+      "runtime.deferred"
+    >;
 
     switch (eventType) {
       case "narrative.delta": {
@@ -668,11 +689,22 @@ export function createSseEventHandler(
       case "utils.fetch.failed":
       // Prompt-budget prune trace: /debug reads it from trace_events.
       case "context.pruned":
-      // Kernel job-status progress: forwarded live for future media-progress UI;
-      // the action renderer does not consume it yet (compat with plugin-data
-      // `_jobs`), so ignore for exhaustiveness like the other trace events.
-      case "job-status.updated":
         break;
+      case "job-status.updated": {
+        const jobId = runtimeJobCorrelationId(payload);
+        const existing = deps.stateRef.current.executionSteps.find(
+          (step) =>
+            (jobId && step.jobId === jobId) ||
+            (step.detached === true &&
+              step.runtimeId === payload.runtimeId &&
+              step.turnId === turnId),
+        );
+        const step = buildJobStatusExecutionStep(payload, existing, turnId);
+        if (step) {
+          deps.dispatch({ type: "UPSERT_EXECUTION_STEP", step });
+        }
+        break;
+      }
       default:
         assertNeverEvent(eventType);
     }

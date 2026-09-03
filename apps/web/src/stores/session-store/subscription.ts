@@ -19,7 +19,12 @@ import {
   reduceTurnSuspended,
 } from "./event-reducers.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
-import type { SessionAction } from "./types.js";
+import {
+  buildDeferredExecutionStep,
+  buildJobStatusExecutionStep,
+  runtimeJobCorrelationId,
+} from "./execution-steps.js";
+import type { SessionAction, SessionState } from "./types.js";
 
 interface MutableRef<T> {
   current: T;
@@ -30,6 +35,7 @@ interface UseSessionSubscriptionOptions {
   dispatch: (action: SessionAction) => void;
   workspace: SessionWorkspace;
   sessionIdRef: MutableRef<string | null>;
+  stateRef: MutableRef<SessionState>;
 }
 
 function containsTerminalBackgroundJob(
@@ -62,7 +68,7 @@ export function isCurrentSubscriptionEvent(
 function createSubscriptionEventHandler(
   options: Pick<
     UseSessionSubscriptionOptions,
-    "dispatch" | "workspace" | "sessionIdRef"
+    "dispatch" | "workspace" | "sessionIdRef" | "stateRef"
   > & {
     onReset: () => void;
   },
@@ -135,6 +141,29 @@ function createSubscriptionEventHandler(
           sessionId: event.sessionId,
           timestamp: event.timestamp,
         });
+        break;
+      }
+      case "job-status.updated": {
+        const payload = event.payload ?? {};
+        const jobId = runtimeJobCorrelationId(payload);
+        const existing = options.stateRef.current.executionSteps.find(
+          (step) => jobId && step.jobId === jobId,
+        );
+        const step = buildJobStatusExecutionStep(payload, existing);
+        if (step) {
+          options.dispatch({ type: "UPSERT_EXECUTION_STEP", step });
+        }
+        break;
+      }
+      case "runtime.deferred": {
+        const step = buildDeferredExecutionStep(
+          event.payload ?? {},
+          undefined,
+          event.timestamp,
+        );
+        if (step) {
+          options.dispatch({ type: "UPSERT_EXECUTION_STEP", step });
+        }
         break;
       }
       default:
@@ -217,6 +246,7 @@ export function useSessionSubscription({
   dispatch,
   workspace,
   sessionIdRef,
+  stateRef,
 }: UseSessionSubscriptionOptions): void {
   const subscriptionRef = useRef<SessionSubscription | null>(null);
 
@@ -244,6 +274,7 @@ export function useSessionSubscription({
       dispatch,
       workspace,
       sessionIdRef,
+      stateRef,
       onReset: () => startRecovery(),
     });
 
@@ -303,7 +334,7 @@ export function useSessionSubscription({
     // plugin-data.changed arrives on topic="plugin" with
     // _subType="plugin-data.changed". `game` carries turn.suspended/resumed.
     const sub = createSessionSubscription(sessionId, {
-      topics: ["plugin", "system", "game"],
+      topics: ["plugin", "system", "game", "runtime", "job"],
       onStateChange: handleConnectionStateChange,
     });
     subscriptionRef.current = sub;
@@ -317,5 +348,5 @@ export function useSessionSubscription({
       subscriptionRef.current = null;
       setConnectionState("closed");
     };
-  }, [sessionId, dispatch, workspace, sessionIdRef]);
+  }, [sessionId, dispatch, workspace, sessionIdRef, stateRef]);
 }

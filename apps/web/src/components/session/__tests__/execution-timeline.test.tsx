@@ -103,4 +103,38 @@ describe("ExecutionTimeline plugin names", () => {
       ),
     ).toBeTruthy();
   });
+
+  it("renders a detached runtime as a compact background task with progress", () => {
+    render(
+      <ExecutionTimeline
+        executing={false}
+        steps={[
+          {
+            runtimeId: "mimo-tts/auto-narrate",
+            pluginId: "mimo-tts",
+            status: "deferred",
+            detached: true,
+            jobId: "job-1",
+            jobState: "progress",
+            progress: 42.3,
+            turnId: "turn-1",
+          },
+        ]}
+        packages={[
+          {
+            name: "mimo-tts",
+            displayName: { zh: "语音", en: "Voice" },
+            enabled: true,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("1 in background")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Execution/ }));
+    expect(screen.getByText("Voice / auto-narrate")).toBeTruthy();
+    expect(screen.getByText("running in background")).toBeTruthy();
+    expect(screen.getByText("42%")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
 });

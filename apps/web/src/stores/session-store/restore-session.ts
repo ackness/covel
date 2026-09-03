@@ -47,26 +47,40 @@ function buildSnapshotExecutionSteps(
     const runtimeId = (payload.runtimeId as string) ?? "";
     if (!runtimeId || runtimeId === "__turn__") continue;
 
-    const key = `${event.turnId ?? "__no_turn__"}|${runtimeId}`;
+    const runtimeTurnId =
+      event.type === "runtime.deferred" &&
+      typeof payload.sourceTurnId === "string"
+        ? payload.sourceTurnId
+        : event.turnId;
+    const key = `${runtimeTurnId ?? "__no_turn__"}|${runtimeId}`;
     const prev = byKey.get(key);
     const status: ExecutionStep["status"] =
       event.type === "runtime.completed"
         ? "completed"
-        : event.type === "runtime.failed"
-          ? "failed"
-          : event.type === "runtime.skipped"
-            ? "skipped"
-            : "running";
+        : event.type === "runtime.deferred"
+          ? "deferred"
+          : event.type === "runtime.failed"
+            ? "failed"
+            : event.type === "runtime.skipped"
+              ? "skipped"
+              : "running";
     byKey.set(key, {
       runtimeId,
       pluginId: (payload.pluginId as string) ?? prev?.pluginId ?? "",
       status,
-      turnId: event.turnId,
+      turnId: runtimeTurnId,
       label: (payload.label as string | undefined) ?? prev?.label,
       durationMs:
         (payload.durationMs as number | undefined) ?? prev?.durationMs,
       startedAt:
         event.type === "runtime.started" ? event.timestamp : prev?.startedAt,
+      ...(event.type === "runtime.deferred"
+        ? {
+            detached: true,
+            jobState: "queued",
+            jobId: payload.jobId as string | undefined,
+          }
+        : {}),
     });
   }
   return [...byKey.values()];
@@ -167,6 +181,10 @@ function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
     durationMs: raw.durationMs as number | undefined,
     turnId: raw.turnId as string | undefined,
     startedAt: raw.startedAt as string | undefined,
+    jobId: raw.jobId as string | undefined,
+    detached: raw.detached === true,
+    jobState: raw.jobState as string | undefined,
+    progress: raw.progress as number | undefined,
   };
 }
 

@@ -3,8 +3,16 @@ import {
   type PluginRegistry,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
-import { FrameworkCapability, getRuntimeSpec } from "@covel/shared";
-import type { PluginRelations, Stage } from "@covel/shared";
+import {
+  FrameworkCapability,
+  effectiveTurnCompletion,
+  getRuntimeSpec,
+} from "@covel/shared";
+import type {
+  EffectiveTurnCompletion,
+  PluginRelations,
+  Stage,
+} from "@covel/shared";
 import { mergePluginCommands } from "./commands.js";
 
 export function isRequiredCorePlugin(entry: PluginRegistryEntry): boolean {
@@ -274,6 +282,7 @@ export function buildAvailablePluginList(
       capabilities?: string[];
       tags?: string[];
       relations?: unknown;
+      turnCompletion: EffectiveTurnCompletion;
     }> = [];
     let primaryStage: Stage | undefined;
     for (const [, loaded] of entry.loadedRuntimes) {
@@ -307,6 +316,7 @@ export function buildAvailablePluginList(
           : {}),
         ...(m.tags && m.tags.length > 0 ? { tags: [...m.tags] } : {}),
         ...(m.relations ? { relations: m.relations } : {}),
+        turnCompletion: effectiveTurnCompletion(m),
       });
     }
 

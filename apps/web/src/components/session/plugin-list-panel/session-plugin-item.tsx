@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   AlertTriangle,
   ChevronRight,
+  Clock,
   Lock,
   Puzzle,
   Wrench,
@@ -94,6 +95,9 @@ export function SessionPluginItem({
     : (plugin.trigger?.type ?? "auto");
   const runtimeLabel =
     RUNTIME_TYPE_ICONS[plugin.runtimeType ?? "agent"] ?? "LLM";
+  const hasDetachedRuntime = plugin.runtimes?.some(
+    (runtime) => runtime.turnCompletion?.mode === "detached",
+  );
 
   return (
     <div className="border border-border rounded-(--radius-card) overflow-hidden">
@@ -124,6 +128,18 @@ export function SessionPluginItem({
           >
             {runtimeLabel}
           </Badge>
+          {hasDetachedRuntime && (
+            <Badge
+              variant="outline"
+              className="ui-chip h-4 max-w-full shrink-0 gap-0.5 border-sky-500/30 bg-sky-500/10 px-1 text-xs text-sky-700 dark:text-sky-300"
+              title={t("plugin.turnCompletionDetached")}
+            >
+              <Clock className="h-2.5 w-2.5 shrink-0" />
+              <span className="hidden sm:inline">
+                {t("session.backgroundTask")}
+              </span>
+            </Badge>
+          )}
           {isLocked && (
             <span
               title={t("plugin.locked", "Core plugin — cannot be disabled")}

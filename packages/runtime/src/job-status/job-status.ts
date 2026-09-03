@@ -38,6 +38,13 @@ export interface ProgressReporterDeps {
   readonly pluginId: string;
   readonly runtimeId: string;
   /**
+   * Kernel-owned correlation fields merged into every emitted `data` value.
+   * Detached stage workers use this to associate plugin-defined sub-jobs with
+   * their durable parent job and source turn without letting handlers forge
+   * that identity.
+   */
+  readonly contextData?: Readonly<Record<string, JsonValue>>;
+  /**
    * MediaStore read surface: when present, `report` canonicalizes + ownership-
    * checks any MediaRef in the job `data` (docs 02 §2.1). A rejection throws
    * back to the handler. Absent (finalizer terminal writes, tests) ⇒ no media
@@ -51,6 +58,16 @@ function buildRecord(
   effect: ProgressEffect,
 ): JobStatusRecord {
   const { sessionId, progressScopeId, pluginId, runtimeId } = deps;
+  const data = deps.contextData
+    ? effect.data &&
+      typeof effect.data === "object" &&
+      !Array.isArray(effect.data)
+      ? { ...effect.data, ...deps.contextData }
+      : {
+          ...(effect.data !== undefined ? { payload: effect.data } : {}),
+          ...deps.contextData,
+        }
+    : effect.data;
   return {
     sessionId,
     progressScopeId,
@@ -60,7 +77,7 @@ function buildRecord(
     state: effect.state,
     ...(effect.progress !== undefined ? { progress: effect.progress } : {}),
     ...(effect.message !== undefined ? { message: effect.message } : {}),
-    ...(effect.data !== undefined ? { data: effect.data } : {}),
+    ...(data !== undefined ? { data } : {}),
     sequence: effect.sequence,
     createdAt: new Date().toISOString(),
   };

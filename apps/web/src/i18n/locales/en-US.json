@@ -217,6 +217,9 @@
     "startingUp": "Starting up...",
     "retryFrom": "Retry from {{label}}",
     "executionSummary": "Execution · {{count}} runtimes",
+    "backgroundTask": "background",
+    "backgroundRunning": "running in background",
+    "backgroundCount": "{{count}} in background",
     "executionFlow": "Execution Flow",
     "executionFlowHint": "Turn order — earlier stages run first.",
     "executionFlowTitle": "Plugins run stage by stage each turn: setup, then pre-turn, narrative, and post-turn.",
@@ -1253,6 +1256,8 @@
     "runtimeDefaultSummaryWithModel": "runtime default · {{slot}} · {{model}}",
     "runtimeDefaultMissing": "runtime default · {{slot}} (missing)",
     "invalidPanelSpec": "Invalid panel spec",
+    "turnCompletionDetached": "Does not block the turn",
+    "turnCompletionAwait": "Blocks the turn",
     "source": {
       "builtin": {
         "label": "Core",

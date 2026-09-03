@@ -186,6 +186,15 @@ export interface HttpPermissionDecl {
 /** Declared trigger after applying current defaults. */
 export type TriggerSpec = TriggerConfig;
 
+/** Canonical turn-barrier policy after manifest defaults are applied. */
+export interface TurnCompletionPolicy {
+  readonly mode: "await" | "detached";
+  readonly maxQueueMs?: number;
+  readonly maxExecutionMs?: number;
+  readonly overlap: "serial";
+  readonly stalePolicy: "reject";
+}
+
 /**
  * Loader product: one per manifest, normalized but not
  * session-resolved. Does NOT carry an activation source — how a runtime is
@@ -197,6 +206,8 @@ export interface NormalizedRuntimeSpec {
   readonly declaredTrigger: TriggerSpec;
   /** Derived from the manifest's `execution: background` declaration. */
   readonly backgroundWhenDetached: boolean;
+  /** Scheduler-driven foreground barrier policy. Orthogonal to `execution`. */
+  readonly turnCompletionPolicy: TurnCompletionPolicy;
   /** Absent for event/manual runtimes and for UI-only registration surfaces. */
   readonly stage?: Stage;
   /** capability refs unresolved at this level. */
@@ -250,11 +261,12 @@ export interface ExecutionContext {
 // ── Runtime activation (per-activation, run-time) ────────────────
 
 /**
- * How a runtime was activated this time. `stage` sources are never
- * detached; `event` / `manual` sources detach according to
+ * How a runtime was activated this time. A scheduler-owned `stage` activation
+ * may be detached only after its source execution inputs were frozen into a
+ * durable job; `event` / `manual` sources detach according to
  * `backgroundWhenDetached`. Turn gates and bindings are evaluated against
- * `(spec, activation)` — a manual activation of a staged runtime ignores
- * its turn bindings without making the spec illegal.
+ * `(spec, activation)` — a manual activation of a staged runtime ignores its
+ * turn bindings without making the spec illegal.
  */
 export interface RuntimeActivation {
   readonly source: "stage" | "event" | "manual";

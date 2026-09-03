@@ -107,6 +107,8 @@ export interface FinalizeExecutionArgs {
   readonly hookPipeline?: HookPipeline;
   readonly eventBus?: EventBus;
   readonly emitter?: TurnEmitter;
+  /** Reject proposals that are outside this execution's allowed effect set. */
+  readonly proposalGuard?: (proposal: Proposal) => string | undefined;
   /**
    * Override the hook scope's active plugin set. Defaults to the plugin ids in
    * `runtimes`. Resume passes its broader set (active runtimes plus the resumed
@@ -370,6 +372,7 @@ export async function finalizeExecution(
     ...(eventBus ? { eventBus } : {}),
     ...(emitter ? { emitter } : {}),
     capabilities: capabilitiesByRuntime.get(result.runtimeId) ?? [],
+    ...(args.proposalGuard ? { proposalGuard: args.proposalGuard } : {}),
     ...(deferPostCommit ? { deferPostCommit } : {}),
   });
   const kindOf = (result: FinalizableResult): string =>

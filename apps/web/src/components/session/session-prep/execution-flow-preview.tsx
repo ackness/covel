@@ -1,4 +1,4 @@
-import { Cpu, Zap } from "lucide-react";
+import { Clock, Cpu, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import type * as api from "@/services/api.js";
@@ -70,6 +70,18 @@ export function ExecutionFlowPreview({
                       </span>
                       {step.runtimeType === "agent" && (
                         <Cpu className="w-2.5 h-2.5 text-muted-foreground" />
+                      )}
+                      {step.turnCompletion.mode === "detached" && (
+                        <Badge
+                          variant="outline"
+                          className="h-4 max-w-full gap-0.5 border-sky-500/30 bg-sky-500/10 px-1 text-[9px] text-sky-700 dark:text-sky-300"
+                          title={t("plugin.turnCompletionDetached")}
+                        >
+                          <Clock className="h-2.5 w-2.5 shrink-0" />
+                          <span className="truncate">
+                            {t("session.backgroundTask")}
+                          </span>
+                        </Badge>
                       )}
                       {bindingEntry?.slotName && (
                         <Badge

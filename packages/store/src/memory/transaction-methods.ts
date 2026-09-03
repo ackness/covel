@@ -91,6 +91,7 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   // plugin data
   setPluginData: ["pluginData"],
   setPluginDataBatch: ["pluginData"],
+  compareAndSetPluginData: ["pluginData"],
   deletePluginData: ["pluginData"],
   // working memory / ledger / lorebook
   upsertWorkingMemory: ["workingMemoryEntries"],
