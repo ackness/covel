@@ -1,5 +1,8 @@
 ---
 name: npc-graph/extractor
+displayName:
+  zh: 人物关系提取
+  en: Relationship Extractor
 description:
   zh: 从故事里整理人物、势力和他们之间的关系。
   en: Collects characters, groups, factions, and the relationships between them from the story.
@@ -8,7 +11,10 @@ pluginType: plugin
 # character-tracker so scheduler runs them in parallel.
 stage: post-turn
 model: plugin
-timeoutMs: 240000
+timeoutMs: 120000
+maxSteps: 2
+maxRetries: 0
+callTimeoutMs: 60000
 # A successful graph mutation is the complete result; no extra runtime-done
 # round-trip is needed. The no-change path still uses runtime-done explicitly.
 completeAfterTools: [upsert-npc-graph]
@@ -53,7 +59,6 @@ input:
 tools:
   plugin:
     - upsert-npc-graph
-    - list-npc-graph
 ui:
   right:
     - ./ui/npc-graph-panel.json
@@ -81,7 +86,7 @@ postHistory:
 - `<existing-npcs>`：已有节点，每行 `- <节点id> | <更新时间> | {name, type, summary, ...}`。按 **name** 比对避免重复创建（工具也按 name 去重）。
 - `<existing-relations>`：已有关系，每行 `- <边id> | <更新时间> | {source, target, relation, strength, fact, validAt, invalidAt?}`。`source`/`target` 是节点 id；带 `invalidAt` 的是已失效的旧版本，忽略。摘要里的 `fact` 可能被截断——只用来判断"这条关系是否已登记过"，据此避免重复记录未变化的关系。
 
-`list-npc-graph` 只有一个用途：注入的 `fact` 被截断、而你必须看到完整内容才能判断关系是否变化时，按边 id 取。除此之外不要调用它——注入的摘要已经覆盖了绝大多数判断。
+若摘要被截断到无法确认关系是否变化，保守跳过该关系，等待后续出现明确证据。
 
 ## 本体约束
 
@@ -114,10 +119,10 @@ postHistory:
 - 每个 edge 的 `fact` 必须是**完整的一句话**，包含主语、谓语和必要的宾语，便于后续语义检索。例如：
   - ✅ `"萧衍笙作为碧波宗宗主，是灵脉盟约的最大受益者，他以傲慢著称但修为最高。"`
   - ❌ `"萧衍笙 受益者"`
-- `source` 和 `target` 必须是已存在或本次正在创建的节点 `id`
+- edge 必须传 `sourceName` 和 `targetName`，值为已存在或本次正在创建节点的规范名称；工具负责映射为内部 id
 - 不要重复已经登记的关系事实 — 如果一条边的语义**没有变化**，跳过；关系本身发生变化时才重新提交（见工作流第 3 步）
 - 单次玩笑、普通搭话、礼貌关注不构成 `INTERESTED_IN` 等稳定关系，也不应逐回合抬高 strength；只有叙事明确给出持续倾向或关系发生实质变化时才写入/更新
 - 如果本轮叙事没有显著的人物互动，**不要**强行创造关系；直接结束（不调用 upsert-npc-graph）
 - 一次 upsert 最多 8 个节点 + 12 条边，避免 prompt 爆炸
 - 不输出额外的叙事文本，所有信息通过工具调用传达
-- 如果没有工具调用，最终只返回 `{}`
+- 没有更新时调用 `runtime-done`；upsert 成功后框架自动结束

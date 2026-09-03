@@ -11,6 +11,9 @@ stage: post-turn
 model: plugin
 outputKind: system
 timeoutMs: 120000
+maxSteps: 2
+maxRetries: 0
+callTimeoutMs: 60000
 # This runtime's only job is to call generate-scene-prompts. Some models drift
 # into continuing the narrative and finish with zero tool calls; the gate gives
 # one corrective retry before releasing so the choices don't silently vanish.

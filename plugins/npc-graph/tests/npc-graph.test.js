@@ -124,9 +124,10 @@ describe("npc-graph manifests", () => {
     // codex, and character-tracker.
     expect(extractor.stage).toBe("post-turn");
     expect(extractor.completeAfterTools).toEqual(["upsert-npc-graph"]);
+    expect(extractor.maxSteps).toBe(2);
+    expect(extractor.maxRetries).toBe(0);
     expect(extractor.capabilities).toContain("npc-graph");
-    expect(extractor.tools?.plugin).toContain("upsert-npc-graph");
-    expect(extractor.tools?.plugin).toContain("list-npc-graph");
+    expect(extractor.tools?.plugin).toEqual(["upsert-npc-graph"]);
     expect(extractor.trigger?.type).toBe("scheduled");
     expect(extractor.trigger?.interval).toBe(1);
     expect(extractor.needs).toBeUndefined();
@@ -183,6 +184,29 @@ describe("upsert-npc-graph", () => {
     store = createMockStore();
     upsertTool = createUpsertNpcGraph({ tool, z, shortIdBatch, store });
     listTool = createListNpcGraph({ tool, z, store });
+  });
+
+  it("publishes the node and name-based edge schema to the model", () => {
+    expect(upsertTool.jsonSchema).toMatchObject({
+      type: "object",
+      properties: {
+        nodes: { type: "array", maxItems: 8 },
+        edges: {
+          type: "array",
+          maxItems: 12,
+          items: {
+            type: "object",
+            required: expect.arrayContaining(["sourceName", "targetName"]),
+          },
+        },
+      },
+    });
+  });
+
+  it("rejects an empty upsert", async () => {
+    await expect(upsertTool.execute({}, ctx)).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
   });
 
   it("creates new nodes with short IDs and persists them", async () => {
