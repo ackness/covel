@@ -10,6 +10,7 @@ import {
   discoverPlugins,
   loadPluginManifest,
   loadRuntime,
+  parsePluginMd,
   type LoadedRuntime,
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
@@ -149,17 +150,22 @@ export async function loadEntryTools(
   manifests: readonly RuntimeManifest[],
   store?: DataStore,
 ): Promise<readonly ToolModule[]> {
-  const entryPath = manifests.find((m) => m.entry)?.entry;
-  if (!entryPath) return [];
-
-  const fullPath = path.resolve(discovery.rootPath, entryPath);
-  const rel = path.relative(discovery.rootPath, fullPath);
-  if (rel.startsWith("..") || path.isAbsolute(rel)) {
-    throw new Error(`entry path escapes plugin root: ${entryPath}`);
+  const entryPaths = new Set(
+    manifests.flatMap((manifest) => (manifest.entry ? [manifest.entry] : [])),
+  );
+  // Multi-runtime discovery intentionally excludes the metadata-only root
+  // PLUGIN.md from `manifests`. Production bootstrap reads it separately so
+  // root-declared entry tools are registered; the test harness must do the
+  // same or it silently tests a different tool registry than production.
+  const rootManifestPath = path.join(discovery.rootPath, "PLUGIN.md");
+  if (fs.existsSync(rootManifestPath)) {
+    const rootEntry = parsePluginMd(
+      fs.readFileSync(rootManifestPath, "utf8"),
+      rootManifestPath,
+    ).manifest.entry;
+    if (rootEntry) entryPaths.add(rootEntry);
   }
-  if (!fs.existsSync(fullPath)) {
-    throw new Error(`entry file not found: ${fullPath}`);
-  }
+  if (entryPaths.size === 0) return [];
 
   const registered: ToolModule[] = [];
   const covel = {
@@ -181,11 +187,24 @@ export async function loadEntryTools(
     registerWires() {},
   } as unknown as PluginAPI;
 
-  const mod = await import(pathToFileURL(fullPath).href);
-  const factory = mod.default;
-  if (typeof factory !== "function") {
-    throw new Error(`entry module must default-export a function: ${fullPath}`);
+  for (const entryPath of entryPaths) {
+    const fullPath = path.resolve(discovery.rootPath, entryPath);
+    const rel = path.relative(discovery.rootPath, fullPath);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) {
+      throw new Error(`entry path escapes plugin root: ${entryPath}`);
+    }
+    if (!fs.existsSync(fullPath)) {
+      throw new Error(`entry file not found: ${fullPath}`);
+    }
+
+    const mod = await import(pathToFileURL(fullPath).href);
+    const factory = mod.default;
+    if (typeof factory !== "function") {
+      throw new Error(
+        `entry module must default-export a function: ${fullPath}`,
+      );
+    }
+    await factory(covel);
   }
-  await factory(covel);
   return registered;
 }
