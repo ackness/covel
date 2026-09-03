@@ -76,9 +76,9 @@ export function buildToolDefinitions(
 
   // Framework-contracted tool: `runtime-done` is auto-available to tool-using
   // agent runtimes so the LLM can exit immediately after completing business
-  // tool calls. Schema-declared runtimes must emit final JSON text, so
-  // `runtime-done` is withheld there; otherwise the early-exit branch would
-  // stop before the JSON envelope that downstream event chains read.
+  // tool calls. Schema-declared runtimes either emit final JSON text or use a
+  // declared completing tool as their output channel, so `runtime-done` is
+  // withheld; either path already has an explicit completion contract.
   const frameworkNames = new Set<string>();
   if (!manifest.output?.schema && !names.includes("runtime-done")) {
     names.push("runtime-done");

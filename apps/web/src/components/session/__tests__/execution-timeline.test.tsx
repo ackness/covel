@@ -70,7 +70,10 @@ describe("ExecutionTimeline plugin names", () => {
         packages={[
           {
             name: "world-ir",
-            displayName: { zh: "世界中间表示", en: "World IR" },
+            displayName: {
+              zh: "世界事实提取",
+              en: "World Fact Extraction",
+            },
             enabled: true,
           },
         ]}

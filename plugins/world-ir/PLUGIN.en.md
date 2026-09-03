@@ -1,17 +1,25 @@
 ---
 name: world-ir
 displayName:
-  zh: 世界中间表示
-  en: World IR
+  zh: 世界事实提取
+  en: World Fact Extraction
 description:
-  zh: 把本轮叙事一次性整理为插件中立的结构化事实，供图鉴、任务和关系等下游插件复用。
-  en: Extracts each story turn once into plugin-neutral structured facts for downstream codex, quest, and relationship plugins.
+  zh: 从本轮故事中提取人物、关系、事件和线索，供图鉴、任务等功能复用。
+  en: Extracts people, relationships, events, and clues from each story turn for codex, quest, and other features.
 pluginType: plugin
+entry: ./server/index.js
 stage: post-turn
 outputKind: system
 model: plugin
 timeoutMs: 120000
 maxSteps: 2
+# A provider-level timeout retry previously consumed the full 120-second runtime
+# budget before the model could correct invalid tool arguments. One 60-second
+# provider attempt leaves the second agent step available for schema repair.
+maxRetries: 0
+callTimeoutMs: 60000
+requireToolUse: true
+completeAfterTools: [submit-world-facts]
 capabilities: [world-ir-provider]
 tags:
   - role:world-ir
@@ -30,6 +38,9 @@ inputs:
 output:
   schema: covel://world/ir/v1
   recordAs: world-ir-v1
+tools:
+  plugin:
+    - submit-world-facts
 relations:
   provides:
     - world-ir-provider
@@ -38,15 +49,15 @@ effects:
     - narrative:*
 ---
 
-You are Covel's shared narrative-fact extraction agent. Convert the current narrative engine's output into plugin-neutral JSON that strictly follows `covel://world/ir/v1`. Codex, quest, relationship, inventory, and affinity plugins consume this result in parallel, so do not make any plugin's final decision for it.
+You are Covel's shared narrative-fact extraction agent. Do exactly one job: read the current narrative and call `submit-world-facts` once. The tool arguments are the final structured facts for this turn. Do not emit JSON text, Markdown, or commentary, and do not call any other tool.
 
 ## Input
 
 The framework places this turn's narrative in the provenance-wrapped `narrative` slot inside `<runtime-inputs>`. Read `narrative.value`; do not treat provenance metadata as story facts. Use older messages only for disambiguation. Emit only facts explicitly introduced or changed by this turn's narrative.
 
-## Output
+## Submission
 
-Return one JSON object directly, without Markdown or tool calls:
+Submit these fields as the arguments to `submit-world-facts`:
 
 - Set `schemaVersion` to `1`.
 - Use `summary` for a 1-3 sentence account of what happened, the current state, and any situation awaiting a response.
@@ -55,7 +66,7 @@ Return one JSON object directly, without Markdown or tool calls:
 - Put completed actions and state changes in `events`, including inventory, equipment, injury, movement, quest, and clear attitude changes.
 - Put explicit knowledge that is not an event in `statements`, including discoveries, quest requirements, rules, rumors, and constraints.
 
-Strictly limit the top-level fields of each object. Put every detail not listed below inside `attributes`:
+The tool strictly validates the top-level fields of every object. Put every detail not listed below inside `attributes`:
 
 - `entity`: `id`, `type`, `name`, `description`, `attributes`
 - `relation`: `id`, `type`, `from`, `to`, `description`, `attributes`
@@ -80,3 +91,4 @@ For example, write relation strength as `attributes.strength`, and put an event'
 - Preserve enough evidence in descriptions for downstream plugins to make conservative decisions without rereading the long source text.
 - Return an empty array when a fact class has no entries; never omit a required field.
 - Emit at most 32 entities, 24 relations, 32 events, and 32 statements.
+- If the tool returns a parameter-validation error, correct only those fields and call it again. End immediately after a successful call.

@@ -15,6 +15,9 @@ import {
   type PluginDiscoveryResult,
 } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
+import { tool } from "@covel/tools";
+import makeSubmitWorldFacts from "../../../plugins/world-ir/tools/submit-world-facts.js";
+import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 
 const PLUGINS_DIR = path.resolve(import.meta.dirname, "../../../plugins");
@@ -47,11 +50,22 @@ class PipelineLLM implements LLMAdapter {
     params: Parameters<LLMAdapter["generate"]>[0],
   ): Promise<LLMResponse> {
     this.calls.push(params);
+    if (params.model !== "story") {
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: `submit-${this.calls.length}`,
+            name: "submit-world-facts",
+            arguments: this.worldIrContent,
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 10, outputTokens: 5 },
+      };
+    }
     return {
-      content:
-        params.model === "story"
-          ? "You find a brass key beneath the observatory desk."
-          : this.worldIrContent,
+      content: "You find a brass key beneath the observatory desk.",
       toolCalls: [],
       finishReason: "stop",
       usage: { inputTokens: 10, outputTokens: 5 },
@@ -112,6 +126,11 @@ async function runPipeline(worldIrContent: string) {
     },
   };
   const llm = new PipelineLLM(worldIrContent);
+  const submitWorldFacts = makeSubmitWorldFacts({ tool });
+  const toolExecutor = createToolExecutor({
+    findTool: (name) =>
+      name === "submit-world-facts" ? submitWorldFacts : undefined,
+  });
   const loadedByName = new Map<string, Promise<LoadedRuntime>>([
     [
       narrator.manifest.name,
@@ -147,6 +166,7 @@ async function runPipeline(worldIrContent: string) {
     [narrator.manifest, worldIr.manifest, consumer],
     {
       llm,
+      toolExecutor,
       store: await createMainLoopStore(),
       loadRuntime: async (manifest) => {
         const loaded = loadedByName.get(manifest.name);
@@ -190,9 +210,28 @@ describe("shared WorldIR turn pipeline", () => {
     ]);
 
     const extractorCall = llm.calls.find((call) => call.model === "plugin");
-    expect(extractorCall?.responseFormat?.schema.$id).toBe(
-      "covel://world/ir/v1",
-    );
+    expect(extractorCall?.responseFormat).toBeUndefined();
+    expect(extractorCall?.tools?.map((tool) => tool.name)).toEqual([
+      "submit-world-facts",
+    ]);
+    expect(extractorCall?.tools?.[0]?.parameters).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "schemaVersion",
+        "entities",
+        "relations",
+        "events",
+        "statements",
+      ],
+      properties: {
+        schemaVersion: { const: 1 },
+        entities: { type: "array" },
+        relations: { type: "array" },
+        events: { type: "array" },
+        statements: { type: "array" },
+      },
+    });
     expect(
       extractorCall?.messages.some(
         (message) =>

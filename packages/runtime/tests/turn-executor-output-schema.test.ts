@@ -6,6 +6,13 @@ import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
 import type { ToolExecutor } from "../src/agent-loop/tool-executor.js";
 
+const OBJECT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["prompt"],
+  properties: { prompt: { type: "string" } },
+} as const;
+
 class CapturingLLM implements LLMAdapter {
   responseFormat: unknown;
   tools: unknown;
@@ -20,6 +27,30 @@ class CapturingLLM implements LLMAdapter {
       content: this.content,
       toolCalls: [],
       finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    };
+  }
+}
+
+class ToolCallingLLM implements LLMAdapter {
+  responseFormat: unknown;
+  calls = 0;
+
+  async generate(
+    params: Parameters<LLMAdapter["generate"]>[0],
+  ): Promise<LLMResponse> {
+    this.calls++;
+    this.responseFormat = params.responseFormat;
+    return {
+      content: "incidental prose must not replace the tool result",
+      toolCalls: [
+        {
+          id: "call-submit-output",
+          name: "submit-output",
+          arguments: '{"prompt":"a portrait"}',
+        },
+      ],
+      finishReason: "tool_calls",
       usage: { inputTokens: 1, outputTokens: 1 },
     };
   }
@@ -117,6 +148,111 @@ describe("executeTurn: output.schema.json", () => {
     expect(
       (llm.tools as Array<{ name: string }>).map((tool) => tool.name),
     ).toEqual(["plugin-data-set"]);
+  });
+
+  it("uses a required completing tool as the sole structured output channel", async () => {
+    const llm = new ToolCallingLLM();
+    const output = { prompt: "a portrait" };
+    const toolExecutor: ToolExecutor = {
+      async execute(call) {
+        return {
+          toolCallId: call.toolCallId,
+          name: call.name,
+          result: JSON.stringify(output),
+          parsedResult: output,
+          success: true,
+          approvalStatus: "auto-allowed",
+        };
+      },
+      getToolInfo: (name) => ({
+        name,
+        description: "Submit the output",
+        jsonSchema: { ...OBJECT_SCHEMA },
+      }),
+    };
+    const runtime = manifest({
+      output: { schema: "./output.schema.json" },
+      tools: { plugin: ["submit-output"] },
+      requireToolUse: true,
+      completeAfterTools: ["submit-output"],
+    });
+
+    const result = await executeTurn(
+      {
+        sessionId: "sess-schema-tool",
+        turnId: "turn-schema-tool",
+        playerMessage: "start",
+      },
+      [runtime],
+      {
+        loadRuntime: async (loadedManifest) => ({
+          manifest: loadedManifest,
+          promptTemplate: "Call submit-output.",
+          outputSchema: { ...OBJECT_SCHEMA },
+        }),
+        llm,
+        store: createMemoryStore(),
+        toolExecutor,
+      },
+    );
+
+    expect(llm.calls).toBe(1);
+    expect(llm.responseFormat).toBeUndefined();
+    expect(result.runtimeResults[0]?.status).toBe("success");
+    expect(result.runtimeResults[0]?.output).toEqual(output);
+  });
+
+  it("schema-validates the object returned by a completing tool", async () => {
+    const llm = new ToolCallingLLM();
+    const invalidOutput = { wrong: "shape" };
+    const toolExecutor: ToolExecutor = {
+      async execute(call) {
+        return {
+          toolCallId: call.toolCallId,
+          name: call.name,
+          result: JSON.stringify(invalidOutput),
+          parsedResult: invalidOutput,
+          success: true,
+          approvalStatus: "auto-allowed",
+        };
+      },
+      getToolInfo: (name) => ({
+        name,
+        description: "Submit the output",
+        jsonSchema: { ...OBJECT_SCHEMA },
+      }),
+    };
+    const runtime = manifest({
+      output: { schema: "./output.schema.json" },
+      tools: { plugin: ["submit-output"] },
+      requireToolUse: true,
+      completeAfterTools: ["submit-output"],
+    });
+
+    const result = await executeTurn(
+      {
+        sessionId: "sess-schema-tool-invalid",
+        turnId: "turn-schema-tool-invalid",
+        playerMessage: "start",
+      },
+      [runtime],
+      {
+        loadRuntime: async (loadedManifest) => ({
+          manifest: loadedManifest,
+          promptTemplate: "Call submit-output.",
+          outputSchema: { ...OBJECT_SCHEMA },
+        }),
+        llm,
+        store: createMemoryStore(),
+        toolExecutor,
+      },
+    );
+
+    expect(result.runtimeResults[0]?.status).toBe("failed");
+    expect(result.runtimeResults[0]?.output).toEqual(invalidOutput);
+    expect(result.runtimeResults[0]?.error).toContain(
+      "output did not match output.schema",
+    );
   });
 
   it("fails schema-declared plugin runtimes when parsed JSON has the wrong shape", async () => {

@@ -390,6 +390,7 @@ export async function executeAgentRuntime({
 
   const {
     finalContent,
+    finalToolOutput,
     collectedToolCalls,
     executedToolCalls,
     failedToolCalls,
@@ -492,6 +493,7 @@ export async function executeAgentRuntime({
   const finalized = finalizeAgentOutput({
     manifest,
     finalContent,
+    ...(finalToolOutput ? { preferredOutput: finalToolOutput } : {}),
     executedToolCalls,
     failedToolCalls,
     pendingProposals,
@@ -508,15 +510,18 @@ export async function executeAgentRuntime({
               collectedToolCalls,
               outputSchema: loaded.outputSchema!,
             };
-            const proseFailure = checkSchemaProseFailure(
-              ctx,
-              content,
-              parsedAsJson,
-            );
-            if (proseFailure) {
-              // Emission happens in finalizeFailure (the short-circuit result
-              // routes through it) — emitting here too would double-fire.
-              return proseFailure;
+            if (content !== null) {
+              const proseFailure = checkSchemaProseFailure(
+                ctx,
+                content,
+                parsedAsJson,
+              );
+              if (proseFailure) {
+                // Emission happens in finalizeFailure (the short-circuit
+                // result routes through it) — emitting here too would
+                // double-fire.
+                return proseFailure;
+              }
             }
             const schemaFailure = checkSchemaValidation(ctx, built);
             if (schemaFailure) {

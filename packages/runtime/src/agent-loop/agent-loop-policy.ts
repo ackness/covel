@@ -38,6 +38,11 @@ export interface AgentLoopPolicy {
   /** JSON-schema response format when the runtime declares an output schema. */
   readonly responseFormat: LLMResponseFormat | undefined;
   /**
+   * Use the successful completing tool's structured result as the runtime
+   * output instead of asking the model for a second JSON channel.
+   */
+  readonly outputFromCompletingTool: boolean;
+  /**
    * Session/API model override for this runtime. Story runtimes honour
    * the legacy story-only API override; every runtime kind honours the
    * per-session `runtimeModelOverrides` snapshot.
@@ -121,15 +126,29 @@ export function buildAgentLoopPolicy({
     input.modelOverride && manifest.outputKind === "story"
       ? input.modelOverride
       : sessionRuntimeSlot;
+  const completeAfterTools = new Set(manifest.completeAfterTools ?? []);
+  const outputFromCompletingTool = Boolean(
+    loaded.outputSchema &&
+    manifest.outputKind !== "story" &&
+    manifest.requireToolUse === true &&
+    [...completeAfterTools].some((name) =>
+      toolDefs?.some((definition) => definition.name === name),
+    ),
+  );
 
   return {
     toolDefs,
     deferredToolNames: deps.toolExecutor
       ? resolveDeferredToolNames(manifest)
       : new Set<string>(),
-    responseFormat: loaded.outputSchema
-      ? { type: "json_schema" as const, schema: loaded.outputSchema }
-      : undefined,
+    // A required, auto-completing tool already exposes its parameter schema to
+    // the provider. Sending response_format too creates two competing output
+    // channels. The completing tool result still passes the runtime schema gate.
+    responseFormat:
+      loaded.outputSchema && !outputFromCompletingTool
+        ? { type: "json_schema" as const, schema: loaded.outputSchema }
+        : undefined,
+    outputFromCompletingTool,
     runtimeModelOverride,
     useStreaming: !!(
       deps.onDelta &&
@@ -145,7 +164,7 @@ export function buildAgentLoopPolicy({
       runtimeTimeoutMs: timeoutMs,
     }),
     requireToolUse: manifest.requireToolUse === true,
-    completeAfterTools: new Set(manifest.completeAfterTools ?? []),
+    completeAfterTools,
     acceptsSteering: manifest.outputKind === "story",
     authorizedToolNames,
   };

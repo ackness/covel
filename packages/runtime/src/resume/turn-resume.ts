@@ -230,6 +230,7 @@ export async function resumeSuspendedRuntime(
 
   const {
     finalContent,
+    finalToolOutput,
     collectedToolCalls,
     executedToolCalls,
     failedToolCalls,
@@ -263,6 +264,7 @@ export async function resumeSuspendedRuntime(
   const finalized = finalizeAgentOutput({
     manifest,
     finalContent,
+    ...(finalToolOutput ? { preferredOutput: finalToolOutput } : {}),
     executedToolCalls,
     failedToolCalls,
     pendingProposals,

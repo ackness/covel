@@ -254,7 +254,7 @@ plugins/<plugin-id>/
 
 > **`output.schema`**：frontmatter 的 `output.schema` 接受一个相对该 runtime 目录的路径（如 `./schemas/out.schema.json`），loader 会按声明加载并做 realpath containment 校验（阻断 `../` 逃逸）。未声明时回落到同目录 `output.schema.json` 约定文件。声明了路径但文件缺失只会 `console.warn` 而不中断加载。
 
-> **单批工具 runtime**：如果某个写入工具成功就是 agent 的最终产物，可在 frontmatter 设置 `completeAfterTools: [save-result]`。框架会执行完模型同一响应中的全部业务工具，并在指定工具成功且该批无失败时直接结束，省去只输出 `runtime-done` 的第二次模型调用。不要把需要读取结果后继续决策的查询工具列入；无更新分支仍可显式调用 `runtime-done`。
+> **单批工具 runtime**：如果某个工具成功就是 agent 的最终产物，可在 frontmatter 设置 `completeAfterTools: [save-result]`。框架会执行完模型同一响应中的全部业务工具，并在指定工具成功且该批无失败时直接结束，省去只输出 `runtime-done` 的第二次模型调用。不要把需要读取结果后继续决策的查询工具列入；无更新分支仍可显式调用 `runtime-done`。非 story runtime 同时配置 `output.schema` 与 `requireToolUse: true` 时，成功终结工具的对象结果会直接作为 runtime 输出并再次经过 schema gate，因此可用工具参数承担结构化输出，避免同时要求模型返回 JSON 文本。
 
 ### E. 供应链防护（`.npmrc`）
 

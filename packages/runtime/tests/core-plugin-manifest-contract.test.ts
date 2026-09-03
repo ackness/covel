@@ -203,6 +203,9 @@ describe("core plugin manifest contract", () => {
       schema: "covel://world/ir/v1",
       recordAs: "world-ir-v1",
     });
+    expect(worldIr.tools?.plugin).toEqual(["submit-world-facts"]);
+    expect(worldIr.requireToolUse).toBe(true);
+    expect(worldIr.completeAfterTools).toEqual(["submit-world-facts"]);
     for (const downstream of structuredDownstreams) {
       expect(downstream.needs).toBeUndefined();
       expect(downstream.inputs?.worldIR).toMatchObject({

@@ -1657,7 +1657,7 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 
 **`requireToolUse` 判定**：仅当本轮 loop 从未有任何工具**成功**执行、且 LLM 本次回复无 tool call 时触发；已经成功干过活再收尾的 runtime 不受影响。纠正消息按 `input.locale` 分支（zh 前缀 → 中文“你没有调用任何工具就结束了……”，其余含无 locale → 英文），记一条 `[runtime-retry] <name> ... reason=no-tool-call`。内置的 `scene-prompts`（每回合必须调用 `generate-scene-prompts`）已启用。
 
-**`completeAfterTools` 适用边界**：适合“某个写入工具成功就是最终产物”的单步或单批 agent runtime。框架仍会执行同一响应中的全部工具调用，并把调用记录组成 runtime 输出；只把终结写入工具列入，不要把需要读取结果后继续决策的查询工具列入。
+**`completeAfterTools` 适用边界**：适合“某个工具成功就是最终产物”的单步或单批 agent runtime。框架仍会执行同一响应中的全部工具调用；只把终结工具列入，不要把需要读取结果后继续决策的查询工具列入。通常 runtime 输出由调用记录组成；当非 story runtime 同时声明 `output.schema`、`requireToolUse: true` 和 `completeAfterTools` 时，框架改用函数调用作为唯一结构化输出通道，不再发送 `responseFormat`，并将成功终结工具返回的对象作为 runtime 输出再次执行 `output.schema` 校验。该工具应让参数 schema 与输出 schema 保持一致，并原样返回通过校验的参数。
 
 **四类重试触发条件：**
 
