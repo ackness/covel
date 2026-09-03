@@ -22,8 +22,8 @@ import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 import { getCategoryMetadata } from "../category-metadata.js";
 
-export default function ({ tool, z, shortIdBatch, store }) {
-  const codexEntrySchema = z.object({
+export function createCodexEntrySchema(z) {
+  return z.object({
     category: z
       .enum(["monster", "item", "location", "lore", "character", "skill"])
       .describe("Knowledge category"),
@@ -39,6 +39,10 @@ export default function ({ tool, z, shortIdBatch, store }) {
       .optional()
       .describe("Optional visual description hint for later image generation"),
   });
+}
+
+export default function ({ tool, z, shortIdBatch, store }) {
+  const codexEntrySchema = createCodexEntrySchema(z);
 
   return tool({
     name: "unlock-codex-entries",

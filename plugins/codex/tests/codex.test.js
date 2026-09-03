@@ -23,9 +23,16 @@ import {
   loadPluginManifest,
   loadRuntime,
 } from "@covel/plugin-loader";
-import { getPendingProposals, tool, z, shortIdBatch } from "@covel/tools";
+import {
+  getPendingProposals,
+  getToolContent,
+  tool,
+  z,
+  shortIdBatch,
+} from "@covel/tools";
 import createUnlockCodexEntries from "../tools/unlock-codex-entries.js";
 import createUpdateCodexEntry from "../tools/update-codex-entry.js";
+import createSyncCodexEntries from "../tools/sync-codex-entries.js";
 import {
   CODEX_CATEGORY_METADATA,
   getCategoryMetadata,
@@ -129,6 +136,7 @@ describe("codex tools", () => {
   let mockStore;
   let unlockCodexEntriesTool;
   let updateCodexEntryTool;
+  let syncCodexEntriesTool;
 
   beforeEach(() => {
     mockStore = createMockPluginDataStore();
@@ -141,6 +149,12 @@ describe("codex tools", () => {
     updateCodexEntryTool = createUpdateCodexEntry({
       tool,
       z,
+      store: mockStore,
+    });
+    syncCodexEntriesTool = createSyncCodexEntries({
+      tool,
+      z,
+      shortIdBatch,
       store: mockStore,
     });
   });
@@ -511,6 +525,117 @@ describe("codex tools", () => {
       expect(stored.value.rarity).toBe("legendary");
     });
   });
+
+  describe("sync-codex-entries", () => {
+    it("publishes the full batch schema to the model", () => {
+      expect(syncCodexEntriesTool.jsonSchema).toMatchObject({
+        type: "object",
+        properties: {
+          unlocks: { type: "array", maxItems: 3 },
+          updates: { type: "array", maxItems: 5 },
+        },
+      });
+    });
+
+    it("commits new entries and existing-entry updates in one call", async () => {
+      const initial = await executeAndCommit(
+        unlockCodexEntriesTool,
+        {
+          entries: [
+            {
+              category: "location",
+              title: "青萍山",
+              content: "青萍宗所在的灵脉山峰，山腰分布着外门建筑。",
+              tags: ["宗门", "灵脉"],
+              rarity: "common",
+            },
+          ],
+        },
+        ctx,
+        mockStore,
+      );
+      const existingId = initial.entries[0].entryId;
+
+      const rawResult = await executeAndCommit(
+        syncCodexEntriesTool,
+        {
+          unlocks: [
+            {
+              category: "item",
+              title: "梦莲",
+              content: "生于雾泽深处的灵植，花瓣能短暂增强灵识。",
+              tags: ["灵植", "雾泽"],
+              rarity: "uncommon",
+            },
+          ],
+          updates: [
+            {
+              entryId: existingId,
+              appendContent: "山顶近来出现了新的古阵波动。",
+              newTags: ["古阵"],
+              rarityUpgrade: "rare",
+            },
+          ],
+        },
+        ctx,
+        mockStore,
+      );
+      const result = getToolContent(rawResult);
+
+      expect(result.unlocked).toBe(1);
+      expect(result.updated).toBe(1);
+      expect(result.ui).toHaveLength(2);
+      expect(getPendingProposals(rawResult)).toHaveLength(2);
+
+      const updated = await mockStore.getPluginData(
+        "sess-1",
+        "codex",
+        "entries",
+        existingId,
+      );
+      expect(updated.value.content).toContain("古阵波动");
+      expect(updated.value.tags).toContain("古阵");
+      expect(updated.value.rarity).toBe("rare");
+
+      const rows = await mockStore.listPluginData("sess-1", "codex", "entries");
+      expect(rows).toHaveLength(2);
+    });
+
+    it("fails atomically when an update target does not exist", async () => {
+      await expect(
+        syncCodexEntriesTool.execute(
+          {
+            unlocks: [
+              {
+                category: "item",
+                title: "未提交的梦莲",
+                content: "这条新记录不应在同批更新失败后被持久化。",
+                tags: ["测试"],
+                rarity: "common",
+              },
+            ],
+            updates: [
+              {
+                entryId: "codex-missing",
+                appendContent: "无法追加的内容。",
+              },
+            ],
+          },
+          ctx,
+        ),
+      ).rejects.toThrow("Entry codex-missing not found");
+
+      expect(
+        await mockStore.listPluginData("sess-1", "codex", "entries"),
+      ).toHaveLength(0);
+    });
+
+    it("rejects an empty sync and reserves runtime-done for no-change turns", async () => {
+      await expect(
+        syncCodexEntriesTool.execute({ unlocks: [], updates: [] }, ctx),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    });
+  });
 });
 
 // ── Category metadata helper tests ───────────────────────────────
@@ -582,11 +707,11 @@ describe("codex plugin manifest", () => {
     );
   });
 
-  it("should declare unlock + update plugin tools but NOT plugin-data-list", () => {
-    expect(manifest.tools?.plugin).toEqual([
-      "unlock-codex-entries",
-      "update-codex-entry",
-    ]);
+  it("should expose one atomic sync tool but NOT plugin-data-list", () => {
+    expect(manifest.tools?.plugin).toEqual(["sync-codex-entries"]);
+    expect(manifest.completeAfterTools).toEqual(["sync-codex-entries"]);
+    expect(manifest.maxSteps).toBe(2);
+    expect(manifest.maxRetries).toBe(0);
     // plugin-data-list was removed — existing entries now arrive via input.inject
     expect(manifest.tools?.builtin ?? []).not.toContain("plugin-data-list");
   });

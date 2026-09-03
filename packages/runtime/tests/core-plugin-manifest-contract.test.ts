@@ -242,6 +242,9 @@ describe("core plugin manifest contract", () => {
     expect(requireRuntime(manifests, "core-quest").completeAfterTools).toEqual([
       "upsert-quests",
     ]);
+    expect(requireRuntime(manifests, "codex").completeAfterTools).toEqual([
+      "sync-codex-entries",
+    ]);
 
     expect(
       [...rawDownstreams, worldIr, ...structuredDownstreams].map(

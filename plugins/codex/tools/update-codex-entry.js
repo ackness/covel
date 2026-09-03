@@ -15,23 +15,27 @@ import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 import { getCategoryMetadata } from "../category-metadata.js";
 
+export function createCodexUpdateSchema(z) {
+  return z.object({
+    entryId: z
+      .string()
+      .min(1)
+      .describe("Short ID of the entry to update (e.g. codex-fire-magic)"),
+    appendContent: z.string().min(1).describe("New content to append"),
+    newTags: z.array(z.string()).optional().describe("Tags to add"),
+    rarityUpgrade: z
+      .enum(["common", "uncommon", "rare", "legendary"])
+      .optional()
+      .describe("Set if a new discovery upgrades the rarity"),
+  });
+}
+
 export default function ({ tool, z, store }) {
   return tool({
     name: "update-codex-entry",
     description:
       "Update an existing codex entry by appending newly discovered information. Use the short entryId returned by unlock-codex-entries (e.g. codex-fire-magic).",
-    parameters: z.object({
-      entryId: z
-        .string()
-        .min(1)
-        .describe("Short ID of the entry to update (e.g. codex-fire-magic)"),
-      appendContent: z.string().min(1).describe("New content to append"),
-      newTags: z.array(z.string()).optional().describe("Tags to add"),
-      rarityUpgrade: z
-        .enum(["common", "uncommon", "rare", "legendary"])
-        .optional()
-        .describe("Set if a new discovery upgrades the rarity"),
-    }),
+    parameters: createCodexUpdateSchema(z),
     execute: async (params, context) => {
       const now = new Date().toISOString();
 
