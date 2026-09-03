@@ -751,6 +751,9 @@ describe("core-quest plugin manifest", () => {
   it("declares the upsert-quests plugin tool via the entry module", () => {
     expect(manifest.entry).toBe("./server/index.js");
     expect(manifest.tools?.plugin).toEqual(["upsert-quests"]);
+    expect(manifest.completeAfterTools).toEqual(["upsert-quests"]);
+    expect(manifest.maxSteps).toBe(2);
+    expect(manifest.maxRetries).toBe(0);
   });
 
   it("accepts world-data imports into the quests namespace", () => {

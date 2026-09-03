@@ -233,6 +233,16 @@ describe("core plugin manifest contract", () => {
       ).toBe(false);
     }
 
+    expect(requireRuntime(manifests, "affinity").completeAfterTools).toEqual([
+      "update-affinity",
+    ]);
+    expect(requireRuntime(manifests, "inventory").completeAfterTools).toEqual([
+      "update-inventory",
+    ]);
+    expect(requireRuntime(manifests, "core-quest").completeAfterTools).toEqual([
+      "upsert-quests",
+    ]);
+
     expect(
       [...rawDownstreams, worldIr, ...structuredDownstreams].map(
         (manifest) => manifest.model,

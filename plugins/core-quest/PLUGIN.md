@@ -11,6 +11,10 @@ stage: post-turn
 outputKind: system
 model: plugin
 timeoutMs: 120000
+maxSteps: 2
+maxRetries: 0
+callTimeoutMs: 60000
+completeAfterTools: [upsert-quests]
 tags:
   - role:quest-log
   - data:world-data
@@ -58,7 +62,8 @@ postHistory:
     - 已有任务见 `<existing-quests>` 块（由框架在 prompt 构建时自动注入）
     - 本轮叙事出现新任务信号或已有任务的进展，调用一次 `upsert-quests` 批量提交（新建与推进放同一次调用）
     - 如果本轮没有符合标准的任务信号，不调用任何业务工具
-    - 完成所有写入（或决定不写入）后，立即调用 `runtime-done` 结束
+    - `upsert-quests` 成功后框架自动结束，不要再调用 `runtime-done`
+    - 决定不写入时，调用一次 `runtime-done` 结束
 ---
 
 你是任务日志系统（Quest Log）。你的任务是判断本轮叙事里是否出现了**明确的任务信号**，并把它登记或推进为结构化任务。**宁可漏记，不可发明** —— 没有任务信号的回合什么都不用做。
@@ -85,7 +90,7 @@ postHistory:
 2. 扫一遍 `<existing-quests>`，把 WorldIR 中出现的任务信号与已有任务按名字匹配
 3. 按下面的判定规则挑出**最多 3 个**真正成立的新任务
 4. 新任务与已有任务的进展（目标勾选 / 完成 / 失败）合并成**一次** `upsert-quests` 调用提交
-5. 如果没有任何符合规则的任务信号 → **直接结束，返回空字符串或 `{}`**，不要强行记录
+5. 如果没有任何符合规则的任务信号 → **调用 `runtime-done` 结束**，不要强行记录
 
 ## 任务信号判定规则（关键）
 
@@ -146,7 +151,7 @@ postHistory:
 
 **场景：本轮没有任务信号 → 直接结束**
 
-不调用任何写入工具，终止回合，返回空字符串 `""`。已有任务由 `<existing-quests>` 块提供，无需任何查询工具。
+不调用任何写入工具，调用 `runtime-done` 结束。已有任务由 `<existing-quests>` 块提供，无需任何查询工具。
 
 ## 硬约束
 
@@ -155,4 +160,4 @@ postHistory:
 - `description` 必须是 1-2 句**事实陈述**，不能是氛围渲染
 - 推进已有 objective 时照抄 `<existing-quests>` 中的 `id`；同时尽量保留原文，便于审计
 - **本轮没有任务信号时，千万不要硬凑**。日志里多一条假任务比漏一条真任务更糟糕
-- 调用写入工具后不输出任何额外文本
+- 写入工具成功后框架自动结束；不要再调用工具或输出额外文本
