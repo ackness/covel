@@ -24,6 +24,19 @@ export interface ResolvedSlot {
   serverProvider?: string;
 }
 
+/** Return the model that requests for this slot will use on this client. */
+export function effectiveSlotModel(
+  slot: ResolvedSlot | null | undefined,
+): string | undefined {
+  return slot?.preset?.model ?? slot?.serverModel;
+}
+
+/** Format a runtime-binding option as `<slot> · <effective model>`. */
+export function formatSlotBindingLabel(slot: ResolvedSlot): string {
+  const model = effectiveSlotModel(slot);
+  return model ? `${slot.slotId} · ${model}` : slot.slotId;
+}
+
 function inferClientSlotTag(slotId: string): string {
   if (slotId === "image") return "image";
   return "text";

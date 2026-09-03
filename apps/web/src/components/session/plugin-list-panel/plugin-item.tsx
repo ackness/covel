@@ -12,7 +12,10 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { stageLabel } from "@/lib/stage-label.js";
-import { formatSlotLabel } from "@/hooks/use-slot-config.js";
+import {
+  effectiveSlotModel,
+  formatSlotLabel,
+} from "@/hooks/use-slot-config.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
 import { SetupRecovery } from "./setup-recovery.js";
 import type { PluginItemProps } from "./types.js";
@@ -291,7 +294,7 @@ export function PluginItem({
                   .map((slot) => (
                     <option key={slot.slotId} value={slot.slotId}>
                       {slot.slotId.toUpperCase()} —{" "}
-                      {slot.serverModel ?? slot.presetId}
+                      {effectiveSlotModel(slot) ?? slot.presetId}
                     </option>
                   ))}
               </select>

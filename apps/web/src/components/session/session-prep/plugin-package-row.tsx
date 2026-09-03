@@ -5,7 +5,11 @@ import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { stageLabel } from "@/lib/stage-label.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
-import { formatSlotLabel } from "@/hooks/use-slot-config.js";
+import {
+  effectiveSlotModel,
+  formatSlotBindingLabel,
+  formatSlotLabel,
+} from "@/hooks/use-slot-config.js";
 import type { UseRuntimeBindingsResult } from "@/hooks/use-runtime-bindings.js";
 import {
   recommendationReason,
@@ -230,8 +234,7 @@ export function PluginPackageRow({
               </option>
               {resolvedSlots.map((slot) => (
                 <option key={slot.slotId} value={slot.slotId}>
-                  {slot.slotId}
-                  {slot.serverModel ? ` · ${slot.serverModel}` : ""}
+                  {formatSlotBindingLabel(slot)}
                 </option>
               ))}
             </select>
@@ -315,8 +318,7 @@ export function PluginPackageRow({
               </option>
               {resolvedSlots.map((slot) => (
                 <option key={slot.slotId} value={slot.slotId}>
-                  {slot.slotId}
-                  {slot.serverModel ? ` · ${slot.serverModel}` : ""}
+                  {formatSlotBindingLabel(slot)}
                 </option>
               ))}
             </select>
@@ -334,6 +336,8 @@ export function PluginPackageRow({
                 ? resolvedSlots.find((slot) => slot.slotId === binding.slotName)
                 : configuredDefault;
               const missingDefault = isMissingDeclaredSlot(declaredSlot);
+              const configuredDefaultModel =
+                effectiveSlotModel(configuredDefault);
               const showPicker =
                 pluginBindings.length > 1 ||
                 missingDefault ||
@@ -391,10 +395,10 @@ export function PluginPackageRow({
                     >
                       <option value="">
                         {configuredDefault
-                          ? configuredDefault.serverModel
+                          ? configuredDefaultModel
                             ? t("plugin.runtimeDefaultSummaryWithModel", {
                                 slot: declaredSlot,
-                                model: configuredDefault.serverModel,
+                                model: configuredDefaultModel,
                                 defaultValue:
                                   "runtime default · {{slot}} · {{model}}",
                               })
@@ -410,8 +414,7 @@ export function PluginPackageRow({
                       </option>
                       {resolvedSlots.map((slot) => (
                         <option key={slot.slotId} value={slot.slotId}>
-                          {slot.slotId}
-                          {slot.serverModel ? ` · ${slot.serverModel}` : ""}
+                          {formatSlotBindingLabel(slot)}
                         </option>
                       ))}
                     </select>

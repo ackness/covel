@@ -1,6 +1,11 @@
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { formatSlotLabel, useSlotConfig } from "@/hooks/use-slot-config.js";
+import {
+  effectiveSlotModel,
+  formatSlotBindingLabel,
+  formatSlotLabel,
+  useSlotConfig,
+} from "@/hooks/use-slot-config.js";
 
 const modelSettings = vi.hoisted(() => ({
   values: new Map<string, unknown>(),
@@ -43,6 +48,26 @@ beforeEach(() => {
 });
 
 describe("useSlotConfig", () => {
+  it("uses the client override in runtime-binding labels", () => {
+    const slot = {
+      slotId: "plugin",
+      presetId: "model-a",
+      preset: {
+        ...preset("model-a", "ali-coding-plan", "qwen3.8-flash"),
+        enabled: true,
+        isDefault: false,
+        scope: "custom" as const,
+      },
+      label: "plugin",
+      tag: "text",
+      serverModel: "deepseek-v4-flash",
+      serverProvider: "deepseek",
+    };
+
+    expect(effectiveSlotModel(slot)).toBe("qwen3.8-flash");
+    expect(formatSlotBindingLabel(slot)).toBe("plugin · qwen3.8-flash");
+  });
+
   it("updates a displayed provider/model when provider settings change", () => {
     const { result, rerender } = renderHook(() => useSlotConfig([]));
     expect(formatSlotLabel(result.current.resolvedSlots[0])).toBe(

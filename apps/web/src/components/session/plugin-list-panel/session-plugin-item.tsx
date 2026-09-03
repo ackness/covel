@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
+import { formatSlotBindingLabel } from "@/hooks/use-slot-config.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { stageLabel } from "@/lib/stage-label.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
@@ -157,8 +158,7 @@ export function SessionPluginItem({
               </option>
               {resolvedSlots.map((slot) => (
                 <option key={slot.slotId} value={slot.slotId}>
-                  {slot.slotId}
-                  {slot.serverModel ? ` · ${slot.serverModel}` : ""}
+                  {formatSlotBindingLabel(slot)}
                 </option>
               ))}
             </select>
