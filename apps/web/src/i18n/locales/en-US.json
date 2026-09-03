@@ -1436,6 +1436,8 @@
       "server": "The provider is temporarily unavailable. Try again later.",
       "timeout": "The request timed out. Check the network or proxy.",
       "network": "Could not reach the provider. Check the network or proxy.",
+      "invalidOutput": "The model returned data that does not match this task's required format. Retry or open details.",
+      "incomplete": "The task stream ended before its final status arrived. Retry this task.",
       "generic": "The request failed. Open details for the original error.",
       "unknown": "The request failed without an error message.",
       "showDetail": "Show details",

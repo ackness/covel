@@ -127,10 +127,8 @@ function RuntimeChip({
   onRetry?: (runtimeId: string) => void;
   retryFromLabel: string;
 }) {
-  const { t } = useTranslation();
   const isActive =
     rt.status === "running" || rt.status === "llm" || rt.status === "tool";
-  const resolvedDetail = resolveI18nSentinel(rt.detail, t);
 
   return (
     <span
@@ -167,10 +165,7 @@ function RuntimeChip({
           {formatDuration(rt.durationMs)}
         </span>
       )}
-      {rt.status === "failed" && resolvedDetail && (
-        <ActionableErrorNotice error={resolvedDetail} />
-      )}
-      {canRetry && onRetry && (
+      {canRetry && onRetry && !(rt.status === "failed" && rt.detail) && (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -183,6 +178,67 @@ function RuntimeChip({
         </button>
       )}
     </span>
+  );
+}
+
+function RuntimeFailureNotice({
+  rt,
+  canRetry,
+  onRetry,
+  retryFromLabel,
+}: {
+  rt: RuntimeStatus;
+  canRetry?: boolean;
+  onRetry?: (runtimeId: string) => void;
+  retryFromLabel: string;
+}) {
+  const { t } = useTranslation();
+  const resolvedDetail = resolveI18nSentinel(rt.detail, t);
+  if (!resolvedDetail) return null;
+
+  const isIncomplete = rt.detail?.startsWith(
+    `${I18N_SENTINEL_PREFIX}session.reasonConnectionClosed`,
+  );
+
+  return (
+    <div
+      role="alert"
+      className="w-full min-w-0 max-w-2xl overflow-hidden rounded-(--radius-control) border border-destructive/35 bg-destructive/5"
+    >
+      <div className="flex min-w-0 items-start gap-2 px-3 py-2">
+        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[11px] font-medium text-destructive">
+              {rt.label}
+            </span>
+            {rt.durationMs != null && (
+              <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
+                {formatDuration(rt.durationMs)}
+              </span>
+            )}
+          </div>
+          <div className="mt-1">
+            <ActionableErrorNotice
+              error={resolvedDetail}
+              kind={isIncomplete ? "incomplete" : undefined}
+              layout="panel"
+            />
+          </div>
+        </div>
+        {canRetry && onRetry && (
+          <button
+            type="button"
+            onClick={() => onRetry(rt.runtimeId)}
+            className="shrink-0 rounded-(--radius-control) p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            title={retryFromLabel}
+            aria-label={retryFromLabel}
+          >
+            <RotateCw className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -261,6 +317,9 @@ export function ExecutionTimeline({
         );
         const allDone = !executing || !isLatest ? !active : false;
         const canRetry = allDone && isLatest && !!onRetryRuntime;
+        const failures = statuses.filter(
+          (runtime) => runtime.status === "failed" && runtime.detail,
+        );
         const isCollapsed =
           foldOverrides[group.turnId] ?? !(executing && isLatest);
         const turnNumber = groupIdx + 1;
@@ -302,23 +361,46 @@ export function ExecutionTimeline({
 
             {/* Chips row */}
             {!isCollapsed && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {statuses.map((rt) => (
-                  <RuntimeChip
-                    key={rt.runtimeId}
-                    rt={rt}
-                    canRetry={canRetry}
-                    // Carry the chip's turn id so the retry replays THIS
-                    // turn's recorded upstream outputs (server-side seeding).
-                    onRetry={
-                      onRetryRuntime
-                        ? (rid) => onRetryRuntime(rid, group.turnId)
-                        : undefined
-                    }
-                    retryFromLabel={t("session.retryFrom", { label: rt.label })}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {statuses.map((rt) => (
+                    <RuntimeChip
+                      key={rt.runtimeId}
+                      rt={rt}
+                      canRetry={canRetry}
+                      // Carry the chip's turn id so the retry replays THIS
+                      // turn's recorded upstream outputs (server-side seeding).
+                      onRetry={
+                        onRetryRuntime
+                          ? (rid) => onRetryRuntime(rid, group.turnId)
+                          : undefined
+                      }
+                      retryFromLabel={t("session.retryFrom", {
+                        label: rt.label,
+                      })}
+                    />
+                  ))}
+                </div>
+                {failures.length > 0 && (
+                  <div className="mt-1.5 flex min-w-0 flex-col gap-1.5">
+                    {failures.map((rt) => (
+                      <RuntimeFailureNotice
+                        key={rt.runtimeId}
+                        rt={rt}
+                        canRetry={canRetry}
+                        onRetry={
+                          onRetryRuntime
+                            ? (rid) => onRetryRuntime(rid, group.turnId)
+                            : undefined
+                        }
+                        retryFromLabel={t("session.retryFrom", {
+                          label: rt.label,
+                        })}
+                      />
+                    ))}
+                  </div>
+                )}
+              </>
             )}
 
             {/* Active detail line (latest turn only) */}

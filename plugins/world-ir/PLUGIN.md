@@ -55,6 +55,15 @@ effects:
 - `events` 收录已经发生的动作与状态变化，例如获得/失去/装备物品、受伤、移动、接受/推进/完成任务、明显的态度变化
 - `statements` 收录不适合表达为事件的明确知识，例如新发现、任务要求、规则、传闻或约束
 
+严格限制每类对象的顶层字段；以下列表之外的细节一律放入 `attributes`：
+
+- `entity`: `id`, `type`, `name`, `description`, `attributes`
+- `relation`: `id`, `type`, `from`, `to`, `description`, `attributes`
+- `event`: `id`, `type`, `participantIds`, `time`, `description`, `attributes`
+- `statement`: `id`, `type`, `content`, `subjectIds`, `attributes`
+
+例如，关系强度写成 `attributes.strength`，事件的动作、发起者和目标写进 `attributes`；不要输出顶层 `strength`、`actor`、`target`、`action` 或 `subject`。
+
 ## 类型与 attributes 约定
 
 - `entity.type` 优先使用 `character`、`group`、`faction`、`location`、`item`、`skill`、`concept`

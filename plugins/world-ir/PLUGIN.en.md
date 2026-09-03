@@ -55,6 +55,15 @@ Return one JSON object directly, without Markdown or tool calls:
 - Put completed actions and state changes in `events`, including inventory, equipment, injury, movement, quest, and clear attitude changes.
 - Put explicit knowledge that is not an event in `statements`, including discoveries, quest requirements, rules, rumors, and constraints.
 
+Strictly limit the top-level fields of each object. Put every detail not listed below inside `attributes`:
+
+- `entity`: `id`, `type`, `name`, `description`, `attributes`
+- `relation`: `id`, `type`, `from`, `to`, `description`, `attributes`
+- `event`: `id`, `type`, `participantIds`, `time`, `description`, `attributes`
+- `statement`: `id`, `type`, `content`, `subjectIds`, `attributes`
+
+For example, write relation strength as `attributes.strength`, and put an event's action, actor, and target inside `attributes`. Never emit top-level `strength`, `actor`, `target`, `action`, or `subject` fields.
+
 ## Types and attributes
 
 - Prefer `character`, `group`, `faction`, `location`, `item`, `skill`, and `concept` for `entity.type`.

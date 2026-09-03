@@ -174,6 +174,36 @@ describe("Turn executor hook wire-in", () => {
     });
   });
 
+  describe("PreRuntime hook", () => {
+    it("reports a terminal skipped status when the hook aborts", async () => {
+      const llm = new SimpleMockLLM();
+      const pipeline = createHookPipeline();
+      pipeline.register({
+        id: "test:PreRuntime:abort",
+        event: "PreRuntime",
+        handler: vi
+          .fn()
+          .mockResolvedValue({ action: "abort", reason: "runtime blocked" }),
+      });
+      const deps = await makeDeps(llm, pipeline);
+      const onRuntimeComplete = vi.fn();
+      deps.onRuntimeComplete = onRuntimeComplete;
+
+      const result = await executeTurn(makeTurnInput(), [makeManifest()], deps);
+
+      expect(result.runtimeResults[0]?.status).toBe("skipped");
+      expect(onRuntimeComplete).toHaveBeenCalledOnce();
+      expect(onRuntimeComplete).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runtimeId: "test-plugin",
+          pluginId: "test-plugin",
+          status: "skipped",
+        }),
+      );
+      expect(llm.calls).toHaveLength(0);
+    });
+  });
+
   describe("PreToolUse hook", () => {
     it("skips tool and feeds synthetic error to LLM when PreToolUse aborts", async () => {
       const llm = new SimpleMockLLM();

@@ -116,6 +116,46 @@ describe("createGatewayAdapter target resolution", () => {
     });
   });
 
+  it("forwards responseFormat and exposes the exact schema to the model", async () => {
+    let inputSeen: Parameters<GatewayLike["generateText"]>[0] | undefined;
+    const gateway: GatewayLike = {
+      resolveSlot() {
+        return { provider: "qwen", model: "qwen-test" };
+      },
+      async generateText(input) {
+        inputSeen = input;
+        return {
+          text: '{"ok":true}',
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+    };
+    const schema = {
+      type: "object",
+      additionalProperties: false,
+      properties: { ok: { type: "boolean" } },
+      required: ["ok"],
+    } as const;
+    const messages = [{ role: "system" as const, content: "Original prompt" }];
+
+    await createGatewayAdapter(gateway).generate({
+      messages,
+      responseFormat: { type: "json_schema", schema },
+    });
+
+    expect(inputSeen?.responseFormat).toEqual({
+      type: "json_schema",
+      schema,
+    });
+    expect(inputSeen?.messages[0]?.content).toContain("Original prompt");
+    expect(inputSeen?.messages[0]?.content).toContain(
+      "Do not add properties that the schema does not allow.",
+    );
+    expect(inputSeen?.messages[0]?.content).toContain(JSON.stringify(schema));
+    expect(messages[0]?.content).toBe("Original prompt");
+  });
+
   it("preserves prompt cache usage from the gateway", async () => {
     const gateway: GatewayLike = {
       resolveSlot() {

@@ -200,6 +200,13 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
         ),
       };
       attachOpenAiTools(body, params.tools, params.model, context);
+      if (params.responseFormat) {
+        // json_object is the widest interoperable structured-output mode for
+        // OpenAI-compatible endpoints (including Qwen/DeepSeek proxies). The
+        // gateway adapter also places the exact schema in the system prompt;
+        // runtime validation remains the final contract gate.
+        body.response_format = { type: "json_object" };
+      }
 
       const response = await postJson(config, "/chat/completions", body);
       const payload = await parseJson(response);

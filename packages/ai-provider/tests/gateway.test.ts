@@ -128,6 +128,35 @@ describe("gateway", () => {
     expect(result.provider).toBe("test");
   });
 
+  it("forwards a structured response format to the provider adapter", async () => {
+    const generateText = vi.fn(async () => ({
+      text: '{"ok":true}',
+      finishReason: "stop",
+      usage: { inputTokens: 10, outputTokens: 5 },
+    }));
+    const { gateway } = setup({ generateText });
+    const responseFormat = {
+      type: "json_schema" as const,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        properties: { ok: { type: "boolean" } },
+        required: ["ok"],
+      },
+    };
+
+    await gateway.generateText({
+      messages: [{ role: "user", content: "hi" }],
+      responseFormat,
+    });
+
+    expect(generateText).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ responseFormat }),
+      expect.objectContaining({ mode: "text" }),
+    );
+  });
+
   it("streamText yields events", async () => {
     const { gateway } = setup();
     const events: StreamEvent[] = [];
