@@ -67,6 +67,8 @@ export async function buildPluginFlowResponse() {
     segmentId: FlowSegmentId;
     runtimeType: string;
     outputKind: string;
+    capabilities: string[];
+    execution: "sync" | "background";
     model?: string;
     trigger: {
       type: string;
@@ -139,6 +141,8 @@ export async function buildPluginFlowResponse() {
         segmentId,
         runtimeType: manifest.runtimeType ?? "agent",
         outputKind: manifest.outputKind ?? "plugin",
+        capabilities: [...(manifest.capabilities ?? [])],
+        execution: manifest.execution ?? "sync",
         model: manifest.model,
         trigger: {
           type: manifest.trigger?.type ?? "auto",

@@ -79,6 +79,8 @@ export interface PluginFlowStep {
   trigger: { type: string };
   runtimeType?: string;
   outputKind?: string;
+  capabilities?: string[];
+  execution?: "sync" | "background";
   model?: string;
   turnCompletion: TurnCompletionSummary;
 }
@@ -108,6 +110,8 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
     trigger?: { type?: string };
     runtimeType?: string;
     outputKind?: string;
+    capabilities?: string[];
+    execution?: "sync" | "background";
     model?: string;
     turnCompletion?: TurnCompletionSummary;
   };
@@ -129,6 +133,8 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
       trigger: { type: s.trigger?.type ?? "auto" },
       runtimeType: s.runtimeType,
       outputKind: s.outputKind,
+      capabilities: s.capabilities,
+      execution: s.execution,
       model: s.model,
       turnCompletion: normalizeTurnCompletion(s.turnCompletion),
     })),

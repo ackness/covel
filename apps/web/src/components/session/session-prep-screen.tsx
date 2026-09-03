@@ -185,10 +185,35 @@ export function SessionPrepScreen({
   const visual = useMemo(() => worldVisual(world), [world]);
   const selectedFlowSteps = useMemo(() => {
     if (!flowData) return [];
-    return flowData.steps.filter((step) =>
-      selectedPluginIdSet.has(step.pluginId),
+    const runtimeMetadata = new Map(
+      packages.map(
+        (pkg) =>
+          [
+            pkg.name,
+            new Map(
+              (pkg.runtimes ?? []).map(
+                (runtime) => [runtime.id, runtime] as const,
+              ),
+            ),
+          ] as const,
+      ),
     );
-  }, [flowData, selectedPluginIdSet]);
+    return flowData.steps
+      .filter((step) => selectedPluginIdSet.has(step.pluginId))
+      .map((step) => {
+        const runtime = runtimeMetadata.get(step.pluginId)?.get(step.runtimeId);
+        if (!runtime) return step;
+        return {
+          ...step,
+          runtimeType: step.runtimeType ?? runtime.kind,
+          outputKind: step.outputKind ?? runtime.outputKind,
+          capabilities: step.capabilities ?? runtime.capabilities,
+          execution: step.execution ?? runtime.execution,
+          turnCompletion: step.turnCompletion ??
+            runtime.turnCompletion ?? { mode: "await" },
+        };
+      });
+  }, [flowData, packages, selectedPluginIdSet]);
 
   const resolveSelectedDeclaredSlot = useCallback(
     (slotId: string) => resolveDeclaredSlot(resolvedSlots, slotId),

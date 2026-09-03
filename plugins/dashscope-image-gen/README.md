@@ -18,7 +18,7 @@
 
 | Runtime                                | 类型                  | 触发                             | 职责                                                                                                                                                                                      |
 | -------------------------------------- | --------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dashscope-image-gen/prompt-generator` | agent                 | manual                           | 读取最近的 prompt 历史，按 `promptMode` 产出 JSON envelope（顶层 `prompt` 字段 + `events[image.generate.requested]`），唤醒下游                                                           |
+| `dashscope-image-gen/prompt-generator` | agent (background)    | manual                           | 后台读取最近的 prompt 历史，按 `promptMode` 产出 JSON envelope（顶层 `prompt` 字段 + `events[image.generate.requested]`），唤醒下游                                                       |
 | `dashscope-image-gen/image-generator`  | function (background) | event:`image.generate.requested` | 调用 `ctx.images.generate()`（框架选 wire、发请求、落 MediaStore、按 promptHash 去重）→ 拿到 `MediaRef[]` 后写索引记录（含 `ref`）进 `images` 命名空间，并 emit `asset.generate` proposal |
 
 ## userSettings

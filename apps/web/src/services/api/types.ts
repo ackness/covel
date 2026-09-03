@@ -115,6 +115,8 @@ export interface RuntimeSummary {
   capabilities?: string[];
   tags?: string[];
   relations?: Record<string, unknown>;
+  /** Invocation policy for stage-less manual/event runtimes. */
+  execution?: "sync" | "background";
   /** Whether this staged runtime blocks the foreground turn from completing. */
   turnCompletion?: TurnCompletionSummary;
 }

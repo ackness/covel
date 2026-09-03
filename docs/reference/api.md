@@ -1376,7 +1376,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 `entry` 中通过 `covel.registerRpc` 注册的 handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
 2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
-   - `'background'`: 立即返回 202 + `jobId`,后台通过 `setImmediate` 继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。
+   - `'background'`: 立即返回 202 + `jobId`,后台通过有界进程内队列继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。入口 runtime 发出的 background follower 会继续建立子任务，并记录在父任务的 `deferredJobs`。
 3. **Command 级**: `{ commandId, input }` 或 `{ commandId, args }` — 前者来自输入框，后者来自插件 JSON-RENDER `invokeCommand`。两者执行会话命令目录中的同一个命令；服务端重新确认插件仍激活、验证并归一化参数，并从 manifest 决定 action 和可注入上下文。客户端不能提交 `pluginId`、`payload` 或扩大 context scope。
 
 **参数:**
@@ -1998,7 +1998,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 }
 ```
 
-`available[].runtimes[].turnCompletion` 返回与全局插件/flow discovery 相同的 effective policy：未声明或未启用后台屏障时是 `{ "mode": "await" }`；detached 声明会附带期限与 `serial/reject` 策略。客户端应把它当作展示/诊断元数据，真正是否后台化仍由每回合活跃 DAG 的安全检查决定。
+`available[].runtimes[].execution` 始终返回 manual/event 激活的 effective 模式（`sync` 或 `background`）；`available[].runtimes[].turnCompletion` 返回与全局插件/flow discovery 相同的 staged effective policy：未声明或未启用后台屏障时是 `{ "mode": "await" }`，detached 声明会附带期限与 `serial/reject` 策略。客户端可据此展示功能特性，但 staged runtime 真正是否后台化仍由每回合活跃 DAG 的安全检查决定。
 
 #### `POST /api/sessions/:id/plugins/enable`
 

@@ -7,7 +7,10 @@ pluginType: plugin
 model: default
 outputKind: plugin
 capabilities: [image-prompt, manual-invoke]
-execution: sync
+# Prompt generation and the provider render are both outside the gameplay
+# critical path. Declaring this here makes every RPC caller non-blocking; the
+# emitted image.generate.requested event keeps chaining to image-generator.
+execution: background
 timeoutMs: 300000
 maxSteps: 10
 maxRetries: 5

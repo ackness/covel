@@ -278,6 +278,7 @@ export function buildAvailablePluginList(
       stage?: Stage;
       model?: string;
       outputKind?: string;
+      execution: "sync" | "background";
       trigger?: { type: string; topic?: string };
       capabilities?: string[];
       tags?: string[];
@@ -303,6 +304,7 @@ export function buildAvailablePluginList(
         ...(stage !== undefined ? { stage } : {}),
         ...(m.model ? { model: m.model } : {}),
         ...(m.outputKind ? { outputKind: m.outputKind } : {}),
+        execution: m.execution ?? "sync",
         ...(m.trigger
           ? {
               trigger: {

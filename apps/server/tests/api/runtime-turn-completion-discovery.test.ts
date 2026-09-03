@@ -51,6 +51,7 @@ describe("runtime turnCompletion discovery", () => {
     pluginId: "media-tools",
     description: "Render media",
     runtimeType: "function",
+    execution: "background",
     stage: "post-turn",
     turnCompletion: {
       mode: "detached",
@@ -71,6 +72,27 @@ describe("runtime turnCompletion discovery", () => {
         overlap: "serial",
         stalePolicy: "reject",
       },
+    ]);
+  });
+
+  it("exposes explicit execution modes for manual and event background work", () => {
+    const contract = buildPluginContract(makeEntry([awaited, detached]));
+    expect(contract.runtimes.map((runtime) => runtime.execution)).toEqual([
+      undefined,
+      "background",
+    ]);
+
+    const registry = createPluginRegistry();
+    registry.register(makeEntry([awaited, detached]));
+    const [plugin] = buildAvailablePluginList(
+      ["media-tools"],
+      registry,
+    ) as Array<{
+      runtimes: Array<{ execution: string }>;
+    }>;
+    expect(plugin?.runtimes.map((runtime) => runtime.execution)).toEqual([
+      "sync",
+      "background",
     ]);
   });
 

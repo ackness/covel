@@ -322,6 +322,7 @@ describe("listPackages", () => {
               id: "tts/auto",
               kind: "function",
               trigger: { type: "auto" },
+              capabilities: ["tts"],
               turnCompletion: { mode: "detached", maxQueueMs: 10_000 },
             },
           ],
@@ -343,6 +344,7 @@ describe("listPackages", () => {
           runtimeId: "tts/auto",
           runtimeName: "auto",
           segmentId: "post-turn",
+          capabilities: ["tts"],
           turnCompletion: { mode: "detached" },
         },
         {
@@ -358,5 +360,43 @@ describe("listPackages", () => {
       "detached",
       "await",
     ]);
+    expect(flow.steps[0]?.capabilities).toEqual(["tts"]);
+  });
+
+  it("preserves background execution for manual and event runtimes", async () => {
+    mockFetchOnce({
+      packages: [
+        {
+          name: "media",
+          enabled: true,
+          runtimes: [
+            {
+              id: "media/manual",
+              kind: "function",
+              trigger: { type: "manual" },
+              execution: "background",
+            },
+          ],
+        },
+      ],
+      loadErrors: [],
+    });
+    const packages = await listPackages();
+    expect(packages.packages[0]?.runtimes?.[0]?.execution).toBe("background");
+
+    mockFetchOnce({
+      segments: [{ id: "event-manual", label: "Events & Manual" }],
+      steps: [
+        {
+          pluginId: "media",
+          runtimeId: "media/manual",
+          segmentId: "event-manual",
+          trigger: { type: "manual" },
+          execution: "background",
+        },
+      ],
+    });
+    const flow = await fetchPluginFlows();
+    expect(flow.steps[0]?.execution).toBe("background");
   });
 });

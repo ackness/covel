@@ -216,7 +216,7 @@ describe("session plugin metadata UI", () => {
     fireEvent.click(screen.getByText("Manual Plugin"));
     fireEvent.click(screen.getByText("Event Plugin"));
 
-    expect(screen.getByText("Every turn")).toBeTruthy();
+    expect(screen.getByText("Automatic")).toBeTruthy();
     expect(screen.getByText("Manual")).toBeTruthy();
     expect(screen.getByText("Event")).toBeTruthy();
   });

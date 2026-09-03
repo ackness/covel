@@ -29,6 +29,7 @@ describe("ExecutionFlowPreview turn completion", () => {
         segmentId: "post-turn" as const,
         trigger: { type: "auto" },
         runtimeType: "function",
+        capabilities: ["tts"],
         turnCompletion: { mode: "detached" as const },
       },
       {
@@ -54,8 +55,13 @@ describe("ExecutionFlowPreview turn completion", () => {
       />,
     );
 
-    expect(screen.getByText("background")).toBeTruthy();
-    expect(screen.getByTitle("Does not block the turn")).toBeTruthy();
+    expect(screen.getByText("Background")).toBeTruthy();
+    expect(
+      screen.getByLabelText(
+        "Runs in the background without blocking the foreground flow",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Media")).toBeTruthy();
     expect(screen.getAllByText(/auto-narrate|guide/)).toHaveLength(2);
   });
 });

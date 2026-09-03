@@ -1,9 +1,10 @@
-import { Clock, Cpu, Zap } from "lucide-react";
+import { Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import type * as api from "@/services/api.js";
 import type { UseRuntimeBindingsResult } from "@/hooks/use-runtime-bindings.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
+import { RuntimeFeatureBadges } from "../runtime-feature-badges.js";
 
 interface ExecutionFlowPreviewProps {
   flowData: api.PluginFlowResponse | null;
@@ -68,21 +69,7 @@ export function ExecutionFlowPreview({
                       <span className="font-medium truncate max-w-30">
                         {step.label}
                       </span>
-                      {step.runtimeType === "agent" && (
-                        <Cpu className="w-2.5 h-2.5 text-muted-foreground" />
-                      )}
-                      {step.turnCompletion.mode === "detached" && (
-                        <Badge
-                          variant="outline"
-                          className="h-4 max-w-full gap-0.5 border-sky-500/30 bg-sky-500/10 px-1 text-[9px] text-sky-700 dark:text-sky-300"
-                          title={t("plugin.turnCompletionDetached")}
-                        >
-                          <Clock className="h-2.5 w-2.5 shrink-0" />
-                          <span className="truncate">
-                            {t("session.backgroundTask")}
-                          </span>
-                        </Badge>
-                      )}
+                      <RuntimeFeatureBadges runtime={step} />
                       {bindingEntry?.slotName && (
                         <Badge
                           variant="outline"

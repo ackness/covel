@@ -8,10 +8,12 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 - **Safe post-turn function runtimes can finish beyond the foreground turn barrier.** Plugin manifests can opt in with `turnCompletion.mode: detached` plus queue/execution deadlines, serial overlap, and stale-result rejection. The scheduler freezes source-turn inputs, falls back to foreground execution with diagnostics when a declaration is unsafe, and validates actual effects again before commit. `mimo-tts/auto-narrate` is the first bundled runtime using this path.
 - **Scheduler-detached work has durable lifecycle APIs and events.** `_runtime_jobs` stores CAS-leased jobs on the active DataStore backend while snapshots and browser checkpoints omit control-plane rows; clients can list, cancel, or explicitly retry jobs and receive `runtime.deferred` plus origin-turn-aware `job-status.updated` events.
+- **Plugin surfaces explain runtime behavior with contract-derived feature badges.** Session setup, plugin details, and the execution-flow preview expose trigger, LLM/function type, background execution, output role, and declared capabilities without branching on bundled plugin ids.
 
 ### Changed
 
 - **A player turn no longer waits for eligible media follow-up work.** Queued job creation commits atomically with the source turn, while background execution runs outside the main session lock and rechecks session/plugin incarnation, version, lease ownership, and declared effects before committing. Restart recovery resumes unclaimed queued work, but terminalizes expired queues and expired in-flight leases without replaying potentially billable provider calls.
+- **Bundled image prompt generation is now manifest-declared background work.** Both OpenAI-compatible and DashScope image prompt agents return a job immediately for every RPC caller, and a background entry now preserves its emitted background-follower chain instead of dropping the provider render. Decision guidance such as `scene-prompts` remains inside the foreground barrier because the player needs it before choosing the next action.
 
 ## [0.0.29] - 2026-09-02
 

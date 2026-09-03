@@ -357,6 +357,18 @@ export function createPluginRpcJobRunner(
         try {
           const summary = await options.runManualTurn();
           const completion = deriveBackgroundJobCompletion(summary);
+          // A background entry runtime may itself emit events for additional
+          // `execution: background` followers (for example, image prompt
+          // generation followed by the provider render). Preserve that chain
+          // exactly as the synchronous entry path does. Followers are only
+          // published after the entry turn committed, so no child observes
+          // rolled-back prompt/state output.
+          const deferredJobs =
+            completion.status === "done" &&
+            summary.commit.committed &&
+            summary.deferredFollowers.length > 0
+              ? await scheduleDeferredFollowers(summary.deferredFollowers)
+              : [];
           const completedAt = new Date().toISOString();
           await persistJob({
             pluginId: args.pluginId,
@@ -373,6 +385,7 @@ export function createPluginRpcJobRunner(
               completedAt,
               durationMs: summary.durationMs,
               runtimeResults: summary.runtimeResults,
+              ...(deferredJobs.length > 0 ? { deferredJobs } : {}),
               ...(completion.error ? { error: completion.error } : {}),
               ...(summary.abortReason
                 ? { abortReason: summary.abortReason }

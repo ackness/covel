@@ -93,6 +93,7 @@ export interface SessionPluginInfo {
     capabilities?: string[];
     tags?: string[];
     relations?: Record<string, unknown>;
+    execution?: "sync" | "background";
     turnCompletion?: import("./types.js").TurnCompletionSummary;
   }>;
 }

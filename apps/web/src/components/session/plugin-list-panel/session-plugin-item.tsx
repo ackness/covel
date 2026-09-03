@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   AlertTriangle,
   ChevronRight,
-  Clock,
   Lock,
   Puzzle,
   Wrench,
@@ -14,11 +13,8 @@ import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { stageLabel } from "@/lib/stage-label.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
 import { SetupRecovery } from "./setup-recovery.js";
-import {
-  RUNTIME_TYPE_ICONS,
-  TRIGGER_TYPE_I18N,
-  type SessionPluginItemProps,
-} from "./types.js";
+import { TRIGGER_TYPE_I18N, type SessionPluginItemProps } from "./types.js";
+import { RuntimeCollectionFeatureBadges } from "../runtime-feature-badges.js";
 
 export function SessionPluginItem({
   plugin,
@@ -93,11 +89,17 @@ export function SessionPluginItem({
   const triggerLabel = triggerEntry
     ? t(triggerEntry.key, triggerEntry.fallback)
     : (plugin.trigger?.type ?? "auto");
-  const runtimeLabel =
-    RUNTIME_TYPE_ICONS[plugin.runtimeType ?? "agent"] ?? "LLM";
-  const hasDetachedRuntime = plugin.runtimes?.some(
-    (runtime) => runtime.turnCompletion?.mode === "detached",
-  );
+  const featureRuntimes =
+    plugin.runtimes && plugin.runtimes.length > 0
+      ? plugin.runtimes
+      : [
+          {
+            runtimeType: plugin.runtimeType,
+            trigger: plugin.trigger,
+            outputKind: plugin.outputKind,
+            capabilities: plugin.capabilities,
+          },
+        ];
 
   return (
     <div className="border border-border rounded-(--radius-card) overflow-hidden">
@@ -122,24 +124,10 @@ export function SessionPluginItem({
               {stageLabel(plugin.stage, t)}
             </Badge>
           )}
-          <Badge
-            variant="outline"
-            className="ui-chip text-xs px-1 py-0 h-4 shrink-0"
-          >
-            {runtimeLabel}
-          </Badge>
-          {hasDetachedRuntime && (
-            <Badge
-              variant="outline"
-              className="ui-chip h-4 max-w-full shrink-0 gap-0.5 border-sky-500/30 bg-sky-500/10 px-1 text-xs text-sky-700 dark:text-sky-300"
-              title={t("plugin.turnCompletionDetached")}
-            >
-              <Clock className="h-2.5 w-2.5 shrink-0" />
-              <span className="hidden sm:inline">
-                {t("session.backgroundTask")}
-              </span>
-            </Badge>
-          )}
+          <RuntimeCollectionFeatureBadges
+            runtimes={featureRuntimes}
+            display="summary"
+          />
           {isLocked && (
             <span
               title={t("plugin.locked", "Core plugin — cannot be disabled")}
@@ -238,6 +226,8 @@ export function SessionPluginItem({
               {description}
             </p>
           )}
+
+          <RuntimeCollectionFeatureBadges runtimes={featureRuntimes} />
 
           <div className="flex flex-wrap gap-1">
             {plugin.model && (

@@ -45,6 +45,7 @@ export async function buildPackagesResponse(registry: PluginRegistry): Promise<{
         ? { stage: getRuntimeSpec(m.manifest).stage }
         : {}),
       trigger: normalizeRuntimeTrigger(m.manifest.trigger),
+      execution: m.manifest.execution ?? "sync",
       turnCompletion: effectiveTurnCompletion(m.manifest),
       ...(m.manifest.model ? { model: m.manifest.model } : {}),
       ...(m.manifest.outputKind ? { outputKind: m.manifest.outputKind } : {}),

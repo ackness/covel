@@ -2447,6 +2447,60 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     );
   });
 
+  it("background target preserves its background follower chain", async () => {
+    const { app, store, targetRuntimeId, followerRuntimeId } =
+      setupTargetAndFollower({
+        targetExecution: "background",
+        followerHandler: async (ctx) => ({
+          ok: true,
+          pluginData: [
+            {
+              namespace: "images",
+              key: ctx.turnId,
+              value: { url: "https://cdn.test/background-chain.png" },
+            },
+          ],
+        }),
+      });
+    await seedRuntimeSession(store, PLUGIN_ID, SESSION_ID);
+
+    const res = await app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        pluginId: PLUGIN_ID,
+        runtimeId: targetRuntimeId,
+      }),
+    });
+    expect(res.status).toBe(202);
+    const body = (await res.json()) as { jobId: string };
+
+    let followerJobId: string | undefined;
+    await waitFor(async () => {
+      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
+      const parent = rows.find((row) => row.key === body.jobId)?.value as
+        | {
+            status?: string;
+            deferredJobs?: Array<{ jobId: string; runtimeId: string }>;
+          }
+        | undefined;
+      followerJobId = parent?.deferredJobs?.[0]?.jobId;
+      return parent?.status === "done" && followerJobId !== undefined;
+    });
+
+    await waitFor(async () => {
+      const rows = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
+      const follower = rows.find((row) => row.key === followerJobId)?.value as
+        { status?: string; runtimeId?: string } | undefined;
+      return (
+        follower?.status === "done" && follower.runtimeId === followerRuntimeId
+      );
+    });
+    expect(
+      await store.listPluginData(SESSION_ID, PLUGIN_ID, "images"),
+    ).toHaveLength(1);
+  });
+
   // ── Audit P1: background follower aligned with executeTurn lifecycle. ──
   //
   // Before P1, the background follower path manually invoked the handler
@@ -2462,6 +2516,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
   // (we care about emitter/store side effects here, not scheduling order).
   function setupTargetAndFollower(args: {
     targetHandler?: FunctionHandler;
+    targetExecution?: "sync" | "background";
     followerHandler: FunctionHandler;
     followerSource?: PluginSource;
   }): {
@@ -2486,7 +2541,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       pluginId: PLUGIN_ID,
       runtimeId: TARGET,
       stage: "post-turn",
-      execution: "sync",
+      execution: args.targetExecution ?? "sync",
       handler: targetHandler,
     });
 

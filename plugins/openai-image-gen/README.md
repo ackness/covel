@@ -70,7 +70,7 @@ dashscope-image-gen 默认 `modelPresetId = "image"` → wan2.7；openai-image-g
 
 | Runtime                             | 类型                  | 触发                                    | 职责                                                                                                                                                                                      |
 | ----------------------------------- | --------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `openai-image-gen/prompt-generator` | agent                 | manual                                  | 读取最近 prompt 历史，按 `composition` × `promptMode` 组合写出图像 prompt（默认带 4K / ultra detailed 等画质词；漫画模式额外带 crisp ink lines / clean panel borders），唤醒下游          |
+| `openai-image-gen/prompt-generator` | agent (background)    | manual                                  | 后台读取最近 prompt 历史，按 `composition` × `promptMode` 组合写出图像 prompt（默认带 4K / ultra detailed 等画质词；漫画模式额外带 crisp ink lines / clean panel borders），唤醒下游      |
 | `openai-image-gen/image-generator`  | function (background) | event:`openai-image.generate.requested` | 调用 `ctx.images.generate()`（框架选 wire、发请求、落 MediaStore、按 promptHash 去重）→ 拿到 `MediaRef[]` 后写索引记录（含 `ref`）进 `images` 命名空间，并 emit `asset.generate` proposal |
 
 ## userSettings

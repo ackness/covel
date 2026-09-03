@@ -139,9 +139,9 @@ Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填
 | living-world-rules                   | plugin      | —                          | manual（按需 / world-data 导入）                                           | —         | 长期世界规则 → `lorebook.upsert` 注入叙事；支持 WorldIR → rules 投影                           |
 | branch-reply                         | plugin      | `post-turn`                | auto（每回合播种）+ manual（重生成/采纳）                                  | —         | 回复候选 + `prompt-history-rewriter`（自动播种叙事原文，重生成走 LLM；投影历史折叠已采纳回合） |
 | scene-stage/background-gen           | plugin      | 无（event，不设 stage）    | event（topic: `scene-stage.generate.requested`，`execution: background`）  | —         | 后台增量生成缺失的场景背景图（`ctx.images`），产出 `asset.generate`                            |
-| dashscope-image-gen/prompt-generator | plugin      | —                          | manual（右侧「生成图片」按钮）                                             | `default` | 剧情插图提示词 agent，发 `image.generate.requested` 唤醒生成 follower                          |
+| dashscope-image-gen/prompt-generator | plugin      | —                          | manual（右侧「生成图片」按钮，`execution: background`）                    | `default` | 后台整理剧情插图提示词，发 `image.generate.requested` 唤醒后台生成 follower                    |
 | dashscope-image-gen/image-generator  | plugin      | 无（event，不设 stage）    | event（topic: `image.generate.requested`，`execution: background`）        | —         | DashScope wan2.x 生成插图（`ctx.images`），产出 `asset.generate` + 画廊记录                    |
-| openai-image-gen/prompt-generator    | plugin      | —                          | manual（右侧「生成图片」按钮）                                             | `default` | 剧情插图提示词 agent，发 `openai-image.generate.requested`                                     |
+| openai-image-gen/prompt-generator    | plugin      | —                          | manual（右侧「生成图片」按钮，`execution: background`）                    | `default` | 后台整理剧情插图提示词，发 `openai-image.generate.requested` 唤醒后台生成 follower             |
 | openai-image-gen/image-generator     | plugin      | 无（event，不设 stage）    | event（topic: `openai-image.generate.requested`，`execution: background`） | —         | OpenAI 兼容生成插图（`ctx.images`），产出 `asset.generate` + 画廊记录                          |
 | mimo-tts/auto-narrate                | plugin      | `post-turn`                | auto（`needs: capability narrative-engine`，`turnCompletion: detached`）   | —         | 叙事旁白自动 TTS（`ctx.speech`，MiMo wire）；冻结本轮叙事后转入后台，不阻塞下一次玩家操作      |
 | mimo-tts/manual-narrate              | plugin      | —                          | manual（消息内「朗读」按钮，`execution: background`）                      | —         | 按钮 payload 指定段落的手动 TTS（`ctx.speech`）                                                |
@@ -1003,6 +1003,7 @@ Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direc
 | runtimeType  | `agent`                                                                                              |
 | model        | `default`                                                                                            |
 | trigger      | `manual`（右侧 `ui/generate-button.json`，`expectsBackgroundFollower`）                              |
+| execution    | `background`（prompt LLM 与后续出图均不阻塞玩家继续操作）                                            |
 | output       | `schema: ./output.schema.json` — JSON envelope，必须携带 `events[].topic = image.generate.requested` |
 | capabilities | `[image-prompt, manual-invoke]`                                                                      |
 | input.inject | `plugin-data[prompts]` → `<previous-image-prompts>`（`ids-only`，避免复述旧图）                      |
@@ -1033,7 +1034,7 @@ Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direc
 
 **路径**: `plugins/openai-image-gen/`
 
-结构与 dashscope-image-gen 一致（manual prompt agent + event follower），差异点：
+结构与 dashscope-image-gen 一致（`execution: background` 的 manual prompt agent + background event follower），差异点：
 
 | 差异        | 值                                                                         |
 | ----------- | -------------------------------------------------------------------------- |
@@ -1493,13 +1494,13 @@ outputKind: story
 
 | 值             | 含义                                                                                                                                                                                                                       |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sync`（默认） | 同步执行:HTTP 请求阻塞到 runtime 完成,返回 `runtimeResults` 汇总 JSON。适合可以秒级完成的 runtime(prompt 生成、状态校验等)                                                                                                 |
+| `sync`（默认） | 同步执行:HTTP 请求阻塞到 runtime 完成,返回 `runtimeResults` 汇总 JSON。适合玩家下一步必须立即看到的引导、状态校验等 runtime                                                                                                |
 | `background`   | 后台执行:立即返回 202 + `jobId`,通过 `setImmediate` 脱离请求继续跑。框架在 `plugin_data` 表 `_jobs/{jobId}` 记录任务生命周期(`pending` → `done` / `failed`),前端通过 `plugin-data.changed` SSE 感知并渲染 loading/final UI |
 
 **使用规则:**
 
 - `_jobs` 是框架保留命名空间,插件**禁止**直接写入;框架自动维护 row 生命周期
-- background 模式下,事件链 chain 仍然生效 —— 手动触发的 runtime emit 的 `event.emit` proposals 会在同一后台任务里按 stage/DAG 顺序执行下游 runtime
+- background 模式下,事件链 chain 仍然生效 —— 手动触发的 runtime emit 的 `event.emit` proposals 提交后，框架为匹配的 background follower 建立子任务；父 `_jobs` 记录通过 `deferredJobs` 关联子任务
 - 如果 runtime 通过 `input.inject` 向下游传递结构化数据,background 模式下下游 runtime 会看到最终态(不是增量),就像在 sync 模式下一样
 - **不持会话锁执行**:后台 follower 的 handler 跑在会话锁**外**,只有提交阶段(finalize 事务 + auto-snapshot)进锁——否则一次几分钟的出图会把玩家的下一条消息一起堵住。由此带来两条对插件作者可见的约定:
   - 同一 runtime 的并发 follower 由框架按 `<sessionId>::<runtimeId>` 串行,所以 handler 里"这张图是不是已经生成过"这类 check-then-act 仍然是原子的,不会重复计费;**跨 runtime 不保证**。
@@ -1552,6 +1553,8 @@ effects:
 - 实际 proposal 在提交前还会再次经过 effect guard；未声明 namespace、框架保留 namespace及 state/character/interaction/event 等非白名单写入都会使作业失败。
 
 静态检查不通过时，runtime **不会丢失**，而是留在原前台 DAG 执行并产生调度诊断。后台任务读取的是原始 DAG 层级开始时冻结的上游 `RuntimeResult[]`、模型/设置快照和来源 execution 身份；它不会在稍后的新回合重新解析“当前最新输入”。原始回合结果和 `_runtime_jobs` queued 记录在同一个 `finalizeExecution` transaction 中提交，任一侧失败都会一起回滚。
+
+内置 runtime 的取舍遵循“玩家下一步是否依赖该结果”：自动/手动 TTS、出图 prompt 和 provider render 可以后台运行；`scene-prompts`、`guide` 等决策引导必须在回合完成前出现；角色、图谱、任务、物品、好感与 WorldIR 写入会被下一回合消费，也必须留在前台。耗时本身不是后台化依据。
 
 `_runtime_jobs` 是框架独占的 durable source of truth，状态机为：
 
