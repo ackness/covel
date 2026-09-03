@@ -84,10 +84,9 @@ class ChatModeMockLLM implements LLMAdapter {
       };
     }
 
-    // `update-character` is the tracker's always-loaded signature tool.
-    // `create-character` / `get-character` are deferred until search-tools
-    // activates them, while the roster read is injected into the prompt.
-    if (toolNames.includes("update-character")) {
+    // `sync-characters` is the tracker's always-loaded batch writer;
+    // `get-character` is deferred while the roster is prompt-injected.
+    if (toolNames.includes("sync-characters")) {
       // char-creator/character-tracker — engine-agnostic since the upstream
       // gate became capability-based, so it
       // runs in dialogue mode too (it used to be permanently skipped by an

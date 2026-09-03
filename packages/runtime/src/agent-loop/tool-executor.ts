@@ -101,7 +101,7 @@ export interface ToolExecutor {
    * Look up a tool's LLM-facing shape (name/description/jsonSchema).
    *
    * `context` lets the resolver return a session-specific variant — e.g.
-   * `create-character` / `update-character` with `fields` typed against the
+   * character write tools with `fields` typed against the
    * active world's CharacterAttributeSchema — and enforces plugin scoping.
    */
   getToolInfo(name: string, context: ToolCallContext): ToolInfo | undefined;

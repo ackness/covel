@@ -139,21 +139,14 @@ describe("char-creator plugin", () => {
     });
 
     it("declares the write tools plus the on-demand detail read", () => {
-      expect(manifest.tools?.builtin).toEqual(
-        expect.arrayContaining([
-          "create-character",
-          "update-character",
-          "get-character",
-        ]),
-      );
-      expect(manifest.completeAfterTools).toEqual([
-        "create-character",
-        "update-character",
-      ]);
-      expect(manifest.tools?.defer).toEqual([
-        "create-character",
+      expect(manifest.tools?.builtin).toEqual([
+        "sync-characters",
         "get-character",
       ]);
+      expect(manifest.completeAfterTools).toEqual(["sync-characters"]);
+      expect(manifest.tools?.defer).toEqual(["get-character"]);
+      expect(manifest.maxSteps).toBe(2);
+      expect(manifest.maxRetries).toBe(0);
     });
 
     it("does not declare list-characters — the roster is injected", () => {
@@ -162,6 +155,8 @@ describe("char-creator plugin", () => {
       // the model a tool its own prompt forbids costs tokens and invites a
       // detour; `get-character` remains for the truncated-snapshot case.
       expect(manifest.tools?.builtin).not.toContain("list-characters");
+      expect(manifest.tools?.builtin).not.toContain("create-character");
+      expect(manifest.tools?.builtin).not.toContain("update-character");
       expect(manifest.input?.inject).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ namespace: "characters" }),

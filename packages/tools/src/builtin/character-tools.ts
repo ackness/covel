@@ -31,7 +31,11 @@ import type {
 import { z } from "zod";
 import { tool } from "../tool.js";
 import type { ToolExecutionContext, ToolModule } from "../types.js";
-import { withPendingProposals } from "../result.js";
+import {
+  getPendingProposals,
+  getToolContent,
+  withPendingProposals,
+} from "../result.js";
 import { overlayCharacters } from "../proposal-overlay.js";
 import { validateFieldsAgainstSchema } from "../schema-validator.js";
 import {
@@ -137,6 +141,17 @@ function makeCharacterUpsertProposal(
 const CREATE_DESCRIPTION =
   "创建角色；同 session 的同名同类型会去重。fields 按世界 schema 合并默认值并返回校验 warning。";
 
+function createCharacterParametersSchema() {
+  return z.object({
+    name: z.string().min(1).describe("角色名"),
+    type: characterTypeSchema,
+    description: z.string().optional().describe("简短描述"),
+    fields: buildFieldsZod(null)
+      .optional()
+      .describe("可选属性；使用 world schema attribute id"),
+  });
+}
+
 function createCreateCharacterTool(
   store: CharacterStore,
   deps: CharacterToolDeps,
@@ -144,14 +159,7 @@ function createCreateCharacterTool(
   return tool({
     name: "create-character",
     description: CREATE_DESCRIPTION,
-    parameters: z.object({
-      name: z.string().min(1).describe("角色名"),
-      type: characterTypeSchema,
-      description: z.string().optional().describe("简短描述"),
-      fields: buildFieldsZod(null)
-        .optional()
-        .describe("可选属性；使用 world schema attribute id"),
-    }),
+    parameters: createCharacterParametersSchema(),
     execute: async (params, context) => {
       const now = new Date().toISOString();
 
@@ -229,6 +237,16 @@ function createCreateCharacterTool(
 const UPDATE_DESCRIPTION =
   "按 id 更新角色；description 替换，fields shallow merge，version 自动 +1。只传明确变化。";
 
+function createUpdateCharacterParametersSchema() {
+  return z.object({
+    id: z.string().min(1).describe("角色 id"),
+    description: z.string().optional().describe("新描述；省略则保留"),
+    fields: buildFieldsZod(null)
+      .optional()
+      .describe("属性 patch；使用 world schema attribute id"),
+  });
+}
+
 function createUpdateCharacterTool(
   store: CharacterStore,
   deps: CharacterToolDeps,
@@ -236,13 +254,7 @@ function createUpdateCharacterTool(
   return tool({
     name: "update-character",
     description: UPDATE_DESCRIPTION,
-    parameters: z.object({
-      id: z.string().min(1).describe("角色 id"),
-      description: z.string().optional().describe("新描述；省略则保留"),
-      fields: buildFieldsZod(null)
-        .optional()
-        .describe("属性 patch；使用 world schema attribute id"),
-    }),
+    parameters: createUpdateCharacterParametersSchema(),
     execute: async (params, context) => {
       const all = await mergeCharacterViews(store, context);
       const existing = all.find((c) => c.id === params.id);
@@ -324,6 +336,101 @@ function createUpdateCharacterTool(
           version: newVersion,
         },
         [proposal],
+      );
+    },
+  });
+}
+
+// ── sync-characters ─────────────────────────────────────────────
+
+interface CharacterWriteOutput {
+  readonly success?: boolean;
+  readonly existed?: boolean;
+  readonly characterId?: string;
+  readonly name?: string;
+  readonly type?: string;
+  readonly version?: number;
+  readonly _text?: string;
+}
+
+function createSyncCharactersTool(
+  store: CharacterStore,
+  deps: CharacterToolDeps,
+): ToolModule {
+  const createCharacter = createCreateCharacterTool(store, deps);
+  const updateCharacter = createUpdateCharacterTool(store, deps);
+
+  return tool({
+    name: "sync-characters",
+    description:
+      "Atomically submit every explicit character change from this narrative turn. Put new named NPCs in creates and patches for existing character ids in updates. Call once at most; use runtime-done when neither array has changes.",
+    parameters: z
+      .object({
+        creates: z
+          .array(createCharacterParametersSchema())
+          .max(5)
+          .default([])
+          .describe("Up to 5 named, plot-relevant new NPCs."),
+        updates: z
+          .array(createUpdateCharacterParametersSchema())
+          .max(10)
+          .default([])
+          .describe("Explicit patches for existing character ids."),
+      })
+      .refine((value) => value.creates.length + value.updates.length > 0, {
+        message:
+          "submit at least one create or update; use runtime-done when nothing changed",
+      }),
+    execute: async ({ creates, updates }, context) => {
+      const proposals: Proposal[] = [];
+      const created: Array<Record<string, unknown>> = [];
+      const updated: Array<Record<string, unknown>> = [];
+
+      for (const params of creates) {
+        const rawResult = await createCharacter.execute(params, {
+          ...context,
+          pendingProposals: [...(context.pendingProposals ?? []), ...proposals],
+        });
+        const result = getToolContent(rawResult) as CharacterWriteOutput;
+        if (result.success !== true || result.existed === true) {
+          throw new Error(
+            result._text ?? `Character ${params.name} could not be created`,
+          );
+        }
+        proposals.push(...getPendingProposals(rawResult));
+        created.push({
+          characterId: result.characterId,
+          name: result.name,
+          type: result.type,
+        });
+      }
+
+      for (const params of updates) {
+        const rawResult = await updateCharacter.execute(params, {
+          ...context,
+          pendingProposals: [...(context.pendingProposals ?? []), ...proposals],
+        });
+        const result = getToolContent(rawResult) as CharacterWriteOutput;
+        if (result.success !== true) {
+          throw new Error(
+            result._text ?? `Character ${params.id} could not be updated`,
+          );
+        }
+        proposals.push(...getPendingProposals(rawResult));
+        updated.push({
+          characterId: result.characterId,
+          version: result.version,
+        });
+      }
+
+      return withPendingProposals(
+        {
+          _text: `Synchronized ${created.length} new and ${updated.length} existing characters.`,
+          success: true,
+          created,
+          updated,
+        },
+        proposals,
       );
     },
   });
@@ -456,6 +563,7 @@ export function createCharacterTools(
   return [
     createCreateCharacterTool(store, deps),
     createUpdateCharacterTool(store, deps),
+    createSyncCharactersTool(store, deps),
     createListCharactersTool(store),
     createGetCharacterTool(store),
   ];
@@ -479,5 +587,6 @@ export function buildSessionCharacterWriteTools(
   return [
     createCreateCharacterTool(store, deps),
     createUpdateCharacterTool(store, deps),
+    createSyncCharactersTool(store, deps),
   ];
 }

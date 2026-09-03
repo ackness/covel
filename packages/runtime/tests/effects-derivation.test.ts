@@ -35,7 +35,7 @@ function manifest(overrides: Partial<RuntimeManifest> = {}): RuntimeManifest {
 const asSet = (r: ReadonlySet<EffectResource>) => [...r].sort();
 
 describe("deriveEffects — builtin tool mapping table", () => {
-  it("maps character tools to characters:* (write for create/update, read for get/list)", () => {
+  it("maps character tools to characters:*", () => {
     const w = deriveEffects(
       manifest({
         tools: { builtin: ["create-character", "update-character"] },
@@ -49,6 +49,12 @@ describe("deriveEffects — builtin tool mapping table", () => {
     );
     expect(asSet(r.reads)).toEqual(["characters:*"]);
     expect(asSet(r.writes)).toEqual([]);
+
+    const sync = deriveEffects(
+      manifest({ tools: { builtin: ["sync-characters"] } }),
+    );
+    expect(asSet(sync.reads)).toEqual(["characters:*"]);
+    expect(asSet(sync.writes)).toEqual(["characters:*"]);
   });
 
   it("maps memory-update-block to working-memory:* write", () => {

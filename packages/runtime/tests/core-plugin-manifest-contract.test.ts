@@ -180,6 +180,17 @@ describe("core plugin manifest contract", () => {
       maxSteps: 2,
       maxRetries: 0,
     });
+    expect(
+      requireRuntime(manifests, "char-creator/character-tracker"),
+    ).toMatchObject({
+      tools: {
+        builtin: ["sync-characters", "get-character"],
+        defer: ["get-character"],
+      },
+      completeAfterTools: ["sync-characters"],
+      maxSteps: 2,
+      maxRetries: 0,
+    });
 
     for (const downstream of [
       ...rawDownstreams,
