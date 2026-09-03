@@ -18,7 +18,7 @@
 
 | Runtime                                | 类型                  | 触发                             | 职责                                                                                                                                                                                      |
 | -------------------------------------- | --------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dashscope-image-gen/prompt-generator` | agent (background)    | manual                           | 后台读取最近的 prompt 历史，按 `promptMode` 产出 JSON envelope（顶层 `prompt` 字段 + `events[image.generate.requested]`），唤醒下游                                                       |
+| `dashscope-image-gen/prompt-generator` | agent (background)    | manual                           | 后台读取最近的 prompt 历史，按 `promptMode` 调用对应提交工具；工具统一留档并发出 `image.generate.requested`，唤醒下游                                                                     |
 | `dashscope-image-gen/image-generator`  | function (background) | event:`image.generate.requested` | 调用 `ctx.images.generate()`（框架选 wire、发请求、落 MediaStore、按 promptHash 去重）→ 拿到 `MediaRef[]` 后写索引记录（含 `ref`）进 `images` 命名空间，并 emit `asset.generate` proposal |
 
 ## userSettings
@@ -103,9 +103,9 @@ DASHSCOPE_API_KEY=sk-xxx
 pnpm test:runtime -- dashscope-image-gen --plugins-dir plugins --pretty
 ```
 
-预期：全部 `mock-*` case passed（正向 envelope 触发 + 负路径可见失败，具体清单见 runtime-cases.json）。
+预期：全部 `mock-*` case passed（文本 / 结构化工具提交、参数修复和未调用工具的可见失败，具体清单见 runtime-cases.json）。
 
-正向 case 模拟 `prompt-generator` 输出包含 `events[image.generate.requested]` 的 envelope，框架自动唤醒 `image-generator` follower。mock harness 不装配 `ctx.images`（没有真实 gateway/MediaStore），follower 在拿到 `ctx.images` 之前直接返回可见失败（`status: "failed"`），这是预期行为、不是回归。断言验证：事件触发、follower 失败被正确记录。
+正向 case 模拟 `prompt-generator` 调用提交工具；工具以固定 topic 发出 `image.generate.requested`，框架自动唤醒 `image-generator` follower。mock harness 不装配 `ctx.images`（没有真实 gateway/MediaStore），follower 在拿到 `ctx.images` 之前直接返回可见失败（`status: "failed"`），这是预期行为、不是回归。断言验证：提示词已留档、事件已触发、follower 失败被正确记录。
 
 ### 单元测试（handler 入参断言）
 

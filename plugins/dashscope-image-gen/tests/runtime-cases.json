@@ -6,26 +6,28 @@
       "runtimeId": "dashscope-image-gen/prompt-generator",
       "message": "测试场景：黄昏的城堡塔楼，飞鸟掠过霞光",
       "userSettings": {
+        "composition": "single-scene",
         "promptMode": "text",
         "modelPresetId": "image",
         "imageSize": "1440x720",
         "negativePrompt": "low quality, blurry, watermark, text, extra fingers"
       },
-      "llmObject": {
-        "prompt": "黄昏时分的城堡塔楼，金色阳光洒落在斑驳石墙上，飞鸟群剪影掠过霞光，电影感构图，暖色调",
-        "promptMode": "text",
-        "events": [
-          {
-            "topic": "image.generate.requested",
-            "data": {
-              "prompt": "黄昏时分的城堡塔楼，金色阳光洒落在斑驳石墙上，飞鸟群剪影掠过霞光，电影感构图，暖色调",
-              "promptMode": "text"
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "call-submit-text-prompt",
+              "name": "submit-dashscope-text-prompt",
+              "arguments": "{\"prompt\":\"黄昏时分的城堡塔楼，金色阳光洒落在斑驳石墙上，飞鸟群剪影掠过霞光，电影感构图，暖色调\",\"composition\":\"single-scene\"}"
             }
-          }
-        ]
-      },
+          ]
+        }
+      ],
       "expect": {
         "events": ["image.generate.requested"],
+        "pluginData": [{ "namespace": "prompts", "field": "prompt" }],
         "runtimeResults": [
           {
             "runtimeId": "dashscope-image-gen/prompt-generator",
@@ -44,26 +46,28 @@
       "runtimeId": "dashscope-image-gen/prompt-generator",
       "message": "测试场景：雨夜霓虹街口，披风旅人站在湿润石板上",
       "userSettings": {
+        "composition": "single-scene",
         "promptMode": "image-json",
         "modelPresetId": "image",
         "imageSize": "1440x720",
         "negativePrompt": "low quality, blurry, watermark, text, extra fingers"
       },
-      "llmObject": {
-        "prompt": "{\"subject\":{\"who\":\"披风旅人\",\"pose\":\"驻足凝视\",\"expression\":\"沉思\",\"costume\":\"深色斗篷\"},\"scene\":{\"location\":\"霓虹街口\",\"time\":\"night\",\"weather\":\"rainy\"},\"camera\":{\"angle\":\"低角度\",\"framing\":\"medium\",\"lens_mm\":35},\"lighting\":{\"key\":\"霓虹招牌\",\"rim\":\"湿地反光\",\"color_temp\":\"cool\",\"mood\":\"赛博朋克\"},\"palette\":{\"primary\":\"青蓝\",\"accent\":\"品红\",\"style\":\"neon noir\"},\"style\":{\"reference\":\"Blade Runner 2049\",\"medium\":\"concept art\",\"aesthetic\":\"cinematic\"},\"details\":[\"湿石板反射霓虹\",\"细雨在灯光中飘落\",\"远处招牌闪烁\",\"水洼倒影模糊\"],\"negative\":[\"blurry\",\"watermark\",\"extra fingers\"]}",
-        "promptMode": "image-json",
-        "events": [
-          {
-            "topic": "image.generate.requested",
-            "data": {
-              "prompt": "{\"subject\":{\"who\":\"披风旅人\"},\"scene\":{\"location\":\"霓虹街口\",\"time\":\"night\",\"weather\":\"rainy\"}}",
-              "promptMode": "image-json"
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "call-submit-structured-prompt",
+              "name": "submit-dashscope-structured-prompt",
+              "arguments": "{\"prompt\":{\"subject\":{\"who\":\"披风旅人\",\"pose\":\"驻足凝视\",\"expression\":\"沉思\",\"costume\":\"深色斗篷\"},\"scene\":{\"location\":\"霓虹街口\",\"time\":\"night\",\"weather\":\"rainy\"},\"quality\":[\"4K\",\"ultra detailed\",\"highly detailed\",\"masterpiece\",\"best quality\",\"sharp focus\"]},\"composition\":\"single-scene\"}"
             }
-          }
-        ]
-      },
+          ]
+        }
+      ],
       "expect": {
         "events": ["image.generate.requested"],
+        "pluginData": [{ "namespace": "prompts", "field": "prompt" }],
         "runtimeResults": [
           {
             "runtimeId": "dashscope-image-gen/prompt-generator",
@@ -77,13 +81,14 @@
       }
     },
     {
-      "name": "mock-prompt-tool-chain-recovers-before-maxsteps",
+      "name": "mock-invalid-structured-prompt-recovers",
       "mode": "mock",
       "runtimeId": "dashscope-image-gen/prompt-generator",
       "message": "测试场景：雾港暗梯入口，潮石灯照亮湿木板",
       "expectsBackgroundFollower": true,
       "userSettings": {
-        "promptMode": "text",
+        "composition": "single-scene",
+        "promptMode": "image-json",
         "modelPresetId": "image",
         "imageSize": "1440x720",
         "negativePrompt": "low quality, blurry, watermark, text, extra fingers"
@@ -94,9 +99,9 @@
           "finishReason": "tool_calls",
           "toolCalls": [
             {
-              "id": "call-list-prompts",
-              "name": "plugin-data-list",
-              "arguments": "{\"namespace\":\"prompts\"}"
+              "id": "call-submit-empty-prompt",
+              "name": "submit-dashscope-structured-prompt",
+              "arguments": "{\"prompt\":{},\"composition\":\"single-scene\"}"
             }
           ]
         },
@@ -105,19 +110,15 @@
           "finishReason": "tool_calls",
           "toolCalls": [
             {
-              "id": "call-set-prompt",
-              "name": "plugin-data-set",
-              "arguments": "{\"namespace\":\"prompts\",\"key\":\"tool-chain-recovered\",\"value\":{\"prompt\":\"雾港暗梯入口，潮石灯照亮湿木板，冷青色雾气从礁石缝隙升起，电影感构图\",\"promptMode\":\"text\"}}"
+              "id": "call-submit-corrected-prompt",
+              "name": "submit-dashscope-structured-prompt",
+              "arguments": "{\"prompt\":{\"subject\":{\"who\":\"手握铜表的旅人\"},\"scene\":{\"location\":\"雾港暗梯入口\"},\"quality\":[\"4K\",\"ultra detailed\",\"highly detailed\",\"masterpiece\",\"best quality\",\"sharp focus\"]},\"composition\":\"single-scene\"}"
             }
           ]
-        },
-        {
-          "content": "{\"prompt\":\"雾港暗梯入口，潮石灯照亮湿木板，冷青色雾气从礁石缝隙升起，画面中央的旅人手握铜表站在阴影边缘，电影感构图，湿润材质细节清晰。\",\"promptMode\":\"text\",\"events\":[{\"topic\":\"image.generate.requested\",\"data\":{\"prompt\":\"雾港暗梯入口，潮石灯照亮湿木板，冷青色雾气从礁石缝隙升起，画面中央的旅人手握铜表站在阴影边缘，电影感构图，湿润材质细节清晰。\",\"promptMode\":\"text\"}}]}",
-          "finishReason": "stop",
-          "toolCalls": []
         }
       ],
       "expect": {
+        "pluginData": [{ "namespace": "prompts", "field": "prompt" }],
         "runtimeResults": [
           {
             "runtimeId": "dashscope-image-gen/prompt-generator",
@@ -132,12 +133,13 @@
       }
     },
     {
-      "name": "mock-prompt-tool-chain-prose-fails-visible",
+      "name": "mock-missing-submit-tool-fails-visible",
       "mode": "mock",
       "runtimeId": "dashscope-image-gen/prompt-generator",
       "message": "测试场景：雾港暗梯入口，模型工具后输出了解释文本",
       "expectsBackgroundFollower": true,
       "userSettings": {
+        "composition": "single-scene",
         "promptMode": "text",
         "modelPresetId": "image",
         "imageSize": "1440x720",
@@ -145,29 +147,12 @@
       },
       "llmResponses": [
         {
-          "content": null,
-          "finishReason": "tool_calls",
-          "toolCalls": [
-            {
-              "id": "call-list-prompts",
-              "name": "plugin-data-list",
-              "arguments": "{\"namespace\":\"prompts\"}"
-            }
-          ]
+          "content": "这是一个没有调用提交工具的错误回答。",
+          "finishReason": "stop",
+          "toolCalls": []
         },
         {
-          "content": null,
-          "finishReason": "tool_calls",
-          "toolCalls": [
-            {
-              "id": "call-set-prompt",
-              "name": "plugin-data-set",
-              "arguments": "{\"namespace\":\"prompts\",\"key\":\"prose-after-tool\",\"value\":{\"prompt\":\"特写潮向仪与手部动作\",\"promptMode\":\"text\"}}"
-            }
-          ]
-        },
-        {
-          "content": "好的，我已经查看了前两次生成的画面提示词，这次我选择聚焦于一个更微观的瞬间。",
+          "content": "仍然只输出说明文本。",
           "finishReason": "stop",
           "toolCalls": []
         }
@@ -177,39 +162,7 @@
           {
             "runtimeId": "dashscope-image-gen/prompt-generator",
             "status": "failed",
-            "errorIncludes": "expected a JSON envelope"
-          }
-        ],
-        "pluginData": [
-          {
-            "namespace": "_jobs",
-            "status": "failed"
-          }
-        ]
-      }
-    },
-    {
-      "name": "mock-prompt-json-without-events-fails-visible",
-      "mode": "mock",
-      "runtimeId": "dashscope-image-gen/prompt-generator",
-      "message": "测试场景：模型返回 JSON 但漏掉 events 包络",
-      "expectsBackgroundFollower": true,
-      "userSettings": {
-        "promptMode": "text",
-        "modelPresetId": "image",
-        "imageSize": "1440x720",
-        "negativePrompt": "low quality, blurry, watermark, text, extra fingers"
-      },
-      "llmObject": {
-        "prompt": "雾港暗梯入口，潮石灯照亮湿木板，冷青色雾气从礁石缝隙升起。",
-        "promptMode": "text"
-      },
-      "expect": {
-        "runtimeResults": [
-          {
-            "runtimeId": "dashscope-image-gen/prompt-generator",
-            "status": "failed",
-            "errorIncludes": "output.schema"
+            "errorIncludes": "requireToolUse"
           }
         ],
         "pluginData": [
