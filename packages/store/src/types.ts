@@ -309,6 +309,20 @@ export interface CharacterStore {
 export interface PluginDataStore {
   setPluginData(record: PluginDataRecord): Promise<void>;
   setPluginDataBatch(records: readonly PluginDataRecord[]): Promise<void>;
+  /**
+   * Atomically create or replace one plugin-data row when its current revision
+   * matches `expectedUpdatedAt`.
+   *
+   * Passing `null` is insert-if-absent. Passing a timestamp updates only when
+   * the existing row has that exact `updatedAt`; a missing or changed row
+   * returns `false`. This is the portable CAS primitive used by durable
+   * framework control planes (runtime jobs, leases) without weakening the
+   * plugin-data JSON contract.
+   */
+  compareAndSetPluginData(
+    record: PluginDataRecord,
+    expectedUpdatedAt: string | null,
+  ): Promise<boolean>;
   getPluginData(
     sessionId: string,
     pluginId: string,

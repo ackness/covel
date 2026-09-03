@@ -13,7 +13,7 @@
  *      for non-story runtimes), so a non-conforming output still succeeds.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
@@ -88,10 +88,13 @@ describe("agent schema gate (golden)", () => {
 
   it("fails with a schema-validation error when JSON has the wrong shape", async () => {
     const llm = new FixedContentLLM('{"wrong":"shape"}');
+    const onRuntimeComplete = vi.fn();
+    const deps = makeDeps(llm, { ...OBJECT_SCHEMA });
+    deps.onRuntimeComplete = onRuntimeComplete;
     const result = await executeTurn(
       input("sess-wrong"),
       [manifest({ output: { schema: "./output.schema.json" } })],
-      makeDeps(llm, { ...OBJECT_SCHEMA }),
+      deps,
     );
 
     const r = result.runtimeResults[0];
@@ -100,6 +103,15 @@ describe("agent schema gate (golden)", () => {
     expect(r?.error).toContain("must have required property 'prompt'");
     // The non-conforming parsed object is preserved as the failed output.
     expect((r?.output as Record<string, unknown>).wrong).toBe("shape");
+    expect(onRuntimeComplete).toHaveBeenCalledOnce();
+    expect(onRuntimeComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeId: "test-plugin/schema-runtime",
+        pluginId: "test-plugin",
+        status: "failed",
+        error: expect.stringContaining("output did not match output.schema"),
+      }),
+    );
   });
 
   it("fails with a prose diagnostic when the model returns plain prose", async () => {

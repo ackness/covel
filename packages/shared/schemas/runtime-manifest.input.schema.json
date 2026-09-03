@@ -1,7 +1,7 @@
 {
   "$id": "https://covel.local/schemas/runtime-manifest.input.schema.json",
   "title": "Covel runtime manifest (loader input)",
-  "description": "What the plugin loader accepts — the field set that decides whether a PLUGIN.md parses at all. Same fields as the authoring schema, with fewer cross-field constraints enforced.\n\nEnforced by Zod but not representable in this JSON Schema (validate with the Zod schema for these):\n- runtimeType 'function' requires a non-empty handler path.\n- output.schema is required when output.recordAs is set.\n- trigger.topic is required when trigger.type is 'event'.\n- a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.\n- stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.\n- needs entries with scope 'session' are only valid on stage 'setup' runtimes.\n- effects.reads, effects.writes and permissions.http[].methods must contain unique entries.\n- an i18n description map must have at least one locale entry.",
+  "description": "What the plugin loader accepts — the field set that decides whether a PLUGIN.md parses at all. Same fields as the authoring schema, with fewer cross-field constraints enforced.\n\nEnforced by Zod but not representable in this JSON Schema (validate with the Zod schema for these):\n- runtimeType 'function' requires a non-empty handler path.\n- output.schema is required when output.recordAs is set.\n- trigger.topic is required when trigger.type is 'event'.\n- a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.\n- stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.\n- needs entries with scope 'session' are only valid on stage 'setup' runtimes.\n- turnCompletion.mode 'detached' is only valid on post-turn/audit staged runtimes.\n- turnCompletion.mode 'detached' cannot be used with outputKind 'story'.\n- event/manual runtimes use execution and cannot use detached turn completion.\n- turnCompletion queue/overlap/stale options require mode 'detached'.\n- effects.reads, effects.writes and permissions.http[].methods must contain unique entries.\n- an i18n description map must have at least one locale entry.",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
@@ -431,6 +431,34 @@
     "execution": {
       "type": "string",
       "enum": ["sync", "background"]
+    },
+    "turnCompletion": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["await", "detached"]
+        },
+        "maxQueueMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxExecutionMs": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "overlap": {
+          "type": "string",
+          "const": "serial"
+        },
+        "stalePolicy": {
+          "type": "string",
+          "const": "reject"
+        }
+      },
+      "additionalProperties": false
     },
     "advertiseEvents": {
       "type": "boolean"

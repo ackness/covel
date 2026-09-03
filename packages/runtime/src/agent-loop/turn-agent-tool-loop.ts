@@ -34,6 +34,7 @@ import {
 } from "../hooks/wire-helpers.js";
 import {
   extractToolFailureMessage,
+  isRecord,
   type ExecutedToolCallState,
   type FailedToolCallState,
 } from "../turn-executor/turn-output-helpers.js";
@@ -54,6 +55,8 @@ import {
 
 export interface AgentToolLoopCompleted {
   readonly finalContent: string | null;
+  /** Structured result from the tool that completed this runtime. */
+  readonly finalToolOutput: Record<string, unknown> | null;
   readonly collectedToolCalls: ToolCallRecord[];
   readonly executedToolCalls: ExecutedToolCallState[];
   readonly failedToolCalls: FailedToolCallState[];
@@ -138,6 +141,7 @@ export async function runAgentToolLoop({
   // resume path continues from the persisted suspension; the normal path passes
   // nothing and starts fresh.
   let finalContent: string | null = initialState?.finalContent ?? null;
+  let finalToolOutput: Record<string, unknown> | null = null;
   const collectedToolCalls: ToolCallRecord[] = [
     ...(initialState?.collectedToolCalls ?? []),
   ];
@@ -182,6 +186,7 @@ export async function runAgentToolLoop({
     retryPolicy,
     requireToolUse,
     completeAfterTools,
+    outputFromCompletingTool,
     acceptsSteering,
     authorizedToolNames,
   } = buildAgentLoopPolicy({
@@ -347,6 +352,7 @@ export async function runAgentToolLoop({
 
       let successfulCompletingToolsInResponse = 0;
       let failedBusinessToolsInResponse = 0;
+      let completingToolOutputInResponse: Record<string, unknown> | null = null;
 
       for (
         let toolCallIndex = 0;
@@ -562,6 +568,11 @@ export async function runAgentToolLoop({
             if (toolResult.success) {
               if (completeAfterTools.has(effectiveTc.name)) {
                 successfulCompletingToolsInResponse++;
+                if (isRecord(toolResult.parsedResult)) {
+                  completingToolOutputInResponse = {
+                    ...toolResult.parsedResult,
+                  };
+                }
               }
             } else failedBusinessToolsInResponse++;
           }
@@ -672,7 +683,13 @@ export async function runAgentToolLoop({
         successfulCompletingToolsInResponse > 0 &&
         failedBusinessToolsInResponse === 0
       ) {
-        if (!finalContent) {
+        if (outputFromCompletingTool && completingToolOutputInResponse) {
+          // The tool arguments/result are the structured output channel. Ignore
+          // incidental assistant prose and let the normal schema gate validate
+          // the exact returned object before it reaches typed consumers.
+          finalContent = null;
+          finalToolOutput = completingToolOutputInResponse;
+        } else if (!finalContent) {
           finalContent = JSON.stringify({
             toolCalls: collectedToolCalls
               .filter((call) => call.toolName !== "runtime-done")
@@ -770,6 +787,7 @@ export async function runAgentToolLoop({
 
   return {
     finalContent,
+    finalToolOutput,
     collectedToolCalls,
     executedToolCalls,
     failedToolCalls,

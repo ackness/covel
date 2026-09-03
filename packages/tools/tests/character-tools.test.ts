@@ -198,12 +198,13 @@ describe("builtin character tools", () => {
     loop = new Loop(tools, store);
   });
 
-  it("factory returns four named tools", () => {
+  it("factory returns five named tools", () => {
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([
       "create-character",
       "get-character",
       "list-characters",
+      "sync-characters",
       "update-character",
     ]);
   });
@@ -489,6 +490,77 @@ describe("builtin character tools", () => {
       });
       expect(result).toMatchObject({ success: false, notFound: true });
       expect(loop.pending).toHaveLength(0);
+    });
+  });
+
+  describe("sync-characters", () => {
+    it("publishes bounded create and update arrays to the model", () => {
+      const syncTool = tools.find((item) => item.name === "sync-characters")!;
+
+      expect(syncTool.jsonSchema).toMatchObject({
+        type: "object",
+        properties: {
+          creates: { type: "array", maxItems: 5 },
+          updates: { type: "array", maxItems: 10 },
+        },
+      });
+    });
+
+    it("queues new and existing character changes in one call", async () => {
+      const existing = await loop.call("create-character", {
+        name: "苏婉",
+        type: "npc",
+        fields: { hp: 100 },
+      });
+      const existingId = (existing as { characterId: string }).characterId;
+      loop.commit();
+
+      const result = await loop.call("sync-characters", {
+        creates: [
+          {
+            name: "林昭",
+            type: "npc",
+            description: "新到任的执事",
+            fields: { status: "alert" },
+          },
+        ],
+        updates: [{ id: existingId, fields: { hp: 75, status: "wounded" } }],
+      });
+
+      expect(result).toMatchObject({
+        success: true,
+        created: [expect.objectContaining({ name: "林昭", type: "npc" })],
+        updated: [expect.objectContaining({ characterId: existingId })],
+      });
+      expect(loop.pending).toHaveLength(2);
+      expect(store.characters).toHaveLength(1);
+
+      loop.commit();
+      expect(store.characters).toHaveLength(2);
+      expect(
+        store.characters.find((item) => item.id === existingId)?.fields,
+      ).toEqual({
+        hp: 75,
+        status: "wounded",
+      });
+    });
+
+    it("does not expose earlier writes when a later update fails", async () => {
+      await expect(
+        loop.call("sync-characters", {
+          creates: [{ name: "未提交角色", type: "npc" }],
+          updates: [{ id: "char-missing", fields: { hp: 1 } }],
+        }),
+      ).rejects.toThrow("not found");
+
+      expect(loop.pending).toHaveLength(0);
+      expect(store.characters).toHaveLength(0);
+    });
+
+    it("rejects an empty sync", async () => {
+      await expect(
+        loop.call("sync-characters", { creates: [], updates: [] }),
+      ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     });
   });
 

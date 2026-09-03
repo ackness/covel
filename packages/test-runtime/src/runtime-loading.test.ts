@@ -1,10 +1,12 @@
 import os from "node:os";
 import path from "node:path";
+import fs from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
 
 import {
   expandPath,
+  loadEntryTools,
   pluginIdFromRuntime,
   prepareRuntimeManifests,
 } from "./runtime-loading.js";
@@ -50,5 +52,52 @@ describe("test-runtime runtime loading helpers", () => {
         pluginId: "plugin",
       }),
     ).toThrow('runtime "plugin/missing" not found in plugin "plugin"');
+  });
+
+  it("loads entry tools declared only by a multi-runtime root manifest", async () => {
+    const rootPath = await fs.mkdtemp(
+      path.join(os.tmpdir(), "covel-test-runtime-entry-"),
+    );
+    try {
+      await fs.mkdir(path.join(rootPath, "server"));
+      await fs.writeFile(
+        path.join(rootPath, "PLUGIN.md"),
+        [
+          "---",
+          "name: plugin",
+          "description: Test plugin",
+          "pluginType: plugin",
+          "entry: ./server/index.js",
+          "---",
+        ].join("\n"),
+      );
+      await fs.writeFile(
+        path.join(rootPath, "server/index.js"),
+        [
+          "export default function (covel) {",
+          "  covel.registerTool(covel.toolkit.tool({",
+          '    name: "root-tool",',
+          '    description: "Root tool",',
+          "    parameters: covel.toolkit.z.object({}),",
+          "    execute: async () => ({ ok: true }),",
+          "  }));",
+          "}",
+        ].join("\n"),
+      );
+
+      const tools = await loadEntryTools(
+        {
+          id: "plugin",
+          rootPath,
+          isMultiRuntime: true,
+          pluginMdPaths: [path.join(rootPath, "runtimes/main/PLUGIN.md")],
+        },
+        [manifest()],
+      );
+
+      expect(tools.map((entry) => entry.name)).toEqual(["root-tool"]);
+    } finally {
+      await fs.rm(rootPath, { recursive: true, force: true });
+    }
   });
 });

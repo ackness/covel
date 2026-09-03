@@ -97,6 +97,21 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 **解析失败可见**：若 `llm.toml` 有语法错误（如某个 key 写了 `=` 却没值），整份文件会解析失败并**回退到内置默认**（只剩一个 `story` slot）。此时 `GET /api/llm-config` 会带 `error` 字段，**Settings → LLM** 顶部显示红色提示（含具体错误），不再静默回退让你摸不着头脑。改好后点「重载配置」即可恢复。
 
+### 给单个世界或会话调整插件 runtime 模型
+
+设置页的“用途分配”决定每个 slot 当前实际使用的服务商和模型，例如把 `plugin` 指向 `ali-coding-plan / qwen3.8-flash`。插件 manifest 只声明默认 slot（如 `model: plugin`），不会把 `deepseek-v4-flash` 之类的具体模型写死到世界中。
+
+在**开局准备**的插件列表里，每个 agent runtime 都可以进一步选择一个 slot：
+
+- 选择“插件默认用途：`plugin`”表示不做世界级覆盖，实际模型跟随设置页中 `plugin` 的当前有效配置。
+- 选择 `story`、`fast` 等其他 slot，会把 `runtimeId → slot` 保存到新会话的 `runtimeModelOverrides`，只影响这局，不修改世界包或全局设置。
+- 多 runtime 插件会逐项显示完整 runtime ID（例如 `char-creator/character-tracker`）；每项可独立选择。
+- 已进入游戏后，可在左侧插件列表继续修改 agent runtime 的 slot；服务端通过 `PATCH /api/sessions/:id` 保存，并从下一次执行开始生效。
+
+下拉项与默认摘要同时显示 slot、服务商和**当前有效模型**。因此 `default: plugin` 是路由声明，旁边的 `ali-coding-plan · qwen3.8-flash` 才是这台设备实际会调用的目标；两者并不冲突。以后在设置页把 `plugin` 改到另一个模型时，仍绑定 `plugin` 的 runtime 会自动跟随，不需要逐个世界重配。
+
+这套 `runtimeModelOverrides` 只适用于 agent runtime。图像、语音等 function runtime 常通过插件设置 `modelPresetId` 选择媒体 provider slot；它会在开局准备中单独显示为“提供方 slot”，保存到当前设备的插件设置，而不是当前会话的 runtime 覆盖。
+
 **插件 provider slot 就地覆盖**：有些插件（如图像生成）通过 `modelPresetId` 设置指定要用哪个 `[covel.<slot>]`（如 `openai-image`）。如果你没配那个 slot 名、但配了别的同类 slot（如 `gpt-image`），可在**开局准备**界面该插件那一行的「提供方 slot」下拉里直接选你已有的 slot —— 不必去 Settings > Plugins 改、也不必照搬插件默认的 slot 名。选中后红色「缺少」提示即消失，覆盖值会随回合下发给该插件的 function runtime。
 
 ## 前端入口

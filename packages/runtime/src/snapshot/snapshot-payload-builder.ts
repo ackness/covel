@@ -71,8 +71,14 @@ export async function buildSnapshotPayload(
   // One query returns every plugin_data row for the session, which is exactly
   // what the payload needs: a plugin with no rows contributes nothing here,
   // and a plugin that never produced a runtime result still travels.
-  const pluginData: readonly PluginDataRecord[] =
-    await store.listPluginDataSessionScope(sessionId);
+  // Framework job-control rows are incarnation-bound execution state, not
+  // plugin business data. Copying them into a fork would make a second worker
+  // replay already-paid provider work under a new session.
+  const pluginData: readonly PluginDataRecord[] = (
+    await store.listPluginDataSessionScope(sessionId)
+  ).filter(
+    (row) => row.namespace !== "_jobs" && row.namespace !== "_runtime_jobs",
+  );
 
   // Working memory
   const workingMemory: readonly WorkingMemoryRecord[] =

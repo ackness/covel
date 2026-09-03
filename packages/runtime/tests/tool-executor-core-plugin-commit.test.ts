@@ -3,8 +3,7 @@ import { createMemoryStore } from "@covel/store";
 import { tool, z } from "@covel/tools";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { createCommitPipeline } from "../src/session/session-kernel.js";
-import setWorldSchema from "../../../plugins/world-init/tools/set-world-schema.js";
-import setWorldEntriesBatch from "../../../plugins/world-init/tools/set-world-entries-batch.js";
+import initializeWorld from "../../../plugins/world-init/tools/initialize-world.js";
 
 const context = {
   sessionId: "sess-tool-core",
@@ -13,84 +12,56 @@ const context = {
   runtimeId: "world-init/schema-gen",
 };
 
+const categories = ["stats", "bio", "abilities", "equipment", "social"];
+
+function makeAttributes() {
+  return Array.from({ length: 15 }, (_, index) => ({
+    id: `field${index + 1}`,
+    name: `字段 ${index + 1}`,
+    type: "string",
+    category: categories[index % categories.length],
+  }));
+}
+
 describe("ToolExecutor + core plugin pending proposals + commit pipeline", () => {
   it("executes world-init tools, records calls, then commits schema, entries and lorebook rows", async () => {
     const store = createMemoryStore();
-    const schemaTool = setWorldSchema({ tool, z, store });
-    const entriesTool = setWorldEntriesBatch({ tool, z, store });
-    const toolMap = new Map([
-      [schemaTool.name, schemaTool],
-      [entriesTool.name, entriesTool],
-    ]);
+    const initializeTool = initializeWorld({ tool, z, store });
+    const toolMap = new Map([[initializeTool.name, initializeTool]]);
     const executor = createToolExecutor({
       findTool: (name) => toolMap.get(name),
       getToolSource: () => "local",
       store,
     });
 
-    const schemaResult = await executor.execute(
+    const initializeResult = await executor.execute(
       {
-        toolCallId: "call-schema",
-        name: "set-world-schema",
+        toolCallId: "call-initialize",
+        name: "initialize-world",
         arguments: JSON.stringify({
-          attributes: [
-            {
-              id: "hp",
-              name: "生命值",
-              type: "number",
-              min: 0,
-              max: 100,
-              defaultValue: 100,
-              category: "stats",
-            },
-            {
-              id: "sect",
-              name: "宗门",
-              type: "string",
-              category: "social",
-            },
+          attributes: makeAttributes(),
+          entries: [
+            { key: "geography", value: { regions: ["云梦泽"] } },
+            { key: "factions", value: { groups: ["青萍宗"] } },
+            { key: "power-system", value: { name: "灵脉" } },
+            { key: "social-structure", value: { ranks: ["外门", "内门"] } },
+            { key: "currency", value: { name: "灵石" } },
           ],
         }),
       },
       context,
     );
-    const entriesResult = await executor.execute(
-      {
-        toolCallId: "call-entries",
-        name: "set-world-entries-batch",
-        arguments: JSON.stringify({
-          entries: [
-            { key: "geography", value: { regions: ["云梦泽"] } },
-            { key: "factions", value: { groups: ["青萍宗"] } },
-          ],
-        }),
-      },
-      {
-        ...context,
-        // Tool calls in one runtime share the proposals accumulated so far.
-        // world-init uses the schema proposal as its same-turn completion gate.
-        pendingProposals: schemaResult.pendingProposals,
-      },
-    );
 
-    expect(schemaResult.success).toBe(true);
-    expect(entriesResult.success).toBe(true);
-    expect(schemaResult.pendingProposals).toHaveLength(1);
-    expect(entriesResult.pendingProposals).toHaveLength(2);
+    expect(initializeResult.success).toBe(true);
+    expect(initializeResult.pendingProposals).toHaveLength(3);
 
     const calls = await store.listToolCalls(context.sessionId);
-    expect(calls.map((call) => call.toolName)).toEqual([
-      "set-world-schema",
-      "set-world-entries-batch",
-    ]);
+    expect(calls.map((call) => call.toolName)).toEqual(["initialize-world"]);
     expect(calls.every((call) => call.approvalStatus === "auto-allowed")).toBe(
       true,
     );
 
-    const proposals = [
-      ...(schemaResult.pendingProposals ?? []),
-      ...(entriesResult.pendingProposals ?? []),
-    ];
+    const proposals = initializeResult.pendingProposals ?? [];
     const commitResults =
       await createCommitPipeline(store).commitAll(proposals);
     expect(commitResults.every((result) => result.committed)).toBe(true);
@@ -101,13 +72,12 @@ describe("ToolExecutor + core plugin pending proposals + commit pipeline", () =>
       "schema",
       "character-attributes",
     );
-    expect(schema?.value).toMatchObject({
-      version: 1,
-      attributes: [
-        expect.objectContaining({ id: "hp", type: "number" }),
-        expect.objectContaining({ id: "sect", type: "string" }),
-      ],
-    });
+    expect(schema?.value).toMatchObject({ version: 1 });
+    expect(schema?.value.attributes).toHaveLength(15);
+    expect(schema?.value.attributes.slice(0, 2)).toEqual([
+      expect.objectContaining({ id: "field1", category: "stats" }),
+      expect.objectContaining({ id: "field2", category: "bio" }),
+    ]);
 
     const entries = await store.listPluginData(
       context.sessionId,
@@ -115,14 +85,20 @@ describe("ToolExecutor + core plugin pending proposals + commit pipeline", () =>
       "entries",
     );
     expect(entries.map((entry) => entry.key).sort()).toEqual([
+      "currency",
       "factions",
       "geography",
+      "power-system",
+      "social-structure",
     ]);
 
     const lorebook = await store.listSessionLorebookEntries(context.sessionId);
     expect(lorebook.map((entry) => entry.id)).toEqual([
       "world-entry:geography",
       "world-entry:factions",
+      "world-entry:power-system",
+      "world-entry:social-structure",
+      "world-entry:currency",
     ]);
     expect(lorebook[0]).toMatchObject({
       pluginId: "world-init",

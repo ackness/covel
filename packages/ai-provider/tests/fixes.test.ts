@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { z } from "zod";
 import { createAnthropicMessagesAdapter } from "../src/adapters/anthropic-messages.js";
 import { createOpenAiChatAdapter } from "../src/adapters/openai-chat.js";
+import { createOpenAiResponsesAdapter } from "../src/adapters/openai-responses.js";
 import { fetchLiteLlmModels } from "../src/capability/model-db.js";
 import { parseLlmConfig } from "../src/config/llm-loader.js";
 import { createGateway } from "../src/gateway.js";
@@ -225,6 +226,72 @@ describe("providerRequestMetadata cannot override critical fields", () => {
     ) as Record<string, unknown>;
     const msgs = body["messages"] as Array<Record<string, unknown>>;
     expect(msgs[0]["content"]).toBe("real message");
+  });
+
+  it("openai-chat generateText: requests JSON mode for responseFormat", async () => {
+    mockOpenAiSuccessResponse();
+
+    const adapter = createOpenAiChatAdapter();
+    await adapter.generateText(
+      { baseUrl: "https://api.openai.com/v1", apiKey: "sk-test" },
+      {
+        model: "qwen-test",
+        messages: [{ role: "user", content: "hi", toolCalls: undefined }],
+        responseFormat: {
+          type: "json_schema",
+          schema: { type: "object", properties: { ok: { type: "boolean" } } },
+        },
+      },
+      { profile: {} as never, preset: undefined, mode: "text" },
+    );
+
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(body["response_format"]).toEqual({ type: "json_object" });
+  });
+
+  it("openai-responses generateText: forwards the exact JSON Schema", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            status: "completed",
+            output_text: '{"ok":true}',
+            usage: { input_tokens: 5, output_tokens: 3 },
+          }),
+      }),
+    );
+    const schema = {
+      title: "World IR result",
+      type: "object",
+      additionalProperties: false,
+      properties: { ok: { type: "boolean" } },
+    };
+
+    await createOpenAiResponsesAdapter().generateText(
+      { baseUrl: "https://api.openai.com/v1", apiKey: "sk-test" },
+      {
+        model: "gpt-test",
+        messages: [{ role: "user", content: "hi", toolCalls: undefined }],
+        responseFormat: { type: "json_schema", schema },
+      },
+      { profile: {} as never, preset: undefined, mode: "text" },
+    );
+
+    const body = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(body["text"]).toEqual({
+      format: {
+        type: "json_schema",
+        name: "World_IR_result",
+        schema,
+      },
+    });
   });
 
   it("openai-chat streamText: metadata cannot override stream flag", async () => {

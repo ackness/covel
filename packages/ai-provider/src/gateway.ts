@@ -1,3 +1,4 @@
+import type { LLMResponseFormat } from "@covel/shared";
 import type { ZodType } from "zod";
 
 import { AiProviderError } from "./errors.js";
@@ -104,6 +105,7 @@ export function createGateway(deps: GatewayDependencies) {
       presetId?: string;
       messages: TextMessage[];
       tools?: ToolDefinition[];
+      responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: GatewayOptions,
@@ -122,6 +124,7 @@ export function createGateway(deps: GatewayDependencies) {
               model: targetModel(target),
               messages: input.messages,
               tools: input.tools,
+              responseFormat: input.responseFormat,
               providerRequestMetadata: withPresetMetadata(
                 target,
                 input.providerRequestMetadata,

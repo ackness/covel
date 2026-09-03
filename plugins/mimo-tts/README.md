@@ -4,7 +4,7 @@
 
 ## 包含什么
 
-- `mimo-tts/auto-narrate` (function · auto · `stage: post-turn` · `needs: capability narrative-engine`)：当前叙事引擎（narrator 或 chat-mode-narrator）成功后自动朗读；同时每回合写入「朗读」按钮的消息层数据（关闭自动朗读也会写，按钮始终可用）。
+- `mimo-tts/auto-narrate` (function · auto · `stage: post-turn` · `turnCompletion: detached` · `needs: capability narrative-engine`)：当前叙事引擎（narrator 或 chat-mode-narrator）成功后持久入队并在后台自动朗读，不阻塞下一回合；同时写入「朗读」按钮的消息层数据（关闭自动朗读也会写，按钮始终可用）。
 - `mimo-tts/manual-narrate` (function · manual · `execution: background`)：「朗读」按钮触发，段落文本经按钮 payload 传入（manual 激活不解析 turn inputs，`payload.text` 必需）。
 - `lib/wires.js`：MiMo TTS HTTP wire（`api-key` header + OpenAI 风格 `chat/completions` + `audio.format/voice`）；`lib/mimo-tts.js`：track 记录/展示字段辅助。
 - 右侧 Tab `ui/audio-tab.json`：playlist 风格 — 每个 turn 一行，header（turn 标号 + AUTO/MANUAL + voice + 字节数）+ 一句文本提示 + 内联 `<audio controls>`。**故意不重复 narrator 全文**（聊天流里已有），用户按 turn 选择播放。

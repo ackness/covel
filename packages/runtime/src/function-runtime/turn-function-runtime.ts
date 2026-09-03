@@ -188,6 +188,14 @@ export async function executeFunctionRuntime({
         turnId: input.turnId,
         pluginId: manifest.pluginId,
         runtimeId: manifest.name,
+        ...(input.detachedStage
+          ? {
+              contextData: {
+                runtimeJobId: input.detachedStage.jobId,
+                originTurnId: input.detachedStage.sourceTurnId,
+              },
+            }
+          : {}),
         eventBus: deps.eventBus,
         emitter: deps.emitter,
       },

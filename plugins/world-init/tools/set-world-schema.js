@@ -7,7 +7,7 @@
 import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 
-export default function ({ tool, z }) {
+export function createWorldAttributeSchema(z) {
   // A display label is either a plain string or an i18n record
   // (`{ "zh-CN": "门派", "en-US": "Faction" }`). The LLM normally emits a plain
   // string; a world that ships its own schema may declare bilingual labels.
@@ -62,6 +62,12 @@ export default function ({ tool, z }) {
         .describe("Attribute description (string or i18n record)"),
     }),
   );
+
+  return attributeSchema;
+}
+
+export default function ({ tool, z }) {
+  const attributeSchema = createWorldAttributeSchema(z);
 
   return tool({
     name: "set-world-schema",

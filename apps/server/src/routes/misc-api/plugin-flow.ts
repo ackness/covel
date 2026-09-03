@@ -3,8 +3,13 @@ import {
   loadPluginManifest,
   loadPluginSummary,
 } from "@covel/plugin-loader";
-import type { I18nText, Stage } from "@covel/shared";
-import { getRuntimeSpec, stageRank, STAGE_ORDER } from "@covel/shared";
+import type { EffectiveTurnCompletion, I18nText, Stage } from "@covel/shared";
+import {
+  effectiveTurnCompletion,
+  getRuntimeSpec,
+  stageRank,
+  STAGE_ORDER,
+} from "@covel/shared";
 import { resolve } from "node:path";
 import {
   docPathFromAbsolute,
@@ -62,6 +67,8 @@ export async function buildPluginFlowResponse() {
     segmentId: FlowSegmentId;
     runtimeType: string;
     outputKind: string;
+    capabilities: string[];
+    execution: "sync" | "background";
     model?: string;
     trigger: {
       type: string;
@@ -84,6 +91,7 @@ export async function buildPluginFlowResponse() {
     uiSlots: string[];
     docPath: string;
     isStoryRuntime: boolean;
+    turnCompletion: EffectiveTurnCompletion;
   }> = [];
   for (const discovery of discoveries) {
     const [summary, manifests] = await Promise.all([
@@ -133,6 +141,8 @@ export async function buildPluginFlowResponse() {
         segmentId,
         runtimeType: manifest.runtimeType ?? "agent",
         outputKind: manifest.outputKind ?? "plugin",
+        capabilities: [...(manifest.capabilities ?? [])],
+        execution: manifest.execution ?? "sync",
         model: manifest.model,
         trigger: {
           type: manifest.trigger?.type ?? "auto",
@@ -162,6 +172,7 @@ export async function buildPluginFlowResponse() {
         uiSlots: uiSlotsOf(manifest),
         docPath,
         isStoryRuntime: isStoryRuntime(manifest),
+        turnCompletion: effectiveTurnCompletion(manifest),
       });
     }
   }

@@ -72,6 +72,8 @@ export type {
   RuntimeType,
   TriggerType,
   TriggerConfig,
+  TurnCompletionMode,
+  TurnCompletionConfig,
   InputInjectDecl,
   RuntimeInjectDecl,
   PluginDataInjectDecl,
@@ -121,6 +123,8 @@ export type {
   ToolCallRecord,
   TokenUsage,
   RuntimeResult,
+  DeferredRuntimeJob,
+  DetachedStageInput,
   TurnInput,
   TurnResult,
   NestedTurnResult,
@@ -240,6 +244,7 @@ export type {
   CovelEventMeta,
   CovelEventPayload,
   DomainEventPreviewedPayload,
+  RuntimeDeferredPayload,
 } from "./protocol.js";
 
 export {
@@ -376,6 +381,7 @@ export type {
   HttpMethod,
   HttpPermissionDecl,
   TriggerSpec,
+  TurnCompletionPolicy,
   NormalizedRuntimeSpec,
   ExecutionOrigin,
   CountPolicy,

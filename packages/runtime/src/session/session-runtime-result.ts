@@ -58,6 +58,12 @@ export async function processRuntimeResult(
     readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
     readonly capabilities?: readonly string[];
     /**
+     * Optional commit-boundary policy for restricted execution classes such
+     * as scheduler-detached jobs. Returning a message rejects the entire
+     * proposal batch before any proposal reaches a commit handler.
+     */
+    readonly proposalGuard?: (proposal: Proposal) => string | undefined;
+    /**
      * Commit barrier for callers running this inside their own store
      * transaction (passing a tx-bound view as `store`): externally-visible
      * fan-out (emitter events + PostStateCommit hooks) is handed to this
@@ -169,8 +175,18 @@ async function commitProposals(
     readonly eventBus?: EventBus;
     readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
     readonly deferPostCommit?: (fn: () => Promise<void>) => void;
+    readonly proposalGuard?: (proposal: Proposal) => string | undefined;
   },
 ): Promise<ProcessRuntimeResultOutput> {
+  if (opts?.proposalGuard) {
+    const rejected = proposals.flatMap((proposal) => {
+      const error = opts.proposalGuard?.(proposal);
+      return error ? [{ proposal, error }] : [];
+    });
+    if (rejected.length > 0) {
+      return { events: [], failedProposals: rejected };
+    }
+  }
   // Thread the hook pipeline + eventBus through so PreStateCommit /
   // PostStateCommit actually run on real turn commits (previously these
   // hooks only fired in tests because callers didn't pass them).

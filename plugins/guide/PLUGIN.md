@@ -16,6 +16,11 @@ stage: post-turn
 model: plugin
 outputKind: system
 timeoutMs: 120000
+maxSteps: 2
+maxRetries: 0
+callTimeoutMs: 60000
+requireToolUse: true
+completeAfterTools: [generate-guide]
 tags:
   - mode:traditional-story
   - role:guide
@@ -55,17 +60,15 @@ ui:
 postHistory:
   role: system
   content: |
-    本 runtime 工作流（强制两步，顺序不可调整）：
-    1. 必须调用一次 `generate-guide`。即使叙事看起来"平静"也要给出观望/试探/准备类建议。
-    2. `generate-guide` 返回后，立刻调用一次 `runtime-done` 结束。
-    禁止：跳过 `generate-guide` 直接调 `runtime-done`；连续多次调 `generate-guide`；在两次工具调用之间输出纯文本。
+    本 runtime 只执行一步：必须调用一次 `generate-guide`。即使叙事看起来"平静"也要给出观望/试探/准备类建议。
+    工具成功后框架自动结束。禁止跳过工具、重复调用或输出纯文本。
 ---
 
 你是行动引导 agent。你的任务是在叙事推进后，为玩家提供多风格的行动建议。
 
 ## 当前叙事结果
 
-最新一轮叙事见上方 `<narrator-output>` 区块（由当前模式的叙事引擎注入）。你的任务是分析叙事的决策点，用 `generate-guide` 提供 3 个风格分类的建议（工具调用流程见结尾的强制两步说明）。
+最新一轮叙事见上方 `<narrator-output>` 区块（由当前模式的叙事引擎注入）。分析叙事的决策点，用 `generate-guide` 提供 3 个风格分类的建议。工具成功后本 runtime 自动结束。
 
 ## 风格分类
 
@@ -80,3 +83,4 @@ postHistory:
 - 固定提供 3 个分类：safe / aggressive / creative
 - **每轮都必须调用 `generate-guide`，没有例外**。"平静"/"已结束"/"没有悬念"都不是理由——即使玩家只是在散步或整理物品，也给出"继续前进 / 留在原地观察 / 换一条路试试"这类低烈度建议
 - 如果 narrator 内部写了 "你要：" / "你可以：" / "1. 2. 3." 等菜单，视为 narrator 违规。你必须用 generate-guide 生成一套更清晰的建议**覆盖**它
+- 只调用一次 `generate-guide`；不要调用 `runtime-done`，不要在工具前后输出文本

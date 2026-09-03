@@ -21,6 +21,7 @@ import type { BudgetOptions, CompactorRunner } from "@covel/context";
 import type { ModelCapability } from "@covel/ai-provider";
 import type { SessionLock } from "./lib/session-lock.js";
 import type { EventDirectory } from "./routes/api/bootstrap/event-directory.js";
+import type { RuntimeJobWorker } from "./routes/api/plugin-rpc/runtime-job-worker.js";
 
 type LoadRuntimeFn = (
   manifest: RuntimeManifest,
@@ -109,6 +110,8 @@ declare module "hono" {
      * `sessionLock` so PG deployments automatically get cross-pod safety.
      */
     sessionLock: SessionLock;
+    /** Durable scheduler-detached runtime queue worker. */
+    runtimeJobWorker?: RuntimeJobWorker;
     /**
      * Content-addressable media store used by `/api/media/:id`,
      * `/api/sessions/:id/media-token`, and runtime `ctx.media`.

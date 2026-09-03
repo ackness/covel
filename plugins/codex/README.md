@@ -5,11 +5,11 @@
 ## 运行时结构
 
 - `PLUGIN.md`：叙事后执行的 agent runtime。
-- `tools/unlock-codex-entries.js`：创建新图鉴条目。
-- `tools/update-codex-entry.js`：补充已有图鉴条目。
+- `tools/sync-codex-entries.js`：一次提交本轮全部新条目和已有条目补充。
+- `tools/unlock-codex-entries.js`、`tools/update-codex-entry.js`：由同步工具复用的底层写入实现。
 - `ui/codex-panel.json`：右侧完整图鉴面板。
 
-聊天区的"本轮发现"卡片由 `unlock-codex-entries` 工具的 `ui` 字段经 `ui.render` 渲染（不再使用单独的 `ui.message` spec）。
+聊天区的"本轮发现"卡片由 `sync-codex-entries` 汇总的 `ui` 字段经 `ui.render` 渲染（不再使用单独的 `ui.message` spec）。
 
 ## 数据与行为
 

@@ -1,3 +1,4 @@
+import type { LLMResponseFormat } from "@covel/shared";
 import type { ModelProviderAdapter } from "./adapter.js";
 import type { UsageSummary } from "../types.js";
 import {
@@ -50,6 +51,23 @@ const RESPONSES_PARAMETER_FIELD_MAP = {
 const sanitizeResponsesMetadata = createMetadataSanitizer(
   RESPONSES_PROTECTED_KEYS,
 );
+
+function toResponsesJsonSchema(
+  responseFormat: LLMResponseFormat,
+): Record<string, unknown> {
+  const rawName =
+    typeof responseFormat.schema.title === "string"
+      ? responseFormat.schema.title
+      : typeof responseFormat.schema.$id === "string"
+        ? responseFormat.schema.$id
+        : "structured_output";
+  const name = rawName.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+  return {
+    type: "json_schema",
+    name: name || "structured_output",
+    schema: responseFormat.schema,
+  };
+}
 
 function extractResponsesParameterOverrides(
   meta: Record<string, unknown> | undefined,
@@ -199,6 +217,9 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       const response = await postJson(config, "/responses", {
         model: params.model,
         input: serializeResponsesInput(messages),
+        ...(params.responseFormat
+          ? { text: { format: toResponsesJsonSchema(params.responseFormat) } }
+          : {}),
         ...sanitizeResponsesMetadata(params.providerRequestMetadata),
         ...extractResponsesParameterOverrides(
           params.providerRequestMetadata,

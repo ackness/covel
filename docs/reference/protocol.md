@@ -67,15 +67,18 @@
 
 ### 执行生命周期事件
 
-| 事件类型              | 方向 | 描述              | 负载                                                                                                                                                                                                                                                                                                                  |
-| --------------------- | ---- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `execution.started`   | S→C  | 回合执行开始      | `{ runtimeCount }`                                                                                                                                                                                                                                                                                                    |
-| `runtime.started`     | S→C  | 单个 runtime 开始 | `{ runtimeId, pluginId, label }`                                                                                                                                                                                                                                                                                      |
-| `runtime.completed`   | S→C  | 单个 runtime 完成 | `{ runtimeId, pluginId, durationMs }`                                                                                                                                                                                                                                                                                 |
-| `runtime.failed`      | S→C  | 单个 runtime 失败 | `{ runtimeId, pluginId, error }`                                                                                                                                                                                                                                                                                      |
-| `execution.completed` | S→C  | 回合执行终态      | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason? }`。`committed: true` 表示 proposal、execution journal 与会话时钟已落库；`false` 时 `error` 携带 proposal 或通用事务错误，客户端撤销该回合的 optimistic stream。`abortReason` 仅在回合被中止时出现（玩家 abort 值为 `"aborted-by-player"`） |
+| 事件类型              | 方向 | 描述                                      | 负载                                                                                                                                                                                                                                                                                                                  |
+| --------------------- | ---- | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `execution.started`   | S→C  | 回合执行开始                              | `{ runtimeCount }`                                                                                                                                                                                                                                                                                                    |
+| `runtime.started`     | S→C  | 单个 runtime 开始                         | `{ runtimeId, pluginId, label }`                                                                                                                                                                                                                                                                                      |
+| `runtime.deferred`    | S→C  | staged runtime 已随原始回合提交并转入后台 | `{ runtimeId, pluginId, jobId, sourceTurnId }`                                                                                                                                                                                                                                                                        |
+| `runtime.completed`   | S→C  | 单个 runtime 完成                         | `{ runtimeId, pluginId, durationMs }`                                                                                                                                                                                                                                                                                 |
+| `runtime.failed`      | S→C  | 单个 runtime 失败                         | `{ runtimeId, pluginId, error }`                                                                                                                                                                                                                                                                                      |
+| `execution.completed` | S→C  | 回合执行终态                              | `{ runtimeCount, resultCount, durationMs, committed, error?, abortReason? }`。`committed: true` 表示 proposal、execution journal 与会话时钟已落库；`false` 时 `error` 携带 proposal 或通用事务错误，客户端撤销该回合的 optimistic stream。`abortReason` 仅在回合被中止时出现（玩家 abort 值为 `"aborted-by-player"`） |
 
 > **开场接力**：当一次玩家动作完成了最后一个 setup runtime，`POST /api/actions` 的同一条 SSE 流会自动接力一个主循环回合（见 [api.md § POST /api/actions](./api.md)）。此时流内会出现**两轮** `execution.started` / runtime 生命周期事件（信封 `turnId` 不同——setup 回合 + 接力回合），但只有**一个** `execution.completed` 收尾（前端以它复位 executing 状态并按 `committed` 收敛 optimistic 输出）。setup 提交失败时不会启动接力，终态直接返回 `committed: false`。
+
+`runtime.deferred` 只在原始回合和 `_runtime_jobs` queued 记录原子提交成功、session lock 释放后发出；回滚时不产生“幽灵后台任务”。服务端分别写入当前 `/api/actions` 流，并通过 EventBus 的 `runtime` topic 发给 `/api/events/stream` 持久订阅。其 `COVEL_EVENT_META.forwardToActionStream` 为 `false`，避免 EventBus 再转发一次造成 action 流重复。
 
 ### 回合中控制（W4：steer / abort）
 
@@ -110,13 +113,15 @@
 
 ### 作业进度事件（job-status，实验性）
 
-| 事件类型             | 方向 | 描述                     | 负载（完整 `JobStatusRecord`）                                                                                       |
-| -------------------- | ---- | ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `job-status.updated` | S→C  | 长任务作业进度（追加式） | `{ sessionId, progressScopeId, pluginId, runtimeId, jobId, state, progress?, message?, data?, sequence, createdAt }` |
+| 事件类型             | 方向 | 描述                     | 负载（完整 `JobStatusRecord`）                                                                                                                                                                            |
+| -------------------- | ---- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `job-status.updated` | S→C  | 长任务作业进度（追加式） | `{ sessionId, progressScopeId, pluginId, runtimeId, jobId, state, progress?, message?, data?, sequence, createdAt }`；staged detached job 的 `data` 含 `{ originTurnId, durableStatus, reason?, error? }` |
 
 长耗时的 function runtime（媒体生成等）在 finalizer 提交之前，通过 `ctx.progress.report({ jobId, state, progress?, message?, data?, sequence })` 实时上报进度。这是 effects 隔离的**唯一实时例外**：上报写入内核 job-status 存储（追加式、按 `(sessionId, progressScopeId, pluginId, runtimeId, jobId, sequence)` 幂等），成功后立即发出本事件并经 `/actions` SSE 转发；它不写游戏态、不满足 binding/gate、不随领域事务回滚。`state` 取值为 `queued | running | progress | waiting-input | succeeded | failed | cancelled`；身份字段全部由内核注入，插件只提供作业业务字段。
 
-> 本通道与 `plugin-data` 的 `_jobs` 命名空间并存：`_jobs` 是持久化的作业簿记，本事件是实时推送。
+staged detached worker 也使用同一事件投影 durable 状态：`queued/claimed/running/committing/succeeded/cancelled` 分别映射为公开的 `queued/running/progress/succeeded/cancelled`；`failed/timed_out/stale/orphaned` 映射为公开 `failed`，具体终态保留在 `data.durableStatus`。`data.originTurnId` 让 Web 把后台任务挂回产生它的原始 turn，而不是后台执行自己的 `backgroundTurnId`。
+
+> 本通道与两个框架保留 namespace 并存：manual/event `execution: background` 使用 `_jobs`；staged `turnCompletion: detached` 使用 `_runtime_jobs`。`job-status.updated` 是它们的实时/恢复投影，不替代领域结果事务。
 
 ### 媒体资产事件
 
@@ -180,6 +185,26 @@ Provider 图片输入矩阵：
 所有 `_jobs/<jobId>` 的写入都是普通 `setPluginData` 调用，因此都会通过标准 `plugin-data.changed` 频道广播。插件**禁止**直接写入 `_jobs` —— 框架独占该命名空间。业务数据请使用自定义命名空间（如 `images`、`prompts`）。
 
 `pending` 行也作为跨 Pod 删除 drain 的权威索引：入队会在 session lock 内先持久化 runtimeId，再启动 detached work。Memory/SQLite 启动时可按进程 owner 将孤儿标为 failed；PostgreSQL 多 Pod 不做不安全的 owner 扫描，崩溃遗留 pending 的自动回收需等待可续租 job lease/持久队列。
+
+**保留命名空间 `_runtime_jobs`（staged detached runtime）:**
+
+`turnCompletion.mode: detached` 的 scheduler 作业使用 `_runtime_jobs/<jobId>` 作为 durable source of truth。queued 记录与原始回合 proposal、journal 和会话时钟在同一事务中落库；worker 再通过 `compareAndSetPluginData` claim 并续租，防止多 Pod 重复执行或迟到结果复活。
+
+| durable status        | 语义                                                                                                             |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `queued`              | 已随原始回合提交，等待 worker；超过 `maxQueueMs` 转 `timed_out`                                                  |
+| `claimed` / `running` | worker 已取得 CAS lease / 正在执行；同一 session/plugin/runtime 保持串行                                         |
+| `committing`          | 已通过 owner CAS，正在 session lock 内做 stale/effect guard 和领域提交                                           |
+| `succeeded`           | 后台 proposal 已提交，`result` 保存 background turn/execution/runtime 摘要                                       |
+| `failed`              | 执行、effect guard 或领域提交失败；`reason/error` 为权威原因                                                     |
+| `timed_out`           | 排队或 `maxExecutionMs` 到期；迟到执行不能再进入 committing                                                      |
+| `cancelled`           | 控制面取消终态；不能转回 active 或接受迟到结果                                                                   |
+| `stale`               | session inactive、session/plugin incarnation 或版本已变化；提交屏障以 `reason: commit-barrier-rejected` 拒绝结果 |
+| `orphaned`            | 在途 owner 停止续租且 lease 过期                                                                                 |
+
+启动恢复会继续执行未过排队期限且从未 claim 的 `queued` 作业；排队超时会终态化为 `timed_out`，lease 已过期的 `claimed/running/committing` 作业会终态化为 `orphaned`，这些终态**不自动 replay**，避免 provider 已计费但响应未落库时被重复扣费。提交前会重新确认 session 仍 active、session incarnation、插件 approval scope 和版本未变化，并以 manifest 的隔离 effects 白名单检查实际 proposal。`_runtime_jobs` 不进入 snapshot/fork payload，也不允许插件直接读写。当前没有用旧值表达新策略的兼容折叠；未来扩展状态或 overlap/stalePolicy 时必须同步升级 schema version、合法迁移图、SSE 投影与客户端 hydration。
+
+客户端可用 `GET /api/sessions/:id/runtime-jobs` 恢复状态与成功结果；响应会移除包含冻结输入、设置与审批身份的内部 `payload`。detached runtime 内部通过 `ctx.progress` 发出的插件子任务消息会由内核在 `data` 中追加不可伪造的 `runtimeJobId` 与 `originTurnId`，客户端据此折叠到父任务，而不是产生孤立状态行。`POST .../:jobId/cancel` 只接受 `queued/claimed/running`，以 CAS 写入 `cancelled`，已经进入 `committing` 或终态的作业返回冲突。`POST .../:jobId/retry` 只接受失败类终态，显式创建新 `jobId` 和 queued 记录并使用当前 session incarnation、approval scope、locale 与 runtime model overrides；旧终态不改变，也不会被后台自动重放。
 
 ### Suspend / Resume 事件
 
@@ -267,7 +292,7 @@ data: {
 
 Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot、plugins、全部 active plugin data、未解决 suspensions 与 world，并缓冲期间到达的 live events 后重放。服务端对 SSE write 使用单一有界串行队列（256），连接预算为每 session 8、进程总计 512；超限返回 429，慢客户端溢出时主动断开。
 
-`apps/web/src/services/subscription.ts` 默认订阅 topic `runtime / state / game / plugin / session / system`（不含 `store`），并按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/events/stream` 接受的合法 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 单一真相派生（`subscribe.ts` 的 `VALID_TOPICS` 从中生成）：`runtime / state / game / plugin / session / store / system / trace / hooks`。其中 `trace`（TurnEmitter）与 `hooks`（hook pipeline）为运行时内部可观测性 topic。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `apps/web/src/services/api/actions.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
+`apps/web/src/services/subscription.ts` 的通用缺省订阅 topic 为 `runtime / state / game / plugin / session / system`（不含 `store`）；session store 为恢复后台任务另外显式订阅 `job`。客户端按 `event.topic` 路由分发；新增 topic 或 enum 事件时**必须同步更新该文件**。`/api/events/stream` 接受的合法 topic 由 `@covel/shared` 的 `SUBSCRIPTION_TOPICS` 单一真相派生（`subscribe.ts` 的 `VALID_TOPICS` 从中生成）：`runtime / state / game / plugin / session / store / system / trace / hooks / job`。其中 `trace`（TurnEmitter）与 `hooks`（hook pipeline）为运行时内部可观测性 topic，`job` 承载 `job-status.updated`。`/api/actions` 的回合内事件（`narrative.delta` / `narrative.completed` / `interaction.requested` / `plugin-data.changed` 等）在 actions 流里以 data-only 帧推送，由 `apps/web/src/services/api/actions.ts: sendAction` 的回调消费，不经过 `subscription.ts`。
 
 ### 转发的运行时内部事件（`/api/actions` 转发，已纳入 `CovelEvent`）
 
@@ -469,8 +494,10 @@ event.emitted         → gameState.events
 record.updated        → gameState.records
 execution.started     → executionSteps
 runtime.started       → executionSteps
+runtime.deferred      → executionSteps（pending，按 sourceTurnId 归属原始回合）
 runtime.completed     → executionSteps
 runtime.failed        → executionSteps
+job-status.updated    → executionSteps（按 data.originTurnId 更新后台终态）
 execution.completed   → committed=true: finalize；committed=false: discard optimistic stream + executionError；两者均 executing=false
 error.occurred        → executionError
 ```

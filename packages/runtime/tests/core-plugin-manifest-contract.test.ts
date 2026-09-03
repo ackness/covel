@@ -63,11 +63,13 @@ describe("core plugin manifest contract", () => {
       model: "plugin",
       guard: "../../guard.js",
       trigger: { type: "auto", maxTriggerCount: 1 },
+      requireToolUse: true,
+      completeAfterTools: ["initialize-world"],
+      maxSteps: 2,
+      maxRetries: 0,
+      output: { schema: "./output.schema.json" },
     });
-    expect(schemaGen.tools?.plugin).toEqual([
-      "set-world-schema",
-      "set-world-entries-batch",
-    ]);
+    expect(schemaGen.tools?.plugin).toEqual(["initialize-world"]);
     // schema-gen writes the world schema during setup; it has no reason to
     // read its own plugin-data back, and its prompt never mentioned the read
     // tools it used to declare.
@@ -79,7 +81,10 @@ describe("core plugin manifest contract", () => {
       model: "plugin",
       guard: "./guard.js",
       trigger: { type: "auto" },
+      requireToolUse: true,
       completeAfterTools: ["create-form"],
+      maxSteps: 2,
+      maxRetries: 0,
       // Turn-scoped needs carry both the intra-stage order and the same-turn
       // gate; the explicit stage picks the band.
       needs: ["pregame", "world-init/schema-gen"],
@@ -168,6 +173,25 @@ describe("core plugin manifest contract", () => {
       "emit-event",
     ]);
 
+    const guide = requireRuntime(manifests, "guide");
+    expect(guide).toMatchObject({
+      requireToolUse: true,
+      completeAfterTools: ["generate-guide"],
+      maxSteps: 2,
+      maxRetries: 0,
+    });
+    expect(
+      requireRuntime(manifests, "char-creator/character-tracker"),
+    ).toMatchObject({
+      tools: {
+        builtin: ["sync-characters", "get-character"],
+        defer: ["get-character"],
+      },
+      completeAfterTools: ["sync-characters"],
+      maxSteps: 2,
+      maxRetries: 0,
+    });
+
     for (const downstream of [
       ...rawDownstreams,
       worldIr,
@@ -203,6 +227,9 @@ describe("core plugin manifest contract", () => {
       schema: "covel://world/ir/v1",
       recordAs: "world-ir-v1",
     });
+    expect(worldIr.tools?.plugin).toEqual(["submit-world-facts"]);
+    expect(worldIr.requireToolUse).toBe(true);
+    expect(worldIr.completeAfterTools).toEqual(["submit-world-facts"]);
     for (const downstream of structuredDownstreams) {
       expect(downstream.needs).toBeUndefined();
       expect(downstream.inputs?.worldIR).toMatchObject({
@@ -218,6 +245,19 @@ describe("core plugin manifest contract", () => {
         ) ?? false,
       ).toBe(false);
     }
+
+    expect(requireRuntime(manifests, "affinity").completeAfterTools).toEqual([
+      "update-affinity",
+    ]);
+    expect(requireRuntime(manifests, "inventory").completeAfterTools).toEqual([
+      "update-inventory",
+    ]);
+    expect(requireRuntime(manifests, "core-quest").completeAfterTools).toEqual([
+      "upsert-quests",
+    ]);
+    expect(requireRuntime(manifests, "codex").completeAfterTools).toEqual([
+      "sync-codex-entries",
+    ]);
 
     expect(
       [...rawDownstreams, worldIr, ...structuredDownstreams].map(

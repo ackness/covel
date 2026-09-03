@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   classifyActionableError,
@@ -13,6 +13,8 @@ const MESSAGE_KEYS: Record<ActionableErrorKind, string> = {
   server: "error.actionable.server",
   timeout: "error.actionable.timeout",
   network: "error.actionable.network",
+  "invalid-output": "error.actionable.invalidOutput",
+  incomplete: "error.actionable.incomplete",
   error: "error.actionable.generic",
   unknown: "error.actionable.unknown",
 };
@@ -27,15 +29,33 @@ const DEFAULT_MESSAGES: Record<ActionableErrorKind, string> = {
   server: "The provider is temporarily unavailable.",
   timeout: "The request timed out. Check the network or proxy.",
   network: "Could not reach the provider. Check the network or proxy.",
+  "invalid-output":
+    "The model returned data that does not match this task's required format.",
+  incomplete:
+    "The task stream ended before its final status arrived. Retry this task.",
   error: "The request failed. Open details for the original error.",
   unknown: "The request failed without an error message.",
 };
 
-export function ActionableErrorNotice({ error }: { error?: string }) {
+const BADGE_LABELS: Partial<Record<ActionableErrorKind, string>> = {
+  "invalid-output": "output",
+  incomplete: "incomplete",
+};
+
+export function ActionableErrorNotice({
+  error,
+  kind: kindOverride,
+  layout = "inline",
+}: {
+  error?: string;
+  kind?: ActionableErrorKind;
+  layout?: "inline" | "panel";
+}) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const kind = classifyActionableError(error);
+  const detailId = useId();
+  const kind = kindOverride ?? classifyActionableError(error);
 
   useEffect(() => {
     setExpanded(false);
@@ -54,30 +74,48 @@ export function ActionableErrorNotice({ error }: { error?: string }) {
   };
 
   return (
-    <span className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
-      <span className="shrink-0 rounded-sm border border-destructive/40 bg-destructive/5 px-1.5 py-0.5 font-mono text-[10px] uppercase text-destructive">
-        {kind}
+    <span
+      className={
+        layout === "panel"
+          ? "block min-w-0 w-full"
+          : "inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5"
+      }
+    >
+      <span
+        className={
+          layout === "panel"
+            ? "flex min-w-0 flex-wrap items-center gap-1.5"
+            : "contents"
+        }
+      >
+        <span className="shrink-0 rounded-sm border border-destructive/40 bg-destructive/5 px-1.5 py-0.5 font-mono text-[10px] uppercase text-destructive">
+          {BADGE_LABELS[kind] ?? kind}
+        </span>
+        <span className="min-w-0 text-[11px] text-destructive">
+          {t(MESSAGE_KEYS[kind], DEFAULT_MESSAGES[kind])}
+        </span>
+        {error && (
+          <button
+            type="button"
+            className="shrink-0 text-[10px] text-destructive underline underline-offset-2 hover:text-destructive/80"
+            aria-controls={detailId}
+            aria-expanded={expanded}
+            onClick={(event) => {
+              event.stopPropagation();
+              setExpanded((value) => !value);
+            }}
+          >
+            {expanded
+              ? t("error.actionable.hideDetail", "Hide details")
+              : t("error.actionable.showDetail", "Show details")}
+          </button>
+        )}
       </span>
-      <span className="min-w-0 text-[11px] text-destructive">
-        {t(MESSAGE_KEYS[kind], DEFAULT_MESSAGES[kind])}
-      </span>
-      {error && (
-        <button
-          type="button"
-          className="shrink-0 text-[10px] text-destructive underline underline-offset-2 hover:text-destructive/80"
-          aria-expanded={expanded}
-          onClick={(event) => {
-            event.stopPropagation();
-            setExpanded((value) => !value);
-          }}
-        >
-          {expanded
-            ? t("error.actionable.hideDetail", "Hide details")
-            : t("error.actionable.showDetail", "Show details")}
-        </button>
-      )}
       {expanded && error && (
-        <span className="basis-full rounded-sm border border-destructive/25 bg-destructive/5 p-2 font-mono text-[10px] font-normal normal-case leading-relaxed text-destructive/90 whitespace-pre-wrap break-all select-text">
+        <span
+          id={detailId}
+          className="mt-2 block max-h-40 w-full overflow-auto rounded-sm border border-destructive/25 bg-background/60 p-2 font-mono text-[10px] font-normal normal-case leading-relaxed text-destructive/90 whitespace-pre-wrap wrap-anywhere select-text"
+        >
           <span className="block">{error}</span>
           <button
             type="button"
@@ -91,6 +129,9 @@ export function ActionableErrorNotice({ error }: { error?: string }) {
               ? t("error.actionable.copied", "Copied")
               : t("error.actionable.copyDetail", "Copy details")}
           </button>
+          <span className="sr-only" aria-live="polite">
+            {copied ? t("error.actionable.copied", "Copied") : ""}
+          </span>
         </span>
       )}
     </span>

@@ -41,6 +41,10 @@ const SHARED_UNREPRESENTABLE_CONSTRAINTS = [
   "a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.",
   "stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.",
   "needs entries with scope 'session' are only valid on stage 'setup' runtimes.",
+  "turnCompletion.mode 'detached' is only valid on post-turn/audit staged runtimes.",
+  "turnCompletion.mode 'detached' cannot be used with outputKind 'story'.",
+  "event/manual runtimes use execution and cannot use detached turn completion.",
+  "turnCompletion queue/overlap/stale options require mode 'detached'.",
   "effects.reads, effects.writes and permissions.http[].methods must contain unique entries.",
   "an i18n description map must have at least one locale entry.",
 ] as const;

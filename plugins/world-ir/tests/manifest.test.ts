@@ -18,6 +18,16 @@ describe("world-ir plugin contract", () => {
     const [parsed] = await loadPluginManifest(discovery!);
     const loaded = await loadRuntime(discovery!, "world-ir");
     expect(parsed?.manifest.capabilities).toContain("world-ir-provider");
+    expect(parsed?.manifest.displayName).toEqual({
+      zh: "世界事实提取",
+      en: "World Fact Extraction",
+    });
+    expect(parsed?.manifest.entry).toBe("./server/index.js");
+    expect(parsed?.manifest.tools?.plugin).toEqual(["submit-world-facts"]);
+    expect(parsed?.manifest.requireToolUse).toBe(true);
+    expect(parsed?.manifest.completeAfterTools).toEqual(["submit-world-facts"]);
+    expect(parsed?.manifest.maxRetries).toBe(0);
+    expect(parsed?.manifest.callTimeoutMs).toBe(60_000);
     expect(parsed?.manifest.inputs?.narrative).toEqual({
       from: { capability: "narrative-engine", cardinality: "one" },
       select: "/narrativeOutput",

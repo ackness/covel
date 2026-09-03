@@ -36,6 +36,7 @@ export interface RuntimeEffects {
 const BUILTIN_WRITE: Readonly<Record<string, EffectResource>> = {
   "create-character": "characters:*",
   "update-character": "characters:*",
+  "sync-characters": "characters:*",
   "memory-update-block": "working-memory:*",
   "render-ui": "ui:*",
   "create-notification": "ui:*",
@@ -47,6 +48,7 @@ const BUILTIN_WRITE: Readonly<Record<string, EffectResource>> = {
 const BUILTIN_READ: Readonly<Record<string, EffectResource>> = {
   "list-characters": "characters:*",
   "get-character": "characters:*",
+  "sync-characters": "characters:*",
   "world-dimension-get": "state:*",
 };
 

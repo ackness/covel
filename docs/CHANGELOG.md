@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.30] - 2026-09-03
+
+This release moves eligible media follow-up work into durable background jobs, exposes effective runtime model routing in the UI, and converts structured plugin agents to bounded atomic Function Calling workflows for faster, more reliable world and story updates.
+
+### Added
+
+- **Safe post-turn function runtimes can finish beyond the foreground turn barrier.** Plugin manifests can opt in with `turnCompletion.mode: detached` plus queue/execution deadlines, serial overlap, and stale-result rejection. The scheduler freezes source-turn inputs, falls back to foreground execution with diagnostics when a declaration is unsafe, and validates actual effects again before commit. `mimo-tts/auto-narrate` is the first bundled runtime using this path.
+- **Scheduler-detached work has durable lifecycle APIs and events.** `_runtime_jobs` stores CAS-leased jobs on the active DataStore backend while snapshots and browser checkpoints omit control-plane rows; clients can list, cancel, or explicitly retry jobs and receive `runtime.deferred` plus origin-turn-aware `job-status.updated` events.
+- **Plugin surfaces explain runtime behavior with contract-derived feature badges.** Session setup, plugin details, and the execution-flow preview expose trigger, LLM/function type, background execution, output role, and declared capabilities without branching on bundled plugin ids.
+
+### Changed
+
+- **A player turn no longer waits for eligible media follow-up work.** Queued job creation commits atomically with the source turn, while background execution runs outside the main session lock and rechecks session/plugin incarnation, version, lease ownership, and declared effects before committing. Restart recovery resumes unclaimed queued work, but terminalizes expired queues and expired in-flight leases without replaying potentially billable provider calls.
+- **Bundled image prompt generation is now manifest-declared background work.** Both OpenAI-compatible and DashScope image prompt agents return a job immediately for every RPC caller, and a background entry now preserves its emitted background-follower chain instead of dropping the provider render. Decision guidance such as `scene-prompts` remains inside the foreground barrier because the player needs it before choosing the next action.
+- **Bundled structured agents now submit results through bounded Function Calling workflows.** World setup, WorldIR extraction, character tracking, codex updates, relationship extraction, guidance, scene prompts, quests, affinity, inventory, and image prompts use one atomic batch tool where practical, stop immediately after a successful terminal tool, and cap provider attempts so a stalled plugin cannot consume repeated full runtime budgets. Prose narrators remain streaming text runtimes.
+- **Runtime model selectors now distinguish routing declarations from effective targets.** Session Prep and in-session plugin controls keep `runtimeId → slot` overrides scoped to the session while showing the provider/model currently resolved for each slot. Function-runtime `modelPresetId` provider slots remain separate device-level plugin settings.
+
+### Fixed
+
+- **WorldIR factual events no longer become malformed domain events.** Output normalization only creates `event.emit` proposals from `{ topic, data? }` envelopes whose `topic` is a string, so WorldIR's own `events[]` records cannot produce repeated `event.emit: topic must be a non-empty string` failures.
+- **Atomic submission tools prevent partial structured-plugin writes.** `initialize-world`, `sync-characters`, and `sync-codex-entries` return their accumulated proposals only after the full batch succeeds; image prompt tools own their fixed event topics instead of asking the model to construct fragile event envelopes.
+
 ## [0.0.29] - 2026-09-02
 
 This release adds Russian across the application, makes source-distributed Web locales catalog-driven, improves AI world-generation recovery, refreshes responsive and themed interfaces, and lets packaged desktop apps notify players about newer releases.
@@ -1013,7 +1035,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.29...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.30...HEAD
+[0.0.30]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.30
 [0.0.29]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.29
 [0.0.28]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.28
 [0.0.27]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.27

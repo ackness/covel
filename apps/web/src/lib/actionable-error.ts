@@ -6,6 +6,8 @@ export type ActionableErrorKind =
   | "server"
   | "timeout"
   | "network"
+  | "invalid-output"
+  | "incomplete"
   | "error"
   | "unknown";
 
@@ -34,6 +36,13 @@ export function classifyActionableError(
     )
   ) {
     return "network";
+  }
+  if (
+    /output did not match output\.schema|expected a json envelope|schema[- ]validation/.test(
+      lower,
+    )
+  ) {
+    return "invalid-output";
   }
   return "error";
 }

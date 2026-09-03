@@ -132,6 +132,20 @@ const compatCurrentPositives: readonly Fixture[] = [
     },
   },
   {
+    name: "post-turn detached turn completion",
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      turnCompletion: {
+        mode: "detached",
+        maxQueueMs: 30_000,
+        maxExecutionMs: 90_000,
+        overlap: "serial",
+        stalePolicy: "reject",
+      },
+    },
+  },
+  {
     name: "setup stage + auto trigger + maxTriggerCount",
     manifest: {
       ...base,
@@ -336,6 +350,43 @@ const authoringCrossFieldRejections: readonly Fixture[] = [
       output: { recordAs: "codexEntries" },
     },
   },
+  {
+    name: "detached runtime in narrative stage",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      stage: "narrative",
+      turnCompletion: { mode: "detached" },
+    },
+  },
+  {
+    name: "detached runtime with story output",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      outputKind: "story",
+      turnCompletion: { mode: "detached" },
+    },
+  },
+  {
+    name: "manual runtime using detached turn completion",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      trigger: { type: "manual" },
+      turnCompletion: { mode: "detached" },
+    },
+  },
+  {
+    name: "detached-only options with await mode",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      turnCompletion: { mode: "await", maxQueueMs: 30_000 },
+    },
+  },
 ];
 
 // ── Compat (input) malformed rejections ─────────────────────────────
@@ -377,6 +428,56 @@ const compatMalformedRejections: readonly Fixture[] = [
   {
     name: "unknown top-level field",
     manifest: { ...base, stage: "narrative", bogusField: true },
+  },
+  {
+    name: "turnCompletion maxQueueMs is not positive",
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      turnCompletion: { mode: "detached", maxQueueMs: 0 },
+    },
+  },
+  {
+    name: "turnCompletion maxExecutionMs is not positive",
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      turnCompletion: { mode: "detached", maxExecutionMs: 0 },
+    },
+  },
+  {
+    name: "turnCompletion unsupported overlap policy",
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      turnCompletion: { mode: "detached", overlap: "parallel" },
+    },
+  },
+  {
+    name: "turnCompletion unknown field",
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      turnCompletion: { mode: "detached", retry: true },
+    },
+  },
+  {
+    name: "detached runtime in setup stage",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      stage: "setup",
+      turnCompletion: { mode: "detached" },
+    },
+  },
+  {
+    name: "event runtime using detached turn completion",
+    zodOnly: true,
+    manifest: {
+      ...base,
+      trigger: { type: "event", topic: "scene.set" },
+      turnCompletion: { mode: "detached" },
+    },
   },
   {
     // Step 6: reserved triggers are now rejected by the compat input schema too

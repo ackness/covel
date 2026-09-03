@@ -1,6 +1,11 @@
 import { request } from "./request.js";
 import type { I18nText, Stage } from "@covel/shared";
-import type { PackageSummary, PresetSummary, RuntimeSummary } from "./types.js";
+import type {
+  PackageSummary,
+  PresetSummary,
+  RuntimeSummary,
+  TurnCompletionSummary,
+} from "./types.js";
 
 /** Flow segment id: a named stage, or the stage-less event/manual bucket. */
 export type FlowSegmentId = Stage | "event-manual";
@@ -29,6 +34,14 @@ type RawPackageSummary = Omit<PackageSummary, "runtimes"> & {
   runtimes?: RawRuntimeSummary[];
 };
 
+function normalizeTurnCompletion(
+  value: TurnCompletionSummary | undefined,
+): TurnCompletionSummary {
+  return value?.mode === "detached"
+    ? { ...value, mode: "detached" }
+    : { mode: "await" };
+}
+
 function normalizePackageSummary(pkg: RawPackageSummary): PackageSummary {
   return {
     ...pkg,
@@ -36,6 +49,7 @@ function normalizePackageSummary(pkg: RawPackageSummary): PackageSummary {
       return {
         ...runtime,
         trigger: runtime.trigger ?? { type: "auto" },
+        turnCompletion: normalizeTurnCompletion(runtime.turnCompletion),
       };
     }),
   };
@@ -65,7 +79,10 @@ export interface PluginFlowStep {
   trigger: { type: string };
   runtimeType?: string;
   outputKind?: string;
+  capabilities?: string[];
+  execution?: "sync" | "background";
   model?: string;
+  turnCompletion: TurnCompletionSummary;
 }
 
 export interface PluginFlowSegment {
@@ -93,7 +110,10 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
     trigger?: { type?: string };
     runtimeType?: string;
     outputKind?: string;
+    capabilities?: string[];
+    execution?: "sync" | "background";
     model?: string;
+    turnCompletion?: TurnCompletionSummary;
   };
   type RawSegment = {
     id: FlowSegmentId;
@@ -113,7 +133,10 @@ export async function fetchPluginFlows(): Promise<PluginFlowResponse> {
       trigger: { type: s.trigger?.type ?? "auto" },
       runtimeType: s.runtimeType,
       outputKind: s.outputKind,
+      capabilities: s.capabilities,
+      execution: s.execution,
       model: s.model,
+      turnCompletion: normalizeTurnCompletion(s.turnCompletion),
     })),
     segments: raw.segments.map((seg) => ({
       id: seg.id,

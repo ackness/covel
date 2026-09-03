@@ -12,10 +12,17 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { stageLabel } from "@/lib/stage-label.js";
-import { formatSlotLabel } from "@/hooks/use-slot-config.js";
+import {
+  effectiveSlotModel,
+  formatSlotLabel,
+} from "@/hooks/use-slot-config.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
 import { SetupRecovery } from "./setup-recovery.js";
-import { TRIGGER_LABELS, type PluginItemProps } from "./types.js";
+import type { PluginItemProps } from "./types.js";
+import {
+  RuntimeCollectionFeatureBadges,
+  RuntimeFeatureBadges,
+} from "../runtime-feature-badges.js";
 
 export function PluginItem({
   pkg,
@@ -100,6 +107,12 @@ export function PluginItem({
             >
               {stageLabel(mainRuntime.stage, t)}
             </Badge>
+          )}
+          {runtimes.length > 0 && (
+            <RuntimeCollectionFeatureBadges
+              runtimes={runtimes}
+              display="summary"
+            />
           )}
           {isLocked && (
             <span
@@ -203,23 +216,10 @@ export function PluginItem({
                 {runtimes.map((rt) => (
                   <div
                     key={rt.id}
-                    className="flex items-center gap-2 text-xs text-muted-foreground pl-1"
+                    className="flex min-w-0 flex-wrap items-center gap-2 pl-1 text-xs text-muted-foreground"
                   >
                     <span className="font-mono">{rt.id}</span>
-                    <Badge
-                      variant="outline"
-                      className="text-[8px] px-1 py-0 h-3.5"
-                    >
-                      {rt.kind}
-                    </Badge>
-                    <span className="text-muted-foreground/60">
-                      {TRIGGER_LABELS[rt.trigger.type]
-                        ? t(
-                            TRIGGER_LABELS[rt.trigger.type].key,
-                            TRIGGER_LABELS[rt.trigger.type].fallback,
-                          )
-                        : rt.trigger.type}
-                    </span>
+                    <RuntimeFeatureBadges runtime={rt} />
                     {rt.model && (
                       <span className="text-muted-foreground/60">
                         @ {rt.model}
@@ -294,7 +294,7 @@ export function PluginItem({
                   .map((slot) => (
                     <option key={slot.slotId} value={slot.slotId}>
                       {slot.slotId.toUpperCase()} —{" "}
-                      {slot.serverModel ?? slot.presetId}
+                      {effectiveSlotModel(slot) ?? slot.presetId}
                     </option>
                   ))}
               </select>

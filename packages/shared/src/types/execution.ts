@@ -67,6 +67,36 @@ export interface RuntimeResult {
   readonly timestamp: string;
 }
 
+/**
+ * Frozen work item produced when a scheduler-driven runtime is moved beyond
+ * the foreground turn barrier. `upstreamResults` is the source execution's
+ * immutable dependency snapshot; workers must not resolve it against newer
+ * session state.
+ */
+export interface DeferredRuntimeJob {
+  readonly jobId: string;
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly sourceTurnId: string;
+  readonly sourceExecutionId: string;
+  readonly sourceExecutionStartedAt: string;
+  readonly sourceLogicalTurnId?: string;
+  readonly pluginVersion?: string;
+  readonly upstreamResults: readonly RuntimeResult[];
+}
+
+/** Detached-stage context accepted by `executeTurn` after a job is claimed. */
+export type DetachedStageInput = Pick<
+  DeferredRuntimeJob,
+  | "jobId"
+  | "runtimeId"
+  | "sourceTurnId"
+  | "sourceExecutionId"
+  | "sourceExecutionStartedAt"
+  | "sourceLogicalTurnId"
+  | "upstreamResults"
+>;
+
 // ── Turn input / result ──────────────────────────────────────────
 
 export interface TurnInput {
@@ -113,6 +143,12 @@ export interface TurnInput {
      */
     readonly retrySeedResults?: readonly RuntimeResult[];
   };
+  /**
+   * Re-entry descriptor for a scheduler-deferred stage runtime. Unlike a
+   * manual trigger, dependency bindings resolve only from the frozen source
+   * execution results carried here.
+   */
+  readonly detachedStage?: DetachedStageInput;
   /**
    * Execution origin, stamped onto the persisted
    * `turn_results` row so turn accounting can distinguish a real player turn
@@ -236,6 +272,8 @@ export interface TurnResult {
       readonly data: Readonly<Record<string, unknown>>;
     };
   }[];
+  /** Scheduler-driven runtimes durably queued beyond this turn's barrier. */
+  readonly deferredRuntimeJobs?: readonly DeferredRuntimeJob[];
   /**
    * Turn-completion barrier (commit consistency, audit). Present on
    * results returned by `executeTurn`. The caller that owns the commit

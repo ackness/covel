@@ -126,8 +126,8 @@ export async function setupPluginTools(
   // Phase 1 made write-tool `fields` validation soft (warnings in `_text`).
   // Phase 2 lets the LLM see the world-specific schema directly in the tool
   // parameters: `prepareToolsForSession(sessionId)` loads the active
-  // CharacterAttributeSchema and rebuilds `create-character`/`update-character`
-  // with strongly-typed `fields` Zod, then caches them per session. The
+  // CharacterAttributeSchema and rebuilds the character write tools with
+  // strongly-typed `fields` Zod, then caches them per session. The
   // `findTool` resolver below checks this cache before falling back to the
   // generic toolMap. Action handlers call `prepareToolsForSession` before
   // every `executeTurn` so the LLM always gets the freshest schema.
@@ -135,6 +135,7 @@ export async function setupPluginTools(
   const SESSION_OVERRIDABLE_TOOLS = new Set([
     "create-character",
     "update-character",
+    "sync-characters",
   ]);
 
   async function prepareToolsForSession(sessionId: string): Promise<void> {

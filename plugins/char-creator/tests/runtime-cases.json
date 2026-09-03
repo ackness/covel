@@ -1,0 +1,65 @@
+{
+  "cases": [
+    {
+      "name": "mock-player-init-completes-after-form",
+      "mode": "mock",
+      "runtimeId": "char-creator/player-init",
+      "ignoreUpstreams": true,
+      "message": "开始创建角色。",
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "call-create-form",
+              "name": "create-form",
+              "arguments": "{\"formId\":\"char-creation\",\"title\":\"创建主角\",\"fields\":[{\"type\":\"text\",\"name\":\"characterName\",\"label\":\"角色名\",\"required\":true}],\"submitLabel\":\"踏入故事\",\"narrativeTemplate\":\"你名为 {{characterName}}，此刻踏入雾中的港口。\",\"submitBehavior\":{\"echoFilledNarrative\":true,\"immediate\":true}}"
+            }
+          ]
+        },
+        {
+          "content": "不应请求第二次模型响应。",
+          "finishReason": "stop",
+          "toolCalls": []
+        }
+      ],
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "char-creator/player-init",
+            "status": "success"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mock-player-init-without-form-fails-visible",
+      "mode": "mock",
+      "runtimeId": "char-creator/player-init",
+      "ignoreUpstreams": true,
+      "message": "模型没有创建表单。",
+      "llmResponses": [
+        {
+          "content": "请描述你的角色。",
+          "finishReason": "stop",
+          "toolCalls": []
+        },
+        {
+          "content": "等待角色信息。",
+          "finishReason": "stop",
+          "toolCalls": []
+        }
+      ],
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "char-creator/player-init",
+            "status": "failed",
+            "errorIncludes": "requireToolUse"
+          }
+        ]
+      }
+    }
+  ]
+}

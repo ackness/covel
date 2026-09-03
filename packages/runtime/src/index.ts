@@ -3,6 +3,14 @@ export { shouldTrigger } from "./trigger/trigger.js";
 
 // ── Scheduler ────────────────────────────────────────────────────
 export { scheduleByDag } from "./schedule/dag-scheduler.js";
+export {
+  createDetachedProposalGuard,
+  planTurnDetachment,
+} from "./schedule/turn-completion.js";
+export type {
+  TurnDetachmentDiagnostic,
+  TurnDetachmentPlan,
+} from "./schedule/turn-completion.js";
 
 // ── Effects hazard (same-layer read/write policy) ────────────────
 export {

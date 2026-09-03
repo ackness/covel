@@ -20,4 +20,17 @@ describe("classifyActionableError", () => {
       "not-found",
     );
   });
+
+  it("recognises structured runtime output failures", () => {
+    expect(
+      classifyActionableError(
+        'Runtime "world-ir" output did not match output.schema: /events/0 must NOT have additional properties',
+      ),
+    ).toBe("invalid-output");
+    expect(
+      classifyActionableError(
+        'Runtime "generator" expected a JSON envelope per output.schema',
+      ),
+    ).toBe("invalid-output");
+  });
 });

@@ -936,6 +936,41 @@ describe("current snapshot clock", () => {
       pregame: { state: "done" },
     });
   });
+
+  it("does not copy incarnation-bound background jobs into a fork", async () => {
+    const store = createMemoryStore();
+    const now = new Date().toISOString();
+    await store.createSession({
+      id: "snapshot-jobs",
+      status: "active",
+      phase: "playing",
+      completedPlayerTurns: 1,
+      setupRuntimes: {},
+      activePlugins: ["media"],
+      locale: "zh-CN",
+      createdAt: now,
+      updatedAt: now,
+    });
+    for (const namespace of ["tracks", "_jobs", "_runtime_jobs"]) {
+      await store.setPluginData({
+        id: `snapshot-jobs:media:${namespace}:row`,
+        sessionId: "snapshot-jobs",
+        pluginId: "media",
+        namespace,
+        key: "row",
+        value: { status: "queued" },
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const payload = await buildSnapshotPayload(
+      store,
+      "snapshot-jobs",
+      "turn-1",
+    );
+    expect(payload.pluginData.map((row) => row.namespace)).toEqual(["tracks"]);
+  });
 });
 
 describe("blocked control (maxTriggerCount / retry / waive)", () => {

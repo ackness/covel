@@ -1,4 +1,8 @@
-import type { LLMUsageSummary, MediaRef } from "@covel/shared";
+import type {
+  LLMResponseFormat,
+  LLMUsageSummary,
+  MediaRef,
+} from "@covel/shared";
 import type { ZodType } from "zod";
 import type { ReasoningEffort } from "./reasoning-effort.js";
 
@@ -299,6 +303,8 @@ export interface TextGenerationParams {
   messages: TextMessage[];
   /** Tool definitions to pass to the model (OpenAI function calling format). */
   tools?: ToolDefinition[];
+  /** Structured response contract requested by an agent runtime. */
+  responseFormat?: LLMResponseFormat;
   providerRequestMetadata?: Record<string, unknown>;
 }
 

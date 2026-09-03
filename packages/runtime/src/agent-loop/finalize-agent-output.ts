@@ -32,6 +32,8 @@ import {
 export interface FinalizeAgentOutputParams {
   readonly manifest: RuntimeManifest;
   readonly finalContent: string | null;
+  /** Prefer this completing-tool result over incidental assistant prose. */
+  readonly preferredOutput?: Record<string, unknown>;
   readonly executedToolCalls: readonly ExecutedToolCallState[];
   readonly failedToolCalls: readonly FailedToolCallState[];
   readonly pendingProposals: readonly Proposal[];
@@ -44,15 +46,15 @@ export interface FinalizeAgentOutputParams {
    */
   readonly dedupeInteractions?: boolean;
   /**
-   * Optional schema gate, invoked only when `finalContent` is present and after
-   * the envelope `output` is built. Returning a failed RuntimeResult
-   * short-circuits finalize; the caller is responsible for any telemetry +
-   * PostRuntime wrapping. Resume passes none (no schema enforcement on resume).
+   * Optional schema gate, invoked after a preferred tool output or final text
+   * has been converted into the output envelope. Returning a failed
+   * RuntimeResult short-circuits finalize; the caller is responsible for any
+   * telemetry + PostRuntime wrapping. Resume passes none.
    */
   readonly schemaGate?: (args: {
     readonly output: Record<string, unknown>;
     readonly parsedAsJson: boolean;
-    readonly finalContent: string;
+    readonly finalContent: string | null;
   }) => RuntimeResult | undefined;
 }
 
@@ -74,6 +76,7 @@ export function finalizeAgentOutput(
   const {
     manifest,
     finalContent,
+    preferredOutput,
     executedToolCalls,
     failedToolCalls,
     pendingProposals,
@@ -86,7 +89,17 @@ export function finalizeAgentOutput(
   const structured = findLastStructuredToolOutput(executedToolCalls);
 
   let output: Record<string, unknown>;
-  if (finalContent) {
+  if (preferredOutput) {
+    output = { ...preferredOutput };
+    if (schemaGate) {
+      const failed = schemaGate({
+        output,
+        parsedAsJson: true,
+        finalContent: null,
+      });
+      if (failed) return { kind: "short-circuit", result: failed };
+    }
+  } else if (finalContent) {
     const parsed = parseFinalOutputEnvelope(finalContent);
     output = shouldSuppressToolLoopNarrative({
       outputKind: manifest.outputKind,

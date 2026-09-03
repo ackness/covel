@@ -11,6 +11,10 @@ stage: post-turn
 outputKind: system
 model: plugin
 timeoutMs: 120000
+maxSteps: 2
+maxRetries: 0
+callTimeoutMs: 60000
+completeAfterTools: [update-affinity]
 tags:
   - role:affinity
   - data:characters
@@ -58,7 +62,8 @@ postHistory:
     - 已有好感记录见 `<existing-affinity>` 块（由框架在 prompt 构建时自动注入）
     - 本轮叙事中玩家与 NPC 有明确互动且好感应当变化时，调用一次 `update-affinity`（可批量，至多 5 条）
     - 本轮没有值得记录的变化时，不调用任何业务工具
-    - 完成写入（或决定不写入）后，立即调用 `runtime-done` 结束
+    - `update-affinity` 成功后框架自动结束，不要再调用 `runtime-done`
+    - 决定不写入时，调用一次 `runtime-done` 结束
 ---
 
 你是好感度系统（Affinity Tracker）。你的任务是读取本轮叙事，判断玩家与哪些 NPC 之间发生了**明确互动**，并用 `update-affinity` 记录数值好感变化。**宁可少记，不可乱记** —— 很多回合根本没有值得记录的变化。
@@ -92,7 +97,7 @@ postHistory:
 1. 仔细阅读 `<runtime-inputs>` 中的 `worldIR.value`
 2. 找出玩家与 NPC 之间的**明确互动**（对话、赠礼、帮助、冲突、欺骗、背叛……）
 3. 对每个发生互动的 NPC 评估一个 delta，调用一次 `update-affinity`（可批量，至多 5 条）
-4. 如果本轮没有任何值得记录的变化 → **不调用任何业务工具，直接结束，返回空字符串 `""`**
+4. 如果本轮没有任何值得记录的变化 → **不调用任何业务工具，调用 `runtime-done` 结束**
 
 ## 计分规则（关键）
 
@@ -131,11 +136,11 @@ postHistory:
 
 **场景 2：本轮没有明确互动 → 直接结束**
 
-不调用任何写入工具，终止回合，返回空字符串 `""`。已有记录由 `<existing-affinity>` 块提供，无需任何查询工具。
+不调用任何写入工具，调用 `runtime-done` 结束。已有记录由 `<existing-affinity>` 块提供，无需任何查询工具。
 
 ## 硬约束
 
 - 一轮最多 5 条变化；超过就只取最重要的 5 条
 - 同一个 NPC 一轮只给一条变化，把多个因素合并成一个 delta 和一句 reason
 - `reason` 用一句话、以玩家视角描述（会直接展示给玩家，例如"你替她挡了债主"）
-- 调用写入工具后不输出任何额外文本
+- 写入工具成功后框架自动结束；不要再调用工具或输出额外文本

@@ -1,15 +1,15 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "openai-image-gen/prompt-generator output",
-  "description": "Contract for the JSON envelope the prompt-generator agent must emit. The framework's event-chain wakes the sibling image-generator runtime when `events[0].topic === 'openai-image.generate.requested'` and `events[0].data.prompt` is non-empty. When the LLM drops the events array (or drops `data.prompt`), the image-generator never fires and the gallery silently shows nothing — this schema documents the required shape so plugin authors can wire structured-output enforcement once the executor surfaces `output.schema` to provider request bodies.",
+  "description": "Output returned by the prompt submission tool. The tool normalizes the prompt and emits the fixed openai-image.generate.requested event, so the model never constructs the event envelope itself.",
   "type": "object",
-  "required": ["prompt", "promptMode", "events"],
-  "additionalProperties": true,
+  "required": ["prompt", "promptMode", "composition"],
+  "additionalProperties": false,
   "properties": {
     "prompt": {
       "type": "string",
       "minLength": 1,
-      "description": "Final image prompt — the same string that appears in events[0].data.prompt."
+      "description": "Normalized final image prompt. Structured prompts are serialized by the submission tool."
     },
     "promptMode": {
       "type": "string",
@@ -19,15 +19,17 @@
     "composition": {
       "type": "string",
       "enum": ["single-scene", "comic-strip"],
-      "description": "Optional. Picture composition mode. single-scene=one moment as a single frame; comic-strip=one comic page rendered as a single image with multiple sequential panels along a timeline."
+      "description": "Picture composition mode copied from runtime settings and forwarded for tracing."
     },
     "events": {
       "type": "array",
       "minItems": 1,
-      "description": "Must contain exactly one event with topic 'openai-image.generate.requested' and a non-empty data.prompt — that wakes the image-generator follower.",
+      "maxItems": 1,
+      "description": "The submission tool emits exactly one event that wakes the image-generator follower.",
       "items": {
         "type": "object",
         "required": ["topic", "data"],
+        "additionalProperties": false,
         "properties": {
           "topic": {
             "type": "string",
@@ -35,7 +37,8 @@
           },
           "data": {
             "type": "object",
-            "required": ["prompt", "promptMode"],
+            "required": ["prompt", "promptMode", "composition"],
+            "additionalProperties": false,
             "properties": {
               "prompt": {
                 "type": "string",

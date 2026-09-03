@@ -37,6 +37,8 @@ describe("plugin flow routes", () => {
         runtimeId: string;
         segmentId: string;
         isStoryRuntime: boolean;
+        capabilities: string[];
+        execution: string;
       }>;
     };
 
@@ -50,7 +52,11 @@ describe("plugin flow routes", () => {
     ]);
     expect(
       body.steps.some(
-        (step) => step.runtimeId === "narrator" && step.isStoryRuntime,
+        (step) =>
+          step.runtimeId === "narrator" &&
+          step.isStoryRuntime &&
+          step.capabilities.includes("narrative-engine") &&
+          step.execution === "sync",
       ),
     ).toBe(true);
     expect(
@@ -84,11 +90,18 @@ describe("plugin flow routes", () => {
       name: "test-package",
       description: "Test runtime",
       runtimeType: "agent",
+      execution: "background",
       stage: "pre-turn",
       trigger: { type: "scheduled", interval: 3 },
       capabilities: ["narrative"],
       tags: ["mode:dialogue", "role:narrator"],
       relations: { provides: ["narrative-engine"] },
+      turnCompletion: {
+        mode: "detached",
+        maxQueueMs: 30_000,
+        overlap: "serial",
+        stalePolicy: "reject",
+      },
     };
     const parsed: ParsedPluginMd = {
       manifest,
@@ -130,8 +143,11 @@ describe("plugin flow routes", () => {
         relations?: Record<string, unknown>;
         runtimes?: Array<{
           trigger: { type?: string; interval?: number };
+          capabilities?: string[];
+          execution?: string;
           tags?: string[];
           relations?: Record<string, unknown>;
+          turnCompletion?: { mode: string; maxQueueMs?: number };
         }>;
       }>;
     };
@@ -154,9 +170,17 @@ describe("plugin flow routes", () => {
       type: "scheduled",
       interval: 3,
     });
+    expect(pkg?.runtimes?.[0]?.capabilities).toEqual(["narrative"]);
+    expect(pkg?.runtimes?.[0]?.execution).toBe("background");
     expect(pkg?.runtimes?.[0]?.tags).toEqual([
       "mode:dialogue",
       "role:narrator",
     ]);
+    expect(pkg?.runtimes?.[0]?.turnCompletion).toEqual({
+      mode: "detached",
+      maxQueueMs: 30_000,
+      overlap: "serial",
+      stalePolicy: "reject",
+    });
   });
 });

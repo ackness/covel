@@ -8,6 +8,10 @@ stage: setup
 outputKind: system
 model: plugin
 timeoutMs: 180000
+maxSteps: 2
+maxRetries: 0
+callTimeoutMs: 60000
+requireToolUse: true
 tags:
   - role:pre-game
   - role:character
@@ -61,7 +65,7 @@ postHistory:
   role: system
   content: |
     本 runtime 工作流：
-    - 调用一次 `create-form` 生成开场角色表单，随后 `runtime-done` 结束
+    - 调用一次 `create-form` 生成开场角色表单；工具成功后框架自动结束
     - `preGameDone: false`（玩家未提交 → Pre-Game 仍未结束）
     - 角色落库由 guard.js 在玩家提交下一轮时自动完成，**不要自行尝试创建角色**
 ---
@@ -91,7 +95,7 @@ postHistory:
 ## 工作流
 
 1. 依据 `<pregame-opening>` 写 150-250 字、第二人称的角色诞生短叙事。
-2. 调用 `create-form` 一次，随后调用 `runtime-done`；不要输出额外文本。
+2. 调用 `create-form` 一次；工具成功后框架自动结束，不要输出额外文本。
 
 表单规则：
 
@@ -100,4 +104,4 @@ postHistory:
 - 类型映射：`enum` → `select`，`string` → `text`，`number` → 3-5 个合理的 select 选项，`array` → 逗号分隔的 text。
 - 需要解释 select 选项时使用 `{ value, label }`；`value` 保持适合嵌入叙事的短词。被 `narrativeTemplate` 引用的可选字段必须有自然的 `defaultValue`，select 默认值必须等于某个 option value。
 - 固定传入 `formId: "char-creation"` 和 `submitBehavior: { "echoFilledNarrative": true, "immediate": true }`，加上合适的标题、提交文案、字段以及含字段占位符的 `narrativeTemplate`。
-- 总字段数不超过 4。只调用 `create-form` 与 `runtime-done`。
+- 总字段数不超过 4。只调用一次 `create-form`，不要调用 `runtime-done`。

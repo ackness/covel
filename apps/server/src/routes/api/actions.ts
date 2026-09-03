@@ -27,10 +27,15 @@ import {
 } from "@covel/runtime";
 import type {
   CovelEventType,
+  JobStatusRecord,
   RuntimeManifest,
   RuntimeResult,
 } from "@covel/shared";
-import { FORWARDED_EVENT_TYPES } from "@covel/shared";
+import {
+  FORWARDED_EVENT_TYPES,
+  assertJsonValue,
+  getRuntimeSpec,
+} from "@covel/shared";
 import { estimateTokens } from "@covel/context";
 import type { CompactorRunner } from "@covel/context";
 import { errorBody } from "../../api-error.js";
@@ -38,6 +43,12 @@ import { rateLimiter } from "../../middleware/rate-limit.js";
 import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
+import { createRuntimeJob, type RuntimeJobRecord } from "./plugin-rpc/jobs.js";
+import {
+  makeRuntimeJobStatusRecord,
+  publishRuntimeJobStatusEvent,
+  type StagedRuntimeJobPayload,
+} from "./plugin-rpc/runtime-job-worker.js";
 import {
   resolveTurnCapabilityPluginIds,
   type TurnCapabilityPluginIds,
@@ -102,6 +113,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const eventDirectory = c.get("eventDirectory");
   const memorySystem = c.get("memorySystem");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
+  const runtimeJobWorker = c.get("runtimeJobWorker");
 
   const rawBody = await c.req.json<unknown>().catch(() => null);
   const bodyResult = validateActionRequest(rawBody);
@@ -337,6 +349,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         wasPreGamePending,
         followerSession,
         approvalScopes,
+        queuedRuntimeJobs,
       } = await sessionLock.withLock(sessionId, async () => {
         // This execution now owns the session — events on the bus
         // from here on belong to this turn.
@@ -684,6 +697,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           const hasSuspendedRuntime = finalizableResults.some(
             (runtimeResult) => runtimeResult.status === "suspended",
           );
+          const queuedRuntimeJobs: Array<{
+            readonly job: RuntimeJobRecord;
+            readonly status: JobStatusRecord;
+          }> = [];
           const outcome = await finalizeExecution({
             store,
             sessionId,
@@ -696,13 +713,76 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             results: finalizableResults,
             journalMessages: collectExecutionJournal(result),
             suspensions: collectExecutionSuspensions(result),
-            ...(playerInputWrites
+            ...(playerInputWrites || result.deferredRuntimeJobs?.length
               ? {
                   extraInTx: async (tx) => {
-                    await tx.addMessage(playerInputWrites.message);
-                    await tx.saveInteractionRecord(
-                      playerInputWrites.interaction,
-                    );
+                    if (playerInputWrites) {
+                      await tx.addMessage(playerInputWrites.message);
+                      await tx.saveInteractionRecord(
+                        playerInputWrites.interaction,
+                      );
+                    }
+                    for (const descriptor of result.deferredRuntimeJobs ?? []) {
+                      const target = activeRuntimes.find(
+                        (runtime) => runtime.name === descriptor.runtimeId,
+                      );
+                      if (!target || target.pluginId !== descriptor.pluginId) {
+                        throw new Error(
+                          `detached runtime ${descriptor.runtimeId} left the active graph before enqueue`,
+                        );
+                      }
+                      const policy =
+                        getRuntimeSpec(target).turnCompletionPolicy;
+                      const jobPayload: StagedRuntimeJobPayload = {
+                        schemaVersion: 1,
+                        descriptor,
+                        expectedSessionIncarnation:
+                          sessionIncarnationIdentity(effectiveSession),
+                        expectedApprovalScope: sessionApprovalScope(
+                          effectiveSession,
+                          descriptor.pluginId,
+                        ),
+                        locale: effectiveLocale,
+                        ...(model ? { modelOverride: model } : {}),
+                        ...(effectiveSession.runtimeModelOverrides
+                          ? {
+                              runtimeModelOverrides:
+                                effectiveSession.runtimeModelOverrides,
+                            }
+                          : {}),
+                        ...(userSettings ? { userSettings } : {}),
+                      };
+                      assertJsonValue(
+                        jobPayload,
+                        `detached runtime job ${descriptor.jobId}`,
+                      );
+                      const job = await createRuntimeJob(tx, {
+                        jobId: descriptor.jobId,
+                        sessionId,
+                        pluginId: descriptor.pluginId,
+                        runtimeId: descriptor.runtimeId,
+                        origin: {
+                          activation: "stage",
+                          sourceTurnId: descriptor.sourceTurnId,
+                          sourceExecutionId: descriptor.sourceExecutionId,
+                          sourceRuntimeId: descriptor.runtimeId,
+                        },
+                        payload: jobPayload,
+                        ...(policy.maxQueueMs !== undefined
+                          ? { maxQueueMs: policy.maxQueueMs }
+                          : {}),
+                        ...(policy.maxExecutionMs !== undefined
+                          ? { maxExecutionMs: policy.maxExecutionMs }
+                          : {}),
+                      });
+                      const status = makeRuntimeJobStatusRecord(job, 0);
+                      if (!(await tx.appendJobStatus(status))) {
+                        throw new Error(
+                          `could not append queued status for detached runtime job ${job.jobId}`,
+                        );
+                      }
+                      queuedRuntimeJobs.push({ job, status });
+                    }
                   },
                 }
               : {}),
@@ -820,6 +900,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 sessionApprovalScope(effectiveSession, runtime.pluginId),
               ]),
             ),
+            queuedRuntimeJobs: committed ? queuedRuntimeJobs : [],
           };
         } finally {
           // Torn down while the lock is still held: after release the next
@@ -837,6 +918,30 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       // the turn still held the lock), and a slow client draining
       // execution.completed must not extend the critical section.
       const hookPipeline = c.get("hookPipeline");
+
+      for (const queued of queuedRuntimeJobs) {
+        publishRuntimeJobStatusEvent(eventBus, queued.status);
+        const payload = {
+          runtimeId: queued.job.runtimeId,
+          pluginId: queued.job.pluginId,
+          jobId: queued.job.jobId,
+          sourceTurnId: queued.job.origin.sourceTurnId,
+        };
+        await writeEvent("runtime.deferred", payload);
+        eventBus.emit({
+          id: crypto.randomUUID(),
+          type: "event",
+          topic: "runtime",
+          sessionId,
+          timestamp: new Date().toISOString(),
+          payload: {
+            ...payload,
+            _subTopic: "runtime",
+            _subType: "runtime.deferred",
+          },
+        });
+      }
+      if (queuedRuntimeJobs.length > 0) runtimeJobWorker?.wake();
 
       // Main turn path: `executeTurn` can surface `deferredFollowers`
       // — event-chain followers with `execution: 'background'` that were

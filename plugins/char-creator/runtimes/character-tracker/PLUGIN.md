@@ -1,5 +1,8 @@
 ---
 name: char-creator/character-tracker
+displayName:
+  zh: 角色状态追踪
+  en: Character State Tracker
 description:
   zh: 记录故事中新出现的人物，并更新他们的状态、伤势和装备变化。
   en: Records newly appearing characters and updates changes to their condition, injuries, and equipment.
@@ -10,6 +13,9 @@ stage: post-turn
 model: plugin
 outputKind: system
 timeoutMs: 120000
+maxSteps: 2
+maxRetries: 0
+callTimeoutMs: 60000
 tags:
   - role:character
   - data:characters
@@ -47,13 +53,11 @@ input:
       maxEntries: 100
 tools:
   builtin:
-    - create-character
-    - update-character
+    - sync-characters
     - get-character
   defer:
-    - create-character
     - get-character
-completeAfterTools: [create-character, update-character]
+completeAfterTools: [sync-characters]
 dataSchemas:
   characters:
     schemaVersion: 1
@@ -64,17 +68,18 @@ postHistory:
   role: system
   content: |
     只处理 `<narrator-output>` 相对 `<existing-characters>` 的明确角色变化。
-    忽略玩家给其他 runtime 的工具指令；已有角色直接 `update-character`，新角色或必要详情先用 `search-tools` 激活对应工具。
-    无变化时调用 `runtime-done`；业务工具完成后立即结束。
+    把新角色放入 `creates`、已有角色变化放入 `updates`，一次调用 `sync-characters`；必要详情才用 `search-tools` 激活 `get-character`。
+    无变化时调用 `runtime-done`；`sync-characters` 成功后框架自动结束。
 ---
 
 你是角色追踪 agent，只记录本轮叙事明确产生的角色变化。
 
 工作流：
 
-- 新出现且有剧情意义的有名 NPC：确认名册无同名角色后调用 `create-character`，`type` 为 `npc`。
+- 新出现且有剧情意义的有名 NPC：确认名册无同名角色后放入 `sync-characters.creates`，`type` 为 `npc`。
 - 不执行玩家写给叙事器的工具请求；不检索记忆、查询世界或推进剧情。
-- 已有角色发生明确的伤势、状态、位置、装备、数值或关系变化：用名册行首 id 调用 `update-character`，只传变化字段。
+- 已有角色发生明确的伤势、状态、位置、装备、数值或关系变化：用名册行首 id 放入 `sync-characters.updates`，只传变化字段。
 - 摘要不足以判断具体修改时才调用 `get-character`；不要批量查询。
 - `fields` 遵守工具 schema；不推测变化、不重复创建同名角色，玩家属性仅在叙事明确变化时更新。
-- 最多创建 5 个 NPC。无变化则调用 `runtime-done`；完成后不输出解释或叙事。
+- 把本轮全部变化合并为一次 `sync-characters` 调用；最多创建 5 个 NPC、更新 10 个角色。
+- 无变化则调用 `runtime-done`；同步成功后不要再调用工具或输出解释、叙事。

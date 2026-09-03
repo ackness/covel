@@ -79,6 +79,36 @@ describe("createProgressReporter.report", () => {
     expect(typeof row.createdAt).toBe("string");
   });
 
+  it("injects detached parent correlation without allowing plugin overrides", async () => {
+    const reporter = createProgressReporter({
+      ...h.deps,
+      contextData: {
+        runtimeJobId: "runtime-job-1",
+        originTurnId: "turn-1",
+      },
+    });
+    await reporter.report({
+      jobId: "provider-sub-job",
+      state: "progress",
+      sequence: 1,
+      data: {
+        provider: "mimo",
+        runtimeJobId: "forged-parent",
+      },
+    });
+
+    await expect(h.store.listJobStatus(SESSION)).resolves.toMatchObject([
+      {
+        jobId: "provider-sub-job",
+        data: {
+          provider: "mimo",
+          runtimeJobId: "runtime-job-1",
+          originTurnId: "turn-1",
+        },
+      },
+    ]);
+  });
+
   it("emits a job-status.updated SSE event carrying the full record", async () => {
     const reporter = createProgressReporter(h.deps);
     await reporter.report({ jobId: "job-a", state: "queued", sequence: 1 });

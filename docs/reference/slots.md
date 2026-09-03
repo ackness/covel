@@ -32,6 +32,21 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
 模型能力（模态 / 特性 / 上限 / 计价）自动检测优先级：请求级 operational 覆盖 → `llm.toml` 手动字段 → 内置模型资料 → 版本化 LiteLLM 快照 → 协议默认。请求覆盖经 `X-Slot-Config.capabilityOverrides` 下发，只包含 input/output/features/contextWindow/maxOutputTokens；价格覆盖仅供客户端显示，绝不进入服务端信任边界。`self` 部署允许本机用户扩张能力；`demo` / `commercial` 只接受基础能力的非空子集，并对 token 上限取服务端值与请求值的较小者。每次请求只克隆 effective target，不修改全局 registry。服务端 turn 可能同时执行 story / plugin / fast slot，因此共享的 compactor 与 hard-prune budget 取所有已启用 text slot 的最小 `contextWindow` 和最小 `maxOutputTokens`；请求 overlay 再与这个基础预算取较小值，显式 `COVEL_COMPACTOR_CONTEXT_WINDOW` 始终优先覆盖 window。最终 response reserve 会作为 provider 请求的硬输出上限。仓库快照由维护者通过 `pnpm --filter @covel/ai-provider update-model-db` 从固定 commit 生成；设置页的手动刷新会把较新数据写入用户配置目录，并在后续启动时优先于内置快照加载。
 
+## Runtime 覆盖的作用域与 UI
+
+模型配置分两层，值的含义不同：
+
+| 层级         | 映射                    | 持久化位置                                   | 作用域                           |
+| ------------ | ----------------------- | -------------------------------------------- | -------------------------------- |
+| 模型用途     | `slot → provider/model` | `llm.toml` 基础配置 + 当前设备 Settings 覆盖 | 当前设备上所有使用该 slot 的执行 |
+| runtime 覆盖 | `runtimeId → slot`      | `SessionRecord.runtimeModelOverrides`        | 单个会话；快照与 fork 会保留     |
+
+开局准备页从已启用插件发现所有 agent runtime。空选择表示沿用 `PLUGIN.md` 的 `model`；非空选择写入 `runtimeModelOverrides`。同一插件包含多个 runtime 时，key 必须是完整 ID（如 `char-creator/character-tracker`），可以分别绑定。会话开始后，左侧插件列表通过 `PATCH /api/sessions/:id` 更新同一张 map；下一次执行快照该值，正在运行的调用不受中途修改影响。
+
+UI 的“默认用途”展示的是 manifest 声明，“服务商 · 模型”展示的是该 slot 经设备覆盖后的有效目标。二者同时出现是为了区分路由和最终模型，不代表配置不一致。改变某个 slot 的 provider/model 会影响仍指向该 slot 的 runtime；改变 runtime 覆盖只切换 slot，不改 slot 本身。
+
+Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插件通常从自己的 `userSettings.modelPresetId` 选择对应 tag 的 provider slot；开局准备页把它显示为独立的“提供方 slot”，并写入 `plugin.<pluginId>.modelPresetId` 设备设置。Agent runtime 的会话覆盖与 function runtime 的 provider slot 不应混用。
+
 ## 服务商与模型 ID
 
 设置界面将连接信息和模型 ID 分开保存：一个服务商配置一组 `baseUrl`、协议、API 密钥和价格倍率，并可包含多个模型 ID。用途绑定只引用其中一个模型。请求时前端把该引用编译为兼容服务器的自定义 preset；preset 是内部传输结构，用户无需单独创建。

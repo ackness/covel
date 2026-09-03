@@ -71,6 +71,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     dispatch,
     workspace,
     sessionIdRef: refs.sessionIdRef,
+    stateRef: refs.stateRef,
   });
 
   // Two providers: the actions value is referentially stable across streaming

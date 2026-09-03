@@ -12,23 +12,22 @@
         "imageSize": "1024x1024",
         "n": 1
       },
-      "llmObject": {
-        "prompt": "黄昏时分的城堡塔楼，金色阳光洒落在斑驳石墙上，飞鸟群剪影掠过霞光，电影感构图，暖色调，4K, ultra detailed, highly detailed, masterpiece, best quality, sharp focus, intricate details, cinematic lighting",
-        "promptMode": "text",
-        "composition": "single-scene",
-        "events": [
-          {
-            "topic": "openai-image.generate.requested",
-            "data": {
-              "prompt": "黄昏时分的城堡塔楼，金色阳光洒落在斑驳石墙上，飞鸟群剪影掠过霞光，电影感构图，暖色调，4K, ultra detailed, highly detailed, masterpiece, best quality, sharp focus, intricate details, cinematic lighting",
-              "promptMode": "text",
-              "composition": "single-scene"
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "call-submit-text-prompt",
+              "name": "submit-openai-image-text-prompt",
+              "arguments": "{\"prompt\":\"黄昏时分的城堡塔楼，金色阳光洒落在斑驳石墙上，飞鸟群剪影掠过霞光，电影感构图，暖色调，4K, ultra detailed, highly detailed, masterpiece, best quality, sharp focus, intricate details, cinematic lighting\",\"composition\":\"single-scene\"}"
             }
-          }
-        ]
-      },
+          ]
+        }
+      ],
       "expect": {
         "events": ["openai-image.generate.requested"],
+        "pluginData": [{ "namespace": "prompts", "field": "prompt" }],
         "runtimeResults": [
           {
             "runtimeId": "openai-image-gen/prompt-generator",
@@ -55,23 +54,22 @@
         "imageSize": "1792x1024",
         "n": 1
       },
-      "llmObject": {
-        "prompt": "comic page layout, sequential storytelling, 3-panel manga / comic page, dynamic asymmetric panels, action breaking out of gutters, motion lines crossing borders. Panel 1 全景：黄昏城门下，披风旅人远景登场，剪影偏暗，城门石纹清晰。Panel 2 中近景：守卫横戟拦下旅人，铁甲反光，旅人侧脸表情平静。Panel 3 特写仰拍：守卫长戟收回，旅人迈步穿过城门光影，披风从 panel 2 延伸跨过 gutter 进入 panel 3。统一色调：金黄夕阳 + 冷青阴影，墨线扎实。crisp ink lines, clean panel borders, professional manga / comic page composition, 4K, 8K, ultra HD, ultra detailed, highly detailed, masterpiece, best quality, sharp focus, intricate details, cinematic lighting, fine texture",
-        "promptMode": "text",
-        "composition": "comic-strip",
-        "events": [
-          {
-            "topic": "openai-image.generate.requested",
-            "data": {
-              "prompt": "comic page layout, sequential storytelling, 3-panel manga / comic page, dynamic asymmetric panels, action breaking out of gutters, motion lines crossing borders. Panel 1 全景：黄昏城门下，披风旅人远景登场。Panel 2 中近景：守卫横戟拦下旅人。Panel 3 特写仰拍：守卫长戟收回，旅人迈步穿过城门光影。crisp ink lines, clean panel borders, 4K, ultra detailed, masterpiece, best quality, sharp focus, intricate details",
-              "promptMode": "text",
-              "composition": "comic-strip"
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "call-submit-comic-prompt",
+              "name": "submit-openai-image-text-prompt",
+              "arguments": "{\"prompt\":\"comic page layout, sequential storytelling, 3-panel manga / comic page, dynamic asymmetric panels. Panel 1 全景：黄昏城门下，披风旅人远景登场。Panel 2 中近景：守卫横戟拦下旅人。Panel 3 特写仰拍：守卫收回长戟，旅人迈步穿过城门光影。crisp ink lines, clean panel borders, professional manga page composition, 4K, ultra detailed, highly detailed, masterpiece, best quality, sharp focus\",\"composition\":\"comic-strip\"}"
             }
-          }
-        ]
-      },
+          ]
+        }
+      ],
       "expect": {
         "events": ["openai-image.generate.requested"],
+        "pluginData": [{ "namespace": "prompts", "field": "prompt" }],
         "runtimeResults": [
           {
             "runtimeId": "openai-image-gen/prompt-generator",
@@ -85,10 +83,50 @@
       }
     },
     {
-      "name": "mock-prompt-json-without-events-fails-visible",
+      "name": "mock-prompt-structured",
       "mode": "mock",
       "runtimeId": "openai-image-gen/prompt-generator",
-      "message": "测试场景：模型返回 JSON 但漏掉 events 包络",
+      "message": "测试场景：雨夜霓虹街口，披风旅人站在湿润石板上",
+      "userSettings": {
+        "composition": "single-scene",
+        "promptMode": "image-json",
+        "modelPresetId": "openai-image",
+        "imageSize": "1024x1024",
+        "n": 1
+      },
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "call-submit-structured-prompt",
+              "name": "submit-openai-image-structured-prompt",
+              "arguments": "{\"prompt\":{\"subject\":{\"who\":\"披风旅人\",\"pose\":\"驻足凝视\"},\"scene\":{\"location\":\"霓虹街口\",\"time\":\"night\"},\"quality\":[\"4K\",\"ultra detailed\",\"highly detailed\",\"masterpiece\",\"best quality\",\"sharp focus\"]},\"composition\":\"single-scene\"}"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "events": ["openai-image.generate.requested"],
+        "pluginData": [{ "namespace": "prompts", "field": "prompt" }],
+        "runtimeResults": [
+          {
+            "runtimeId": "openai-image-gen/prompt-generator",
+            "status": "success"
+          },
+          {
+            "runtimeId": "openai-image-gen/image-generator",
+            "status": "failed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mock-missing-submit-tool-fails-visible",
+      "mode": "mock",
+      "runtimeId": "openai-image-gen/prompt-generator",
+      "message": "测试场景：模型只返回说明文本，没有调用提交工具",
       "userSettings": {
         "composition": "single-scene",
         "promptMode": "text",
@@ -97,16 +135,24 @@
         "n": 1
       },
       "expectsBackgroundFollower": true,
-      "llmObject": {
-        "prompt": "雾港暗梯入口，潮石灯照亮湿木板，冷青色雾气从礁石缝隙升起。",
-        "promptMode": "text"
-      },
+      "llmResponses": [
+        {
+          "content": "这是一个没有调用提交工具的错误回答。",
+          "finishReason": "stop",
+          "toolCalls": []
+        },
+        {
+          "content": "仍然只输出说明文本。",
+          "finishReason": "stop",
+          "toolCalls": []
+        }
+      ],
       "expect": {
         "runtimeResults": [
           {
             "runtimeId": "openai-image-gen/prompt-generator",
             "status": "failed",
-            "errorIncludes": "output.schema"
+            "errorIncludes": "requireToolUse"
           }
         ],
         "pluginData": [{ "namespace": "_jobs", "status": "failed" }]

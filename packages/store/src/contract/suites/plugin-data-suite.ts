@@ -491,5 +491,53 @@ export function registerPluginDataStoreSuite(getStore: () => DataStore): void {
       const rows = await store.listPluginDataSessionScope("sess-no-data");
       expect(rows).toEqual([]);
     });
+
+    it("compareAndSetPluginData provides atomic insert and revision swap", async () => {
+      const first = {
+        id: "pd-cas",
+        sessionId: "sess-cas",
+        pluginId: "framework",
+        namespace: "_runtime_jobs",
+        key: "job-1",
+        value: { status: "queued" },
+        createdAt: "2026-09-03T00:00:00.000Z",
+        updatedAt: "2026-09-03T00:00:00.000Z",
+      };
+      await expect(store.compareAndSetPluginData(first, null)).resolves.toBe(
+        true,
+      );
+      await expect(
+        store.compareAndSetPluginData(
+          { ...first, value: { status: "lost" } },
+          null,
+        ),
+      ).resolves.toBe(false);
+
+      const claimed = {
+        ...first,
+        value: { status: "claimed", ownerId: "worker-a" },
+        updatedAt: "2026-09-03T00:00:01.000Z",
+      };
+      const competing = {
+        ...first,
+        value: { status: "claimed", ownerId: "worker-b" },
+        updatedAt: "2026-09-03T00:00:02.000Z",
+      };
+      const outcomes = await Promise.all([
+        store.compareAndSetPluginData(claimed, first.updatedAt),
+        store.compareAndSetPluginData(competing, first.updatedAt),
+      ]);
+      expect(outcomes.filter(Boolean)).toHaveLength(1);
+
+      const stored = await store.getPluginData(
+        first.sessionId,
+        first.pluginId,
+        first.namespace,
+        first.key,
+      );
+      expect(stored?.value).toEqual(
+        outcomes[0] ? claimed.value : competing.value,
+      );
+    });
   });
 }

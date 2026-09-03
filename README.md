@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.29-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.29)
+[![Version](https://img.shields.io/badge/version-v0.0.30-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.30)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 
-> **Current public release: v0.0.29**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; read [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) and back up custom content before upgrading.
+> **Current public release: v0.0.30**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; read [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) and back up custom content before upgrading.
 
 ## Highlights
 

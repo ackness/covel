@@ -116,6 +116,14 @@ export interface RuntimeStartedPayload {
   readonly label?: string;
 }
 
+/** A staged runtime was queued beyond its source turn's foreground barrier. */
+export interface RuntimeDeferredPayload {
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly jobId: string;
+  readonly sourceTurnId: string;
+}
+
 export interface RuntimeLifecyclePayload {
   readonly runtimeId: string;
   readonly pluginId: string;
@@ -257,6 +265,10 @@ export type CovelEvent =
   | {
       readonly type: "runtime.started";
       readonly payload: RuntimeStartedPayload;
+    }
+  | {
+      readonly type: "runtime.deferred";
+      readonly payload: RuntimeDeferredPayload;
     }
   | {
       readonly type: "runtime.completed";
@@ -430,6 +442,9 @@ export const COVEL_EVENT_META = {
   "state.patch.applied": { forwardToActionStream: true },
   "execution.started": { forwardToActionStream: false },
   "runtime.started": { forwardToActionStream: false },
+  // Written directly by the action route. Persistent EventBus subscribers may
+  // still observe it; the forwarding flag only prevents a duplicate SSE event.
+  "runtime.deferred": { forwardToActionStream: false },
   "runtime.completed": { forwardToActionStream: false },
   "runtime.failed": { forwardToActionStream: false },
   "runtime.skipped": { forwardToActionStream: false },

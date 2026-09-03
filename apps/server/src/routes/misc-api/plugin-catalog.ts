@@ -1,5 +1,5 @@
 import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
-import { getRuntimeSpec } from "@covel/shared";
+import { effectiveTurnCompletion, getRuntimeSpec } from "@covel/shared";
 import type { PluginUserSettingSpec, RuntimeManifest } from "@covel/shared";
 import { loadLivePluginMaps } from "./live-plugin-maps.js";
 import { normalizeRuntimeTrigger } from "./shared.js";
@@ -45,6 +45,8 @@ export async function buildPackagesResponse(registry: PluginRegistry): Promise<{
         ? { stage: getRuntimeSpec(m.manifest).stage }
         : {}),
       trigger: normalizeRuntimeTrigger(m.manifest.trigger),
+      execution: m.manifest.execution ?? "sync",
+      turnCompletion: effectiveTurnCompletion(m.manifest),
       ...(m.manifest.model ? { model: m.manifest.model } : {}),
       ...(m.manifest.outputKind ? { outputKind: m.manifest.outputKind } : {}),
       ...(m.manifest.capabilities && m.manifest.capabilities.length > 0

@@ -1,15 +1,17 @@
 {
   "name": "@covel/plugin-world-ir",
-  "version": "0.0.29",
+  "version": "0.0.30",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "@covel/shared": "workspace:*"
+  },
   "devDependencies": {
     "@covel/plugin-loader": "workspace:*",
-    "@covel/shared": "workspace:*",
     "vitest": "^4.1.11"
   }
 }

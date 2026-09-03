@@ -141,12 +141,21 @@ async function backgroundLocksForSession(
   // it must drain. A process-local registry can miss code loaded on another
   // Pod and therefore cannot safely drive deletion.
   for (const row of await store.listPluginDataSessionScope(sessionId)) {
-    if (row.namespace !== "_jobs") continue;
+    if (row.namespace !== "_jobs" && row.namespace !== "_runtime_jobs") {
+      continue;
+    }
     const value = row.value as {
       readonly status?: unknown;
       readonly runtimeId?: unknown;
     };
-    if (value?.status === "pending" && typeof value.runtimeId === "string") {
+    const active =
+      row.namespace === "_jobs"
+        ? value?.status === "pending"
+        : value?.status === "queued" ||
+          value?.status === "claimed" ||
+          value?.status === "running" ||
+          value?.status === "committing";
+    if (active && typeof value.runtimeId === "string") {
       runtimeNames.add(value.runtimeId);
     }
   }

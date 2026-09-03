@@ -519,6 +519,20 @@ export const pluginUserSettingSpecSchema = z
 export const stageSchema = z.enum(STAGE_ORDER);
 
 /**
+ * Scheduler-driven turn-barrier policy. Kept separate from `execution`, whose
+ * existing meaning is manual/event activation mode.
+ */
+export const turnCompletionConfigSchema = z
+  .object({
+    mode: z.enum(["await", "detached"]).optional(),
+    maxQueueMs: z.number().int().positive().optional(),
+    maxExecutionMs: z.number().int().positive().optional(),
+    overlap: z.literal("serial").optional(),
+    stalePolicy: z.literal("reject").optional(),
+  })
+  .strict();
+
+/**
  * `after` entry — weak ordering, no gate. A bare string is shorthand for
  * `{ runtime }`; the object form is a {@link bindingSourceSchema} (runtime XOR
  * capability). `scope` is intentionally NOT accepted on `after` entries.
@@ -655,6 +669,14 @@ interface ManifestCrossFieldView {
   readonly runtimeType?: string;
   readonly handler?: string;
   readonly stage?: string;
+  readonly outputKind?: string;
+  readonly turnCompletion?: {
+    readonly mode?: string;
+    readonly maxQueueMs?: number;
+    readonly maxExecutionMs?: number;
+    readonly overlap?: string;
+    readonly stalePolicy?: string;
+  };
   readonly trigger?: {
     readonly type?: string;
     readonly topic?: string;
@@ -713,6 +735,41 @@ function sharedManifestCrossFieldIssues(
     issues.push({
       path: ["stage"],
       message: "a staged runtime cannot use trigger.type 'event' or 'manual'",
+    });
+  }
+
+  const turnCompletionMode = m.turnCompletion?.mode ?? "await";
+  if (turnCompletionMode === "detached") {
+    if (m.stage !== "post-turn" && m.stage !== "audit") {
+      issues.push({
+        path: ["stage"],
+        message:
+          "turnCompletion.mode 'detached' is only valid on stage 'post-turn' or 'audit' runtimes",
+      });
+    }
+    if (m.outputKind === "story") {
+      issues.push({
+        path: ["outputKind"],
+        message:
+          "turnCompletion.mode 'detached' cannot be used with outputKind 'story'",
+      });
+    }
+    if (m.trigger?.type === "event" || m.trigger?.type === "manual") {
+      issues.push({
+        path: ["trigger", "type"],
+        message:
+          "event/manual runtimes must use execution; turnCompletion.mode 'detached' is scheduler-only",
+      });
+    }
+  } else if (
+    m.turnCompletion?.maxQueueMs !== undefined ||
+    m.turnCompletion?.maxExecutionMs !== undefined ||
+    m.turnCompletion?.overlap !== undefined ||
+    m.turnCompletion?.stalePolicy !== undefined
+  ) {
+    issues.push({
+      path: ["turnCompletion", "mode"],
+      message: "turnCompletion detached options require mode 'detached'",
     });
   }
 
@@ -869,6 +926,8 @@ const runtimeManifestCommonShape = {
    * plugin-data). Ignored for scheduler-driven runtimes.
    */
   execution: z.enum(["sync", "background"]).optional(),
+  /** Scheduler-driven foreground turn-barrier policy. */
+  turnCompletion: turnCompletionConfigSchema.optional(),
   /**
    * When true, the session-level event directory (aggregated across all
    * active runtimes' `events` declarations) is rendered into this

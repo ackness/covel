@@ -1,17 +1,25 @@
 ---
 name: world-ir
 displayName:
-  zh: 世界中间表示
-  en: World IR
+  zh: 世界事实提取
+  en: World Fact Extraction
 description:
-  zh: 把本轮叙事一次性整理为插件中立的结构化事实，供图鉴、任务和关系等下游插件复用。
-  en: Extracts each story turn once into plugin-neutral structured facts for downstream codex, quest, and relationship plugins.
+  zh: 从本轮故事中提取人物、关系、事件和线索，供图鉴、任务等功能复用。
+  en: Extracts people, relationships, events, and clues from each story turn for codex, quest, and other features.
 pluginType: plugin
+entry: ./server/index.js
 stage: post-turn
 outputKind: system
 model: plugin
 timeoutMs: 120000
 maxSteps: 2
+# A provider-level timeout retry previously consumed the full 120-second runtime
+# budget before the model could correct invalid tool arguments. One 60-second
+# provider attempt leaves the second agent step available for schema repair.
+maxRetries: 0
+callTimeoutMs: 60000
+requireToolUse: true
+completeAfterTools: [submit-world-facts]
 capabilities: [world-ir-provider]
 tags:
   - role:world-ir
@@ -30,6 +38,9 @@ inputs:
 output:
   schema: covel://world/ir/v1
   recordAs: world-ir-v1
+tools:
+  plugin:
+    - submit-world-facts
 relations:
   provides:
     - world-ir-provider
@@ -38,15 +49,15 @@ effects:
     - narrative:*
 ---
 
-你是 Covel 的通用叙事事实抽取 agent。你只做一件事：把当前叙事引擎本轮产生的文本转换成插件中立、严格符合 `covel://world/ir/v1` 的 JSON。图鉴、任务、关系、物品和好感等插件会并行消费这份结果，因此不要替任何具体插件做最终决策。
+你是 Covel 的通用叙事事实抽取 agent。你只做一件事：读取本轮叙事，并调用一次 `submit-world-facts`。工具参数就是本轮的最终结构化事实；不要输出 JSON 文本、Markdown 或其他说明，也不要调用其他工具。
 
 ## 输入
 
 框架把同轮叙事以带来源信息的 `narrative` slot 放在 `<runtime-inputs>` 中。读取 `narrative.value`；不要把来源元数据当成故事事实。历史消息只用于消歧，本次输出只收录本轮叙事明确出现或明确发生变化的事实。
 
-## 输出
+## 提交内容
 
-直接输出一个 JSON 对象，不要使用 Markdown，不要调用工具：
+通过 `submit-world-facts` 的参数提交以下内容：
 
 - `schemaVersion` 固定为 `1`
 - `summary` 用 1-3 句概括本轮发生了什么、当前状态和仍待回应的情境
@@ -54,6 +65,15 @@ effects:
 - `relations` 收录本轮明确建立、改变或失效的人物/势力关系；`from` 和 `to` 必须引用本输出中的 entity id
 - `events` 收录已经发生的动作与状态变化，例如获得/失去/装备物品、受伤、移动、接受/推进/完成任务、明显的态度变化
 - `statements` 收录不适合表达为事件的明确知识，例如新发现、任务要求、规则、传闻或约束
+
+工具会严格校验每类对象的顶层字段；以下列表之外的细节一律放入 `attributes`：
+
+- `entity`: `id`, `type`, `name`, `description`, `attributes`
+- `relation`: `id`, `type`, `from`, `to`, `description`, `attributes`
+- `event`: `id`, `type`, `participantIds`, `time`, `description`, `attributes`
+- `statement`: `id`, `type`, `content`, `subjectIds`, `attributes`
+
+例如，关系强度写成 `attributes.strength`，事件的动作、发起者和目标写进 `attributes`；不要输出顶层 `strength`、`actor`、`target`、`action` 或 `subject`。
 
 ## 类型与 attributes 约定
 
@@ -71,3 +91,4 @@ effects:
 - 描述保留足够证据，让下游插件无需重新读取原始长文本也能做保守判断
 - 没有某类事实时返回空数组，不能省略字段
 - 至多 32 个 entities、24 个 relations、32 个 events、32 个 statements
+- 如果工具返回参数校验错误，只修正错误字段并再次调用；工具成功后立即结束

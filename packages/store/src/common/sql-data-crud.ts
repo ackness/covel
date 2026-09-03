@@ -43,6 +43,7 @@ type PluginDataTable = Table & {
   pluginId: Column;
   namespace: Column;
   key: Column;
+  updatedAt: Column;
   // Ordering keys for offset pagination — see the list methods below.
   createdAt: Column;
   id: Column;
@@ -91,6 +92,7 @@ export type SqlDataCrud = Pick<
   DataStore,
   | "setPluginData"
   | "setPluginDataBatch"
+  | "compareAndSetPluginData"
   | "getPluginData"
   | "listPluginData"
   | "listPluginDataSessionScope"
@@ -141,6 +143,38 @@ export function createSqlDataCrud(deps: SqlDataCrudDeps): SqlDataCrud {
           conflict: { target, set: values.pluginDataUpdate(record) },
         })),
       );
+    },
+
+    async compareAndSetPluginData(
+      record: PluginDataRecord,
+      expectedUpdatedAt: string | null,
+    ): Promise<boolean> {
+      if (expectedUpdatedAt === null) {
+        const inserted = await runner.insertIgnoreReturningCount(
+          pluginData,
+          values.pluginDataInsert(record),
+          [
+            pluginData.sessionId,
+            pluginData.pluginId,
+            pluginData.namespace,
+            pluginData.key,
+          ],
+        );
+        return inserted === 1;
+      }
+
+      const updated = await runner.updateReturningCount(
+        pluginData,
+        values.pluginDataUpdate(record),
+        and(
+          eq(pluginData.sessionId, record.sessionId),
+          eq(pluginData.pluginId, record.pluginId),
+          eq(pluginData.namespace, record.namespace),
+          eq(pluginData.key, record.key),
+          eq(pluginData.updatedAt, expectedUpdatedAt),
+        ),
+      );
+      return updated === 1;
     },
 
     async getPluginData(

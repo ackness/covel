@@ -9,8 +9,10 @@
 
 import type {
   LLMAdapter,
+  LLMMessage,
   LLMMessageContent,
   LLMResponse,
+  LLMResponseFormat,
   LLMStreamEvent,
   LLMTargetIdentity,
   LLMToolDefinition,
@@ -120,6 +122,7 @@ export interface GatewayLike {
           parameters?: Record<string, unknown>;
         };
       }>;
+      responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
     },
     options?: {
@@ -245,13 +248,16 @@ export function createGatewayAdapter(
       const tools = params.tools?.map(toGatewayTool);
 
       // Convert LLMMessage[] → gateway TextMessage[]
-      const messages = toGatewayMessages(params.messages);
+      const messages = toGatewayMessages(
+        withResponseFormatInstruction(params.messages, params.responseFormat),
+      );
 
       const result = await gateway.generateText(
         {
           presetId: params.model ?? undefined,
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
+          responseFormat: params.responseFormat,
         },
         {
           apiKeys: config?.apiKeys,
@@ -356,6 +362,42 @@ export function createGatewayAdapter(
       }
     },
   };
+}
+
+/**
+ * Keep the JSON Schema visible to every gateway-backed provider. Some OpenAI-
+ * compatible endpoints only support JSON mode rather than native strict
+ * schemas; the provider wire hint guarantees JSON while this instruction
+ * supplies the exact allowed fields that the runtime validates afterward.
+ */
+function withResponseFormatInstruction(
+  messages: readonly LLMMessage[],
+  responseFormat: LLMResponseFormat | undefined,
+): readonly LLMMessage[] {
+  if (!responseFormat) return messages;
+  const instruction =
+    "Return only JSON that conforms exactly to the following JSON Schema. " +
+    "Do not add properties that the schema does not allow.\n" +
+    `<response-format>${JSON.stringify(responseFormat.schema)}</response-format>`;
+  const systemIndex = messages.findIndex(
+    (message) => message.role === "system",
+  );
+
+  if (systemIndex < 0) {
+    return [{ role: "system", content: instruction }, ...messages];
+  }
+
+  return messages.map((message, index) => {
+    if (index !== systemIndex) return message;
+    const content =
+      typeof message.content === "string"
+        ? `${message.content}\n\n${instruction}`
+        : [
+            ...message.content,
+            { type: "text" as const, text: `\n\n${instruction}` },
+          ];
+    return { ...message, content };
+  });
 }
 
 function toGatewayMessages(

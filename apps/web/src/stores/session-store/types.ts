@@ -41,6 +41,7 @@ export interface ExecutionStep {
     | "running"
     | "llm"
     | "tool"
+    | "deferred"
     | "completed"
     | "failed"
     | "skipped"
@@ -54,6 +55,14 @@ export interface ExecutionStep {
   turnId?: string;
   /** Wall-clock start time (for on-device duration fallback). */
   startedAt?: string;
+  /** Background job identity when this runtime no longer blocks its source turn. */
+  jobId?: string;
+  /** True for a detached runtime, including after it reaches a terminal state. */
+  detached?: boolean;
+  /** Latest kernel/legacy job state used for accessible progress text. */
+  jobState?: string;
+  /** Latest background progress percentage. */
+  progress?: number;
 }
 
 /**

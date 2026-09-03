@@ -95,6 +95,25 @@ The model settings are split into **Model Roles**, **Providers & Models**, and *
 
 Model settings persist `llm.providers` as the only source of truth. On startup, legacy `llm.customPresets` first migrates connection keys and model references and is removed only after every step succeeds. The legacy API facade and request custom-preset shape are compiled from providers instead of maintaining a second synchronized copy.
 
+### Choose a plugin runtime model for one world or session
+
+The **Model Roles** page maps each slot to the provider and model currently used on this device. For example, the `plugin` slot may resolve to `ali-coding-plan / qwen3.8-flash`. A plugin manifest declares only its default slot, such as `model: plugin`; it does not pin a concrete model inside the world package.
+
+Each agent runtime can choose a slot in the **Session Prep** plugin list:
+
+- **Runtime default: `plugin`** means there is no world-level override. The runtime follows the effective `plugin` assignment from Settings.
+- Choosing another slot such as `story` or `fast` stores `runtimeId → slot` in the new session's `runtimeModelOverrides`. It affects only that session and does not modify the world package or global settings.
+- Multi-runtime plugins show each qualified runtime ID, such as `char-creator/character-tracker`, and each runtime can be assigned independently.
+- After the game starts, the slot can still be changed in the left-side plugin list. Covel persists it through `PATCH /api/sessions/:id`, and the next execution uses the new slot.
+
+Default summaries and picker options show the slot, provider, and **effective model** together. `default: plugin` is the routing declaration; `ali-coding-plan · qwen3.8-flash` is the concrete target currently resolved on this device. Changing the `plugin` assignment in Settings therefore updates every runtime that still follows that slot without editing each world.
+
+`runtimeModelOverrides` applies only to agent runtimes. Image, speech, and similar function runtimes commonly select a media provider slot through the plugin setting `modelPresetId`. Session Prep exposes that separately as a **provider slot** setting, persisted for this device rather than in the session runtime override map.
+
+The LLM page can reload `llm.toml` without restarting through `POST /api/llm-config/reload`. Parse errors fall back to the built-in `story` slot and are exposed in `GET /api/llm-config` and the Settings UI.
+
+Plugins such as image generation may declare a `modelPresetId` provider slot. If its default slot is missing but another compatible slot is configured, Session Prep lets you override the **provider slot** inline; the warning clears as soon as a configured slot is selected.
+
 ## Frontend entry point
 
 **Settings → Desktop** surfaces every path, proxy selection, one-click folder actions, and the `data_root` picker.
@@ -109,10 +128,6 @@ settings/proxy/app updates
 require `Authorization: Bearer <token>`. `/api/config/info` and the provider
 name-only `/api/config/keys` response remain public. Development web/server
 mode keeps the token gate disabled when the variable is absent.
-
-The LLM page can reload `llm.toml` without restarting through
-`POST /api/llm-config/reload`. Parse errors fall back to the built-in `story`
-slot and are exposed in `GET /api/llm-config` and the Settings UI.
 
 ## Related docs
 

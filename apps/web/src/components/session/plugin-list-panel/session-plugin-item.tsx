@@ -9,15 +9,13 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
+import { formatSlotBindingLabel } from "@/hooks/use-slot-config.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { stageLabel } from "@/lib/stage-label.js";
 import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
 import { SetupRecovery } from "./setup-recovery.js";
-import {
-  RUNTIME_TYPE_ICONS,
-  TRIGGER_TYPE_I18N,
-  type SessionPluginItemProps,
-} from "./types.js";
+import { TRIGGER_TYPE_I18N, type SessionPluginItemProps } from "./types.js";
+import { RuntimeCollectionFeatureBadges } from "../runtime-feature-badges.js";
 
 export function SessionPluginItem({
   plugin,
@@ -92,8 +90,17 @@ export function SessionPluginItem({
   const triggerLabel = triggerEntry
     ? t(triggerEntry.key, triggerEntry.fallback)
     : (plugin.trigger?.type ?? "auto");
-  const runtimeLabel =
-    RUNTIME_TYPE_ICONS[plugin.runtimeType ?? "agent"] ?? "LLM";
+  const featureRuntimes =
+    plugin.runtimes && plugin.runtimes.length > 0
+      ? plugin.runtimes
+      : [
+          {
+            runtimeType: plugin.runtimeType,
+            trigger: plugin.trigger,
+            outputKind: plugin.outputKind,
+            capabilities: plugin.capabilities,
+          },
+        ];
 
   return (
     <div className="border border-border rounded-(--radius-card) overflow-hidden">
@@ -118,12 +125,10 @@ export function SessionPluginItem({
               {stageLabel(plugin.stage, t)}
             </Badge>
           )}
-          <Badge
-            variant="outline"
-            className="ui-chip text-xs px-1 py-0 h-4 shrink-0"
-          >
-            {runtimeLabel}
-          </Badge>
+          <RuntimeCollectionFeatureBadges
+            runtimes={featureRuntimes}
+            display="summary"
+          />
           {isLocked && (
             <span
               title={t("plugin.locked", "Core plugin — cannot be disabled")}
@@ -153,8 +158,7 @@ export function SessionPluginItem({
               </option>
               {resolvedSlots.map((slot) => (
                 <option key={slot.slotId} value={slot.slotId}>
-                  {slot.slotId}
-                  {slot.serverModel ? ` · ${slot.serverModel}` : ""}
+                  {formatSlotBindingLabel(slot)}
                 </option>
               ))}
             </select>
@@ -222,6 +226,8 @@ export function SessionPluginItem({
               {description}
             </p>
           )}
+
+          <RuntimeCollectionFeatureBadges runtimes={featureRuntimes} />
 
           <div className="flex flex-wrap gap-1">
             {plugin.model && (

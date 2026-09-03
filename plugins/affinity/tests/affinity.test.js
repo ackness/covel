@@ -521,6 +521,9 @@ describe("affinity plugin manifest", () => {
   it("declares the update-affinity plugin tool via the entry module", () => {
     expect(manifest.tools?.plugin).toEqual(["update-affinity"]);
     expect(manifest.entry).toBe("./server/index.js");
+    expect(manifest.completeAfterTools).toEqual(["update-affinity"]);
+    expect(manifest.maxSteps).toBe(2);
+    expect(manifest.maxRetries).toBe(0);
   });
 
   it("accepts world data into the affinity namespace via dataSchemas", () => {

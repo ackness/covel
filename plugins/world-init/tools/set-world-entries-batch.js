@@ -17,6 +17,18 @@
 import { makeProposal } from "@covel/plugin-handlers-utils";
 import { withPendingProposals } from "@covel/tools";
 
+export function createWorldEntrySchema(z) {
+  return z.object({
+    key: z
+      .string()
+      .min(1)
+      .describe('Entry key (e.g. "geography", "factions", "currency")'),
+    value: z
+      .record(z.string(), z.unknown())
+      .describe("Entry content (any JSON object)"),
+  });
+}
+
 export default function ({ tool, z, store }) {
   void store;
   return tool({
@@ -25,17 +37,7 @@ export default function ({ tool, z, store }) {
       "Batch-write world entries. Pass all entries in a single call (geography, factions, currency, power system, etc.) instead of calling one by one. At least 5 entries.",
     parameters: z.object({
       entries: z
-        .array(
-          z.object({
-            key: z
-              .string()
-              .min(1)
-              .describe('Entry key (e.g. "geography", "factions", "currency")'),
-            value: z
-              .record(z.string(), z.unknown())
-              .describe("Entry content (any JSON object)"),
-          }),
-        )
+        .array(createWorldEntrySchema(z))
         .min(1)
         .describe("Array of world entries"),
     }),

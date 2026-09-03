@@ -2,6 +2,7 @@ import {
   createTurnEmitter,
   collectExecutionJournal,
   collectExecutionSuspensions,
+  createDetachedProposalGuard,
   executeTurn,
   finalizeExecution,
   saveAutoSnapshot,
@@ -9,14 +10,22 @@ import {
 } from "@covel/runtime";
 import type { DataStore, SessionRecord } from "@covel/store";
 import type { EventBus } from "@covel/events";
-import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
+import type {
+  DeferredRuntimeJob,
+  RuntimeManifest,
+  RuntimeResult,
+  TurnInput,
+} from "@covel/shared";
 
 import type { SessionLock } from "../../../lib/session-lock.js";
 import type {
   ManualTurnSummary,
   TurnCommitOutcome,
 } from "./runtime-response.js";
-import { sessionApprovalScope } from "../session/session-guard.js";
+import {
+  sessionApprovalScope,
+  sessionIncarnationIdentity,
+} from "../session/session-guard.js";
 
 export class SessionApprovalScopeChangedError extends Error {
   constructor() {
@@ -79,6 +88,23 @@ export interface RunDeferredFollowerArgs {
   >;
 }
 
+export interface RunDetachedStageArgs {
+  readonly descriptor: DeferredRuntimeJob;
+  readonly backgroundTurnId: string;
+  readonly expectedSessionIncarnation: string;
+  readonly userSettings?: Readonly<
+    Record<string, Readonly<Record<string, unknown>>>
+  >;
+  readonly modelOverride?: string;
+  readonly runtimeModelOverrides?: Readonly<Record<string, string>>;
+  readonly beforeCommit: (args: {
+    readonly backgroundTurnId: string;
+    readonly backgroundExecutionId: string;
+  }) => Promise<void>;
+  readonly beforeExecute?: () => Promise<void>;
+  readonly executionSignal?: AbortSignal;
+}
+
 /**
  * Stable cross-process identity for detached work owned by one runtime.
  *
@@ -100,6 +126,10 @@ export function createPluginRpcRuntimeTurnRunner(
 ): {
   runManualTurn(args: RunManualTurnArgs): Promise<ManualTurnSummary>;
   runDeferredFollowerTurn(args: RunDeferredFollowerArgs): Promise<{
+    readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly commit: TurnCommitOutcome;
+  }>;
+  runDetachedStage(args: RunDetachedStageArgs): Promise<{
     readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
     readonly commit: TurnCommitOutcome;
   }>;
@@ -138,6 +168,12 @@ export function createPluginRpcRuntimeTurnRunner(
   async function processTurnResults(
     turnResult: Awaited<ReturnType<typeof executeTurn>>,
     emitter: ReturnType<typeof createTurnEmitter>,
+    opts: {
+      readonly proposalGuard?: Parameters<
+        typeof finalizeExecution
+      >[0]["proposalGuard"];
+      readonly completeTurn?: boolean;
+    } = {},
   ): Promise<TurnCommitOutcome> {
     // Commit the whole execution (top-level + nested recursiveCall results) in
     // ONE transaction via the shared finalize primitive. Any proposal failure
@@ -159,6 +195,7 @@ export function createPluginRpcRuntimeTurnRunner(
       ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
       eventBus: ctx.eventBus,
       emitter,
+      ...(opts.proposalGuard ? { proposalGuard: opts.proposalGuard } : {}),
       // Manual / late-setup runs settle their setup attempts too (a manual
       // retrigger of a pending setup runtime burns an attempt).
       ...(turnResult.setupRan ? { setupRan: turnResult.setupRan } : {}),
@@ -224,7 +261,7 @@ export function createPluginRpcRuntimeTurnRunner(
       ...turnResult.runtimeResults,
       ...(turnResult.nestedRuntimeResults ?? []),
     ].some((result) => result.status === "suspended");
-    if (committed && !hasSuspendedRuntime) {
+    if (committed && !hasSuspendedRuntime && opts.completeTurn !== false) {
       await turnResult.completeTurn?.();
     }
     return {
@@ -257,6 +294,21 @@ export function createPluginRpcRuntimeTurnRunner(
     runtimeId: string,
     turnInput: TurnInput,
     emitter: ReturnType<typeof createTurnEmitter>,
+    opts: {
+      readonly expectedSessionIncarnation?: string;
+      readonly expectedPluginVersion?: string;
+      readonly beforeCommit?: (args: {
+        readonly backgroundTurnId: string;
+        readonly backgroundExecutionId: string;
+      }) => Promise<void>;
+      readonly beforeExecute?: () => Promise<void>;
+      readonly executionSignal?: AbortSignal;
+      readonly rejectSuspension?: boolean;
+      readonly proposalGuard?: Parameters<
+        typeof finalizeExecution
+      >[0]["proposalGuard"];
+      readonly completeTurn?: boolean;
+    } = {},
   ): Promise<{
     readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
     readonly commit: TurnCommitOutcome;
@@ -267,7 +319,24 @@ export function createPluginRpcRuntimeTurnRunner(
       // execution. Take it briefly to linearize authorization against a
       // concurrent revoke/disable/delete before spending external work.
       await ctx.sessionLock.withLock(ctx.sessionId, () =>
-        requireLiveApprovedSession(runtimeId).then(() => undefined),
+        requireLiveApprovedSession(runtimeId).then(async (live) => {
+          if (
+            opts.expectedSessionIncarnation &&
+            sessionIncarnationIdentity(live) !== opts.expectedSessionIncarnation
+          ) {
+            throw new SessionApprovalScopeChangedError();
+          }
+          const target = ctx.activeRuntimes.find(
+            (runtime) => runtime.name === runtimeId,
+          );
+          if (
+            opts.expectedPluginVersion !== undefined &&
+            target?.version !== opts.expectedPluginVersion
+          ) {
+            throw new SessionApprovalScopeChangedError();
+          }
+          await opts.beforeExecute?.();
+        }),
       );
       const result = await executeTurn(turnInput, ctx.activeRuntimes, {
         ...ctx.deps,
@@ -275,7 +344,18 @@ export function createPluginRpcRuntimeTurnRunner(
         eventBus: ctx.eventBus,
         emitter,
         ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
+        ...(opts.executionSignal
+          ? { turnControl: { executionSignal: opts.executionSignal } }
+          : {}),
       });
+      if (
+        opts.rejectSuspension === true &&
+        [...result.runtimeResults, ...(result.nestedRuntimeResults ?? [])].some(
+          (runtimeResult) => runtimeResult.status === "suspended",
+        )
+      ) {
+        throw new Error("detached stage runtimes cannot suspend for input");
+      }
       const outcome = await ctx.sessionLock.withLock(
         ctx.sessionId,
         async () => {
@@ -292,7 +372,26 @@ export function createPluginRpcRuntimeTurnRunner(
             throw new SessionNotActiveError(live.status);
           }
           assertApprovalScope(live, runtimeId);
-          return processTurnResults(result, emitter);
+          if (
+            opts.expectedSessionIncarnation &&
+            sessionIncarnationIdentity(live) !== opts.expectedSessionIncarnation
+          ) {
+            throw new SessionApprovalScopeChangedError();
+          }
+          if (opts.beforeCommit) {
+            await opts.beforeCommit({
+              backgroundTurnId: result.turnId,
+              backgroundExecutionId: result.executionContext.executionId,
+            });
+          }
+          return processTurnResults(result, emitter, {
+            ...(opts.proposalGuard
+              ? { proposalGuard: opts.proposalGuard }
+              : {}),
+            ...(opts.completeTurn !== undefined
+              ? { completeTurn: opts.completeTurn }
+              : {}),
+          });
         },
       );
       return { turnResult: result, commit: outcome };
@@ -406,5 +505,61 @@ export function createPluginRpcRuntimeTurnRunner(
     return runDetached(args.runtimeId, turnInput, emitter);
   }
 
-  return { runManualTurn, runDeferredFollowerTurn };
+  async function runDetachedStage(args: RunDetachedStageArgs): Promise<{
+    readonly turnResult: Awaited<ReturnType<typeof executeTurn>>;
+    readonly commit: TurnCommitOutcome;
+  }> {
+    const target = ctx.activeRuntimes.find(
+      (runtime) => runtime.name === args.descriptor.runtimeId,
+    );
+    if (!target || target.pluginId !== args.descriptor.pluginId) {
+      throw new SessionApprovalScopeChangedError();
+    }
+    const emitter = createTurnEmitter({
+      store: ctx.store,
+      eventBus: ctx.eventBus,
+      sessionId: ctx.sessionId,
+      turnId: args.backgroundTurnId,
+    });
+    const turnInput: TurnInput = {
+      sessionId: ctx.sessionId,
+      turnId: args.backgroundTurnId,
+      playerMessage: "",
+      locale: ctx.session.locale,
+      origin: "background",
+      parentTurnId: args.descriptor.sourceTurnId,
+      detachedStage: {
+        jobId: args.descriptor.jobId,
+        runtimeId: args.descriptor.runtimeId,
+        sourceTurnId: args.descriptor.sourceTurnId,
+        sourceExecutionId: args.descriptor.sourceExecutionId,
+        sourceExecutionStartedAt: args.descriptor.sourceExecutionStartedAt,
+        ...(args.descriptor.sourceLogicalTurnId
+          ? { sourceLogicalTurnId: args.descriptor.sourceLogicalTurnId }
+          : {}),
+        upstreamResults: args.descriptor.upstreamResults,
+      },
+      ...(args.modelOverride ? { modelOverride: args.modelOverride } : {}),
+      ...(args.runtimeModelOverrides
+        ? { runtimeModelOverrides: args.runtimeModelOverrides }
+        : {}),
+      ...(args.userSettings ? { userSettings: args.userSettings } : {}),
+    };
+    return runDetached(args.descriptor.runtimeId, turnInput, emitter, {
+      expectedSessionIncarnation: args.expectedSessionIncarnation,
+      ...(args.descriptor.pluginVersion
+        ? { expectedPluginVersion: args.descriptor.pluginVersion }
+        : {}),
+      beforeCommit: args.beforeCommit,
+      ...(args.beforeExecute ? { beforeExecute: args.beforeExecute } : {}),
+      ...(args.executionSignal
+        ? { executionSignal: args.executionSignal }
+        : {}),
+      proposalGuard: createDetachedProposalGuard(target),
+      completeTurn: false,
+      rejectSuspension: true,
+    });
+  }
+
+  return { runManualTurn, runDeferredFollowerTurn, runDetachedStage };
 }

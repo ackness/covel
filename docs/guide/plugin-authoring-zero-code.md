@@ -340,7 +340,7 @@ LLM 拿到的 prompt 里会有两个 XML 块：
 </existing-entries>
 ```
 
-LLM 直接对照两个块即可判断"这个发现在不在已有条目里"，一次 LLM 调用就决定 `unlock-codex-entries`（新）或 `update-codex-entry`（补）。
+LLM 直接对照两个块即可判断"这个发现在不在已有条目里"，把新增放入 `sync-codex-entries.unlocks`、补充放入 `updates`，一次工具调用原子提交整批变化。
 
 **要点：**
 

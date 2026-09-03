@@ -7,19 +7,27 @@ pluginType: plugin
 model: default
 outputKind: plugin
 capabilities: [image-prompt, manual-invoke]
-execution: sync
+# Prompt generation and the provider render are both outside the gameplay
+# critical path. Declaring this here makes every RPC caller non-blocking; the
+# emitted image.generate.requested event keeps chaining to image-generator.
+execution: background
 timeoutMs: 300000
-maxSteps: 10
-maxRetries: 5
+maxSteps: 2
+maxRetries: 0
 callTimeoutMs: 50000
 firstTokenTimeoutMs: 30000
+requireToolUse: true
+completeAfterTools:
+  - submit-openai-image-text-prompt
+  - submit-openai-image-structured-prompt
 output:
   schema: ./output.schema.json
 trigger:
   type: manual
 tools:
-  builtin:
-    - plugin-data-set
+  plugin:
+    - submit-openai-image-text-prompt
+    - submit-openai-image-structured-prompt
 input:
   inject:
     - kind: plugin-data
@@ -116,7 +124,7 @@ professional photography, award-winning, fine texture
 
 ### A. composition = single-scene + promptMode = text
 
-输出一段 **140–240 字** 的单条中文画面描述，覆盖以下要素（顺序可调，不必列点）：
+生成一段 **140–240 字** 的单条中文画面描述，覆盖以下要素（顺序可调，不必列点）：
 
 1. **主体** — 谁/什么在画面中央，姿态/表情/服饰
 2. **场景** — 环境、地标、时间、天气
@@ -133,7 +141,7 @@ professional photography, award-winning, fine texture
 
 ### B. composition = single-scene + promptMode = image-json
 
-输出一个合法 JSON 对象（不要用 markdown 包裹，**直接输出 JSON**），schema 如下：
+构造一个符合下列 schema 的 JSON 对象，最后把对象直接放进提交工具的 `prompt` 参数；不要先 stringify，也不要用 markdown 包裹：
 
 ```json
 {
@@ -188,7 +196,7 @@ professional photography, award-winning, fine texture
 
 ### C. composition = comic-strip + promptMode = text
 
-输出一段 **240–420 字** 的中文画面描述，把整页漫画当成一张图来写。结构必须包含：
+生成一段 **240–420 字** 的中文画面描述，把整页漫画当成一张图来写。结构必须包含：
 
 1. **开篇定位**（必须出现这串关键词，模型才会按整页漫画构图）：
    `comic page layout, sequential storytelling, {N}-panel manga / comic page, {layoutStyle}`
@@ -220,7 +228,7 @@ professional photography, award-winning, fine texture
 
 ### D. composition = comic-strip + promptMode = image-json
 
-输出一个合法 JSON 对象（**直接输出 JSON，不要 markdown 包裹**），schema 如下：
+构造一个符合下列 schema 的 JSON 对象，最后把对象直接放进提交工具的 `prompt` 参数；不要先 stringify，也不要用 markdown 包裹：
 
 ```json
 {
@@ -308,37 +316,20 @@ professional photography, award-winning, fine texture
 
 ---
 
-## 输出规范（所有模式共用）
+## 提交规范（所有模式共用）
 
-**最终输出必须是一段合法 JSON**（不要带前后解说、不要 markdown 围栏），结构固定如下：
+完成提示词后必须只调用一次与当前 `promptMode` 匹配的工具：
 
-```json
-{
-  "prompt": "<最终提示词：text 模式为一段中文文本，image-json 模式为已 stringify 的 JSON 字符串>",
-  "promptMode": "{{ userSettings.promptMode }}",
-  "composition": "{{ userSettings.composition }}",
-  "events": [
-    {
-      "topic": "openai-image.generate.requested",
-      "data": {
-        "prompt": "<与上面 prompt 字段完全相同>",
-        "promptMode": "{{ userSettings.promptMode }}",
-        "composition": "{{ userSettings.composition }}"
-      }
-    }
-  ]
-}
-```
+- `text`：调用 `submit-openai-image-text-prompt`，`prompt` 传完整文本。
+- `image-json`：调用 `submit-openai-image-structured-prompt`，`prompt` 直接传 JSON 对象，不要 stringify。
+- 两种工具的 `composition` 都必须照抄 `{{ userSettings.composition }}`。
 
-框架会：
-
-1. 读取 `events[0]` 触发下游 `image-generator` runtime（topic 必须是 `openai-image.generate.requested`，否则不触发）
-2. 读取顶层 `prompt` 字段把它作为本轮 runtime 的业务输出
+工具会统一完成提示词序列化、留档和 `openai-image.generate.requested` 事件发射。不要自行构造 `events`，不要重复提交，也不要在工具调用前后输出 JSON、解释或确认文本。
 
 ### 硬规则
 
-- **一次性输出**：不要做多轮思考，不要使用 reasoning 区块
+- **一次性提交**：不要做多轮思考，不要使用 reasoning 区块
 - **不写元叙事**：不要说"这是一张……的画面"这种自我指涉
 - **画质词必带**：见上方「全局画质要求」，缺失会导致画面糊；漫画模式还需附加漫画专属词
 - **避免雷同**：参考 `<previous-image-prompts>` 中的 id 列表避免和最近几次重复；漫画模式可故意挑近期单图未覆盖的剧情段落
-- **工具调用可选**：如需留档可调用 `plugin-data-set` 把本次 prompt 存入 `prompts` 命名空间（key 用短 slug，如 `sunset-shrine` / `comic-castle-fall`），但**最终仍必须输出上方 JSON 包络**（否则 `image-generator` 不会被唤醒）
+- **工具调用必需**：只能调用当前模式对应的提交工具；工具成功后本 runtime 会自动结束
