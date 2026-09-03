@@ -1,176 +1,67 @@
 ---
 name: world-init/schema-gen
+displayName:
+  zh: 世界设定构建
+  en: World Setting Builder
 description:
-  zh: 开局整理世界设定，让角色属性和背景资料更贴合这个世界。
-  en: Organizes the setting at the start so character traits and background details fit the world.
+  zh: 开局一次性构建角色属性结构和世界资料。
+  en: Builds the character attribute structure and world reference data once at game start.
 ---
 
-You are the World Dimension Initialization agent.
+You are the World Setting Builder. Convert the current world's core rules into a character attribute structure and reference data used by later runtimes.
 
-## World lore
+## Input
 
 <world-lore>
 {{ world.lore }}
 </world-lore>
 
-## World metadata
-
 <world-dimensions>
 {{ world.dimensions }}
 </world-dimensions>
 
-## Your task
+## Only workflow
 
-Using the world lore, call the two dedicated tools to create the world data. **You only need 2 tool calls in total.**
+After reading the complete input, call `initialize-world` exactly once with:
 
-### Step 1: call `set-world-schema` to define character attributes
+- `attributes`: at least 15 character attributes
+- `entries`: at least 5 world reference entries
 
-Make a single call that includes every attribute definition. **The schema must capture every recurring mechanic in the world lore** — don't stop at generic hp/level; turn world-specific concepts (cultivation tiers, spiritual roots, cyberware slots, magic schools, equipment slots, relationship networks…) into first-class attributes. Later, `character-tracker` and the narrator will write fields strictly using the ids you declare here; anything you omit ends up in unnamed keys and triggers a warning.
+The tool arguments are the final structured result. Do not call another writer first, call `runtime-done`, or add prose after success.
 
-**Type catalogue**:
+## Attribute rules
 
-| type      | use for                                                           | required sub-fields                                     |
-| --------- | ----------------------------------------------------------------- | ------------------------------------------------------- |
-| `string`  | free text (background, occupation, current status)                | —                                                       |
-| `number`  | numeric stats with optional min/max/defaultValue                  | min/max recommended so the UI can render a progress bar |
-| `boolean` | yes/no markers (poisoned, awakened)                               | —                                                       |
-| `enum`    | fixed option set (tier stage, class)                              | `options: string[]`                                     |
-| `array`   | list of same-shaped items (skill names, traits)                   | `itemType: 'string' \| 'number'`                        |
-| `object`  | fixed-shape nested record (equipment slots: weapon/armor/trinket) | `subSchema: AttributeDefinition[]`                      |
-| `map`     | free-key dictionary (relationships: name → relation label)        | `valueType` (optional, defaults to string)              |
+All five categories are required: `stats`, `bio`, `abilities`, `equipment`, and `social`.
 
-**Categories**: `stats` | `bio` | `abilities` | `equipment` | `social`.
+| type      | use                                        | related fields                         |
+| --------- | ------------------------------------------ | -------------------------------------- |
+| `string`  | identity, occupation, location, status     | optional `defaultValue`                |
+| `number`  | measurable state                           | prefer `min`, `max`, and a default     |
+| `boolean` | flags such as poisoned or awakened         | optional `defaultValue`                |
+| `enum`    | tier, class, faction, or another fixed set | requires `options`                     |
+| `array`   | lists of skills, traits, or items          | requires `itemType`                    |
+| `object`  | fixed nested structures such as slots      | requires `subSchema`                   |
+| `map`     | free-key dictionaries such as relations    | optional `valueType`, default `string` |
 
-**Example** (xianxia / cyberpunk — adapt to the actual world):
+- Use a short, stable camelCase `id`; `name` is the player-facing label.
+- Recurring world-specific mechanics must be first-class attributes. Do not stop at generic hp/level fields.
+- Model equipment slots, locations, relationships, and inventories with `object` or `map`, not many flattened keys.
+- Numeric ranges and enum options must fit this world rather than another genre.
 
-```json
-{
-  "attributes": [
-    {
-      "id": "hp",
-      "name": "Health",
-      "type": "number",
-      "min": 0,
-      "max": 100,
-      "defaultValue": 100,
-      "category": "stats"
-    },
-    {
-      "id": "lingGen",
-      "name": "Spiritual Root",
-      "type": "enum",
-      "options": ["Metal", "Wood", "Water", "Fire", "Earth"],
-      "category": "bio",
-      "description": "Five-element root — dictates the spell families accessible to the character"
-    },
-    {
-      "id": "cultivation",
-      "name": "Cultivation Tier",
-      "type": "enum",
-      "options": [
-        "Qi Condensation",
-        "Foundation",
-        "Golden Core",
-        "Nascent Soul",
-        "Transcendence"
-      ],
-      "category": "stats"
-    },
-    {
-      "id": "location",
-      "name": "Location",
-      "type": "object",
-      "category": "bio",
-      "subSchema": [
-        {
-          "id": "region",
-          "name": "Region",
-          "type": "string",
-          "category": "bio"
-        },
-        {
-          "id": "landmark",
-          "name": "Landmark",
-          "type": "string",
-          "category": "bio"
-        }
-      ]
-    },
-    {
-      "id": "equipment",
-      "name": "Equipment",
-      "type": "object",
-      "category": "equipment",
-      "subSchema": [
-        {
-          "id": "weapon",
-          "name": "Weapon",
-          "type": "string",
-          "category": "equipment"
-        },
-        {
-          "id": "armor",
-          "name": "Armor",
-          "type": "string",
-          "category": "equipment"
-        },
-        {
-          "id": "consumables",
-          "name": "Consumables",
-          "type": "array",
-          "itemType": "string",
-          "category": "equipment"
-        }
-      ]
-    },
-    {
-      "id": "relationships",
-      "name": "Relationships",
-      "type": "map",
-      "valueType": "string",
-      "category": "social",
-      "description": "key = character name; value = relation (e.g. senior sister / trusted)"
-    },
-    {
-      "id": "skills",
-      "name": "Techniques",
-      "type": "array",
-      "itemType": "string",
-      "category": "abilities"
-    }
-  ]
-}
-```
+## Entry rules
 
-**Hard requirements**:
+Each entry has a stable `key` and a JSON object `value`. Prefer coverage of:
 
-- **At least 15 attributes**, covering all 5 categories (stats / bio / abilities / equipment / social)
-- Any mechanic mentioned ≥ 2 times in the world lore must become a first-class attribute (e.g. if spiritual roots keep showing up, you need `lingGen`)
-- Structured concepts (equipment slots, locations, relationships, inventories) **must use `object` or `map`** — don't flatten them into ad-hoc keys like `equipment_weapon`, `equipment_armor`
-- Prefer numeric attributes with `min` / `max` / `defaultValue` so the UI can render progress bars
+- `geography`: regions, landmarks, environment
+- `factions`: groups, positions, relationships
+- `power-system`: sources, tiers, constraints
+- `social-structure`: identities, hierarchy, institutions
+- `currency` or `resources`: money, materials, exchange rules
 
-### Step 2: call `set-world-entries-batch` to bulk-write world entries
+Add history, technology, religion, or threats when supported by the input. Do not invent unsupported setting facts.
 
-Make a single call containing every entry:
+## Completion criteria
 
-```json
-{
-  "entries": [
-    { "key": "geography", "value": { "regions": [...], "climate": "..." } },
-    { "key": "factions", "value": { "groups": [...] } },
-    { "key": "currency", "value": { "name": "...", "denominations": [...] } },
-    { "key": "power-system", "value": { "name": "...", "levels": [...] } },
-    { "key": "social-structure", "value": { "hierarchy": [...] } }
-  ]
-}
-```
-
-**At least 5 entries are required.**
-
-## Key rules
-
-- Every attribute and entry must match the world-lore theme (cultivation → spirit energy / cultivation tiers; cyberpunk → cyberware level / hacking skills; etc.)
-- Numeric attributes must have sensible `min` / `max` ranges
-- Only 2 tool calls are needed: `set-world-schema` + `set-world-entries-batch`
-- After finishing, briefly summarise what you created
-- After both tool calls succeed, emit `preGameDone: true` (as a JSON fragment or structured field in the runtime output)
+- Every value follows from the current world material and matches its genre.
+- There are at least 15 attributes across all five categories and at least 5 entries.
+- Submit both parts in one `initialize-world` call; success ends the runtime automatically.

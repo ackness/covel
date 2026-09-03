@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createMemoryStore } from "../../../packages/store/src/index.ts";
-import { getPendingProposals, tool, z } from "@covel/tools";
+import { getPendingProposals, getToolContent, tool, z } from "@covel/tools";
 import { createCommitPipeline } from "../../../packages/runtime/src/session/session-kernel.ts";
+import initializeWorld from "../tools/initialize-world.js";
 import setWorldSchema from "../tools/set-world-schema.js";
 import setWorldEntriesBatch from "../tools/set-world-entries-batch.js";
 
@@ -12,6 +13,27 @@ const context = {
   runtimeId: "world-init/schema-gen",
 };
 
+const categories = ["stats", "bio", "abilities", "equipment", "social"];
+
+function makeAttributes() {
+  return Array.from({ length: 15 }, (_, index) => ({
+    id: `field${index + 1}`,
+    name: `字段 ${index + 1}`,
+    type: "string",
+    category: categories[index % categories.length],
+  }));
+}
+
+function makeEntries() {
+  return [
+    "geography",
+    "factions",
+    "power-system",
+    "social-structure",
+    "currency",
+  ].map((key) => ({ key, value: { summary: `${key} data` } }));
+}
+
 describe("world-init local tools", () => {
   it("constructs the schema and entries tool modules", () => {
     const store = createMemoryStore();
@@ -19,11 +41,100 @@ describe("world-init local tools", () => {
 
     const schemaTool = setWorldSchema(injection);
     const entriesTool = setWorldEntriesBatch(injection);
+    const initializeTool = initializeWorld(injection);
 
     expect(schemaTool._type).toBe("covel-tool");
     expect(schemaTool.name).toBe("set-world-schema");
     expect(entriesTool._type).toBe("covel-tool");
     expect(entriesTool.name).toBe("set-world-entries-batch");
+    expect(initializeTool._type).toBe("covel-tool");
+    expect(initializeTool.name).toBe("initialize-world");
+  });
+
+  it("publishes the complete atomic initialization schema to the model", () => {
+    const store = createMemoryStore();
+    const initializeTool = initializeWorld({ tool, z, store });
+
+    expect(initializeTool.jsonSchema).toMatchObject({
+      type: "object",
+      properties: {
+        attributes: { type: "array", minItems: 15 },
+        entries: { type: "array", minItems: 5 },
+      },
+    });
+  });
+
+  it("queues schema, plugin-data, and lorebook writes in one atomic call", async () => {
+    const store = createMemoryStore();
+    const initializeTool = initializeWorld({ tool, z, store });
+
+    const rawResult = await initializeTool.execute(
+      { attributes: makeAttributes(), entries: makeEntries() },
+      context,
+    );
+    const result = getToolContent(rawResult);
+
+    expect(result).toMatchObject({
+      success: true,
+      attributeCount: 15,
+      categories,
+      count: 5,
+      keys: [
+        "geography",
+        "factions",
+        "power-system",
+        "social-structure",
+        "currency",
+      ],
+      worldSchema: {
+        "character-attributes": {
+          version: 1,
+          attributes: expect.any(Array),
+        },
+      },
+      preGameDone: true,
+    });
+    expect(
+      getPendingProposals(rawResult).map((proposal) => proposal.type),
+    ).toEqual(["plugin.data", "plugin.data.batch", "lorebook.upsert"]);
+  });
+
+  it("rejects incomplete input before exposing any pending write", async () => {
+    const store = createMemoryStore();
+    const initializeTool = initializeWorld({ tool, z, store });
+
+    await expect(
+      initializeTool.execute(
+        {
+          attributes: makeAttributes(),
+          entries: makeEntries().slice(0, 4),
+        },
+        context,
+      ),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+
+    expect(
+      await store.listPluginData(context.sessionId, "world-init", "schema"),
+    ).toEqual([]);
+    expect(
+      await store.listPluginData(context.sessionId, "world-init", "entries"),
+    ).toEqual([]);
+    expect(await store.listSessionLorebookEntries(context.sessionId)).toEqual(
+      [],
+    );
+  });
+
+  it("requires all five attribute categories in the atomic call", async () => {
+    const store = createMemoryStore();
+    const initializeTool = initializeWorld({ tool, z, store });
+    const attributes = makeAttributes().map((attribute) => ({
+      ...attribute,
+      category: attribute.category === "social" ? "bio" : attribute.category,
+    }));
+
+    await expect(
+      initializeTool.execute({ attributes, entries: makeEntries() }, context),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 
   it("queues one schema proposal with versioned character attributes", async () => {

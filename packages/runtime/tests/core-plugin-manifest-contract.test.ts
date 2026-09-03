@@ -63,11 +63,13 @@ describe("core plugin manifest contract", () => {
       model: "plugin",
       guard: "../../guard.js",
       trigger: { type: "auto", maxTriggerCount: 1 },
+      requireToolUse: true,
+      completeAfterTools: ["initialize-world"],
+      maxSteps: 2,
+      maxRetries: 0,
+      output: { schema: "./output.schema.json" },
     });
-    expect(schemaGen.tools?.plugin).toEqual([
-      "set-world-schema",
-      "set-world-entries-batch",
-    ]);
+    expect(schemaGen.tools?.plugin).toEqual(["initialize-world"]);
     // schema-gen writes the world schema during setup; it has no reason to
     // read its own plugin-data back, and its prompt never mentioned the read
     // tools it used to declare.

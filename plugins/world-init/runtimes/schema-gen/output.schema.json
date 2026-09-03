@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "world-init/schema-gen output",
+  "description": "Trusted output returned by initialize-world after it has validated and queued the schema, plugin data, and lorebook writes.",
+  "type": "object",
+  "required": [
+    "success",
+    "attributeCount",
+    "categories",
+    "count",
+    "keys",
+    "worldSchema",
+    "preGameDone"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "success": { "type": "boolean", "const": true },
+    "attributeCount": { "type": "integer", "minimum": 15 },
+    "categories": {
+      "type": "array",
+      "minItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["stats", "bio", "abilities", "equipment", "social"]
+      }
+    },
+    "count": { "type": "integer", "minimum": 5 },
+    "keys": {
+      "type": "array",
+      "minItems": 5,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "worldSchema": {
+      "type": "object",
+      "required": ["character-attributes"],
+      "additionalProperties": false,
+      "properties": {
+        "character-attributes": {
+          "type": "object",
+          "required": ["version", "attributes"],
+          "additionalProperties": false,
+          "properties": {
+            "version": { "type": "integer", "const": 1 },
+            "attributes": {
+              "type": "array",
+              "minItems": 15,
+              "items": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    "preGameDone": { "type": "boolean", "const": true }
+  }
+}
