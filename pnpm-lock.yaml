@@ -876,6 +876,9 @@ importers:
       '@covel/plugin-handlers-utils':
         specifier: workspace:*
         version: link:../../packages/plugin-handlers-utils
+      '@covel/tools':
+        specifier: workspace:*
+        version: link:../../packages/tools
     devDependencies:
       vitest:
         specifier: ^4.1.11
