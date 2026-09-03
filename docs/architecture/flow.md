@@ -438,11 +438,14 @@ plugins/my-plugin/
   插件工具执行                     服务端                      前端
   ────────────                   ──────                     ──────
 
-  unlock-codex-entries
-  params: { entries: [...] }
+  sync-codex-entries
+  params: { unlocks: [...], updates: [...] }
         │
         ▼
-  store.setPluginDataBatch()   ──► 写入 plugin_data 表
+  withPendingProposals()       ──► execution write buffer
+        │                          (plugin.data / plugin.data.batch)
+        ▼
+  turn finalizer transaction  ──► 原子写入 plugin_data 表
         │                          (sessionId, pluginId,
         │                           namespace, key, value)
         │
@@ -527,9 +530,9 @@ plugins/my-plugin/
   │  │   ├─ 生成叙事文本（自然语言，非 JSON）                      │ │
   │  │   └─ 返回 filledNarrative（不写 turn_messages，不建角色）   │ │
   │  │                                                            │ │
-  │  │   下一次 /api/actions 由 char-creator 运行：                │ │
-  │  │   create-character() → upsertCharacter                     │ │
-  │  │   （setup runtime 用 `preGameDone: true` 登记完成；集齐后   │ │
+  │  │   下一次 /api/actions 由 char-creator 的 guard 运行：       │ │
+  │  │   生成 character.upsert + plugin.data proposals            │ │
+  │  │   （guard 用 `preGameDone: true` 登记完成；集齐后           │ │
   │  │    Kernel 在提交事务内把 phase 翻到 'playing'，             │ │
   │  │    无 phase.changed SSE 推送）                             │ │
   │  │                                                            │ │

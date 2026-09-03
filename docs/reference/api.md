@@ -498,7 +498,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 ### 角色数据
 
-> **接入状态（2026-04-27）**：当前内置 Web UI 主要通过 `GET /api/sessions/:id/snapshot` 获取角色快照；本节 REST 端点保留为轻量读取/管理 API。插件 runtime 推荐使用 `create-character` / `update-character` / `list-characters` / `get-character` 工具维护角色。`POST /characters` 是兼容管理入口，后续若收敛角色写路径，应保持 URL/响应兼容并优先替换内部实现。
+> **接入状态（2026-04-27）**：当前内置 Web UI 主要通过 `GET /api/sessions/:id/snapshot` 获取角色快照；本节 REST 端点保留为轻量读取/管理 API。单批追踪 runtime 推荐使用 `sync-characters`，通用插件仍可按需使用低层 `create-character` / `update-character` 与读取工具 `list-characters` / `get-character`。`POST /characters` 是兼容管理入口，后续若收敛角色写路径，应保持 URL/响应兼容并优先替换内部实现。
 
 角色 `id` 仅需在当前 session 内唯一；不同 session 可安全复用同一 ID。
 
@@ -1912,7 +1912,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
   "worldProjections": {},
   "tools": {
     "builtin": [],
-    "local": [{ "runtimeId": "codex", "name": "unlock-codex-entries" }]
+    "local": [{ "runtimeId": "codex", "name": "sync-codex-entries" }]
   },
   "ui": {
     "right": [{ "runtimeId": "codex", "path": "./ui/codex-panel.json" }],
@@ -2519,7 +2519,7 @@ Query 参数：`limit`（默认 50，最大 500）、`before_created_at` + `befo
 
 ### 角色数据
 
-> **接入状态（2026-04-27）**：当前内置 Web UI 主要通过 `GET /api/sessions/:id/snapshot` 获取角色快照；本节 REST 端点保留为轻量读取/管理 API。插件 runtime 推荐使用 `create-character` / `update-character` / `list-characters` / `get-character` 工具维护角色。`POST /characters` 是兼容管理入口，后续若收敛角色写路径，应保持 URL/响应兼容并优先替换内部实现。
+> **接入状态（2026-04-27）**：当前内置 Web UI 主要通过 `GET /api/sessions/:id/snapshot` 获取角色快照；本节 REST 端点保留为轻量读取/管理 API。单批追踪 runtime 推荐使用 `sync-characters`，通用插件仍可按需使用低层 `create-character` / `update-character` 与读取工具 `list-characters` / `get-character`。`POST /characters` 是兼容管理入口，后续若收敛角色写路径，应保持 URL/响应兼容并优先替换内部实现。
 
 #### `GET /api/sessions/:id/characters`
 

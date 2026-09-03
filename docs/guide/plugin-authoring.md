@@ -155,20 +155,20 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 来源：当前 `plugins/**/PLUGIN.md` 的 frontmatter；下表列出代表性 runtime，并非完整清单。
 
-| Runtime                          | Stage       | 触发                                  | 类型          | 工具 / 关键能力                                              | 学习价值                        |
-| -------------------------------- | ----------- | ------------------------------------- | ------------- | ------------------------------------------------------------ | ------------------------------- |
-| `pregame`                        | `setup`     | `auto`（`maxTriggerCount: 1`）        | function      | 无                                                           | 最简 function runtime,纯初始化  |
-| `world-init/schema-gen`          | `setup`     | `auto`（`maxTriggerCount: 1`）        | agent + guard | `tools.plugin`（set-world-schema / set-world-entries-batch） | guard 在 LLM 前跳过门控,零开销  |
-| `char-creator/player-init`       | `setup`     | `auto`（guard 门控）                  | agent         | builtin `create-form`                                        | 首轮表单 + setup 闸门           |
-| `npc-graph/rag-retriever`        | `pre-turn`  | `scheduled`（interval 1）             | function      | —                                                            | 给 narrator 预拉结构化检索      |
-| `narrator`                       | `narrative` | `auto`                                | agent         | builtin `world-dimension-get` / `emit-event`                 | 零代码主叙事 + 事件发射         |
-| `codex`                          | `post-turn` | `auto`                                | agent         | `tools.plugin` + plugin-data inject                          | JS 工具 + 已有条目预注入        |
-| `guide`                          | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | `tools.plugin`（generate-guide）                             | inject narrator output 生成选项 |
-| `npc-graph/extractor`            | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | `tools.plugin`（upsert / list-npc-graph）                    | NPC 关系抽取 + 写入图谱         |
-| `char-creator/character-tracker` | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | builtin create/update/get-character                          | 跟踪 NPC 状态变化               |
-| `memory`                         | —           | UI only（无 trigger）                 | UI            | —                                                            | 纯前端面板,不占调度槽           |
+| Runtime                          | Stage       | 触发                                  | 类型          | 工具 / 关键能力                                  | 学习价值                          |
+| -------------------------------- | ----------- | ------------------------------------- | ------------- | ------------------------------------------------ | --------------------------------- |
+| `pregame`                        | `setup`     | `auto`（`maxTriggerCount: 1`）        | function      | 无                                               | 最简 function runtime,纯初始化    |
+| `world-init/schema-gen`          | `setup`     | `auto`（`maxTriggerCount: 1`）        | agent + guard | `tools.plugin`（initialize-world）               | guard 门控 + 原子单工具结构化输出 |
+| `char-creator/player-init`       | `setup`     | `auto`（guard 门控）                  | agent         | builtin `create-form`                            | 首轮表单 + setup 闸门             |
+| `npc-graph/rag-retriever`        | `pre-turn`  | `scheduled`（interval 1）             | function      | —                                                | 给 narrator 预拉结构化检索        |
+| `narrator`                       | `narrative` | `auto`                                | agent         | builtin `world-dimension-get` / `emit-event`     | 零代码主叙事 + 事件发射           |
+| `codex`                          | `post-turn` | `auto`                                | agent         | `sync-codex-entries` + plugin-data inject        | 新增/更新原子批量提交             |
+| `guide`                          | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | `tools.plugin`（generate-guide）                 | inject narrator output 生成选项   |
+| `npc-graph/extractor`            | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | `upsert-npc-graph` + 图谱预注入                  | 单次批量关系写入                  |
+| `char-creator/character-tracker` | `post-turn` | `scheduled`（interval 1, cooldown 1） | agent         | builtin sync-characters / deferred get-character | 原子跟踪 NPC 状态变化             |
+| `memory`                         | —           | UI only（无 trigger）                 | UI            | —                                                | 纯前端面板,不占调度槽             |
 
-> 上表四个 `post-turn` runtime 都用 `needs: [{ capability: narrative-engine }]` 门控在当前模式的叙事引擎上，因此传统模式（`narrator`）与对话模式（`chat-mode-narrator`）通用。
+> 上表的 `guide` 与 `character-tracker` 用 `needs: [{ capability: narrative-engine }]` 直接门控当前叙事引擎；`codex` 与 `npc-graph/extractor` 则消费 `world-ir-provider` typed input，由它间接形成叙事依赖与失败 gate。两条路径都按 capability 发现 provider，因此传统模式（`narrator`）与对话模式（`chat-mode-narrator`）通用。
 
 完整注册表（含 stage 分带、capabilities、frontmatter 全字段）见 [docs/reference/plugins.md](../reference/plugins.md)。
 

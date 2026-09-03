@@ -22,14 +22,14 @@
 
 ## App And Runtime
 
-| Goal                       | Start here                                       | Reference                                                          |
-| -------------------------- | ------------------------------------------------ | ------------------------------------------------------------------ |
-| 配置桌面版数据目录和 token | [`desktop-config.md`](./desktop-config.md)       | [`../reference/api.md`](../reference/api.md)                       |
-| 构建、签名和公证桌面版     | [`desktop-packaging.md`](./desktop-packaging.md) | [`../CONTRIBUTING.md`](../CONTRIBUTING.md)                         |
-| 配置环境变量               | [`env-registry.md`](./env-registry.md)           | `packages/shared/src/env/registry.ts`                              |
-| 做主题包                   | [`themes.md`](./themes.md)                       | [`../reference/theme-packages.md`](../reference/theme-packages.md) |
-| 写外部 Agent skill         | [`skills.md`](./skills.md)                       | `.claude/skills/`                                                  |
-| 做浏览器 E2E               | [`e2e-testing.md`](./e2e-testing.md)             | [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)                   |
+| Goal                                  | Start here                                       | Reference                                                                                      |
+| ------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| 配置模型用途、单局 runtime 与桌面目录 | [`desktop-config.md`](./desktop-config.md)       | [`../reference/slots.md`](../reference/slots.md), [`../reference/api.md`](../reference/api.md) |
+| 构建、签名和公证桌面版                | [`desktop-packaging.md`](./desktop-packaging.md) | [`../CONTRIBUTING.md`](../CONTRIBUTING.md)                                                     |
+| 配置环境变量                          | [`env-registry.md`](./env-registry.md)           | `packages/shared/src/env/registry.ts`                                                          |
+| 做主题包                              | [`themes.md`](./themes.md)                       | [`../reference/theme-packages.md`](../reference/theme-packages.md)                             |
+| 写外部 Agent skill                    | [`skills.md`](./skills.md)                       | `.claude/skills/`                                                                              |
+| 做浏览器 E2E                          | [`e2e-testing.md`](./e2e-testing.md)             | [`e2e-plugin-verify.md`](./e2e-plugin-verify.md)                                               |
 
 ## Writing Rules
 

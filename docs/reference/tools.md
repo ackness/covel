@@ -6,45 +6,53 @@
 
 ## 概览
 
-| 工具名                  | 来源    | 所属插件      | 审批策略   | 描述                                                                                      |
-| ----------------------- | ------- | ------------- | ---------- | ----------------------------------------------------------------------------------------- |
-| create-form             | builtin | —             | auto-allow | 创建玩家表单                                                                              |
-| create-choices          | builtin | —             | auto-allow | 创建选项列表                                                                              |
-| create-notification     | builtin | —             | auto-allow | 显示通知消息                                                                              |
-| render-ui               | builtin | —             | auto-allow | 渲染带独立 part 状态的 UI 块                                                              |
-| plugin-data-set         | builtin | —             | auto-allow | 写入插件持久化数据（单条）                                                                |
-| plugin-data-set-batch   | builtin | —             | auto-allow | 批量写入插件持久化数据                                                                    |
-| plugin-data-get         | builtin | —             | auto-allow | 读取当前插件持久化数据                                                                    |
-| plugin-data-list        | builtin | —             | auto-allow | 列出当前插件持久化数据                                                                    |
-| **create-character**    | builtin | —             | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data                   |
-| **update-character**    | builtin | —             | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                                  |
-| **list-characters**     | builtin | —             | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                                     |
-| **get-character**       | builtin | —             | auto-allow | 按 id 或 name 查找单个角色                                                                |
-| **world-dimension-get** | builtin | —             | auto-allow | 按需读取当前 session 世界的结构化维度字段                                                 |
-| **emit-event**          | builtin | —             | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema          |
-| **suspend**             | builtin | —             | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复                |
-| **runtime-done**        | builtin | —             | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                          |
-| **search-tools**        | 注入    | —             | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具       |
-| **memory-search**       | builtin | —             | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)                 |
-| **memory-get-block**    | builtin | —             | auto-allow | 按标签读取核心记忆块；接受世界/插件 `memoryBlocks` 声明的自定义标签                       |
-| **memory-update-block** | builtin | —             | auto-allow | 按标签完整替换核心记忆块；支持自定义标签，无 capability 门控——列入 `tools.builtin` 即可用 |
-| set-world-schema        | local   | world-init    | auto-allow | 定义世界角色属性 Schema                                                                   |
-| set-world-entries-batch | local   | world-init    | auto-allow | 批量写入世界词条                                                                          |
-| unlock-codex-entries    | local   | codex         | auto-allow | 批量解锁图鉴条目                                                                          |
-| update-codex-entry      | local   | codex         | auto-allow | 更新已有图鉴条目                                                                          |
-| generate-guide          | local   | guide         | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`            |
-| upsert-npc-graph        | local   | npc-graph     | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                        |
-| list-npc-graph          | local   | npc-graph     | auto-allow | 读取现有 NPC 图；图已注入 prompt，仅在需要某关系完整 `fact` 时按需调用                    |
-| generate-scene-prompts  | local   | scene-prompts | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                              |
-| upsert-quests           | local   | core-quest    | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）             |
-| update-affinity         | local   | affinity      | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）         |
-| update-inventory        | local   | inventory     | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）               |
+| 工具名                                | 来源    | 所属插件            | 审批策略   | 描述                                                                                      |
+| ------------------------------------- | ------- | ------------------- | ---------- | ----------------------------------------------------------------------------------------- |
+| create-form                           | builtin | —                   | auto-allow | 创建玩家表单                                                                              |
+| create-choices                        | builtin | —                   | auto-allow | 创建选项列表                                                                              |
+| create-notification                   | builtin | —                   | auto-allow | 显示通知消息                                                                              |
+| render-ui                             | builtin | —                   | auto-allow | 渲染带独立 part 状态的 UI 块                                                              |
+| plugin-data-set                       | builtin | —                   | auto-allow | 写入插件持久化数据（单条）                                                                |
+| plugin-data-set-batch                 | builtin | —                   | auto-allow | 批量写入插件持久化数据                                                                    |
+| plugin-data-get                       | builtin | —                   | auto-allow | 读取当前插件持久化数据                                                                    |
+| plugin-data-list                      | builtin | —                   | auto-allow | 列出当前插件持久化数据                                                                    |
+| **create-character**                  | builtin | —                   | auto-allow | 创建角色（player/npc/companion），写 characters 表 + 镜像到 plugin-data                   |
+| **update-character**                  | builtin | —                   | auto-allow | 按 id 更新角色描述/字段（shallow merge），自动 version++                                  |
+| **sync-characters**                   | builtin | —                   | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10                                        |
+| **list-characters**                   | builtin | —                   | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                                     |
+| **get-character**                     | builtin | —                   | auto-allow | 按 id 或 name 查找单个角色                                                                |
+| **world-dimension-get**               | builtin | —                   | auto-allow | 按需读取当前 session 世界的结构化维度字段                                                 |
+| **emit-event**                        | builtin | —                   | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema          |
+| **suspend**                           | builtin | —                   | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复                |
+| **runtime-done**                      | builtin | —                   | auto-allow | Agent 工具循环的结束信号——业务工具调用完毕后调用以结束本 runtime                          |
+| **search-tools**                      | 注入    | —                   | auto-allow | 延迟工具搜索——manifest 声明 `tools.defer` 时框架自动注入，BM25 检索并激活未预载工具       |
+| **memory-search**                     | builtin | —                   | auto-allow | 搜索记忆：对话历史(recall) + 长期知识库(archival，含 codex/lorebook/角色)                 |
+| **memory-get-block**                  | builtin | —                   | auto-allow | 按标签读取核心记忆块；接受世界/插件 `memoryBlocks` 声明的自定义标签                       |
+| **memory-update-block**               | builtin | —                   | auto-allow | 按标签完整替换核心记忆块；支持自定义标签，无 capability 门控——列入 `tools.builtin` 即可用 |
+| initialize-world                      | local   | world-init          | auto-allow | 原子提交角色属性 Schema 与世界词条                                                        |
+| set-world-schema                      | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部 schema 写入原语                                            |
+| set-world-entries-batch               | local   | world-init          | auto-allow | `initialize-world` 的兼容/内部词条写入原语                                                |
+| submit-world-facts                    | local   | world-ir            | auto-allow | 以 Function Calling 参数提交并校验完整 `covel://world/ir/v1`                              |
+| sync-codex-entries                    | local   | codex               | auto-allow | 原子批量提交本轮图鉴新增与补充                                                            |
+| unlock-codex-entries                  | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部新增原语                                                  |
+| update-codex-entry                    | local   | codex               | auto-allow | `sync-codex-entries` 的兼容/内部更新原语                                                  |
+| generate-guide                        | local   | guide               | auto-allow | 写入本轮行动建议（safe / aggressive / creative 三组）到 `plugin_data[message]`            |
+| upsert-npc-graph                      | local   | npc-graph           | auto-allow | 批量写入 NPC 节点与关系边（按 name 引用，工具内部去重并分配短 ID）                        |
+| list-npc-graph                        | local   | npc-graph           | auto-allow | 兼容读取工具；当前 extractor 已通过 prompt 注入读取图，不向模型声明                       |
+| generate-scene-prompts                | local   | scene-prompts       | auto-allow | 原子写入前情摘要、当前决策与玩家口吻快捷回复                                              |
+| upsert-quests                         | local   | core-quest          | auto-allow | 批量创建/推进任务（≤5/次，按 name 合并；objectives 按稳定 ID / 文本匹配勾选）             |
+| update-affinity                       | local   | affinity            | auto-allow | 批量记玩家↔NPC 好感增量（≤5/次，clamp ±100，派生 6 档 tier + history 最近 10 条）         |
+| update-inventory                      | local   | inventory           | auto-allow | 批量物品得失/装备变化（≤8/次，add/remove/set/equip/unequip，减到 0 墓碑化）               |
+| submit-dashscope-text-prompt          | local   | dashscope-image-gen | auto-allow | 提交文本画面提示并发射固定 DashScope 出图事件                                             |
+| submit-dashscope-structured-prompt    | local   | dashscope-image-gen | auto-allow | 提交结构化画面提示并发射固定 DashScope 出图事件                                           |
+| submit-openai-image-text-prompt       | local   | openai-image-gen    | auto-allow | 提交文本画面提示并发射固定 OpenAI-compatible 出图事件                                     |
+| submit-openai-image-structured-prompt | local   | openai-image-gen    | auto-allow | 提交结构化画面提示并发射固定 OpenAI-compatible 出图事件                                   |
 
 ---
 
 ## 工具调用方向
 
-本页当前以 `apps/server/src/routes/api/bootstrap.ts` 与 `plugins/**/tools/` 下的实现为准。
+本页当前以 `apps/server/src/routes/api/bootstrap/tools.ts`、`packages/tools/src/builtin/` 与 `plugins/**/tools/` 下的实现为准。
 
 ### 选择顺序
 
@@ -177,7 +185,7 @@ Plugin tool 承接插件自己的业务封装，例如：
 
 - `generate-guide`
 - `upsert-npc-graph`
-- `unlock-codex-entries`
+- `sync-codex-entries`
 
 这类能力的 schema、文案、数据结构由插件包自己定义和演进。
 
@@ -535,7 +543,7 @@ Created npc "苏婉" as char-abc123. — 青萍宗外门首席弟子，冰灵根
 Character "苏婉" (npc) already exists as char-abc123. No new record created. Use update-character to modify it.
 ```
 
-**使用者**: `char-creator/player-init`（创建 player 角色，建角完成后输出 `preGameDone: true`）、`char-creator/character-tracker`（只创建 NPC）
+**使用者**: 通用 builtin；捆绑的 `char-creator/character-tracker` 通过下方 `sync-characters` 间接复用。`player-init` 的表单提交由 guard 直接生成同类 proposal，不向模型暴露此工具。
 
 > **提交语义（缓冲提交）**：`create-character` / `update-character` 在执行阶段**不再直写** `characters` 表，而是把写入缓冲成一条 [`character.upsert`](#characterupsert) proposal。同一 tool loop 内的读取走**读穿透 overlay**——先 create 再 update 时，update 能读到自己刚缓冲的 create。真正的 `characters` 表写入 + plugin-data 镜像（`characters` namespace）由 commit handler 在回合结束时随该执行的**单一事务**一起落库：`success` / `skipped` 结果会提交其缓冲 proposal，`failed` / `suspended` 则不提交。
 
@@ -562,6 +570,23 @@ Updated npc "苏婉" (char-abc123) → v2.
   hp: 100 → 60
   status: alive → wounded
 ```
+
+---
+
+### sync-characters
+
+把同一叙事回合发现的新角色和已有角色变化合并成一次原子提交。它复用 `create-character` / `update-character` 的去重、默认值合并、schema warning 与读穿透 overlay，但只有整个批次成功才把 proposal 返回给 commit chain；中途任一创建或更新失败时，本次调用不会留下部分写入。
+
+| 参数      | 类型              | 必需 | 描述                                  |
+| --------- | ----------------- | ---- | ------------------------------------- |
+| `creates` | CharacterCreate[] |      | 新角色，默认 `[]`，最多 5 条          |
+| `updates` | CharacterUpdate[] |      | 已有角色 patch，默认 `[]`，最多 10 条 |
+
+两组不能同时为空；没有明确变化时 runtime 应调用 `runtime-done`。`creates[]` 与 `create-character` 参数相同，`updates[]` 与 `update-character` 参数相同。
+
+**输出 (parsedResult)**: `{ _text, success: true, created, updated }`
+
+**使用者**: `char-creator/character-tracker`。该 runtime 把 `sync-characters` 放入 `completeAfterTools`，工具成功后立即结束，不再请求一次模型收尾。
 
 ---
 
@@ -634,6 +659,25 @@ Attributes:
 - 持久化写入优先返回 `withPendingProposals(...)`，让 commit chain 接管落盘
 - 通过 plugin tool 封装插件自己的数据 schema 和批量写入逻辑
 
+### initialize-world
+
+**所属**: world-init (`plugins/world-init/tools/initialize-world.js`)
+
+开局一次性提交角色属性 schema 和世界参考词条。工具组合下方两个低层原语，并把它们产生的 `plugin.data`、`plugin.data.batch` 与 `lorebook.upsert` proposals 作为一个结果返回；任一部分校验或执行失败时都不会向 finalizer 暴露半套写入。
+
+| 参数         | 类型           | 必需 | 描述                                                                          |
+| ------------ | -------------- | ---- | ----------------------------------------------------------------------------- |
+| `attributes` | AttributeDef[] | ✓    | 至少 15 项，且必须覆盖 `stats` / `bio` / `abilities` / `equipment` / `social` |
+| `entries`    | WorldEntry[]   | ✓    | 至少 5 项世界参考资料                                                         |
+
+**输出**: `{ success, attributeCount, categories, count, keys, worldSchema, preGameDone: true }`
+
+`worldSchema` 同时作为 `world-init/schema-gen` 的 runtime output 交给同一 setup execution 中的 `char-creator/player-init`，避免下游读取尚未提交的 store。该 runtime 声明 `requireToolUse: true`、`completeAfterTools: [initialize-world]` 和 `output.schema`，因此模型只需生成一次工具参数；工具成功后框架直接把结果过 schema gate 并结束。
+
+**使用者**: `world-init/schema-gen`
+
+---
+
 ### set-world-schema
 
 **所属**: world-init (`plugins/world-init/tools/set-world-schema.js`)
@@ -646,21 +690,23 @@ Attributes:
 
 **AttributeDef**:
 
-| 字段         | 类型     | 必需 | 描述                                                   |
-| ------------ | -------- | ---- | ------------------------------------------------------ |
-| id           | string   | ✓    | 属性唯一标识                                           |
-| name         | string   | ✓    | 属性显示名称                                           |
-| type         | enum     | ✓    | `string` / `number` / `array` / `enum` / `boolean`     |
-| category     | enum     | ✓    | `stats` / `bio` / `abilities` / `equipment` / `social` |
-| min/max      | number   |      | 数值类型的范围                                         |
-| defaultValue | unknown  |      | 默认值                                                 |
-| itemType     | enum     |      | 数组元素类型（`string` / `number`）                    |
-| options      | string[] |      | 枚举选项列表                                           |
-| description  | string   |      | 属性说明                                               |
+| 字段         | 类型           | 必需 | 描述                                                                  |
+| ------------ | -------------- | ---- | --------------------------------------------------------------------- |
+| id           | string         | ✓    | 属性唯一标识                                                          |
+| name         | I18nText       | ✓    | 属性显示名称（字符串或 locale → string 记录）                         |
+| type         | enum           | ✓    | `string` / `number` / `array` / `enum` / `boolean` / `object` / `map` |
+| category     | enum           | ✓    | `stats` / `bio` / `abilities` / `equipment` / `social`                |
+| min/max      | number         |      | 数值类型的范围                                                        |
+| defaultValue | unknown        |      | 默认值                                                                |
+| itemType     | enum           |      | 数组元素类型（`string` / `number`）                                   |
+| options      | string[]       |      | 枚举选项列表                                                          |
+| subSchema    | AttributeDef[] |      | `object` 的递归子字段定义                                             |
+| valueType    | enum           |      | `map` 的值类型（`string` / `number` / `boolean`）                     |
+| description  | I18nText       |      | 属性说明（字符串或 locale → string 记录）                             |
 
-**输出**: `{ success, attributeCount, categories }`
+**输出**: `{ success, attributeCount, categories, worldSchema }`
 
-**使用者**: world-init/schema-gen
+**当前用途**: `initialize-world` 的内部组合原语。为兼容已有插件代码仍由 entry 注册，但捆绑的 `world-init/schema-gen` 不再直接向模型声明它。
 
 ---
 
@@ -683,9 +729,42 @@ Attributes:
 | key   | string | ✓    | 词条标识（如 `geography`, `factions`） |
 | value | object | ✓    | 词条内容（任意 JSON 对象）             |
 
-**输出**: `{ success, count, keys }`
+**输出**: `{ success, count, keys, worldSchema, preGameDone: true }`
 
-**使用者**: world-init/schema-gen
+**当前用途**: `initialize-world` 的内部组合原语。它要求同一执行的 pending proposals 中已经有 schema 写入；为兼容已有插件代码仍由 entry 注册，但捆绑 runtime 不再直接向模型声明它。
+
+---
+
+### submit-world-facts
+
+**所属**: world-ir (`plugins/world-ir/tools/submit-world-facts.js`)
+
+通过 Function Calling 参数提交完整 `covel://world/ir/v1`。参数 schema 直接复用 `worldIRV1Schema`，并在 Zod 的 `superRefine` 中执行 `validateWorldIRV1` 语义校验，因此模型能在工具参数路径上看到全局 ID 重复、实体引用缺失、深度或节点预算等错误并只修正相应字段。完整数据形状见 [world-data.md · WorldIR 与插件投影](./world-data.md#worldir-与插件投影)。
+
+| 参数                                               | 必需 | 描述                                                              |
+| -------------------------------------------------- | ---- | ----------------------------------------------------------------- |
+| `schemaVersion`                                    | ✓    | 固定为 `1`                                                        |
+| `summary`                                          | ✓    | 本轮事实摘要                                                      |
+| `entities` / `relations` / `events` / `statements` | ✓    | 四类事实数组；无内容时传空数组，插件扩展字段放入各项 `attributes` |
+
+工具原样返回校验后的参数，不产生持久化 proposal。`world-ir` 声明 `completeAfterTools: [submit-world-facts]`，框架把成功结果直接作为 typed runtime output，再执行一次 `covel://world/ir/v1` output schema gate。
+
+这里的 `events` 是 WorldIR **事实数组**，不是领域事件信封。只有形如 `{ topic, data? }` 且 `topic` 为字符串的条目才会被 output normalizer 转成 `event.emit`；普通 WorldIR event 不会再触发 `event.emit: topic must be a non-empty string`。
+
+---
+
+### sync-codex-entries
+
+**所属**: codex (`plugins/codex/tools/sync-codex-entries.js`)
+
+一次提交本轮全部图鉴变化，新发现放入 `unlocks`，已有条目的补充放入 `updates`。工具复用下方新增/更新原语并累积 pending proposals；任一更新找不到 `entryId` 时抛错，整个调用不返回 proposal，避免只提交前半批。
+
+| 参数      | 类型          | 必需 | 描述                               |
+| --------- | ------------- | ---- | ---------------------------------- |
+| `unlocks` | CodexEntry[]  |      | 默认 `[]`，最多 3 个真正的新条目   |
+| `updates` | CodexUpdate[] |      | 默认 `[]`，最多 5 个已有条目的补充 |
+
+两组不能同时为空；没有值得记录的新事实时调用 `runtime-done`。输出为 `{ unlocked, updated, entries, updates, ui }`。`codex` 将它列入 `completeAfterTools`，成功后立即结束。
 
 ---
 
@@ -716,6 +795,8 @@ Attributes:
 
 **ID 生成**: 使用 `shortIdBatch('codex', titles, sessionId)`，英文标题生成语义 slug（`codex-fire-magic`），CJK 标题回退为计数器（`codex-1`），同一批次内自动去重。
 
+**当前用途**: `sync-codex-entries` 的内部组合原语。为兼容已有插件代码仍注册，但捆绑的 `codex` runtime 不再直接向模型声明它。
+
 ---
 
 ### update-codex-entry
@@ -732,6 +813,23 @@ Attributes:
 | rarityUpgrade | enum     |      | 提升稀有度                                 |
 
 **输出**: `{ updated, entryId, ui }` — 含更新动画的 UI 卡片
+
+**当前用途**: `sync-codex-entries` 的内部组合原语。它支持读取同一次 sync 已缓冲的新增条目；捆绑 runtime 不再直接向模型声明它。
+
+---
+
+### 图像 prompt 提交工具
+
+两个图像插件各注册一对终结工具：
+
+| 插件                | `promptMode=text`                 | `promptMode=image-json`                 | 固定事件 topic                    |
+| ------------------- | --------------------------------- | --------------------------------------- | --------------------------------- |
+| dashscope-image-gen | `submit-dashscope-text-prompt`    | `submit-dashscope-structured-prompt`    | `image.generate.requested`        |
+| openai-image-gen    | `submit-openai-image-text-prompt` | `submit-openai-image-structured-prompt` | `openai-image.generate.requested` |
+
+文本工具接收非空 `prompt: string`；结构化工具接收至少一个字段的 `prompt: Record<string, unknown>`，由工具负责序列化。两者都要求 `composition: "single-scene" | "comic-strip"`。
+
+工具把规范化后的 `{ prompt, promptMode, composition }` 写入 `plugin_data[prompts]`，并通过 `withEmittedEvents` 发射插件自己的固定 topic。模型不再生成 `{ topic, data }` 事件信封，因此不能漏写或写空 topic；runtime output schema 只校验工具产生的可信结果。两个 prompt-generator 都是 `execution: background`，并以对应工具的 `completeAfterTools` 在一次成功提交后结束，后续 image-generator follower 继续在后台执行。
 
 ---
 

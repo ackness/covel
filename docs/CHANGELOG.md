@@ -14,6 +14,13 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 - **A player turn no longer waits for eligible media follow-up work.** Queued job creation commits atomically with the source turn, while background execution runs outside the main session lock and rechecks session/plugin incarnation, version, lease ownership, and declared effects before committing. Restart recovery resumes unclaimed queued work, but terminalizes expired queues and expired in-flight leases without replaying potentially billable provider calls.
 - **Bundled image prompt generation is now manifest-declared background work.** Both OpenAI-compatible and DashScope image prompt agents return a job immediately for every RPC caller, and a background entry now preserves its emitted background-follower chain instead of dropping the provider render. Decision guidance such as `scene-prompts` remains inside the foreground barrier because the player needs it before choosing the next action.
+- **Bundled structured agents now submit results through bounded Function Calling workflows.** World setup, WorldIR extraction, character tracking, codex updates, relationship extraction, guidance, scene prompts, quests, affinity, inventory, and image prompts use one atomic batch tool where practical, stop immediately after a successful terminal tool, and cap provider attempts so a stalled plugin cannot consume repeated full runtime budgets. Prose narrators remain streaming text runtimes.
+- **Runtime model selectors now distinguish routing declarations from effective targets.** Session Prep and in-session plugin controls keep `runtimeId → slot` overrides scoped to the session while showing the provider/model currently resolved for each slot. Function-runtime `modelPresetId` provider slots remain separate device-level plugin settings.
+
+### Fixed
+
+- **WorldIR factual events no longer become malformed domain events.** Output normalization only creates `event.emit` proposals from `{ topic, data? }` envelopes whose `topic` is a string, so WorldIR's own `events[]` records cannot produce repeated `event.emit: topic must be a non-empty string` failures.
+- **Atomic submission tools prevent partial structured-plugin writes.** `initialize-world`, `sync-characters`, and `sync-codex-entries` return their accumulated proposals only after the full batch succeeds; image prompt tools own their fixed event topics instead of asking the model to construct fragile event envelopes.
 
 ## [0.0.29] - 2026-09-02
 

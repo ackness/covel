@@ -51,8 +51,8 @@ self-contained **session-scoped knowledge graph** that:
 │  • LLM reads <narrator-output> + the existing graph, both already    │
 │    in the prompt (input.inject pulls nodes/edges as                  │
 │    <existing-npcs> / <existing-relations>) — no per-turn list call   │
-│  • calls upsert-npc-graph to write; list-npc-graph only on demand,   │
-│    when a truncated summary hides the full `fact` it needs           │
+│  • calls upsert-npc-graph once to write; when a summary is too       │
+│    short to prove a change, conservatively skips that relation       │
 │  • upsert tool maintains nodes/edges/index in plugin_data            │
 └──────────────────────────────────────────────────────────────────────┘
         │
@@ -118,16 +118,17 @@ retriever can do O(1) neighbour lookups instead of scanning all edges.
 
 `plugins/npc-graph/tools/`:
 
-- **`list-npc-graph.js`** — returns compact summaries of nodes and
-  edges so the LLM can avoid duplicate creates without paging through
-  the full plugin_data.
+- **`list-npc-graph.js`** — compatibility read tool for custom runtimes.
+  The bundled extractor no longer declares it because nodes and edges are
+  injected into its prompt before the LLM call.
 - **`upsert-npc-graph.js`** — the heavy-lift tool. Resolves node IDs
   by name (case-insensitive), assigns short IDs to new nodes via
   `shortIdBatch`, merges aliases / labels / summary / attributes into
   existing nodes, de-duplicates edges by `(source, target, relation)`,
   and refreshes the adjacency index in one transaction.
 
-Both tools follow the existing zero-dep injection pattern:
+Both tools follow the existing zero-dep injection pattern, but only
+`upsert-npc-graph` is exposed to the bundled extractor:
 `({ tool, z, shortIdBatch, store }) => tool({ ... })`.
 
 ## Embedding And Vector Capabilities
@@ -198,7 +199,7 @@ The plugin's right-panel spec lives at
 
 - `docs/reference/plugins.md` — full plugin registry with both runtimes
 - `docs/reference/ui-panels.md` — GraphCanvas catalog entry
-- `docs/reference/tools.md` — upsert-npc-graph and list-npc-graph
+- `docs/reference/tools.md` — current upsert workflow and compatibility reader
 - `packages/shared/src/types/npc-graph.ts` — type source of truth
 - `plugins/npc-graph/` — the plugin itself
 - `apps/web/src/lib/graph-canvas.tsx` — visualization component
