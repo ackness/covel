@@ -1,0 +1,61 @@
+{
+  "cases": [
+    {
+      "name": "mock-generate-guide-completes-after-one-tool",
+      "mode": "mock",
+      "runtimeId": "guide",
+      "ignoreUpstreams": true,
+      "message": "旅人走到雾港岔路，一侧传来钟声，另一侧留有新鲜脚印。",
+      "llmResponses": [
+        {
+          "content": null,
+          "finishReason": "tool_calls",
+          "toolCalls": [
+            {
+              "id": "call-generate-guide",
+              "name": "generate-guide",
+              "arguments": "{\"topic\":\"雾港岔路的路线选择\",\"categories\":[{\"style\":\"safe\",\"suggestions\":[\"先检查脚印的新旧与方向\"]},{\"style\":\"aggressive\",\"suggestions\":[\"沿钟声方向快速突进\"]},{\"style\":\"creative\",\"suggestions\":[\"留下标记后反向绕行观察\"]}]}"
+            }
+          ]
+        },
+        {
+          "content": "不应请求第二次模型响应。",
+          "finishReason": "stop",
+          "toolCalls": []
+        }
+      ],
+      "expect": {
+        "runtimeResults": [{ "runtimeId": "guide", "status": "success" }],
+        "pluginData": [{ "namespace": "message", "key": "category1Label" }]
+      }
+    },
+    {
+      "name": "mock-missing-guide-tool-fails-visible",
+      "mode": "mock",
+      "runtimeId": "guide",
+      "ignoreUpstreams": true,
+      "message": "模型没有调用业务工具。",
+      "llmResponses": [
+        {
+          "content": "你可以继续观察。",
+          "finishReason": "stop",
+          "toolCalls": []
+        },
+        {
+          "content": "或者向前探索。",
+          "finishReason": "stop",
+          "toolCalls": []
+        }
+      ],
+      "expect": {
+        "runtimeResults": [
+          {
+            "runtimeId": "guide",
+            "status": "failed",
+            "errorIncludes": "requireToolUse"
+          }
+        ]
+      }
+    }
+  ]
+}

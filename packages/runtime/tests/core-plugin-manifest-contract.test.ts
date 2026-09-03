@@ -79,7 +79,10 @@ describe("core plugin manifest contract", () => {
       model: "plugin",
       guard: "./guard.js",
       trigger: { type: "auto" },
+      requireToolUse: true,
       completeAfterTools: ["create-form"],
+      maxSteps: 2,
+      maxRetries: 0,
       // Turn-scoped needs carry both the intra-stage order and the same-turn
       // gate; the explicit stage picks the band.
       needs: ["pregame", "world-init/schema-gen"],
@@ -167,6 +170,14 @@ describe("core plugin manifest contract", () => {
       "memory-search",
       "emit-event",
     ]);
+
+    const guide = requireRuntime(manifests, "guide");
+    expect(guide).toMatchObject({
+      requireToolUse: true,
+      completeAfterTools: ["generate-guide"],
+      maxSteps: 2,
+      maxRetries: 0,
+    });
 
     for (const downstream of [
       ...rawDownstreams,

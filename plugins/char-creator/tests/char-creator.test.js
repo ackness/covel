@@ -66,6 +66,13 @@ describe("char-creator plugin", () => {
       expect(manifest.tools?.builtin).toEqual(["create-form"]);
     });
 
+    it("requires one create-form call and stops immediately after success", () => {
+      expect(manifest.requireToolUse).toBe(true);
+      expect(manifest.completeAfterTools).toEqual(["create-form"]);
+      expect(manifest.maxSteps).toBe(2);
+      expect(manifest.maxRetries).toBe(0);
+    });
+
     it("injects the same-turn pregame opening and generated world schema", () => {
       // Pre-Game band: narrator is NOT scheduled on turn 0, so player-init
       // consumes the opening summary produced by pregame (priority 10)
