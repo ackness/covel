@@ -231,6 +231,24 @@ describe("normalizeOutput", () => {
         data: { enemies: 3 },
       });
     });
+
+    it("ignores typed plugin events that are not domain-event envelopes", () => {
+      const output = {
+        events: [
+          {
+            id: "arrived-at-school",
+            type: "interaction",
+            participantIds: ["player", "teacher"],
+            description: "The player arrived at school.",
+          },
+        ],
+      };
+
+      const proposals = normalizeOutput(output, SOURCE, TURN_ID, SESSION_ID);
+
+      expect(proposals.filter((p) => p.type === "event.emit")).toEqual([]);
+      expect(output.events).toHaveLength(1);
+    });
   });
 
   describe("asset.generate", () => {

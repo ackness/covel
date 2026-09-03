@@ -431,7 +431,7 @@ interface UIRenderPart {
 | topic | string                  | ✓    | 事件 topic，须匹配某个激活插件已声明的 `events[].topic` |
 | data  | Record<string, unknown> |      | 事件 payload，按声明的 JSON Schema 校验，默认 `{}`      |
 
-**单通道语义**：发射成功时结果只经 `emittedEvents` result channel 携带（`withEmittedEvents`，见 `packages/tools/src/result.ts`），由工具循环累积、`finalize-agent-output.ts` 合并进 `RuntimeResult.output.events`——**绝不**同时返回 `event.emit` pendingProposal，避免同一事件被 `turn-event-chain.ts` 的 fan-out 与提案归一化重复处理。合并进 `output.events` 后走已有的回合内事件 fan-out（同 depth 同 topic 首胜）与 `event.emit` proposal 归一化，最终以 `event.emitted` SSE 事件下发（见 [protocol.md](protocol.md)）。
+**单通道语义**：发射成功时结果只经 `emittedEvents` result channel 携带（`withEmittedEvents`，见 `packages/tools/src/result.ts`），由工具循环累积、`finalize-agent-output.ts` 合并进 `RuntimeResult.output.events`——**绝不**同时返回 `event.emit` pendingProposal，避免同一事件被 `turn-event-chain.ts` 的 fan-out 与提案归一化重复处理。合并进 `output.events` 后走已有的回合内事件 fan-out（同 depth 同 topic 首胜）与 `event.emit` proposal 归一化，最终以 `event.emitted` SSE 事件下发（见 [protocol.md](protocol.md)）。归一化只把含 `topic` 字段的 `{ topic, data? }` 事件信封识别为领域事件；插件输出 schema 可以把同名 `events` 用作自身数据字段（例如 WorldIR 的事实事件），这类条目不会生成 `event.emit` proposal。
 
 **校验流程与错误形态**（错误均以可读文本回给 LLM，供其看错误后重试，不抛异常中断工具循环）：
 

@@ -98,14 +98,33 @@ export function normalizeOutput(
     }
   }
 
-  // event.emit — from events[]
-  const events = output.events as Array<Record<string, unknown>> | undefined;
-  if (events && events.length > 0) {
-    for (const evt of events) {
-      proposals.push(
-        makeProposal("event.emit", source, turnId, sessionId, evt),
-      );
+  // event.emit — from events[] entries that use the domain-event envelope.
+  //
+  // `events` is also a legitimate field in typed plugin schemas (WorldIR, for
+  // example, stores factual story events there).  Treating every array entry
+  // as `{ topic, data }` turns those schema values into malformed proposals
+  // and rolls back an otherwise valid turn.  Presence of the discriminator is
+  // enough here; malformed topic values still reach the commit validator and
+  // produce the existing actionable error instead of being silently dropped.
+  const events = Array.isArray(output.events) ? output.events : [];
+  for (const evt of events) {
+    if (
+      !evt ||
+      typeof evt !== "object" ||
+      Array.isArray(evt) ||
+      !("topic" in evt)
+    ) {
+      continue;
     }
+    proposals.push(
+      makeProposal(
+        "event.emit",
+        source,
+        turnId,
+        sessionId,
+        evt as Record<string, unknown>,
+      ),
+    );
   }
 
   // asset.generate — from output.assetGenerations[]. Accepted entry shape:

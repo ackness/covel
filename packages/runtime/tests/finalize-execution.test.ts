@@ -227,6 +227,39 @@ describe("finalizeExecution", () => {
     expect(emits).toHaveLength(0);
   });
 
+  it("does not commit typed plugin events as domain events", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: crypto.randomUUID(),
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("world-ir")],
+      results: [
+        makeResult("world-ir", {
+          events: [
+            {
+              id: "found-brass-key",
+              type: "inventory_change",
+              participantIds: ["player", "brass-key"],
+            },
+          ],
+        }),
+      ],
+      turnIds: [TURN_ID],
+    });
+
+    expect(outcome.status).toBe("committed");
+    expect(outcome.failedProposals).toEqual([]);
+    expect(await store.listEvents(SESSION_ID)).toEqual([]);
+    expect(await commitStatusOf(store)).toBe("committed");
+  });
+
   it("commits execution journal messages with successful proposals", async () => {
     const store = createMemoryStore();
     await savePendingTurn(store);
