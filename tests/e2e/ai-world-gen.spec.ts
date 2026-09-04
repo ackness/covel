@@ -4,7 +4,9 @@ import {
   composerInput,
   expectPlayerCanAct,
   seedAppSettings,
+  useServerWorlds,
   waitForTurnIdle,
+  waitForTurnStarted,
 } from "./helpers/player.js";
 
 const liveLlmEnabled = /^(1|true|yes|on)$/i.test(
@@ -57,6 +59,10 @@ test.describe("AI World Generation", () => {
   test("generate world via AI and verify it appears", async ({ page }) => {
     test.skip(!hasProviderKeys, "No provider keys configured for live LLM e2e");
 
+    // The following serial tests inspect the generated record through the
+    // server API and open it in a fresh page. Persist it in the transient
+    // server store instead of a per-test BrowserVault context.
+    await useServerWorlds(page);
     await seedAppSettings(page);
 
     // ── Navigate to world selection ──
@@ -66,6 +72,12 @@ test.describe("AI World Generation", () => {
     });
     await expect(worldCards.first()).toBeVisible({ timeout: 15_000 });
     const initialWorldCount = await worldCards.count();
+    const initialWorldIds = new Set(
+      (await worldCards.allTextContents()).flatMap((text) => {
+        const id = text.match(/№\s*\d+\s*·\s*([A-Za-z0-9_-]+)/)?.[1];
+        return id ? [id] : [];
+      }),
+    );
     console.log(`Initial world count: ${initialWorldCount}`);
 
     // ── Open AI World Generator dialog ──
@@ -142,7 +154,9 @@ test.describe("AI World Generation", () => {
           else terminalState = "pending";
           return terminalState;
         },
-        { timeout: 420_000, intervals: [1_000] },
+        // Three server attempts can each consume the 150s generation budget.
+        // Leave enough room to observe the final SSE error instead of racing it.
+        { timeout: 500_000, intervals: [1_000] },
       )
       .not.toBe("pending");
 
@@ -185,19 +199,30 @@ test.describe("AI World Generation", () => {
     }
     console.log(`World names: ${names.join(", ")}`);
 
+    let newWorldIndex = -1;
+    let newWorldId: string | undefined;
+    for (let i = 0; i < (await updatedWorldCards.count()); i++) {
+      const id = (await updatedWorldCards.nth(i).textContent())?.match(
+        /№\s*\d+\s*·\s*([A-Za-z0-9_-]+)/,
+      )?.[1];
+      if (id && !initialWorldIds.has(id)) {
+        newWorldIndex = i;
+        newWorldId = id;
+        break;
+      }
+    }
+    expect(newWorldIndex).toBeGreaterThanOrEqual(0);
+    expect(newWorldId).toBeTruthy();
+    const newWorldCard = updatedWorldCards.nth(newWorldIndex);
+
     // The new world should have tags (AI-generated worlds include tags)
-    const worldTags = page.locator("article").last().locator(".ui-tag");
+    const worldTags = newWorldCard.locator(".ui-tag");
     const tagCount = await worldTags.count();
     console.log(`New world tags: ${tagCount}`);
 
-    const newWorldId = (await updatedWorldCards.last().textContent())?.match(
-      /№\s*\d+\s*·\s*([a-z][a-z0-9-]*)/,
-    )?.[1];
-    expect(newWorldId).toBeTruthy();
-
     // Save the generated world for subsequent tests. Use the id to avoid name
     // collisions from live model output.
-    createdWorldName = names[names.length - 1] ?? null;
+    createdWorldName = (await newWorldCard.locator("h2").textContent()) ?? null;
     createdWorldId = newWorldId ?? null;
     expect(createdWorldName).toBeTruthy();
     console.log(`Created world: ${createdWorldName} (${createdWorldId})`);
@@ -278,6 +303,7 @@ test.describe("AI World Generation", () => {
     test.skip(!hasProviderKeys, "No provider keys configured for live LLM e2e");
     test.skip(!createdWorldId, "No world was created in previous test");
 
+    await useServerWorlds(page);
     await seedAppSettings(page);
 
     // ── Navigate to world selection ──
@@ -419,6 +445,7 @@ test.describe("AI World Generation", () => {
     console.log("Character creation submitted");
 
     // Wait for the response after character creation
+    await waitForTurnStarted(page);
     await waitForTurnIdle(page);
     console.log("Character creation response received");
 

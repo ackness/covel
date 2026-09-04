@@ -5,6 +5,15 @@ import { request } from "./request.js";
 const providerKeysResponseSchema = z
   .object({
     keys: z.record(z.string(), z.string()),
+    providers: z.record(
+      z.string(),
+      z
+        .object({
+          configured: z.boolean(),
+          masked: z.string(),
+        })
+        .strict(),
+    ),
   })
   .strict();
 

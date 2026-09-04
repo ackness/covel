@@ -5,7 +5,7 @@
  */
 
 import { Hono } from "hono";
-import { readEnvString, readRuntimeEnv } from "@covel/shared";
+import { providerApiKeysFromEnv, readRuntimeEnv } from "@covel/shared";
 import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import {
   applySlotOverlay,
@@ -190,43 +190,21 @@ export function createMiscApiRoutes(
     // on self/desktop, where the raw-key branch below is the real path.
     const denied = checkHostedOperator(c);
     if (denied) return denied;
-    const KNOWN_PROVIDERS = [
-      "DEEPSEEK",
-      "DASHSCOPE",
-      "OPENAI",
-      "ANTHROPIC",
-      "OPENROUTER",
-    ] as const;
-
     const env = readRuntimeEnv();
     const allowRawKeys =
       !!env.desktopRestToken && bearerToken(c) === env.desktopRestToken;
-
-    if (allowRawKeys) {
-      const keys: Record<string, string> = {};
-      for (const provider of KNOWN_PROVIDERS) {
-        const envKey = `${provider}_API_KEY`;
-        const value = readEnvString(envKey);
-        if (value) keys[provider.toLowerCase()] = value;
-      }
-      return c.json({ keys });
-    }
-
-    // Non-T1 or non-localhost: return availability + masked metadata only
+    const configuredKeys = providerApiKeysFromEnv();
     const providers: Record<string, { configured: boolean; masked: string }> =
       {};
-    for (const provider of KNOWN_PROVIDERS) {
-      const envKey = `${provider}_API_KEY`;
-      const value = readEnvString(envKey);
-      if (value) {
-        const masked =
-          value.length > 8
-            ? `${value.slice(0, 4)}...${value.slice(-4)}`
-            : "****";
-        providers[provider.toLowerCase()] = { configured: true, masked };
-      }
+    for (const [provider, value] of Object.entries(configuredKeys)) {
+      const masked =
+        value.length > 8 ? `${value.slice(0, 4)}...${value.slice(-4)}` : "****";
+      providers[provider] = { configured: true, masked };
     }
-    return c.json({ keys: {}, providers });
+    return c.json({
+      keys: allowRawKeys ? configuredKeys : {},
+      providers,
+    });
   });
 
   // POST /api/ai/ping — real provider latency probe.

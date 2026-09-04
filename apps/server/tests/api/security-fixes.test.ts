@@ -209,6 +209,7 @@ describe("[P2] provider keys raw exposure", () => {
     savedEnv = {
       COVEL_DESKTOP_REST_TOKEN: process.env.COVEL_DESKTOP_REST_TOKEN,
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      QWEN_API_KEY: process.env.QWEN_API_KEY,
       DEPLOYMENT_TIER: process.env.DEPLOYMENT_TIER,
     };
   });
@@ -223,6 +224,7 @@ describe("[P2] provider keys raw exposure", () => {
   it("returns masked availability without desktop bearer token", async () => {
     process.env.COVEL_DESKTOP_REST_TOKEN = "desktop-token";
     process.env.OPENAI_API_KEY = "sk-openai-secret";
+    process.env.QWEN_API_KEY = "sk-qwen-secret";
     const app = new Hono();
     app.route(
       "/",
@@ -243,6 +245,8 @@ describe("[P2] provider keys raw exposure", () => {
     expect(body.keys).toEqual({});
     expect(body.providers.openai).toMatchObject({ configured: true });
     expect(body.providers.openai.masked).toContain("...");
+    expect(body.providers.qwen).toMatchObject({ configured: true });
+    expect(body.providers.qwen.masked).toContain("...");
   });
 
   it("denies the masked listing to an anonymous caller on a hosted tier", async () => {
@@ -270,6 +274,7 @@ describe("[P2] provider keys raw exposure", () => {
   it("returns raw keys with the desktop bearer token", async () => {
     process.env.COVEL_DESKTOP_REST_TOKEN = "desktop-token";
     process.env.OPENAI_API_KEY = "sk-openai-secret";
+    process.env.QWEN_API_KEY = "sk-qwen-secret";
     const app = new Hono();
     app.route(
       "/",
@@ -283,10 +288,15 @@ describe("[P2] provider keys raw exposure", () => {
     const res = await app.request("http://localhost/api/provider-keys", {
       headers: { Authorization: "Bearer desktop-token" },
     });
-    const body = (await res.json()) as { keys: Record<string, string> };
+    const body = (await res.json()) as {
+      keys: Record<string, string>;
+      providers: Record<string, { configured: boolean; masked: string }>;
+    };
 
     expect(res.status).toBe(200);
     expect(body.keys.openai).toBe("sk-openai-secret");
+    expect(body.keys.qwen).toBe("sk-qwen-secret");
+    expect(body.providers.qwen).toMatchObject({ configured: true });
   });
 });
 

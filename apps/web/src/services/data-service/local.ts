@@ -69,6 +69,28 @@ function serverWorldPatch(world: StoreWorldRecord): WorldPatchRequest {
   return patch;
 }
 
+/**
+ * Browser-authored worlds may retain locale maps for display, while the
+ * server's WorldRecord and public API use the locale-resolved string shape.
+ * Keep that conversion at the browser-workspace boundary so an uploaded
+ * checkpoint cannot replace the transient server world with a non-wire shape.
+ */
+function serverCheckpointWorld(world: StoreWorldRecord): StoreWorldRecord {
+  const input = serverWorldRequest(world);
+  return {
+    id: input.id ?? world.id,
+    name: input.name,
+    description: input.description ?? "",
+    lore: input.lore,
+    tags: input.tags,
+    locale: input.locale,
+    dimensions: input.dimensions as StoreWorldRecord["dimensions"],
+    metadata: input.metadata,
+    createdAt: input.createdAt ?? world.createdAt,
+    updatedAt: world.updatedAt,
+  };
+}
+
 function humanSessionId(): string {
   const words = [
     "brave",
@@ -748,7 +770,10 @@ export class LocalDataService implements DataService {
       }
     }
 
-    await api.uploadBrowserCheckpoint(serverSessionId, checkpoint);
+    await api.uploadBrowserCheckpoint(serverSessionId, {
+      ...checkpoint,
+      world: serverCheckpointWorld(world),
+    });
   }
 
   async commitFromServer(sessionId: string, actionId: string): Promise<void> {
@@ -769,7 +794,19 @@ export class LocalDataService implements DataService {
       actionId,
       current.revision,
     );
-    await vault.applySessionCommit(commit);
+    // The server mirror deliberately uses locale-resolved WorldRecord strings.
+    // The browser remains authoritative for the richer local world document,
+    // so do not let a returned execution commit downgrade its i18n fields.
+    const browserWorld = current.session.worldId
+      ? await vault.getWorld(current.session.worldId)
+      : current.world;
+    await vault.applySessionCommit({
+      ...commit,
+      checkpoint: {
+        ...commit.checkpoint,
+        world: browserWorld,
+      },
+    });
     await vault.clearPendingCommit(sessionId, actionId);
   }
 

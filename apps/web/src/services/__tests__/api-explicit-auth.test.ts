@@ -174,7 +174,14 @@ describe("operator auth on hosted administration routes", () => {
           restartRequired: true,
         }),
       )
-      .mockResolvedValueOnce(okJson({ keys: { openai: "secret" } }))
+      .mockResolvedValueOnce(
+        okJson({
+          keys: { openai: "secret" },
+          providers: {
+            openai: { configured: true, masked: "****" },
+          },
+        }),
+      )
       .mockResolvedValueOnce(okJson({ ok: true }));
     vi.stubGlobal("fetch", fetchMock);
 

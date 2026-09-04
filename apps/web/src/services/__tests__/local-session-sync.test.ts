@@ -243,6 +243,39 @@ describe("LocalDataService browser-authoritative sync", () => {
     });
   });
 
+  it("uploads a locale-resolved server world without downgrading browser i18n", async () => {
+    const service = await serviceWithWorld("localized-world");
+    await vault.upsertWorld({
+      id: "localized-world",
+      name: { "zh-CN": "雾港", "en-US": "Mistport" },
+      description: { "zh-CN": "雾中港口", "en-US": "A port in fog" },
+      locale: "zh-CN",
+      createdAt: "2026-08-25T00:00:00.000Z",
+    } as never);
+    await service.createSession(
+      "localized-world",
+      undefined,
+      "sess-localized",
+      [],
+      "zh-CN",
+    );
+
+    await service.syncToServer("sess-localized");
+
+    expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
+      "sess-localized",
+      expect.objectContaining({
+        world: expect.objectContaining({
+          name: "雾港",
+          description: "雾中港口",
+        }),
+      }),
+    );
+    await expect(vault.getWorld("localized-world")).resolves.toMatchObject({
+      name: { "zh-CN": "雾港", "en-US": "Mistport" },
+    });
+  });
+
   it("preserves an established browser clock when rebuilding a missing mirror", async () => {
     const service = await serviceWithWorld();
     await service.createSession("world-1", undefined, "sess-1", [], "en-US");
@@ -385,6 +418,59 @@ describe("LocalDataService browser-authoritative sync", () => {
     await expect(vault.getLatestCheckpoint("sess-1")).resolves.toMatchObject({
       revision: 3,
       actionId: "turn-b",
+    });
+  });
+
+  it("keeps the browser world document when applying a server commit", async () => {
+    const service = await serviceWithWorld("localized-world");
+    await vault.upsertWorld({
+      id: "localized-world",
+      name: { "zh-CN": "雾港", "en-US": "Mistport" },
+      description: { "zh-CN": "雾中港口", "en-US": "A port in fog" },
+      createdAt: "2026-08-25T00:00:00.000Z",
+    } as never);
+    await service.createSession(
+      "localized-world",
+      undefined,
+      "sess-localized",
+      [],
+      "zh-CN",
+    );
+    api.fetchBrowserCommit.mockImplementation(
+      async (_sessionId: string, actionId: string, baseRevision: number) => {
+        const current = await vault.getLatestCheckpoint("sess-localized");
+        if (!current) throw new Error("missing checkpoint");
+        return {
+          baseRevision,
+          revision: baseRevision + 1,
+          actionId,
+          checkpoint: {
+            ...current,
+            world: {
+              id: "localized-world",
+              name: "雾港",
+              description: "雾中港口",
+              createdAt: "2026-08-25T00:00:00.000Z",
+            },
+            revision: baseRevision + 1,
+            actionId,
+            committedAt: "2026-08-26T00:00:00.000Z",
+          },
+        };
+      },
+    );
+
+    await service.commitFromServer("sess-localized", "turn-1");
+
+    await expect(vault.getWorld("localized-world")).resolves.toMatchObject({
+      name: { "zh-CN": "雾港", "en-US": "Mistport" },
+    });
+    await expect(
+      vault.getLatestCheckpoint("sess-localized"),
+    ).resolves.toMatchObject({
+      world: {
+        name: { "zh-CN": "雾港", "en-US": "Mistport" },
+      },
     });
   });
 

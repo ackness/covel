@@ -161,7 +161,7 @@ describe("BrowserVault session commits", () => {
     );
   });
 
-  it("rejects API keys and secrets before writing", async () => {
+  it("rejects credential-shaped fields before writing", async () => {
     const secret = checkpoint("session-a", 1, "turn-secret", {
       session: {
         ...checkpoint("session-a", 1, "turn-secret").session,
@@ -172,6 +172,27 @@ describe("BrowserVault session commits", () => {
       vault.applySessionCommit(commit(secret)),
     ).rejects.toBeInstanceOf(BrowserVaultSecretError);
     expect(await vault.getLatestCheckpoint("session-a")).toBeNull();
+  });
+
+  it("allows narrative character secrets that are ordinary world content", async () => {
+    await expect(
+      vault.upsertWorld({
+        id: "world-with-lore-secrets",
+        name: "World",
+        description: "",
+        metadata: {
+          characterBlueprints: [
+            {
+              schemaVersion: 1,
+              id: "keeper",
+              name: "Keeper",
+              persona: { secrets: ["The lighthouse is still occupied."] },
+            },
+          ],
+        },
+        createdAt: "2026-08-25T00:00:00.000Z",
+      }),
+    ).resolves.toBeUndefined();
   });
 });
 

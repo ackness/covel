@@ -139,6 +139,7 @@ export function PluginPackageRow({
 
   return (
     <div
+      data-plugin-id={pkg.id}
       className={`prep-plugin-row border px-3 py-2.5 transition-colors ${
         isSelected
           ? "border-primary/40 bg-primary/5"
@@ -149,6 +150,7 @@ export function PluginPackageRow({
         <button
           type="button"
           role="switch"
+          aria-label={displayName}
           aria-checked={isSelected}
           disabled={isLocked}
           title={isLocked ? t("plugin.locked") : undefined}
