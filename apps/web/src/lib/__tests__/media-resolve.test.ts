@@ -14,11 +14,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { __resetMediaCacheForTests } from "../media-cache.js";
-import {
-  resolveMediaSrc,
-  MEDIA_TOKEN_ENDPOINT,
-  __testing,
-} from "../media-resolve.js";
+import { resolveMediaSrc, __testing } from "../media-resolve.js";
+import { mediaTokenEndpoint } from "../../services/api/media.js";
 import { sha256Hex } from "../media-hash.js";
 import { storeSessionToken } from "../../services/session-credentials.js";
 import type { MediaRef } from "@covel/shared";
@@ -231,9 +228,9 @@ function mockFetch(
 
 // ── Tests ──────────────────────────────────────────────────────────
 
-describe("MEDIA_TOKEN_ENDPOINT", () => {
+describe("mediaTokenEndpoint", () => {
   it("encodes both sessionId and id", () => {
-    const out = MEDIA_TOKEN_ENDPOINT("abc/def", "id with space");
+    const out = mediaTokenEndpoint("abc/def", "id with space");
     expect(out).toBe(
       "/api/sessions/abc%2Fdef/media-token?id=id%20with%20space",
     );
@@ -254,7 +251,7 @@ describe("resolveMediaSrc", () => {
       if (url.startsWith("/api/sessions/")) {
         return new Response(
           JSON.stringify({
-            url: "https://signed.example.com/abc.png?token=xyz",
+            url: "/api/media/abc?token=xyz",
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
@@ -263,13 +260,13 @@ describe("resolveMediaSrc", () => {
     });
     const result = await resolveMediaSrc(refWithUrl, { sessionId: "s1" });
     expect(calls).toEqual([
-      MEDIA_TOKEN_ENDPOINT("s1", baseRef.id),
-      "https://signed.example.com/abc.png?token=xyz",
+      mediaTokenEndpoint("s1", baseRef.id),
+      "/api/media/abc?token=xyz",
     ]);
     const tokenCall = vi.mocked(globalThis.fetch).mock.calls[0];
-    expect(
-      (tokenCall?.[1]?.headers as Record<string, string>)["X-Session-Token"],
-    ).toBe("owner-secret");
+    expect(new Headers(tokenCall?.[1]?.headers).get("X-Session-Token")).toBe(
+      "owner-secret",
+    );
     expect(result.fromCache).toBe(false);
     expect(result.ok).toBe(true);
     expect(result.url.startsWith("blob:")).toBe(true);
@@ -292,7 +289,7 @@ describe("resolveMediaSrc", () => {
       return pngResponse();
     });
     const result = await resolveMediaSrc(baseRef, { sessionId: "s2" });
-    expect(calls[0]).toBe(MEDIA_TOKEN_ENDPOINT("s2", baseRef.id));
+    expect(calls[0]).toBe(mediaTokenEndpoint("s2", baseRef.id));
     expect(calls[1]).toBe("https://signed.example.com/sha256-abc?token=xyz");
     expect(result.url.startsWith("blob:")).toBe(true);
     expect(result.fromCache).toBe(false);
@@ -397,7 +394,7 @@ describe("resolveMediaSrc", () => {
     const result = await resolveMediaSrc(refWithUrl, { sessionId: "s5" });
     expect(result.url.startsWith("blob:")).toBe(true);
     expect(calls).toEqual([
-      MEDIA_TOKEN_ENDPOINT("s5", baseRef.id),
+      mediaTokenEndpoint("s5", baseRef.id),
       "https://recovered.example.com/x.png",
     ]);
   });

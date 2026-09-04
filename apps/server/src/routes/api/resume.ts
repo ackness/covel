@@ -41,7 +41,11 @@ import {
   runWithHookScope,
   saveAutoSnapshot,
 } from "@covel/runtime";
-import type { ExecutionContext, RuntimeManifest } from "@covel/shared";
+import type {
+  ExecutionContext,
+  RuntimeManifest,
+  SuspensionSummary,
+} from "@covel/shared";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { EventBus } from "@covel/events";
 import { errorBody, listBody, okBody, parseJsonBody } from "../../api-error.js";
@@ -576,5 +580,21 @@ resumeRoutes.get("/:id/suspensions", async (c) => {
   if (!guard.ok) return guard.response;
 
   const suspensions = await store.listSuspensions(sessionId);
-  return c.json(listBody(suspensions));
+  return c.json(
+    listBody(
+      suspensions.map(
+        (suspension) =>
+          ({
+            id: suspension.id,
+            sessionId: suspension.sessionId,
+            turnId: suspension.turnId,
+            runtimeId: suspension.runtimeId,
+            pluginId: suspension.pluginId,
+            reason: suspension.reason,
+            resumeSchema: suspension.resumeSchema,
+            createdAt: suspension.createdAt,
+          }) satisfies SuspensionSummary,
+      ),
+    ),
+  );
 });

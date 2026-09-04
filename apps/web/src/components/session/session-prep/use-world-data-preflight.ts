@@ -12,6 +12,7 @@ export interface UseWorldDataPreflightResult {
 export function useWorldDataPreflight(
   worldId: string,
   selectedPluginIds: string[],
+  prepareWorldForServer: () => Promise<void>,
 ): UseWorldDataPreflightResult {
   const [worldDataPreflight, setWorldDataPreflight] =
     useState<api.WorldDataPreflightResponse | null>(null);
@@ -25,6 +26,7 @@ export function useWorldDataPreflight(
     setWorldDataPreflightStatus("loading");
     setWorldDataPreflightError(null);
     try {
+      await prepareWorldForServer();
       const result = await api.preflightWorldData(worldId, {
         plugins: selectedPluginIds,
       });
@@ -37,7 +39,7 @@ export function useWorldDataPreflight(
       );
       setWorldDataPreflightStatus("error");
     }
-  }, [worldId, selectedPluginIds]);
+  }, [worldId, selectedPluginIds, prepareWorldForServer]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

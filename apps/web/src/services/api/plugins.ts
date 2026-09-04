@@ -4,8 +4,10 @@ import type {
   PluginSummary,
   Stage,
 } from "@covel/shared";
+import { apiListResponseSchema, pluginSummarySchema } from "@covel/shared";
 import { request } from "./request.js";
 import type { PresetSummary, TurnCompletionSummary } from "./types.js";
+import { getDesktopRestAuthHeaders } from "@/lib/desktop-bridge.js";
 
 export type FlowSegmentId = Stage | "event-manual";
 
@@ -14,20 +16,20 @@ export async function listPresets(): Promise<PresetSummary[]> {
   return response.items;
 }
 
-interface PluginsResponse {
-  plugins: PluginSummary[];
+export interface PluginCatalog {
+  items: PluginSummary[];
   loadErrors: PluginLoadError[];
 }
 
-export async function listPlugins(options?: {
+export async function getPluginCatalog(options?: {
   silentErrors?: boolean;
-}): Promise<PluginsResponse> {
-  const response = await request<{ items: PluginSummary[] }>(
-    "/api/plugins",
-    options,
-  );
+}): Promise<PluginCatalog> {
+  const response = await request("/api/plugins", {
+    ...options,
+    schema: apiListResponseSchema(pluginSummarySchema),
+  });
   return {
-    plugins: response.items.filter((plugin) => plugin.status !== "error"),
+    items: response.items.filter((plugin) => plugin.status !== "error"),
     loadErrors: response.items
       .filter(
         (plugin): plugin is PluginSummary & { error: string } =>
@@ -37,13 +39,17 @@ export async function listPlugins(options?: {
   };
 }
 
-export async function uninstallPlugin(
-  pluginId: string,
-  headers?: HeadersInit,
-): Promise<void> {
+/** List usable plugins. Load diagnostics are available through getPluginCatalog. */
+export async function listPlugins(options?: {
+  silentErrors?: boolean;
+}): Promise<PluginSummary[]> {
+  return (await getPluginCatalog(options)).items;
+}
+
+export async function uninstallPlugin(pluginId: string): Promise<void> {
   await request(`/api/plugins/${encodeURIComponent(pluginId)}`, {
     method: "DELETE",
-    headers,
+    headers: getDesktopRestAuthHeaders(),
     operatorAuth: true,
   });
 }

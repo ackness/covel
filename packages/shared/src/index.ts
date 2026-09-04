@@ -174,9 +174,13 @@ export type { WorldManifestInput } from "./schemas/world.js";
 export {
   actionRequestSchema,
   actionTypeSchema,
+  apiListResponseSchema,
   apiErrorResponseSchema,
+  pluginSummarySchema,
   sseEnvelopeSchema,
+  suspensionSummarySchema,
   validateActionRequest,
+  worldPluginPlanSchema,
   worldCreateRequestSchema,
   worldPatchRequestSchema,
   worldWireRecordSchema,

@@ -86,7 +86,7 @@ describe("PluginListPanel runtime model overrides", () => {
 
     render(
       <PluginListPanel
-        packages={[fixturePlugin]}
+        plugins={[fixturePlugin]}
         sessionId={session.id}
         runtimeModelOverrides={{ "fixture/runtime": "text" }}
         resolvedSlots={[
@@ -147,7 +147,7 @@ describe("PluginListPanel runtime model overrides", () => {
 
     render(
       <PluginListPanel
-        packages={[fixturePlugin]}
+        plugins={[fixturePlugin]}
         sessionId={session.id}
         runtimeModelOverrides={{ "fixture/runtime": "text" }}
         resolvedSlots={[
@@ -194,7 +194,7 @@ describe("PluginListPanel runtime model overrides", () => {
       }),
     );
     const props = {
-      packages: [fixturePlugin],
+      plugins: [fixturePlugin],
       resolvedSlots: [
         {
           slotId: "fast",

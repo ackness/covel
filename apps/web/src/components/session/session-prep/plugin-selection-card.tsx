@@ -20,10 +20,10 @@ import type { PrepSectionStatus } from "./types.js";
 interface PluginSelectionCardProps {
   pluginPlan: api.WorldPluginPlan | null;
   pluginPlanLoading: boolean;
-  packages: api.PluginSummary[];
+  plugins: api.PluginSummary[];
   selectedPluginIds: string[];
   selectedPluginIdSet: ReadonlySet<string>;
-  selectedPackages: api.PluginSummary[];
+  selectedPluginSummaries: api.PluginSummary[];
   expanded: boolean;
   onToggleExpanded: () => void;
   pluginPacks: readonly PluginPack[];
@@ -104,10 +104,10 @@ function PluginPackSelector({
 export function PluginSelectionCard({
   pluginPlan,
   pluginPlanLoading,
-  packages,
+  plugins,
   selectedPluginIds,
   selectedPluginIdSet,
-  selectedPackages,
+  selectedPluginSummaries,
   expanded,
   onToggleExpanded,
   pluginPacks,
@@ -134,7 +134,7 @@ export function PluginSelectionCard({
   selectedFlowSteps,
 }: PluginSelectionCardProps) {
   const { t } = useTranslation();
-  const totalRuntimes = selectedPackages.reduce(
+  const totalRuntimes = selectedPluginSummaries.reduce(
     (sum, pkg) => sum + (pkg.runtimes?.length ?? 0),
     0,
   );
@@ -147,14 +147,14 @@ export function PluginSelectionCard({
         contentId="plugin-selection-card-content"
         summary={t("session.pluginsSelectionSummary", {
           selectedCount: selectedPluginIds.length,
-          pluginCount: packages.length,
+          pluginCount: plugins.length,
           runtimeCount: totalRuntimes,
         })}
       >
         <Puzzle className="w-4 h-4" />
         {t("session.plugins", "Plugins & Runtimes")}
         <Badge variant="secondary" className="text-xs ml-1">
-          {selectedPluginIds.length}/{packages.length}
+          {selectedPluginIds.length}/{plugins.length}
         </Badge>
       </CollapsibleCardHeader>
       {expanded && (
@@ -183,10 +183,10 @@ export function PluginSelectionCard({
                     {group.label}
                   </h4>
                   <span className="text-xs text-muted-foreground">
-                    {group.packages.length}
+                    {group.plugins.length}
                   </span>
                 </div>
-                {group.packages.map((pkg) => (
+                {group.plugins.map((pkg) => (
                   <PluginPackageRow
                     key={pkg.id}
                     pkg={pkg}

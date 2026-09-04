@@ -56,7 +56,7 @@ describe("useMessageGrouping", () => {
         messages,
         executionSteps,
         executing: false,
-        packages: [],
+        plugins: [],
         renderMessage,
       }),
     );
@@ -76,7 +76,7 @@ describe("useMessageGrouping", () => {
         messages: [],
         executionSteps: [step({ runtimeId: "boot", turnId: "t9" })],
         executing: true,
-        packages: [],
+        plugins: [],
         renderMessage,
       }),
     );
@@ -99,7 +99,7 @@ describe("useMessageGrouping", () => {
           messages,
           executionSteps,
           executing,
-          packages: [],
+          plugins: [],
           renderMessage,
         }),
       { initialProps: { executing: false } },

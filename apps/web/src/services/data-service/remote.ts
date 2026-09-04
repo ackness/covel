@@ -28,13 +28,16 @@ export class RemoteDataService implements DataService {
     }
   }
   async createWorld(name: string, description: string) {
-    return api.createWorld(name, description);
+    return api.createWorld({ name, description });
   }
   async saveGeneratedWorld(world: WorldRecord) {
     return world;
   }
   async updateWorld(id: string, patch: WorldPatch) {
     return api.updateWorld(id, patch);
+  }
+  async prepareWorldForServer() {
+    // No-op: the remote store is already the server's authority.
   }
 
   async listSessions(worldId: string) {

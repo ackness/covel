@@ -77,8 +77,8 @@ export function LlmSlotsPane() {
 
   const configuredSlots = isConfigured ? Object.keys(llm!.slots) : [];
   const discoveredSlotIds = useMemo(
-    () => discoverRuntimeSlotIds(state.packages),
-    [state.packages],
+    () => discoverRuntimeSlotIds(state.plugins),
+    [state.plugins],
   );
   const slots = useMemo(
     () =>
@@ -140,7 +140,7 @@ export function LlmSlotsPane() {
     setReloading(true);
     try {
       const result = await reloadLlmConfig();
-      // Refetch the config bundle (presets / packages / llm-config) into the
+      // Refetch the config bundle (presets / plugins / llm-config) into the
       // store so the slot list + "missing slot" checks reflect the new file.
       // BOOT_SUCCESS preserves any active session/world/messages.
       await boot();

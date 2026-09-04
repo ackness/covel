@@ -994,6 +994,37 @@ describe("Resume Routes", () => {
       expect(suspensions).toHaveLength(2);
     });
 
+    it("returns only the public suspension summary", async () => {
+      const createdAt = "2026-09-04T01:02:03.000Z";
+      await createSuspension(store, { createdAt });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      const res = await app.request("/api/sessions/sess-1/suspensions");
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        items: Array<Record<string, unknown>>;
+      };
+      expect(body.items).toEqual([
+        {
+          id: "susp-1",
+          sessionId: "sess-1",
+          turnId: "turn-1",
+          runtimeId: "test-plugin",
+          pluginId: "test-plugin",
+          reason: "Need player input",
+          resumeSchema: {
+            type: "object",
+            properties: { name: { type: "string" } },
+            required: ["name"],
+          },
+          createdAt,
+        },
+      ]);
+      expect(body.items[0]).not.toHaveProperty("pendingContinuation");
+      expect(body.items[0]).not.toHaveProperty("resolvedAt");
+    });
+
     it("does not include suspensions from other sessions", async () => {
       await createSession(store, "sess-other");
       await createSuspension(store, { id: "susp-mine" });

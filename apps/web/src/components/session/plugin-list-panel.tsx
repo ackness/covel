@@ -9,7 +9,7 @@ import { SessionPluginItem } from "./plugin-list-panel/session-plugin-item.js";
 import type { PluginListPanelProps } from "./plugin-list-panel/types.js";
 
 export function PluginListPanel({
-  packages,
+  plugins,
   loadErrors = [],
   sessionPlugins,
   executing,
@@ -98,7 +98,7 @@ export function PluginListPanel({
 
   const hasSessionPlugins = (sessionPlugins ?? []).length > 0;
 
-  if (packages.length === 0 && loadErrors.length === 0 && !hasSessionPlugins) {
+  if (plugins.length === 0 && loadErrors.length === 0 && !hasSessionPlugins) {
     return (
       <p className="text-xs text-muted-foreground italic">
         {t("session.noPluginsLoaded")}
@@ -109,7 +109,7 @@ export function PluginListPanel({
   const sessionPluginMap = new Map<string, SessionPlugin>(
     (sessionPlugins ?? []).map((p) => [p.id, p]),
   );
-  const useDetailView = packages.length === 0 && hasSessionPlugins;
+  const useDetailView = plugins.length === 0 && hasSessionPlugins;
   const sortedPlugins = useDetailView
     ? [...(sessionPlugins ?? [])].sort(
         (a, b) =>
@@ -143,7 +143,7 @@ export function PluginListPanel({
               setupRuntimes={setupRuntimes}
             />
           ))
-        : packages.map((pkg) => (
+        : plugins.map((pkg) => (
             <PluginItem
               key={pkg.id}
               pkg={pkg}

@@ -55,6 +55,7 @@ export type {
   ActionType,
   ValidatedActionRequest,
   SseEnvelope,
+  SuspensionSummary,
   UntrustedActionRequest,
   WorldCreateRequest,
   WorldPatchRequest,

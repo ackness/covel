@@ -127,9 +127,9 @@ export function PluginShowcase() {
     let cancelled = false;
     void (async () => {
       try {
-        const result = await listPlugins({ silentErrors: true });
+        const plugins = await listPlugins({ silentErrors: true });
         if (cancelled) return;
-        setCapabilityToPlugin(indexByCapability(result.plugins));
+        setCapabilityToPlugin(indexByCapability(plugins));
       } catch {
         // Landing page renders without a backend — silent fallback.
       }

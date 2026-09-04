@@ -71,9 +71,9 @@ export interface ExecutionStep {
  * The backend persists a fuller record in the store (pendingContinuation etc.);
  * only the UI-visible fields travel through api.ts via `listSuspensions` and
  * the SSE payloads; we re-export that shape from session-store.tsx so callers
- * can keep using `import type { SuspensionRecord } from "@/stores/session-store"`.
+ * can keep using `import type { SuspensionSummary } from "@/stores/session-store"`.
  */
-export type SuspensionRecord = api.SuspensionRecord;
+export type SuspensionSummary = api.SuspensionSummary;
 
 export interface PendingInteractionDraft {
   id: string;
@@ -109,7 +109,7 @@ export interface AssetProgressEvent {
 export interface SessionState {
   // Boot data
   presets: api.PresetSummary[];
-  packages: api.PluginSummary[];
+  plugins: api.PluginSummary[];
   /** Plugins that failed to load (manifest or dependency errors). */
   pluginLoadErrors: api.PluginLoadError[];
   worlds: api.WorldRecord[];
@@ -153,7 +153,7 @@ export interface SessionState {
    * maintained live via `turn.suspended` / `turn.resumed` SSE events. Cleared
    * when the matching resume/cancel call succeeds.
    */
-  suspensions: SuspensionRecord[];
+  suspensions: SuspensionSummary[];
 
   // State patches from kernel
   statePatches: Array<{
@@ -213,7 +213,7 @@ export type SessionAction =
   | {
       type: "BOOT_SUCCESS";
       presets: api.PresetSummary[];
-      packages: api.PluginSummary[];
+      plugins: api.PluginSummary[];
       pluginLoadErrors: api.PluginLoadError[];
       worlds: api.WorldRecord[];
       llmConfig: api.LlmConfigResponse | null;
@@ -312,8 +312,8 @@ export type SessionAction =
   | { type: "UPSERT_DRAFT"; draft: PendingInteractionDraft }
   | { type: "REMOVE_DRAFT"; draftId: string }
   | { type: "CLEAR_DRAFTS" }
-  | { type: "SET_SUSPENSIONS"; suspensions: SuspensionRecord[] }
-  | { type: "ADD_SUSPENSION"; suspension: SuspensionRecord }
+  | { type: "SET_SUSPENSIONS"; suspensions: SuspensionSummary[] }
+  | { type: "ADD_SUSPENSION"; suspension: SuspensionSummary }
   | { type: "REMOVE_SUSPENSION"; suspensionId: string }
   | { type: "ASSET_GENERATED"; turnId: string; asset: AssetGenerateView }
   | { type: "ASSET_PROGRESS"; turnId: string; progress: AssetProgressEvent };

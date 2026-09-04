@@ -315,7 +315,7 @@ export function useBuildSessionActions({
     async (content: string): Promise<boolean> => {
       const session = state.session;
       if (!session || !content) return false;
-      const ok = await api.steerTurn(session.id, content).catch(() => false);
+      const ok = await api.steerTurn(session.id, content);
       if (!ok) return false;
       // Echo in the UI. The in-flight action commit captures the authoritative
       // server copy; writing a second local revision here would conflict with
@@ -334,7 +334,7 @@ export function useBuildSessionActions({
   const abortActiveTurn = useCallback(async (): Promise<void> => {
     const session = state.session;
     if (!session) return;
-    await api.abortTurn(session.id).catch(() => false);
+    await api.abortTurn(session.id);
   }, [state.session]);
 
   const loadOlderMessages = useCallback(async () => {
@@ -435,7 +435,7 @@ export function useBuildSessionActions({
           echoUserMessage: echo && Boolean(filled),
         });
         try {
-          const snapshot = await api.getSessionSnapshot(sid);
+          const snapshot = await api.getSessionView(sid);
           if (sessionIdRef.current === sid) {
             dispatch({
               type: "SET_GAME_STATE",

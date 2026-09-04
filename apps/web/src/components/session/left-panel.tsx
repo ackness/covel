@@ -31,7 +31,7 @@ export interface LeftPanelProps {
   isLeftCollapsed: boolean;
   showSessionList: boolean;
   otherSessions: SessionRecord[];
-  enabledPackages: PluginSummary[];
+  enabledPlugins: PluginSummary[];
   pluginLoadErrors: PluginLoadError[];
   sessionPlugins: SessionPlugin[];
   executing: boolean;
@@ -50,7 +50,7 @@ export function LeftPanel({
   session,
   showSessionList,
   otherSessions,
-  enabledPackages,
+  enabledPlugins,
   pluginLoadErrors,
   sessionPlugins,
   executing,
@@ -180,15 +180,15 @@ export function LeftPanel({
           <div className="ui-panel-section border-b border-border space-y-3">
             <h3 className="ui-eyebrow text-xs flex items-center justify-between">
               <span>{t("session.plugins", "Plugins")}</span>
-              {enabledPackages.length > 0 && (
+              {enabledPlugins.length > 0 && (
                 <span className="ml-1 font-normal text-muted-foreground">
-                  {enabledPackages.length}
+                  {enabledPlugins.length}
                 </span>
               )}
             </h3>
             <PluginListPanel
               key={session.id}
-              packages={enabledPackages}
+              plugins={enabledPlugins}
               loadErrors={pluginLoadErrors}
               sessionPlugins={sessionPlugins}
               executing={executing}

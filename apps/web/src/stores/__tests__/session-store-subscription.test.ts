@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/api", () => ({
-  getSessionSnapshot: vi.fn(),
+  getSessionView: vi.fn(),
   getWorld: vi.fn(),
   listPluginData: vi.fn(),
   listSessionPlugins: vi.fn(),
@@ -68,7 +68,7 @@ describe("rehydrateSessionSideState", () => {
         updatedAt: "t",
       },
     ]);
-    vi.mocked(api.getSessionSnapshot).mockResolvedValue(snapshot);
+    vi.mocked(api.getSessionView).mockResolvedValue(snapshot);
     vi.mocked(api.listSuspensions).mockResolvedValue([
       {
         id: "susp-1",
@@ -76,7 +76,7 @@ describe("rehydrateSessionSideState", () => {
         turnId: "t1",
         runtimeId: "p1/run",
         pluginId: "p1",
-        suspendedAt: "t",
+        createdAt: "t",
       },
     ]);
     vi.mocked(api.getWorld).mockResolvedValue({
@@ -116,7 +116,7 @@ describe("rehydrateSessionSideState", () => {
 
   it("drops every async result after the active session changes", async () => {
     let release!: (value: typeof snapshot) => void;
-    vi.mocked(api.getSessionSnapshot).mockReturnValue(
+    vi.mocked(api.getSessionView).mockReturnValue(
       new Promise((resolve) => {
         release = resolve;
       }),

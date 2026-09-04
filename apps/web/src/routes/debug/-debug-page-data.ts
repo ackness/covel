@@ -13,7 +13,7 @@ import {
 } from "./-debug-page-model.js";
 
 export type SessionSnapshot = Awaited<
-  ReturnType<typeof apiClient.getSessionSnapshot>
+  ReturnType<typeof apiClient.getSessionView>
 >;
 
 export function useDebugPageData(sid: string | undefined) {
@@ -173,7 +173,7 @@ export function useDebugPageData(sid: string | undefined) {
       return;
     }
     apiClient
-      .getSessionSnapshot(selectedSessionId)
+      .getSessionView(selectedSessionId)
       .then(setSnapshotData)
       .catch(() => setSnapshotData(null));
   }, [debugView, selectedSessionId]);

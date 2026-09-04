@@ -167,6 +167,7 @@
     "noModelsConfigured": "No models configured",
     "preparation": "Session Setup",
     "startFailed": "Could not create session",
+    "pluginPlanFailed": "Could not resolve the world plugin plan",
     "history": "Previous Sessions",
     "worldLore": "World Document",
     "worldTab": "World",

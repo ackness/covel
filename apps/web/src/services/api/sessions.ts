@@ -6,7 +6,9 @@ import type {
   RuntimeResult,
   SessionEvent,
   SessionPluginsResponse,
+  SuspensionSummary,
 } from "@covel/shared";
+import { apiListResponseSchema, suspensionSummarySchema } from "@covel/shared";
 import type {
   BrowserCheckpoint,
   SessionCommit,
@@ -132,7 +134,7 @@ export async function submitInputs(
 
 // -- Session Snapshot (restore/reconnection) -------------------
 
-export async function getSessionSnapshot(
+export async function getSessionView(
   sessionId: string,
 ): Promise<import("@covel/shared").SessionSnapshot> {
   return request<import("@covel/shared").SessionSnapshot>(
@@ -250,10 +252,13 @@ export async function updateSession(
     runtimeModelOverrides?: Record<string, string>;
   },
 ): Promise<SessionRecord> {
-  return request<SessionRecord>(`/api/sessions/${sessionId}`, {
-    method: "PATCH",
-    body: JSON.stringify(updates),
-  });
+  return request<SessionRecord>(
+    `/api/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    },
+  );
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
@@ -360,44 +365,21 @@ export async function fetchBrowserCommit(
 // players can feed resume data for runtimes that declared a wait-point
 // (e.g. image generation, manual review, external callbacks).
 
-export interface SuspensionRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  readonly runtimeId: string;
-  readonly pluginId: string;
-  /** Normalised from backend `createdAt` - timestamp the runtime was paused. */
-  readonly suspendedAt: string;
-  readonly reason?: string;
-  /** Plain JSON schema describing the shape the plugin expects for resume data. */
-  readonly resumeSchema?: unknown;
-}
+export type { SuspensionSummary } from "@covel/shared";
 
 export interface ResumeSuspensionResponse {
   readonly result: RuntimeResult;
   readonly events: readonly SessionEvent[];
 }
 
-function normaliseSuspension(raw: Record<string, unknown>): SuspensionRecord {
-  return {
-    id: String(raw.id ?? ""),
-    sessionId: String(raw.sessionId ?? ""),
-    turnId: String(raw.turnId ?? ""),
-    runtimeId: String(raw.runtimeId ?? ""),
-    pluginId: String(raw.pluginId ?? ""),
-    suspendedAt: String(raw.suspendedAt ?? raw.createdAt ?? ""),
-    reason: typeof raw.reason === "string" ? raw.reason : undefined,
-    resumeSchema: raw.resumeSchema,
-  };
-}
-
 export async function listSuspensions(
   sessionId: string,
-): Promise<SuspensionRecord[]> {
-  const res = await request<{ items: Array<Record<string, unknown>> }>(
+): Promise<SuspensionSummary[]> {
+  const res = await request(
     `/api/sessions/${encodeURIComponent(sessionId)}/suspensions`,
+    { schema: apiListResponseSchema(suspensionSummarySchema) },
   );
-  return res.items.map(normaliseSuspension);
+  return res.items;
 }
 
 export async function resumeSuspension(

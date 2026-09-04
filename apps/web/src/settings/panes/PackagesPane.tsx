@@ -2,24 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Package, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
-import {
-  getDesktopRestAuthHeaders,
-  hasElectronIpc,
-  reloadServerAndWait,
-} from "@/lib/desktop-bridge.js";
+import { hasElectronIpc, reloadServerAndWait } from "@/lib/desktop-bridge.js";
 import { text } from "@/components/world/editor-helpers.js";
-import { operatorAuthHeaders } from "@/services/session-credentials.js";
-import { listPlugins, uninstallPlugin } from "@/services/api.js";
+import {
+  installPackage,
+  listPlugins,
+  uninstallPlugin,
+  type InstallKind,
+  type InstallResult,
+} from "@/services/api.js";
 import type { PluginSummary } from "@covel/shared";
-
-type InstallKind = "plugin" | "world";
-
-interface InstallResult {
-  ok: boolean;
-  kind: InstallKind;
-  id: string;
-  restartRequired: boolean;
-}
 
 interface ToastState {
   message: string;
@@ -43,11 +35,9 @@ export function PackagesPane() {
 
   const refreshInstalled = useCallback(async () => {
     try {
-      const result = await listPlugins({ silentErrors: true });
+      const plugins = await listPlugins({ silentErrors: true });
       // Only third-party (non-builtin) plugins can be uninstalled.
-      setInstalled(
-        result.plugins.filter((plugin) => plugin.source !== "builtin"),
-      );
+      setInstalled(plugins.filter((plugin) => plugin.source !== "builtin"));
     } catch {
       /* non-fatal — the list just stays as-is */
     }
@@ -72,27 +62,7 @@ export function PackagesPane() {
     setBusy(kind);
     setLastResult(null);
     try {
-      const form = new FormData();
-      form.append("file", file, file.name);
-      const res = await fetch(`/api/install/${kind}`, {
-        method: "POST",
-        headers: {
-          ...operatorAuthHeaders(),
-          ...getDesktopRestAuthHeaders(),
-        },
-        body: form,
-      });
-      const body = (await res.json()) as Partial<InstallResult> & {
-        error?: string;
-      };
-      if (!res.ok || !body.ok) {
-        flash({
-          message: body.error ?? t("settings.packages.uploadFailed"),
-          tone: "error",
-        });
-        return;
-      }
-      const result = body as InstallResult;
+      const result = await installPackage(kind, file);
       setLastResult(result);
       flash({
         message: result.restartRequired
@@ -116,10 +86,7 @@ export function PackagesPane() {
   async function uninstall(id: string) {
     setRemoving(id);
     try {
-      await uninstallPlugin(id, {
-        ...operatorAuthHeaders(),
-        ...getDesktopRestAuthHeaders(),
-      });
+      await uninstallPlugin(id);
       flash({
         message: t("settings.packages.uninstalledRestart", { id }),
         tone: "success",

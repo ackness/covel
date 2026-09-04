@@ -64,7 +64,7 @@ export interface StageViewProps {
   readonly executing: boolean;
   readonly executionError: string | null;
   readonly executionSteps: ExecutionStep[];
-  readonly packages: PluginSummary[];
+  readonly plugins: PluginSummary[];
   readonly sessionPlugins: SessionPlugin[];
   readonly submittedBlockIds: ReadonlySet<string>;
   readonly submittedBlockValues: Readonly<

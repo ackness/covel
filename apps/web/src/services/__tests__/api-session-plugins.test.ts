@@ -26,6 +26,7 @@ const {
   disableSessionPlugin,
   enableSessionPlugin,
   fetchPluginFlows,
+  getPluginCatalog,
   listPlugins,
   listSessionPlugins,
 } = await import("../api.js");
@@ -124,11 +125,14 @@ describe("plugin discovery API", () => {
       ],
     });
 
-    await expect(listPlugins()).resolves.toEqual({
-      plugins: [plugin()],
+    await expect(getPluginCatalog()).resolves.toEqual({
+      items: [plugin()],
       loadErrors: [{ pluginId: "broken", errors: ["bad manifest"] }],
     });
     expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("/api/plugins");
+
+    mockFetchOnce({ items: [plugin()] });
+    await expect(listPlugins()).resolves.toEqual([plugin()]);
   });
 
   it("normalizes only flow-specific optional turn completion", async () => {

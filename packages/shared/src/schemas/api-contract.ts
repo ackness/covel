@@ -4,9 +4,20 @@ import type {
   ActionRequest,
   WorldCreateRequest,
   WorldPatchRequest,
+  SuspensionSummary,
 } from "../types/api-contract.js";
+import type {
+  PluginRuntimeSummary,
+  PluginSummary,
+  WorldPluginPlan,
+} from "../types/plugin-api.js";
 import { canonicalizeLocale } from "../utils/locale-registry.js";
-import { worldDimensionsSchema } from "./world.js";
+import {
+  pluginRelationsSchema,
+  pluginUserSettingSpecSchema,
+  stageSchema,
+} from "./plugin-schemas.js";
+import { i18nTextSchema, worldDimensionsSchema } from "./world.js";
 
 const ACTION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
 const SAFE_WORLD_ID_PATTERN = /^[a-z0-9_-]{1,64}$/i;
@@ -160,6 +171,132 @@ export const apiErrorResponseSchema = z
       .regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u)
       .optional(),
     details: z.unknown().optional(),
+  })
+  .strict();
+
+/** Canonical collection envelope used by ordinary list endpoints. */
+export function apiListResponseSchema<Item extends z.ZodType>(item: Item) {
+  return z
+    .object({
+      items: z.array(item),
+      nextCursor: z.string().nullable().optional(),
+    })
+    .strict();
+}
+
+const effectiveTurnCompletionSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("await") }).strict(),
+  z
+    .object({
+      mode: z.literal("detached"),
+      maxQueueMs: z.number().int().positive().optional(),
+      maxExecutionMs: z.number().int().positive().optional(),
+      overlap: z.literal("serial"),
+      stalePolicy: z.literal("reject"),
+    })
+    .strict(),
+]);
+
+const pluginRuntimeSummarySchema: z.ZodType<PluginRuntimeSummary> = z
+  .object({
+    id: z.string().min(1),
+    runtimeType: z.enum(["agent", "function"]),
+    stage: stageSchema.optional(),
+    trigger: z
+      .object({
+        type: z.enum(["auto", "manual", "scheduled", "event"]),
+        interval: z.number().int().positive().optional(),
+        cooldownTurns: z.number().int().nonnegative().optional(),
+        maxTriggerCount: z.number().int().positive().optional(),
+        startTurn: z.number().int().nonnegative().optional(),
+        topic: z.string().min(1).optional(),
+      })
+      .strict(),
+    execution: z.enum(["sync", "background"]),
+    turnCompletion: effectiveTurnCompletionSchema,
+    model: z.string().optional(),
+    outputKind: z.enum(["story", "plugin", "system"]),
+    capabilities: z.array(z.string()),
+    tags: z.array(z.string()),
+    relations: pluginRelationsSchema.optional(),
+  })
+  .strict();
+
+/** Registry-level plugin DTO returned by plugin discovery endpoints. */
+export const pluginSummarySchema: z.ZodType<PluginSummary> = z
+  .object({
+    id: z.string().min(1),
+    displayName: i18nTextSchema,
+    description: i18nTextSchema,
+    pluginType: z.enum(["core-plugin", "plugin"]),
+    source: z.enum(["builtin", "community"]),
+    status: z.enum(["discovered", "registered", "active", "disabled", "error"]),
+    error: z.string().optional(),
+    runtimeCount: z.number().int().nonnegative(),
+    version: z.string().optional(),
+    capabilities: z.array(z.string()),
+    tags: z.array(z.string()),
+    relations: pluginRelationsSchema.optional(),
+    runtimes: z.array(pluginRuntimeSummarySchema),
+    tools: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          kind: z.enum(["builtin", "local"]),
+          runtimeId: z.string().optional(),
+        })
+        .strict(),
+    ),
+    userSettings: z.array(pluginUserSettingSpecSchema),
+  })
+  .strict();
+
+const pluginPackSchema = z
+  .object({
+    id: z.string().min(1),
+    label: i18nTextSchema,
+    description: i18nTextSchema.optional(),
+    pluginIds: z.array(z.string()),
+    optionalPluginIds: z.array(z.string()),
+    excludedPluginIds: z.array(z.string()),
+    tags: z.array(z.string()),
+    reason: i18nTextSchema.optional(),
+    source: z.enum(["builtin", "world"]),
+  })
+  .strict();
+
+/** Server-resolved plugin-selection plan for one world. */
+export const worldPluginPlanSchema: z.ZodType<WorldPluginPlan> = z
+  .object({
+    worldId: z.string().min(1),
+    packs: z.array(pluginPackSchema),
+    policy: z
+      .object({
+        presetId: z.string().optional(),
+        preferredTags: z.array(z.string()),
+        avoidedTags: z.array(z.string()),
+        requiredCapabilities: z.array(z.string()),
+        requiredPluginIds: z.array(z.string()),
+        recommendedPluginIds: z.array(z.string()),
+        excludedPluginIds: z.array(z.string()),
+      })
+      .strict(),
+    selectedPackId: z.string().optional(),
+    defaultPluginIds: z.array(z.string()),
+  })
+  .strict();
+
+/** Public suspension DTO; runtime continuation state never crosses the API. */
+export const suspensionSummarySchema: z.ZodType<SuspensionSummary> = z
+  .object({
+    id: z.string().min(1),
+    sessionId: z.string().min(1),
+    turnId: z.string().min(1),
+    runtimeId: z.string().min(1),
+    pluginId: z.string().min(1),
+    reason: z.string().optional(),
+    resumeSchema: z.unknown().optional(),
+    createdAt: z.string().min(1),
   })
   .strict();
 

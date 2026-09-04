@@ -8,7 +8,7 @@ const api = vi.hoisted(() => ({
   getPrepRuntimeBindings: vi.fn(),
   updateSession: vi.fn(),
   clearPrepRuntimeBindings: vi.fn(),
-  getSessionSnapshot: vi.fn(),
+  getSessionView: vi.fn(),
   markServerAck: vi.fn(),
 }));
 const hydration = vi.hoisted(() => ({
@@ -74,7 +74,7 @@ beforeEach(() => {
   api.getSlotConfig.mockReturnValue({});
   api.getPrepRuntimeBindings.mockReturnValue({ narrator: "fast" });
   api.updateSession.mockResolvedValue(session);
-  api.getSessionSnapshot.mockResolvedValue({});
+  api.getSessionView.mockResolvedValue({});
   hydration.hydratePluginDataForUiSpecs.mockResolvedValue(undefined);
 });
 
@@ -183,7 +183,7 @@ describe("startGameSession bootstrap order", () => {
   });
 
   it("clears a published session when initial snapshot hydration fails", async () => {
-    api.getSessionSnapshot.mockRejectedValueOnce(new Error("snapshot failed"));
+    api.getSessionView.mockRejectedValueOnce(new Error("snapshot failed"));
     const ds = makeDataService([]);
     vi.mocked(ds.deleteSession).mockRejectedValueOnce(
       new Error("cleanup failed"),
@@ -215,7 +215,7 @@ describe("startGameSession bootstrap order", () => {
 
   it("drops an initial snapshot that resolves after a session switch", async () => {
     let resolveSnapshot!: (snapshot: Record<string, unknown>) => void;
-    api.getSessionSnapshot.mockReturnValueOnce(
+    api.getSessionView.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveSnapshot = resolve;
       }),

@@ -1,3 +1,5 @@
+import { ApiError, requestResponse } from "./request.js";
+
 // -- Server Info -------------------------------------------------
 
 export interface ServerHealth {
@@ -38,11 +40,18 @@ const HEALTH_TIMEOUT_MS = 3000;
  * the status, and treat an unparseable or non-object body as a failed probe.
  */
 export async function fetchServerHealth(): Promise<ServerHealth> {
-  const res = await fetch("/api/health", {
-    signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
-  });
-  if (!res.ok) {
-    throw new Error(`[health] HTTP ${res.status}`);
+  let res: Response;
+  try {
+    res = await requestResponse("/api/health", {
+      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+      silentErrors: true,
+      retry: false,
+    });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw new Error(`[health] HTTP ${error.status}`, { cause: error });
+    }
+    throw error;
   }
   const body: unknown = await res.json().catch(() => null);
   if (!body || typeof body !== "object" || Array.isArray(body)) {

@@ -6,6 +6,7 @@ import { BrowserVault } from "../storage/browser-vault.js";
 const api = vi.hoisted(() => ({
   getWorld: vi.fn(),
   createWorld: vi.fn(),
+  updateWorld: vi.fn(),
   getSession: vi.fn(),
   createSession: vi.fn(),
   deleteSession: vi.fn(),
@@ -53,6 +54,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   isNotFound.mockReturnValue(true);
   api.getWorld.mockResolvedValue({ id: "world-1" });
+  api.updateWorld.mockResolvedValue({ id: "world-1" });
   api.getSession.mockRejectedValue(new Error("404"));
   api.createSession.mockResolvedValue({
     id: "sess-1",
@@ -72,6 +74,55 @@ afterEach(async () => {
 });
 
 describe("LocalDataService browser-authoritative sync", () => {
+  it("prepares the complete local world before server-side planning", async () => {
+    const service = await serviceWithWorld("world-local", {
+      pluginPolicy: { requiredPluginIds: ["world-notes"] },
+      source: "browser-indexeddb",
+    });
+    await service.updateWorld("world-local", {
+      lore: "Local lore",
+      locale: "en-US",
+      tags: ["mystery"],
+      dimensions: { custom: { enabled: true } },
+    });
+    api.getWorld.mockRejectedValueOnce(new Error("404"));
+
+    await service.prepareWorldForServer("world-local");
+
+    expect(api.createWorld).toHaveBeenCalledWith({
+      id: "world-local",
+      name: "World",
+      description: "",
+      lore: "Local lore",
+      tags: ["mystery"],
+      locale: "en-US",
+      dimensions: { custom: { enabled: true } },
+      metadata: {
+        pluginPolicy: { requiredPluginIds: ["world-notes"] },
+        source: "browser-indexeddb",
+      },
+      createdAt: expect.any(String),
+    });
+  });
+
+  it("refreshes an existing transient world mirror", async () => {
+    const service = await serviceWithWorld("world-1", {
+      pluginPolicy: { excludedPluginIds: ["economy"] },
+    });
+
+    await service.prepareWorldForServer("world-1");
+
+    expect(api.updateWorld).toHaveBeenCalledWith(
+      "world-1",
+      expect.objectContaining({
+        name: "World",
+        metadata: {
+          pluginPolicy: { excludedPluginIds: ["economy"] },
+        },
+      }),
+    );
+  });
+
   it("persists the selected plugin set, locale, and requested id", async () => {
     const service = await serviceWithWorld();
     const session = await service.createSession(

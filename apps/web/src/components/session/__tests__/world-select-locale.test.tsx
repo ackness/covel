@@ -50,7 +50,7 @@ describe("world select — locale preference", () => {
     render(
       <WorldSelectScreen
         worlds={[ENGLISH_WORLD, CHINESE_WORLD_ONE, CHINESE_WORLD_TWO]}
-        packages={[]}
+        plugins={[]}
         resolvedSlots={[]}
         settingsOpen={false}
         onSettingsOpenChange={() => {}}
@@ -89,7 +89,7 @@ describe("world select — locale preference", () => {
     render(
       <WorldSelectScreen
         worlds={[ENGLISH_WORLD]}
-        packages={[]}
+        plugins={[]}
         resolvedSlots={[]}
         settingsOpen={false}
         onSettingsOpenChange={() => {}}

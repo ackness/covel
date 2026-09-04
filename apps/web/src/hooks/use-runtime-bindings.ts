@@ -40,7 +40,7 @@ export interface UseRuntimeBindingsResult {
  */
 export function useRuntimeBindings(
   sessionId: string | undefined,
-  packages: PluginSummary[],
+  plugins: PluginSummary[],
   resolvedSlots: ResolvedSlot[],
   sessionPlugins?: SessionPlugin[],
   runtimeModelOverrides?: Record<string, string>,
@@ -55,7 +55,7 @@ export function useRuntimeBindings(
   const runtimeTargets = useMemo(() => {
     const result: Array<Omit<RuntimeBindingEntry, "slotName">> = [];
 
-    if (packages.length === 0 && sessionPlugins && sessionPlugins.length > 0) {
+    if (plugins.length === 0 && sessionPlugins && sessionPlugins.length > 0) {
       for (const sp of sessionPlugins) {
         if (sp.status === "error") continue;
         for (const runtime of sp.runtimes) {
@@ -71,21 +71,21 @@ export function useRuntimeBindings(
       return result;
     }
 
-    for (const pkg of packages) {
-      for (const rt of pkg.runtimes) {
+    for (const plugin of plugins) {
+      for (const rt of plugin.runtimes) {
         if (rt.runtimeType === "function" || rt.model === undefined) continue;
         const defaultSlot = rt.model;
         result.push({
           qualifiedId: rt.id,
-          pluginId: pkg.id,
-          pluginDisplayName: text(pkg.displayName) || pkg.id,
+          pluginId: plugin.id,
+          pluginDisplayName: text(plugin.displayName) || plugin.id,
           defaultSlot,
         });
       }
     }
 
     return result;
-  }, [packages, sessionPlugins]);
+  }, [plugins, sessionPlugins]);
 
   const runtimeTargetIdsKey = useMemo(
     () => runtimeTargets.map((target) => target.qualifiedId).join("\n"),

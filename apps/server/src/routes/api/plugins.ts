@@ -13,7 +13,7 @@ import {
   buildPluginDetail,
   buildPluginSummary,
 } from "../../lib/plugin-descriptor.js";
-import { errorBody, okBody } from "../../api-error.js";
+import { errorBody, listBody, okBody } from "../../api-error.js";
 import { makeInstallApiGuard } from "../privileged-auth.js";
 
 type Env = {
@@ -40,9 +40,9 @@ export const pluginRoutes = new Hono<Env>();
 // GET /plugins — List all loaded plugins
 pluginRoutes.get("/", async (c) => {
   const registry = c.get("pluginRegistry");
-  return c.json({
-    items: [...registry.getAll().values()].map(buildPluginSummary),
-  });
+  return c.json(
+    listBody([...registry.getAll().values()].map(buildPluginSummary)),
+  );
 });
 
 // GET /plugins/:id — Get plugin details

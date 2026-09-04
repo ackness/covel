@@ -1,4 +1,4 @@
-import type { CursorPage, PageCursor } from "@covel/shared";
+import type { CursorPage, PageCursor, WorldPatchRequest } from "@covel/shared";
 import type {
   MessageRecord,
   SessionRecord,
@@ -6,12 +6,7 @@ import type {
   WorldRecord,
 } from "../api.js";
 
-export type WorldPatch = Partial<
-  Pick<
-    WorldRecord,
-    "name" | "description" | "lore" | "locale" | "tags" | "dimensions"
-  >
->;
+export type WorldPatch = WorldPatchRequest;
 
 export type SessionPatch = Partial<
   Pick<SessionRecord, "status" | "presetId" | "runtimeModelOverrides">
@@ -24,6 +19,8 @@ export interface DataService {
   createWorld(name: string, description: string): Promise<WorldRecord>;
   saveGeneratedWorld(world: WorldRecord): Promise<WorldRecord>;
   updateWorld(id: string, patch: WorldPatch): Promise<WorldRecord>;
+  /** Ensure APIs needed before session creation can resolve this world. */
+  prepareWorldForServer(worldId: string): Promise<void>;
 
   // Sessions
   listSessions(worldId: string): Promise<SessionRecord[]>;

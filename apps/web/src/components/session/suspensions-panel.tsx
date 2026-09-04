@@ -14,10 +14,10 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { SuspensionRecord } from "@/services/api";
+import type { SuspensionSummary } from "@/services/api";
 
 interface SuspensionsPanelProps {
-  suspensions: readonly SuspensionRecord[];
+  suspensions: readonly SuspensionSummary[];
   onResume: (suspensionId: string, data: unknown) => Promise<void>;
   onCancel: (suspensionId: string) => Promise<void>;
 }
@@ -52,7 +52,7 @@ export function SuspensionsPanel({
 }
 
 interface SuspensionCardProps {
-  suspension: SuspensionRecord;
+  suspension: SuspensionSummary;
   onResume: (suspensionId: string, data: unknown) => Promise<void>;
   onCancel: (suspensionId: string) => Promise<void>;
 }
@@ -114,9 +114,9 @@ function SuspensionCard({
             </p>
           )}
         </div>
-        {suspension.suspendedAt && (
+        {suspension.createdAt && (
           <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
-            {formatRelativeTime(suspension.suspendedAt, t)}
+            {formatRelativeTime(suspension.createdAt, t)}
           </span>
         )}
       </div>

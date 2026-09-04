@@ -278,7 +278,7 @@ function SessionPage() {
     return (
       <SessionPrepScreen
         world={state.world}
-        packages={state.packages}
+        plugins={state.plugins}
         presets={state.presets}
         llmConfig={state.llmConfig}
         startError={state.executionError}
@@ -301,7 +301,7 @@ function SessionPage() {
       <OnboardingWizard />
       <WorldSelectScreen
         worlds={state.worlds}
-        packages={state.packages}
+        plugins={state.plugins}
         resolvedSlots={resolvedSlots}
         settingsOpen={settings.open}
         onSettingsOpenChange={settings.onOpenChange}

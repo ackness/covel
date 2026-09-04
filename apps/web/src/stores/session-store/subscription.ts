@@ -219,7 +219,7 @@ export async function rehydrateSessionSideState(
     .catch(ignoreError("reload session plugins and data after reconnect"));
 
   const snapshotTask = api
-    .getSessionSnapshot(sessionId)
+    .getSessionView(sessionId)
     .then(async (snapshot) => {
       if (!isCurrent()) return;
       dispatch({

@@ -4,7 +4,7 @@ import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
-  getSessionSnapshot: vi.fn(),
+  getSessionView: vi.fn(),
   listSessionPlugins: vi.fn(),
   listSuspensions: vi.fn(),
   markServerAck: vi.fn(),
@@ -74,7 +74,7 @@ function makeWorkspace(ds: DataService): SessionWorkspace {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  api.getSessionSnapshot.mockResolvedValue(emptySnapshot());
+  api.getSessionView.mockResolvedValue(emptySnapshot());
   api.listSessionPlugins.mockResolvedValue({ items: [], commands: [] });
   api.listSuspensions.mockResolvedValue([]);
 });
@@ -86,7 +86,7 @@ describe("restoreSessionState workspace ordering", () => {
     const dispatch = vi.fn((action: { type: string }) => {
       if (action.type === "SET_SESSION") order.push("publish");
     });
-    api.getSessionSnapshot.mockImplementation(async () => {
+    api.getSessionView.mockImplementation(async () => {
       order.push("snapshot");
       return emptySnapshot();
     });
@@ -144,7 +144,7 @@ describe("restoreSessionState workspace ordering", () => {
       type: "SET_EXECUTION_ERROR",
       error: "offline",
     });
-    expect(api.getSessionSnapshot).not.toHaveBeenCalled();
+    expect(api.getSessionView).not.toHaveBeenCalled();
     expect(api.listSessionPlugins).not.toHaveBeenCalled();
     expect(api.listSuspensions).not.toHaveBeenCalled();
     expect(api.markServerAck).not.toHaveBeenCalled();

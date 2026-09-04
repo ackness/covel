@@ -4,7 +4,7 @@ import type { PluginSummary } from "@/services/api.js";
 import type { ResolvedSlot } from "../use-slot-config.js";
 import { useRuntimeBindings } from "../use-runtime-bindings.js";
 
-const packages: PluginSummary[] = [
+const plugins: PluginSummary[] = [
   {
     id: "fixture-package",
     displayName: "Fixture package",
@@ -57,7 +57,7 @@ describe("useRuntimeBindings hydration", () => {
     const { result } = renderHook(() =>
       useRuntimeBindings(
         "prep:world-1",
-        packages,
+        plugins,
         slots,
         undefined,
         savedBindings,

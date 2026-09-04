@@ -169,6 +169,7 @@
     "noModelsConfigured": "未配置模型",
     "preparation": "会话配置",
     "startFailed": "创建会话失败",
+    "pluginPlanFailed": "无法解析世界插件方案",
     "history": "历史会话",
     "worldLore": "世界文档",
     "worldTab": "世界",

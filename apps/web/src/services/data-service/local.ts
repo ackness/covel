@@ -6,6 +6,8 @@ import {
   resolveI18nText,
   type CharacterBlueprint,
   type CursorPage,
+  type WorldCreateRequest,
+  type WorldPatchRequest,
 } from "@covel/shared";
 import type {
   BrowserCheckpoint,
@@ -40,6 +42,31 @@ const DEFAULT_MESSAGES_PAGE_LIMIT = 80;
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function serverWorldRequest(world: StoreWorldRecord): WorldCreateRequest {
+  return {
+    id: world.id,
+    name: resolveI18nText(world.name, i18n.language) || world.id,
+    description: resolveI18nText(world.description, i18n.language) ?? undefined,
+    lore: world.lore
+      ? (resolveI18nText(world.lore, i18n.language) ?? undefined)
+      : undefined,
+    tags: world.tags ? [...world.tags] : undefined,
+    locale: world.locale,
+    dimensions: world.dimensions,
+    metadata: world.metadata ? { ...world.metadata } : undefined,
+    createdAt: world.createdAt,
+  };
+}
+
+function serverWorldPatch(world: StoreWorldRecord): WorldPatchRequest {
+  const {
+    id: _id,
+    createdAt: _createdAt,
+    ...patch
+  } = serverWorldRequest(world);
+  return patch;
 }
 
 function humanSessionId(): string {
@@ -379,6 +406,14 @@ export class LocalDataService implements DataService {
     return toFrontendWorld(updated);
   }
 
+  async prepareWorldForServer(worldId: string): Promise<void> {
+    return this.enqueueWorkspace(async () => {
+      const world = await (await this.ready()).getWorld(worldId);
+      if (!world) throw new Error(`World not found: ${worldId}`);
+      await this.syncWorldToServerNow(world);
+    });
+  }
+
   // Sessions
 
   async listSessions(worldId: string): Promise<SessionRecord[]> {
@@ -631,6 +666,16 @@ export class LocalDataService implements DataService {
     return this.enqueueWorkspace(() => this.syncToServerNow(sessionId));
   }
 
+  private async syncWorldToServerNow(world: StoreWorldRecord): Promise<void> {
+    try {
+      await api.getWorld(world.id, { silentErrors: true });
+      await api.updateWorld(world.id, serverWorldPatch(world));
+    } catch (err) {
+      if (!isNotFound(err)) throw err;
+      await api.createWorld(serverWorldRequest(world));
+    }
+  }
+
   private async syncToServerNow(sessionId: string): Promise<void> {
     const vault = await this.ready();
     const pendingActionId = await vault.getPendingCommit(sessionId);
@@ -666,19 +711,9 @@ export class LocalDataService implements DataService {
     const serverWorldId = world.id;
     const serverSessionId = session.id;
 
-    // Ensure world exists on server (pass local ID so server uses the same ID).
-    // Only a 404 means "not there yet" — a transient 500 must not be answered
-    // by creating a second, empty world over the top of the real one.
-    try {
-      await api.getWorld(serverWorldId, { silentErrors: true });
-    } catch (err) {
-      if (!isNotFound(err)) throw err;
-      await api.createWorld(
-        resolveI18nText(world.name, i18n.language) ?? "",
-        resolveI18nText(world.description, i18n.language) ?? "",
-        serverWorldId,
-      );
-    }
+    // Keep the transient mirror current as well as present. Plugin planning and
+    // world-data preflight run before session creation and depend on metadata.
+    await this.syncWorldToServerNow(world);
 
     // Ensure session exists on server (pass local ID so server uses the same ID)
     try {

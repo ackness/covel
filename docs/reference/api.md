@@ -2401,13 +2401,14 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
         "required": ["choice"],
         "properties": { "choice": { "type": "string" } }
       },
-      "pendingContinuation": {/* runtime-internal serialized state */},
-      "createdAt": "2026-04-12T00:00:00.000Z",
-      "resolvedAt": null
+      "createdAt": "2026-04-12T00:00:00.000Z"
     }
   ]
 }
 ```
+
+响应项使用共享的 `SuspensionSummary` DTO。仅返回恢复交互需要的公开元数据；
+`pendingContinuation` 和 claim/resolution 状态属于服务端内部数据，不会通过此接口暴露。
 
 #### `DELETE /api/sessions/:id/suspensions/:suspensionId`
 

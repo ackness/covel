@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { request } from "../request.js";
+import { z } from "zod";
+import { ApiResponseError, request } from "../request.js";
 
 /**
  * `request()` retries idempotent GETs on a boot-race / transient gateway
@@ -57,6 +58,17 @@ describe("request() boot-race retry", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("does NOT retry a deliberately aborted GET", async () => {
+    const abortError = new DOMException("aborted", "AbortError");
+    const fetchMock = vi.fn().mockRejectedValue(abortError);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(request("/api/worlds", { silentErrors: true })).rejects.toBe(
+      abortError,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("does NOT retry a POST (avoids double-submit)", async () => {
     const fetchMock = vi.fn().mockResolvedValue(errRes(503));
     vi.stubGlobal("fetch", fetchMock);
@@ -79,5 +91,55 @@ describe("request() boot-race retry", () => {
       request("/api/worlds", { silentErrors: true }),
     ).rejects.toThrow("API 500");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets long-lived clients own their retry policy", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(errRes(503));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      request("/api/events/stream", {
+        retry: false,
+        silentErrors: true,
+      }),
+    ).rejects.toThrow("API 503");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("sets JSON content type only for JSON-string bodies", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(okRes({ ok: true }))
+      .mockResolvedValueOnce(okRes({ ok: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await request("/api/worlds");
+    await request("/api/install/plugin", {
+      method: "POST",
+      body: new FormData(),
+    });
+
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Content-Type"),
+    ).toBeNull();
+    expect(
+      new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get("Content-Type"),
+    ).toBeNull();
+  });
+
+  it("accepts Headers instances and validates successful responses", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okRes({ ok: "wrong" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      request("/api/example", {
+        headers: new Headers({ "X-Custom": "value" }),
+        silentErrors: true,
+        schema: z.object({ ok: z.literal(true) }),
+      }),
+    ).rejects.toBeInstanceOf(ApiResponseError);
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("X-Custom"),
+    ).toBe("value");
   });
 });

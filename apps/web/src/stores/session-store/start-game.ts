@@ -50,7 +50,7 @@ async function hydrateInitialSnapshot(
   sessionIdRef: MutableRef<string | null>,
   dispatch: SessionDispatch,
 ): Promise<void> {
-  const snapshot = await api.getSessionSnapshot(sessionId);
+  const snapshot = await api.getSessionView(sessionId);
   if (sessionIdRef.current !== sessionId) return;
 
   dispatch({

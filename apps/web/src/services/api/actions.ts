@@ -6,8 +6,7 @@ import {
   type ActionType,
   type SseEnvelope,
 } from "@covel/shared";
-import { sessionAuthHeaders } from "../session-credentials.js";
-import { buildAiHeaders } from "./model-settings.js";
+import { ApiError, request, requestResponse } from "./request.js";
 
 // -- Actions (SSE) -------------------------------------------------
 
@@ -28,21 +27,12 @@ export function sendAction(
   (async () => {
     try {
       const body = actionRequestSchema.parse(req);
-      const res = await fetch("/api/actions", {
+      const res = await requestResponse("/api/actions", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...buildAiHeaders(),
-          ...sessionAuthHeaders(req.sessionId),
-        },
         body: JSON.stringify(body),
         signal: controller.signal,
+        sessionId: req.sessionId,
       });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`Action failed ${res.status}: ${text}`);
-      }
 
       await readSseStream({
         response: res,
@@ -79,18 +69,20 @@ export async function steerTurn(
   sessionId: string,
   message: string,
 ): Promise<boolean> {
-  const res = await fetch(
-    `/api/sessions/${encodeURIComponent(sessionId)}/steer`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...sessionAuthHeaders(sessionId),
+  try {
+    await request<{ ok: true; turnId: string }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/steer`,
+      {
+        method: "POST",
+        body: JSON.stringify({ message }),
+        silentStatuses: [409],
       },
-      body: JSON.stringify({ message }),
-    },
-  );
-  return res.ok;
+    );
+    return true;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) return false;
+    throw error;
+  }
 }
 
 /**
@@ -98,9 +90,14 @@ export async function steerTurn(
  * discards uncommitted proposals. Resolves false when no turn is active.
  */
 export async function abortTurn(sessionId: string): Promise<boolean> {
-  const res = await fetch(
-    `/api/sessions/${encodeURIComponent(sessionId)}/abort`,
-    { method: "POST", headers: sessionAuthHeaders(sessionId) },
-  );
-  return res.ok;
+  try {
+    await request<{ ok: true; turnId: string }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/abort`,
+      { method: "POST", silentStatuses: [409] },
+    );
+    return true;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) return false;
+    throw error;
+  }
 }

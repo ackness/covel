@@ -11,20 +11,8 @@ interface BootSessionStoreOptions {
   ds: DataService;
 }
 
-function isProviderKeyRecord(value: unknown): value is Record<string, string> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
 async function loadProviderKeysFromServer(): Promise<void> {
-  const token = api.getDesktopRestToken?.();
-  const res = await fetch(
-    "/api/provider-keys",
-    token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
-  );
-  if (!res.ok) return;
-
-  const { keys } = await res.json();
-  if (!isProviderKeyRecord(keys)) return;
+  const keys = await api.fetchServerProviderKeys();
 
   const validKeys: Record<string, string> = {};
   for (const [key, value] of Object.entries(keys)) {
@@ -46,7 +34,7 @@ export async function bootSessionStore({
   try {
     const [presets, pluginsRes, worlds, llmConfig] = await Promise.all([
       api.listPresets(),
-      api.listPlugins(),
+      api.getPluginCatalog(),
       ds.listWorlds(),
       api.fetchLlmConfig().catch(() => null),
     ]);
@@ -61,7 +49,7 @@ export async function bootSessionStore({
       ]),
     ].sort((a, b) => a.localeCompare(b));
 
-    for (const plugin of pluginsRes.plugins) {
+    for (const plugin of pluginsRes.items) {
       if (plugin.userSettings.length > 0) {
         registerPluginUserSettings(
           getSettings(),
@@ -79,7 +67,7 @@ export async function bootSessionStore({
     dispatch({
       type: "BOOT_SUCCESS",
       presets,
-      packages: pluginsRes.plugins,
+      plugins: pluginsRes.items,
       pluginLoadErrors: pluginsRes.loadErrors,
       worlds,
       llmConfig,

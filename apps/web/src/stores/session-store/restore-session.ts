@@ -91,7 +91,7 @@ async function restoreServerSnapshot(
   dispatch: SessionDispatch,
 ): Promise<boolean> {
   try {
-    const snapshot = await api.getSessionSnapshot(sessionId);
+    const snapshot = await api.getSessionView(sessionId);
     dispatch({
       type: "LOAD_MESSAGES",
       messages: toStreamMessages(snapshot.messages),

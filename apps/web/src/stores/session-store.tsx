@@ -24,7 +24,7 @@ export type {
   ExecutionStep,
   PendingInteractionDraft,
   StreamMessage,
-  SuspensionRecord,
+  SuspensionSummary,
 } from "./session-store/types.js";
 export {
   mergeGameStateForReplacement,

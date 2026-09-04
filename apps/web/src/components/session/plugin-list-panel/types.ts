@@ -12,7 +12,7 @@ export type RuntimeModelOverrideChange = (
 ) => Promise<void>;
 
 export interface PluginListPanelProps {
-  packages: PluginSummary[];
+  plugins: PluginSummary[];
   loadErrors?: PluginLoadError[];
   /** Session-scoped plugin info with live active state. */
   sessionPlugins?: SessionPlugin[];

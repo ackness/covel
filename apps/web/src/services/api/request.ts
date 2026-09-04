@@ -63,7 +63,7 @@ export function isNotFound(err: unknown): boolean {
 }
 
 /** Options for the internal `request` fetch wrapper. */
-interface RequestOptions extends RequestInit {
+export interface RequestOptions extends RequestInit {
   /** Session id carried in a body, query, or non-standard route path. */
   sessionId?: string;
   /** Attach the hosted operator credential for global administration. */
@@ -74,6 +74,19 @@ interface RequestOptions extends RequestInit {
    * polling or optional capability checks).
    */
   silentErrors?: boolean;
+  /** HTTP statuses that are expected control flow and should not emit a toast. */
+  silentStatuses?: readonly number[];
+  /** Disable the shared GET retry loop when the caller owns its own backoff. */
+  retry?: boolean;
+}
+
+export interface ResponseSchema<T> {
+  parse(value: unknown): T;
+}
+
+export interface JsonRequestOptions<T> extends RequestOptions {
+  /** Validate and normalize a successful JSON response at the HTTP boundary. */
+  schema?: ResponseSchema<T>;
 }
 
 /**
@@ -95,6 +108,27 @@ function emitNetworkErrorToast(url: string, err: unknown): void {
   }) as string;
   const detail = `${url}\n${err instanceof Error ? err.message : String(err)}`;
   emitToast("error", short, detail);
+}
+
+function emitResponseErrorToast(url: string, err: unknown): void {
+  const shortTitle = i18n.t("toast.errorTitle", {
+    defaultValue: "Something went wrong",
+  }) as string;
+  const detail = `${url}\n${err instanceof Error ? err.message : String(err)}`;
+  emitToast("error", shortTitle, detail);
+}
+
+/** A successful HTTP response that did not satisfy its declared JSON contract. */
+export class ApiResponseError extends Error {
+  constructor(
+    readonly status: number,
+    readonly url: string,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "ApiResponseError";
+  }
 }
 
 /**
@@ -123,15 +157,68 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function request<T>(
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "AbortError"
+  );
+}
+
+function mergeRequestHeaders(
+  url: string,
+  fetchInit: RequestInit,
+  sessionId: string | undefined,
+  operatorAuth: boolean | undefined,
+): Headers {
+  const headers = new Headers();
+  if (typeof fetchInit.body === "string") {
+    headers.set("Content-Type", "application/json");
+  }
+  for (const [name, value] of Object.entries(
+    needsProviderKeys(url) ? buildAiHeaders() : {},
+  )) {
+    headers.set(name, value);
+  }
+  for (const [name, value] of Object.entries(sessionTokenHeader(url))) {
+    headers.set(name, value);
+  }
+  for (const [name, value] of Object.entries(sessionAuthHeaders(sessionId))) {
+    headers.set(name, value);
+  }
+  if (operatorAuth) {
+    for (const [name, value] of Object.entries(operatorAuthHeaders())) {
+      headers.set(name, value);
+    }
+  }
+  new Headers(fetchInit.headers).forEach((value, name) => {
+    headers.set(name, value);
+  });
+  return headers;
+}
+
+/**
+ * Run an authenticated API request and return the untouched successful
+ * response. Streaming and binary callers use this instead of duplicating
+ * credential injection and error handling.
+ */
+export async function requestResponse(
   url: string,
   init?: RequestOptions,
-): Promise<T> {
-  const { silentErrors, sessionId, operatorAuth, ...fetchInit } = init ?? {};
+): Promise<Response> {
+  const {
+    silentErrors,
+    silentStatuses,
+    sessionId,
+    operatorAuth,
+    retry,
+    ...fetchInit
+  } = init ?? {};
   // Only GETs are retried — they're idempotent, so a boot-race ECONNREFUSED (dev
   // server not up yet) or a transient gateway error can be retried without risk
   // of double-submitting. Non-GET requests keep the single-shot behaviour.
-  const canRetry = isIdempotent(fetchInit);
+  const canRetry = retry !== false && isIdempotent(fetchInit);
 
   for (let attempt = 0; ; attempt++) {
     const isLastAttempt = attempt >= MAX_RETRIES;
@@ -140,19 +227,12 @@ export async function request<T>(
     try {
       res = await fetch(url, {
         ...fetchInit,
-        headers: {
-          "Content-Type": "application/json",
-          ...(needsProviderKeys(url) ? buildAiHeaders() : {}),
-          ...sessionTokenHeader(url),
-          ...sessionAuthHeaders(sessionId),
-          ...(operatorAuth ? operatorAuthHeaders() : {}),
-          ...fetchInit.headers,
-        },
+        headers: mergeRequestHeaders(url, fetchInit, sessionId, operatorAuth),
       });
     } catch (err) {
       // Transport-level failure (offline, DNS, CORS preflight, or the dev proxy
       // resetting the socket because the runtime server isn't up yet).
-      if (canRetry && !isLastAttempt) {
+      if (canRetry && !isLastAttempt && !isAbortError(err)) {
         await delay(backoffMs(attempt));
         continue;
       }
@@ -166,10 +246,36 @@ export async function request<T>(
         continue;
       }
       const text = await res.text().catch(() => "");
-      if (!silentErrors) emitHttpErrorToast(url, res.status, text);
+      if (!silentErrors && !silentStatuses?.includes(res.status)) {
+        emitHttpErrorToast(url, res.status, text);
+      }
       throw new ApiError(res.status, url, text);
     }
 
-    return res.json();
+    return res;
+  }
+}
+
+/** Fetch, decode, and optionally validate one JSON API response. */
+export async function request<T>(
+  url: string,
+  init?: JsonRequestOptions<T>,
+): Promise<T> {
+  const { schema, ...transportInit } = init ?? {};
+  const res = await requestResponse(url, transportInit);
+  if (res.status === 204) return undefined as T;
+
+  try {
+    const body: unknown = await res.json();
+    return schema ? schema.parse(body) : (body as T);
+  } catch (cause) {
+    const error = new ApiResponseError(
+      res.status,
+      url,
+      `API ${res.status} returned an invalid JSON response`,
+      { cause },
+    );
+    if (!init?.silentErrors) emitResponseErrorToast(url, cause);
+    throw error;
   }
 }

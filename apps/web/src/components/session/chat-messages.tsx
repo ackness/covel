@@ -37,7 +37,7 @@ export interface ChatMessagesProps {
   executing: boolean;
   session: SessionRecord;
   world: WorldRecord | null;
-  packages: PluginSummary[];
+  plugins: PluginSummary[];
   sessionPlugins: SessionPlugin[];
   submittedBlockIds: ReadonlySet<string>;
   /** Form values keyed by submitted block id — used to repopulate disabled forms. */
@@ -74,7 +74,7 @@ export function ChatMessages({
   executing,
   session,
   world,
-  packages,
+  plugins,
   sessionPlugins,
   submittedBlockIds,
   submittedBlockValues,
@@ -221,7 +221,7 @@ export function ChatMessages({
     messages,
     executionSteps,
     executing,
-    packages,
+    plugins,
     onRetryRuntime,
     renderMessage,
   });

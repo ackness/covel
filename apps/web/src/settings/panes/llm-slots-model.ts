@@ -77,16 +77,16 @@ export function bindSlotToProvider(args: {
 }
 
 export function discoverRuntimeSlotIds(
-  packages: readonly Pick<PluginSummary, "runtimes" | "userSettings">[],
+  plugins: readonly Pick<PluginSummary, "runtimes" | "userSettings">[],
 ): string[] {
   const out = new Set<string>();
-  for (const pkg of packages) {
-    for (const rt of pkg.runtimes ?? []) {
+  for (const plugin of plugins) {
+    for (const rt of plugin.runtimes ?? []) {
       if (rt.runtimeType === "function") continue;
       const slot = rt.model;
       if (isRuntimeSlotId(slot)) out.add(slot);
     }
-    for (const setting of pkg.userSettings ?? []) {
+    for (const setting of plugin.userSettings ?? []) {
       if (setting.type !== "slot") continue;
       if (isSettingsSlotId(setting.default)) out.add(setting.default);
     }

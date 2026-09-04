@@ -26,7 +26,7 @@ import {
   collectJobTransitions,
   emitJobTransitionToast,
 } from "./job-transitions.js";
-import type { SessionDispatch, SuspensionRecord } from "./types.js";
+import type { SessionDispatch, SuspensionSummary } from "./types.js";
 
 /**
  * Envelope-level fallbacks the suspend/resume reducers need. The two channels
@@ -75,13 +75,13 @@ export function reduceTurnSuspended(
 ): void {
   const id = payload.suspensionId as string | undefined;
   if (!id) return;
-  const suspension: SuspensionRecord = {
+  const suspension: SuspensionSummary = {
     id,
     sessionId: (payload.sessionId as string) ?? ctx.sessionId,
     turnId: (payload.turnId as string) ?? ctx.turnId ?? "",
     runtimeId: (payload.runtimeId as string) ?? "",
     pluginId: (payload.pluginId as string) ?? "",
-    suspendedAt: (payload.suspendedAt as string) ?? ctx.timestamp,
+    createdAt: (payload.suspendedAt as string) ?? ctx.timestamp,
     reason: payload.reason as string | undefined,
     resumeSchema: payload.resumeSchema,
   };

@@ -167,6 +167,7 @@
     "noModelsConfigured": "Ни одна модель не настроена",
     "preparation": "Настройка сеанса",
     "startFailed": "Не удалось создать сеанс",
+    "pluginPlanFailed": "Не удалось определить план плагинов мира",
     "history": "Предыдущие сессии",
     "worldLore": "Документ мира",
     "worldTab": "Мир",

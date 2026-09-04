@@ -86,7 +86,7 @@ function capLiveMessages(
 
 export const initialState: SessionState = {
   presets: [],
-  packages: [],
+  plugins: [],
   pluginLoadErrors: [],
   worlds: [],
   llmConfig: null,
@@ -151,7 +151,7 @@ export function reducer(
         booted: true,
         bootError: null,
         presets: action.presets,
-        packages: action.packages,
+        plugins: action.plugins,
         pluginLoadErrors: action.pluginLoadErrors,
         worlds: action.worlds,
         llmConfig: action.llmConfig,

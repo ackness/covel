@@ -2,6 +2,7 @@ import { parseJsonSseData, readSseStream } from "../sse.js";
 import {
   worldCreateRequestSchema,
   worldPatchRequestSchema,
+  worldPluginPlanSchema,
   worldWireRecordSchema,
   type WorldCreationBrief,
   type WorldCreateRequest,
@@ -9,9 +10,7 @@ import {
   type WorldPluginPlan,
   type WorldWireRecord,
 } from "@covel/shared";
-import { operatorAuthHeaders } from "../session-credentials.js";
-import { buildAiHeaders } from "./model-settings.js";
-import { request } from "./request.js";
+import { request, requestResponse } from "./request.js";
 import type {
   GeneratedWorldSaveTarget,
   WorldDataPreflightResponse,
@@ -50,22 +49,18 @@ export async function getWorld(
 
 export async function getWorldPluginPlan(
   worldId: string,
+  options?: { silentErrors?: boolean },
 ): Promise<WorldPluginPlan> {
-  return request<WorldPluginPlan>(
-    `/api/worlds/${encodeURIComponent(worldId)}/plugin-plan`,
-  );
+  return request(`/api/worlds/${encodeURIComponent(worldId)}/plugin-plan`, {
+    ...options,
+    schema: worldPluginPlanSchema,
+  });
 }
 
 export async function createWorld(
-  name: string,
-  description: string,
-  id?: string,
+  input: WorldCreateRequest,
 ): Promise<WorldRecord> {
-  const body: WorldCreateRequest = worldCreateRequestSchema.parse({
-    ...(id !== undefined ? { id } : {}),
-    name,
-    description,
-  });
+  const body = worldCreateRequestSchema.parse(input);
   const raw = await request<unknown>("/api/worlds", {
     method: "POST",
     body: JSON.stringify(body),
@@ -76,14 +71,9 @@ export async function createWorld(
 
 export async function updateWorld(
   id: string,
-  patch: Partial<
-    Pick<
-      WorldRecord,
-      "name" | "description" | "lore" | "locale" | "tags" | "dimensions"
-    >
-  >,
+  patch: WorldPatchRequest,
 ): Promise<WorldRecord> {
-  const body = worldPatchRequestSchema.parse(patch) as WorldPatchRequest;
+  const body = worldPatchRequestSchema.parse(patch);
   const raw = await request<unknown>(`/api/worlds/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(body),
@@ -179,13 +169,8 @@ export function generateWorld(
 
   (async () => {
     try {
-      const res = await fetch("/api/ai/generate-world", {
+      const res = await requestResponse("/api/ai/generate-world", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...buildAiHeaders(),
-          ...operatorAuthHeaders(),
-        },
         body: JSON.stringify({
           prompt,
           locale,
@@ -193,12 +178,8 @@ export function generateWorld(
           brief: options?.brief,
         }),
         signal: controller.signal,
+        operatorAuth: true,
       });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`API ${res.status}: ${text}`);
-      }
 
       await readSseStream({
         response: res,

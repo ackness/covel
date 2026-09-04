@@ -289,13 +289,13 @@ function groupStepsByTurn(
 export function ExecutionTimeline({
   steps,
   executing,
-  packages = [],
+  plugins = [],
   onRetryRuntime,
   onRetryAll,
 }: {
   steps: ExecutionStep[];
   executing: boolean;
-  packages?: PluginSummary[];
+  plugins?: PluginSummary[];
   onRetryRuntime?: (runtimeId: string, sourceTurnId?: string) => void;
   onRetryAll?: () => void;
 }) {
@@ -309,9 +309,9 @@ export function ExecutionTimeline({
 
   // Build label map from plugin manifests (pluginId → display name)
   const RUNTIME_LABELS: Record<string, string> = {};
-  for (const pkg of packages) {
-    const name = resolveI18nText(pkg.displayName, i18n.language);
-    if (name) RUNTIME_LABELS[pkg.id] = name;
+  for (const plugin of plugins) {
+    const name = resolveI18nText(plugin.displayName, i18n.language);
+    if (name) RUNTIME_LABELS[plugin.id] = name;
   }
 
   const turnGroups = groupStepsByTurn(steps);

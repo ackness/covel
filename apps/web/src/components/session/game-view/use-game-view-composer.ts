@@ -287,10 +287,15 @@ export function useGameViewComposer({
       // Merge with anything typed during the round-trip instead of dropping it:
       // steered text first, newer draft after.
       setInputValue("");
-      void steerMessage(val).then((ok) => {
-        if (!ok)
+      void steerMessage(val)
+        .then((ok) => {
+          if (!ok) {
+            setInputValue((current) => (current ? `${val}\n${current}` : val));
+          }
+        })
+        .catch(() => {
           setInputValue((current) => (current ? `${val}\n${current}` : val));
-      });
+        });
       return;
     }
     onSendMessage(val);
@@ -312,7 +317,9 @@ export function useGameViewComposer({
   ]);
 
   const handleAbort = useCallback(() => {
-    void abortActiveTurn();
+    void abortActiveTurn().catch(() => {
+      // The API transport already surfaced the actionable failure.
+    });
   }, [abortActiveTurn]);
 
   const handleKeyDown = useCallback(

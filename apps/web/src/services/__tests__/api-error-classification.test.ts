@@ -10,7 +10,12 @@
  *    as a bare SyntaxError far from the cause.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, isNotFound, request } from "../api/request.js";
+import {
+  ApiError,
+  ApiResponseError,
+  isNotFound,
+  request,
+} from "../api/request.js";
 import { fetchServerHealth } from "../api/health.js";
 import { createSessionSubscription } from "../subscription.js";
 
@@ -58,6 +63,20 @@ describe("ApiError classification", () => {
       code: "world_already_exists",
       details: { id: "world-1" },
     });
+  });
+
+  it("classifies an invalid successful JSON response at the boundary", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => {
+        throw new SyntaxError("Unexpected token <");
+      },
+    } as unknown as Response);
+
+    await expect(
+      request("/api/worlds", { silentErrors: true }),
+    ).rejects.toBeInstanceOf(ApiResponseError);
   });
 });
 

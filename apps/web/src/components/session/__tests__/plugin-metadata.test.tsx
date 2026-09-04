@@ -82,7 +82,7 @@ describe("session plugin metadata UI", () => {
     await i18n.changeLanguage("en-US");
     render(
       <PluginListPanel
-        packages={[
+        plugins={[
           plugin("auto", "auto"),
           plugin("manual", "manual"),
           plugin("event", "event", "function"),

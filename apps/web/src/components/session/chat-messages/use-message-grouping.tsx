@@ -8,7 +8,7 @@ interface UseMessageGroupingArgs {
   readonly messages: StreamMessage[];
   readonly executionSteps: ExecutionStep[];
   readonly executing: boolean;
-  readonly packages: PluginSummary[];
+  readonly plugins: PluginSummary[];
   readonly onRetryRuntime?: (
     runtimeId: string | undefined,
     sourceTurnId?: string,
@@ -38,7 +38,7 @@ export function useMessageGrouping({
   messages,
   executionSteps,
   executing,
-  packages,
+  plugins,
   onRetryRuntime,
   renderMessage,
 }: UseMessageGroupingArgs): ReactNode[] {
@@ -85,7 +85,7 @@ export function useMessageGrouping({
             key={`exec-${msg.turnId}`}
             steps={turnSteps}
             executing={isActiveTurn ? executing : false}
-            packages={packages}
+            plugins={plugins}
             onRetryRuntime={
               isActiveTurn && onRetryRuntime
                 ? (id, sourceTurnId) => onRetryRuntime(id, sourceTurnId)
@@ -122,7 +122,7 @@ export function useMessageGrouping({
         key="exec-active"
         steps={activeTurnSteps}
         executing={executing}
-        packages={packages}
+        plugins={plugins}
         onRetryRuntime={onRetryRuntime ? (id) => onRetryRuntime(id) : undefined}
         onRetryAll={
           onRetryRuntime ? () => onRetryRuntime(undefined) : undefined

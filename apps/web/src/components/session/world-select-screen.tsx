@@ -31,7 +31,7 @@ type ViewMode = "list" | "detail" | "edit";
 
 interface WorldSelectScreenProps {
   worlds: WorldRecord[];
-  packages: PluginSummary[];
+  plugins: PluginSummary[];
   resolvedSlots: ResolvedSlot[];
   settingsOpen: boolean;
   onSettingsOpenChange: (v: boolean) => void;
@@ -73,7 +73,7 @@ export function worldStorageLabel(world: WorldRecord): string {
 
 export function WorldSelectScreen({
   worlds,
-  packages,
+  plugins,
   resolvedSlots,
   settingsOpen,
   onSettingsOpenChange,
@@ -85,7 +85,7 @@ export function WorldSelectScreen({
 }: WorldSelectScreenProps) {
   const { t, i18n: translation } = useTranslation();
   const primarySlotLabel = formatSlotLabel(resolvedSlots[0]);
-  const enabledPluginCount = packages.length;
+  const enabledPluginCount = plugins.length;
   const prioritizedWorlds = useMemo(
     () =>
       prioritizeWorldsByLocale(
@@ -374,7 +374,7 @@ export function WorldSelectScreen({
         open={settingsOpen}
         onOpenChange={onSettingsOpenChange}
         initialKey={settingsInitialKey}
-        packages={packages}
+        plugins={plugins}
       />
       <AiWorldGenerator
         open={generatorOpen}

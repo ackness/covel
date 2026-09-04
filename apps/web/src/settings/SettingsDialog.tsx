@@ -34,14 +34,14 @@ interface SettingsDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Deep-link target — either a nav node id ("llm.slots") or a setting key. */
   initialKey?: string;
-  packages?: readonly Pick<PluginSummary, "id" | "displayName">[];
+  plugins?: readonly Pick<PluginSummary, "id" | "displayName">[];
 }
 
 export function SettingsDialog({
   open,
   onOpenChange,
   initialKey,
-  packages = [],
+  plugins = [],
 }: SettingsDialogProps) {
   const store = useSettingsStore();
   const { t, i18n } = useTranslation();
@@ -51,9 +51,9 @@ export function SettingsDialog({
   const pluginDisplayNames = useMemo(
     () =>
       Object.fromEntries(
-        packages.map((plugin) => [plugin.id, plugin.displayName] as const),
+        plugins.map((plugin) => [plugin.id, plugin.displayName] as const),
       ),
-    [packages],
+    [plugins],
   );
 
   useEffect(

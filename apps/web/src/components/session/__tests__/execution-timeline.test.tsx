@@ -55,7 +55,7 @@ describe("ExecutionTimeline plugin names", () => {
             turnId: "turn-1",
           },
         ]}
-        packages={[
+        plugins={[
           plugin("dice-check", { zh: "骰子判定", en: "Dice Check" }),
           plugin("npc-graph", { zh: "关系图谱", en: "Relationship Graph" }),
         ]}
@@ -80,7 +80,7 @@ describe("ExecutionTimeline plugin names", () => {
             detail: "__i18n:session.reasonConnectionClosed__",
           },
         ]}
-        packages={[
+        plugins={[
           plugin("world-ir", {
             zh: "世界事实提取",
             en: "World Fact Extraction",
@@ -132,7 +132,7 @@ describe("ExecutionTimeline plugin names", () => {
             turnId: "turn-1",
           },
         ]}
-        packages={[plugin("mimo-tts", { zh: "语音", en: "Voice" })]}
+        plugins={[plugin("mimo-tts", { zh: "语音", en: "Voice" })]}
       />,
     );
 

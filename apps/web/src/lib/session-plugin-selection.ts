@@ -11,7 +11,7 @@ export type { PluginPack } from "@covel/shared";
 export interface PluginGroup {
   id: string;
   label: string;
-  packages: PluginSummary[];
+  plugins: PluginSummary[];
 }
 
 /**
@@ -39,10 +39,10 @@ export function textValue(
 export function applyPluginPackSelection(
   current: ReadonlySet<string>,
   pack: PluginPack,
-  packages: readonly PluginSummary[],
+  plugins: readonly PluginSummary[],
   lockedPluginIds: ReadonlySet<string>,
 ): Set<string> {
-  const available = new Set(packages.map((pkg) => pkg.id));
+  const available = new Set(plugins.map((plugin) => plugin.id));
   const next = new Set(current);
   for (const pluginId of pack.excludedPluginIds) {
     if (!lockedPluginIds.has(pluginId)) next.delete(pluginId);
@@ -60,11 +60,9 @@ export function defaultSelectedPluginIds(
   return new Set(plan?.defaultPluginIds ?? []);
 }
 
-export function collectPluginTags(
-  packages: readonly PluginSummary[],
-): string[] {
-  return [...new Set(packages.flatMap((pkg) => pkg.tags ?? []))].sort((a, b) =>
-    a.localeCompare(b),
+export function collectPluginTags(plugins: readonly PluginSummary[]): string[] {
+  return [...new Set(plugins.flatMap((plugin) => plugin.tags ?? []))].sort(
+    (a, b) => a.localeCompare(b),
   );
 }
 
@@ -91,15 +89,15 @@ const GROUP_ORDER = [
   "utility",
 ];
 
-export function groupPluginPackages(
-  packages: readonly PluginSummary[],
+export function groupPlugins(
+  plugins: readonly PluginSummary[],
   labelForGroup: (groupId: string) => string,
 ): PluginGroup[] {
   const grouped = new Map<string, PluginSummary[]>();
-  for (const pkg of packages) {
-    const groupId = groupIdForPackage(pkg);
+  for (const plugin of plugins) {
+    const groupId = groupIdForPackage(plugin);
     const list = grouped.get(groupId) ?? [];
-    list.push(pkg);
+    list.push(plugin);
     grouped.set(groupId, list);
   }
   return [...grouped.entries()]
@@ -109,20 +107,20 @@ export function groupPluginPackages(
           (GROUP_ORDER.indexOf(b) === -1 ? 99 : GROUP_ORDER.indexOf(b)) ||
         a.localeCompare(b),
     )
-    .map(([id, groupPackages]) => ({
+    .map(([id, groupPlugins]) => ({
       id,
       label: labelForGroup(id),
-      packages: groupPackages.slice().sort((a, b) => a.id.localeCompare(b.id)),
+      plugins: groupPlugins.slice().sort((a, b) => a.id.localeCompare(b.id)),
     }));
 }
 
-export function filterPluginPackages(
-  packages: readonly PluginSummary[],
+export function filterPlugins(
+  plugins: readonly PluginSummary[],
   query: string,
   activeTags: ReadonlySet<string>,
 ): PluginSummary[] {
   const normalizedQuery = query.trim().toLocaleLowerCase();
-  return packages.filter((pkg) => {
+  return plugins.filter((pkg) => {
     const pkgTags = new Set(pkg.tags ?? []);
     if (
       activeTags.size > 0 &&

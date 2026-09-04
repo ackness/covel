@@ -4,8 +4,8 @@ import {
   applyPluginPackSelection,
   collectPluginTags,
   defaultSelectedPluginIds,
-  filterPluginPackages,
-  groupPluginPackages,
+  filterPlugins,
+  groupPlugins,
   recommendationReason,
 } from "../session-plugin-selection.js";
 
@@ -89,12 +89,12 @@ describe("session plugin selection helpers", () => {
   it("filters and groups canonical plugin descriptors", () => {
     expect(collectPluginTags(plugins)).toContain("mode:dialogue");
     expect(
-      filterPluginPackages(plugins, "chat", new Set(["mode:dialogue"])).map(
+      filterPlugins(plugins, "chat", new Set(["mode:dialogue"])).map(
         (item) => item.id,
       ),
     ).toEqual(["chat-mode-narrator"]);
     expect(
-      groupPluginPackages(plugins, (group) => group).map((group) => group.id),
+      groupPlugins(plugins, (group) => group).map((group) => group.id),
     ).toContain("dialogue");
   });
 

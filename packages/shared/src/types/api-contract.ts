@@ -103,3 +103,15 @@ export type WorldPatchRequest = Partial<
     | "metadata"
   >
 >;
+
+/** Public view of an unresolved runtime suspension. */
+export interface SuspensionSummary {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly runtimeId: string;
+  readonly pluginId: string;
+  readonly reason?: string;
+  readonly resumeSchema?: unknown;
+  readonly createdAt: string;
+}

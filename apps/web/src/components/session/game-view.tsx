@@ -74,7 +74,7 @@ export function GameView({ session }: GameViewProps) {
     messages,
     executing,
     executionError,
-    packages,
+    plugins,
     pluginLoadErrors,
     sessionPlugins,
     sessionCommands,
@@ -279,7 +279,7 @@ export function GameView({ session }: GameViewProps) {
 
   // ── Left Panel ─────────────────────────────────────────────────
 
-  const enabledPackages = packages;
+  const enabledPlugins = plugins;
   const [showSessionList, setShowSessionList] = useState(false);
   const otherSessions = worldSessions.filter((s) => s.id !== session.id);
 
@@ -296,7 +296,7 @@ export function GameView({ session }: GameViewProps) {
         open={settings.open}
         onOpenChange={settings.onOpenChange}
         initialKey={settings.initialKey}
-        packages={packages}
+        plugins={plugins}
       />
 
       <Dialog open={suspensionsOpen} onOpenChange={setSuspensionsOpen}>
@@ -325,7 +325,7 @@ export function GameView({ session }: GameViewProps) {
             isLeftCollapsed={!mobileLeftOpen}
             showSessionList={showSessionList}
             otherSessions={otherSessions}
-            enabledPackages={enabledPackages}
+            enabledPlugins={enabledPlugins}
             pluginLoadErrors={pluginLoadErrors}
             sessionPlugins={sessionPlugins}
             executing={executing}
@@ -384,7 +384,7 @@ export function GameView({ session }: GameViewProps) {
                 isLeftCollapsed={isLeftCollapsed}
                 showSessionList={showSessionList}
                 otherSessions={otherSessions}
-                enabledPackages={enabledPackages}
+                enabledPlugins={enabledPlugins}
                 pluginLoadErrors={pluginLoadErrors}
                 sessionPlugins={sessionPlugins}
                 executing={executing}
@@ -474,7 +474,7 @@ export function GameView({ session }: GameViewProps) {
               executing={executing}
               executionError={executionError}
               executionSteps={executionSteps}
-              packages={packages}
+              plugins={plugins}
               sessionPlugins={sessionPlugins}
               submittedBlockIds={submittedBlockIds}
               submittedBlockValues={submittedBlockValues}
@@ -497,7 +497,7 @@ export function GameView({ session }: GameViewProps) {
                 executing={executing}
                 session={session}
                 world={world}
-                packages={packages}
+                plugins={plugins}
                 sessionPlugins={sessionPlugins}
                 submittedBlockIds={submittedBlockIds}
                 submittedBlockValues={submittedBlockValues}

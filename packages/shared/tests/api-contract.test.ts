@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   actionRequestSchema,
+  apiListResponseSchema,
   apiErrorResponseSchema,
+  pluginSummarySchema,
   sseEnvelopeSchema,
   validateActionRequest,
   worldCreateRequestSchema,
+  worldPluginPlanSchema,
   worldWireRecordSchema,
 } from "../src/schemas/api-contract.js";
 
@@ -88,5 +91,52 @@ describe("shared API contracts", () => {
         createdAt: "2026-09-04T00:00:00.000Z",
       }).success,
     ).toBe(false);
+  });
+
+  it("validates canonical plugin discovery and world-plan responses", () => {
+    const plugin = {
+      id: "memory",
+      displayName: "Memory",
+      description: "Memory plugin",
+      pluginType: "plugin",
+      source: "builtin",
+      status: "registered",
+      runtimeCount: 1,
+      capabilities: ["memory"],
+      tags: [],
+      runtimes: [
+        {
+          id: "memory",
+          runtimeType: "agent",
+          trigger: { type: "auto" },
+          execution: "sync",
+          turnCompletion: { mode: "await" },
+          outputKind: "plugin",
+          capabilities: ["memory"],
+          tags: [],
+        },
+      ],
+      tools: [],
+      userSettings: [],
+    };
+    expect(
+      apiListResponseSchema(pluginSummarySchema).parse({ items: [plugin] }),
+    ).toEqual({ items: [plugin] });
+
+    expect(
+      worldPluginPlanSchema.safeParse({
+        worldId: "world-1",
+        packs: [],
+        policy: {
+          preferredTags: [],
+          avoidedTags: [],
+          requiredCapabilities: [],
+          requiredPluginIds: [],
+          recommendedPluginIds: [],
+          excludedPluginIds: [],
+        },
+        defaultPluginIds: ["memory"],
+      }).success,
+    ).toBe(true);
   });
 });

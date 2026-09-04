@@ -88,7 +88,7 @@ describe("world API mapping", () => {
       updatedAt: "2026-09-04T00:00:00.000Z",
     });
 
-    await createWorld("World", "Description");
+    await createWorld({ name: "World", description: "Description" });
 
     const fetchMock = vi.mocked(globalThis.fetch);
     const body = JSON.parse(
@@ -139,8 +139,7 @@ describe("world API mapping", () => {
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/ai/generate-world");
     expect(
-      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)
-        .Authorization,
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization"),
     ).toBe("Bearer operator-secret");
     expect(
       JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
@@ -180,8 +179,7 @@ describe("world API mapping", () => {
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/worlds/world-1");
     expect(
-      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)
-        .Authorization,
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization"),
     ).toBe("Bearer operator-secret");
   });
 
@@ -245,9 +243,7 @@ describe("world API mapping", () => {
       sessionId: "sess-1",
     });
     expect(
-      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)[
-        "X-Session-Token"
-      ],
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("X-Session-Token"),
     ).toBe("owner-secret");
   });
 });
@@ -293,9 +289,7 @@ describe("approvals API helpers", () => {
 
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(
-      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)[
-        "X-Session-Token"
-      ],
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("X-Session-Token"),
     ).toBe("owner-secret");
   });
 });

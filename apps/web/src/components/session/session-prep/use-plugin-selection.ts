@@ -4,8 +4,8 @@ import {
   applyPluginPackSelection,
   collectPluginTags,
   defaultSelectedPluginIds,
-  filterPluginPackages,
-  groupPluginPackages,
+  filterPlugins,
+  groupPlugins,
 } from "@/lib/session-plugin-selection.js";
 import {
   excludedPluginIdsForWorld,
@@ -18,43 +18,62 @@ export interface UsePluginSelectionResult {
   corePluginIds: ReadonlySet<string>;
   lockedPluginIds: ReadonlySet<string>;
   selectedPlugins: ReadonlySet<string>;
-  selectedPackages: api.PluginSummary[];
+  selectedPluginSummaries: api.PluginSummary[];
   selectedPluginIds: string[];
   selectedPluginIdSet: ReadonlySet<string>;
   pluginPlan: api.WorldPluginPlan | null;
   pluginPlanLoading: boolean;
+  pluginPlanError: string | null;
   pluginPacks: readonly import("@covel/shared").PluginPack[];
   activePluginPack: import("@covel/shared").PluginPack | null;
   pluginSearch: string;
   activePluginTags: ReadonlySet<string>;
   availablePluginTags: string[];
-  pluginGroups: ReturnType<typeof groupPluginPackages>;
+  pluginGroups: ReturnType<typeof groupPlugins>;
   setPluginSearch: (value: string) => void;
   togglePluginTag: (tag: string) => void;
   applyPack: (packId: string) => void;
   togglePlugin: (name: string) => void;
+  retryPluginPlan: () => void;
 }
 
 export function usePluginSelection(
   worldId: string,
-  packages: api.PluginSummary[],
+  plugins: api.PluginSummary[],
+  prepareWorldForServer: () => Promise<void>,
 ): UsePluginSelectionResult {
   const { t } = useTranslation();
   const [pluginPlan, setPluginPlan] = useState<api.WorldPluginPlan | null>(
     null,
   );
   const [pluginPlanLoading, setPluginPlanLoading] = useState(true);
+  const [pluginPlanError, setPluginPlanError] = useState<string | null>(null);
+  const [pluginPlanRequest, setPluginPlanRequest] = useState(0);
+
+  const retryPluginPlan = useCallback(() => {
+    setPluginPlanRequest((request) => request + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
+    setPluginPlan(null);
+    setPluginPlanError(null);
     setPluginPlanLoading(true);
-    api
-      .getWorldPluginPlan(worldId)
+    prepareWorldForServer()
+      .then(() =>
+        api.getWorldPluginPlan(worldId, {
+          silentErrors: true,
+        }),
+      )
       .then((plan) => {
         if (!cancelled) setPluginPlan(plan);
       })
-      .catch(() => {
-        if (!cancelled) setPluginPlan(null);
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setPluginPlanError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setPluginPlanLoading(false);
@@ -62,11 +81,12 @@ export function usePluginSelection(
     return () => {
       cancelled = true;
     };
-  }, [worldId]);
+  }, [worldId, pluginPlanRequest, prepareWorldForServer]);
 
   const corePluginIds = useMemo(
-    () => new Set(packages.filter(isLockedCorePackage).map((pkg) => pkg.id)),
-    [packages],
+    () =>
+      new Set(plugins.filter(isLockedCorePackage).map((plugin) => plugin.id)),
+    [plugins],
   );
   const worldRequiredPluginIds = useMemo(
     () => requiredPluginIdsForWorld(pluginPlan),
@@ -84,12 +104,13 @@ export function usePluginSelection(
   const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(
     () => new Set(corePluginIds),
   );
-  const selectedPackages = useMemo(
+  const selectedPluginSummaries = useMemo(
     () =>
-      packages.filter(
-        (pkg) => selectedPlugins.has(pkg.id) || lockedPluginIds.has(pkg.id),
+      plugins.filter(
+        (plugin) =>
+          selectedPlugins.has(plugin.id) || lockedPluginIds.has(plugin.id),
       ),
-    [packages, selectedPlugins, lockedPluginIds],
+    [plugins, selectedPlugins, lockedPluginIds],
   );
   const selectedPluginIds = useMemo(
     () => [...new Set([...selectedPlugins, ...lockedPluginIds])],
@@ -118,19 +139,19 @@ export function usePluginSelection(
     setActivePluginPackId(pluginPlan.selectedPackId ?? null);
   }, [pluginPlan]);
   const availablePluginTags = useMemo(
-    () => collectPluginTags(packages),
-    [packages],
+    () => collectPluginTags(plugins),
+    [plugins],
   );
-  const visiblePluginPackages = useMemo(
-    () => filterPluginPackages(packages, pluginSearch, activePluginTags),
-    [packages, pluginSearch, activePluginTags],
+  const visiblePlugins = useMemo(
+    () => filterPlugins(plugins, pluginSearch, activePluginTags),
+    [plugins, pluginSearch, activePluginTags],
   );
   const pluginGroups = useMemo(
     () =>
-      groupPluginPackages(visiblePluginPackages, (groupId) =>
+      groupPlugins(visiblePlugins, (groupId) =>
         t(`session.pluginGroups.${groupId}`, groupId),
       ),
-    [visiblePluginPackages, t],
+    [visiblePlugins, t],
   );
 
   // Sync locked/excluded plugin lists whenever they change
@@ -166,10 +187,10 @@ export function usePluginSelection(
       if (!pack) return;
       setActivePluginPackId(pack.id);
       setSelectedPlugins((prev) =>
-        applyPluginPackSelection(prev, pack, packages, lockedPluginIds),
+        applyPluginPackSelection(prev, pack, plugins, lockedPluginIds),
       );
     },
-    [pluginPacks, packages, lockedPluginIds],
+    [pluginPacks, plugins, lockedPluginIds],
   );
 
   const togglePlugin = useCallback(
@@ -190,11 +211,12 @@ export function usePluginSelection(
     corePluginIds,
     lockedPluginIds,
     selectedPlugins,
-    selectedPackages,
+    selectedPluginSummaries,
     selectedPluginIds,
     selectedPluginIdSet,
     pluginPlan,
     pluginPlanLoading,
+    pluginPlanError,
     pluginPacks,
     activePluginPack,
     pluginSearch,
@@ -205,5 +227,6 @@ export function usePluginSelection(
     togglePluginTag,
     applyPack,
     togglePlugin,
+    retryPluginPlan,
   };
 }
