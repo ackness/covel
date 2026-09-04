@@ -155,6 +155,50 @@ describe("world routes", () => {
     app = createTestApp(store, pluginRegistry);
   });
 
+  it("POST /api/worlds mints an id when omitted", async () => {
+    const res = await app.request("/api/worlds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Player World", description: "Created" }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { id: string; name: string };
+    expect(body).toMatchObject({ name: "Player World" });
+    expect(body.id).toMatch(/^world-[a-f0-9]{8}$/);
+    expect(await store.getWorld(body.id)).not.toBeNull();
+  });
+
+  it("POST /api/worlds does not overwrite an existing id", async () => {
+    const now = new Date().toISOString();
+    await store.upsertWorld({
+      id: "world-1",
+      name: "Original",
+      description: "Keep me",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await app.request("/api/worlds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "world-1",
+        name: "Replacement",
+        description: "Overwrite",
+      }),
+    });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      code: "world_already_exists",
+    });
+    expect(await store.getWorld("world-1")).toMatchObject({
+      name: "Original",
+      description: "Keep me",
+    });
+  });
+
   it("PATCH /api/worlds/:id accepts top-level dimensions and preserves sibling metadata", async () => {
     const now = new Date().toISOString();
     await store.upsertWorld({
@@ -223,7 +267,7 @@ describe("world routes", () => {
         description: "Created from the world endpoint",
       }),
     });
-    expect(create.status).toBe(200);
+    expect(create.status).toBe(201);
 
     const remove = await app.request("/api/worlds/player-world", {
       method: "DELETE",

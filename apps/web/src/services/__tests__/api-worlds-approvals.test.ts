@@ -28,6 +28,7 @@ Object.defineProperty(globalThis, "localStorage", {
 const apiModule = await import("../api.js");
 const {
   generateWorld,
+  createWorld,
   updateWorld,
   importDimensions,
   preflightWorldData,
@@ -75,6 +76,25 @@ describe("world API mapping", () => {
     expect(generatedWorldSaveTargetForStorageMode(undefined)).toBe(
       "server-file",
     );
+  });
+
+  it("lets POST /api/worlds mint the id when createWorld omits one", async () => {
+    storeOperatorToken("operator-secret");
+    mockFetchOnce({
+      id: "world-abc12345",
+      name: "World",
+      description: "Description",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      updatedAt: "2026-09-04T00:00:00.000Z",
+    });
+
+    await createWorld("World", "Description");
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const body = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body),
+    ) as Record<string, unknown>;
+    expect(body).toEqual({ name: "World", description: "Description" });
   });
 
   it("generateWorld sends the requested save target", async () => {

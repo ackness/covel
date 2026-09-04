@@ -1,24 +1,17 @@
 import { parseJsonSseData, readSseStream } from "../sse.js";
+import {
+  actionRequestSchema,
+  sseEnvelopeSchema,
+  type ActionRequest,
+  type ActionType,
+  type SseEnvelope,
+} from "@covel/shared";
 import { sessionAuthHeaders } from "../session-credentials.js";
 import { buildAiHeaders } from "./model-settings.js";
-import type { SseEnvelope } from "./types.js";
 
 // -- Actions (SSE) -------------------------------------------------
 
-export type ActionType =
-  | "send_message"
-  | "execute_command"
-  | "start_session"
-  | "retry_runtime"
-  | "retry_turn";
-
-export interface ActionRequest {
-  requestId: string;
-  type: ActionType;
-  sessionId: string;
-  locale?: string;
-  payload: Record<string, unknown>;
-}
+export type { ActionRequest, ActionType } from "@covel/shared";
 
 /**
  * Send an action and receive SSE events via callback.
@@ -34,6 +27,7 @@ export function sendAction(
 
   (async () => {
     try {
+      const body = actionRequestSchema.parse(req);
       const res = await fetch("/api/actions", {
         method: "POST",
         headers: {
@@ -41,7 +35,7 @@ export function sendAction(
           ...buildAiHeaders(),
           ...sessionAuthHeaders(req.sessionId),
         },
-        body: JSON.stringify(req),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
 
@@ -53,7 +47,12 @@ export function sendAction(
       await readSseStream({
         response: res,
         signal: controller.signal,
-        parse: parseJsonSseData<SseEnvelope>,
+        parse: (data) => {
+          const decoded = parseJsonSseData<unknown>(data);
+          return decoded === undefined
+            ? undefined
+            : sseEnvelopeSchema.parse(decoded);
+        },
         onMessage: onEvent,
       });
 

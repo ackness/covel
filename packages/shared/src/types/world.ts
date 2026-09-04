@@ -18,14 +18,18 @@ export type I18nText = string | Record<string, string>;
  */
 export interface World {
   readonly id: string;
-  readonly name: I18nText;
+  readonly name: string;
   readonly description: string;
   readonly lore?: string;
   readonly tags?: readonly string[];
   readonly locale?: string;
+  readonly dimensions?: WorldDimensions;
+  readonly metadata?: Readonly<Record<string, unknown>>;
   readonly createdAt: string;
   readonly updatedAt?: string;
 }
+
+export type WorldWireRecord = World;
 
 // ── Geography ────────────────────────────────────────────────────
 

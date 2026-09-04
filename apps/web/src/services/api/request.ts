@@ -1,5 +1,6 @@
 import i18n from "@/i18n";
 import { emitToast } from "@/lib/toast-channel";
+import { apiErrorResponseSchema, type ApiErrorResponse } from "@covel/shared";
 import {
   operatorAuthHeaders,
   sessionAuthHeaders,
@@ -29,13 +30,30 @@ function sessionTokenHeader(url: string): Record<string, string> {
  * see "session not found".
  */
 export class ApiError extends Error {
+  readonly response: ApiErrorResponse | undefined;
+  readonly code: string | undefined;
+  readonly details: unknown;
+
   constructor(
     readonly status: number,
     readonly url: string,
     readonly body: string,
   ) {
-    super(`API ${status}: ${body}`);
+    const response = parseApiErrorResponse(body);
+    super(`API ${status}: ${response?.error ?? body}`);
     this.name = "ApiError";
+    this.response = response;
+    this.code = response?.code;
+    this.details = response?.details;
+  }
+}
+
+function parseApiErrorResponse(body: string): ApiErrorResponse | undefined {
+  try {
+    const parsed = apiErrorResponseSchema.safeParse(JSON.parse(body));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
   }
 }
 

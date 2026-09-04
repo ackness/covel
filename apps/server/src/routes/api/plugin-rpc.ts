@@ -5,18 +5,19 @@
  *
  *   POST /api/sessions/:id/plugin-rpc
  *   {
+ *     "kind": "action",
  *     "pluginId": "codex",
- *     "action": "regenerate",     // OR runtimeId, never both
+ *     "action": "regenerate",
  *     "payload": { ... }
  *   }
  *
- * Two dispatch modes:
+ * Three dispatch kinds:
  *
- *   1. Action-level (`action` set) — delegates to an inline handler registered
+ *   1. Action-level (`kind: "action"`) — delegates to an inline handler registered
  *      by the plugin entry or a framework default. Returns a
  *      single JSON response.
  *
- *   2. Runtime-level (`runtimeId` set) — invokes `executeTurn` with
+ *   2. Runtime-level (`kind: "runtime"`) — invokes `executeTurn` with
  *      `input.manualTrigger` so the target runtime runs through the full
  *      turn pipeline (prompt assembly, tool loop, proposal commit) and any
  *      event-triggered downstreams fire automatically.
@@ -28,13 +29,16 @@
  *          jobId; progress streams via `plugin-data.changed` SSE under the
  *          reserved `_jobs` namespace.
  *
+ *   3. Command-level (`kind: "command"`) — resolves `commandId` against the
+ *      active session command directory, validates text or structured args,
+ *      then dispatches the server-owned plugin action.
+ *
  * Resolution order for action dispatch:
  *   1. Plugin entry-registered action
  *   2. Framework default (registry.getFrameworkDefault)
  */
 
 import { Hono } from "hono";
-import { estimateTokens } from "@covel/context";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import {
   createRpcHandlerStoreView,
@@ -42,7 +46,6 @@ import {
 } from "@covel/runtime";
 import { RpcDispatchError, RpcValidationError } from "@covel/runtime";
 import {
-  type PluginRpcCommandRequest,
   type RpcCommandInvocation,
   type RuntimeResult,
   type SessionSlashCommand,
@@ -77,8 +80,14 @@ import {
   resolveSessionCommand,
 } from "./session/commands.js";
 import { runTracedCommand } from "./plugin-rpc/command-trace.js";
+import { buildManualTurnExecutorDeps } from "./turn-execution-deps.js";
+import { errorBody } from "../../api-error.js";
 
 export const pluginRpcRoutes = new Hono();
+
+function toApiErrorCode(code: string): string {
+  return code.replaceAll("-", "_");
+}
 
 // Runtime-mode dispatch runs the full turn pipeline (LLM call) — same cost
 // class as POST /api/actions, so same budget.
@@ -91,11 +100,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   );
   if (!decodedUserSettings.ok) {
     return c.json(
-      {
-        status: "error",
-        error: decodedUserSettings.error,
-        code: decodedUserSettings.code,
-      },
+      errorBody(decodedUserSettings.error, {
+        code: toApiErrorCode(decodedUserSettings.code),
+      }),
       decodedUserSettings.status,
     );
   }
@@ -103,7 +110,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   const session = await store.getSession(sessionId);
   if (!session) {
     return c.json(
-      { status: "error", error: `Session "${sessionId}" not found` },
+      errorBody(`Session "${sessionId}" not found`, {
+        code: "session_not_found",
+      }),
       404,
     );
   }
@@ -114,11 +123,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   const expectedIncarnation = sessionIncarnationIdentity(session);
   if (session.status !== "active") {
     return c.json(
-      {
-        status: "error",
-        error: `session is ${session.status}; plugin RPC execution refused`,
-        code: "session-not-active",
-      },
+      errorBody(`session is ${session.status}; plugin RPC execution refused`, {
+        code: "session_not_active",
+      }),
       409,
     );
   }
@@ -127,15 +134,15 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   try {
     rawBody = await c.req.json();
   } catch {
-    return c.json({ status: "error", error: "invalid JSON body" }, 400);
+    return c.json(
+      errorBody("invalid JSON body", { code: "invalid_json_body" }),
+      400,
+    );
   }
 
   const bodyResult = validatePluginRpcBody(rawBody);
   if (!bodyResult.ok) {
-    return c.json(
-      { status: "error", error: bodyResult.error },
-      bodyResult.status,
-    );
+    return c.json(errorBody(bodyResult.error), bodyResult.status);
   }
   const body = bodyResult.body;
 
@@ -145,8 +152,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // command's context scopes or dispatch it into another plugin.
   let resolvedCommand: SessionSlashCommand | undefined;
   let commandInvocation: RpcCommandInvocation | undefined;
-  const commandInvocationId = body.commandId ? crypto.randomUUID() : undefined;
-  if (body.commandId) {
+  const commandInvocationId =
+    body.kind === "command" ? crypto.randomUUID() : undefined;
+  if (body.kind === "command") {
     resolvedCommand = resolveSessionCommand(
       body.commandId,
       session.activePlugins ?? [],
@@ -154,22 +162,20 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     );
     if (!resolvedCommand) {
       return c.json(
-        {
-          status: "error",
-          error: `command "${body.commandId}" is not active in this session`,
-          code: "command-not-active",
-        },
+        errorBody(`command "${body.commandId}" is not active in this session`, {
+          code: "command_not_active",
+        }),
         404,
       );
     }
     const parsed = parseSessionCommandInvocation(
       resolvedCommand,
-      body as PluginRpcCommandRequest,
+      body,
       commandInvocationId!,
     );
     if (!parsed.ok) {
       return c.json(
-        { status: "error", error: parsed.message, code: parsed.code },
+        errorBody(parsed.message, { code: toApiErrorCode(parsed.code) }),
         400,
       );
     }
@@ -188,22 +194,11 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   //   - `'background'` → enqueue a `_jobs/{jobId}` row, return 202 + {jobId},
   //     and run the turn off-request (see the background branch below). The
   //     UI tracks completion via `plugin-data.changed` SSE.
-  if (body.runtimeId) {
+  if (body.kind === "runtime") {
     const pluginRegistry = c.get("pluginRegistry");
-    const llmAdapter = c.get("llmAdapter");
-    const pluginGateway = c.get("pluginGateway");
-    const pluginUtils = c.get("pluginUtils");
-    const getPluginSource = c.get("getPluginSource");
-    const loadRuntimeFn = c.get("loadRuntimeFn");
-    const toolExecutor = c.get("toolExecutor");
-    const resolveModel = c.get("resolveModel");
     const eventBus = c.get("eventBus");
-    const compactorRunner = c.get("compactorRunner");
-    const turnContextBudget = c.get("turnContextBudget");
     const hookPipeline = c.get("hookPipeline");
     const sessionLock = c.get("sessionLock");
-    const mediaStore = c.get("mediaStore");
-    const eventDirectory = c.get("eventDirectory");
     const prepareToolsForSession = c.get("prepareToolsForSession");
 
     // Reconcile the process-local registry from the persisted session
@@ -217,21 +212,19 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     const target = activeRuntimes.find((rt) => rt.name === body.runtimeId);
     if (!target) {
       return c.json(
-        {
-          status: "error",
-          error: `runtime "${body.runtimeId}" not active in session ${sessionId}`,
-          code: "runtime-not-active",
-        },
+        errorBody(
+          `runtime "${body.runtimeId}" not active in session ${sessionId}`,
+          { code: "runtime_not_active" },
+        ),
         404,
       );
     }
     if (target.pluginId !== body.pluginId) {
       return c.json(
-        {
-          status: "error",
-          error: `runtime "${body.runtimeId}" belongs to plugin "${target.pluginId}", not "${body.pluginId}"`,
-          code: "plugin-mismatch",
-        },
+        errorBody(
+          `runtime "${body.runtimeId}" belongs to plugin "${target.pluginId}", not "${body.pluginId}"`,
+          { code: "plugin_mismatch" },
+        ),
         400,
       );
     }
@@ -289,11 +282,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     }
     if (verdict.status === "rejected") {
       return c.json(
-        {
-          status: "error",
-          error: `approval queue is full (limit ${verdict.limit}); try again after resolving pending approvals`,
-          code: "queue-full",
-        },
+        errorBody(
+          `approval queue is full (limit ${verdict.limit}); try again after resolving pending approvals`,
+          { code: "queue_full" },
+        ),
         429,
       );
     }
@@ -341,11 +333,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       const row = rows.find((r) => r.turnId === body.retryFromTurnId);
       if (!row) {
         return c.json(
-          {
-            status: "error",
-            error: `turn "${body.retryFromTurnId}" has no persisted results in session ${sessionId}`,
-            code: "retry-turn-not-found",
-          },
+          errorBody(
+            `turn "${body.retryFromTurnId}" has no persisted results in session ${sessionId}`,
+            { code: "retry_turn_not_found" },
+          ),
           404,
         );
       }
@@ -369,29 +360,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           sessionApprovalScope(session, runtime.pluginId),
         ]),
       ),
-      deps: {
-        loadRuntime: loadRuntimeFn,
-        llm: llmAdapter,
-        ...(pluginGateway ? { gateway: pluginGateway } : {}),
-        ...(pluginUtils ? { utils: pluginUtils } : {}),
-        ...(getPluginSource ? { getPluginSource } : {}),
-        ...(mediaStore ? { mediaStore } : {}),
-        toolExecutor,
-        resolveModel,
-        // Without eventBus the executor's emitSubEvent calls (turn.started,
-        // runtime.started/completed, turn.completed, …) silently no-op,
-        // leaving the trace timeline with only the two LLM lifecycle events
-        // that flow through the parallel `emitter` channel. The /debug page
-        // then can't tell the runtime ever finished. Wire it through so
-        // manual-trigger turns produce the same trace surface as auto turns.
-        compactor: compactorRunner,
-        ...(turnContextBudget
-          ? { estimator: estimateTokens, contextBudget: turnContextBudget }
-          : {}),
-        capabilityPluginIds,
-        ...(hookPipeline ? { hookPipeline } : {}),
-        ...(eventDirectory ? { eventDirectory } : {}),
-      },
+      deps: buildManualTurnExecutorDeps(c, capabilityPluginIds),
       ...(hookPipeline ? { hookPipeline } : {}),
     });
 
@@ -456,29 +425,23 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       } catch (err) {
         if (err instanceof SessionNotActiveError) {
           return c.json(
-            { status: "error", error: err.message, code: "session-not-active" },
+            errorBody(err.message, { code: "session_not_active" }),
             409,
           );
         }
         if (err instanceof SessionApprovalScopeChangedError) {
           return c.json(
-            {
-              status: "error",
-              error: err.message,
-              code: "approval-scope-changed",
-            },
+            errorBody(err.message, { code: "approval_scope_changed" }),
             409,
           );
         }
         return c.json(
-          {
-            status: "error",
-            error:
-              err instanceof Error
-                ? err.message
-                : "failed to enqueue background job",
-            code: "background-enqueue-failed",
-          },
+          errorBody(
+            err instanceof Error
+              ? err.message
+              : "failed to enqueue background job",
+            { code: "background_enqueue_failed" },
+          ),
           500,
         );
       }
@@ -521,29 +484,21 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       } catch (err) {
         if (err instanceof SessionNotActiveError) {
           return c.json(
-            { status: "error", error: err.message, code: "session-not-active" },
+            errorBody(err.message, { code: "session_not_active" }),
             409,
           );
         }
         if (err instanceof SessionApprovalScopeChangedError) {
           return c.json(
-            {
-              status: "error",
-              error: err.message,
-              code: "approval-scope-changed",
-            },
+            errorBody(err.message, { code: "approval_scope_changed" }),
             409,
           );
         }
         return c.json(
-          {
-            status: "error",
-            error:
-              err instanceof Error
-                ? err.message
-                : "failed to enqueue prompt job",
-            code: "prompt-job-enqueue-failed",
-          },
+          errorBody(
+            err instanceof Error ? err.message : "failed to enqueue prompt job",
+            { code: "prompt_job_enqueue_failed" },
+          ),
           500,
         );
       }
@@ -568,13 +523,13 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       // as an error and do not chain followers onto rolled-back state.
       if (!summary.commit.committed) {
         return c.json(
-          {
-            status: "error",
-            error: commitFailureMessage(summary.commit),
-            code: "turn-commit-failed",
-            turnId: summary.turnId,
-            runtimeResults: summary.runtimeResults,
-          },
+          errorBody(commitFailureMessage(summary.commit), {
+            code: "turn_commit_failed",
+            details: {
+              turnId: summary.turnId,
+              runtimeResults: summary.runtimeResults,
+            },
+          }),
           500,
         );
       }
@@ -593,27 +548,21 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     } catch (err) {
       if (err instanceof SessionNotActiveError) {
         return c.json(
-          { status: "error", error: err.message, code: "session-not-active" },
+          errorBody(err.message, { code: "session_not_active" }),
           409,
         );
       }
       if (err instanceof SessionApprovalScopeChangedError) {
         return c.json(
-          {
-            status: "error",
-            error: err.message,
-            code: "approval-scope-changed",
-          },
+          errorBody(err.message, { code: "approval_scope_changed" }),
           409,
         );
       }
       return c.json(
-        {
-          status: "error",
-          error:
-            err instanceof Error ? err.message : "runtime execution failed",
-          code: "runtime-execution-failed",
-        },
+        errorBody(
+          err instanceof Error ? err.message : "runtime execution failed",
+          { code: "runtime_execution_failed" },
+        ),
         500,
       );
     }
@@ -641,9 +590,12 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // `pluginId === "framework"` for framework defaults. Plugin-declared
   // actions still use the real plugin ID.
   const FRAMEWORK_PLUGIN_SENTINEL = "framework";
-  const action = resolvedCommand?.action ?? body.action!;
-  const pluginId = resolvedCommand?.pluginId ?? body.pluginId!;
-  const actionPayload = commandInvocation ?? body.payload;
+  const action =
+    body.kind === "command" ? resolvedCommand!.action : body.action;
+  const pluginId =
+    body.kind === "command" ? resolvedCommand!.pluginId : body.pluginId;
+  const actionPayload =
+    body.kind === "command" ? commandInvocation : body.payload;
   const registry = c.get("rpcRegistry");
   const gate = c.get("rpcApprovalGate");
   const approvalScope = sessionApprovalScope(session, pluginId);
@@ -667,11 +619,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       entryDescription = fwEntry.description;
     } else {
       return c.json(
-        {
-          status: "error",
-          error: `unknown framework action "${action}"`,
-          code: "unknown-action",
-        },
+        errorBody(`unknown framework action "${action}"`, {
+          code: "unknown_action",
+        }),
         404,
       );
     }
@@ -684,11 +634,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     pendingEntryActivation = true;
   } else {
     return c.json(
-      {
-        status: "error",
-        error: `unknown action "${action}" for plugin "${pluginId}"`,
-        code: "unknown-action",
-      },
+      errorBody(`unknown action "${action}" for plugin "${pluginId}"`, {
+        code: "unknown_action",
+      }),
       404,
     );
   }
@@ -743,11 +691,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   if (verdict.status === "rejected") {
     // Pending queue is full. Map to 429 so clients back off.
     return c.json(
-      {
-        status: "error",
-        error: `approval queue is full (limit ${verdict.limit}); try again after resolving pending approvals`,
-        code: "queue-full",
-      },
+      errorBody(
+        `approval queue is full (limit ${verdict.limit}); try again after resolving pending approvals`,
+        { code: "queue_full" },
+      ),
       429,
     );
   }
@@ -762,11 +709,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       const activatedEntry = registry.getPluginAction(pluginId, action);
       if (!activatedEntry) {
         return c.json(
-          {
-            status: "error",
-            error: `unknown action "${action}" for plugin "${pluginId}"`,
-            code: "unknown-action",
-          },
+          errorBody(`unknown action "${action}" for plugin "${pluginId}"`, {
+            code: "unknown_action",
+          }),
           404,
         );
       }
@@ -794,11 +739,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     }
     if (actionVerdict.status === "rejected") {
       return c.json(
-        {
-          status: "error",
-          error: `approval queue is full (limit ${actionVerdict.limit}); try again after resolving pending approvals`,
-          code: "queue-full",
-        },
+        errorBody(
+          `approval queue is full (limit ${actionVerdict.limit}); try again after resolving pending approvals`,
+          { code: "queue_full" },
+        ),
         429,
       );
     }
@@ -829,21 +773,17 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       const liveSession = await store.getSession(sessionId);
       if (!liveSession) {
         return c.json(
-          {
-            status: "error",
-            error: `Session "${sessionId}" not found`,
-            code: "session-not-found",
-          },
+          errorBody(`Session "${sessionId}" not found`, {
+            code: "session_not_found",
+          }),
           404,
         );
       }
       if (sessionIncarnationIdentity(liveSession) !== expectedIncarnation) {
         return c.json(
-          {
-            status: "error",
-            error: "session was replaced while the request was waiting",
-            code: "session-incarnation-changed",
-          },
+          errorBody("session was replaced while the request was waiting", {
+            code: "session_incarnation_changed",
+          }),
           409,
         );
       }
@@ -852,13 +792,14 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]
       ) {
         return c.json(
-          {
-            status: "error",
-            error: `session is ${liveSession.status}; plugin RPC execution refused`,
-            code: liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]
-              ? "session-deleting"
-              : "session-not-active",
-          },
+          errorBody(
+            `session is ${liveSession.status}; plugin RPC execution refused`,
+            {
+              code: liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]
+                ? "session_deleting"
+                : "session_not_active",
+            },
+          ),
           409,
         );
       }
@@ -867,11 +808,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
         sessionApprovalScope(liveSession, pluginId) !== approvalScope
       ) {
         return c.json(
-          {
-            status: "error",
-            error: "approval scope changed while the request was waiting",
-            code: "approval-scope-changed",
-          },
+          errorBody("approval scope changed while the request was waiting", {
+            code: "approval_scope_changed",
+          }),
           409,
         );
       }
@@ -880,7 +819,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       let liveInvocation = commandInvocation;
       let activeRuntimes: readonly import("@covel/shared").RuntimeManifest[] =
         [];
-      if (body.commandId) {
+      if (body.kind === "command") {
         liveCommand = resolveSessionCommand(
           body.commandId,
           liveActivePlugins,
@@ -892,22 +831,21 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           liveCommand.action !== action
         ) {
           return c.json(
-            {
-              status: "error",
-              error: `command "${body.commandId}" changed while the request was waiting`,
-              code: "command-changed",
-            },
+            errorBody(
+              `command "${body.commandId}" changed while the request was waiting`,
+              { code: "command_changed" },
+            ),
             409,
           );
         }
         const parsed = parseSessionCommandInvocation(
           liveCommand,
-          body as PluginRpcCommandRequest,
+          body,
           commandInvocationId!,
         );
         if (!parsed.ok) {
           return c.json(
-            { status: "error", error: parsed.message, code: parsed.code },
+            errorBody(parsed.message, { code: toApiErrorCode(parsed.code) }),
             400,
           );
         }
@@ -929,7 +867,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
           {
             pluginId,
             action,
-            payload: liveInvocation ?? body.payload,
+            payload: body.kind === "command" ? liveInvocation : body.payload,
           },
           // session.locale lets framework defaults (submit-form) localize their
           // produced narrative; resolution order request → session → world → app.
@@ -988,21 +926,19 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     });
   } catch (err) {
     if (err instanceof RpcValidationError) {
-      return c.json({ status: "error", error: err.message }, 400);
+      return c.json(errorBody(err.message), 400);
     }
     if (err instanceof RpcDispatchError) {
-      const code = err.code === "unknown-action" ? 404 : 500;
+      const httpStatus = err.code === "unknown-action" ? 404 : 500;
       return c.json(
-        { status: "error", error: err.message, code: err.code },
-        code,
+        errorBody(err.message, { code: toApiErrorCode(err.code) }),
+        httpStatus,
       );
     }
     return c.json(
-      {
-        status: "error",
-        error:
-          err instanceof Error ? err.message : "plugin-rpc dispatch failed",
-      },
+      errorBody(
+        err instanceof Error ? err.message : "plugin-rpc dispatch failed",
+      ),
       500,
     );
   }

@@ -108,6 +108,7 @@ describe("BranchReplyCandidates", () => {
 
     await waitFor(() => {
       expect(postPluginRpc).toHaveBeenCalledWith("sess-branch", {
+        kind: "runtime",
         pluginId: "branch-reply",
         runtimeId: "branch-reply",
         payload: {
@@ -126,6 +127,7 @@ describe("BranchReplyCandidates", () => {
 
     await waitFor(() => {
       expect(postPluginRpc).toHaveBeenCalledWith("sess-branch", {
+        kind: "runtime",
         pluginId: "branch-reply",
         runtimeId: "branch-reply",
         payload: {

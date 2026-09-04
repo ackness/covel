@@ -13,6 +13,7 @@ export type {
   PluginRpcResponse,
   SessionStatus,
   SetupRuntimeState,
+  SseEnvelope,
 } from "@covel/shared";
 
 // -- Shared API types
@@ -180,16 +181,4 @@ export interface WorldDataPreflightResponse {
   diagnostics: WorldDataPreflightDiagnostic[];
   planned: number;
   targets: WorldDataPreflightTarget[];
-}
-
-export interface SseEnvelope {
-  type: string;
-  requestId: string;
-  traceId: string;
-  sessionId: string;
-  turnId: string;
-  flowId: string;
-  seq: number;
-  timestamp: string;
-  payload: Record<string, unknown>;
 }

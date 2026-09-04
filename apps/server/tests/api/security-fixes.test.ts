@@ -445,10 +445,12 @@ describe("[HIGH] state-patches returns stable IDs", () => {
 
     const res = await app.request(`/api/sessions/${id}/state-patches`);
     expect(res.status).toBe(200);
-    const patches = (await json(res)) as Array<{
-      id: string;
-      createdAt: string;
-    }>;
+    const { items: patches } = (await json(res)) as {
+      items: Array<{
+        id: string;
+        createdAt: string;
+      }>;
+    };
     expect(patches).toHaveLength(1);
     // ID should NOT be "character.hp.0" (array index pattern)
     expect(patches[0].id).not.toMatch(/\.\d+$/);

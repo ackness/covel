@@ -1025,6 +1025,7 @@ execute: async (params) => ({
 POST /api/sessions/:id/plugin-rpc
 
 {
+  "kind": "action",
   "pluginId": "framework",
   "action": "submit-form",
   "payload": {

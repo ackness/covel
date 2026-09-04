@@ -47,6 +47,18 @@ export type {
 } from "./world-data.js";
 
 export type {
+  ApiErrorResponse,
+  ActionRequest,
+  ActionRequestValidation,
+  ActionType,
+  ValidatedActionRequest,
+  SseEnvelope,
+  UntrustedActionRequest,
+  WorldCreateRequest,
+  WorldPatchRequest,
+} from "./api-contract.js";
+
+export type {
   WorldIRJsonValue,
   WorldIRV1,
   WorldIRV1Entity,
@@ -335,6 +347,7 @@ export type {
 export type {
   I18nText,
   World,
+  WorldWireRecord,
   WorldLandmark,
   WorldRegion,
   WorldGeography,

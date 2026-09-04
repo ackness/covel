@@ -1,17 +1,21 @@
 /**
  * Plugin RPC channel types.
  *
- * Two RPC modes flow through the same channel:
+ * Three invocation kinds flow through the same channel:
  *
- *   - **Action level** (`{ pluginId, action, payload }`):
+ *   - **Action level** (`{ kind: "action", pluginId, action, payload }`):
  *     Looks up the action registered by the plugin entry module and runs its
  *     handler. Used for high-level structured commands like
  *     "submit-form", "regenerate", "cancel".
  *
- *   - **Runtime level** (`{ pluginId, runtimeId, payload }`):
+ *   - **Runtime level** (`{ kind: "runtime", pluginId, runtimeId, payload }`):
  *     Manually triggers a single runtime through the turn pipeline,
  *     bypassing the trigger router. Used for "regenerate this card" /
  *     "rerun the codex extractor" style operations.
+ *
+ *   - **Command level** (`{ kind: "command", commandId, input | args }`):
+ *     Resolves a server-discovered slash command for the active session and
+ *     dispatches its server-owned plugin action after validation.
  *
  * Trust levels mirror the plugin source taxonomy:
  *   - `builtin`: shipped with the framework, auto-allowed
@@ -83,16 +87,18 @@ export interface RpcHandlerStore {
 /**
  * Request body for `POST /api/sessions/:id/plugin-rpc`.
  *
- * Either `action` or `runtimeId` must be set, never both. Sending both
- * is a 400.
+ * `kind` is the required discriminator. The server never infers an invocation
+ * kind from the presence of `action`, `runtimeId`, or `commandId`.
  */
 export interface PluginRpcActionRequest {
+  readonly kind: "action";
   readonly pluginId: string;
   readonly action: string;
   readonly payload?: unknown;
 }
 
 export interface PluginRpcRuntimeRequest {
+  readonly kind: "runtime";
   readonly pluginId: string;
   readonly runtimeId: string;
   readonly payload?: unknown;
@@ -112,6 +118,7 @@ export interface PluginRpcRuntimeRequest {
 
 /** Execute one server-discovered slash command from composer text. */
 export interface PluginRpcTextCommandRequest {
+  readonly kind: "command";
   /** Stable id returned by the session command directory. */
   readonly commandId: string;
   /** Original composer input; parsed and validated again by the server. */
@@ -121,6 +128,7 @@ export interface PluginRpcTextCommandRequest {
 
 /** Execute the same command from a plugin-owned structured UI action. */
 export interface PluginRpcStructuredCommandRequest {
+  readonly kind: "command";
   /** Stable id built from the rendering plugin and canonical command name. */
   readonly commandId: string;
   /** Named arguments; validated against the server-selected command spec. */
@@ -215,9 +223,4 @@ export type PluginRpcResponse =
       readonly status: "approval-required";
       readonly approvalId: string;
       readonly pending?: unknown;
-    }
-  | {
-      readonly status: "error";
-      readonly error: string;
-      readonly code?: string;
     };

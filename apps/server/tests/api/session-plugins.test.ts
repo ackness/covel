@@ -272,6 +272,26 @@ describe("Session plugin routes (real sessionRoutes)", () => {
     });
   });
 
+  describe("GET plugin projection", () => {
+    it("filters unapproved plugins without mutating session or registry state", async () => {
+      const updateSession = vi.spyOn(store, "updateSession");
+      const deactivate = vi.spyOn(registry, "deactivate");
+
+      const response = await app.request(`/api/sessions/${SESSION_ID}/plugins`);
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { active: string[] };
+      expect(body.active).toContain("narrator");
+      expect(body.active).not.toContain("optional-plugin");
+      expect(updateSession).not.toHaveBeenCalled();
+      expect(deactivate).not.toHaveBeenCalled();
+      expect((await store.getSession(SESSION_ID))?.activePlugins).toEqual([
+        "narrator",
+        "optional-plugin",
+      ]);
+    });
+  });
+
   describe("H1: core-plugin cannot be disabled", () => {
     it("includes required core plugins when creating a session from a partial plugin list", async () => {
       const res = await app.request("/api/sessions", {

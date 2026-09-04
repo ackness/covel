@@ -1,15 +1,14 @@
 import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
 import { effectiveTurnCompletion, getRuntimeSpec } from "@covel/shared";
 import type { PluginUserSettingSpec, RuntimeManifest } from "@covel/shared";
-import { loadLivePluginMaps } from "./live-plugin-maps.js";
+import { pluginManifestRecords } from "./registry-projection.js";
 import { normalizeRuntimeTrigger } from "./shared.js";
 
-export async function buildPackagesResponse(registry: PluginRegistry): Promise<{
+export function buildPackagesResponse(registry: PluginRegistry): {
   packages: Array<Record<string, unknown>>;
   loadErrors: Array<{ pluginId: string; errors: string[] }>;
-}> {
+} {
   const all = registry.getAll();
-  const { summaryMap, manifestMap } = await loadLivePluginMaps();
   const packages: Array<Record<string, unknown>> = [];
   const loadErrors: Array<{ pluginId: string; errors: string[] }> = [];
 
@@ -19,11 +18,8 @@ export async function buildPackagesResponse(registry: PluginRegistry): Promise<{
       continue;
     }
 
-    const liveManifests =
-      manifestMap.get(entry.id) ??
-      entry.manifests ??
-      (entry.manifest ? [entry.manifest] : []);
-    const liveSummary = summaryMap.get(entry.id) ?? entry.summary;
+    const liveManifests = pluginManifestRecords(entry);
+    const liveSummary = entry.summary;
     const runtimeSummaryTags = [
       ...new Set(liveManifests.flatMap((m) => [...(m.manifest.tags ?? [])])),
     ].sort((a, b) => a.localeCompare(b));

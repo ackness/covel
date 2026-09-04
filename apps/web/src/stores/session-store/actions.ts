@@ -255,18 +255,25 @@ export function useBuildSessionActions({
                 new Error("Session changed before action start"),
               );
             }
-            return runActionStream(
-              {
-                requestId,
-                type: isCommand ? "execute_command" : "send_message",
-                sessionId,
-                locale: session.locale ?? i18n.language,
-                payload: isCommand ? { command: content } : { content },
-              },
-              handleSseEvent,
-              dispatch,
-              { toastOnError: true, sessionIdRef },
-            );
+            const action: api.ActionRequest = isCommand
+              ? {
+                  requestId,
+                  type: "execute_command",
+                  sessionId,
+                  locale: session.locale ?? i18n.language,
+                  payload: { command: content },
+                }
+              : {
+                  requestId,
+                  type: "send_message",
+                  sessionId,
+                  locale: session.locale ?? i18n.language,
+                  payload: { content },
+                };
+            return runActionStream(action, handleSseEvent, dispatch, {
+              toastOnError: true,
+              sessionIdRef,
+            });
           });
         };
 
@@ -522,16 +529,27 @@ export function useBuildSessionActions({
         });
       }
 
-      runKernelAction({
-        requestId: crypto.randomUUID(),
-        type: runtimeId ? "retry_runtime" : "retry_turn",
-        sessionId,
-        locale: state.session?.locale ?? i18n.language,
-        payload: {
-          ...(runtimeId ? { runtimeId } : {}),
-          ...(sourceTurnId ? { retryFromTurnId: sourceTurnId } : {}),
-        },
-      });
+      const requestId = crypto.randomUUID();
+      runKernelAction(
+        runtimeId
+          ? {
+              requestId,
+              type: "retry_runtime",
+              sessionId,
+              locale: state.session?.locale ?? i18n.language,
+              payload: {
+                runtimeId,
+                ...(sourceTurnId ? { retryFromTurnId: sourceTurnId } : {}),
+              },
+            }
+          : {
+              requestId,
+              type: "retry_turn",
+              sessionId,
+              locale: state.session?.locale ?? i18n.language,
+              payload: {},
+            },
+      );
     },
     [dispatch, state, runKernelAction],
   );

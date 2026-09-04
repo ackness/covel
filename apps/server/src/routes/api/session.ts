@@ -422,6 +422,7 @@ sessionRoutes.post("/", async (c) => {
   const session: SessionRecord = {
     id,
     worldId: rawWorldId,
+    ...(parsedCreate.presetId ? { presetId: parsedCreate.presetId } : {}),
     // Validate the untrusted locale: it flows into locale-variant file-path
     // construction (world-data importer) and localized prompt text, so an
     // invalid/attacker-controlled value must never be stored verbatim.
@@ -1160,7 +1161,6 @@ sessionRoutes.delete("/:id", async (c) => {
 
 // GET /sessions/:id/plugins
 sessionRoutes.get("/:id/plugins", async (c) => {
-  const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
   const id = c.req.param("id");
   const guard = await resolveSessionParam(c);
@@ -1194,15 +1194,6 @@ sessionRoutes.get("/:id/plugins", async (c) => {
       c.get("rpcApprovalGate"),
       lockedGuard.session,
     );
-    if (active.length !== previousActive.length) {
-      await store.updateSession(id, {
-        activePlugins: active,
-        updatedAt: new Date().toISOString(),
-      });
-      for (const pluginId of previousActive) {
-        if (!active.includes(pluginId)) pluginRegistry.deactivate(pluginId, id);
-      }
-    }
     const available = buildAvailablePluginList(active, pluginRegistry);
     const commands = buildSessionCommandList(active, pluginRegistry);
 

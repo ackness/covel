@@ -32,13 +32,11 @@ interface ParsedTableName {
 /**
  * Break long internal table names into a display-friendly tuple.
  *
- *   `session`                                 → core
- *   `plugin_data/codex:__ui_right__`     → plugin · codex · ui_right
+ *   `session`                                      → core
  *   `plugin_data/dashscope-image-gen:gallery` → plugin · dashscope-image-gen · gallery
  *
- * Surrounding `__` markers (used internally to namespace UI mounts) are
- * stripped from the display only — the original `fullName` stays available
- * via the `title` attribute for inspection.
+ * Surrounding `__` markers are stripped from the display only — the original
+ * `fullName` stays available via the `title` attribute for inspection.
  */
 function parseTableName(name: string): ParsedTableName {
   if (!name.startsWith(PLUGIN_DATA_PREFIX)) {

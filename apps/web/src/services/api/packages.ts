@@ -13,7 +13,8 @@ export type FlowSegmentId = Stage | "event-manual";
 // -- Config API -------------------------------------------------
 
 export async function listPresets(): Promise<PresetSummary[]> {
-  return request<PresetSummary[]>("/api/presets");
+  const response = await request<{ items: PresetSummary[] }>("/api/presets");
+  return response.items;
 }
 
 export interface PluginLoadError {

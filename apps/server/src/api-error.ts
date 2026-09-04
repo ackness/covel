@@ -1,5 +1,8 @@
 import type { Context, ErrorHandler } from "hono";
+import type { ApiErrorResponse } from "@covel/shared";
 import { SessionLockTimeoutError } from "./lib/session-lock.js";
+
+export type { ApiErrorResponse } from "@covel/shared";
 
 /**
  * Standard API error envelope.
@@ -19,12 +22,6 @@ import { SessionLockTimeoutError } from "./lib/session-lock.js";
  *                           `{ error, details }` cases. The single factory all
  *                           JSON error responses converge on.
  */
-export interface ApiErrorResponse<Code extends string = string> {
-  readonly error: string;
-  readonly code?: Code;
-  readonly details?: unknown;
-}
-
 /**
  * Build a flexible error envelope. Message first; `code` and `details` are
  * optional and omitted from the body when not provided.

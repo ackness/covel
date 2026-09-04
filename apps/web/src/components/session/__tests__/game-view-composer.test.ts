@@ -232,7 +232,11 @@ describe("useGameViewComposer", () => {
       expect(postPluginRpcWithApproval).toHaveBeenCalledWith(
         expect.objectContaining({
           sessionId: "session-1",
-          request: { commandId: "dice-check:roll", input: "/roll 2d6" },
+          request: {
+            kind: "command",
+            commandId: "dice-check:roll",
+            input: "/roll 2d6",
+          },
         }),
       ),
     );

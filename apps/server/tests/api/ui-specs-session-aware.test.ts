@@ -11,6 +11,7 @@ import {
   type PluginRegistryEntry,
   type PluginSummary,
   type LoadedRuntime,
+  type ParsedPluginMd,
 } from "@covel/plugin-loader";
 import type { Hono } from "hono";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
@@ -62,6 +63,21 @@ function makeEntry(
   } as PluginRegistryEntry;
 }
 
+function makeManifest(name: string, pluginId: string): ParsedPluginMd {
+  return {
+    manifest: {
+      name,
+      pluginId,
+      description: "",
+      stage: "narrative",
+      trigger: { type: "auto" },
+      ui: { right: ["./ui/panel.json"] },
+    },
+    promptTemplate: "",
+    rawFrontmatter: {},
+  } as ParsedPluginMd;
+}
+
 describe("GET /api/ui-specs session-aware filter", () => {
   let app: Hono;
   let store: DataStore;
@@ -95,6 +111,8 @@ describe("GET /api/ui-specs session-aware filter", () => {
             }),
           ],
         ]),
+        manifest: makeManifest("codex", "codex"),
+        manifests: [makeManifest("codex", "codex")],
       }),
     );
     registry.register(
@@ -119,6 +137,8 @@ describe("GET /api/ui-specs session-aware filter", () => {
             }),
           ],
         ]),
+        manifest: makeManifest("optional-plugin", "optional-plugin"),
+        manifests: [makeManifest("optional-plugin", "optional-plugin")],
       }),
     );
 
@@ -142,7 +162,17 @@ describe("GET /api/ui-specs session-aware filter", () => {
     app = createMiscApiRoutes(stubAi, registry, store);
   });
 
-  it("returns all specs when sessionId is omitted (back-compat)", async () => {
+  it("returns the shared not-found error for an unknown session", async () => {
+    const response = await app.request("/api/ui-specs?sessionId=missing");
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({
+      error: "Session not found: missing",
+      code: "session_not_found",
+    });
+  });
+
+  it("returns all registry specs when sessionId is omitted", async () => {
     const res = await app.request("/api/ui-specs");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { right: Array<{ pluginId: string }> };
@@ -155,13 +185,5 @@ describe("GET /api/ui-specs session-aware filter", () => {
     const body = (await res.json()) as { right: Array<{ pluginId: string }> };
     expect(body.right).toHaveLength(1);
     expect(body.right[0].pluginId).toBe("codex");
-  });
-
-  it("falls back to all specs if sessionId does not match a session", async () => {
-    const res = await app.request("/api/ui-specs?sessionId=does-not-exist");
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { right: Array<{ pluginId: string }> };
-    // When session lookup fails, we leave activeFilter null — full list returned.
-    expect(body.right).toHaveLength(2);
   });
 });

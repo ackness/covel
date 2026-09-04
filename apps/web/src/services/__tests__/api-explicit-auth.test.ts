@@ -68,7 +68,7 @@ describe("explicit session auth on indirect routes", () => {
         requestId: "req-1",
         type: "send_message",
         sessionId: "sess-1",
-        payload: {},
+        payload: { content: "hello" },
       },
       () => {},
     );
@@ -87,6 +87,38 @@ describe("explicit session auth on indirect routes", () => {
         "owner-secret",
       );
     }
+  });
+
+  it("surfaces an invalid action SSE envelope through onError", async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode('data: {"type":"runtime.completed"}\n\n'),
+        );
+        controller.close();
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce({
+        ...okJson(),
+        body: stream,
+      }),
+    );
+    const onError = vi.fn();
+
+    api.sendAction(
+      {
+        requestId: "req-invalid-sse",
+        type: "retry_turn",
+        sessionId: "sess-1",
+        payload: {},
+      },
+      () => {},
+      onError,
+    );
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
   });
 });
 

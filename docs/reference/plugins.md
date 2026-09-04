@@ -1149,6 +1149,8 @@ plugins/<plugin-id>/
 
 子运行时之间可通过 `input.inject` 传递数据（上游输出 → 下游 prompt 注入）。
 
+服务端在启动时把所有 runtime manifest 发布为 registry 的声明快照；能力发现、会话可用插件、`/api/packages`、flow 与 UI 投影都只读取这份快照。`loadedRuntimes` 仅缓存已经按需加载的可执行产物，不参与“插件是否声明某能力”的判断。因此尚未执行过的 runtime 也可被发现，GET 端点不会因一次读取而加载插件代码或修改会话。
+
 #### README.md（必需，用于人类阅读）
 
 每个插件根目录都需要 `README.md`。它不参与 runtime 执行，也不会被当作模型提示词；它服务于插件作者、维护者和代码审核者。建议包含：
@@ -1203,6 +1205,8 @@ description: # I18nText：一句话简介
 entry: ./server/index.js # 整个插件声明一次（多 runtime 声明同一路径会去重，约定写在根 PLUGIN.md）
 ```
 
+多 runtime 插件的根 `PLUGIN.md` 虽不作为 runtime 调度，但其中的 `entry` 会在启动时与各 runtime 声明合并为一个插件级定义；审批预检与实际激活读取同一份定义，避免根 entry 在延迟加载路径中丢失。
+
 ```js
 // server/index.js
 export default function (covel) {
@@ -1239,7 +1243,7 @@ tools:
 
 ### commands（输入框斜线命令）
 
-插件可以在 runtime 的 `PLUGIN.md` frontmatter 声明玩家可发现的斜线命令，并在该插件的 `entry` 中注册对应 RPC action。框架不按插件 ID 写分支：`GET /api/sessions/:id/plugins` 只聚合当前会话已启用插件的声明，输入框据此匹配、补全和展示参数；执行时输入框提交 `{ commandId, input }`，插件 JSON-RENDER UI 提交 `{ commandId, args }`，服务端都再次从当前会话目录解析 action、参数和上下文权限。
+插件可以在 runtime 的 `PLUGIN.md` frontmatter 声明玩家可发现的斜线命令，并在该插件的 `entry` 中注册对应 RPC action。框架不按插件 ID 写分支：`GET /api/sessions/:id/plugins` 只聚合当前会话已启用插件的声明，输入框据此匹配、补全和展示参数；执行时输入框提交 `{ kind: "command", commandId, input }`，插件 JSON-RENDER UI 提交 `{ kind: "command", commandId, args }`，服务端都再次从当前会话目录解析 action、参数和上下文权限。
 
 ```yaml
 commands:

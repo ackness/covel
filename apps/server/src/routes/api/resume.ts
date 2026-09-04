@@ -58,6 +58,7 @@ import {
   mergePluginUserSettings,
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
+import { buildResumeTurnExecutorDeps } from "./turn-execution-deps.js";
 
 type Env = {
   Variables: {
@@ -147,12 +148,6 @@ resumeRoutes.post("/:id/resume", async (c) => {
   // Opportunistic, time-gated, best-effort: never blocks the resume.
   void maybeSweepExpiredSuspensions(store);
   const pluginRegistry = c.get("pluginRegistry");
-  const llmAdapter = c.get("llmAdapter");
-  const pluginGateway = c.get("pluginGateway");
-  const pluginUtils = c.get("pluginUtils");
-  const loadRuntimeFn = c.get("loadRuntimeFn");
-  const toolExecutor = c.get("toolExecutor");
-  const resolveModel = c.get("resolveModel");
 
   let body: { suspensionId?: unknown; data?: unknown };
   try {
@@ -372,18 +367,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
             liveSuspension,
             data,
             effectiveManifest!,
-            {
-              loadRuntime: loadRuntimeFn,
-              llm: llmAdapter,
-              ...(pluginGateway ? { gateway: pluginGateway } : {}),
-              ...(pluginUtils ? { utils: pluginUtils } : {}),
-              store,
-              toolExecutor,
-              resolveModel,
-              ...(hookPipeline ? { hookPipeline } : {}),
-              ...(eventBus ? { eventBus } : {}),
-              emitter,
-            },
+            buildResumeTurnExecutorDeps(c, emitter),
             { userSettings },
           );
 

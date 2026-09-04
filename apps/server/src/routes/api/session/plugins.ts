@@ -13,6 +13,7 @@ import type {
   PluginRelations,
   Stage,
 } from "@covel/shared";
+import { pluginManifestRecords } from "../../misc-api/registry-projection.js";
 import { mergePluginCommands } from "./commands.js";
 
 export function isRequiredCorePlugin(entry: PluginRegistryEntry): boolean {
@@ -265,9 +266,7 @@ export function buildAvailablePluginList(
     // existing UI surface working: gates only need "does this plugin do X".
     const caps: string[] = [];
     const tags: string[] = [];
-    if (entry.manifest?.manifest.capabilities) {
-      caps.push(...entry.manifest.manifest.capabilities);
-    }
+    const manifests = pluginManifestRecords(entry);
     for (const tag of entry.summary.tags ?? []) {
       if (!tags.includes(tag)) tags.push(tag);
     }
@@ -286,8 +285,7 @@ export function buildAvailablePluginList(
       turnCompletion: EffectiveTurnCompletion;
     }> = [];
     let primaryStage: Stage | undefined;
-    for (const [, loaded] of entry.loadedRuntimes) {
-      const m = loaded.manifest;
+    for (const { manifest: m } of manifests) {
       const stage = getRuntimeSpec(m).stage;
       if (primaryStage === undefined) primaryStage = stage;
       if (m.capabilities) {
@@ -362,8 +360,7 @@ export function buildSnapshotPluginList(
     stage?: Stage;
   }> = [];
   for (const [, entry] of pluginRegistry.getAll()) {
-    const manifests =
-      entry.manifests ?? (entry.manifest ? [entry.manifest] : []);
+    const manifests = pluginManifestRecords(entry);
     const primary = manifests[0]?.manifest;
     const stage = primary ? getRuntimeSpec(primary).stage : undefined;
     pluginList.push({
@@ -384,18 +381,9 @@ export function findWorldDataProviderPluginId(
   for (const pid of activePlugins) {
     const entry = pluginRegistry.get(pid);
     if (!entry) continue;
-    if (
-      entry.manifest?.manifest.capabilities?.includes(
-        FrameworkCapability.WorldDataProvider,
-      )
-    ) {
-      return pid;
-    }
-    for (const [, loaded] of entry.loadedRuntimes) {
+    for (const { manifest } of pluginManifestRecords(entry)) {
       if (
-        loaded.manifest.capabilities?.includes(
-          FrameworkCapability.WorldDataProvider,
-        )
+        manifest.capabilities?.includes(FrameworkCapability.WorldDataProvider)
       ) {
         return pid;
       }

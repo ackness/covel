@@ -363,6 +363,8 @@ export interface PluginDataStore {
 export interface WorldStore {
   listWorlds(): Promise<WorldRecord[]>;
   getWorld(id: string): Promise<WorldRecord | null>;
+  /** Atomically insert a world, returning false when its id already exists. */
+  createWorld(record: WorldRecord): Promise<boolean>;
   upsertWorld(record: WorldRecord): Promise<void>;
   deleteWorld(id: string): Promise<void>;
 }

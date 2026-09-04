@@ -38,6 +38,7 @@ describe("image plugin panel actions", () => {
           pluginId: "image-plugin",
           actionLabel: "runtime image-plugin/generate",
           request: {
+            kind: "runtime",
             pluginId: "image-plugin",
             runtimeId: "image-plugin/generate",
             payload: { prompt: "a lighthouse" },

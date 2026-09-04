@@ -28,6 +28,69 @@ describe("plugin flow routes", () => {
   });
 
   it("returns the segmented plugin flow payload", async () => {
+    const registerRuntime = (args: {
+      pluginId: string;
+      runtimeId: string;
+      stage?: RuntimeManifest["stage"];
+      capabilities?: string[];
+      outputKind?: RuntimeManifest["outputKind"];
+      trigger?: RuntimeManifest["trigger"];
+    }) => {
+      const manifest: RuntimeManifest = {
+        name: args.runtimeId,
+        pluginId: args.pluginId,
+        description: args.runtimeId,
+        runtimeType: "agent",
+        execution: "sync",
+        ...(args.stage ? { stage: args.stage } : {}),
+        ...(args.capabilities ? { capabilities: args.capabilities } : {}),
+        ...(args.outputKind ? { outputKind: args.outputKind } : {}),
+        trigger: args.trigger ?? { type: "auto" },
+      };
+      const parsed: ParsedPluginMd = {
+        manifest,
+        promptTemplate: "",
+        rawFrontmatter: {},
+      };
+      registry.register({
+        id: args.pluginId,
+        summary: {
+          id: args.pluginId,
+          name: args.pluginId,
+          description: args.pluginId,
+          pluginType: "plugin",
+          runtimeCount: 1,
+        },
+        manifest: parsed,
+        manifests: [parsed],
+        loadedRuntimes: new Map(),
+        status: "registered",
+        source: "builtin",
+      });
+    };
+    registerRuntime({
+      pluginId: "narrator",
+      runtimeId: "narrator",
+      stage: "narrative",
+      capabilities: ["narrative-engine"],
+      outputKind: "story",
+    });
+    registerRuntime({
+      pluginId: "pregame",
+      runtimeId: "pregame",
+      stage: "setup",
+    });
+    registerRuntime({
+      pluginId: "guide",
+      runtimeId: "guide",
+      stage: "post-turn",
+    });
+    registerRuntime({
+      pluginId: "scene-stage",
+      runtimeId: "scene-stage/resolver",
+      trigger: { type: "manual" },
+    });
+
     const res = await app.request("/api/plugin-flows");
     expect(res.status).toBe(200);
 

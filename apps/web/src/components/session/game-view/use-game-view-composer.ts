@@ -190,17 +190,13 @@ export function useGameViewComposer({
       try {
         const response = await postPluginRpcWithApproval({
           sessionId: session.id,
-          request: { commandId: command.id, input: raw },
+          request: { kind: "command", commandId: command.id, input: raw },
           pluginId: command.pluginId,
           actionLabel: `/${command.name}`,
           confirm: requestConfirm,
           t,
         });
         if (!response) return;
-        if (response.status === "error") {
-          setCommandFeedback({ tone: "error", message: response.error });
-          return;
-        }
         if (response.status !== "ok") {
           setCommandFeedback({
             tone: "info",

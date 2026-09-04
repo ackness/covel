@@ -51,6 +51,26 @@ export interface PluginDiscoveryResult {
   readonly source?: PluginSource;
 }
 
+/**
+ * Declaration-time server entry definition for one plugin package.
+ *
+ * This is metadata only: `entryPaths` are validated manifest declarations and
+ * no plugin module has been imported. Keeping this separate from
+ * {@link LoadedRuntime} prevents discovery/approval decisions from depending on
+ * which executable runtime artifacts happen to be loaded.
+ */
+export interface PluginEntryDefinition {
+  readonly pluginId: string;
+  readonly pluginRoot: string;
+  /** Plugin-root-relative entry module paths, deduplicated in declaration order. */
+  readonly entryPaths: readonly string[];
+  /** Non-fatal parse issue for a metadata-only multi-runtime root manifest. */
+  readonly rootManifestIssue?: {
+    readonly path: string;
+    readonly message: string;
+  };
+}
+
 // ── Progressive loading results ──────────────────────────────────
 
 /** I18n text: plain string or locale map (e.g. { "zh-CN": "...", "en-US": "..." }). */
@@ -715,6 +735,10 @@ export interface PluginRegistryEntry {
   readonly dataSchemas?: Readonly<Record<string, PluginDataSchemaDecl>>;
   /** Plugin-level world projections merged across all runtime manifests. */
   readonly worldProjections?: Readonly<Record<string, WorldProjectionDecl>>;
+  /**
+   * Executable artifacts loaded on demand.
+   * Declaration-time discovery must use `manifests`, never this partial cache.
+   */
   readonly loadedRuntimes: ReadonlyMap<string, LoadedRuntime>;
   readonly status: PluginEntryStatus;
   readonly error?: string;

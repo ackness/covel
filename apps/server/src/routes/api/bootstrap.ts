@@ -472,38 +472,6 @@ export async function bootstrapApi(
     eventDirectory,
   });
 
-  // 6b. Eagerly load runtimes that declare UI specs so /api/ui-specs has data at boot.
-  //     Deferred-trust (community) plugins are skipped: loadRuntimeFn imports the
-  //     plugin's handler/guard/wires JS, which must never execute before approval
-  //     Their runtimes load post-approval through the same loadRuntimeFn
-  //     path, mirroring the deferred `entry` activation.
-  for (const [pluginId, discovery] of discoveryMap) {
-    if (!getPluginTrustInfo(pluginId, discovery.source).autoLoad) continue;
-    const manifests = manifestCache.get(pluginId);
-    if (!manifests) continue;
-    for (const parsed of manifests) {
-      if (parsed.manifest.ui) {
-        try {
-          const loaded = await loadRuntimeFn(parsed.manifest);
-          if (loaded) {
-            const entry = registry.get(pluginId);
-            if (entry) {
-              (entry.loadedRuntimes as Map<string, typeof loaded>).set(
-                parsed.manifest.name,
-                loaded,
-              );
-            }
-          }
-        } catch (err) {
-          console.warn(
-            `[bootstrap] Failed to load UI specs for ${parsed.manifest.name}:`,
-            err,
-          );
-        }
-      }
-    }
-  }
-
   const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
 
   const { rpcRegistry, rpcExecutor, rpcApprovalGate } =

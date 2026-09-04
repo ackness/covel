@@ -41,6 +41,7 @@ describe("plugin user-settings header early rejection", () => {
     const app = new Hono();
     app.route("/api/sessions", pluginRpcRoutes);
     await expectHeaderRejected(app, "/api/sessions/session-1/plugin-rpc", {
+      kind: "runtime",
       pluginId: "plugin-1",
       runtimeId: "plugin-1/runtime",
     });

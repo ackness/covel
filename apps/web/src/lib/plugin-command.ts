@@ -32,6 +32,7 @@ export function buildPluginCommandRequest(
     ok: true,
     command,
     request: {
+      kind: "command",
       commandId: `${pluginId}:${command}`,
       args: rawArgs as Readonly<Record<string, unknown>>,
     },

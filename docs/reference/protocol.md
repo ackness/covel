@@ -346,14 +346,14 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 > 区分 chat turn 与 plugin runtime 调用：
 >
 > - 玩家发送的自然语言走 `/api/actions` `send_message`，触发 narrator 主链。
-> - 输入框先用 `GET /api/sessions/:id/plugins` 返回的会话命令目录匹配斜线命令。已知命令走 `/api/sessions/:id/plugin-rpc` 的 `{ commandId, input }` 变体，不经过 narrator；未知命令继续按原有 composer 规则处理（普通空闲提交走 `execute_command`），保留世界/旧插件对自由文本命令的兼容行为。
-> - 已声明 command 的插件 UI 按钮使用 JSON-RENDER `invokeCommand`，走 `/api/sessions/:id/plugin-rpc` 的 `{ commandId, args }` 变体，不经过 narrator，并与输入框命令共用参数校验、上下文、审批、handler 和 trace。其他自定义 UI action 才使用 `invokePluginAction`。
+> - 输入框先用 `GET /api/sessions/:id/plugins` 返回的会话命令目录匹配斜线命令。已知命令走 `/api/sessions/:id/plugin-rpc` 的 `{ kind: "command", commandId, input }` 变体，不经过 narrator；未知命令继续按原有 composer 规则处理（普通空闲提交走 `execute_command`）。
+> - 已声明 command 的插件 UI 按钮使用 JSON-RENDER `invokeCommand`，走 `/api/sessions/:id/plugin-rpc` 的 `{ kind: "command", commandId, args }` 变体，不经过 narrator，并与输入框命令共用参数校验、上下文、审批、handler 和 trace。其他自定义 UI action 才使用 `invokePluginAction`。
 
 ### 交互响应
 
-| 命令           | 方法 | 端点                           | 响应                                                                   |
-| -------------- | ---- | ------------------------------ | ---------------------------------------------------------------------- |
-| `input.submit` | POST | `/api/sessions/:id/plugin-rpc` | Action `{ pluginId: "framework", action: "submit-form" }` 的 JSON 响应 |
+| 命令           | 方法 | 端点                           | 响应                                                                                   |
+| -------------- | ---- | ------------------------------ | -------------------------------------------------------------------------------------- |
+| `input.submit` | POST | `/api/sessions/:id/plugin-rpc` | Action `{ kind: "action", pluginId: "framework", action: "submit-form" }` 的 JSON 响应 |
 
 ### 插件管理
 
@@ -374,6 +374,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ```json
 {
+  "kind": "action",
   "pluginId": "framework",
   "action": "submit-form",
   "payload": {/* ... */}
@@ -382,6 +383,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ```json
 {
+  "kind": "runtime",
   "pluginId": "my-plugin",
   "runtimeId": "my-plugin/my-runtime",
   "payload": {/* ... */}
@@ -390,6 +392,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ```json
 {
+  "kind": "command",
   "commandId": "dice-check:roll",
   "input": "/roll 2d6"
 }
@@ -397,25 +400,28 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ```json
 {
+  "kind": "command",
   "commandId": "dice-check:roll",
   "args": { "notation": "2d6" }
 }
 ```
 
-command 请求的 `input` 与 `args` 必须且只能提供一个。服务端将两者归一化为 `RpcCommandInvocation`，所以日志和后续 handler 以 `commandId + args` 识别同一业务操作；仅 `source` 保留 `composer | plugin-ui` 的入口差异。
+`kind` 是必填判别字段，服务端不根据 selector 推断分支。command 请求的 `input` 与 `args` 必须且只能提供一个。服务端将两者归一化为 `RpcCommandInvocation`，所以日志和后续 handler 以 `commandId + args` 识别同一业务操作；仅 `source` 保留 `composer | plugin-ui` 的入口差异。
 
 **响应分支:**
 
-| 状态码 | status                                                                                                                       | 触发                                                                                                                |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 200    | `ok`                                                                                                                         | action / command 级成功，或 runtime 级 sync 模式成功                                                                |
-| 202    | `approval-required`                                                                                                          | community-trust 首次调用(action、command 或 runtime 级)                                                             |
-| 202    | `accepted`                                                                                                                   | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
-| 400    | `error`                                                                                                                      | 缺字段 / 三种 selector 互斥违反 / 参数或 payload 校验失败 / `plugin-mismatch`                                       |
-| 404    | `error` (`code: "unknown-action"` / `"runtime-not-active"` / `"command-not-active"`)                                         | action 未注册 / runtime 未加载 / command 不在当前会话目录                                                           |
-| 409    | `error` (`code: "approval-scope-changed"` / `"session-not-active"` / `"session-deleting"` / `"session-incarnation-changed"`) | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                  |
-| 429    | `error` (`code: "queue-full"`)                                                                                               | pending approvals 超过 cap                                                                                          |
-| 500    | `error` (`code: "runtime-execution-failed"` / `"background-enqueue-failed"`)                                                 | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
+| 状态码 | 成功 `status` / 错误 `code`                                                                          | 触发                                                                                                                |
+| ------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 200    | `ok`                                                                                                 | action / command 级成功，或 runtime 级 sync 模式成功                                                                |
+| 202    | `approval-required`                                                                                  | community-trust 首次调用(action、command 或 runtime 级)                                                             |
+| 202    | `accepted`                                                                                           | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
+| 400    | 通用错误信封                                                                                         | kind/字段组合、参数或 payload 校验失败                                                                              |
+| 404    | `unknown_action` / `runtime_not_active` / `command_not_active`                                       | action 未注册 / runtime 未激活 / command 不在当前会话目录                                                           |
+| 409    | `approval_scope_changed` / `session_not_active` / `session_deleting` / `session_incarnation_changed` | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                  |
+| 429    | `queue_full`                                                                                         | pending approvals 超过 cap                                                                                          |
+| 500    | `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed`                      | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
+
+所有非 2xx 响应均使用 `{ error, code?, details? }`，不返回业务 `status`。
 
 带延迟 `entry` 的 community action 会连续返回两次 `approval-required`：先授权 `covel:plugin-server-code`，重试后再授权真实 action。客户端逐阶段展示审批并重试原请求，最多处理两个阶段，超过上限即终止以避免异常审批循环。
 

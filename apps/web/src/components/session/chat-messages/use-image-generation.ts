@@ -66,6 +66,7 @@ export function useImageGeneration({
   const handleGenerateImage = useCallback(async () => {
     if (!sessionId || !imageGenEntry || generatingImage) return;
     const req = {
+      kind: "runtime",
       pluginId: imageGenEntry.pluginId,
       runtimeId: imageGenEntry.runtimeId,
       expectsBackgroundFollower: true,

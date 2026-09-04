@@ -1,8 +1,5 @@
-import {
-  discoverPluginsMulti,
-  loadPluginManifest,
-  loadPluginSummary,
-} from "@covel/plugin-loader";
+import type { PluginRegistry } from "@covel/plugin-loader";
+import path from "node:path";
 import type { EffectiveTurnCompletion, I18nText, Stage } from "@covel/shared";
 import {
   effectiveTurnCompletion,
@@ -10,15 +7,17 @@ import {
   stageRank,
   STAGE_ORDER,
 } from "@covel/shared";
-import { resolve } from "node:path";
 import {
   docPathFromAbsolute,
   isStoryRuntime,
-  resolvePluginsDirs,
   textValue,
   uiSlotsOf,
   type FlowSegmentId,
 } from "./shared.js";
+import {
+  pluginManifestRecords,
+  pluginRuntimeDocumentPath,
+} from "./registry-projection.js";
 
 // Stage-driven segment labels (player-facing plain language). A
 // `Record<Stage, …>` so adding a stage to STAGE_ORDER is a compile error here
@@ -44,9 +43,7 @@ const FLOW_SEGMENTS: ReadonlyArray<{ id: FlowSegmentId; labelText: I18nText }> =
     },
   ];
 
-export async function buildPluginFlowResponse() {
-  const discoveries = await discoverPluginsMulti(resolvePluginsDirs());
-
+export function buildPluginFlowResponse(registry: PluginRegistry) {
   const plugins: Array<{
     id: string;
     name: I18nText;
@@ -93,28 +90,27 @@ export async function buildPluginFlowResponse() {
     isStoryRuntime: boolean;
     turnCompletion: EffectiveTurnCompletion;
   }> = [];
-  for (const discovery of discoveries) {
-    const [summary, manifests] = await Promise.all([
-      loadPluginSummary(discovery),
-      loadPluginManifest(discovery),
-    ]);
+  for (const entry of registry.getAll().values()) {
+    if (entry.status === "error") continue;
+    const summary = entry.summary;
+    const manifests = pluginManifestRecords(entry);
 
     // Serve raw I18nText (frontend resolves to the UI locale), matching
     // /api/packages and the segment labelText — never collapse to one locale
     // server-side. Prefer the friendly displayName, fall back to summary name
     // (an I18nText for multi-runtime packages, else the id).
-    const pluginName = summary.displayName ?? summary.name ?? discovery.id;
+    const pluginName = summary.displayName ?? summary.name ?? entry.id;
     const pluginDescription = summary.description;
 
     plugins.push({
-      id: discovery.id,
+      id: entry.id,
       name: pluginName,
       description: pluginDescription,
       pluginType: summary.pluginType,
       runtimeIds: manifests.map((item) => item.manifest.name),
     });
 
-    for (const [index, parsed] of manifests.entries()) {
+    for (const parsed of manifests) {
       const manifest = parsed.manifest;
       const runtimeId = manifest.name;
       const runtimeName = runtimeId.includes("/")
@@ -124,14 +120,15 @@ export async function buildPluginFlowResponse() {
       // Staged runtimes map 1:1 to their stage segment; stage-less ones
       // (event / manual) group under the dedicated "event-manual" bucket.
       const segmentId: FlowSegmentId = stage ?? "event-manual";
-      const mdPath =
-        discovery.pluginMdPaths[index] ?? discovery.pluginMdPaths[0];
-      const discoveryRoot = resolve(discovery.rootPath, "..");
-      const docPath = mdPath ? docPathFromAbsolute(discoveryRoot, mdPath) : "";
+      const mdPath = pluginRuntimeDocumentPath(entry, runtimeId);
+      const docPath =
+        mdPath && entry.rootPath
+          ? docPathFromAbsolute(path.resolve(entry.rootPath, ".."), mdPath)
+          : "";
 
       steps.push({
         id: runtimeId,
-        pluginId: discovery.id,
+        pluginId: entry.id,
         pluginName,
         runtimeId,
         runtimeName,

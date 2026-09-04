@@ -71,6 +71,14 @@ describe("POST /api/sessions/:id/messages/sync", () => {
       "2026-01-01T00:00:00.000Z",
       "2026-01-01T00:00:01.000Z",
     ]);
+
+    const response = await app.request("/api/sessions/s/messages");
+    expect(await response.json()).toMatchObject({
+      items: [
+        { id: "local-m1", content: "one" },
+        { id: "local-m2", content: "two" },
+      ],
+    });
   });
 
   it("rolls back the whole batch when one message write fails", async () => {

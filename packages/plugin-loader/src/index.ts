@@ -6,6 +6,7 @@ export { discoverPlugins, discoverPluginsMulti } from "./discover.js";
 export {
   loadPluginSummary,
   loadPluginManifest,
+  loadPluginEntryDefinition,
   loadRuntime,
   loadRuntimeUi,
 } from "./load.js";
@@ -30,6 +31,7 @@ export type { PluginLlmConfig, PluginLlmSlot } from "./plugin-llm-config.js";
 export type {
   ParsedPluginMd,
   PluginDiscoveryResult,
+  PluginEntryDefinition,
   PluginSummary,
   LoadedRuntime,
   PluginEntryStatus,

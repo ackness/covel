@@ -49,7 +49,7 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
   → pluginData[pluginId][namespace] 注入为 state
 ```
 
-> 不带 `sessionId` 的请求返回所有已加载插件（向后兼容用于 boot/debug）。`right-panel.tsx` 在 session 切换时会清空状态并以新 sessionId 重新拉取，避免跨会话的 Tab 残留。
+> 不带 `sessionId` 的请求返回 registry 快照中的全部插件（用于 boot/debug）。`right-panel.tsx` 在 session 切换时会清空状态并以新 sessionId 重新拉取，避免跨会话的 Tab 残留。
 
 ### 当前注册的面板
 
@@ -163,7 +163,7 @@ ui:
 - **单个坏 spec 不污染整个响应**：校验失败的 spec 从对应 slot 中剔除，并在响应顶层 `diagnostics[]` 中给出具体诊断（`{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }`）——指明哪个插件、哪个字段、什么问题，而非泛泛的 "Invalid panel spec"。
 - 前端（`right-panel.tsx`）在 dev 模式下把这些诊断打到 console；`plugin-panel.tsx` 的本地兜底消息也会带上 spec 名与具体原因（缺 `view` / `view` 非对象 / 转换失败）。
 
-加载与校验结果按插件目录布局缓存，失效信号为 `PLUGIN.md` 与 `ui/*` 文件的 mtime/size 内容签名；会话级 `plugin_data` 物化仅在签名变化或首次访问时触发（详见 [api.md](./api.md#get-apiui-specs)）。
+UI 声明来自启动时 registry 快照，静态资源惰性加载并按快照缓存。GET 只做读取与会话激活集过滤，不扫描插件目录，也不向 `plugin_data` 物化 UI 定义（详见 [api.md](./api.md#get-apiui-specs)）。
 
 ### activity-bar 短标签
 

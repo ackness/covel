@@ -144,6 +144,32 @@ describe("Session Routes", () => {
       expect(session!.setupRuntimes).toEqual({});
     });
 
+    it("persists presetId on creation", async () => {
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ presetId: "story-fast" }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await json(res)) as { id: string; presetId?: string };
+      expect(body.presetId).toBe("story-fast");
+      expect((await store.getSession(body.id))?.presetId).toBe("story-fast");
+    });
+
+    it("rejects an invalid presetId on creation", async () => {
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ presetId: "" }),
+      });
+
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({
+        error: "presetId must be a non-empty string",
+      });
+    });
+
     it("rejects worldId with invalid characters", async () => {
       const res = await app.request("/api/sessions", {
         method: "POST",

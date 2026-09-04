@@ -378,6 +378,7 @@ describe("POST /api/actions — action type contract ", () => {
         requestId: "req-empty-plugins",
         type: "start_session",
         sessionId: emptySessionId,
+        payload: {},
       }),
     });
 

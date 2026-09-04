@@ -150,11 +150,15 @@ export const BranchReplyCandidates: ComponentRenderer = ({ element }) => {
       const res = await getSessionWorkspace().run(
         sessionId,
         `plugin-rpc:${crypto.randomUUID()}`,
-        () => requestPluginRpc(sessionId, { pluginId, runtimeId, payload }),
+        () =>
+          requestPluginRpc(sessionId, {
+            kind: "runtime",
+            pluginId,
+            runtimeId,
+            payload,
+          }),
       );
-      if (res.status === "error") {
-        emitToast("error", res.error);
-      } else if (res.status === "accepted") {
+      if (res.status === "accepted") {
         emitToast(
           "info",
           t("branchReply.jobSubmitted", {

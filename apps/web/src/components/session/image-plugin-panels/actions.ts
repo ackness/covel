@@ -35,7 +35,7 @@ async function triggerImageFromPrompt(
       `plugin ${pluginId} has no runtime declaring \`${FrameworkRuntimeCapability.ImageGenerator}\` capability`,
     );
   }
-  const req = { pluginId, runtimeId, payload };
+  const req = { kind: "runtime" as const, pluginId, runtimeId, payload };
   const res = await postPluginRpcWithApproval({
     sessionId,
     request: req,
@@ -54,7 +54,6 @@ async function triggerImageFromPrompt(
     );
     return;
   }
-  if (res.status === "error") throw new Error(res.error);
   if (res.status !== "ok") return;
   const failed = res.runtimeResults?.find(
     (r) => r.status === "failed" || r.error,

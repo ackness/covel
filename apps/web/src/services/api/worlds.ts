@@ -1,5 +1,13 @@
 import { parseJsonSseData, readSseStream } from "../sse.js";
-import type { WorldCreationBrief } from "@covel/shared";
+import {
+  worldCreateRequestSchema,
+  worldPatchRequestSchema,
+  worldWireRecordSchema,
+  type WorldCreationBrief,
+  type WorldCreateRequest,
+  type WorldPatchRequest,
+  type WorldWireRecord,
+} from "@covel/shared";
 import { operatorAuthHeaders } from "../session-credentials.js";
 import { buildAiHeaders } from "./model-settings.js";
 import { request } from "./request.js";
@@ -11,19 +19,20 @@ import type {
 
 // -- World API ------------------------------------------------------
 
-/** Map server WorldRecord (metadata.dimensions) to frontend WorldRecord (top-level dimensions). */
-function mapWorldRecord(w: Record<string, unknown>): WorldRecord {
-  const meta = w.metadata as Record<string, unknown> | undefined;
+/** Map the shared wire contract into the frontend's local-domain shape. */
+function mapWorldRecord(value: unknown): WorldRecord {
+  const w = worldWireRecordSchema.parse(value) as WorldWireRecord;
+  const meta = w.metadata;
   return {
     ...w,
     dimensions: (w.dimensions ?? meta?.dimensions) as WorldRecord["dimensions"],
-  } as WorldRecord;
+    metadata: meta ? { ...meta } : undefined,
+    tags: w.tags ? [...w.tags] : undefined,
+  };
 }
 
 export async function listWorlds(): Promise<WorldRecord[]> {
-  const res = await request<{ items: Record<string, unknown>[] }>(
-    "/api/worlds",
-  );
+  const res = await request<{ items: unknown[] }>("/api/worlds");
   return res.items.map(mapWorldRecord);
 }
 
@@ -31,7 +40,7 @@ export async function getWorld(
   id: string,
   options?: { silentErrors?: boolean },
 ): Promise<WorldRecord> {
-  const raw = await request<Record<string, unknown>>(
+  const raw = await request<unknown>(
     `/api/worlds/${encodeURIComponent(id)}`,
     options,
   );
@@ -43,9 +52,14 @@ export async function createWorld(
   description: string,
   id?: string,
 ): Promise<WorldRecord> {
-  const raw = await request<Record<string, unknown>>("/api/worlds", {
+  const body: WorldCreateRequest = worldCreateRequestSchema.parse({
+    ...(id !== undefined ? { id } : {}),
+    name,
+    description,
+  });
+  const raw = await request<unknown>("/api/worlds", {
     method: "POST",
-    body: JSON.stringify({ id, name, description }),
+    body: JSON.stringify(body),
     operatorAuth: true,
   });
   return mapWorldRecord(raw);
@@ -60,14 +74,12 @@ export async function updateWorld(
     >
   >,
 ): Promise<WorldRecord> {
-  const raw = await request<Record<string, unknown>>(
-    `/api/worlds/${encodeURIComponent(id)}`,
-    {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-      operatorAuth: true,
-    },
-  );
+  const body = worldPatchRequestSchema.parse(patch) as WorldPatchRequest;
+  const raw = await request<unknown>(`/api/worlds/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+    operatorAuth: true,
+  });
   return mapWorldRecord(raw);
 }
 
@@ -108,7 +120,7 @@ export async function importDimensions(
   worldId: string,
   dimensions: Record<string, unknown>,
 ): Promise<WorldRecord> {
-  const raw = await request<Record<string, unknown>>(
+  const raw = await request<unknown>(
     `/api/worlds/${encodeURIComponent(worldId)}/dimensions/import`,
     {
       method: "POST",

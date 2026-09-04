@@ -61,16 +61,15 @@ function flattenMessage(m: {
   };
 }
 
-// GET /sessions/:id/messages — full history (backward-compatible; used by the
-// snapshot-miss fallback and bulk sync). Prefer /messages/page for windowed
-// reads on long sessions.
+// GET /sessions/:id/messages — full history used by the snapshot-miss fallback
+// and bulk sync. Prefer /messages/page for windowed reads on long sessions.
 messageRoutes.get("/:id/messages", async (c) => {
   const store = c.get("store");
   const sessionId = c.req.param("id");
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;
   const messages = await store.listMessages(sessionId);
-  return c.json(messages.map(flattenMessage));
+  return c.json({ items: messages.map(flattenMessage) });
 });
 
 // GET /sessions/:id/messages/page — keyset page, oldest-first. `?limit`,

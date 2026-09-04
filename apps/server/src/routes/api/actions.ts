@@ -30,13 +30,13 @@ import type {
   JobStatusRecord,
   RuntimeManifest,
   RuntimeResult,
+  SseEnvelope,
 } from "@covel/shared";
 import {
   FORWARDED_EVENT_TYPES,
   assertJsonValue,
   getRuntimeSpec,
 } from "@covel/shared";
-import { estimateTokens } from "@covel/context";
 import type { CompactorRunner } from "@covel/context";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
@@ -66,6 +66,7 @@ import {
   sessionApprovalScope,
 } from "./session/session-guard.js";
 import { validateActionRequest } from "./actions/request.js";
+import { buildManualTurnExecutorDeps } from "./turn-execution-deps.js";
 
 // SSE uses CovelEventType names directly.
 // Frontend handleSseEvent handles these standard types.
@@ -98,19 +99,10 @@ export const actionRoutes = new Hono<Env>();
 actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const store = c.get("store");
   const pluginRegistry = c.get("pluginRegistry");
-  const llmAdapter = c.get("llmAdapter");
-  const pluginGateway = c.get("pluginGateway");
-  const pluginUtils = c.get("pluginUtils");
-  const getPluginSource = c.get("getPluginSource");
   const loadRuntimeFn = c.get("loadRuntimeFn");
-  const toolExecutor = c.get("toolExecutor");
-  const resolveModel = c.get("resolveModel");
   const eventBus = c.get("eventBus");
-  const compactorRunner = c.get("compactorRunner");
-  const turnContextBudget = c.get("turnContextBudget");
   const sessionLock = c.get("sessionLock");
   const mediaStore = c.get("mediaStore");
-  const eventDirectory = c.get("eventDirectory");
   const memorySystem = c.get("memorySystem");
   const prepareToolsForSession = c.get("prepareToolsForSession"); // optional — see env.d.ts
   const runtimeJobWorker = c.get("runtimeJobWorker");
@@ -118,7 +110,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   const rawBody = await c.req.json<unknown>().catch(() => null);
   const bodyResult = validateActionRequest(rawBody);
   if (!bodyResult.ok) {
-    return c.json(errorBody(bodyResult.error), 400);
+    return c.json(
+      errorBody(bodyResult.error, { code: "invalid_action_request" }),
+      400,
+    );
   }
   const body = bodyResult.value;
   const { requestId, type, sessionId, locale, model, payload } = body;
@@ -137,7 +132,12 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
 
   const session = await store.getSession(sessionId);
   if (!session) {
-    return c.json(errorBody("Session not found"), 404);
+    return c.json(
+      errorBody(`Session not found: ${sessionId}`, {
+        code: "session_not_found",
+      }),
+      404,
+    );
   }
 
   // Owner guard (hosted tiers): actions execute turns and spend tokens
@@ -153,6 +153,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     return c.json(
       errorBody(
         `session is ${session.status}; it must be active to accept actions`,
+        { code: "session_not_active" },
       ),
       409,
     );
@@ -210,6 +211,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       errorBody(
         "Session has no active plugins. Create the session with an explicit " +
           "plugin set (or a world whose manifest seeds one) before starting it.",
+        { code: "no_active_plugins" },
       ),
       400,
     );
@@ -254,7 +256,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     function makeEnvelope(
       eventType: string,
       eventPayload: Record<string, unknown>,
-    ) {
+    ): SseEnvelope {
       return {
         type: eventType,
         requestId,
@@ -596,8 +598,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           let result;
           try {
             result = await executeTurn(turnInput, activeRuntimes, {
-              loadRuntime: loadRuntimeFn,
-              llm: llmAdapter,
+              ...buildManualTurnExecutorDeps(c, capabilityPluginIds),
               // The main turn path never passed the eventBus, so every
               // `emitSubEvent` inside the executor — including the
               // completion barrier's `turn.completed` — silently no-opped on
@@ -605,13 +606,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               // fault-injection tests). Without it the barrier's only
               // observable effect was memory ingestion.
               eventBus,
-              ...(pluginGateway ? { gateway: pluginGateway } : {}),
-              ...(pluginUtils ? { utils: pluginUtils } : {}),
-              ...(getPluginSource ? { getPluginSource } : {}),
               store,
-              ...(mediaStore ? { mediaStore } : {}),
-              toolExecutor,
-              resolveModel,
               emitter,
               onDelta: async (delta) => {
                 await writeEvent("narrative.delta", {
@@ -659,19 +654,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                     : {}),
                 });
               },
-              compactor: compactorRunner,
-              // Prompt-assembly hard prune — last line of defense when
-              // compaction is skipped/vetoed/insufficient for the model window.
-              ...(turnContextBudget
-                ? {
-                    estimator: estimateTokens,
-                    contextBudget: turnContextBudget,
-                  }
-                : {}),
               ...(memorySystem ? { memorySystem } : {}),
-              // Let the turn executor construct a unified SessionContextSnapshot.
-              capabilityPluginIds,
-              ...(eventDirectory ? { eventDirectory } : {}),
               // Player mid-turn steering + abort.
               turnControl: registeredTurn.turnControl,
             });
@@ -963,22 +946,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           session: { ...followerSession, locale: effectiveLocale },
           activeRuntimes,
           approvalScopes,
-          deps: {
-            loadRuntime: loadRuntimeFn,
-            llm: llmAdapter,
-            ...(pluginGateway ? { gateway: pluginGateway } : {}),
-            ...(pluginUtils ? { utils: pluginUtils } : {}),
-            ...(getPluginSource ? { getPluginSource } : {}),
-            ...(mediaStore ? { mediaStore } : {}),
-            toolExecutor,
-            resolveModel,
-            compactor: compactorRunner,
-            ...(turnContextBudget
-              ? { estimator: estimateTokens, contextBudget: turnContextBudget }
-              : {}),
-            capabilityPluginIds,
-            ...(eventDirectory ? { eventDirectory } : {}),
-          },
+          deps: buildManualTurnExecutorDeps(c, capabilityPluginIds),
           ...(hookPipeline ? { hookPipeline } : {}),
         });
         const jobRunner = createPluginRpcJobRunner({

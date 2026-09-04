@@ -18,6 +18,7 @@ import {
 import type { Hono } from "hono";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
 import { __resetUiSpecsCache } from "../../src/routes/misc-api/ui-specs.js";
+import { registerTestPlugins } from "../helpers/register-test-plugins.js";
 
 const stubAi = {
   presetRegistry: { listPresets: () => [] },
@@ -78,6 +79,7 @@ describe("GET /api/ui-specs — one bad runtime must not 500 the whole response"
     process.env.COVEL_PLUGINS_DIR = dir;
     store = createMemoryStore();
     registry = createPluginRegistry();
+    await registerTestPlugins(registry, [dir]);
     await store.createSession({
       phase: "playing",
       setupRuntimes: {},

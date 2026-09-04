@@ -169,6 +169,18 @@ export {
 
 export type { WorldManifestInput } from "./schemas/world.js";
 
+// ── API Transport Contracts ────────────────────────────────────
+export {
+  actionRequestSchema,
+  actionTypeSchema,
+  apiErrorResponseSchema,
+  sseEnvelopeSchema,
+  validateActionRequest,
+  worldCreateRequestSchema,
+  worldPatchRequestSchema,
+  worldWireRecordSchema,
+} from "./schemas/api-contract.js";
+
 export {
   WORLD_IR_V1_SCHEMA_URI,
   WORLD_IR_V1_JSON_SCHEMA,

@@ -20,7 +20,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 > **注意**: `idb` 不是 `@covel/store` 的 `DataStore` 后端；它仅用于浏览器端 MediaStore / BrowserVault 能力。常规服务器部署使用 `memory` / `sqlite` / `pg`。
 
-### 错误响应约定（自 v0.0.5 起统一）
+### 错误响应约定
 
 所有 JSON 错误响应统一收敛为以下信封（`apps/server/src/api-error.ts`）：
 
@@ -41,11 +41,8 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 - **会话 404 统一**：所有以 `:id` 为路由参数的会话作用域端点，当会话不存在时统一返回
   `404 { "error": "Session not found: <id>", "code": "session_not_found" }`
   （由 `routes/api/session/session-guard.ts#resolveSessionParam` 集中产生）。
-  这是 v0.0.5 的有意破坏性改动：此前各端点的 404 响应体形态不一（`{error:"Session not found"}` /
-  `{error:"Session not found: <id>"}` / `{status:"error",error}` 等），现统一为上表形态。
-  以 query 参数 `sessionId` 取会话的端点（`/api/events/subscribe`）与以 body `sessionId` 取会话的端点
-  （`/api/actions`、`/api/worlds/:id/sync-data` 等）保持各自既有 404 文案不变。
-- `plugin-rpc` 通道保留其专属信封 `{ status: "error", error, code }`（见下文 plugin-rpc 小节），不并入通用信封。
+  query/body 携带 session id 的端点同样返回 `code: "session_not_found"`。
+- `plugin-rpc` 的 4xx/5xx 也使用这套通用错误信封；`status` 只用于 2xx 的业务响应分支。
 
 ### 鉴权：Session owner token
 
@@ -144,7 +141,8 @@ curl -N -X POST http://localhost:3001/api/actions \
     "requestId": "req-001",
     "type": "start_session",
     "sessionId": "<sessionId>",
-    "locale": "zh-CN"
+    "locale": "zh-CN",
+    "payload": {}
   }'
 ```
 
@@ -195,6 +193,7 @@ curl -N -X POST http://localhost:3001/api/actions \
 curl -X POST http://localhost:3001/api/sessions/<sessionId>/plugin-rpc \
   -H "Content-Type: application/json" \
   -d '{
+    "kind": "action",
     "pluginId": "framework",
     "action": "submit-form",
     "payload": {
@@ -340,7 +339,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 | 方法   | 路径                          | 描述                                                                                                                                                                                                                                                    |
 | ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET    | `/api/framework/capabilities` | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                                                                                                                                                           |
-| GET    | `/api/plugins`                | 列出所有已加载插件                                                                                                                                                                                                                                      |
+| GET    | `/api/plugins`                | 列出 registry 中的插件及其注册/错误状态                                                                                                                                                                                                                 |
 | GET    | `/api/plugins/:id`            | 获取插件详情                                                                                                                                                                                                                                            |
 | DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。错误码：鉴权失败 `401/403`、id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
 | GET    | `/api/plugins/:id/contract`   | 获取插件完整开发契约（含 `dataSchemas` / `worldProjections` / plugin-data namespace 契约）                                                                                                                                                              |
@@ -359,10 +358,10 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### 状态查询
 
-| 方法 | 路径                              | 描述                 |
-| ---- | --------------------------------- | -------------------- |
-| GET  | `/api/sessions/:id/state`         | 获取所有状态表       |
-| GET  | `/api/sessions/:id/state-patches` | 获取状态变更补丁列表 |
+| 方法 | 路径                              | 描述                                |
+| ---- | --------------------------------- | ----------------------------------- |
+| GET  | `/api/sessions/:id/state`         | 获取所有状态表                      |
+| GET  | `/api/sessions/:id/state-patches` | 获取状态变更补丁列表（`{ items }`） |
 
 完整会话恢复使用 `GET /api/sessions/:id/snapshot`；物化存档、列表、读取与分叉使用
 `/api/sessions/:id/snapshot(s)` 路由（见 [Snapshot / Fork](#snapshot--fork)）。没有
@@ -370,11 +369,11 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### 消息历史
 
-| 方法 | 路径                              | 描述                                                        |
-| ---- | --------------------------------- | ----------------------------------------------------------- |
-| GET  | `/api/sessions/:id/messages`      | 获取会话完整消息列表（兜底 / 同步用；长会话优先用 `/page`） |
-| GET  | `/api/sessions/:id/messages/page` | keyset 游标分页消息（最新窗口 + 向上加载更旧）              |
-| POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用）                             |
+| 方法 | 路径                              | 描述                                                      |
+| ---- | --------------------------------- | --------------------------------------------------------- |
+| GET  | `/api/sessions/:id/messages`      | 获取会话完整消息列表（`{ items }`；长会话优先用 `/page`） |
+| GET  | `/api/sessions/:id/messages/page` | keyset 游标分页消息（最新窗口 + 向上加载更旧）            |
+| POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用）                           |
 
 ### 统一翻译层（Runtime Outputs / Interaction Records）
 
@@ -559,8 +558,8 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 | 方法 | 路径                           | 描述                                                                                                                                                                |
 | ---- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET  | `/api/presets`                 | 列出配置的模型预设                                                                                                                                                  |
-| GET  | `/api/packages`                | 列出已加载插件包（含 runtime/tool/`userSettings`/`tags`/`relations` 信息）                                                                                          |
+| GET  | `/api/presets`                 | 列出配置的模型预设（`{ items }`）                                                                                                                                   |
+| GET  | `/api/packages`                | 从启动时 registry 快照列出插件声明（含 runtime/tool/`userSettings`/`tags`/`relations` 信息）                                                                        |
 | GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件                                                                             |
 | GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                                                                                              |
 | POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`                                                                                |
@@ -582,9 +581,9 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 **查询参数：**
 
-| 参数        | 类型           | 说明                                                                       |
-| ----------- | -------------- | -------------------------------------------------------------------------- |
-| `sessionId` | string（可选） | 指定后只返回该会话激活集中的插件；省略时返回全局所有已加载插件（向后兼容） |
+| 参数        | 类型           | 说明                                                                                                   |
+| ----------- | -------------- | ------------------------------------------------------------------------------------------------------ |
+| `sessionId` | string（可选） | 指定后只返回该会话激活集中的插件；未知会话返回 `404 session_not_found`；省略时返回 registry 中全部插件 |
 
 **响应格式**：
 
@@ -614,7 +613,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 **校验与 `specVersion`**：聚合时对每个 spec 执行 Zod 校验（结构包络 + `specVersion`）。`specVersion` 可省略（按 v1 处理），声明高于服务端支持版本（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。校验失败的 spec **不污染整个响应**——只从对应 slot 中剔除，并在顶层 `diagnostics[]` 中按 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }` 给出具体诊断（哪个插件、哪个字段、什么问题）。带 `sessionId` 时 `diagnostics` 仅包含该会话激活集中的插件。
 
-**缓存**：插件发现 + UI spec 加载/校验结果按插件目录布局缓存，失效信号为 `PLUGIN.md` 与 `ui/*` 文件的 mtime/size 内容签名（仅 `stat`，不读文件）。会话级 `plugin_data` 物化（delete + rewrite）只在签名变化或该会话首次访问时触发，避免每请求扫盘与 DB 重写。spec 文件变更后下次请求会正确重新物化。
+**读取模型**：UI 声明来自启动时发布到 registry 的 manifest 快照，静态 `ui/*` 资源按该快照惰性加载并缓存。GET 请求不会重新发现插件、重读 `PLUGIN.md`，也不会把 UI 定义写入 `plugin_data`。开发时修改 manifest 或 UI 文件后需重载 registry（通常重启 server）。
 
 ## 详细文档
 
@@ -791,7 +790,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 #### `POST /api/worlds`
 
-创建或更新一个世界记录（upsert 语义）。
+创建一个世界记录。`id` 可省略，由服务端生成 `world-<uuid8>`；已有 id 不会被覆盖，原子地返回 `409 world_already_exists`。修改已有世界使用 `PATCH /api/worlds/:id`。
 
 **请求体:**
 
@@ -805,7 +804,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 }
 ```
 
-**响应:**
+**响应 201:**
 
 ```json
 {
@@ -1017,17 +1016,19 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 ```json
 {
   "worldId": "mistport",
+  "presetId": "default",
   "locale": "zh-CN",
   "plugins": ["pregame", "narrator", "codex"]
 }
 ```
 
-| 字段      | 类型     | 必填 | 说明                                                          |
-| --------- | -------- | ---- | ------------------------------------------------------------- |
-| `worldId` | string   | 否   | 关联的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                |
-| `locale`  | string   | 否   | 语言区域，默认 `zh-CN`                                        |
-| `plugins` | string[] | 否   | 要激活的插件 ID 列表                                          |
-| `id`      | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`） |
+| 字段       | 类型     | 必填 | 说明                                                          |
+| ---------- | -------- | ---- | ------------------------------------------------------------- |
+| `worldId`  | string   | 否   | 关联的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                |
+| `presetId` | string   | 否   | 会话模型预设 ID；创建与后续 PATCH 使用同一字段                |
+| `locale`   | string   | 否   | 语言区域，默认 `zh-CN`                                        |
+| `plugins`  | string[] | 否   | 要激活的插件 ID 列表                                          |
+| `id`       | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`） |
 
 客户端自定义 `id` 已存在时返回
 `409 { "error": "Session already exists: <id>", "code": "session_already_exists" }`。
@@ -1048,6 +1049,7 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 {
   "id": "mistport-a1b2c3d4",
   "worldId": "mistport",
+  "presetId": "default",
   "locale": "zh-CN",
   "status": "active",
   "phase": "setup",
@@ -1262,6 +1264,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
+  "kind": "action",
   "pluginId": "framework",
   "action": "submit-form",
   "payload": {
@@ -1373,11 +1376,11 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 统一的"结构化插件指令"通道。同时支持:
 
-1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 `entry` 中通过 `covel.registerRpc` 注册的 handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
-2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
+1. **Action 级**: `{ kind: "action", pluginId, action, payload }` — 调用插件在 `entry` 中通过 `covel.registerRpc` 注册的 handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
+2. **Runtime 级**: `{ kind: "runtime", pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
    - `'background'`: 立即返回 202 + `jobId`,后台通过有界进程内队列继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。入口 runtime 发出的 background follower 会继续建立子任务，并记录在父任务的 `deferredJobs`。
-3. **Command 级**: `{ commandId, input }` 或 `{ commandId, args }` — 前者来自输入框，后者来自插件 JSON-RENDER `invokeCommand`。两者执行会话命令目录中的同一个命令；服务端重新确认插件仍激活、验证并归一化参数，并从 manifest 决定 action 和可注入上下文。客户端不能提交 `pluginId`、`payload` 或扩大 context scope。
+3. **Command 级**: `{ kind: "command", commandId, input }` 或 `{ kind: "command", commandId, args }` — 前者来自输入框，后者来自插件 JSON-RENDER `invokeCommand`。两者执行会话命令目录中的同一个命令；服务端重新确认插件仍激活、验证并归一化参数，并从 manifest 决定 action 和可注入上下文。客户端不能提交 `pluginId`、`payload` 或扩大 context scope。
 
 **参数:**
 
@@ -1389,6 +1392,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
+  "kind": "action",
   "pluginId": "framework",
   "action": "submit-form",
   "payload": {
@@ -1408,6 +1412,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
+  "kind": "action",
   "pluginId": "codex",
   "action": "regenerate",
   "payload": { "cardId": "shrine-of-stars" }
@@ -1418,6 +1423,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
+  "kind": "runtime",
   "pluginId": "dashscope-image-gen",
   "runtimeId": "dashscope-image-gen/prompt-generator",
   "payload": { "style": "cinematic" }
@@ -1428,6 +1434,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
+  "kind": "command",
   "commandId": "dice-check:roll",
   "input": "/roll 2d6"
 }
@@ -1437,6 +1444,7 @@ JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
 
 ```json
 {
+  "kind": "command",
   "commandId": "dice-check:roll",
   "args": { "notation": "2d6" }
 }
@@ -1444,6 +1452,7 @@ JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
 
 | 字段                        | 类型          | 说明                                                                                                                                                                                                                                                                                                                                 |
 | --------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `kind`                      | string(必填)  | 请求种类：`action` / `runtime` / `command`。服务端不再根据 selector 字段推断种类                                                                                                                                                                                                                                                     |
 | `pluginId`                  | string(可选)  | action / runtime 模式的插件 ID(框架默认 handler 用 `framework` 占位)；command 模式禁止提交                                                                                                                                                                                                                                           |
 | `action`                    | string(可选)  | RPC action 名,kebab-case。与 `runtimeId` / `commandId` 互斥                                                                                                                                                                                                                                                                          |
 | `runtimeId`                 | string(可选)  | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` / `commandId` 互斥                                                                                                                                                                                                                                                              |
@@ -1452,7 +1461,7 @@ JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
 | `args`                      | object(可选)  | command JSON-RENDER 模式的命名参数；与 `input` 必须且只能提供一个；未知字段、类型、choices、required 与 variadic 都按服务端命令声明校验                                                                                                                                                                                              |
 | `payload`                   | unknown       | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload`                                                                                                                                                                                                                                        |
 | `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即写入 `_jobs` 占位并返回 202，随后在后台执行入口 runtime 与 follower，避免 UI 等 prompt LLM 完成后才出现任务。                                                                                                                                |
-| `retryFromTurnId`           | string(可选)  | 仅 runtime 级。带原回合上下文的重试：服务端加载该 turn 的持久化 `turn_results` 工件，把其中记录的 runtime 输出播种进本次执行的 completedResults——目标 runtime 的 `input.inject` / `needs` 按原回合叙事解析（裸 manual 触发这些解析为空）。种子只作上下文，不会被本次工件重复持久化。找不到该 turn 时 404（`retry-turn-not-found`）。 |
+| `retryFromTurnId`           | string(可选)  | 仅 runtime 级。带原回合上下文的重试：服务端加载该 turn 的持久化 `turn_results` 工件，把其中记录的 runtime 输出播种进本次执行的 completedResults——目标 runtime 的 `input.inject` / `needs` 按原回合叙事解析（裸 manual 触发这些解析为空）。种子只作上下文，不会被本次工件重复持久化。找不到该 turn 时 404（`retry_turn_not_found`）。 |
 
 **解析顺序(action 级):**
 
@@ -1585,17 +1594,17 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 
 **错误响应:**
 
-| 状态码 | 触发条件                                                                                                                           |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | `pluginId` 缺失 / `action` 与 `runtimeId` 同时设置或同时缺失 / `RpcValidationError` / `plugin-mismatch`(runtimeId 不属于 pluginId) |
-| 404    | 会话不存在 / `unknown-action`(action 未注册) / `runtime-not-active`(runtimeId 未加载到该 session)                                  |
-| 409    | `session-not-active` / `session-deleting` / `session-incarnation-changed` / `approval-scope-changed`                               |
-| 429    | `queue-full`(community 来源的待批准队列满)                                                                                         |
-| 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime-execution-failed` / `background-enqueue-failed` / `turn-commit-failed`    |
+| 状态码 | 触发条件                                                                                                                        |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `kind` 或该 kind 的必填字段缺失 / 字段跨 kind 混用 / `RpcValidationError` / `plugin_mismatch`                                   |
+| 404    | `session_not_found` / `unknown_action` / `runtime_not_active` / `command_not_active`                                            |
+| 409    | `session_not_active` / `session_deleting` / `session_incarnation_changed` / `approval_scope_changed`                            |
+| 429    | `queue_full`(community 来源的待批准队列满)                                                                                      |
+| 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed` |
 
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
-> **提交结果是权威判据**：runtime 可能返回 `success` 而其 proposal 提交失败。此时同步 RPC 返回 `500 turn-commit-failed`，background job 标记 `failed`（`error` 说明失败的 proposal 数量），且**不会**调度该回合的 deferred follower —— 后续 follower 不应建立在已回滚的状态上。主回合路径（`POST /api/actions`）遵循同一规则。
+> **提交结果是权威判据**：runtime 可能返回 `success` 而其 proposal 提交失败。此时同步 RPC 返回 `500 turn_commit_failed`，诊断位于通用错误信封的 `details`；background job 标记 `failed`（`error` 说明失败的 proposal 数量），且**不会**调度该回合的 deferred follower —— 后续 follower 不应建立在已回滚的状态上。主回合路径（`POST /api/actions`）遵循同一规则。
 
 > **community 插件 + `entry` action 的延迟激活**：首次调用时 action 尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin 的 entry 在 boot 时已运行，其未知 action 直接 404。
 >
@@ -1642,6 +1651,8 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 | 状态码 | 含义                                          |
 | ------ | --------------------------------------------- |
 | 202    | `community` 信任级别需要 approval。响应体见下 |
+
+其余 4xx/5xx 使用本文开头的 `{ error, code?, details? }` 通用错误信封，不返回 `status: "error"`。
 
 **202 响应体:**
 
@@ -1770,13 +1781,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
     },
     "pluginData": {
       "scope": "(sessionId, pluginId, namespace, key)",
-      "reservedNamespaces": [
-        "_jobs",
-        "_runtime_jobs",
-        "_logs",
-        "__ui_right__",
-        "__ui_message__"
-      ],
+      "reservedNamespaces": ["_jobs", "_runtime_jobs", "_logs"],
       "writePaths": [
         "builtin-tool:plugin-data-set",
         "function-output:pluginData[]"
@@ -2114,19 +2119,21 @@ enable/disable 与同一 session 的其他写入共用 session lock，并在持�
 | ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
-**响应:** 扁平化消息对象的**数组**（`metadata.{turnId,runtimeId,kind,block}` 提升为顶层字段）。
+**响应:** `{ items }` 信封；每项是扁平化消息对象（`metadata.{turnId,runtimeId,kind,block}` 提升为顶层字段）。
 
 ```json
-[
-  {
-    "id": "msg-001",
-    "sessionId": "mistport-a1b2c3d4",
-    "role": "user",
-    "content": "我环顾四周",
-    "turnId": "turn-1",
-    "createdAt": "2025-01-15T10:00:00.000Z"
-  }
-]
+{
+  "items": [
+    {
+      "id": "msg-001",
+      "sessionId": "mistport-a1b2c3d4",
+      "role": "user",
+      "content": "我环顾四周",
+      "turnId": "turn-1",
+      "createdAt": "2025-01-15T10:00:00.000Z"
+    }
+  ]
+}
 ```
 
 #### `GET /api/sessions/:id/messages/page`
@@ -2722,7 +2729,7 @@ id: evt-002
 }
 ```
 
-支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_turn` · `retry_runtime`。
+支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_turn` · `retry_runtime`。五种请求都必须显式提供与 type 匹配的 `payload`；不接受未知字段。
 
 | `payload` 字段    | 适用 `type`       | 说明                                                                                                                                                                                                                                                                |
 | ----------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

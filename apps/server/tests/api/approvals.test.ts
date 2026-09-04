@@ -110,6 +110,7 @@ async function dispatchRpc(app: Hono, sessionId: string): Promise<Response> {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
+      kind: "action",
       pluginId: "untrusted",
       action: "do-thing",
       payload: { foo: "bar" },

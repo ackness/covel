@@ -224,6 +224,7 @@ export async function submitInputs(
     {
       method: "POST",
       body: JSON.stringify({
+        kind: "action",
         pluginId: "framework",
         action: "submit-form",
         payload: body,
@@ -231,11 +232,7 @@ export async function submitInputs(
     },
   );
   if (response.status !== "ok") {
-    throw new Error(
-      response.status === "error"
-        ? response.error
-        : `submit-form returned ${response.status}`,
-    );
+    throw new Error(`submit-form returned ${response.status}`);
   }
   return response.result as SubmitInputsResult;
 }
@@ -273,9 +270,10 @@ export async function getSession(
 export async function listStatePatches(
   sessionId: string,
 ): Promise<StatePatchRecord[]> {
-  return request<StatePatchRecord[]>(
+  const response = await request<{ items: StatePatchRecord[] }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/state-patches`,
   );
+  return response.items;
 }
 
 export interface StateTableEntry {
@@ -380,7 +378,10 @@ export async function deleteSession(sessionId: string): Promise<void> {
 export async function listMessages(
   sessionId: string,
 ): Promise<MessageRecord[]> {
-  return request<MessageRecord[]>(`/api/sessions/${sessionId}/messages`);
+  const response = await request<{ items: MessageRecord[] }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
+  );
+  return response.items;
 }
 
 /**
@@ -388,7 +389,7 @@ export async function listMessages(
  * `before` set ⇒ the page immediately older than that `(createdAt, id)`
  * position (scroll-up "load older"). `nextCursor` points at the oldest returned
  * row, or is `null` once the window reaches the start of history. Keeps the
- * full-history `listMessages` above untouched.
+ * The full-history `listMessages` endpoint uses the same `{ items }` envelope.
  */
 export async function listMessagesPage(
   sessionId: string,
