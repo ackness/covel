@@ -68,12 +68,12 @@
 - `requiredPlugins`：准备页锁定启用。
 - `recommendedPlugins`：准备页默认启用。
 - `excludedPlugins`：准备页默认关闭。
-- `pluginPolicy`：描述场景意图和组合包，可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins` 和 `packs`。写在顶层的同名三组字段也会被前端并入 `pluginPolicy`。
+- `pluginPolicy`：描述场景意图和组合包，可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins` 和 `packs`。写在顶层的同名三组字段会在世界加载时并入 `pluginPolicy`。
 - `worldData`：可选，指向 `data/world.data.yaml`；当前会读取本地 YAML/JSON/Markdown/Text/Media source，生成轻量 `WorldRecord.metadata.worldData` 摘要，投影 `world:metadata.dimensions`，并在 session 创建时导入 `plugin:*/*`、`plugin:*/*+lorebook`、`lorebook`、`characters`、`media` + `indexTo`。
 
 第三方插件可以把插件数据声明为 `schema: plugin://<pluginId>/<namespace>` 与 `to: plugin:<pluginId>/<namespace>`。完整格式见 [World Data](world-data.md)。
 
-内置组合包由前端提供：`traditional-story`、`dialogue-mode`、`low-cost`。世界可以用 `pluginPolicy.preset` 引用，也可以在 `pluginPolicy.packs` 自定义组合包。对话模式世界通常启用 `chat-mode-narrator`、`scene-cast`、`scene-stage`、`scene-prompts`、`character-blueprint`、`character-presence`、`living-world-rules`、`branch-reply`，并排除默认 `narrator`、`guide` 以及包级旧下游插件。多 runtime 插件当前按包选择；例如 `npc-graph/rag-retriever` 和 `npc-graph/extractor` 同属 `npc-graph` 包，准备页会一起启用或关闭。`scene-stage` 由 `chat-mode-narrator` 的 `relations.requires` 强制拉起（同 `scene-cast`），即便玩家在准备页手动关闭也会被服务端展开逻辑重新加回——世界包引用 `plugin:scene-stage/scenes` 的 worldData source 因此总能解析到已激活插件。
+内置组合包由服务端提供：`traditional-story`、`dialogue-mode`、`low-cost`。`GET /api/worlds/:id/plugin-plan` 把内置组合包、世界自定义组合包、标签和能力约束解析为默认插件集合，前端只展示并提交选择。世界可以用 `pluginPolicy.preset` 引用，也可以在 `pluginPolicy.packs` 自定义组合包。对话模式世界通常启用 `chat-mode-narrator`、`scene-cast`、`scene-stage`、`scene-prompts`、`character-blueprint`、`character-presence`、`living-world-rules`、`branch-reply`，并排除默认 `narrator`、`guide` 以及包级旧下游插件。多 runtime 插件当前按包选择；例如 `npc-graph/rag-retriever` 和 `npc-graph/extractor` 同属 `npc-graph` 包，准备页会一起启用或关闭。`scene-stage` 由 `chat-mode-narrator` 的 `relations.requires` 强制拉起（同 `scene-cast`），即便玩家在准备页手动关闭也会被服务端展开逻辑重新加回——世界包引用 `plugin:scene-stage/scenes` 的 worldData source 因此总能解析到已激活插件。
 
 ## 徽章说明 / Badge legend
 
@@ -1102,7 +1102,7 @@ Prompt agent 不再直接拼 `{ topic, data }` JSON 信封：文本模式把字�
 
 ---
 
-当前世界包推荐使用 `pluginPolicy` 表达插件组合意图。内置前端组合包包括：`traditional-story`（传统叙事主线 + 行动建议/图鉴/关系图，玩家口吻设置为可选项）、`dialogue-mode`（对话优先叙事 + 场景演员/短句回复 + 玩家口吻设置）、`low-cost`（保留核心流程并减少下游 LLM 调用，玩家口吻设置为可选项）。世界可以通过 `preset` 引用这些组合包，也可以在 `packs` 中提供自定义组合。
+当前世界包推荐使用 `pluginPolicy` 表达插件组合意图。内置服务端组合包包括：`traditional-story`（传统叙事主线 + 行动建议/图鉴/关系图，玩家口吻设置为可选项）、`dialogue-mode`（对话优先叙事 + 场景演员/短句回复 + 玩家口吻设置）、`low-cost`（保留核心流程并减少下游 LLM 调用，玩家口吻设置为可选项）。世界可以通过 `preset` 引用这些组合包，也可以在 `packs` 中提供自定义组合；服务端通过 `plugin-plan` 端点返回解析结果。
 
 ---
 
@@ -1149,7 +1149,7 @@ plugins/<plugin-id>/
 
 子运行时之间可通过 `input.inject` 传递数据（上游输出 → 下游 prompt 注入）。
 
-服务端在启动时把所有 runtime manifest 发布为 registry 的声明快照；能力发现、会话可用插件、`/api/packages`、flow 与 UI 投影都只读取这份快照。`loadedRuntimes` 仅缓存已经按需加载的可执行产物，不参与“插件是否声明某能力”的判断。因此尚未执行过的 runtime 也可被发现，GET 端点不会因一次读取而加载插件代码或修改会话。
+服务端在启动时把所有 runtime manifest 发布为 registry 的声明快照；能力发现、会话可用插件、`/api/plugins`、flow 与 UI 投影都只读取这份快照，并由同一个 canonical descriptor 生成。`loadedRuntimes` 仅缓存已经按需加载的可执行产物，不参与“插件是否声明某能力”的判断。因此尚未执行过的 runtime 也可被发现，GET 端点不会因一次读取而加载插件代码或修改会话。
 
 #### README.md（必需，用于人类阅读）
 

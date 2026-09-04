@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
+import { decodePageCursor } from "@covel/shared";
 import { buildSessionSnapshot } from "../src/snapshot/snapshot-builder.js";
 
 describe("buildSessionSnapshot", () => {
@@ -154,7 +155,7 @@ describe("buildSessionSnapshot", () => {
     const snapshot = await buildSessionSnapshot(store as any, "sess-1");
 
     expect(snapshot!.messages).toHaveLength(80);
-    expect(snapshot!.messagesCursor).toEqual({
+    expect(decodePageCursor(snapshot!.messagesCursor!)).toEqual({
       createdAt: full[0].createdAt,
       id: "m0",
     });

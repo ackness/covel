@@ -1,19 +1,20 @@
 import type {
   I18nText,
-  PluginUserSettingSpec,
   Session as SharedSession,
-  SessionStatus,
-  SetupRuntimeState,
-  Stage,
   WorldDimensions,
 } from "@covel/shared";
 
 export type {
+  PluginDetail,
+  PluginLoadError,
+  PluginRuntimeSummary,
+  PluginSummary,
   PluginRpcRequest,
   PluginRpcResponse,
   SessionStatus,
   SetupRuntimeState,
   SseEnvelope,
+  WorldPluginPlan,
 } from "@covel/shared";
 
 // -- Shared API types
@@ -94,34 +95,6 @@ export interface PresetSummary {
   slotBindings?: string[];
 }
 
-export interface RuntimeSummary {
-  id: string;
-  kind: string;
-  /** Named stage; absent for event/manual/UI-only runtimes. */
-  stage?: Stage;
-  trigger: {
-    type: string;
-    onEvents?: string[];
-    interval?: number;
-    cooldownTurns?: number;
-    maxTriggerCount?: number;
-    startTurn?: number;
-    topic?: string;
-    condition?: string;
-    maxRetryCount?: number;
-  };
-  /** Slot declared by PLUGIN.md `model` (e.g. story/plugin/image). */
-  model?: string;
-  outputKind?: string;
-  capabilities?: string[];
-  tags?: string[];
-  relations?: Record<string, unknown>;
-  /** Invocation policy for stage-less manual/event runtimes. */
-  execution?: "sync" | "background";
-  /** Whether this staged runtime blocks the foreground turn from completing. */
-  turnCompletion?: TurnCompletionSummary;
-}
-
 /** Effective runtime completion policy returned by discovery APIs. */
 export interface TurnCompletionSummary {
   mode: "await" | "detached";
@@ -130,30 +103,6 @@ export interface TurnCompletionSummary {
   maxExecutionMs?: number;
   overlap?: "serial";
   stalePolicy?: "reject";
-}
-
-export interface ToolSummary {
-  id: string;
-  kind: string;
-}
-
-export interface PackageSummary {
-  name: string;
-  displayName?: string | Record<string, string>;
-  description?: string | Record<string, string>;
-  pluginType?: string;
-  source?: "builtin" | "community";
-  enabled: boolean;
-  runtimes?: RuntimeSummary[];
-  tools?: ToolSummary[];
-  requires?: string[];
-  capabilities?: string[];
-  tags?: string[];
-  relations?: Record<string, unknown>;
-  version?: string;
-  author?: string;
-  /** User-editable settings declared in PLUGIN.md frontmatter. */
-  userSettings?: readonly PluginUserSettingSpec[];
 }
 
 export type WorldDataPreflightDiagnosticLevel = "info" | "warning" | "error";

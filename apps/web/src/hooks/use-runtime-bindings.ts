@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { PackageSummary, SessionPluginInfo } from "@/services/api.js";
+import type { PluginSummary, SessionPlugin } from "@/services/api.js";
 import { updateSession } from "@/services/api.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import type { ResolvedSlot } from "./use-slot-config.js";
@@ -40,9 +40,9 @@ export interface UseRuntimeBindingsResult {
  */
 export function useRuntimeBindings(
   sessionId: string | undefined,
-  packages: PackageSummary[],
+  packages: PluginSummary[],
   resolvedSlots: ResolvedSlot[],
-  sessionPlugins?: SessionPluginInfo[],
+  sessionPlugins?: SessionPlugin[],
   runtimeModelOverrides?: Record<string, string>,
   onPersist?: (bindings: Record<string, string>) => void,
 ): UseRuntimeBindingsResult {
@@ -57,34 +57,28 @@ export function useRuntimeBindings(
 
     if (packages.length === 0 && sessionPlugins && sessionPlugins.length > 0) {
       for (const sp of sessionPlugins) {
-        if (
-          sp.status === "error" ||
-          sp.runtimeType === "function" ||
-          sp.model === undefined
-        )
-          continue;
-        const defaultSlot = sp.model;
-        result.push({
-          qualifiedId: sp.id,
-          pluginId: sp.id.includes("/")
-            ? sp.id.slice(0, sp.id.indexOf("/"))
-            : sp.id,
-          pluginDisplayName: text(sp.displayName) || sp.id,
-          defaultSlot,
-        });
+        if (sp.status === "error") continue;
+        for (const runtime of sp.runtimes) {
+          if (runtime.runtimeType === "function" || !runtime.model) continue;
+          result.push({
+            qualifiedId: runtime.id,
+            pluginId: sp.id,
+            pluginDisplayName: text(sp.displayName) || sp.id,
+            defaultSlot: runtime.model,
+          });
+        }
       }
       return result;
     }
 
     for (const pkg of packages) {
-      if (!pkg.enabled || !pkg.runtimes) continue;
       for (const rt of pkg.runtimes) {
-        if (rt.kind === "function" || rt.model === undefined) continue;
+        if (rt.runtimeType === "function" || rt.model === undefined) continue;
         const defaultSlot = rt.model;
         result.push({
           qualifiedId: rt.id,
-          pluginId: pkg.name,
-          pluginDisplayName: text(pkg.displayName) || pkg.name,
+          pluginId: pkg.id,
+          pluginDisplayName: text(pkg.displayName) || pkg.id,
           defaultSlot,
         });
       }

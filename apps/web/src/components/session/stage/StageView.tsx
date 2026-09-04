@@ -13,6 +13,7 @@
 import { useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { FrameworkCapability } from "@covel/shared";
 import {
   Dialog,
   DialogContent,
@@ -28,8 +29,8 @@ import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type {
   SessionRecord,
   WorldRecord,
-  PackageSummary,
-  SessionPluginInfo,
+  PluginSummary,
+  SessionPlugin,
 } from "@/services/api.js";
 import { ChatMessages } from "../chat-messages.js";
 import { MessageBlockRenderer } from "../chat-messages/message-blocks.js";
@@ -49,7 +50,6 @@ import {
   pluginIdForCapability,
   resolveStageSpeakers,
   stageStoryKey,
-  STAGE_CAPABILITIES,
   type PresenceRecord,
   type StageCurrentRecord,
   type StageDirectionRecord,
@@ -64,8 +64,8 @@ export interface StageViewProps {
   readonly executing: boolean;
   readonly executionError: string | null;
   readonly executionSteps: ExecutionStep[];
-  readonly packages: PackageSummary[];
-  readonly sessionPlugins: SessionPluginInfo[];
+  readonly packages: PluginSummary[];
+  readonly sessionPlugins: SessionPlugin[];
   readonly submittedBlockIds: ReadonlySet<string>;
   readonly submittedBlockValues: Readonly<
     Record<string, Record<string, unknown>>
@@ -136,15 +136,20 @@ export function StageView(props: StageViewProps): ReactElement {
   // Namespaces below ("stage", "active-cast", …) are intra-plugin data keys
   // defined by the resolved plugin, not plugin ids.
   const sceneStageId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.scene) ?? "";
+    pluginIdForCapability(sessionPlugins, FrameworkCapability.SceneStage) ?? "";
   const sceneCastId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.cast) ?? "";
+    pluginIdForCapability(sessionPlugins, FrameworkCapability.SceneCast) ?? "";
   const scenePromptsId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.prompts) ?? "";
+    pluginIdForCapability(sessionPlugins, FrameworkCapability.ScenePrompts) ??
+    "";
   const presenceId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.presence) ?? "";
+    pluginIdForCapability(
+      sessionPlugins,
+      FrameworkCapability.CharacterPresence,
+    ) ?? "";
   const stageDirectionId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.direction) ?? "";
+    pluginIdForCapability(sessionPlugins, FrameworkCapability.StageDirection) ??
+    "";
 
   const sceneCurrent = usePluginNamespace(sceneStageId, "stage")["current"] as
     StageCurrentRecord | undefined;

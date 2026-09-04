@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
 import type { SessionRecord } from "@/services/api.js";
 import { PluginListPanel } from "../../plugin-list-panel.js";
@@ -36,6 +37,33 @@ const session = {
   updatedAt: "2026-08-24T00:00:00.000Z",
 } satisfies SessionRecord;
 
+const fixturePlugin: PluginSummary = {
+  id: "fixture",
+  displayName: "Fixture",
+  description: "Fixture plugin",
+  pluginType: "plugin",
+  source: "builtin",
+  status: "registered",
+  runtimeCount: 1,
+  capabilities: [],
+  tags: [],
+  runtimes: [
+    {
+      id: "fixture/runtime",
+      runtimeType: "agent",
+      model: "text",
+      trigger: { type: "auto" },
+      execution: "sync",
+      turnCompletion: { mode: "await" },
+      outputKind: "plugin",
+      capabilities: [],
+      tags: [],
+    },
+  ],
+  tools: [],
+  userSettings: [],
+};
+
 beforeEach(async () => {
   vi.clearAllMocks();
   await i18n.changeLanguage("en-US");
@@ -58,21 +86,7 @@ describe("PluginListPanel runtime model overrides", () => {
 
     render(
       <PluginListPanel
-        packages={[
-          {
-            name: "fixture",
-            displayName: "Fixture",
-            enabled: true,
-            runtimes: [
-              {
-                id: "fixture/runtime",
-                kind: "agent",
-                model: "text",
-                trigger: { type: "auto" },
-              },
-            ],
-          },
-        ]}
+        packages={[fixturePlugin]}
         sessionId={session.id}
         runtimeModelOverrides={{ "fixture/runtime": "text" }}
         resolvedSlots={[
@@ -133,21 +147,7 @@ describe("PluginListPanel runtime model overrides", () => {
 
     render(
       <PluginListPanel
-        packages={[
-          {
-            name: "fixture",
-            displayName: "Fixture",
-            enabled: true,
-            runtimes: [
-              {
-                id: "fixture/runtime",
-                kind: "agent",
-                model: "text",
-                trigger: { type: "auto" },
-              },
-            ],
-          },
-        ]}
+        packages={[fixturePlugin]}
         sessionId={session.id}
         runtimeModelOverrides={{ "fixture/runtime": "text" }}
         resolvedSlots={[
@@ -194,21 +194,7 @@ describe("PluginListPanel runtime model overrides", () => {
       }),
     );
     const props = {
-      packages: [
-        {
-          name: "fixture",
-          displayName: "Fixture",
-          enabled: true,
-          runtimes: [
-            {
-              id: "fixture/runtime",
-              kind: "agent" as const,
-              model: "text",
-              trigger: { type: "auto" as const },
-            },
-          ],
-        },
-      ],
+      packages: [fixturePlugin],
       resolvedSlots: [
         {
           slotId: "fast",

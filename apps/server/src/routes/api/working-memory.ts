@@ -129,7 +129,9 @@ workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
       );
       if (violation)
         return c.json(
-          errorBody(violation.message, { code: violation.kind }),
+          errorBody(violation.message, {
+            code: violation.kind.replaceAll("-", "_"),
+          }),
           violation.kind === "value-too-large" ? 413 : 409,
         );
       await store.upsertWorkingMemory({

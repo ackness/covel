@@ -61,6 +61,25 @@ export type {
 } from "./api-contract.js";
 
 export type {
+  PluginDataSchemaContract,
+  PluginDetail,
+  PluginLoadError,
+  PluginPack,
+  PluginMutationResponse,
+  PluginRuntimeSummary,
+  PluginRuntimeTrigger,
+  PluginSource,
+  PluginStatus,
+  PluginSummary,
+  PluginToolSummary,
+  RuntimePluginContract,
+  ResolvedWorldPluginPolicy,
+  SessionPlugin,
+  SessionPluginsResponse,
+  WorldPluginPlan,
+} from "./plugin-api.js";
+
+export type {
   WorldIRJsonValue,
   WorldIRV1,
   WorldIRV1Entity,
@@ -248,6 +267,7 @@ export type {
   SnapshotCharacter,
   SnapshotTraceEvent,
   SnapshotPluginStatus,
+  PageCursor,
   TimeCursor,
   CursorPage,
 } from "./protocol.js";

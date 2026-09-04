@@ -50,9 +50,10 @@ describe("plugin user-settings header early rejection", () => {
   it("rejects resume before a suspension claim or hook scope", async () => {
     const app = new Hono();
     app.route("/api/sessions", resumeRoutes);
-    await expectHeaderRejected(app, "/api/sessions/session-1/resume", {
-      suspensionId: "suspension-1",
-      data: {},
-    });
+    await expectHeaderRejected(
+      app,
+      "/api/sessions/session-1/suspensions/suspension-1/resume",
+      { data: {} },
+    );
   });
 });

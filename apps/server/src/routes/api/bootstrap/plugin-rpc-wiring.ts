@@ -6,7 +6,7 @@ import {
   type PluginRpcRegistry,
   type RpcExecutor,
 } from "@covel/runtime";
-import { isDefaultLocale } from "@covel/shared";
+import { FrameworkCapability, isDefaultLocale } from "@covel/shared";
 
 export interface BootstrapPluginRpc {
   readonly rpcRegistry: PluginRpcRegistry;
@@ -28,7 +28,7 @@ export function createBootstrapPluginRpc(): BootstrapPluginRpc {
         .filter(
           (runtime) =>
             runtime.outputKind === "story" ||
-            runtime.capabilities.includes("narrative"),
+            runtime.capabilities.includes(FrameworkCapability.Narrative),
         )
         .map((runtime) => runtime.model?.resolved ?? runtime.model?.slot)
         .filter((model): model is string => Boolean(model));

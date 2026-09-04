@@ -9,6 +9,8 @@ import {
 } from "@/lib/desktop-bridge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { operatorAuthHeaders } from "@/services/session-credentials.js";
+import { listPlugins, uninstallPlugin } from "@/services/api.js";
+import type { PluginSummary } from "@covel/shared";
 
 type InstallKind = "plugin" | "world";
 
@@ -24,14 +26,6 @@ interface ToastState {
   tone: "success" | "error";
 }
 
-interface InstalledPlugin {
-  id: string;
-  name?: string;
-  displayName?: string | Record<string, string>;
-  source: string;
-  pluginType?: string;
-}
-
 /**
  * Drag-and-drop install pane for plugin + world .zip packages.
  *
@@ -43,16 +37,17 @@ export function PackagesPane() {
   const [busy, setBusy] = useState<InstallKind | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [lastResult, setLastResult] = useState<InstallResult | null>(null);
-  const [installed, setInstalled] = useState<InstalledPlugin[]>([]);
+  const [installed, setInstalled] = useState<PluginSummary[]>([]);
   const [removing, setRemoving] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
 
   const refreshInstalled = useCallback(async () => {
     try {
-      const res = await fetch("/api/plugins");
-      const body = (await res.json()) as { items?: InstalledPlugin[] };
+      const result = await listPlugins({ silentErrors: true });
       // Only third-party (non-builtin) plugins can be uninstalled.
-      setInstalled((body.items ?? []).filter((p) => p.source !== "builtin"));
+      setInstalled(
+        result.plugins.filter((plugin) => plugin.source !== "builtin"),
+      );
     } catch {
       /* non-fatal — the list just stays as-is */
     }
@@ -121,26 +116,10 @@ export function PackagesPane() {
   async function uninstall(id: string) {
     setRemoving(id);
     try {
-      const res = await fetch(`/api/plugins/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-        headers: {
-          ...operatorAuthHeaders(),
-          ...getDesktopRestAuthHeaders(),
-        },
+      await uninstallPlugin(id, {
+        ...operatorAuthHeaders(),
+        ...getDesktopRestAuthHeaders(),
       });
-      const body = (await res.json()) as {
-        ok?: boolean;
-        error?: string;
-      };
-      if (!res.ok || !body.ok) {
-        flash({
-          message:
-            body.error ??
-            t("settings.packages.uninstallFailed", "Uninstall failed"),
-          tone: "error",
-        });
-        return;
-      }
       flash({
         message: t("settings.packages.uninstalledRestart", { id }),
         tone: "success",
@@ -255,7 +234,7 @@ export function PackagesPane() {
               >
                 <div className="min-w-0">
                   <div className="text-xs font-medium truncate">
-                    {text(p.displayName) || p.name || p.id}
+                    {text(p.displayName) || p.id}
                   </div>
                   <div className="text-[10px] font-mono text-muted-foreground truncate">
                     {p.id}

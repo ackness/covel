@@ -6,6 +6,7 @@ import {
   type WorldCreationBrief,
   type WorldCreateRequest,
   type WorldPatchRequest,
+  type WorldPluginPlan,
   type WorldWireRecord,
 } from "@covel/shared";
 import { operatorAuthHeaders } from "../session-credentials.js";
@@ -45,6 +46,14 @@ export async function getWorld(
     options,
   );
   return mapWorldRecord(raw);
+}
+
+export async function getWorldPluginPlan(
+  worldId: string,
+): Promise<WorldPluginPlan> {
+  return request<WorldPluginPlan>(
+    `/api/worlds/${encodeURIComponent(worldId)}/plugin-plan`,
+  );
 }
 
 export async function createWorld(

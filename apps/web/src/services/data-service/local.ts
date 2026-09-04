@@ -1,6 +1,8 @@
 import {
   DEFAULT_LOCALE,
   characterBlueprintToCharacterUpsert,
+  decodePageCursor,
+  encodePageCursor,
   resolveI18nText,
   type CharacterBlueprint,
   type CursorPage,
@@ -509,7 +511,7 @@ export class LocalDataService implements DataService {
 
   async listMessagesPage(
     sessionId: string,
-    opts: { limit?: number; before?: { createdAt: string; id: string } },
+    opts: { limit?: number; cursor?: import("@covel/shared").PageCursor },
   ): Promise<CursorPage<MessageRecord>> {
     const limit = opts.limit ?? DEFAULT_MESSAGES_PAGE_LIMIT;
     const all = [
@@ -519,12 +521,12 @@ export class LocalDataService implements DataService {
       (a, b) =>
         a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
     );
-    const eligible = opts.before
+    const before = opts.cursor ? decodePageCursor(opts.cursor) : undefined;
+    const eligible = before
       ? all.filter(
           (row) =>
-            row.createdAt < opts.before!.createdAt ||
-            (row.createdAt === opts.before!.createdAt &&
-              row.id < opts.before!.id),
+            row.createdAt < before.createdAt ||
+            (row.createdAt === before.createdAt && row.id < before.id),
         )
       : all;
     const rows = eligible.slice(-limit);
@@ -532,7 +534,7 @@ export class LocalDataService implements DataService {
     // 按契约：拿满一页（可能还有更旧）时游标指向最旧一条，否则到历史开头 → null。
     const nextCursor =
       items.length >= limit && items.length > 0
-        ? { createdAt: items[0].createdAt, id: items[0].id }
+        ? encodePageCursor({ createdAt: items[0].createdAt, id: items[0].id })
         : null;
     return { items, nextCursor };
   }

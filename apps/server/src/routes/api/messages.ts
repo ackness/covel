@@ -10,7 +10,7 @@ import {
   resolveSessionParam,
   withLockedSessionMutation,
 } from "./session/session-guard.js";
-import { errorBody } from "../../api-error.js";
+import { errorBody, parseJsonBody } from "../../api-error.js";
 import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
 
 type Env = {
@@ -73,7 +73,7 @@ messageRoutes.get("/:id/messages", async (c) => {
 });
 
 // GET /sessions/:id/messages/page — keyset page, oldest-first. `?limit`,
-// `?before_created_at`, `?before_id` (see cursor-params). No cursor → the
+// `?cursor` (see cursor-params). No cursor → the
 // newest window; cursor → the page immediately older (scroll-up "load older").
 // Rate-limited: this is called repeatedly while scrolling.
 messageRoutes.get(
@@ -84,7 +84,14 @@ messageRoutes.get(
     const sessionId = c.req.param("id");
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
-    const { limit, before } = parseCursorQuery(c);
+    const cursor = parseCursorQuery(c);
+    if (!cursor.ok) {
+      return c.json(
+        errorBody("Invalid pagination cursor", { code: "invalid_cursor" }),
+        400,
+      );
+    }
+    const { limit, before } = cursor;
     const messages = await store.listMessagesPage(sessionId, { limit, before });
     return c.json({
       items: messages.map(flattenMessage),
@@ -102,17 +109,8 @@ messageRoutes.post(
     const sessionId = c.req.param("id");
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
-    const parsed = syncBodySchema.safeParse(
-      await c.req.json().catch(() => null),
-    );
-    if (!parsed.success) {
-      return c.json(
-        errorBody(
-          "Invalid body: expected { messages: [{ role: 'user'|'assistant'|'system'|'tool', content: string }] }",
-        ),
-        400,
-      );
-    }
+    const parsed = await parseJsonBody(c, syncBodySchema);
+    if (parsed instanceof Response) return parsed;
     return withLockedSessionMutation({
       c,
       store,
@@ -125,7 +123,7 @@ messageRoutes.post(
           const existingIds = new Set(
             (await tx.listMessages(sessionId)).map((message) => message.id),
           );
-          for (const msg of parsed.data.messages) {
+          for (const msg of parsed.body.messages) {
             if (msg.id && existingIds.has(msg.id)) continue;
             const id = msg.id ?? crypto.randomUUID();
             await tx.addMessage({

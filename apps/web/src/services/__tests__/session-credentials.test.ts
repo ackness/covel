@@ -122,7 +122,7 @@ describe("request() session-token injection", () => {
     const fetchMock = vi.fn().mockResolvedValue(okRes());
     vi.stubGlobal("fetch", fetchMock);
 
-    await request("/api/sessions/world-abc12345/snapshot");
+    await request("/api/sessions/world-abc12345/view");
 
     expect(lastHeaders(fetchMock)["X-Session-Token"]).toBe("tok-xyz");
   });
@@ -143,7 +143,7 @@ describe("request() session-token injection", () => {
     const fetchMock = vi.fn().mockResolvedValue(okRes());
     vi.stubGlobal("fetch", fetchMock);
 
-    await request("/api/sessions/world-notoken/snapshot");
+    await request("/api/sessions/world-notoken/view");
 
     expect(lastHeaders(fetchMock)["X-Session-Token"]).toBeUndefined();
   });

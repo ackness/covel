@@ -274,20 +274,6 @@
       "guidance": "引导",
       "utility": "工具"
     },
-    "pluginPacks": {
-      "traditional-story": {
-        "label": "传统故事模式",
-        "description": "主叙事器、行动建议、图鉴和关系图，适合长篇探索。"
-      },
-      "dialogue-mode": {
-        "label": "对话模式",
-        "description": "对话优先叙事、场景演员、快速短句和角色资料。"
-      },
-      "low-cost": {
-        "label": "低成本",
-        "description": "保留核心流程和函数型插件，减少下游 LLM 调用；cost-gate 为每局设置 token 花费上限。"
-      }
-    },
     "recommendationReasons": {
       "requiredByWorld": "世界必需",
       "packOptional": "组合包可选",

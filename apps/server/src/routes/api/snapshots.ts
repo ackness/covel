@@ -3,7 +3,7 @@
  *
  * Materialized state snapshots power save / load / fork.
  *
- *   POST   /api/sessions/:id/snapshot                — create manual snapshot
+ *   POST   /api/sessions/:id/snapshots               — create manual snapshot
  *   GET    /api/sessions/:id/snapshots               — list snapshot metadata (paginated)
  *   GET    /api/sessions/:id/snapshots/:snapshotId   — fetch one full snapshot payload
  *   POST   /api/sessions/:id/fork                    — create new session from snapshot
@@ -22,6 +22,7 @@
 
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
+import { z } from "zod";
 import { collectMediaRefIds } from "@covel/shared";
 import type {
   DataStore,
@@ -39,7 +40,7 @@ import { buildSnapshotPayload } from "@covel/runtime";
 import { getPluginTrustInfo } from "@covel/plugin-loader";
 import { CHARACTER_NAMESPACE } from "@covel/tools";
 import type { EventBus } from "@covel/events";
-import { errorBody } from "../../api-error.js";
+import { errorBody, parseJsonBody } from "../../api-error.js";
 import {
   SessionLockTimeoutError,
   type SessionLock,
@@ -118,9 +119,9 @@ function rethrowUnlessLockBusy(c: Context<Env>) {
 
 export const snapshotRoutes = new Hono<Env>();
 
-// ── POST /api/sessions/:id/snapshot — manual snapshot ─────────────
+// ── POST /api/sessions/:id/snapshots — manual snapshot ────────────
 
-snapshotRoutes.post("/:id/snapshot", async (c) => {
+snapshotRoutes.post("/:id/snapshots", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
   const sessionLock = c.get("sessionLock");
@@ -204,7 +205,7 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
 // GET /:id/snapshots/:snapshotId.
 //
 // Keyset contract matches /messages/page and /traces turns: `?limit`,
-// `?before_created_at`, `?before_id` (see cursor-params). No cursor → the
+// `?cursor` (see cursor-params). No cursor → the
 // newest window; cursor → the page immediately older. Rows are oldest-first
 // within each page.
 
@@ -217,7 +218,14 @@ snapshotRoutes.get("/:id/snapshots", async (c) => {
   const resolved = await resolveSessionParam(c);
   if (!resolved.ok) return resolved.response;
 
-  const { limit, before } = parseCursorQuery(c, SNAPSHOT_LIST_DEFAULT_LIMIT);
+  const cursor = parseCursorQuery(c, SNAPSHOT_LIST_DEFAULT_LIMIT);
+  if (!cursor.ok) {
+    return c.json(
+      errorBody("Invalid pagination cursor", { code: "invalid_cursor" }),
+      400,
+    );
+  }
+  const { limit, before } = cursor;
   const page = await store.listSnapshotsPage(sessionId, { limit, before });
 
   const snapshots = page.map((s) => ({
@@ -258,24 +266,12 @@ snapshotRoutes.post("/:id/fork", async (c) => {
   const sessionLock = c.get("sessionLock");
   const mediaStore = c.get("mediaStore");
 
-  let body: { fromSnapshotId?: unknown };
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json(
-      errorBody("Invalid JSON body", { code: "invalid_body" }),
-      400,
-    );
-  }
-
-  const fromSnapshotId =
-    typeof body.fromSnapshotId === "string" ? body.fromSnapshotId : undefined;
-  if (!fromSnapshotId) {
-    return c.json(
-      errorBody("fromSnapshotId is required", { code: "invalid_body" }),
-      400,
-    );
-  }
+  const parsedBody = await parseJsonBody(
+    c,
+    z.object({ fromSnapshotId: z.string().min(1) }).strict(),
+  );
+  if (parsedBody instanceof Response) return parsedBody;
+  const { fromSnapshotId } = parsedBody.body;
 
   const resolved = await resolveSessionParam(c);
   if (!resolved.ok) return resolved.response;
@@ -445,7 +441,8 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             // Copy unresolved suspensions (audit 2026-04-20 finding 7.3). Each
             // record is rebound to the child session with a fresh id so the parent
             // copy remains untouched. `pendingContinuation` is preserved verbatim —
-            // POST /resume on the child uses the new id to re-enter the tool loop.
+            // POST /suspensions/:suspensionId/resume on the child uses the new id
+            // to re-enter the tool loop.
             for (const susp of snapshot.payload.suspensions) {
               const record: SuspensionRecord = {
                 ...susp,

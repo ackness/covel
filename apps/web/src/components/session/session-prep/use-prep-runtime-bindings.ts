@@ -10,7 +10,7 @@ export interface UsePrepRuntimeBindingsResult {
 
 export function usePrepRuntimeBindings(
   worldId: string,
-  selectedPackages: api.PackageSummary[],
+  selectedPackages: api.PluginSummary[],
   resolvedSlots: ResolvedSlot[],
 ): UsePrepRuntimeBindingsResult {
   const [prepBindings, setPrepBindingsState] = useState<Record<string, string>>(

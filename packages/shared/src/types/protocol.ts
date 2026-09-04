@@ -546,6 +546,9 @@ export interface TimeCursor {
   readonly id: string;
 }
 
+/** Opaque cursor exposed by paginated HTTP APIs. */
+export type PageCursor = string;
+
 /**
  * A keyset page of an append-only log. `items` are oldest-first; `nextCursor`
  * is the position to request the next (older) page, or `null` when the returned
@@ -553,7 +556,7 @@ export interface TimeCursor {
  */
 export interface CursorPage<T> {
   readonly items: readonly T[];
-  readonly nextCursor: TimeCursor | null;
+  readonly nextCursor: PageCursor | null;
 }
 
 export interface SessionSnapshot {
@@ -571,7 +574,7 @@ export interface SessionSnapshot {
    * window, not the full history). `null` when the window already reaches the
    * start of the chat — i.e. there is nothing older to load.
    */
-  readonly messagesCursor?: TimeCursor | null;
+  readonly messagesCursor?: PageCursor | null;
   readonly characters: readonly SnapshotCharacter[];
   readonly gameState: Readonly<Record<string, unknown>>;
   readonly executionSteps: readonly SnapshotTraceEvent[];
@@ -608,8 +611,8 @@ export interface SnapshotTraceEvent {
 
 export interface SnapshotPluginStatus {
   readonly id: string;
-  readonly name: string;
-  readonly isActive: boolean;
+  readonly displayName: import("./world.js").I18nText;
+  readonly active: boolean;
   /** Named stage; absent for event/manual/UI-only plugins. */
   readonly stage?: import("./runtime-scheduling.js").Stage;
 }

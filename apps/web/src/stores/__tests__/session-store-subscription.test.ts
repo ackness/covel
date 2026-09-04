@@ -19,6 +19,25 @@ import {
   rehydrateSessionSideState,
 } from "../session-store/subscription.js";
 
+function sessionPlugin(id: string, active: boolean): api.SessionPlugin {
+  return {
+    id,
+    displayName: id === "p1" ? "P1" : "Off",
+    description: "",
+    pluginType: "plugin",
+    source: "builtin",
+    status: "registered",
+    runtimeCount: 0,
+    capabilities: [],
+    tags: [],
+    runtimes: [],
+    tools: [],
+    userSettings: [],
+    active,
+    locked: false,
+  };
+}
+
 const snapshot = {
   session: {
     id: "s1",
@@ -38,12 +57,8 @@ describe("rehydrateSessionSideState", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.listSessionPlugins).mockResolvedValue({
-      active: ["p1"],
       commands: [],
-      available: [
-        { id: "p1", displayName: "P1", isActive: true },
-        { id: "off", displayName: "Off", isActive: false },
-      ],
+      items: [sessionPlugin("p1", true), sessionPlugin("off", false)],
     });
     vi.mocked(api.listPluginData).mockResolvedValue([
       {

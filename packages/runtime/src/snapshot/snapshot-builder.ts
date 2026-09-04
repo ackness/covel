@@ -7,12 +7,13 @@
  * Flattens message metadata and aggregates state entries by table.
  */
 
-import type {
-  SessionSnapshot,
-  SnapshotMessage,
-  SnapshotCharacter,
-  SnapshotTraceEvent,
-  TimeCursor,
+import {
+  encodePageCursor,
+  type SessionSnapshot,
+  type SnapshotCharacter,
+  type SnapshotMessage,
+  type SnapshotTraceEvent,
+  type TimeCursor,
 } from "@covel/shared";
 import type { SetupRuntimeState } from "@covel/shared";
 
@@ -177,7 +178,7 @@ export async function buildSessionSnapshot(
       locale: session.locale,
     },
     messages,
-    messagesCursor,
+    messagesCursor: messagesCursor ? encodePageCursor(messagesCursor) : null,
     characters: snapshotCharacters,
     gameState,
     executionSteps,

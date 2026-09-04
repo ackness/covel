@@ -1,21 +1,35 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { PackageSummary } from "@/services/api.js";
+import type { PluginSummary } from "@/services/api.js";
 import type { ResolvedSlot } from "../use-slot-config.js";
 import { useRuntimeBindings } from "../use-runtime-bindings.js";
 
-const packages: PackageSummary[] = [
+const packages: PluginSummary[] = [
   {
-    name: "fixture-package",
-    enabled: true,
+    id: "fixture-package",
+    displayName: "Fixture package",
+    description: "Fixture package",
+    pluginType: "plugin",
+    source: "builtin",
+    status: "registered",
+    runtimeCount: 1,
+    capabilities: [],
+    tags: [],
     runtimes: [
       {
         id: "fixture-package/runtime",
-        kind: "agent",
+        runtimeType: "agent",
         model: "text",
         trigger: { type: "auto" },
+        execution: "sync",
+        turnCompletion: { mode: "await" },
+        outputKind: "plugin",
+        capabilities: [],
+        tags: [],
       },
     ],
+    tools: [],
+    userSettings: [],
   },
 ];
 

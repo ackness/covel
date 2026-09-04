@@ -1,8 +1,8 @@
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import type {
-  PackageSummary,
+  PluginSummary,
   PluginLoadError,
-  SessionPluginInfo,
+  SessionPlugin,
   SetupRuntimeState,
 } from "@/services/api.js";
 
@@ -12,10 +12,10 @@ export type RuntimeModelOverrideChange = (
 ) => Promise<void>;
 
 export interface PluginListPanelProps {
-  packages: PackageSummary[];
+  packages: PluginSummary[];
   loadErrors?: PluginLoadError[];
-  /** Session-scoped plugin info with live isActive state. */
-  sessionPlugins?: SessionPluginInfo[];
+  /** Session-scoped plugin info with live active state. */
+  sessionPlugins?: SessionPlugin[];
   /** Whether a turn is currently executing (disables toggles mid-turn). */
   executing?: boolean;
   /** Called when the user flips the enable/disable switch. */
@@ -32,8 +32,8 @@ export interface PluginListPanelProps {
 }
 
 export interface PluginItemProps {
-  pkg: PackageSummary;
-  sessionPlugin?: SessionPluginInfo;
+  pkg: PluginSummary;
+  sessionPlugin?: SessionPlugin;
   executing?: boolean;
   onToggle?: (pluginId: string, enable: boolean) => void;
   resolvedSlots?: ResolvedSlot[];
@@ -48,7 +48,7 @@ export interface PluginErrorItemProps {
 }
 
 export interface SessionPluginItemProps {
-  plugin: SessionPluginInfo;
+  plugin: SessionPlugin;
   executing?: boolean;
   onToggle?: (pluginId: string, enable: boolean) => void;
   resolvedSlots?: ResolvedSlot[];

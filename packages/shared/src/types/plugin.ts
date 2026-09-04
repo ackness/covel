@@ -198,6 +198,16 @@ export const FrameworkCapability = {
   PersonaProvider: "persona-provider",
   /** Prompt history rewriter — folds adopted branches into projected history. */
   PromptHistoryRewriter: "prompt-history-rewriter",
+  /** Visual-stage backdrop state provider. */
+  SceneStage: "scene-stage",
+  /** Visual-stage cast/speaker state provider. */
+  SceneCast: "scene-cast",
+  /** Visual-stage quick-reply provider. */
+  ScenePrompts: "scene-prompts",
+  /** Character portrait and sprite presence provider. */
+  CharacterPresence: "character-presence",
+  /** Structured actor placement and transition provider. */
+  StageDirection: "stage-direction",
 } as const;
 
 /** Union of the framework-consumed capability tag string values. */
@@ -628,16 +638,16 @@ export const PLUGIN_SCOPED_FIELDS = {
   tags: {
     merge: "union",
     conflict: "none — deduped",
-    where: "apps/server/src/routes/misc-api/plugin-catalog.ts",
+    where: "apps/server/src/lib/plugin-descriptor.ts",
   },
   /**
-   * Split behaviour: the lightweight summary reads whichever manifest it
-   * loaded, while session dependency resolution unions every runtime's.
+   * Unioned across the plugin summary and all runtime manifests.
    */
   relations: {
     merge: "union",
     conflict: "none — resolution unions all runtimes",
-    where: "apps/server/src/routes/api/session/plugins.ts (entryRelations)",
+    where:
+      "apps/server/src/lib/plugin-descriptor.ts + apps/server/src/routes/api/session/plugins.ts",
   },
   /** Read from the root PLUGIN.md only — see loadPluginSummary's comment. */
   displayName: {

@@ -280,9 +280,15 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       const response = await app.request(`/api/sessions/${SESSION_ID}/plugins`);
 
       expect(response.status).toBe(200);
-      const body = (await response.json()) as { active: string[] };
-      expect(body.active).toContain("narrator");
-      expect(body.active).not.toContain("optional-plugin");
+      const body = (await response.json()) as {
+        items: Array<{ id: string; active: boolean }>;
+      };
+      expect(body.items.find((item) => item.id === "narrator")?.active).toBe(
+        true,
+      );
+      expect(
+        body.items.find((item) => item.id === "optional-plugin")?.active,
+      ).toBe(false);
       expect(updateSession).not.toHaveBeenCalled();
       expect(deactivate).not.toHaveBeenCalled();
       expect((await store.getSession(SESSION_ID))?.activePlugins).toEqual([
@@ -474,18 +480,16 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       );
 
       const res = await app.request(
-        "/api/sessions/sess-reverse-conflict/plugins/enable",
+        "/api/sessions/sess-reverse-conflict/plugins/alternate-engine",
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pluginId: "alternate-engine" }),
+          method: "PUT",
         },
       );
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { active: string[] };
-      expect(body.active).toContain("alternate-engine");
-      expect(body.active).not.toContain("default-engine");
+      const body = (await res.json()) as { activePluginIds: string[] };
+      expect(body.activePluginIds).toContain("alternate-engine");
+      expect(body.activePluginIds).not.toContain("default-engine");
     });
 
     it("does not let community conflicts remove required core plugins", async () => {
@@ -757,29 +761,27 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 
     it("enabling chat-mode-narrator replaces default narrator and adds the chat mode bundle", async () => {
       const res = await app.request(
-        `/api/sessions/${SESSION_ID}/plugins/enable`,
+        `/api/sessions/${SESSION_ID}/plugins/chat-mode-narrator`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pluginId: "chat-mode-narrator" }),
+          method: "PUT",
         },
       );
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { active: string[] };
-      expect(body.active).toContain("chat-mode-narrator");
-      expect(body.active).toContain("scene-cast");
-      expect(body.active).toContain("scene-prompts");
-      expect(body.active).toContain("character-blueprint");
-      expect(body.active).toContain("character-presence");
-      expect(body.active).toContain("player-identity");
-      expect(body.active).toContain("living-world-rules");
-      expect(body.active).toContain("branch-reply");
-      expect(body.active).toContain("optional-plugin");
-      expect(body.active).not.toContain("narrator");
+      const body = (await res.json()) as { activePluginIds: string[] };
+      expect(body.activePluginIds).toContain("chat-mode-narrator");
+      expect(body.activePluginIds).toContain("scene-cast");
+      expect(body.activePluginIds).toContain("scene-prompts");
+      expect(body.activePluginIds).toContain("character-blueprint");
+      expect(body.activePluginIds).toContain("character-presence");
+      expect(body.activePluginIds).toContain("player-identity");
+      expect(body.activePluginIds).toContain("living-world-rules");
+      expect(body.activePluginIds).toContain("branch-reply");
+      expect(body.activePluginIds).toContain("optional-plugin");
+      expect(body.activePluginIds).not.toContain("narrator");
 
       const session = await store.getSession(SESSION_ID);
-      expect(session?.activePlugins).toEqual(body.active);
+      expect(session?.activePlugins).toEqual(body.activePluginIds);
     });
 
     it("serializes concurrent plugin enables and preserves both updates", async () => {
@@ -815,10 +817,8 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       );
 
       const enable = (pluginId: string) =>
-        app.request(`/api/sessions/${SESSION_ID}/plugins/enable`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pluginId }),
+        app.request(`/api/sessions/${SESSION_ID}/plugins/${pluginId}`, {
+          method: "PUT",
         });
       const first = enable("concurrent-plugin-a");
       await firstStarted;
@@ -853,11 +853,9 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       );
 
       const response = await app.request(
-        `/api/sessions/${SESSION_ID}/plugins/enable`,
+        `/api/sessions/${SESSION_ID}/plugins/persist-failure-plugin`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pluginId: "persist-failure-plugin" }),
+          method: "PUT",
         },
       );
 
@@ -873,10 +871,8 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 
     it("requires a session grant before enabling community server code", async () => {
       const requestEnable = () =>
-        app.request(`/api/sessions/${SESSION_ID}/plugins/enable`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pluginId: "optional-plugin" }),
+        app.request(`/api/sessions/${SESSION_ID}/plugins/optional-plugin`, {
+          method: "PUT",
         });
 
       const pendingResponse = await requestEnable();
@@ -919,11 +915,9 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 
     it("should return 403 when attempting to disable a core-plugin", async () => {
       const res = await app.request(
-        `/api/sessions/${SESSION_ID}/plugins/disable`,
+        `/api/sessions/${SESSION_ID}/plugins/narrator`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pluginId: "narrator" }),
+          method: "DELETE",
         },
       );
       expect(res.status).toBe(403);
@@ -933,18 +927,15 @@ describe("Session plugin routes (real sessionRoutes)", () => {
 
     it("should allow disabling a non-core plugin", async () => {
       const res = await app.request(
-        `/api/sessions/${SESSION_ID}/plugins/disable`,
+        `/api/sessions/${SESSION_ID}/plugins/optional-plugin`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pluginId: "optional-plugin" }),
+          method: "DELETE",
         },
       );
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.ok).toBe(true);
-      // Real route returns `active`, not `activePlugins`
-      expect(body.active as string[]).not.toContain("optional-plugin");
+      expect(body.activePluginIds as string[]).not.toContain("optional-plugin");
     });
 
     it("keeps the registry unchanged when disabling fails to persist", async () => {
@@ -954,11 +945,9 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       );
 
       const response = await app.request(
-        `/api/sessions/${SESSION_ID}/plugins/disable`,
+        `/api/sessions/${SESSION_ID}/plugins/optional-plugin`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pluginId: "optional-plugin" }),
+          method: "DELETE",
         },
       );
 
@@ -973,10 +962,8 @@ describe("Session plugin routes (real sessionRoutes)", () => {
     });
 
     it("should still include narrator in active list after failed disable", async () => {
-      await app.request(`/api/sessions/${SESSION_ID}/plugins/disable`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pluginId: "narrator" }),
+      await app.request(`/api/sessions/${SESSION_ID}/plugins/narrator`, {
+        method: "DELETE",
       });
       const session = await store.getSession(SESSION_ID);
       expect(session!.activePlugins).toContain("narrator");
@@ -1000,42 +987,34 @@ describe("Session plugin routes (real sessionRoutes)", () => {
       });
 
       const res = await app.request(
-        `/api/sessions/${SESSION_ID}/plugins/disable`,
+        `/api/sessions/${SESSION_ID}/plugins/forged-core`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pluginId: "forged-core" }),
+          method: "DELETE",
         },
       );
 
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { active: string[] };
-      expect(body.active).toEqual(["narrator", "optional-plugin"]);
+      const body = (await res.json()) as { activePluginIds: string[] };
+      expect(body.activePluginIds).toEqual(["narrator", "optional-plugin"]);
     });
   });
 
-  describe("H3: pluginId validation on disable route", () => {
-    it("should return 400 when pluginId is missing in disable body", async () => {
+  describe("plugin resource validation", () => {
+    it("returns 200 when disabling an unknown inactive plugin id", async () => {
       const res = await app.request(
-        `/api/sessions/${SESSION_ID}/plugins/disable`,
+        `/api/sessions/${SESSION_ID}/plugins/not-active`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          method: "DELETE",
         },
       );
-      expect(res.status).toBe(400);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body.error).toMatch(/pluginId/);
+      expect(res.status).toBe(200);
     });
 
     it("should return 404 when session does not exist", async () => {
       const res = await app.request(
-        `/api/sessions/no-such-session/plugins/disable`,
+        `/api/sessions/no-such-session/plugins/optional-plugin`,
         {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pluginId: "optional-plugin" }),
+          method: "DELETE",
         },
       );
       expect(res.status).toBe(404);

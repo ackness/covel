@@ -44,9 +44,9 @@ export async function bootSessionStore({
   ds,
 }: BootSessionStoreOptions): Promise<void> {
   try {
-    const [presets, packagesRes, worlds, llmConfig] = await Promise.all([
+    const [presets, pluginsRes, worlds, llmConfig] = await Promise.all([
       api.listPresets(),
-      api.listPackages(),
+      api.listPlugins(),
       ds.listWorlds(),
       api.fetchLlmConfig().catch(() => null),
     ]);
@@ -61,12 +61,12 @@ export async function bootSessionStore({
       ]),
     ].sort((a, b) => a.localeCompare(b));
 
-    for (const pkg of packagesRes.packages) {
-      if (pkg.userSettings && pkg.userSettings.length > 0) {
+    for (const plugin of pluginsRes.plugins) {
+      if (plugin.userSettings.length > 0) {
         registerPluginUserSettings(
           getSettings(),
-          pkg.name,
-          pkg.userSettings,
+          plugin.id,
+          plugin.userSettings,
           slotIds,
         );
       }
@@ -79,8 +79,8 @@ export async function bootSessionStore({
     dispatch({
       type: "BOOT_SUCCESS",
       presets,
-      packages: packagesRes.packages,
-      pluginLoadErrors: packagesRes.loadErrors,
+      packages: pluginsRes.plugins,
+      pluginLoadErrors: pluginsRes.loadErrors,
       worlds,
       llmConfig,
     });

@@ -279,7 +279,7 @@ export function GameView({ session }: GameViewProps) {
 
   // ── Left Panel ─────────────────────────────────────────────────
 
-  const enabledPackages = packages.filter((p) => p.enabled);
+  const enabledPackages = packages;
   const [showSessionList, setShowSessionList] = useState(false);
   const otherSessions = worldSessions.filter((s) => s.id !== session.id);
 

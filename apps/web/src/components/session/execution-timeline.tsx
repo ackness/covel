@@ -14,7 +14,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
 import type { ExecutionStep } from "@/stores/session-store.js";
-import type { PackageSummary } from "@/services/api.js";
+import type { PluginSummary } from "@/services/api.js";
 import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
 
 interface RuntimeStatus {
@@ -295,7 +295,7 @@ export function ExecutionTimeline({
 }: {
   steps: ExecutionStep[];
   executing: boolean;
-  packages?: PackageSummary[];
+  packages?: PluginSummary[];
   onRetryRuntime?: (runtimeId: string, sourceTurnId?: string) => void;
   onRetryAll?: () => void;
 }) {
@@ -311,7 +311,7 @@ export function ExecutionTimeline({
   const RUNTIME_LABELS: Record<string, string> = {};
   for (const pkg of packages) {
     const name = resolveI18nText(pkg.displayName, i18n.language);
-    if (name) RUNTIME_LABELS[pkg.name] = name;
+    if (name) RUNTIME_LABELS[pkg.id] = name;
   }
 
   const turnGroups = groupStepsByTurn(steps);

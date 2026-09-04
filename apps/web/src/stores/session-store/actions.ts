@@ -344,7 +344,7 @@ export function useBuildSessionActions({
     if (!sid || !cursor) return;
     try {
       const page = await ds.listMessagesPage(sid, {
-        before: { createdAt: cursor.createdAt, id: cursor.id },
+        cursor,
         limit: OLDER_MESSAGES_PAGE_SIZE,
       });
       // 会话可能在请求期间被切换 —— 丢弃过期响应。
@@ -593,8 +593,8 @@ export function useBuildSessionActions({
       if (sessionIdRef.current !== sid) return;
       dispatch({
         type: "LOAD_SESSION_PLUGINS",
-        plugins: res.available,
-        commands: res.commands,
+        plugins: [...res.items],
+        commands: [...res.commands],
       });
     } catch {
       // Non-critical: plugins panel is optional.
@@ -605,7 +605,7 @@ export function useBuildSessionActions({
     async (pluginId: string, enable: boolean) => {
       const sid = sessionIdRef.current;
       if (!sid) return;
-      dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, isActive: enable });
+      dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, active: enable });
       try {
         if (!enable) {
           await workspace.run(
@@ -642,7 +642,7 @@ export function useBuildSessionActions({
           dispatch({
             type: "TOGGLE_SESSION_PLUGIN",
             pluginId,
-            isActive: false,
+            active: false,
           });
           await workspace.run(sid, `plugin-deny:${crypto.randomUUID()}`, () =>
             api.resolveApproval(firstResult.approvalId, "deny", "session", sid),
@@ -678,7 +678,7 @@ export function useBuildSessionActions({
         dispatch({
           type: "TOGGLE_SESSION_PLUGIN",
           pluginId,
-          isActive: !enable,
+          active: !enable,
         });
       }
     },

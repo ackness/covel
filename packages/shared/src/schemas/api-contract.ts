@@ -155,7 +155,10 @@ export function validateActionRequest(raw: unknown): ActionRequestValidation {
 export const apiErrorResponseSchema = z
   .object({
     error: z.string(),
-    code: z.string().optional(),
+    code: z
+      .string()
+      .regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/u)
+      .optional(),
     details: z.unknown().optional(),
   })
   .strict();

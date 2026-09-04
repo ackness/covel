@@ -1,4 +1,5 @@
 import type { Context, ErrorHandler } from "hono";
+import type { ZodType } from "zod";
 import type {
   ApiErrorResponse,
   ApiListResponse,
@@ -75,6 +76,26 @@ export async function readJsonBody<T = unknown>(
       400,
     );
   }
+}
+
+/** Parse and validate a JSON body with the standard coded 400 response. */
+export async function parseJsonBody<Schema extends ZodType>(
+  c: Context,
+  schema: Schema,
+): Promise<{ body: Schema["_output"] } | Response> {
+  const json = await readJsonBody(c);
+  if (json instanceof Response) return json;
+  const parsed = schema.safeParse(json.body);
+  if (!parsed.success) {
+    return c.json(
+      errorBody("Invalid request body", {
+        code: "invalid_request_body",
+        details: parsed.error.flatten(),
+      }),
+      400,
+    );
+  }
+  return { body: parsed.data };
 }
 
 /**

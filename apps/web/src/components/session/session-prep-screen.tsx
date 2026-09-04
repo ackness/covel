@@ -75,6 +75,8 @@ export function SessionPrepScreen({
     selectedPackages,
     selectedPluginIds,
     selectedPluginIdSet,
+    pluginPlan,
+    pluginPlanLoading,
     pluginPacks,
     activePluginPack,
     pluginSearch,
@@ -85,7 +87,7 @@ export function SessionPrepScreen({
     togglePluginTag,
     applyPack,
     togglePlugin,
-  } = usePluginSelection(world, packages);
+  } = usePluginSelection(world.id, packages);
 
   const {
     worldDataPreflight,
@@ -189,7 +191,7 @@ export function SessionPrepScreen({
       packages.map(
         (pkg) =>
           [
-            pkg.name,
+            pkg.id,
             new Map(
               (pkg.runtimes ?? []).map(
                 (runtime) => [runtime.id, runtime] as const,
@@ -205,7 +207,7 @@ export function SessionPrepScreen({
         if (!runtime) return step;
         return {
           ...step,
-          runtimeType: step.runtimeType ?? runtime.kind,
+          runtimeType: step.runtimeType ?? runtime.runtimeType,
           outputKind: step.outputKind ?? runtime.outputKind,
           capabilities: step.capabilities ?? runtime.capabilities,
           execution: step.execution ?? runtime.execution,
@@ -231,7 +233,7 @@ export function SessionPrepScreen({
   const [resumingId, setResumingId] = useState<string | null>(null);
 
   const handleStart = useCallback(async () => {
-    if (isStarting) return;
+    if (isStarting || pluginPlanLoading) return;
     setIsStarting(true);
     try {
       await onStart(startPluginsPayload(selectedPluginIds));
@@ -241,7 +243,7 @@ export function SessionPrepScreen({
     } finally {
       setIsStarting(false);
     }
-  }, [isStarting, selectedPluginIds, onStart]);
+  }, [isStarting, pluginPlanLoading, selectedPluginIds, onStart]);
 
   const handleResume = useCallback(
     async (session: api.SessionRecord) => {
@@ -311,7 +313,7 @@ export function SessionPrepScreen({
                 <Button
                   size="sm"
                   className="h-10 shrink-0 px-5 font-bold uppercase tracking-widest"
-                  disabled={isStarting}
+                  disabled={isStarting || pluginPlanLoading}
                   onClick={() => void handleStart()}
                 >
                   {isStarting ? (
@@ -405,7 +407,8 @@ export function SessionPrepScreen({
               />
 
               <PluginSelectionCard
-                world={world}
+                pluginPlan={pluginPlan}
+                pluginPlanLoading={pluginPlanLoading}
                 packages={packages}
                 selectedPluginIds={selectedPluginIds}
                 selectedPluginIdSet={selectedPluginIdSet}
@@ -445,7 +448,7 @@ export function SessionPrepScreen({
       <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border bg-background/92 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
         <Button
           className="h-12 w-full font-semibold uppercase tracking-wider shadow-(--shadow-pop)"
-          disabled={isStarting}
+          disabled={isStarting || pluginPlanLoading}
           onClick={() => void handleStart()}
         >
           {isStarting ? (

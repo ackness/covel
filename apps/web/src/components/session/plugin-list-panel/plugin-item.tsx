@@ -39,7 +39,7 @@ export function PluginItem({
   const [expanded, setExpanded] = useState(false);
 
   const agentRuntimes = (pkg.runtimes ?? []).filter(
-    (rt) => rt.kind !== "function" && rt.model,
+    (rt) => rt.runtimeType !== "function" && rt.model,
   );
   const primaryRuntime = agentRuntimes[0];
   const runtimeKey = primaryRuntime?.id ?? "";
@@ -51,15 +51,15 @@ export function PluginItem({
       onChange: onRuntimeModelOverrideChange,
     });
 
-  const displayName = text(pkg.displayName) || pkg.name;
+  const displayName = text(pkg.displayName) || pkg.id;
   const description = text(pkg.description);
   const runtimes = pkg.runtimes ?? [];
   const tools = pkg.tools ?? [];
-  const requires = pkg.requires ?? [];
+  const requires = pkg.relations?.requires ?? [];
   const mainRuntime = runtimes[0];
 
   const hasSessionScope = sessionPlugin !== undefined;
-  const isActive = sessionPlugin?.isActive ?? true;
+  const isActive = sessionPlugin?.active ?? true;
   const isLocked = sessionPlugin?.locked === true;
   const toggleDisabled = executing === true || isLocked;
 
@@ -141,7 +141,7 @@ export function PluginItem({
               toggleDisabled ? "opacity-50 cursor-not-allowed" : "",
             ].join(" ")}
             onClick={() => {
-              if (!toggleDisabled) onToggle(pkg.name, !isActive);
+              if (!toggleDisabled) onToggle(pkg.id, !isActive);
             }}
           >
             <span
@@ -155,7 +155,7 @@ export function PluginItem({
       </div>
 
       <SetupRecovery
-        pluginId={pkg.name}
+        pluginId={pkg.id}
         sessionId={sessionId}
         setupRuntimes={setupRuntimes}
       />
@@ -203,7 +203,6 @@ export function PluginItem({
 
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {pkg.version && <span>v{pkg.version}</span>}
-            {pkg.author && <span>{pkg.author}</span>}
           </div>
 
           {runtimes.length > 0 && (

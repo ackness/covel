@@ -686,9 +686,12 @@ sequenceDiagram
     participant LLM as LLM / Tool
 
     Player->>Web: 打开页面
-    Web->>Server: GET /api/worlds / /api/packages / /api/ui-specs
+    Web->>Server: GET /api/worlds / /api/plugins / /api/ui-specs
     Server-->>Web: 世界列表 + 包清单 + UI 面板声明
-    Player->>Web: 选择世界 + 点击"开始冒险"
+    Player->>Web: 选择世界
+    Web->>Server: GET /api/worlds/:id/plugin-plan
+    Server-->>Web: 服务端解析后的组合包、约束与默认插件集合
+    Player->>Web: 调整插件 + 点击"开始冒险"
     Web->>Server: POST /api/sessions (新 session, phase='setup')
     Web->>Server: POST /api/actions { type: 'start_session' }
     Server-->>Web: SSE: execution.started
@@ -738,7 +741,7 @@ sequenceDiagram
     opt 某个 runtime 挂起
         Server-->>Web: SSE: turn.suspended
         Player->>Web: 提供 resume 输入
-        Web->>Server: POST /api/sessions/:id/resume
+        Web->>Server: POST /api/sessions/:id/suspensions/:suspensionId/resume
         Server-->>Web: SSE: turn.resumed
     end
 

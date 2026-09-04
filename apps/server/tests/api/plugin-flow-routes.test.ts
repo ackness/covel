@@ -9,6 +9,7 @@ import {
 import type { RuntimeManifest } from "@covel/shared";
 import type { Hono } from "hono";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
+import { pluginRoutes } from "../../src/routes/api/plugins.js";
 
 const stubAi = {
   presetRegistry: { listPresets: () => [] },
@@ -25,6 +26,11 @@ describe("plugin flow routes", () => {
     store = createMemoryStore();
     registry = createPluginRegistry();
     app = createMiscApiRoutes(stubAi, registry, store);
+    app.use("/api/plugins/*", async (c, next) => {
+      c.set("pluginRegistry", registry);
+      await next();
+    });
+    app.route("/api/plugins", pluginRoutes);
   });
 
   it("returns the segmented plugin flow payload", async () => {
@@ -192,12 +198,12 @@ describe("plugin flow routes", () => {
     };
     registry.register(entry);
 
-    const res = await app.request("/api/packages");
+    const res = await app.request("/api/plugins");
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as {
       items: Array<{
-        name: string;
+        id: string;
         displayName?: unknown;
         description?: unknown;
         source?: string;
@@ -214,7 +220,7 @@ describe("plugin flow routes", () => {
         }>;
       }>;
     };
-    const pkg = body.items.find((item) => item.name === "test-package");
+    const pkg = body.items.find((item) => item.id === "test-package");
     // displayName / description are served as RAW I18nText (the frontend
     // resolves to the UI locale) — never collapsed to a single locale here.
     expect(pkg?.displayName).toEqual({

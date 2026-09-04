@@ -9,37 +9,19 @@
  *   PATCH  /api/sessions/:id                  — update session fields
  *   DELETE /api/sessions/:id                  — delete session
  *   GET    /api/sessions/:id/plugins          — list active + available plugins
- *   POST   /api/sessions/:id/plugins/enable   — enable a plugin
- *   POST   /api/sessions/:id/plugins/disable  — disable a plugin
+ *   PUT    /api/sessions/:id/plugins/:pluginId — enable a plugin
+ *   DELETE /api/sessions/:id/plugins/:pluginId — disable a plugin
  */
 
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import {
-  COMMUNITY_SERVER_CODE_ACTION,
-  type RpcApprovalGate,
-} from "@covel/approval";
 import { isSetupRuntime, readRuntimeEnv } from "@covel/shared";
-import { getPluginTrustInfo, type PluginRegistry } from "@covel/plugin-loader";
-import type {
-  DataStore,
-  MediaStore,
-  SessionRecord,
-  StoreBackend,
-} from "@covel/store";
+import type { PluginRegistry } from "@covel/plugin-loader";
+import type { SessionRecord } from "@covel/store";
 import { SessionAlreadyExistsError } from "@covel/store";
-import type { EventBus } from "@covel/events";
-import type { HookPipeline } from "@covel/runtime";
-import {
-  buildSessionSnapshot,
-  runSessionStartHook,
-  runSessionEndHook,
-  runWithHookScope,
-} from "@covel/runtime";
-import { backgroundRuntimeLockId } from "./plugin-rpc/runtime-turn.js";
-import { errorBody, okBody, readJsonBody } from "../../api-error.js";
+import { runSessionStartHook, runWithHookScope } from "@covel/runtime";
+import { errorBody, readJsonBody } from "../../api-error.js";
 import { normalizeLocale } from "../../lib/validators.js";
-import { signMediaTokenForSession } from "../../middleware/media-token.js";
 import {
   cleanupWorldDataMediaRefs,
   finalizeWorldDataMediaRefs,
@@ -53,35 +35,23 @@ import {
 } from "./session/embedding.js";
 import {
   hasOperatorToken,
-  checkHostedOperator,
   isOwnerAuthEnforced,
   mintSessionOwnerToken,
   mintSessionApprovalScope,
   resolveSessionParam,
-  rotateSessionApprovalScope,
   sessionIncarnationIdentity,
-  sessionApprovalScope,
   publicSessionMetadata,
   SESSION_APPROVAL_SCOPE_KEY,
   SESSION_DELETION_PENDING_KEY,
-  SESSION_DELETION_STARTED_AT_KEY,
-  SESSION_DELETION_RETRY_KEY,
-  SESSION_DELETION_END_FIRED_KEY,
   SESSION_INCARNATION_KEY,
   SESSION_LIFECYCLE_PENDING_KEY,
-  SESSION_NOT_FOUND_CODE,
   SESSION_OWNER_TOKEN_HASH_KEY,
 } from "./session/session-guard.js";
 import {
-  buildAvailablePluginList,
-  buildSnapshotPluginList,
-  findWorldDataProviderPluginId,
-  isRequiredCorePlugin,
-  resolveEnabledSessionPlugins,
+  approvedActivePlugins,
   resolveSessionPlugins,
   unknownPluginIds,
 } from "./session/plugins.js";
-import { buildSessionCommandList } from "./session/commands.js";
 import {
   buildSessionPatchUpdates,
   parseCreateSessionBody,
@@ -90,19 +60,24 @@ import {
   importWorldCharacterBlueprints,
   importWorldEmbeddedLorebook,
 } from "./session/world-character-blueprints.js";
+import { registerSessionMediaTokenRoute } from "./session/media-token-route.js";
+import { registerSessionPluginRoutes } from "./session/plugin-routes.js";
+import type { SessionRouteEnv } from "./session/route-env.js";
+import { registerSessionViewRoute } from "./session/view-route.js";
+import { registerSessionDeleteRoute } from "./session/delete-route.js";
+import {
+  fireSessionEnd,
+  lifecycleLeaseIsFresh,
+  readSessionLifecyclePending,
+  type SessionLifecyclePending,
+  withoutLifecyclePending,
+} from "./session/lifecycle.js";
 
-type Env = {
-  Variables: {
-    store: DataStore;
-    pluginRegistry: PluginRegistry;
-    mediaStore?: MediaStore;
-    worldsDirs?: readonly string[];
-    covelHome?: string;
-    storeBackend?: StoreBackend;
-  };
-};
-
-export const sessionRoutes = new Hono<Env>();
+export const sessionRoutes = new Hono<SessionRouteEnv>();
+registerSessionMediaTokenRoute(sessionRoutes);
+registerSessionPluginRoutes(sessionRoutes);
+registerSessionViewRoute(sessionRoutes);
+registerSessionDeleteRoute(sessionRoutes);
 
 /**
  * Whether any plugin in the set declares a setup-stage runtime. Discovered by
@@ -130,104 +105,6 @@ function sessionHasSetupRuntime(
   return false;
 }
 
-async function backgroundLocksForSession(
-  sessionId: string,
-  store: DataStore,
-): Promise<string[]> {
-  const runtimeNames = new Set<string>();
-  // Pending job rows are the cross-Pod source of truth. They are persisted
-  // before detached work is scheduled while holding the session lock, so a
-  // delete either closes admission first or observes the exact runtime lock
-  // it must drain. A process-local registry can miss code loaded on another
-  // Pod and therefore cannot safely drive deletion.
-  for (const row of await store.listPluginDataSessionScope(sessionId)) {
-    if (row.namespace !== "_jobs" && row.namespace !== "_runtime_jobs") {
-      continue;
-    }
-    const value = row.value as {
-      readonly status?: unknown;
-      readonly runtimeId?: unknown;
-    };
-    const active =
-      row.namespace === "_jobs"
-        ? value?.status === "pending"
-        : value?.status === "queued" ||
-          value?.status === "claimed" ||
-          value?.status === "running" ||
-          value?.status === "committing";
-    if (active && typeof value.runtimeId === "string") {
-      runtimeNames.add(value.runtimeId);
-    }
-  }
-  return [...runtimeNames]
-    .map((runtimeId) => backgroundRuntimeLockId(sessionId, runtimeId))
-    .sort();
-}
-
-const SESSION_LIFECYCLE_LEASE_MS = 10 * 60 * 1000;
-const SESSION_DELETION_LEASE_MS = 10 * 60 * 1000;
-
-interface SessionLifecyclePending {
-  readonly opId: string;
-  readonly event: "SessionStart" | "SessionEnd";
-  readonly startedAt: string;
-}
-
-function readSessionLifecyclePending(
-  session: SessionRecord,
-): SessionLifecyclePending | undefined {
-  const raw = session.metadata?.[SESSION_LIFECYCLE_PENDING_KEY];
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
-  const value = raw as Record<string, unknown>;
-  if (
-    typeof value.opId !== "string" ||
-    (value.event !== "SessionStart" && value.event !== "SessionEnd") ||
-    typeof value.startedAt !== "string"
-  ) {
-    return undefined;
-  }
-  return {
-    opId: value.opId,
-    event: value.event,
-    startedAt: value.startedAt,
-  };
-}
-
-function lifecycleLeaseIsFresh(pending: SessionLifecyclePending): boolean {
-  const startedAt = Date.parse(pending.startedAt);
-  return (
-    Number.isFinite(startedAt) &&
-    Date.now() - startedAt <= SESSION_LIFECYCLE_LEASE_MS
-  );
-}
-
-function withoutLifecyclePending(
-  metadata: SessionRecord["metadata"],
-): Record<string, unknown> {
-  const { [SESSION_LIFECYCLE_PENDING_KEY]: _lifecyclePending, ...rest } =
-    metadata ?? {};
-  return { ...rest, [SESSION_LIFECYCLE_PENDING_KEY]: undefined };
-}
-
-function withoutDeletionControl(
-  metadata: SessionRecord["metadata"],
-): Record<string, unknown> {
-  const {
-    [SESSION_DELETION_PENDING_KEY]: _deletionPending,
-    [SESSION_DELETION_STARTED_AT_KEY]: _deletionStartedAt,
-    [SESSION_DELETION_RETRY_KEY]: _deletionRetry,
-    [SESSION_DELETION_END_FIRED_KEY]: _deletionEndFired,
-    ...rest
-  } = metadata ?? {};
-  return {
-    ...rest,
-    [SESSION_DELETION_PENDING_KEY]: undefined,
-    [SESSION_DELETION_STARTED_AT_KEY]: undefined,
-    [SESSION_DELETION_RETRY_KEY]: undefined,
-    [SESSION_DELETION_END_FIRED_KEY]: undefined,
-  };
-}
-
 /**
  * Prepare a session for the wire by stripping internal metadata credentials.
  */
@@ -241,68 +118,6 @@ function sanitizeSessionForResponse<
     ...session,
     metadata: publicSessionMetadata(session.metadata),
   };
-}
-
-/**
- * Keep persisted active plugins aligned with the in-memory approval gate.
- * Community server code is never restored implicitly after create/fork or a
- * process restart; the operator must enable it again for this session.
- */
-function approvedActivePlugins(
-  pluginIds: readonly string[],
-  registry: PluginRegistry,
-  gate: RpcApprovalGate | undefined,
-  session?: SessionRecord,
-): string[] {
-  return pluginIds.filter((pluginId) => {
-    const entry = registry.get(pluginId);
-    const trust = getPluginTrustInfo(pluginId, entry?.source);
-    return (
-      trust.autoLoad ||
-      Boolean(
-        session &&
-        gate?.hasGrant(
-          session.id,
-          pluginId,
-          COMMUNITY_SERVER_CODE_ACTION,
-          sessionApprovalScope(session, pluginId),
-        ),
-      )
-    );
-  });
-}
-
-/**
- * Fire the SessionEnd lifecycle hook under the session's plugin scope, then
- * await an EventBus durability barrier.
- *
- * SessionEnd is observe-only: the DB mutation (end / delete) has already
- * happened, so a handler failure must never surface as a 500. We swallow and
- * log. `flush()` guarantees any audit events the handlers emitted are
- * persisted before we return — there is no later flush for a session that is
- * ending or already gone.
- */
-async function fireSessionEnd(
-  pipeline: HookPipeline | undefined,
-  eventBus: EventBus | undefined,
-  sessionId: string,
-  activePlugins: readonly string[],
-  reason: "ended" | "deleted",
-): Promise<void> {
-  try {
-    await runWithHookScope({ activePluginIds: new Set(activePlugins) }, () =>
-      runSessionEndHook(
-        { pipeline, sessionId, turnId: "", eventBus },
-        { sessionId, reason },
-      ),
-    );
-    await eventBus?.flush();
-  } catch (err) {
-    console.warn(
-      "[sessions] SessionEnd hook failed:",
-      err instanceof Error ? err.message : String(err),
-    );
-  }
 }
 
 // ── Collection endpoints ────────────────────────────────────────
@@ -652,80 +467,6 @@ sessionRoutes.post("/", async (c) => {
 
 // ── Instance endpoints ──────────────────────────────────────────
 
-// GET /sessions/:id/media-token?id=<mediaId>
-sessionRoutes.get("/:id/media-token", async (c) => {
-  const sessionId = c.req.param("id");
-  // Owner guard: minting media URLs is a session-scoped read. Hosted tiers
-  // only — self/desktop keeps the historical behavior (no session-existence
-  // requirement; media access is checked against the media_refs table below).
-  if (isOwnerAuthEnforced()) {
-    const guard = await resolveSessionParam(c);
-    if (!guard.ok) return guard.response;
-  }
-  const mediaId = c.req.query("id");
-  if (!mediaId) {
-    return c.json(
-      errorBody("id query parameter is required", { code: "invalid_request" }),
-      400,
-    );
-  }
-
-  const mediaStore = c.get("mediaStore");
-  if (!mediaStore) {
-    return c.json(
-      errorBody("Media store unavailable", { code: "media_store_unavailable" }),
-      503,
-    );
-  }
-
-  let lookup: Awaited<ReturnType<MediaStore["lookup"]>>;
-  try {
-    lookup = await mediaStore.lookup(mediaId);
-  } catch (err) {
-    console.error("[sessions/media-token] MediaStore.lookup failed:", err);
-    return c.json(
-      errorBody("Failed to load media metadata", {
-        code: "media_lookup_failed",
-      }),
-      500,
-    );
-  }
-
-  if (!lookup) {
-    return c.json(
-      errorBody("Media not found", { code: "media_not_found" }),
-      404,
-    );
-  }
-
-  let allowed = lookup.ownerSessionId === sessionId;
-  if (!allowed) {
-    try {
-      allowed = await mediaStore.isReferencedBy(mediaId, sessionId);
-    } catch (err) {
-      console.error(
-        "[sessions/media-token] MediaStore.isReferencedBy failed:",
-        err,
-      );
-      return c.json(
-        errorBody("Failed to check media access", {
-          code: "media_access_check_failed",
-        }),
-        500,
-      );
-    }
-  }
-
-  if (!allowed) {
-    return c.json(errorBody("Forbidden", { code: "media_forbidden" }), 403);
-  }
-
-  const token = signMediaTokenForSession(mediaId, sessionId);
-  return c.json({
-    url: `/api/media/${encodeURIComponent(mediaId)}?token=${encodeURIComponent(token)}`,
-  });
-});
-
 // GET /sessions/:id
 sessionRoutes.get("/:id", async (c) => {
   const store = c.get("store");
@@ -901,548 +642,4 @@ sessionRoutes.patch("/:id", async (c) => {
   if (responseSession instanceof Response) return responseSession;
 
   return c.json(sanitizeSessionForResponse(responseSession));
-});
-
-// DELETE /sessions/:id
-sessionRoutes.delete("/:id", async (c) => {
-  const store = c.get("store");
-  const id = c.req.param("id");
-  const guard = await resolveSessionParam(c);
-  if (!guard.ok) return guard.response;
-  const expectedIncarnation = sessionIncarnationIdentity(guard.session);
-  const sessionLock = c.get("sessionLock");
-  const pluginRegistry = c.get("pluginRegistry");
-  const clearProcessLocalState = (): void => {
-    pluginRegistry.clearSession(id);
-    c.get("rpcApprovalGate")?.revoke(id);
-    c.get("clearSessionToolOverrides")?.(id);
-  };
-
-  // Phase 1: close the admission gate before waiting for long-running
-  // detached runtimes. Rotating the persisted scope makes every Pod reject
-  // new work immediately; pausing also closes trusted-plugin execution.
-  const prepared = await sessionLock.withLock(id, async () => {
-    const lockedGuard = await resolveSessionParam(c);
-    if (!lockedGuard.ok) return lockedGuard.response;
-    const session = lockedGuard.session;
-    if (sessionIncarnationIdentity(session) !== expectedIncarnation) {
-      return c.json(
-        errorBody("Session was replaced while DELETE was waiting", {
-          code: "session_incarnation_changed",
-        }),
-        409,
-      );
-    }
-    const existingDeletionNonce =
-      session.metadata?.[SESSION_DELETION_PENDING_KEY];
-    const deletionStartedAt =
-      typeof session.metadata?.[SESSION_DELETION_STARTED_AT_KEY] === "string"
-        ? Date.parse(session.metadata[SESSION_DELETION_STARTED_AT_KEY])
-        : Number.NaN;
-    const staleDeletionLease =
-      Number.isFinite(deletionStartedAt) &&
-      Date.now() - deletionStartedAt > SESSION_DELETION_LEASE_MS;
-    const retryableDeletion =
-      typeof existingDeletionNonce === "string" &&
-      (session.metadata?.[SESSION_DELETION_RETRY_KEY] ===
-        existingDeletionNonce ||
-        staleDeletionLease);
-    if (existingDeletionNonce && !retryableDeletion) {
-      return c.json(
-        errorBody("Session deletion is already in progress", {
-          code: "session_deleting",
-        }),
-        409,
-      );
-    }
-    const lifecyclePending = readSessionLifecyclePending(session);
-    if (lifecyclePending && lifecycleLeaseIsFresh(lifecyclePending)) {
-      return c.json(
-        errorBody(
-          `Session lifecycle hook ${lifecyclePending.event} is still running`,
-          { code: "session_lifecycle_busy" },
-        ),
-        409,
-      );
-    }
-    const runtimeLockIds = await backgroundLocksForSession(id, store);
-    const deletionNonce = randomUUID();
-    const skipEndHook =
-      retryableDeletion &&
-      session.metadata?.[SESSION_DELETION_END_FIRED_KEY] ===
-        existingDeletionNonce;
-    const approvalSession = {
-      ...session,
-      metadata: withoutDeletionControl(
-        lifecyclePending
-          ? withoutLifecyclePending(session.metadata)
-          : session.metadata,
-      ),
-    };
-    await store.updateSession(id, {
-      ...(session.status !== "ended" ? { status: "paused" as const } : {}),
-      metadata: {
-        ...rotateSessionApprovalScope(approvalSession),
-        [SESSION_DELETION_PENDING_KEY]: deletionNonce,
-        [SESSION_DELETION_STARTED_AT_KEY]: new Date().toISOString(),
-        ...(skipEndHook
-          ? { [SESSION_DELETION_END_FIRED_KEY]: deletionNonce }
-          : {}),
-      },
-      updatedAt: new Date().toISOString(),
-    });
-    return { session, runtimeLockIds, deletionNonce, skipEndHook };
-  });
-  if (prepared instanceof Response) return prepared;
-
-  const markDeletionRetryable = async (): Promise<void> => {
-    try {
-      await sessionLock.withLock(id, async () => {
-        const live = await store.getSession(id);
-        if (
-          !live ||
-          sessionIncarnationIdentity(live) !== expectedIncarnation ||
-          live.metadata?.[SESSION_DELETION_PENDING_KEY] !==
-            prepared.deletionNonce
-        ) {
-          return;
-        }
-        await store.updateSession(id, {
-          status: "paused",
-          metadata: {
-            ...live.metadata,
-            [SESSION_DELETION_RETRY_KEY]: prepared.deletionNonce,
-          },
-          updatedAt: new Date().toISOString(),
-        });
-      });
-    } catch (recoveryError) {
-      // If PostgreSQL itself is unavailable the durable startedAt lease lets
-      // a later request take over after the hard expiry.
-      console.warn(
-        "[sessions] failed to mark DELETE retryable:",
-        recoveryError instanceof Error
-          ? recoveryError.message
-          : String(recoveryError),
-      );
-    }
-  };
-
-  const completeDeletion = async (): Promise<Response> => {
-    // Phase 2: drain every detached runtime lock before removing the row. Their
-    // final scope check now fails against phase 1, and all execution artefacts
-    // they wrote still belong to the old row and are removed by deleteSession.
-    const draining = await sessionLock.withLocks(prepared.runtimeLockIds, () =>
-      sessionLock.withLock(id, async () => {
-        // Check the exact deletion generation after draining every detached
-        // job for this incarnation.
-        const lockedGuard = await resolveSessionParam(c);
-        if (!lockedGuard.ok) return lockedGuard.response;
-        const session = lockedGuard.session;
-        if (sessionIncarnationIdentity(session) !== expectedIncarnation) {
-          return c.json(
-            errorBody("Session was replaced while DELETE was draining", {
-              code: "session_incarnation_changed",
-            }),
-            409,
-          );
-        }
-        if (
-          session.metadata?.[SESSION_DELETION_PENDING_KEY] !==
-          prepared.deletionNonce
-        ) {
-          return c.json(
-            errorBody("Session deletion generation changed", {
-              code: "session_deleting",
-            }),
-            409,
-          );
-        }
-        return session;
-      }),
-    );
-    if (draining instanceof Response) return draining;
-
-    // Run observe-only plugin code without any advisory lock. The row remains
-    // paused and deletion-marked, so hook-initiated mutations and recursive
-    // lifecycle requests fail closed while same-id creation sees the tombstone.
-    if (prepared.session.status !== "ended" && !prepared.skipEndHook) {
-      await fireSessionEnd(
-        c.get("hookPipeline"),
-        c.get("eventBus"),
-        id,
-        prepared.session.activePlugins,
-        "deleted",
-      );
-    }
-
-    return sessionLock.withLock(id, async () => {
-      const lockedGuard = await resolveSessionParam(c);
-      if (!lockedGuard.ok) return lockedGuard.response;
-      const session = lockedGuard.session;
-      if (
-        sessionIncarnationIdentity(session) !== expectedIncarnation ||
-        session.metadata?.[SESSION_DELETION_PENDING_KEY] !==
-          prepared.deletionNonce
-      ) {
-        return c.json(
-          errorBody("Session changed before DELETE commit", {
-            code: "session_incarnation_changed",
-          }),
-          409,
-        );
-      }
-
-      if (
-        prepared.session.status !== "ended" &&
-        session.metadata?.[SESSION_DELETION_END_FIRED_KEY] !==
-          prepared.deletionNonce
-      ) {
-        await store.updateSession(id, {
-          metadata: {
-            ...session.metadata,
-            [SESSION_DELETION_END_FIRED_KEY]: prepared.deletionNonce,
-          },
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
-      try {
-        await c.get("mediaStore")?.releaseSession(id);
-        await store.deleteSession(id);
-      } catch (error) {
-        const live = await store.getSession(id);
-        if (!live) {
-          // PostgreSQL may report a connection error after COMMIT. An absent
-          // row while this lock is held proves the delete won; purge locals.
-          clearProcessLocalState();
-          return c.json(okBody());
-        } else if (
-          sessionIncarnationIdentity(live) === expectedIncarnation &&
-          live.metadata?.[SESSION_DELETION_PENDING_KEY] ===
-            prepared.deletionNonce
-        ) {
-          // The row survived. Keep it paused and deletion-marked because
-          // media cleanup may already have succeeded. A separate retry nonce
-          // lets exactly one later DELETE take over without reopening normal
-          // mutations or firing SessionEnd twice.
-          try {
-            await store.updateSession(id, {
-              status: "paused",
-              metadata: {
-                ...live.metadata,
-                [SESSION_DELETION_RETRY_KEY]: prepared.deletionNonce,
-              },
-              updatedAt: new Date().toISOString(),
-            });
-          } catch (recoveryError) {
-            console.warn(
-              "[sessions] failed to clear deletion marker after DELETE error:",
-              recoveryError instanceof Error
-                ? recoveryError.message
-                : String(recoveryError),
-            );
-          }
-        }
-        throw error;
-      }
-
-      clearProcessLocalState();
-      return c.json(okBody());
-    });
-  };
-
-  try {
-    return await completeDeletion();
-  } catch (error) {
-    await markDeletionRetryable();
-    throw error;
-  }
-});
-
-// ── Session plugin management ───────────────────────────────────
-
-// GET /sessions/:id/plugins
-sessionRoutes.get("/:id/plugins", async (c) => {
-  const pluginRegistry = c.get("pluginRegistry");
-  const id = c.req.param("id");
-  const guard = await resolveSessionParam(c);
-  if (!guard.ok) return guard.response;
-  const expectedIncarnation = sessionIncarnationIdentity(guard.session);
-  return c.get("sessionLock").withLock(id, async () => {
-    const lockedGuard = await resolveSessionParam(c);
-    if (!lockedGuard.ok) return lockedGuard.response;
-    if (
-      sessionIncarnationIdentity(lockedGuard.session) !== expectedIncarnation
-    ) {
-      return c.json(
-        errorBody("Session was replaced while the request was waiting", {
-          code: "session_incarnation_changed",
-        }),
-        409,
-      );
-    }
-    if (lockedGuard.session.metadata?.[SESSION_DELETION_PENDING_KEY]) {
-      return c.json(
-        errorBody("Session deletion is in progress", {
-          code: "session_deleting",
-        }),
-        409,
-      );
-    }
-    const previousActive = lockedGuard.session.activePlugins;
-    const active = approvedActivePlugins(
-      previousActive,
-      pluginRegistry,
-      c.get("rpcApprovalGate"),
-      lockedGuard.session,
-    );
-    const available = buildAvailablePluginList(active, pluginRegistry);
-    const commands = buildSessionCommandList(active, pluginRegistry);
-
-    return c.json({ active, available, commands });
-  });
-});
-
-// POST /sessions/:id/plugins/enable
-sessionRoutes.post("/:id/plugins/enable", async (c) => {
-  const store = c.get("store");
-  const pluginRegistry = c.get("pluginRegistry");
-  const id = c.req.param("id");
-  const guard = await resolveSessionParam(c);
-  if (!guard.ok) return guard.response;
-  const expectedIncarnation = sessionIncarnationIdentity(guard.session);
-  const parsed = await readJsonBody<{ pluginId: string }>(c);
-  if (parsed instanceof Response) return parsed;
-  const body = parsed.body;
-  if (!body.pluginId || !pluginRegistry.get(body.pluginId)) {
-    return c.json(errorBody(`Plugin "${body.pluginId}" not found`), 404);
-  }
-
-  const pluginEntry = pluginRegistry.get(body.pluginId);
-  const trust = getPluginTrustInfo(body.pluginId, pluginEntry?.source);
-  if (trust.source === "community") {
-    const operatorDenied = checkHostedOperator(c);
-    if (operatorDenied) return operatorDenied;
-  }
-  const approvalScope = sessionApprovalScope(guard.session, body.pluginId);
-  const verdict = c.get("rpcApprovalGate").evaluate({
-    sessionId: id,
-    sessionScope: approvalScope,
-    pluginId: body.pluginId,
-    action: COMMUNITY_SERVER_CODE_ACTION,
-    payload: { operation: "enable" },
-    trustLevel: trust.source,
-    description: `Enable server-side code for plugin ${body.pluginId}`,
-  });
-  if (verdict.status === "pending") {
-    return c.json(
-      {
-        status: "approval-required",
-        approvalId: verdict.approvalId,
-        pending: verdict.pending,
-      },
-      202,
-    );
-  }
-  if (verdict.status === "rejected") {
-    return c.json(
-      errorBody(
-        `approval queue is full (limit ${verdict.limit}); resolve pending approvals and retry`,
-      ),
-      429,
-    );
-  }
-
-  // Community entry modules are arbitrary plugin code and may call the HTTP
-  // API. Execute them without the main session lock; the activator rechecks
-  // the live persisted approval scope before importing anything, and the
-  // commit below checks the same scope again.
-  await c.get("activatePluginServerCode")?.(body.pluginId, id);
-
-  return c.get("sessionLock").withLock(id, async () => {
-    const lockedGuard = await resolveSessionParam(c);
-    if (!lockedGuard.ok) return lockedGuard.response;
-    const session = lockedGuard.session;
-
-    if (sessionIncarnationIdentity(session) !== expectedIncarnation) {
-      return c.json(
-        errorBody("Session was replaced while enable was waiting", {
-          code: "session_incarnation_changed",
-        }),
-        409,
-      );
-    }
-    if (
-      session.status !== "active" ||
-      session.metadata?.[SESSION_DELETION_PENDING_KEY]
-    ) {
-      return c.json(
-        errorBody(`Session is ${session.status}; plugin enable refused`, {
-          code: session.metadata?.[SESSION_DELETION_PENDING_KEY]
-            ? "session_deleting"
-            : "session_not_active",
-        }),
-        409,
-      );
-    }
-
-    if (
-      trust.source === "community" &&
-      sessionApprovalScope(session, body.pluginId) !== approvalScope
-    ) {
-      return c.json(
-        errorBody("Approval scope changed while enabling the plugin", {
-          code: "approval_scope_changed",
-        }),
-        409,
-      );
-    }
-
-    const active = resolveEnabledSessionPlugins(
-      session.activePlugins,
-      body.pluginId,
-      pluginRegistry,
-    );
-    await store.updateSession(id, {
-      activePlugins: active,
-      updatedAt: new Date().toISOString(),
-    });
-    for (const activePluginId of active) {
-      pluginRegistry.activate(activePluginId, id);
-    }
-    for (const previousPluginId of session.activePlugins) {
-      if (!active.includes(previousPluginId)) {
-        pluginRegistry.deactivate(previousPluginId, id);
-        c.get("rpcApprovalGate")?.revoke(id, previousPluginId);
-      }
-    }
-    return c.json({ ok: true, active });
-  });
-});
-
-// POST /sessions/:id/plugins/disable
-sessionRoutes.post("/:id/plugins/disable", async (c) => {
-  const store = c.get("store");
-  const pluginRegistry = c.get("pluginRegistry");
-  const id = c.req.param("id");
-  const guard = await resolveSessionParam(c);
-  if (!guard.ok) return guard.response;
-  const expectedIncarnation = sessionIncarnationIdentity(guard.session);
-  const parsed = await readJsonBody<{ pluginId: string }>(c);
-  if (parsed instanceof Response) return parsed;
-  const body = parsed.body;
-  if (!body.pluginId || typeof body.pluginId !== "string") {
-    return c.json(errorBody("pluginId is required"), 400);
-  }
-
-  // Core plugin protection combines framework-owned trust source metadata
-  // with manifest.pluginType. Keep IDs data-driven per the framework-plugin
-  // isolation rule.
-  const entry = pluginRegistry.get(body.pluginId);
-  if (entry && isRequiredCorePlugin(entry)) {
-    return c.json(
-      errorBody(`Cannot disable core plugin "${body.pluginId}"`),
-      403,
-    );
-  }
-
-  return c.get("sessionLock").withLock(id, async () => {
-    const lockedGuard = await resolveSessionParam(c);
-    if (!lockedGuard.ok) return lockedGuard.response;
-    const session = lockedGuard.session;
-
-    if (sessionIncarnationIdentity(session) !== expectedIncarnation) {
-      return c.json(
-        errorBody("Session was replaced while disable was waiting", {
-          code: "session_incarnation_changed",
-        }),
-        409,
-      );
-    }
-    if (
-      session.status !== "active" ||
-      session.metadata?.[SESSION_DELETION_PENDING_KEY]
-    ) {
-      return c.json(
-        errorBody(`Session is ${session.status}; plugin disable refused`, {
-          code: session.metadata?.[SESSION_DELETION_PENDING_KEY]
-            ? "session_deleting"
-            : "session_not_active",
-        }),
-        409,
-      );
-    }
-
-    const active = session.activePlugins.filter((p) => p !== body.pluginId);
-    await store.updateSession(id, {
-      activePlugins: active,
-      // Rotate the persisted plugin generation so grants cached by every
-      // server process become unusable. The local revoke below only cleans
-      // this process; the revision is the cross-Pod invalidation mechanism.
-      metadata: rotateSessionApprovalScope(session, body.pluginId),
-      updatedAt: new Date().toISOString(),
-    });
-    pluginRegistry.deactivate(body.pluginId, id);
-    c.get("rpcApprovalGate")?.revoke(id, body.pluginId);
-    return c.json({ ok: true, active });
-  });
-});
-
-// ── Session Snapshot (restore/reconnection) ────────────────────
-
-// GET /sessions/:id/snapshot — complete session state for client restore
-sessionRoutes.get("/:id/snapshot", async (c) => {
-  const store = c.get("store");
-  const pluginRegistry = c.get("pluginRegistry");
-  const id = c.req.param("id");
-
-  const guard = await resolveSessionParam(c);
-  if (!guard.ok) return guard.response;
-
-  const snapshot = await buildSessionSnapshot(store, id);
-  if (!snapshot) {
-    return c.json(
-      errorBody(`Session not found: ${id}`, { code: SESSION_NOT_FOUND_CODE }),
-      404,
-    );
-  }
-
-  // Populate plugins from registry + session activePlugins
-  const currentSession = await store.getSession(id);
-  if (!currentSession) {
-    return c.json(
-      errorBody(`Session not found: ${id}`, { code: SESSION_NOT_FOUND_CODE }),
-      404,
-    );
-  }
-  const activeIds = new Set(currentSession.activePlugins);
-  const pluginList = buildSnapshotPluginList(pluginRegistry, activeIds);
-  (snapshot as unknown as Record<string, unknown>).plugins = pluginList;
-
-  // Attach character attribute schema if a world-data-provider plugin exists.
-  // Use session.activePlugins from DB + global registry (not in-memory activation map)
-  // to survive server restarts / hot-reloads.
-  const activePlugins = currentSession.activePlugins;
-  const worldDataPluginId = findWorldDataProviderPluginId(
-    activePlugins,
-    pluginRegistry,
-  );
-  if (worldDataPluginId) {
-    try {
-      const schemaRecord = await store.getPluginData(
-        id,
-        worldDataPluginId,
-        "schema",
-        "character-attributes",
-      );
-      if (schemaRecord?.value) {
-        return c.json({ ...snapshot, characterSchema: schemaRecord.value });
-      }
-    } catch {
-      // Non-critical: proceed without schema
-    }
-  }
-
-  return c.json(snapshot);
 });

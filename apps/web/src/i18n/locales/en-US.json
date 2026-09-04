@@ -274,20 +274,6 @@
       "guidance": "Guidance",
       "utility": "Utility"
     },
-    "pluginPacks": {
-      "traditional-story": {
-        "label": "Traditional Story",
-        "description": "Narrator, suggestions, codex, and relationship memory for long-form exploration."
-      },
-      "dialogue-mode": {
-        "label": "Dialogue Mode",
-        "description": "Dialogue-first narration, scene cast state, quick replies, and character profiles."
-      },
-      "low-cost": {
-        "label": "Low Cost",
-        "description": "Keeps the core loop and function plugins while reducing downstream LLM calls; cost-gate caps per-session token spend."
-      }
-    },
     "recommendationReasons": {
       "requiredByWorld": "Required by world",
       "packOptional": "Pack optional",

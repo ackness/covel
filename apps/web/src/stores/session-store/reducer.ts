@@ -1,5 +1,5 @@
 import type { AssetGenerateView } from "@covel/shared";
-import { deepMerge } from "@covel/shared";
+import { deepMerge, encodePageCursor } from "@covel/shared";
 import {
   mergeGameStateForReplacement,
   rebuildGameStateFromPatches,
@@ -79,7 +79,7 @@ function capLiveMessages(
     // (timestamp = server createdAt); stream placeholders with client wall
     // clocks never reach the front of a full window.
     olderMessagesCursor: edge
-      ? { createdAt: edge.timestamp, id: edge.id }
+      ? encodePageCursor({ createdAt: edge.timestamp, id: edge.id })
       : state.olderMessagesCursor,
   };
 }
@@ -432,13 +432,18 @@ export function reducer(
         sessionPlugins: action.plugins,
         sessionCommands: action.commands ?? state.sessionCommands,
       };
-    case "TOGGLE_SESSION_PLUGIN":
+    case "TOGGLE_SESSION_PLUGIN": {
+      const plugin = state.sessionPlugins.find(
+        (item) => item.id === action.pluginId,
+      );
+      if (!plugin || plugin.active === action.active) return state;
       return {
         ...state,
         sessionPlugins: state.sessionPlugins.map((p) =>
-          p.id === action.pluginId ? { ...p, isActive: action.isActive } : p,
+          p.id === action.pluginId ? { ...p, active: action.active } : p,
         ),
       };
+    }
     case "BACKFILL_TURN_ID": {
       // Assign turnId to the last user message that has no turnId.
       // This links the player's input to the server-generated turnId so the

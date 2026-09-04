@@ -154,10 +154,25 @@ describe("debug route components", () => {
       plugins: [
         {
           id: "story-plugin",
-          name: "Story Plugin",
+          displayName: "Story Plugin",
+          description: "Story plugin",
+          pluginType: "plugin",
+          source: "builtin",
+          status: "registered",
+          runtimeCount: 0,
           capabilities: ["narrative"],
-          tools: { builtin: ["append-story"] },
-          ui: { right: [{ runtimeId: "story/runtime", path: "ui.json" }] },
+          tags: [],
+          tools: [{ id: "append-story", kind: "builtin" }],
+          userSettings: [],
+          dataSchemas: {},
+          worldProjections: {},
+          declaredPluginDataNamespaces: [],
+          ui: {
+            right: [{ runtimeId: "story/runtime", path: "ui.json" }],
+            message: [],
+            left: [],
+          },
+          runtimes: [],
         },
       ],
       pluginData: [

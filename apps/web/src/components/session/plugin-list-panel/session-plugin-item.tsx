@@ -5,7 +5,6 @@ import {
   Lock,
   Puzzle,
   Wrench,
-  Zap,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
@@ -30,7 +29,8 @@ export function SessionPluginItem({
   const { t, i18n } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
-  const runtimeKey = plugin.id;
+  const primaryRuntime = plugin.runtimes[0];
+  const runtimeKey = primaryRuntime?.id ?? plugin.id;
   const [boundSlot, handleSlotChange, overrideError] =
     useRuntimeModelSlotOverride({
       runtimeKey,
@@ -81,26 +81,13 @@ export function SessionPluginItem({
     resolveI18n(plugin.description, i18n.language) || undefined;
   const isLocked = plugin.locked === true;
   const toggleDisabled = executing === true || isLocked;
-  const allTools = [
-    ...(plugin.tools?.builtin ?? []),
-    ...(plugin.tools?.local ?? []),
-  ];
-  const configFields = Object.entries(plugin.config ?? {});
-  const triggerEntry = TRIGGER_TYPE_I18N[plugin.trigger?.type ?? "auto"];
+  const allTools = plugin.tools.map((tool) => tool.id);
+  const triggerEntry =
+    TRIGGER_TYPE_I18N[primaryRuntime?.trigger.type ?? "auto"];
   const triggerLabel = triggerEntry
     ? t(triggerEntry.key, triggerEntry.fallback)
-    : (plugin.trigger?.type ?? "auto");
-  const featureRuntimes =
-    plugin.runtimes && plugin.runtimes.length > 0
-      ? plugin.runtimes
-      : [
-          {
-            runtimeType: plugin.runtimeType,
-            trigger: plugin.trigger,
-            outputKind: plugin.outputKind,
-            capabilities: plugin.capabilities,
-          },
-        ];
+    : (primaryRuntime?.trigger.type ?? "auto");
+  const featureRuntimes = plugin.runtimes;
 
   return (
     <div className="border border-border rounded-(--radius-card) overflow-hidden">
@@ -117,12 +104,12 @@ export function SessionPluginItem({
           <span className="text-xs font-medium truncate flex-1 min-w-0">
             {displayName}
           </span>
-          {stageLabel(plugin.stage, t) && (
+          {stageLabel(primaryRuntime?.stage, t) && (
             <Badge
               variant="secondary"
               className="ui-chip text-xs px-1.5 py-0 h-4 shrink-0"
             >
-              {stageLabel(plugin.stage, t)}
+              {stageLabel(primaryRuntime?.stage, t)}
             </Badge>
           )}
           <RuntimeCollectionFeatureBadges
@@ -137,7 +124,7 @@ export function SessionPluginItem({
             </span>
           )}
         </button>
-        {plugin.runtimeType !== "function" &&
+        {primaryRuntime?.runtimeType !== "function" &&
           (resolvedSlots && resolvedSlots.length > 0 ? (
             <select
               value={boundSlot}
@@ -152,8 +139,8 @@ export function SessionPluginItem({
               className="ui-input-shell min-w-0 shrink mr-2 max-w-35 text-xs bg-background border border-border px-1 py-0.5 disabled:opacity-50"
             >
               <option value="">
-                {plugin.model
-                  ? t("plugin.autoWithModel", { model: plugin.model })
+                {primaryRuntime?.model
+                  ? t("plugin.autoWithModel", { model: primaryRuntime.model })
                   : t("plugin.autoSlot")}
               </option>
               {resolvedSlots.map((slot) => (
@@ -186,9 +173,9 @@ export function SessionPluginItem({
           <button
             type="button"
             role="switch"
-            aria-checked={plugin.isActive}
+            aria-checked={plugin.active}
             aria-label={
-              plugin.isActive
+              plugin.active
                 ? t("plugin.disable", "Disable plugin")
                 : t("plugin.enable", "Enable plugin")
             }
@@ -197,17 +184,17 @@ export function SessionPluginItem({
               "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent mr-2.5",
               "transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2",
               "focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              plugin.isActive ? "bg-primary" : "bg-input",
+              plugin.active ? "bg-primary" : "bg-input",
               toggleDisabled ? "opacity-50 cursor-not-allowed" : "",
             ].join(" ")}
             onClick={() => {
-              if (!toggleDisabled) onToggle(plugin.id, !plugin.isActive);
+              if (!toggleDisabled) onToggle(plugin.id, !plugin.active);
             }}
           >
             <span
               className={[
                 "pointer-events-none inline-block h-3 w-3 rounded-full bg-background shadow-lg ring-0 transition duration-200 ease-in-out",
-                plugin.isActive ? "translate-x-3" : "translate-x-0",
+                plugin.active ? "translate-x-3" : "translate-x-0",
               ].join(" ")}
             />
           </button>
@@ -230,16 +217,18 @@ export function SessionPluginItem({
           <RuntimeCollectionFeatureBadges runtimes={featureRuntimes} />
 
           <div className="flex flex-wrap gap-1">
-            {plugin.model && (
+            {primaryRuntime?.model && (
               <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
-                model: {plugin.model}
+                model: {primaryRuntime.model}
               </Badge>
             )}
             <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
               trigger: {triggerLabel}
-              {plugin.trigger?.interval ? ` (${plugin.trigger.interval})` : ""}
-              {plugin.trigger?.maxTriggerCount
-                ? ` max:${plugin.trigger.maxTriggerCount}`
+              {primaryRuntime?.trigger.interval
+                ? ` (${primaryRuntime.trigger.interval})`
+                : ""}
+              {primaryRuntime?.trigger.maxTriggerCount
+                ? ` max:${primaryRuntime.trigger.maxTriggerCount}`
                 : ""}
             </Badge>
             {plugin.pluginType && (
@@ -266,40 +255,6 @@ export function SessionPluginItem({
                   </Badge>
                 ))}
               </div>
-            </div>
-          )}
-
-          {configFields.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Zap className="w-3 h-3" />
-                {t("plugin.config", "Config")}
-              </div>
-              {configFields.map(([key, field]) => (
-                <div
-                  key={key}
-                  className="flex items-center justify-between gap-2 text-xs"
-                >
-                  <span className="text-muted-foreground">
-                    {field.label ?? key}
-                    {field.description && (
-                      <span className="ml-1 text-muted-foreground/50">
-                        — {field.description}
-                      </span>
-                    )}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className="text-xs px-1.5 py-0 h-4 font-mono shrink-0"
-                  >
-                    {field.options
-                      ? String(field.default ?? field.options[0])
-                      : field.type === "boolean"
-                        ? String(field.default ?? false)
-                        : String(field.default ?? "—")}
-                  </Badge>
-                </div>
-              ))}
             </div>
           )}
         </div>

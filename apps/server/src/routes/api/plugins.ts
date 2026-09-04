@@ -9,8 +9,11 @@ import { rm, stat } from "node:fs/promises";
 import { Hono } from "hono";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { readRuntimeEnv } from "@covel/shared";
-import { buildPluginContract, summarizePluginManifests } from "./discovery.js";
-import { errorBody } from "../../api-error.js";
+import {
+  buildPluginDetail,
+  buildPluginSummary,
+} from "../../lib/plugin-descriptor.js";
+import { errorBody, okBody } from "../../api-error.js";
 import { makeInstallApiGuard } from "../privileged-auth.js";
 
 type Env = {
@@ -37,39 +40,9 @@ export const pluginRoutes = new Hono<Env>();
 // GET /plugins — List all loaded plugins
 pluginRoutes.get("/", async (c) => {
   const registry = c.get("pluginRegistry");
-  const all = registry.getAll();
-  const plugins = Array.from(all.values()).map((entry) => {
-    const { capabilities, tags, relations, outputKind } =
-      summarizePluginManifests(entry);
-    return {
-      id: entry.id,
-      name: entry.summary.name,
-      ...(entry.summary.displayName
-        ? { displayName: entry.summary.displayName }
-        : {}),
-      description: entry.summary.description,
-      pluginType: entry.summary.pluginType,
-      runtimeCount: entry.summary.runtimeCount,
-      status: entry.status,
-      source: entry.source,
-      capabilities,
-      tags,
-      ...(relations ? { relations } : {}),
-      outputKind,
-    };
+  return c.json({
+    items: [...registry.getAll().values()].map(buildPluginSummary),
   });
-  return c.json({ items: plugins });
-});
-
-// GET /plugins/:id/contract — Manifest-derived plugin contract.
-pluginRoutes.get("/:id/contract", async (c) => {
-  const registry = c.get("pluginRegistry");
-  const id = c.req.param("id");
-  const entry = registry.get(id);
-  if (!entry) {
-    return c.json(errorBody(`Plugin "${id}" not found`), 404);
-  }
-  return c.json(buildPluginContract(entry));
 });
 
 // GET /plugins/:id — Get plugin details
@@ -78,23 +51,12 @@ pluginRoutes.get("/:id", async (c) => {
   const id = c.req.param("id");
   const entry = registry.get(id);
   if (!entry) {
-    return c.json(errorBody(`Plugin "${id}" not found`), 404);
+    return c.json(
+      errorBody(`Plugin "${id}" not found`, { code: "plugin_not_found" }),
+      404,
+    );
   }
-  const { capabilities, tags, relations, outputKind } =
-    summarizePluginManifests(entry);
-  return c.json({
-    id: entry.id,
-    name: entry.summary.name,
-    description: entry.summary.description,
-    pluginType: entry.summary.pluginType,
-    runtimeCount: entry.summary.runtimeCount,
-    status: entry.status,
-    source: entry.source,
-    capabilities,
-    tags,
-    ...(relations ? { relations } : {}),
-    outputKind,
-  });
+  return c.json(buildPluginDetail(entry));
 });
 
 // DELETE /plugins/:id — uninstall a third-party plugin from the user plugins
@@ -129,5 +91,5 @@ pluginRoutes.delete("/:id", makeInstallApiGuard(), async (c) => {
   }
 
   await rm(finalDir, { recursive: true, force: true });
-  return c.json({ ok: true, id, restartRequired: true });
+  return c.json(okBody({ id, restartRequired: true }));
 });

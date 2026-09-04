@@ -470,7 +470,11 @@ describe("traceRoutes", () => {
         plugins: Array<{
           id: string;
           declaredPluginDataNamespaces: string[];
-          tools: { builtin: string[] };
+          tools: Array<{
+            id: string;
+            kind: "builtin" | "local";
+            runtimeId?: string;
+          }>;
         }>;
         pluginData: Array<{
           pluginId: string;
@@ -493,7 +497,18 @@ describe("traceRoutes", () => {
     expect(body.discovery.plugins[0]).toMatchObject({
       id: "image-plugin",
       declaredPluginDataNamespaces: ["images"],
-      tools: { builtin: ["plugin-data-get"] },
+      tools: [
+        {
+          id: "plugin-data-get",
+          kind: "builtin",
+          runtimeId: "image-plugin",
+        },
+        {
+          id: "save-image",
+          kind: "local",
+          runtimeId: "image-plugin",
+        },
+      ],
     });
     expect(body.discovery.pluginData[0]).toMatchObject({
       pluginId: "image-plugin",

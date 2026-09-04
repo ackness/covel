@@ -1,11 +1,16 @@
 /**
  * Shared keyset-cursor query parsing for the paginated read endpoints
  * (`/messages/page`, `/traces/:id/turns/page`). Keeps the `?limit`,
- * `?before_created_at`, `?before_id` contract identical across routes.
+ * opaque `?cursor` contract identical across routes.
  */
 
 import type { Context } from "hono";
-import type { TimeCursor } from "@covel/shared";
+import {
+  decodePageCursor,
+  encodePageCursor,
+  type PageCursor,
+  type TimeCursor,
+} from "@covel/shared";
 
 /** Fallback page size when `?limit` is absent or invalid. */
 export const DEFAULT_PAGE_LIMIT = 80;
@@ -13,31 +18,35 @@ export const DEFAULT_PAGE_LIMIT = 80;
 export const MAX_PAGE_LIMIT = 500;
 
 export interface CursorQuery {
+  readonly ok: true;
   readonly limit: number;
   readonly before?: TimeCursor;
 }
 
+export interface InvalidCursorQuery {
+  readonly ok: false;
+  readonly limit: number;
+}
+
 /**
- * Parse `?limit`, `?before_created_at`, `?before_id` into a bounded page
- * request. `limit` is clamped to `[1, MAX_PAGE_LIMIT]`. A cursor is only
- * returned when BOTH `before_created_at` and `before_id` are present — the
- * tuple is meaningless without its tie-break half.
+ * Parse `?limit` and an opaque `?cursor` into a bounded page request. Invalid
+ * cursor data is reported to the route as a stable client error.
  */
 export function parseCursorQuery(
   c: Context,
   defaultLimit: number = DEFAULT_PAGE_LIMIT,
-): CursorQuery {
+): CursorQuery | InvalidCursorQuery {
   const rawLimit = Number(c.req.query("limit"));
   const limit =
     Number.isFinite(rawLimit) && rawLimit > 0
       ? Math.min(Math.floor(rawLimit), MAX_PAGE_LIMIT)
       : defaultLimit;
 
-  const createdAt = c.req.query("before_created_at");
-  const id = c.req.query("before_id");
-  const before = createdAt && id ? { createdAt, id } : undefined;
+  const encodedCursor = c.req.query("cursor");
+  const before = encodedCursor ? decodePageCursor(encodedCursor) : undefined;
+  if (encodedCursor && !before) return { ok: false, limit };
 
-  return { limit, before };
+  return { ok: true, limit, before: before ?? undefined };
 }
 
 /**
@@ -48,9 +57,9 @@ export function parseCursorQuery(
 export function nextCursorFrom<T extends { createdAt: string; id: string }>(
   items: readonly T[],
   limit: number,
-): TimeCursor | null {
+): PageCursor | null {
   const oldest = items[0];
   return items.length >= limit && oldest
-    ? { createdAt: oldest.createdAt, id: oldest.id }
+    ? encodePageCursor({ createdAt: oldest.createdAt, id: oldest.id })
     : null;
 }

@@ -1,5 +1,5 @@
 import type {
-  PackageSummary,
+  PluginSummary,
   PresetSummary,
   SlotConfigEntry,
 } from "@/services/api.js";
@@ -77,12 +77,12 @@ export function bindSlotToProvider(args: {
 }
 
 export function discoverRuntimeSlotIds(
-  packages: readonly Pick<PackageSummary, "runtimes" | "userSettings">[],
+  packages: readonly Pick<PluginSummary, "runtimes" | "userSettings">[],
 ): string[] {
   const out = new Set<string>();
   for (const pkg of packages) {
     for (const rt of pkg.runtimes ?? []) {
-      if (rt.kind === "function") continue;
+      if (rt.runtimeType === "function") continue;
       const slot = rt.model;
       if (isRuntimeSlotId(slot)) out.add(slot);
     }

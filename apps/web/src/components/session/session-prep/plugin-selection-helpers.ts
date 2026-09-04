@@ -1,33 +1,26 @@
 import type * as api from "@/services/api.js";
-import {
-  defaultSelectedPluginIdsForWorld as computeDefaultSelectedPluginIdsForWorld,
-  readWorldPluginPolicy,
-} from "@/lib/session-plugin-selection.js";
+import { defaultSelectedPluginIds as computeDefaultSelectedPluginIds } from "@/lib/session-plugin-selection.js";
 
 export function isLockedCorePackage(
-  pkg: Pick<api.PackageSummary, "pluginType" | "source">,
+  pkg: Pick<api.PluginSummary, "pluginType" | "source">,
 ): boolean {
-  return (
-    pkg.pluginType === "core-plugin" &&
-    (pkg.source === undefined || pkg.source === "builtin")
-  );
+  return pkg.pluginType === "core-plugin" && pkg.source === "builtin";
 }
 
 export function defaultSelectedPluginIdsForWorld(
-  world: api.WorldRecord,
-  packages: readonly api.PackageSummary[],
+  plan: api.WorldPluginPlan | null,
 ): Set<string> {
-  return computeDefaultSelectedPluginIdsForWorld(
-    world,
-    packages,
-    isLockedCorePackage,
-  );
+  return computeDefaultSelectedPluginIds(plan);
 }
 
-export function requiredPluginIdsForWorld(world: api.WorldRecord): Set<string> {
-  return new Set(readWorldPluginPolicy(world).requiredPlugins);
+export function requiredPluginIdsForWorld(
+  plan: api.WorldPluginPlan | null,
+): Set<string> {
+  return new Set(plan?.policy.requiredPluginIds ?? []);
 }
 
-export function excludedPluginIdsForWorld(world: api.WorldRecord): Set<string> {
-  return new Set(readWorldPluginPolicy(world).excludedPlugins);
+export function excludedPluginIdsForWorld(
+  plan: api.WorldPluginPlan | null,
+): Set<string> {
+  return new Set(plan?.policy.excludedPluginIds ?? []);
 }

@@ -130,6 +130,7 @@ function submitForm(
 ) {
   return request.post(`/api/sessions/${sessionId}/plugin-rpc`, {
     data: {
+      kind: "action",
       pluginId: "framework",
       action: "submit-form",
       payload: { turnId: "turn-1", submissions },
@@ -157,8 +158,12 @@ test.describe("Interaction submit-form (API-level, deterministic)", () => {
         values: { selectedId: "a" },
       },
     ]);
-    expect(res.ok()).toBeTruthy();
-    const body = (await res.json()) as {
+    const responseBody = await res.text();
+    expect(
+      res.ok(),
+      `submit form failed: ${res.status()} ${responseBody}`,
+    ).toBeTruthy();
+    const body = JSON.parse(responseBody) as {
       result: { results: Array<{ filledNarrative: string }> };
     };
     expect(body.result.results[0]!.filledNarrative).toBe("[玩家选择] Attack");
@@ -226,6 +231,7 @@ test.describe("Interaction submit-form (API-level, deterministic)", () => {
     const session = await createSession(request, "zh-CN");
     const res = await request.post(`/api/sessions/${session.id}/plugin-rpc`, {
       data: {
+        kind: "action",
         pluginId: "framework",
         action: "submit-form",
         payload: { submissions: [] },

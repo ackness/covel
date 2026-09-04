@@ -15,7 +15,6 @@ import {
 } from "@covel/ai-provider";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
-import { buildPackagesResponse } from "./misc-api/plugin-catalog.js";
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
 import { bearerToken } from "./misc-api/shared.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
@@ -81,11 +80,6 @@ export function createMiscApiRoutes(
       };
     });
     return c.json({ items: presets });
-  });
-
-  // GET /api/packages — project declared plugin packages from the registry
-  app.get("/api/packages", (c) => {
-    return c.json(buildPackagesResponse(registry));
   });
 
   // GET /api/plugin-flows — framework-orchestrated flow data for pre-game preview

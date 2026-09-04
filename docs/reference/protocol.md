@@ -211,7 +211,7 @@ Provider 图片输入矩阵：
 | 事件类型         | 方向 | 描述                                                                                                                          | 负载                                                        |
 | ---------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `turn.suspended` | S→C  | runtime 创建 suspension artifact；`finalizeExecution` 将记录与同一 execution 的写入提交成功后才发出。回滚不保留记录也不发事件 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
-| `turn.resumed`   | S→C  | `POST /api/sessions/:id/resume` 成功重新启动 runtime 后由 resume 路由发出                                                     | `{ sessionId, turnId, suspensionId }`                       |
+| `turn.resumed`   | S→C  | suspension 资源的 `resume` 动作成功后由路由发出                                                                               | `{ sessionId, turnId, suspensionId }`                       |
 
 ### Snapshot / Fork 事件
 
@@ -224,11 +224,11 @@ Provider 图片输入矩阵：
 
 发射点对照：
 
-| 触发路径                          | 事件序列                                                | 来源                                                          |
-| --------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------- |
-| `executeTurn` 自动捕获            | `state.snapshot.created` (kind=auto)                    | `packages/runtime/src/turn-executor/turn-result-finalizer.ts` |
-| `POST /api/sessions/:id/snapshot` | `state.snapshot.created` (kind=manual)                  | `apps/server/src/routes/api/snapshots.ts`                     |
-| `POST /api/sessions/:id/fork`     | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts`                     |
+| 触发路径                           | 事件序列                                                | 来源                                                          |
+| ---------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------- |
+| `executeTurn` 自动捕获             | `state.snapshot.created` (kind=auto)                    | `packages/runtime/src/turn-executor/turn-result-finalizer.ts` |
+| `POST /api/sessions/:id/snapshots` | `state.snapshot.created` (kind=manual)                  | `apps/server/src/routes/api/snapshots.ts`                     |
+| `POST /api/sessions/:id/fork`      | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts`                     |
 
 > 内置 Web 当前不提供 snapshot / fork 操作界面。外部客户端可从 `session` topic 消费上述事件。
 
@@ -319,11 +319,11 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ### 会话管理
 
-| 命令              | 方法   | 端点                         | 响应                    |
-| ----------------- | ------ | ---------------------------- | ----------------------- |
-| `session.create`  | POST   | `/api/sessions`              | JSON: `SessionRecord`   |
-| `session.restore` | GET    | `/api/sessions/:id/snapshot` | JSON: `SessionSnapshot` |
-| `session.delete`  | DELETE | `/api/sessions/:id`          | JSON: `{ deleted }`     |
+| 命令              | 方法   | 端点                     | 响应                    |
+| ----------------- | ------ | ------------------------ | ----------------------- |
+| `session.create`  | POST   | `/api/sessions`          | JSON: `SessionRecord`   |
+| `session.restore` | GET    | `/api/sessions/:id/view` | JSON: `SessionSnapshot` |
+| `session.delete`  | DELETE | `/api/sessions/:id`      | JSON: `{ deleted }`     |
 
 ### 回合执行（SSE 流式响应）
 
@@ -357,10 +357,10 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ### 插件管理
 
-| 命令             | 方法 | 端点                                | 响应                     |
-| ---------------- | ---- | ----------------------------------- | ------------------------ |
-| `plugin.enable`  | POST | `/api/sessions/:id/plugins/enable`  | JSON: `{ ok, active[] }` |
-| `plugin.disable` | POST | `/api/sessions/:id/plugins/disable` | JSON: `{ ok, active[] }` |
+| 命令             | 方法   | 端点                                  | 响应                              |
+| ---------------- | ------ | ------------------------------------- | --------------------------------- |
+| `plugin.enable`  | PUT    | `/api/sessions/:id/plugins/:pluginId` | JSON: `{ ok, activePluginIds[] }` |
+| `plugin.disable` | DELETE | `/api/sessions/:id/plugins/:pluginId` | JSON: `{ ok, activePluginIds[] }` |
 
 ### 插件 RPC
 
@@ -453,22 +453,22 @@ community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 
 
 只读数据获取，标准 REST GET 响应：
 
-| 查询     | 端点                                              | 响应                                                              |
-| -------- | ------------------------------------------------- | ----------------------------------------------------------------- |
-| 会话列表 | `GET /api/sessions?worldId=`                      | `{ items: SessionRecord[] }`                                      |
-| 会话详情 | `GET /api/sessions/:id`                           | `SessionRecord`                                                   |
-| 会话快照 | `GET /api/sessions/:id/snapshot`                  | `SessionSnapshot`（messages/steps 为最近窗口 + `messagesCursor`） |
-| 消息列表 | `GET /api/sessions/:id/messages`                  | `FlatMessage[]`（全量）                                           |
-| 消息分页 | `GET /api/sessions/:id/messages/page`             | `CursorPage<FlatMessage>`（游标）                                 |
-| 角色列表 | `GET /api/sessions/:id/characters`                | `{ items: CharacterRecord[] }`                                    |
-| 插件列表 | `GET /api/sessions/:id/plugins`                   | `{ active[], available[] }`                                       |
-| 状态查询 | `GET /api/sessions/:id/state`                     | `{ tables }`                                                      |
-| 状态补丁 | `GET /api/sessions/:id/state-patches`             | `Patch[]`                                                         |
-| 插件数据 | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }`                                                     |
-| 世界列表 | `GET /api/worlds`                                 | `{ items: WorldRecord[] }`                                        |
-| 执行追踪 | `GET /api/traces/:sessionId`                      | `{ events[] }`（全量）                                            |
-| 追踪分页 | `GET /api/traces/:sessionId/turns/page`           | `{ turns[], nextCursor }`（游标）                                 |
-| 服务健康 | `GET /api/health`                                 | `{ status, version, bootId, timestamp, storage, vector }`         |
+| 查询     | 端点                                              | 响应                                                                     |
+| -------- | ------------------------------------------------- | ------------------------------------------------------------------------ |
+| 会话列表 | `GET /api/sessions?worldId=`                      | `{ items: SessionRecord[] }`                                             |
+| 会话详情 | `GET /api/sessions/:id`                           | `SessionRecord`                                                          |
+| 会话视图 | `GET /api/sessions/:id/view`                      | `SessionSnapshot`（messages/steps 为最近窗口 + 不透明 `messagesCursor`） |
+| 消息列表 | `GET /api/sessions/:id/messages`                  | `FlatMessage[]`（全量）                                                  |
+| 消息分页 | `GET /api/sessions/:id/messages/page`             | `CursorPage<FlatMessage>`（游标）                                        |
+| 角色列表 | `GET /api/sessions/:id/characters`                | `{ items: CharacterRecord[] }`                                           |
+| 插件列表 | `GET /api/sessions/:id/plugins`                   | `{ active[], available[] }`                                              |
+| 状态查询 | `GET /api/sessions/:id/state`                     | `{ tables }`                                                             |
+| 状态补丁 | `GET /api/sessions/:id/state-patches`             | `Patch[]`                                                                |
+| 插件数据 | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }`                                                            |
+| 世界列表 | `GET /api/worlds`                                 | `{ items: WorldRecord[] }`                                               |
+| 执行追踪 | `GET /api/traces/:sessionId`                      | `{ events[] }`（全量）                                                   |
+| 追踪分页 | `GET /api/traces/:sessionId/turns/page`           | `{ turns[], nextCursor }`（游标）                                        |
+| 服务健康 | `GET /api/health`                                 | `{ status, version, bootId, timestamp, storage, vector }`                |
 
 ## 四、SSE 信封格式
 

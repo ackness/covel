@@ -458,7 +458,7 @@ interface UIRenderPart {
 
 ### suspend
 
-声明在 `packages/tools/src/builtin/suspend.ts`。Agent runtime 调用 `suspend({ reason, resumeSchema })` 时，工具直接返回一个 sentinel 对象 `{ _covelSuspend: true, reason, resumeSchema }`。turn-executor 在每次 tool 执行后通过 `isSuspendSentinel()` 检测：识别到 sentinel 后会序列化当前 pendingContinuation（含 execution identity、已缓冲 proposal/event 和完整 provider transcript）写入 `suspensions` 表，并发出 `turn.suspended` 事件，整个 tool loop 立即停止。同一 assistant 消息含多个 tool call 时，suspend call 保留可替换的 tool result placeholder，其后未执行 call 写入 cancellation result，因此 resume 后 transcript 仍符合 provider 的 tool-call 成对要求。后续可通过 `POST /api/sessions/:id/resume` 提交匹配 `resumeSchema` 的数据重新启动该 runtime（详见 `docs/reference/api.md`）。
+声明在 `packages/tools/src/builtin/suspend.ts`。Agent runtime 调用 `suspend({ reason, resumeSchema })` 时，工具直接返回一个 sentinel 对象 `{ _covelSuspend: true, reason, resumeSchema }`。turn-executor 在每次 tool 执行后通过 `isSuspendSentinel()` 检测：识别到 sentinel 后会序列化当前 pendingContinuation（含 execution identity、已缓冲 proposal/event 和完整 provider transcript）写入 `suspensions` 表，并发出 `turn.suspended` 事件，整个 tool loop 立即停止。同一 assistant 消息含多个 tool call 时，suspend call 保留可替换的 tool result placeholder，其后未执行 call 写入 cancellation result，因此 resume 后 transcript 仍符合 provider 的 tool-call 成对要求。后续可通过 `POST /api/sessions/:id/suspensions/:suspensionId/resume` 提交匹配 `resumeSchema` 的数据重新启动该 runtime（详见 `docs/reference/api.md`）。
 
 | 参数         | 类型   | 必需 | 描述                                                                                                                                             |
 | ------------ | ------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ |

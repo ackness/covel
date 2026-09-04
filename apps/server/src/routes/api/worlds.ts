@@ -16,10 +16,12 @@ import { Hono } from "hono";
 import { type WorldEnv } from "./worlds/shared.js";
 import { worldDataSyncRoutes } from "./worlds/data-sync.js";
 import { worldDimensionRoutes } from "./worlds/dimensions.js";
+import { worldPluginPlanRoutes } from "./worlds/plugin-plan.js";
 import { worldCrudRoutes } from "./worlds/crud.js";
 
 export const worldRoutes = new Hono<WorldEnv>();
 
 worldRoutes.route("/", worldDataSyncRoutes);
 worldRoutes.route("/", worldDimensionRoutes);
+worldRoutes.route("/", worldPluginPlanRoutes);
 worldRoutes.route("/", worldCrudRoutes);

@@ -95,8 +95,8 @@ function createSubscriptionEventHandler(
               if (options.sessionIdRef.current !== currentSid) return;
               options.dispatch({
                 type: "LOAD_SESSION_PLUGINS",
-                plugins: res.available,
-                commands: res.commands,
+                plugins: [...res.items],
+                commands: [...res.commands],
               });
             })
             .catch(ignoreError("reload session plugins on plugin toggle"));
@@ -192,14 +192,16 @@ export async function rehydrateSessionSideState(
       if (!isCurrent()) return;
       dispatch({
         type: "LOAD_SESSION_PLUGINS",
-        plugins: res.available,
-        commands: res.commands,
+        plugins: [...res.items],
+        commands: [...res.commands],
       });
       const rowsByPlugin = await Promise.all(
-        res.active.map(async (pluginId) => ({
-          pluginId,
-          rows: await api.listPluginData(sessionId, pluginId),
-        })),
+        res.items
+          .filter((plugin) => plugin.active)
+          .map(async ({ id: pluginId }) => ({
+            pluginId,
+            rows: await api.listPluginData(sessionId, pluginId),
+          })),
       );
       if (!isCurrent()) return;
 

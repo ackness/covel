@@ -16,9 +16,9 @@ import { PluginListPanel } from "./plugin-list-panel.js";
 import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
 import type {
   SessionRecord,
-  PackageSummary,
+  PluginSummary,
   PluginLoadError,
-  SessionPluginInfo,
+  SessionPlugin,
 } from "@/services/api.js";
 import {
   formatSessionDate,
@@ -31,9 +31,9 @@ export interface LeftPanelProps {
   isLeftCollapsed: boolean;
   showSessionList: boolean;
   otherSessions: SessionRecord[];
-  enabledPackages: PackageSummary[];
+  enabledPackages: PluginSummary[];
   pluginLoadErrors: PluginLoadError[];
-  sessionPlugins: SessionPluginInfo[];
+  sessionPlugins: SessionPlugin[];
   executing: boolean;
   resolvedSlots: ResolvedSlot[];
   onToggleLeftPanel: () => void;

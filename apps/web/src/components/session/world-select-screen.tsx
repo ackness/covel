@@ -16,7 +16,7 @@ import { WorldEditor } from "@/components/world/world-editor.js";
 import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
 import { WorldListView } from "@/components/world/world-list-view.js";
 import * as api from "@/services/api.js";
-import type { WorldRecord, PackageSummary } from "@/services/api.js";
+import type { PluginSummary, WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 import {
@@ -31,7 +31,7 @@ type ViewMode = "list" | "detail" | "edit";
 
 interface WorldSelectScreenProps {
   worlds: WorldRecord[];
-  packages: PackageSummary[];
+  packages: PluginSummary[];
   resolvedSlots: ResolvedSlot[];
   settingsOpen: boolean;
   onSettingsOpenChange: (v: boolean) => void;
@@ -85,7 +85,7 @@ export function WorldSelectScreen({
 }: WorldSelectScreenProps) {
   const { t, i18n: translation } = useTranslation();
   const primarySlotLabel = formatSlotLabel(resolvedSlots[0]);
-  const enabledPluginCount = packages.filter((p) => p.enabled).length;
+  const enabledPluginCount = packages.length;
   const prioritizedWorlds = useMemo(
     () =>
       prioritizeWorldsByLocale(

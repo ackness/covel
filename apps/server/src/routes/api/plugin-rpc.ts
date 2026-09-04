@@ -81,7 +81,7 @@ import {
 } from "./session/commands.js";
 import { runTracedCommand } from "./plugin-rpc/command-trace.js";
 import { buildManualTurnExecutorDeps } from "./turn-execution-deps.js";
-import { errorBody } from "../../api-error.js";
+import { errorBody, readJsonBody } from "../../api-error.js";
 
 export const pluginRpcRoutes = new Hono();
 
@@ -130,15 +130,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     );
   }
 
-  let rawBody: unknown;
-  try {
-    rawBody = await c.req.json();
-  } catch {
-    return c.json(
-      errorBody("invalid JSON body", { code: "invalid_json_body" }),
-      400,
-    );
-  }
+  const parsedJson = await readJsonBody(c);
+  if (parsedJson instanceof Response) return parsedJson;
+  const rawBody = parsedJson.body;
 
   const bodyResult = validatePluginRpcBody(rawBody);
   if (!bodyResult.ok) {

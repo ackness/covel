@@ -6,8 +6,29 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { PluginSummary } from "@covel/shared";
 import i18n from "@/i18n";
 import { ExecutionTimeline } from "../execution-timeline.js";
+
+function plugin(
+  id: string,
+  displayName: PluginSummary["displayName"],
+): PluginSummary {
+  return {
+    id,
+    displayName,
+    description: "",
+    pluginType: "plugin",
+    source: "builtin",
+    status: "registered",
+    runtimeCount: 0,
+    capabilities: [],
+    tags: [],
+    runtimes: [],
+    tools: [],
+    userSettings: [],
+  };
+}
 
 describe("ExecutionTimeline plugin names", () => {
   beforeEach(async () => {
@@ -35,16 +56,8 @@ describe("ExecutionTimeline plugin names", () => {
           },
         ]}
         packages={[
-          {
-            name: "dice-check",
-            displayName: { zh: "骰子判定", en: "Dice Check" },
-            enabled: true,
-          },
-          {
-            name: "npc-graph",
-            displayName: { zh: "关系图谱", en: "Relationship Graph" },
-            enabled: true,
-          },
+          plugin("dice-check", { zh: "骰子判定", en: "Dice Check" }),
+          plugin("npc-graph", { zh: "关系图谱", en: "Relationship Graph" }),
         ]}
       />,
     );
@@ -68,14 +81,10 @@ describe("ExecutionTimeline plugin names", () => {
           },
         ]}
         packages={[
-          {
-            name: "world-ir",
-            displayName: {
-              zh: "世界事实提取",
-              en: "World Fact Extraction",
-            },
-            enabled: true,
-          },
+          plugin("world-ir", {
+            zh: "世界事实提取",
+            en: "World Fact Extraction",
+          }),
         ]}
       />,
     );
@@ -123,13 +132,7 @@ describe("ExecutionTimeline plugin names", () => {
             turnId: "turn-1",
           },
         ]}
-        packages={[
-          {
-            name: "mimo-tts",
-            displayName: { zh: "语音", en: "Voice" },
-            enabled: true,
-          },
-        ]}
+        packages={[plugin("mimo-tts", { zh: "语音", en: "Voice" })]}
       />,
     );
 

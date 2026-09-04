@@ -3,28 +3,28 @@ import { useTranslation } from "react-i18next";
 import {
   applyPluginPackSelection,
   collectPluginTags,
+  defaultSelectedPluginIds,
   filterPluginPackages,
   groupPluginPackages,
-  pluginPacksForWorld,
-  selectedPackForWorld,
 } from "@/lib/session-plugin-selection.js";
 import {
-  defaultSelectedPluginIdsForWorld,
   excludedPluginIdsForWorld,
   isLockedCorePackage,
   requiredPluginIdsForWorld,
 } from "./plugin-selection-helpers.js";
-import type * as api from "@/services/api.js";
+import * as api from "@/services/api.js";
 
 export interface UsePluginSelectionResult {
   corePluginIds: ReadonlySet<string>;
   lockedPluginIds: ReadonlySet<string>;
   selectedPlugins: ReadonlySet<string>;
-  selectedPackages: api.PackageSummary[];
+  selectedPackages: api.PluginSummary[];
   selectedPluginIds: string[];
   selectedPluginIdSet: ReadonlySet<string>;
-  pluginPacks: ReturnType<typeof pluginPacksForWorld>;
-  activePluginPack: ReturnType<typeof pluginPacksForWorld>[number] | null;
+  pluginPlan: api.WorldPluginPlan | null;
+  pluginPlanLoading: boolean;
+  pluginPacks: readonly import("@covel/shared").PluginPack[];
+  activePluginPack: import("@covel/shared").PluginPack | null;
   pluginSearch: string;
   activePluginTags: ReadonlySet<string>;
   availablePluginTags: string[];
@@ -36,41 +36,58 @@ export interface UsePluginSelectionResult {
 }
 
 export function usePluginSelection(
-  world: api.WorldRecord,
-  packages: api.PackageSummary[],
+  worldId: string,
+  packages: api.PluginSummary[],
 ): UsePluginSelectionResult {
   const { t } = useTranslation();
+  const [pluginPlan, setPluginPlan] = useState<api.WorldPluginPlan | null>(
+    null,
+  );
+  const [pluginPlanLoading, setPluginPlanLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPluginPlanLoading(true);
+    api
+      .getWorldPluginPlan(worldId)
+      .then((plan) => {
+        if (!cancelled) setPluginPlan(plan);
+      })
+      .catch(() => {
+        if (!cancelled) setPluginPlan(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPluginPlanLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [worldId]);
 
   const corePluginIds = useMemo(
-    () => new Set(packages.filter(isLockedCorePackage).map((pkg) => pkg.name)),
+    () => new Set(packages.filter(isLockedCorePackage).map((pkg) => pkg.id)),
     [packages],
   );
   const worldRequiredPluginIds = useMemo(
-    () => requiredPluginIdsForWorld(world),
-    [world],
+    () => requiredPluginIdsForWorld(pluginPlan),
+    [pluginPlan],
   );
   const worldExcludedPluginIds = useMemo(
-    () => excludedPluginIdsForWorld(world),
-    [world],
+    () => excludedPluginIdsForWorld(pluginPlan),
+    [pluginPlan],
   );
   const lockedPluginIds = useMemo(
-    () =>
-      new Set([
-        ...[...corePluginIds].filter(
-          (pluginId) => !worldExcludedPluginIds.has(pluginId),
-        ),
-        ...worldRequiredPluginIds,
-      ]),
-    [corePluginIds, worldRequiredPluginIds, worldExcludedPluginIds],
+    () => new Set([...corePluginIds, ...worldRequiredPluginIds]),
+    [corePluginIds, worldRequiredPluginIds],
   );
 
-  const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(() =>
-    defaultSelectedPluginIdsForWorld(world, packages),
+  const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(
+    () => new Set(corePluginIds),
   );
   const selectedPackages = useMemo(
     () =>
       packages.filter(
-        (pkg) => selectedPlugins.has(pkg.name) || lockedPluginIds.has(pkg.name),
+        (pkg) => selectedPlugins.has(pkg.id) || lockedPluginIds.has(pkg.id),
       ),
     [packages, selectedPlugins, lockedPluginIds],
   );
@@ -82,10 +99,9 @@ export function usePluginSelection(
     () => new Set(selectedPluginIds),
     [selectedPluginIds],
   );
-  const pluginPacks = useMemo(() => pluginPacksForWorld(world), [world]);
-  const worldDefaultPack = useMemo(() => selectedPackForWorld(world), [world]);
+  const pluginPacks = pluginPlan?.packs ?? [];
   const [activePluginPackId, setActivePluginPackId] = useState<string | null>(
-    () => worldDefaultPack?.id ?? null,
+    null,
   );
   const activePluginPack = useMemo(
     () => pluginPacks.find((pack) => pack.id === activePluginPackId) ?? null,
@@ -95,6 +111,12 @@ export function usePluginSelection(
   const [activePluginTags, setActivePluginTags] = useState<Set<string>>(
     () => new Set(),
   );
+
+  useEffect(() => {
+    if (!pluginPlan) return;
+    setSelectedPlugins(defaultSelectedPluginIds(pluginPlan));
+    setActivePluginPackId(pluginPlan.selectedPackId ?? null);
+  }, [pluginPlan]);
   const availablePluginTags = useMemo(
     () => collectPluginTags(packages),
     [packages],
@@ -171,6 +193,8 @@ export function usePluginSelection(
     selectedPackages,
     selectedPluginIds,
     selectedPluginIdSet,
+    pluginPlan,
+    pluginPlanLoading,
     pluginPacks,
     activePluginPack,
     pluginSearch,

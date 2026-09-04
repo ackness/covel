@@ -1,5 +1,5 @@
 import i18n from "@/i18n/index.js";
-import type { SessionPluginInfo } from "@/services/api.js";
+import type { SessionPlugin } from "@/services/api.js";
 import { resolveMediaSrc } from "@/lib/media-resolve.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { compactJobId } from "@/lib/job-ui.js";
@@ -14,7 +14,7 @@ import type { ImagePromptPayload } from "./image-records.js";
 // as the `image-prompt` discovery used in chat-messages.tsx. Both tags live in
 // FrameworkRuntimeCapability so a typo is a compile error, not a silent miss.
 export function findImageGeneratorRuntimeId(
-  plugin: SessionPluginInfo | undefined,
+  plugin: SessionPlugin | undefined,
 ): string | null {
   if (!plugin) return null;
   const rt = plugin.runtimes?.find((r) =>

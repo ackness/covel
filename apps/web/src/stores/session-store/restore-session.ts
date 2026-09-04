@@ -217,8 +217,8 @@ function refreshSessionSideData(
       if (sessionIdRef.current === targetSessionId) {
         dispatch({
           type: "LOAD_SESSION_PLUGINS",
-          plugins: res.available,
-          commands: res.commands,
+          plugins: [...res.items],
+          commands: [...res.commands],
         });
       }
     })

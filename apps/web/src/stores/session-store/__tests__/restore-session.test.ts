@@ -75,7 +75,7 @@ function makeWorkspace(ds: DataService): SessionWorkspace {
 beforeEach(() => {
   vi.clearAllMocks();
   api.getSessionSnapshot.mockResolvedValue(emptySnapshot());
-  api.listSessionPlugins.mockResolvedValue({ active: [], available: [] });
+  api.listSessionPlugins.mockResolvedValue({ items: [], commands: [] });
   api.listSuspensions.mockResolvedValue([]);
 });
 
@@ -92,7 +92,7 @@ describe("restoreSessionState workspace ordering", () => {
     });
     api.listSessionPlugins.mockImplementation(async () => {
       order.push("plugins");
-      return { active: [], available: [] };
+      return { items: [], commands: [] };
     });
     api.listSuspensions.mockImplementation(async () => {
       order.push("suspensions");

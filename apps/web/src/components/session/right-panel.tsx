@@ -126,7 +126,7 @@ export function RightPanel({
   const activePluginKey = useMemo(
     () =>
       sessionState.sessionPlugins
-        .filter((plugin) => plugin.isActive)
+        .filter((plugin) => plugin.active)
         .map((plugin) => plugin.id)
         .sort()
         .join("\u001f"),

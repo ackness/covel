@@ -47,14 +47,6 @@ export {
 // discovery resolves to them today; a third-party equivalent that declares the
 // same capability transparently replaces them without touching this code.
 
-export const STAGE_CAPABILITIES = {
-  scene: "scene-stage",
-  cast: "scene-cast",
-  prompts: "scene-prompts",
-  presence: "character-presence",
-  direction: "stage-direction",
-} as const;
-
 /** Stable key for the story currently presented on stage. A turn id survives
  * the streaming-placeholder to durable-message swap; the message id covers
  * restored legacy rows without a turn id. */
@@ -75,7 +67,7 @@ export function initialStageReadStoryKey(
 
 interface CapabilityCarrier {
   readonly id: string;
-  readonly isActive?: boolean;
+  readonly active?: boolean;
   readonly capabilities?: readonly string[];
 }
 
@@ -96,7 +88,7 @@ export function pluginIdForCapability(
 ): string | undefined {
   let best: string | undefined;
   for (const p of plugins) {
-    if (!p.isActive || !p.capabilities?.includes(capability)) continue;
+    if (!p.active || !p.capabilities?.includes(capability)) continue;
     if (best === undefined || p.id < best) best = p.id;
   }
   return best;

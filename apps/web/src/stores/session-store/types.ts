@@ -1,7 +1,7 @@
 import type {
   AssetGenerateView,
+  PageCursor,
   SnapshotCharacter,
-  TimeCursor,
 } from "@covel/shared";
 import type * as api from "@/services/api";
 
@@ -109,7 +109,7 @@ export interface AssetProgressEvent {
 export interface SessionState {
   // Boot data
   presets: api.PresetSummary[];
-  packages: api.PackageSummary[];
+  packages: api.PluginSummary[];
   /** Plugins that failed to load (manifest or dependency errors). */
   pluginLoadErrors: api.PluginLoadError[];
   worlds: api.WorldRecord[];
@@ -119,7 +119,7 @@ export interface SessionState {
   bootError: string | null;
 
   /** Session-scoped plugin list (active + available). Loaded after session is set. */
-  sessionPlugins: api.SessionPluginInfo[];
+  sessionPlugins: api.SessionPlugin[];
   /** Framework + active-plugin slash command directory from the same snapshot. */
   sessionCommands: import("@covel/shared").SessionSlashCommand[];
 
@@ -135,7 +135,7 @@ export interface SessionState {
    * oldest loaded message. `null` ⇒ the window already reaches the start of the
    * chat (nothing older to load) — the scroll-up loader stops.
    */
-  olderMessagesCursor: TimeCursor | null;
+  olderMessagesCursor: PageCursor | null;
 
   /** All sessions for the current world (for switching). */
   worldSessions: api.SessionRecord[];
@@ -213,7 +213,7 @@ export type SessionAction =
   | {
       type: "BOOT_SUCCESS";
       presets: api.PresetSummary[];
-      packages: api.PackageSummary[];
+      packages: api.PluginSummary[];
       pluginLoadErrors: api.PluginLoadError[];
       worlds: api.WorldRecord[];
       llmConfig: api.LlmConfigResponse | null;
@@ -260,9 +260,9 @@ export type SessionAction =
       // 并把 olderMessagesCursor 更新为返回的 nextCursor。区别于 LOAD_MESSAGES（整体覆盖）。
       type: "PREPEND_MESSAGES";
       messages: StreamMessage[];
-      cursor: TimeCursor | null;
+      cursor: PageCursor | null;
     }
-  | { type: "SET_OLDER_MESSAGES_CURSOR"; cursor: TimeCursor | null }
+  | { type: "SET_OLDER_MESSAGES_CURSOR"; cursor: PageCursor | null }
   | {
       type: "LOAD_STATE_PATCHES";
       patches: Array<{
@@ -288,10 +288,10 @@ export type SessionAction =
   | { type: "REMOVE_SESSION"; sessionId: string }
   | {
       type: "LOAD_SESSION_PLUGINS";
-      plugins: api.SessionPluginInfo[];
+      plugins: api.SessionPlugin[];
       commands?: import("@covel/shared").SessionSlashCommand[];
     }
-  | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; isActive: boolean }
+  | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; active: boolean }
   | { type: "BACKFILL_TURN_ID"; turnId: string }
   | {
       type: "PLUGIN_DATA_CHANGED";

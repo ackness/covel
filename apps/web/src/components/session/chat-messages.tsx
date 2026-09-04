@@ -23,9 +23,9 @@ import { isPreGameSession } from "@/stores/session-store/selectors.js";
 import type { PluginRpcConfirmRequest } from "./plugin-rpc-ui.js";
 import type {
   WorldRecord,
-  PackageSummary,
+  PluginSummary,
   SessionRecord,
-  SessionPluginInfo,
+  SessionPlugin,
 } from "@/services/api.js";
 
 // ── Types ────────────────────────────────────────────────────────
@@ -37,8 +37,8 @@ export interface ChatMessagesProps {
   executing: boolean;
   session: SessionRecord;
   world: WorldRecord | null;
-  packages: PackageSummary[];
-  sessionPlugins: SessionPluginInfo[];
+  packages: PluginSummary[];
+  sessionPlugins: SessionPlugin[];
   submittedBlockIds: ReadonlySet<string>;
   /** Form values keyed by submitted block id — used to repopulate disabled forms. */
   submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;

@@ -5,10 +5,8 @@ import {
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
-import {
-  buildFrameworkCapabilities,
-  buildPluginContract,
-} from "../../src/routes/api/discovery.js";
+import { buildFrameworkCapabilities } from "../../src/routes/api/discovery.js";
+import { buildPluginDetail } from "../../src/lib/plugin-descriptor.js";
 import { buildAvailablePluginList } from "../../src/routes/api/session/plugins.js";
 
 function makeEntry(manifests: readonly RuntimeManifest[]): PluginRegistryEntry {
@@ -61,7 +59,7 @@ describe("runtime turnCompletion discovery", () => {
   };
 
   it("returns an explicit effective policy from the plugin contract", () => {
-    const contract = buildPluginContract(makeEntry([awaited, detached]));
+    const contract = buildPluginDetail(makeEntry([awaited, detached]));
 
     expect(contract.runtimes.map((runtime) => runtime.turnCompletion)).toEqual([
       { mode: "await" },
@@ -76,9 +74,9 @@ describe("runtime turnCompletion discovery", () => {
   });
 
   it("exposes explicit execution modes for manual and event background work", () => {
-    const contract = buildPluginContract(makeEntry([awaited, detached]));
+    const contract = buildPluginDetail(makeEntry([awaited, detached]));
     expect(contract.runtimes.map((runtime) => runtime.execution)).toEqual([
-      undefined,
+      "sync",
       "background",
     ]);
 

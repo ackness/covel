@@ -96,7 +96,7 @@ export function buildPluginFlowResponse(registry: PluginRegistry) {
     const manifests = pluginManifestRecords(entry);
 
     // Serve raw I18nText (frontend resolves to the UI locale), matching
-    // /api/packages and the segment labelText — never collapse to one locale
+    // /api/plugins and the segment labelText — never collapse to one locale
     // server-side. Prefer the friendly displayName, fall back to summary name
     // (an I18nText for multi-runtime packages, else the id).
     const pluginName = summary.displayName ?? summary.name ?? entry.id;

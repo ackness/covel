@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { PageCursor } from "@covel/shared";
 import type * as api from "@/services/api.js";
 import * as apiClient from "@/services/api.js";
 import type { EventCategory } from "./-debug-helpers.js";
@@ -24,7 +25,7 @@ export function useDebugPageData(sid: string | undefined) {
   const [turns, setTurns] = useState<api.TurnTrace[]>([]);
   // 游标分页：olderCursor 指向已加载最旧一段的更前一步；null 表示已到 trace
   // 起点或已通过「加载全部」拉全量，此时展示数据即完整（无窗口失真）。
-  const [olderCursor, setOlderCursor] = useState<api.TraceCursor | null>(null);
+  const [olderCursor, setOlderCursor] = useState<PageCursor | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -117,7 +118,7 @@ export function useDebugPageData(sid: string | undefined) {
     setLoadingOlder(true);
     try {
       const data = await apiClient.fetchTraceTurnsPage(selectedSessionId, {
-        before: olderCursor,
+        cursor: olderCursor,
       });
       setTurns((prev) => mergeTurnPages(prev, data.turns));
       setOlderCursor(data.nextCursor);

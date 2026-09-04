@@ -1,187 +1,111 @@
 import { describe, expect, it } from "vitest";
-import type { PackageSummary, WorldRecord } from "@/services/api.js";
+import type { PluginPack, PluginSummary, WorldPluginPlan } from "@covel/shared";
 import {
   applyPluginPackSelection,
   collectPluginTags,
-  defaultSelectedPluginIdsForWorld,
+  defaultSelectedPluginIds,
   filterPluginPackages,
   groupPluginPackages,
-  pluginPacksForWorld,
   recommendationReason,
-  selectedPackForWorld,
 } from "../session-plugin-selection.js";
 
-function world(metadata: WorldRecord["metadata"]): WorldRecord {
+function plugin(
+  id: string,
+  options: Partial<PluginSummary> = {},
+): PluginSummary {
   return {
-    id: "world",
-    name: "World",
-    description: "World",
-    metadata,
-    createdAt: "2026-01-01T00:00:00.000Z",
+    id,
+    displayName: id,
+    description: `${id} plugin`,
+    pluginType: "plugin",
+    source: "builtin",
+    status: "registered",
+    runtimeCount: 0,
+    capabilities: [],
+    tags: [],
+    runtimes: [],
+    tools: [],
+    userSettings: [],
+    ...options,
   };
 }
 
-const packages: PackageSummary[] = [
-  {
-    name: "pregame",
+const plugins = [
+  plugin("pregame", { pluginType: "core-plugin", tags: ["role:pre-game"] }),
+  plugin("narrator", {
     pluginType: "core-plugin",
-    source: "builtin",
-    enabled: true,
-    tags: ["role:pre-game", "cost:function"],
-  },
-  {
-    name: "narrator",
-    pluginType: "core-plugin",
-    source: "builtin",
-    enabled: true,
-    tags: ["mode:traditional-story", "role:narrator", "cost:llm"],
+    tags: ["mode:traditional-story", "role:narrator"],
     capabilities: ["narrative"],
-  },
-  {
-    name: "chat-mode-narrator",
-    pluginType: "plugin",
-    source: "builtin",
-    enabled: true,
-    tags: ["mode:dialogue", "role:narrator", "cost:llm"],
+  }),
+  plugin("chat-mode-narrator", {
+    tags: ["mode:dialogue", "role:narrator"],
     capabilities: ["narrative", "chat-mode"],
-  },
-  {
-    name: "scene-cast",
-    pluginType: "plugin",
-    source: "builtin",
-    enabled: true,
-    tags: ["mode:dialogue", "role:scene-state", "cost:function"],
-  },
-  {
-    name: "codex",
-    pluginType: "plugin",
-    source: "builtin",
-    enabled: true,
-    tags: ["role:codex", "data:lorebook", "cost:llm"],
-  },
+  }),
+  plugin("scene-cast", { tags: ["mode:dialogue"] }),
 ];
 
+const dialoguePack: PluginPack = {
+  id: "dialogue-mode",
+  label: { "en-US": "Dialogue Mode", "zh-CN": "对话模式" },
+  pluginIds: ["chat-mode-narrator", "scene-cast"],
+  optionalPluginIds: [],
+  excludedPluginIds: ["narrator"],
+  tags: ["mode:dialogue"],
+  source: "builtin",
+};
+
+const plan: WorldPluginPlan = {
+  worldId: "world",
+  packs: [dialoguePack],
+  selectedPackId: dialoguePack.id,
+  policy: {
+    preferredTags: ["mode:dialogue"],
+    avoidedTags: [],
+    requiredCapabilities: [],
+    requiredPluginIds: ["pregame"],
+    recommendedPluginIds: ["chat-mode-narrator"],
+    excludedPluginIds: ["narrator"],
+  },
+  defaultPluginIds: ["pregame", "chat-mode-narrator", "scene-cast"],
+};
+
 describe("session plugin selection helpers", () => {
-  it("uses pluginPolicy preset plus legacy exclusions for defaults", () => {
-    const selected = defaultSelectedPluginIdsForWorld(
-      world({
-        requiredPlugins: ["pregame"],
-        excludedPlugins: ["narrator"],
-        pluginPolicy: {
-          preset: "dialogue-mode",
-          preferTags: ["mode:dialogue"],
-        },
-      }),
-      packages,
-      (pkg) => pkg.pluginType === "core-plugin" && pkg.source === "builtin",
-    );
-
-    expect(selected.has("pregame")).toBe(true);
-    expect(selected.has("chat-mode-narrator")).toBe(true);
-    expect(selected.has("scene-cast")).toBe(true);
-    expect(selected.has("narrator")).toBe(false);
+  it("uses the server-resolved plan as the only default source", () => {
+    expect([...defaultSelectedPluginIds(plan)]).toEqual(plan.defaultPluginIds);
   });
 
-  it("merges world-defined packs before builtin packs", () => {
-    const customWorld = world({
-      pluginPolicy: {
-        preset: "custom",
-        packs: [
-          {
-            id: "custom",
-            label: "Custom",
-            plugins: ["pregame", "codex"],
-            tags: ["role:codex"],
-          },
-        ],
-      },
-    });
-    const packs = pluginPacksForWorld(customWorld);
-
-    expect(packs[0]?.id).toBe("custom");
-    expect(selectedPackForWorld(customWorld)?.id).toBe("custom");
-  });
-
-  it("applies packs without removing locked plugins", () => {
-    const pack = pluginPacksForWorld(world({})).find(
-      (item) => item.id === "dialogue-mode",
-    );
-    expect(pack).toBeTruthy();
-
+  it("applies packs while preserving locked plugins", () => {
     const selected = applyPluginPackSelection(
       new Set(["narrator"]),
-      pack!,
-      packages,
+      dialoguePack,
+      plugins,
       new Set(["narrator"]),
     );
-
-    expect(selected.has("narrator")).toBe(true);
-    expect(selected.has("chat-mode-narrator")).toBe(true);
-  });
-
-  it("dialogue-mode pack lists the full VN subsystem, matching the server-side relations expansion", () => {
-    const dialogue = pluginPacksForWorld(world({})).find(
-      (item) => item.id === "dialogue-mode",
+    expect([...selected]).toEqual(
+      expect.arrayContaining(["narrator", "chat-mode-narrator", "scene-cast"]),
     );
-    // chat-mode-narrator's relations.requires would re-add these anyway —
-    // the pack lists them so the prep page shows what will actually run.
-    for (const pluginId of ["scene-cast", "scene-stage", "scene-prompts"]) {
-      expect(dialogue?.plugins).toContain(pluginId);
-    }
   });
 
-  it("retires player-identity from every pack (voice belongs on the card, not a mid-play editor)", () => {
-    const packs = pluginPacksForWorld(world({}));
-    const traditional = packs.find((item) => item.id === "traditional-story");
-    const lowCost = packs.find((item) => item.id === "low-cost");
-    const dialogue = packs.find((item) => item.id === "dialogue-mode");
-
-    // player-identity (the mid-play persona editor) is retired — its voice/persona
-    // belongs on the character card (set at creation), so it is in no pack's
-    // plugins OR optionalPlugins.
-    for (const pack of packs) {
-      expect(pack.plugins).not.toContain("player-identity");
-      expect(pack.optionalPlugins).not.toContain("player-identity");
-    }
-    // The other selections are unchanged.
-    expect(traditional?.plugins).toContain("living-world-rules");
-    expect(lowCost?.plugins).toContain("cost-gate");
-    expect(dialogue?.plugins).toContain("chat-mode-narrator");
+  it("filters and groups canonical plugin descriptors", () => {
+    expect(collectPluginTags(plugins)).toContain("mode:dialogue");
+    expect(
+      filterPluginPackages(plugins, "chat", new Set(["mode:dialogue"])).map(
+        (item) => item.id,
+      ),
+    ).toEqual(["chat-mode-narrator"]);
+    expect(
+      groupPluginPackages(plugins, (group) => group).map((group) => group.id),
+    ).toContain("dialogue");
   });
 
-  it("filters and groups packages by tags", () => {
-    expect(collectPluginTags(packages)).toContain("mode:dialogue");
-
-    const filtered = filterPluginPackages(
-      packages,
-      "chat",
-      new Set(["mode:dialogue"]),
-    );
-    expect(filtered.map((pkg) => pkg.name)).toEqual(["chat-mode-narrator"]);
-
-    const groups = groupPluginPackages(packages, (group) => group);
-    expect(groups.map((group) => group.id)).toContain("dialogue");
-  });
-
-  it("explains selected world recommendations", () => {
-    const w = world({
-      pluginPolicy: {
-        preset: "dialogue-mode",
-        preferTags: ["mode:dialogue"],
-      },
-    });
-    const reason = recommendationReason(
-      packages[2],
-      w,
-      selectedPackForWorld(w),
-      {
+  it("explains recommendations from the resolved policy and pack", () => {
+    expect(
+      recommendationReason(plugins[2]!, plan, dialoguePack, {
         locale: "zh-CN",
         requiredByWorld: "世界必需",
         packOptional: "组合包可选",
         recommendedByWorld: "世界推荐",
-      },
-    );
-
-    expect(reason).toBe("Dialogue Mode");
+      }),
+    ).toBe("对话模式");
   });
 });

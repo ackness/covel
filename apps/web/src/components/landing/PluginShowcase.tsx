@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useInView } from "@/hooks/use-in-view";
 import { useI18nResolver } from "@/lib/catalog/helpers";
+import { listPlugins } from "@/services/api.js";
+import type { I18nText, PluginSummary } from "@covel/shared";
 
 /**
  * Marketing tile descriptor. Only the visual layout (`span`) and the
@@ -73,21 +75,13 @@ const TILES: readonly Tile[] = [
   },
 ];
 
-interface RegistryPlugin {
-  id: string;
-  name?: unknown;
-  description?: unknown;
-  capabilities?: string[];
-  source?: "builtin" | "community";
-}
-
 interface PluginMatch {
   id: string;
-  name?: unknown;
-  description?: unknown;
+  displayName: I18nText;
+  description: I18nText;
 }
 
-const SOURCE_RANK: Record<NonNullable<RegistryPlugin["source"]>, number> = {
+const SOURCE_RANK: Record<PluginSummary["source"], number> = {
   builtin: 0,
   community: 1,
 };
@@ -97,7 +91,7 @@ const SOURCE_RANK: Record<NonNullable<RegistryPlugin["source"]>, number> = {
  * community when multiple plugins claim the same capability.
  */
 function indexByCapability(
-  plugins: readonly RegistryPlugin[],
+  plugins: readonly PluginSummary[],
 ): Map<string, PluginMatch> {
   const sorted = [...plugins].sort(
     (a, b) =>
@@ -108,7 +102,11 @@ function indexByCapability(
   for (const p of sorted) {
     for (const cap of p.capabilities ?? []) {
       if (!index.has(cap)) {
-        index.set(cap, { id: p.id, name: p.name, description: p.description });
+        index.set(cap, {
+          id: p.id,
+          displayName: p.displayName,
+          description: p.description,
+        });
       }
     }
   }
@@ -129,11 +127,9 @@ export function PluginShowcase() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch("/api/plugins");
-        if (!res.ok) return;
-        const body = (await res.json()) as { items?: RegistryPlugin[] };
-        if (cancelled || !body.items) return;
-        setCapabilityToPlugin(indexByCapability(body.items));
+        const result = await listPlugins({ silentErrors: true });
+        if (cancelled) return;
+        setCapabilityToPlugin(indexByCapability(result.plugins));
       } catch {
         // Landing page renders without a backend — silent fallback.
       }
@@ -150,7 +146,9 @@ export function PluginShowcase() {
         return {
           tile,
           pluginId: match?.id,
-          displayName: match?.name ? resolveI18n(match.name) : undefined,
+          displayName: match?.displayName
+            ? resolveI18n(match.displayName)
+            : undefined,
           description: match?.description
             ? resolveI18n(match.description)
             : undefined,

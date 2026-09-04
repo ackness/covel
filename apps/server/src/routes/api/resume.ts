@@ -1,8 +1,8 @@
 /**
  * Resume route — resumes a suspended runtime.
  *
- * POST /api/sessions/:id/resume
- *   Body: { suspensionId: string, data: unknown }
+ * POST /api/sessions/:id/suspensions/:suspensionId/resume
+ *   Body: { data: unknown }
  *
  * Browser callers may supply `X-Provider-Keys` for request-scoped overrides.
  * Desktop callers may omit it and use the server's configured provider keys.
@@ -25,6 +25,7 @@
  */
 
 import { Hono } from "hono";
+import { z } from "zod";
 // Ajv 8 ships as CJS with both `module.exports = Ajv` and `exports.default = Ajv`.
 // Under NodeNext + esModuleInterop, TS sees the default-import as the module's
 // namespace rather than the class constructor. The named export works cleanly.
@@ -43,7 +44,7 @@ import {
 import type { ExecutionContext, RuntimeManifest } from "@covel/shared";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { EventBus } from "@covel/events";
-import { errorBody, listBody, okBody } from "../../api-error.js";
+import { errorBody, listBody, okBody, parseJsonBody } from "../../api-error.js";
 import {
   checkSessionOwner,
   resolveSessionParam,
@@ -132,8 +133,9 @@ function validateAgainstJsonSchema(
 
 // ── Route ────────────────────────────────────────────────────────
 
-resumeRoutes.post("/:id/resume", async (c) => {
+resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   const sessionId = c.req.param("id");
+  const suspensionId = c.req.param("suspensionId");
   const store = c.get("store");
   const sessionLock = c.get("sessionLock");
   const decodedUserSettings = decodePluginUserSettingsHeader(
@@ -149,17 +151,12 @@ resumeRoutes.post("/:id/resume", async (c) => {
   void maybeSweepExpiredSuspensions(store);
   const pluginRegistry = c.get("pluginRegistry");
 
-  let body: { suspensionId?: unknown; data?: unknown };
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json(errorBody("Invalid JSON body"), 400);
-  }
-
-  const { suspensionId, data } = body;
-  if (!suspensionId || typeof suspensionId !== "string") {
-    return c.json(errorBody("suspensionId is required"), 400);
-  }
+  const parsedBody = await parseJsonBody(
+    c,
+    z.object({ data: z.unknown() }).strict(),
+  );
+  if (parsedBody instanceof Response) return parsedBody;
+  const { data } = parsedBody.body;
 
   // Verify session exists
   const guard = await resolveSessionParam(c);

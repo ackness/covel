@@ -27,14 +27,14 @@ import { LlmPresetsPane } from "./panes/LlmPresetsPane.js";
 import { PackagesPane } from "./panes/PackagesPane.js";
 import { AppearancePane } from "./panes/AppearancePane.js";
 import { OperatorAccessPane } from "./panes/OperatorAccessPane.js";
-import type { PackageSummary } from "@/services/api.js";
+import type { PluginSummary } from "@/services/api.js";
 
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Deep-link target — either a nav node id ("llm.slots") or a setting key. */
   initialKey?: string;
-  packages?: readonly Pick<PackageSummary, "name" | "displayName">[];
+  packages?: readonly Pick<PluginSummary, "id" | "displayName">[];
 }
 
 export function SettingsDialog({
@@ -51,7 +51,7 @@ export function SettingsDialog({
   const pluginDisplayNames = useMemo(
     () =>
       Object.fromEntries(
-        packages.map((pkg) => [pkg.name, pkg.displayName] as const),
+        packages.map((plugin) => [plugin.id, plugin.displayName] as const),
       ),
     [packages],
   );

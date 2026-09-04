@@ -1,18 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PluginUserSettingSpec, RuntimeManifest } from "@covel/shared";
-import { mergeUserSettings } from "../../src/routes/misc-api/plugin-catalog.js";
+import { mergePluginUserSettings } from "../../src/lib/plugin-descriptor.js";
 
 function runtime(
   name: string,
   userSettings: readonly PluginUserSettingSpec[],
-): { manifest: RuntimeManifest } {
+): RuntimeManifest {
   return {
-    manifest: {
-      name,
-      pluginId: name.split("/")[0],
-      description: "",
-      userSettings,
-    } as RuntimeManifest,
+    name,
+    pluginId: name.split("/")[0]!,
+    description: "",
+    userSettings,
   };
 }
 
@@ -27,7 +25,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("mergeUserSettings", () => {
+describe("mergePluginUserSettings", () => {
   it("dedupes an identical key declared by two runtimes without warning", () => {
     // Arrange — the same knob repeated on every runtime that reads it.
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -37,7 +35,7 @@ describe("mergeUserSettings", () => {
     ];
 
     // Act
-    const merged = mergeUserSettings("tts", manifests);
+    const merged = mergePluginUserSettings("tts", manifests);
 
     // Assert
     expect(merged).toHaveLength(1);
@@ -54,7 +52,7 @@ describe("mergeUserSettings", () => {
       key: "voice",
     };
 
-    const merged = mergeUserSettings("tts", [
+    const merged = mergePluginUserSettings("tts", [
       runtime("tts/auto", [VOICE]),
       runtime("tts/manual", [reordered]),
     ]);
@@ -72,7 +70,7 @@ describe("mergeUserSettings", () => {
     ];
 
     // Act
-    const merged = mergeUserSettings("tts", manifests);
+    const merged = mergePluginUserSettings("tts", manifests);
 
     // Assert
     expect(merged).toHaveLength(1);
@@ -85,7 +83,7 @@ describe("mergeUserSettings", () => {
   });
 
   it("keeps distinct keys from different runtimes", () => {
-    const merged = mergeUserSettings("img", [
+    const merged = mergePluginUserSettings("img", [
       runtime("img/prompt", [{ ...VOICE, key: "composition" }]),
       runtime("img/generate", [{ ...VOICE, key: "imageSize" }]),
     ]);
@@ -94,6 +92,8 @@ describe("mergeUserSettings", () => {
   });
 
   it("returns an empty list when no runtime declares settings", () => {
-    expect(mergeUserSettings("plain", [runtime("plain", [])])).toEqual([]);
+    expect(mergePluginUserSettings("plain", [runtime("plain", [])])).toEqual(
+      [],
+    );
   });
 });

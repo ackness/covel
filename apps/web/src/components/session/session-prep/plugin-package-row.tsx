@@ -21,8 +21,8 @@ import type * as api from "@/services/api.js";
 import { RuntimeCollectionFeatureBadges } from "../runtime-feature-badges.js";
 
 export interface PluginPackageRowProps {
-  pkg: api.PackageSummary;
-  world: api.WorldRecord;
+  pkg: api.PluginSummary;
+  pluginPlan: api.WorldPluginPlan | null;
   activePluginPack: PluginPack | null;
   selectedPluginIdSet: ReadonlySet<string>;
   corePluginIds: ReadonlySet<string>;
@@ -36,7 +36,7 @@ export interface PluginPackageRowProps {
 
 export function PluginPackageRow({
   pkg,
-  world,
+  pluginPlan,
   activePluginPack,
   selectedPluginIdSet,
   corePluginIds,
@@ -48,12 +48,12 @@ export function PluginPackageRow({
   onTogglePlugin,
 }: PluginPackageRowProps) {
   const { t, i18n } = useTranslation();
-  const displayName = text(pkg.displayName) || pkg.name;
+  const displayName = text(pkg.displayName) || pkg.id;
   const description = text(pkg.description);
-  const isSelected = selectedPluginIdSet.has(pkg.name);
-  const isLocked = lockedPluginIds.has(pkg.name);
-  const isCore = corePluginIds.has(pkg.name);
-  const reason = recommendationReason(pkg, world, activePluginPack, {
+  const isSelected = selectedPluginIdSet.has(pkg.id);
+  const isLocked = lockedPluginIds.has(pkg.id);
+  const isCore = corePluginIds.has(pkg.id);
+  const reason = recommendationReason(pkg, pluginPlan, activePluginPack, {
     locale: i18n.language,
     requiredByWorld: t(
       "session.recommendationReasons.requiredByWorld",
@@ -71,7 +71,7 @@ export function PluginPackageRow({
   const runtimes = pkg.runtimes ?? [];
   const tools = pkg.tools ?? [];
   const pluginBindings = bindingState.entries.filter(
-    (entry) => entry.pluginId === pkg.name,
+    (entry) => entry.pluginId === pkg.id,
   );
   const primaryBinding = pluginBindings[0];
   const hasAgentRuntime = pluginBindings.length > 0;
@@ -87,7 +87,7 @@ export function PluginPackageRow({
       : undefined;
   // Empty when the plugin declares no slot setting — `has()` then misses and
   // the picker below stays unrendered, same as before.
-  const providerSlotKey = `plugin.${pkg.name}.${providerSlotSetting?.key ?? ""}`;
+  const providerSlotKey = `plugin.${pkg.id}.${providerSlotSetting?.key ?? ""}`;
   const [providerSlotOverride, setProviderSlotOverride] = useState<
     string | undefined
   >(() => {
@@ -155,7 +155,7 @@ export function PluginPackageRow({
           className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 border-transparent transition-colors after:absolute after:-inset-2.5 after:content-[''] ${
             isSelected ? "bg-primary" : "bg-input"
           } ${isLocked ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-          onClick={() => !isLocked && onTogglePlugin(pkg.name)}
+          onClick={() => !isLocked && onTogglePlugin(pkg.id)}
         >
           <span
             className={`pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-background shadow-sm transition ${
@@ -274,7 +274,7 @@ export function PluginPackageRow({
               providerSlotMissing
                 ? t("plugin.providerSlotMissingTitle", {
                     slot: effectiveProviderSlot,
-                    plugin: pkg.name,
+                    plugin: pkg.id,
                     defaultValue:
                       "Add [covel.{{slot}}] to llm.toml, or pick a configured slot here.",
                   })

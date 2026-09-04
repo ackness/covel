@@ -651,7 +651,7 @@ sources:
 
 **WORLD.md** 是默认的世界观长文本，框架通过 `{{ world.lore }}` 注入到插件提示词中。支持多语言：`WORLD.zh.md`、`WORLD.en.md`。
 
-**`requiredPlugins`** 是世界运行依赖，前端准备页会锁定这些插件。**`recommendedPlugins`** 会在准备页默认选中，**`excludedPlugins`** 会在准备页默认关闭。这三个字段写在顶层或 `pluginPolicy` 下都可以；**`pluginPolicy`** 额外能表达场景意图和组合包，可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`。内置前端组合包有 `traditional-story`、`dialogue-mode`、`low-cost`，世界可以用 `preset` 引用，也可以通过 `packs` 自定义。创建会话时，前端会把最终选择的插件列表传给 `POST /api/sessions`。
+**`requiredPlugins`** 是世界运行依赖，前端准备页会锁定这些插件。**`recommendedPlugins`** 会在准备页默认选中，**`excludedPlugins`** 会在准备页默认关闭。这三个字段写在顶层或 `pluginPolicy` 下都可以；**`pluginPolicy`** 额外能表达场景意图和组合包，可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins`、`packs`。内置服务端组合包有 `traditional-story`、`dialogue-mode`、`low-cost`，世界可以用 `preset` 引用，也可以通过 `packs` 自定义。服务端通过 `GET /api/worlds/:id/plugin-plan` 返回解析后的默认集合，创建会话时前端只提交玩家最终选择到 `POST /api/sessions`。
 
 **`worldData`** 指向统一数据索引。`to: world:metadata.dimensions` 会把维度写入 world metadata；`to: plugin:character-blueprint/blueprints` 加上 `effects: [characters]` 会在创建 session 时导入角色卡、实例化 NPC，并镜像到角色面板。运行中也可以在 `character-blueprint` 右侧面板用表单创建蓝图；完整迁移或调试时使用 JSON 导入入口。
 

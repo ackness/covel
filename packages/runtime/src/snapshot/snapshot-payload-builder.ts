@@ -128,7 +128,7 @@ export async function buildSnapshotPayload(
   // either already finished or in-flight; the child session has no way to
   // take over a mid-flight resume, so they are excluded. Each record's
   // `pendingContinuation` travels with the snapshot so a forked session can
-  // POST /resume with the copy.
+  // POST /suspensions/:suspensionId/resume with the copy.
   const allSuspensions: readonly SuspensionRecord[] =
     await store.listSuspensions(sessionId);
   const suspensions: readonly SuspensionRecord[] = allSuspensions.filter(

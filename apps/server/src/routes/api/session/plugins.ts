@@ -4,17 +4,44 @@ import {
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import {
-  FrameworkCapability,
-  effectiveTurnCompletion,
-  getRuntimeSpec,
-} from "@covel/shared";
+  COMMUNITY_SERVER_CODE_ACTION,
+  type RpcApprovalGate,
+} from "@covel/approval";
+import type { SessionRecord } from "@covel/store";
+import { FrameworkCapability } from "@covel/shared";
 import type {
-  EffectiveTurnCompletion,
   PluginRelations,
-  Stage,
+  SessionPlugin,
+  SnapshotPluginStatus,
 } from "@covel/shared";
+import { buildPluginSummary } from "../../../lib/plugin-descriptor.js";
 import { pluginManifestRecords } from "../../misc-api/registry-projection.js";
-import { mergePluginCommands } from "./commands.js";
+import { sessionApprovalScope } from "./session-guard.js";
+
+/** Exclude community server code unless this session owns a live grant. */
+export function approvedActivePlugins(
+  pluginIds: readonly string[],
+  registry: PluginRegistry,
+  gate: RpcApprovalGate | undefined,
+  session?: SessionRecord,
+): string[] {
+  return pluginIds.filter((pluginId) => {
+    const entry = registry.get(pluginId);
+    const trust = getPluginTrustInfo(pluginId, entry?.source);
+    return (
+      trust.autoLoad ||
+      Boolean(
+        session &&
+        gate?.hasGrant(
+          session.id,
+          pluginId,
+          COMMUNITY_SERVER_CODE_ACTION,
+          sessionApprovalScope(session, pluginId),
+        ),
+      )
+    );
+  });
+}
 
 export function isRequiredCorePlugin(entry: PluginRegistryEntry): boolean {
   const trust = getPluginTrustInfo(entry.id, entry.source);
@@ -83,7 +110,7 @@ function expandRequiredRelations(
   let changed = true;
   while (changed) {
     changed = false;
-    for (const pluginId of [...active]) {
+    for (const pluginId of active) {
       const entry = pluginRegistry.get(pluginId);
       if (!entry) continue;
       for (const requiredPluginId of relationPluginIds(entry, "requires")) {
@@ -168,7 +195,7 @@ function pruneUnsatisfiedRelations(
   let changed = true;
   while (changed) {
     changed = false;
-    for (const pluginId of [...active]) {
+    for (const pluginId of active) {
       if (protectedPluginIds.has(pluginId)) continue;
       const entry = pluginRegistry.get(pluginId);
       if (!entry) {
@@ -180,7 +207,6 @@ function pruneUnsatisfiedRelations(
         (requiredPluginId) => pluginRegistry.get(requiredPluginId),
       );
       if (
-        requiredPluginIds.length > 0 &&
         requiredPluginIds.some(
           (requiredPluginId) => !active.has(requiredPluginId),
         )
@@ -259,119 +285,28 @@ function pluginIdFromRuntimeOrPlugin(value: string): string {
 export function buildAvailablePluginList(
   active: readonly string[],
   pluginRegistry: PluginRegistry,
-): Array<Record<string, unknown>> {
-  const all = pluginRegistry.getAll();
-  return Array.from(all.values()).map((entry) => {
-    // Aggregated capabilities (plugin-level + runtime-level union) keep the
-    // existing UI surface working: gates only need "does this plugin do X".
-    const caps: string[] = [];
-    const tags: string[] = [];
-    const manifests = pluginManifestRecords(entry);
-    for (const tag of entry.summary.tags ?? []) {
-      if (!tags.includes(tag)) tags.push(tag);
-    }
-
-    const runtimes: Array<{
-      id: string;
-      runtimeType?: string;
-      stage?: Stage;
-      model?: string;
-      outputKind?: string;
-      execution: "sync" | "background";
-      trigger?: { type: string; topic?: string };
-      capabilities?: string[];
-      tags?: string[];
-      relations?: unknown;
-      turnCompletion: EffectiveTurnCompletion;
-    }> = [];
-    let primaryStage: Stage | undefined;
-    for (const { manifest: m } of manifests) {
-      const stage = getRuntimeSpec(m).stage;
-      if (primaryStage === undefined) primaryStage = stage;
-      if (m.capabilities) {
-        for (const c of m.capabilities) {
-          if (!caps.includes(c)) caps.push(c);
-        }
-      }
-      for (const tag of m.tags ?? []) {
-        if (!tags.includes(tag)) tags.push(tag);
-      }
-      runtimes.push({
-        id: m.name,
-        ...(m.runtimeType ? { runtimeType: m.runtimeType } : {}),
-        ...(stage !== undefined ? { stage } : {}),
-        ...(m.model ? { model: m.model } : {}),
-        ...(m.outputKind ? { outputKind: m.outputKind } : {}),
-        execution: m.execution ?? "sync",
-        ...(m.trigger
-          ? {
-              trigger: {
-                type: m.trigger.type,
-                ...(m.trigger.topic ? { topic: m.trigger.topic } : {}),
-              },
-            }
-          : {}),
-        ...(m.capabilities && m.capabilities.length > 0
-          ? { capabilities: [...m.capabilities] }
-          : {}),
-        ...(m.tags && m.tags.length > 0 ? { tags: [...m.tags] } : {}),
-        ...(m.relations ? { relations: m.relations } : {}),
-        turnCompletion: effectiveTurnCompletion(m),
-      });
-    }
-
-    const trust = getPluginTrustInfo(entry.id, entry.source);
-    const commands = mergePluginCommands(entry);
-    return {
-      id: entry.id,
-      name: entry.summary.name,
-      ...(entry.summary.displayName
-        ? { displayName: entry.summary.displayName }
-        : {}),
-      description: entry.summary.description,
-      pluginType: entry.summary.pluginType,
-      source: trust.source,
-      active: active.includes(entry.id),
-      ...(primaryStage !== undefined ? { stage: primaryStage } : {}),
-      ...(caps.length > 0 ? { capabilities: caps } : {}),
-      ...(tags.length > 0 ? { tags } : {}),
-      ...(entry.summary.relations
-        ? { relations: entry.summary.relations }
-        : {}),
-      ...(commands.length > 0 ? { commands } : {}),
-      ...(runtimes.length > 0 ? { runtimes } : {}),
-    };
-  });
+): SessionPlugin[] {
+  return [...pluginRegistry.getAll().values()].map((entry) => ({
+    ...buildPluginSummary(entry),
+    active: active.includes(entry.id),
+    locked: isRequiredCorePlugin(entry),
+  }));
 }
 
 export function buildSnapshotPluginList(
   pluginRegistry: PluginRegistry,
   activeIds: ReadonlySet<string>,
-): Array<{
-  id: string;
-  name: string;
-  isActive: boolean;
-  stage?: Stage;
-}> {
-  const pluginList: Array<{
-    id: string;
-    name: string;
-    isActive: boolean;
-    stage?: Stage;
-  }> = [];
-  for (const [, entry] of pluginRegistry.getAll()) {
-    const manifests = pluginManifestRecords(entry);
-    const primary = manifests[0]?.manifest;
-    const stage = primary ? getRuntimeSpec(primary).stage : undefined;
-    pluginList.push({
-      id: entry.id,
-      name:
-        typeof entry.summary.name === "string" ? entry.summary.name : entry.id,
-      isActive: activeIds.has(entry.id),
+): SnapshotPluginStatus[] {
+  return [...pluginRegistry.getAll().values()].map((entry) => {
+    const plugin = buildPluginSummary(entry);
+    const stage = plugin.runtimes[0]?.stage;
+    return {
+      id: plugin.id,
+      displayName: plugin.displayName,
+      active: activeIds.has(plugin.id),
       ...(stage !== undefined ? { stage } : {}),
-    });
-  }
-  return pluginList;
+    };
+  });
 }
 
 export function findWorldDataProviderPluginId(

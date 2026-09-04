@@ -2,13 +2,13 @@ import { useMemo, type ReactNode } from "react";
 import { ExecutionTimeline } from "../execution-timeline.js";
 import { AssetTurnSidebar } from "@/components/asset-render/index.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
-import type { PackageSummary } from "@/services/api.js";
+import type { PluginSummary } from "@/services/api.js";
 
 interface UseMessageGroupingArgs {
   readonly messages: StreamMessage[];
   readonly executionSteps: ExecutionStep[];
   readonly executing: boolean;
-  readonly packages: PackageSummary[];
+  readonly packages: PluginSummary[];
   readonly onRetryRuntime?: (
     runtimeId: string | undefined,
     sourceTurnId?: string,

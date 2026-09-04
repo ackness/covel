@@ -35,7 +35,7 @@ test.describe("Covel Full Flow", () => {
     }
   });
 
-  test("packages API returns loaded plugins", async ({ request }) => {
+  test("plugins API returns loaded plugins", async ({ request }) => {
     const response = await request.get("/api/plugins");
     expect(response.ok()).toBeTruthy();
 

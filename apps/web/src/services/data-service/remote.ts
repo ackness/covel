@@ -1,9 +1,4 @@
-import type {
-  MessageRecord,
-  SessionRecord,
-  StatePatchRecord,
-  WorldRecord,
-} from "../api.js";
+import type { MessageRecord, StatePatchRecord, WorldRecord } from "../api.js";
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
@@ -73,7 +68,7 @@ export class RemoteDataService implements DataService {
   }
   async listMessagesPage(
     sessionId: string,
-    opts: { limit?: number; before?: { createdAt: string; id: string } },
+    opts: { limit?: number; cursor?: import("@covel/shared").PageCursor },
   ) {
     return api.listMessagesPage(sessionId, opts);
   }

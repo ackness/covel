@@ -360,40 +360,6 @@ function registerPresenceAssetsPlugin(pluginRegistry: PluginRegistry): void {
   });
 }
 
-// ── HIGH: plugins/disable must validate pluginId ────────────────
-
-describe("[HIGH] plugins/disable validates pluginId", () => {
-  let app: Hono;
-
-  beforeEach(() => {
-    const store = createMemoryStore();
-    app = createTestApp({
-      store,
-      pluginRegistry: createPluginRegistry(),
-    });
-  });
-
-  it("rejects missing pluginId", async () => {
-    const { id } = await createSession(app);
-    const res = await app.request(`/api/sessions/${id}/plugins/disable`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it("rejects empty pluginId", async () => {
-    const { id } = await createSession(app);
-    const res = await app.request(`/api/sessions/${id}/plugins/disable`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pluginId: "" }),
-    });
-    expect(res.status).toBe(400);
-  });
-});
-
 // ── HIGH: state-patches IDs must be stable ──────────────────────
 
 describe("[HIGH] state-patches returns stable IDs", () => {
