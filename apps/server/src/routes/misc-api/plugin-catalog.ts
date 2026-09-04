@@ -5,8 +5,8 @@ import { pluginManifestRecords } from "./registry-projection.js";
 import { normalizeRuntimeTrigger } from "./shared.js";
 
 export function buildPackagesResponse(registry: PluginRegistry): {
-  packages: Array<Record<string, unknown>>;
-  loadErrors: Array<{ pluginId: string; errors: string[] }>;
+  items: Array<Record<string, unknown>>;
+  errors: Array<{ pluginId: string; errors: string[] }>;
 } {
   const all = registry.getAll();
   const packages: Array<Record<string, unknown>> = [];
@@ -98,7 +98,7 @@ export function buildPackagesResponse(registry: PluginRegistry): {
     });
   }
 
-  return { packages, loadErrors };
+  return { items: packages, errors: loadErrors };
 }
 
 /**

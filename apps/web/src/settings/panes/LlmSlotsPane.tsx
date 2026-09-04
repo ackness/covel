@@ -173,19 +173,15 @@ export function LlmSlotsPane() {
     emitToast("info", t("settings.modelDbRefreshStarted"));
     try {
       const result = await refreshModelDb();
-      if (result.ok) {
-        setModelDbInfo({
-          available: true,
-          count: result.count,
-          updatedAt: new Date().toISOString(),
-        });
-        emitToast(
-          "success",
-          t("settings.modelDbRefreshSucceeded", { count: result.count ?? 0 }),
-        );
-      } else {
-        emitToast("error", t("settings.modelDbRefreshFailed"), result.error);
-      }
+      setModelDbInfo({
+        available: true,
+        count: result.count,
+        updatedAt: new Date().toISOString(),
+      });
+      emitToast(
+        "success",
+        t("settings.modelDbRefreshSucceeded", { count: result.count }),
+      );
     } catch (error) {
       emitToast(
         "error",

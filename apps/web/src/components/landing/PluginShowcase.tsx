@@ -131,9 +131,9 @@ export function PluginShowcase() {
       try {
         const res = await fetch("/api/plugins");
         if (!res.ok) return;
-        const body = (await res.json()) as { plugins?: RegistryPlugin[] };
-        if (cancelled || !body.plugins) return;
-        setCapabilityToPlugin(indexByCapability(body.plugins));
+        const body = (await res.json()) as { items?: RegistryPlugin[] };
+        if (cancelled || !body.items) return;
+        setCapabilityToPlugin(indexByCapability(body.items));
       } catch {
         // Landing page renders without a backend — silent fallback.
       }

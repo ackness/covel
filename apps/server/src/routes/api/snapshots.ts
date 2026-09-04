@@ -188,7 +188,7 @@ snapshotRoutes.post("/:id/snapshot", async (c) => {
         });
       }
 
-      return c.json({ snapshot }, 201);
+      return c.json(snapshot, 201);
     },
   }).catch(rethrowUnlessLockBusy(c));
 });
@@ -230,7 +230,7 @@ snapshotRoutes.get("/:id/snapshots", async (c) => {
     payloadSize: s.size,
   }));
 
-  return c.json({ snapshots, nextCursor: nextCursorFrom(page, limit) });
+  return c.json({ items: snapshots, nextCursor: nextCursorFrom(page, limit) });
 });
 
 // ── GET /api/sessions/:id/snapshots/:snapshotId — full payload ────
@@ -247,7 +247,7 @@ snapshotRoutes.get("/:id/snapshots/:snapshotId", async (c) => {
   if (!snapshot || snapshot.sessionId !== sessionId) {
     return c.json(errorBody("Snapshot not found", { code: "not_found" }), 404);
   }
-  return c.json({ snapshot });
+  return c.json(snapshot);
 });
 
 // ── POST /api/sessions/:id/fork — fork from snapshot ──────────────

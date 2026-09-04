@@ -58,12 +58,12 @@ function normalizePackageSummary(pkg: RawPackageSummary): PackageSummary {
 
 export async function listPackages(): Promise<PackagesResponse> {
   const res = await request<{
-    packages: RawPackageSummary[];
-    loadErrors: PluginLoadError[];
+    items: RawPackageSummary[];
+    errors: PluginLoadError[];
   }>("/api/packages");
   return {
-    packages: res.packages.map(normalizePackageSummary),
-    loadErrors: res.loadErrors,
+    packages: res.items.map(normalizePackageSummary),
+    loadErrors: res.errors,
   };
 }
 

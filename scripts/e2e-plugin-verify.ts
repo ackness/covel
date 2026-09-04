@@ -1002,11 +1002,11 @@ async function runTurn(
   await new Promise((r) => setTimeout(r, outcome.terminated ? 1500 : 300));
 
   // Pull the latest turn from the authoritative source
-  const turnsResp = await httpGet<{ turns: TurnRecord[] }>(
+  const turnsResp = await httpGet<{ items: TurnRecord[] }>(
     args.server,
     `/sessions/${sessionId}/turns`,
   );
-  const turns = turnsResp.turns ?? [];
+  const turns = turnsResp.items ?? [];
   if (turns.length === 0) {
     throw new Error("No turns returned from /turns after action");
   }
@@ -1316,11 +1316,11 @@ async function main(): Promise<void> {
     if (sink && state.sessionId) {
       if (state.finalTurns.length === 0) {
         try {
-          const resp = await httpGet<{ turns: TurnRecord[] }>(
+          const resp = await httpGet<{ items: TurnRecord[] }>(
             args.server,
             `/sessions/${state.sessionId}/turns`,
           );
-          state.finalTurns = resp.turns ?? [];
+          state.finalTurns = resp.items ?? [];
         } catch {
           /* backend unreachable — artefact will be empty */
         }
@@ -1861,11 +1861,11 @@ async function runMain(
 
   // ── Phase 7: Summary ───────────────────────────────────────────
   section("Phase 7: Summary");
-  const turnsResp = await httpGet<{ turns: TurnRecord[] }>(
+  const turnsResp = await httpGet<{ items: TurnRecord[] }>(
     args.server,
     `/sessions/${session.id}/turns`,
   );
-  const allTurns = turnsResp.turns ?? [];
+  const allTurns = turnsResp.items ?? [];
   state.finalTurns = allTurns;
 
   let totalRunRuns = 0;

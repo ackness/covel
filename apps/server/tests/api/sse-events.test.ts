@@ -63,7 +63,7 @@ describe("SSE Events", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.id).toBeDefined();
-      expect(body.emitted).toBe(true);
+      expect(body.ok).toBe(true);
     });
 
     it("should notify onEmit subscribers", async () => {

@@ -109,7 +109,7 @@ describe("[HIGH] Client-supplied session ID validation", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: "my-custom-session-01" }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     const body = (await json(res)) as { id: string };
     expect(body.id).toBe("my-custom-session-01");
   });
@@ -122,7 +122,7 @@ describe("[HIGH] Client-supplied session ID validation", () => {
         body: JSON.stringify({ id: "duplicate-session" }),
       });
 
-    expect((await create()).status).toBe(200);
+    expect((await create()).status).toBe(201);
     const duplicate = await create();
     expect(duplicate.status).toBe(409);
     expect(await duplicate.json()).toMatchObject({
@@ -496,7 +496,7 @@ describe("[HIGH] Plugin activation happens after session persist", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plugins: ["test-plugin"] }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
 
     const body = (await json(res)) as { id: string; activePlugins: string[] };
     // Session must be persisted

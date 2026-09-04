@@ -264,7 +264,7 @@ describe("listPackages", () => {
 
   it("keeps runtime trigger.type from the server payload", async () => {
     mockFetchOnce({
-      packages: [
+      items: [
         {
           name: "narrator",
           enabled: true,
@@ -284,7 +284,7 @@ describe("listPackages", () => {
           relations: { provides: ["narrative-engine"] },
         },
       ],
-      loadErrors: [],
+      errors: [],
     });
 
     const result = await listPackages();
@@ -313,7 +313,7 @@ describe("listPackages", () => {
 
   it("preserves detached package and flow policies", async () => {
     mockFetchOnce({
-      packages: [
+      items: [
         {
           name: "tts",
           enabled: true,
@@ -328,7 +328,7 @@ describe("listPackages", () => {
           ],
         },
       ],
-      loadErrors: [],
+      errors: [],
     });
     const packages = await listPackages();
     expect(packages.packages[0]?.runtimes?.[0]?.turnCompletion).toEqual({
@@ -365,7 +365,7 @@ describe("listPackages", () => {
 
   it("preserves background execution for manual and event runtimes", async () => {
     mockFetchOnce({
-      packages: [
+      items: [
         {
           name: "media",
           enabled: true,
@@ -379,7 +379,7 @@ describe("listPackages", () => {
           ],
         },
       ],
-      loadErrors: [],
+      errors: [],
     });
     const packages = await listPackages();
     expect(packages.packages[0]?.runtimes?.[0]?.execution).toBe("background");

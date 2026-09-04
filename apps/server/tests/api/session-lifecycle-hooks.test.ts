@@ -56,7 +56,7 @@ async function createSession(app: Hono): Promise<string> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ worldId: "cloudmere", locale: "en-US" }),
   });
-  expect(res.status).toBe(200);
+  expect(res.status).toBe(201);
   const body = (await res.json()) as { id: string };
   return body.id;
 }
@@ -199,7 +199,7 @@ describe("Session lifecycle hooks", () => {
     } finally {
       warning.mockRestore();
     }
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     const body = (await response.json()) as {
       id: string;
       ownerToken?: string;
@@ -233,7 +233,7 @@ describe("Session lifecycle hooks", () => {
     } finally {
       warning.mockRestore();
     }
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(201);
     const body = (await response.json()) as {
       id: string;
       ownerToken?: string;
@@ -283,7 +283,7 @@ describe("Session lifecycle hooks", () => {
     );
 
     releaseHook();
-    expect((await creating).status).toBe(200);
+    expect((await creating).status).toBe(201);
     expect(
       (await app.request(`/api/sessions/${id}`, { method: "DELETE" })).status,
     ).toBe(200);
@@ -642,7 +642,7 @@ describe("Session lifecycle hooks", () => {
           body: JSON.stringify({ id }),
         })
       ).status,
-    ).toBe(200);
+    ).toBe(201);
     expect(await mediaStore.isReferencedBy(media.id, id)).toBe(false);
   });
 
@@ -688,7 +688,7 @@ describe("Session lifecycle hooks", () => {
           body: JSON.stringify({ id }),
         })
       ).status,
-    ).toBe(200);
+    ).toBe(201);
     expect(await store.getSession(id)).not.toBeNull();
   });
 

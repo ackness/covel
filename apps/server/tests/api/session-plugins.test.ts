@@ -303,7 +303,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201);
       const body = (await res.json()) as { activePlugins: string[] };
       expect(body.activePlugins).toEqual(
         expect.arrayContaining(["narrator", "pregame"]),
@@ -327,7 +327,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201);
       const body = (await res.json()) as { activePlugins: string[] };
       expect(body.activePlugins).toContain("chat-mode-narrator");
       expect(body.activePlugins).toContain("scene-cast");
@@ -397,7 +397,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201);
       const body = (await res.json()) as { activePlugins: string[] };
       expect(body.activePlugins).toContain("relation-source");
       expect(body.activePlugins).toContain("relation-required");
@@ -512,7 +512,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201);
       const body = (await res.json()) as { activePlugins: string[] };
       expect(body.activePlugins).toContain("pregame");
       expect(body.activePlugins).toContain("narrator");
@@ -566,7 +566,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201);
       const body = (await res.json()) as { activePlugins: string[] };
       expect(body.activePlugins).toContain("conflicting-plugin");
       expect(body.activePlugins).not.toContain("required-plugin");
@@ -607,7 +607,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201);
       const characters = await store.listCharacters("sess-academy");
       expect(characters).toEqual([
         expect.objectContaining({
@@ -685,7 +685,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
         }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201);
       await expect(
         store.listSessionLorebookEntries("sess-portable-generated"),
       ).resolves.toEqual(
@@ -736,7 +736,7 @@ describe("Session plugin routes (real sessionRoutes)", () => {
             plugins: ["chat-mode-narrator"],
           }),
         });
-        expect(res.status).toBe(200);
+        expect(res.status).toBe(201);
         const scopedId = `${sessionId}-npc-test-heroine-scoped`;
         const characters = await store.listCharacters(sessionId);
         expect(characters.map((character) => character.id)).toContain(scopedId);

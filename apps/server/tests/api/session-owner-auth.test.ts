@@ -83,7 +83,7 @@ async function createSession(
     headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify({}),
   });
-  expect(res.status).toBe(200);
+  expect(res.status).toBe(201);
   return (await res.json()) as CreatedSession;
 }
 

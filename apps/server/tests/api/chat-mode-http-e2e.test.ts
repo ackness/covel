@@ -194,7 +194,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         plugins: ["chat-mode-narrator"],
       }),
     });
-    expect(createRes.status).toBe(200);
+    expect(createRes.status).toBe(201);
 
     const created = (await createRes.json()) as {
       id: string;

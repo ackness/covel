@@ -6,6 +6,19 @@ export interface ApiErrorResponse<Code extends string = string> {
   readonly details?: unknown;
 }
 
+/** Standard envelope for a collection, optionally with an opaque page cursor. */
+export interface ApiListResponse<T, Cursor = unknown> {
+  readonly items: readonly T[];
+  readonly nextCursor?: Cursor | null;
+}
+
+/** Standard acknowledgement for a command that does not return a resource. */
+export type ApiOkResponse<
+  Details extends Readonly<Record<string, unknown>> = Readonly<
+    Record<never, never>
+  >,
+> = Readonly<{ ok: true } & Details>;
+
 interface ActionRequestBase {
   readonly requestId: string;
   readonly sessionId: string;

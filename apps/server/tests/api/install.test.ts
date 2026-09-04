@@ -283,7 +283,7 @@ describe("POST /api/install/plugin", () => {
       headers: { Authorization: "Bearer install-token" },
       body: ok,
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
   });
 
   it("requires explicit production opt-in when no bearer token is configured", async () => {
@@ -300,7 +300,7 @@ describe("POST /api/install/plugin", () => {
     process.env.COVEL_INSTALL_API_ENABLED = "1";
     const enabledApp = createTestApp();
     const allowed = await postZip(enabledApp, "/api/install/plugin", zip);
-    expect(allowed.status).toBe(200);
+    expect(allowed.status).toBe(201);
   });
 
   it("accepts uploads above the global body limit on the install branch", async () => {
@@ -314,7 +314,7 @@ describe("POST /api/install/plugin", () => {
     expect(zipBuf.byteLength).toBeGreaterThan(1 * 1024 * 1024);
     expect(zipBuf.byteLength).toBeLessThan(20 * 1024 * 1024);
     const res = await postZip(app, "/api/install/plugin", zipBuf);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
   });
 
   it("accepts a valid single-runtime plugin package", async () => {
@@ -324,7 +324,7 @@ describe("POST /api/install/plugin", () => {
       "package.json": VALID_PACKAGE_JSON,
     });
     const res = await postZip(app, "/api/install/plugin", zip);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     const body = (await res.json()) as {
       ok: boolean;
       id: string;
@@ -359,7 +359,7 @@ describe("POST /api/install/plugin", () => {
       ),
     });
     const res = await postZip(app, "/api/install/plugin", zip);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     const body = (await res.json()) as { id: string };
     expect(body.id).toBe("multi-plugin");
     expect(
@@ -551,7 +551,7 @@ describe("POST /api/install/plugin", () => {
       "package.json": VALID_PACKAGE_JSON,
     });
     const res = await postZip(app, "/api/install/plugin", zip);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     const body = (await res.json()) as { id: string };
     expect(body.id).toBe("test-plugin");
   });
@@ -602,7 +602,7 @@ describe("POST /api/install/plugin", () => {
     expect(res.status).toBeLessThan(500);
   });
 
-  it("serialises concurrent installs of the same id (one 200, one 409)", async () => {
+  it("serialises concurrent installs of the same id (one 201, one 409)", async () => {
     const app = createTestApp();
     const zipA = await buildZip({
       "PLUGIN.md": VALID_PLUGIN_MD,
@@ -618,7 +618,7 @@ describe("POST /api/install/plugin", () => {
       postZip(app, "/api/install/plugin", zipB),
     ]);
     const statuses = [resA.status, resB.status].sort();
-    expect(statuses).toEqual([200, 409]);
+    expect(statuses).toEqual([201, 409]);
 
     // The winning install must leave a valid plugin on disk.
     const installed = path.join(pluginsDir, "test-plugin", "PLUGIN.md");
@@ -638,7 +638,7 @@ describe("POST /api/install/world", () => {
       "WORLD.md": VALID_WORLD_MD,
     });
     const res = await postZip(app, "/api/install/world", zip);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     const body = (await res.json()) as {
       ok: boolean;
       id: string;

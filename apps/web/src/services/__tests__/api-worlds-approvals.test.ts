@@ -253,9 +253,9 @@ describe("world API mapping", () => {
 });
 
 describe("approvals API helpers", () => {
-  it("listApprovals reads the pending envelope from the server", async () => {
+  it("listApprovals reads the standard items envelope from the server", async () => {
     mockFetchOnce({
-      pending: [
+      items: [
         {
           approvalId: "approval-1",
           sessionId: "sess-1",

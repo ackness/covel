@@ -1439,7 +1439,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         locale: "zh-CN",
       }),
     });
-    expect(createSession.status).toBe(200);
+    expect(createSession.status).toBe(201);
     const session = (await createSession.json()) as {
       id: string;
       activePlugins: string[];

@@ -105,12 +105,15 @@ worldInstallRoutes.post("/world", async (c) => {
     const finalDir = path.join(root, summary.worldId);
     await materializeEntries(finalDir, entries);
 
-    return c.json({
-      ok: true,
-      kind: "world",
-      id: summary.worldId,
-      restartRequired: false,
-    });
+    return c.json(
+      {
+        ok: true,
+        kind: "world",
+        id: summary.worldId,
+        restartRequired: false,
+      },
+      201,
+    );
   } catch (err) {
     const { status, body } = errorResponse(err);
     return c.json(body, status as 400 | 409 | 413 | 500);

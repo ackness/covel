@@ -391,6 +391,10 @@ describe("world routes", () => {
     });
 
     expect(res.status).toBe(200);
+    await expect(res.clone().json()).resolves.toMatchObject({
+      ok: true,
+      entryCount: 2,
+    });
 
     const pluginData = await store.listPluginData(
       "sess-1",

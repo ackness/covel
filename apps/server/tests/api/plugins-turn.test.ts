@@ -101,7 +101,7 @@ describe("Plugin Routes", () => {
       const res = await app.request("/api/plugins");
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body).toEqual({ plugins: [] });
+      expect(body).toEqual({ items: [] });
     });
 
     it("should return all registered plugins", async () => {
@@ -121,12 +121,12 @@ describe("Plugin Routes", () => {
       const res = await app.request("/api/plugins");
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.plugins).toHaveLength(2);
-      expect(body.plugins[0]).toMatchObject({
+      expect(body.items).toHaveLength(2);
+      expect(body.items[0]).toMatchObject({
         id: "plugin-a",
         name: "Plugin A",
       });
-      expect(body.plugins[1]).toMatchObject({
+      expect(body.items[1]).toMatchObject({
         id: "plugin-b",
         name: "Plugin B",
       });

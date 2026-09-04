@@ -10,7 +10,7 @@
 import { Hono } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import { FrameworkCapability } from "@covel/shared";
-import { errorBody, readJsonBody } from "../../../api-error.js";
+import { errorBody, okBody, readJsonBody } from "../../../api-error.js";
 import {
   prepareWorldDataSyncForSession,
   WorldDataSyncConflictError,
@@ -150,6 +150,7 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
   const publicSyncResult = (
     result: Awaited<ReturnType<typeof syncWorldDataForSession>>,
   ) => ({
+    ok: true as const,
     imported: result.imported,
     dryRun: result.dryRun,
     diagnostics: result.diagnostics,
@@ -409,9 +410,10 @@ worldDataSyncRoutes.post("/:id/sync-dimensions", async (c) => {
     );
   }
 
-  return c.json({
-    success: true,
-    syncedKeys: Object.keys(dimensions),
-    entryCount: Object.keys(dimensions).length,
-  });
+  return c.json(
+    okBody({
+      syncedKeys: Object.keys(dimensions),
+      entryCount: Object.keys(dimensions).length,
+    }),
+  );
 });

@@ -58,7 +58,7 @@ pluginRoutes.get("/", async (c) => {
       outputKind,
     };
   });
-  return c.json({ plugins });
+  return c.json({ items: plugins });
 });
 
 // GET /plugins/:id/contract — Manifest-derived plugin contract.

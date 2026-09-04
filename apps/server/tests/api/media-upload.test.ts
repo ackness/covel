@@ -63,7 +63,7 @@ describe("POST /api/media (upload)", () => {
       headers: { "content-type": "image/png" },
       body: IMG,
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     const ref = (await res.json()) as {
       id: string;
       mime: string;

@@ -10,7 +10,7 @@ import {
   worldPatchRequestSchema,
 } from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
-import { errorBody, readJsonBody } from "../../../api-error.js";
+import { errorBody, okBody, readJsonBody } from "../../../api-error.js";
 import { resolveContainedPath } from "../../../world-data/safe-path.js";
 import { checkHostedOperator } from "../session/session-guard.js";
 import { type WorldEnv, resolveWorldMetadata } from "./shared.js";
@@ -151,5 +151,5 @@ worldCrudRoutes.delete("/:id", async (c) => {
     }
   }
   await store.deleteWorld(id);
-  return c.json({ success: true });
+  return c.json(okBody());
 });

@@ -50,9 +50,9 @@ export function PackagesPane() {
   const refreshInstalled = useCallback(async () => {
     try {
       const res = await fetch("/api/plugins");
-      const body = (await res.json()) as { plugins?: InstalledPlugin[] };
+      const body = (await res.json()) as { items?: InstalledPlugin[] };
       // Only third-party (non-builtin) plugins can be uninstalled.
-      setInstalled((body.plugins ?? []).filter((p) => p.source !== "builtin"));
+      setInstalled((body.items ?? []).filter((p) => p.source !== "builtin"));
     } catch {
       /* non-fatal — the list just stays as-is */
     }

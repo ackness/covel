@@ -431,10 +431,10 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 后,前端通过下述端点拉取 / 提交决定。
 
-| 命令              | 方法 | 端点                                  | 响应                                      |
-| ----------------- | ---- | ------------------------------------- | ----------------------------------------- |
-| `approval.list`   | GET  | `/api/sessions/:id/approvals`         | JSON: `{ pending: RpcApprovalPending[] }` |
-| `approval.decide` | POST | `/api/approvals/:approvalId/decision` | JSON: `{ ok, decision, scope, pending }`  |
+| 命令              | 方法 | 端点                                  | 响应                                     |
+| ----------------- | ---- | ------------------------------------- | ---------------------------------------- |
+| `approval.list`   | GET  | `/api/sessions/:id/approvals`         | JSON: `{ items: RpcApprovalPending[] }`  |
+| `approval.decide` | POST | `/api/approvals/:approvalId/decision` | JSON: `{ ok, decision, scope, pending }` |
 
 **Decision 请求体:**
 

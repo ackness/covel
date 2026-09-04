@@ -189,17 +189,18 @@ export async function lookupModelCapabilityDetails(
 }
 
 export async function refreshModelDb(): Promise<{
-  ok: boolean;
-  count?: number;
-  error?: string;
+  ok: true;
+  count: number;
+  persisted: boolean;
 }> {
-  const result = await request<{ ok: boolean; count?: number; error?: string }>(
-    "/api/model-db/refresh",
-    {
-      method: "POST",
-      operatorAuth: true,
-    },
-  );
+  const result = await request<{
+    ok: true;
+    count: number;
+    persisted: boolean;
+  }>("/api/model-db/refresh", {
+    method: "POST",
+    operatorAuth: true,
+  });
   invalidateModelCapabilityCache();
   return result;
 }

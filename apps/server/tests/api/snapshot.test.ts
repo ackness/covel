@@ -174,8 +174,7 @@ describe("Snapshot routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(201);
-      const body = (await res.json()) as Record<string, unknown>;
-      const snapshot = body.snapshot as Record<string, unknown>;
+      const snapshot = (await res.json()) as Record<string, unknown>;
       expect(snapshot.kind).toBe("manual");
       expect(snapshot.sessionId).toBe("sess-1");
       expect(snapshot.id).toMatch(/./); // non-empty string
@@ -259,8 +258,7 @@ describe("Snapshot routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(201);
-      const body = (await res.json()) as Record<string, unknown>;
-      const snapshot = body.snapshot as Record<string, unknown>;
+      const snapshot = (await res.json()) as Record<string, unknown>;
 
       const snapshotEvents = captured.filter(
         (m) => m.type === "state.snapshot.created",
@@ -293,7 +291,7 @@ describe("Snapshot routes", () => {
       const res = await app.request("/api/sessions/sess-1/snapshots");
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body.snapshots).toEqual([]);
+      expect(body.items).toEqual([]);
     });
 
     it("returns all snapshots for a session", async () => {
@@ -305,7 +303,7 @@ describe("Snapshot routes", () => {
       const res = await app.request("/api/sessions/sess-1/snapshots");
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
-      expect((body.snapshots as unknown[]).length).toBe(2);
+      expect((body.items as unknown[]).length).toBe(2);
     });
 
     it("does not include snapshots from other sessions", async () => {
@@ -319,7 +317,7 @@ describe("Snapshot routes", () => {
 
       const res = await app.request("/api/sessions/sess-1/snapshots");
       const body = (await res.json()) as Record<string, unknown>;
-      const snapshots = body.snapshots as Array<Record<string, unknown>>;
+      const snapshots = body.items as Array<Record<string, unknown>>;
       expect(snapshots).toHaveLength(1);
       expect(snapshots[0]!.sessionId).toBe("sess-1");
     });
@@ -330,11 +328,11 @@ describe("Snapshot routes", () => {
 
       const res = await app.request("/api/sessions/sess-1/snapshots");
       const body = (await res.json()) as {
-        snapshots: Array<Record<string, unknown>>;
+        items: Array<Record<string, unknown>>;
         nextCursor: string | null;
       };
-      expect(body.snapshots).toHaveLength(1);
-      const meta = body.snapshots[0]!;
+      expect(body.items).toHaveLength(1);
+      const meta = body.items[0]!;
       expect(meta.payload).toBeUndefined();
       expect(typeof meta.id).toBe("string");
       expect(typeof meta.turnId).toBe("string");
@@ -352,7 +350,7 @@ describe("Snapshot routes", () => {
       }
 
       type Page = {
-        snapshots: Array<{ id: string }>;
+        items: Array<{ id: string }>;
         nextCursor: { createdAt: string; id: string } | null;
       };
 
@@ -360,11 +358,11 @@ describe("Snapshot routes", () => {
       const page1 = (await (
         await app.request("/api/sessions/sess-1/snapshots?limit=2")
       ).json()) as Page;
-      expect(page1.snapshots).toHaveLength(2);
+      expect(page1.items).toHaveLength(2);
       // The next cursor is the oldest returned row's (createdAt, id) position.
       expect(page1.nextCursor).not.toBeNull();
       expect(typeof page1.nextCursor!.createdAt).toBe("string");
-      expect(page1.nextCursor!.id).toBe(page1.snapshots[0]!.id);
+      expect(page1.nextCursor!.id).toBe(page1.items[0]!.id);
 
       const page2 = (await (
         await app.request(
@@ -373,10 +371,10 @@ describe("Snapshot routes", () => {
             `&before_id=${page1.nextCursor!.id}`,
         )
       ).json()) as Page;
-      expect(page2.snapshots).toHaveLength(1);
+      expect(page2.items).toHaveLength(1);
       expect(page2.nextCursor).toBeNull();
 
-      const ids = [...page1.snapshots, ...page2.snapshots].map((s) => s.id);
+      const ids = [...page1.items, ...page2.items].map((s) => s.id);
       expect(new Set(ids).size).toBe(3);
     });
 
@@ -388,8 +386,8 @@ describe("Snapshot routes", () => {
         "/api/sessions/sess-1/snapshots?before_id=nope",
       );
       expect(res.status).toBe(200);
-      const body = (await res.json()) as { snapshots: unknown[] };
-      expect(body.snapshots).toHaveLength(1);
+      const body = (await res.json()) as { items: unknown[] };
+      expect(body.items).toHaveLength(1);
     });
   });
 
@@ -400,18 +398,19 @@ describe("Snapshot routes", () => {
       const app = createTestApp(store);
       const created = (await (
         await app.request("/api/sessions/sess-1/snapshot", { method: "POST" })
-      ).json()) as { snapshot: { id: string } };
+      ).json()) as { id: string };
 
       const res = await app.request(
-        `/api/sessions/sess-1/snapshots/${created.snapshot.id}`,
+        `/api/sessions/sess-1/snapshots/${created.id}`,
       );
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
-        snapshot: { id: string; payload: Record<string, unknown> };
+        id: string;
+        payload: Record<string, unknown>;
       };
-      expect(body.snapshot.id).toBe(created.snapshot.id);
-      expect(body.snapshot.payload).toBeDefined();
-      expect(body.snapshot.payload.schemaVersion).toBe(3);
+      expect(body.id).toBe(created.id);
+      expect(body.payload).toBeDefined();
+      expect(body.payload.schemaVersion).toBe(3);
     });
 
     it("returns 404 for an unknown snapshot or one from another session", async () => {
@@ -422,7 +421,7 @@ describe("Snapshot routes", () => {
         await app.request("/api/sessions/sess-other-payload/snapshot", {
           method: "POST",
         })
-      ).json()) as { snapshot: { id: string } };
+      ).json()) as { id: string };
 
       const missing = await app.request(
         "/api/sessions/sess-1/snapshots/unknown-id",
@@ -430,7 +429,7 @@ describe("Snapshot routes", () => {
       expect(missing.status).toBe(404);
 
       const crossSession = await app.request(
-        `/api/sessions/sess-1/snapshots/${created.snapshot.id}`,
+        `/api/sessions/sess-1/snapshots/${created.id}`,
       );
       expect(crossSession.status).toBe(404);
     });
@@ -447,7 +446,7 @@ describe("Snapshot routes", () => {
         method: "POST",
       });
       const body = (await res.json()) as Record<string, unknown>;
-      return (body.snapshot as Record<string, unknown>).id as string;
+      return body.id as string;
     }
 
     it("returns 400 when fromSnapshotId is missing", async () => {
@@ -503,7 +502,7 @@ describe("Snapshot routes", () => {
             method: "POST",
           });
           const b = (await r.json()) as Record<string, unknown>;
-          return (b.snapshot as Record<string, unknown>).id as string;
+          return b.id as string;
         },
       );
 
@@ -1397,9 +1396,7 @@ describe("Snapshot routes", () => {
           headers: { "X-Session-Token": parentToken },
         });
         expect(snapshotRes.status).toBe(201);
-        const snapshotBody = (await snapshotRes.json()) as {
-          snapshot: { id: string };
-        };
+        const snapshotBody = (await snapshotRes.json()) as { id: string };
 
         const forkRes = await app.request("/api/sessions/sess-1/fork", {
           method: "POST",
@@ -1407,7 +1404,7 @@ describe("Snapshot routes", () => {
             "Content-Type": "application/json",
             "X-Session-Token": parentToken,
           },
-          body: JSON.stringify({ fromSnapshotId: snapshotBody.snapshot.id }),
+          body: JSON.stringify({ fromSnapshotId: snapshotBody.id }),
         });
         expect(forkRes.status).toBe(201);
         const fork = (await forkRes.json()) as {

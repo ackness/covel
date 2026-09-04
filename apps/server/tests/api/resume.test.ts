@@ -845,7 +845,7 @@ describe("Resume Routes", () => {
       expect(res.status).toBe(404);
     });
 
-    it("returns 200 with deleted: true when suspension is removed", async () => {
+    it("returns 200 with ok: true when suspension is removed", async () => {
       await createSuspension(store);
       const app = createTestApp(makeDefaultDeps(store));
 
@@ -855,7 +855,7 @@ describe("Resume Routes", () => {
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body.deleted).toBe(true);
+      expect(body.ok).toBe(true);
       expect(body.suspensionId).toBe("susp-1");
     });
 
@@ -936,7 +936,7 @@ describe("Resume Routes", () => {
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body.suspensions).toEqual([]);
+      expect(body.items).toEqual([]);
     });
 
     it("returns 404 when session does not exist", async () => {
@@ -956,7 +956,7 @@ describe("Resume Routes", () => {
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
-      const suspensions = body.suspensions as unknown[];
+      const suspensions = body.items as unknown[];
       expect(suspensions).toHaveLength(2);
     });
 
@@ -972,7 +972,7 @@ describe("Resume Routes", () => {
       const res = await app.request("/api/sessions/sess-1/suspensions");
 
       const body = (await res.json()) as Record<string, unknown>;
-      const suspensions = body.suspensions as Array<Record<string, unknown>>;
+      const suspensions = body.items as Array<Record<string, unknown>>;
       expect(suspensions).toHaveLength(1);
       expect(suspensions[0]!.id).toBe("susp-mine");
     });

@@ -504,10 +504,10 @@ function normaliseSuspension(raw: Record<string, unknown>): SuspensionRecord {
 export async function listSuspensions(
   sessionId: string,
 ): Promise<SuspensionRecord[]> {
-  const res = await request<{ suspensions: Array<Record<string, unknown>> }>(
+  const res = await request<{ items: Array<Record<string, unknown>> }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/suspensions`,
   );
-  return res.suspensions.map(normaliseSuspension);
+  return res.items.map(normaliseSuspension);
 }
 
 export async function resumeSuspension(

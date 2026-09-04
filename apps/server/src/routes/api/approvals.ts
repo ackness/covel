@@ -26,7 +26,7 @@ import {
 import type { RpcApprovalDecision } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import type { SessionLock } from "../../lib/session-lock.js";
-import { errorBody } from "../../api-error.js";
+import { errorBody, listBody, okBody } from "../../api-error.js";
 import {
   checkSessionOwner,
   checkHostedOperator,
@@ -84,7 +84,7 @@ sessionApprovalRoutes.get("/:id/approvals", async (c) => {
         sessionApprovalScope(session, pending.pluginId),
       ),
     );
-  return c.json({ pending: current });
+  return c.json(listBody(current));
 });
 
 // Revoke cached grants for a session, optionally scoped to one plugin via
@@ -100,7 +100,7 @@ sessionApprovalRoutes.delete("/:id/approvals", async (c) => {
   const session = await store.getSession(sessionId);
   if (!session) {
     const cleared = gate.revoke(sessionId, pluginId || undefined);
-    return c.json({ ok: true, cleared });
+    return c.json(okBody({ cleared }));
   }
   return withLockedSessionMutation({
     c,
@@ -118,7 +118,7 @@ sessionApprovalRoutes.delete("/:id/approvals", async (c) => {
         updatedAt: new Date().toISOString(),
       });
       const cleared = gate.revoke(sessionId, pluginId || undefined);
-      return c.json({ ok: true, cleared });
+      return c.json(okBody({ cleared }));
     },
   });
 });

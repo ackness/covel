@@ -139,7 +139,7 @@ describe("E2E: Narrator game flow", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ locale: "zh-CN", plugins: ["narrator"] }),
     });
-    expect(startRes.status).toBe(200);
+    expect(startRes.status).toBe(201);
 
     const session = (await startRes.json()) as {
       id: string;
@@ -270,9 +270,9 @@ describe("E2E: Narrator game flow", () => {
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as {
-      plugins: Array<{ id: string; pluginType: string }>;
+      items: Array<{ id: string; pluginType: string }>;
     };
-    const narrator = body.plugins.find((p) => p.id === "narrator");
+    const narrator = body.items.find((p) => p.id === "narrator");
     expect(narrator).toBeDefined();
     expect(narrator!.pluginType).toBe("core-plugin");
   });

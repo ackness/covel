@@ -184,7 +184,7 @@ export function createMiscApiRoutes(
   app.post("/api/llm-config/reload", (c) => {
     const env = readRuntimeEnv();
     if (env.desktopRestToken && bearerToken(c) !== env.desktopRestToken) {
-      return c.json({ error: "Unauthorized" }, 401);
+      return c.json(errorBody("Unauthorized", { code: "unauthorized" }), 401);
     }
     return c.json(reloadAiStack(ai));
   });

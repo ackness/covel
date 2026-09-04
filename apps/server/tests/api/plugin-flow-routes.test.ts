@@ -196,7 +196,7 @@ describe("plugin flow routes", () => {
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as {
-      packages: Array<{
+      items: Array<{
         name: string;
         displayName?: unknown;
         description?: unknown;
@@ -214,7 +214,7 @@ describe("plugin flow routes", () => {
         }>;
       }>;
     };
-    const pkg = body.packages.find((item) => item.name === "test-package");
+    const pkg = body.items.find((item) => item.name === "test-package");
     // displayName / description are served as RAW I18nText (the frontend
     // resolves to the UI locale) — never collapsed to a single locale here.
     expect(pkg?.displayName).toEqual({

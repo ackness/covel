@@ -1,5 +1,9 @@
 import type { Context, ErrorHandler } from "hono";
-import type { ApiErrorResponse } from "@covel/shared";
+import type {
+  ApiErrorResponse,
+  ApiListResponse,
+  ApiOkResponse,
+} from "@covel/shared";
 import { SessionLockTimeoutError } from "./lib/session-lock.js";
 
 export type { ApiErrorResponse } from "@covel/shared";
@@ -36,6 +40,20 @@ export function errorBody<Code extends string = string>(
   if (options?.code !== undefined) body.code = options.code;
   if (options?.details !== undefined) body.details = options.details;
   return body;
+}
+
+/** Build the only envelope used by ordinary collection endpoints. */
+export function listBody<T>(items: readonly T[]): ApiListResponse<T> {
+  return { items };
+}
+
+/** Build a successful command acknowledgement with optional result metadata. */
+export function okBody<
+  Details extends Readonly<Record<string, unknown>> = Readonly<
+    Record<never, never>
+  >,
+>(details?: Details): ApiOkResponse<Details> {
+  return { ...details, ok: true } as ApiOkResponse<Details>;
 }
 
 /**

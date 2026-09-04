@@ -54,10 +54,10 @@ describe("GET /api/sessions/:id/turns", () => {
     const res = await app.request("/api/sessions/sess-turns/turns");
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      turns: Array<{ turnId: string; commitStatus: string }>;
+      items: Array<{ turnId: string; commitStatus: string }>;
     };
-    expect(body.turns).toHaveLength(1);
-    expect(body.turns[0]).toMatchObject({
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]).toMatchObject({
       turnId: "turn-1",
       commitStatus: "committed",
     });

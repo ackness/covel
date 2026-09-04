@@ -40,8 +40,8 @@ test.describe("Covel Full Flow", () => {
     expect(response.ok()).toBeTruthy();
 
     const data = await response.json();
-    expect(Array.isArray(data.plugins)).toBeTruthy();
-    expect(data.plugins.length).toBeGreaterThanOrEqual(1);
+    expect(Array.isArray(data.items)).toBeTruthy();
+    expect(data.items.length).toBeGreaterThanOrEqual(1);
   });
 
   test("landing page loads", async ({ page }) => {

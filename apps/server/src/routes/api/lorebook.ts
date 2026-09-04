@@ -17,7 +17,7 @@ import {
   resolveSessionParam,
   withLockedSessionMutation,
 } from "./session/session-guard.js";
-import { errorBody } from "../../api-error.js";
+import { errorBody, listBody, okBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -53,7 +53,7 @@ lorebookRoutes.get("/:id/lorebook", async (c) => {
   if (!guard.ok) return guard.response;
 
   const entries = await store.listSessionLorebookEntries(sessionId);
-  return c.json({ entries });
+  return c.json(listBody(entries));
 });
 
 // POST /sessions/:id/lorebook
@@ -80,7 +80,7 @@ lorebookRoutes.post("/:id/lorebook", async (c) => {
     allowedStatuses: ["active"],
     mutate: async () => {
       await store.upsertLorebookEntries([entry]);
-      return c.json({ entry }, 201);
+      return c.json(entry, 201);
     },
   });
 });
@@ -122,7 +122,7 @@ lorebookRoutes.put("/:id/lorebook/:entryId", async (c) => {
         existing,
       );
       await store.upsertLorebookEntries([entry]);
-      return c.json({ entry });
+      return c.json(entry);
     },
   });
 });
@@ -166,7 +166,7 @@ lorebookRoutes.patch("/:id/lorebook/:entryId", async (c) => {
           updatedAt: new Date().toISOString(),
         },
       ]);
-      return c.json({ success: true, entryId, enabled: parsed.data.enabled });
+      return c.json(okBody({ entryId, enabled: parsed.data.enabled }));
     },
   });
 });
@@ -192,7 +192,7 @@ lorebookRoutes.delete("/:id/lorebook/:entryId", async (c) => {
       );
       if (!existing) return c.json(errorBody("Lorebook entry not found"), 404);
       await store.deleteLorebookEntry(sessionId, entryId);
-      return c.json({ success: true });
+      return c.json(okBody());
     },
   });
 });

@@ -188,7 +188,7 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
     // the session changed while the request body was uploading; GC reclaims it.
     await mediaStore.recordOwnership(ref.id, sessionId);
     await mediaStore.addRef(ref.id, sessionId);
-    return c.json({ id: ref.id, mime: ref.mime, size: ref.size });
+    return c.json({ id: ref.id, mime: ref.mime, size: ref.size }, 201);
   });
 });
 
@@ -506,7 +506,7 @@ mediaRoutes.post("/cleanup", singleFlight(), async (c) => {
       );
     }
     const result = await mediaStore.cleanup(scan.protectedIds, policy);
-    return new Response(JSON.stringify({ policy, result }), {
+    return new Response(JSON.stringify({ ok: true, policy, result }), {
       status: 200,
       headers: { "content-type": "application/json; charset=utf-8" },
     });

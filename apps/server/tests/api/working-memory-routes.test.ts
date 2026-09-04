@@ -70,7 +70,7 @@ describe("Working Memory API routes", () => {
       );
       expect(res.status).toBe(200);
       const body = await res.json<Record<string, unknown>>();
-      expect(body.success).toBe(true);
+      expect(body.ok).toBe(true);
       expect(body.scope).toBe("player");
       expect(body.key).toBe("prefs");
     });
@@ -98,9 +98,9 @@ describe("Working Memory API routes", () => {
       );
       expect(res.status).toBe(200);
       const body = await res.json<{
-        entries: Array<Record<string, unknown>>;
+        items: Array<Record<string, unknown>>;
       }>();
-      expect(body.entries).toHaveLength(2);
+      expect(body.items).toHaveLength(2);
     });
 
     it("DELETE removes the targeted entry", async () => {
@@ -139,9 +139,9 @@ describe("Working Memory API routes", () => {
         `/api/sessions/${SESSION_ID}/working-memory`,
       );
       const body = await listRes.json<{
-        entries: Array<{ scope: string; key: string; value: unknown }>;
+        items: Array<{ scope: string; key: string; value: unknown }>;
       }>();
-      const entry = body.entries.find(
+      const entry = body.items.find(
         (e) => e.key === "goal" && e.scope === "shared",
       );
       expect(entry).toBeDefined();

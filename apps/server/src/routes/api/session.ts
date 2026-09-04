@@ -37,7 +37,7 @@ import {
   runWithHookScope,
 } from "@covel/runtime";
 import { backgroundRuntimeLockId } from "./plugin-rpc/runtime-turn.js";
-import { errorBody, readJsonBody } from "../../api-error.js";
+import { errorBody, okBody, readJsonBody } from "../../api-error.js";
 import { normalizeLocale } from "../../lib/validators.js";
 import { signMediaTokenForSession } from "../../middleware/media-token.js";
 import {
@@ -641,10 +641,13 @@ sessionRoutes.post("/", async (c) => {
 
   // `ownerToken` is returned exactly once — it is never readable again
   // (only its hash is stored). Clients on hosted tiers must persist it.
-  return c.json({
-    ...sanitizeSessionForResponse(responseSession),
-    ownerToken: owner.token,
-  });
+  return c.json(
+    {
+      ...sanitizeSessionForResponse(responseSession),
+      ownerToken: owner.token,
+    },
+    201,
+  );
 });
 
 // ── Instance endpoints ──────────────────────────────────────────
@@ -1113,7 +1116,7 @@ sessionRoutes.delete("/:id", async (c) => {
           // PostgreSQL may report a connection error after COMMIT. An absent
           // row while this lock is held proves the delete won; purge locals.
           clearProcessLocalState();
-          return c.json({ deleted: true });
+          return c.json(okBody());
         } else if (
           sessionIncarnationIdentity(live) === expectedIncarnation &&
           live.metadata?.[SESSION_DELETION_PENDING_KEY] ===
@@ -1145,7 +1148,7 @@ sessionRoutes.delete("/:id", async (c) => {
       }
 
       clearProcessLocalState();
-      return c.json({ deleted: true });
+      return c.json(okBody());
     });
   };
 

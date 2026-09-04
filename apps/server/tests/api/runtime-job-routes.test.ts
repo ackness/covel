@@ -79,10 +79,10 @@ describe("runtime job control routes", () => {
     );
     expect(listed.status).toBe(200);
     const listedBody = (await listed.json()) as {
-      jobs: Array<Record<string, unknown>>;
+      items: Array<Record<string, unknown>>;
     };
-    expect(listedBody.jobs).toHaveLength(1);
-    expect(listedBody.jobs[0]).not.toHaveProperty("payload");
+    expect(listedBody.items).toHaveLength(1);
+    expect(listedBody.items[0]).not.toHaveProperty("payload");
 
     const cancelled = await app.request(
       "/api/sessions/runtime-job-session/runtime-jobs/source-job/cancel",
@@ -103,13 +103,14 @@ describe("runtime job control routes", () => {
     );
     expect(retried.status).toBe(202);
     const retriedBody = (await retried.json()) as {
-      job: { jobId: string; status: string };
+      jobId: string;
+      status: string;
     };
-    expect(retriedBody.job).toMatchObject({ status: "queued" });
-    expect(retriedBody.job.jobId).not.toBe("source-job");
+    expect(retriedBody).toMatchObject({ status: "queued" });
+    expect(retriedBody.jobId).not.toBe("source-job");
     expect(runtimeJobWorker.wake).toHaveBeenCalledOnce();
     await expect(
-      store.listJobStatus(session.id, { jobId: retriedBody.job.jobId }),
+      store.listJobStatus(session.id, { jobId: retriedBody.jobId }),
     ).resolves.toMatchObject([{ state: "queued", sequence: 0 }]);
   });
 });

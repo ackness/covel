@@ -43,7 +43,7 @@ import {
 import type { ExecutionContext, RuntimeManifest } from "@covel/shared";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { EventBus } from "@covel/events";
-import { errorBody } from "../../api-error.js";
+import { errorBody, listBody, okBody } from "../../api-error.js";
 import {
   checkSessionOwner,
   resolveSessionParam,
@@ -562,7 +562,7 @@ resumeRoutes.delete("/:id/suspensions/:suspensionId", async (c) => {
       }
 
       await store.deleteSuspension(suspensionId);
-      return c.json({ deleted: true, suspensionId });
+      return c.json(okBody({ suspensionId }));
     },
   });
 });
@@ -579,5 +579,5 @@ resumeRoutes.get("/:id/suspensions", async (c) => {
   if (!guard.ok) return guard.response;
 
   const suspensions = await store.listSuspensions(sessionId);
-  return c.json({ suspensions });
+  return c.json(listBody(suspensions));
 });
