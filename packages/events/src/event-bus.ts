@@ -93,12 +93,14 @@ export interface EventBus {
   /** Register for replay invalidations that require connected clients to reset. */
   onReset?(callback: (reset: EventBusReset) => void): () => void;
   /**
-   * Await all in-flight audit-event persistence. `emit()` is intentionally
+   * Await idle audit-event persistence, including queued saves and events
+   * emitted while the bus is still draining. `emit()` is intentionally
    * non-blocking (audit trail is best-effort; authoritative state is durably
    * committed via the commit pipeline). Call `flush()` at a durability barrier
    * — graceful shutdown, test teardown, or before asserting audit rows — to
-   * ensure every emitted event has been persisted. No-op when there is no
-   * store. Never rejects (per-event failures are already logged).
+   * ensure saves have settled. Dropped or failed saves remain best-effort;
+   * transport delivery is not awaited. No-op when there is no store. Never
+   * rejects (per-event failures are already logged).
    */
   flush(): Promise<void>;
 }
@@ -284,7 +286,9 @@ export function createEventBus(
   }
   const persistQueue: PersistItem[] = [];
   let persistInFlight = 0;
-  const flushWaiters: Array<() => void> = [];
+  let persistDrain:
+    | { readonly promise: Promise<void>; readonly resolve: () => void }
+    | undefined;
   let droppedSinceWarn = 0;
   let lastDropWarnMs = 0;
 
@@ -367,7 +371,8 @@ export function createEventBus(
         if (persistQueue.length > 0) {
           pump();
         } else if (persistInFlight === 0) {
-          for (const waiter of flushWaiters.splice(0)) waiter();
+          persistDrain?.resolve();
+          persistDrain = undefined;
         }
       });
     }
@@ -728,9 +733,15 @@ export function createEventBus(
 
     async flush(): Promise<void> {
       if (persistInFlight === 0 && persistQueue.length === 0) return;
-      await new Promise<void>((resolve) => {
-        flushWaiters.push(resolve);
-      });
+      // All callers share the same idle boundary for this busy period.
+      if (!persistDrain) {
+        let resolve!: () => void;
+        const promise = new Promise<void>((settle) => {
+          resolve = settle;
+        });
+        persistDrain = { promise, resolve };
+      }
+      await persistDrain.promise;
     },
   };
 

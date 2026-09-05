@@ -278,9 +278,9 @@ function approvedActivePlugins(
  *
  * SessionEnd is observe-only: the DB mutation (end / delete) has already
  * happened, so a handler failure must never surface as a 500. We swallow and
- * log. `flush()` guarantees any audit events the handlers emitted are
- * persisted before we return — there is no later flush for a session that is
- * ending or already gone.
+ * log. `flush()` waits for the handlers' audit saves to settle before we
+ * return; failed or dropped saves remain best-effort. There is no later
+ * flush for a session that is ending or already gone.
  */
 async function fireSessionEnd(
   pipeline: HookPipeline | undefined,
