@@ -7,6 +7,10 @@ import {
   stripPromptCacheMarkers,
 } from "@covel/shared";
 
+import {
+  withTextRequestDefaults,
+  defaultToolChoice,
+} from "./request-defaults.js";
 import type { ModelProviderAdapter } from "./adapter.js";
 import type {
   ModelRequestContext,
@@ -56,6 +60,25 @@ const ANTHROPIC_VERSION = "2023-06-01";
  * contract test keeps the two from drifting apart. See that constant's doc for
  * the full contract.
  */
+
+function requestedToolChoice(
+  params: import("../types.js").TextGenerationParams,
+  context: ModelRequestContext | undefined,
+): Record<string, unknown> {
+  if (!params.tools?.length || !params.defaults?.toolChoice) return {};
+  const body = {
+    ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
+    ...extractAnthropicParameterOverrides(
+      params.providerRequestMetadata,
+      context,
+      params.model,
+    ),
+  };
+  return {
+    tool_choice:
+      body.tool_choice ?? defaultToolChoice(params.defaults, body, "anthropic"),
+  };
+}
 
 /** Fields that providerRequestMetadata must never override. */
 const ANTHROPIC_PROTECTED_KEYS = new Set([
@@ -264,6 +287,7 @@ function hasSystem(value: string | AnthropicSystemBlock[]): boolean {
 export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
   return {
     async generateText(config, params, context) {
+      params = withTextRequestDefaults(params);
       const { system, messages } = toAnthropicMessages(
         applyCapabilityFallback(params.messages, context),
       );
@@ -280,6 +304,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
           ...(hasSystem(systemField) ? { system: systemField } : {}),
           messages,
           ...(anthropicTools ? { tools: anthropicTools } : {}),
+          ...requestedToolChoice(params, context),
           ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
           ...extractAnthropicParameterOverrides(
             params.providerRequestMetadata,
@@ -353,6 +378,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
     },
 
     async *streamText(config, params, context) {
+      params = withTextRequestDefaults(params);
       const { system, messages } = toAnthropicMessages(
         applyCapabilityFallback(params.messages, context),
       );
@@ -370,6 +396,7 @@ export function createAnthropicMessagesAdapter(): ModelProviderAdapter {
           ...(hasSystem(systemField) ? { system: systemField } : {}),
           messages,
           ...(anthropicTools ? { tools: anthropicTools } : {}),
+          ...requestedToolChoice(params, context),
           ...sanitizeAnthropicMetadata(params.providerRequestMetadata),
           ...extractAnthropicParameterOverrides(
             params.providerRequestMetadata,

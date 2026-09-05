@@ -28,6 +28,7 @@ export type {
   LLMResponse,
   LLMToolDefinition,
   LLMResponseFormat,
+  LLMRequestDefaults,
   LLMStreamEvent,
   LLMTargetIdentity,
   LLMAdapter,

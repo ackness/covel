@@ -98,8 +98,8 @@ html[data-theme="modern"] {
   --title-text-transform: none;
 
   --story-font-family: var(--font-sans);
-  --story-font-size: 0.9375rem;
-  --story-line-height: 1.72;
+  --story-font-size: 1.0625rem;
+  --story-line-height: 1.8;
   --story-font-weight: 400;
   --story-letter-spacing: 0;
   --story-max-width: 54rem;

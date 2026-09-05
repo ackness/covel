@@ -1,0 +1,593 @@
+@layer components {
+  /* ─────────────────────────────────────────────────────────────────
+   ATOMS — the new design language
+   ───────────────────────────────────────────────────────────────── */
+
+  /* Meta typography — for IDs, numbers, labels */
+  .ui-eyebrow {
+    font-family: var(--eyebrow-font-family);
+    font-size: var(--eyebrow-font-size);
+    font-weight: var(--eyebrow-font-weight);
+    letter-spacing: var(--eyebrow-letter-spacing);
+    text-transform: var(--eyebrow-text-transform);
+    color: var(--color-muted-foreground);
+  }
+
+  .ui-meta {
+    font-family: var(--meta-font-family);
+    font-size: var(--meta-font-size);
+    letter-spacing: var(--meta-letter-spacing);
+    text-transform: var(--meta-text-transform);
+    color: var(--color-muted-foreground);
+  }
+
+  .ui-title {
+    font-family: var(--title-font-family);
+    font-style: var(--title-font-style);
+    font-weight: var(--title-font-weight);
+    letter-spacing: var(--title-letter-spacing);
+    text-transform: var(--title-text-transform);
+  }
+
+  /* Folio — page-header line "卷·则" style for editorial section labels */
+  .ui-folio {
+    font-family: var(--meta-font-family);
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    color: color-mix(in oklab, var(--color-foreground) 58%, transparent);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .ui-folio em {
+    font-style: normal;
+    color: color-mix(in oklab, var(--color-foreground) 80%, transparent);
+  }
+
+  /* Rules / hairlines */
+  .ui-rule {
+    border: 0;
+    border-top: var(--rule-thickness) var(--rule-style) var(--rule-color);
+    height: 0;
+    width: 100%;
+  }
+
+  .ui-outline-rail {
+    border-left-style: solid;
+  }
+
+  /* Section: a content group with optional marker bar */
+  .ui-section {
+    display: block;
+    padding-block: 0.875rem 1rem;
+    border-bottom: var(--rule-thickness) var(--rule-style) var(--rule-color);
+  }
+
+  .ui-section:last-child {
+    border-bottom: 0;
+  }
+
+  .ui-section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.625rem;
+    margin-bottom: 0.625rem;
+  }
+
+  .ui-section-title {
+    font-family: var(--title-font-family);
+    font-weight: var(--title-font-weight);
+    letter-spacing: -0.005em;
+    font-size: 0.9375rem;
+    color: var(--color-foreground);
+  }
+
+  .ui-section-count {
+    font-family: var(--type-meta);
+    font-size: 0.6875rem;
+    color: var(--color-muted-foreground);
+    letter-spacing: 0.08em;
+  }
+
+  /* Band: marker ribbon + content (replaces most Card uses) */
+  .ui-band {
+    position: relative;
+    display: block;
+    padding: 0.75rem 0.875rem 0.75rem 1.125rem;
+    background: transparent;
+    border-left: 3px solid transparent;
+  }
+
+  .ui-band::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-primary);
+    opacity: 0.85;
+  }
+
+  .ui-band[data-tone="muted"]::before {
+    background: var(--color-muted-foreground);
+    opacity: 0.45;
+  }
+
+  .ui-band[data-tone="warning"]::before {
+    background: var(--accent-warning);
+  }
+  .ui-band[data-tone="danger"]::before {
+    background: var(--accent-danger);
+  }
+  .ui-band[data-tone="success"]::before {
+    background: var(--accent-success);
+  }
+  .ui-band[data-tone="info"]::before {
+    background: var(--accent-secondary);
+  }
+
+  .ui-band-quiet {
+    background: transparent;
+    padding: 0.625rem 0.875rem 0.625rem 0.875rem;
+    border-left: 0;
+  }
+
+  .ui-band-quiet::before {
+    display: none;
+  }
+
+  /* Frame: hairline outline used sparingly (replaces ui-card-surface
+   for cases that genuinely need an enclosure) */
+  .ui-frame {
+    background: var(--surface-inset);
+    border: var(--rule-thickness) var(--rule-style) var(--rule-color);
+    border-radius: var(--radius-card);
+  }
+
+  /* Rail: vertical surface for left/right panels */
+  .ui-rail {
+    background: var(--surface-rail);
+  }
+
+  /* Panel header / footer (same surface as rail) */
+  .ui-panel-header {
+    height: var(--panel-header-height);
+    background: var(--surface-rail);
+    border-bottom: var(--rule-thickness) var(--rule-style) var(--rule-color);
+    flex-shrink: 0;
+  }
+
+  .ui-panel-section {
+    padding-inline: var(--panel-section-padding-x);
+    padding-block: var(--panel-section-padding-y);
+  }
+
+  .ui-panel-footer {
+    background: var(--surface-rail);
+    padding-inline: var(--panel-section-padding-x);
+    padding-block: calc(var(--panel-section-padding-y) * 0.85);
+    border-top: var(--rule-thickness) var(--rule-style) var(--rule-color);
+  }
+
+  /* Card surface (LEGACY — keep so existing usage stays valid;
+   now renders as a quiet hairline frame instead of a glossy card) */
+  .ui-card-surface {
+    background: var(--surface-elevated);
+    border-radius: var(--radius-card);
+  }
+
+  .ui-entry-title {
+    font-family: var(--title-font-family);
+    font-style: var(--title-font-style);
+    font-weight: var(--title-font-weight);
+    letter-spacing: -0.005em;
+    text-transform: none;
+  }
+
+  .ui-dialog-shell {
+    background: var(--surface-dialog);
+    border-radius: var(--radius-dialog);
+    box-shadow: var(--shadow-dialog);
+    border: var(--rule-thickness) var(--rule-style) var(--rule-color);
+  }
+
+  .ui-input-shell {
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+    border: var(--rule-thickness) var(--rule-style) var(--rule-color);
+  }
+
+  /* Chips */
+  .ui-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.125rem 0.625rem 0.125rem 0.5rem;
+    border-radius: var(--radius-chip);
+    border: 1px solid var(--color-border);
+    background: color-mix(in oklab, var(--surface-elevated) 80%, transparent);
+    color: var(--color-muted-foreground);
+  }
+
+  .ui-chip-name {
+    font-family: var(--type-mono);
+    font-size: 0.6875rem;
+    color: var(--color-primary);
+  }
+
+  .ui-chip-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--color-primary);
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  /* Tags (square not rounded — feels more editorial) */
+  .ui-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.0625rem 0.4375rem;
+    font-family: var(--type-meta);
+    font-size: 0.6875rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-muted-foreground);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+  }
+
+  .ui-tag-solid {
+    background: var(--color-foreground);
+    color: var(--surface-page);
+    border-color: var(--color-foreground);
+  }
+
+  /* Buttons */
+  .ui-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    padding: 0.4375rem 0.875rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.005em;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--color-border);
+    background: transparent;
+    color: var(--color-foreground);
+    transition:
+      background 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
+    cursor: pointer;
+  }
+
+  .ui-btn:hover {
+    background: color-mix(in oklab, var(--color-foreground) 7%, transparent);
+  }
+
+  .ui-btn-quiet {
+    border-color: transparent;
+  }
+
+  .ui-btn-quiet:hover {
+    background: color-mix(in oklab, var(--color-foreground) 5%, transparent);
+  }
+
+  /* Empty state */
+  .ui-empty-title {
+    font-family: var(--title-font-family);
+    font-style: var(--title-font-style);
+    font-weight: var(--title-font-weight);
+    letter-spacing: -0.01em;
+    text-transform: none;
+    color: var(--color-foreground);
+  }
+
+  .ui-empty-copy {
+    max-width: 32rem;
+    color: var(--color-muted-foreground);
+  }
+
+  /* Messages */
+  .ui-message-player {
+    background: var(--surface-player);
+    color: var(--color-foreground);
+    border-left: 3px solid var(--accent-primary);
+    border-radius: 0;
+    padding: 0.5rem 0.875rem;
+  }
+
+  .ui-message-assistant {
+    color: var(--color-foreground);
+  }
+
+  /* Session column */
+  .ui-session-column {
+    max-width: var(--session-column-max-width);
+  }
+
+  /*
+ * Chat list off-screen render-skipping (P1-E). `content-visibility: auto`
+ * skips layout + paint for rows outside the viewport without unmounting them,
+ * so refs, component state, scroll anchoring, streaming follow, and the
+ * jump-to-latest affordance all keep working. `contain-intrinsic-size: auto …`
+ * lets the browser remember each row's real measured height after first paint,
+ * keeping the scrollbar stable on scrollback. The 240px is only the first-paint
+ * estimate for never-yet-rendered off-screen rows. Degrades to a normal render
+ * in browsers without `content-visibility`.
+ */
+  .chat-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 240px;
+  }
+
+  /*
+ * Session setup can render dozens of metadata-heavy plugin rows. Let the
+ * browser skip layout and paint for rows outside the page viewport while
+ * preserving their DOM state and native find/accessibility behavior.
+ */
+  .prep-plugin-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 90px;
+  }
+
+  /* Long debugger and media lists use the same browser-native render skipping. */
+  .debug-turn-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 64px;
+  }
+
+  .debug-data-message {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 64px;
+  }
+
+  .debug-compact-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 28px;
+  }
+
+  .image-gallery-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 420px;
+  }
+
+  .image-job-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 48px;
+  }
+
+  /* Meters / progress */
+  .ui-meter-track {
+    background: var(--color-muted);
+  }
+
+  .ui-meter-fill {
+    background: var(--color-primary);
+  }
+
+  /* Composer */
+  .ui-composer-frame {
+    max-width: var(--composer-max-width);
+  }
+
+  .ui-composer-input {
+    border-radius: var(--radius-control);
+    background: var(--surface-inset);
+    border: var(--rule-thickness) var(--rule-style) var(--rule-color);
+  }
+
+  .ui-composer-submit {
+    border-radius: var(--radius-control);
+  }
+
+  /* Choice — used for narrative branching options. NOT a card. */
+  .ui-choice {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.875rem 1rem 0.875rem 1.125rem;
+    background: transparent;
+    border-left: 2px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      border-color 150ms ease,
+      background 150ms ease;
+  }
+
+  .ui-choice:hover {
+    border-left-color: var(--accent-primary);
+    background: color-mix(in oklab, var(--accent-primary) 4%, transparent);
+  }
+
+  .ui-choice[aria-selected="true"],
+  .ui-choice[data-selected="true"] {
+    border-left-color: var(--accent-primary);
+    border-left-width: 3px;
+    background: color-mix(in oklab, var(--accent-primary) 6%, transparent);
+  }
+
+  .ui-choice-eyebrow {
+    font-family: var(--type-meta);
+    font-size: 0.625rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-muted-foreground);
+  }
+
+  .ui-choice-title {
+    font-family: var(--title-font-family);
+    font-weight: 500;
+    font-size: 0.9375rem;
+    color: var(--color-foreground);
+  }
+
+  .ui-choice-body {
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    color: var(--color-muted-foreground);
+  }
+
+  /* Animations */
+  @keyframes ui-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  @keyframes ui-blink {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    50.01%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  .ui-pulse-dot {
+    animation: ui-pulse 1.3s ease-in-out infinite;
+  }
+
+  .ui-cursor::after {
+    content: "";
+    display: inline-block;
+    width: 2px;
+    height: 1.05em;
+    margin-left: 3px;
+    vertical-align: -0.15em;
+    background: var(--color-primary);
+    animation: ui-blink 1s step-end infinite;
+  }
+
+  /* ─────────────────────────────────────────────────────────────────
+   Reduced motion — collapse animations/transitions and disable smooth
+   scrolling for users who request it (WCAG 2.3.3 / vestibular safety).
+   Spinners keep spinning (load feedback) but lose their easing; the
+   .ui-keep-motion escape hatch fully opts an element back in.
+   ───────────────────────────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    *:not(.ui-keep-motion),
+    *:not(.ui-keep-motion)::before,
+    *:not(.ui-keep-motion)::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+
+    /* Keep purely-rotational loading spinners visible as motion feedback,
+     just without timing easing differences. */
+    .animate-spin {
+      animation-duration: 1s !important;
+      animation-iteration-count: infinite !important;
+    }
+  }
+
+  /* ─────────────────────────────────────────────────────────────────
+   Resize handle — quiet hairline by default, becomes a thin colored
+   stripe on hover so the user still has a clear affordance.
+   ───────────────────────────────────────────────────────────────── */
+  .ui-resize-handle {
+    position: relative;
+    z-index: 10;
+  }
+
+  .ui-resize-handle::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    transition: background 150ms ease;
+  }
+
+  /* Wider invisible hit-target so the 1px hairline is still grabable */
+  .ui-resize-handle.cursor-col-resize::before {
+    left: -3px;
+    right: -3px;
+  }
+  .ui-resize-handle.cursor-row-resize::before {
+    top: -3px;
+    bottom: -3px;
+  }
+
+  .ui-resize-handle:hover {
+    background: var(--accent-primary) !important;
+    box-shadow: 0 0 0 1px
+      color-mix(in oklab, var(--accent-primary) 35%, transparent);
+  }
+
+  .ui-resize-handle[data-separator="dragging"] {
+    background: var(--accent-primary) !important;
+  }
+
+  /* ─────────────────────────────────────────────────────────────────
+   Global scrollbar — thin and theme-aware
+   ───────────────────────────────────────────────────────────────── */
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(
+        in oklab,
+        var(--color-foreground) 14%,
+        transparent
+      )
+      transparent;
+  }
+
+  /* WebKit / Blink */
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--color-foreground) 14%, transparent);
+    border-radius: 999px;
+    /* Inset border keeps the thumb a hair away from the panel edge */
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    min-height: 32px;
+    transition: background-color 150ms ease;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklab, var(--color-foreground) 28%, transparent);
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* `.ui-scroll` is now a no-op alias kept for backward compat */
+  .ui-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(
+        in oklab,
+        var(--color-foreground) 14%,
+        transparent
+      )
+      transparent;
+  }
+}

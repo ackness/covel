@@ -28,6 +28,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
     selectedSessionId,
     visibleTurns,
     loading,
+    refreshing,
     autoRefresh,
     filterCategory,
     expandedTurns,
@@ -35,6 +36,9 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
     selectedEvent,
     debugView,
     snapshotData,
+    snapshotLoading,
+    snapshotError,
+    snapshotUpdatedAt,
     traceDiscovery,
     totalEvents,
     storyTurnCount,
@@ -42,7 +46,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
     loadingOlder,
     selectSession,
     openSelectedSession,
-    loadTraces,
+    refresh,
     loadOlder,
     loadAll,
     setAutoRefresh,
@@ -156,12 +160,14 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
             variant="ghost"
             size="sm"
             className="h-8 px-2.5 text-xs text-muted-foreground"
-            onClick={loadTraces}
-            disabled={loading}
+            onClick={refresh}
+            disabled={loading || refreshing || snapshotLoading}
             aria-label={t("debugger.refresh")}
             title={t("debugger.refresh")}
           >
-            <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-3 h-3 ${loading || refreshing || snapshotLoading ? "animate-spin" : ""}`}
+            />
           </Button>
         </div>
       </div>
@@ -229,6 +235,9 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
               <SessionDataView
                 selectedSessionId={selectedSessionId}
                 snapshotData={snapshotData}
+                snapshotLoading={snapshotLoading}
+                snapshotError={snapshotError}
+                snapshotUpdatedAt={snapshotUpdatedAt}
                 traceDiscovery={traceDiscovery}
               />
             ) : debugView === "cost" ? (

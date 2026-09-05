@@ -17,6 +17,8 @@ import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
 import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
+import { storyOutputError } from "../agent-loop/story-output.js";
+import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
@@ -74,10 +76,18 @@ export async function resumeSuspendedRuntime(
     eventBus: deps.eventBus,
     emitter: deps.emitter,
   };
-  const finalizeWithPostRuntime = (
+  const finalizeWithPostRuntime = async (
     result: RuntimeResult,
-  ): RuntimeResult | Promise<RuntimeResult> =>
-    hookPipeline ? runPostRuntimeHook(postRuntimeOpts, result) : result;
+  ): Promise<RuntimeResult> => {
+    const final = hookPipeline
+      ? await runPostRuntimeHook(postRuntimeOpts, result)
+      : result;
+    const error =
+      manifest.outputKind === "story" && final.status === "success"
+        ? storyOutputError(final.output)
+        : undefined;
+    return error ? { ...final, status: "failed", output: null, error } : final;
+  };
 
   // ── PreRuntime hook ──────────────────────────────────────────────
   if (hookPipeline) {
@@ -202,6 +212,9 @@ export async function resumeSuspendedRuntime(
     manifest,
     input,
     loaded,
+    inputSlots: pendingContinuation.inputSlots
+      ? freezeInputSlots(pendingContinuation.inputSlots)
+      : undefined,
     deps,
     maxSteps,
     timeoutMs,
@@ -270,7 +283,7 @@ export async function resumeSuspendedRuntime(
     pendingProposals,
     emittedEvents,
   });
-  if (finalized.kind === "tool-failed") {
+  if (finalized.kind === "tool-failed" || finalized.kind === "invalid-output") {
     return finalizeWithPostRuntime({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
@@ -280,11 +293,14 @@ export async function resumeSuspendedRuntime(
       output: null,
       toolCalls: collectedToolCalls,
       durationMs: Date.now() - startTime,
-      error: formatToolLoopFailure({
-        runtimeId: manifest.name,
-        reason: "tool_failed_without_output",
-        failedToolCalls,
-      }),
+      error:
+        finalized.kind === "invalid-output"
+          ? finalized.error
+          : formatToolLoopFailure({
+              runtimeId: manifest.name,
+              reason: "tool_failed_without_output",
+              failedToolCalls,
+            }),
       timestamp: new Date().toISOString(),
     });
   }

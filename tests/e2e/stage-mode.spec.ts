@@ -59,6 +59,130 @@ test.describe("Stage view mode", () => {
       expect(cleanup.ok(), "stage test session cleanup failed").toBeTruthy();
     }
   });
+
+  test("mobile restored decisions remain bounded, scrollable, and actionable", async ({
+    page,
+  }) => {
+    const sessionId = await enterFreshHarukaSession(page);
+    const sessionPath = `**/api/sessions/${sessionId}`;
+    const lastChoice =
+      "Walk to the library and ask the librarian about the old festival journal.";
+    try {
+      // Restore a deterministic completed turn without invoking a model.
+      await page.route(sessionPath, async (route) => {
+        if (route.request().method() !== "GET") return route.fallback();
+        const response = await route.fetch();
+        const session = (await response.json()) as Record<string, unknown>;
+        await route.fulfill({
+          response,
+          json: { ...session, phase: "playing" },
+        });
+      });
+      await page.route(`${sessionPath}/view`, async (route) => {
+        const response = await route.fetch();
+        const snapshot = (await response.json()) as {
+          session: Record<string, unknown>;
+        };
+        await route.fulfill({
+          response,
+          json: {
+            ...snapshot,
+            session: { ...snapshot.session, phase: "playing" },
+            messages: [
+              {
+                id: "stage-mobile-story",
+                role: "assistant",
+                kind: "story",
+                turnId: "stage-mobile-turn",
+                content:
+                  "Mio points toward the library.\n\nThe afternoon bell rings.",
+                createdAt: "2026-01-01T00:00:00Z",
+              },
+            ],
+          },
+        });
+      });
+      await page.route(
+        `${sessionPath}/plugin-data/scene-prompts{,/**}`,
+        async (route) => {
+          const prompts = {
+            __turnId: "stage-mobile-turn",
+            scene: "After class",
+            recap:
+              "Mio has offered to help you find an old festival journal. ".repeat(
+                30,
+              ),
+            decision: "Where will you look first?",
+            ...Object.fromEntries(
+              Array.from({ length: 5 }, (_, index) => [
+                `prompt${index + 1}Text`,
+                `Option ${index + 1}: Ask about the archive, then compare the notes with the festival records.`,
+              ]),
+            ),
+            prompt6Text: lastChoice,
+          };
+          await route.fulfill({
+            json: {
+              items: Object.entries(prompts).map(([key, value]) => ({
+                namespace: "message",
+                key,
+                value,
+                updatedAt: "2026-01-01T00:00:00Z",
+              })),
+            },
+          });
+        },
+      );
+      await page.route("**/api/actions", async (route) => {
+        await route.fulfill({ contentType: "text/event-stream", body: "" });
+      });
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.reload();
+      const stage = page.getByTestId("stage-view");
+      const panel = page.getByTestId("stage-choices");
+      const input = page.getByTestId("stage-decision-input");
+      await expect(panel).toBeVisible();
+      await expect(panel.getByText("Where will you look first?")).toBeVisible();
+      const stageBox = await stage.boundingBox();
+      const panelBox = await panel.boundingBox();
+      expect(stageBox).not.toBeNull();
+      expect(panelBox).not.toBeNull();
+      expect(panelBox!.height).toBeLessThanOrEqual(stageBox!.height * 0.61);
+      expect(panelBox!.y + panelBox!.height).toBeLessThanOrEqual(
+        stageBox!.y + stageBox!.height + 1,
+      );
+      await expect(input).toBeInViewport();
+      await panel.locator("summary").click();
+      await expect(panel.locator("details")).toHaveAttribute("open", "");
+      await expect(input).toBeInViewport();
+      await input.fill("I check the journal.");
+      await expect(input).toHaveValue("I check the journal.");
+
+      const actionRequest = page.waitForRequest(
+        (request) =>
+          request.url().endsWith("/api/actions") && request.method() === "POST",
+      );
+      await panel
+        .getByRole("button", { name: lastChoice, exact: true })
+        .click();
+      expect((await actionRequest).postDataJSON()).toMatchObject({
+        sessionId,
+        type: "send_message",
+        payload: { content: lastChoice },
+      });
+    } finally {
+      // Finish pending restore requests before deleting their session or context.
+      await page.unrouteAll({ behavior: "wait" });
+      const cleanup = await page.request.delete(
+        `/api/sessions/${encodeURIComponent(sessionId)}`,
+      );
+      expect(
+        cleanup.ok(),
+        "stage mobile test session cleanup failed",
+      ).toBeTruthy();
+    }
+  });
 });
 
 async function enterFreshHarukaSession(page: Page): Promise<string> {

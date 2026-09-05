@@ -102,6 +102,7 @@ export interface CallLLMWithRetryParams {
   readonly responseFormat?: LLMResponseFormat;
   /** Hard per-attempt provider generation limit. */
   readonly maxOutputTokens?: number;
+  readonly defaults?: import("@covel/shared").LLMRequestDefaults;
   readonly policy: RetryPolicy;
   /**
    * Called with the queue wait (ms) each time an attempt had to wait for an
@@ -219,6 +220,7 @@ export async function callLLMWithRetry(
         messages: attemptMessages,
         tools,
         responseFormat: params.responseFormat,
+        ...(params.defaults ? { defaults: params.defaults } : {}),
         ...(params.maxOutputTokens !== undefined
           ? { maxOutputTokens: params.maxOutputTokens }
           : {}),
@@ -376,6 +378,7 @@ export async function streamLLMWithRetry(
         model,
         messages: attemptMessages,
         tools,
+        ...(params.defaults ? { defaults: params.defaults } : {}),
         ...(params.maxOutputTokens !== undefined
           ? { maxOutputTokens: params.maxOutputTokens }
           : {}),

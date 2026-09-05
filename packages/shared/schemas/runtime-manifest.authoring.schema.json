@@ -65,6 +65,27 @@
     "model": {
       "type": "string"
     },
+    "llm": {
+      "type": "object",
+      "properties": {
+        "reasoningEffort": {
+          "type": "string",
+          "const": "disabled"
+        },
+        "toolChoice": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": ["name"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "timeoutMs": {
       "type": "integer",
       "exclusiveMinimum": 0,

@@ -357,7 +357,11 @@
     "blockLabel": "Block",
     "exportEmpty": "No messages to export yet",
     "exportSuccess": "Chat exported",
-    "exportFailed": "Failed to export chat"
+    "exportFailed": "Failed to export chat",
+    "executionFailures": "Failed: {{count}}",
+    "partialCompletion": "Some updates failed. Review the affected tasks below.",
+    "runtimeFailedDetail": "This task did not complete. Retry it or inspect its trace.",
+    "stateSetup": "Preparing"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -652,19 +656,31 @@
         "label": "Theme Library",
         "description": "Import, remove, and reuse custom theme packages."
       },
-      "uiLocale": { "label": "Interface Language" },
-      "chatMessageWindow": { "label": "Chat window message limit" },
-      "onboardedVersion": { "label": "Onboarding version" },
+      "uiLocale": {
+        "label": "Interface Language"
+      },
+      "chatMessageWindow": {
+        "label": "Chat window message limit"
+      },
+      "onboardedVersion": {
+        "label": "Onboarding version"
+      },
       "llmSlotConfig": {
         "label": "Model role assignments",
         "description": "Choose a provider and model for each model role"
       },
-      "llmProviders": { "label": "Providers and models" },
+      "llmProviders": {
+        "label": "Providers and models"
+      },
       "llmProviderPriceMultipliers": {
         "label": "Provider price multipliers"
       },
-      "llmParamOverrides": { "label": "Parameter overrides" },
-      "llmCapabilityOverrides": { "label": "Capability overrides" },
+      "llmParamOverrides": {
+        "label": "Parameter overrides"
+      },
+      "llmCapabilityOverrides": {
+        "label": "Capability overrides"
+      },
       "llmPrepRuntimeBindings": {
         "label": "Prep-phase runtime bindings"
       }
@@ -901,7 +917,15 @@
       "high": "High",
       "xhigh": "Extra high",
       "max": "Maximum"
-    }
+    },
+    "modelLimitsUnknown": "Model limits unknown",
+    "capabilityUnknownHint": "No exact model record was found. Protocol support is estimated; model token limits are unknown unless explicitly overridden.",
+    "backToProviders": "All providers",
+    "maxOutputTokensInvalid": "Enter a positive whole number within the displayed limit.",
+    "conflictTitle": "Settings changed in another window",
+    "conflictDetail": "{{keys}} was not saved. The latest saved values have been loaded. Review them and retry your change.",
+    "draftConflict": "This setting changed in another window. Your draft has been kept. Reload the saved value before editing again.",
+    "reloadSavedValue": "Reload saved value"
   },
   "appearance": {
     "customizeTitle": "Fine tuning",
@@ -1678,7 +1702,9 @@
       "namespaces": "{{count}} namespaces",
       "keys": "{{count}} keys",
       "empty": "empty"
-    }
+    },
+    "snapshotRefreshFailed": "Could not refresh session data. Displayed data may be outdated; use Refresh to retry.",
+    "snapshotUpdatedAt": "Data updated at {{time}}"
   },
   "reload": {
     "reloading": "Restarting server…",

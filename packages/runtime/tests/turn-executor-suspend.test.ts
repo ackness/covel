@@ -923,6 +923,60 @@ describe("resumeSuspendedRuntime", () => {
     );
   });
 
+  it("passes the frozen declared inputs to resumed tools", async () => {
+    const suspensionId = await createTestSuspension("tc-inputs");
+    const suspension = (await store.getSuspension(suspensionId))!;
+    const inputSlots = {
+      schema: {
+        cardinality: "one" as const,
+        value: { attributes: [] },
+        source: {
+          pluginId: "source",
+          runtimeId: "source",
+          resultId: "source-result",
+        },
+      },
+    };
+    let seen: ToolCallContext | undefined;
+    const manifest = makeManifest({ tools: { builtin: ["read-inputs"] } });
+    mockLLM.setResponses([
+      {
+        content: null,
+        toolCalls: [{ id: "tc-read", name: "read-inputs", arguments: "{}" }],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+      {
+        content: "Done.",
+        toolCalls: [],
+        finishReason: "stop",
+        usage: { inputTokens: 1, outputTokens: 1 },
+      },
+    ]);
+    await resumeSuspendedRuntime(
+      {
+        ...suspension,
+        pendingContinuation: { ...suspension.pendingContinuation, inputSlots },
+      },
+      {},
+      manifest,
+      {
+        store,
+        llm: mockLLM,
+        loadRuntime: async () => ({ manifest, promptTemplate: "" }),
+        toolExecutor: {
+          getToolInfo: (name, context) =>
+            mockToolExecutor.getToolInfo(name, context),
+          execute: async (call, context) => {
+            seen = context;
+            return mockToolExecutor.execute(call, context);
+          },
+        },
+      },
+    );
+    expect(seen?.inputSlots).toEqual(inputSlots);
+  });
+
   it("retries a transient LLM failure on resume (goes through requestLLMResponse / retry policy)", async () => {
     const suspensionId = await createTestSuspension("tc-retry");
 

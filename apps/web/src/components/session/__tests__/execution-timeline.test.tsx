@@ -116,6 +116,64 @@ describe("ExecutionTimeline plugin names", () => {
     ).toBeTruthy();
   });
 
+  it("keeps failures and retry visible after completion and manual folding", () => {
+    const { rerender } = render(
+      <ExecutionTimeline
+        executing
+        steps={[
+          {
+            runtimeId: "story",
+            pluginId: "story",
+            status: "completed",
+            turnId: "turn-1",
+          },
+          {
+            runtimeId: "extract",
+            pluginId: "extract",
+            status: "failed",
+            detail: "Extraction timed out",
+            turnId: "turn-1",
+          },
+        ]}
+        onRetryRuntime={() => {}}
+      />,
+    );
+    rerender(
+      <ExecutionTimeline
+        executing={false}
+        steps={[
+          {
+            runtimeId: "story",
+            pluginId: "story",
+            status: "completed",
+            turnId: "turn-1",
+          },
+          {
+            runtimeId: "extract",
+            pluginId: "extract",
+            status: "failed",
+            detail: "Extraction timed out",
+            turnId: "turn-1",
+          },
+        ]}
+        onRetryRuntime={() => {}}
+      />,
+    );
+    const summary = screen.getByRole("button", { name: /Execution/ });
+    expect(summary.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("Failed: 1")).toBeTruthy();
+    expect(
+      screen.getByText("Some updates failed. Review the affected tasks below."),
+    ).toBeTruthy();
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Retry from.*extract/ }),
+    ).toBeTruthy();
+    fireEvent.click(summary);
+    fireEvent.click(summary);
+    expect(screen.getByRole("alert")).toBeTruthy();
+  });
+
   it("renders a detached runtime as a compact background task with progress", () => {
     render(
       <ExecutionTimeline

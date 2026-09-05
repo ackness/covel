@@ -56,6 +56,7 @@ import {
   type MediaOwnershipStore,
 } from "../media/canonicalize-media-refs.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
+import { storyOutputError } from "../agent-loop/story-output.js";
 
 /**
  * The subset of a manifest needed to resolve output kind, capabilities, scope
@@ -412,6 +413,18 @@ export async function finalizeExecution(
     let committedEvents: readonly SessionEvent[] = [];
     try {
       committedEvents = await store.withTransaction(async (tx) => {
+        // A failed story cannot complete a player action. Optional state
+        // extractors may fail independently after a valid narrative exists.
+        for (const result of results) {
+          if (kindOf(result) !== "story") continue;
+          const error =
+            result.status === "failed"
+              ? `Story runtime ${result.runtimeId} failed; the action was not committed.`
+              : result.status === "success"
+                ? storyOutputError(result.output)
+                : undefined;
+          if (error) throw new Error(error);
+        }
         const events: SessionEvent[] = [];
         for (const result of results) {
           const out = await processRuntimeResult(

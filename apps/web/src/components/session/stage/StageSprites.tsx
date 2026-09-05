@@ -66,8 +66,8 @@ export function StageSprites({
       className={clsx(
         // Dim is brightness-only: opacity made sprites see-through against
         // the backdrop for the whole idle wait, which read as a rendering bug.
-        "pointer-events-none absolute inset-x-0 top-0 bottom-[26%] transition-[filter] duration-300",
-        dimmed && "brightness-[.6]",
+        "pointer-events-none absolute inset-x-0 top-0 bottom-[45%] md:bottom-[26%] transition-[filter] duration-300",
+        dimmed && "brightness-[.78]",
       )}
       data-testid="stage-sprites"
     >
@@ -106,6 +106,8 @@ export function StageSprites({
                 style={{
                   transform: `translate(${slot.framing?.offsetX ?? 0}%, ${slot.framing?.offsetY ?? 0}%) scale(${slot.framing?.scale ?? 1})`,
                   transformOrigin: "bottom center",
+                  maskImage:
+                    "linear-gradient(to bottom, black 78%, transparent 100%)",
                 }}
                 data-visual-variant={slot.variantId}
                 data-transition={slot.transition ?? "fade"}
@@ -130,16 +132,18 @@ export function StageSprites({
               </div>
             )}
           </div>
-          <span
-            className={clsx(
-              "ui-stage-panel absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs whitespace-nowrap transition-colors duration-300",
-              slot.active
-                ? "border-(--accent-primary) text-(--accent-primary)"
-                : "text-muted-foreground",
-            )}
-          >
-            {slot.displayName}
-          </span>
+          {!slot.ref && (
+            <span
+              className={clsx(
+                "ui-stage-panel absolute bottom-1 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs whitespace-nowrap transition-colors duration-300",
+                slot.active
+                  ? "border-(--accent-primary) text-(--accent-primary)"
+                  : "text-muted-foreground",
+              )}
+            >
+              {slot.displayName}
+            </span>
+          )}
         </div>
       ))}
     </div>

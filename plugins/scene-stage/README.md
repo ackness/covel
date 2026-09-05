@@ -23,6 +23,7 @@
 - `stage/current`：解析后的当前场景状态（场景 id、名称、昼夜变体、来源、日/夜 `MediaRef`、解析后的展示图）。命中注册表或会话内已生成的场景时写入 `source: "world" | "session"`；未命中且门控放行时写入 `source: "pending"` 并向 `background-gen` 发内部事件；门控不放行则 `source: "none"`。同时写入 `sourceLabel`（`I18nText`，`source` 的展示文案，例如 `pending` → "背景生成中…"）与 `variantLabel`（`I18nText`，昼夜文案）供只读面板直接渲染——json-render spec 不支持按枚举值条件选文案，翻译需在 handler 侧算好（对齐 `scene-cast` 的 `signalView()`/`reasonLabel` 做法）。
 - `stage/generated`：会话内已增量生成的场景索引，供 `background-gen` 记账、场景解析器做会话内命中匹配、以及 `maxGeneratedScenes` 帽计数。
 - `direction/current`：权威角色舞台状态。`actors[]` 记录角色、焦点、显式站位与 `variantId/outfit/expression/pose` 请求；`actors: []` 表示明确清空。未产生该记录时 Web 继续回退到 `scene-cast/active-cast`。
+- `dialogue/<turnId>`：独立于演员焦点的正文分段署名。`stage.direction.dialogue.paragraphSpeakers` 按空行分段顺序提交准确角色 ID 或 `null`，持久化为 `{ schemaVersion: 1, turnId, paragraphSpeakers: [{ characterId, displayName } | null] }`。每轮 1–80 项，未知 ID 记录诊断并降级为 `null`；只有对白映射时允许 `cues: []`，不会清空舞台。旧消息无映射、回合不匹配或最终段数不一致时，Web 不显示人物署名。
 - **开场种子**：`scene.set` 的唯一发射方是叙事 LLM（事件目录的【必做】指示是提示词约束，不是保证）。整局不发时 `resolver` 作为 `event` 触发的 runtime 永远不跑，舞台恒空。`seed` runtime 在 `stage: setup` 跑一次补上这条下限：`stage/current` 已存在（恢复会话、setup 重试）或世界没有场景注册表时跳过，否则按白天变体写入注册表第一个场景。它跑在任何叙事输出之前，因此不与 LLM 发的 `scene.set` 竞争——两者若落在同一回合，事件扇出顺序不定，后写的会盖掉正确场景。
 
 ## userSettings

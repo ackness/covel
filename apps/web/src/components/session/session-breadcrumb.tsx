@@ -5,6 +5,7 @@ export type SessionStep = "world_select" | "prep" | "game";
 
 interface SessionBreadcrumbProps {
   step: SessionStep;
+  currentStepLabel?: string;
   worldName?: string;
   onGoWorldSelect?: () => void;
   onGoPrep?: () => void;
@@ -13,6 +14,7 @@ interface SessionBreadcrumbProps {
 
 export function SessionBreadcrumb({
   step,
+  currentStepLabel,
   worldName,
   onGoWorldSelect,
   onGoPrep,
@@ -45,7 +47,7 @@ export function SessionBreadcrumb({
 
   if (step === "game") {
     items.push({
-      label: STEP_LABELS.game,
+      label: currentStepLabel ?? STEP_LABELS.game,
       active: true,
     });
   }

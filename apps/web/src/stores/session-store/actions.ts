@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import i18n from "i18next";
 import * as api from "@/services/api";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -16,7 +16,7 @@ import { clearStreamingTextsForTurn } from "@/stores/streaming-text-store.js";
 import { bootSessionStore } from "./boot.js";
 import type { SessionActions } from "./context.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
-import { enrichGameStateFromSnapshot } from "./game-state.js";
+import { submitInteractionBlock } from "./interaction-submission.js";
 import { restoreSessionState, toStreamMessages } from "./restore-session.js";
 import {
   finalizeActionExecution,
@@ -379,83 +379,26 @@ export function useBuildSessionActions({
     [ds, dispatch, sessionIdRef],
   );
 
-  const submitInteraction = useCallback(
-    async (
-      blockId: string,
-      turnId: string,
-      interactionId: string,
-      type: "form" | "choice" | "confirmation",
-      values: Record<string, unknown>,
-      submitBehavior?: { echoFilledNarrative?: boolean },
-    ) => {
-      const sid = sessionIdRef.current;
-      if (!sid) return;
-      const echo = submitBehavior?.echoFilledNarrative !== false;
-
-      // Persist the player's input and fill the interaction template. If this
-      // fails we cannot run the turn, so fall back to a plain message so the
-      // player's input is never silently dropped.
-      let filled: string;
-      try {
-        submitBlock(blockId, values);
-        const result = await workspace.run(
-          sid,
-          `interaction:${crypto.randomUUID()}`,
-          () =>
-            api.submitInputs(sid, {
-              turnId,
-              submissions: [{ interactionId, type, values }],
-            }),
-        );
-        filled = result.results?.[0]?.filledNarrative ?? "";
-      } catch (err) {
-        if (sessionIdRef.current !== sid) return;
-        if (reportWorkspaceSyncError(err, dispatch)) return;
-        console.error("[submitInteraction] submit-form failed:", err);
-        sendMessage(Object.values(values).join(", "));
-        return;
-      }
-
-      // Run the resulting narrative turn, then re-sync the character snapshot.
-      //
-      // Proposal-backed character writes (including the builtin
-      // create/update-character tools and player-init guard) emit
-      // `character.upserted`, so characters update incrementally.
-      // `characterSchema` still has no SSE carrier; refresh the snapshot after
-      // setup input so the schema and character slices are reconciled together.
-      //
-      // So after the turn that may have created/updated the player, we pull a
-      // snapshot to refresh both `characters` and `characterSchema`. Done after
-      // the turn (not before) so a just-created character is included.
-      if (sessionIdRef.current !== sid) return;
-      dispatch({ type: "SET_EXECUTING", value: true });
-      dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-      try {
-        await runSingleAction(echo ? filled : "", {
-          echoUserMessage: echo && Boolean(filled),
-        });
-        try {
-          const snapshot = await api.getSessionView(sid);
-          if (sessionIdRef.current === sid) {
-            dispatch({
-              type: "SET_GAME_STATE",
-              state: enrichGameStateFromSnapshot(snapshot),
-            });
-          }
-        } catch {
-          // Non-critical: the character panel refreshes on reconnect/restore.
-        }
-      } finally {
-        finalizeActionExecution(dispatch, sid, sessionIdRef);
-        const currentSid = sessionIdRef.current;
-        if (currentSid) resyncSession(currentSid);
-      }
-    },
+  const submittingInteractions = useRef(new Set<string>());
+  const submitInteraction = useCallback<SessionActions["submitInteraction"]>(
+    (...submission) =>
+      submitInteractionBlock(
+        {
+          dispatch,
+          workspace,
+          sessionIdRef,
+          submitBlock,
+          runSingleAction,
+          resyncSession,
+          inFlight: submittingInteractions.current,
+        },
+        submission,
+      ),
     [
       dispatch,
+      workspace,
       sessionIdRef,
       submitBlock,
-      sendMessage,
       runSingleAction,
       resyncSession,
     ],

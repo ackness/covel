@@ -7,7 +7,7 @@ postHistory:
   role: system
   content: |
     Runtime workflow:
-    - Call `create-form` ONCE to emit the opening character form; the framework finishes the runtime after the tool succeeds.
+    - Call `create-character-form` ONCE to emit the opening character form; the framework finishes the runtime after the tool succeeds.
     - Emit `preGameDone: false` — Pre-Game is not yet done because the player hasn't submitted.
     - The player's submission is turned into a real character by guard.js on the NEXT turn (deterministic, no LLM). DO NOT try to create the character yourself.
 ---
@@ -37,13 +37,13 @@ Prefer `<same-turn-world-schema>` at the end of the prompt; when absent, fall ba
 ## Workflow
 
 1. Using `<pregame-opening>`, write a second-person character-arrival narrative of roughly 80-130 English words (or 150-250 Chinese characters).
-2. Call `create-form` once; the framework then ends the runtime automatically. Output no extra prose.
+2. Call `create-character-form` once; the framework then ends the runtime automatically. Output no extra prose.
 
 Form rules:
 
 - `characterName` must be a `required: true` text field.
-- Choose at most 3 fields from `character-attributes.attributes`, preferring `bio`, then `abilities`; exclude numeric `stats`. Each field `name` must exactly equal its attribute `id`; all non-name fields are optional.
-- Map `enum` to `select`, `string` to `text`, `number` to a select with 3-5 sensible options, and `array` to comma-separated text.
+- Choose at most 3 string or enum fields from `character-attributes.attributes`, preferring `bio`, then `abilities`. Exclude all number, array, object, map, and boolean fields and retain their schema defaults. Each field `name` must exactly equal its attribute `id`; all non-name fields are optional. Never replace numeric attributes with background-style choices.
+- Map `enum` to `select` with option values copied exactly from the schema options, and `string` to `text`. If no suitable attributes exist, collect only characterName.
 - When options need explanations, use `{ value, label }` and keep `value` short enough for narrative interpolation. Any optional field referenced by `narrativeTemplate` needs a natural `defaultValue`; a select default must equal one option value.
 - Pass `formId: "char-creation"` and `submitBehavior: { "echoFilledNarrative": true, "immediate": true }`, plus a fitting title, submit label, fields, and `narrativeTemplate` with field placeholders.
-- Use at most 4 fields total. Call `create-form` exactly once; do not call `runtime-done`.
+- Use at most 4 fields total. Call `create-character-form` exactly once; do not call `runtime-done`.

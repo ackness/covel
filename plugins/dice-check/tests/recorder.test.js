@@ -198,7 +198,7 @@ describe("dice-check recorder handler", () => {
     expect(checkRows[0].value.action).toBe("撬开地窖的铜锁");
   });
 
-  it("skips gracefully when every batch item misses a required field", async () => {
+  it("reports failure when every batch item misses a required field", async () => {
     // Arrange
     const { roll: _dropped, ...withoutRoll } = VALID_CHECK;
     const ctx = makeCtx({ data: { checks: [withoutRoll] } });
@@ -207,11 +207,11 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    expect(result.outcome).toBe("skipped");
+    expect(result.outcome).toBe("failed");
     expect(result.effects?.pluginData).toBeUndefined();
   });
 
-  it("skips gracefully when outcome is not a known value", async () => {
+  it("reports failure when outcome is not a known value", async () => {
     // Arrange
     const ctx = makeCtx({
       data: { checks: [{ ...VALID_CHECK, outcome: "maybe" }] },
@@ -221,7 +221,7 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    expect(result.outcome).toBe("skipped");
+    expect(result.outcome).toBe("failed");
     expect(result.effects?.pluginData).toBeUndefined();
   });
 
@@ -274,7 +274,7 @@ describe("dice-check recorder handler", () => {
     const result = await handler(ctx);
 
     // Assert
-    expect(result.outcome).toBe("skipped");
+    expect(result.outcome).toBe("failed");
     expect(result.effects?.pluginData).toBeUndefined();
   });
 
@@ -289,14 +289,14 @@ describe("dice-check recorder handler", () => {
     });
 
     const result = await handler(ctx);
-    expect(result.outcome).toBe("skipped");
+    expect(result.outcome).toBe("failed");
     expect(result.effects?.pluginData).toBeUndefined();
   });
 
   it("fails closed when the pre-rolled audit row is missing", async () => {
     const ctx = makeCtx({ data: { checks: [VALID_CHECK] }, dice: null });
     const result = await handler(ctx);
-    expect(result.outcome).toBe("skipped");
+    expect(result.outcome).toBe("failed");
   });
 
   it("fails closed without shifting positions when the dice pool is malformed", async () => {
@@ -305,7 +305,7 @@ describe("dice-check recorder handler", () => {
       dice: [99, VALID_CHECK.roll],
     });
     const result = await handler(ctx);
-    expect(result.outcome).toBe("skipped");
+    expect(result.outcome).toBe("failed");
   });
 
   it("uses the same-execution roller output before pluginData commits", async () => {

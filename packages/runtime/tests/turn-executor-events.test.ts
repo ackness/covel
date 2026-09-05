@@ -207,6 +207,7 @@ describe("TurnExecutor EventBus Bridge", () => {
     expect(updateAfterTurn.mock.calls[0][0].sessionId).toBe("sess-1");
     expect(updateAfterTurn.mock.calls[0][0].authoritativeFacts).toEqual({
       playerCharacter: {
+        id: "player-1",
         name: "阿砾",
         type: "player",
         description: "玄负上的少年",

@@ -59,6 +59,26 @@ export const session = snapshotSession.extend({
   embeddingLockedAt: timestamp.nullable().optional(),
 });
 
+const inputSource = z.object({
+  pluginId: nonEmptyString,
+  runtimeId: nonEmptyString,
+  resultId: nonEmptyString,
+});
+const inputSlots = z.record(
+  z.string(),
+  z.discriminatedUnion("cardinality", [
+    z.object({
+      cardinality: z.literal("one"),
+      value: jsonValue,
+      source: inputSource,
+    }),
+    z.object({
+      cardinality: z.literal("all"),
+      items: z.array(z.object({ value: jsonValue, source: inputSource })),
+    }),
+  ]),
+);
+
 const suspensions = createdRow.extend({
   turnId: z.string(),
   runtimeId: z.string(),
@@ -70,6 +90,7 @@ const suspensions = createdRow.extend({
     partialContent: z.string().optional(),
     toolCallsSoFar: z.array(jsonValue),
     pendingProposals: z.array(jsonValue),
+    inputSlots: inputSlots.optional(),
     executionContext: z.looseObject({
       executionId: nonEmptyString,
       origin: executionOrigin,

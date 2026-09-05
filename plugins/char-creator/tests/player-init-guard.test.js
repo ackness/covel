@@ -38,6 +38,41 @@ function createStore() {
 }
 
 describe("char-creator/player-init guard character mirror", () => {
+  it("rejects a form-valid string that violates a numeric world attribute before any write", async () => {
+    const store = createStore();
+    const values = { characterName: "Alex", systems: "self-taught" };
+    store.playerInputs.push({
+      id: "invalid-input",
+      sessionId: "sess-1",
+      values,
+    });
+    store.listPluginDataSessionScope = async () => [
+      {
+        namespace: "schema",
+        key: "character-attributes",
+        value: {
+          version: 1,
+          attributes: [
+            {
+              id: "systems",
+              name: "Systems",
+              type: "number",
+              category: "abilities",
+              min: 0,
+              max: 5,
+              defaultValue: 2,
+            },
+          ],
+        },
+      },
+    ];
+    await expect(guard({ sessionId: "sess-1", store })).rejects.toThrow(
+      /systems/,
+    );
+    expect(store.upsertCharacter).not.toHaveBeenCalled();
+    expect(store.setPluginData).not.toHaveBeenCalled();
+    expect(store.playerInputs[0].values).toEqual(values);
+  });
   it("creates a submitted player and mirrors it for the character panel", async () => {
     const store = createStore();
     store.playerInputs.push({

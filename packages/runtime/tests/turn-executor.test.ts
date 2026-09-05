@@ -886,7 +886,7 @@ describe("TurnExecutor _interaction protocol", () => {
     const discoveries = await discoverPlugins(PLUGINS_DIR);
     const charDiscovery = discoveries.find((d) => d.id === "char-creator")!;
     const charManifests = await loadPluginManifest(charDiscovery);
-    // player-init is the runtime that declares `create-form`. Picking
+    // player-init declares its schema-checked `create-character-form`. Picking
     // `charManifests[0]` used to grab character-tracker instead, and the
     // test only passed back when the executor let any runtime call any
     // builtin regardless of its declaration.
@@ -895,7 +895,7 @@ describe("TurnExecutor _interaction protocol", () => {
     )!.manifest;
     const charLoaded = await loadRuntime(charDiscovery, charManifest.name);
 
-    // MockLLM that calls create-form (which now returns _interaction)
+    // MockLLM calls the character-specific form wrapper.
     const mockLLM = new MockLLM();
     mockLLM.generate = async (params) => {
       const hasToolResult = params.messages.some((m) => m.role === "tool");
@@ -912,20 +912,20 @@ describe("TurnExecutor _interaction protocol", () => {
         toolCalls: [
           {
             id: "tc-1",
-            name: "create-form",
+            name: "create-character-form",
             arguments: JSON.stringify({
               formId: "test-form",
               title: "创建角色",
               fields: [
                 {
                   type: "text",
-                  name: "charName",
+                  name: "characterName",
                   label: "角色名",
                   required: true,
                 },
               ],
               submitLabel: "确认",
-              narrativeTemplate: "你的名字是 {{charName}}。",
+              narrativeTemplate: "你的名字是 {{characterName}}。",
             }),
           },
         ],
@@ -936,9 +936,13 @@ describe("TurnExecutor _interaction protocol", () => {
 
     const { createToolExecutor } =
       await import("../src/agent-loop/tool-executor.js");
-    const { builtinUITools } = await import("@covel/tools");
+    const { builtinUITools, createFormTool } = await import("@covel/tools");
+    const { default: makeCharacterForm } =
+      await import("../../../plugins/char-creator/tools/create-character-form.js");
     const toolMap = new Map();
     for (const t of builtinUITools) toolMap.set(t.name, t);
+    const characterForm = makeCharacterForm({ tool }, createFormTool);
+    toolMap.set(characterForm.name, characterForm);
 
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => charLoaded,

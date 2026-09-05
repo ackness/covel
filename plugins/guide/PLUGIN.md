@@ -84,3 +84,5 @@ postHistory:
 - **每轮都必须调用 `generate-guide`，没有例外**。"平静"/"已结束"/"没有悬念"都不是理由——即使玩家只是在散步或整理物品，也给出"继续前进 / 留在原地观察 / 换一条路试试"这类低烈度建议
 - 如果 narrator 内部写了 "你要：" / "你可以：" / "1. 2. 3." 等菜单，视为 narrator 违规。你必须用 generate-guide 生成一套更清晰的建议**覆盖**它
 - 只调用一次 `generate-guide`；不要调用 `runtime-done`，不要在工具前后输出文本
+
+Keep the guide brief: default to one short suggestion per category (about 25 English words or 45 Chinese characters). Add alternatives only for materially different actions. Keep the topic to one sentence; do not repeat the narrative or predeclare outcomes.

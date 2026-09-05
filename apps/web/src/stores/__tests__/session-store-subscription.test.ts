@@ -87,7 +87,31 @@ describe("rehydrateSessionSideState", () => {
 
   it("rehydrates plugins, plugin data, suspensions, game state and world", async () => {
     const dispatch = vi.fn();
+    vi.mocked(api.getSessionView).mockResolvedValue({
+      ...snapshot,
+      messages: [
+        {
+          id: "missed-story",
+          role: "assistant",
+          kind: "story",
+          runtimeId: "story-runtime",
+          turnId: "turn-1",
+          content: "Recovered story",
+          createdAt: "2026-09-05T00:00:00.000Z",
+        },
+      ],
+    });
     await rehydrateSessionSideState("s1", { current: "s1" }, dispatch);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "MERGE_RECOVERED_MESSAGES",
+      messages: [
+        expect.objectContaining({
+          id: "missed-story",
+          kind: "story",
+          content: "Recovered story",
+        }),
+      ],
+    });
 
     expect(api.listPluginData).toHaveBeenCalledTimes(1);
     expect(api.listPluginData).toHaveBeenCalledWith("s1", "p1");
@@ -112,6 +136,29 @@ describe("rehydrateSessionSideState", () => {
       type: "UPDATE_WORLD",
       world: expect.objectContaining({ id: "w1" }),
     });
+  });
+
+  it("drops a snapshot superseded by a newer recovery generation", async () => {
+    let release!: (value: typeof snapshot) => void;
+    vi.mocked(api.getSessionView).mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    let current = true;
+    const dispatch = vi.fn();
+    const pending = rehydrateSessionSideState(
+      "s1",
+      { current: "s1" },
+      dispatch,
+      () => current,
+    );
+    current = false;
+    release(snapshot);
+    await pending;
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "MERGE_RECOVERED_MESSAGES" }),
+    );
   });
 
   it("drops every async result after the active session changes", async () => {

@@ -59,6 +59,15 @@ Any new store backend MUST pass this suite.
 
 ## Backend implementations
 
+Story completion is a commit precondition: a failed `outputKind: story` runtime,
+or a successful story result without non-empty sanitized `narrativeOutput`,
+rejects execution finalization before any buffered proposals, journal messages,
+or player-turn counters commit. Already durable client messages remain outside
+this transaction. A premature `runtime-done` first requests narrative with the
+remaining bounded model steps; an empty result becomes a failed runtime. This
+does not retry or reverse external tool side effects. Optional system extractors
+can still fail after a valid story; their failure does not discard the story.
+
 ### MemoryStore
 
 Two-phase snapshot using a **shallow reference copy** of each collection

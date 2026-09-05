@@ -106,6 +106,50 @@ const checkpoint: BrowserCheckpoint = JSON.parse(
 ) as BrowserCheckpoint;
 
 describe("checkpoint record validation", () => {
+  it("preserves declared suspension inputs and rejects malformed provenance", () => {
+    const inputSlots = {
+      narrative: {
+        cardinality: "one",
+        value: "A lamp goes out.",
+        source: { pluginId: "story", runtimeId: "story", resultId: "result-1" },
+      },
+    };
+    const value = {
+      ...checkpoint,
+      suspensions: [
+        {
+          ...checkpoint.suspensions[0],
+          pendingContinuation: {
+            ...checkpoint.suspensions[0]!.pendingContinuation,
+            inputSlots,
+          },
+        },
+      ],
+    };
+    expect(
+      validateBrowserCheckpoint(value).suspensions[0]?.pendingContinuation
+        .inputSlots,
+    ).toEqual(inputSlots);
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...value,
+        suspensions: [
+          {
+            ...value.suspensions[0],
+            pendingContinuation: {
+              ...value.suspensions[0]!.pendingContinuation,
+              inputSlots: {
+                narrative: {
+                  ...inputSlots.narrative,
+                  source: { ...inputSlots.narrative.source, resultId: 123 },
+                },
+              },
+            },
+          },
+        ],
+      }),
+    ).toThrow(/inputSlots.narrative.source.resultId/);
+  });
   it("preserves valid records in every durable domain and opaque JSON", () => {
     expect(validateBrowserCheckpoint(checkpoint)).toEqual(checkpoint);
   });

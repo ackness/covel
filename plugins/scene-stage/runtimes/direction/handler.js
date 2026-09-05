@@ -16,7 +16,16 @@ const POSITIONS = new Set([
 export default async function handler(ctx) {
   const evt = ctx.triggerEvent;
   const cues = Array.isArray(evt?.data?.cues) ? evt.data.cues : [];
-  if (!evt || evt.topic !== "stage.direction" || cues.length === 0) {
+  const paragraphSpeakers = evt?.data?.dialogue?.paragraphSpeakers;
+  const hasDialogue =
+    Array.isArray(paragraphSpeakers) &&
+    paragraphSpeakers.length > 0 &&
+    paragraphSpeakers.length <= 80;
+  if (
+    !evt ||
+    evt.topic !== "stage.direction" ||
+    (!cues.length && !hasDialogue)
+  ) {
     return {
       outcome: "success",
       value: { skipped: true, reason: "no usable stage.direction cues" },
@@ -30,6 +39,32 @@ export default async function handler(ctx) {
   const hadDirectionState = previous !== null && previous !== undefined;
   let actors = normalizeActors(previous?.actors);
   const diagnostics = [];
+  const dialogue = hasDialogue
+    ? {
+        schemaVersion: 1,
+        turnId: ctx.turnId,
+        paragraphSpeakers: paragraphSpeakers.map((characterId) => {
+          if (characterId === null) return null;
+          const character = characters.find((row) => row.id === characterId);
+          if (!character) {
+            diagnostics.push(
+              `unresolved dialogue speaker: ${String(characterId)}`,
+            );
+            return null;
+          }
+          return { characterId: character.id, displayName: character.name };
+        }),
+      }
+    : undefined;
+  const proposals = dialogue
+    ? [
+        makeProposal(ctx, new Date().toISOString(), "plugin.data", {
+          namespace: "dialogue",
+          key: ctx.turnId,
+          value: dialogue,
+        }),
+      ]
+    : [];
   let changed = false;
 
   for (const cue of cues) {
@@ -40,7 +75,11 @@ export default async function handler(ctx) {
       continue;
     }
 
-    const matched = resolveActor(cue.character, actors, characters);
+    const matched = resolveActor(
+      cue.character,
+      actors,
+      characters.filter((character) => character.type !== "player"),
+    );
     if (!matched) {
       diagnostics.push(`unresolved character: ${String(cue.character ?? "")}`);
       continue;
@@ -113,10 +152,17 @@ export default async function handler(ctx) {
   }
 
   if (!changed) {
-    return {
-      outcome: "success",
-      value: { skipped: true, diagnostics },
-    };
+    return withPendingProposals(
+      {
+        outcome: "success",
+        value: {
+          skipped: !dialogue,
+          ...(dialogue ? { dialogue } : {}),
+          diagnostics,
+        },
+      },
+      proposals,
+    );
   }
   if (actors.length > 0 && !actors.some((actor) => actor.active)) {
     actors = actors.map((actor, index) => ({ ...actor, active: index === 0 }));
@@ -136,9 +182,9 @@ export default async function handler(ctx) {
   return withPendingProposals(
     {
       outcome: "success",
-      value: { direction, diagnostics },
+      value: { direction, ...(dialogue ? { dialogue } : {}), diagnostics },
     },
-    [proposal],
+    [proposal, ...proposals],
   );
 }
 
@@ -219,8 +265,7 @@ async function listCharacters(store, sessionId) {
         row &&
         typeof row === "object" &&
         typeof row.id === "string" &&
-        typeof row.name === "string" &&
-        row.type !== "player",
+        typeof row.name === "string",
     )
-    .map((row) => ({ id: row.id, name: row.name }));
+    .map((row) => ({ id: row.id, name: row.name, type: row.type }));
 }

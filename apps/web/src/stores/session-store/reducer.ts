@@ -9,6 +9,8 @@ import {
   buildLegacyJobExecutionStep,
 } from "./execution-steps.js";
 import { applyPluginMessageSurface } from "./plugin-message-surface.js";
+import { mergeRecoveredMessages } from "./recovered-messages.js";
+import { orderStoryBeforePluginMessages } from "./message-order.js";
 import type {
   AssetProgressEvent,
   SessionAction,
@@ -65,6 +67,7 @@ function capLiveMessages(
   state: SessionState,
   messages: StreamMessage[],
 ): Pick<SessionState, "messages"> & Partial<SessionState> {
+  messages = orderStoryBeforePluginMessages(messages);
   if (messages.length <= messagesWindowCap) return { messages };
   const dropCount = messages.length - messagesWindowCap;
   const dropped = messages.slice(0, dropCount);
@@ -209,7 +212,7 @@ export function reducer(
       if (existingIdx >= 0) {
         const next = [...state.messages];
         next[existingIdx] = { ...next[existingIdx], ...action.message };
-        return { ...state, messages: next };
+        return { ...state, messages: orderStoryBeforePluginMessages(next) };
       }
       return {
         ...state,
@@ -231,7 +234,7 @@ export function reducer(
           ...action.message,
           kind: "story",
         };
-        return { ...state, messages: next };
+        return { ...state, messages: orderStoryBeforePluginMessages(next) };
       }
       const authoritativeIdx = state.messages.findIndex(
         (message) => message.id === action.message.id,
@@ -239,7 +242,7 @@ export function reducer(
       if (authoritativeIdx >= 0) {
         const next = [...state.messages];
         next[authoritativeIdx] = { ...action.message, kind: "story" };
-        return { ...state, messages: next };
+        return { ...state, messages: orderStoryBeforePluginMessages(next) };
       }
       return {
         ...state,
@@ -304,6 +307,15 @@ export function reducer(
         gameState: newGameState,
       };
     }
+    case "MERGE_RECOVERED_MESSAGES":
+      return {
+        ...state,
+        messages: mergeRecoveredMessages(
+          state.messages,
+          action.messages,
+          state.executing,
+        ),
+      };
     case "LOAD_MESSAGES": {
       // LOAD_MESSAGES overwrites `messages` with the server snapshot, so any
       // plugin-message entries previously synthesised from plugin-data hydration

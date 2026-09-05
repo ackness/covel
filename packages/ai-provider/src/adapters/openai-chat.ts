@@ -1,3 +1,7 @@
+import {
+  withTextRequestDefaults,
+  defaultToolChoice,
+} from "./request-defaults.js";
 import type { ModelProviderAdapter } from "./adapter.js";
 import type { UsageSummary } from "../types.js";
 import {
@@ -135,11 +139,12 @@ function attachOpenAiTools(
   tools: ToolDefinition[] | undefined,
   model: string,
   context: ModelRequestContext | undefined,
+  defaults: import("@covel/shared").LLMRequestDefaults | undefined,
 ): void {
   if (!tools || tools.length === 0) return;
   body.tools = tools;
   if (!isDeepSeekV4ThinkingRequest(model, context, body)) {
-    body.tool_choice = "auto";
+    body.tool_choice ??= defaultToolChoice(defaults, body, "chat");
   }
 }
 
@@ -188,6 +193,7 @@ function serializeMessages(messages: TextMessage[]): Record<string, unknown>[] {
 export function createOpenAiChatAdapter(): ModelProviderAdapter {
   return {
     async generateText(config, params, context) {
+      params = withTextRequestDefaults(params);
       const messages = applyCapabilityFallback(params.messages, context);
       const body: Record<string, unknown> = {
         model: params.model,
@@ -199,7 +205,13 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           params.model,
         ),
       };
-      attachOpenAiTools(body, params.tools, params.model, context);
+      attachOpenAiTools(
+        body,
+        params.tools,
+        params.model,
+        context,
+        params.defaults,
+      );
       if (params.responseFormat) {
         // json_object is the widest interoperable structured-output mode for
         // OpenAI-compatible endpoints (including Qwen/DeepSeek proxies). The
@@ -258,6 +270,7 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
     },
 
     async *streamText(config, params, context) {
+      params = withTextRequestDefaults(params);
       const messages = applyCapabilityFallback(params.messages, context);
       const body: Record<string, unknown> = {
         model: params.model,
@@ -274,7 +287,13 @@ export function createOpenAiChatAdapter(): ModelProviderAdapter {
           params.model,
         ),
       };
-      attachOpenAiTools(body, params.tools, params.model, context);
+      attachOpenAiTools(
+        body,
+        params.tools,
+        params.model,
+        context,
+        params.defaults,
+      );
       const response = await postJson(config, "/chat/completions", body);
 
       // Check HTTP status before parsing SSE — a non-2xx response won't be SSE

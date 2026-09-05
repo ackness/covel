@@ -89,6 +89,26 @@ describe("SettingsDialog navigation", () => {
     );
   });
 
+  it("applies a provider deep link once and allows subsequent navigation", async () => {
+    const view = render(
+      <SettingsDialog open initialKey="llm.providers" onOpenChange={vi.fn()} />,
+    );
+    expect(await screen.findByText("Presets pane")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Model Roles" }));
+    expect(await screen.findByText("Slots pane")).toBeTruthy();
+    view.rerender(
+      <SettingsDialog
+        open={false}
+        initialKey="llm.providers"
+        onOpenChange={vi.fn()}
+      />,
+    );
+    view.rerender(
+      <SettingsDialog open initialKey="llm.providers" onOpenChange={vi.fn()} />,
+    );
+    expect(await screen.findByText("Presets pane")).toBeTruthy();
+  });
+
   it("labels search and clears a stale query after a locale change", async () => {
     render(<SettingsDialog open onOpenChange={vi.fn()} />);
 

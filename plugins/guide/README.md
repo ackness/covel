@@ -17,3 +17,5 @@
 ## 开发
 
 修改建议分类、工具输出或 UI 绑定后，运行本插件测试。
+
+The guide shows one action per category first, with additional suggestions under “More options”. Players send selected actions and optional text together from the story composer; the guide does not have a second custom-action input.

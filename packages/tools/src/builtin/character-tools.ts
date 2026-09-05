@@ -40,6 +40,7 @@ import { overlayCharacters } from "../proposal-overlay.js";
 import { validateFieldsAgainstSchema } from "../schema-validator.js";
 import {
   buildFieldsZod,
+  assertCharacterFields,
   characterTypeSchema,
   formatFields,
   formatFieldValue,
@@ -275,6 +276,11 @@ function createUpdateCharacterTool(
           ? { ...prevFields, ...params.fields }
           : existing.fields;
       const newVersion = existing.version + 1;
+      const schema = await loadCharacterSchema(store, deps, context.sessionId);
+      // Validate the supplied patch, so correcting one legacy field does not
+      // require rewriting unrelated attributes that were already malformed.
+      if (params.fields !== undefined)
+        assertCharacterFields(params.fields, schema);
 
       // Buffer the upsert as a proposal (commit handler does the write +
       // mirror). `existing` may itself be a buffered create from earlier in
@@ -324,7 +330,6 @@ function createUpdateCharacterTool(
       // Soft schema validation over the merged fields — catches drift the
       // LLM introduced this turn as well as ones already in storage, so a
       // cleanup update can surface outstanding warnings too.
-      const schema = await loadCharacterSchema(store, deps, context.sessionId);
       const { warningText } = validateFieldsAgainstSchema(mergedFields, schema);
       const warning = warningText ? `\n\n${warningText}` : "";
 

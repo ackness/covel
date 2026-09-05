@@ -783,6 +783,8 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    */
   readonly guard?: string;
   readonly model?: string;
+  /** Per-call preferences; explicit slot/preset reasoning settings take priority. */
+  readonly llm?: import("./llm-adapter.js").LLMRequestDefaults;
   /**
    * Per-runtime hard timeout in ms.
    * Overrides the executor default for agent runtimes.

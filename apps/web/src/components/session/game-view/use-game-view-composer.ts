@@ -170,8 +170,6 @@ export function useGameViewComposer({
     [pendingDrafts, clearInteractionDrafts, onSendMessage, submitBlock],
   );
 
-  const handleConfirmDrafts = useCallback(() => commitDrafts(), [commitDrafts]);
-
   const applyCommandCompletion = useCallback((command: SessionSlashCommand) => {
     setInputValue(completeSlashCommand(command));
     setCommandMenuDismissed(false);
@@ -266,7 +264,11 @@ export function useGameViewComposer({
 
   const handleSubmit = useCallback(() => {
     const val = inputValue.trim();
-    if (!val || composerDisabled || commandExecuting) return;
+    if (composerDisabled || commandExecuting) return;
+    if (!val) {
+      if (!executing) commitDrafts();
+      return;
+    }
     if (commandQuery && selectedCommand) {
       if (!commandAcceptsTypedName(selectedCommand, val)) {
         if (!commandMenuDismissed) applyCommandCompletion(selectedCommand);
@@ -376,7 +378,7 @@ export function useGameViewComposer({
     commandExecuting,
     commandFeedback,
     applyCommandCompletion,
-    handleConfirmDrafts,
+    handleConfirmDrafts: handleSubmit,
     handleSubmit,
     handleAbort,
     handleKeyDown,

@@ -5,6 +5,7 @@ import type {
   RuntimeResult,
   ToolCallRecord,
   TurnInput,
+  InputSlot,
 } from "@covel/shared";
 import { isDefaultLocale, toJsonValueOrDiagnostic } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
@@ -35,6 +36,7 @@ import {
 import {
   extractToolFailureMessage,
   isRecord,
+  parseFinalOutputEnvelope,
   type ExecutedToolCallState,
   type FailedToolCallState,
 } from "../turn-executor/turn-output-helpers.js";
@@ -46,6 +48,7 @@ import {
 } from "./turn-agent-tool-loop-messages.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
+import { storyOutputError } from "./story-output.js";
 import {
   applyBudget,
   resolveBudgetOptions,
@@ -97,6 +100,7 @@ export interface RunAgentToolLoopOptions {
   /** Authoritative logical turn number, forwarded into ToolCallContext. */
   readonly turnNumber?: number;
   readonly loaded: LoadedRuntime;
+  readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   readonly deps: AgentLoopDeps;
   readonly maxSteps: number;
   readonly timeoutMs: number;
@@ -124,6 +128,7 @@ export async function runAgentToolLoop({
   input,
   turnNumber,
   loaded,
+  inputSlots,
   deps,
   maxSteps,
   timeoutMs,
@@ -454,6 +459,7 @@ export async function runAgentToolLoop({
               pluginId: manifest.pluginId,
               runtimeId: manifest.name,
               pendingProposals: pendingProposals,
+              inputSlots,
               emittedEventTopics: emittedEvents.map((e) => e.topic),
               emitter: deps.emitter,
               ...(turnNumber !== undefined ? { turnNumber } : {}),
@@ -542,6 +548,7 @@ export async function runAgentToolLoop({
                 sentinel: toolResult.parsedResult,
                 manifest,
                 input,
+                inputSlots,
                 deps,
                 hookPipeline,
                 messages,
@@ -637,6 +644,24 @@ export async function runAgentToolLoop({
         );
         collectedToolCalls.length = 0;
         collectedToolCalls.push(...businessCalls);
+        if (
+          manifest.outputKind === "story" &&
+          storyOutputError(
+            finalContent ? parseFinalOutputEnvelope(finalContent).output : null,
+          )
+        ) {
+          // A lookup is preparation, not a story. Give the model its remaining
+          // bounded steps to write the narrative before accepting completion.
+          finalContent = null;
+          activeToolDefs = undefined;
+          messages.push({
+            role: "system",
+            content: isDefaultLocale(input.locale)
+              ? "你只完成了工具调用，还没有输出故事正文。现在根据已读取的信息直接写出本回合正文；不要再调用工具或解释处理过程。"
+              : "You completed tool calls but have not written the story. Write this turn's narrative now using the information already retrieved. Do not call more tools or describe the processing steps.",
+          });
+          continue;
+        }
         // A `requireToolUse` runtime can reach here having called nothing but
         // the terminator — a nudged model will do exactly that to satisfy
         // "call the declared tools". This exit runs before the gate below, so

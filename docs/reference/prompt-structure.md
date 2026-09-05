@@ -55,6 +55,10 @@ messages
 
 ## 3. 插件扩展点
 
+`PostContextAssembly` 除组装后的 `systemPrompt` / `messages` 外，还收到只读 `promptTemplate`（本地化后的原始模板，尚未替换变量）、`inputSlots`（权威已解析输入）及 `characters`（已有角色规范 ID、姓名、类型和可选简介）。这些源字段不接受 hook replacement；只可改写最终 prompt/messages。工具的 `ToolExecutionContext.inputSlots` 使用同一数据视图。显式 typed inputs 保留其 cardinality、value/items 和 provenance；legacy `input.inject` 的 runtime 来源只投影本 runtime 明确声明的 field，以去掉尖括号的 alias 为键。未声明上游字段不会暴露，typed slot 同名时优先。这不改变 legacy 调度或 skipped guard 的注入语义。
+
+挂起时冻结 `inputSlots` 到 `pendingContinuation`，恢复工具调用继续使用原输入；旧存档缺少该可选字段仍可读取。`world-ir` 通过自身 hook 用任务模板、当前完整 narrative/source 及角色姓名构建专用提取请求，不再把历史剧情和全部记忆重复注入。叙事作为用户消息中的 JSON 数据传入，不能解释成新指令；其他 runtime 的 prompt 保持原装配策略。
+
 插件可以在 `PLUGIN.md` frontmatter 声明 `authorsNote` 和 `postHistory`：
 
 ```yaml
@@ -86,6 +90,12 @@ summaryFocus:
 - 相同 `(role, depth)` 的 `authorsNote` 用空行合并成一条消息。
 - 不同 depth 的 `authorsNote` 分别插入到对应历史位置。
 - `postHistory` 按 role 分组，相同 role 合并后追加到消息末尾。
+
+### Runtime LLM 请求默认值
+
+agent manifest 可声明 `llm.reasoningEffort: disabled` 和 `llm.toolChoice: { name: submit-facts }`。这表示该 runtime 的请求偏好，不改写 session/provider 配置，也不会从 `requireToolUse` 自动推导。重试、非流式调用、流式调用与 fallback 使用同一偏好；用户 slot 的 parameter overrides 和 preset provider metadata 优先。
+
+provider adapter 只在没有显式 reasoning 配置时应用默认关闭值，沿现有模型能力映射为 Qwen `enable_thinking: false`、DeepSeek disabled，或支持 `none` 的模型的对应值；不支持关闭的模型保留原能力。指定工具分别映射到 Chat Completions、Responses 和 Anthropic 原生协议；显式启用 thinking 的 Qwen/Anthropic 请求退回自动选择，DeepSeek v4 thinking 继续省略不兼容的 `tool_choice`，避免插件偏好覆盖玩家配置而导致 400。该偏好不能代替运行时工具执行与输出 schema 校验。
 
 ## 4. Template 变量
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Info, RotateCcw, SlidersHorizontal } from "lucide-react";
 import {
@@ -6,17 +6,24 @@ import {
   getProviderProfiles,
   getSlotConfig,
   flattenProviderProfiles,
-  lookupModelCapabilityDetails,
+  getCapabilityOverrides,
   setParamOverrides,
   slotBindingId,
   type ModelParameterOverrides,
-  type ReasoningEffortProfile,
 } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { useSession } from "@/stores/session-store.js";
 import { ReasoningEffortCard } from "./llm-reasoning-effort-card.js";
 import { pruneInvalidReasoningEffortOverride } from "./llm-reasoning-effort.js";
+
+import {
+  resolveDisplayCapability,
+  resolveEffectiveModelTarget,
+} from "./llm-effective-capability.js";
+import { useModelCapability } from "./use-model-capability.js";
+import { MaxOutputTokensCard, ValueCell } from "./llm-max-output-tokens.js";
+import { useSettingsRevision } from "../use-settings-revision.js";
 
 const DEFAULT_FALLBACK_SLOTS = [
   "story",
@@ -43,12 +50,6 @@ interface ParameterDefinition {
   min: number;
   max: number;
   step: number;
-}
-
-interface ReasoningProfileLookup {
-  targetKey: string;
-  profile: ReasoningEffortProfile | null;
-  succeeded: boolean;
 }
 
 const PARAMETER_DEFINITIONS: readonly ParameterDefinition[] = [
@@ -130,83 +131,37 @@ export function LlmAdvancedPane() {
   const [selectedSlot, setSelectedSlot] = useState<string>(
     slots[0] ?? "default",
   );
+  const revision = useSettingsRevision([
+    "llm.paramOverrides",
+    "llm.slotConfig",
+    "llm.providers",
+    "llm.capabilityOverrides",
+  ]);
+  useEffect(() => {
+    setParamOverridesLocal(getParamOverrides());
+  }, [revision]);
 
   const current = paramOverrides[selectedSlot] ?? {};
   const serverSlot = llm?.slots[selectedSlot];
-  const localModels = useMemo(
-    () => flattenProviderProfiles(getProviderProfiles()),
-    [],
-  );
-  const slotConfig = useMemo(() => getSlotConfig(), []);
+  const localModels = flattenProviderProfiles(getProviderProfiles());
+  const slotConfig = getSlotConfig();
   const boundModelId = slotBindingId(slotConfig[selectedSlot]);
   const boundModel = [...state.presets, ...localModels].find(
     (preset) => preset.id === boundModelId,
   );
-  const effectiveTarget = {
-    provider: boundModel?.provider ?? serverSlot?.provider ?? "",
-    model: boundModel?.model ?? serverSlot?.model ?? "",
-    protocol: boundModel?.protocol ?? serverSlot?.protocol,
-  };
-  const reasoningTargetKey = JSON.stringify([
-    effectiveTarget.provider,
-    effectiveTarget.model,
-    effectiveTarget.protocol ?? null,
-  ]);
-  const [reasoningLookup, setReasoningLookup] =
-    useState<ReasoningProfileLookup>();
-  const reasoningProfile =
-    reasoningLookup?.targetKey === reasoningTargetKey
-      ? reasoningLookup.profile
-      : undefined;
-  const canPruneReasoningOverride =
-    reasoningLookup?.targetKey === reasoningTargetKey &&
-    reasoningLookup.succeeded;
-
-  useEffect(() => {
-    let active = true;
-    if (!effectiveTarget.model) {
-      setReasoningLookup({
-        targetKey: reasoningTargetKey,
-        profile: null,
-        succeeded: false,
-      });
-      return () => {
-        active = false;
-      };
-    }
-    setReasoningLookup(undefined);
-    lookupModelCapabilityDetails(
-      effectiveTarget.model,
-      effectiveTarget.provider,
-      effectiveTarget.protocol,
-    )
-      .then((result) => {
-        if (active) {
-          setReasoningLookup({
-            targetKey: reasoningTargetKey,
-            profile: result.reasoning,
-            succeeded: true,
-          });
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setReasoningLookup({
-            targetKey: reasoningTargetKey,
-            profile: null,
-            succeeded: false,
-          });
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [
+  const effectiveTarget = resolveEffectiveModelTarget(boundModel, serverSlot);
+  const lookup = useModelCapability(
     effectiveTarget.model,
     effectiveTarget.provider,
     effectiveTarget.protocol,
-    reasoningTargetKey,
-  ]);
+  );
+  const reasoningProfile = lookup?.reasoning;
+  const canPruneReasoningOverride = lookup !== undefined && lookup !== null;
+  const capability = resolveDisplayCapability(
+    lookup,
+    effectiveTarget.baseCapability,
+    getCapabilityOverrides()[selectedSlot],
+  );
   const overrideCount = Object.values(current).filter(
     (value) => value !== undefined,
   ).length;
@@ -309,7 +264,8 @@ export function LlmAdvancedPane() {
         />
         <MaxOutputTokensCard
           override={current.maxOutputTokens}
-          modelLimit={serverSlot?.capability?.maxOutputTokens}
+          key={selectedSlot}
+          modelLimit={capability?.maxOutputTokens}
           onChange={(value) => setField("maxOutputTokens", value)}
         />
       </div>
@@ -409,111 +365,6 @@ function ParameterCard({
       <div className="flex justify-between font-mono text-[9px] text-muted-foreground/70">
         <span>{definition.min}</span>
         <span>{definition.max}</span>
-      </div>
-    </div>
-  );
-}
-
-function MaxOutputTokensCard({
-  override,
-  modelLimit,
-  onChange,
-}: {
-  override: number | undefined;
-  modelLimit?: number;
-  onChange: (value: number | undefined) => void;
-}) {
-  const { t } = useTranslation();
-  return (
-    <div className="border border-border p-3 space-y-3 md:col-span-2">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm font-medium">
-            {t("settings.maxOutputTokens", "Max output tokens")}
-          </div>
-          <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
-            {t(
-              "settings.maxOutputTokensHint",
-              "Caps one response. Leave unset to use the provider default.",
-            )}
-          </p>
-        </div>
-        {override !== undefined && (
-          <button
-            type="button"
-            onClick={() => onChange(undefined)}
-            className="shrink-0 text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-          >
-            {t("settings.useDefault", "Use default")}
-          </button>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-2 text-[10px]">
-        <ValueCell
-          label={t("settings.defaultValue", "Default")}
-          value={t("settings.providerDefault", "Provider default")}
-        />
-        <ValueCell
-          label={t("settings.currentValue", "Current")}
-          value={
-            override?.toLocaleString() ??
-            t("settings.providerDefault", "Provider default")
-          }
-          active={override !== undefined}
-        />
-      </div>
-      <div className="flex items-center gap-3">
-        <input
-          aria-label={t("settings.maxOutputTokens", "Max output tokens")}
-          type="number"
-          min={1}
-          max={modelLimit}
-          step={1}
-          placeholder={t("settings.numberPlaceholder", "e.g. 4096")}
-          value={override ?? ""}
-          onChange={(event) => {
-            if (!event.target.value) {
-              onChange(undefined);
-              return;
-            }
-            const value = Number.parseInt(event.target.value, 10);
-            if (Number.isFinite(value) && value > 0) onChange(value);
-          }}
-          className="min-w-0 flex-1 border border-border bg-background px-3 py-2 text-sm font-mono outline-none focus:ring-1 focus:ring-primary"
-        />
-        {modelLimit && (
-          <span className="shrink-0 text-[10px] text-muted-foreground">
-            {t("settings.modelOutputLimit", {
-              value: modelLimit.toLocaleString(),
-              defaultValue: "Model limit: {{value}}",
-            })}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ValueCell({
-  label,
-  value,
-  active = false,
-}: {
-  label: string;
-  value: string;
-  active?: boolean;
-}) {
-  return (
-    <div
-      className={
-        active
-          ? "border border-primary/40 bg-primary/5 px-2 py-1.5"
-          : "border border-border/60 bg-muted/20 px-2 py-1.5"
-      }
-    >
-      <div className="text-muted-foreground">{label}</div>
-      <div className="mt-0.5 font-mono text-xs tabular-nums text-foreground">
-        {value}
       </div>
     </div>
   );

@@ -35,6 +35,8 @@ import {
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { finalizeAgentOutput } from "./finalize-agent-output.js";
+import { storyOutputError } from "./story-output.js";
+import { agentInputSlots } from "./runtime-input-slots.js";
 import { filterRuntimeHistory } from "./message-filter.js";
 import {
   checkSchemaProseFailure,
@@ -67,6 +69,7 @@ export interface ExecuteAgentRuntimeOptions {
     | {
         turnNumber: number;
         characters: readonly {
+          id?: string;
           name: string;
           type: string;
           description?: string;
@@ -316,6 +319,11 @@ export async function executeAgentRuntime({
   // Turn-level, once per runtime: lets plugins rewrite the assembled system
   // prompt and/or projected history before the loop. Distinct from the
   // per-call PreLLMCall — this shapes the assembled context a single time.
+  const resolvedInputSlots = agentInputSlots(
+    manifest,
+    completedResults,
+    inputs,
+  );
   const shapedContext = await runPostContextAssemblyHook(
     {
       pipeline: hookPipeline,
@@ -331,6 +339,12 @@ export async function executeAgentRuntime({
       messages: assembled.messages,
       outputKind: manifest.outputKind,
       locale: input.locale,
+      promptTemplate: loaded.promptTemplate,
+      inputSlots: resolvedInputSlots,
+      characters: (sessionContext?.characters ?? sessionMeta?.characters)?.map(
+        ({ id, name, type, description }) =>
+          Object.freeze({ id, name, type, description }),
+      ),
     },
   );
 
@@ -374,6 +388,7 @@ export async function executeAgentRuntime({
       ? { turnNumber: sessionMeta.turnNumber }
       : {}),
     loaded,
+    inputSlots: resolvedInputSlots,
     deps,
     maxSteps,
     timeoutMs,
@@ -532,7 +547,7 @@ export async function executeAgentRuntime({
         : undefined,
   });
 
-  if (finalized.kind === "tool-failed") {
+  if (finalized.kind === "tool-failed" || finalized.kind === "invalid-output") {
     return finalizeFailure({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
@@ -542,11 +557,14 @@ export async function executeAgentRuntime({
       output: null,
       toolCalls: collectedToolCalls,
       durationMs: Date.now() - startTime,
-      error: formatToolLoopFailure({
-        runtimeId: manifest.name,
-        reason: "tool_failed_without_output",
-        failedToolCalls,
-      }),
+      error:
+        finalized.kind === "invalid-output"
+          ? finalized.error
+          : formatToolLoopFailure({
+              runtimeId: manifest.name,
+              reason: "tool_failed_without_output",
+              failedToolCalls,
+            }),
       timestamp: new Date().toISOString(),
     });
   }
@@ -575,6 +593,31 @@ export async function executeAgentRuntime({
   // narrative in history.
   const result = await runPostRuntimeHook(postRuntimeOpts, rawResult);
   const finalOutput = (result.output ?? output) as Record<string, unknown>;
+  const storyError =
+    manifest.outputKind === "story" && result.status === "success"
+      ? storyOutputError(result.output)
+      : undefined;
+  if (storyError) {
+    const failed: RuntimeResult = {
+      ...result,
+      status: "failed",
+      output: null,
+      error: storyError,
+    };
+    try {
+      await deps.onRuntimeComplete?.({
+        runtimeId: manifest.name,
+        pluginId: manifest.pluginId,
+        status: "failed",
+        durationMs: result.durationMs,
+        error: storyError,
+      });
+    } catch {
+      // Telemetry cannot turn a missing story into a successful result.
+    }
+    emitRuntimeFailed(deps, input.sessionId, manifest, failed);
+    return failed;
+  }
 
   // Stage the runtime output in the execution journal. finalizeExecution
   // appends it inside the proposal/session-clock transaction. Manual

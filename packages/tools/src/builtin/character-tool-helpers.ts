@@ -171,7 +171,35 @@ export function mergeSchemaDefaults(
       base[attr.id] = attr.defaultValue;
     }
   }
+  assertCharacterFields(base, schema);
   return base;
+}
+
+export class CharacterFieldValidationError extends Error {
+  constructor(readonly issues: readonly { path: string; message: string }[]) {
+    super(
+      `Character attributes do not match the world schema: ${issues.map((issue) => `${issue.path}: ${issue.message}`).join("; ")}. Correct the submitted fields before continuing.`,
+    );
+    this.name = "CharacterFieldValidationError";
+  }
+}
+
+/** Validate declared attribute types before producing any character write. */
+export function assertCharacterFields(
+  fields: unknown,
+  schema: CharacterAttributeSchema | null,
+): void {
+  const validator = schema ? buildFieldsZodFromSchema(schema) : null;
+  if (!validator) return;
+  const parsed = validator.safeParse(fields);
+  if (!parsed.success) {
+    throw new CharacterFieldValidationError(
+      parsed.error.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+      })),
+    );
+  }
 }
 
 export async function mirrorCharacterToPluginData(

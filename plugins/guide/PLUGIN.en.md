@@ -31,7 +31,7 @@ Call `generate-guide` once: analyse the decision points in the narrative and pro
 
 ## Hard rules
 
-- Each category contains 1–3 concrete, actionable suggestions — never vague generalities
+- Default to one concise suggestion per category. Add at most two alternatives only when they offer materially different actions. Each suggestion is one short sentence (about 25 words); keep the topic to one sentence. Never repeat the narrative or include outcomes the player has not chosen.
 - Suggestions must tie directly to the current narrative situation
 - Always produce all 3 categories: safe / aggressive / creative
 - **Every turn must call `generate-guide` — no exceptions.** "Calm" / "already wrapped" / "no cliffhanger" are not valid excuses. Even if the player is just strolling or tidying their belongings, give low-intensity suggestions like "keep moving / stay and observe / try a different route".

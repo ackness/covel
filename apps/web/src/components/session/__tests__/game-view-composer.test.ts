@@ -194,6 +194,57 @@ describe("useGameViewComposer", () => {
     expect(result.current.inputValue).toBe("");
   });
 
+  it("sends selections without requiring an extra typed line", () => {
+    sessionMock.pendingInteractionDrafts = [
+      {
+        id: "draft-1",
+        label: "Inspect the door",
+        values: { text: "Inspect the door" },
+      },
+    ];
+    const { result, onSendMessage } = setup([]);
+    act(() => result.current.handleSubmit());
+    expect(onSendMessage).toHaveBeenCalledWith("Inspect the door");
+    expect(sessionMock.clearInteractionDrafts).toHaveBeenCalledOnce();
+  });
+
+  it("includes the typed line when confirming the selection bar", () => {
+    sessionMock.pendingInteractionDrafts = [
+      {
+        id: "draft-1",
+        label: "Inspect the door",
+        values: { text: "Inspect the door" },
+      },
+    ];
+    const { result, onSendMessage } = setup([]);
+    act(() => result.current.setInputValue("Keep the evidence intact"));
+    act(() => result.current.handleConfirmDrafts());
+    expect(onSendMessage).toHaveBeenCalledWith(
+      "Inspect the door\nKeep the evidence intact",
+    );
+    expect(result.current.inputValue).toBe("");
+  });
+
+  it("runs a command independently from either send entry while retaining queued selections", async () => {
+    sessionMock.pendingInteractionDrafts = [
+      {
+        id: "draft-1",
+        label: "Inspect the door",
+        values: { text: "Inspect the door" },
+      },
+    ];
+    const { result, onSendMessage } = setup([], false, "playing", [
+      rollCommand,
+    ]);
+    act(() => result.current.setInputValue("/roll 2d6"));
+    act(() => result.current.handleConfirmDrafts());
+    await waitFor(() =>
+      expect(postPluginRpcWithApproval).toHaveBeenCalledOnce(),
+    );
+    expect(onSendMessage).not.toHaveBeenCalled();
+    expect(sessionMock.clearInteractionDrafts).not.toHaveBeenCalled();
+  });
+
   it("steers instead of starting a turn while one is executing", () => {
     const { result, onSendMessage } = setup([], true);
 

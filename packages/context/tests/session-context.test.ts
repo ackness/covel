@@ -312,6 +312,7 @@ describe("buildSessionContextSnapshot — memory + summaries wiring", () => {
     // Character + player input wiring
     expect(snapshot.characters).toEqual([
       {
+        id: "char-1",
         name: "Hero",
         type: "player",
         description: undefined,

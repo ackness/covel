@@ -406,12 +406,16 @@ guide 分析叙事 → `generate-guide` 写入 `plugin_data[message]`
 | **Backdrop** | `("scene-stage","stage")["current"]`                                                                        | `resolveBackdrop`（四档回退，见下）                                        |
 | **Sprites**  | `("scene-cast","active-cast")["current"].speakers` × `("character-presence","presence")`                    | `computeSpriteSlots`（站位/高亮，无立绘则过滤）                            |
 | **Hud**      | `("scene-stage","stage")["current"]`（`name` / `variant` / `sourceLabel` / `source`）                       | —（无状态，按钮回调上抛）                                                  |
-| **Dialog**   | 最新 `kind === "story"` 消息的 `content`                                                                    | `use-typewriter`（流式驱动、`\n\n` 分段、▼ 暂停）                          |
+| **Dialog**   | 最新 story 的 `content` + stage-direction 提供方的 `dialogue/<turnId>`                                      | `use-typewriter` 与 `splitStageParagraphs`（共享分段边界、逐段署名）       |
 | **Choices**  | 未提交的 choice 类 interaction block + scene-prompts message namespace 的 `scene/recap/decision/prompt{N}*` | `extractInteractionChoices` + `mergeChoices`（保留问题分组并统一自由输入） |
 
 “流式中”判定沿用内核约定——无 streaming 布尔，`executing && story 消息 id 以 stream_ 开头`。新叙事由 `StageDialog` 打字展示；读完后，同一位置切换为统一决策面板，依次显示场景、“当前信息”摘要、“现在需要决定”的问题、分组选项和行内自由输入。提交后面板保持禁用并显示生成状态，直到下一段叙事出现首个非空内容，避免旧对话框或空白面板闪回。恢复会话或从其他视图切入时，挂载前已经存在的最新叙事视为已读，不会重新打字。旧版 scene-prompts 行没有 `recap/decision` 时，面板从最新 story 提取最多三句、180 字符的情境回顾，并用 `scene` 生成带上下文的决策问题；新数据始终优先使用 agent 生成字段。
 
 scene-prompts 数据既可能从当前 SSE 实时到达，也可能在会话恢复时从 `/plugin-data` 拉取。恢复水合必须同时写入 session reducer 与 `usePluginNamespace` 订阅的 external store；否则解析消息能看到数据，而舞台选择层仍会读到空 namespace。
+
+对白名牌读取当前回合 `dialogue/<turnId>.paragraphSpeakers`，由 `stage.direction` 显式提供角色 ID 并解析为 `{ characterId, displayName } | null`。同回合实时事件可以先行预览，旧的已提交映射不会在同回合重试的流式阶段复用。打字机与署名校验共用 `splitStageParagraphs`（CRLF 转 LF，三个以上换行视为一个空行分隔）；正文结束后的分段数量必须和映射一致。旁白、未知身份、旧消息无映射或回合不匹配时不显示人物名牌，演员焦点不参与署名。
+
+决策面板在窄屏最多占舞台下方 60%，宽屏为 65%，始终在舞台范围内。回顾默认折叠、点击“当前信息”可展开；回顾、问题和选项共用可滚动内容区，自由输入保持固定可见。立绘底部渐隐，窄屏提高站位以让脸部露出决策面板，宽屏保留原有站位高度；有角色图时不重复叠加名字徽标，缺图时保留姓名占位。
 
 ### 背景回退链（`resolveBackdrop`）
 
@@ -481,3 +485,11 @@ Turn 执行 → 各 Runtime 按 stage 屏障 + stage 内 DAG 运行
 1. 在 runtime 输出或 tool 返回值里写 `interaction`
 2. 由 session-kernel 归一化为 `interaction.request`
 3. `chat-messages.tsx` 经 `messageToSpec()` 渲染表单、选择或确认 UI
+
+### Gameplay completion and reading order
+
+Story messages precede same-turn plugin message surfaces even when streaming or hydration delivers the surface first. Message order uses turn attribution, not client timestamps. Execution failures remain visible after the task chips collapse, with the affected runtime and its existing retry action. A partially completed turn must not be presented as a clean completion.
+
+The story composer can submit queued selections without additional text. Both the main send button and the selection bar combine queued actions with typed text. Rejected interaction RPCs keep the form editable and never fall back to sending its fields as an unvalidated story message.
+
+Responsive panel resize callbacks use the supplied dimensions, avoiding imperative constraint queries during panel registration changes. Typography uses active theme tokens for both light and dark prose.

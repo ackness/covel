@@ -16,6 +16,7 @@ import type {
   RuntimeResult,
   ToolCallRecord,
   TurnInput,
+  InputSlot,
 } from "@covel/shared";
 import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent, SuspendSentinel } from "@covel/tools";
@@ -38,6 +39,7 @@ export interface HandleSuspensionOptions {
   readonly pendingProposals: readonly Proposal[];
   readonly emittedEvents: readonly EmittedEvent[];
   readonly executionContext: ExecutionContext;
+  readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   readonly suspendToolCallId: string;
   readonly startTime: number;
   readonly runId: string;
@@ -77,6 +79,7 @@ export async function handleSuspension(
     partialContent: finalContent ?? undefined,
     toolCallsSoFar: [...collectedToolCalls],
     pendingProposals: [...pendingProposals],
+    ...(opts.inputSlots ? { inputSlots: opts.inputSlots } : {}),
     ...(emittedEvents.length > 0 ? { emittedEvents: [...emittedEvents] } : {}),
     executionContext,
     // Store the suspend tool's call ID so resume can append a proper tool result

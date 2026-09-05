@@ -20,7 +20,7 @@ import {
 } from "@covel/tools";
 import type { DataStore } from "@covel/store";
 import type { ApprovalPipeline } from "@covel/approval";
-import type { ApprovalStatus, Proposal } from "@covel/shared";
+import type { ApprovalStatus, InputSlot, Proposal } from "@covel/shared";
 
 // ── Structured tool error shape (returned to LLM) ────────────────
 
@@ -59,6 +59,7 @@ export interface ToolCallContext {
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   readonly pendingProposals?: readonly Proposal[];
   /** Authoritative logical turn number, forwarded to ToolExecutionContext. */
   readonly turnNumber?: number;
@@ -403,6 +404,7 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
           turnId: context.turnId,
           pluginId: context.pluginId,
           runtimeId: context.runtimeId,
+          inputSlots: context.inputSlots,
           pendingProposals: context.pendingProposals,
           emittedEventTopics: context.emittedEventTopics,
           ...(context.turnNumber !== undefined

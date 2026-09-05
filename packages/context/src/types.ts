@@ -91,6 +91,7 @@ export interface SummaryRecord {
 
 /** Summary of a character record for template injection. */
 export interface CharacterSummary {
+  readonly id?: string;
   readonly name: string;
   readonly type: string;
   readonly description?: string;

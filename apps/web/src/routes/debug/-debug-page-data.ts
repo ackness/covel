@@ -1,9 +1,14 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PageCursor } from "@covel/shared";
 import type * as api from "@/services/api.js";
 import * as apiClient from "@/services/api.js";
 import type { EventCategory } from "./-debug-helpers.js";
+import {
+  useSessionSnapshot,
+  type SessionSnapshot,
+} from "./-use-session-snapshot.js";
+export type { SessionSnapshot } from "./-use-session-snapshot.js";
 import {
   getStoryTurnCount,
   getVisibleTurns,
@@ -11,10 +16,6 @@ import {
   traceEventMatchesCategory,
   type DebugView,
 } from "./-debug-page-model.js";
-
-export type SessionSnapshot = Awaited<
-  ReturnType<typeof apiClient.getSessionView>
->;
 
 export function useDebugPageData(sid: string | undefined) {
   const navigate = useNavigate();
@@ -28,6 +29,7 @@ export function useDebugPageData(sid: string | undefined) {
   const [olderCursor, setOlderCursor] = useState<PageCursor | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [filterCategory, setFilterCategory] = useState<EventCategory | null>(
     null,
@@ -40,9 +42,17 @@ export function useDebugPageData(sid: string | undefined) {
     null,
   );
   const [debugView, setDebugView] = useState<DebugView>("traces");
-  const [snapshotData, setSnapshotData] = useState<SessionSnapshot | null>(
-    null,
-  );
+  const currentSession = useRef(selectedSessionId);
+  currentSession.current = selectedSessionId;
+  const updateSession = useCallback((session: SessionSnapshot["session"]) => {
+    setSessions((previous) =>
+      previous.map((item) =>
+        item.id === session.id ? { ...item, ...session } : item,
+      ),
+    );
+  }, []);
+  const snapshot = useSessionSnapshot(selectedSessionId, updateSession);
+  const { refreshSnapshot } = snapshot;
   const [traceDiscovery, setTraceDiscovery] =
     useState<api.TraceDiscovery | null>(null);
 
@@ -69,7 +79,7 @@ export function useDebugPageData(sid: string | undefined) {
       }
       allSessions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       setSessions(allSessions);
-      if (!selectedSessionId && allSessions.length > 0) {
+      if (!currentSession.current && allSessions.length > 0) {
         const target =
           sid && allSessions.some((session) => session.id === sid)
             ? sid
@@ -79,7 +89,7 @@ export function useDebugPageData(sid: string | undefined) {
     } catch {
       // The debugger remains usable when the server is unavailable.
     }
-  }, [selectedSessionId, sid]);
+  }, [sid]);
 
   // 展开最新（正序数组的最后一个）turn，便于用户直接看到最近一轮。
   const expandLatestTurn = useCallback((loaded: api.TurnTrace[]) => {
@@ -98,16 +108,18 @@ export function useDebugPageData(sid: string | undefined) {
     setLoading(true);
     try {
       const data = await apiClient.fetchTraceTurnsPage(selectedSessionId);
+      if (currentSession.current !== selectedSessionId) return;
       setTurns(data.turns);
       setOlderCursor(data.nextCursor);
       setTraceDiscovery(data.discovery ?? null);
       expandLatestTurn(data.turns);
     } catch {
+      if (currentSession.current !== selectedSessionId) return;
       setTurns([]);
       setOlderCursor(null);
       setTraceDiscovery(null);
     } finally {
-      setLoading(false);
+      if (currentSession.current === selectedSessionId) setLoading(false);
     }
   }, [selectedSessionId, expandLatestTurn]);
 
@@ -120,12 +132,13 @@ export function useDebugPageData(sid: string | undefined) {
       const data = await apiClient.fetchTraceTurnsPage(selectedSessionId, {
         cursor: olderCursor,
       });
+      if (currentSession.current !== selectedSessionId) return;
       setTurns((prev) => mergeTurnPages(prev, data.turns));
       setOlderCursor(data.nextCursor);
     } catch {
       // 保留已加载数据；失败不清空。
     } finally {
-      setLoadingOlder(false);
+      if (currentSession.current === selectedSessionId) setLoadingOlder(false);
     }
   }, [selectedSessionId, olderCursor, loadingOlder]);
 
@@ -135,6 +148,7 @@ export function useDebugPageData(sid: string | undefined) {
     if (!selectedSessionId) return;
     try {
       const data = await apiClient.fetchTraceTurnsPage(selectedSessionId);
+      if (currentSession.current !== selectedSessionId) return;
       setTurns((prev) => mergeTurnPages(prev, data.turns));
       if (data.discovery) setTraceDiscovery(data.discovery);
     } catch {
@@ -148,6 +162,7 @@ export function useDebugPageData(sid: string | undefined) {
     setLoading(true);
     try {
       const data = await apiClient.fetchTraceTurns(selectedSessionId);
+      if (currentSession.current !== selectedSessionId) return;
       setTurns(data.turns);
       setOlderCursor(null);
       setTraceDiscovery(data.discovery ?? null);
@@ -155,34 +170,39 @@ export function useDebugPageData(sid: string | undefined) {
     } catch {
       // 保留已加载数据；失败不清空。
     } finally {
-      setLoading(false);
+      if (currentSession.current === selectedSessionId) setLoading(false);
     }
   }, [selectedSessionId, expandLatestTurn]);
 
   useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
+    void loadSessions().then(refreshSnapshot);
+  }, [loadSessions, refreshSnapshot]);
 
   useEffect(() => {
+    setTurns([]);
+    setOlderCursor(null);
+    setLoadingOlder(false);
+    setSelectedEvent(null);
     loadTraces();
   }, [loadTraces]);
 
-  useEffect(() => {
-    if (debugView !== "data" || !selectedSessionId) {
-      setSnapshotData(null);
-      return;
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([loadTraces(), loadSessions().then(refreshSnapshot)]);
+    } finally {
+      setRefreshing(false);
     }
-    apiClient
-      .getSessionView(selectedSessionId)
-      .then(setSnapshotData)
-      .catch(() => setSnapshotData(null));
-  }, [debugView, selectedSessionId]);
+  }, [loadTraces, loadSessions, refreshSnapshot]);
 
   useEffect(() => {
     if (!autoRefresh || !selectedSessionId) return;
-    const interval = setInterval(refreshLatest, 3000);
+    const interval = setInterval(() => {
+      void refreshLatest();
+      void refreshSnapshot();
+    }, 3000);
     return () => clearInterval(interval);
-  }, [autoRefresh, selectedSessionId, refreshLatest]);
+  }, [autoRefresh, selectedSessionId, refreshLatest, refreshSnapshot]);
 
   const toggleTurn = useCallback((turnId: string) => {
     setExpandedTurns((prev) => {
@@ -225,13 +245,14 @@ export function useDebugPageData(sid: string | undefined) {
     turns,
     visibleTurns,
     loading,
+    refreshing,
     autoRefresh,
     filterCategory,
     expandedTurns,
     expandedRuntimes,
     selectedEvent,
     debugView,
-    snapshotData,
+    ...snapshot,
     traceDiscovery,
     totalEvents,
     storyTurnCount,
@@ -240,6 +261,7 @@ export function useDebugPageData(sid: string | undefined) {
     selectSession,
     openSelectedSession,
     loadTraces,
+    refresh,
     loadOlder,
     loadAll,
     setAutoRefresh,

@@ -12,7 +12,7 @@ import type {
 } from "./memory-records.js";
 import type { PluginDataRecord } from "./plugin-records.js";
 import type { SessionRecord } from "./session-records.js";
-import type { ExecutionContext } from "@covel/shared";
+import type { ExecutionContext, InputSlot } from "@covel/shared";
 
 /**
  * Materialized state snapshot.
@@ -181,6 +181,8 @@ export interface SuspensionRecord {
      * final runtime output.
      */
     readonly pendingProposals: readonly unknown[];
+    /** Frozen declared inputs for tools resumed in the same logical turn. */
+    readonly inputSlots?: Readonly<Record<string, InputSlot>>;
     /**
      * Framework-owned execution identity from the suspended scheduling run.
      * Resume inherits its logical turn and count policy while allocating a new

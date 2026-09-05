@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Download, Plus, Search, Server, Upload } from "lucide-react";
+import { ArrowLeft, Download, Plus, Server, Upload } from "lucide-react";
 import {
   getSlotConfig,
   getProviderProfiles,
@@ -25,8 +25,10 @@ import {
   type ProviderCatalogEntry,
   type ProviderDraft,
 } from "./llm-provider-catalog.js";
+import { ProviderList } from "./llm-provider-list.js";
 import { ProviderDetails } from "./llm-provider-details.js";
 import { ModelDialog, ProviderDialog } from "./llm-provider-dialogs.js";
+import { useSettingsRevision } from "../use-settings-revision.js";
 
 export { buildProviderCatalog } from "./llm-provider-catalog.js";
 
@@ -39,12 +41,17 @@ export function LlmPresetsPane() {
     normalizeProviderProfiles(getProviderProfiles()),
   );
   const [selectedProviderId, setSelectedProviderId] = useState("");
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const [providerDraft, setProviderDraft] =
     useState<ProviderDraft>(EMPTY_PROVIDER_DRAFT);
   const [modelIdsDraft, setModelIdsDraft] = useState("");
+  const revision = useSettingsRevision(["llm.providers"]);
+  useEffect(() => {
+    setProfilesLocal(normalizeProviderProfiles(getProviderProfiles()));
+  }, [revision]);
 
   const catalog = useMemo(
     () => buildProviderCatalog(state.presets, profiles),
@@ -134,6 +141,7 @@ export function LlmPresetsPane() {
     );
     if (nextSlots !== currentSlots) setSlotConfig(nextSlots);
     setSelectedProviderId(providerId);
+    setMobileDetailsOpen(true);
     setProviderDraft(EMPTY_PROVIDER_DRAFT);
     setProviderDialogOpen(false);
   };
@@ -231,68 +239,32 @@ export function LlmPresetsPane() {
         </Button>
       </div>
 
-      <div className="grid min-h-112 grid-cols-[10.5rem_minmax(0,1fr)] border border-border">
-        <aside className="flex min-w-0 flex-col border-r border-border bg-muted/10">
-          <div className="border-b border-border p-2">
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t("settings.searchProviders", "Search")}
-                className="w-full border border-border bg-background py-1.5 pl-7 pr-2 text-xs outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-          </div>
-          <div className="flex-1 space-y-0.5 overflow-y-auto p-1.5">
-            {filteredCatalog.map((provider) => {
-              const modelCount =
-                provider.serverModels.length +
-                (provider.localProfile?.models.length ?? 0);
-              const active = provider.id === selectedProvider?.id;
-              return (
-                <button
-                  key={provider.id}
-                  type="button"
-                  onClick={() => setSelectedProviderId(provider.id)}
-                  className={`flex w-full items-center gap-2 px-2 py-2 text-left transition-colors ${
-                    active
-                      ? "bg-primary/10 text-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted font-mono text-[10px] uppercase">
-                    {provider.id.slice(0, 2)}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-medium">
-                      {provider.id}
-                    </span>
-                    <span className="block text-[9px] text-muted-foreground">
-                      {t("settings.modelCountShort", {
-                        count: modelCount,
-                        defaultValue: "{{count}} models",
-                      })}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="border-t border-border p-1.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start text-xs"
-              onClick={() => setProviderDialogOpen(true)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {t("settings.addProvider", "Add provider")}
-            </Button>
-          </div>
-        </aside>
+      <div className="grid min-h-112 grid-cols-1 lg:grid-cols-[10.5rem_minmax(0,1fr)] border border-border">
+        <ProviderList
+          providers={filteredCatalog}
+          selectedProviderId={selectedProvider?.id}
+          query={query}
+          mobileDetailsOpen={mobileDetailsOpen}
+          onQueryChange={setQuery}
+          onSelect={(id) => {
+            setSelectedProviderId(id);
+            setMobileDetailsOpen(true);
+          }}
+          onAddProvider={() => setProviderDialogOpen(true)}
+        />
 
-        <main className="min-w-0 p-3">
+        <main
+          className={`${mobileDetailsOpen ? "block" : "hidden lg:block"} min-w-0 p-3`}
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mb-3 lg:hidden"
+            onClick={() => setMobileDetailsOpen(false)}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            {t("settings.backToProviders", { defaultValue: "All providers" })}
+          </Button>
           {selectedProvider ? (
             <ProviderDetails
               provider={selectedProvider}
@@ -308,6 +280,7 @@ export function LlmPresetsPane() {
                 });
               }}
               onDeleteLocalProvider={() => {
+                setMobileDetailsOpen(false);
                 commit(
                   profiles.filter(
                     (profile) =>

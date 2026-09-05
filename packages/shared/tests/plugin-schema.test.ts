@@ -65,9 +65,17 @@ describe("plugin manifest dataSchemas", () => {
       description: "Calls one tool and finishes",
       stage: "post-turn",
       completeAfterTools: ["persist-result"],
+      llm: {
+        reasoningEffort: "disabled",
+        toolChoice: { name: "persist-result" },
+      },
     });
 
     expect(manifest.completeAfterTools).toEqual(["persist-result"]);
+    expect(manifest.llm).toEqual({
+      reasoningEffort: "disabled",
+      toolChoice: { name: "persist-result" },
+    });
   });
 
   it("normalizes keyed declarations into plugin data schema declarations", () => {

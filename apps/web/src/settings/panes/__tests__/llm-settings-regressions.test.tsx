@@ -40,7 +40,16 @@ vi.mock("@/stores/session-store.js", () => ({
       llmConfig: {
         configured: true,
         slots: {
-          story: { provider: "openai", model: "story-model" },
+          story: {
+            provider: "openai",
+            model: "story-model",
+            capability: {
+              input: ["text"],
+              output: ["text"],
+              contextWindow: 1_000_000,
+              maxOutputTokens: 384_000,
+            },
+          },
           fast: { provider: "deepseek", model: "fast-model" },
         },
       },
@@ -164,7 +173,7 @@ describe("LLM settings regressions", () => {
       expect(apiMocks.lookupModelCapabilityDetails).toHaveBeenCalledWith(
         "story-model",
         "openai",
-        undefined,
+        "openai-chat-v1",
       ),
     );
     await waitFor(() =>
@@ -202,11 +211,55 @@ describe("LLM settings regressions", () => {
       expect(apiMocks.lookupModelCapabilityDetails).toHaveBeenCalledWith(
         "story-model",
         "openai",
-        undefined,
+        "openai-chat-v1",
       ),
     );
     await act(async () => undefined);
     expect(apiMocks.setParamOverrides).not.toHaveBeenCalled();
+  });
+
+  it("does not display the previous slot's output limit for an unknown bound model", async () => {
+    apiMocks.getProviderProfiles.mockReturnValue([
+      {
+        id: "ali-coding-plan",
+        name: "Ali",
+        baseUrl: "https://example.invalid",
+        protocol: "openai-chat-v1",
+        models: [{ ref: "local-qwen", modelId: "qwen3.8-flash" }],
+      },
+    ]);
+    apiMocks.getSlotConfig.mockReturnValue({
+      story: { modelRef: "local-qwen" },
+    });
+    apiMocks.lookupModelCapabilityDetails.mockResolvedValue({
+      found: false,
+      source: "protocol-default",
+      pricingKind: "unknown",
+      candidates: [],
+      reasoning: null,
+      capability: {
+        input: ["text"],
+        output: ["text"],
+        contextWindow: 32768,
+        maxOutputTokens: 4096,
+      },
+    });
+    render(<LlmAdvancedPane />);
+    await waitFor(() =>
+      expect(apiMocks.lookupModelCapabilityDetails).toHaveBeenCalledWith(
+        "qwen3.8-flash",
+        "ali-coding-plan",
+        "openai-chat-v1",
+      ),
+    );
+    expect(screen.getByText("qwen3.8-flash")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("spinbutton", { name: "Max Output Tokens" })
+        .hasAttribute("max"),
+    ).toBe(false);
+    expect(screen.getByText("Model limits unknown")).toBeTruthy();
+    expect(screen.queryByText(/384,000/)).toBeNull();
   });
 
   it("keeps the base URL as a draft and commits it once on blur", () => {
@@ -250,5 +303,44 @@ describe("LLM settings regressions", () => {
     expect(onPatchLocalProfile).toHaveBeenCalledWith({
       baseUrl: "https://new.example/v1",
     });
+  });
+
+  it("keeps an endpoint draft and requires review when its saved value changes", () => {
+    const patch = vi.fn();
+    const provider = {
+      id: "example",
+      provider: "example",
+      baseUrl: "https://old.example",
+      protocol: "openai-chat-v1",
+      serverModels: [],
+      localProfile: {
+        id: "example",
+        name: "Example",
+        baseUrl: "https://old.example",
+        protocol: "openai-chat-v1",
+        models: [],
+      },
+    };
+    const renderDetails = (baseUrl: string) => (
+      <ProviderDetails
+        provider={{
+          ...provider,
+          localProfile: { ...provider.localProfile, baseUrl },
+        }}
+        onAddModel={vi.fn()}
+        onPatchLocalProfile={patch}
+        onDeleteLocalModel={vi.fn()}
+        onDeleteLocalProvider={vi.fn()}
+      />
+    );
+    const view = render(renderDetails("https://old.example"));
+    const input = screen.getByLabelText("API endpoint");
+    fireEvent.change(input, { target: { value: "https://draft.example" } });
+    view.rerender(renderDetails("https://remote.example"));
+    fireEvent.blur(input);
+    expect(patch).not.toHaveBeenCalled();
+    expect((input as HTMLInputElement).value).toBe("https://draft.example");
+    fireEvent.click(screen.getByRole("button", { name: "Reload saved value" }));
+    expect((input as HTMLInputElement).value).toBe("https://remote.example");
   });
 });

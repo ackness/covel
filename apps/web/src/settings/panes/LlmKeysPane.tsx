@@ -17,6 +17,11 @@ import {
   PingButton,
 } from "@/components/shared/ping-button.js";
 import { isDesktopApp, openLlmToml } from "@/lib/desktop-bridge.js";
+import {
+  SettingsDraftConflict,
+  useSettingDraft,
+} from "../use-setting-draft.js";
+import { useSettingsRevision } from "../use-settings-revision.js";
 
 /**
  * Shape we need per preset for rendering — a minimal projection of both
@@ -46,9 +51,11 @@ interface PresetRow {
 export function LlmKeysPane({
   providerId: onlyProviderId,
   showIntro = true,
+  showPresetTests = true,
 }: {
   providerId?: string;
   showIntro?: boolean;
+  showPresetTests?: boolean;
 } = {}) {
   const { t } = useTranslation();
   const store = useSettingsStore();
@@ -58,6 +65,10 @@ export function LlmKeysPane({
   const [priceMultipliers, setPriceMultipliersLocal] = useState<
     Record<string, number>
   >(() => getProviderPriceMultipliers());
+  const revision = useSettingsRevision(["llm.providerPriceMultipliers"]);
+  useEffect(() => {
+    setPriceMultipliersLocal(getProviderPriceMultipliers());
+  }, [revision]);
 
   // The key input subscribes to its own setting, but the configured badge and
   // ping rows live in this parent. Refresh them after persistence and discard
@@ -197,7 +208,7 @@ export function LlmKeysPane({
                 setProviderPriceMultipliers(next);
               }}
             />
-            {hasKey && providerPresets.length > 0 && (
+            {showPresetTests && hasKey && providerPresets.length > 0 && (
               <div className="space-y-2 pt-1">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
                   {t("settings.pingTest")}
@@ -224,8 +235,12 @@ function ProviderPriceMultiplierField({
   onChange: (value: number) => void;
 }) {
   const { t } = useTranslation();
-  const [draft, setDraft] = useState(String(value));
+  const { draft, setDraft, conflict, reset } = useSettingDraft(
+    String(value),
+    provider,
+  );
   const commit = () => {
+    if (conflict) return;
     const parsed = Number(draft);
     if (Number.isFinite(parsed) && parsed > 0) {
       onChange(parsed);
@@ -236,7 +251,7 @@ function ProviderPriceMultiplierField({
   };
 
   return (
-    <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-2">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-2">
       <div className="min-w-0">
         <div className="text-[11px] font-medium">
           {t("settings.priceMultiplier", "Price multiplier")}
@@ -264,6 +279,11 @@ function ProviderPriceMultiplierField({
           className="w-20 border border-border bg-background px-2 py-1 text-right font-mono text-xs outline-none focus:ring-1 focus:ring-primary"
         />
       </div>
+      {conflict && (
+        <div className="w-full">
+          <SettingsDraftConflict onReload={reset} />
+        </div>
+      )}
     </div>
   );
 }

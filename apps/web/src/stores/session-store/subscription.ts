@@ -18,6 +18,7 @@ import {
   reduceTurnResumed,
   reduceTurnSuspended,
 } from "./event-reducers.js";
+import { toStreamMessages } from "./restore-session.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
 import {
   buildDeferredExecutionStep,
@@ -222,6 +223,10 @@ export async function rehydrateSessionSideState(
     .getSessionView(sessionId)
     .then(async (snapshot) => {
       if (!isCurrent()) return;
+      dispatch({
+        type: "MERGE_RECOVERED_MESSAGES",
+        messages: toStreamMessages(snapshot.messages),
+      });
       dispatch({
         type: "SET_GAME_STATE",
         state: enrichGameStateFromSnapshot(snapshot),

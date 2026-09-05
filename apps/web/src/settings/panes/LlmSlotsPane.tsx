@@ -1,15 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Database, Info, Loader2, Pencil, RotateCw } from "lucide-react";
+import { Database, Info, Loader2, RotateCw } from "lucide-react";
 import {
   fetchModelDbInfo,
   getCapabilityOverrides,
   getCustomPresets,
   getParamOverrides,
-  getProviderPriceMultiplier,
   getSlotConfig,
-  lookupModelCapabilityDetails,
-  mergeCapability,
   refreshModelDb,
   reloadLlmConfig,
   setCapabilityOverrides,
@@ -17,7 +14,6 @@ import {
   setSlotConfig,
   slotBindingId,
   type ModelCapabilityInfo,
-  type ModelCapabilityLookupResult,
   type ModelDbInfo,
   type SlotConfigEntry,
 } from "@/services/api.js";
@@ -25,21 +21,16 @@ import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSession } from "@/stores/session-store.js";
-import {
-  CapabilityEditor,
-  CapabilityTags,
-  formatPrice,
-} from "./llm-capability-controls.js";
+import { LlmSlotCard } from "./llm-slot-card.js";
 import {
   autoBindDiscoveredSlots as resolveAutoBindDiscoveredSlots,
-  bindSlotToProvider,
   collectLlmSlotPresetCandidates,
-  createProviderScopedModelChoices,
   createVisibleSlotIds,
   discoverRuntimeSlotIds,
 } from "./llm-slots-model.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { clearChangedSlotReasoningEfforts } from "./llm-reasoning-effort.js";
+import { useSettingsRevision } from "../use-settings-revision.js";
 
 /**
  * Pane that surfaces the `[covel.<slot>]` sections from llm.toml and lets the
@@ -62,6 +53,15 @@ export function LlmSlotsPane() {
   const [modelDbInfo, setModelDbInfo] = useState<ModelDbInfo | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [reloading, setReloading] = useState(false);
+  const revision = useSettingsRevision([
+    "llm.providers",
+    "llm.slotConfig",
+    "llm.capabilityOverrides",
+  ]);
+  useEffect(() => {
+    setSlotConfigLocal(getSlotConfig());
+    setCapOverridesLocal(getCapabilityOverrides());
+  }, [revision]);
 
   useEffect(() => {
     fetchModelDbInfo()
@@ -127,13 +127,6 @@ export function LlmSlotsPane() {
     delete next[slotId];
     setCapOverridesLocal(next);
     setCapabilityOverrides(next);
-  };
-
-  const getEffectiveCapability = (
-    slotId: string,
-  ): ModelCapabilityInfo | undefined => {
-    const serverCap = isConfigured ? llm!.slots[slotId]?.capability : undefined;
-    return mergeCapability(serverCap, capOverrides[slotId]);
   };
 
   const handleReloadConfig = async () => {
@@ -310,257 +303,26 @@ export function LlmSlotsPane() {
           </div>
         </div>
       )}
-      {slots.map((slotId) => {
-        const selectedPresetId = slotBindingId(slotConfig[slotId]) ?? "";
-        const selectedPreset = allPresets.find(
-          (p) => p.id === selectedPresetId,
-        );
-        const serverSlot = isConfigured ? llm!.slots[slotId] : null;
-        const effectiveProvider =
-          selectedPreset?.provider ?? serverSlot?.provider ?? "";
-        const effectiveModel = selectedPreset?.model ?? serverSlot?.model ?? "";
-        const effectiveProtocol =
-          selectedPreset?.protocol ?? serverSlot?.protocol ?? "";
-        const providerChoices = Array.from(
-          new Set(
-            [
-              ...allPresets.map((preset) => preset.provider),
-              effectiveProvider,
-            ].filter(Boolean),
-          ),
-        );
-        const modelChoices = createProviderScopedModelChoices({
-          provider: effectiveProvider,
-          presets: allPresets,
-          serverSlot,
-        });
-        const isRequired = !isConfigured && slotId === "default";
-        const isFirst = isConfigured && slotId === configuredSlots[0];
-        const isDiscovered = discoveredSlotIds.includes(slotId);
-        const isVirtualSlot = isDiscovered && !serverSlot;
-        const effectiveCap = isConfigured
-          ? getEffectiveCapability(slotId)
-          : null;
-        const hasCapOverride = isConfigured && !!capOverrides[slotId];
-        const isEditing = editingSlot === slotId;
-
-        return (
-          <div key={slotId} className="border border-border p-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">{slotId}</span>
-              <div className="flex items-center gap-1">
-                {isRequired && (
-                  <Badge variant="default" className="text-[10px]">
-                    {t("settings.required", "required")}
-                  </Badge>
-                )}
-                {isFirst && (
-                  <Badge variant="default" className="text-[10px]">
-                    {t("settings.default", "default")}
-                  </Badge>
-                )}
-                {isDiscovered && (
-                  <Badge variant="secondary" className="text-[10px]">
-                    {t("settings.runtime", "runtime")}
-                  </Badge>
-                )}
-                {isVirtualSlot && (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] text-amber-600 border-amber-400"
-                  >
-                    {t("settings.frontendOverlay", "frontend overlay")}
-                  </Badge>
-                )}
-                {serverSlot?.fallback && (
-                  <Badge variant="secondary" className="text-[10px]">
-                    {t("settings.fallbackSlot", {
-                      slot: serverSlot.fallback,
-                      defaultValue: "fallback: {{slot}}",
-                    })}
-                  </Badge>
-                )}
-                {selectedPreset && (
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] text-amber-600 border-amber-400"
-                  >
-                    {t("settings.overrideApplied")}
-                  </Badge>
-                )}
-                {selectedPreset && serverSlot && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-1.5 text-[10px]"
-                    onClick={() => {
-                      const updated = { ...slotConfig };
-                      delete updated[slotId];
-                      commitSlot(updated);
-                    }}
-                    title={t("settings.useLlmTomlDefault", {
-                      provider: serverSlot.provider,
-                      model: serverSlot.model,
-                    })}
-                  >
-                    <RotateCw className="mr-0.5 h-3 w-3" />
-                    {t("settings.resetOverride")}
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <label className="space-y-1">
-                <span className="text-[10px] text-muted-foreground">
-                  {t("settings.providerLabel", "Provider")}
-                </span>
-                <select
-                  value={effectiveProvider}
-                  onChange={(event) => {
-                    commitSlot(
-                      bindSlotToProvider({
-                        slotId,
-                        provider: event.target.value,
-                        slotConfig,
-                        presets: allPresets,
-                        serverSlot,
-                      }),
-                    );
-                  }}
-                  className="w-full bg-background border border-border px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {!effectiveProvider && (
-                    <option value="">
-                      {t("settings.selectProvider", "Select provider")}
-                    </option>
-                  )}
-                  {providerChoices.map((provider) => (
-                    <option key={provider} value={provider}>
-                      {provider}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="space-y-1">
-                <span className="text-[10px] text-muted-foreground">
-                  {t("settings.modelId", "Model ID")}
-                </span>
-                <select
-                  value={
-                    selectedPreset
-                      ? selectedPresetId
-                      : modelChoices.includesServerBase
-                        ? "__base"
-                        : ""
-                  }
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    if (!value || value === "__base") {
-                      const updated = { ...slotConfig };
-                      delete updated[slotId];
-                      commitSlot(updated);
-                      return;
-                    }
-                    const candidate = allPresets.find(
-                      (preset) => preset.id === value,
-                    );
-                    if (!candidate) return;
-                    commitSlot({
-                      ...slotConfig,
-                      [slotId]: candidate.isCustom
-                        ? { modelRef: candidate.id }
-                        : { presetId: candidate.id },
-                    });
-                  }}
-                  className="w-full bg-background border border-border px-3 py-1.5 text-sm font-mono outline-none focus:ring-1 focus:ring-primary"
-                >
-                  {modelChoices.includesServerBase && serverSlot && (
-                    <option value="__base">{serverSlot.model}</option>
-                  )}
-                  {!modelChoices.includesServerBase &&
-                    modelChoices.presets.length === 0 && (
-                      <option value="">
-                        {t("settings.addModelFirst", "Add a model first")}
-                      </option>
-                    )}
-                  {modelChoices.presets.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.model}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="text-xs text-muted-foreground grid grid-cols-3 gap-1">
-              <span>
-                {t("settings.providerLabel", "Provider")}:{" "}
-                {effectiveProvider || "—"}
-              </span>
-              <span>
-                {t("settings.modelLabel", "Model")}: {effectiveModel || "—"}
-              </span>
-              <span>
-                {selectedPreset
-                  ? selectedPreset.isCustom
-                    ? t("settings.localModel", "Local model")
-                    : t("settings.configuredModel", "Configured model")
-                  : t("settings.protocolLabel", {
-                      protocol:
-                        (effectiveProtocol || "").replace("-v1", "") || "—",
-                      defaultValue: "Protocol: {{protocol}}",
-                    })}
-              </span>
-            </div>
-
-            {effectiveModel && (
-              <ResolvedCapability
-                model={effectiveModel}
-                provider={effectiveProvider}
-                protocol={effectiveProtocol}
-                baseCapability={effectiveCap}
-                override={capOverrides[slotId]}
-              />
-            )}
-
-            {isConfigured && (
-              <div className="flex items-center gap-1.5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-[10px] px-1.5"
-                  onClick={() => setEditingSlot(isEditing ? null : slotId)}
-                >
-                  <Pencil className="w-3 h-3 mr-0.5" />
-                  {isEditing
-                    ? t("settings.collapseCapability")
-                    : t("settings.editCapability")}
-                </Button>
-                {hasCapOverride && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-[10px] px-1.5 text-amber-600"
-                    onClick={() => resetCapOverride(slotId)}
-                  >
-                    <RotateCw className="w-3 h-3 mr-0.5" />
-                    {t("settings.resetOverride")}
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {isConfigured && isEditing && (
-              <CapabilityEditor
-                serverCap={serverSlot?.capability}
-                override={capOverrides[slotId]}
-                onUpdate={(patch) => updateCapOverride(slotId, patch)}
-              />
-            )}
-          </div>
-        );
-      })}
+      {slots.map((slotId) => (
+        <LlmSlotCard
+          key={`${slotId}:${modelDbInfo?.updatedAt ?? ""}`}
+          slotId={slotId}
+          slotConfig={slotConfig}
+          serverSlot={isConfigured ? llm!.slots[slotId] : null}
+          allPresets={allPresets}
+          capOverride={capOverrides[slotId]}
+          isConfigured={isConfigured}
+          isFirst={isConfigured && slotId === configuredSlots[0]}
+          isDiscovered={discoveredSlotIds.includes(slotId)}
+          isEditing={editingSlot === slotId}
+          commitSlot={commitSlot}
+          onToggleEditing={() =>
+            setEditingSlot(editingSlot === slotId ? null : slotId)
+          }
+          onResetCapability={() => resetCapOverride(slotId)}
+          onUpdateCapability={(patch) => updateCapOverride(slotId, patch)}
+        />
+      ))}
 
       <div className="border border-dashed border-border p-3 space-y-2 mt-2">
         <div className="flex items-center justify-between">
@@ -600,96 +362,6 @@ export function LlmSlotsPane() {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function ResolvedCapability({
-  model,
-  provider,
-  protocol,
-  baseCapability,
-  override,
-}: {
-  model: string;
-  provider: string;
-  protocol?: string;
-  baseCapability?: ModelCapabilityInfo | null;
-  override?: Partial<ModelCapabilityInfo>;
-}) {
-  const { t } = useTranslation();
-  const [lookup, setLookup] = useState<ModelCapabilityLookupResult | null>(
-    null,
-  );
-
-  useEffect(() => {
-    let active = true;
-    setLookup(null);
-    lookupModelCapabilityDetails(model, provider, protocol)
-      .then((result) => {
-        if (active) setLookup(result);
-      })
-      .catch(ignoreError("lookup model capability"));
-    return () => {
-      active = false;
-    };
-  }, [model, provider, protocol]);
-
-  const capability = mergeCapability(
-    lookup?.capability ?? baseCapability ?? undefined,
-    override,
-  );
-  if (!capability) return null;
-  const priceMultiplier = getProviderPriceMultiplier(provider);
-  const inputPrice = capability.pricing?.inputPerMToken;
-  const outputPrice = capability.pricing?.outputPerMToken;
-  const imagePrice = capability.pricing?.perImage;
-
-  return (
-    <div className="space-y-1.5">
-      <CapabilityTags capability={capability} />
-      {lookup && (
-        <div className="text-[10px] leading-relaxed text-muted-foreground">
-          {lookup.matchKind && lookup.matchedModelId ? (
-            <span>
-              {t("settings.capabilityMatched", {
-                model: lookup.matchedModelId,
-                defaultValue: "Capabilities matched from {{model}}.",
-              })}
-            </span>
-          ) : (
-            <span>
-              {t(
-                "settings.capabilityEstimated",
-                "No exact model record was found. Capabilities use protocol defaults and can be adjusted below.",
-              )}
-            </span>
-          )}
-          {lookup.pricingKind === "reference" && (
-            <span className="ml-1 text-amber-600">
-              {t(
-                "settings.referencePricing",
-                "Pricing is a model reference; the provider's actual bill may differ.",
-              )}
-            </span>
-          )}
-        </div>
-      )}
-      {priceMultiplier !== 1 && capability.pricing && (
-        <div className="border-l-2 border-primary/50 pl-2 text-[10px] text-muted-foreground">
-          <span className="font-medium text-foreground">
-            {t("settings.estimatedSettlementPrice", {
-              multiplier: priceMultiplier,
-              defaultValue: "Estimated settlement at ×{{multiplier}}: ",
-            })}
-          </span>
-          {inputPrice != null && outputPrice != null
-            ? `${formatPrice(inputPrice * priceMultiplier)} / ${formatPrice(outputPrice * priceMultiplier)}`
-            : imagePrice != null
-              ? `$${(imagePrice * priceMultiplier).toFixed(4)}/img`
-              : "—"}
-        </div>
-      )}
     </div>
   );
 }

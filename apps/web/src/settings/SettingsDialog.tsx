@@ -92,20 +92,26 @@ export function SettingsDialog({
 
   const [selected, setSelected] = useState<string>("");
   const contentRef = useRef<HTMLElement>(null);
+  const appliedInitialKey = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
   }, [selected]);
 
   useEffect(() => {
-    if (!open) return;
-    if (initialKey) {
-      const exact = filtered.find((n) => n.id === initialKey);
+    if (!open) {
+      appliedInitialKey.current = undefined;
+      return;
+    }
+    if (initialKey && appliedInitialKey.current !== initialKey) {
+      appliedInitialKey.current = initialKey;
+      setQuery("");
+      const exact = tree.find((n) => n.id === initialKey);
       if (exact && isSelectable(exact)) {
         setSelected(exact.id);
         return;
       }
-      const byChild = filtered.find((n) =>
+      const byChild = tree.find((n) =>
         n.children.some(
           (e) => e.key === initialKey || e.key.startsWith(initialKey),
         ),
@@ -118,7 +124,7 @@ export function SettingsDialog({
     if (!selected || !filtered.find((n) => n.id === selected)) {
       setSelected(firstSelectable?.id ?? "");
     }
-  }, [open, initialKey, filtered, firstSelectable, selected]);
+  }, [open, initialKey, tree, filtered, firstSelectable, selected]);
 
   const selectedNode: NavNode | null =
     filtered.find((n) => n.id === selected) ?? firstSelectable ?? null;

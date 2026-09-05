@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/dialog.js";
 import { Button } from "@/components/ui/button.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
-import { usePluginNamespace } from "@/stores/plugin-data-store.js";
 import { useDomainEventPreview } from "@/stores/domain-event-preview-store.js";
 import { useStreamingText } from "@/stores/streaming-text-store.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
@@ -39,6 +38,8 @@ import { StageSprites } from "./StageSprites.js";
 import { StageHud } from "./StageHud.js";
 import { StageDialog } from "./StageDialog.js";
 import { StageChoices } from "./StageChoices.js";
+import { resolveStageParagraphSpeakers } from "./stage-dialogue-selectors.js";
+import { useStageData, useStageNamespace } from "./use-stage-data.js";
 import {
   applySceneSetPreview,
   applyStageDirectionPreview,
@@ -151,23 +152,44 @@ export function StageView(props: StageViewProps): ReactElement {
     pluginIdForCapability(sessionPlugins, FrameworkCapability.StageDirection) ??
     "";
 
-  const sceneCurrent = usePluginNamespace(sceneStageId, "stage")["current"] as
-    StageCurrentRecord | undefined;
-  const sceneRegistry = usePluginNamespace(sceneStageId, "scenes")[
+  const initialData = useStageData(session.id, [
+    sceneStageId,
+    sceneCastId,
+    scenePromptsId,
+    presenceId,
+    stageDirectionId,
+  ]);
+  const sceneCurrent = useStageNamespace(initialData, sceneStageId, "stage")[
+    "current"
+  ] as StageCurrentRecord | undefined;
+  const sceneRegistry = useStageNamespace(initialData, sceneStageId, "scenes")[
     "scene-registry"
   ] as StageSceneRegistry | undefined;
-  const activeCast = usePluginNamespace(sceneCastId, "active-cast")[
+  const activeCast = useStageNamespace(initialData, sceneCastId, "active-cast")[
     "current"
   ] as { speakers?: readonly StageSpeaker[] } | undefined;
-  const directionCurrent = usePluginNamespace(stageDirectionId, "direction")[
-    "current"
-  ] as StageDirectionRecord | undefined;
-  const promptsNamespace = usePluginNamespace(scenePromptsId, "message");
+  const directionCurrent = useStageNamespace(
+    initialData,
+    stageDirectionId,
+    "direction",
+  )["current"] as StageDirectionRecord | undefined;
+  const dialogueNamespace = useStageNamespace(
+    initialData,
+    stageDirectionId,
+    "dialogue",
+  );
+  const promptsNamespace = useStageNamespace(
+    initialData,
+    scenePromptsId,
+    "message",
+  );
   // Mirror portrait-gallery-panel: the presence namespace is consumed as a
   // characterId-keyed record of `{ sprite, avatar, ... }`.
-  const presence = usePluginNamespace(presenceId, "presence") as Readonly<
-    Record<string, PresenceRecord | undefined>
-  >;
+  const presence = useStageNamespace(
+    initialData,
+    presenceId,
+    "presence",
+  ) as Readonly<Record<string, PresenceRecord | undefined>>;
   const directionPreview = useDomainEventPreview(session.id, "stage.direction");
   const scenePreview = useDomainEventPreview(session.id, "scene.set");
   const effectiveSceneCurrent = useMemo(() => {
@@ -210,6 +232,14 @@ export function StageView(props: StageViewProps): ReactElement {
   const storyKey = stageStoryKey(storyMsg);
   const isStreaming =
     executing && (storyMsg?.id.startsWith("stream_") ?? false);
+  const paragraphSpeakers = resolveStageParagraphSpeakers({
+    turnId: storyTurnId,
+    record: storyTurnId ? dialogueNamespace[storyTurnId] : undefined,
+    preview: directionPreview,
+    speakers,
+    presence,
+    isStreaming,
+  });
 
   // ── Cross-layer state ─────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false);
@@ -287,7 +317,7 @@ export function StageView(props: StageViewProps): ReactElement {
           turnId={storyTurnId}
           storyText={storyText}
           streamEnded={!isStreaming}
-          speakerName={speakers[0]?.name}
+          paragraphSpeakers={paragraphSpeakers}
           autoPlay={autoPlay}
           reducedMotion={reducedMotion}
           onAllRead={() => setReadStoryKey(storyKey)}

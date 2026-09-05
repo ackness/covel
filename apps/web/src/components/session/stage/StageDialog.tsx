@@ -5,12 +5,13 @@
 import { useEffect, useRef, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { useTypewriter } from "./use-typewriter.js";
+import { stageParagraphSpeakerName } from "./stage-dialogue-selectors.js";
 
 export interface StageDialogProps {
   readonly turnId?: string;
   readonly storyText: string;
   readonly streamEnded: boolean;
-  readonly speakerName?: string;
+  readonly paragraphSpeakers?: readonly (string | null)[];
   readonly autoPlay: boolean;
   readonly reducedMotion?: boolean;
   /** Fires once when the current turn's text has been fully revealed. */
@@ -24,16 +25,22 @@ export function StageDialog({
   turnId,
   storyText,
   streamEnded,
-  speakerName,
+  paragraphSpeakers,
   autoPlay,
   reducedMotion = false,
   onAllRead,
 }: StageDialogProps): ReactElement {
   const { t } = useTranslation();
-  const { visible, status, advance, skip } = useTypewriter(
+  const { visible, segmentIndex, status, advance, skip } = useTypewriter(
     storyText,
     streamEnded,
     { turnId, reducedMotion },
+  );
+  const speakerName = stageParagraphSpeakerName(
+    paragraphSpeakers,
+    storyText,
+    segmentIndex,
+    streamEnded,
   );
 
   const prevStatusRef = useRef(status);
@@ -67,7 +74,10 @@ export function StageDialog({
           className="flex w-full cursor-pointer flex-col gap-1.5 rounded-(--radius-card) p-4 text-left transition-colors hover:bg-[color-mix(in_oklab,var(--color-foreground)_5%,transparent)]"
         >
           {speakerName && (
-            <span className="ui-stage-panel absolute -top-3.5 left-4 rounded-full border-(--accent-primary) px-3.5 py-0.5 text-xs font-semibold text-(--accent-primary)">
+            <span
+              data-testid="stage-dialog-speaker"
+              className="ui-stage-panel absolute -top-3.5 left-4 rounded-full border-(--accent-primary) px-3.5 py-0.5 text-xs font-semibold text-(--accent-primary)"
+            >
               {speakerName}
             </span>
           )}

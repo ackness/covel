@@ -357,7 +357,11 @@
     "blockLabel": "区块",
     "exportEmpty": "暂无可导出的消息",
     "exportSuccess": "聊天记录已导出",
-    "exportFailed": "导出聊天记录失败"
+    "exportFailed": "导出聊天记录失败",
+    "executionFailures": "失败 {{count}} 项",
+    "partialCompletion": "部分更新未完成，请查看下方受影响的任务。",
+    "runtimeFailedDetail": "这项任务未完成，可以重试或查看执行追踪。",
+    "stateSetup": "准备中"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -652,18 +656,34 @@
         "label": "主题库",
         "description": "导入、移除并复用自定义主题包。"
       },
-      "uiLocale": { "label": "界面语言" },
-      "chatMessageWindow": { "label": "聊天窗口消息上限" },
-      "onboardedVersion": { "label": "Onboarding 版本" },
+      "uiLocale": {
+        "label": "界面语言"
+      },
+      "chatMessageWindow": {
+        "label": "聊天窗口消息上限"
+      },
+      "onboardedVersion": {
+        "label": "Onboarding 版本"
+      },
       "llmSlotConfig": {
         "label": "用途分配",
         "description": "为每种模型用途选择服务商和模型"
       },
-      "llmProviders": { "label": "服务商与模型" },
-      "llmProviderPriceMultipliers": { "label": "服务商价格倍率" },
-      "llmParamOverrides": { "label": "参数覆盖" },
-      "llmCapabilityOverrides": { "label": "能力覆盖" },
-      "llmPrepRuntimeBindings": { "label": "准备阶段 Runtime 绑定" }
+      "llmProviders": {
+        "label": "服务商与模型"
+      },
+      "llmProviderPriceMultipliers": {
+        "label": "服务商价格倍率"
+      },
+      "llmParamOverrides": {
+        "label": "参数覆盖"
+      },
+      "llmCapabilityOverrides": {
+        "label": "能力覆盖"
+      },
+      "llmPrepRuntimeBindings": {
+        "label": "准备阶段 Runtime 绑定"
+      }
     },
     "operatorAccessTitle": "托管服务运维访问",
     "operatorAccessConfigured": "已配置",
@@ -897,7 +917,15 @@
       "high": "较高",
       "xhigh": "很高",
       "max": "最高"
-    }
+    },
+    "modelLimitsUnknown": "模型上限未知",
+    "capabilityUnknownHint": "未找到对应模型记录。协议支持为估计值；模型 token 上限未知，可手动指定。",
+    "backToProviders": "返回服务商列表",
+    "maxOutputTokensInvalid": "请输入正整数，且不要超过已显示的上限。",
+    "conflictTitle": "其他窗口已修改设置",
+    "conflictDetail": "{{keys}} 未保存。已加载最新值，请核对后重新修改。",
+    "draftConflict": "其他窗口已修改此设置。已保留你的草稿，请先加载已保存值，再继续编辑。",
+    "reloadSavedValue": "加载已保存值"
   },
   "appearance": {
     "customizeTitle": "精细调整",
@@ -1674,7 +1702,9 @@
       "namespaces": "{{count}} 个命名空间",
       "keys": "{{count}} 个键",
       "empty": "空"
-    }
+    },
+    "snapshotRefreshFailed": "会话数据刷新失败，当前数据可能已过期，请点击刷新重试。",
+    "snapshotUpdatedAt": "数据更新于 {{time}}"
   },
   "reload": {
     "reloading": "正在重启服务…",

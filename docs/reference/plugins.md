@@ -826,22 +826,26 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 
 ### scene-stage/direction
 
-| 字段         | 值                                                                                              |
-| ------------ | ----------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`                                                                                        |
-| runtimeType  | `function`（无 LLM）                                                                            |
-| handler      | `./runtimes/direction/handler.js`                                                               |
-| stage        | 无（`event` 触发不设 `stage`）                                                                  |
-| trigger      | `event`，topic `stage.direction`                                                                |
-| outputKind   | `system`                                                                                        |
-| capabilities | `[stage-direction]`                                                                             |
-| tags         | `mode:dialogue` · `role:scene-state` · `role:character` · `cost:function`                       |
-| events       | 消费 `stage.direction`，单次载荷为 1–12 条 `cues`                                               |
-| output       | `direction/current`，持久化至多 4 名演员的焦点、站位、过渡与 `variantId/outfit/expression/pose` |
+| 字段         | 值                                                                                |
+| ------------ | --------------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                          |
+| runtimeType  | `function`（无 LLM）                                                              |
+| handler      | `./runtimes/direction/handler.js`                                                 |
+| stage        | 无（`event` 触发不设 `stage`）                                                    |
+| trigger      | `event`，topic `stage.direction`                                                  |
+| outputKind   | `system`                                                                          |
+| capabilities | `[stage-direction]`                                                               |
+| tags         | `mode:dialogue` · `role:scene-state` · `role:character` · `cost:function`         |
+| events       | 消费 `stage.direction`，0–12 条 `cues`；为空时必须有 `dialogue.paragraphSpeakers` |
+| output       | `direction/current` 持久化至多 4 名演员；`dialogue/<turnId>` 持久化独立的逐段署名 |
 
 **职责**：把传统 Galgame 的导演指令从“由当前说话者猜画面”提升为持久状态。叙事器在角色登场、更新、退场、焦点切换或清空舞台时发射一次 `stage.direction`，并把同一轮所有变化合并进 `cues[]`。角色通过完整名称、角色 id 或唯一部分名称解析；无法唯一解析的指令被忽略并写入 diagnostics，不会误操作其他角色。显式站位冲突时新角色占据该站位，旧角色退回自动站位。
 
 Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direction/current` 就以其为权威，包括 `actors: []` 的明确清空。尚未产生方向状态的旧世界继续使用 `scene-cast/active-cast`，因此无需迁移即可保持原行为。视觉请求的具体回退由 `character-presence.visuals` 负责。
+
+**对白署名契约**：演员焦点只控制画面高亮。叙事器在正文前提交 `dialogue: { paragraphSpeakers: ["exact-character-id", null, "other-character-id"] }`，每个元素对应一个空行分隔的正文段落（1–80 段）；`null` 表示旁白、混合对白或无法确定身份。不同说话人必须独立分段，数组长度与正文段数必须一致。`scene-cast` 的 `<active-cast>` 注入同时提供名称和精确角色 ID，ID 不出现在最终玩家正文。这里只接受准确 ID，不使用舞台演员的部分名称匹配，也不从中文正文猜测。
+
+处理器写入 `dialogue/<turnId>`，值为 `{ schemaVersion: 1, turnId, paragraphSpeakers: [{ characterId, displayName } | null] }`；未知 ID 保留所在位置为 `null` 并记录 diagnostics。仅提交对白映射不会建立或清空 `direction/current`。Web 只读取当前 story 的回合记录；流式阶段使用同回合事件预览，恢复后使用持久数据；无映射的旧消息、回合不符或最终段数不符均不显示署名。
 
 动作流实时预览会短暂保留 `actor.leave` 和 `stage.clear` 的目标角色，以播放指令指定的 `fade`、`slide-left`、`slide-right` 或 `dissolve` 离场动画；持久化的 `direction/current` 仍然只保存留在舞台上的角色。
 

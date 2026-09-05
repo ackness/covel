@@ -98,6 +98,7 @@ export function WorldSelectScreen({
   const [mode, setMode] = useState<ViewMode>("list");
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
   const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [settingsTarget, setSettingsTarget] = useState<string>();
   const [enteringWorldId, setEnteringWorldId] = useState<string | null>(null);
   const [pendingWorldId, setPendingWorldId] = useState<string | null>(null);
   const [deletingWorldId, setDeletingWorldId] = useState<string | null>(null);
@@ -372,8 +373,11 @@ export function WorldSelectScreen({
       {deleteDialog}
       <SettingsDialog
         open={settingsOpen}
-        onOpenChange={onSettingsOpenChange}
-        initialKey={settingsInitialKey}
+        onOpenChange={(open) => {
+          if (!open) setSettingsTarget(undefined);
+          onSettingsOpenChange(open);
+        }}
+        initialKey={settingsTarget ?? settingsInitialKey}
         plugins={plugins}
       />
       <AiWorldGenerator
@@ -390,7 +394,10 @@ export function WorldSelectScreen({
         enteringWorldId={enteringWorldId}
         storageLabel={worldStorageLabel}
         onOpenGenerator={() => setGeneratorOpen(true)}
-        onOpenSettings={() => onSettingsOpenChange(true)}
+        onOpenSettings={() => {
+          setSettingsTarget("llm.providers");
+          onSettingsOpenChange(true);
+        }}
         onEnterWorld={handleEnterWorld}
         onViewDetails={handleViewDetails}
         onDeleteWorld={handleDeleteClick}

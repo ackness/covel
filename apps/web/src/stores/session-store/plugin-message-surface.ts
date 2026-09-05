@@ -1,3 +1,4 @@
+import { orderStoryBeforePluginMessages } from "./message-order.js";
 import type { SessionState, StreamMessage } from "./types.js";
 
 function stripPrivateMessageKeys(
@@ -107,5 +108,5 @@ export function applyPluginMessageSurface(
     messages = next;
   }
 
-  return { ...state, messages };
+  return { ...state, messages: orderStoryBeforePluginMessages(messages) };
 }

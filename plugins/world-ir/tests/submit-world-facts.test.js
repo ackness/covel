@@ -36,6 +36,24 @@ describe("submit-world-facts", () => {
     ).resolves.toEqual(VALID_FACTS);
   });
 
+  it("supplies the protocol version when omitted and rejects unsupported versions", async () => {
+    const { schemaVersion: _version, ...withoutVersion } = VALID_FACTS;
+    const parsed = submitWorldFacts.parameters.parse(withoutVersion);
+    expect(await submitWorldFacts.execute(parsed)).toEqual(VALID_FACTS);
+    expect(
+      submitWorldFacts.parameters.safeParse({
+        ...VALID_FACTS,
+        schemaVersion: 2,
+      }).success,
+    ).toBe(false);
+    expect(
+      submitWorldFacts.parameters.safeParse({
+        ...VALID_FACTS,
+        schemaVersion: null,
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects extra top-level fields with a precise validation path", async () => {
     const result = submitWorldFacts.parameters.safeParse({
       ...VALID_FACTS,
