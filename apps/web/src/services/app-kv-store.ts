@@ -169,9 +169,26 @@ export async function saveSubmittedBlocks(
   ids: string[],
   values: Record<string, Record<string, unknown>>,
 ): Promise<void> {
-  return idbPut<SubmittedBlocksRecord>(STORE_SUBMITTED_BLOCKS, sessionId, {
-    ids,
-    values,
+  const db = await openAppDb();
+  return new Promise((resolve, reject) => {
+    // One readwrite transaction serializes concurrent submissions, including
+    // writes from another tab, without dropping previously submitted forms.
+    const tx = db.transaction(STORE_SUBMITTED_BLOCKS, "readwrite");
+    const store = tx.objectStore(STORE_SUBMITTED_BLOCKS);
+    const req = store.get(sessionId);
+    req.onsuccess = () => {
+      const current = req.result as SubmittedBlocksRecord | undefined;
+      store.put(
+        {
+          ids: [...new Set([...(current?.ids ?? []), ...ids])],
+          values: { ...current?.values, ...values },
+        } satisfies SubmittedBlocksRecord,
+        sessionId,
+      );
+    };
+    tx.oncomplete = () => resolve();
+    tx.onabort = () =>
+      reject(tx.error ?? new Error("Submitted blocks transaction aborted"));
   });
 }
 

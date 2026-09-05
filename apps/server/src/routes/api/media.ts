@@ -103,6 +103,11 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 /** Scriptable image type — rejected on upload, neutered on read. */
 const SVG_MIME = "image/svg+xml";
 
+/** MIME type/subtype is case-insensitive; parameters do not change its type. */
+function mimeEssence(mime: string): string {
+  return mime.split(";")[0]!.trim().toLowerCase();
+}
+
 // 20 MB per request — keep the per-IP budget tight so repeat uploads can't
 // hammer storage.
 mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
@@ -130,7 +135,7 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
     return jsonError("not_found", `session ${sessionId} not found`, 404);
   }
   const expectedIncarnation = sessionIncarnationIdentity(initialSession);
-  const mime = (c.req.header("content-type") ?? "").split(";")[0]!.trim();
+  const mime = mimeEssence(c.req.header("content-type") ?? "");
   if (!mime.startsWith("image/")) {
     return jsonError(
       "invalid_request",
@@ -574,6 +579,16 @@ mediaRoutes.get("/:id", async (c) => {
     return jsonError("forbidden", "session does not reference this media", 403);
   }
 
+  // Cover historical and producer-written MIME values, including parameters.
+  // Send these on 304 too so revalidation hardens a previously cached response.
+  const svgHeaders: Record<string, string> =
+    mimeEssence(lookup.mime) === SVG_MIME
+      ? {
+          "content-disposition": "attachment",
+          "content-security-policy": "sandbox",
+        }
+      : {};
+
   // ETag short-circuit. id is the SHA-256 of the bytes, so any cached
   // response is permanently fresh.
   const etag = `"${id}"`;
@@ -584,6 +599,7 @@ mediaRoutes.get("/:id", async (c) => {
       headers: {
         etag,
         "cache-control": "private, max-age=300, immutable",
+        ...svgHeaders,
       },
     });
   }
@@ -600,12 +616,7 @@ mediaRoutes.get("/:id", async (c) => {
     "x-content-type-options": "nosniff",
     // Uploads reject SVG, but rows predating that ban (or written by another
     // media producer) must still never render inline on the app origin.
-    ...(lookup.mime === SVG_MIME
-      ? {
-          "content-disposition": "attachment",
-          "content-security-policy": "sandbox",
-        }
-      : {}),
+    ...svgHeaders,
   };
 
   try {

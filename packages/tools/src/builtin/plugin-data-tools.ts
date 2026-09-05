@@ -177,7 +177,7 @@ function createPluginDataSetBatchTool(): ToolModule {
 
 /**
  * Uncommitted `plugin.data` / `plugin.data.batch` proposals produced earlier
- * in THIS tool loop, as an overlay keyed `namespace\u0000key`.
+ * in THIS tool loop, keyed by JSON-encoded `[namespace, key]` tuples.
  *
  * Plugin-data writes go through proposals, which commit only at the end of the
  * turn. Without this overlay a runtime that calls `plugin-data-set` and then
@@ -189,10 +189,10 @@ function createPluginDataSetBatchTool(): ToolModule {
 function buildPendingOverlay(context: {
   readonly pluginId: string;
   readonly pendingProposals?: readonly Proposal[];
-}): Map<string, unknown> {
-  const overlay = new Map<string, unknown>();
+}): Map<string, PluginDataPayload> {
+  const overlay = new Map<string, PluginDataPayload>();
   const overlayKey = (namespace: string, key: string) =>
-    `${namespace}\u0000${key}`;
+    JSON.stringify([namespace, key]);
 
   for (const proposal of context.pendingProposals ?? []) {
     // Only this plugin's own writes — the store call is already scoped to
@@ -201,10 +201,10 @@ function buildPendingOverlay(context: {
 
     if (proposal.type === "plugin.data") {
       const p = proposal.payload;
-      overlay.set(overlayKey(p.namespace, p.key), p.value);
+      overlay.set(overlayKey(p.namespace, p.key), p);
     } else if (proposal.type === "plugin.data.batch") {
       for (const item of proposal.payload.items ?? []) {
-        overlay.set(overlayKey(item.namespace, item.key), item.value);
+        overlay.set(overlayKey(item.namespace, item.key), item);
       }
     }
   }
@@ -224,13 +224,13 @@ function createPluginDataGetTool(store: PluginDataStore): ToolModule {
     execute: async (params, context) => {
       const targetPlugin = context.pluginId;
       const overlay = buildPendingOverlay(context);
-      const overlayKey = `${params.namespace}\u0000${params.key}`;
+      const overlayKey = JSON.stringify([params.namespace, params.key]);
       if (overlay.has(overlayKey)) {
         return {
           found: true,
           namespace: params.namespace,
           key: params.key,
-          value: overlay.get(overlayKey),
+          value: overlay.get(overlayKey)!.value,
           updatedAt: new Date().toISOString(),
         };
       }
@@ -280,15 +280,16 @@ function createPluginDataListTool(store: PluginDataStore): ToolModule {
         { namespace: string; key: string; value: unknown; updatedAt: string }
       >();
       for (const r of records) {
-        merged.set(`${r.namespace}\u0000${r.key}`, {
+        merged.set(JSON.stringify([r.namespace, r.key]), {
           namespace: r.namespace,
           key: r.key,
           value: r.value,
           updatedAt: r.updatedAt,
         });
       }
-      for (const [overlayKey, value] of buildPendingOverlay(context)) {
-        const [namespace = "", key = ""] = overlayKey.split("\u0000");
+      for (const [overlayKey, { namespace, key, value }] of buildPendingOverlay(
+        context,
+      )) {
         // A namespace filter must apply to pending writes too.
         if (params.namespace !== undefined && namespace !== params.namespace) {
           continue;

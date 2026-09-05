@@ -16,6 +16,7 @@ export interface MutableRef<T> {
 export interface SessionRuntimeRefs {
   stateRef: MutableRef<SessionState>;
   sessionIdRef: MutableRef<string | null>;
+  sessionGenerationRef: MutableRef<number>;
   runtimeKindRef: MutableRef<Map<string, string>>;
   deltaBufferRef: DeltaBufferRef;
   deltaRafRef: DeltaRafRef;
@@ -29,16 +30,29 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
   }, [state]);
 
   const sessionIdRef = useRef<string | null>(null);
+  const sessionGenerationRef = useRef(0);
+  const publishedSessionIdRef = useRef<string | null>(null);
   const runtimeKindRef = useRef<Map<string, string>>(new Map());
   const deltaBufferRef = useRef<DeltaBufferRef["current"]>(new Map());
   const deltaRafRef = useRef<DeltaRafRef["current"]>(null);
   const lastBackfilledTurnIdRef = useRef<string | null>(null);
 
+  useEffect(
+    () => () => {
+      sessionGenerationRef.current += 1;
+      sessionIdRef.current = null;
+      publishedSessionIdRef.current = null;
+    },
+    [],
+  );
+
   useEffect(() => {
     const nextId = state.session?.id ?? null;
-    if (sessionIdRef.current === nextId) return;
-    if (sessionIdRef.current) {
-      clearDomainEventPreviews(sessionIdRef.current);
+    const previousId = publishedSessionIdRef.current;
+    if (previousId === nextId) return;
+    publishedSessionIdRef.current = nextId;
+    if (previousId) {
+      clearDomainEventPreviews(previousId);
     }
     sessionIdRef.current = nextId;
     setActivePluginDataSession(nextId);
@@ -49,6 +63,7 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
   return {
     stateRef,
     sessionIdRef,
+    sessionGenerationRef,
     runtimeKindRef,
     deltaBufferRef,
     deltaRafRef,

@@ -269,6 +269,16 @@ session owner-token 鉴权。它们是 Web `LocalDataService` 的内部同步协
 session clock、规范 origin/commitStatus 与 snapshot schema；旧版本直接拒绝。
 checkpoint 不允许携带 provider key、owner token 或其他凭据。
 
+两个端点在取得 session lock 后都会重新验证 owner、session incarnation 与删除标记。
+工作区 revision 和幂等 commit 缓存绑定该 incarnation；删除后使用同一公开 ID 重建
+会话必须重新上传 checkpoint，无法重用或读取旧会话的 head/commit。
+
+`demo` / `commercial` 的普通 owner 同步必须保持服务端的 `session.worldId`；
+携带的 `world` 只能为空或等于该会话当前的服务端世界记录。更改世界绑定、写入新世界
+或修改共享世界均需 operator token，否则在任何 checkpoint 写入前返回
+`401 operator_token_required`。允许的普通 owner 同步只替换会话数据，不回写全局世界；
+`self` 与 operator 的世界导入行为保持不变。
+
 ### 会话快照
 
 | 方法 | 路径                         | 描述                                                                                                                           |

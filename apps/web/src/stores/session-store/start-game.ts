@@ -15,6 +15,7 @@ interface StartGameOptions {
   workspace: SessionWorkspace;
   dispatch: SessionDispatch;
   sessionIdRef: MutableRef<string | null>;
+  sessionGenerationRef: MutableRef<number>;
   world: api.WorldRecord;
   presets: readonly api.PresetSummary[];
   llmConfig: api.LlmConfigResponse | null;
@@ -47,11 +48,11 @@ function selectPresetId(
 
 async function hydrateInitialSnapshot(
   sessionId: string,
-  sessionIdRef: MutableRef<string | null>,
+  isCurrent: () => boolean,
   dispatch: SessionDispatch,
 ): Promise<void> {
   const snapshot = await api.getSessionSnapshot(sessionId);
-  if (sessionIdRef.current !== sessionId) return;
+  if (!isCurrent()) return;
 
   dispatch({
     type: "SET_GAME_STATE",
@@ -63,6 +64,7 @@ async function persistPrepRuntimeBindings(
   ds: DataService,
   worldId: string,
   sessionId: string,
+  isCurrent: () => boolean,
 ): Promise<void> {
   const prepBindings = api.getPrepRuntimeBindings(worldId);
   if (Object.keys(prepBindings).length === 0) return;
@@ -78,7 +80,7 @@ async function persistPrepRuntimeBindings(
     await ds.updateSession(sessionId, {
       runtimeModelOverrides: overrides,
     });
-    api.clearPrepRuntimeBindings(worldId);
+    if (isCurrent()) api.clearPrepRuntimeBindings(worldId);
   } catch {
     // Non-fatal: keep the Prep bindings so a later retry can persist them.
   }
@@ -89,13 +91,19 @@ export async function startGameSession({
   workspace,
   dispatch,
   sessionIdRef,
+  sessionGenerationRef,
   world,
   presets,
   llmConfig,
   plugins,
 }: StartGameOptions): Promise<void> {
+  const generation = ++sessionGenerationRef.current;
+  const previousSessionId = sessionIdRef.current;
   let createdSessionId: string | null = null;
   let published = false;
+  const isCurrent = (): boolean =>
+    generation === sessionGenerationRef.current &&
+    sessionIdRef.current === (published ? createdSessionId : previousSessionId);
   dispatch({ type: "SET_EXECUTION_ERROR", error: null });
   try {
     const session = await ds.createSession(
@@ -106,33 +114,35 @@ export async function startGameSession({
       world.locale ?? i18n.language,
     );
     createdSessionId = session.id;
+    if (!isCurrent()) return;
 
     // Local mode creates the browser record first. Establish the authoritative
     // server mirror before publishing an executable session or issuing any
     // server-backed hydration / model-binding calls. Remote mode is already
     // authoritative and implements syncToServer as a no-op.
     await workspace.hydrate(session.id);
+    if (!isCurrent()) return;
     api.markServerAck();
-    await persistPrepRuntimeBindings(ds, world.id, session.id);
+    await persistPrepRuntimeBindings(ds, world.id, session.id, isCurrent);
+    if (!isCurrent()) return;
     const hydratedSession = (await ds.getSession(session.id)) ?? session;
+    if (!isCurrent()) return;
 
     setActivePluginDataSession(session.id);
     sessionIdRef.current = session.id;
     published = true;
     dispatch({ type: "SET_SESSION", session: hydratedSession });
 
-    await hydrateInitialSnapshot(session.id, sessionIdRef, dispatch);
+    await hydrateInitialSnapshot(session.id, isCurrent, dispatch);
+    if (!isCurrent()) return;
 
     try {
-      await hydratePluginDataForUiSpecs(
-        session.id,
-        dispatch,
-        () => sessionIdRef.current === session.id,
-      );
+      await hydratePluginDataForUiSpecs(session.id, dispatch, isCurrent);
     } catch {
       // Right-panel hydration will retry when its own ui-spec loader runs.
     }
   } catch (err) {
+    if (!isCurrent()) return;
     const error = err instanceof Error ? err : new Error(String(err));
     if (published) {
       try {
@@ -146,6 +156,7 @@ export async function startGameSession({
     if (createdSessionId) {
       await ds.deleteSession(createdSessionId).catch(() => undefined);
     }
+    if (generation !== sessionGenerationRef.current) return;
     dispatch({
       type: "SET_EXECUTION_ERROR",
       error: error.message,

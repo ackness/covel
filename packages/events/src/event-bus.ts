@@ -447,16 +447,17 @@ export function createEventBus(
       return;
     }
     if (!frame.ref) return;
-    if (!store) return; // cannot re-fetch without a store
+    if (!store) {
+      throw new Error("transport ref cannot be fetched without a store");
+    }
     const record = await store.getEventById(
       frame.ref.sessionId,
       frame.ref.eventId,
     );
     if (!record) {
-      console.warn(
-        `[EventBus] transport ref "${frame.ref.eventId}" not found in store`,
+      throw new Error(
+        `transport ref "${frame.ref.eventId}" not found in store`,
       );
-      return;
     }
     const rawPayload =
       typeof record.payload === "object" && record.payload !== null
@@ -503,6 +504,10 @@ export function createEventBus(
       .then(() => deliverFrame(frame))
       .catch((err) => {
         console.error("[EventBus] transport frame delivery failed:", err);
+        // A received ref can still be unreadable or gone from storage. Its
+        // origin seq has already advanced, so invalidate here on the delivery
+        // chain before successors receive apparently contiguous replay ids.
+        invalidateReplay(rs.sessionId);
       });
   }
 

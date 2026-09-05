@@ -16,11 +16,9 @@
 
 import type { CharacterUpsertPayload, Proposal } from "@covel/shared";
 
-// NUL separator so `namespace`/`key` (arbitrary plugin strings) cannot collide
-// across the join boundary. Built via fromCharCode to keep the source ASCII.
-const NUL = String.fromCharCode(0);
+// Encode the tuple so arbitrary namespace/key strings cannot collide.
 const pluginDataKey = (namespace: string, key: string): string =>
-  `${namespace}${NUL}${key}`;
+  JSON.stringify([namespace, key]);
 
 /**
  * Latest buffered plugin-data value for `(pluginId, namespace, key)`.
@@ -60,8 +58,8 @@ export function overlayPluginDataValue(
 
 /**
  * All buffered plugin-data rows for `(pluginId[, namespace])`, keyed
- * `namespace<NUL>key` so callers can merge them over store rows (last write
- * wins).
+ * by JSON-encoded `[namespace, key]` so callers can merge them over store rows
+ * (last write wins).
  */
 export function overlayPluginDataRows(
   proposals: readonly Proposal[],

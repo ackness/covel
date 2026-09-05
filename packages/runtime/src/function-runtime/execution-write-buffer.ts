@@ -138,8 +138,7 @@ export function mergePluginDataRows(
   if (overlay.size === 0) return [...stored];
   const now = new Date().toISOString();
   const byKey = new Map<string, PluginDataRecord>();
-  const compositeKey = (ns: string, key: string) =>
-    `${ns}${String.fromCharCode(0)}${key}`;
+  const compositeKey = (ns: string, key: string) => JSON.stringify([ns, key]);
   for (const row of stored)
     byKey.set(compositeKey(row.namespace, row.key), row);
   for (const entry of overlay.values()) {

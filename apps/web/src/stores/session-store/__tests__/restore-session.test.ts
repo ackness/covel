@@ -2,6 +2,10 @@ import type { DataService } from "@/services/data-service.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { useReducer } from "react";
+import { initialState, reducer } from "../reducer.js";
+import { useSessionRuntimeRefs } from "../runtime-refs.js";
 
 const api = vi.hoisted(() => ({
   getSessionSnapshot: vi.fn(),
@@ -72,7 +76,10 @@ function makeWorkspace(ds: DataService): SessionWorkspace {
   };
 }
 
+const sessionGenerationRef = { current: 0 };
+
 beforeEach(() => {
+  sessionGenerationRef.current = 0;
   vi.clearAllMocks();
   api.getSessionSnapshot.mockResolvedValue(emptySnapshot());
   api.listSessionPlugins.mockResolvedValue({ active: [], available: [] });
@@ -105,6 +112,7 @@ describe("restoreSessionState workspace ordering", () => {
       workspace: makeWorkspace(ds),
       dispatch,
       sessionIdRef,
+      sessionGenerationRef,
       worlds: [world],
       session,
     });
@@ -133,6 +141,7 @@ describe("restoreSessionState workspace ordering", () => {
         workspace: makeWorkspace(ds),
         dispatch,
         sessionIdRef,
+        sessionGenerationRef,
         worlds: [world],
         session,
       }),
@@ -149,5 +158,138 @@ describe("restoreSessionState workspace ordering", () => {
     expect(api.listSuspensions).not.toHaveBeenCalled();
     expect(api.markServerAck).not.toHaveBeenCalled();
     expect(pluginData.setActiveSession).toHaveBeenLastCalledWith(null);
+  });
+});
+
+describe("restoreSessionState stale requests", () => {
+  it.each(["snapshot", "fallback", "blocks", "steps"] as const)(
+    "drops %s data after another session is selected",
+    async (stage) => {
+      const ds = makeDataService([]);
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      if (stage === "snapshot") {
+        api.getSessionSnapshot.mockImplementationOnce(async () => {
+          await pending;
+          return emptySnapshot();
+        });
+      } else if (stage === "fallback") {
+        api.getSessionSnapshot.mockRejectedValueOnce(new Error("offline"));
+        vi.mocked(ds.listMessages).mockImplementationOnce(async () => {
+          await pending;
+          return [];
+        });
+      } else if (stage === "blocks") {
+        vi.mocked(ds.loadSubmittedBlocks).mockImplementationOnce(async () => {
+          await pending;
+          return { ids: ["old-block"], values: {} };
+        });
+      } else {
+        vi.mocked(ds.loadExecutionSteps).mockImplementationOnce(async () => {
+          await pending;
+          return [
+            {
+              runtimeId: "old-runtime",
+              pluginId: "plugin",
+              status: "completed",
+            },
+          ];
+        });
+      }
+      const dispatch = vi.fn();
+      const sessionIdRef = { current: null as string | null };
+      const restoring = restoreSessionState({
+        ds,
+        workspace: makeWorkspace(ds),
+        dispatch,
+        sessionIdRef,
+        sessionGenerationRef,
+        worlds: [world],
+        session,
+      });
+      const waitingOn =
+        stage === "snapshot"
+          ? api.getSessionSnapshot
+          : stage === "fallback"
+            ? ds.listMessages
+            : stage === "blocks"
+              ? ds.loadSubmittedBlocks
+              : ds.loadExecutionSteps;
+      await vi.waitFor(() => expect(waitingOn).toHaveBeenCalled());
+      sessionIdRef.current = "sess-2";
+      dispatch.mockClear();
+      release();
+      await restoring;
+      expect(dispatch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps a newer restore of the same session when the older snapshot arrives", async () => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    api.getSessionSnapshot.mockImplementationOnce(async () => {
+      await pending;
+      return emptySnapshot();
+    });
+    const ds = makeDataService([]);
+    const dispatch = vi.fn();
+    const sessionIdRef = { current: null as string | null };
+    const options = {
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch,
+      sessionIdRef,
+      sessionGenerationRef,
+      worlds: [world],
+      session,
+    };
+    const first = restoreSessionState(options);
+    await vi.waitFor(() =>
+      expect(api.getSessionSnapshot).toHaveBeenCalledOnce(),
+    );
+    await restoreSessionState(options);
+    dispatch.mockClear();
+    release();
+    await first;
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("publishes a restored session after React commits the reset during hydration", async () => {
+    const ds = makeDataService([]);
+    let release!: () => void;
+    vi.mocked(ds.syncToServer).mockReturnValueOnce(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const { result } = renderHook(() => {
+      const [state, dispatch] = useReducer(reducer, {
+        ...initialState,
+        session: { ...session, id: "sess-old" },
+      });
+      const refs = useSessionRuntimeRefs(state);
+      return { state, dispatch, refs };
+    });
+    let restoring!: Promise<void>;
+    act(() => {
+      restoring = restoreSessionState({
+        ds,
+        workspace: makeWorkspace(ds),
+        dispatch: result.current.dispatch,
+        sessionIdRef: result.current.refs.sessionIdRef,
+        sessionGenerationRef: result.current.refs.sessionGenerationRef,
+        worlds: [world],
+        session,
+      });
+    });
+    await act(async () => {
+      release();
+      await restoring;
+    });
+    expect(result.current.state.session?.id).toBe(session.id);
   });
 });

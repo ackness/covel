@@ -84,6 +84,11 @@ The web app uses two databases with separate lifecycles:
 - `covel-browser-cache` (native IDB schema v1): UI state, submitted blocks,
   execution-display cache, media metadata, and render blobs.
 
+Submitted block IDs and form values merge in one IndexedDB readwrite
+transaction. Concurrent submissions, including writes from separate tabs,
+retain each block; a later write to the same block replaces that block's values.
+Removing the session's submitted-block record remains the explicit reset path.
+
 Only the latest full checkpoint is retained. Snapshot history already exists
 inside the checkpoint; retaining a full checkpoint for every action would grow
 quadratically. The compact `commits` table stores only revision/action metadata.

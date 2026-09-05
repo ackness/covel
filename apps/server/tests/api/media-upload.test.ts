@@ -16,6 +16,7 @@ import type { SessionLock } from "../../src/lib/session-lock.js";
 
 // A few non-empty bytes — content is irrelevant, the store content-addresses.
 const IMG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
+let nextClientId = 1;
 
 async function makeApp(withStore = true): Promise<{
   app: Hono;
@@ -24,6 +25,7 @@ async function makeApp(withStore = true): Promise<{
   sessionLock: SessionLock;
 }> {
   const app = new Hono();
+  const remoteAddress = `198.51.100.${nextClientId++}`;
   const store = createMemoryStore();
   const now = new Date().toISOString();
   await store.createSession({
@@ -46,6 +48,7 @@ async function makeApp(withStore = true): Promise<{
     mediaStore = createMemoryMediaStore();
   }
   app.use("*", async (c, next) => {
+    c.env = { incoming: { socket: { remoteAddress } } };
     c.set("store", store);
     c.set("sessionLock", sessionLock);
     if (mediaStore) c.set("mediaStore", mediaStore);
@@ -145,16 +148,34 @@ describe("POST /api/media (upload)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects an SVG upload — it would execute script on the app origin", async () => {
+  it.each([
+    "image/svg+xml",
+    "image/SVG+xml",
+    "IMAGE/SVG+XML; charset=utf-8",
+    "image/svg+xml ; charset=utf-8",
+  ])("rejects an SVG upload with MIME %s", async (mime) => {
     const { app } = await makeApp();
     const res = await app.request("/api/media?sessionId=s1", {
       method: "POST",
-      headers: { "content-type": "image/svg+xml" },
+      headers: { "content-type": mime },
       body: new TextEncoder().encode(
         `<svg xmlns="http://www.w3.org/2000/svg"><script>fetch('//evil')</script></svg>`,
       ),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("normalizes raster MIME casing and parameters before storing", async () => {
+    const { app, mediaStore } = await makeApp();
+    const res = await app.request("/api/media?sessionId=s1", {
+      method: "POST",
+      headers: { "content-type": "IMAGE/PNG ; charset=binary" },
+      body: IMG,
+    });
+    expect(res.status).toBe(200);
+    const ref = (await res.json()) as { id: string; mime: string };
+    expect(ref.mime).toBe("image/png");
+    expect((await mediaStore!.lookup(ref.id))?.mime).toBe("image/png");
   });
 
   it("rejects an empty body", async () => {

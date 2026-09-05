@@ -127,6 +127,22 @@ async function main(): Promise<void> {
   assert.equal(res.entries, 1, "one entry extracted");
   assert.equal(res.rootPrefix, "pkg", "root prefix detected");
 
+  for (const manifest of ["world.yaml", "PLUGIN.md"]) {
+    const archive = tmpZip(
+      `${manifest}.zip`,
+      singleStoredEntryZip(manifest, Buffer.from("manifest")),
+    );
+    const extracted = await extractZipSafely(
+      archive,
+      fs.mkdtempSync(path.join(tmpRoot, "manifest-")),
+    );
+    assert.equal(
+      extracted.rootPrefix,
+      null,
+      "a root-level manifest is not a package directory",
+    );
+  }
+
   console.log("zip-extract.selfcheck: all assertions passed");
 }
 

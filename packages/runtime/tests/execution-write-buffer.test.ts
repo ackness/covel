@@ -171,6 +171,46 @@ describe("createTrustedHandlerStore with a write buffer", () => {
       await store.getPluginData(CTX.sessionId, CTX.pluginId, "schema", "k"),
     ).not.toBeNull();
   });
+
+  it("keeps buffered and committed NUL-containing plugin-data tuples distinct", async () => {
+    const store = createMemoryStore();
+    const buffer = createExecutionWriteBuffer();
+    const trusted = createTrustedHandlerStore(store, CTX, buffer);
+    const now = new Date().toISOString();
+    const rows = [
+      { namespace: "a", key: "b\u0000c", value: "first" },
+      { namespace: "a\u0000b", key: "c", value: "second" },
+    ].map((entry, index) => ({
+      ...entry,
+      id: `pd-${index}`,
+      sessionId: CTX.sessionId,
+      pluginId: CTX.pluginId,
+      createdAt: now,
+      updatedAt: now,
+    }));
+
+    await trusted.setPluginDataBatch(rows);
+    expect(
+      await trusted.listPluginData(CTX.sessionId, CTX.pluginId),
+    ).toMatchObject(
+      rows.map(({ namespace, key, value }) => ({ namespace, key, value })),
+    );
+
+    await store.setPluginDataBatch(rows);
+    buffer.length = 0;
+    await trusted.deletePluginData(
+      CTX.sessionId,
+      CTX.pluginId,
+      "a\u0000b",
+      "c",
+    );
+    expect(await trusted.listPluginData(CTX.sessionId, CTX.pluginId)).toEqual([
+      rows[0],
+    ]);
+    expect(await store.listPluginData(CTX.sessionId, CTX.pluginId)).toEqual(
+      rows,
+    );
+  });
 });
 
 describe("createPluginDataWriter with a write buffer", () => {

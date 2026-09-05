@@ -16,8 +16,50 @@ interface RestoreSessionOptions {
   workspace: SessionWorkspace;
   dispatch: SessionDispatch;
   sessionIdRef: MutableRef<string | null>;
+  sessionGenerationRef: MutableRef<number>;
+  generation?: number;
   worlds: readonly api.WorldRecord[];
   session: api.SessionRecord;
+}
+
+/** Refresh session metadata that has no SSE carrier, such as the phase. */
+export async function resyncSessionRecord(
+  sessionId: string,
+  sessionIdRef: MutableRef<string | null>,
+  dispatch: SessionDispatch,
+  sessionGenerationRef: MutableRef<number>,
+): Promise<void> {
+  const generation = sessionGenerationRef.current;
+  try {
+    const session = await api.getSession(sessionId);
+    if (
+      sessionIdRef.current !== sessionId ||
+      sessionGenerationRef.current !== generation
+    )
+      return;
+    dispatch({ type: "SET_SESSION", session });
+  } catch {
+    // The next action or reload will resync.
+  }
+}
+
+export async function restoreSessionById({
+  sessionId,
+  ...options
+}: Omit<RestoreSessionOptions, "session" | "generation"> & {
+  sessionId: string;
+}): Promise<void> {
+  const generation = ++options.sessionGenerationRef.current;
+  let session: api.SessionRecord | null;
+  try {
+    session = await options.ds.getSession(sessionId);
+  } catch (error) {
+    if (generation !== options.sessionGenerationRef.current) return;
+    throw error;
+  }
+  if (generation !== options.sessionGenerationRef.current) return;
+  if (!session) throw new Error("Session not found: " + sessionId);
+  await restoreSessionState({ ...options, generation, session });
 }
 
 export function toStreamMessages(
@@ -239,9 +281,23 @@ export async function restoreSessionState({
   workspace,
   dispatch,
   sessionIdRef,
+  sessionGenerationRef,
+  generation = ++sessionGenerationRef.current,
   worlds,
   session,
 }: RestoreSessionOptions): Promise<void> {
+  if (generation !== sessionGenerationRef.current) return;
+  const targetSessionId = session.id;
+  let published = false;
+  const isCurrent = (): boolean =>
+    generation === sessionGenerationRef.current &&
+    sessionIdRef.current === (published ? targetSessionId : null);
+  const dispatchCurrent: SessionDispatch = (action) => {
+    if (isCurrent()) dispatch(action);
+  };
+  // A reset commits while hydration is pending. Keep the published id empty
+  // until the server workspace is ready, and use the generation to cancel it.
+  sessionIdRef.current = null;
   clearAllStreamingText();
   dispatch({ type: "RESET_SESSION" });
   setActivePluginDataSession(null);
@@ -251,9 +307,6 @@ export async function restoreSessionState({
     dispatch({ type: "SET_WORLD", world });
   }
 
-  const targetSessionId = session.id;
-  sessionIdRef.current = targetSessionId;
-
   // Browser-private sessions only become executable after their durable
   // checkpoint has rebuilt the ephemeral server workspace. Publishing the
   // session first starts snapshot/plugin/SSE effects against an empty
@@ -262,35 +315,44 @@ export async function restoreSessionState({
   try {
     await workspace.hydrate(targetSessionId);
   } catch (error) {
-    if (sessionIdRef.current === targetSessionId) {
-      sessionIdRef.current = null;
-      setActivePluginDataSession(null);
-      dispatch({
-        type: "SET_EXECUTION_ERROR",
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    if (!isCurrent()) return;
+    sessionIdRef.current = null;
+    setActivePluginDataSession(null);
+    dispatch({
+      type: "SET_EXECUTION_ERROR",
+      error: error instanceof Error ? error.message : String(error),
+    });
     throw error;
   }
-  if (sessionIdRef.current !== targetSessionId) return;
+  if (!isCurrent()) return;
 
   api.markServerAck();
+  published = true;
+  sessionIdRef.current = targetSessionId;
   setActivePluginDataSession(targetSessionId);
   dispatch({ type: "SET_SESSION", session });
 
-  const snapshotLoaded = await restoreServerSnapshot(session.id, dispatch);
-  if (sessionIdRef.current !== targetSessionId) return;
+  const snapshotLoaded = await restoreServerSnapshot(
+    session.id,
+    dispatchCurrent,
+  );
+  if (!isCurrent()) return;
 
   if (!snapshotLoaded) {
-    await restoreLocalFallback(ds, session.id, dispatch);
-    if (sessionIdRef.current !== targetSessionId) return;
+    await restoreLocalFallback(ds, session.id, dispatchCurrent);
+    if (!isCurrent()) return;
   }
 
-  await restoreSubmittedBlocks(ds, session.id, dispatch);
-  if (sessionIdRef.current !== targetSessionId) return;
+  await restoreSubmittedBlocks(ds, session.id, dispatchCurrent);
+  if (!isCurrent()) return;
 
-  await restorePersistedExecutionSteps(ds, session.id, dispatch);
-  if (sessionIdRef.current !== targetSessionId) return;
+  await restorePersistedExecutionSteps(ds, session.id, dispatchCurrent);
+  if (!isCurrent()) return;
 
-  refreshSessionSideData(session.id, targetSessionId, sessionIdRef, dispatch);
+  refreshSessionSideData(
+    session.id,
+    targetSessionId,
+    sessionIdRef,
+    dispatchCurrent,
+  );
 }

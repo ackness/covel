@@ -37,4 +37,21 @@ describe("useSessionRuntimeRefs", () => {
       getDomainEventPreview("session-a", "stage.direction"),
     ).toBeUndefined();
   });
+
+  it("clears previews even when navigation already cleared the active id", () => {
+    const { result, rerender } = renderHook(
+      ({ state }) => useSessionRuntimeRefs(state),
+      { initialProps: { state: stateForSession("session-a") } },
+    );
+    applyDomainEventPreview("session-a", {
+      turnId: "turn-1",
+      topic: "stage.direction",
+      data: { cues: [] },
+    });
+    result.current.sessionIdRef.current = null;
+    act(() => rerender({ state: initialState }));
+    expect(
+      getDomainEventPreview("session-a", "stage.direction"),
+    ).toBeUndefined();
+  });
 });
