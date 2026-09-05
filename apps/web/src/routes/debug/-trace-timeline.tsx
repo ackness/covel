@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Activity, Terminal } from "lucide-react";
+import type { SessionExecutionStatus } from "@covel/shared";
 import type * as api from "@/services/api.js";
 import type { EventCategory } from "./-debug-helpers.js";
 import type { VisibleTurn } from "./-debug-page-model.js";
@@ -7,6 +8,7 @@ import { TurnCard } from "./-trace-panels.js";
 
 export function TraceTimeline({
   selectedSessionId,
+  execution,
   turns,
   loading,
   expandedTurns,
@@ -18,6 +20,7 @@ export function TraceTimeline({
   onSelectEvent,
 }: {
   selectedSessionId: string | null;
+  execution?: SessionExecutionStatus;
   turns: VisibleTurn[];
   loading: boolean;
   expandedTurns: Set<string>;
@@ -58,6 +61,7 @@ export function TraceTimeline({
           <TurnCard
             key={turn.turnId}
             turn={turn}
+            execution={execution}
             turnIndex={turnIndex}
             expanded={expandedTurns.has(turn.turnId)}
             onToggle={() => onToggleTurn(turn.turnId)}

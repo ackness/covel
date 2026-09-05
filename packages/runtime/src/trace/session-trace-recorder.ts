@@ -5,14 +5,20 @@
  * through session-kernel.ts unless a caller intentionally needs this boundary.
  */
 
-import type { Stage } from "@covel/shared";
+import type { SessionExecutionStatus, Stage } from "@covel/shared";
 import type { KernelStore } from "../commit/session-commit-pipeline.js";
 
 export interface TraceRecorder {
-  turnStarted(info: { runtimeCount: number }): Promise<void>;
+  turnStarted(info: {
+    runtimeCount: number;
+    requestId?: string;
+    origin?: "player" | "continuation";
+    recoveryAction?: SessionExecutionStatus["retry"];
+  }): Promise<void>;
   turnCompleted(info: {
     durationMs: number;
     resultCount: number;
+    committed?: boolean;
   }): Promise<void>;
   runtimeStarted(info: {
     runtimeId: string;
@@ -25,6 +31,7 @@ export interface TraceRecorder {
     pluginId: string;
     status: string;
     durationMs: number;
+    error?: string;
   }): Promise<void>;
   runtimeFailed(info: {
     runtimeId: string;

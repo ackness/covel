@@ -134,6 +134,15 @@ export async function submitInputs(
 
 // -- Session Snapshot (restore/reconnection) -------------------
 
+export async function getSessionExecution(
+  sessionId: string,
+): Promise<import("@covel/shared").SessionExecutionStatus> {
+  return request<import("@covel/shared").SessionExecutionStatus>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/execution`,
+    { silentErrors: true },
+  );
+}
+
 export async function getSessionView(
   sessionId: string,
 ): Promise<import("@covel/shared").SessionSnapshot> {

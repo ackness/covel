@@ -361,7 +361,21 @@
     "executionFailures": "Failed: {{count}}",
     "partialCompletion": "Some updates failed. Review the affected tasks below.",
     "runtimeFailedDetail": "This task did not complete. Retry it or inspect its trace.",
-    "stateSetup": "Preparing"
+    "stateSetup": "Preparing",
+    "recoveryChecking": "Checking the unfinished turn",
+    "recoveryRunning": "Your turn is still running",
+    "recoveryInterrupted": "This turn was interrupted",
+    "recoveryFailed": "This turn did not complete",
+    "recoveryHydrating": "Restoring your session",
+    "recoveryUnknownDetail": "We cannot confirm the result yet. Reconnecting will check the original task without starting another turn.",
+    "recoveryRunningDetail": "The server is continuing the original task. Its result will appear here automatically; you can wait or stop it.",
+    "recoveryInterruptedDetail": "The unfinished task is no longer running. Your saved progress is preserved. Retry starts a new attempt only when you choose it.",
+    "recoveryHydratingDetail": "Recovering the latest saved result before you continue.",
+    "recoveryRetry": "Retry unfinished turn",
+    "recoveryRefresh": "Check status",
+    "recoveryStop": "Stop task",
+    "recoveryStopFailed": "Could not stop the task. Check its status and try again.",
+    "reasonInterrupted": "This task has no completed result and is no longer running. Check the recovery notice before retrying."
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -1704,7 +1718,9 @@
       "empty": "empty"
     },
     "snapshotRefreshFailed": "Could not refresh session data. Displayed data may be outdated; use Refresh to retry.",
-    "snapshotUpdatedAt": "Data updated at {{time}}"
+    "snapshotUpdatedAt": "Data updated at {{time}}",
+    "interrupted": "Interrupted",
+    "interruptedHint": "The server reports this execution was interrupted. The trace is preserved and may have no terminal event."
   },
   "reload": {
     "reloading": "Restarting server…",

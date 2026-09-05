@@ -103,6 +103,8 @@ export const initialState: SessionState = {
   executing: false,
   executionError: null,
   executionSteps: [],
+  executionRecovery: null,
+  actionGeneration: 0,
   statePatches: [],
   gameState: {},
   pluginData: {},
@@ -132,6 +134,8 @@ const SESSION_RESET: Partial<SessionState> = {
   executing: false,
   executionError: null,
   executionSteps: [],
+  executionRecovery: null,
+  actionGeneration: 0,
   submittedBlockIds: new Set<string>(),
   submittedBlockValues: {},
   sessionPlugins: [],
@@ -148,6 +152,19 @@ export function reducer(
   action: SessionAction,
 ): SessionState {
   switch (action.type) {
+    case "SET_EXECUTION_RECOVERY":
+      return {
+        ...state,
+        executionRecovery: action.recovery,
+        ...(action.recovery
+          ? {
+              executing:
+                action.recovery.hydrating ||
+                action.recovery.checking ||
+                action.recovery.status?.state === "running",
+            }
+          : {}),
+      };
     case "BOOT_SUCCESS":
       return {
         ...state,
@@ -281,7 +298,20 @@ export function reducer(
       };
     }
     case "SET_EXECUTING":
-      return { ...state, executing: action.value };
+      return {
+        ...state,
+        ...(action.value
+          ? { actionGeneration: (state.actionGeneration ?? 0) + 1 }
+          : {}),
+        executing:
+          action.value ||
+          !!(
+            state.executionRecovery &&
+            (state.executionRecovery.hydrating ||
+              state.executionRecovery.checking ||
+              state.executionRecovery.status?.state === "running")
+          ),
+      };
     case "DISCARD_TURN_STREAMS": {
       // Streaming placeholders use the `stream_<turnId>_<runtimeId>` id
       // convention (APPEND_DELTA above). No turnId → discard all placeholders.

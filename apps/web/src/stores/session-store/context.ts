@@ -36,6 +36,8 @@ export interface SessionActions {
   ) => Promise<void>;
   executeCommand: (command: string) => void;
   retryRuntime: (runtimeId?: string, sourceTurnId?: string) => void;
+  retryInterruptedTurn: () => void;
+  refreshExecutionRecovery: () => void;
   resetSession: () => void;
   backToWorldSelect: () => void;
   updateWorldLocal: (world: api.WorldRecord) => void;

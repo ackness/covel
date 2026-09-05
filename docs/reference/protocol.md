@@ -337,7 +337,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 | `turn.retry`    | POST | `/api/actions` `type: "retry_turn"`      | SSE: ProtocolEvent 流 |
 | `runtime.retry` | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
 
-`retry_turn` 显式重跑整回合，payload 必须为空。`retry_runtime` 必须提供 `payload.runtimeId`，并通过 manual-trigger 路径只重跑该 runtime；它会以源回合（`payload.retryFromTurnId`，缺省取最近的 player-origin 工件）持久化的 runtime 输出**播种**执行，使被重试 runtime 的 `input.inject` / `needs` 按原回合叙事解析——裸 manual 触发这些解析为空，重试型调用因此必须播种。
+`retry_turn` 显式重跑整回合，普通请求的 payload 为空；恢复未完成回合时，五种动作都可附加 `payload.recoverFromTurnId`。客户端从 `GET /api/sessions/:id/execution` 获取只读状态，刷新不重新提交动作；明确点击恢复重试后才发送新的 requestId。服务端在会话锁内校验源回合，开场恢复保留 continuation 来源，不增加玩家回合数。`retry_runtime` 必须提供 `payload.runtimeId`，并通过 manual-trigger 路径只重跑该 runtime；它会以源回合（`payload.retryFromTurnId`，缺省取最近的 player-origin 工件）持久化的 runtime 输出**播种**执行，使被重试 runtime 的 `input.inject` / `needs` 按原回合叙事解析——裸 manual 触发这些解析为空，重试型调用因此必须播种。
 
 `start_session` 要求会话已带非空 `activePlugins`（创建会话时选定）。空集合直接 400，不会退化成"激活全部注册插件"——详见 [api.md](./api.md#post-apiactions)。
 

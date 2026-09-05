@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   listWorlds: vi.fn(),
   listSessions: vi.fn(),
   getSessionView: vi.fn(),
+  getSessionExecution: vi.fn(),
   fetchTraceTurnsPage: vi.fn(),
   navigate: vi.fn(),
 }));
@@ -58,6 +59,10 @@ describe("debugger refresh", () => {
       },
     ]);
     mocks.getSessionView.mockImplementation(async (id) => snapshot(id));
+    mocks.getSessionExecution.mockResolvedValue({
+      state: "running",
+      turnId: "2",
+    });
     mocks.fetchTraceTurnsPage.mockResolvedValue({
       turns: [trace("2")],
       nextCursor: "older",
@@ -74,11 +79,19 @@ describe("debugger refresh", () => {
     );
     act(() => result.current.setDebugView("data"));
     mocks.getSessionView.mockResolvedValue(snapshot("session-a", 2));
+    mocks.getSessionExecution.mockResolvedValue({
+      state: "interrupted",
+      turnId: "2",
+    });
     await act(async () => result.current.refresh());
     expect(result.current.snapshotData?.session.completedPlayerTurns).toBe(2);
     expect(result.current.sessions[0]?.completedPlayerTurns).toBe(2);
     expect(result.current.sessions[0]?.phase).toBe("playing");
     expect(result.current.snapshotUpdatedAt).toBeTruthy();
+    expect(result.current.execution).toEqual({
+      state: "interrupted",
+      turnId: "2",
+    });
   });
 
   it("polls data and summary while retaining previously loaded trace pages", async () => {
@@ -94,6 +107,10 @@ describe("debugger refresh", () => {
       nextCursor: "older",
     });
     mocks.getSessionView.mockResolvedValue(snapshot("session-a", 3));
+    mocks.getSessionExecution.mockResolvedValue({
+      state: "interrupted",
+      turnId: "3",
+    });
     vi.useFakeTimers();
     act(() => result.current.setAutoRefresh(true));
     await act(async () => vi.advanceTimersByTimeAsync(3000));
@@ -105,6 +122,10 @@ describe("debugger refresh", () => {
     expect(result.current.isPartial).toBe(true);
     expect(result.current.snapshotData?.session.completedPlayerTurns).toBe(3);
     expect(result.current.sessions[0]?.completedPlayerTurns).toBe(3);
+    expect(result.current.execution).toEqual({
+      state: "interrupted",
+      turnId: "3",
+    });
   });
 
   it("marks failed data refreshes stale and recovers without losing the snapshot", async () => {
@@ -112,10 +133,15 @@ describe("debugger refresh", () => {
     await waitFor(() => expect(result.current.snapshotData).not.toBeNull());
     const previous = result.current.snapshotData;
     mocks.getSessionView.mockRejectedValueOnce(new Error("offline"));
+    mocks.getSessionExecution.mockResolvedValue({
+      state: "interrupted",
+      turnId: "2",
+    });
     await act(async () => result.current.refresh());
     expect(result.current.snapshotError).toBe(true);
     expect(result.current.snapshotData).toBe(previous);
     expect(result.current.snapshotLoading).toBe(false);
+    expect(result.current.execution?.state).toBe("interrupted");
     await act(async () => result.current.refresh());
     expect(result.current.snapshotError).toBe(false);
   });

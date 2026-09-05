@@ -26,7 +26,9 @@ interface ActionRequestBase {
   readonly model?: string;
 }
 
-export type ActionRequest =
+export type ActionRequest = {
+  readonly payload: { readonly recoverFromTurnId?: string };
+} & (
   | (ActionRequestBase & {
       readonly type: "send_message";
       readonly payload: { readonly content: string };
@@ -49,7 +51,8 @@ export type ActionRequest =
   | (ActionRequestBase & {
       readonly type: "retry_turn";
       readonly payload: Readonly<Record<never, never>>;
-    });
+    })
+);
 
 export type ActionType = ActionRequest["type"];
 

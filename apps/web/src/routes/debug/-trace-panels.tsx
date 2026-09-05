@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import type { SessionExecutionStatus } from "@covel/shared";
 import {
   Activity,
   AlertTriangle,
@@ -15,7 +16,6 @@ import {
   aggregateDeltas,
   categorize,
   CATEGORY_STYLES,
-  deriveRuntimesFromTurn,
   extractDetail,
   fmtDuration,
   fmtTime,
@@ -27,9 +27,11 @@ import {
   type EventCategory,
   type RuntimeInfo,
 } from "./-debug-helpers.js";
+import { getTurnRuntimes, isTurnInterrupted } from "./-execution-status.js";
 
 export function TurnCard({
   turn,
+  execution,
   turnIndex,
   expanded,
   onToggle,
@@ -40,6 +42,7 @@ export function TurnCard({
   selectedEventId,
 }: {
   turn: api.TurnTrace;
+  execution?: SessionExecutionStatus;
   turnIndex: number;
   expanded: boolean;
   onToggle: () => void;
@@ -51,9 +54,10 @@ export function TurnCard({
 }) {
   const { t } = useTranslation();
   const runtimes = useMemo(
-    () => deriveRuntimesFromTurn(turn.events),
-    [turn.events],
+    () => getTurnRuntimes(turn, execution),
+    [turn, execution],
   );
+  const interrupted = isTurnInterrupted(turn, execution);
   const filteredRuntimes = useMemo(
     () =>
       filterCategory
@@ -211,11 +215,13 @@ export function TurnCard({
             }
             className="text-xs h-4"
           >
-            {hasError
-              ? t("debugger.error")
-              : isCompleted
-                ? duration
-                : t("debugger.running")}
+            {interrupted
+              ? t("debugger.interrupted", { defaultValue: "Interrupted" })
+              : hasError
+                ? t("debugger.error")
+                : isCompleted
+                  ? duration
+                  : t("debugger.running")}
           </Badge>
 
           <span className="text-xs text-muted-foreground font-mono">
@@ -223,6 +229,15 @@ export function TurnCard({
           </span>
         </div>
       </button>
+
+      {interrupted && (
+        <p className="px-3 pb-2 text-xs text-amber-500">
+          {t("debugger.interruptedHint", {
+            defaultValue:
+              "The server reports this execution was interrupted. The trace is preserved and may have no terminal event.",
+          })}
+        </p>
+      )}
 
       {expanded && (
         <div className="border-t border-border">
@@ -296,7 +311,9 @@ function RuntimeRow({
   const { t } = useTranslation();
   const duration = runtime.completedAt
     ? fmtDuration(runtime.startedAt, runtime.completedAt)
-    : "...";
+    : runtime.status === "interrupted"
+      ? t("debugger.interrupted", { defaultValue: "Interrupted" })
+      : "...";
 
   const llmCalls = runtime.events.filter(
     (event) =>
@@ -348,7 +365,9 @@ function RuntimeRow({
           ? "border-emerald-500/15 bg-emerald-500/2"
           : runtime.status === "failed"
             ? "border-destructive/15 bg-destructive/2"
-            : "border-blue-500/15 bg-blue-500/2"
+            : runtime.status === "interrupted"
+              ? "border-amber-500/15 bg-amber-500/2"
+              : "border-blue-500/15 bg-blue-500/2"
       }`}
     >
       <button
@@ -368,7 +387,9 @@ function RuntimeRow({
               ? "bg-emerald-500"
               : runtime.status === "failed"
                 ? "bg-destructive"
-                : "bg-blue-500 animate-pulse"
+                : runtime.status === "interrupted"
+                  ? "bg-amber-500"
+                  : "bg-blue-500 animate-pulse"
           }`}
         />
 

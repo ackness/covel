@@ -54,6 +54,7 @@ async function restoreReadingFixture(page: Page): Promise<string> {
           {
             type: "runtime.completed",
             turnId: "reading-turn",
+            timestamp: "2026-01-01T00:00:01Z",
             payload: {
               runtimeId: "narrator",
               pluginId: "narrator",
@@ -63,6 +64,7 @@ async function restoreReadingFixture(page: Page): Promise<string> {
           {
             type: "runtime.failed",
             turnId: "reading-turn",
+            timestamp: "2026-01-01T00:00:02Z",
             payload: {
               runtimeId: "world-ir",
               pluginId: "world-ir",

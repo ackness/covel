@@ -2,6 +2,7 @@ import type {
   AssetGenerateView,
   PageCursor,
   SnapshotCharacter,
+  SessionExecutionStatus,
 } from "@covel/shared";
 import type * as api from "@/services/api";
 
@@ -145,6 +146,9 @@ export interface SessionState {
   executionError: string | null;
   /** Real-time execution progress steps from kernel. */
   executionSteps: ExecutionStep[];
+  executionRecovery?: ExecutionRecovery | null;
+  /** Browser action generation; rejects recovery reads from an older POST. */
+  actionGeneration?: number;
 
   /**
    * Active suspensions awaiting external resume.
@@ -209,6 +213,14 @@ export interface SessionState {
   submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;
 }
 
+export interface ExecutionRecovery {
+  sessionId: string;
+  status: SessionExecutionStatus | null;
+  hydrating: boolean;
+  checking: boolean;
+  error?: string;
+}
+
 export type SessionAction =
   | {
       type: "BOOT_SUCCESS";
@@ -241,6 +253,7 @@ export type SessionAction =
     }
   | { type: "SET_EXECUTING"; value: boolean }
   | { type: "SET_EXECUTION_ERROR"; error: string | null }
+  | { type: "SET_EXECUTION_RECOVERY"; recovery: ExecutionRecovery | null }
   // Player abort terminal state: drop the uncommitted streaming placeholder
   // message(s) — the server never commits partial narrative on abort, so
   // keeping them would show text that vanishes on refresh (audit A-04).

@@ -19,6 +19,7 @@ import {
   reduceTurnSuspended,
 } from "./event-reducers.js";
 import { toStreamMessages } from "./restore-session.js";
+import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
 import {
   buildDeferredExecutionStep,
@@ -37,6 +38,18 @@ interface UseSessionSubscriptionOptions {
   workspace: SessionWorkspace;
   sessionIdRef: MutableRef<string | null>;
   stateRef: MutableRef<SessionState>;
+  activeTurnIdRef: MutableRef<string | null>;
+}
+
+interface ExecutionObservation {
+  stateRef: MutableRef<SessionState>;
+  activeTurnIdRef: MutableRef<string | null>;
+}
+
+function executionOwner(observation: ExecutionObservation): string {
+  const state = observation.stateRef.current;
+  const ownsStream = state.executing && !state.executionRecovery;
+  return `${ownsStream}|${state.actionGeneration ?? 0}|${observation.activeTurnIdRef.current ?? ""}`;
 }
 
 function containsTerminalBackgroundJob(
@@ -183,7 +196,10 @@ export async function rehydrateSessionSideState(
   sessionIdRef: MutableRef<string | null>,
   dispatch: (action: SessionAction) => void,
   isRevisionCurrent: () => boolean = () => true,
+  executionObservation?: ExecutionObservation,
 ): Promise<void> {
+  const initialExecutionOwner =
+    executionObservation && executionOwner(executionObservation);
   const isCurrent = (): boolean =>
     sessionIdRef.current === sessionId && isRevisionCurrent();
 
@@ -231,6 +247,46 @@ export async function rehydrateSessionSideState(
         type: "SET_GAME_STATE",
         state: enrichGameStateFromSnapshot(snapshot),
       });
+      const execution = snapshot.execution;
+      const state = executionObservation?.stateRef.current;
+      if (
+        execution &&
+        executionObservation &&
+        state?.session?.id === sessionId &&
+        initialExecutionOwner === executionOwner(executionObservation)
+      ) {
+        const ownsStream = state.executing && !state.executionRecovery;
+        const interruptedCurrentStream =
+          execution.state === "interrupted" &&
+          !!execution.turnId &&
+          execution.turnId === executionObservation.activeTurnIdRef.current;
+        // A healthy POST stream remains authoritative for its live steps.
+        // Only confirmed interruption of that exact turn transfers ownership;
+        // disconnected/refresh sessions can adopt every server state.
+        if (!ownsStream || interruptedCurrentStream) {
+          dispatch({
+            type: "LOAD_EXECUTION_STEPS",
+            steps: reconcileExecutionSteps(
+              state.executionSteps,
+              snapshot.executionSteps,
+              execution,
+            ),
+          });
+          dispatch({
+            type: "SET_SESSION",
+            session: { ...state.session, ...snapshot.session },
+          });
+          dispatch({
+            type: "SET_EXECUTION_RECOVERY",
+            recovery: {
+              sessionId,
+              status: execution,
+              checking: false,
+              hydrating: false,
+            },
+          });
+        }
+      }
       const worldId = snapshot.session.worldId;
       if (!worldId) return;
       const world = await api.getWorld(worldId);
@@ -254,6 +310,7 @@ export function useSessionSubscription({
   workspace,
   sessionIdRef,
   stateRef,
+  activeTurnIdRef,
 }: UseSessionSubscriptionOptions): void {
   const subscriptionRef = useRef<SessionSubscription | null>(null);
 
@@ -289,16 +346,25 @@ export function useSessionSubscription({
       const generation = ++recoveryGeneration;
       recovering = true;
       bufferedEvents = [];
+      const observation = { stateRef, activeTurnIdRef };
+      const owner = executionOwner(observation);
       void rehydrateSessionSideState(
         sessionId,
         sessionIdRef,
         dispatch,
         () => generation === recoveryGeneration,
+        observation,
       ).then(() => {
         if (
           generation !== recoveryGeneration ||
           sessionIdRef.current !== sessionId
         ) {
+          return;
+        }
+        // If a POST started/ended or moved to its opening continuation during
+        // the read, obtain a fresh snapshot before transferring ownership.
+        if (owner !== executionOwner(observation)) {
+          startRecovery();
           return;
         }
         recovering = false;
@@ -355,5 +421,5 @@ export function useSessionSubscription({
       subscriptionRef.current = null;
       setConnectionState("closed");
     };
-  }, [sessionId, dispatch, workspace, sessionIdRef, stateRef]);
+  }, [sessionId, dispatch, workspace, sessionIdRef, stateRef, activeTurnIdRef]);
 }

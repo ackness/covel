@@ -61,6 +61,10 @@ import {
 import { getCachedWorld } from "../../world-cache.js";
 import { registerActiveTurn } from "./turn-control.js";
 import {
+  assertRecoverableTurn,
+  recoveryAction,
+} from "./actions/execution-recovery.js";
+import {
   checkSessionOwner,
   sessionIncarnationIdentity,
   sessionApprovalScope,
@@ -252,6 +256,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     // but before settlement is a known failure, not a crash, so the row must
     // not be left `pending` forever.
     let commitStatusSettled = false;
+    let hasStartedTurn = false;
 
     function makeEnvelope(
       eventType: string,
@@ -340,8 +345,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       readonly suppressPlayerMessage: boolean;
       readonly origin: "player" | "continuation";
     }) => {
+      let turnOrigin = turnArgs.origin;
       currentTurnId = turnArgs.turnId;
       commitStatusSettled = false;
+      hasStartedTurn = false;
       const {
         result,
         trace,
@@ -374,6 +381,22 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               `session is ${liveSession.status}; it must be active to accept actions`,
             );
           }
+
+          if (turnArgs.origin !== "continuation") {
+            const recovery = await assertRecoverableTurn(
+              store,
+              sessionId,
+              payload.recoverFromTurnId,
+              { type, payload },
+            );
+            turnOrigin = recovery?.origin ?? turnOrigin;
+          }
+          const registeredTurn = registerActiveTurn(
+            sessionId,
+            turnArgs.turnId,
+            requestId,
+          );
+          releaseTurnControl = registeredTurn.release;
 
           // Prep's editable world document is browser-local until the first
           // start action. Persist its value on the session so setup, opening
@@ -492,7 +515,17 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           // Emit execution started (protocol: execution.started). Goes
           // through the serial write queue like every other stream write, so
           // it keeps its envelope order relative to forwarded bus events.
-          await trace.turnStarted({ runtimeCount: activeRuntimes.length });
+          await trace.turnStarted({
+            runtimeCount: activeRuntimes.length,
+            requestId,
+            origin: turnOrigin,
+            recoveryAction: recoveryAction(
+              type,
+              payload,
+              turnOrigin === "continuation",
+            ),
+          });
+          hasStartedTurn = true;
           await writeEvent("execution.started", {
             status: "executing",
             runtimeCount: activeRuntimes.length,
@@ -563,8 +596,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             playerMessage: turnArgs.playerMessage,
             locale: effectiveLocale,
             modelOverride: model,
-            origin: isRuntimeRetry ? ("manual" as const) : turnArgs.origin,
-            ...(turnArgs.origin === "player" && !isRuntimeRetry
+            origin: isRuntimeRetry ? ("manual" as const) : turnOrigin,
+            ...(turnOrigin === "player" && !isRuntimeRetry
               ? { logicalTurnId: crypto.randomUUID() }
               : {}),
             ...(userSettings ? { userSettings } : {}),
@@ -590,77 +623,71 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 }
               : {}),
           };
-          // Register the in-flight turn only after this action owns the
-          // session lock. Release control after execution while retaining the
-          // lock through proposal commit, lifecycle sync, and snapshot capture.
-          const registeredTurn = registerActiveTurn(sessionId, turnArgs.turnId);
-          releaseTurnControl = registeredTurn.release;
-          let result;
-          try {
-            result = await executeTurn(turnInput, activeRuntimes, {
-              ...buildManualTurnExecutorDeps(c, capabilityPluginIds),
-              // The main turn path never passed the eventBus, so every
-              // `emitSubEvent` inside the executor — including the
-              // completion barrier's `turn.completed` — silently no-opped on
-              // the player-facing path (found while adding the
-              // fault-injection tests). Without it the barrier's only
-              // observable effect was memory ingestion.
-              eventBus,
-              store,
-              emitter,
-              onDelta: async (delta) => {
-                await writeEvent("narrative.delta", {
-                  runtimeId: delta.runtimeId,
-                  pluginId: delta.pluginId,
-                  kind: outputKindResolver.getOutputKind(delta.runtimeId),
-                  delta: delta.textDelta,
-                });
-              },
-              onRuntimeStart: async (info) => {
-                await trace.runtimeStarted({
-                  runtimeId: info.runtimeId,
-                  pluginId: info.pluginId,
-                  ...(info.stage !== undefined ? { stage: info.stage } : {}),
-                });
-                const kind = outputKindResolver.getOutputKind(info.runtimeId);
-                await writeEvent("runtime.started", {
-                  runtimeId: info.runtimeId,
-                  pluginId: info.pluginId,
-                  ...(info.stage !== undefined ? { stage: info.stage } : {}),
-                  kind,
-                  label: info.pluginId + "/" + kind,
-                });
-              },
-              onRuntimeComplete: async (info) => {
-                await trace.runtimeCompleted({
-                  runtimeId: info.runtimeId,
-                  pluginId: info.pluginId,
-                  status: info.status,
-                  durationMs: info.durationMs,
-                });
-                const eventType =
-                  info.status === "failed"
-                    ? "runtime.failed"
-                    : info.status === "skipped"
-                      ? "runtime.skipped"
-                      : "runtime.completed";
-                await writeEvent(eventType, {
-                  runtimeId: info.runtimeId,
-                  pluginId: info.pluginId,
-                  durationMs: info.durationMs,
-                  status: info.status,
-                  ...(info.status === "failed" && info.error
-                    ? { error: info.error }
-                    : {}),
-                });
-              },
-              ...(memorySystem ? { memorySystem } : {}),
-              // Player mid-turn steering + abort.
-              turnControl: registeredTurn.turnControl,
-            });
-          } finally {
-            registeredTurn.release();
-          }
+          // Control covers preparation, execution and commit. Closing the SSE
+          // transport does not cancel this turn; a refreshed client observes
+          // it through the read-only execution endpoint until finalization.
+          const result = await executeTurn(turnInput, activeRuntimes, {
+            ...buildManualTurnExecutorDeps(c, capabilityPluginIds),
+            // The main turn path never passed the eventBus, so every
+            // `emitSubEvent` inside the executor — including the
+            // completion barrier's `turn.completed` — silently no-opped on
+            // the player-facing path (found while adding the
+            // fault-injection tests). Without it the barrier's only
+            // observable effect was memory ingestion.
+            eventBus,
+            store,
+            emitter,
+            onDelta: async (delta) => {
+              await writeEvent("narrative.delta", {
+                runtimeId: delta.runtimeId,
+                pluginId: delta.pluginId,
+                kind: outputKindResolver.getOutputKind(delta.runtimeId),
+                delta: delta.textDelta,
+              });
+            },
+            onRuntimeStart: async (info) => {
+              await trace.runtimeStarted({
+                runtimeId: info.runtimeId,
+                pluginId: info.pluginId,
+                ...(info.stage !== undefined ? { stage: info.stage } : {}),
+              });
+              const kind = outputKindResolver.getOutputKind(info.runtimeId);
+              await writeEvent("runtime.started", {
+                runtimeId: info.runtimeId,
+                pluginId: info.pluginId,
+                ...(info.stage !== undefined ? { stage: info.stage } : {}),
+                kind,
+                label: info.pluginId + "/" + kind,
+              });
+            },
+            onRuntimeComplete: async (info) => {
+              await trace.runtimeCompleted({
+                runtimeId: info.runtimeId,
+                pluginId: info.pluginId,
+                status: info.status,
+                durationMs: info.durationMs,
+                ...(info.error ? { error: info.error } : {}),
+              });
+              const eventType =
+                info.status === "failed"
+                  ? "runtime.failed"
+                  : info.status === "skipped"
+                    ? "runtime.skipped"
+                    : "runtime.completed";
+              await writeEvent(eventType, {
+                runtimeId: info.runtimeId,
+                pluginId: info.pluginId,
+                durationMs: info.durationMs,
+                status: info.status,
+                ...(info.status === "failed" && info.error
+                  ? { error: info.error }
+                  : {}),
+              });
+            },
+            ...(memorySystem ? { memorySystem } : {}),
+            // Player mid-turn steering + abort.
+            turnControl: registeredTurn.turnControl,
+          });
 
           // Commit the whole execution — top-level plus nested recursiveCall
           // results — in ONE transaction via the shared finalize primitive.
@@ -972,6 +999,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       await trace.turnCompleted({
         durationMs: result.durationMs,
         resultCount: result.runtimeResults.length,
+        committed,
       });
 
       return { result, committed, commitError, wasPreGamePending };
@@ -1039,6 +1067,19 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         commitStatusSettled = true;
         await store
           .setTurnResultCommitStatus(sessionId, currentTurnId, "failed")
+          .catch(() => {});
+      }
+      if (hasStartedTurn) {
+        await store
+          .addTraceEvent({
+            id: crypto.randomUUID(),
+            sessionId,
+            turnId: currentTurnId,
+            traceId,
+            type: "turn.failed",
+            payload: { error: message, requestId },
+            createdAt: new Date().toISOString(),
+          })
           .catch(() => {});
       }
       await writeEvent("error.occurred", { message }).catch(() => {});

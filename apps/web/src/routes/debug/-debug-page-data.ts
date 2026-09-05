@@ -4,6 +4,7 @@ import type { PageCursor } from "@covel/shared";
 import type * as api from "@/services/api.js";
 import * as apiClient from "@/services/api.js";
 import type { EventCategory } from "./-debug-helpers.js";
+import { useSessionExecution } from "./-use-session-execution.js";
 import {
   useSessionSnapshot,
   type SessionSnapshot,
@@ -53,6 +54,8 @@ export function useDebugPageData(sid: string | undefined) {
   }, []);
   const snapshot = useSessionSnapshot(selectedSessionId, updateSession);
   const { refreshSnapshot } = snapshot;
+  const { execution, refreshExecution } =
+    useSessionExecution(selectedSessionId);
   const [traceDiscovery, setTraceDiscovery] =
     useState<api.TraceDiscovery | null>(null);
 
@@ -189,20 +192,31 @@ export function useDebugPageData(sid: string | undefined) {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([loadTraces(), loadSessions().then(refreshSnapshot)]);
+      await Promise.all([
+        loadTraces(),
+        loadSessions().then(refreshSnapshot),
+        refreshExecution(),
+      ]);
     } finally {
       setRefreshing(false);
     }
-  }, [loadTraces, loadSessions, refreshSnapshot]);
+  }, [loadTraces, loadSessions, refreshSnapshot, refreshExecution]);
 
   useEffect(() => {
     if (!autoRefresh || !selectedSessionId) return;
     const interval = setInterval(() => {
       void refreshLatest();
       void refreshSnapshot();
+      void refreshExecution();
     }, 3000);
     return () => clearInterval(interval);
-  }, [autoRefresh, selectedSessionId, refreshLatest, refreshSnapshot]);
+  }, [
+    autoRefresh,
+    selectedSessionId,
+    refreshLatest,
+    refreshSnapshot,
+    refreshExecution,
+  ]);
 
   const toggleTurn = useCallback((turnId: string) => {
     setExpandedTurns((prev) => {
@@ -253,6 +267,7 @@ export function useDebugPageData(sid: string | undefined) {
     selectedEvent,
     debugView,
     ...snapshot,
+    execution,
     traceDiscovery,
     totalEvents,
     storyTurnCount,

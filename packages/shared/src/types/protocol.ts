@@ -559,6 +559,25 @@ export interface CursorPage<T> {
   readonly nextCursor: PageCursor | null;
 }
 
+/** Read-only recovery state for the latest foreground action. */
+export interface SessionExecutionStatus {
+  readonly state: "idle" | "running" | "completed" | "failed" | "interrupted";
+  readonly turnId?: string;
+  readonly requestId?: string;
+  readonly startedAt?: string;
+  readonly origin?: "player" | "continuation";
+  /** An explicit retry uses a new requestId and includes recoverFromTurnId. */
+  readonly retry?: {
+    readonly type:
+      | "start_session"
+      | "send_message"
+      | "execute_command"
+      | "retry_turn"
+      | "retry_runtime";
+    readonly payload: Readonly<Record<string, unknown>>;
+  };
+}
+
 export interface SessionSnapshot {
   readonly session: {
     readonly id: string;
@@ -578,6 +597,7 @@ export interface SessionSnapshot {
   readonly characters: readonly SnapshotCharacter[];
   readonly gameState: Readonly<Record<string, unknown>>;
   readonly executionSteps: readonly SnapshotTraceEvent[];
+  readonly execution?: SessionExecutionStatus;
   readonly plugins: readonly SnapshotPluginStatus[];
   /** Character attribute schema from world-data-provider plugin (if available). */
   readonly characterSchema?: Readonly<Record<string, unknown>>;

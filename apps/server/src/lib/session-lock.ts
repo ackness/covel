@@ -41,6 +41,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
  */
 export class SessionLockTimeoutError extends Error {}
 
+export type TrySessionLockResult<T> =
+  { readonly acquired: true; readonly value: T } | { readonly acquired: false };
+
 export interface SessionLock {
   /**
    * Acquire the lock for `sessionId`, run `fn`, release. Blocks until the
@@ -48,6 +51,15 @@ export interface SessionLock {
    * error propagates.
    */
   withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T>;
+  /**
+   * Run only if ownership is immediately available, without waiting for
+   * another owner. Reentrant callers reuse their live lease. A false result
+   * also covers an unavailable connection from a database lock pool.
+   */
+  tryWithLock?<T>(
+    sessionId: string,
+    fn: () => Promise<T>,
+  ): Promise<TrySessionLockResult<T>>;
   /**
    * Acquire several lock keys in the supplied order and release them after
    * `fn`. Callers must provide one consistent global order; implementations
@@ -57,6 +69,12 @@ export interface SessionLock {
 }
 
 type ChainTail = Promise<unknown>;
+
+type InProcessSessionLock = SessionLock & {
+  tryWithLock: NonNullable<SessionLock["tryWithLock"]>;
+  /** Test-only: observe current lock count. */
+  readonly _sizeForTests: () => number;
+};
 
 /**
  * Build an in-process session lock. Correct for single-node deployments.
@@ -70,16 +88,22 @@ type ChainTail = Promise<unknown>;
  * chain (their error is already delivered to their own caller) so one bad
  * turn cannot poison every subsequent turn on the session.
  */
-export function createInProcessSessionLock(): SessionLock & {
-  /** Test-only: observe current lock count. */
-  readonly _sizeForTests: () => number;
-} {
+export function createInProcessSessionLock(): InProcessSessionLock {
   const locks = new Map<string, ChainTail>();
   const lockContext = new AsyncLocalStorage<
     ReadonlyMap<string, { active: boolean }>
   >();
 
-  const api: SessionLock & { readonly _sizeForTests: () => number } = {
+  const api: InProcessSessionLock = {
+    async tryWithLock<T>(sessionId: string, fn: () => Promise<T>) {
+      if (lockContext.getStore()?.get(sessionId)?.active) {
+        return { acquired: true, value: await fn() };
+      }
+      if (locks.has(sessionId)) return { acquired: false };
+      // withLock publishes the lease synchronously before its first await,
+      // so a competing probe cannot pass between this check and ownership.
+      return { acquired: true, value: await api.withLock(sessionId, fn) };
+    },
     async withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
       const parentOwners = lockContext.getStore();
       if (parentOwners?.get(sessionId)?.active) return fn();

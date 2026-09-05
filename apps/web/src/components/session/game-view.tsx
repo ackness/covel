@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { SuspensionsPanel } from "./suspensions-panel.js";
+import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -61,6 +62,9 @@ export function GameView({ session }: GameViewProps) {
     submitInteraction: onSubmitInteraction,
     beginAdventure: onBeginAdventure,
     retryRuntime: onRetryRuntime,
+    retryInterruptedTurn,
+    refreshExecutionRecovery,
+    abortActiveTurn,
     resetSession: onResetSession,
     backToWorldSelect: onBackToWorldSelect,
     resumeSession: onSwitchSession,
@@ -466,6 +470,12 @@ export function GameView({ session }: GameViewProps) {
           )}
 
           {/* Messages */}
+          <ExecutionRecoveryNotice
+            recovery={state.executionRecovery}
+            onRetry={retryInterruptedTurn}
+            onRefresh={refreshExecutionRecovery}
+            onStop={abortActiveTurn}
+          />
           {viewMode === "stage" && stageReady ? (
             <StageView
               key={session.id}

@@ -47,6 +47,7 @@ import {
   createInProcessSessionLock,
   SessionLockTimeoutError,
   type SessionLock,
+  type TrySessionLockResult,
 } from "./session-lock.js";
 
 interface PgLockState {
@@ -249,11 +250,88 @@ export function createPgAdvisorySessionLock(
     }
   };
 
+  const probeReserved = async <T>(
+    state: PgLockState,
+    entry: { id: string; keyLiteral: string },
+    heldKeys: ReadonlySet<string>,
+    fn: () => Promise<T>,
+    waitForNested = false,
+  ): Promise<TrySessionLockResult<T>> => {
+    const rows = await state.reserved<{ locked: boolean }[]>`
+      SELECT pg_try_advisory_lock(${entry.keyLiteral}::bigint) AS locked
+    `;
+    if (!rows[0]?.locked) return { acquired: false };
+    try {
+      return {
+        acquired: true,
+        value: await lockContext.run(
+          { state, heldKeys: new Set([...heldKeys, entry.keyLiteral]) },
+          fn,
+        ),
+      };
+    } finally {
+      if (waitForNested) await state.nestedIdle;
+      await unlockEntries(state.reserved, [entry]);
+    }
+  };
+
+  const tryWithLock = async <T>(
+    sessionId: string,
+    fn: () => Promise<T>,
+  ): Promise<TrySessionLockResult<T>> => {
+    const entry = {
+      id: sessionId,
+      keyLiteral: hashSessionId(sessionId).toString(),
+    };
+    const parent = lockContext.getStore();
+    if (parent?.state.active) {
+      if (parent.heldKeys.has(entry.keyLiteral)) {
+        return { acquired: true, value: await fn() };
+      }
+      // PG considers the same connection reentrant. Sibling async branches
+      // still need local exclusion before probing an additional key on it.
+      beginNested(parent.state);
+      try {
+        const nested = await parent.state.localNestedLock.tryWithLock!(
+          entry.keyLiteral,
+          () => probeReserved(parent.state, entry, parent.heldKeys, fn),
+        );
+        return nested.acquired ? nested.value : { acquired: false };
+      } finally {
+        endNested(parent.state);
+      }
+    }
+
+    let reserved: ReservedConnection;
+    try {
+      // A status probe must not queue behind turns exhausting the lock pool.
+      // Late checkouts are released by reserveWithDeadline without running fn.
+      reserved = await reserveWithDeadline(sql, Date.now(), 0, sessionId);
+    } catch (error) {
+      if (error instanceof SessionLockTimeoutError) return { acquired: false };
+      throw error;
+    }
+    const state: PgLockState = {
+      reserved,
+      localNestedLock: createInProcessSessionLock(),
+      active: true,
+      nestedCount: 0,
+      nestedIdle: Promise.resolve(),
+    };
+    try {
+      return await probeReserved(state, entry, new Set(), fn, true);
+    } finally {
+      state.active = false;
+      reserved.release();
+    }
+  };
+
   return {
     withLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
       return withLocks([sessionId], fn);
     },
     withLocks,
+    tryWithLock,
   };
 }
 

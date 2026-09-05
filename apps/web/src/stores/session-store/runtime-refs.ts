@@ -35,7 +35,11 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
   const lastBackfilledTurnIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const nextId = state.session?.id ?? null;
+    const nextId =
+      state.session?.id ??
+      (state.executionRecovery?.hydrating
+        ? state.executionRecovery.sessionId
+        : null);
     if (sessionIdRef.current === nextId) return;
     if (sessionIdRef.current) {
       clearDomainEventPreviews(sessionIdRef.current);
@@ -44,7 +48,11 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
     setActivePluginDataSession(nextId);
     clearNarrativeDeltaBuffer(deltaBufferRef, deltaRafRef);
     clearAllStreamingText();
-  }, [state.session]);
+  }, [
+    state.session,
+    state.executionRecovery?.hydrating,
+    state.executionRecovery?.sessionId,
+  ]);
 
   return {
     stateRef,

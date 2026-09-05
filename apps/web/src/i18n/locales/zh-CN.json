@@ -361,7 +361,21 @@
     "executionFailures": "失败 {{count}} 项",
     "partialCompletion": "部分更新未完成，请查看下方受影响的任务。",
     "runtimeFailedDetail": "这项任务未完成，可以重试或查看执行追踪。",
-    "stateSetup": "准备中"
+    "stateSetup": "准备中",
+    "recoveryChecking": "正在确认未完成回合",
+    "recoveryRunning": "上一回合仍在执行",
+    "recoveryInterrupted": "此回合已中断",
+    "recoveryFailed": "此回合未能完成",
+    "recoveryHydrating": "正在恢复存档",
+    "recoveryUnknownDetail": "暂时无法确认执行结果，正在重新连接。这里只检查原任务，不会重复发起回合。",
+    "recoveryRunningDetail": "服务端仍在继续原任务，完成后会自动恢复结果。你可以等待，也可以停止任务。",
+    "recoveryInterruptedDetail": "未完成的任务已停止运行，已保存的进度会保留。只有点击重试，才会发起新的尝试。",
+    "recoveryHydratingDetail": "正在取回最新保存的结果，随后即可继续游玩。",
+    "recoveryRetry": "重试未完成回合",
+    "recoveryRefresh": "检查状态",
+    "recoveryStop": "停止任务",
+    "recoveryStopFailed": "未能停止任务，请检查状态后再试。",
+    "reasonInterrupted": "此任务没有完成结果，且已停止运行。重试前请查看上方的恢复提示。"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -1704,7 +1718,9 @@
       "empty": "空"
     },
     "snapshotRefreshFailed": "会话数据刷新失败，当前数据可能已过期，请点击刷新重试。",
-    "snapshotUpdatedAt": "数据更新于 {{time}}"
+    "snapshotUpdatedAt": "数据更新于 {{time}}",
+    "interrupted": "已中断",
+    "interruptedHint": "服务端确认此执行已中断。原始追踪已保留，可能没有终止事件。"
   },
   "reload": {
     "reloading": "正在重启服务…",

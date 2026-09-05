@@ -16,6 +16,69 @@ import { describe, it, expect } from "vitest";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 
 describe("createInProcessSessionLock", () => {
+  it("does not queue a probe behind another owner and excludes new contenders", async () => {
+    const lock = createInProcessSessionLock();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const owner = lock.tryWithLock("probe", () => gate);
+    let ran = false;
+    expect(
+      await lock.tryWithLock("probe", async () => {
+        ran = true;
+      }),
+    ).toEqual({ acquired: false });
+    expect(ran).toBe(false);
+    release();
+    expect(await owner).toEqual({ acquired: true, value: undefined });
+    expect(await lock.tryWithLock("probe", async () => 42)).toEqual({
+      acquired: true,
+      value: 42,
+    });
+    expect(lock._sizeForTests()).toBe(0);
+  });
+
+  it("reenters a live owner and releases a failed probe", async () => {
+    const lock = createInProcessSessionLock();
+    expect(
+      await lock.withLock("probe", () =>
+        lock.tryWithLock("probe", async () => 42),
+      ),
+    ).toEqual({ acquired: true, value: 42 });
+    await expect(
+      lock.tryWithLock("probe", async () => {
+        throw new Error("probe failed");
+      }),
+    ).rejects.toThrow("probe failed");
+    expect(await lock.tryWithLock("probe", async () => "recovered")).toEqual({
+      acquired: true,
+      value: "recovered",
+    });
+    expect(lock._sizeForTests()).toBe(0);
+  });
+
+  it("does not reuse a released owner from a detached probe", async () => {
+    const lock = createInProcessSessionLock();
+    let startProbe!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      startProbe = resolve;
+    });
+    let probe!: Promise<unknown>;
+    await lock.withLock("probe", async () => {
+      probe = gate.then(() => lock.tryWithLock("probe", async () => "invalid"));
+    });
+    let releaseOwner!: () => void;
+    const ownerGate = new Promise<void>((resolve) => {
+      releaseOwner = resolve;
+    });
+    const owner = lock.withLock("probe", () => ownerGate);
+    startProbe();
+    expect(await probe).toEqual({ acquired: false });
+    releaseOwner();
+    await owner;
+  });
+
   it("serializes same-session calls in submission order", async () => {
     const lock = createInProcessSessionLock();
     const log: string[] = [];

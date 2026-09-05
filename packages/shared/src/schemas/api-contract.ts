@@ -74,6 +74,14 @@ const actionBase = {
 
 export const actionTypeSchema = z.enum(ACTION_TYPES);
 
+const actionRecoveryPayload = {
+  recoverFromTurnId: requiredActionString(
+    "recoverFromTurnId",
+    128,
+    ACTION_ID_PATTERN,
+  ).optional(),
+};
+
 export const actionRequestSchema = z.discriminatedUnion("type", [
   z
     .object({
@@ -82,6 +90,7 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
       payload: z
         .object({
           content: requiredActionString("send_message.content", 100_000),
+          ...actionRecoveryPayload,
         })
         .strict(),
     })
@@ -93,6 +102,7 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
       payload: z
         .object({
           command: requiredActionString("execute_command.command", 10_000),
+          ...actionRecoveryPayload,
         })
         .strict(),
     })
@@ -110,6 +120,7 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
                 "start_session.loreOverride must be at most 500000 characters",
             })
             .optional(),
+          ...actionRecoveryPayload,
         })
         .strict(),
     })
@@ -130,6 +141,7 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
             256,
             ACTION_ID_PATTERN,
           ).optional(),
+          ...actionRecoveryPayload,
         })
         .strict(),
     })
@@ -138,7 +150,7 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
     .object({
       ...actionBase,
       type: z.literal("retry_turn"),
-      payload: z.object({}).strict(),
+      payload: z.object(actionRecoveryPayload).strict(),
     })
     .strict(),
 ]);

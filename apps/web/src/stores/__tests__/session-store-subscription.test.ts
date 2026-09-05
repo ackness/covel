@@ -14,6 +14,8 @@ vi.mock("@/stores/plugin-data-store.js", () => ({
 
 import * as api from "@/services/api";
 import { replaceSessionPluginData } from "@/stores/plugin-data-store.js";
+import { initialState } from "../session-store/reducer.js";
+import type { SessionState } from "../session-store/types.js";
 import {
   isCurrentSubscriptionEvent,
   rehydrateSessionSideState,
@@ -53,6 +55,33 @@ const snapshot = {
   plugins: [],
 };
 
+function observation(executing = false) {
+  const state: SessionState = {
+    ...initialState,
+    session: {
+      ...snapshot.session,
+      locale: "en-US",
+      status: "active",
+      activePlugins: [],
+      createdAt: "now",
+      updatedAt: "now",
+    },
+    executing,
+    executionSteps: [
+      {
+        runtimeId: "story",
+        pluginId: "story",
+        turnId: "t1",
+        status: "running",
+      },
+    ],
+  };
+  return {
+    stateRef: { current: state },
+    activeTurnIdRef: { current: "t1" as string | null },
+  };
+}
+
 describe("rehydrateSessionSideState", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,6 +112,173 @@ describe("rehydrateSessionSideState", () => {
       id: "w1",
       name: "World",
     } as api.WorldRecord);
+  });
+
+  it("adopts the still-running server task after its action connection ended", async () => {
+    const owner = observation();
+    vi.mocked(api.getSessionView).mockResolvedValue({
+      ...snapshot,
+      execution: { state: "running", turnId: "t1" },
+    });
+    const dispatch = vi.fn();
+    await rehydrateSessionSideState(
+      "s1",
+      { current: "s1" },
+      dispatch,
+      () => true,
+      owner,
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTION_RECOVERY",
+      recovery: {
+        sessionId: "s1",
+        status: { state: "running", turnId: "t1" },
+        checking: false,
+        hydrating: false,
+      },
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "LOAD_EXECUTION_STEPS",
+      steps: [expect.objectContaining({ status: "running" })],
+    });
+  });
+
+  it.each(["running", "completed", "failed"] as const)(
+    "does not replace a healthy POST stream with a %s snapshot",
+    async (state) => {
+      const owner = observation(true);
+      vi.mocked(api.getSessionView).mockResolvedValue({
+        ...snapshot,
+        execution: { state, turnId: "t1" },
+      });
+      const dispatch = vi.fn();
+      await rehydrateSessionSideState(
+        "s1",
+        { current: "s1" },
+        dispatch,
+        () => true,
+        owner,
+      );
+      expect(dispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "SET_EXECUTION_RECOVERY" }),
+      );
+      expect(dispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "LOAD_EXECUTION_STEPS" }),
+      );
+      expect(dispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "SET_SESSION" }),
+      );
+    },
+  );
+
+  it("surfaces confirmed interruption of the current POST turn without a page refresh", async () => {
+    const owner = observation(true);
+    vi.mocked(api.getSessionView).mockResolvedValue({
+      ...snapshot,
+      execution: { state: "interrupted", turnId: "t1" },
+    });
+    const dispatch = vi.fn();
+    await rehydrateSessionSideState(
+      "s1",
+      { current: "s1" },
+      dispatch,
+      () => true,
+      owner,
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_EXECUTION_RECOVERY",
+      recovery: {
+        sessionId: "s1",
+        status: { state: "interrupted", turnId: "t1" },
+        checking: false,
+        hydrating: false,
+      },
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "LOAD_EXECUTION_STEPS",
+      steps: [expect.objectContaining({ status: "failed" })],
+    });
+  });
+
+  it("does not apply another turn's interrupted status to the active POST", async () => {
+    const owner = observation(true);
+    vi.mocked(api.getSessionView).mockResolvedValue({
+      ...snapshot,
+      execution: { state: "interrupted", turnId: "older-turn" },
+    });
+    const dispatch = vi.fn();
+    await rehydrateSessionSideState(
+      "s1",
+      { current: "s1" },
+      dispatch,
+      () => true,
+      owner,
+    );
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SET_EXECUTION_RECOVERY" }),
+    );
+  });
+
+  it("drops execution recovery if a new POST starts while the snapshot is in flight", async () => {
+    const owner = observation();
+    let release!: (
+      value: typeof snapshot & {
+        execution: { state: "interrupted"; turnId: string };
+      },
+    ) => void;
+    vi.mocked(api.getSessionView).mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const dispatch = vi.fn();
+    const pending = rehydrateSessionSideState(
+      "s1",
+      { current: "s1" },
+      dispatch,
+      () => true,
+      owner,
+    );
+    owner.stateRef.current = { ...owner.stateRef.current, executing: true };
+    release({ ...snapshot, execution: { state: "interrupted", turnId: "t1" } });
+    await pending;
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SET_EXECUTION_RECOVERY" }),
+    );
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "LOAD_EXECUTION_STEPS" }),
+    );
+  });
+
+  it("rejects an old snapshot after consecutive POSTs even before the new turn ID arrives", async () => {
+    const owner = observation(true);
+    let release!: (
+      value: typeof snapshot & {
+        execution: { state: "interrupted"; turnId: string };
+      },
+    ) => void;
+    vi.mocked(api.getSessionView).mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    const dispatch = vi.fn();
+    const pending = rehydrateSessionSideState(
+      "s1",
+      { current: "s1" },
+      dispatch,
+      () => true,
+      owner,
+    );
+    owner.stateRef.current = { ...owner.stateRef.current, actionGeneration: 2 };
+    release({ ...snapshot, execution: { state: "interrupted", turnId: "t1" } });
+    await pending;
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "SET_EXECUTION_RECOVERY" }),
+    );
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "LOAD_EXECUTION_STEPS" }),
+    );
   });
 
   it("rehydrates plugins, plugin data, suspensions, game state and world", async () => {

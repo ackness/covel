@@ -265,6 +265,7 @@ export { PROPOSAL_TYPES } from "./proposal.js";
 export type {
   ProtocolEvent,
   SessionSnapshot,
+  SessionExecutionStatus,
   SnapshotMessage,
   SnapshotCharacter,
   SnapshotTraceEvent,

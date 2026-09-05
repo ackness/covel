@@ -17,6 +17,7 @@ import { bootSessionStore } from "./boot.js";
 import type { SessionActions } from "./context.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
 import { submitInteractionBlock } from "./interaction-submission.js";
+import { useExecutionRecoveryActions } from "./execution-recovery-actions.js";
 import { restoreSessionState, toStreamMessages } from "./restore-session.js";
 import {
   finalizeActionExecution,
@@ -138,6 +139,7 @@ export function useBuildSessionActions({
 
     const postStart = (loreOverride?: unknown) => {
       if (sessionIdRef.current !== sessionId) return;
+      dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
       const requestId = crypto.randomUUID();
@@ -221,6 +223,7 @@ export function useBuildSessionActions({
     (content: string, opts: { echoUserMessage: boolean }): Promise<void> => {
       const session = state.session;
       if (!session) return Promise.resolve();
+      dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
       const sessionId = session.id;
 
       let persistInput: Promise<void> = Promise.resolve();
@@ -332,10 +335,9 @@ export function useBuildSessionActions({
   );
 
   const abortActiveTurn = useCallback(async (): Promise<void> => {
-    const session = state.session;
-    if (!session) return;
-    await api.abortTurn(session.id);
-  }, [state.session]);
+    const sid = state.session?.id ?? state.executionRecovery?.sessionId;
+    if (sid) await api.abortTurn(sid);
+  }, [state.session, state.executionRecovery?.sessionId]);
 
   const loadOlderMessages = useCallback(async () => {
     const sid = sessionIdRef.current;
@@ -407,6 +409,7 @@ export function useBuildSessionActions({
   const runKernelAction = useCallback(
     (request: api.ActionRequest): void => {
       if (sessionIdRef.current !== request.sessionId) return;
+      dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
@@ -449,11 +452,27 @@ export function useBuildSessionActions({
     [state, runKernelAction],
   );
 
+  const { retryInterruptedTurn, refreshExecutionRecovery } =
+    useExecutionRecoveryActions({
+      state,
+      dispatch,
+      runKernelAction,
+      resumeSessionById,
+    });
+
   const retryRuntime = useCallback(
     (runtimeId?: string, sourceTurnId?: string) => {
       if (!canRunSessionAction(state)) return;
       const sessionId = state.session?.id;
       if (!sessionId) return;
+      const recovery = state.executionRecovery?.status;
+      if (
+        recovery?.state === "interrupted" &&
+        (!sourceTurnId || sourceTurnId === recovery.turnId)
+      ) {
+        retryInterruptedTurn();
+        return;
+      }
 
       // Whole-turn retry regenerates the narrative, so the turn's messages
       // go. A chip-scoped retry (sourceTurnId set) replays ONE auxiliary
@@ -494,7 +513,7 @@ export function useBuildSessionActions({
             },
       );
     },
-    [dispatch, state, runKernelAction],
+    [dispatch, state, runKernelAction, retryInterruptedTurn],
   );
 
   const resetSession = useCallback(() => {
@@ -716,6 +735,8 @@ export function useBuildSessionActions({
       submitInteraction,
       executeCommand,
       retryRuntime,
+      retryInterruptedTurn,
+      refreshExecutionRecovery,
       resetSession,
       backToWorldSelect,
       updateWorldLocal,
@@ -745,6 +766,8 @@ export function useBuildSessionActions({
       submitInteraction,
       executeCommand,
       retryRuntime,
+      retryInterruptedTurn,
+      refreshExecutionRecovery,
       resetSession,
       backToWorldSelect,
       updateWorldLocal,

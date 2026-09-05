@@ -10,6 +10,7 @@ import {
   findWorldDataProviderPluginId,
 } from "./plugins.js";
 import type { SessionRouteEnv } from "./route-env.js";
+import { getSessionExecutionStatus } from "../actions/execution-recovery.js";
 
 export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
   routes.get("/:id/view", async (c) => {
@@ -19,6 +20,11 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
     const guard = await resolveSessionParam(c);
     if (!guard.ok) return guard.response;
 
+    const execution = await getSessionExecutionStatus(
+      store,
+      id,
+      c.get("sessionLock"),
+    );
     const snapshot = await buildSessionSnapshot(store, id);
     if (!snapshot) {
       return c.json(
@@ -40,6 +46,7 @@ export function registerSessionViewRoute(routes: Hono<SessionRouteEnv>): void {
 
     const view = {
       ...snapshot,
+      execution,
       plugins: buildSnapshotPluginList(
         pluginRegistry,
         new Set(currentSession.activePlugins),

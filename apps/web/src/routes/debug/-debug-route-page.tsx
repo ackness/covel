@@ -39,6 +39,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
     snapshotLoading,
     snapshotError,
     snapshotUpdatedAt,
+    execution,
     traceDiscovery,
     totalEvents,
     storyTurnCount,
@@ -250,6 +251,7 @@ export function DebugRoutePage({ sid }: { sid?: string }) {
               <>
                 <TraceTimeline
                   selectedSessionId={selectedSessionId}
+                  execution={execution}
                   turns={visibleTurns}
                   loading={loading}
                   expandedTurns={expandedTurns}

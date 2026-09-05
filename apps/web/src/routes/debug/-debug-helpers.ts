@@ -96,7 +96,7 @@ export interface RuntimeInfo {
   pluginId: string;
   stage?: string;
   label: string;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "interrupted";
   events: api.TraceEvent[];
   startedAt: string;
   completedAt?: string;

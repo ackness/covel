@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   listSessionPlugins: vi.fn(),
   listSuspensions: vi.fn(),
   markServerAck: vi.fn(),
+  getSession: vi.fn(),
 }));
 const pluginData = vi.hoisted(() => ({
   setActiveSession: vi.fn(),
@@ -75,11 +76,60 @@ function makeWorkspace(ds: DataService): SessionWorkspace {
 beforeEach(() => {
   vi.clearAllMocks();
   api.getSessionView.mockResolvedValue(emptySnapshot());
+  api.getSession.mockResolvedValue(session);
   api.listSessionPlugins.mockResolvedValue({ items: [], commands: [] });
   api.listSuspensions.mockResolvedValue([]);
 });
 
 describe("restoreSessionState workspace ordering", () => {
+  it("restores authoritative terminal steps and the updated session clock", async () => {
+    const ds = makeDataService([]);
+    vi.mocked(ds.loadExecutionSteps).mockResolvedValue([
+      { runtimeId: "story", pluginId: "story", turnId: "t", status: "running" },
+    ]);
+    api.getSession.mockResolvedValue({
+      ...session,
+      phase: "playing",
+      completedPlayerTurns: 1,
+    });
+    api.getSessionView.mockResolvedValue({
+      ...emptySnapshot(),
+      execution: { state: "completed", turnId: "t" },
+      executionSteps: [
+        {
+          type: "runtime.completed",
+          turnId: "t",
+          timestamp: "now",
+          payload: { runtimeId: "story", pluginId: "story", status: "success" },
+        },
+      ],
+    });
+    const dispatch = vi.fn();
+    await restoreSessionState({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch,
+      sessionIdRef: { current: null },
+      worlds: [world],
+      session,
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "LOAD_EXECUTION_STEPS",
+      steps: [
+        expect.objectContaining({ runtimeId: "story", status: "completed" }),
+      ],
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "SET_SESSION",
+      session: expect.objectContaining({
+        completedPlayerTurns: 1,
+        phase: "playing",
+      }),
+    });
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "UPSERT_EXECUTION_STEP" }),
+    );
+  });
   it("hydrates the server workspace before publishing the session", async () => {
     const order: string[] = [];
     const ds = makeDataService(order);
@@ -138,7 +188,7 @@ describe("restoreSessionState workspace ordering", () => {
       }),
     ).rejects.toThrow("offline");
 
-    expect(sessionIdRef.current).toBeNull();
+    expect(sessionIdRef.current).toBe(session.id);
     expect(dispatch).not.toHaveBeenCalledWith({ type: "SET_SESSION", session });
     expect(dispatch).toHaveBeenCalledWith({
       type: "SET_EXECUTION_ERROR",

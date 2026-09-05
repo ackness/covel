@@ -318,6 +318,14 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 >
 > 快照内嵌的 session 对象包含与会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复与重连以这些字段为唯一进度来源。
 
+### 刷新与未完成回合恢复
+
+`GET /api/sessions/:id/execution` 返回 `SessionExecutionStatus`，遵循相同的会话归属校验；`GET /api/sessions/:id/view` 的可选 `execution` 字段提供同一状态。`state` 为 `idle`、`running`、`completed`、`failed` 或 `interrupted`，可带 `turnId`、`requestId`、`startedAt`、`origin` 和显式重试用的 `retry: { type, payload }`。此接口不会等待长回合锁；PG 使用非阻塞 advisory lock 探测，另一进程仍持锁或暂时无法取得连接时保守返回 `running`，可能没有回合标识。
+
+网页刷新或 SSE 断开不会自动取消原回合。客户端仅查询状态并恢复已提交的消息、时钟和任务步骤，不自动重新调用模型。服务器进程停止会丢失前台内存执行；无活跃锁、无已提交工件且缺少终止记录时显示 `interrupted`。已经提交但来不及记录终止 trace 的回合仍为 `completed`。浏览器旧步骤只补充服务端快照缺失的信息，不能把终态覆盖为 `running`；`runtime.completed` 的 `payload.status` 决定成功、失败、跳过或挂起状态。
+
+用户显式重试时，使用 `retry` 描述、新 `requestId`，并在 payload 中附加 `recoverFromTurnId`。服务端在会话锁内再次核实源回合，重复点击或原回合已结束时不会再次执行；开场延续重试保留 `origin: continuation`，不增加玩家回合数。新回合的 `turn.started` 只记录恢复所需的动作输入，不记录请求头和凭据。旧日志只在同一请求的 traceId 能证明它是开场延续时提供无输入重试，否则要求玩家重新输入。常规 `retry_runtime` 的已提交辅助任务重试语义保持不变。
+
 ### Turn 执行
 
 回合执行的唯一入口是 [`POST /api/actions`](#post-apiactions)（SSE 桥接），没有 session 级的回合端点。
@@ -340,7 +348,7 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 - abort 后当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`；已在 abort 前正常完成的 runtime 结果照常提交。
 - steer 仅对 `outputKind: story` 的 runtime 生效（plugin runtime 执行结构化任务，不接受插话）。插话在最终响应流式期间到达时，story runtime 收尾前会追加一步 LLM 调用消化它（受 maxSteps 约束）；持久化失败则撤回队列项并返回 `500`。
 - 注册表为进程内实现——多 pod（PG）部署下 steer/abort 只能到达同 pod 上的回合。
-- 可控窗口与 session lock 对齐：注册发生在取得 session lock 之后、`executeTurn` 前，释放在 `executeTurn` 返回时——同 session 的并发 action 在锁上排队，steer/abort 永远命中真实在途的回合，不会指向排队中的下一回合；提案 commit / 后台 follower 调度等收尾阶段不再对外呈现为可控（此时 steer/abort 返回 `409`）。
+- 注册发生在取得 session lock 后，覆盖准备、模型执行、提交和收尾，直到 action 完成才释放。因此刷新时不会在提交尚未完成时误判为空闲；排队请求不会覆盖当前回合的控制注册。停止信号不能撤回已经完成的事务；跨进程执行状态探测不改变 steer/abort 仍需到达执行进程的限制。
 
 ### Setup runtime 控制（重试 / 跳过）
 
