@@ -194,7 +194,19 @@ the IndexedDB transaction and schema lifecycle in
 - browser checkpoint upload/download operations are serialized by
   `LocalDataService`;
 - the transient server workspace uses `MemoryStore.withTransaction` when a
-  checkpoint replaces a session.
+  checkpoint replaces a session;
+- checkpoint imports validate every record's structure and session scope,
+  including snapshot payloads, before entering the write transaction;
+- trusted fork copies use `rebindSnapshotPayloadSession` to bind nested state
+  to the child session; exports normalize legacy fork payloads before wire
+  validation. External checkpoint input is never rebound to bypass ownership
+  checks;
+- `replaceSessionFromCheckpoint` preserves global worlds by default. Callers
+  must explicitly opt into `writeWorld` after independently authorizing global
+  writes; session ownership alone does not authorize a shared-world update;
+- upload and commit routes recheck owner, incarnation and deletion status
+  under the session lock before using revision or idempotency caches. Cache
+  entries belong to one incarnation and are discarded after same-id recreation.
 
 This is a synchronization contract, not an attempt to reproduce the full
 server transaction API in the browser.

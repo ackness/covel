@@ -5,6 +5,7 @@ import {
   type PersistenceProfile,
 } from "./browser-sync.js";
 import type { DataStore, SessionRecord, StoreTransaction } from "../types.js";
+import { rebindSnapshotPayloadSession } from "../records/snapshot-session-scope.js";
 
 export interface ExportSessionCheckpointOptions {
   readonly profile?: PersistenceProfile;
@@ -16,6 +17,8 @@ export interface ExportSessionCheckpointOptions {
 export interface ReplaceSessionCheckpointOptions {
   /** Server composition may preserve private owner/incarnation metadata here. */
   readonly session?: SessionRecord;
+  /** Global worlds require separate authorization; session replacement preserves them by default. */
+  readonly writeWorld?: boolean;
 }
 
 /** Export every durable session domain needed to resume execution elsewhere. */
@@ -121,7 +124,16 @@ export async function exportSessionCheckpoint(
     sessionSummaries,
     playerInputs,
     suspensions,
-    snapshots,
+    snapshots: snapshots.map((snapshot) =>
+      snapshot.kind === "fork"
+        ? {
+            ...snapshot,
+            // Historical fork snapshots retained the parent's row scope.
+            // Normalize trusted store data before enforcing the wire boundary.
+            payload: rebindSnapshotPayloadSession(snapshot.payload, sessionId),
+          }
+        : snapshot,
+    ),
     worldDataLedger,
     logicalTurnLedger,
     setupAttempts,
@@ -155,7 +167,8 @@ async function writeCheckpoint(
   }
 
   await store.deleteSession(checkpoint.sessionId);
-  if (checkpoint.world) await store.upsertWorld(checkpoint.world);
+  if (options.writeWorld && checkpoint.world)
+    await store.upsertWorld(checkpoint.world);
   await store.createSession(session);
 
   for (const record of checkpoint.turnResults)

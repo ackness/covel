@@ -3,12 +3,24 @@ import { bodyLimit } from "hono/body-limit";
 
 export const DEFAULT_BODY_LIMIT_BYTES = 1 * 1024 * 1024;
 export const INSTALL_BODY_LIMIT_BYTES = 20 * 1024 * 1024;
+export const BROWSER_CHECKPOINT_BODY_LIMIT_BYTES = 64 * 1024 * 1024;
 
 const defaultBodyLimit = bodyLimit({ maxSize: DEFAULT_BODY_LIMIT_BYTES });
 const installBodyLimit = bodyLimit({ maxSize: INSTALL_BODY_LIMIT_BYTES });
+const browserCheckpointBodyLimit = bodyLimit({
+  maxSize: BROWSER_CHECKPOINT_BODY_LIMIT_BYTES,
+});
 
 export function createRequestBodyLimitMiddleware(): MiddlewareHandler {
   return (c, next) => {
+    if (
+      c.req.method === "PUT" &&
+      /^\/api\/sessions\/[^/]+\/browser-checkpoint$/.test(c.req.path)
+    ) {
+      // Full browser checkpoints include the complete message and snapshot
+      // history, so they need a separate bounded budget as sessions grow.
+      return browserCheckpointBodyLimit(c, next);
+    }
     if (
       c.req.path === "/api/install" ||
       c.req.path.startsWith("/api/install/") ||

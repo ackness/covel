@@ -6,6 +6,7 @@ import type {
   WorldDataImportLedgerRecord,
 } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
+import { assertSessionRecordScope } from "./session-record-scope.js";
 
 export function createWorkingMemoryMethods(
   state: MemoryState,
@@ -57,6 +58,18 @@ export function createWorldDataImportLedgerMethods(
     async saveWorldDataImportLedgerBatch(
       records: readonly WorldDataImportLedgerRecord[],
     ): Promise<void> {
+      // Validate the entire batch before writing, including duplicate ids
+      // within this batch, so a late conflict cannot leave partial changes.
+      const pendingSessions = new Map<string, string>();
+      for (const record of records) {
+        assertSessionRecordScope(
+          "world-data import ledger",
+          record,
+          pendingSessions.get(record.id) ??
+            state.worldDataImportLedger.get(record.id)?.sessionId,
+        );
+        pendingSessions.set(record.id, record.sessionId);
+      }
       for (const record of records) {
         state.worldDataImportLedger.set(record.id, record);
       }

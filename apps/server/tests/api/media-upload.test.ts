@@ -56,24 +56,27 @@ async function makeApp(withStore = true): Promise<{
 }
 
 describe("POST /api/media (upload)", () => {
-  it("stores an image and returns a content-addressed ref the session can read", async () => {
-    const { app, mediaStore } = await makeApp();
-    const res = await app.request("/api/media?sessionId=s1", {
-      method: "POST",
-      headers: { "content-type": "image/png" },
-      body: IMG,
-    });
-    expect(res.status).toBe(201);
-    const ref = (await res.json()) as {
-      id: string;
-      mime: string;
-      size: number;
-    };
-    expect(ref.id).toMatch(/^[0-9a-f]{64}$/);
-    expect(ref.mime).toBe("image/png");
-    expect(ref.size).toBe(IMG.byteLength);
-    expect(await mediaStore!.isReferencedBy(ref.id, "s1")).toBe(true);
-  });
+  it.each(["image/png", " IMAGE/PNG ; charset=binary"])(
+    "stores %s with a normalized image MIME the session can read",
+    async (mime) => {
+      const { app, mediaStore } = await makeApp();
+      const res = await app.request("/api/media?sessionId=s1", {
+        method: "POST",
+        headers: { "content-type": mime },
+        body: IMG,
+      });
+      expect(res.status).toBe(201);
+      const ref = (await res.json()) as {
+        id: string;
+        mime: string;
+        size: number;
+      };
+      expect(ref.id).toMatch(/^[0-9a-f]{64}$/);
+      expect(ref.mime).toBe("image/png");
+      expect(ref.size).toBe(IMG.byteLength);
+      expect(await mediaStore!.isReferencedBy(ref.id, "s1")).toBe(true);
+    },
+  );
 
   it("does not bind an upload to a replacement session with the same id", async () => {
     const { app, mediaStore, store, sessionLock } = await makeApp();
@@ -145,17 +148,21 @@ describe("POST /api/media (upload)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects an SVG upload — it would execute script on the app origin", async () => {
-    const { app } = await makeApp();
-    const res = await app.request("/api/media?sessionId=s1", {
-      method: "POST",
-      headers: { "content-type": "image/svg+xml" },
-      body: new TextEncoder().encode(
-        `<svg xmlns="http://www.w3.org/2000/svg"><script>fetch('//evil')</script></svg>`,
-      ),
-    });
-    expect(res.status).toBe(400);
-  });
+  it.each(["image/svg+xml", "image/SVG+XML", " IMAGE/SVG+XML ; charset=UTF-8"])(
+    "rejects a scriptable SVG upload with MIME %s",
+    async (mime) => {
+      const { app, mediaStore } = await makeApp();
+      const res = await app.request("/api/media?sessionId=s1", {
+        method: "POST",
+        headers: { "content-type": mime },
+        body: new TextEncoder().encode(
+          `<svg xmlns="http://www.w3.org/2000/svg"><script>fetch('//evil')</script></svg>`,
+        ),
+      });
+      expect(res.status).toBe(400);
+      expect(await mediaStore!.listAssets()).toEqual([]);
+    },
+  );
 
   it("rejects an empty body", async () => {
     const { app } = await makeApp();

@@ -24,6 +24,7 @@ import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { collectMediaRefIds } from "@covel/shared";
+import { rebindSnapshotPayloadSession } from "@covel/store";
 import type {
   DataStore,
   MediaStore,
@@ -443,6 +444,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             // copy remains untouched. `pendingContinuation` is preserved verbatim —
             // POST /suspensions/:suspensionId/resume on the child uses the new id
             // to re-enter the tool loop.
+            const childSuspensions: SuspensionRecord[] = [];
             for (const susp of snapshot.payload.suspensions) {
               const record: SuspensionRecord = {
                 ...susp,
@@ -450,6 +452,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 sessionId: childSessionId,
               };
               await tx.saveSuspension(record);
+              childSuspensions.push(record);
             }
 
             // Copy session-scoped lorebook entries. Missing before, so a fork lost
@@ -619,7 +622,11 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               kind: "fork",
               parentId: snapshot.id,
               payload: {
-                ...snapshot.payload,
+                ...rebindSnapshotPayloadSession(
+                  snapshot.payload,
+                  childSessionId,
+                ),
+                suspensions: childSuspensions,
                 sessionSummaries: childSessionSummaries,
                 compactedMessageSummaryIds: childCompactedMessageSummaryIds,
                 messagesCursor: childMessagesCursor,

@@ -2,7 +2,10 @@ import type { Hono } from "hono";
 import type { MediaStore } from "@covel/store";
 import { errorBody } from "../../../api-error.js";
 import { signMediaTokenForSession } from "../../../middleware/media-token.js";
-import { isOwnerAuthEnforced, resolveSessionParam } from "./session-guard.js";
+import {
+  isSessionOwnerAuthEnforced,
+  resolveSessionParam,
+} from "./session-guard.js";
 import type { SessionRouteEnv } from "./route-env.js";
 
 export function registerSessionMediaTokenRoute(
@@ -10,7 +13,7 @@ export function registerSessionMediaTokenRoute(
 ): void {
   routes.get("/:id/media-token", async (c) => {
     const sessionId = c.req.param("id");
-    if (isOwnerAuthEnforced()) {
+    if (isSessionOwnerAuthEnforced(c)) {
       const guard = await resolveSessionParam(c);
       if (!guard.ok) return guard.response;
     }

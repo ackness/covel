@@ -47,7 +47,9 @@ describe("session checkpoint transfer", () => {
       actionId: "bootstrap",
       committedAt: "2026-08-25T00:00:00.000Z",
     });
-    await replaceSessionFromCheckpoint(target, checkpoint);
+    await replaceSessionFromCheckpoint(target, checkpoint, {
+      writeWorld: true,
+    });
 
     expect(await target.getSession(sessionId)).toEqual(session);
     expect(await target.getWorld(world.id)).toEqual(world);
@@ -94,5 +96,24 @@ describe("session checkpoint transfer", () => {
       ui: 1,
       ownerTokenHash: "server-private",
     });
+  });
+
+  it("preserves shared worlds unless world writes are explicitly authorized", async () => {
+    const source = createMemoryStore();
+    const target = createMemoryStore();
+    const world = makeWorld({ id: "shared-world", name: "Shared world" });
+    const session = makeSession({ id: "browser-session", worldId: world.id });
+    await target.upsertWorld(world);
+    await source.upsertWorld({ ...world, name: "Browser edit" });
+    await source.createSession(session);
+    const checkpoint = await exportSessionCheckpoint(source, session.id, {
+      revision: 1,
+      actionId: "bootstrap",
+    });
+
+    await replaceSessionFromCheckpoint(target, checkpoint);
+
+    expect(await target.getWorld(world.id)).toEqual(world);
+    expect(await target.getSession(session.id)).toEqual(session);
   });
 });
