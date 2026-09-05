@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { subscribeToast } from "../../lib/toast-channel.js";
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -181,6 +182,54 @@ describe("world API mapping", () => {
     expect(
       new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization"),
     ).toBe("Bearer operator-secret");
+  });
+
+  it.each(["create", "update"])(
+    "reports an explicit %s world authorization failure",
+    async (operation) => {
+      const toast = vi.fn();
+      const unsubscribe = subscribeToast(toast);
+      mockFetchOnce(
+        { error: "Operator required", code: "operator_token_required" },
+        401,
+      );
+      try {
+        const request =
+          operation === "create"
+            ? createWorld({ name: "World" })
+            : updateWorld("world-1", { name: "World" });
+
+        await expect(request).rejects.toMatchObject({
+          status: 401,
+          code: "operator_token_required",
+        });
+
+        expect(toast).toHaveBeenCalledOnce();
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
+
+  it("keeps automatic world-sync authorization probes silent without swallowing the error", async () => {
+    const toast = vi.fn();
+    const unsubscribe = subscribeToast(toast);
+    mockFetchOnce(
+      { error: "Operator required", code: "operator_token_required" },
+      401,
+    );
+    try {
+      await expect(
+        updateWorld("world-1", { name: "World" }, { silentStatuses: [401] }),
+      ).rejects.toMatchObject({
+        status: 401,
+        code: "operator_token_required",
+      });
+
+      expect(toast).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
   });
 
   it("importDimensions maps metadata.dimensions onto the frontend record", async () => {

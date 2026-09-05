@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
+import { ApiError } from "../api/request.js";
 
 const api = vi.hoisted(() => ({
   getWorld: vi.fn(),
@@ -26,8 +27,6 @@ const appKv = vi.hoisted(() => ({
 }));
 
 vi.mock("../api.js", () => api);
-const isNotFound = vi.hoisted(() => vi.fn(() => true));
-vi.mock("../api/request.js", () => ({ isNotFound }));
 vi.mock("../app-kv-store.js", () => appKv);
 
 const { LocalDataService } = await import("../data-service/local.js");
@@ -52,10 +51,11 @@ async function serviceWithWorld(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  isNotFound.mockReturnValue(true);
   api.getWorld.mockResolvedValue({ id: "world-1" });
   api.updateWorld.mockResolvedValue({ id: "world-1" });
-  api.getSession.mockRejectedValue(new Error("404"));
+  api.getSession.mockRejectedValue(
+    new ApiError(404, "/api/sessions/sess-1", ""),
+  );
   api.createSession.mockResolvedValue({
     id: "sess-1",
     // A server-created session without setup runtimes starts directly in the
@@ -85,7 +85,9 @@ describe("LocalDataService browser-authoritative sync", () => {
       tags: ["mystery"],
       dimensions: { custom: { enabled: true } },
     });
-    api.getWorld.mockRejectedValueOnce(new Error("404"));
+    api.getWorld.mockRejectedValueOnce(
+      new ApiError(404, "/api/worlds/world-local", ""),
+    );
 
     await service.prepareWorldForServer("world-local");
 
@@ -120,7 +122,123 @@ describe("LocalDataService browser-authoritative sync", () => {
           pluginPolicy: { excludedPluginIds: ["economy"] },
         },
       }),
+      { silentStatuses: [401] },
     );
+  });
+
+  it("uses an existing shared world for planning when operator access is required", async () => {
+    const service = await serviceWithWorld();
+    api.updateWorld.mockRejectedValueOnce(
+      new ApiError(
+        401,
+        "/api/worlds/world-1",
+        JSON.stringify({
+          error: "Operator required",
+          code: "operator_token_required",
+        }),
+      ),
+    );
+
+    await expect(
+      service.prepareWorldForServer("world-1"),
+    ).resolves.toBeUndefined();
+
+    expect(api.createWorld).not.toHaveBeenCalled();
+    expect(api.uploadBrowserCheckpoint).not.toHaveBeenCalled();
+  });
+
+  it.each(["existing", "recreated"])(
+    "hydrates a %s session without operator permission to update its shared world",
+    async (mirror) => {
+      const service = await serviceWithWorld();
+      await service.createSession("world-1", undefined, "sess-1", [], "en-US");
+      await service.addMessage({
+        id: "durable-message",
+        sessionId: "sess-1",
+        role: "user",
+        content: "Preserved browser history",
+        createdAt: "2026-09-01T00:00:00.000Z",
+      });
+      if (mirror === "existing")
+        api.getSession.mockResolvedValueOnce({ id: "sess-1" });
+      api.updateWorld.mockRejectedValueOnce(
+        new ApiError(
+          401,
+          "/api/worlds/world-1",
+          JSON.stringify({
+            error: "Operator required",
+            code: "operator_token_required",
+          }),
+        ),
+      );
+
+      await service.syncToServer("sess-1");
+
+      expect(api.createWorld).not.toHaveBeenCalled();
+      expect(api.createSession).toHaveBeenCalledTimes(
+        mirror === "existing" ? 0 : 1,
+      );
+      expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
+        "sess-1",
+        expect.objectContaining({
+          messages: [expect.objectContaining({ id: "durable-message" })],
+        }),
+      );
+    },
+  );
+
+  it.each([
+    ["GET", 401, "operator_token_required"],
+    ["GET", 500, "internal"],
+    ["PATCH", 500, "internal"],
+    ["PATCH", 401, "session_owner_required"],
+    ["PATCH", 401, undefined],
+    ["PATCH", 403, "operator_token_required"],
+  ] as const)(
+    "propagates %s %i (%s) before session hydration",
+    async (method, status, code) => {
+      const service = await serviceWithWorld();
+      await service.createSession("world-1", undefined, "sess-1", [], "en-US");
+      const error = new ApiError(
+        status,
+        "/api/worlds/world-1",
+        JSON.stringify({
+          error: "World sync failed",
+          ...(code ? { code } : {}),
+        }),
+      );
+      (method === "GET" ? api.getWorld : api.updateWorld).mockRejectedValueOnce(
+        error,
+      );
+
+      await expect(service.syncToServer("sess-1")).rejects.toBe(error);
+
+      expect(api.createWorld).not.toHaveBeenCalled();
+      expect(api.getSession).not.toHaveBeenCalled();
+      expect(api.uploadBrowserCheckpoint).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses to hydrate a missing world when its creation requires an operator", async () => {
+    const service = await serviceWithWorld();
+    await service.createSession("world-1", undefined, "sess-1", [], "en-US");
+    api.getWorld.mockRejectedValueOnce(
+      new ApiError(404, "/api/worlds/world-1", ""),
+    );
+    const denied = new ApiError(
+      401,
+      "/api/worlds",
+      JSON.stringify({
+        error: "Operator required",
+        code: "operator_token_required",
+      }),
+    );
+    api.createWorld.mockRejectedValueOnce(denied);
+
+    await expect(service.syncToServer("sess-1")).rejects.toBe(denied);
+
+    expect(api.updateWorld).not.toHaveBeenCalled();
+    expect(api.uploadBrowserCheckpoint).not.toHaveBeenCalled();
   });
 
   it("persists the selected plugin set, locale, and requested id", async () => {
@@ -368,7 +486,6 @@ describe("LocalDataService browser-authoritative sync", () => {
   it("does not turn a real sync error into a create probe", async () => {
     const service = await serviceWithWorld();
     await service.createSession("world-1", undefined, "sess-1", [], "en-US");
-    isNotFound.mockReturnValue(false);
     const error = new Error("server unavailable");
     api.getWorld.mockRejectedValue(error);
 
@@ -481,7 +598,6 @@ describe("LocalDataService browser-authoritative sync", () => {
     await service.stageServerCommit("sess-1", "turn-pending");
 
     const downloadError = new Error("connection reset");
-    isNotFound.mockReturnValue(false);
     api.fetchBrowserCommit.mockRejectedValueOnce(downloadError);
     await expect(
       service.commitFromServer("sess-1", "turn-pending"),

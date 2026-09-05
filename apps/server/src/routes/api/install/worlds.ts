@@ -11,6 +11,7 @@ import path from "node:path";
 import { Hono } from "hono";
 import { parse as parseYaml } from "yaml";
 import { errorBody } from "../../../api-error.js";
+import { checkWorldWriteAccess } from "../worlds/world-write-guard.js";
 import {
   readRuntimeEnv,
   validateWorldManifest,
@@ -78,6 +79,8 @@ function validateWorldBundle(
 }
 
 worldInstallRoutes.post("/world", async (c) => {
+  const denied = checkWorldWriteAccess(c);
+  if (denied) return denied;
   try {
     const tooLarge = rejectByContentLength(c.req.header("content-length"));
     if (tooLarge) throw tooLarge;

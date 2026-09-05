@@ -3,11 +3,8 @@ import {
   characterBlueprintToCharacterUpsert,
   decodePageCursor,
   encodePageCursor,
-  resolveI18nText,
   type CharacterBlueprint,
   type CursorPage,
-  type WorldCreateRequest,
-  type WorldPatchRequest,
 } from "@covel/shared";
 import type {
   BrowserCheckpoint,
@@ -23,7 +20,6 @@ import type {
   StatePatchRecord,
   WorldRecord,
 } from "../api.js";
-import i18n from "i18next";
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
@@ -35,6 +31,10 @@ import {
   toFrontendWorld,
 } from "./mappers.js";
 import { LOCAL_SEED_WORLDS } from "./seed-worlds.js";
+import {
+  serverCheckpointWorld,
+  syncWorldToServer,
+} from "./local-world-sync.js";
 import type { DataService, SessionPatch, WorldPatch } from "./types.js";
 
 /** Default keyset page size when a caller omits `limit` (mirrors the API default). */
@@ -42,53 +42,6 @@ const DEFAULT_MESSAGES_PAGE_LIMIT = 80;
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function serverWorldRequest(world: StoreWorldRecord): WorldCreateRequest {
-  return {
-    id: world.id,
-    name: resolveI18nText(world.name, i18n.language) || world.id,
-    description: resolveI18nText(world.description, i18n.language) ?? undefined,
-    lore: world.lore
-      ? (resolveI18nText(world.lore, i18n.language) ?? undefined)
-      : undefined,
-    tags: world.tags ? [...world.tags] : undefined,
-    locale: world.locale,
-    dimensions: world.dimensions,
-    metadata: world.metadata ? { ...world.metadata } : undefined,
-    createdAt: world.createdAt,
-  };
-}
-
-function serverWorldPatch(world: StoreWorldRecord): WorldPatchRequest {
-  const {
-    id: _id,
-    createdAt: _createdAt,
-    ...patch
-  } = serverWorldRequest(world);
-  return patch;
-}
-
-/**
- * Browser-authored worlds may retain locale maps for display, while the
- * server's WorldRecord and public API use the locale-resolved string shape.
- * Keep that conversion at the browser-workspace boundary so an uploaded
- * checkpoint cannot replace the transient server world with a non-wire shape.
- */
-function serverCheckpointWorld(world: StoreWorldRecord): StoreWorldRecord {
-  const input = serverWorldRequest(world);
-  return {
-    id: input.id ?? world.id,
-    name: input.name,
-    description: input.description ?? "",
-    lore: input.lore,
-    tags: input.tags,
-    locale: input.locale,
-    dimensions: input.dimensions as StoreWorldRecord["dimensions"],
-    metadata: input.metadata,
-    createdAt: input.createdAt ?? world.createdAt,
-    updatedAt: world.updatedAt,
-  };
 }
 
 function humanSessionId(): string {
@@ -432,7 +385,7 @@ export class LocalDataService implements DataService {
     return this.enqueueWorkspace(async () => {
       const world = await (await this.ready()).getWorld(worldId);
       if (!world) throw new Error(`World not found: ${worldId}`);
-      await this.syncWorldToServerNow(world);
+      await syncWorldToServer(world);
     });
   }
 
@@ -688,16 +641,6 @@ export class LocalDataService implements DataService {
     return this.enqueueWorkspace(() => this.syncToServerNow(sessionId));
   }
 
-  private async syncWorldToServerNow(world: StoreWorldRecord): Promise<void> {
-    try {
-      await api.getWorld(world.id, { silentErrors: true });
-      await api.updateWorld(world.id, serverWorldPatch(world));
-    } catch (err) {
-      if (!isNotFound(err)) throw err;
-      await api.createWorld(serverWorldRequest(world));
-    }
-  }
-
   private async syncToServerNow(sessionId: string): Promise<void> {
     const vault = await this.ready();
     const pendingActionId = await vault.getPendingCommit(sessionId);
@@ -735,7 +678,7 @@ export class LocalDataService implements DataService {
 
     // Keep the transient mirror current as well as present. Plugin planning and
     // world-data preflight run before session creation and depend on metadata.
-    await this.syncWorldToServerNow(world);
+    await syncWorldToServer(world);
 
     // Ensure session exists on server (pass local ID so server uses the same ID)
     try {

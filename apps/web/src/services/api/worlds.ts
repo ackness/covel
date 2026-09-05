@@ -72,12 +72,14 @@ export async function createWorld(
 export async function updateWorld(
   id: string,
   patch: WorldPatchRequest,
+  options?: { silentStatuses?: readonly number[] },
 ): Promise<WorldRecord> {
   const body = worldPatchRequestSchema.parse(patch);
   const raw = await request<unknown>(`/api/worlds/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(body),
     operatorAuth: true,
+    silentStatuses: options?.silentStatuses,
   });
   return mapWorldRecord(raw);
 }

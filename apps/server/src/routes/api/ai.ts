@@ -25,6 +25,7 @@ import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { loadSingleWorld } from "../../world-seed-loader.js";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { checkHostedOperator } from "./session/session-guard.js";
+import { checkWorldWriteAccess } from "./worlds/world-write-guard.js";
 import { normalizeLocale } from "../../lib/validators.js";
 
 type Env = {
@@ -228,6 +229,10 @@ aiRoutes.post(
         ),
         400,
       );
+    }
+    if (saveTarget !== "return-only") {
+      const denied = checkWorldWriteAccess(c);
+      if (denied) return denied;
     }
     const brief = parseCreationBrief(body.brief);
     if (brief.error) {

@@ -64,6 +64,12 @@ HTTP/API 失败统一使用非 2xx 状态码和以下错误信封（`apps/server
 | `self`（默认）/ 桌面  | **不强制**。单机本地游玩零 token 可用；网络边界由默认回环监听保障（`COVEL_BIND_HOST=127.0.0.1`，见 env-registry）。带 token 也不校验。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `demo` / `commercial` | **硬性强制**。所有会话作用域端点（session CRUD、messages、traces、actions、plugin-rpc、steer/abort、SSE subscribe、snapshots、state 等经 `resolveSessionParam` 的路由，以及会话 id 走 query/body/间接引用的端点：approvals 列表/撤销/决策、`POST /api/media?sessionId=`、`/api/worlds/:id/world-data/preflight`、`sync-data`、`sync-dimensions`、`GET /api/ui-specs?sessionId=`）缺失或错误 token 一律返回 `401 { code: "session_owner_required" }`（未知会话返回 404）。无哈希的历史会话 fail-closed。`GET /api/sessions` 列表在这两个层级仅对持有运维 token 的调用方返回内容，其余返回空列表；`POST /api/sessions` **创建会话需运维 token**（缺失返回 `401 { code: "operator_token_required" }`）——这是单运维方门禁，完整的用户身份/租户隔离/配额属产品级工作，尚未实现。 |
 
+**生产 MemoryStore 例外**：即使 `DEPLOYMENT_TIER=self`，`NODE_ENV=production`
+且实际存储为 MemoryStore 时，会话仍强制 owner token；全局世界的创建、修改、
+删除、维度导入和服务端生成保存强制 operator token。该判断使用服务端实际注入的
+存储后端，不依赖请求参数或可能与运行实例不一致的 `STORE_BACKEND` 环境值。
+没有配置 operator token 时，世界写入保持关闭，公开读取和合法会话访问仍可使用。
+
 **Token 提交方式**（三选一）：
 
 1. `Authorization: Bearer <ownerToken>`
@@ -72,7 +78,7 @@ HTTP/API 失败统一使用非 2xx 状态码和以下错误信封（`apps/server
 
 **运维 master token**：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用），并且是 hosted 层级创建会话、世界写入/维度导入、AI 世界生成、模型探测/刷新、provider key 可用性查询（`GET /api/provider-keys`）以及 community server-code 激活的凭证。community ESM 会在服务端进程内注册全局能力，因此 hosted 层级同时要求 owner token 与 operator token；这是当前单运维方信任模型，不提供多租户代码沙箱。`DEPLOYMENT_TIER=demo|commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动。
 
-纯 Web 客户端可在 **Settings → Operator Access（运维访问）** 输入或清除该 token。凭据只保存在当前浏览器的 `localStorage`，仅在上述 operator-gated 同源请求中作为 `Authorization: Bearer <token>` 发送；保存或清除后客户端会重新加载，以新凭据重取会话与世界数据。`self` 层级继续允许无 token 使用，并忽略该可选凭据。
+纯 Web 客户端可在 **Settings → Operator Access（运维访问）** 输入或清除该 token。凭据只保存在当前浏览器的 `localStorage`，仅在上述 operator-gated 同源请求中作为 `Authorization: Bearer <token>` 发送；保存或清除后客户端会重新加载，以新凭据重取会话与世界数据。开发及桌面单用户模式继续允许无 token 使用；生产 MemoryStore 遵循上述例外。
 
 **community server-code grant 是 session 授权、进程级生效**：
 
@@ -236,18 +242,18 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 世界管理
 
-| 方法   | 路径                                   | 描述                                                                              |
-| ------ | -------------------------------------- | --------------------------------------------------------------------------------- |
-| GET    | `/api/worlds`                          | 列出所有世界                                                                      |
-| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                      |
-| POST   | `/api/worlds`                          | 创建/更新世界                                                                     |
-| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                   |
-| DELETE | `/api/worlds/:id`                      | 删除世界（内置 `source:"file"` 世界禁止删除，返回 403；hosted 需 operator token） |
-| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                         |
-| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                      |
-| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key  |
-| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要        |
-| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force  |
+| 方法   | 路径                                   | 描述                                                                                                 |
+| ------ | -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| GET    | `/api/worlds`                          | 列出所有世界                                                                                         |
+| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                                         |
+| POST   | `/api/worlds`                          | 创建/更新世界                                                                                        |
+| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                      |
+| DELETE | `/api/worlds/:id`                      | 删除世界（内置 `source:"file"` 世界禁止删除，返回 403；hosted / 生产 MemoryStore 需 operator token） |
+| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                                            |
+| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                                         |
+| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                     |
+| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                           |
+| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                     |
 
 ### 会话管理
 
@@ -295,6 +301,11 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 包含全部消息、轨迹与快照；超过上限返回 `413`。此专用额度仅适用于该路径的
 `PUT` 请求，`browser-commit` 等普通 API 仍使用 **1 MiB** 上限。当前协议不支持
 分块上传，因此完整 checkpoint 必须保持在该额度内。
+
+浏览器准备或恢复已有世界时，自动世界同步若收到准确的
+`401 operator_token_required`，会保留服务端共享世界并继续同步会话；其他鉴权、
+网络及服务端错误仍向调用方返回。创建服务端尚不存在的本地世界仍需要管理员
+凭据。显式世界编辑 API 不会把拒绝写入视为成功。
 
 ### 会话快照
 
@@ -374,7 +385,7 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### 拖拽导入（Install）
 
-`.zip` 包拖拽导入插件/世界。鉴权同 `DELETE /api/plugins/:id`：桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。
+`.zip` 包拖拽导入插件/世界。基础鉴权同 `DELETE /api/plugins/:id`：桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。世界安装还遵循全局世界写入鉴权：生产 MemoryStore（含 self）及 hosted 层级必须持有 operator token，启用安装 API 不会绕过该检查。
 
 | 方法 | 路径                  | 描述                                                                                                                                                                  |
 | ---- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -2873,6 +2884,10 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 | `return-only`  | SSE 响应体                            | 调用方自行保存                 | 浏览器本地 IndexedDB、预览生成结果、公开服务避免写服务端持久层 |
 
 `server-store` 和 `return-only` 会先把世界包写入临时目录做校验，然后删除临时目录。这两个模式保存的 `WorldRecord.metadata` 会移除文件路径型 `worldDataPath`、`worldData`、`dimensionSources` 和 `characterBlueprintSources`，保留已归一化的 `metadata.dimensions`，并用 `metadata.characterBlueprints` 与 `metadata.embeddedLorebook` 携带经过校验的角色/资料/规则文本。创建 session 时，文件世界优先走 descriptor；没有世界包目录时走这份便携内容，避免数据库和浏览器本地世界丢失补充内容。
+
+生产 MemoryStore 的 self 部署中，`server-file`（含省略 `saveTarget` 的默认值）
+与 `server-store` 在生成及写入前要求 operator token；`return-only` 继续公开，
+不会改写服务端共享世界。hosted 层级仍对所有 AI 世界生成请求要求 operator token。
 
 响应里的 `world.metadata.storage` 标注真实保存位置：
 
