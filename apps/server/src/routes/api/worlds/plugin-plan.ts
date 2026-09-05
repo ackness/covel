@@ -62,6 +62,11 @@ function resolvePolicy(
   packs: PluginPack[];
 } {
   const raw = isRecord(metadata?.pluginPolicy) ? metadata.pluginPolicy : {};
+  const selectionIds = (
+    key: "requiredPlugins" | "recommendedPlugins" | "excludedPlugins",
+  ): string[] => [
+    ...new Set([...stringArray(metadata?.[key]), ...stringArray(raw[key])]),
+  ];
   const worldPacks = Array.isArray(raw.packs)
     ? raw.packs
         .map(worldPack)
@@ -74,9 +79,9 @@ function resolvePolicy(
       preferredTags: stringArray(raw.preferTags),
       avoidedTags: stringArray(raw.avoidTags),
       requiredCapabilities: stringArray(raw.requireCapabilities),
-      requiredPluginIds: stringArray(raw.requiredPlugins),
-      recommendedPluginIds: stringArray(raw.recommendedPlugins),
-      excludedPluginIds: stringArray(raw.excludedPlugins),
+      requiredPluginIds: selectionIds("requiredPlugins"),
+      recommendedPluginIds: selectionIds("recommendedPlugins"),
+      excludedPluginIds: selectionIds("excludedPlugins"),
     },
     packs: [
       ...worldPacks,

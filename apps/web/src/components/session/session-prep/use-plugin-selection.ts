@@ -66,7 +66,12 @@ export function usePluginSelection(
         }),
       )
       .then((plan) => {
-        if (!cancelled) setPluginPlan(plan);
+        if (cancelled) return;
+        // Publish defaults with the plan so consumers never observe a ready
+        // plan alongside the temporary core-only selection.
+        setSelectedPlugins(defaultSelectedPluginIds(plan));
+        setActivePluginPackId(plan.selectedPackId ?? null);
+        setPluginPlan(plan);
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -133,11 +138,6 @@ export function usePluginSelection(
     () => new Set(),
   );
 
-  useEffect(() => {
-    if (!pluginPlan) return;
-    setSelectedPlugins(defaultSelectedPluginIds(pluginPlan));
-    setActivePluginPackId(pluginPlan.selectedPackId ?? null);
-  }, [pluginPlan]);
   const availablePluginTags = useMemo(
     () => collectPluginTags(plugins),
     [plugins],

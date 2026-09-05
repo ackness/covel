@@ -382,20 +382,21 @@ async function httpGet<T>(
     : new Error(`GET ${path} failed: ${String(lastError)}`);
 }
 
-async function httpPost<T>(
+async function httpJson<T>(
   server: string,
   path: string,
   body: unknown,
+  method: "POST" | "PUT" = "POST",
 ): Promise<T> {
   const res = await fetch(`${server}${path}`, {
-    method: "POST",
+    method,
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
   const payload = (await res.json().catch(() => ({}))) as T;
   if (!res.ok) {
     throw new Error(
-      `POST ${path} -> ${res.status}: ${JSON.stringify(payload)}`,
+      `${method} ${path} -> ${res.status}: ${JSON.stringify(payload)}`,
     );
   }
   return payload;
@@ -1473,7 +1474,7 @@ async function runMain(
 
   // ── Phase 4: Session creation ──────────────────────────────────
   section("Phase 4: Session Creation");
-  const session = await httpPost<SessionRecord>(args.server, "/sessions", {
+  const session = await httpJson<SessionRecord>(args.server, "/sessions", {
     worldId: chosen.id,
     locale: "zh-CN",
   });
@@ -1485,10 +1486,11 @@ async function runMain(
 
   let preparedSession = session;
   for (const pluginId of args.enablePlugins) {
-    const enabled = await httpPost<{ ok: boolean; active: string[] }>(
+    const enabled = await httpJson<{ ok: true; activePluginIds: string[] }>(
       args.server,
-      `/sessions/${session.id}/plugins/enable`,
-      { pluginId },
+      `/sessions/${encodeURIComponent(session.id)}/plugins/${encodeURIComponent(pluginId)}`,
+      undefined,
+      "PUT",
     );
     if (!enabled.ok) {
       throw new Error(`failed to enable plugin ${pluginId}`);
@@ -1572,12 +1574,13 @@ async function runMain(
     const values = buildFormValues(detectedForm, args.formValues);
     kv("Values", previewJson(values, 120));
 
-    const submitResp = await httpPost<{
+    const submitResp = await httpJson<{
       status: string;
       result?: {
         results?: Array<{ filledNarrative?: string }>;
       };
     }>(args.server, `/sessions/${session.id}/plugin-rpc`, {
+      kind: "action",
       pluginId: "framework",
       action: "submit-form",
       payload: {
@@ -1682,8 +1685,8 @@ async function runMain(
     session: { id: string };
     messages?: unknown[];
     characters?: unknown[];
-    plugins?: Array<{ id: string; isActive: boolean }>;
-  }>(args.server, `/sessions/${session.id}/snapshot`);
+    plugins?: Array<{ id: string; active: boolean }>;
+  }>(args.server, `/sessions/${encodeURIComponent(session.id)}/view`);
   state.snapshot = snapshot;
   // The snapshot's `session` is the client-restore projection and omits
   // lifecycle fields. Read the live SessionRecord for
@@ -1699,7 +1702,7 @@ async function runMain(
   kv("Completed player turns", finalSession.completedPlayerTurns);
   kv("Messages", snapshot.messages?.length ?? 0);
   kv("Characters", snapshot.characters?.length ?? 0);
-  kv("Active plugins", snapshot.plugins?.filter((p) => p.isActive).length ?? 0);
+  kv("Active plugins", snapshot.plugins?.filter((p) => p.active).length ?? 0);
 
   // Setup completion: setup-stage runtimes settle during the setup phase
   // (possibly inside the form-submit sub-execution the turn loop cannot read

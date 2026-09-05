@@ -115,10 +115,13 @@ export function SessionPrepScreen({
     runWorldDataPreflight,
   } = useWorldDataPreflight(world.id, selectedPluginIds, prepareWorldForServer);
 
+  const pluginPlanUnavailable =
+    pluginPlanLoading || pluginPlanError !== null || pluginPlan === null;
   const { bindingState } = usePrepRuntimeBindings(
     world.id,
     selectedPluginSummaries,
     resolvedSlots,
+    !pluginPlanUnavailable,
   );
 
   const [flowData, setFlowData] = useState<api.PluginFlowResponse | null>(null);
@@ -250,8 +253,6 @@ export function SessionPrepScreen({
   // or double resume on a slow connection.
   const [isStarting, setIsStarting] = useState(false);
   const [resumingId, setResumingId] = useState<string | null>(null);
-  const pluginPlanUnavailable =
-    pluginPlanLoading || pluginPlanError !== null || pluginPlan === null;
 
   const handleStart = useCallback(async () => {
     if (isStarting || pluginPlanUnavailable) return;

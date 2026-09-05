@@ -50,8 +50,21 @@ export function __resetUiSpecsCache(): void {
   specCache = new WeakMap<PluginRegistry, Promise<ValidatedSpecs>>();
 }
 
-function assertInsidePluginRoot(pluginRoot: string, filePath: string): void {
-  const relative = path.relative(pluginRoot, filePath);
+async function assertInsidePluginRoot(
+  pluginRoot: string,
+  filePath: string,
+): Promise<void> {
+  const realRoot = await fs.realpath(pluginRoot);
+  const realFile = await fs
+    .realpath(filePath)
+    .catch((error: NodeJS.ErrnoException) => {
+      // Custom component declarations may reference assets built only on the client.
+      if (error.code === "ENOENT") {
+        return path.resolve(realRoot, path.relative(pluginRoot, filePath));
+      }
+      throw error;
+    });
+  const relative = path.relative(realRoot, realFile);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`UI spec path escapes plugin root: ${filePath}`);
   }
@@ -66,7 +79,7 @@ async function loadSlot(
   const specs: Readonly<Record<string, unknown>>[] = [];
   for (const declaredPath of paths) {
     const filePath = path.resolve(runtimeDirectory, declaredPath);
-    assertInsidePluginRoot(pluginRoot, filePath);
+    await assertInsidePluginRoot(pluginRoot, filePath);
     if (filePath.endsWith(".json")) {
       specs.push(
         JSON.parse(await fs.readFile(filePath, "utf-8")) as Readonly<

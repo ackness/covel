@@ -101,4 +101,57 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
       code: "world_not_found",
     });
   });
+
+  it("preserves legacy metadata selection without a nested plugin policy", async () => {
+    await store.createWorld({
+      id: "legacy-world",
+      name: "Legacy world",
+      description: "",
+      metadata: {
+        requiredPlugins: ["dialogue"],
+        excludedPlugins: ["traditional"],
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    const response = await app.request("/api/worlds/legacy-world/plugin-plan");
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      policy: {
+        requiredPluginIds: ["dialogue"],
+        excludedPluginIds: ["traditional"],
+      },
+      defaultPluginIds: ["core", "dialogue"],
+    });
+  });
+
+  it("merges and deduplicates legacy and nested selection lists", async () => {
+    await store.createWorld({
+      id: "mixed-world",
+      name: "Mixed world",
+      description: "",
+      metadata: {
+        requiredPlugins: ["dialogue", "dialogue", "", 42],
+        recommendedPlugins: ["legacy-recommended"],
+        excludedPlugins: ["traditional"],
+        pluginPolicy: {
+          requiredPlugins: ["dialogue", "nested-required"],
+          recommendedPlugins: ["legacy-recommended", "nested-recommended"],
+          excludedPlugins: ["traditional", "nested-excluded"],
+        },
+      },
+      createdAt: new Date().toISOString(),
+    });
+
+    const response = await app.request("/api/worlds/mixed-world/plugin-plan");
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      policy: {
+        requiredPluginIds: ["dialogue", "nested-required"],
+        recommendedPluginIds: ["legacy-recommended", "nested-recommended"],
+        excludedPluginIds: ["traditional", "nested-excluded"],
+      },
+      defaultPluginIds: ["core", "dialogue"],
+    });
+  });
 });

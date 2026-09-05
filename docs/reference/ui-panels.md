@@ -165,6 +165,8 @@ ui:
 
 UI 声明来自启动时 registry 快照，静态资源惰性加载并按快照缓存。GET 只做读取与会话激活集过滤，不扫描插件目录，也不向 `plugin_data` 物化 UI 定义（详见 [api.md](./api.md#get-apiui-specs)）。
 
+静态资源读取会校验符号链接解析后的真实路径：允许指向插件根目录内的链接，拒绝指向根目录外的文件或目录。资源加载失败时跳过对应 runtime 的 UI，不影响其他 runtime 的面板。
+
 ### activity-bar 短标签
 
 activity-bar（右侧垂直 Tab 条）每个 Tab 只能显示极窄的文字。框架默认对 `groupLabel`（或 `label`）做机械截断：
