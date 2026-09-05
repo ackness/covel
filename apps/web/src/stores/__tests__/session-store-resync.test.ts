@@ -14,6 +14,7 @@ vi.mock("@/services/api", async (importOriginal) => {
 
 import * as api from "@/services/api";
 import { resyncSessionRecord } from "../session-store/actions.js";
+import { claimSessionAction } from "../session-store/runtime-refs.js";
 
 const SESSION = { id: "sess-1" } as api.SessionRecord;
 
@@ -55,6 +56,30 @@ describe("resyncSessionRecord", () => {
     await expect(
       resyncSessionRecord("sess-1", { current: "sess-1" }, dispatch),
     ).resolves.toBeUndefined();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("drops an old clock response after another action starts in the same session", async () => {
+    let resolve!: (value: api.SessionRecord) => void;
+    vi.mocked(api.getSession).mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const sessionIdRef = { current: "sess-1" };
+    const actionRef = { current: null as symbol | null };
+    const old = claimSessionAction(actionRef, sessionIdRef, "sess-1");
+    const dispatch = vi.fn();
+    const pending = resyncSessionRecord(
+      "sess-1",
+      sessionIdRef,
+      dispatch,
+      old.isCurrent,
+    );
+    claimSessionAction(actionRef, sessionIdRef, "sess-1");
+    resolve(SESSION);
+    await pending;
     expect(dispatch).not.toHaveBeenCalled();
   });
 });

@@ -63,7 +63,7 @@ describe("authoritative execution recovery", () => {
         status: "failed",
         detail: "__i18n:session.reasonInterrupted__",
       }),
-      detached,
+      expect.objectContaining(detached),
     ]);
   });
   it("does not guess interruption when server state is unknown", () => {

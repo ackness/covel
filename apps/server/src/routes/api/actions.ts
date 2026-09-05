@@ -30,6 +30,7 @@ import type {
   JobStatusRecord,
   RuntimeManifest,
   RuntimeResult,
+  RuntimeRetryScope,
   SseEnvelope,
 } from "@covel/shared";
 import {
@@ -71,6 +72,10 @@ import {
 } from "./session/session-guard.js";
 import { validateActionRequest } from "./actions/request.js";
 import { buildManualTurnExecutorDeps } from "./turn-execution-deps.js";
+import {
+  prepareRuntimeRetry,
+  settleRuntimeRetry,
+} from "./actions/runtime-retry.js";
 
 // SSE uses CovelEventType names directly.
 // Frontend handleSseEvent handles these standard types.
@@ -121,6 +126,8 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   }
   const body = bodyResult.value;
   const { requestId, type, sessionId, locale, model, payload } = body;
+  const isRuntimeRetry =
+    type === "retry_runtime" || type === "retry_failed_runtimes";
 
   // Enforce header transport limits before opening the SSE response or doing
   // any session work. Malformed legacy values remain a no-settings request.
@@ -257,6 +264,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     // not be left `pending` forever.
     let commitStatusSettled = false;
     let hasStartedTurn = false;
+    let currentRetryScope: RuntimeRetryScope | undefined;
 
     function makeEnvelope(
       eventType: string,
@@ -271,7 +279,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         flowId: traceId,
         seq: seq++,
         timestamp: new Date().toISOString(),
-        payload: eventPayload,
+        payload: { ...eventPayload, ...currentRetryScope },
       };
     }
 
@@ -349,6 +357,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       currentTurnId = turnArgs.turnId;
       commitStatusSettled = false;
       hasStartedTurn = false;
+      currentRetryScope = undefined;
       const {
         result,
         trace,
@@ -391,13 +400,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             );
             turnOrigin = recovery?.origin ?? turnOrigin;
           }
-          const registeredTurn = registerActiveTurn(
-            sessionId,
-            turnArgs.turnId,
-            requestId,
-          );
-          releaseTurnControl = registeredTurn.release;
-
           // Prep's editable world document is browser-local until the first
           // start action. Persist its value on the session so setup, opening
           // continuation, later turns, reconnects, and other server workers
@@ -407,6 +409,23 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             liveSession.activePlugins,
           );
           activeRuntimes = pluginRegistry.getActiveRuntimes(sessionId);
+          const retryPlan =
+            body.type === "retry_runtime" ||
+            body.type === "retry_failed_runtimes"
+              ? await prepareRuntimeRetry(
+                  store,
+                  sessionId,
+                  body,
+                  activeRuntimes,
+                )
+              : undefined;
+          currentRetryScope = retryPlan?.scope;
+          const registeredTurn = registerActiveTurn(
+            sessionId,
+            turnArgs.turnId,
+            requestId,
+          );
+          releaseTurnControl = registeredTurn.release;
           outputKindResolver = createRuntimeResultProcessor({
             store,
             sessionId,
@@ -493,6 +512,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             sessionId,
             turnArgs.turnId,
             traceId,
+            currentRetryScope,
           );
 
           // Per-turn trace emitter — fans emit() into trace_events + eventBus. Threaded
@@ -506,6 +526,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             sessionId,
             turnId: turnArgs.turnId,
             traceId,
+            retryScope: currentRetryScope,
           });
 
           // `phase` is persisted by the session-clock write in finalizeExecution.
@@ -559,37 +580,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             decodedUserSettings.settings,
           );
 
-          // retry_runtime reruns ONE
-          // runtime, not a new player turn. Stamp it non-player origin and
-          // keep it out of player-turn accounting so retrying doesn't advance
-          // the session clock
-          // a second time over the same logical turn.
-          const isRuntimeRetry = type === "retry_runtime";
-
-          // Seed a scoped retry with the source turn's recorded outputs so
-          // the retried runtime's `input.inject` / `needs` resolve against
-          // the original narrative instead of empty manual-trigger context
-          // (a bare manual trigger resolves them empty — the retried agent
-          // would see no <narrator-output> and do nothing). Source: explicit
-          // payload.retryFromTurnId (the chip's turn), else the most recent
-          // player-origin artifact.
-          // ponytail: full artifact scan; add a keyed store getter if long
-          // sessions make this show up in traces.
-          let retrySeedResults: readonly RuntimeResult[] | undefined;
-          if (isRuntimeRetry) {
-            const rows = await store.listTurnResults(sessionId);
-            const explicit =
-              typeof payload.retryFromTurnId === "string"
-                ? rows.find((r) => r.turnId === payload.retryFromTurnId)
-                : undefined;
-            const source =
-              explicit ??
-              [...rows].reverse().find((r) => r.origin === "player");
-            retrySeedResults = Array.isArray(source?.runtimeResults)
-              ? (source.runtimeResults as RuntimeResult[])
-              : undefined;
-          }
-
           const turnInput = {
             sessionId,
             turnId: turnArgs.turnId,
@@ -610,15 +600,18 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             ...(turnArgs.suppressPlayerMessage
               ? { suppressPlayerMessage: true }
               : {}),
-            // retry_runtime always scopes the rerun to its required runtimeId;
-            // retry_turn is the explicit whole-turn action.
-            ...(isRuntimeRetry
+            // Scoped retries share one execution and commit without counting
+            // another player turn. Seeds are already checked under the lock.
+            ...(type === "retry_runtime" || type === "retry_failed_runtimes"
               ? {
                   manualTrigger: {
-                    runtimeId: payload.runtimeId,
-                    ...(retrySeedResults && retrySeedResults.length > 0
-                      ? { retrySeedResults }
+                    ...(type === "retry_failed_runtimes"
+                      ? { runtimeIds: payload.runtimeIds }
+                      : { runtimeId: payload.runtimeId }),
+                    ...(currentRetryScope
+                      ? { sourceTurnId: currentRetryScope.sourceTurnId }
                       : {}),
+                    retrySeedResults: retryPlan?.seedResults,
                   },
                 }
               : {}),
@@ -850,6 +843,11 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             });
           }
           const committed = outcome.status === "committed";
+          currentRetryScope = settleRuntimeRetry(
+            retryPlan,
+            result.runtimeResults,
+            committed,
+          );
           const proposalErrors = outcome.failedProposals
             .map((failure) => failure.error)
             .filter(Boolean)
@@ -996,11 +994,14 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       }
 
       // Emit runtime progress: complete + persist trace
-      await trace.turnCompleted({
-        durationMs: result.durationMs,
-        resultCount: result.runtimeResults.length,
-        committed,
-      });
+      await trace.turnCompleted(
+        {
+          durationMs: result.durationMs,
+          resultCount: result.runtimeResults.length,
+          committed,
+        },
+        currentRetryScope,
+      );
 
       return { result, committed, commitError, wasPreGamePending };
     };
@@ -1026,7 +1027,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         first.committed &&
         first.wasPreGamePending &&
         !first.result.abortReason &&
-        type !== "retry_runtime" &&
+        !isRuntimeRetry &&
         type !== "retry_turn"
       ) {
         const settled = await store.getSession(sessionId);
@@ -1077,7 +1078,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             turnId: currentTurnId,
             traceId,
             type: "turn.failed",
-            payload: { error: message, requestId },
+            payload: { error: message, requestId, ...currentRetryScope },
             createdAt: new Date().toISOString(),
           })
           .catch(() => {});

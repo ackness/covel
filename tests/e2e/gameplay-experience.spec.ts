@@ -52,6 +52,12 @@ async function restoreReadingFixture(page: Page): Promise<string> {
         ],
         executionSteps: [
           {
+            type: "turn.completed",
+            turnId: "reading-turn",
+            timestamp: "2026-01-01T00:00:03Z",
+            payload: { committed: true },
+          },
+          {
             type: "runtime.completed",
             turnId: "reading-turn",
             timestamp: "2026-01-01T00:00:01Z",

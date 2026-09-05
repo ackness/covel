@@ -9,6 +9,10 @@ describe("explicit recovery retries", () => {
     { type: "retry_turn", payload: {} },
     { type: "start_session", payload: {} },
     { type: "retry_runtime", payload: { runtimeId: "guide" } },
+    {
+      type: "retry_failed_runtimes",
+      payload: { runtimeIds: ["guide", "tracker"], retryFromTurnId: "source" },
+    },
   ] satisfies NonNullable<SessionExecutionStatus["retry"]>[])(
     "preserves $type input and guards the original turn",
     (retry) => {

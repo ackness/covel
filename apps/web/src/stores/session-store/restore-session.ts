@@ -148,6 +148,20 @@ function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
     detail: raw.detail as string | undefined,
     durationMs: raw.durationMs as number | undefined,
     turnId: raw.turnId as string | undefined,
+    sourceTurnId:
+      typeof raw.sourceTurnId === "string" ? raw.sourceTurnId : undefined,
+    ...(raw.sourceCommitted === true ? { sourceCommitted: true } : {}),
+    ...(Array.isArray(raw.sourceFailedRuntimeIds) &&
+    raw.sourceFailedRuntimeIds.every((id) => typeof id === "string")
+      ? { sourceFailedRuntimeIds: raw.sourceFailedRuntimeIds as string[] }
+      : {}),
+    attemptStatus: ["pending", "committed", "failed", "interrupted"].includes(
+      String(raw.attemptStatus),
+    )
+      ? (raw.attemptStatus as ExecutionStep["attemptStatus"])
+      : undefined,
+    turnStartedAt:
+      typeof raw.turnStartedAt === "string" ? raw.turnStartedAt : undefined,
     startedAt: raw.startedAt as string | undefined,
     jobId: raw.jobId as string | undefined,
     detached: raw.detached === true,

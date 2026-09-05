@@ -1,144 +1,16 @@
-import { expect, test, type Page } from "@playwright/test";
-import type { SessionExecutionStatus } from "@covel/shared";
+import { expect, test } from "@playwright/test";
+import { composer, composerInput } from "./helpers/player.js";
 import {
-  composer,
-  composerInput,
-  seedAppSettings,
-  useServerWorlds,
-} from "./helpers/player.js";
+  createRecoveryFixture,
+  latestTurnId,
+  recoveredStory,
+  sourceTurnId,
+  trackerRuntimeId,
+} from "./execution-recovery-fixtures.js";
 
 test.use({ viewport: { width: 1280, height: 900 } });
-
-const sourceTurnId = "e2e-interrupted-turn";
 const originalRequestId = "e2e-original-request";
 const playerAction = "Ask the archivist to examine the sealed notebook.";
-const recoveredStory =
-  "The archivist opens the notebook and finds the missing harbor map.";
-
-interface CapturedAction {
-  requestId: string;
-  type: string;
-  sessionId: string;
-  payload: Record<string, unknown>;
-}
-
-/** Real isolated session, with only execution observations and action transport stubbed. */
-async function createRecoveryFixture(
-  page: Page,
-  initialState: "running" | "interrupted",
-) {
-  await seedAppSettings(page);
-  await useServerWorlds(page);
-  const response = await page.request.post("/api/sessions", {
-    data: {
-      worldId: "mistport",
-      locale: "zh-CN",
-      plugins: [
-        "pregame",
-        "world-init",
-        "char-creator",
-        "narrator",
-        "guide",
-        "codex",
-        "npc-graph",
-        "living-world-rules",
-        "character-blueprint",
-      ],
-    },
-  });
-  expect(response.ok()).toBeTruthy();
-  const session = (await response.json()) as { id: string };
-  let executionState: SessionExecutionStatus["state"] = initialState;
-  let executionReads = 0;
-  const actions: CapturedAction[] = [];
-  const status = (): SessionExecutionStatus => ({
-    state: executionState,
-    turnId: sourceTurnId,
-    requestId: originalRequestId,
-    startedAt: "2026-01-01T00:00:00Z",
-    origin: "player",
-    ...(executionState === "interrupted"
-      ? {
-          retry: {
-            type: "send_message" as const,
-            payload: { content: playerAction },
-          },
-        }
-      : {}),
-  });
-  const sessionPath = `**/api/sessions/${session.id}`;
-  await page.route(sessionPath, async (route) => {
-    if (route.request().method() !== "GET") return route.fallback();
-    const response = await route.fetch();
-    await route.fulfill({
-      response,
-      json: { ...(await response.json()), phase: "playing" },
-    });
-  });
-  await page.route(`${sessionPath}/execution`, async (route) => {
-    executionReads += 1;
-    await route.fulfill({ json: status() });
-  });
-  await page.route(`${sessionPath}/view`, async (route) => {
-    const response = await route.fetch();
-    const snapshot = await response.json();
-    await route.fulfill({
-      response,
-      json: {
-        ...snapshot,
-        session: {
-          ...snapshot.session,
-          phase: "playing",
-          completedPlayerTurns: executionState === "completed" ? 1 : 0,
-        },
-        execution: status(),
-        messages: [
-          {
-            id: "e2e-recovery-player",
-            role: "user",
-            turnId: sourceTurnId,
-            content: playerAction,
-            createdAt: "2026-01-01T00:00:00Z",
-          },
-          ...(executionState === "completed"
-            ? [
-                {
-                  id: "e2e-recovery-story",
-                  role: "assistant",
-                  kind: "story",
-                  turnId: sourceTurnId,
-                  content: recoveredStory,
-                  createdAt: "2026-01-01T00:00:03Z",
-                },
-              ]
-            : []),
-        ],
-        executionSteps: [],
-      },
-    });
-  });
-  // No request in either test can reach a provider, including an accidental auto-retry.
-  await page.route("**/api/actions", async (route) => {
-    actions.push(route.request().postDataJSON() as CapturedAction);
-    await route.fulfill({ contentType: "text/event-stream", body: "" });
-  });
-  return {
-    id: session.id,
-    actions,
-    get executionReads() {
-      return executionReads;
-    },
-    complete() {
-      executionState = "completed";
-    },
-    async dispose() {
-      await page.unrouteAll({ behavior: "wait" });
-      expect(
-        (await page.request.delete(`/api/sessions/${session.id}`)).ok(),
-      ).toBeTruthy();
-    },
-  };
-}
 
 test("refresh waits for the existing running turn and restores its completed story", async ({
   page,
@@ -203,6 +75,104 @@ test("refreshing an interrupted turn only retries after explicit player confirma
     });
     expect(fixture.actions[0]!.requestId).toBeTruthy();
     expect(fixture.actions[0]!.requestId).not.toBe(originalRequestId);
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+test("older orphaned execution stays before the latest story while an optional task can be retried", async ({
+  page,
+}) => {
+  const fixture = await createRecoveryFixture(page, "completed", true);
+  try {
+    await page.goto(`/session?sid=${fixture.id}`);
+    const historical = page.locator(
+      `[data-row-kind="execution"][data-turn-id="${sourceTurnId}"]`,
+    );
+    const current = page.locator(
+      `[data-row-kind="execution"][data-turn-id="${latestTurnId}"]`,
+    );
+    await expect(page.locator(".ui-narrative")).toContainText(recoveredStory);
+    await expect(page.getByTestId("execution-recovery-notice")).toHaveCount(0);
+    await expect(historical).toHaveAttribute("data-turn-current", "false");
+    await expect(current).toHaveAttribute("data-turn-current", "true");
+    const fold = historical.getByRole("button").first();
+    await expect(fold).toHaveAttribute("aria-expanded", "false");
+    await expect(historical.getByRole("alert")).toBeHidden();
+    expect(
+      await historical.evaluate((element) => {
+        const story = document.querySelector(".ui-narrative");
+        return (
+          !!story &&
+          !!(
+            element.compareDocumentPosition(story) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+          )
+        );
+      }),
+    ).toBe(true);
+    await fold.click();
+    await expect(historical.getByRole("button", { name: /重试/ })).toHaveCount(
+      0,
+    );
+    await fold.click();
+
+    await expect(current.getByRole("alert")).toContainText("未产出有效结果");
+    const retry = current.getByRole("button", {
+      name: /重试此任务/,
+    });
+    await expect(retry).toBeVisible();
+    await expect(retry).toHaveText("重试此任务");
+    expect(fixture.actions).toEqual([]);
+    await retry.click();
+    await expect.poll(() => fixture.actions.length).toBe(1);
+    expect(fixture.actions[0]).toMatchObject({
+      sessionId: fixture.id,
+      type: "retry_runtime",
+      payload: { runtimeId: trackerRuntimeId, retryFromTurnId: latestTurnId },
+    });
+    expect(fixture.actions[0]!.payload).not.toHaveProperty("recoverFromTurnId");
+    await expect(page.locator(".ui-narrative")).toContainText(recoveredStory);
+    expect(fixture.actions).toHaveLength(1);
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+test("a new running turn keeps historical interruption folded and shows its own progress", async ({
+  page,
+}) => {
+  const fixture = await createRecoveryFixture(page, "running", true);
+  try {
+    await page.goto(`/session?sid=${fixture.id}`);
+    await page.reload();
+    const historical = page.locator(
+      `[data-row-kind="execution"][data-turn-id="${sourceTurnId}"]`,
+    );
+    const current = page.locator(
+      `[data-row-kind="execution"][data-turn-id="${latestTurnId}"]`,
+    );
+    const notice = page.getByTestId("execution-recovery-notice");
+    await expect(notice).toContainText("上一回合仍在执行");
+    await expect(notice).not.toContainText("此回合已中断");
+    await expect(notice.getByRole("button", { name: /重试/ })).toHaveCount(0);
+    await expect(historical).toHaveAttribute("data-turn-current", "false");
+    await expect(historical.getByRole("button").first()).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    await expect(historical.getByRole("alert")).toBeHidden();
+    await expect(historical.getByRole("button", { name: /重试/ })).toHaveCount(
+      0,
+    );
+    await expect(current).toHaveAttribute("data-turn-current", "true");
+    await expect(current.getByRole("button").first()).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    await expect(current.locator(".animate-spin").first()).toBeVisible();
+    await expect(composer(page)).toHaveAttribute("data-executing", "true");
+    expect(fixture.actions).toEqual([]);
   } finally {
     await fixture.dispose();
   }

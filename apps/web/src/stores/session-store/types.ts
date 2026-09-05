@@ -52,8 +52,18 @@ export interface ExecutionStep {
   /** Qualified tool name when status is "tool". */
   toolName?: string;
   durationMs?: number;
-  /** Turn this step belongs to — enables grouping across multiple turns. */
+  /** Actual execution attempt, retained for recovery and trace correlation. */
   turnId?: string;
+  /** Original turn whose task this retry attempts to repair. */
+  sourceTurnId?: string;
+  /** Server-validated source commit proof, retained when its trace window expires. */
+  sourceCommitted?: true;
+  /** Complete failure ledger before the attempt, or after its committed settlement. */
+  sourceFailedRuntimeIds?: readonly string[];
+  /** Turn commit evidence, independent of each runtime's result. */
+  attemptStatus?: "pending" | "committed" | "failed" | "interrupted";
+  /** Attempt start time, independent of when an individual runtime starts. */
+  turnStartedAt?: string;
   /** Wall-clock start time (for on-device duration fallback). */
   startedAt?: string;
   /** Background job identity when this runtime no longer blocks its source turn. */
@@ -287,6 +297,12 @@ export type SessionAction =
       }>;
     }
   | { type: "UPSERT_EXECUTION_STEP"; step: ExecutionStep }
+  | {
+      type: "SET_TURN_ATTEMPT_STATUS";
+      turnId: string;
+      status: NonNullable<ExecutionStep["attemptStatus"]>;
+      sourceFailedRuntimeIds?: readonly string[];
+    }
   | { type: "LOAD_EXECUTION_STEPS"; steps: ExecutionStep[] }
   | { type: "CLEAR_EXECUTION_STEPS" }
   | { type: "FINALIZE_HANGING_RUNTIMES"; reason: string }

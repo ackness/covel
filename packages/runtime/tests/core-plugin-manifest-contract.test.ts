@@ -185,7 +185,6 @@ describe("core plugin manifest contract", () => {
     ).toMatchObject({
       tools: {
         builtin: ["sync-characters", "get-character"],
-        defer: ["get-character"],
       },
       completeAfterTools: ["sync-characters"],
       maxSteps: 2,

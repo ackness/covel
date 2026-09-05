@@ -42,6 +42,7 @@ import {
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { executeAgentGuard } from "../agent-loop/turn-agent-guard.js";
 import { combineAbortSignals } from "./turn-control.js";
+import { isScopedRuntimeRecovery } from "./scheduling.js";
 
 export type ExecuteTurnFn = (
   input: TurnInput,
@@ -175,6 +176,11 @@ export async function executeOneRuntime(
       rawDelta: RecursiveCallDelta,
       opts?: { readonly reason?: string },
     ): Promise<NestedTurnResult> => {
+      if (isScopedRuntimeRecovery(input)) {
+        throw new Error(
+          "recursiveCall is not available during scoped recovery",
+        );
+      }
       if (input.detachedStage) {
         throw new Error(
           `recursiveCall is not available to detached stage runtime "${manifest.name}"`,

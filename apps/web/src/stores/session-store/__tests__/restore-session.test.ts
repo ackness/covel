@@ -82,6 +82,34 @@ beforeEach(() => {
 });
 
 describe("restoreSessionState workspace ordering", () => {
+  it("retains persisted retry source, actual attempt, and commit evidence", async () => {
+    const ds = makeDataService([]);
+    const step = {
+      runtimeId: "tracker",
+      pluginId: "tracker",
+      turnId: "retry",
+      sourceTurnId: "source",
+      sourceCommitted: true,
+      sourceFailedRuntimeIds: ["tracker", "remaining"],
+      attemptStatus: "committed",
+      status: "completed",
+      turnStartedAt: "2026-09-05T00:00:00Z",
+    };
+    vi.mocked(ds.loadExecutionSteps).mockResolvedValue([step]);
+    const dispatch = vi.fn();
+    await restoreSessionState({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch,
+      sessionIdRef: { current: null },
+      worlds: [world],
+      session,
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "LOAD_EXECUTION_STEPS",
+      steps: [expect.objectContaining(step)],
+    });
+  });
   it("restores authoritative terminal steps and the updated session clock", async () => {
     const ds = makeDataService([]);
     vi.mocked(ds.loadExecutionSteps).mockResolvedValue([

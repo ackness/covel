@@ -573,6 +573,7 @@ export interface SessionExecutionStatus {
       | "send_message"
       | "execute_command"
       | "retry_turn"
+      | "retry_failed_runtimes"
       | "retry_runtime";
     readonly payload: Readonly<Record<string, unknown>>;
   };

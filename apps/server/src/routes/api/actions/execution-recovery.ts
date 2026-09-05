@@ -16,6 +16,18 @@ const recoveryActionSchema = z.discriminatedUnion("type", [
     payload: z.object({ command: z.string().min(1) }),
   }),
   z.object({
+    type: z.literal("retry_failed_runtimes"),
+    payload: z.object({
+      retryFromTurnId: z.string().min(1),
+      runtimeIds: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(20)
+        .refine((ids) => new Set(ids).size === ids.length)
+        .transform((ids) => [...ids].sort()),
+    }),
+  }),
+  z.object({
     type: z.literal("retry_runtime"),
     payload: z.object({
       runtimeId: z.string().min(1),

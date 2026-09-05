@@ -80,6 +80,7 @@ import {
 } from "./session-state.js";
 import {
   countPlayerMessagesSinceRuntime,
+  isScopedRuntimeRecovery,
   scheduleTriggeredRuntimes,
   selectTriggeredRuntimes,
 } from "./scheduling.js";
@@ -208,6 +209,12 @@ async function executeTurnImpl(
   const recursionDepth = options?.recursionDepth ?? 0;
   const targetedRuntimeId =
     input.detachedStage?.runtimeId ?? input.manualTrigger?.runtimeId;
+  const batchRuntimeIds = input.manualTrigger?.runtimeIds;
+  const scopedRecovery = isScopedRuntimeRecovery(input);
+  const targetedRuntimeIds = new Set(
+    batchRuntimeIds ?? (targetedRuntimeId ? [targetedRuntimeId] : []),
+  );
+  const isTargeted = Boolean(input.manualTrigger || input.detachedStage);
   // Allocate identity before hooks run. Counting stays conservative until the
   // authoritative persisted session phase is loaded below.
   let executionContext = createExecutionContext(input);
@@ -229,10 +236,15 @@ async function executeTurnImpl(
     ...(input.manualTrigger
       ? {
           manualTrigger: {
-            runtimeId: input.manualTrigger.runtimeId,
-            ...(input.manualTrigger.runtimeId.includes("/")
-              ? { pluginId: input.manualTrigger.runtimeId.split("/")[0] }
-              : { pluginId: input.manualTrigger.runtimeId }),
+            ...(batchRuntimeIds
+              ? { runtimeIds: batchRuntimeIds }
+              : {
+                  runtimeId: targetedRuntimeId,
+                  pluginId: targetedRuntimeId?.split("/")[0],
+                }),
+            ...(input.manualTrigger.sourceTurnId
+              ? { sourceTurnId: input.manualTrigger.sourceTurnId }
+              : {}),
           },
         }
       : {}),
@@ -324,7 +336,7 @@ async function executeTurnImpl(
       return st !== "done" && st !== "blocked";
     });
     const cycles = detectSetupSessionCycles(pendingSetup);
-    if (cycles.size > 0 && !targetedRuntimeId) {
+    if (cycles.size > 0 && !isTargeted) {
       const now = new Date().toISOString();
       const patched: Record<string, SetupRuntimeState> = {
         ...setupRuntimesSnapshot,
@@ -370,16 +382,18 @@ async function executeTurnImpl(
     activeRuntimes,
     sessionState.phase,
   );
-  const { manualTarget, triggered, abortReason } = selectTriggeredRuntimes({
-    activeRuntimes,
-    manualRuntimeId: targetedRuntimeId,
-    messageHistory: triggerMessageHistory,
-    runtimeTriggerCounts,
-    setupRuntimes: setupRuntimesSnapshot,
-    sessionId: input.sessionId,
-    turnNumber,
-    logicalTurn,
-  });
+  const { manualTarget, manualTargets, triggered, abortReason } =
+    selectTriggeredRuntimes({
+      activeRuntimes,
+      manualRuntimeId: targetedRuntimeId,
+      manualRuntimeIds: batchRuntimeIds,
+      messageHistory: triggerMessageHistory,
+      runtimeTriggerCounts,
+      setupRuntimes: setupRuntimesSnapshot,
+      sessionId: input.sessionId,
+      turnNumber,
+      logicalTurn,
+    });
   if (abortReason) {
     return {
       turnId: input.turnId,
@@ -431,6 +445,7 @@ async function executeTurnImpl(
   // See packages/runtime/src/schedule/dag-scheduler.ts for the algorithm.
   const { groups: scheduledGroups, cyclic } = scheduleTriggeredRuntimes({
     manualTarget,
+    manualTargets,
     triggered: scheduledRuntimes,
     isPreGamePending,
   });
@@ -458,9 +473,10 @@ async function executeTurnImpl(
       },
     );
   }
-  const detachmentPlan = input.detachedStage
-    ? { eligibleRuntimeIds: new Set<string>(), diagnostics: [] }
-    : planTurnDetachment(scheduledRuntimes);
+  const detachmentPlan =
+    input.detachedStage || scopedRecovery
+      ? { eligibleRuntimeIds: new Set<string>(), diagnostics: [] }
+      : planTurnDetachment(scheduledRuntimes);
   for (const diagnostic of detachmentPlan.diagnostics) {
     const message = `runtime "${diagnostic.runtimeId}" remains in the foreground: ${diagnostic.reason}`;
     console.warn(`[covel:warn] [turn-executor] ${message}`);
@@ -580,7 +596,7 @@ async function executeTurnImpl(
     input.manualTrigger?.retrySeedResults ??
     [];
   for (const seed of seededResults) {
-    if (seed.runtimeId === targetedRuntimeId) continue;
+    if (targetedRuntimeIds.has(seed.runtimeId)) continue;
     completedResults.set(seed.runtimeId, seed);
     retrySeeds.set(seed.runtimeId, seed);
   }
@@ -733,7 +749,7 @@ async function executeTurnImpl(
   // main runtimes gate on this turn's fresh result. Same declared-edge setup
   // DAG as the setup phase. Blocked / done setup runtimes were already
   // filtered out by selectTriggeredRuntimes.
-  if (!isPreGamePending && !manualTarget && !executionAborted()) {
+  if (!isPreGamePending && !isTargeted && !executionAborted()) {
     const lateSetup = scheduledRuntimes.filter((rt) => isSetupRuntime(rt));
     const lateSetupPlan = scheduleByDag(lateSetup);
     for (const group of lateSetupPlan.groups) {
@@ -817,29 +833,31 @@ async function executeTurnImpl(
     if (completedResults.get(name) === seed) completedResults.delete(name);
   }
 
-  const deferredFollowers = executionAborted()
-    ? []
-    : await runEventChain({
-        activeRuntimes,
-        completedResults,
-        executeRuntime: (manifest, triggerEvent, identity) =>
-          invoke(manifest, triggerEvent, identity),
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        turnNumber,
-        logicalTurn,
-        // Fan-out is the only place an `event` runtime can trigger, so its
-        // throttle gates only work if the real history reaches them. The setup
-        // mirror prevents a completed setup runtime from re-firing.
-        setupRuntimes: setupRuntimesSnapshot,
-        runtimeTriggerCounts,
-        runtimeTurnsSinceLastTrigger: new Map(
-          activeRuntimes.map((rt) => [
-            rt.name,
-            countPlayerMessagesSinceRuntime(triggerMessageHistory, rt.name),
-          ]),
-        ),
-      });
+  // Recovery events remain in the target's result without rerunning subscribers.
+  const deferredFollowers =
+    executionAborted() || scopedRecovery
+      ? []
+      : await runEventChain({
+          activeRuntimes,
+          completedResults,
+          executeRuntime: (manifest, triggerEvent, identity) =>
+            invoke(manifest, triggerEvent, identity),
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          turnNumber,
+          logicalTurn,
+          // Fan-out is the only place an `event` runtime can trigger, so its
+          // throttle gates only work if the real history reaches them. The setup
+          // mirror prevents a completed setup runtime from re-firing.
+          setupRuntimes: setupRuntimesSnapshot,
+          runtimeTriggerCounts,
+          runtimeTurnsSinceLastTrigger: new Map(
+            activeRuntimes.map((rt) => [
+              rt.name,
+              countPlayerMessagesSinceRuntime(triggerMessageHistory, rt.name),
+            ]),
+          ),
+        });
 
   // ── Pre-Game completion tracking ────────────────────────────────
   //

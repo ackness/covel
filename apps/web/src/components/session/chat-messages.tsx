@@ -54,7 +54,7 @@ export interface ChatMessagesProps {
     submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
   onRetryRuntime?: (
-    runtimeId: string | undefined,
+    runtimeId: string | readonly string[] | undefined,
     sourceTurnId?: string,
   ) => void;
   onBeginAdventure: () => void;

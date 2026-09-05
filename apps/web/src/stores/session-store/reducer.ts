@@ -10,6 +10,7 @@ import {
 } from "./execution-steps.js";
 import { applyPluginMessageSurface } from "./plugin-message-surface.js";
 import { mergeRecoveredMessages } from "./recovered-messages.js";
+import { settleExecutionAttempt } from "./execution-attempts.js";
 import { orderStoryBeforePluginMessages } from "./message-order.js";
 import type {
   AssetProgressEvent,
@@ -29,8 +30,24 @@ function upsertExecutionStep(
     (item) => `${item.turnId ?? "__no_turn__"}|${item.runtimeId}` === key,
   );
   const next = [...steps];
-  if (idx >= 0) next[idx] = { ...next[idx], ...step };
-  else next.push(step);
+  // A later transport/trace failure cannot undo a transaction already committed.
+  const committed =
+    step.turnId &&
+    steps.some(
+      (row) => row.turnId === step.turnId && row.attemptStatus === "committed",
+    );
+  const updated = {
+    ...(idx >= 0 ? next[idx] : undefined),
+    ...step,
+    ...(committed ? { attemptStatus: "committed" as const } : {}),
+    ...(idx >= 0 &&
+    next[idx].attemptStatus === "committed" &&
+    step.attemptStatus === "pending"
+      ? { sourceFailedRuntimeIds: next[idx].sourceFailedRuntimeIds }
+      : {}),
+  };
+  if (idx >= 0) next[idx] = updated;
+  else next.push(updated);
   return next.length > EXEC_STEPS_MAX
     ? next.slice(next.length - EXEC_STEPS_MAX)
     : next;
@@ -406,6 +423,16 @@ export function reducer(
     }
     case "LOAD_EXECUTION_STEPS":
       return { ...state, executionSteps: action.steps };
+    case "SET_TURN_ATTEMPT_STATUS":
+      return {
+        ...state,
+        executionSteps: settleExecutionAttempt(
+          state.executionSteps,
+          action.turnId,
+          action.status,
+          action.sourceFailedRuntimeIds,
+        ),
+      };
     case "FINALIZE_HANGING_RUNTIMES": {
       // Backend runtimes whose LLM call hangs never emit runtime.completed —
       // the executor's timeoutMs is a loop guard, not an HTTP AbortSignal,

@@ -1,4 +1,5 @@
 import type { ExecutionStep } from "./types.js";
+import { retryStepMetadata } from "./execution-projection.js";
 
 export function toExecutionStepStatus(
   status: string | undefined,
@@ -31,6 +32,7 @@ export function createExecutionStepUpdate(args: {
     status,
     durationMs: payload.durationMs as number | undefined,
     turnId,
+    ...retryStepMetadata(payload, turnId),
     ...(typeof payload.jobId === "string" ? { jobId: payload.jobId } : {}),
     ...(payload.mode === "detached" || status === "deferred"
       ? { detached: true }
@@ -59,6 +61,7 @@ export function buildDeferredExecutionStep(
     payload.origin && typeof payload.origin === "object"
       ? (payload.origin as Record<string, unknown>)
       : undefined;
+  const retryMetadata = retryStepMetadata(payload, fallbackTurnId);
   return {
     runtimeId,
     pluginId: typeof payload.pluginId === "string" ? payload.pluginId : "",
@@ -77,6 +80,10 @@ export function buildDeferredExecutionStep(
         : undefined) ??
       (typeof payload.turnId === "string" ? payload.turnId : fallbackTurnId),
     startedAt,
+    ...retryMetadata,
+    ...(retryMetadata.sourceTurnId && fallbackTurnId
+      ? { turnId: fallbackTurnId }
+      : {}),
     ...(typeof payload.jobId === "string" ? { jobId: payload.jobId } : {}),
   };
 }

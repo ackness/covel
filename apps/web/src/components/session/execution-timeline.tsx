@@ -43,17 +43,20 @@ function RuntimeFailureNotice({
   const isIncomplete = rt.detail?.startsWith(
     `${I18N_SENTINEL_PREFIX}session.reasonConnectionClosed`,
   );
+  const isInterrupted = rt.detail?.startsWith(
+    `${I18N_SENTINEL_PREFIX}session.reasonInterrupted`,
+  );
 
   return (
     <div
       role="alert"
-      className="w-full min-w-0 max-w-2xl overflow-hidden rounded-(--radius-control) border border-destructive/35 bg-destructive/5"
+      className={`w-full min-w-0 overflow-hidden rounded-(--radius-control) border p-3 ${isInterrupted ? "border-amber-500/30 bg-amber-500/5" : "border-destructive/35 bg-destructive/5"}`}
     >
-      <div className="flex min-w-0 items-start gap-2 px-3 py-2">
+      <div className="flex min-w-0 flex-wrap items-start gap-2">
         <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-[11px] font-medium text-destructive">
+            <span className="text-xs font-medium text-foreground">
               {rt.label}
             </span>
             {rt.durationMs != null && (
@@ -63,22 +66,29 @@ function RuntimeFailureNotice({
             )}
           </div>
           <div className="mt-1">
-            <ActionableErrorNotice
-              error={resolvedDetail}
-              kind={isIncomplete ? "incomplete" : undefined}
-              layout="panel"
-            />
+            {rt.detail?.startsWith(I18N_SENTINEL_PREFIX) && !isIncomplete ? (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {resolvedDetail}
+              </p>
+            ) : (
+              <ActionableErrorNotice
+                error={resolvedDetail}
+                kind={isIncomplete ? "incomplete" : undefined}
+                layout="panel"
+              />
+            )}
           </div>
         </div>
         {canRetry && onRetry && (
           <button
             type="button"
             onClick={() => onRetry(rt.runtimeId)}
-            className="shrink-0 rounded-(--radius-control) p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-(--radius-control) border border-border px-3 py-2 text-xs text-foreground transition-colors hover:bg-muted"
             title={retryFromLabel}
-            aria-label={retryFromLabel}
+            aria-label={`${t("session.retryTask")}: ${rt.label}`}
           >
             <RotateCw className="h-3 w-3" />
+            {t("session.retryTask")}
           </button>
         )}
       </div>
@@ -108,13 +118,20 @@ export function ExecutionTimeline({
   executing,
   plugins = [],
   onRetryRuntime,
-  onRetryAll,
+  isLatestTurn = true,
+  turnNumberStart = 1,
+  canRetryTasks = true,
 }: {
   steps: ExecutionStep[];
   executing: boolean;
   plugins?: PluginSummary[];
-  onRetryRuntime?: (runtimeId: string, sourceTurnId?: string) => void;
-  onRetryAll?: () => void;
+  onRetryRuntime?: (
+    runtimeId: string | readonly string[],
+    sourceTurnId?: string,
+  ) => void;
+  isLatestTurn?: boolean;
+  turnNumberStart?: number;
+  canRetryTasks?: boolean;
 }) {
   const { i18n, t } = useTranslation();
   // Per-turn explicit fold override. Without one, the runtime chips only show
@@ -154,7 +171,7 @@ export function ExecutionTimeline({
     <div className="space-y-2 py-1">
       {turnGroups.map((group, groupIdx) => {
         const statuses = deriveStatuses(group.steps, RUNTIME_LABELS);
-        const isLatest = group.turnId === latestTurnId;
+        const isLatest = isLatestTurn && group.turnId === latestTurnId;
         const active = statuses.find(
           (r) =>
             r.status === "running" ||
@@ -165,22 +182,43 @@ export function ExecutionTimeline({
         const activeBackgroundCount = statuses.filter(
           (runtime) => runtime.status === "deferred",
         ).length;
-        const allDone = !executing || !isLatest ? !active : false;
-        const canRetry = allDone && isLatest && !!onRetryRuntime;
+        const activeForeground = statuses.some(
+          (runtime) =>
+            !runtime.detached &&
+            ["running", "llm", "tool"].includes(runtime.status),
+        );
+        const allDone = (!executing || !isLatest) && !activeForeground;
+        const canRetry =
+          allDone && isLatest && canRetryTasks && !!onRetryRuntime;
         const failures = statuses.filter(
           (runtime) => runtime.status === "failed",
         );
+        const retryableFailures = failures.filter(
+          (runtime) =>
+            !runtime.detached &&
+            !runtime.detail?.startsWith(
+              `${I18N_SENTINEL_PREFIX}session.reasonInterrupted`,
+            ) &&
+            !runtime.detail?.startsWith(
+              `${I18N_SENTINEL_PREFIX}session.reasonConnectionClosed`,
+            ),
+        );
+        // The action contract bounds one atomic retry to twenty targets.
+        const retryBatch = retryableFailures.slice(0, 20);
         const isCollapsed =
           foldOverrides[group.turnId] ?? !(executing && isLatest);
-        const turnNumber = groupIdx + 1;
+        const turnNumber = groupIdx + turnNumberStart;
 
         return (
           <div
             key={group.turnId}
+            data-testid="execution-turn"
+            data-turn-id={group.turnId}
+            data-historical={!isLatest}
             className={`space-y-1 ${!isLatest && failures.length === 0 ? "opacity-70 hover:opacity-100 transition-opacity" : ""}`}
           >
             {/* Turn header */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => toggleTurn(group.turnId, isCollapsed)}
                 aria-expanded={!isCollapsed}
@@ -197,6 +235,7 @@ export function ExecutionTimeline({
                 <span className="text-[9px] text-muted-foreground/50 font-mono">
                   #{turnNumber}
                 </span>
+                {!isLatest && <span>{t("session.executionHistory")}</span>}
                 {failures.length > 0 && (
                   <span className="text-destructive font-medium normal-case tracking-normal">
                     {t("session.executionFailures", {
@@ -213,19 +252,33 @@ export function ExecutionTimeline({
                   </span>
                 )}
               </button>
-              {isLatest && onRetryAll && allDone && (
+              {canRetry && retryableFailures.length > 1 && (
                 <button
-                  onClick={onRetryAll}
-                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
-                  title={t("session.retryAllTitle")}
+                  type="button"
+                  onClick={() =>
+                    onRetryRuntime?.(
+                      retryBatch.map((rt) => rt.runtimeId),
+                      group.turnId,
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 rounded-(--radius-control) border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-medium text-foreground hover:bg-primary/20"
                 >
-                  <RotateCw className="w-3 h-3" />
-                  <span>{t("session.retryAll")}</span>
+                  <RotateCw className="h-3 w-3" />
+                  {t(
+                    retryableFailures.length > retryBatch.length
+                      ? "session.retryFailedBatch"
+                      : "session.retryFailedTasks",
+                    {
+                      count: retryBatch.length,
+                    },
+                  )}
                 </button>
               )}
             </div>
 
-            {allDone &&
+            {isLatest &&
+              allDone &&
+              canRetryTasks &&
               failures.length > 0 &&
               statuses.some((runtime) => runtime.status === "completed") && (
                 <p className="text-sm text-destructive">
@@ -235,6 +288,13 @@ export function ExecutionTimeline({
                   })}
                 </p>
               )}
+            {canRetry && retryableFailures.length > 0 && (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t("session.retryScopeHint")}
+                {retryableFailures.length > retryBatch.length &&
+                  ` ${t("session.retryBatchLimit", { count: retryBatch.length })}`}
+              </p>
+            )}
 
             {/* Chips row */}
             {!isCollapsed && (
@@ -244,7 +304,7 @@ export function ExecutionTimeline({
                     <RuntimeChip
                       key={rt.runtimeId}
                       rt={rt}
-                      canRetry={canRetry}
+                      canRetry={canRetry && retryableFailures.includes(rt)}
                       // Carry the chip's turn id so the retry replays THIS
                       // turn's recorded upstream outputs (server-side seeding).
                       onRetry={
@@ -261,13 +321,13 @@ export function ExecutionTimeline({
               </>
             )}
 
-            {failures.length > 0 && (
+            {failures.length > 0 && (isLatest || !isCollapsed) && (
               <div className="mt-1.5 flex min-w-0 flex-col gap-1.5">
                 {failures.map((rt) => (
                   <RuntimeFailureNotice
                     key={rt.runtimeId}
                     rt={rt}
-                    canRetry={canRetry}
+                    canRetry={canRetry && retryableFailures.includes(rt)}
                     onRetry={
                       onRetryRuntime
                         ? (rid) => onRetryRuntime(rid, group.turnId)
@@ -282,7 +342,7 @@ export function ExecutionTimeline({
             )}
 
             {/* Active detail line (latest turn only) */}
-            {isLatest && active && (
+            {(isLatest || active?.detached) && active && (
               <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground animate-pulse">
                 <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                 <span className="truncate">
@@ -292,7 +352,7 @@ export function ExecutionTimeline({
                     active.toolName &&
                     ` — ${active.toolName}`}
                   {active.status === "running" &&
-                    ` — ${t("session.statusPreparing")}`}
+                    ` — ${active.detail?.startsWith(I18N_SENTINEL_PREFIX) ? resolveI18nSentinel(active.detail, t) : t("session.statusPreparing")}`}
                   ...
                 </span>
               </div>

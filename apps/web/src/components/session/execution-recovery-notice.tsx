@@ -29,6 +29,17 @@ export function ExecutionRecoveryNotice({
   if (!unknown && !running && !interrupted && !failed && !recovery.hydrating)
     return null;
   const waiting = recovery.hydrating || running || unknown;
+  const retry = status?.retry;
+  const retryLabel =
+    retry?.type === "retry_runtime"
+      ? t("session.retryTask")
+      : retry?.type === "retry_failed_runtimes"
+        ? t("session.retryFailedTasks", {
+            count: Array.isArray(retry.payload.runtimeIds)
+              ? retry.payload.runtimeIds.length
+              : 0,
+          })
+        : t("session.recoveryRetry");
   const title = unknown
     ? "session.recoveryChecking"
     : running
@@ -82,7 +93,7 @@ export function ExecutionRecoveryNotice({
                 }}
                 className="rounded-(--radius-control) bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
               >
-                {t("session.recoveryRetry")}
+                {retryLabel}
               </button>
             )}
           <button

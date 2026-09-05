@@ -2,7 +2,7 @@ import * as api from "@/services/api.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import type { SessionActions } from "./context.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
-import type { MutableRef } from "./runtime-refs.js";
+import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
 import type { SessionDispatch } from "./types.js";
 import {
   finalizeActionExecution,
@@ -16,9 +16,10 @@ interface SubmissionDependencies {
   submitBlock: SessionActions["submitBlock"];
   runSingleAction: (
     content: string,
-    options: { echoUserMessage: boolean },
+    options: { echoUserMessage: boolean; owner: SessionActionOwner },
   ) => Promise<void>;
-  resyncSession: (sessionId: string) => void;
+  resyncSession: (sessionId: string, isCurrentAction?: () => boolean) => void;
+  claimAction: (sessionId: string) => SessionActionOwner;
   inFlight: Set<string>;
 }
 
@@ -35,18 +36,22 @@ export async function submitInteractionBlock(
   const key = `${sid}:${blockId}`;
   if (inFlight.has(key)) return;
   inFlight.add(key);
+  const owner = deps.claimAction(sid);
   let started = false;
   try {
     const result = await deps.workspace.run(
       sid,
-      `interaction:${crypto.randomUUID()}`,
-      () =>
-        api.submitInputs(sid, {
+      `interaction:${owner.requestId}`,
+      () => {
+        if (!owner.isCurrent())
+          throw new Error("Action was superseded before submission");
+        return api.submitInputs(sid, {
           turnId,
           submissions: [{ interactionId, type, values }],
-        }),
+        });
+      },
     );
-    if (sessionIdRef.current !== sid) return;
+    if (!owner.isCurrent()) return;
     if (
       !result.results.find((item) => item.interactionId === interactionId)
         ?.accepted
@@ -63,10 +68,12 @@ export async function submitInteractionBlock(
     dispatch({ type: "SET_EXECUTION_ERROR", error: null });
     await deps.runSingleAction(echo ? filled : "", {
       echoUserMessage: echo && Boolean(filled),
+      owner,
     });
+    if (!owner.isCurrent()) return;
     try {
       const snapshot = await api.getSessionView(sid);
-      if (sessionIdRef.current === sid) {
+      if (owner.isCurrent()) {
         dispatch({
           type: "SET_GAME_STATE",
           state: enrichGameStateFromSnapshot(snapshot),
@@ -76,7 +83,7 @@ export async function submitInteractionBlock(
       // Reconnect will reconcile the character schema if this refresh fails.
     }
   } catch (error) {
-    if (sessionIdRef.current !== sid) return;
+    if (!owner.isCurrent()) return;
     if (!reportWorkspaceSyncError(error, dispatch)) {
       dispatch({
         type: "SET_EXECUTION_ERROR",
@@ -86,8 +93,8 @@ export async function submitInteractionBlock(
   } finally {
     inFlight.delete(key);
     if (started) {
-      finalizeActionExecution(dispatch, sid, sessionIdRef);
-      if (sessionIdRef.current === sid) deps.resyncSession(sid);
+      finalizeActionExecution(dispatch, sid, sessionIdRef, owner.isCurrent);
+      if (owner.isCurrent()) deps.resyncSession(sid, owner.isCurrent);
     }
   }
 }

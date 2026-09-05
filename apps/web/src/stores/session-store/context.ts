@@ -35,7 +35,10 @@ export interface SessionActions {
     submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
   executeCommand: (command: string) => void;
-  retryRuntime: (runtimeId?: string, sourceTurnId?: string) => void;
+  retryRuntime: (
+    runtimeId?: string | readonly string[],
+    sourceTurnId?: string,
+  ) => void;
   retryInterruptedTurn: () => void;
   refreshExecutionRecovery: () => void;
   resetSession: () => void;

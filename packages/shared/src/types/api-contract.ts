@@ -49,6 +49,13 @@ export type ActionRequest = {
       };
     })
   | (ActionRequestBase & {
+      readonly type: "retry_failed_runtimes";
+      readonly payload: {
+        readonly runtimeIds: readonly string[];
+        readonly retryFromTurnId: string;
+      };
+    })
+  | (ActionRequestBase & {
       readonly type: "retry_turn";
       readonly payload: Readonly<Record<never, never>>;
     })

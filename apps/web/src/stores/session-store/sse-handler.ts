@@ -28,6 +28,8 @@ import {
   runtimeJobCorrelationId,
 } from "./execution-steps.js";
 import { upsertGameStateCharacter } from "./game-state.js";
+import { retryStepMetadata } from "./execution-projection.js";
+import { buildRetryAttemptSteps } from "./execution-attempts.js";
 import type {
   AssetProgressEvent,
   ExecutionStep,
@@ -380,6 +382,13 @@ export function createSseEventHandler(
       }
       case "execution.started": {
         if (currentSessionId) clearDomainEventPreviews(currentSessionId);
+        for (const step of buildRetryAttemptSteps(
+          payload,
+          turnId,
+          envelope.timestamp,
+          deps.stateRef.current.executionSteps,
+        ))
+          deps.dispatch({ type: "UPSERT_EXECUTION_STEP", step });
         break;
       }
       case "runtime.started": {
@@ -398,9 +407,11 @@ export function createSseEventHandler(
             runtimeId,
             pluginId,
             status: "running",
+            attemptStatus: "pending",
             label,
             turnId,
             startedAt: envelope.timestamp,
+            ...retryStepMetadata(payload, turnId),
           },
         });
         break;
@@ -440,6 +451,14 @@ export function createSseEventHandler(
       }
       case "execution.completed": {
         const committed = payload.committed !== false;
+        if (turnId)
+          deps.dispatch({
+            type: "SET_TURN_ATTEMPT_STATUS",
+            turnId,
+            status: payload.committed === true ? "committed" : "failed",
+            sourceFailedRuntimeIds: retryStepMetadata(payload, turnId)
+              .sourceFailedRuntimeIds,
+          });
         if (currentSessionId) {
           clearDomainEventPreviewsForTurn(currentSessionId, turnId);
         }
@@ -603,6 +622,12 @@ export function createSseEventHandler(
         break;
       }
       case "error.occurred": {
+        if (turnId)
+          deps.dispatch({
+            type: "SET_TURN_ATTEMPT_STATUS",
+            turnId,
+            status: "failed",
+          });
         if (currentSessionId) {
           clearDomainEventPreviewsForTurn(currentSessionId, turnId);
         }

@@ -158,6 +158,7 @@ export type {
   ToolCallRecord,
   TokenUsage,
   RuntimeResult,
+  RuntimeRetryScope,
   DeferredRuntimeJob,
   DetachedStageInput,
   TurnInput,

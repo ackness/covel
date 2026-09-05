@@ -324,7 +324,7 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 
 网页刷新或 SSE 断开不会自动取消原回合。客户端仅查询状态并恢复已提交的消息、时钟和任务步骤，不自动重新调用模型。服务器进程停止会丢失前台内存执行；无活跃锁、无已提交工件且缺少终止记录时显示 `interrupted`。已经提交但来不及记录终止 trace 的回合仍为 `completed`。浏览器旧步骤只补充服务端快照缺失的信息，不能把终态覆盖为 `running`；`runtime.completed` 的 `payload.status` 决定成功、失败、跳过或挂起状态。
 
-用户显式重试时，使用 `retry` 描述、新 `requestId`，并在 payload 中附加 `recoverFromTurnId`。服务端在会话锁内再次核实源回合，重复点击或原回合已结束时不会再次执行；开场延续重试保留 `origin: continuation`，不增加玩家回合数。新回合的 `turn.started` 只记录恢复所需的动作输入，不记录请求头和凭据。旧日志只在同一请求的 traceId 能证明它是开场延续时提供无输入重试，否则要求玩家重新输入。常规 `retry_runtime` 的已提交辅助任务重试语义保持不变。
+用户显式重试时，使用 `retry` 描述、新 `requestId`，并在 payload 中附加 `recoverFromTurnId`。服务端在会话锁内再次核实源回合，重复点击或原回合已结束时不会再次执行；开场延续重试保留 `origin: continuation`，不增加玩家回合数。新回合的 `turn.started` 只记录恢复所需的动作输入，不记录请求头和凭据。旧日志只在同一请求的 traceId 能证明它是开场延续时提供无输入重试，否则要求玩家重新输入。批量辅助任务恢复使用 `retry_failed_runtimes`；中断后必须按 `retry` 描述恢复同一组目标，未提交的成功任务不能视作已恢复或用作上下文。
 
 ### Turn 执行
 
@@ -2779,20 +2779,28 @@ id: evt-002
 }
 ```
 
-支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_turn` · `retry_runtime`。五种请求都必须显式提供与 type 匹配的 `payload`；不接受未知字段。
+支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_turn` · `retry_runtime` · `retry_failed_runtimes`。六种请求都必须显式提供与 type 匹配的 `payload`；不接受未知字段。
 
-| `payload` 字段    | 适用 `type`       | 说明                                                                                                                                                                                                                                                                |
-| ----------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `content`         | `send_message`    | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                                                                                                     |
-| `command`         | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                                                                                                |
-| `loreOverride`    | `start_session`   | 可选。Prep 页编辑后的世界文档；服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空。                                                                                                          |
-| —                 | `retry_turn`      | payload 必须为空；显式重跑整个主循环回合。                                                                                                                                                                                                                          |
-| `runtimeId`       | `retry_runtime`   | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                                                                                                          |
-| `retryFromTurnId` | `retry_runtime`   | 可选（需与 `runtimeId` 同用）。指定作为上下文种子的源回合：服务端加载该回合的 `turn_results` 工件播种执行，使被重试 runtime 的 `input.inject`/`needs` 按原回合叙事解析。缺省回退到最近一个 player-origin 工件。前端失败 chip 的重试按钮走这条路径（不删叙事消息）。 |
+| `payload` 字段    | 适用 `type`             | 说明                                                                                                                                                                                   |
+| ----------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `content`         | `send_message`          | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                        |
+| `command`         | `execute_command`       | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                   |
+| `loreOverride`    | `start_session`         | 可选。Prep 页编辑后的世界文档；服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空。                             |
+| —                 | `retry_turn`            | 普通 payload 为空；以空玩家输入启动新的主循环回合，使用当前已提交上下文，成功提交后增加玩家回合数。它不恢复或重新生成历史回合。                                                        |
+| `runtimeId`       | `retry_runtime`         | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                             |
+| `retryFromTurnId` | `retry_runtime`         | 可选（需与 `runtimeId` 同用）。显式来源必须是当前故事已提交的原回合，目标须仍失败；来源不存在时不会回退。未指定时保留旧 manual 调用语义，使用最近已提交的 player-origin 工件（如有）。 |
+| `runtimeIds`      | `retry_failed_runtimes` | 必填，1–20 个不重复的 active runtime ID；服务端排序后在同一执行内按 stage/DAG 重跑。                                                                                                   |
+| `retryFromTurnId` | `retry_failed_runtimes` | 必填，原始已提交来源回合。锁内投影其已提交重试结果后，所有所选目标必须仍失败；来源之后若已有已提交的 player/continuation 回合则拒绝旧来源。                                            |
+
+**批量恢复边界**：一次 action、一次会话锁和一次事务提交，不追加玩家输入、不推进玩家回合数、不触发开场接力。仅原始回合及关联的已提交重试中成功的非目标结果可作为上下文；种子不会重复提交或重放事件。目标间保留正常输入校验、依赖顺序和独立任务并行；失败依赖导致的 skipped 不会把原失败任务标为已修复。批量恢复和带明确来源的单任务恢复均保持前台，不通过事件订阅、递归调用或后台分发扩大所选范围。显式单任务来源重试同样校验来源与最新失败状态；普通不带来源的 manual / plugin-RPC 调用保留原有事件链、递归和分发行为。
+
+重试的生命周期 trace 和 SSE payload 带 `sourceTurnId`（原回合）及 `runtimeIds`（本次范围），envelope 的 `turnId` 仍是新 attempt。原审计记录不修改；只有该 attempt 已提交（`turn.completed` / `execution.completed` 的 `committed: true` 或已提交工件）才可把成功任务投影为已恢复。回滚或中断后，不能凭单条 `runtime.completed` 宣告恢复。刷新接口只观察状态，不能重新生成。
+
+服务端验证来源已提交后，scope 同时携带 `sourceCommitted: true` 和 `sourceFailedRuntimeIds`。后者是该来源已提交记录中仍失败的完整 ID 摘要，包含 inactive 任务，不受本次选择的 20 个目标上限截断。执行中携带开始前的失败全集；成功提交的终态移除本次成功任务，保留失败或依赖跳过的任务；回滚或中断保持原摘要。空数组也显式传递。客户端用最新摘要替换旧摘要，并以已提交终态优先于同一次 attempt 的执行中事件；即使原回合日志或较早任务事件被快照的 trace 窗口裁掉，也能保留来源提交证明和真实剩余失败范围。摘要中缺少某 ID 只表示它已不在失败集合，不能据此伪造成功步骤。
 
 **`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建请求的 `plugins` 数组决定；Web Prep 先读取服务端 `GET /api/worlds/:id/plugin-plan` 的解析结果，再把玩家最终选择显式传给创建接口。`plugin-plan.defaultPluginIds` 使用与会话相同的 `requires`、`conflicts` 和可信 builtin core 替换规则解析；准备页遵守该结果，不重新锁定已被替代的 core 插件。服务端创建路由不再次读取 world policy，只补 builtin core、`requires` 关系并处理 conflicts。`start_session` 只负责在注册表里激活已持久化集合。空集合会被 **400** 拒绝（`Session has no active plugins. …`），不会回退到"激活全部已注册插件"；该回退会把玩家从未选择的社区插件及互斥叙事引擎同时拉进会话，并持久化到会话生命周期结束。
 
-**开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力回合是第一个计数的玩家回合（`completedPlayerTurns` 0 → 1）。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_turn` / `retry_runtime` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
+**开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力以 `origin: continuation` 执行，不增加 `completedPlayerTurns`。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_turn` / `retry_runtime` / `retry_failed_runtimes` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
 
 > 玩家输入字段是 `payload.content`（`send_message`）/ `payload.command`（`execute_command`），没有别的别名。插件侧发事件请用 builtin `emit-event` 工具；未列出的 `type` 一律 400。
 

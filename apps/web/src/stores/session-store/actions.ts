@@ -12,7 +12,6 @@ import {
   resetPluginData,
   setActiveSession as setActivePluginDataSession,
 } from "@/stores/plugin-data-store.js";
-import { clearStreamingTextsForTurn } from "@/stores/streaming-text-store.js";
 import { bootSessionStore } from "./boot.js";
 import type { SessionActions } from "./context.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
@@ -23,8 +22,14 @@ import {
   finalizeActionExecution,
   reportWorkspaceSyncError,
   runActionStream,
+  runSingleSessionAction,
+  resyncSessionRecord,
 } from "./runtime-rpc.js";
-import type { MutableRef, SessionRuntimeRefs } from "./runtime-refs.js";
+import {
+  claimSessionAction,
+  type SessionActionOwner,
+  type SessionRuntimeRefs,
+} from "./runtime-refs.js";
 import { canRunSessionAction } from "./selectors.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import { applyResumeEvents as applyResumeSseEvents } from "./sse-handler.js";
@@ -47,27 +52,7 @@ interface UseSessionActionsOptions {
 /** Page size for the scroll-up "load older messages" fetch. */
 const OLDER_MESSAGES_PAGE_SIZE = 40;
 
-/**
- * The server evolves SessionRecord during a turn (the phase/clock advances,
- * pre-game completion, status) but the SSE stream carries none of it —
- * without a resync the stage view's phase gate stays stale until a
- * full page reload.
- */
-export async function resyncSessionRecord(
-  sessionId: string,
-  sessionIdRef: MutableRef<string | null>,
-  dispatch: SessionDispatch,
-): Promise<void> {
-  try {
-    const session = await api.getSession(sessionId);
-    // A stale response after a session switch must not overwrite the
-    // now-active session's record (and yank the URL back to it).
-    if (sessionIdRef.current !== sessionId) return;
-    dispatch({ type: "SET_SESSION", session });
-  } catch {
-    /* next action or reload will resync */
-  }
-}
+export { resyncSessionRecord } from "./runtime-rpc.js";
 
 export function useBuildSessionActions({
   state,
@@ -78,6 +63,12 @@ export function useBuildSessionActions({
   handleSseEvent,
 }: UseSessionActionsOptions): SessionActions {
   const { sessionIdRef, stateRef } = refs;
+  const activeActionRef = useRef<symbol | null>(null);
+  const claimAction = useCallback(
+    (sessionId: string, requestId?: string) =>
+      claimSessionAction(activeActionRef, sessionIdRef, sessionId, requestId),
+    [sessionIdRef],
+  );
 
   const boot = useCallback(async () => {
     await bootSessionStore({ dispatch, ds });
@@ -125,8 +116,14 @@ export function useBuildSessionActions({
   );
 
   const resyncSession = useCallback(
-    (sessionId: string): void => {
-      void resyncSessionRecord(sessionId, sessionIdRef, dispatch);
+    (sessionId: string, isCurrentAction?: () => boolean): void => {
+      if (isCurrentAction && !isCurrentAction()) return;
+      void resyncSessionRecord(
+        sessionId,
+        sessionIdRef,
+        dispatch,
+        isCurrentAction,
+      );
     },
     [dispatch, sessionIdRef],
   );
@@ -136,16 +133,17 @@ export function useBuildSessionActions({
     const sessionId = state.session?.id;
     if (!sessionId) return;
     const worldId = state.world?.id ?? "";
+    const owner = claimAction(sessionId);
 
     const postStart = (loreOverride?: unknown) => {
-      if (sessionIdRef.current !== sessionId) return;
+      if (!owner.isCurrent()) return;
       dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-      const requestId = crypto.randomUUID();
+      const requestId = owner.requestId;
       void workspace
         .run(sessionId, requestId, () => {
-          if (sessionIdRef.current !== sessionId) {
+          if (!owner.isCurrent()) {
             return Promise.reject(
               new Error("Session changed before action start"),
             );
@@ -160,15 +158,20 @@ export function useBuildSessionActions({
             },
             handleSseEvent,
             dispatch,
-            { sessionIdRef },
+            { sessionIdRef, isCurrentAction: owner.isCurrent },
           );
         })
         .catch((error: unknown) => {
-          reportWorkspaceSyncError(error, dispatch);
+          if (owner.isCurrent()) reportWorkspaceSyncError(error, dispatch);
         })
         .finally(() => {
-          finalizeActionExecution(dispatch, sessionId, sessionIdRef);
-          resyncSession(sessionId);
+          finalizeActionExecution(
+            dispatch,
+            sessionId,
+            sessionIdRef,
+            owner.isCurrent,
+          );
+          resyncSession(sessionId, owner.isCurrent);
         });
     };
 
@@ -176,7 +179,15 @@ export function useBuildSessionActions({
       .getWorldOverlay(worldId)
       .then((overlay) => postStart(overlay?.lore))
       .catch(() => postStart());
-  }, [workspace, state, handleSseEvent, dispatch, resyncSession, sessionIdRef]);
+  }, [
+    workspace,
+    state,
+    handleSseEvent,
+    dispatch,
+    resyncSession,
+    sessionIdRef,
+    claimAction,
+  ]);
 
   const resumeSession = useCallback(
     async (session: api.SessionRecord) => {
@@ -220,98 +231,51 @@ export function useBuildSessionActions({
   );
 
   const runSingleAction = useCallback(
-    (content: string, opts: { echoUserMessage: boolean }): Promise<void> => {
-      const session = state.session;
-      if (!session) return Promise.resolve();
-      dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
-      const sessionId = session.id;
-
-      let persistInput: Promise<void> = Promise.resolve();
-      if (opts.echoUserMessage && content) {
-        const userMsgId = crypto.randomUUID();
-        const userTimestamp = new Date().toISOString();
-        dispatch({
-          type: "ADD_MESSAGE",
-          message: {
-            id: userMsgId,
-            role: "user",
+    (
+      content: string,
+      opts: { echoUserMessage: boolean; owner: SessionActionOwner },
+    ): Promise<void> =>
+      state.session
+        ? runSingleSessionAction({
             content,
-            timestamp: userTimestamp,
-          },
-        });
-        persistInput = ds.addMessage({
-          id: userMsgId,
-          sessionId,
-          role: "user",
-          content,
-          createdAt: userTimestamp,
-        });
-      }
-
-      return new Promise<void>((resolve) => {
-        const fireAction = () => {
-          const isCommand = content.startsWith("/");
-          const requestId = crypto.randomUUID();
-          return workspace.run(sessionId, requestId, () => {
-            if (sessionIdRef.current !== sessionId) {
-              return Promise.reject(
-                new Error("Session changed before action start"),
-              );
-            }
-            const action: api.ActionRequest = isCommand
-              ? {
-                  requestId,
-                  type: "execute_command",
-                  sessionId,
-                  locale: session.locale ?? i18n.language,
-                  payload: { command: content },
-                }
-              : {
-                  requestId,
-                  type: "send_message",
-                  sessionId,
-                  locale: session.locale ?? i18n.language,
-                  payload: { content },
-                };
-            return runActionStream(action, handleSseEvent, dispatch, {
-              toastOnError: true,
-              sessionIdRef,
-            });
-          });
-        };
-
-        // Settle the promise on an aborted sync too, or `sendMessage`'s
-        // `.finally(finalizeActionExecution)` never runs and the UI stays
-        // stuck on "executing".
-        persistInput.then(
-          () =>
-            fireAction().then(resolve, (error: unknown) => {
-              reportWorkspaceSyncError(error, dispatch);
-              resolve();
-            }),
-          (error: unknown) => {
-            ignoreError("persist user message")(error);
-            resolve();
-          },
-        );
-      });
-    },
-    [workspace, ds, dispatch, state.session, handleSseEvent],
+            ...opts,
+            session: state.session,
+            ds,
+            workspace,
+            dispatch,
+            handleSseEvent,
+            sessionIdRef,
+          })
+        : Promise.resolve(),
+    [workspace, ds, dispatch, state.session, handleSseEvent, sessionIdRef],
   );
 
   const sendMessage = useCallback(
     (content: string) => {
-      if (!canRunSessionAction(state)) return;
+      if (!canRunSessionAction(state) || !state.session) return;
+      const owner = claimAction(state.session.id);
 
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-      runSingleAction(content, { echoUserMessage: true }).finally(() => {
-        finalizeActionExecution(dispatch, state.session?.id, sessionIdRef);
-        if (state.session) resyncSession(state.session.id);
+      runSingleAction(content, { echoUserMessage: true, owner }).finally(() => {
+        finalizeActionExecution(
+          dispatch,
+          state.session?.id,
+          sessionIdRef,
+          owner.isCurrent,
+        );
+        if (state.session) resyncSession(state.session.id, owner.isCurrent);
       });
     },
-    [dispatch, state, runSingleAction, resyncSession],
+    [
+      dispatch,
+      state,
+      runSingleAction,
+      resyncSession,
+      sessionIdRef,
+      claimAction,
+    ],
   );
 
   const steerMessage = useCallback(
@@ -393,6 +357,7 @@ export function useBuildSessionActions({
           runSingleAction,
           resyncSession,
           inFlight: submittingInteractions.current,
+          claimAction,
         },
         submission,
       ),
@@ -403,36 +368,51 @@ export function useBuildSessionActions({
       submitBlock,
       runSingleAction,
       resyncSession,
+      claimAction,
     ],
   );
 
   const runKernelAction = useCallback(
     (request: api.ActionRequest): void => {
       if (sessionIdRef.current !== request.sessionId) return;
+      const owner = claimAction(request.sessionId, request.requestId);
       dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
       void workspace
         .run(request.sessionId, request.requestId, () => {
-          if (sessionIdRef.current !== request.sessionId) {
+          if (!owner.isCurrent()) {
             return Promise.reject(
               new Error("Session changed before action start"),
             );
           }
           return runActionStream(request, handleSseEvent, dispatch, {
             sessionIdRef,
+            isCurrentAction: owner.isCurrent,
           });
         })
         .catch((error: unknown) => {
-          reportWorkspaceSyncError(error, dispatch);
+          if (owner.isCurrent()) reportWorkspaceSyncError(error, dispatch);
         })
         .finally(() => {
-          finalizeActionExecution(dispatch, request.sessionId, sessionIdRef);
-          if (request.sessionId) resyncSession(request.sessionId);
+          finalizeActionExecution(
+            dispatch,
+            request.sessionId,
+            sessionIdRef,
+            owner.isCurrent,
+          );
+          resyncSession(request.sessionId, owner.isCurrent);
         });
     },
-    [dispatch, workspace, handleSseEvent, resyncSession, sessionIdRef],
+    [
+      dispatch,
+      workspace,
+      handleSseEvent,
+      resyncSession,
+      sessionIdRef,
+      claimAction,
+    ],
   );
 
   const executeCommand = useCallback(
@@ -461,59 +441,45 @@ export function useBuildSessionActions({
     });
 
   const retryRuntime = useCallback(
-    (runtimeId?: string, sourceTurnId?: string) => {
+    (runtimeId?: string | readonly string[], sourceTurnId?: string) => {
       if (!canRunSessionAction(state)) return;
       const sessionId = state.session?.id;
       if (!sessionId) return;
       const recovery = state.executionRecovery?.status;
       if (
-        recovery?.state === "interrupted" &&
+        (recovery?.state === "interrupted" || recovery?.state === "failed") &&
         (!sourceTurnId || sourceTurnId === recovery.turnId)
       ) {
         retryInterruptedTurn();
         return;
       }
-
-      // Whole-turn retry regenerates the narrative, so the turn's messages
-      // go. A chip-scoped retry (sourceTurnId set) replays ONE auxiliary
-      // runtime against that turn's recorded outputs — the narrative stays.
-      const lastTurnId =
-        state.messages.length > 0
-          ? [...state.messages].reverse().find((message) => message.turnId)
-              ?.turnId
-          : undefined;
-      if (lastTurnId && !sourceTurnId) {
-        clearStreamingTextsForTurn(lastTurnId);
-        dispatch({
-          type: "REMOVE_MESSAGES_FROM_TURN",
-          turnId: lastTurnId,
-          keepRuntimeIds: new Set<string>(),
+      if (typeof runtimeId !== "string" && runtimeId !== undefined) {
+        if (!sourceTurnId || runtimeId.length === 0) return;
+        runKernelAction({
+          requestId: crypto.randomUUID(),
+          type: "retry_failed_runtimes",
+          sessionId,
+          locale: state.session?.locale ?? i18n.language,
+          payload: {
+            runtimeIds: [...new Set(runtimeId)],
+            retryFromTurnId: sourceTurnId,
+          },
         });
+        return;
       }
-
-      const requestId = crypto.randomUUID();
-      runKernelAction(
-        runtimeId
-          ? {
-              requestId,
-              type: "retry_runtime",
-              sessionId,
-              locale: state.session?.locale ?? i18n.language,
-              payload: {
-                runtimeId,
-                ...(sourceTurnId ? { retryFromTurnId: sourceTurnId } : {}),
-              },
-            }
-          : {
-              requestId,
-              type: "retry_turn",
-              sessionId,
-              locale: state.session?.locale ?? i18n.language,
-              payload: {},
-            },
-      );
+      if (!runtimeId) return;
+      runKernelAction({
+        requestId: crypto.randomUUID(),
+        type: "retry_runtime",
+        sessionId,
+        locale: state.session?.locale ?? i18n.language,
+        payload: {
+          runtimeId,
+          ...(sourceTurnId ? { retryFromTurnId: sourceTurnId } : {}),
+        },
+      });
     },
-    [dispatch, state, runKernelAction, retryInterruptedTurn],
+    [state, runKernelAction, retryInterruptedTurn],
   );
 
   const resetSession = useCallback(() => {

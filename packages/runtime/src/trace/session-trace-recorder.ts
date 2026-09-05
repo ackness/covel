@@ -5,7 +5,11 @@
  * through session-kernel.ts unless a caller intentionally needs this boundary.
  */
 
-import type { SessionExecutionStatus, Stage } from "@covel/shared";
+import type {
+  RuntimeRetryScope,
+  SessionExecutionStatus,
+  Stage,
+} from "@covel/shared";
 import type { KernelStore } from "../commit/session-commit-pipeline.js";
 
 export interface TraceRecorder {
@@ -15,11 +19,14 @@ export interface TraceRecorder {
     origin?: "player" | "continuation";
     recoveryAction?: SessionExecutionStatus["retry"];
   }): Promise<void>;
-  turnCompleted(info: {
-    durationMs: number;
-    resultCount: number;
-    committed?: boolean;
-  }): Promise<void>;
+  turnCompleted(
+    info: {
+      durationMs: number;
+      resultCount: number;
+      committed?: boolean;
+    },
+    settledRetryScope?: RuntimeRetryScope,
+  ): Promise<void>;
   runtimeStarted(info: {
     runtimeId: string;
     pluginId: string;
@@ -51,11 +58,13 @@ export function createTraceRecorder(
    * callers without an SSE stream.
    */
   traceId?: string,
+  retryScope?: RuntimeRetryScope,
 ): TraceRecorder {
   const effectiveTraceId = traceId ?? turnId;
   async function record(
     type: string,
     payload: Record<string, unknown>,
+    scope: RuntimeRetryScope | undefined = retryScope,
   ): Promise<void> {
     await store.addTraceEvent({
       id: crypto.randomUUID(),
@@ -63,14 +72,15 @@ export function createTraceRecorder(
       type,
       traceId: effectiveTraceId,
       turnId,
-      payload,
+      payload: { ...payload, ...scope },
       createdAt: new Date().toISOString(),
     });
   }
 
   return {
     turnStarted: (info) => record("turn.started", info),
-    turnCompleted: (info) => record("turn.completed", info),
+    turnCompleted: (info, settledRetryScope) =>
+      record("turn.completed", info, settledRetryScope),
     runtimeStarted: (info) => record("runtime.started", info),
     runtimeCompleted: (info) => record("runtime.completed", info),
     runtimeFailed: (info) => record("runtime.failed", info),

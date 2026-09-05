@@ -55,8 +55,6 @@ tools:
   builtin:
     - sync-characters
     - get-character
-  defer:
-    - get-character
 completeAfterTools: [sync-characters]
 dataSchemas:
   characters:
@@ -68,7 +66,7 @@ postHistory:
   role: system
   content: |
     只处理 `<narrator-output>` 相对 `<existing-characters>` 的明确角色变化。
-    把新角色放入 `creates`、已有角色变化放入 `updates`，一次调用 `sync-characters`；必要详情才用 `search-tools` 激活 `get-character`。
+    必要详情可直接调用 `get-character`；读取后在下一步把新角色放入 `creates`、已有角色变化放入 `updates`，一次调用 `sync-characters`。
     无变化时调用 `runtime-done`；`sync-characters` 成功后框架自动结束。
 ---
 

@@ -139,13 +139,13 @@ describe("char-creator plugin", () => {
       expect(manifest.stage).toBe("post-turn");
     });
 
-    it("declares the write tools plus the on-demand detail read", () => {
+    it("exposes writes and the detail read within the two-step budget", () => {
       expect(manifest.tools?.builtin).toEqual([
         "sync-characters",
         "get-character",
       ]);
       expect(manifest.completeAfterTools).toEqual(["sync-characters"]);
-      expect(manifest.tools?.defer).toEqual(["get-character"]);
+      expect(manifest.tools?.defer).toBeUndefined();
       expect(manifest.maxSteps).toBe(2);
       expect(manifest.maxRetries).toBe(0);
     });

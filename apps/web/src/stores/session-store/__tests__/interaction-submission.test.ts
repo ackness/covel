@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { submitInteractionBlock } from "../interaction-submission.js";
+import { claimSessionAction } from "../runtime-refs.js";
 
 const api = vi.hoisted(() => ({
   submitInputs: vi.fn(),
@@ -26,10 +27,14 @@ const submission: Parameters<typeof submitInteractionBlock>[1] = [
 ];
 
 function makeDeps(): Parameters<typeof submitInteractionBlock>[0] {
+  const sessionIdRef = { current: "session-1" };
+  const activeActionRef = { current: null as symbol | null };
   return {
     dispatch: vi.fn(),
     workspace: { run: async (_sid, _requestId, action) => action() },
-    sessionIdRef: { current: "session-1" },
+    sessionIdRef,
+    claimAction: (sid) =>
+      claimSessionAction(activeActionRef, sessionIdRef, sid),
     submitBlock: vi.fn(),
     runSingleAction: vi.fn(async () => {}),
     resyncSession: vi.fn(),
@@ -62,6 +67,7 @@ describe("interaction submission", () => {
     });
     expect(deps.runSingleAction).toHaveBeenCalledExactlyOnceWith("Ready", {
       echoUserMessage: true,
+      owner: expect.objectContaining({ requestId: expect.any(String) }),
     });
   });
 
@@ -99,5 +105,43 @@ describe("interaction submission", () => {
     expect(deps.submitBlock).not.toHaveBeenCalled();
     expect(deps.runSingleAction).not.toHaveBeenCalled();
     expect(deps.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("ignores an old form response after another action starts in the same session", async () => {
+    let resolve!: (value: typeof accepted) => void;
+    api.submitInputs.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const deps = makeDeps();
+    const pending = submitInteractionBlock(deps, submission);
+    deps.claimAction("session-1");
+    resolve(accepted);
+    await pending;
+    expect(deps.submitBlock).not.toHaveBeenCalled();
+    expect(deps.runSingleAction).not.toHaveBeenCalled();
+    expect(deps.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("does not finalize or refresh over a newer action after a slow form turn", async () => {
+    let finish!: () => void;
+    const deps = makeDeps();
+    vi.mocked(deps.runSingleAction).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const pending = submitInteractionBlock(deps, submission);
+    await vi.waitFor(() => expect(deps.runSingleAction).toHaveBeenCalledOnce());
+    vi.mocked(deps.dispatch).mockClear();
+    deps.claimAction("session-1");
+    finish();
+    await pending;
+    expect(deps.dispatch).not.toHaveBeenCalled();
+    expect(deps.resyncSession).not.toHaveBeenCalled();
+    expect(api.getSessionView).not.toHaveBeenCalled();
   });
 });

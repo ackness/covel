@@ -12,7 +12,7 @@
  */
 import { useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { FrameworkCapability } from "@covel/shared";
 import {
   Dialog,
@@ -20,7 +20,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.js";
-import { Button } from "@/components/ui/button.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
 import { useDomainEventPreview } from "@/stores/domain-event-preview-store.js";
 import { useStreamingText } from "@/stores/streaming-text-store.js";
@@ -38,6 +37,7 @@ import { StageSprites } from "./StageSprites.js";
 import { StageHud } from "./StageHud.js";
 import { StageDialog } from "./StageDialog.js";
 import { StageChoices } from "./StageChoices.js";
+import { StageExecutionStatus } from "./StageExecutionStatus.js";
 import { resolveStageParagraphSpeakers } from "./stage-dialogue-selectors.js";
 import { useStageData, useStageNamespace } from "./use-stage-data.js";
 import {
@@ -82,7 +82,7 @@ export interface StageViewProps {
     submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
   readonly onRetryRuntime?: (
-    runtimeId: string | undefined,
+    runtimeId: string | readonly string[] | undefined,
     sourceTurnId?: string,
   ) => void;
   readonly onBeginAdventure: () => void;
@@ -112,14 +112,12 @@ export function StageView(props: StageViewProps): ReactElement {
     world,
     messages,
     executing,
-    executionError,
     sessionPlugins,
     submittedBlockIds,
     submittedBlockValues,
     onSendMessage,
     onSubmitBlock,
     onSubmitInteraction,
-    onRetryRuntime,
     onViewModeChange,
     immersive,
     onToggleImmersive,
@@ -349,35 +347,7 @@ export function StageView(props: StageViewProps): ReactElement {
         </div>
       )}
 
-      {/* Execution error — a failed turn otherwise just stops the typewriter
-          silently on stage; surface it with a retry affordance. */}
-      {executionError && (
-        <div
-          className="pointer-events-none absolute inset-x-0 top-14 z-50 flex justify-center px-4"
-          data-testid="stage-error"
-        >
-          <div className="ui-stage-panel pointer-events-auto flex max-w-2xl items-start gap-2 rounded-(--radius-card) border border-destructive/60 px-4 py-3 text-sm">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-destructive">
-                {t("common.error")}
-              </p>
-              <p className="mt-1 wrap-break-word text-xs text-muted-foreground">
-                {executionError}
-              </p>
-            </div>
-            {onRetryRuntime && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => onRetryRuntime(undefined)}
-              >
-                {t("session.retryAll")}
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
+      <StageExecutionStatus {...props} />
 
       {/* History drawer — the full parsed chat, needs a bounded flex column
           for its internal scroll viewport (flex-1 min-h-0). Zero out executionSteps

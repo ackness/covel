@@ -27,6 +27,7 @@ const ACTION_TYPES = [
   "execute_command",
   "start_session",
   "retry_runtime",
+  "retry_failed_runtimes",
   "retry_turn",
 ] as const;
 
@@ -141,6 +142,30 @@ export const actionRequestSchema = z.discriminatedUnion("type", [
             256,
             ACTION_ID_PATTERN,
           ).optional(),
+          ...actionRecoveryPayload,
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...actionBase,
+      type: z.literal("retry_failed_runtimes"),
+      payload: z
+        .object({
+          runtimeIds: z
+            .array(requiredActionString("runtimeIds", 200, ACTION_ID_PATTERN))
+            .min(1)
+            .max(20)
+            .refine((ids) => new Set(ids).size === ids.length, {
+              message: "runtimeIds must be unique",
+            })
+            .transform((ids) => [...ids].sort()),
+          retryFromTurnId: requiredActionString(
+            "retry_failed_runtimes.retryFromTurnId",
+            256,
+            ACTION_ID_PATTERN,
+          ),
           ...actionRecoveryPayload,
         })
         .strict(),

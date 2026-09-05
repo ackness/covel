@@ -329,19 +329,26 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 `/api/actions` 接受的 `type` 字段由 `apps/server/src/routes/api/actions/request.ts` 的闭合请求联合定义：
 
-| 命令            | 方法 | 端点                                     | 响应                  |
-| --------------- | ---- | ---------------------------------------- | --------------------- |
-| `turn.submit`   | POST | `/api/actions` `type: "send_message"`    | SSE: ProtocolEvent 流 |
-| `turn.cmd`      | POST | `/api/actions` `type: "execute_command"` | SSE: ProtocolEvent 流 |
-| `turn.start`    | POST | `/api/actions` `type: "start_session"`   | SSE: ProtocolEvent 流 |
-| `turn.retry`    | POST | `/api/actions` `type: "retry_turn"`      | SSE: ProtocolEvent 流 |
-| `runtime.retry` | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
+| 命令             | 方法 | 端点                                           | 响应                  |
+| ---------------- | ---- | ---------------------------------------------- | --------------------- |
+| `turn.submit`    | POST | `/api/actions` `type: "send_message"`          | SSE: ProtocolEvent 流 |
+| `turn.cmd`       | POST | `/api/actions` `type: "execute_command"`       | SSE: ProtocolEvent 流 |
+| `turn.start`     | POST | `/api/actions` `type: "start_session"`         | SSE: ProtocolEvent 流 |
+| `turn.retry`     | POST | `/api/actions` `type: "retry_turn"`            | SSE: ProtocolEvent 流 |
+| `runtime.retry`  | POST | `/api/actions` `type: "retry_runtime"`         | SSE: ProtocolEvent 流 |
+| `runtimes.retry` | POST | `/api/actions` `type: "retry_failed_runtimes"` | SSE: ProtocolEvent 流 |
 
-`retry_turn` 显式重跑整回合，普通请求的 payload 为空；恢复未完成回合时，五种动作都可附加 `payload.recoverFromTurnId`。客户端从 `GET /api/sessions/:id/execution` 获取只读状态，刷新不重新提交动作；明确点击恢复重试后才发送新的 requestId。服务端在会话锁内校验源回合，开场恢复保留 continuation 来源，不增加玩家回合数。`retry_runtime` 必须提供 `payload.runtimeId`，并通过 manual-trigger 路径只重跑该 runtime；它会以源回合（`payload.retryFromTurnId`，缺省取最近的 player-origin 工件）持久化的 runtime 输出**播种**执行，使被重试 runtime 的 `input.inject` / `needs` 按原回合叙事解析——裸 manual 触发这些解析为空，重试型调用因此必须播种。
+`retry_turn` 的普通请求 payload 为空，以空玩家输入和当前已提交上下文启动新的主循环回合，成功提交后增加玩家回合数；它不恢复或重新生成历史回合。恢复未完成回合时，六种动作都可附加 `payload.recoverFromTurnId`，并且必须匹配服务端返回的原 action 描述。客户端从 `GET /api/sessions/:id/execution` 获取只读状态，刷新不重新提交动作；明确点击恢复重试后才发送新的 requestId。服务端在会话锁内校验源回合，开场恢复保留 continuation 来源，不增加玩家回合数。`retry_runtime` 必须提供 `payload.runtimeId`，显式 `retryFromTurnId` 必须指向已提交且仍是当前故事的原回合，目标须仍失败；不带来源时保留旧 manual 调用语义。
+
+`retry_failed_runtimes` 必须提供原回合 `retryFromTurnId` 和 1–20 个不重复的 `runtimeIds`。锁内合并该来源已提交的恢复 attempt 后，仅仍失败且 active 的目标可重跑；同一 action 按 stage/DAG 执行，统一提交，不重新计数。批量恢复和带来源的单任务恢复都只执行所选目标，禁止事件订阅者、递归或后台分发扩围；普通无来源的 manual / plugin-RPC 行为不变。原故事及已提交成功的非目标结果仅作上下文，不重复提交。一个目标失败而另一个被依赖跳过时，两者仍待恢复。无已提交来源的整回合中断应先恢复原 action，不能把 trace 中的成功当作已提交数据。
+
+每次恢复的生命周期 trace/SSE payload 持久关联 `sourceTurnId` 和本次 `runtimeIds`；`turnId` 保留 attempt 身份。客户端在 `committed: true` 的 turn/execution 终态或已提交工件确认后更新任务恢复状态，保留原失败审计。事务回滚和中断不会清除原失败。中断批量操作的 `retry` 描述保留同一组目标，`recoverFromTurnId` 校验不得更改该组。
+
+新 scope 还携带服务端验证的 `sourceCommitted: true` 与 `sourceFailedRuntimeIds`；旧 trace 可缺省这两个字段。失败摘要完整包含来源账本中仍失败的 ID（含 inactive，不按所选目标上限截断）。执行中是开始前的摘要；已提交终态按本次真实结果结算：成功移除，失败和 skipped 保留，回滚或中断不变，空数组也发送。客户端按最新摘要替换旧集合，同一次 attempt 的已提交终态优先于执行中摘要，防止有界 trace 快照遗漏未恢复任务或复活旧失败。ID 不在摘要中不等于存在可展示的成功步骤；成功步骤仍需真实执行及提交证据。
 
 `start_session` 要求会话已带非空 `activePlugins`（创建会话时选定）。空集合直接 400，不会退化成"激活全部注册插件"——详见 [api.md](./api.md#post-apiactions)。
 
-> `type` 是闭集，上面五种之外的取值一律返回 400 `Unsupported action type`。插件侧发事件请用 builtin `emit-event` 工具。
+> `type` 是闭集，上面六种之外的取值一律返回 400 `Unsupported action type`。插件侧发事件请用 builtin `emit-event` 工具。
 >
 > 区分 chat turn 与 plugin runtime 调用：
 >
