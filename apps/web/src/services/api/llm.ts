@@ -4,8 +4,7 @@ import {
   buildProviderKeysHeader,
   buildSlotConfigHeaderInternal,
 } from "./model-settings.js";
-import { request } from "./request.js";
-import { operatorAuthHeaders } from "../session-credentials.js";
+import { ApiError, request, requestResponse } from "./request.js";
 
 // -- LLM Config -------------------------------------------------
 
@@ -189,17 +188,18 @@ export async function lookupModelCapabilityDetails(
 }
 
 export async function refreshModelDb(): Promise<{
-  ok: boolean;
-  count?: number;
-  error?: string;
+  ok: true;
+  count: number;
+  persisted: boolean;
 }> {
-  const result = await request<{ ok: boolean; count?: number; error?: string }>(
-    "/api/model-db/refresh",
-    {
-      method: "POST",
-      operatorAuth: true,
-    },
-  );
+  const result = await request<{
+    ok: true;
+    count: number;
+    persisted: boolean;
+  }>("/api/model-db/refresh", {
+    method: "POST",
+    operatorAuth: true,
+  });
   invalidateModelCapabilityCache();
   return result;
 }
@@ -285,20 +285,34 @@ export interface PingResult {
  * Requires API keys in localStorage.
  */
 export async function pingPreset(presetId: string): Promise<PingResult> {
-  const res = await fetch("/api/ai/ping", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...buildProviderKeysHeader(),
-      ...buildSlotConfigHeaderInternal({ includeCustomPresetIds: [presetId] }),
-      ...operatorAuthHeaders(),
-    },
-    body: JSON.stringify({ presetId }),
-  });
+  let res: Response;
+  try {
+    res = await requestResponse("/api/ai/ping", {
+      method: "POST",
+      headers: {
+        ...buildProviderKeysHeader(),
+        ...buildSlotConfigHeaderInternal({
+          includeCustomPresetIds: [presetId],
+        }),
+      },
+      body: JSON.stringify({ presetId }),
+      operatorAuth: true,
+      silentErrors: true,
+    });
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return {
+        ok: false,
+        latencyMs: 0,
+        error: error.response?.error ?? `HTTP ${error.status}`,
+      };
+    }
+    throw error;
+  }
   // A 500 or an HTML error body used to yield `{ ok: undefined }` — the UI then
   // showed neither success nor a reason. Produce an explicit failure instead.
   const body: unknown = await res.json().catch(() => null);
-  if (!res.ok || !body || typeof body !== "object") {
+  if (!body || typeof body !== "object") {
     const detail =
       body && typeof body === "object" && "error" in body
         ? String((body as { error: unknown }).error)

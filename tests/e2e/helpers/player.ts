@@ -109,8 +109,19 @@ export async function selectWorldByText(page: Page, text: RegExp) {
  * well past a minute, so the budget is generous — but unlike the old helper
  * this actually waits for the turn rather than for an enabled input.
  */
-export async function waitForTurnIdle(page: Page, timeout = 240_000) {
+export async function waitForTurnIdle(page: Page, timeout = 360_000) {
   await expect(composer(page)).toHaveAttribute("data-executing", "false", {
+    timeout,
+  });
+}
+
+/**
+ * Wait for the async action launcher to enter its running state. Some actions
+ * perform a small preflight before flipping `executing`; waiting only for the
+ * later idle state can therefore pass before the turn has even started.
+ */
+export async function waitForTurnStarted(page: Page, timeout = 15_000) {
+  await expect(composer(page)).toHaveAttribute("data-executing", "true", {
     timeout,
   });
 }
@@ -122,6 +133,7 @@ export async function sendPlayerMessage(page: Page, text: string) {
   await input.fill(text);
   await composer(page).getByRole("button").last().click();
   await expect(page.getByText(text).first()).toBeVisible({ timeout: 10_000 });
+  await waitForTurnStarted(page);
 }
 
 /**

@@ -10,6 +10,7 @@ import type { TurnMessageRecord } from "@covel/store";
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 
 export interface TurnSessionCharacter {
+  readonly id?: string;
   readonly name: string;
   readonly type: string;
   readonly description?: string;
@@ -116,6 +117,7 @@ export async function loadTurnSessionState(args: {
 
     const charRecords = await deps.store.listCharacters(input.sessionId);
     sessionCharacters = charRecords.map((c) => ({
+      id: c.id,
       name: c.name,
       type: c.type,
       description: c.description,

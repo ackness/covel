@@ -873,6 +873,12 @@ const runtimeManifestCommonShape = {
    */
   entry: pluginRelativeJsPath.optional(),
   model: z.string().optional(),
+  llm: z
+    .strictObject({
+      reasoningEffort: z.literal("disabled").optional(),
+      toolChoice: z.strictObject({ name: z.string().min(1) }).optional(),
+    })
+    .optional(),
   timeoutMs: z.number().int().positive().optional(),
   /**
    * Per-runtime cap on the agent tool-call loop. Overrides the framework

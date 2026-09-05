@@ -1,4 +1,8 @@
 import type { LLMResponseFormat } from "@covel/shared";
+import {
+  withTextRequestDefaults,
+  defaultToolChoice,
+} from "./request-defaults.js";
 import type { ModelProviderAdapter } from "./adapter.js";
 import type { UsageSummary } from "../types.js";
 import {
@@ -208,13 +212,28 @@ function serializeResponsesTools(tools: ToolDefinition[]): unknown[] {
  * Uses the /responses endpoint with different streaming format.
  * Falls back to OpenAI Chat adapter for non-text operations.
  */
+function readResponseToolCalls(payload: Record<string, unknown>) {
+  if (!Array.isArray(payload.output)) return [];
+  return payload.output.flatMap((item: unknown) => {
+    if (item === null || typeof item !== "object") return [];
+    const call = item as Record<string, unknown>;
+    return call.type === "function_call" &&
+      typeof call.call_id === "string" &&
+      typeof call.name === "string" &&
+      typeof call.arguments === "string"
+      ? [{ id: call.call_id, name: call.name, arguments: call.arguments }]
+      : [];
+  });
+}
+
 export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
   const chatAdapter = createOpenAiChatAdapter();
 
   return {
     async generateText(config, params, context) {
+      params = withTextRequestDefaults(params);
       const messages = applyCapabilityFallback(params.messages, context);
-      const response = await postJson(config, "/responses", {
+      const body: Record<string, unknown> = {
         model: params.model,
         input: serializeResponsesInput(messages),
         ...(params.responseFormat
@@ -226,7 +245,16 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
           context,
           params.model,
         ),
-      });
+      };
+      if (params.tools?.length) {
+        body.tools = serializeResponsesTools(params.tools);
+        body.tool_choice = defaultToolChoice(
+          params.defaults,
+          body,
+          "responses",
+        );
+      }
+      const response = await postJson(config, "/responses", body);
       const payload = await parseJson(response);
       assertSuccess(response, payload, "openai-responses");
 
@@ -234,6 +262,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
         text: readResponsesOutputText(payload),
         finishReason: mapResponseStatus(payload.status),
         usage: readOpenAiResponsesUsage(payload),
+        toolCalls: readResponseToolCalls(payload),
       };
     },
 
@@ -272,6 +301,7 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
     },
 
     async *streamText(config, params, context) {
+      params = withTextRequestDefaults(params);
       const messages = applyCapabilityFallback(params.messages, context);
       const body: Record<string, unknown> = {
         model: params.model,
@@ -286,7 +316,11 @@ export function createOpenAiResponsesAdapter(): ModelProviderAdapter {
       };
       if (params.tools && params.tools.length > 0) {
         body.tools = serializeResponsesTools(params.tools);
-        body.tool_choice = "auto";
+        body.tool_choice = defaultToolChoice(
+          params.defaults,
+          body,
+          "responses",
+        );
       }
       const response = await postJson(config, "/responses", body);
 

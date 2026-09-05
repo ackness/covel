@@ -62,13 +62,14 @@ describe("char-creator plugin", () => {
       expect(manifest.pluginType).toBe("core-plugin");
     });
 
-    it("declares only create-form — character creation is performed by guard.js, not by the LLM", () => {
-      expect(manifest.tools?.builtin).toEqual(["create-form"]);
+    it("declares only create-character-form — character creation is performed by guard.js, not by the LLM", () => {
+      expect(manifest.tools?.plugin).toEqual(["create-character-form"]);
+      expect(manifest.entry).toBe("./server/index.js");
     });
 
-    it("requires one create-form call and stops immediately after success", () => {
+    it("requires one create-character-form call and stops immediately after success", () => {
       expect(manifest.requireToolUse).toBe(true);
-      expect(manifest.completeAfterTools).toEqual(["create-form"]);
+      expect(manifest.completeAfterTools).toEqual(["create-character-form"]);
       expect(manifest.maxSteps).toBe(2);
       expect(manifest.maxRetries).toBe(0);
     });
@@ -138,13 +139,13 @@ describe("char-creator plugin", () => {
       expect(manifest.stage).toBe("post-turn");
     });
 
-    it("declares the write tools plus the on-demand detail read", () => {
+    it("exposes writes and the detail read within the two-step budget", () => {
       expect(manifest.tools?.builtin).toEqual([
         "sync-characters",
         "get-character",
       ]);
       expect(manifest.completeAfterTools).toEqual(["sync-characters"]);
-      expect(manifest.tools?.defer).toEqual(["get-character"]);
+      expect(manifest.tools?.defer).toBeUndefined();
       expect(manifest.maxSteps).toBe(2);
       expect(manifest.maxRetries).toBe(0);
     });

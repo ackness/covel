@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 
-import { errorBody } from "../../api-error.js";
+import { errorBody, listBody } from "../../api-error.js";
 import {
   createRuntimeJob,
   listRuntimeJobs,
@@ -45,7 +45,7 @@ runtimeJobRoutes.get("/:id/runtime-jobs", async (c) => {
   const jobs = await listRuntimeJobs(c.get("store"), {
     sessionId: guard.session.id,
   });
-  return c.json({ jobs: jobs.map(publicRuntimeJob) });
+  return c.json(listBody(jobs.map(publicRuntimeJob)));
 });
 
 runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/cancel", async (c) => {
@@ -75,7 +75,7 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/cancel", async (c) => {
     );
   }
   await appendRuntimeJobStatus(c.get("store"), eventBus, changed);
-  return c.json({ job: publicRuntimeJob(changed) });
+  return c.json(publicRuntimeJob(changed));
 });
 
 runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/retry", async (c) => {
@@ -157,5 +157,5 @@ runtimeJobRoutes.post("/:id/runtime-jobs/:jobId/retry", async (c) => {
   }
   publishRuntimeJobStatusEvent(eventBus, created.status);
   c.get("runtimeJobWorker")?.wake();
-  return c.json({ job: publicRuntimeJob(created.job) }, 202);
+  return c.json(publicRuntimeJob(created.job), 202);
 });

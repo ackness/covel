@@ -32,7 +32,7 @@ export interface SqlWorldRecordsDeps {
 
 export type SqlWorldRecords = Pick<
   DataStore,
-  "listWorlds" | "getWorld" | "upsertWorld" | "deleteWorld"
+  "listWorlds" | "getWorld" | "createWorld" | "upsertWorld" | "deleteWorld"
 >;
 
 export function createSqlWorldRecords(
@@ -50,6 +50,15 @@ export function createSqlWorldRecords(
         where: eq(worlds.id, id),
       });
       return row ? toWorldRecord(row, json) : null;
+    },
+
+    async createWorld(record: WorldRecord): Promise<boolean> {
+      const inserted = await runner.insertIgnoreReturningCount(
+        worlds,
+        values.worldInsert(record),
+        worlds.id,
+      );
+      return inserted === 1;
     },
 
     async upsertWorld(record: WorldRecord): Promise<void> {

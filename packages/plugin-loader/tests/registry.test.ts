@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { RuntimeManifest, PluginType } from "@covel/shared";
 import type {
+  LoadedRuntime,
   PluginRegistryEntry,
   PluginSummary,
   ParsedPluginMd,
@@ -405,6 +406,55 @@ describe("PluginRegistry", () => {
           .getActiveRuntimes("cold-process")
           .map((runtime) => runtime.name),
       ).toEqual(["beta/runtime"]);
+    });
+  });
+
+  describe("findPluginByCapability", () => {
+    it("searches every declared runtime without requiring loaded artifacts", () => {
+      registry.register(
+        makeEntry("image-plugin", {
+          manifest: makeParsedPluginMd("image-plugin/prompt", 500),
+          manifests: [
+            makeParsedPluginMd("image-plugin/prompt", 500),
+            makeParsedPluginMd("image-plugin/generator", 600, {
+              capabilities: ["image-generator"],
+            }),
+          ],
+          loadedRuntimes: new Map(),
+        }),
+      );
+      registry.activate("image-plugin", "session-capability");
+
+      expect(
+        registry.findPluginByCapability(
+          "session-capability",
+          "image-generator",
+        ),
+      ).toBe("image-plugin");
+    });
+
+    it("does not infer declared capabilities from loaded artifacts", () => {
+      const loadedOnly = {
+        manifest: makeRuntimeManifest("artifact-only/runtime", 500, {
+          capabilities: ["artifact-only-capability"],
+        }),
+        promptTemplate: "",
+      } satisfies LoadedRuntime;
+      registry.register(
+        makeEntry("artifact-only", {
+          manifest: makeParsedPluginMd("artifact-only/runtime", 500),
+          manifests: [makeParsedPluginMd("artifact-only/runtime", 500)],
+          loadedRuntimes: new Map([["artifact-only/runtime", loadedOnly]]),
+        }),
+      );
+      registry.activate("artifact-only", "session-artifact");
+
+      expect(
+        registry.findPluginByCapability(
+          "session-artifact",
+          "artifact-only-capability",
+        ),
+      ).toBeUndefined();
     });
   });
 

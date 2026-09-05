@@ -20,14 +20,22 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 > **注意**: `idb` 不是 `@covel/store` 的 `DataStore` 后端；它仅用于浏览器端 MediaStore / BrowserVault 能力。常规服务器部署使用 `memory` / `sqlite` / `pg`。
 
-### 错误响应约定（自 v0.0.5 起统一）
+### 响应格式约定
 
-所有 JSON 错误响应统一收敛为以下信封（`apps/server/src/api-error.ts`）：
+所有常规 JSON 端点遵循同一套外层结构：
+
+- 单资源查询或创建/替换资源：直接返回资源对象，不再增加 `{ resource: ... }` 包装。
+- 集合查询：统一返回 `{ "items": [...] }`；游标分页按需增加不透明字符串 `nextCursor`，下一页用 `?cursor=<nextCursor>` 原样回传。
+- 不产生独立资源的命令或删除操作：统一返回 `{ "ok": true, ... }`，其余字段只携带有用的确认信息。
+- 聚合视图保留领域字段，例如 state 的 `tables`、trace 的 `turns`、UI spec 的 `slots` 和 LLM 配置的 `slots/providers`；这些响应不是普通资源列表。
+- 新建资源通常返回 `201 Created`；接受异步处理返回 `202 Accepted`；其他成功请求返回 `200 OK`。
+
+HTTP/API 失败统一使用非 2xx 状态码和以下错误信封（`apps/server/src/api-error.ts`）：
 
 ```jsonc
 {
   "error": "string", // 必有：人类可读的错误消息
-  "code": "string", // 可选：稳定的机器可读错误码
+  "code": "snake_case", // 可选：稳定的机器可读错误码
   "details": {}, // 可选：结构化诊断（如 Zod 校验错误数组）
 }
 ```
@@ -41,11 +49,9 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 - **会话 404 统一**：所有以 `:id` 为路由参数的会话作用域端点，当会话不存在时统一返回
   `404 { "error": "Session not found: <id>", "code": "session_not_found" }`
   （由 `routes/api/session/session-guard.ts#resolveSessionParam` 集中产生）。
-  这是 v0.0.5 的有意破坏性改动：此前各端点的 404 响应体形态不一（`{error:"Session not found"}` /
-  `{error:"Session not found: <id>"}` / `{status:"error",error}` 等），现统一为上表形态。
-  以 query 参数 `sessionId` 取会话的端点（`/api/events/subscribe`）与以 body `sessionId` 取会话的端点
-  （`/api/actions`、`/api/worlds/:id/sync-data` 等）保持各自既有 404 文案不变。
-- `plugin-rpc` 通道保留其专属信封 `{ status: "error", error, code }`（见下文 plugin-rpc 小节），不并入通用信封。
+  query/body 携带 session id 的端点同样返回 `code: "session_not_found"`。
+- `plugin-rpc` 的 4xx/5xx 也使用这套通用错误信封；`status` 只用于 2xx 的业务响应分支。
+- 连通性探测或配置重载可能以 `200 { "ok": false, "error": "..." }` 表示“请求已成功执行，但被探测对象不可用”。这是领域结果，不是 HTTP/API 失败。
 
 ### 鉴权：Session owner token
 
@@ -58,6 +64,12 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 | `self`（默认）/ 桌面  | **不强制**。单机本地游玩零 token 可用；网络边界由默认回环监听保障（`COVEL_BIND_HOST=127.0.0.1`，见 env-registry）。带 token 也不校验。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `demo` / `commercial` | **硬性强制**。所有会话作用域端点（session CRUD、messages、traces、actions、plugin-rpc、steer/abort、SSE subscribe、snapshots、state 等经 `resolveSessionParam` 的路由，以及会话 id 走 query/body/间接引用的端点：approvals 列表/撤销/决策、`POST /api/media?sessionId=`、`/api/worlds/:id/world-data/preflight`、`sync-data`、`sync-dimensions`、`GET /api/ui-specs?sessionId=`）缺失或错误 token 一律返回 `401 { code: "session_owner_required" }`（未知会话返回 404）。无哈希的历史会话 fail-closed。`GET /api/sessions` 列表在这两个层级仅对持有运维 token 的调用方返回内容，其余返回空列表；`POST /api/sessions` **创建会话需运维 token**（缺失返回 `401 { code: "operator_token_required" }`）——这是单运维方门禁，完整的用户身份/租户隔离/配额属产品级工作，尚未实现。 |
 
+**生产 MemoryStore 例外**：即使 `DEPLOYMENT_TIER=self`，`NODE_ENV=production`
+且实际存储为 MemoryStore 时，会话仍强制 owner token；全局世界的创建、修改、
+删除、维度导入和服务端生成保存强制 operator token。该判断使用服务端实际注入的
+存储后端，不依赖请求参数或可能与运行实例不一致的 `STORE_BACKEND` 环境值。
+没有配置 operator token 时，世界写入保持关闭，公开读取和合法会话访问仍可使用。
+
 **Token 提交方式**（三选一）：
 
 1. `Authorization: Bearer <ownerToken>`
@@ -66,7 +78,7 @@ Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI �
 
 **运维 master token**：设置了 `COVEL_DESKTOP_REST_TOKEN` 时，以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用），并且是 hosted 层级创建会话、世界写入/维度导入、AI 世界生成、模型探测/刷新、provider key 可用性查询（`GET /api/provider-keys`）以及 community server-code 激活的凭证。community ESM 会在服务端进程内注册全局能力，因此 hosted 层级同时要求 owner token 与 operator token；这是当前单运维方信任模型，不提供多租户代码沙箱。`DEPLOYMENT_TIER=demo|commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动。
 
-纯 Web 客户端可在 **Settings → Operator Access（运维访问）** 输入或清除该 token。凭据只保存在当前浏览器的 `localStorage`，仅在上述 operator-gated 同源请求中作为 `Authorization: Bearer <token>` 发送；保存或清除后客户端会重新加载，以新凭据重取会话与世界数据。`self` 层级继续允许无 token 使用，并忽略该可选凭据。
+纯 Web 客户端可在 **Settings → Operator Access（运维访问）** 输入或清除该 token。凭据只保存在当前浏览器的 `localStorage`，仅在上述 operator-gated 同源请求中作为 `Authorization: Bearer <token>` 发送；保存或清除后客户端会重新加载，以新凭据重取会话与世界数据。开发及桌面单用户模式继续允许无 token 使用；生产 MemoryStore 遵循上述例外。
 
 **community server-code grant 是 session 授权、进程级生效**：
 
@@ -144,7 +156,8 @@ curl -N -X POST http://localhost:3001/api/actions \
     "requestId": "req-001",
     "type": "start_session",
     "sessionId": "<sessionId>",
-    "locale": "zh-CN"
+    "locale": "zh-CN",
+    "payload": {}
   }'
 ```
 
@@ -195,6 +208,7 @@ curl -N -X POST http://localhost:3001/api/actions \
 curl -X POST http://localhost:3001/api/sessions/<sessionId>/plugin-rpc \
   -H "Content-Type: application/json" \
   -d '{
+    "kind": "action",
     "pluginId": "framework",
     "action": "submit-form",
     "payload": {
@@ -228,18 +242,18 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 世界管理
 
-| 方法   | 路径                                   | 描述                                                                              |
-| ------ | -------------------------------------- | --------------------------------------------------------------------------------- |
-| GET    | `/api/worlds`                          | 列出所有世界                                                                      |
-| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                      |
-| POST   | `/api/worlds`                          | 创建/更新世界                                                                     |
-| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                   |
-| DELETE | `/api/worlds/:id`                      | 删除世界（内置 `source:"file"` 世界禁止删除，返回 403；hosted 需 operator token） |
-| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                         |
-| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                      |
-| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key  |
-| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要        |
-| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force  |
+| 方法   | 路径                                   | 描述                                                                                                 |
+| ------ | -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| GET    | `/api/worlds`                          | 列出所有世界                                                                                         |
+| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                                         |
+| POST   | `/api/worlds`                          | 创建/更新世界                                                                                        |
+| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                      |
+| DELETE | `/api/worlds/:id`                      | 删除世界（内置 `source:"file"` 世界禁止删除，返回 403；hosted / 生产 MemoryStore 需 operator token） |
+| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                                            |
+| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                                         |
+| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                     |
+| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                           |
+| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                     |
 
 ### 会话管理
 
@@ -267,18 +281,50 @@ session owner-token 鉴权。它们是 Web `LocalDataService` 的内部同步协
 `409 browser_private_profile_required`；未先上传 checkpoint、revision 冲突也返回
 `409`。当前 `BrowserCheckpoint` 的 `schemaVersion` 为 `2`，会在边界校验必填
 session clock、规范 origin/commitStatus 与 snapshot schema；旧版本直接拒绝。
+所有外部记录使用 Zod 校验结构；顶层及快照内的会话域记录必须属于
+checkpoint 的 sessionId，world.id 必须匹配 session.worldId，违规返回 `400`。
+快照、挂起记录及世界导入账本的全局记录 ID 已属于其他会话时，返回
+`400 session_record_scope_conflict`，整个 checkpoint 写入回滚。
 checkpoint 不允许携带 provider key、owner token 或其他凭据。
+
+启用会话所有者鉴权的共享部署中，普通 checkpoint 同步保留服务端已有的全局
+世界记录，忽略上传的世界内容；后续 commit 返回服务端世界版本。通过 checkpoint
+创建或修改全局世界必须另持 operator token；普通所有者引用尚不存在的世界时
+返回 `401 operator_token_required`。此 checkpoint 限制同样适用于 production +
+MemoryStore 的 self 部署。开发及桌面单用户模式保持原有世界同步行为。
+
+两个端点都在取得会话锁后重新验证所有者、会话实例及删除状态，然后才读取
+revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/head/commit；
+排队请求遇到所有者变化返回 `401`，实例变化或正在删除返回 `409`。
+
+`PUT /api/sessions/:id/browser-checkpoint` 的完整 JSON 请求体上限为 **64 MiB**，
+包含全部消息、轨迹与快照；超过上限返回 `413`。此专用额度仅适用于该路径的
+`PUT` 请求，`browser-commit` 等普通 API 仍使用 **1 MiB** 上限。当前协议不支持
+分块上传，因此完整 checkpoint 必须保持在该额度内。
+
+浏览器准备或恢复已有世界时，自动世界同步若收到准确的
+`401 operator_token_required`，会保留服务端共享世界并继续同步会话；其他鉴权、
+网络及服务端错误仍向调用方返回。创建服务端尚不存在的本地世界仍需要管理员
+凭据。显式世界编辑 API 不会把拒绝写入视为成功。
 
 ### 会话快照
 
-| 方法 | 路径                         | 描述                                                                                                                           |
-| ---- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| GET  | `/api/sessions/:id/snapshot` | 获取会话快照（客户端恢复/重连）                                                                                                |
-| GET  | `/api/sessions/:id/turns`    | 持久化 turn_results 执行工件列表（含 `commitStatus`/`origin`；`?limit=n` 上限 500）。为 e2e-plugin-verify harness 恢复的薄路由 |
+| 方法 | 路径                      | 描述                                                                                                                                             |
+| ---- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GET  | `/api/sessions/:id/view`  | 获取会话聚合视图（客户端恢复/重连）                                                                                                              |
+| GET  | `/api/sessions/:id/turns` | 持久化 turn_results 执行工件列表，返回 `{ items }`（含 `commitStatus`/`origin`；`?limit=n` 上限 500）。为 e2e-plugin-verify harness 恢复的薄路由 |
 
-> 快照的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载（长会话每次重连都全量读是原性能热点）。快照带 `messagesCursor`（`{createdAt,id} | null`）；前端聊天界面向上滚动时用它调 `GET /api/sessions/:id/messages/page` 增量补更旧消息。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
+> 聚合视图的 `messages` 与 `executionSteps` 只含**最近窗口**（默认最新 80 条消息 / 600 条 trace 事件），不再全量加载。视图带不透明 `messagesCursor`；前端向上滚动时把它作为 `?cursor=` 原样传给 `GET /api/sessions/:id/messages/page`。窗口外旧 Turn 的执行时间线优雅降级（不渲染）。
 >
 > 快照内嵌的 session 对象包含与会话 API 相同的必填时钟：`phase`、`completedPlayerTurns`、`setupRuntimes`。恢复与重连以这些字段为唯一进度来源。
+
+### 刷新与未完成回合恢复
+
+`GET /api/sessions/:id/execution` 返回 `SessionExecutionStatus`，遵循相同的会话归属校验；`GET /api/sessions/:id/view` 的可选 `execution` 字段提供同一状态。`state` 为 `idle`、`running`、`completed`、`failed` 或 `interrupted`，可带 `turnId`、`requestId`、`startedAt`、`origin` 和显式重试用的 `retry: { type, payload }`。此接口不会等待长回合锁；PG 使用非阻塞 advisory lock 探测，另一进程仍持锁或暂时无法取得连接时保守返回 `running`，可能没有回合标识。
+
+网页刷新或 SSE 断开不会自动取消原回合。客户端仅查询状态并恢复已提交的消息、时钟和任务步骤，不自动重新调用模型。服务器进程停止会丢失前台内存执行；无活跃锁、无已提交工件且缺少终止记录时显示 `interrupted`。已经提交但来不及记录终止 trace 的回合仍为 `completed`。浏览器旧步骤只补充服务端快照缺失的信息，不能把终态覆盖为 `running`；`runtime.completed` 的 `payload.status` 决定成功、失败、跳过或挂起状态。
+
+用户显式重试时，使用 `retry` 描述、新 `requestId`，并在 payload 中附加 `recoverFromTurnId`。服务端在会话锁内再次核实源回合，重复点击或原回合已结束时不会再次执行；开场延续重试保留 `origin: continuation`，不增加玩家回合数。新回合的 `turn.started` 只记录恢复所需的动作输入，不记录请求头和凭据。旧日志只在同一请求的 traceId 能证明它是开场延续时提供无输入重试，否则要求玩家重新输入。批量辅助任务恢复使用 `retry_failed_runtimes`；中断后必须按 `retry` 描述恢复同一组目标，未提交的成功任务不能视作已恢复或用作上下文。
 
 ### Turn 执行
 
@@ -302,7 +348,7 @@ checkpoint 不允许携带 provider key、owner token 或其他凭据。
 - abort 后当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`；已在 abort 前正常完成的 runtime 结果照常提交。
 - steer 仅对 `outputKind: story` 的 runtime 生效（plugin runtime 执行结构化任务，不接受插话）。插话在最终响应流式期间到达时，story runtime 收尾前会追加一步 LLM 调用消化它（受 maxSteps 约束）；持久化失败则撤回队列项并返回 `500`。
 - 注册表为进程内实现——多 pod（PG）部署下 steer/abort 只能到达同 pod 上的回合。
-- 可控窗口与 session lock 对齐：注册发生在取得 session lock 之后、`executeTurn` 前，释放在 `executeTurn` 返回时——同 session 的并发 action 在锁上排队，steer/abort 永远命中真实在途的回合，不会指向排队中的下一回合；提案 commit / 后台 follower 调度等收尾阶段不再对外呈现为可控（此时 steer/abort 返回 `409`）。
+- 注册发生在取得 session lock 后，覆盖准备、模型执行、提交和收尾，直到 action 完成才释放。因此刷新时不会在提交尚未完成时误判为空闲；排队请求不会覆盖当前回合的控制注册。停止信号不能撤回已经完成的事务；跨进程执行状态探测不改变 steer/abort 仍需到达执行进程的限制。
 
 ### Setup runtime 控制（重试 / 跳过）
 
@@ -329,58 +375,56 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### 会话插件管理
 
-| 方法 | 路径                                | 描述                                                   |
-| ---- | ----------------------------------- | ------------------------------------------------------ |
-| GET  | `/api/sessions/:id/plugins`         | 列出会话的活跃/可用插件                                |
-| POST | `/api/sessions/:id/plugins/enable`  | 启用插件（body: `{ pluginId }`）                       |
-| POST | `/api/sessions/:id/plugins/disable` | 禁用插件（body: `{ pluginId }`，core-plugin 返回 403） |
+| 方法   | 路径                                  | 描述                                       |
+| ------ | ------------------------------------- | ------------------------------------------ |
+| GET    | `/api/sessions/:id/plugins`           | 列出会话插件，每项携带 `active` / `locked` |
+| PUT    | `/api/sessions/:id/plugins/:pluginId` | 启用插件                                   |
+| DELETE | `/api/sessions/:id/plugins/:pluginId` | 禁用插件（必需 core-plugin 返回 403）      |
 
 ### 全局插件
 
 | 方法   | 路径                          | 描述                                                                                                                                                                                                                                                    |
 | ------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | GET    | `/api/framework/capabilities` | 框架级能力索引：manifest 枚举、工具、proposal、world-data URI                                                                                                                                                                                           |
-| GET    | `/api/plugins`                | 列出所有已加载插件                                                                                                                                                                                                                                      |
-| GET    | `/api/plugins/:id`            | 获取插件详情                                                                                                                                                                                                                                            |
+| GET    | `/api/plugins`                | 列出 registry 中的插件及其注册/错误状态                                                                                                                                                                                                                 |
+| GET    | `/api/plugins/:id`            | 获取插件详情及完整 manifest 开发契约                                                                                                                                                                                                                    |
 | DELETE | `/api/plugins/:id`            | 卸载第三方插件（删除 `~/.covel/plugins/<id>`）。桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。错误码：鉴权失败 `401/403`、id 格式非法 `400`、内置 ID `409`、未安装 `404`；成功返回 `{ ok, id, restartRequired:true }` |
-| GET    | `/api/plugins/:id/contract`   | 获取插件完整开发契约（含 `dataSchemas` / `worldProjections` / plugin-data namespace 契约）                                                                                                                                                              |
 | GET    | `/api/plugin-flows`           | 框架编排的 pre-game 流程预览数据（插件列表 + 分段步骤），供准备页可视化                                                                                                                                                                                 |
 
 ### 拖拽导入（Install）
 
-`.zip` 包拖拽导入插件/世界。鉴权同 `DELETE /api/plugins/:id`：桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。
+`.zip` 包拖拽导入插件/世界。基础鉴权同 `DELETE /api/plugins/:id`：桌面端要求 bearer token；无 token 的生产部署要求 `COVEL_INSTALL_API_ENABLED=1`。世界安装还遵循全局世界写入鉴权：生产 MemoryStore（含 self）及 hosted 层级必须持有 operator token，启用安装 API 不会绕过该检查。
 
-| 方法 | 路径                  | 描述                                                                                                                                               |
-| ---- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST | `/api/install/plugin` | multipart 字段 `file`：接受根级 `PLUGIN.md`+`package.json` 或多 runtime 布局的 `.zip`，解压到用户插件目录，返回 `{ ok, id, restartRequired:true }` |
-| POST | `/api/install/world`  | multipart 字段 `file`：接受根级 `world.yaml`+`WORLD.md` 的 `.zip`，解压到用户世界目录，返回 `{ ok, id, restartRequired:false }`                    |
+| 方法 | 路径                  | 描述                                                                                                                                                                  |
+| ---- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST | `/api/install/plugin` | multipart 字段 `file`：接受根级 `PLUGIN.md`+`package.json` 或多 runtime 布局的 `.zip`，解压到用户插件目录，返回 `201 { ok, kind:"plugin", id, restartRequired:true }` |
+| POST | `/api/install/world`  | multipart 字段 `file`：接受根级 `world.yaml`+`WORLD.md` 的 `.zip`，解压到用户世界目录，返回 `201 { ok, kind:"world", id, restartRequired:false }`                     |
 
 > **canonical 插件身份**：插件的唯一身份是 manifest 根 `name`（= 运行期 `pluginId`）。`package.json` basename 仅在剥离精确 `plugin-` 前缀后参与一致性校验（`@covel/plugin-foo` ↔ `name: foo`），不一致返回 400。reserved-builtin 检查、安装目录、返回的 `id` 全部使用 canonical ID；`@covel/plugin-narrator` + `name: narrator` 会命中 reserved 并返回 409。启动 discovery 同样硬性校验目录名 == manifest 根 name，不一致的插件注册为 `status: "error"`、不加载任何 runtime/tool/hook/wire。
 
 ### 状态查询
 
-| 方法 | 路径                              | 描述                 |
-| ---- | --------------------------------- | -------------------- |
-| GET  | `/api/sessions/:id/state`         | 获取所有状态表       |
-| GET  | `/api/sessions/:id/state-patches` | 获取状态变更补丁列表 |
+| 方法 | 路径                              | 描述                                |
+| ---- | --------------------------------- | ----------------------------------- |
+| GET  | `/api/sessions/:id/state`         | 获取所有状态表                      |
+| GET  | `/api/sessions/:id/state-patches` | 获取状态变更补丁列表（`{ items }`） |
 
-完整会话恢复使用 `GET /api/sessions/:id/snapshot`；物化存档、列表、读取与分叉使用
-`/api/sessions/:id/snapshot(s)` 路由（见 [Snapshot / Fork](#snapshot--fork)）。没有
-旧状态快照兼容端点。
+完整会话恢复使用 `GET /api/sessions/:id/view`；物化存档的创建、列表与读取统一使用
+`/api/sessions/:id/snapshots` 资源（见 [Snapshot / Fork](#snapshot--fork)）。
 
 ### 消息历史
 
-| 方法 | 路径                              | 描述                                                        |
-| ---- | --------------------------------- | ----------------------------------------------------------- |
-| GET  | `/api/sessions/:id/messages`      | 获取会话完整消息列表（兜底 / 同步用；长会话优先用 `/page`） |
-| GET  | `/api/sessions/:id/messages/page` | keyset 游标分页消息（最新窗口 + 向上加载更旧）              |
-| POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用）                             |
+| 方法 | 路径                              | 描述                                                      |
+| ---- | --------------------------------- | --------------------------------------------------------- |
+| GET  | `/api/sessions/:id/messages`      | 获取会话完整消息列表（`{ items }`；长会话优先用 `/page`） |
+| GET  | `/api/sessions/:id/messages/page` | keyset 游标分页消息（最新窗口 + 向上加载更旧）            |
+| POST | `/api/sessions/:id/messages/sync` | 同步消息（LocalDataService 用）                           |
 
 ### 统一翻译层（Runtime Outputs / Interaction Records）
 
 为跨 runtime 消费和观测接入而设计的规范记录。每次 runtime 执行产生一条 `RuntimeOutput`，每次外部输入（玩家消息、插件 UI、RPC 调用）产生一条 `InteractionRecord`。两张表与 `trace_events` 并存 —— 翻译层面向"被组件消费"，trace 层面向"调试时钻取细节"。
 
-服务端写入并提供查询 API；当前内置 Web UI 不直接消费这些 HTTP 查询端点，debug 页面主要使用 `/api/traces/*` 与 `/api/sessions/:id/snapshot`。这些端点面向 observability 与 API client。
+服务端写入并提供查询 API；当前内置 Web UI 不直接消费这些 HTTP 查询端点，debug 页面主要使用 `/api/traces/*` 与 `/api/sessions/:id/view`。这些端点面向 observability 与 API client。
 
 | 方法 | 路径                                                      | 描述                                                                                                                  |
 | ---- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -459,37 +503,40 @@ setup runtime 反复失败、耗尽重试预算（`maxTriggerCount`）后进入 
 
 ### Lorebook
 
-Session 级 lorebook 词条的只读查看 + 启用/删除管理。Entries 由插件通过 proposal commit 管道写入 store 层的 `lorebook_entries` 表，这些端点提供玩家 UI 与程序化读取视图，**不走提案系统**（单项 toggle/删除为 MVP 级别的直接写入）。`entryId` 仅需在当前 session 内唯一；不同 session 可安全复用同一 ID。
+Session 级 lorebook 词条 CRUD。Entries 通常由插件通过 proposal commit 管道写入 store 层的 `lorebook_entries` 表；这些管理端点提供玩家 UI 与程序化读写入口，**不走提案系统**。`entryId` 仅需在当前 session 内唯一；不同 session 可安全复用同一 ID。
 
 | 方法   | 路径                                  | 描述                                                            |
 | ------ | ------------------------------------- | --------------------------------------------------------------- |
 | GET    | `/api/sessions/:id/lorebook`          | 列出该 session 的所有 lorebook 词条（按 `insertionOrder` 升序） |
+| POST   | `/api/sessions/:id/lorebook`          | 创建词条；返回 `201` 和词条资源                                 |
+| PUT    | `/api/sessions/:id/lorebook/:entryId` | 完整替换或按指定 id 创建词条；直接返回词条资源                  |
 | PATCH  | `/api/sessions/:id/lorebook/:entryId` | 切换单条词条的 `enabled` 标志，body: `{ enabled: boolean }`     |
 | DELETE | `/api/sessions/:id/lorebook/:entryId` | 删除单条词条                                                    |
 
 响应：
 
-- `GET` → `{ entries: LorebookEntryRecord[] }`（见 `packages/store/src/types.ts`）
-- `PATCH` → `{ success: true, entryId, enabled }`
-- `DELETE` → `{ success: true }`
+- `GET` → `{ items: LorebookEntryRecord[] }`（见 `packages/store/src/types.ts`）
+- `POST` / `PUT` → `LorebookEntryRecord`
+- `PATCH` → `{ ok: true, entryId, enabled }`
+- `DELETE` → `{ ok: true }`
 
 404 场景：session 不存在、entryId 不存在。无 feature-flag 开关，始终启用。消费方：当前无内置 UI（右侧面板"世界"Tab 已切换为 WORLD.md 渲染，见 `docs/reference/ui-panels.md`）；插件可通过 `ui.right` JSON spec 自行消费这些端点。
 
 ### Suspend / Resume
 
-| 方法   | 路径                                          | 描述                                                   |
-| ------ | --------------------------------------------- | ------------------------------------------------------ |
-| POST   | `/api/sessions/:id/resume`                    | 用提交的 data 重新启动指定 suspensionId 对应的 runtime |
-| GET    | `/api/sessions/:id/suspensions`               | 列出当前 session 所有未解决的挂起项                    |
-| DELETE | `/api/sessions/:id/suspensions/:suspensionId` | 放弃一个挂起项（删除记录）                             |
+| 方法   | 路径                                                 | 描述                                         |
+| ------ | ---------------------------------------------------- | -------------------------------------------- |
+| POST   | `/api/sessions/:id/suspensions/:suspensionId/resume` | 用提交的 data 重新启动该挂起项对应的 runtime |
+| GET    | `/api/sessions/:id/suspensions`                      | 列出当前 session 所有未解决的挂起项          |
+| DELETE | `/api/sessions/:id/suspensions/:suspensionId`        | 放弃一个挂起项（删除记录）                   |
 
 ### Snapshot / Fork
 
-> **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
+> 服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 使用 `GET /api/sessions/:id/view` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
 | 方法 | 路径                                      | 描述                                                                                                  |
 | ---- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| POST | `/api/sessions/:id/snapshot`              | 创建一份手动快照（kind=`manual`）                                                                     |
+| POST | `/api/sessions/:id/snapshots`             | 创建一份手动快照（kind=`manual`）                                                                     |
 | GET  | `/api/sessions/:id/snapshots`             | 分页列出快照元数据（auto / manual / fork，不含 payload）                                              |
 | GET  | `/api/sessions/:id/snapshots/:snapshotId` | 按 id 获取单个快照（含完整 payload）                                                                  |
 | POST | `/api/sessions/:id/fork`                  | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息；响应一次性返回 child `ownerToken` |
@@ -498,7 +545,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 ### 角色数据
 
-> **接入状态（2026-04-27）**：当前内置 Web UI 主要通过 `GET /api/sessions/:id/snapshot` 获取角色快照；本节 REST 端点保留为轻量读取/管理 API。单批追踪 runtime 推荐使用 `sync-characters`，通用插件仍可按需使用低层 `create-character` / `update-character` 与读取工具 `list-characters` / `get-character`。`POST /characters` 是兼容管理入口，后续若收敛角色写路径，应保持 URL/响应兼容并优先替换内部实现。
+> 当前内置 Web UI 主要通过 `GET /api/sessions/:id/view` 获取角色视图；本节 REST 端点保留为轻量读取/管理 API。单批追踪 runtime 推荐使用 `sync-characters`，通用插件仍可按需使用低层 `create-character` / `update-character` 与读取工具 `list-characters` / `get-character`。
 
 角色 `id` 仅需在当前 session 内唯一；不同 session 可安全复用同一 ID。
 
@@ -538,6 +585,8 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 `POST /api/model-db/refresh` 在线获取 LiteLLM 最新数据，并在桌面/自部署环境中写入用户配置目录；该用户缓存会在后续启动时优先于安装包内的固定快照加载。`/api/model-db/lookup` 将 `model` 视为不透明 ID。响应中的 `matchedModelId`、`matchKind` 和 `candidates` 只解释能力资料如何匹配，不会改写实际请求 ID；`source` 为 `known`、`model-database` 或 `protocol-default`。`pricingKind=reference` 表示通过聚合服务商匹配到的是上游模型参考价，实际账单可能不同。`reasoning` 返回按上游模型家族识别的思考强度档位、默认值和家族名称，供生成参数界面使用。
 
+`GET /api/model-db/search` 返回 `{ items: ModelSearchResult[] }`。刷新成功返回 `{ ok: true, count, persisted }`；上游下载或解析失败返回 `502 { error, code: "model_db_refresh_failed" }`，不会再以 `200 { ok: false }` 表示 API 失败。
+
 ### Trace 调试
 
 | 方法 | 路径                                | 描述                                           |
@@ -548,33 +597,34 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 ### 媒体管理
 
-| 方法 | 路径                                | 描述                                                                                                                                                                                                                              |
-| ---- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET  | `/api/media/:id?token=<signed>`     | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                                                                                                                                     |
-| GET  | `/api/sessions/:id/media-token?id=` | 为指定 mediaId 颁发短时签名 token，供上面的下载端点使用                                                                                                                                                                           |
-| POST | `/api/media?sessionId=<id>`         | 玩家图片上传：原始字节 body（`Content-Type` = 文件 MIME，仅 `image/*`，≤20MB），内容寻址入库 + 记会话 owner/ref，返回 `{ id, mime, size }`。**`image/svg+xml` 一律 400 拒绝**——SVG 是可执行内容类型，内联渲染时会在应用源执行脚本 |
-| POST | `/api/media/cleanup`                | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，demo 层需 operator token，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes`                                                                                        |
+| 方法 | 路径                                | 描述                                                                                                                                                                                                                                  |
+| ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET  | `/api/media/:id?token=<signed>`     | 内容寻址媒体下载（HMAC token + 会话引用校验）                                                                                                                                                                                         |
+| GET  | `/api/sessions/:id/media-token?id=` | 为指定 mediaId 颁发短时签名 token，供上面的下载端点使用                                                                                                                                                                               |
+| POST | `/api/media?sessionId=<id>`         | 玩家图片上传：原始字节 body（`Content-Type` = 文件 MIME，仅 `image/*`，≤20MB），内容寻址入库 + 记会话 owner/ref，返回 `201 { id, mime, size }`。**`image/svg+xml` 一律 400 拒绝**——SVG 是可执行内容类型，内联渲染时会在应用源执行脚本 |
+| POST | `/api/media/cleanup`                | 破坏性维护端点：默认禁用 (`COVEL_MEDIA_CLEANUP_ENABLED`)，demo 层需 operator token，商业层 503，`dryRun:false` 需 `X-Confirm-Cleanup: yes`                                                                                            |
 
 ### 配置信息
 
-| 方法 | 路径                           | 描述                                                                                                                                                                |
-| ---- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET  | `/api/presets`                 | 列出配置的模型预设                                                                                                                                                  |
-| GET  | `/api/packages`                | 列出已加载插件包（含 runtime/tool/`userSettings`/`tags`/`relations` 信息）                                                                                          |
-| GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件                                                                             |
-| GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                                                                                              |
-| POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`                                                                                |
-| GET  | `/api/provider-keys`           | 桌面 bearer client 返回原始 provider key；其他请求返回 masked availability。`demo` / `commercial` 层**需运维 token**（已配置的 provider 清单与 key 掩码属运维信息） |
-| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                                                                                                         |
-| GET  | `/api/config/keys`             | 仅桌面：列出已配置的 provider（不返回值）                                                                                                                           |
-| PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                                                                                                     |
-| GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                                                                                                   |
-| PUT  | `/api/config/settings`         | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }`                                                                                         |
-| GET  | `/api/config/proxy`            | 仅桌面：读取核心出站请求的代理模式与生效状态；返回 `{ mode, url?, effective, systemAvailable }`                                                                     |
-| PUT  | `/api/config/proxy`            | 仅桌面：写入并热应用代理；body `{ mode: "direct"                                                                                                                    | "system" | "http" | "socks", url? }`。HTTP/S 与 SOCKS5 地址支持 URL 内认证信息 |
-| GET  | `/api/app-update/latest`       | 仅桌面：通过当前代理查询 GitHub 最新稳定 Release；返回 `{ version, name, publishedAt }`                                                                             |
-| PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                                                                                                        |
-| POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                                                                                                        |
+| 方法 | 路径                           | 描述                                                                                                                                                                                                                                                                   |
+| ---- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET  | `/api/presets`                 | 列出配置的模型预设（`{ items }`）                                                                                                                                                                                                                                      |
+| GET  | `/api/plugins`                 | 从 registry 快照列出 canonical `PluginSummary`；加载失败同样作为 `status: "error"` 的 item 返回                                                                                                                                                                        |
+| GET  | `/api/worlds/:id/plugin-plan`  | 服务端解析世界插件策略、组合包和默认选择，返回 `WorldPluginPlan`                                                                                                                                                                                                       |
+| GET  | `/api/ui-specs?sessionId=<id>` | 列出插件 UI 声明（按 slot 分组）；带 `sessionId` 时按会话激活集过滤，不带则返回全部插件                                                                                                                                                                                |
+| GET  | `/api/llm-config`              | 返回 slot 配置与能力信息；llm.toml 解析失败回退默认时附带 `error` 字段                                                                                                                                                                                                 |
+| POST | `/api/llm-config/reload`       | 重读 llm.toml 并原地应用到运行中的 gateway（无需重启）；返回 `{ ok, slots, error? }`                                                                                                                                                                                   |
+| GET  | `/api/provider-keys`           | 固定返回 `{ keys, providers }`：桌面 bearer client 的 `keys` 包含原始 provider key，其他请求的 `keys` 为空；`providers` 为动态扫描所有 `*_API_KEY` 得到的 masked availability。`demo` / `commercial` 层**需运维 token**（已配置的 provider 清单与 key 掩码属运维信息） |
+| GET  | `/api/config/info`             | 返回当前部署信息（`isDesktop`、`covelHome`、`dataRoot` 等）                                                                                                                                                                                                            |
+| GET  | `/api/config/keys`             | 仅桌面：以 `{ items: string[] }` 列出已配置的 provider（不返回值）                                                                                                                                                                                                     |
+| PUT  | `/api/config/keys`             | 仅桌面：写入 `<covelHome>/keys.env`；body `{ provider: value }`                                                                                                                                                                                                        |
+| GET  | `/api/config/settings`         | 仅桌面：读取 `<covelHome>/settings.json`（unified SettingsStore）                                                                                                                                                                                                      |
+| PUT  | `/api/config/settings`         | 仅桌面：原子写 `settings.json`；body `{ entries: Record<string, unknown> }`                                                                                                                                                                                            |
+| GET  | `/api/config/proxy`            | 仅桌面：读取核心出站请求的代理模式与生效状态；返回 `{ mode, url?, effective, systemAvailable }`                                                                                                                                                                        |
+| PUT  | `/api/config/proxy`            | 仅桌面：写入并热应用代理；body `{ mode: "direct"                                                                                                                                                                                                                       | "system" | "http" | "socks", url? }`。HTTP/S 与 SOCKS5 地址支持 URL 内认证信息 |
+| GET  | `/api/app-update/latest`       | 仅桌面：通过当前代理查询 GitHub 最新稳定 Release；返回 `{ version, name, publishedAt }`                                                                                                                                                                                |
+| PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                                                                                                                                                                                                           |
+| POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                                                                                                                                                                                                           |
 
 #### GET /api/ui-specs
 
@@ -582,9 +632,9 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 **查询参数：**
 
-| 参数        | 类型           | 说明                                                                       |
-| ----------- | -------------- | -------------------------------------------------------------------------- |
-| `sessionId` | string（可选） | 指定后只返回该会话激活集中的插件；省略时返回全局所有已加载插件（向后兼容） |
+| 参数        | 类型           | 说明                                                                                                   |
+| ----------- | -------------- | ------------------------------------------------------------------------------------------------------ |
+| `sessionId` | string（可选） | 指定后只返回该会话激活集中的插件；未知会话返回 `404 session_not_found`；省略时返回 registry 中全部插件 |
 
 **响应格式**：
 
@@ -614,7 +664,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 **校验与 `specVersion`**：聚合时对每个 spec 执行 Zod 校验（结构包络 + `specVersion`）。`specVersion` 可省略（按 v1 处理），声明高于服务端支持版本（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。校验失败的 spec **不污染整个响应**——只从对应 slot 中剔除，并在顶层 `diagnostics[]` 中按 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }` 给出具体诊断（哪个插件、哪个字段、什么问题）。带 `sessionId` 时 `diagnostics` 仅包含该会话激活集中的插件。
 
-**缓存**：插件发现 + UI spec 加载/校验结果按插件目录布局缓存，失效信号为 `PLUGIN.md` 与 `ui/*` 文件的 mtime/size 内容签名（仅 `stat`，不读文件）。会话级 `plugin_data` 物化（delete + rewrite）只在签名变化或该会话首次访问时触发，避免每请求扫盘与 DB 重写。spec 文件变更后下次请求会正确重新物化。
+**读取模型**：UI 声明来自启动时发布到 registry 的 manifest 快照，静态 `ui/*` 资源按该快照惰性加载并缓存。runtime 的 UI 资源目录和文档路径由 discovery 快照保存的实际 `PLUGIN.md` 路径确定，不根据逻辑 runtime ID 中的斜杠推断目录。GET 请求不会重新发现插件、重读 `PLUGIN.md`，也不会把 UI 定义写入 `plugin_data`。开发时修改 manifest 或 UI 文件后需重载 registry（通常重启 server）。
 
 ## 详细文档
 
@@ -791,7 +841,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 #### `POST /api/worlds`
 
-创建或更新一个世界记录（upsert 语义）。
+创建一个世界记录。`id` 可省略，由服务端生成 `world-<uuid8>`；已有 id 不会被覆盖，原子地返回 `409 world_already_exists`。修改已有世界使用 `PATCH /api/worlds/:id`。
 
 **请求体:**
 
@@ -805,7 +855,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 }
 ```
 
-**响应:**
+**响应 201:**
 
 ```json
 {
@@ -892,7 +942,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 **响应:**
 
 ```json
-{ "success": true, "syncedKeys": ["geography", "factions", ...], "entryCount": 9 }
+{ "ok": true, "syncedKeys": ["geography", "factions", ...], "entryCount": 9 }
 ```
 
 #### `POST /api/worlds/:id/world-data/preflight`
@@ -959,6 +1009,7 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 
 ```json
 {
+  "ok": true,
   "imported": true,
   "dryRun": true,
   "diagnostics": [],
@@ -1017,17 +1068,19 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 ```json
 {
   "worldId": "mistport",
+  "presetId": "default",
   "locale": "zh-CN",
   "plugins": ["pregame", "narrator", "codex"]
 }
 ```
 
-| 字段      | 类型     | 必填 | 说明                                                          |
-| --------- | -------- | ---- | ------------------------------------------------------------- |
-| `worldId` | string   | 否   | 关联的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                |
-| `locale`  | string   | 否   | 语言区域，默认 `zh-CN`                                        |
-| `plugins` | string[] | 否   | 要激活的插件 ID 列表                                          |
-| `id`      | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`） |
+| 字段       | 类型     | 必填 | 说明                                                          |
+| ---------- | -------- | ---- | ------------------------------------------------------------- |
+| `worldId`  | string   | 否   | 关联的世界 ID（校验: `/^[a-z0-9_-]{1,64}$/i`）                |
+| `presetId` | string   | 否   | 会话模型预设 ID；创建与后续 PATCH 使用同一字段                |
+| `locale`   | string   | 否   | 语言区域，默认 `zh-CN`                                        |
+| `plugins`  | string[] | 否   | 要激活的插件 ID 列表                                          |
+| `id`       | string   | 否   | 客户端自定义会话 ID（如不提供则自动生成 `{worldId}-{uuid8}`） |
 
 客户端自定义 `id` 已存在时返回
 `409 { "error": "Session already exists: <id>", "code": "session_already_exists" }`。
@@ -1042,12 +1095,13 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 - `metadata.characterBlueprints`：创建 session 时自动导入到 `character-blueprint` 插件数据，并实例化为 NPC character。
 - `metadata.embeddedLorebook`：没有文件型 worldData 时导入为 session lorebook；AI 生成的 `server-store` / `return-only` 世界用它携带资料与规则。
 
-**响应:**
+**响应 201:**
 
 ```json
 {
   "id": "mistport-a1b2c3d4",
   "worldId": "mistport",
+  "presetId": "default",
   "locale": "zh-CN",
   "status": "active",
   "phase": "setup",
@@ -1166,7 +1220,7 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 
 ```json
 {
-  "deleted": true
+  "ok": true
 }
 ```
 
@@ -1207,7 +1261,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
-  "jobs": [
+  "items": [
     {
       "schemaVersion": 1,
       "jobId": "job-uuid",
@@ -1234,11 +1288,11 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 #### `POST /api/sessions/:id/runtime-jobs/:jobId/cancel`
 
-在 session lock 内将 `queued/claimed/running` CAS 到 `cancelled`，随后发 `job-status.updated`。成功返回 `{ job }`；不存在、已进入 `committing` 或已经终态时返回 `409`、`code: "runtime_job_not_cancellable"`。取消是控制面终态：已开始的 provider 调用可能只能协作式停止，但其迟到结果无法再进入 commit。
+在 session lock 内将 `queued/claimed/running` CAS 到 `cancelled`，随后发 `job-status.updated`。成功直接返回更新后的 job 资源；不存在、已进入 `committing` 或已经终态时返回 `409`、`code: "runtime_job_not_cancellable"`。取消是控制面终态：已开始的 provider 调用可能只能协作式停止，但其迟到结果无法再进入 commit。
 
 #### `POST /api/sessions/:id/runtime-jobs/:jobId/retry`
 
-只接受 `failed/timed_out/cancelled/stale/orphaned`，并要求 session 仍为 active。显式重试保留冻结的原始输入和稳定设置，刷新当前 session incarnation、插件 approval scope、locale 与 runtime model overrides，创建**新的** `jobId` 和 queued status；原终态不变。成功返回 `202 { job }`，不可重试返回 `409`、`code: "runtime_job_not_retryable"`。未 claim 的普通 queued 作业可在重启后继续执行，但框架不会自动 replay 失败类终态，以免重复调用已经计费但未成功落库的 provider 工作。
+只接受 `failed/timed_out/cancelled/stale/orphaned`，并要求 session 仍为 active。显式重试保留冻结的原始输入和稳定设置，刷新当前 session incarnation、插件 approval scope、locale 与 runtime model overrides，创建**新的** `jobId` 和 queued status；原终态不变。成功以 `202` 直接返回新 job 资源，不可重试返回 `409`、`code: "runtime_job_not_retryable"`。未 claim 的普通 queued 作业可在重启后继续执行，但框架不会自动 replay 失败类终态，以免重复调用已经计费但未成功落库的 provider 工作。
 
 作业由 CAS claim + renewable lease 驱动，默认 worker 并发为 4，同一 `(session, plugin, runtime)` 串行。`maxQueueMs` 约束排队时间，`maxExecutionMs` 约束 claim 后控制面执行时间；重启后会继续 claim 合法 queued 作业，过期排队项置为 `timed_out`、过期在途 lease 置为 `orphaned`。提交前再次检查 session active/incarnation、插件 approval scope/version 和实际 proposal effects；session/plugin 身份检查失败落 `stale`（`reason: commit-barrier-rejected`），effect 或领域提交失败落 `failed`，两者都不会写入领域状态。
 
@@ -1262,6 +1316,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
+  "kind": "action",
   "pluginId": "framework",
   "action": "submit-form",
   "payload": {
@@ -1373,11 +1428,11 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 统一的"结构化插件指令"通道。同时支持:
 
-1. **Action 级**: `{ pluginId, action, payload }` — 调用插件在 `entry` 中通过 `covel.registerRpc` 注册的 handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
-2. **Runtime 级**: `{ pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
+1. **Action 级**: `{ kind: "action", pluginId, action, payload }` — 调用插件在 `entry` 中通过 `covel.registerRpc` 注册的 handler,或框架默认 handler(如 `submit-form`)。返回单次 JSON。
+2. **Runtime 级**: `{ kind: "runtime", pluginId, runtimeId, payload }` — 手动触发一次 runtime 执行。通过完整 Turn pipeline(prompt 组装、工具循环、proposal 提交)跑一次目标 runtime,事件触发的下游 runtime 会在回合内自动 chain(同一事件的多个订阅者按 `name` 定序)。执行子模式由 `manifest.execution` 决定:
    - `'sync'`(默认): 同步等待 runtime 完成,commit proposals 后返回汇总 JSON。
    - `'background'`: 立即返回 202 + `jobId`,后台通过有界进程内队列继续执行。进度/结果通过 `plugin_data` 表 `_jobs` 保留命名空间写回,前端经 `plugin-data.changed` SSE 感知变化。入口 runtime 发出的 background follower 会继续建立子任务，并记录在父任务的 `deferredJobs`。
-3. **Command 级**: `{ commandId, input }` 或 `{ commandId, args }` — 前者来自输入框，后者来自插件 JSON-RENDER `invokeCommand`。两者执行会话命令目录中的同一个命令；服务端重新确认插件仍激活、验证并归一化参数，并从 manifest 决定 action 和可注入上下文。客户端不能提交 `pluginId`、`payload` 或扩大 context scope。
+3. **Command 级**: `{ kind: "command", commandId, input }` 或 `{ kind: "command", commandId, args }` — 前者来自输入框，后者来自插件 JSON-RENDER `invokeCommand`。两者执行会话命令目录中的同一个命令；服务端重新确认插件仍激活、验证并归一化参数，并从 manifest 决定 action 和可注入上下文。客户端不能提交 `pluginId`、`payload` 或扩大 context scope。
 
 **参数:**
 
@@ -1389,6 +1444,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
+  "kind": "action",
   "pluginId": "framework",
   "action": "submit-form",
   "payload": {
@@ -1408,6 +1464,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
+  "kind": "action",
   "pluginId": "codex",
   "action": "regenerate",
   "payload": { "cardId": "shrine-of-stars" }
@@ -1418,6 +1475,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
+  "kind": "runtime",
   "pluginId": "dashscope-image-gen",
   "runtimeId": "dashscope-image-gen/prompt-generator",
   "payload": { "style": "cinematic" }
@@ -1428,6 +1486,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 ```json
 {
+  "kind": "command",
   "commandId": "dice-check:roll",
   "input": "/roll 2d6"
 }
@@ -1437,6 +1496,7 @@ JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
 
 ```json
 {
+  "kind": "command",
   "commandId": "dice-check:roll",
   "args": { "notation": "2d6" }
 }
@@ -1444,6 +1504,7 @@ JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
 
 | 字段                        | 类型          | 说明                                                                                                                                                                                                                                                                                                                                 |
 | --------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `kind`                      | string(必填)  | 请求种类：`action` / `runtime` / `command`。服务端不再根据 selector 字段推断种类                                                                                                                                                                                                                                                     |
 | `pluginId`                  | string(可选)  | action / runtime 模式的插件 ID(框架默认 handler 用 `framework` 占位)；command 模式禁止提交                                                                                                                                                                                                                                           |
 | `action`                    | string(可选)  | RPC action 名,kebab-case。与 `runtimeId` / `commandId` 互斥                                                                                                                                                                                                                                                                          |
 | `runtimeId`                 | string(可选)  | runtime 全名(如 `my-plugin/my-runtime`)。与 `action` / `commandId` 互斥                                                                                                                                                                                                                                                              |
@@ -1452,7 +1513,7 @@ JSON-RENDER 的结构化 command 级请求使用互斥的 `args` 形态：
 | `args`                      | object(可选)  | command JSON-RENDER 模式的命名参数；与 `input` 必须且只能提供一个；未知字段、类型、choices、required 与 variadic 都按服务端命令声明校验                                                                                                                                                                                              |
 | `payload`                   | unknown       | handler 的输入数据 / agent runtime 的 manualPayload / function runtime 的 `ctx.manualPayload`                                                                                                                                                                                                                                        |
 | `expectsBackgroundFollower` | boolean(可选) | runtime 级 sync 入口若只是生成 prompt 并预计触发后台 follower，可设为 `true`。框架会立即写入 `_jobs` 占位并返回 202，随后在后台执行入口 runtime 与 follower，避免 UI 等 prompt LLM 完成后才出现任务。                                                                                                                                |
-| `retryFromTurnId`           | string(可选)  | 仅 runtime 级。带原回合上下文的重试：服务端加载该 turn 的持久化 `turn_results` 工件，把其中记录的 runtime 输出播种进本次执行的 completedResults——目标 runtime 的 `input.inject` / `needs` 按原回合叙事解析（裸 manual 触发这些解析为空）。种子只作上下文，不会被本次工件重复持久化。找不到该 turn 时 404（`retry-turn-not-found`）。 |
+| `retryFromTurnId`           | string(可选)  | 仅 runtime 级。带原回合上下文的重试：服务端加载该 turn 的持久化 `turn_results` 工件，把其中记录的 runtime 输出播种进本次执行的 completedResults——目标 runtime 的 `input.inject` / `needs` 按原回合叙事解析（裸 manual 触发这些解析为空）。种子只作上下文，不会被本次工件重复持久化。找不到该 turn 时 404（`retry_turn_not_found`）。 |
 
 **解析顺序(action 级):**
 
@@ -1585,17 +1646,17 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 
 **错误响应:**
 
-| 状态码 | 触发条件                                                                                                                           |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | `pluginId` 缺失 / `action` 与 `runtimeId` 同时设置或同时缺失 / `RpcValidationError` / `plugin-mismatch`(runtimeId 不属于 pluginId) |
-| 404    | 会话不存在 / `unknown-action`(action 未注册) / `runtime-not-active`(runtimeId 未加载到该 session)                                  |
-| 409    | `session-not-active` / `session-deleting` / `session-incarnation-changed` / `approval-scope-changed`                               |
-| 429    | `queue-full`(community 来源的待批准队列满)                                                                                         |
-| 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime-execution-failed` / `background-enqueue-failed` / `turn-commit-failed`    |
+| 状态码 | 触发条件                                                                                                                        |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `kind` 或该 kind 的必填字段缺失 / 字段跨 kind 混用 / `RpcValidationError` / `plugin_mismatch`                                   |
+| 404    | `session_not_found` / `unknown_action` / `runtime_not_active` / `command_not_active`                                            |
+| 409    | `session_not_active` / `session_deleting` / `session_incarnation_changed` / `approval_scope_changed`                            |
+| 429    | `queue_full`(community 来源的待批准队列满)                                                                                      |
+| 500    | handler 抛出未处理异常 / handler 模块加载失败 / `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed` |
 
 > 注意: background 模式下 runtime 内部异常 **不会**映射为 5xx HTTP 状态 —— 202 已经发出,失败信息写入 `_jobs/{jobId}.value.error`,前端通过 SSE 感知。
 
-> **提交结果是权威判据**：runtime 可能返回 `success` 而其 proposal 提交失败。此时同步 RPC 返回 `500 turn-commit-failed`，background job 标记 `failed`（`error` 说明失败的 proposal 数量），且**不会**调度该回合的 deferred follower —— 后续 follower 不应建立在已回滚的状态上。主回合路径（`POST /api/actions`）遵循同一规则。
+> **提交结果是权威判据**：runtime 可能返回 `success` 而其 proposal 提交失败。此时同步 RPC 返回 `500 turn_commit_failed`，诊断位于通用错误信封的 `details`；background job 标记 `failed`（`error` 说明失败的 proposal 数量），且**不会**调度该回合的 deferred follower —— 后续 follower 不应建立在已回滚的状态上。主回合路径（`POST /api/actions`）遵循同一规则。
 
 > **community 插件 + `entry` action 的延迟激活**：首次调用时 action 尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin 的 entry 在 boot 时已运行，其未知 action 直接 404。
 >
@@ -1643,6 +1704,8 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 | ------ | --------------------------------------------- |
 | 202    | `community` 信任级别需要 approval。响应体见下 |
 
+其余 4xx/5xx 使用本文开头的 `{ error, code?, details? }` 通用错误信封，不返回 `status: "error"`。
+
 **202 响应体:**
 
 ```json
@@ -1670,7 +1733,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 
 ```json
 {
-  "pending": [
+  "items": [
     { "approvalId": "9d8c-...", "pluginId": "...", "action": "...", ... }
   ]
 }
@@ -1770,13 +1833,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
     },
     "pluginData": {
       "scope": "(sessionId, pluginId, namespace, key)",
-      "reservedNamespaces": [
-        "_jobs",
-        "_runtime_jobs",
-        "_logs",
-        "__ui_right__",
-        "__ui_message__"
-      ],
+      "reservedNamespaces": ["_jobs", "_runtime_jobs", "_logs"],
       "writePaths": [
         "builtin-tool:plugin-data-set",
         "function-output:pluginData[]"
@@ -1810,7 +1867,9 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 
 #### `GET /api/plugins`
 
-列出所有已加载的插件。`name` 与 `description` 是 `I18nText`（可能是字符串或 `{ "<locale>": "..." }` 字典）。`capabilities` 为该插件所有 runtime 声明的 capability 并集；`tags` 是玩家/作者筛选标签；`relations` 是目录关系元数据；`outputKind` 取首个 runtime 的输出类别（`story` / `plugin` / `system`）；`source` 是框架根据加载路径派定的插件来源（`builtin` / `community`）。
+列出 registry 中的 canonical `PluginSummary`。`displayName` 与 `description` 是 `I18nText`；`capabilities`、`tags`、`tools`、`userSettings` 和 `runtimes` 都由同一服务端投影生成。加载失败不会进入另一套错误数组，而是作为 `status: "error"` 且带 `error` 的 item 返回。安装管理使用包含失败条目的完整目录，以便显示原因和卸载第三方插件；运行选择可以过滤失败条目。
+
+`runtimes[].trigger` 的 DTO 校验与 manifest 共用 `triggerConfigSchema`，字段及数值约束保持一致，例如 `interval`、`maxTriggerCount`、`startTurn` 为正整数，`cooldownTurns` 为非负整数。
 
 UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` 派发，**不要**根据 `id` 字符串硬编码（违反框架/插件隔离规则）。
 
@@ -1818,10 +1877,10 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 ```json
 {
-  "plugins": [
+  "items": [
     {
       "id": "narrator",
-      "name": { "zh-CN": "核心叙事者", "en-US": "Narrator" },
+      "displayName": { "zh-CN": "核心叙事者", "en-US": "Narrator" },
       "description": "主要叙事生成插件",
       "pluginType": "core-plugin",
       "runtimeCount": 1,
@@ -1833,11 +1892,13 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
         "provides": ["narrative-engine"],
         "conflicts": ["chat-mode-narrator"]
       },
-      "outputKind": "story"
+      "runtimes": [
+        { "id": "narrator", "runtimeType": "agent", "outputKind": "story" }
+      ]
     },
     {
       "id": "dashscope-image-gen",
-      "name": "DashScope Image",
+      "displayName": "DashScope Image",
       "description": "DashScope 文生图（wan2.x）",
       "pluginType": "plugin",
       "runtimeCount": 2,
@@ -1845,7 +1906,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
       "source": "community",
       "capabilities": ["image-generation", "image-prompt", "manual-invoke"],
       "tags": ["role:image", "cost:llm"],
-      "outputKind": "plugin"
+      "runtimes": []
     }
   ]
 }
@@ -1853,7 +1914,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 #### `GET /api/plugins/:id`
 
-获取单个插件的详细信息。返回字段与列表项一致。
+获取单个插件的完整 `PluginDetail`。它包含列表项的全部字段，并增加 `dataSchemas`、`worldProjections`、`declaredPluginDataNamespaces`、聚合 UI slot 和完整 `runtimes[]` 开发契约；不再提供重复的 `/contract` 子资源。
 
 **参数:**
 
@@ -1866,7 +1927,7 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 ```json
 {
   "id": "narrator",
-  "name": { "zh-CN": "核心叙事者", "en-US": "Narrator" },
+  "displayName": { "zh-CN": "核心叙事者", "en-US": "Narrator" },
   "description": "主要叙事生成插件",
   "pluginType": "core-plugin",
   "runtimeCount": 1,
@@ -1878,7 +1939,10 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
     "provides": ["narrative-engine"],
     "conflicts": ["chat-mode-narrator"]
   },
-  "outputKind": "story"
+  "dataSchemas": {},
+  "worldProjections": {},
+  "declaredPluginDataNamespaces": [],
+  "runtimes": []
 }
 ```
 
@@ -1890,9 +1954,9 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 }
 ```
 
-#### `GET /api/plugins/:id/contract`
+#### `PluginDetail` 开发契约字段
 
-返回单个插件从 `PLUGIN.md` manifest 聚合出的开发契约。多 runtime 插件会把所有 runtime 合并为 plugin-level 视图，同时保留 `runtimes[]` 明细。该端点用于回答“这个插件声明了哪些 capabilities、工具、RPC action、UI slot、`dataSchemas`、`worldProjections` 和 plugin-data namespace”。
+`GET /api/plugins/:id` 同时返回从 `PLUGIN.md` 聚合出的开发契约。多 runtime 插件保留 `runtimes[]` 明细，用于回答“这个插件声明了哪些 capabilities、工具、UI slot、`dataSchemas`、`worldProjections` 和 plugin-data namespace”。
 
 **响应节选:**
 
@@ -1910,10 +1974,9 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
     }
   },
   "worldProjections": {},
-  "tools": {
-    "builtin": [],
-    "local": [{ "runtimeId": "codex", "name": "sync-codex-entries" }]
-  },
+  "tools": [
+    { "id": "sync-codex-entries", "kind": "local", "runtimeId": "codex" }
+  ],
   "ui": {
     "right": [{ "runtimeId": "codex", "path": "./ui/codex-panel.json" }],
     "message": [{ "runtimeId": "codex", "path": "./ui/codex-message.json" }],
@@ -1923,6 +1986,10 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
     {
       "id": "codex",
       "runtimeType": "agent",
+      "tools": {
+        "builtin": [],
+        "local": [{ "name": "sync-codex-entries" }]
+      },
       "after": [],
       "needs": [],
       "inputs": {
@@ -1961,13 +2028,12 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 
 #### `GET /api/sessions/:id/plugins`
 
-列出会话的活跃插件和所有可用插件。`available[]` 同样暴露插件 `capabilities`、`tags`、`relations`、`commands`，供前端筛选和组合包状态说明使用；顶层 `commands[]` 是已经按当前 `activePlugins` 过滤、并加入框架命令（如 `/debug`）的会话可执行目录。
+列出会话可见的 canonical 插件描述。`items[]` 只在 `PluginSummary` 上增加 `active`、`locked`；顶层 `commands[]` 是按当前激活集过滤并加入框架命令后的唯一可执行目录，避免按插件重复返回命令。
 
 **响应:**
 
 ```json
 {
-  "active": ["pregame", "narrator"],
   "commands": [
     {
       "id": "framework:debug",
@@ -1980,13 +2046,14 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
       "context": ["session", "active-runtimes", "models"]
     }
   ],
-  "available": [
+  "items": [
     {
       "id": "narrator",
-      "name": "核心叙事者",
+      "displayName": "核心叙事者",
       "description": "主要叙事生成插件",
       "pluginType": "core-plugin",
       "active": true,
+      "locked": true,
       "capabilities": ["narrative", "narrative-engine"],
       "tags": ["mode:traditional-story", "role:narrator", "cost:llm"],
       "relations": {
@@ -1998,9 +2065,9 @@ UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` �
 }
 ```
 
-`available[].runtimes[].execution` 始终返回 manual/event 激活的 effective 模式（`sync` 或 `background`）；`available[].runtimes[].turnCompletion` 返回与全局插件/flow discovery 相同的 staged effective policy：未声明或未启用后台屏障时是 `{ "mode": "await" }`，detached 声明会附带期限与 `serial/reject` 策略。客户端可据此展示功能特性，但 staged runtime 真正是否后台化仍由每回合活跃 DAG 的安全检查决定。
+`items[].runtimes` 与 `GET /api/plugins` 完全同形，客户端不再维护另一套字段映射。
 
-#### `POST /api/sessions/:id/plugins/enable`
+#### `PUT /api/sessions/:id/plugins/:pluginId`
 
 启用一个插件。
 
@@ -2008,38 +2075,29 @@ enable/disable 与同一 session 的其他写入共用 session lock，并在持�
 `activePlugins`。持久化成功后才更新进程内 registry，避免并发 lost update 和
 持久化失败造成的 registry/store 分裂。
 
-**请求体:**
-
-```json
-{ "pluginId": "codex" }
-```
-
 **响应:**
 
 ```json
-{ "ok": true, "active": ["pregame", "narrator", "codex"] }
+{ "ok": true, "activePluginIds": ["pregame", "narrator", "codex"] }
 ```
 
-#### `POST /api/sessions/:id/plugins/disable`
+#### `DELETE /api/sessions/:id/plugins/:pluginId`
 
 禁用一个插件。如果目标插件 `pluginType === "core-plugin"`，返回 **403** 拒绝禁用（核心插件由框架保护）。
-
-**请求体:**
-
-```json
-{ "pluginId": "codex" }
-```
 
 **响应 200:**
 
 ```json
-{ "ok": true, "active": ["pregame", "narrator"] }
+{ "ok": true, "activePluginIds": ["pregame", "narrator"] }
 ```
 
 **响应 403:**
 
 ```json
-{ "error": "Cannot disable core plugin \"narrator\"" }
+{
+  "error": "Cannot disable core plugin \"narrator\"",
+  "code": "core_plugin_required"
+}
 ```
 
 ---
@@ -2114,19 +2172,21 @@ enable/disable 与同一 session 的其他写入共用 session lock，并在持�
 | ---- | ---- | ------- |
 | `id` | 路径 | 会话 ID |
 
-**响应:** 扁平化消息对象的**数组**（`metadata.{turnId,runtimeId,kind,block}` 提升为顶层字段）。
+**响应:** `{ items }` 信封；每项是扁平化消息对象（`metadata.{turnId,runtimeId,kind,block}` 提升为顶层字段）。
 
 ```json
-[
-  {
-    "id": "msg-001",
-    "sessionId": "mistport-a1b2c3d4",
-    "role": "user",
-    "content": "我环顾四周",
-    "turnId": "turn-1",
-    "createdAt": "2025-01-15T10:00:00.000Z"
-  }
-]
+{
+  "items": [
+    {
+      "id": "msg-001",
+      "sessionId": "mistport-a1b2c3d4",
+      "role": "user",
+      "content": "我环顾四周",
+      "turnId": "turn-1",
+      "createdAt": "2025-01-15T10:00:00.000Z"
+    }
+  ]
+}
 ```
 
 #### `GET /api/sessions/:id/messages/page`
@@ -2135,14 +2195,13 @@ keyset（游标）分页消息，**按时间正序（oldest-first）**。不传�
 
 **参数:**
 
-| 参数                | 位置 | 说明                                                           |
-| ------------------- | ---- | -------------------------------------------------------------- |
-| `id`                | 路径 | 会话 ID                                                        |
-| `limit`             | 查询 | 每页条数，默认 80，上限 500                                    |
-| `before_created_at` | 查询 | 游标：只返回早于此 `createdAt` 的消息（需与 `before_id` 成对） |
-| `before_id`         | 查询 | 游标 tie-break：同 `createdAt` 时按 `id` 断序                  |
+| 参数     | 位置 | 说明                                                 |
+| -------- | ---- | ---------------------------------------------------- |
+| `id`     | 路径 | 会话 ID                                              |
+| `limit`  | 查询 | 每页条数，默认 80，上限 500                          |
+| `cursor` | 查询 | 上一页响应的 opaque `nextCursor`；客户端必须原样回传 |
 
-`(before_created_at, before_id)` 是 `(createdAt, id)` 元组游标，即使同毫秒也不漏不重（`messages` 表无单调 `order` 列，故 `id` 断序是必需的）。
+服务端在 opaque cursor 内版本化编码 `(createdAt, id)` keyset，既保证同毫秒记录不漏不重，也允许后续调整存储排序而不破坏客户端；非法或不支持的 cursor 返回 `400 invalid_cursor`。
 
 **响应:**
 
@@ -2255,7 +2314,7 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 **响应:**
 
 ```json
-{ "success": true, "namespace": "schema", "key": "attributes" }
+{ "ok": true, "namespace": "schema", "key": "attributes" }
 ```
 
 #### `DELETE /api/sessions/:id/plugin-data/:pluginId/:namespace/:key`
@@ -2265,7 +2324,7 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 **响应:**
 
 ```json
-{ "success": true }
+{ "ok": true }
 ```
 
 ---
@@ -2282,7 +2341,7 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 
 ```json
 {
-  "entries": [
+  "items": [
     {
       "id": "wm_abc123",
       "sessionId": "world-uuid8",
@@ -2309,10 +2368,10 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 **响应:**
 
 ```json
-{ "success": true }
+{ "ok": true, "scope": "player", "key": "mood" }
 ```
 
-**存储配额**：与 `working_memory.set` commit handler 共用同一份配额定义（`packages/shared/src/utils/working-memory-quota.ts`）：单条 value 序列化后上限 8000 字符（超限返回 `413`，`code: "value-too-large"`）；单 session 上限 200 条（达到上限后新 key 返回 `409`，`code: "entries-exhausted"`，**已存在的 key 仍可更新**）。
+**存储配额**：与 `working_memory.set` commit handler 共用同一份配额定义（`packages/shared/src/utils/working-memory-quota.ts`）：单条 value 序列化后上限 8000 字符（超限返回 `413`，`code: "value_too_large"`）；单 session 上限 200 条（达到上限后新 key 返回 `409`，`code: "entries_exhausted"`，**已存在的 key 仍可更新**）。
 
 #### `DELETE /api/sessions/:id/working-memory/:scope/:key`
 
@@ -2321,16 +2380,16 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 **响应:**
 
 ```json
-{ "success": true }
+{ "ok": true }
 ```
 
 ---
 
 ### Suspend / Resume
 
-> **过期清理**：`POST /api/sessions/:id/resume` 与 `GET /api/sessions/:id/suspensions` 在处理前会机会式触发一次**时间门控**（最多每小时一次）、**best-effort**、**全局**的过期挂起项清理 —— 删除 `resolvedAt` 未设置且 `createdAt` 早于 `now - COVEL_SUSPENSION_TTL_MS`（默认 7 天）的记录。清理是 fire-and-forget，**不阻塞**本次响应。此外服务**启动时**会执行一次强制 sweep，清掉停机期间堆积的陈旧记录。**claimed（恢复进行中，`resolvedAt = "claimed:<iso>"`）与已成功解决的记录永不被清理。** 设 `COVEL_SUSPENSION_TTL_MS=0` 关闭清理。详见 [`docs/guide/env-registry.md`](../guide/env-registry.md)。
+> **过期清理**：suspension 恢复请求与 `GET /api/sessions/:id/suspensions` 在处理前会机会式触发一次时间门控、best-effort 的全局过期清理。详见 [`docs/guide/env-registry.md`](../guide/env-registry.md)。
 
-#### `POST /api/sessions/:id/resume`
+#### `POST /api/sessions/:id/suspensions/:suspensionId/resume`
 
 用玩家提交的数据重新启动一个暂停的 runtime。Agent runtime 从持久化的 tool-loop transcript 续跑；function runtime 直接重新调用 handler，并通过 `ctx.resumeData` / `ctx.resumedFromSuspensionId` 接收本次数据，不会误进入 agent LLM loop。浏览器客户端可带 `X-Provider-Keys` header 提供请求级 key 覆盖；desktop/self-host 客户端可省略该 header，沿用服务端启动时配置的 provider key。服务端不会通过此 API 回传密钥。
 
@@ -2338,7 +2397,6 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 
 ```json
 {
-  "suspensionId": "susp_abc123",
   "data": {/* shape 必须匹配 suspension.resumeSchema */}
 }
 ```
@@ -2357,7 +2415,7 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 
 | 状态  | 触发条件                                               |
 | ----- | ------------------------------------------------------ |
-| `400` | JSON body 错误、`suspensionId` 缺失或 schema 校验失败  |
+| `400` | JSON body/结构错误或 data schema 校验失败              |
 | `404` | session、suspension 不存在，或 runtime manifest 找不到 |
 | `409` | suspension 已 resolved（含并发 claim 竞争的失败方）    |
 | `500` | `resumeSuspendedRuntime()` 抛出错误                    |
@@ -2370,7 +2428,7 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 
 ```json
 {
-  "suspensions": [
+  "items": [
     {
       "id": "susp_abc123",
       "sessionId": "world-uuid8",
@@ -2383,13 +2441,14 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
         "required": ["choice"],
         "properties": { "choice": { "type": "string" } }
       },
-      "pendingContinuation": {/* runtime-internal serialized state */},
-      "createdAt": "2026-04-12T00:00:00.000Z",
-      "resolvedAt": null
+      "createdAt": "2026-04-12T00:00:00.000Z"
     }
   ]
 }
 ```
+
+响应项使用共享的 `SuspensionSummary` DTO。仅返回恢复交互需要的公开元数据；
+`pendingContinuation` 和 claim/resolution 状态属于服务端内部数据，不会通过此接口暴露。
 
 #### `DELETE /api/sessions/:id/suspensions/:suspensionId`
 
@@ -2398,57 +2457,55 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 **响应:**
 
 ```json
-{ "deleted": true, "suspensionId": "susp_abc123" }
+{ "ok": true, "suspensionId": "susp_abc123" }
 ```
 
 ---
 
 ### Snapshot / Fork
 
-> **接入状态（2026-04-27）**：服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 只直接使用 `GET /api/sessions/:id/snapshot` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
+> 服务端手动快照、列表和 fork 能力已实现并有测试覆盖；当前内置 Web UI 使用 `GET /api/sessions/:id/view` 做恢复/重连，暂未提供手动快照列表或 fork 操作界面。
 
-物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取三种值：`auto`（`completedPlayerTurns <= 1` 时写入，之后每 `COVEL_SNAPSHOT_INTERVAL_TURNS`（默认 5）个已完成玩家回合写一份；resume 路径强制写入）、`manual`（`POST /snapshot` 显式创建）、`fork`（`POST /fork` 写到子 session 上记录来源）。
+物化快照是存档 / 读档 / 时间线分叉的核心 —— 每个快照把一个回合结束时的完整 session 状态序列化为 `payload`，保存在 `state_snapshots` 表。`kind` 取 `auto`、`manual`、`fork` 三种；手动快照通过 snapshots 集合创建。
 
-#### `POST /api/sessions/:id/snapshot`
+#### `POST /api/sessions/:id/snapshots`
 
 从当前 session 状态物化一份 `kind="manual"` 的快照。payload 包含 session 生命周期/运行配置（status、phase、completedPlayerTurns、setupRuntimes、locale、activePlugins、presetId、runtimeModelOverrides）、characters、stateEntries、pluginData、workingMemory、`sessionSummaries`（截至消息游标实际引用的压缩摘要）、`compactedMessageSummaryIds`（快照时刻的消息→摘要映射）、lorebookEntries、suspensions（未解决的挂起项）以及 messagesCursor（最后一条 `turn_message.id`）。读取和保存全程持有该 session 的执行锁，因此不会捕获正在提交回合的混合状态。若消息的压缩标签引用了不存在的摘要，快照会拒绝创建，避免生成会在恢复时隐藏历史的不完整存档。PG 部署下若锁被一个执行中的回合持有超过获取超时（30s），返回 `503 { code: 'session_busy' }`，应稍后重试。
 
-**响应:**
+**响应 201（直接返回 `SnapshotRecord`）:**
 
 ```json
 {
-  "snapshot": {
-    "id": "<uuid>",
-    "sessionId": "mistport-a1b2c3d4",
+  "id": "<uuid>",
+  "sessionId": "mistport-a1b2c3d4",
+  "turnId": "turn-42",
+  "kind": "manual",
+  "payload": {
+    "schemaVersion": 3,
     "turnId": "turn-42",
-    "kind": "manual",
-    "payload": {
-      "schemaVersion": 3,
-      "turnId": "turn-42",
-      "session": {
-        "status": "active",
-        "phase": "playing",
-        "completedPlayerTurns": 42,
-        "setupRuntimes": {
-          "world-init": { "state": "done", "resolution": "completed" }
-        },
-        "locale": "zh-CN",
-        "activePlugins": ["world-init", "narrator"],
-        "presetId": "default",
-        "runtimeModelOverrides": { "narrator": "balance" }
+    "session": {
+      "status": "active",
+      "phase": "playing",
+      "completedPlayerTurns": 42,
+      "setupRuntimes": {
+        "world-init": { "state": "done", "resolution": "completed" }
       },
-      "characters": [/* ... */],
-      "stateEntries": [/* ... */],
-      "pluginData": [/* ... */],
-      "workingMemory": [/* ... */],
-      "sessionSummaries": [/* 当前消息前缀引用的 SessionSummaryRecord[] */],
-      "compactedMessageSummaryIds": { "tm_abc": "summary_xyz" },
-      "lorebookEntries": [],
-      "suspensions": [/* 未解决的 SuspensionRecord[] */],
-      "messagesCursor": "tm_abc"
+      "locale": "zh-CN",
+      "activePlugins": ["world-init", "narrator"],
+      "presetId": "default",
+      "runtimeModelOverrides": { "narrator": "balance" }
     },
-    "createdAt": "2026-04-13T00:00:00.000Z"
-  }
+    "characters": [/* ... */],
+    "stateEntries": [/* ... */],
+    "pluginData": [/* ... */],
+    "workingMemory": [/* ... */],
+    "sessionSummaries": [/* 当前消息前缀引用的 SessionSummaryRecord[] */],
+    "compactedMessageSummaryIds": { "tm_abc": "summary_xyz" },
+    "lorebookEntries": [],
+    "suspensions": [/* 未解决的 SuspensionRecord[] */],
+    "messagesCursor": "tm_abc"
+  },
+  "createdAt": "2026-04-13T00:00:00.000Z"
 }
 ```
 
@@ -2458,11 +2515,11 @@ LocalDataService 将浏览器本地消息镜像到临时 server session。每条
 
 列出指定 session 的快照元数据（`auto` / `manual` / `fork`），**keyset（游标）分页**，与 `/messages/page`、traces 分页同一约定。**不返回 `payload`**（快照 payload 序列化整个 session 状态，全量返回会无界增长）；store 层用投影查询计算 `payloadSize` 且从不加载 payload JSON，需要完整 payload 时按 id 单独获取（见下）。
 
-Query 参数：`limit`（默认 50，最大 500）、`before_created_at` + `before_id`（`(createdAt, id)` 元组游标，需成对出现；只提供一半将被忽略并回落到最新窗口）。无游标返回最新一批；带游标返回紧邻更旧的一页。页内按 `createdAt` 升序（最旧在前）。
+Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque `nextCursor`）。无游标返回最新一批；带游标返回紧邻更旧的一页。页内按 `createdAt` 升序（最旧在前），非法 cursor 返回 `400 invalid_cursor`。
 
 ```json
 {
-  "snapshots": [
+  "items": [
     {
       "id": "<uuid>",
       "sessionId": "mistport-a1b2c3d4",
@@ -2481,7 +2538,7 @@ Query 参数：`limit`（默认 50，最大 500）、`before_created_at` + `befo
 
 #### `GET /api/sessions/:id/snapshots/:snapshotId`
 
-按 id 获取单个快照（含完整 `payload`），响应 `{ "snapshot": SnapshotRecord }`。快照不存在或不属于该 session 时返回 `404`。
+按 id 获取单个快照（含完整 `payload`），直接返回 `SnapshotRecord`。快照不存在或不属于该 session 时返回 `404`。
 
 #### `POST /api/sessions/:id/fork`
 
@@ -2519,7 +2576,7 @@ Query 参数：`limit`（默认 50，最大 500）、`before_created_at` + `befo
 
 ### 角色数据
 
-> **接入状态（2026-04-27）**：当前内置 Web UI 主要通过 `GET /api/sessions/:id/snapshot` 获取角色快照；本节 REST 端点保留为轻量读取/管理 API。单批追踪 runtime 推荐使用 `sync-characters`，通用插件仍可按需使用低层 `create-character` / `update-character` 与读取工具 `list-characters` / `get-character`。`POST /characters` 是兼容管理入口，后续若收敛角色写路径，应保持 URL/响应兼容并优先替换内部实现。
+> 当前内置 Web UI 主要通过 `GET /api/sessions/:id/view` 获取角色视图；本节 REST 端点保留为轻量读取/管理 API。单批追踪 runtime 推荐使用 `sync-characters`，通用插件仍可按需使用低层 `create-character` / `update-character` 与读取工具 `list-characters` / `get-character`。
 
 #### `GET /api/sessions/:id/characters`
 
@@ -2685,8 +2742,8 @@ id: evt-002
 
 ```json
 {
-  "id": "evt-a1b2c3d4",
-  "emitted": true
+  "ok": true,
+  "id": "evt-a1b2c3d4"
 }
 ```
 
@@ -2722,20 +2779,28 @@ id: evt-002
 }
 ```
 
-支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_turn` · `retry_runtime`。
+支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_turn` · `retry_runtime` · `retry_failed_runtimes`。六种请求都必须显式提供与 type 匹配的 `payload`；不接受未知字段。
 
-| `payload` 字段    | 适用 `type`       | 说明                                                                                                                                                                                                                                                                |
-| ----------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `content`         | `send_message`    | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                                                                                                     |
-| `command`         | `execute_command` | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                                                                                                |
-| `loreOverride`    | `start_session`   | 可选。Prep 页编辑后的世界文档；服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空。                                                                                                          |
-| —                 | `retry_turn`      | payload 必须为空；显式重跑整个主循环回合。                                                                                                                                                                                                                          |
-| `runtimeId`       | `retry_runtime`   | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                                                                                                          |
-| `retryFromTurnId` | `retry_runtime`   | 可选（需与 `runtimeId` 同用）。指定作为上下文种子的源回合：服务端加载该回合的 `turn_results` 工件播种执行，使被重试 runtime 的 `input.inject`/`needs` 按原回合叙事解析。缺省回退到最近一个 player-origin 工件。前端失败 chip 的重试按钮走这条路径（不删叙事消息）。 |
+| `payload` 字段    | 适用 `type`             | 说明                                                                                                                                                                                   |
+| ----------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `content`         | `send_message`          | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                        |
+| `command`         | `execute_command`       | 以 `/` 开头的命令（如 `/look`），与 `content` 互斥。                                                                                                                                   |
+| `loreOverride`    | `start_session`         | 可选。Prep 页编辑后的世界文档；服务端持久到 session metadata，setup、opening continuation 与后续回合的 `world.lore` 都优先使用该值。空字符串表示显式清空。                             |
+| —                 | `retry_turn`            | 普通 payload 为空；以空玩家输入启动新的主循环回合，使用当前已提交上下文，成功提交后增加玩家回合数。它不恢复或重新生成历史回合。                                                        |
+| `runtimeId`       | `retry_runtime`         | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                             |
+| `retryFromTurnId` | `retry_runtime`         | 可选（需与 `runtimeId` 同用）。显式来源必须是当前故事已提交的原回合，目标须仍失败；来源不存在时不会回退。未指定时保留旧 manual 调用语义，使用最近已提交的 player-origin 工件（如有）。 |
+| `runtimeIds`      | `retry_failed_runtimes` | 必填，1–20 个不重复的 active runtime ID；服务端排序后在同一执行内按 stage/DAG 重跑。                                                                                                   |
+| `retryFromTurnId` | `retry_failed_runtimes` | 必填，原始已提交来源回合。锁内投影其已提交重试结果后，所有所选目标必须仍失败；来源之后若已有已提交的 player/continuation 回合则拒绝旧来源。                                            |
 
-**`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建请求的 `plugins` 数组决定；Web Prep 会先按 world `pluginPolicy` 计算默认选择，再把结果显式传给创建接口。服务端创建路由不读取 world policy，只补 builtin core、`requires` 关系并处理 conflicts。`start_session` 只负责在注册表里激活已持久化集合。空集合会被 **400** 拒绝（`Session has no active plugins. …`），不会回退到"激活全部已注册插件"；该回退会把玩家从未选择的社区插件及互斥叙事引擎同时拉进会话，并持久化到会话生命周期结束。
+**批量恢复边界**：一次 action、一次会话锁和一次事务提交，不追加玩家输入、不推进玩家回合数、不触发开场接力。仅原始回合及关联的已提交重试中成功的非目标结果可作为上下文；种子不会重复提交或重放事件。目标间保留正常输入校验、依赖顺序和独立任务并行；失败依赖导致的 skipped 不会把原失败任务标为已修复。批量恢复和带明确来源的单任务恢复均保持前台，不通过事件订阅、递归调用或后台分发扩大所选范围。显式单任务来源重试同样校验来源与最新失败状态；普通不带来源的 manual / plugin-RPC 调用保留原有事件链、递归和分发行为。
 
-**开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力回合是第一个计数的玩家回合（`completedPlayerTurns` 0 → 1）。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_turn` / `retry_runtime` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
+重试的生命周期 trace 和 SSE payload 带 `sourceTurnId`（原回合）及 `runtimeIds`（本次范围），envelope 的 `turnId` 仍是新 attempt。原审计记录不修改；只有该 attempt 已提交（`turn.completed` / `execution.completed` 的 `committed: true` 或已提交工件）才可把成功任务投影为已恢复。回滚或中断后，不能凭单条 `runtime.completed` 宣告恢复。刷新接口只观察状态，不能重新生成。
+
+服务端验证来源已提交后，scope 同时携带 `sourceCommitted: true` 和 `sourceFailedRuntimeIds`。后者是该来源已提交记录中仍失败的完整 ID 摘要，包含 inactive 任务，不受本次选择的 20 个目标上限截断。执行中携带开始前的失败全集；成功提交的终态移除本次成功任务，保留失败或依赖跳过的任务；回滚或中断保持原摘要。空数组也显式传递。客户端用最新摘要替换旧摘要，并以已提交终态优先于同一次 attempt 的执行中事件；即使原回合日志或较早任务事件被快照的 trace 窗口裁掉，也能保留来源提交证明和真实剩余失败范围。摘要中缺少某 ID 只表示它已不在失败集合，不能据此伪造成功步骤。
+
+**`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建请求的 `plugins` 数组决定；Web Prep 先读取服务端 `GET /api/worlds/:id/plugin-plan` 的解析结果，再把玩家最终选择显式传给创建接口。`plugin-plan.defaultPluginIds` 使用与会话相同的 `requires`、`conflicts` 和可信 builtin core 替换规则解析；准备页遵守该结果，不重新锁定已被替代的 core 插件。服务端创建路由不再次读取 world policy，只补 builtin core、`requires` 关系并处理 conflicts。`start_session` 只负责在注册表里激活已持久化集合。空集合会被 **400** 拒绝（`Session has no active plugins. …`），不会回退到"激活全部已注册插件"；该回退会把玩家从未选择的社区插件及互斥叙事引擎同时拉进会话，并持久化到会话生命周期结束。
+
+**开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力以 `origin: continuation` 执行，不增加 `completedPlayerTurns`。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_turn` / `retry_runtime` / `retry_failed_runtimes` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
 
 > 玩家输入字段是 `payload.content`（`send_message`）/ `payload.command`（`execute_command`），没有别的别名。插件侧发事件请用 builtin `emit-event` 工具；未列出的 `type` 一律 400。
 
@@ -2835,6 +2900,10 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 | `return-only`  | SSE 响应体                            | 调用方自行保存                 | 浏览器本地 IndexedDB、预览生成结果、公开服务避免写服务端持久层 |
 
 `server-store` 和 `return-only` 会先把世界包写入临时目录做校验，然后删除临时目录。这两个模式保存的 `WorldRecord.metadata` 会移除文件路径型 `worldDataPath`、`worldData`、`dimensionSources` 和 `characterBlueprintSources`，保留已归一化的 `metadata.dimensions`，并用 `metadata.characterBlueprints` 与 `metadata.embeddedLorebook` 携带经过校验的角色/资料/规则文本。创建 session 时，文件世界优先走 descriptor；没有世界包目录时走这份便携内容，避免数据库和浏览器本地世界丢失补充内容。
+
+生产 MemoryStore 的 self 部署中，`server-file`（含省略 `saveTarget` 的默认值）
+与 `server-store` 在生成及写入前要求 operator token；`return-only` 继续公开，
+不会改写服务端共享世界。hosted 层级仍对所有 AI 世界生成请求要求 operator token。
 
 响应里的 `world.metadata.storage` 标注真实保存位置：
 
@@ -2968,12 +3037,11 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 
 **参数:**
 
-| 参数                | 位置 | 说明                                                  |
-| ------------------- | ---- | ----------------------------------------------------- |
-| `sessionId`         | 路径 | 会话 ID                                               |
-| `limit`             | 查询 | 每页**事件**数（非 Turn 数），默认 400，上限 500      |
-| `before_created_at` | 查询 | 游标：只返回早于此位置的事件（需与 `before_id` 成对） |
-| `before_id`         | 查询 | 游标 tie-break                                        |
+| 参数        | 位置 | 说明                                                              |
+| ----------- | ---- | ----------------------------------------------------------------- |
+| `sessionId` | 路径 | 会话 ID                                                           |
+| `limit`     | 查询 | 每页**事件**数（非 Turn 数），默认 400，上限 500                  |
+| `cursor`    | 查询 | 上一页响应的 opaque `nextCursor`；非法值返回 `400 invalid_cursor` |
 
 分页单位是**事件**：一个 Turn 可能跨窗口边界被切开，前端加载更旧一页后按 `turnId` 合并边界 Turn。`nextCursor` 指向窗口内最旧**事件**的 `(createdAt, id)`。
 
@@ -3037,6 +3105,7 @@ data: {"type":"done","world":{"id":"frost-continent","name":"冰封大陆","meta
 
 ```json
 {
+  "ok": true,
   "policy": { "dryRun": true, "maxBytes": 0 },
   "result": {
     "scanned": 12,
@@ -3113,7 +3182,7 @@ Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 | `world.dimensions.changed` | 世界         | 世界维度文件变更（热更新）                                                                      |
 | `plugin-data.changed`      | 插件数据     | `plugin-data-set` / DELETE / batch 等所有写路径                                                 |
 | `turn.suspended`           | 流程控制     | `finalizeExecution` 成功提交 suspension artifact 后发出                                         |
-| `turn.resumed`             | 流程控制     | `POST /api/sessions/:id/resume` 重启 runtime                                                    |
+| `turn.resumed`             | 流程控制     | `POST /api/sessions/:id/suspensions/:suspensionId/resume` 重启 runtime                          |
 | `working_memory.changed`   | 流程控制     | `working_memory.set` proposal commit 后直接写入 `/api/actions`（commit-direct，不经转发白名单） |
 | `proposal.failed`          | 流程控制     | 单条 proposal 提交失败——显式上报而非静默丢弃，由提交方直接写入 action stream                    |
 | `job-status.updated`       | 流程控制     | 后台 function runtime 经 `ctx.progress` 汇报进度（append-only job 通道，转发到 action stream）  |

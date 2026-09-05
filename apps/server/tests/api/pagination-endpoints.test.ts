@@ -4,13 +4,14 @@
  *   GET /api/traces/:sessionId/turns/page
  *
  * Both page an append-only, time-ordered log oldest-first with a
- * `(before_created_at, before_id)` cursor. Exercised with small `?limit` so the
+ * opaque `cursor` value. Exercised with small `?limit` so the
  * windowing/cursor logic is verified without seeding a full default window.
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
+import { decodePageCursor } from "@covel/shared";
 import { messageRoutes } from "../../src/routes/api/messages.js";
 import { traceRoutes } from "../../src/routes/api/traces.js";
 
@@ -78,19 +79,23 @@ describe("GET /api/sessions/:id/messages/page", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       items: Array<{ id: string; turnId?: string }>;
-      nextCursor: { createdAt: string; id: string } | null;
+      nextCursor: string | null;
     };
     expect(body.items.map((m) => m.id)).toEqual(["m3", "m4"]);
     // Metadata is flattened to top-level.
     expect(body.items[0].turnId).toBe("t3");
-    expect(body.nextCursor).toEqual({ createdAt: ts(30), id: "m3" });
+    expect(decodePageCursor(body.nextCursor!)).toEqual({
+      createdAt: ts(30),
+      id: "m3",
+    });
   });
 
   it("pages older when given the cursor, and ends with a null cursor", async () => {
+    const first = (await (
+      await app.request(`/api/sessions/${sessionId}/messages/page?limit=2`)
+    ).json()) as { nextCursor: string };
     const res = await app.request(
-      `/api/sessions/${sessionId}/messages/page?limit=2&before_created_at=${encodeURIComponent(
-        ts(30),
-      )}&before_id=m3`,
+      `/api/sessions/${sessionId}/messages/page?limit=2&cursor=${encodeURIComponent(first.nextCursor)}`,
     );
     const body = (await res.json()) as {
       items: Array<{ id: string }>;
@@ -98,12 +103,13 @@ describe("GET /api/sessions/:id/messages/page", () => {
     };
     expect(body.items.map((m) => m.id)).toEqual(["m1", "m2"]);
     // Exactly `limit` returned → there *might* be more; cursor points older.
-    expect(body.nextCursor).toEqual({ createdAt: ts(10), id: "m1" });
+    expect(decodePageCursor(body.nextCursor as string)).toEqual({
+      createdAt: ts(10),
+      id: "m1",
+    });
 
     const end = await app.request(
-      `/api/sessions/${sessionId}/messages/page?limit=2&before_created_at=${encodeURIComponent(
-        ts(10),
-      )}&before_id=m1`,
+      `/api/sessions/${sessionId}/messages/page?limit=2&cursor=${encodeURIComponent(body.nextCursor as string)}`,
     );
     const endBody = (await end.json()) as {
       items: unknown[];
@@ -116,6 +122,14 @@ describe("GET /api/sessions/:id/messages/page", () => {
   it("404s for an unknown session", async () => {
     const res = await app.request(`/api/sessions/nope/messages/page`);
     expect(res.status).toBe(404);
+  });
+
+  it("rejects malformed opaque cursors", async () => {
+    const res = await app.request(
+      `/api/sessions/${sessionId}/messages/page?cursor=not-a-cursor`,
+    );
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ code: "invalid_cursor" });
   });
 });
 
@@ -155,26 +169,33 @@ describe("GET /api/traces/:sessionId/turns/page", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       turns: Array<{ turnId: string; eventCount: number }>;
-      nextCursor: { createdAt: string; id: string } | null;
+      nextCursor: string | null;
     };
     // Newest 2 events belong to t2.
     expect(body.turns.map((t) => t.turnId)).toEqual(["t2"]);
     expect(body.turns[0].eventCount).toBe(2);
     // Cursor is the oldest event of the window (an event, not a turn).
-    expect(body.nextCursor).toEqual({ createdAt: ts(30), id: "e3" });
+    expect(decodePageCursor(body.nextCursor!)).toEqual({
+      createdAt: ts(30),
+      id: "e3",
+    });
   });
 
   it("pages older turns via the event cursor", async () => {
+    const first = (await (
+      await app.request(`/api/traces/${sessionId}/turns/page?limit=2`)
+    ).json()) as { nextCursor: string };
     const res = await app.request(
-      `/api/traces/${sessionId}/turns/page?limit=2&before_created_at=${encodeURIComponent(
-        ts(30),
-      )}&before_id=e3`,
+      `/api/traces/${sessionId}/turns/page?limit=2&cursor=${encodeURIComponent(first.nextCursor)}`,
     );
     const body = (await res.json()) as {
       turns: Array<{ turnId: string }>;
       nextCursor: unknown;
     };
     expect(body.turns.map((t) => t.turnId)).toEqual(["t1"]);
-    expect(body.nextCursor).toEqual({ createdAt: ts(10), id: "e1" });
+    expect(decodePageCursor(body.nextCursor as string)).toEqual({
+      createdAt: ts(10),
+      id: "e1",
+    });
   });
 });

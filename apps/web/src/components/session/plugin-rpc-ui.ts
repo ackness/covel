@@ -29,7 +29,6 @@ export type ConfirmPluginRpcApproval = (
 ) => Promise<boolean>;
 
 export function getPluginRpcFailureMessage(res: PluginRpcResponse): string {
-  if (res.status === "error") return res.error;
   if (res.status !== "ok") return "";
   const runtimeError = res.runtimeResults?.find(
     (r) =>
@@ -83,10 +82,6 @@ export function emitPluginRpcRuntimeResponse(params: {
   readonly fallbackFailureMessage?: string;
 }): void {
   const { response, t, runtimeId } = params;
-  if (response.status === "error") {
-    emitToast("error", response.error);
-    return;
-  }
   if (response.status === "accepted") {
     emitPluginRpcAcceptedJob(t, response.jobId);
     return;

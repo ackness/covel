@@ -13,6 +13,7 @@ import type {
   LLMMessageContent,
   LLMResponse,
   LLMResponseFormat,
+  LLMRequestDefaults,
   LLMStreamEvent,
   LLMTargetIdentity,
   LLMToolDefinition,
@@ -124,6 +125,7 @@ export interface GatewayLike {
       }>;
       responseFormat?: LLMResponseFormat;
       providerRequestMetadata?: Record<string, unknown>;
+      defaults?: LLMRequestDefaults;
     },
     options?: {
       apiKeys?: Record<string, string>;
@@ -163,6 +165,7 @@ export interface GatewayLike {
         };
       }>;
       providerRequestMetadata?: Record<string, unknown>;
+      defaults?: LLMRequestDefaults;
     },
     options?: {
       apiKeys?: Record<string, string>;
@@ -255,6 +258,7 @@ export function createGatewayAdapter(
       const result = await gateway.generateText(
         {
           presetId: params.model ?? undefined,
+          ...(params.defaults ? { defaults: params.defaults } : {}),
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
           responseFormat: params.responseFormat,
@@ -314,6 +318,7 @@ export function createGatewayAdapter(
       for await (const event of gateway.streamText(
         {
           presetId: params.model ?? undefined,
+          ...(params.defaults ? { defaults: params.defaults } : {}),
           messages,
           tools: tools && tools.length > 0 ? tools : undefined,
         },

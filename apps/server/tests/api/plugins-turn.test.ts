@@ -101,7 +101,7 @@ describe("Plugin Routes", () => {
       const res = await app.request("/api/plugins");
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body).toEqual({ plugins: [] });
+      expect(body).toEqual({ items: [] });
     });
 
     it("should return all registered plugins", async () => {
@@ -121,14 +121,14 @@ describe("Plugin Routes", () => {
       const res = await app.request("/api/plugins");
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.plugins).toHaveLength(2);
-      expect(body.plugins[0]).toMatchObject({
+      expect(body.items).toHaveLength(2);
+      expect(body.items[0]).toMatchObject({
         id: "plugin-a",
-        name: "Plugin A",
+        displayName: "Plugin A",
       });
-      expect(body.plugins[1]).toMatchObject({
+      expect(body.items[1]).toMatchObject({
         id: "plugin-b",
-        name: "Plugin B",
+        displayName: "Plugin B",
       });
     });
   });
@@ -146,7 +146,7 @@ describe("Plugin Routes", () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.id).toBe("my-plugin");
-      expect(body.name).toBe("My Plugin");
+      expect(body.displayName).toBe("My Plugin");
       expect(body.status).toBe("registered");
     });
 
@@ -158,8 +158,8 @@ describe("Plugin Routes", () => {
     });
   });
 
-  describe("GET /api/plugins/:id/contract", () => {
-    it("returns manifest-derived plugin contracts for tooling", async () => {
+  describe("canonical plugin detail", () => {
+    it("includes manifest-derived contracts in the plugin resource", async () => {
       const parsed = makeParsedManifest({
         name: "my-plugin/runner",
         capabilities: ["image-generation"],
@@ -218,7 +218,7 @@ describe("Plugin Routes", () => {
         }),
       );
 
-      const res = await app.request("/api/plugins/my-plugin/contract");
+      const res = await app.request("/api/plugins/my-plugin");
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body).toMatchObject({
@@ -241,10 +241,8 @@ describe("Plugin Routes", () => {
           },
         },
       });
-      // Entry-registered tools are declared by name; there is no on-disk path.
-      expect(body.tools.local).toEqual([
-        { runtimeId: "my-plugin/runner", name: "save-image" },
-      ]);
+      // Runtime-local tools are declared by name; there is no on-disk path.
+      expect(body.runtimes[0].tools.local).toEqual([{ name: "save-image" }]);
       expect(body.runtimes[0]).toMatchObject({
         id: "my-plugin/runner",
         runtimeType: "function",
@@ -270,8 +268,8 @@ describe("Plugin Routes", () => {
       });
     });
 
-    it("keeps missing plugin contract requests as 404", async () => {
-      const res = await app.request("/api/plugins/missing/contract");
+    it("keeps missing plugin detail requests as 404", async () => {
+      const res = await app.request("/api/plugins/missing");
       expect(res.status).toBe(404);
     });
   });

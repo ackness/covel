@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { TFunction } from "i18next";
 import { FrameworkCapability, FrameworkRuntimeCapability } from "@covel/shared";
 import type { PluginRpcRequest } from "@covel/shared";
-import type { SessionPluginInfo } from "@/services/api.js";
+import type { SessionPlugin } from "@/services/api.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import {
   emitPluginRpcRuntimeResponse,
@@ -16,7 +16,7 @@ interface ImageGenEntry {
 }
 
 interface UseImageGenerationArgs {
-  readonly sessionPlugins: SessionPluginInfo[];
+  readonly sessionPlugins: SessionPlugin[];
   readonly sessionId: string | undefined;
   readonly confirm: ConfirmPluginRpcApproval;
   readonly t: TFunction;
@@ -45,7 +45,7 @@ export function useImageGeneration({
 
   const imageGenEntry = useMemo<ImageGenEntry | null>(() => {
     for (const p of sessionPlugins) {
-      if (!p.isActive) continue;
+      if (!p.active) continue;
       if (!p.capabilities?.includes(FrameworkCapability.ImageGeneration))
         continue;
       const entry = p.runtimes?.find(
@@ -66,6 +66,7 @@ export function useImageGeneration({
   const handleGenerateImage = useCallback(async () => {
     if (!sessionId || !imageGenEntry || generatingImage) return;
     const req = {
+      kind: "runtime",
       pluginId: imageGenEntry.pluginId,
       runtimeId: imageGenEntry.runtimeId,
       expectsBackgroundFollower: true,

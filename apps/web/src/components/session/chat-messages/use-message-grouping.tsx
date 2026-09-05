@@ -2,144 +2,103 @@ import { useMemo, type ReactNode } from "react";
 import { ExecutionTimeline } from "../execution-timeline.js";
 import { AssetTurnSidebar } from "@/components/asset-render/index.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
-import type { PackageSummary } from "@/services/api.js";
+import type { PluginSummary } from "@/services/api.js";
+import {
+  projectExecutionTurns,
+  type ExecutionTurn,
+} from "@/stores/session-store/execution-projection.js";
 
 interface UseMessageGroupingArgs {
   readonly messages: StreamMessage[];
   readonly executionSteps: ExecutionStep[];
   readonly executing: boolean;
-  readonly packages: PackageSummary[];
+  readonly plugins: PluginSummary[];
   readonly onRetryRuntime?: (
-    runtimeId: string | undefined,
+    runtimeId: string | readonly string[] | undefined,
     sourceTurnId?: string,
   ) => void;
   readonly renderMessage: (msg: StreamMessage, index: number) => ReactNode;
 }
 
 /**
- * Interleaves message rows with per-turn execution timelines and asset
- * sidebars. Each turn's timeline is inserted after that turn's last message;
- * steps belonging to turns with no messages yet (e.g. startup) render at the
- * bottom. Rows are wrapped in `.chat-row` so off-screen rows skip layout/paint
- * (content-visibility) while preserving keys, refs, state, scroll anchoring,
- * streaming follow and jump-to-latest.
- *
- * The O(history) grouping maps are memoised on `[messages, executionSteps]`
- * so renders driven by other props (hover state, jump-to-latest, load-older
- * spinner, confirm dialog) don't rebuild them. Crucially, streaming token
- * deltas do NOT change `messages` — the live text lives in a separate
- * fine-grained external store, so these maps are NOT rebuilt per token;
- * the streaming placeholder is inserted once and its row subscribes by id.
- * `renderMessage` closes over live
- * props/state and stays fresh — it is called in the render loop below, never
- * memoised, so rows never go stale.
+ * Keep messages, execution and assets together in turn order. A turn without
+ * messages still has a place in history; it must not become the current turn
+ * merely because its timeline used to be appended after every message.
+ * Streaming text lives outside messages, so grouping remains stable per token.
  */
 export function useMessageGrouping({
   messages,
   executionSteps,
   executing,
-  packages,
+  plugins,
   onRetryRuntime,
   renderMessage,
 }: UseMessageGroupingArgs): ReactNode[] {
-  const { stepsByTurn, lastMsgIndexByTurn, lastTurnId } = useMemo(() => {
-    // Group execution steps by turnId for inline rendering
-    const steps = new Map<string, ExecutionStep[]>();
-    for (const step of executionSteps) {
-      const tid = step.turnId ?? "__unknown__";
-      if (!steps.has(tid)) steps.set(tid, []);
-      steps.get(tid)!.push(step);
-    }
+  const projection = useMemo(
+    () => projectExecutionTurns(messages, executionSteps),
+    [messages, executionSteps],
+  );
 
-    // Collect the last message index per turnId so we know where to insert
-    const lastIdx = new Map<string, number>();
-    for (let i = 0; i < messages.length; i += 1) {
-      const tid = messages[i].turnId;
-      if (tid) lastIdx.set(tid, i);
-    }
-
-    // The last inserted turnId — used to flag the active turn for retry/loader.
-    const turnIds = [...lastIdx.keys()];
-    return {
-      stepsByTurn: steps,
-      lastMsgIndexByTurn: lastIdx,
-      lastTurnId: turnIds.at(-1),
-    };
-  }, [messages, executionSteps]);
-
+  const pendingMessage = messages.at(-1);
+  const awaitingTurnIdentity =
+    executing && pendingMessage?.role === "user" && !pendingMessage.turnId;
+  const latestTurn = awaitingTurnIdentity ? undefined : projection.latestTurn;
   const rendered: ReactNode[] = [];
-  const insertedTurnIds = new Set<string>();
+  const addRow = (
+    key: string,
+    node: ReactNode,
+    group: ExecutionTurn,
+    kind: "message" | "execution" | "assets",
+  ) => {
+    if (!node) return;
+    rendered.push(
+      <div
+        key={key}
+        className="chat-row"
+        data-turn-id={group.turnId}
+        data-row-kind={kind}
+        data-turn-current={group === latestTurn}
+      >
+        {node}
+      </div>,
+    );
+  };
 
-  messages.forEach((msg, idx) => {
-    const node = renderMessage(msg, idx);
-    if (node) rendered.push(node);
-
-    // After the last message of a turn, insert that turn's execution timeline
-    if (msg.turnId && lastMsgIndexByTurn.get(msg.turnId) === idx) {
-      const turnSteps = stepsByTurn.get(msg.turnId);
-      if (turnSteps && turnSteps.length > 0) {
-        insertedTurnIds.add(msg.turnId);
-        const isActiveTurn = executing && msg.turnId === lastTurnId;
-        rendered.push(
-          <ExecutionTimeline
-            key={`exec-${msg.turnId}`}
-            steps={turnSteps}
-            executing={isActiveTurn ? executing : false}
-            packages={packages}
-            onRetryRuntime={
-              isActiveTurn && onRetryRuntime
-                ? (id, sourceTurnId) => onRetryRuntime(id, sourceTurnId)
-                : undefined
-            }
-            onRetryAll={
-              isActiveTurn && onRetryRuntime
-                ? () => onRetryRuntime(undefined)
-                : undefined
-            }
-          />,
-        );
-      }
-      // P0-b — surface modality-routed assets emitted by this turn out-of-band,
-      // so plain narrative turns stay untouched while image / audio /
-      // generic-link assets show up next to the execution timeline. Renders
-      // nothing when the turn has no assets, so this is a layout no-op for
-      // text-only turns.
-      rendered.push(
-        <AssetTurnSidebar key={`assets-${msg.turnId}`} turnId={msg.turnId} />,
+  for (const group of projection.turns) {
+    for (const { message, index } of group.messages) {
+      addRow(message.id, renderMessage(message, index), group, "message");
+    }
+    const isLatestTurn = group === latestTurn;
+    const canRetry =
+      isLatestTurn && !executing && !!group.turnId && !!onRetryRuntime;
+    if (group.steps.length > 0) {
+      addRow(
+        `exec-${group.turnId ?? "__unknown__"}`,
+        <ExecutionTimeline
+          steps={group.steps}
+          executing={executing && isLatestTurn}
+          isLatestTurn={isLatestTurn}
+          turnNumberStart={group.turnNumber}
+          plugins={plugins}
+          canRetryTasks={group.sourceCommitted === true}
+          onRetryRuntime={
+            canRetry && group.sourceCommitted === true
+              ? (id) => onRetryRuntime?.(id, group.turnId)
+              : undefined
+          }
+        />,
+        group,
+        "execution",
       );
     }
-  });
-
-  // If the current turn is executing and has no messages yet (startup), or
-  // steps belong to a turn with no messages, show at the bottom.
-  const activeTurnSteps = executionSteps.filter((s) => {
-    const tid = s.turnId ?? "__unknown__";
-    return !insertedTurnIds.has(tid);
-  });
-  if (activeTurnSteps.length > 0) {
-    rendered.push(
-      <ExecutionTimeline
-        key="exec-active"
-        steps={activeTurnSteps}
-        executing={executing}
-        packages={packages}
-        onRetryRuntime={onRetryRuntime ? (id) => onRetryRuntime(id) : undefined}
-        onRetryAll={
-          onRetryRuntime ? () => onRetryRuntime(undefined) : undefined
-        }
-      />,
-    );
+    if (group.turnId && group.messages.length > 0) {
+      addRow(
+        `assets-${group.turnId}`,
+        <AssetTurnSidebar turnId={group.turnId} />,
+        group,
+        "assets",
+      );
+    }
   }
-
-  // Wrap each row in a `.chat-row` so off-screen rows skip layout and paint
-  // (content-visibility) — preserves keys, refs, state, scroll anchoring,
-  // streaming follow and jump-to-latest.
-  return rendered.map((node) => {
-    const el = node as React.ReactElement;
-    return (
-      <div key={el.key} className="chat-row">
-        {node}
-      </div>
-    );
-  });
+  return rendered;
 }

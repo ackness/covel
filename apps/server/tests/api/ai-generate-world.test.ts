@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { aiRoutes } from "../../src/routes/api/ai.js";
@@ -82,6 +82,7 @@ function createTestApp(
   app.use("*", async (c, next) => {
     c.set("llmAdapter", llm);
     c.set("store", store);
+    c.set("storeBackend", "memory");
     await next();
   });
   app.route("/api/ai", aiRoutes);
@@ -117,6 +118,7 @@ describe("ai world generation route", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     if (previousStoreBackend === undefined) {
       delete process.env.STORE_BACKEND;
     } else {
@@ -183,6 +185,54 @@ describe("ai world generation route", () => {
       durable: false,
     });
     expect(await store.getWorld("generated-world")).toBeNull();
+  });
+
+  it("keeps return-only generation public in production browser-private mode", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DEPLOYMENT_TIER", "self");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "");
+    const res = await app.request("/api/ai/generate-world", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        concept: "Local preview",
+        saveTarget: "return-only",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const events = await readSseJson(res);
+    expect(events.find((event) => event.type === "done")?.world).toMatchObject({
+      id: "generated-world",
+      metadata: { storage: { scope: "transient", backend: "response" } },
+    });
+    expect(await store.listWorlds()).toEqual([]);
+    expect(await readdir(worldsDir)).toEqual([]);
+  });
+
+  it("allows an operator to persist a generated world in production browser-private mode", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DEPLOYMENT_TIER", "self");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "synthetic-world-operator");
+    const res = await app.request("/api/ai/generate-world", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer synthetic-world-operator",
+      },
+      body: JSON.stringify({
+        concept: "Shared world",
+        saveTarget: "server-store",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const events = await readSseJson(res);
+    expect(events.some((event) => event.type === "done")).toBe(true);
+    expect(await store.getWorld("generated-world")).toMatchObject({
+      id: "generated-world",
+      metadata: { source: "server-store" },
+    });
   });
 
   it("embeds requested text supplements for store-only worlds without dangling paths", async () => {

@@ -78,15 +78,17 @@ export function FrameworkDiscoveryPanel({
 export function PluginContractsPanel({
   plugins,
 }: {
-  plugins: api.PluginContract[];
+  plugins: api.PluginDetail[];
 }) {
   const { t } = useTranslation();
   return (
     <div className="space-y-2">
       {plugins.map((plugin) => {
         const pluginDescription = displayText(plugin.description);
-        const builtinTools = plugin.tools?.builtin ?? [];
-        const localTools = plugin.tools?.local ?? [];
+        const builtinTools = plugin.tools.filter(
+          (tool) => tool.kind === "builtin",
+        );
+        const localTools = plugin.tools.filter((tool) => tool.kind === "local");
         const uiCount =
           (plugin.ui?.right?.length ?? 0) +
           (plugin.ui?.message?.length ?? 0) +
@@ -128,8 +130,8 @@ export function PluginContractsPanel({
               <DiscoveryMetric
                 label={t("debugger.discovery.tools", "tools")}
                 values={[
-                  ...builtinTools.map((name) => `builtin:${name}`),
-                  ...localTools.map((tool) => `local:${tool.name}`),
+                  ...builtinTools.map((tool) => `builtin:${tool.id}`),
+                  ...localTools.map((tool) => `local:${tool.id}`),
                 ]}
               />
               <DiscoveryMetric
@@ -270,7 +272,7 @@ function DiscoveryMetric({
   values,
 }: {
   label: string;
-  values: string[];
+  values: readonly string[];
 }) {
   const { t } = useTranslation();
   return (

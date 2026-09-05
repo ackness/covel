@@ -90,7 +90,10 @@ quadratically. The compact `commits` table stores only revision/action metadata.
 
 `BrowserVault` recursively rejects credential-shaped fields such as `apiKey`,
 access/refresh tokens, passwords, private keys, and client secrets before any
-transaction writes. Provider keys continue to travel only in request headers.
+transaction writes. Ordinary domain content whose name happens to be
+`secret`/`secrets` (for example `CharacterBlueprint.persona.secrets`) is not a
+credential and remains persistable. Provider keys continue to travel only in
+request headers.
 
 This development-version redesign does not import the removed `covel-browser`
 business schema. Old implementations remain recoverable from Git history.

@@ -21,10 +21,16 @@ import type { DebugPageData } from "./-debug-page-data.js";
 export function SessionDataView({
   selectedSessionId,
   snapshotData,
+  snapshotLoading = false,
+  snapshotError = false,
+  snapshotUpdatedAt,
   traceDiscovery,
 }: {
   selectedSessionId: string | null;
   snapshotData: DebugPageData["snapshotData"];
+  snapshotLoading?: boolean;
+  snapshotError?: boolean;
+  snapshotUpdatedAt?: string | null;
   traceDiscovery: DebugPageData["traceDiscovery"];
 }) {
   const { t } = useTranslation();
@@ -37,7 +43,24 @@ export function SessionDataView({
             {t("debugger.selectSession")}
           </p>
         )}
-        {selectedSessionId && !snapshotData && (
+        {snapshotError && (
+          <p role="alert" className="text-sm text-destructive">
+            {t("debugger.snapshotRefreshFailed", {
+              defaultValue:
+                "Could not refresh session data. Displayed data may be outdated; use Refresh to retry.",
+            })}
+          </p>
+        )}
+        {snapshotUpdatedAt && (
+          <p className="text-xs text-muted-foreground" role="status">
+            {t("debugger.snapshotUpdatedAt", {
+              defaultValue: "Data updated at {{time}}",
+              time: new Date(snapshotUpdatedAt).toLocaleTimeString(),
+            })}
+            {snapshotLoading && ` · ${t("debugger.loadingSessionData")}`}
+          </p>
+        )}
+        {selectedSessionId && !snapshotData && !snapshotError && (
           <p className="text-sm text-muted-foreground py-20 text-center">
             {t("debugger.loadingSessionData")}
           </p>
@@ -55,6 +78,8 @@ export function SessionDataView({
                   completedPlayerTurns:
                     snapshotData.session.completedPlayerTurns,
                   locale: snapshotData.session.locale,
+                  phase: snapshotData.session.phase,
+                  setupRuntimes: snapshotData.session.setupRuntimes,
                 }}
               />
             </DataSection>

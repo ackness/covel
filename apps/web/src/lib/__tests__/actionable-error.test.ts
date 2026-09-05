@@ -24,6 +24,11 @@ describe("classifyActionableError", () => {
   it("recognises structured runtime output failures", () => {
     expect(
       classifyActionableError(
+        'Runtime "tracker" exhausted the tool loop after 2 steps without producing final output.',
+      ),
+    ).toBe("invalid-output");
+    expect(
+      classifyActionableError(
         'Runtime "world-ir" output did not match output.schema: /events/0 must NOT have additional properties',
       ),
     ).toBe("invalid-output");

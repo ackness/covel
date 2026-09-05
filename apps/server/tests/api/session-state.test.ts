@@ -114,7 +114,7 @@ describe("Session Routes", () => {
         body: JSON.stringify({ worldId: "cloudmere", locale: "en-US" }),
       });
 
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201);
 
       const body = (await json(res)) as Record<string, unknown>;
       expect(body.id).toBeDefined();
@@ -142,6 +142,32 @@ describe("Session Routes", () => {
       expect(session!.phase).toBe("playing");
       expect(session!.completedPlayerTurns).toBe(0);
       expect(session!.setupRuntimes).toEqual({});
+    });
+
+    it("persists presetId on creation", async () => {
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ presetId: "story-fast" }),
+      });
+
+      expect(res.status).toBe(201);
+      const body = (await json(res)) as { id: string; presetId?: string };
+      expect(body.presetId).toBe("story-fast");
+      expect((await store.getSession(body.id))?.presetId).toBe("story-fast");
+    });
+
+    it("rejects an invalid presetId on creation", async () => {
+      const res = await app.request("/api/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ presetId: "" }),
+      });
+
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({
+        error: "presetId must be a non-empty string",
+      });
     });
 
     it("rejects worldId with invalid characters", async () => {
@@ -267,7 +293,7 @@ describe("Session Routes", () => {
       expect(res.status).toBe(200);
 
       const body = (await json(res)) as Record<string, unknown>;
-      expect(body.deleted).toBe(true);
+      expect(body.ok).toBe(true);
 
       // Verify it's gone
       const session = await store.getSession(sessionId);
@@ -295,7 +321,7 @@ describe("Session Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(await json(res)).toMatchObject({ deleted: true });
+      expect(await json(res)).toMatchObject({ ok: true });
       expect(await store.getSession(sessionId)).toBeNull();
     });
 

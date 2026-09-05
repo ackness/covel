@@ -187,6 +187,54 @@ describe("createBootstrapPluginEntries", () => {
     );
   });
 
+  it("reports and activates a community MULTI-runtime root-only entry consistently", async () => {
+    const pluginId = "multi-community-root-entry";
+    const rootPath = path.join(tmpRoot, pluginId);
+    fs.mkdirSync(path.join(rootPath, "server"), { recursive: true });
+    fs.writeFileSync(
+      path.join(rootPath, "server", "index.mjs"),
+      `export default function (covel) {
+        covel.registerRpc("root-action", async () => ({ ok: true }));
+      }`,
+    );
+    fs.writeFileSync(
+      path.join(rootPath, "PLUGIN.md"),
+      `---\nname: ${pluginId}\ndescription: community multi-runtime root\npluginType: plugin\nentry: ./server/index.mjs\n---\n`,
+    );
+
+    const subManifest = {
+      name: `${pluginId}/worker`,
+      pluginId,
+      description: "worker without an entry declaration",
+    } as unknown as RuntimeManifest;
+    const params = makeParams([]);
+    params.discoveryMap.set(pluginId, {
+      id: pluginId,
+      rootPath,
+      isMultiRuntime: true,
+      pluginMdPaths: [path.join(rootPath, "runtimes", "worker", "PLUGIN.md")],
+      source: "community",
+    } as PluginDiscoveryResult);
+    params.manifestCache.set(pluginId, [
+      { manifest: subManifest, promptTemplate: "", rawFrontmatter: {} },
+    ]);
+
+    const { ensurePluginEntry, hasPendingEntry } =
+      await createBootstrapPluginEntries(params);
+
+    expect(hasPendingEntry(pluginId)).toBe(true);
+    expect(
+      params.rpcRegistry.getPluginAction(pluginId, "root-action"),
+    ).toBeUndefined();
+
+    await ensurePluginEntry(pluginId, "session-community-root");
+
+    expect(hasPendingEntry(pluginId)).toBe(false);
+    expect(
+      params.rpcRegistry.getPluginAction(pluginId, "root-action"),
+    ).toBeDefined();
+  });
+
   it("defers community entries until ensurePluginEntry (memoized)", async () => {
     const p = writePlugin(
       "entry-community-a",

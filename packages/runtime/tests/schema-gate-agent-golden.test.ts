@@ -149,9 +149,10 @@ describe("agent schema gate (golden)", () => {
 
   it("skips the gate for story runtimes even when a schema is declared", async () => {
     // The gate condition is `outputSchema && outputKind !== "story"`. A story
-    // runtime with a schema therefore bypasses validation — a non-conforming
-    // output still succeeds.
-    const llm = new FixedContentLLM('{"wrong":"shape"}');
+    // runtime bypasses the JSON schema gate while still requiring story prose.
+    const llm = new FixedContentLLM(
+      '{"narrativeOutput":"A lamp lights the stairs."}',
+    );
     const result = await executeTurn(
       input("sess-story"),
       [

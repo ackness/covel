@@ -9,17 +9,21 @@ function validationPath(path) {
 }
 
 export default function ({ tool }) {
-  const parameters = worldIRV1Schema.superRefine((value, ctx) => {
-    const validation = validateWorldIRV1(value);
-    if (validation.valid) return;
-    for (const error of validation.errors) {
-      ctx.addIssue({
-        code: "custom",
-        path: validationPath(error.path),
-        message: error.message,
-      });
-    }
-  });
+  const parameters = worldIRV1Schema
+    .extend({
+      schemaVersion: worldIRV1Schema.shape.schemaVersion.default(1),
+    })
+    .superRefine((value, ctx) => {
+      const validation = validateWorldIRV1(value);
+      if (validation.valid) return;
+      for (const error of validation.errors) {
+        ctx.addIssue({
+          code: "custom",
+          path: validationPath(error.path),
+          message: error.message,
+        });
+      }
+    });
 
   return tool({
     name: "submit-world-facts",

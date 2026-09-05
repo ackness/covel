@@ -10,15 +10,16 @@ export interface UsePrepRuntimeBindingsResult {
 
 export function usePrepRuntimeBindings(
   worldId: string,
-  selectedPackages: api.PackageSummary[],
+  selectedPlugins: api.PluginSummary[],
   resolvedSlots: ResolvedSlot[],
+  pluginSelectionReady: boolean,
 ): UsePrepRuntimeBindingsResult {
   const [prepBindings, setPrepBindingsState] = useState<Record<string, string>>(
     () => api.getPrepRuntimeBindings(worldId),
   );
   const bindingState = useRuntimeBindings(
     `prep:${worldId}`,
-    selectedPackages,
+    selectedPlugins,
     resolvedSlots,
     undefined,
     prepBindings,
@@ -26,6 +27,7 @@ export function usePrepRuntimeBindings(
       setPrepBindingsState(next);
       api.setPrepRuntimeBindings(worldId, next);
     },
+    pluginSelectionReady,
   );
 
   return { bindingState };

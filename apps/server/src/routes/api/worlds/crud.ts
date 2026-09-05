@@ -5,10 +5,14 @@
 import { Hono } from "hono";
 import { rm } from "node:fs/promises";
 import path from "node:path";
+import {
+  worldCreateRequestSchema,
+  worldPatchRequestSchema,
+} from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
-import { errorBody, readJsonBody } from "../../../api-error.js";
+import { errorBody, okBody, readJsonBody } from "../../../api-error.js";
 import { resolveContainedPath } from "../../../world-data/safe-path.js";
-import { checkHostedOperator } from "../session/session-guard.js";
+import { checkWorldWriteAccess } from "./world-write-guard.js";
 import { type WorldEnv, resolveWorldMetadata } from "./shared.js";
 
 export const worldCrudRoutes = new Hono<WorldEnv>();
@@ -33,19 +37,22 @@ worldCrudRoutes.get("/:id", async (c) => {
 
 // POST /worlds
 worldCrudRoutes.post("/", async (c) => {
-  const denied = checkHostedOperator(c);
+  const denied = checkWorldWriteAccess(c);
   if (denied) return denied;
   const store = c.get("store");
   const parsed = await readJsonBody<Record<string, unknown>>(c);
   if (parsed instanceof Response) return parsed;
-  const body = parsed.body;
-
-  if (!body.id || typeof body.id !== "string") {
-    return c.json(errorBody("id (string) is required"), 400);
+  const validated = worldCreateRequestSchema.safeParse(parsed.body);
+  if (!validated.success) {
+    return c.json(
+      errorBody(validated.error.issues[0]?.message ?? "Invalid world request", {
+        details: validated.error.issues,
+      }),
+      400,
+    );
   }
-  if (!body.name || typeof body.name !== "string") {
-    return c.json(errorBody("name (string) is required"), 400);
-  }
+  const body = { ...validated.data };
+  const id = body.id ?? `world-${globalThis.crypto.randomUUID().slice(0, 8)}`;
 
   const now = new Date().toISOString();
   const metadataResult = resolveWorldMetadata(body);
@@ -53,24 +60,29 @@ worldCrudRoutes.post("/", async (c) => {
     return c.json(metadataResult.error.body, metadataResult.error.status);
   }
   const record: WorldRecord = {
-    id: body.id,
+    id,
     name: body.name,
-    description: typeof body.description === "string" ? body.description : "",
-    lore: typeof body.lore === "string" ? body.lore : undefined,
-    tags: Array.isArray(body.tags) ? (body.tags as string[]) : undefined,
-    locale: typeof body.locale === "string" ? body.locale : undefined,
+    description: body.description ?? "",
+    lore: body.lore,
+    tags: body.tags,
+    locale: body.locale,
     metadata: metadataResult.metadata,
-    createdAt: typeof body.createdAt === "string" ? body.createdAt : now,
+    createdAt: body.createdAt ?? now,
     updatedAt: now,
   };
 
-  await store.upsertWorld(record);
-  return c.json(record);
+  if (!(await store.createWorld(record))) {
+    return c.json(
+      errorBody("World already exists", { code: "world_already_exists" }),
+      409,
+    );
+  }
+  return c.json(record, 201);
 });
 
 // PATCH /worlds/:id — partial update (overlay lore, tags, etc.)
 worldCrudRoutes.patch("/:id", async (c) => {
-  const denied = checkHostedOperator(c);
+  const denied = checkWorldWriteAccess(c);
   if (denied) return denied;
   const store = c.get("store");
   const id = c.req.param("id");
@@ -81,7 +93,16 @@ worldCrudRoutes.patch("/:id", async (c) => {
 
   const parsed = await readJsonBody<Record<string, unknown>>(c);
   if (parsed instanceof Response) return parsed;
-  const body = parsed.body;
+  const validated = worldPatchRequestSchema.safeParse(parsed.body);
+  if (!validated.success) {
+    return c.json(
+      errorBody(validated.error.issues[0]?.message ?? "Invalid world patch", {
+        details: validated.error.issues,
+      }),
+      400,
+    );
+  }
+  const body = { ...validated.data };
   const now = new Date().toISOString();
   const metadataResult = resolveWorldMetadata(body, existing.metadata);
   if (metadataResult.error) {
@@ -90,14 +111,11 @@ worldCrudRoutes.patch("/:id", async (c) => {
 
   const updated: WorldRecord = {
     ...existing,
-    name: typeof body.name === "string" ? body.name : existing.name,
-    description:
-      typeof body.description === "string"
-        ? body.description
-        : existing.description,
-    lore: typeof body.lore === "string" ? body.lore : existing.lore,
-    tags: Array.isArray(body.tags) ? (body.tags as string[]) : existing.tags,
-    locale: typeof body.locale === "string" ? body.locale : existing.locale,
+    name: body.name ?? existing.name,
+    description: body.description ?? existing.description,
+    lore: body.lore ?? existing.lore,
+    tags: body.tags ?? existing.tags,
+    locale: body.locale ?? existing.locale,
     metadata: metadataResult.metadata,
     updatedAt: now,
   };
@@ -108,7 +126,7 @@ worldCrudRoutes.patch("/:id", async (c) => {
 
 // DELETE /worlds/:id
 worldCrudRoutes.delete("/:id", async (c) => {
-  const denied = checkHostedOperator(c);
+  const denied = checkWorldWriteAccess(c);
   if (denied) return denied;
   const store = c.get("store");
   const id = c.req.param("id");
@@ -133,5 +151,5 @@ worldCrudRoutes.delete("/:id", async (c) => {
     }
   }
   await store.deleteWorld(id);
-  return c.json({ success: true });
+  return c.json(okBody());
 });

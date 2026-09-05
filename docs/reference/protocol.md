@@ -211,7 +211,7 @@ Provider 图片输入矩阵：
 | 事件类型         | 方向 | 描述                                                                                                                          | 负载                                                        |
 | ---------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `turn.suspended` | S→C  | runtime 创建 suspension artifact；`finalizeExecution` 将记录与同一 execution 的写入提交成功后才发出。回滚不保留记录也不发事件 | `{ sessionId, turnId, suspensionId, reason, resumeSchema }` |
-| `turn.resumed`   | S→C  | `POST /api/sessions/:id/resume` 成功重新启动 runtime 后由 resume 路由发出                                                     | `{ sessionId, turnId, suspensionId }`                       |
+| `turn.resumed`   | S→C  | suspension 资源的 `resume` 动作成功后由路由发出                                                                               | `{ sessionId, turnId, suspensionId }`                       |
 
 ### Snapshot / Fork 事件
 
@@ -224,11 +224,11 @@ Provider 图片输入矩阵：
 
 发射点对照：
 
-| 触发路径                          | 事件序列                                                | 来源                                                          |
-| --------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------- |
-| `executeTurn` 自动捕获            | `state.snapshot.created` (kind=auto)                    | `packages/runtime/src/turn-executor/turn-result-finalizer.ts` |
-| `POST /api/sessions/:id/snapshot` | `state.snapshot.created` (kind=manual)                  | `apps/server/src/routes/api/snapshots.ts`                     |
-| `POST /api/sessions/:id/fork`     | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts`                     |
+| 触发路径                           | 事件序列                                                | 来源                                                          |
+| ---------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------- |
+| `executeTurn` 自动捕获             | `state.snapshot.created` (kind=auto)                    | `packages/runtime/src/turn-executor/turn-result-finalizer.ts` |
+| `POST /api/sessions/:id/snapshots` | `state.snapshot.created` (kind=manual)                  | `apps/server/src/routes/api/snapshots.ts`                     |
+| `POST /api/sessions/:id/fork`      | `state.snapshot.created` (kind=fork) → `session.forked` | `apps/server/src/routes/api/snapshots.ts`                     |
 
 > 内置 Web 当前不提供 snapshot / fork 操作界面。外部客户端可从 `session` topic 消费上述事件。
 
@@ -319,48 +319,55 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ### 会话管理
 
-| 命令              | 方法   | 端点                         | 响应                    |
-| ----------------- | ------ | ---------------------------- | ----------------------- |
-| `session.create`  | POST   | `/api/sessions`              | JSON: `SessionRecord`   |
-| `session.restore` | GET    | `/api/sessions/:id/snapshot` | JSON: `SessionSnapshot` |
-| `session.delete`  | DELETE | `/api/sessions/:id`          | JSON: `{ deleted }`     |
+| 命令              | 方法   | 端点                     | 响应                    |
+| ----------------- | ------ | ------------------------ | ----------------------- |
+| `session.create`  | POST   | `/api/sessions`          | JSON: `SessionRecord`   |
+| `session.restore` | GET    | `/api/sessions/:id/view` | JSON: `SessionSnapshot` |
+| `session.delete`  | DELETE | `/api/sessions/:id`      | JSON: `{ deleted }`     |
 
 ### 回合执行（SSE 流式响应）
 
 `/api/actions` 接受的 `type` 字段由 `apps/server/src/routes/api/actions/request.ts` 的闭合请求联合定义：
 
-| 命令            | 方法 | 端点                                     | 响应                  |
-| --------------- | ---- | ---------------------------------------- | --------------------- |
-| `turn.submit`   | POST | `/api/actions` `type: "send_message"`    | SSE: ProtocolEvent 流 |
-| `turn.cmd`      | POST | `/api/actions` `type: "execute_command"` | SSE: ProtocolEvent 流 |
-| `turn.start`    | POST | `/api/actions` `type: "start_session"`   | SSE: ProtocolEvent 流 |
-| `turn.retry`    | POST | `/api/actions` `type: "retry_turn"`      | SSE: ProtocolEvent 流 |
-| `runtime.retry` | POST | `/api/actions` `type: "retry_runtime"`   | SSE: ProtocolEvent 流 |
+| 命令             | 方法 | 端点                                           | 响应                  |
+| ---------------- | ---- | ---------------------------------------------- | --------------------- |
+| `turn.submit`    | POST | `/api/actions` `type: "send_message"`          | SSE: ProtocolEvent 流 |
+| `turn.cmd`       | POST | `/api/actions` `type: "execute_command"`       | SSE: ProtocolEvent 流 |
+| `turn.start`     | POST | `/api/actions` `type: "start_session"`         | SSE: ProtocolEvent 流 |
+| `turn.retry`     | POST | `/api/actions` `type: "retry_turn"`            | SSE: ProtocolEvent 流 |
+| `runtime.retry`  | POST | `/api/actions` `type: "retry_runtime"`         | SSE: ProtocolEvent 流 |
+| `runtimes.retry` | POST | `/api/actions` `type: "retry_failed_runtimes"` | SSE: ProtocolEvent 流 |
 
-`retry_turn` 显式重跑整回合，payload 必须为空。`retry_runtime` 必须提供 `payload.runtimeId`，并通过 manual-trigger 路径只重跑该 runtime；它会以源回合（`payload.retryFromTurnId`，缺省取最近的 player-origin 工件）持久化的 runtime 输出**播种**执行，使被重试 runtime 的 `input.inject` / `needs` 按原回合叙事解析——裸 manual 触发这些解析为空，重试型调用因此必须播种。
+`retry_turn` 的普通请求 payload 为空，以空玩家输入和当前已提交上下文启动新的主循环回合，成功提交后增加玩家回合数；它不恢复或重新生成历史回合。恢复未完成回合时，六种动作都可附加 `payload.recoverFromTurnId`，并且必须匹配服务端返回的原 action 描述。客户端从 `GET /api/sessions/:id/execution` 获取只读状态，刷新不重新提交动作；明确点击恢复重试后才发送新的 requestId。服务端在会话锁内校验源回合，开场恢复保留 continuation 来源，不增加玩家回合数。`retry_runtime` 必须提供 `payload.runtimeId`，显式 `retryFromTurnId` 必须指向已提交且仍是当前故事的原回合，目标须仍失败；不带来源时保留旧 manual 调用语义。
+
+`retry_failed_runtimes` 必须提供原回合 `retryFromTurnId` 和 1–20 个不重复的 `runtimeIds`。锁内合并该来源已提交的恢复 attempt 后，仅仍失败且 active 的目标可重跑；同一 action 按 stage/DAG 执行，统一提交，不重新计数。批量恢复和带来源的单任务恢复都只执行所选目标，禁止事件订阅者、递归或后台分发扩围；普通无来源的 manual / plugin-RPC 行为不变。原故事及已提交成功的非目标结果仅作上下文，不重复提交。一个目标失败而另一个被依赖跳过时，两者仍待恢复。无已提交来源的整回合中断应先恢复原 action，不能把 trace 中的成功当作已提交数据。
+
+每次恢复的生命周期 trace/SSE payload 持久关联 `sourceTurnId` 和本次 `runtimeIds`；`turnId` 保留 attempt 身份。客户端在 `committed: true` 的 turn/execution 终态或已提交工件确认后更新任务恢复状态，保留原失败审计。事务回滚和中断不会清除原失败。中断批量操作的 `retry` 描述保留同一组目标，`recoverFromTurnId` 校验不得更改该组。
+
+新 scope 还携带服务端验证的 `sourceCommitted: true` 与 `sourceFailedRuntimeIds`；旧 trace 可缺省这两个字段。失败摘要完整包含来源账本中仍失败的 ID（含 inactive，不按所选目标上限截断）。执行中是开始前的摘要；已提交终态按本次真实结果结算：成功移除，失败和 skipped 保留，回滚或中断不变，空数组也发送。客户端按最新摘要替换旧集合，同一次 attempt 的已提交终态优先于执行中摘要，防止有界 trace 快照遗漏未恢复任务或复活旧失败。ID 不在摘要中不等于存在可展示的成功步骤；成功步骤仍需真实执行及提交证据。
 
 `start_session` 要求会话已带非空 `activePlugins`（创建会话时选定）。空集合直接 400，不会退化成"激活全部注册插件"——详见 [api.md](./api.md#post-apiactions)。
 
-> `type` 是闭集，上面五种之外的取值一律返回 400 `Unsupported action type`。插件侧发事件请用 builtin `emit-event` 工具。
+> `type` 是闭集，上面六种之外的取值一律返回 400 `Unsupported action type`。插件侧发事件请用 builtin `emit-event` 工具。
 >
 > 区分 chat turn 与 plugin runtime 调用：
 >
 > - 玩家发送的自然语言走 `/api/actions` `send_message`，触发 narrator 主链。
-> - 输入框先用 `GET /api/sessions/:id/plugins` 返回的会话命令目录匹配斜线命令。已知命令走 `/api/sessions/:id/plugin-rpc` 的 `{ commandId, input }` 变体，不经过 narrator；未知命令继续按原有 composer 规则处理（普通空闲提交走 `execute_command`），保留世界/旧插件对自由文本命令的兼容行为。
-> - 已声明 command 的插件 UI 按钮使用 JSON-RENDER `invokeCommand`，走 `/api/sessions/:id/plugin-rpc` 的 `{ commandId, args }` 变体，不经过 narrator，并与输入框命令共用参数校验、上下文、审批、handler 和 trace。其他自定义 UI action 才使用 `invokePluginAction`。
+> - 输入框先用 `GET /api/sessions/:id/plugins` 返回的会话命令目录匹配斜线命令。已知命令走 `/api/sessions/:id/plugin-rpc` 的 `{ kind: "command", commandId, input }` 变体，不经过 narrator；未知命令继续按原有 composer 规则处理（普通空闲提交走 `execute_command`）。
+> - 已声明 command 的插件 UI 按钮使用 JSON-RENDER `invokeCommand`，走 `/api/sessions/:id/plugin-rpc` 的 `{ kind: "command", commandId, args }` 变体，不经过 narrator，并与输入框命令共用参数校验、上下文、审批、handler 和 trace。其他自定义 UI action 才使用 `invokePluginAction`。
 
 ### 交互响应
 
-| 命令           | 方法 | 端点                           | 响应                                                                   |
-| -------------- | ---- | ------------------------------ | ---------------------------------------------------------------------- |
-| `input.submit` | POST | `/api/sessions/:id/plugin-rpc` | Action `{ pluginId: "framework", action: "submit-form" }` 的 JSON 响应 |
+| 命令           | 方法 | 端点                           | 响应                                                                                   |
+| -------------- | ---- | ------------------------------ | -------------------------------------------------------------------------------------- |
+| `input.submit` | POST | `/api/sessions/:id/plugin-rpc` | Action `{ kind: "action", pluginId: "framework", action: "submit-form" }` 的 JSON 响应 |
 
 ### 插件管理
 
-| 命令             | 方法 | 端点                                | 响应                     |
-| ---------------- | ---- | ----------------------------------- | ------------------------ |
-| `plugin.enable`  | POST | `/api/sessions/:id/plugins/enable`  | JSON: `{ ok, active[] }` |
-| `plugin.disable` | POST | `/api/sessions/:id/plugins/disable` | JSON: `{ ok, active[] }` |
+| 命令             | 方法   | 端点                                  | 响应                              |
+| ---------------- | ------ | ------------------------------------- | --------------------------------- |
+| `plugin.enable`  | PUT    | `/api/sessions/:id/plugins/:pluginId` | JSON: `{ ok, activePluginIds[] }` |
+| `plugin.disable` | DELETE | `/api/sessions/:id/plugins/:pluginId` | JSON: `{ ok, activePluginIds[] }` |
 
 ### 插件 RPC
 
@@ -374,6 +381,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ```json
 {
+  "kind": "action",
   "pluginId": "framework",
   "action": "submit-form",
   "payload": {/* ... */}
@@ -382,6 +390,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ```json
 {
+  "kind": "runtime",
   "pluginId": "my-plugin",
   "runtimeId": "my-plugin/my-runtime",
   "payload": {/* ... */}
@@ -390,6 +399,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ```json
 {
+  "kind": "command",
   "commandId": "dice-check:roll",
   "input": "/roll 2d6"
 }
@@ -397,25 +407,28 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 ```json
 {
+  "kind": "command",
   "commandId": "dice-check:roll",
   "args": { "notation": "2d6" }
 }
 ```
 
-command 请求的 `input` 与 `args` 必须且只能提供一个。服务端将两者归一化为 `RpcCommandInvocation`，所以日志和后续 handler 以 `commandId + args` 识别同一业务操作；仅 `source` 保留 `composer | plugin-ui` 的入口差异。
+`kind` 是必填判别字段，服务端不根据 selector 推断分支。command 请求的 `input` 与 `args` 必须且只能提供一个。服务端将两者归一化为 `RpcCommandInvocation`，所以日志和后续 handler 以 `commandId + args` 识别同一业务操作；仅 `source` 保留 `composer | plugin-ui` 的入口差异。
 
 **响应分支:**
 
-| 状态码 | status                                                                                                                       | 触发                                                                                                                |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 200    | `ok`                                                                                                                         | action / command 级成功，或 runtime 级 sync 模式成功                                                                |
-| 202    | `approval-required`                                                                                                          | community-trust 首次调用(action、command 或 runtime 级)                                                             |
-| 202    | `accepted`                                                                                                                   | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
-| 400    | `error`                                                                                                                      | 缺字段 / 三种 selector 互斥违反 / 参数或 payload 校验失败 / `plugin-mismatch`                                       |
-| 404    | `error` (`code: "unknown-action"` / `"runtime-not-active"` / `"command-not-active"`)                                         | action 未注册 / runtime 未加载 / command 不在当前会话目录                                                           |
-| 409    | `error` (`code: "approval-scope-changed"` / `"session-not-active"` / `"session-deleting"` / `"session-incarnation-changed"`) | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                  |
-| 429    | `error` (`code: "queue-full"`)                                                                                               | pending approvals 超过 cap                                                                                          |
-| 500    | `error` (`code: "runtime-execution-failed"` / `"background-enqueue-failed"`)                                                 | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
+| 状态码 | 成功 `status` / 错误 `code`                                                                          | 触发                                                                                                                |
+| ------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 200    | `ok`                                                                                                 | action / command 级成功，或 runtime 级 sync 模式成功                                                                |
+| 202    | `approval-required`                                                                                  | community-trust 首次调用(action、command 或 runtime 级)                                                             |
+| 202    | `accepted`                                                                                           | runtime 级 `execution: background`,payload 里含 `jobId` + `turnId`。进度走 `plugin-data.changed` + `_jobs` 命名空间 |
+| 400    | 通用错误信封                                                                                         | kind/字段组合、参数或 payload 校验失败                                                                              |
+| 404    | `unknown_action` / `runtime_not_active` / `command_not_active`                                       | action 未注册 / runtime 未激活 / command 不在当前会话目录                                                           |
+| 409    | `approval_scope_changed` / `session_not_active` / `session_deleting` / `session_incarnation_changed` | 等锁期间授权/会话代次变化，或 session 已暂停、结束、删除中；客户端应刷新后重新发起                                  |
+| 429    | `queue_full`                                                                                         | pending approvals 超过 cap                                                                                          |
+| 500    | `runtime_execution_failed` / `background_enqueue_failed` / `turn_commit_failed`                      | sync 执行异常 / 入队失败(background 模式下 runtime 内部异常走 SSE,不进 HTTP)                                        |
+
+所有非 2xx 响应均使用 `{ error, code?, details? }`，不返回业务 `status`。
 
 带延迟 `entry` 的 community action 会连续返回两次 `approval-required`：先授权 `covel:plugin-server-code`，重试后再授权真实 action。客户端逐阶段展示审批并重试原请求，最多处理两个阶段，超过上限即终止以避免异常审批循环。
 
@@ -425,10 +438,10 @@ command 请求的 `input` 与 `args` 必须且只能提供一个。服务端将�
 
 community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 后,前端通过下述端点拉取 / 提交决定。
 
-| 命令              | 方法 | 端点                                  | 响应                                      |
-| ----------------- | ---- | ------------------------------------- | ----------------------------------------- |
-| `approval.list`   | GET  | `/api/sessions/:id/approvals`         | JSON: `{ pending: RpcApprovalPending[] }` |
-| `approval.decide` | POST | `/api/approvals/:approvalId/decision` | JSON: `{ ok, decision, scope, pending }`  |
+| 命令              | 方法 | 端点                                  | 响应                                     |
+| ----------------- | ---- | ------------------------------------- | ---------------------------------------- |
+| `approval.list`   | GET  | `/api/sessions/:id/approvals`         | JSON: `{ items: RpcApprovalPending[] }`  |
+| `approval.decide` | POST | `/api/approvals/:approvalId/decision` | JSON: `{ ok, decision, scope, pending }` |
 
 **Decision 请求体:**
 
@@ -447,22 +460,22 @@ community-trust 插件的 RPC 调用需要玩家显式批准。框架返回 202 
 
 只读数据获取，标准 REST GET 响应：
 
-| 查询     | 端点                                              | 响应                                                              |
-| -------- | ------------------------------------------------- | ----------------------------------------------------------------- |
-| 会话列表 | `GET /api/sessions?worldId=`                      | `{ items: SessionRecord[] }`                                      |
-| 会话详情 | `GET /api/sessions/:id`                           | `SessionRecord`                                                   |
-| 会话快照 | `GET /api/sessions/:id/snapshot`                  | `SessionSnapshot`（messages/steps 为最近窗口 + `messagesCursor`） |
-| 消息列表 | `GET /api/sessions/:id/messages`                  | `FlatMessage[]`（全量）                                           |
-| 消息分页 | `GET /api/sessions/:id/messages/page`             | `CursorPage<FlatMessage>`（游标）                                 |
-| 角色列表 | `GET /api/sessions/:id/characters`                | `{ items: CharacterRecord[] }`                                    |
-| 插件列表 | `GET /api/sessions/:id/plugins`                   | `{ active[], available[] }`                                       |
-| 状态查询 | `GET /api/sessions/:id/state`                     | `{ tables }`                                                      |
-| 状态补丁 | `GET /api/sessions/:id/state-patches`             | `Patch[]`                                                         |
-| 插件数据 | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }`                                                     |
-| 世界列表 | `GET /api/worlds`                                 | `{ items: WorldRecord[] }`                                        |
-| 执行追踪 | `GET /api/traces/:sessionId`                      | `{ events[] }`（全量）                                            |
-| 追踪分页 | `GET /api/traces/:sessionId/turns/page`           | `{ turns[], nextCursor }`（游标）                                 |
-| 服务健康 | `GET /api/health`                                 | `{ status, version, bootId, timestamp, storage, vector }`         |
+| 查询     | 端点                                              | 响应                                                                     |
+| -------- | ------------------------------------------------- | ------------------------------------------------------------------------ |
+| 会话列表 | `GET /api/sessions?worldId=`                      | `{ items: SessionRecord[] }`                                             |
+| 会话详情 | `GET /api/sessions/:id`                           | `SessionRecord`                                                          |
+| 会话视图 | `GET /api/sessions/:id/view`                      | `SessionSnapshot`（messages/steps 为最近窗口 + 不透明 `messagesCursor`） |
+| 消息列表 | `GET /api/sessions/:id/messages`                  | `FlatMessage[]`（全量）                                                  |
+| 消息分页 | `GET /api/sessions/:id/messages/page`             | `CursorPage<FlatMessage>`（游标）                                        |
+| 角色列表 | `GET /api/sessions/:id/characters`                | `{ items: CharacterRecord[] }`                                           |
+| 插件列表 | `GET /api/sessions/:id/plugins`                   | `{ active[], available[] }`                                              |
+| 状态查询 | `GET /api/sessions/:id/state`                     | `{ tables }`                                                             |
+| 状态补丁 | `GET /api/sessions/:id/state-patches`             | `Patch[]`                                                                |
+| 插件数据 | `GET /api/sessions/:id/plugin-data/:pluginId/:ns` | `{ items[] }`                                                            |
+| 世界列表 | `GET /api/worlds`                                 | `{ items: WorldRecord[] }`                                               |
+| 执行追踪 | `GET /api/traces/:sessionId`                      | `{ events[] }`（全量）                                                   |
+| 追踪分页 | `GET /api/traces/:sessionId/turns/page`           | `{ turns[], nextCursor }`（游标）                                        |
+| 服务健康 | `GET /api/health`                                 | `{ status, version, bootId, timestamp, storage, vector }`                |
 
 ## 四、SSE 信封格式
 

@@ -15,9 +15,10 @@ import {
 /** Routes that need the provider API keys header. */
 const AI_ROUTES = ["/api/actions", "/api/ai/", "/api/kernel/"];
 
-/** `POST /api/sessions/:id/resume` re-enters the LLM tool loop. Browser
+/** A suspension resume request re-enters the LLM tool loop. Browser
  * callers attach their request-scoped keys; desktop may use server keys. */
-const RESUME_ROUTE_REGEX = /^\/api\/sessions\/[^/]+\/resume(?:\?|$)/;
+const RESUME_ROUTE_REGEX =
+  /^\/api\/sessions\/[^/]+\/suspensions\/[^/]+\/resume(?:\?|$)/;
 
 /** `POST /api/sessions/:id/plugin-rpc` runs the manual-trigger pipeline,
  * which may invoke LLM / image generation via the plugin runtime gateway
@@ -487,10 +488,9 @@ export async function migrateLegacyProviderProfiles(): Promise<void> {
         const profile = profiles.find(
           (candidate) => candidate.id === profileId,
         );
-        return (
-          profile?.models
-            .filter((model) => after[profileId]?.trim())
-            .map((model) => store.clear(`keys.preset:${model.ref}`)) ?? []
+        if (!profile || !after[profileId]?.trim()) return [];
+        return profile.models.map((model) =>
+          store.clear(`keys.preset:${model.ref}`),
         );
       }),
     );

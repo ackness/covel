@@ -4,7 +4,7 @@
  * player never has to infer what an isolated choice is responding to.
  */
 import { clsx } from "clsx";
-import { Loader2, Send } from "lucide-react";
+import { ChevronDown, Loader2, Send } from "lucide-react";
 import { useState, type KeyboardEvent, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -103,111 +103,122 @@ export function StageChoices({
 
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-4 md:px-8 md:pb-8"
+      className="pointer-events-none absolute inset-x-0 top-[40%] bottom-0 z-40 flex items-end justify-center px-3 pb-3 md:top-[35%] md:px-8 md:pb-8"
       data-testid="stage-choices"
     >
-      <section className="ui-stage-panel pointer-events-auto flex max-h-[62vh] w-full max-w-3xl flex-col overflow-hidden rounded-(--radius-card)">
-        <div className="border-b border-border/50 px-4 py-3.5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              {context.scene && (
-                <p className="mb-1 text-[10px] font-semibold tracking-[0.16em] text-(--accent-primary) uppercase">
-                  {context.scene}
-                </p>
-              )}
-              {recap && (
-                <div>
-                  <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
-                    {t("stage.recapLabel")}
+      <section className="ui-stage-panel pointer-events-auto flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-(--radius-card)">
+        <div
+          className="min-h-0 overflow-y-auto overscroll-contain"
+          data-testid="stage-decision-scroll"
+        >
+          <div className="border-b border-border/50 px-4 py-3.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                {context.scene && (
+                  <p className="mb-1 text-[10px] font-semibold tracking-[0.16em] text-(--accent-primary) uppercase">
+                    {context.scene}
                   </p>
-                  <p className="whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
-                    {recap}
+                )}
+                {recap && (
+                  <details className="group">
+                    <summary className="flex min-h-8 cursor-pointer list-none items-center gap-1.5 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+                      {t("stage.recapLabel")}
+                      <ChevronDown
+                        className="h-3.5 w-3.5 transition-transform group-open:rotate-180"
+                        aria-hidden="true"
+                      />
+                    </summary>
+                    <p className="pt-1 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+                      {recap}
+                    </p>
+                  </details>
+                )}
+                <div className={recap ? "mt-2" : undefined}>
+                  <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
+                    {t("stage.decisionLabel")}
+                  </p>
+                  <p className="text-sm font-medium leading-relaxed">
+                    {decision}
                   </p>
                 </div>
+              </div>
+              {executing && (
+                <span
+                  className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground"
+                  aria-live="polite"
+                >
+                  <Loader2
+                    className="h-3.5 w-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                  {t("stage.thinkingLabel")}
+                </span>
               )}
-              <div className={recap ? "mt-2" : undefined}>
-                <p className="mb-1 text-[10px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
-                  {t("stage.decisionLabel")}
-                </p>
-                <p className="text-sm font-medium leading-relaxed">
-                  {decision}
-                </p>
+            </div>
+          </div>
+
+          {groups.length > 0 && (
+            <div className="px-3 py-3">
+              <div className="space-y-3">
+                {groups.map((group) => (
+                  <div key={group.id}>
+                    {group.prompt && group.prompt !== decision && (
+                      <p className="mb-1.5 px-1 text-xs font-medium text-muted-foreground">
+                        {group.prompt}
+                      </p>
+                    )}
+                    <div
+                      className={clsx(
+                        "grid gap-1.5",
+                        group.items.length >= TWO_COLUMN_GROUP_SIZE
+                          ? "sm:grid-cols-2"
+                          : "grid-cols-1",
+                      )}
+                    >
+                      {group.items.map((item) => {
+                        const index = itemOrder.get(item.id) ?? 0;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            disabled={
+                              executing ||
+                              (item.kind === "interaction" &&
+                                !onSubmitInteraction)
+                            }
+                            onClick={() => handleSelect(item)}
+                            className="ui-stage-choice-item min-h-11 rounded-(--radius-control) border border-border/60 bg-background/35 px-3.5 py-2 text-left text-sm transition-colors hover:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50"
+                            style={{
+                              animationDelay: `${index * STAGGER_STEP_MS}ms`,
+                            }}
+                          >
+                            <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                              <span className="min-w-0 flex-1">
+                                {item.label}
+                              </span>
+                              {item.description && (
+                                <span
+                                  className={clsx(
+                                    "ui-stage-cat ml-auto shrink-0",
+                                    `ui-stage-cat-${index % CATEGORY_HUES}`,
+                                  )}
+                                >
+                                  {item.description}
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-            {executing && (
-              <span
-                className="flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground"
-                aria-live="polite"
-              >
-                <Loader2
-                  className="h-3.5 w-3.5 animate-spin"
-                  aria-hidden="true"
-                />
-                {t("stage.thinkingLabel")}
-              </span>
-            )}
-          </div>
+          )}
         </div>
 
-        {groups.length > 0 && (
-          <div className="min-h-0 overflow-y-auto px-3 py-3">
-            <div className="space-y-3">
-              {groups.map((group) => (
-                <div key={group.id}>
-                  {group.prompt && group.prompt !== decision && (
-                    <p className="mb-1.5 px-1 text-xs font-medium text-muted-foreground">
-                      {group.prompt}
-                    </p>
-                  )}
-                  <div
-                    className={clsx(
-                      "grid gap-1.5",
-                      group.items.length >= TWO_COLUMN_GROUP_SIZE
-                        ? "sm:grid-cols-2"
-                        : "grid-cols-1",
-                    )}
-                  >
-                    {group.items.map((item) => {
-                      const index = itemOrder.get(item.id) ?? 0;
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          disabled={
-                            executing ||
-                            (item.kind === "interaction" &&
-                              !onSubmitInteraction)
-                          }
-                          onClick={() => handleSelect(item)}
-                          className="ui-stage-choice-item min-h-11 rounded-(--radius-control) border border-border/60 bg-background/35 px-3.5 py-2 text-left text-sm transition-colors hover:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50"
-                          style={{
-                            animationDelay: `${index * STAGGER_STEP_MS}ms`,
-                          }}
-                        >
-                          <span className="flex items-center justify-between gap-3">
-                            <span className="min-w-0 flex-1">{item.label}</span>
-                            {item.description && (
-                              <span
-                                className={clsx(
-                                  "ui-stage-cat shrink-0",
-                                  `ui-stage-cat-${index % CATEGORY_HUES}`,
-                                )}
-                              >
-                                {item.description}
-                              </span>
-                            )}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="flex items-end gap-2 border-t border-border/50 px-3 py-2.5">
+        <div className="flex shrink-0 items-end gap-2 border-t border-border/50 px-3 py-2.5">
           <textarea
             rows={1}
             value={draft}
@@ -217,7 +228,7 @@ export function StageChoices({
             placeholder={t("stage.inputPlaceholder")}
             aria-label={t("stage.inputPlaceholder")}
             data-testid="stage-decision-input"
-            className="max-h-24 min-h-11 flex-1 resize-none rounded-(--radius-control) border border-border/60 bg-background/35 px-3 py-2 text-base outline-none transition-colors placeholder:text-muted-foreground focus:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50 md:text-sm"
+            className="max-h-24 min-h-11 min-w-0 flex-1 resize-none rounded-(--radius-control) border border-border/60 bg-background/35 px-3 py-2 text-base outline-none transition-colors placeholder:text-muted-foreground focus:border-(--accent-primary) disabled:cursor-wait disabled:opacity-50 md:text-sm"
           />
           <button
             type="button"

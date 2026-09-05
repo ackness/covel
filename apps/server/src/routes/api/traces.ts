@@ -8,6 +8,7 @@ import type { PluginRegistry } from "@covel/plugin-loader";
 import { buildSessionDiscoverySnapshot } from "./discovery.js";
 import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
+import { errorBody } from "../../api-error.js";
 import { resolveSessionParam } from "./session/session-guard.js";
 
 /** Default per-page event window for the paged turns endpoint. */
@@ -114,7 +115,7 @@ traceRoutes.get("/:sessionId/turns", async (c) => {
 });
 
 // GET /:sessionId/turns/page — turns from the most-recent event window. `?limit`
-// (events, not turns), `?before_created_at`, `?before_id` (see cursor-params).
+// (events, not turns), `?cursor` (see cursor-params).
 // nextCursor is the oldest event's position; the frontend merges a turn split
 // across the window boundary by turnId when it loads the next (older) page.
 traceRoutes.get(
@@ -125,7 +126,14 @@ traceRoutes.get(
     const sessionId = c.req.param("sessionId");
     const guard = await resolveSessionParam(c, "sessionId");
     if (!guard.ok) return guard.response;
-    const { limit, before } = parseCursorQuery(c, TRACE_PAGE_EVENT_LIMIT);
+    const cursor = parseCursorQuery(c, TRACE_PAGE_EVENT_LIMIT);
+    if (!cursor.ok) {
+      return c.json(
+        errorBody("Invalid pagination cursor", { code: "invalid_cursor" }),
+        400,
+      );
+    }
+    const { limit, before } = cursor;
 
     const events = await store.listTraceEventsPage(sessionId, {
       limit,

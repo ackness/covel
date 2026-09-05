@@ -112,7 +112,7 @@ async function createSession(
     headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
-  expect(res.status).toBe(200);
+  expect(res.status).toBe(201);
   return (await res.json()) as CreatedSession;
 }
 
@@ -225,7 +225,7 @@ describe("commercial tier — owner guard on indirect session-scoped routes", ()
       ).toBe(401);
       expect(
         (await upload(h.app, victim.id, bearer(victim.ownerToken))).status,
-      ).toBe(200);
+      ).toBe(201);
     });
 
     it("fails closed (404) for unknown session ids", async () => {
@@ -329,7 +329,7 @@ describe("self tier (default) — guards are strict no-ops", () => {
       headers: { "content-type": "image/png" },
       body: IMG,
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
   });
 
   it("rejects media upload for a missing session", async () => {

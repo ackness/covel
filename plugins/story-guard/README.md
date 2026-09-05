@@ -53,7 +53,7 @@ Thresholds are read lazily, so a deployment can change them without a restart.
 ## Enabling
 
 Add `story-guard` to a world's plugin set, or enable it for a session via
-`POST /api/sessions/:id/plugins/enable`. Its hooks then scope to that session
+`PUT /api/sessions/:id/plugins/:pluginId`. Its hooks then scope to that session
 only (framework hook scoping); other sessions are unaffected.
 
 ## Tests

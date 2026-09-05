@@ -14,6 +14,20 @@ import {
 import type { EventBus } from "@covel/events";
 import type { PluginRegistryEntry, RegistryChangeEvent } from "./types.js";
 
+/**
+ * Complete declaration-time runtime definitions for a registry entry.
+ * `loadedRuntimes` is deliberately excluded: it is only a partial executable
+ * artifact cache and must not influence discovery or session activation.
+ */
+function declaredRuntimeManifests(
+  entry: PluginRegistryEntry,
+): readonly RuntimeManifest[] {
+  if (entry.manifests && entry.manifests.length > 0) {
+    return entry.manifests.map((parsed) => parsed.manifest);
+  }
+  return entry.manifest ? [entry.manifest.manifest] : [];
+}
+
 function isSameDataSchema(
   a: PluginDataSchemaDecl,
   b: PluginDataSchemaDecl,
@@ -34,11 +48,10 @@ function mergeDataSchemas(
     return pluginDataSchemaMapSchema.parse(entry.dataSchemas);
   }
 
-  const manifests = entry.manifests ?? (entry.manifest ? [entry.manifest] : []);
   const merged: Record<string, PluginDataSchemaDecl> = {};
 
-  for (const parsed of manifests) {
-    const schemas = parsed.manifest.dataSchemas;
+  for (const manifest of declaredRuntimeManifests(entry)) {
+    const schemas = manifest.dataSchemas;
     if (!schemas) continue;
     for (const [namespace, schema] of Object.entries(schemas)) {
       const normalized = { ...schema, namespace };
@@ -87,11 +100,10 @@ function mergeWorldProjections(
     return worldProjectionMapSchema.parse(entry.worldProjections);
   }
 
-  const manifests = entry.manifests ?? (entry.manifest ? [entry.manifest] : []);
   const merged: Record<string, WorldProjectionDecl> = {};
 
-  for (const parsed of manifests) {
-    const projections = parsed.manifest.worldProjections;
+  for (const manifest of declaredRuntimeManifests(entry)) {
+    const projections = manifest.worldProjections;
     if (!projections) continue;
     for (const [projectionId, projection] of Object.entries(projections)) {
       const existing = merged[projectionId];
@@ -303,13 +315,8 @@ export function createPluginRegistry(
       for (const pluginId of sessionSet) {
         const entry = entries.get(pluginId);
         if (!entry) continue;
-        // Check the primary manifest
-        if (entry.manifest?.manifest.capabilities?.includes(capability))
-          return pluginId;
-        // Check all loaded runtimes (multi-runtime plugins store sub-runtimes here)
-        for (const [, loaded] of entry.loadedRuntimes) {
-          if (loaded.manifest.capabilities?.includes(capability))
-            return pluginId;
+        for (const manifest of declaredRuntimeManifests(entry)) {
+          if (manifest.capabilities?.includes(capability)) return pluginId;
         }
       }
       return undefined;
@@ -326,14 +333,7 @@ export function createPluginRegistry(
       for (const pluginId of sessionSet) {
         const entry = entries.get(pluginId);
         if (!entry) continue;
-        // Include all manifests for multi-runtime plugins
-        if (entry.manifests && entry.manifests.length > 0) {
-          for (const parsed of entry.manifests) {
-            manifests.push(parsed.manifest);
-          }
-        } else if (entry.manifest !== undefined) {
-          manifests.push(entry.manifest.manifest);
-        }
+        manifests.push(...declaredRuntimeManifests(entry));
       }
 
       // Sort by (stage, name). Stage-less runtimes (event / manual / UI-only)

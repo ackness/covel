@@ -177,6 +177,7 @@ async function loadCharacters(
   try {
     const records = await store.listCharacters(sessionId);
     return records.map((c) => ({
+      id: c.id,
       name: c.name,
       type: c.type,
       description: c.description,

@@ -12,6 +12,7 @@ describe("plugin JSON-render command binding", () => {
       ok: true,
       command: "roll",
       request: {
+        kind: "command",
         commandId: "dice-check:roll",
         args: { notation: "2d6" },
       },

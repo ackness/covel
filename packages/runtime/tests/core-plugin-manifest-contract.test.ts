@@ -82,7 +82,7 @@ describe("core plugin manifest contract", () => {
       guard: "./guard.js",
       trigger: { type: "auto" },
       requireToolUse: true,
-      completeAfterTools: ["create-form"],
+      completeAfterTools: ["create-character-form"],
       maxSteps: 2,
       maxRetries: 0,
       // Turn-scoped needs carry both the intra-stage order and the same-turn
@@ -185,7 +185,6 @@ describe("core plugin manifest contract", () => {
     ).toMatchObject({
       tools: {
         builtin: ["sync-characters", "get-character"],
-        defer: ["get-character"],
       },
       completeAfterTools: ["sync-characters"],
       maxSteps: 2,
@@ -230,6 +229,10 @@ describe("core plugin manifest contract", () => {
     expect(worldIr.tools?.plugin).toEqual(["submit-world-facts"]);
     expect(worldIr.requireToolUse).toBe(true);
     expect(worldIr.completeAfterTools).toEqual(["submit-world-facts"]);
+    expect(worldIr.llm).toEqual({
+      reasoningEffort: "disabled",
+      toolChoice: { name: "submit-world-facts" },
+    });
     for (const downstream of structuredDownstreams) {
       expect(downstream.needs).toBeUndefined();
       expect(downstream.inputs?.worldIR).toMatchObject({

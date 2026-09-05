@@ -45,10 +45,10 @@ function ref(id: string, mime = "image/png"): MediaRef {
 const PLUGINS = [
   {
     id: "character-presence",
-    isActive: true,
+    active: true,
     capabilities: ["character-presence"],
   },
-  { id: "scene-stage", isActive: true, capabilities: ["scene-stage"] },
+  { id: "scene-stage", active: true, capabilities: ["scene-stage"] },
 ];
 
 describe("useStageMediaPreload", () => {
@@ -92,7 +92,7 @@ describe("useStageMediaPreload", () => {
   it("skips everything when no capability provider is active", async () => {
     renderHook(() =>
       useStageMediaPreload("s1", [
-        { id: "narrator", isActive: true, capabilities: ["narrative"] },
+        { id: "narrator", active: true, capabilities: ["narrative"] },
       ]),
     );
     await new Promise((resolve) => setTimeout(resolve, 0));

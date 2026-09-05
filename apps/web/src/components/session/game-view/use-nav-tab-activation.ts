@@ -38,6 +38,5 @@ export function useNavTabActivation({
       const panel = rightPanelRef.current;
       if (panel && panel.isCollapsed()) panel.expand();
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onOpenContext, onOpenPlugins, rightPanelRef]);
 }

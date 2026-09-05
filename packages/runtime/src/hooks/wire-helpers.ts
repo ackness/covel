@@ -21,7 +21,12 @@
  */
 
 import type { EventBus } from "@covel/events";
-import type { RuntimeManifest, RuntimeResult, TurnInput } from "@covel/shared";
+import type {
+  InputSlot,
+  RuntimeManifest,
+  RuntimeResult,
+  TurnInput,
+} from "@covel/shared";
 import type { HookPipeline } from "./pipeline.js";
 import type { HookContext, HookEvent, HookResult } from "./types.js";
 import type { TurnEmitter } from "../trace/turn-emitter.js";
@@ -333,6 +338,17 @@ export interface AssembledContextView {
    * absent when the caller does not supply it; handlers fall back to a default.
    */
   readonly locale?: string;
+  /** Locale-resolved source template; informational and never hook-rewritten. */
+  readonly promptTemplate?: string;
+  /** Authoritative resolved inputs, before prompt serialization. */
+  readonly inputSlots?: Readonly<Record<string, InputSlot>>;
+  /** Existing character identities for bounded extraction/disambiguation. */
+  readonly characters?: readonly {
+    readonly id?: string;
+    readonly name: string;
+    readonly type: string;
+    readonly description?: string;
+  }[];
 }
 
 export interface PostContextAssemblyPayload extends AssembledContextView {
@@ -349,6 +365,9 @@ export async function runPostContextAssemblyHook(
     messages: assembled.messages,
     outputKind: assembled.outputKind,
     locale: assembled.locale,
+    promptTemplate: assembled.promptTemplate,
+    inputSlots: assembled.inputSlots,
+    characters: assembled.characters,
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,
   };
@@ -363,6 +382,9 @@ export async function runPostContextAssemblyHook(
       messages: replace.messages ?? assembled.messages,
       outputKind: assembled.outputKind,
       locale: assembled.locale,
+      promptTemplate: assembled.promptTemplate,
+      inputSlots: assembled.inputSlots,
+      characters: assembled.characters,
     };
   }
   return assembled;

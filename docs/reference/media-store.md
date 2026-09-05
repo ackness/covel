@@ -99,6 +99,20 @@ Returns assets owned by `sessionId` whose `meta` contains every key/value in `fi
 
 `recordOwnership()` sets the first owner for an asset (first-writer-wins; a second call with a different `sessionId` does not overwrite it). `addRef()` grants another session read access for fork and snapshot flows; `removeRef()` idempotently removes one session's explicit ref (does not delete bytes or ownership metadata). `isReferencedBy()` returns true for the owner session and for sessions with an explicit reference row.
 
+`GET /api/sessions/:id/media-token` requires the session owner credential on
+hosted tiers and in production with MemoryStore, including the `self`
+browser-private profile. An operator credential can authorize the request as
+with other session routes. The session must also own or reference the requested
+asset before the server issues a signed media URL.
+
+`POST /api/media` accepts `image/*` MIME types and rejects `image/svg+xml`.
+MIME type checks ignore case, surrounding whitespace, and parameters; accepted
+uploads store the lowercase type without parameters. Reads apply the same
+normalization before checking historical asset metadata: SVG assets are always
+served with `Content-Disposition: attachment` and `Content-Security-Policy:
+sandbox`, on both buffered and streaming responses. The stored MIME parameters
+remain available in the read response's `Content-Type`.
+
 `delete()` removes every inbound ref before the asset. SQL backends perform both
 steps in one transaction; in particular, a second SQLite process cannot insert
 a ref between the ref cleanup and asset deletion.

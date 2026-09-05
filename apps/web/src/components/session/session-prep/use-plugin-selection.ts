@@ -1,91 +1,134 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { resolvePluginSelection } from "@covel/shared";
 import {
   applyPluginPackSelection,
   collectPluginTags,
-  filterPluginPackages,
-  groupPluginPackages,
-  pluginPacksForWorld,
-  selectedPackForWorld,
+  defaultSelectedPluginIds,
+  filterPlugins,
+  groupPlugins,
 } from "@/lib/session-plugin-selection.js";
 import {
-  defaultSelectedPluginIdsForWorld,
-  excludedPluginIdsForWorld,
   isLockedCorePackage,
   requiredPluginIdsForWorld,
 } from "./plugin-selection-helpers.js";
-import type * as api from "@/services/api.js";
+import * as api from "@/services/api.js";
 
 export interface UsePluginSelectionResult {
   corePluginIds: ReadonlySet<string>;
   lockedPluginIds: ReadonlySet<string>;
   selectedPlugins: ReadonlySet<string>;
-  selectedPackages: api.PackageSummary[];
+  selectedPluginSummaries: api.PluginSummary[];
   selectedPluginIds: string[];
   selectedPluginIdSet: ReadonlySet<string>;
-  pluginPacks: ReturnType<typeof pluginPacksForWorld>;
-  activePluginPack: ReturnType<typeof pluginPacksForWorld>[number] | null;
+  pluginPlan: api.WorldPluginPlan | null;
+  pluginPlanLoading: boolean;
+  pluginPlanError: string | null;
+  pluginPacks: readonly import("@covel/shared").PluginPack[];
+  activePluginPack: import("@covel/shared").PluginPack | null;
   pluginSearch: string;
   activePluginTags: ReadonlySet<string>;
   availablePluginTags: string[];
-  pluginGroups: ReturnType<typeof groupPluginPackages>;
+  pluginGroups: ReturnType<typeof groupPlugins>;
   setPluginSearch: (value: string) => void;
   togglePluginTag: (tag: string) => void;
   applyPack: (packId: string) => void;
   togglePlugin: (name: string) => void;
+  retryPluginPlan: () => void;
 }
 
 export function usePluginSelection(
-  world: api.WorldRecord,
-  packages: api.PackageSummary[],
+  worldId: string,
+  plugins: api.PluginSummary[],
+  prepareWorldForServer: () => Promise<void>,
 ): UsePluginSelectionResult {
   const { t } = useTranslation();
+  const [pluginPlan, setPluginPlan] = useState<api.WorldPluginPlan | null>(
+    null,
+  );
+  const [pluginPlanLoading, setPluginPlanLoading] = useState(true);
+  const [pluginPlanError, setPluginPlanError] = useState<string | null>(null);
+  const [pluginPlanRequest, setPluginPlanRequest] = useState(0);
+
+  const retryPluginPlan = useCallback(() => {
+    setPluginPlanRequest((request) => request + 1);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPluginPlan(null);
+    setPluginPlanError(null);
+    setPluginPlanLoading(true);
+    prepareWorldForServer()
+      .then(() =>
+        api.getWorldPluginPlan(worldId, {
+          silentErrors: true,
+        }),
+      )
+      .then((plan) => {
+        if (cancelled) return;
+        // Publish defaults with the plan so consumers never observe a ready
+        // plan alongside the temporary core-only selection.
+        setSelectedPlugins(defaultSelectedPluginIds(plan));
+        setActivePluginPackId(plan.selectedPackId ?? null);
+        setPluginPlan(plan);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setPluginPlanError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPluginPlanLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [worldId, pluginPlanRequest, prepareWorldForServer]);
 
   const corePluginIds = useMemo(
-    () => new Set(packages.filter(isLockedCorePackage).map((pkg) => pkg.name)),
-    [packages],
+    () =>
+      new Set(plugins.filter(isLockedCorePackage).map((plugin) => plugin.id)),
+    [plugins],
   );
   const worldRequiredPluginIds = useMemo(
-    () => requiredPluginIdsForWorld(world),
-    [world],
+    () => requiredPluginIdsForWorld(pluginPlan),
+    [pluginPlan],
   );
-  const worldExcludedPluginIds = useMemo(
-    () => excludedPluginIdsForWorld(world),
-    [world],
-  );
-  const lockedPluginIds = useMemo(
-    () =>
-      new Set([
-        ...[...corePluginIds].filter(
-          (pluginId) => !worldExcludedPluginIds.has(pluginId),
-        ),
-        ...worldRequiredPluginIds,
-      ]),
-    [corePluginIds, worldRequiredPluginIds, worldExcludedPluginIds],
-  );
-
-  const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(() =>
-    defaultSelectedPluginIdsForWorld(world, packages),
-  );
-  const selectedPackages = useMemo(
-    () =>
-      packages.filter(
-        (pkg) => selectedPlugins.has(pkg.name) || lockedPluginIds.has(pkg.name),
-      ),
-    [packages, selectedPlugins, lockedPluginIds],
+  const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(
+    () => new Set(corePluginIds),
   );
   const selectedPluginIds = useMemo(
-    () => [...new Set([...selectedPlugins, ...lockedPluginIds])],
-    [selectedPlugins, lockedPluginIds],
+    () =>
+      resolvePluginSelection({
+        activePluginIds: [...selectedPlugins, ...worldRequiredPluginIds],
+        requestedPluginIds: [...worldRequiredPluginIds, ...selectedPlugins],
+        plugins,
+      }),
+    [plugins, selectedPlugins, worldRequiredPluginIds],
   );
   const selectedPluginIdSet = useMemo(
     () => new Set(selectedPluginIds),
     [selectedPluginIds],
   );
-  const pluginPacks = useMemo(() => pluginPacksForWorld(world), [world]);
-  const worldDefaultPack = useMemo(() => selectedPackForWorld(world), [world]);
+  const lockedPluginIds = useMemo(
+    () =>
+      new Set(
+        [...corePluginIds, ...worldRequiredPluginIds].filter((id) =>
+          selectedPluginIdSet.has(id),
+        ),
+      ),
+    [corePluginIds, worldRequiredPluginIds, selectedPluginIdSet],
+  );
+  const selectedPluginSummaries = useMemo(
+    () => plugins.filter((plugin) => selectedPluginIdSet.has(plugin.id)),
+    [plugins, selectedPluginIdSet],
+  );
+  const pluginPacks = pluginPlan?.packs ?? [];
   const [activePluginPackId, setActivePluginPackId] = useState<string | null>(
-    () => worldDefaultPack?.id ?? null,
+    null,
   );
   const activePluginPack = useMemo(
     () => pluginPacks.find((pack) => pack.id === activePluginPackId) ?? null,
@@ -95,39 +138,22 @@ export function usePluginSelection(
   const [activePluginTags, setActivePluginTags] = useState<Set<string>>(
     () => new Set(),
   );
+
   const availablePluginTags = useMemo(
-    () => collectPluginTags(packages),
-    [packages],
+    () => collectPluginTags(plugins),
+    [plugins],
   );
-  const visiblePluginPackages = useMemo(
-    () => filterPluginPackages(packages, pluginSearch, activePluginTags),
-    [packages, pluginSearch, activePluginTags],
+  const visiblePlugins = useMemo(
+    () => filterPlugins(plugins, pluginSearch, activePluginTags),
+    [plugins, pluginSearch, activePluginTags],
   );
   const pluginGroups = useMemo(
     () =>
-      groupPluginPackages(visiblePluginPackages, (groupId) =>
+      groupPlugins(visiblePlugins, (groupId) =>
         t(`session.pluginGroups.${groupId}`, groupId),
       ),
-    [visiblePluginPackages, t],
+    [visiblePlugins, t],
   );
-
-  // Sync locked/excluded plugin lists whenever they change
-  useEffect(() => {
-    setSelectedPlugins((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const id of worldExcludedPluginIds) {
-        if (!lockedPluginIds.has(id) && next.delete(id)) changed = true;
-      }
-      for (const id of lockedPluginIds) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [lockedPluginIds, worldExcludedPluginIds]);
 
   const togglePluginTag = useCallback((tag: string) => {
     setActivePluginTags((prev) => {
@@ -143,34 +169,64 @@ export function usePluginSelection(
       const pack = pluginPacks.find((item) => item.id === packId);
       if (!pack) return;
       setActivePluginPackId(pack.id);
-      setSelectedPlugins((prev) =>
-        applyPluginPackSelection(prev, pack, packages, lockedPluginIds),
+      setSelectedPlugins(
+        new Set(
+          resolvePluginSelection({
+            activePluginIds: [
+              ...applyPluginPackSelection(
+                selectedPluginIdSet,
+                pack,
+                plugins,
+                worldRequiredPluginIds,
+              ),
+            ],
+            requestedPluginIds: [
+              ...worldRequiredPluginIds,
+              ...pack.pluginIds,
+              ...pack.optionalPluginIds,
+            ],
+            plugins,
+          }),
+        ),
       );
     },
-    [pluginPacks, packages, lockedPluginIds],
+    [pluginPacks, plugins, selectedPluginIdSet, worldRequiredPluginIds],
   );
 
   const togglePlugin = useCallback(
     (name: string) => {
       if (lockedPluginIds.has(name)) return;
       setActivePluginPackId(null);
-      setSelectedPlugins((prev) => {
-        const next = new Set(prev);
-        if (next.has(name)) next.delete(name);
-        else next.add(name);
-        return next;
-      });
+      const next = new Set(selectedPluginIdSet);
+      const enabling = !next.has(name);
+      if (enabling) next.add(name);
+      else next.delete(name);
+      setSelectedPlugins(
+        new Set(
+          resolvePluginSelection({
+            activePluginIds: [...next],
+            requestedPluginIds: [
+              ...worldRequiredPluginIds,
+              ...(enabling ? [name] : next),
+            ],
+            plugins,
+          }),
+        ),
+      );
     },
-    [lockedPluginIds],
+    [lockedPluginIds, plugins, selectedPluginIdSet, worldRequiredPluginIds],
   );
 
   return {
     corePluginIds,
     lockedPluginIds,
-    selectedPlugins,
-    selectedPackages,
+    selectedPlugins: selectedPluginIdSet,
+    selectedPluginSummaries,
     selectedPluginIds,
     selectedPluginIdSet,
+    pluginPlan,
+    pluginPlanLoading,
+    pluginPlanError,
     pluginPacks,
     activePluginPack,
     pluginSearch,
@@ -181,5 +237,6 @@ export function usePluginSelection(
     togglePluginTag,
     applyPack,
     togglePlugin,
+    retryPluginPlan,
   };
 }

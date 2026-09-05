@@ -25,6 +25,7 @@ interface MessageComposerProps {
   selectedCommandIndex?: number;
   commandExecuting?: boolean;
   commandFeedback?: CommandFeedback | null;
+  pendingDraftCount?: number;
   onCommandSelect?: (command: SessionSlashCommand) => void;
 }
 
@@ -45,6 +46,7 @@ export function MessageComposer({
   selectedCommandIndex = 0,
   commandExecuting = false,
   commandFeedback,
+  pendingDraftCount = 0,
   onCommandSelect,
 }: MessageComposerProps) {
   const selectedCommandRef = useRef<HTMLButtonElement>(null);
@@ -195,7 +197,9 @@ export function MessageComposer({
               type="button"
               onClick={onSubmit}
               disabled={
-                composerDisabled || commandExecuting || !inputValue.trim()
+                composerDisabled ||
+                commandExecuting ||
+                (!inputValue.trim() && (executing || pendingDraftCount === 0))
               }
               aria-label={
                 executing

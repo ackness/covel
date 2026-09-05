@@ -110,6 +110,7 @@ async function dispatchRpc(app: Hono, sessionId: string): Promise<Response> {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
+      kind: "action",
       pluginId: "untrusted",
       action: "do-thing",
       payload: { foo: "bar" },
@@ -176,8 +177,8 @@ describe("Plugin RPC approval flow", () => {
 
     const res = await app.request("/api/sessions/sess-approval-1/approvals");
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { pending: ReadonlyArray<unknown> };
-    expect(body.pending).toHaveLength(1);
+    const body = (await res.json()) as { items: ReadonlyArray<unknown> };
+    expect(body.items).toHaveLength(1);
   });
 
   it("decision allow + scope=once unblocks exactly one follow-up dispatch", async () => {

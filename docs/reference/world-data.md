@@ -350,7 +350,7 @@ handler 必须返回以声明的 output id 为 key 的对象；每个 output 值
 - handler 文件 digest、projection/output 身份与实际 item 都进入 ledger 的 source digest；只改 handler 不改 world source 时，下一次 sync 仍会识别变化。执行前后 digest 不一致时会丢弃该次结果，避免热更新竞态写入错误 provenance。
 - session 创建会先在锁和数据库事务之外读取 source、运行 projection 并生成不可变 plan，再在事务内原子应用，避免插件工作占用事务。sync 同样在 session mutation lock 外完成 plan 和 projection Worker；dry-run 不取写锁，实际写入只在短锁内重新校验 world、locale、active plugin 与审批 scope，然后完成冲突扫描和事务应用。
 
-开发工具和 Agent 可通过 `GET /api/framework/capabilities` 发现 `projections` effect、WorldIR URI 及其规范 JSON Schema 文档，再通过 `GET /api/plugins/:id/contract` 读取每个插件聚合后的 `worldProjections`。公开 discovery 只返回声明元数据，不暴露插件根路径或 handler 路径，也不能直接调用 handler。
+开发工具和 Agent 可通过 `GET /api/framework/capabilities` 发现 `projections` effect、WorldIR URI 及其规范 JSON Schema 文档，再通过 `GET /api/plugins/:id` 读取每个插件聚合后的 `worldProjections`。公开 discovery 只返回声明元数据，不暴露插件根路径或 handler 路径，也不能直接调用 handler。
 
 静态 world-data projection 与实时 story 管线使用同一 `covel://world/ir/v1` 数据契约，但执行机制不同：静态数据走上面的纯函数 handler；实时回合由 `world-ir` agent 把 `narrative-engine` 输出抽取一次，`codex`、`core-quest`、`affinity`、`inventory` 和 `npc-graph/extractor` 再通过 typed input 并行消费。共享抽取失败时，下游按 DAG gate 跳过，不影响本轮叙事成功提交。
 

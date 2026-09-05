@@ -390,6 +390,50 @@ describe("finalizeExecution", () => {
     ).toEqual(["hp", "mp"]);
   });
 
+  it("rejects empty story before committing sibling proposals and preserves existing durable state", async () => {
+    const store = createMemoryStore();
+    await savePendingTurn(store);
+    const now = new Date().toISOString();
+    await store.setPluginData({
+      id: "durable-effect",
+      sessionId: SESSION_ID,
+      pluginId: "rt-b",
+      namespace: "external",
+      key: "already-done",
+      value: { intact: true },
+      createdAt: now,
+      updatedAt: now,
+    });
+    const outcome = await finalizeExecution({
+      executionContext: {
+        executionId: "failed-story",
+        origin: "manual",
+        countPolicy: "none",
+      },
+      store,
+      sessionId: SESSION_ID,
+      runtimes: [makeRuntime("rt-b"), makeRuntime("rt-a", "story")],
+      results: [
+        makeResult("rt-b", statePatch("hp", 99)),
+        makeResult("rt-a", { toolCalls: [] }),
+      ],
+      turnIds: [TURN_ID],
+    });
+    expect(outcome.status).toBe("failed");
+    expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
+    expect(
+      (
+        await store.getPluginData(
+          SESSION_ID,
+          "rt-b",
+          "external",
+          "already-done",
+        )
+      )?.value,
+    ).toEqual({ intact: true });
+    expect(await commitStatusOf(store)).toBe("failed");
+  });
+
   it("rolls back on a handler validation failure even without a thrown store error", async () => {
     const store = createMemoryStore();
     await savePendingTurn(store);

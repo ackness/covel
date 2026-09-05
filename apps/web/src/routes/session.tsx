@@ -14,6 +14,7 @@ import { initDesktopBridge } from "@/lib/desktop-bridge.js";
 import { WorldSelectScreen } from "@/components/session/world-select-screen.js";
 import { SessionPrepScreen } from "@/components/session/session-prep-screen.js";
 import { OnboardingWizard } from "@/components/onboarding-wizard.js";
+import { ExecutionRecoveryNotice } from "@/components/session/execution-recovery-notice.js";
 
 // Lazy-load the in-game surface (chat + stage + json-render panels + plugin
 // UI) — the single heaviest component tree in the app, but only reachable once
@@ -46,6 +47,9 @@ function SessionPage() {
     startGame,
     resumeSession,
     resumeSessionById,
+    retryInterruptedTurn,
+    refreshExecutionRecovery,
+    abortActiveTurn,
     deleteSession,
     backToWorldSelect,
     updateWorldLocal,
@@ -94,19 +98,35 @@ function SessionPage() {
           replace: true,
         });
       }
-    } else if (!state.session && sid && autoResumeAttempted.current) {
+    } else if (
+      !state.session &&
+      !state.executionRecovery &&
+      sid &&
+      autoResumeAttempted.current
+    ) {
       // Session was cleared (back to world select) — remove sid from URL
       navigate({ to: "/session", search: {}, replace: true });
     }
-  }, [state.session, sid, navigate, backToWorldSelect]);
+  }, [
+    state.session,
+    state.executionRecovery,
+    sid,
+    navigate,
+    backToWorldSelect,
+  ]);
 
   // Auto-resume from URL sid on boot
   useEffect(() => {
     if (state.booted && sid && !state.session && !autoResumeAttempted.current) {
       autoResumeAttempted.current = true;
-      resumeSessionById(sid).catch(() => {
-        // Session not found — clear sid from URL
-        navigate({ to: "/session", search: {}, replace: true });
+      resumeSessionById(sid).catch((error: unknown) => {
+        // Keep recoverable network/workspace failures visible at this URL.
+        if (
+          error instanceof Error &&
+          error.message === `Session not found: ${sid}`
+        ) {
+          navigate({ to: "/session", search: {}, replace: true });
+        }
       });
     }
   }, [state.booted, sid, state.session, resumeSessionById, navigate]);
@@ -214,6 +234,20 @@ function SessionPage() {
   }
 
   // Auto-resuming from URL — show spinner while loading
+  if (!state.session && state.executionRecovery) {
+    return (
+      <div className="flex h-full items-center justify-center p-4">
+        <div className="w-full max-w-2xl overflow-hidden rounded-(--radius-control) border border-border">
+          <ExecutionRecoveryNotice
+            recovery={state.executionRecovery}
+            onRetry={retryInterruptedTurn}
+            onRefresh={refreshExecutionRecovery}
+            onStop={abortActiveTurn}
+          />
+        </div>
+      </div>
+    );
+  }
   if (state.booted && sid && !state.session && !state.world) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -278,7 +312,7 @@ function SessionPage() {
     return (
       <SessionPrepScreen
         world={state.world}
-        packages={state.packages}
+        plugins={state.plugins}
         presets={state.presets}
         llmConfig={state.llmConfig}
         startError={state.executionError}
@@ -301,7 +335,7 @@ function SessionPage() {
       <OnboardingWizard />
       <WorldSelectScreen
         worlds={state.worlds}
-        packages={state.packages}
+        plugins={state.plugins}
         resolvedSlots={resolvedSlots}
         settingsOpen={settings.open}
         onSettingsOpenChange={settings.onOpenChange}

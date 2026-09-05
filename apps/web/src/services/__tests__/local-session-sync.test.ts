@@ -2,10 +2,12 @@ import "fake-indexeddb/auto";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserVault } from "../storage/browser-vault.js";
+import { ApiError } from "../api/request.js";
 
 const api = vi.hoisted(() => ({
   getWorld: vi.fn(),
   createWorld: vi.fn(),
+  updateWorld: vi.fn(),
   getSession: vi.fn(),
   createSession: vi.fn(),
   deleteSession: vi.fn(),
@@ -25,8 +27,6 @@ const appKv = vi.hoisted(() => ({
 }));
 
 vi.mock("../api.js", () => api);
-const isNotFound = vi.hoisted(() => vi.fn(() => true));
-vi.mock("../api/request.js", () => ({ isNotFound }));
 vi.mock("../app-kv-store.js", () => appKv);
 
 const { LocalDataService } = await import("../data-service/local.js");
@@ -51,9 +51,11 @@ async function serviceWithWorld(
 
 beforeEach(() => {
   vi.clearAllMocks();
-  isNotFound.mockReturnValue(true);
   api.getWorld.mockResolvedValue({ id: "world-1" });
-  api.getSession.mockRejectedValue(new Error("404"));
+  api.updateWorld.mockResolvedValue({ id: "world-1" });
+  api.getSession.mockRejectedValue(
+    new ApiError(404, "/api/sessions/sess-1", ""),
+  );
   api.createSession.mockResolvedValue({
     id: "sess-1",
     // A server-created session without setup runtimes starts directly in the
@@ -72,6 +74,173 @@ afterEach(async () => {
 });
 
 describe("LocalDataService browser-authoritative sync", () => {
+  it("prepares the complete local world before server-side planning", async () => {
+    const service = await serviceWithWorld("world-local", {
+      pluginPolicy: { requiredPluginIds: ["world-notes"] },
+      source: "browser-indexeddb",
+    });
+    await service.updateWorld("world-local", {
+      lore: "Local lore",
+      locale: "en-US",
+      tags: ["mystery"],
+      dimensions: { custom: { enabled: true } },
+    });
+    api.getWorld.mockRejectedValueOnce(
+      new ApiError(404, "/api/worlds/world-local", ""),
+    );
+
+    await service.prepareWorldForServer("world-local");
+
+    expect(api.createWorld).toHaveBeenCalledWith({
+      id: "world-local",
+      name: "World",
+      description: "",
+      lore: "Local lore",
+      tags: ["mystery"],
+      locale: "en-US",
+      dimensions: { custom: { enabled: true } },
+      metadata: {
+        pluginPolicy: { requiredPluginIds: ["world-notes"] },
+        source: "browser-indexeddb",
+      },
+      createdAt: expect.any(String),
+    });
+  });
+
+  it("refreshes an existing transient world mirror", async () => {
+    const service = await serviceWithWorld("world-1", {
+      pluginPolicy: { excludedPluginIds: ["economy"] },
+    });
+
+    await service.prepareWorldForServer("world-1");
+
+    expect(api.updateWorld).toHaveBeenCalledWith(
+      "world-1",
+      expect.objectContaining({
+        name: "World",
+        metadata: {
+          pluginPolicy: { excludedPluginIds: ["economy"] },
+        },
+      }),
+      { silentStatuses: [401] },
+    );
+  });
+
+  it("uses an existing shared world for planning when operator access is required", async () => {
+    const service = await serviceWithWorld();
+    api.updateWorld.mockRejectedValueOnce(
+      new ApiError(
+        401,
+        "/api/worlds/world-1",
+        JSON.stringify({
+          error: "Operator required",
+          code: "operator_token_required",
+        }),
+      ),
+    );
+
+    await expect(
+      service.prepareWorldForServer("world-1"),
+    ).resolves.toBeUndefined();
+
+    expect(api.createWorld).not.toHaveBeenCalled();
+    expect(api.uploadBrowserCheckpoint).not.toHaveBeenCalled();
+  });
+
+  it.each(["existing", "recreated"])(
+    "hydrates a %s session without operator permission to update its shared world",
+    async (mirror) => {
+      const service = await serviceWithWorld();
+      await service.createSession("world-1", undefined, "sess-1", [], "en-US");
+      await service.addMessage({
+        id: "durable-message",
+        sessionId: "sess-1",
+        role: "user",
+        content: "Preserved browser history",
+        createdAt: "2026-09-01T00:00:00.000Z",
+      });
+      if (mirror === "existing")
+        api.getSession.mockResolvedValueOnce({ id: "sess-1" });
+      api.updateWorld.mockRejectedValueOnce(
+        new ApiError(
+          401,
+          "/api/worlds/world-1",
+          JSON.stringify({
+            error: "Operator required",
+            code: "operator_token_required",
+          }),
+        ),
+      );
+
+      await service.syncToServer("sess-1");
+
+      expect(api.createWorld).not.toHaveBeenCalled();
+      expect(api.createSession).toHaveBeenCalledTimes(
+        mirror === "existing" ? 0 : 1,
+      );
+      expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
+        "sess-1",
+        expect.objectContaining({
+          messages: [expect.objectContaining({ id: "durable-message" })],
+        }),
+      );
+    },
+  );
+
+  it.each([
+    ["GET", 401, "operator_token_required"],
+    ["GET", 500, "internal"],
+    ["PATCH", 500, "internal"],
+    ["PATCH", 401, "session_owner_required"],
+    ["PATCH", 401, undefined],
+    ["PATCH", 403, "operator_token_required"],
+  ] as const)(
+    "propagates %s %i (%s) before session hydration",
+    async (method, status, code) => {
+      const service = await serviceWithWorld();
+      await service.createSession("world-1", undefined, "sess-1", [], "en-US");
+      const error = new ApiError(
+        status,
+        "/api/worlds/world-1",
+        JSON.stringify({
+          error: "World sync failed",
+          ...(code ? { code } : {}),
+        }),
+      );
+      (method === "GET" ? api.getWorld : api.updateWorld).mockRejectedValueOnce(
+        error,
+      );
+
+      await expect(service.syncToServer("sess-1")).rejects.toBe(error);
+
+      expect(api.createWorld).not.toHaveBeenCalled();
+      expect(api.getSession).not.toHaveBeenCalled();
+      expect(api.uploadBrowserCheckpoint).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses to hydrate a missing world when its creation requires an operator", async () => {
+    const service = await serviceWithWorld();
+    await service.createSession("world-1", undefined, "sess-1", [], "en-US");
+    api.getWorld.mockRejectedValueOnce(
+      new ApiError(404, "/api/worlds/world-1", ""),
+    );
+    const denied = new ApiError(
+      401,
+      "/api/worlds",
+      JSON.stringify({
+        error: "Operator required",
+        code: "operator_token_required",
+      }),
+    );
+    api.createWorld.mockRejectedValueOnce(denied);
+
+    await expect(service.syncToServer("sess-1")).rejects.toBe(denied);
+
+    expect(api.updateWorld).not.toHaveBeenCalled();
+    expect(api.uploadBrowserCheckpoint).not.toHaveBeenCalled();
+  });
+
   it("persists the selected plugin set, locale, and requested id", async () => {
     const service = await serviceWithWorld();
     const session = await service.createSession(
@@ -192,6 +361,39 @@ describe("LocalDataService browser-authoritative sync", () => {
     });
   });
 
+  it("uploads a locale-resolved server world without downgrading browser i18n", async () => {
+    const service = await serviceWithWorld("localized-world");
+    await vault.upsertWorld({
+      id: "localized-world",
+      name: { "zh-CN": "雾港", "en-US": "Mistport" },
+      description: { "zh-CN": "雾中港口", "en-US": "A port in fog" },
+      locale: "zh-CN",
+      createdAt: "2026-08-25T00:00:00.000Z",
+    } as never);
+    await service.createSession(
+      "localized-world",
+      undefined,
+      "sess-localized",
+      [],
+      "zh-CN",
+    );
+
+    await service.syncToServer("sess-localized");
+
+    expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
+      "sess-localized",
+      expect.objectContaining({
+        world: expect.objectContaining({
+          name: "雾港",
+          description: "雾中港口",
+        }),
+      }),
+    );
+    await expect(vault.getWorld("localized-world")).resolves.toMatchObject({
+      name: { "zh-CN": "雾港", "en-US": "Mistport" },
+    });
+  });
+
   it("preserves an established browser clock when rebuilding a missing mirror", async () => {
     const service = await serviceWithWorld();
     await service.createSession("world-1", undefined, "sess-1", [], "en-US");
@@ -284,7 +486,6 @@ describe("LocalDataService browser-authoritative sync", () => {
   it("does not turn a real sync error into a create probe", async () => {
     const service = await serviceWithWorld();
     await service.createSession("world-1", undefined, "sess-1", [], "en-US");
-    isNotFound.mockReturnValue(false);
     const error = new Error("server unavailable");
     api.getWorld.mockRejectedValue(error);
 
@@ -337,6 +538,59 @@ describe("LocalDataService browser-authoritative sync", () => {
     });
   });
 
+  it("keeps the browser world document when applying a server commit", async () => {
+    const service = await serviceWithWorld("localized-world");
+    await vault.upsertWorld({
+      id: "localized-world",
+      name: { "zh-CN": "雾港", "en-US": "Mistport" },
+      description: { "zh-CN": "雾中港口", "en-US": "A port in fog" },
+      createdAt: "2026-08-25T00:00:00.000Z",
+    } as never);
+    await service.createSession(
+      "localized-world",
+      undefined,
+      "sess-localized",
+      [],
+      "zh-CN",
+    );
+    api.fetchBrowserCommit.mockImplementation(
+      async (_sessionId: string, actionId: string, baseRevision: number) => {
+        const current = await vault.getLatestCheckpoint("sess-localized");
+        if (!current) throw new Error("missing checkpoint");
+        return {
+          baseRevision,
+          revision: baseRevision + 1,
+          actionId,
+          checkpoint: {
+            ...current,
+            world: {
+              id: "localized-world",
+              name: "雾港",
+              description: "雾中港口",
+              createdAt: "2026-08-25T00:00:00.000Z",
+            },
+            revision: baseRevision + 1,
+            actionId,
+            committedAt: "2026-08-26T00:00:00.000Z",
+          },
+        };
+      },
+    );
+
+    await service.commitFromServer("sess-localized", "turn-1");
+
+    await expect(vault.getWorld("localized-world")).resolves.toMatchObject({
+      name: { "zh-CN": "雾港", "en-US": "Mistport" },
+    });
+    await expect(
+      vault.getLatestCheckpoint("sess-localized"),
+    ).resolves.toMatchObject({
+      world: {
+        name: { "zh-CN": "雾港", "en-US": "Mistport" },
+      },
+    });
+  });
+
   it("recovers a durably staged commit after the data service is recreated", async () => {
     const service = await serviceWithWorld();
     await service.createSession("world-1", undefined, "sess-1", [], "en-US");
@@ -344,7 +598,6 @@ describe("LocalDataService browser-authoritative sync", () => {
     await service.stageServerCommit("sess-1", "turn-pending");
 
     const downloadError = new Error("connection reset");
-    isNotFound.mockReturnValue(false);
     api.fetchBrowserCommit.mockRejectedValueOnce(downloadError);
     await expect(
       service.commitFromServer("sess-1", "turn-pending"),

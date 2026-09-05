@@ -68,18 +68,20 @@
 - `requiredPlugins`：准备页锁定启用。
 - `recommendedPlugins`：准备页默认启用。
 - `excludedPlugins`：准备页默认关闭。
-- `pluginPolicy`：描述场景意图和组合包，可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins` 和 `packs`。写在顶层的同名三组字段也会被前端并入 `pluginPolicy`。
+- `pluginPolicy`：描述场景意图和组合包，可包含 `preset`、`preferTags`、`avoidTags`、`requireCapabilities`、`requiredPlugins`、`recommendedPlugins`、`excludedPlugins` 和 `packs`。写在顶层的同名三组字段会在世界加载时并入 `pluginPolicy`。
 - `worldData`：可选，指向 `data/world.data.yaml`；当前会读取本地 YAML/JSON/Markdown/Text/Media source，生成轻量 `WorldRecord.metadata.worldData` 摘要，投影 `world:metadata.dimensions`，并在 session 创建时导入 `plugin:*/*`、`plugin:*/*+lorebook`、`lorebook`、`characters`、`media` + `indexTo`。
 
 第三方插件可以把插件数据声明为 `schema: plugin://<pluginId>/<namespace>` 与 `to: plugin:<pluginId>/<namespace>`。完整格式见 [World Data](world-data.md)。
 
-内置组合包由前端提供：`traditional-story`、`dialogue-mode`、`low-cost`。世界可以用 `pluginPolicy.preset` 引用，也可以在 `pluginPolicy.packs` 自定义组合包。对话模式世界通常启用 `chat-mode-narrator`、`scene-cast`、`scene-stage`、`scene-prompts`、`character-blueprint`、`character-presence`、`living-world-rules`、`branch-reply`，并排除默认 `narrator`、`guide` 以及包级旧下游插件。多 runtime 插件当前按包选择；例如 `npc-graph/rag-retriever` 和 `npc-graph/extractor` 同属 `npc-graph` 包，准备页会一起启用或关闭。`scene-stage` 由 `chat-mode-narrator` 的 `relations.requires` 强制拉起（同 `scene-cast`），即便玩家在准备页手动关闭也会被服务端展开逻辑重新加回——世界包引用 `plugin:scene-stage/scenes` 的 worldData source 因此总能解析到已激活插件。
+内置组合包由服务端提供：`traditional-story`、`dialogue-mode`、`low-cost`。`GET /api/worlds/:id/plugin-plan` 把内置组合包、世界自定义组合包、标签和能力约束解析为默认插件集合；`defaultPluginIds` 使用与会话相同的 `requires`、`conflicts` 和可信 builtin core 替换规则。准备页遵守解析结果，不把已被替代的 core 插件重新选中或锁定。世界可以用 `pluginPolicy.preset` 引用，也可以在 `pluginPolicy.packs` 自定义组合包。对话模式世界通常启用 `chat-mode-narrator`、`scene-cast`、`scene-stage`、`scene-prompts`、`character-blueprint`、`character-presence`、`living-world-rules`、`branch-reply`，并排除默认 `narrator`、`guide` 以及包级旧下游插件。多 runtime 插件当前按包选择；例如 `npc-graph/rag-retriever` 和 `npc-graph/extractor` 同属 `npc-graph` 包，准备页会一起启用或关闭。`scene-stage` 由 `chat-mode-narrator` 的 `relations.requires` 强制拉起（同 `scene-cast`），即便玩家在准备页手动关闭也会被服务端展开逻辑重新加回——世界包引用 `plugin:scene-stage/scenes` 的 worldData source 因此总能解析到已激活插件。
 
 ## 徽章说明 / Badge legend
 
-🔵 core（`pluginType: core-plugin`，不可禁用） · ⚪ optional（`pluginType: plugin`，可禁用） · 🧠 uses LLM（`agent` runtime） · ⚙ pure function（`runtimeType: function`，零 token） · 🖼 UI only（只提供面板，无 runtime）
+🔵 core（`pluginType: core-plugin`，默认锁定；可由提供相同 `relations.provides` 的可信 builtin 插件替代） · ⚪ optional（`pluginType: plugin`，可禁用） · 🧠 uses LLM（`agent` runtime） · ⚙ pure function（`runtimeType: function`，零 token） · 🖼 UI only（只提供面板，无 runtime）
 
 Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填的 runtime 相对路径，目标模块必须 `export default function`。manifest 校验会拒绝缺失 handler，loader 会拒绝没有默认函数导出的模块，避免插件安装后到首次激活才失败。
+
+runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启动 discovery 快照记录的实际 `PLUGIN.md` 路径；根目录单 runtime 即使声明 `name: plugin-id/manual`，仍从根目录解析 UI，不会被推断为 `runtimes/manual/`。
 
 ---
 
@@ -824,22 +826,26 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 
 ### scene-stage/direction
 
-| 字段         | 值                                                                                              |
-| ------------ | ----------------------------------------------------------------------------------------------- |
-| pluginType   | `plugin`                                                                                        |
-| runtimeType  | `function`（无 LLM）                                                                            |
-| handler      | `./runtimes/direction/handler.js`                                                               |
-| stage        | 无（`event` 触发不设 `stage`）                                                                  |
-| trigger      | `event`，topic `stage.direction`                                                                |
-| outputKind   | `system`                                                                                        |
-| capabilities | `[stage-direction]`                                                                             |
-| tags         | `mode:dialogue` · `role:scene-state` · `role:character` · `cost:function`                       |
-| events       | 消费 `stage.direction`，单次载荷为 1–12 条 `cues`                                               |
-| output       | `direction/current`，持久化至多 4 名演员的焦点、站位、过渡与 `variantId/outfit/expression/pose` |
+| 字段         | 值                                                                                |
+| ------------ | --------------------------------------------------------------------------------- |
+| pluginType   | `plugin`                                                                          |
+| runtimeType  | `function`（无 LLM）                                                              |
+| handler      | `./runtimes/direction/handler.js`                                                 |
+| stage        | 无（`event` 触发不设 `stage`）                                                    |
+| trigger      | `event`，topic `stage.direction`                                                  |
+| outputKind   | `system`                                                                          |
+| capabilities | `[stage-direction]`                                                               |
+| tags         | `mode:dialogue` · `role:scene-state` · `role:character` · `cost:function`         |
+| events       | 消费 `stage.direction`，0–12 条 `cues`；为空时必须有 `dialogue.paragraphSpeakers` |
+| output       | `direction/current` 持久化至多 4 名演员；`dialogue/<turnId>` 持久化独立的逐段署名 |
 
 **职责**：把传统 Galgame 的导演指令从“由当前说话者猜画面”提升为持久状态。叙事器在角色登场、更新、退场、焦点切换或清空舞台时发射一次 `stage.direction`，并把同一轮所有变化合并进 `cues[]`。角色通过完整名称、角色 id 或唯一部分名称解析；无法唯一解析的指令被忽略并写入 diagnostics，不会误操作其他角色。显式站位冲突时新角色占据该站位，旧角色退回自动站位。
 
 Web 舞台按 `stage-direction` capability 发现提供方；一旦存在 `direction/current` 就以其为权威，包括 `actors: []` 的明确清空。尚未产生方向状态的旧世界继续使用 `scene-cast/active-cast`，因此无需迁移即可保持原行为。视觉请求的具体回退由 `character-presence.visuals` 负责。
+
+**对白署名契约**：演员焦点只控制画面高亮。叙事器在正文前提交 `dialogue: { paragraphSpeakers: ["exact-character-id", null, "other-character-id"] }`，每个元素对应一个空行分隔的正文段落（1–80 段）；`null` 表示旁白、混合对白或无法确定身份。不同说话人必须独立分段，数组长度与正文段数必须一致。`scene-cast` 的 `<active-cast>` 注入同时提供名称和精确角色 ID，ID 不出现在最终玩家正文。这里只接受准确 ID，不使用舞台演员的部分名称匹配，也不从中文正文猜测。
+
+处理器写入 `dialogue/<turnId>`，值为 `{ schemaVersion: 1, turnId, paragraphSpeakers: [{ characterId, displayName } | null] }`；未知 ID 保留所在位置为 `null` 并记录 diagnostics。仅提交对白映射不会建立或清空 `direction/current`。Web 只读取当前 story 的回合记录；流式阶段使用同回合事件预览，恢复后使用持久数据；无映射的旧消息、回合不符或最终段数不符均不显示署名。
 
 动作流实时预览会短暂保留 `actor.leave` 和 `stage.clear` 的目标角色，以播放指令指定的 `fade`、`slide-left`、`slide-right` 或 `dissolve` 离场动画；持久化的 `direction/current` 仍然只保存留在舞台上的角色。
 
@@ -1102,7 +1108,7 @@ Prompt agent 不再直接拼 `{ topic, data }` JSON 信封：文本模式把字�
 
 ---
 
-当前世界包推荐使用 `pluginPolicy` 表达插件组合意图。内置前端组合包包括：`traditional-story`（传统叙事主线 + 行动建议/图鉴/关系图，玩家口吻设置为可选项）、`dialogue-mode`（对话优先叙事 + 场景演员/短句回复 + 玩家口吻设置）、`low-cost`（保留核心流程并减少下游 LLM 调用，玩家口吻设置为可选项）。世界可以通过 `preset` 引用这些组合包，也可以在 `packs` 中提供自定义组合。
+当前世界包推荐使用 `pluginPolicy` 表达插件组合意图。内置服务端组合包包括：`traditional-story`（传统叙事主线 + 行动建议/图鉴/关系图，玩家口吻设置为可选项）、`dialogue-mode`（对话优先叙事 + 场景演员/短句回复 + 玩家口吻设置）、`low-cost`（保留核心流程并减少下游 LLM 调用，玩家口吻设置为可选项）。世界可以通过 `preset` 引用这些组合包，也可以在 `packs` 中提供自定义组合；服务端通过 `plugin-plan` 端点返回解析结果。
 
 ---
 
@@ -1148,6 +1154,8 @@ plugins/<plugin-id>/
 > 真实多 runtime 范例见 `plugins/npc-graph/`（`extractor` agent + `rag-retriever` function）和 `plugins/char-creator/`（`player-init` 首轮 agent + `character-tracker` 持续 agent）。`world-init` 当前是单 runtime（`schema-gen`）+ 一个 `guard` 文件，不算多 runtime。
 
 子运行时之间可通过 `input.inject` 传递数据（上游输出 → 下游 prompt 注入）。
+
+服务端在启动时把所有 runtime manifest 发布为 registry 的声明快照；能力发现、会话可用插件、`/api/plugins`、flow 与 UI 投影都只读取这份快照，并由同一个 canonical descriptor 生成。`loadedRuntimes` 仅缓存已经按需加载的可执行产物，不参与“插件是否声明某能力”的判断。因此尚未执行过的 runtime 也可被发现，GET 端点不会因一次读取而加载插件代码或修改会话。
 
 #### README.md（必需，用于人类阅读）
 
@@ -1203,6 +1211,8 @@ description: # I18nText：一句话简介
 entry: ./server/index.js # 整个插件声明一次（多 runtime 声明同一路径会去重，约定写在根 PLUGIN.md）
 ```
 
+多 runtime 插件的根 `PLUGIN.md` 虽不作为 runtime 调度，但其中的 `entry` 会在启动时与各 runtime 声明合并为一个插件级定义；审批预检与实际激活读取同一份定义，避免根 entry 在延迟加载路径中丢失。
+
 ```js
 // server/index.js
 export default function (covel) {
@@ -1239,7 +1249,7 @@ tools:
 
 ### commands（输入框斜线命令）
 
-插件可以在 runtime 的 `PLUGIN.md` frontmatter 声明玩家可发现的斜线命令，并在该插件的 `entry` 中注册对应 RPC action。框架不按插件 ID 写分支：`GET /api/sessions/:id/plugins` 只聚合当前会话已启用插件的声明，输入框据此匹配、补全和展示参数；执行时输入框提交 `{ commandId, input }`，插件 JSON-RENDER UI 提交 `{ commandId, args }`，服务端都再次从当前会话目录解析 action、参数和上下文权限。
+插件可以在 runtime 的 `PLUGIN.md` frontmatter 声明玩家可发现的斜线命令，并在该插件的 `entry` 中注册对应 RPC action。框架不按插件 ID 写分支：`GET /api/sessions/:id/plugins` 只聚合当前会话已启用插件的声明，输入框据此匹配、补全和展示参数；执行时输入框提交 `{ kind: "command", commandId, input }`，插件 JSON-RENDER UI 提交 `{ kind: "command", commandId, args }`，服务端都再次从当前会话目录解析 action、参数和上下文权限。
 
 ```yaml
 commands:

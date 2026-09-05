@@ -42,6 +42,32 @@ export function registerRuntimeRecordStoreSuites(
   });
 
   describe("Worlds", () => {
+    it("atomically creates a world only once", async () => {
+      const original = makeWorld({ name: "Original" });
+      const replacement = makeWorld({
+        id: original.id,
+        name: "Replacement",
+      });
+
+      await expect(store.createWorld(original)).resolves.toBe(true);
+      await expect(store.createWorld(replacement)).resolves.toBe(false);
+      await expect(store.getWorld(original.id)).resolves.toEqual(original);
+    });
+
+    it("allows exactly one concurrent create for the same world id", async () => {
+      const first = makeWorld({ name: "First" });
+      const second = makeWorld({ id: first.id, name: "Second" });
+
+      const results = await Promise.all([
+        store.createWorld(first),
+        store.createWorld(second),
+      ]);
+
+      expect(results.filter(Boolean)).toHaveLength(1);
+      const stored = await store.getWorld(first.id);
+      expect(stored).toEqual(results[0] ? first : second);
+    });
+
     it("should upsert and retrieve a world", async () => {
       const world = makeWorld();
       await store.upsertWorld(world);

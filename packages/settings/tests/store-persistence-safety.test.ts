@@ -262,7 +262,7 @@ describe("versioned persistence", () => {
     expect(adapter.readEntries()).toEqual({ "plugin.test.enabled": "no" });
   });
 
-  it("detects a second store's CAS conflict without overwriting it", async () => {
+  it("rebases a second store's disjoint change without overwriting the first", async () => {
     let bundle: SettingsPersistenceBundle = {
       schemaVersion: 2,
       revision: 0,
@@ -298,11 +298,11 @@ describe("versioned persistence", () => {
     const second = new SettingsStore(versioned());
     await Promise.all([first.init(), second.init()]);
     await first.set("first", true);
-    await expect(second.set("second", true)).rejects.toBeInstanceOf(
-      SettingsRevisionConflictError,
-    );
-    expect(bundle.entries).toEqual({ first: true });
-    await expect(second.set("third", true)).rejects.toThrow(/never loaded/);
+    await second.set("second", true);
+    expect(bundle.entries).toEqual({ first: true, second: true });
+    expect(second.get("first")).toBe(true);
+    await second.set("third", true);
+    expect(bundle.entries).toEqual({ first: true, second: true, third: true });
   });
 
   it("uses the revision returned by each queued save", async () => {

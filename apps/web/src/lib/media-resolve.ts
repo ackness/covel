@@ -24,7 +24,7 @@ import {
   type MediaCacheRecord,
 } from "./media-cache.js";
 import { sha256Hex, subtleAvailable } from "./media-hash.js";
-import { sessionAuthHeaders } from "../services/session-credentials.js";
+import { fetchSessionMediaUrl } from "../services/api/media.js";
 
 export interface ResolveOptions {
   readonly sessionId: string;
@@ -44,52 +44,12 @@ export interface ResolveResult {
 const TRANSPARENT_PNG_DATA_URI =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
-/**
- * Path of the short-lived media-token endpoint.
- *
- * Server-issued signed URL endpoint for session-authorized media access.
- */
-export function MEDIA_TOKEN_ENDPOINT(sessionId: string, id: string): string {
-  return (
-    "/api/sessions/" +
-    encodeURIComponent(sessionId) +
-    "/media-token?id=" +
-    encodeURIComponent(id)
-  );
-}
-
-interface TokenResponse {
-  readonly url: string;
-}
-
 async function fetchSignedUrl(
   ref: MediaRef,
   opts: ResolveOptions,
 ): Promise<string | null> {
   try {
-    const res = await fetch(MEDIA_TOKEN_ENDPOINT(opts.sessionId, ref.id), {
-      method: "GET",
-      signal: opts.signal,
-      headers: {
-        Accept: "application/json",
-        ...sessionAuthHeaders(opts.sessionId),
-      },
-      credentials: "same-origin",
-    });
-    if (!res.ok) {
-      console.warn(
-        "[media-resolve] media-token endpoint returned",
-        res.status,
-        ref.id,
-      );
-      return null;
-    }
-    const json = (await res.json()) as Partial<TokenResponse>;
-    if (typeof json?.url !== "string" || json.url.length === 0) {
-      console.warn("[media-resolve] media-token endpoint missing url", ref.id);
-      return null;
-    }
-    return json.url;
+    return await fetchSessionMediaUrl(opts.sessionId, ref.id, opts.signal);
   } catch (err: unknown) {
     // AbortError from a stale render is fine — don't spam the console.
     if ((err as { name?: string })?.name !== "AbortError") {

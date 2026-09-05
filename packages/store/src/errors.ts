@@ -8,6 +8,19 @@ export class SessionAlreadyExistsError extends Error {
   }
 }
 
+/** Raised when a global record id is already bound to another session. */
+export class SessionRecordScopeConflictError extends Error {
+  readonly code = "session_record_scope_conflict";
+
+  constructor(
+    readonly recordType: string,
+    readonly recordId: string,
+  ) {
+    super(`${recordType} id belongs to another session: ${recordId}`);
+    this.name = "SessionRecordScopeConflictError";
+  }
+}
+
 /** Normalize the unique-constraint codes emitted by bundled SQL drivers. */
 export function isUniqueConstraintError(error: unknown): boolean {
   const seen = new Set<object>();

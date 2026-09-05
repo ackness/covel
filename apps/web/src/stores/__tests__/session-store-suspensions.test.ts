@@ -15,7 +15,7 @@ import {
 import type {
   SessionAction,
   SessionState,
-  SuspensionRecord,
+  SuspensionSummary,
 } from "../session-store/types.js";
 
 const SESSION_ID = "sess-1";
@@ -25,15 +25,15 @@ const PLUGIN_ID = "image-gen";
 const SUSPENDED_AT = "2026-04-21T10:00:00.000Z";
 
 function makeSuspension(
-  overrides: Partial<SuspensionRecord> = {},
-): SuspensionRecord {
+  overrides: Partial<SuspensionSummary> = {},
+): SuspensionSummary {
   return {
     id: "susp-1",
     sessionId: SESSION_ID,
     turnId: TURN_ID,
     runtimeId: RUNTIME_ID,
     pluginId: PLUGIN_ID,
-    suspendedAt: SUSPENDED_AT,
+    createdAt: SUSPENDED_AT,
     reason: "Waiting for fal.ai job",
     resumeSchema: { type: "object" },
     ...overrides,
@@ -119,7 +119,7 @@ describe("session-store — suspensions", () => {
     expect(harness.state().suspensions).toEqual([
       expect.objectContaining({
         ...suspension,
-        suspendedAt: SUSPENDED_AT,
+        createdAt: SUSPENDED_AT,
       }),
     ]);
   });

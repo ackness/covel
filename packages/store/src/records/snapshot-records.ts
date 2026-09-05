@@ -12,7 +12,7 @@ import type {
 } from "./memory-records.js";
 import type { PluginDataRecord } from "./plugin-records.js";
 import type { SessionRecord } from "./session-records.js";
-import type { ExecutionContext } from "@covel/shared";
+import type { ExecutionContext, InputSlot } from "@covel/shared";
 
 /**
  * Materialized state snapshot.
@@ -23,7 +23,7 @@ import type { ExecutionContext } from "@covel/shared";
  *
  * `kind`:
  *  - `auto`   — created at turn commit.
- *  - `manual` — created explicitly via `POST /api/sessions/:id/snapshot`.
+ *  - `manual` — created explicitly via `POST /api/sessions/:id/snapshots`.
  *  - `fork`   — created when a fork rebuilds a new session; `parentId`
  *               points at the origin snapshot.
  *
@@ -71,8 +71,8 @@ interface SnapshotPayloadBase {
    * claimed-but-still-executing records are excluded because the target
    * runtime is either done or in-flight and the child session has no way to
    * take over mid-flight. Each suspension travels with its full
-   * `pendingContinuation` so the forked session can POST /resume using the
-   * copied id.
+   * `pendingContinuation` so the forked session can POST
+   * /suspensions/:suspensionId/resume using the copied id.
    *
    * The fork route regenerates each suspension's id and rebinds
    * `sessionId = childSessionId` before persisting, so the original parent
@@ -149,7 +149,7 @@ export interface SnapshotMetadata {
  * captures the current LLM message array and tool-call history, writes a
  * SuspensionRecord, and returns `status: 'suspended'`.
  *
- * On `POST /api/sessions/:id/resume { suspensionId, data }`, the resume
+ * On `POST /api/sessions/:id/suspensions/:suspensionId/resume { data }`, the resume
  * handler loads this record, reconstructs the message array, appends a
  * synthetic message carrying `data`, and re-enters the LLM tool loop.
  *
@@ -181,6 +181,8 @@ export interface SuspensionRecord {
      * final runtime output.
      */
     readonly pendingProposals: readonly unknown[];
+    /** Frozen declared inputs for tools resumed in the same logical turn. */
+    readonly inputSlots?: Readonly<Record<string, InputSlot>>;
     /**
      * Framework-owned execution identity from the suspended scheduling run.
      * Resume inherits its logical turn and count policy while allocating a new

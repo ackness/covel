@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, afterEach } from "vitest";
+import { encodePageCursor } from "@covel/shared";
 import {
   configureMessagesWindowCap,
   initialState,
@@ -54,10 +55,9 @@ describe("live message window cap", () => {
     expect(next.messages.at(-1)!.id).toBe(msg(CAP_MIN).id);
     // Cursor points at the new window edge so scroll-up re-fetches the
     // dropped row (listMessagesPage fetches strictly BEFORE the cursor).
-    expect(next.olderMessagesCursor).toEqual({
-      createdAt: msg(1).timestamp,
-      id: msg(1).id,
-    });
+    expect(next.olderMessagesCursor).toBe(
+      encodePageCursor({ createdAt: msg(1).timestamp, id: msg(1).id }),
+    );
   });
 
   it("does not cap below the cap and keeps the cursor untouched", () => {

@@ -1,9 +1,4 @@
-import type {
-  MessageRecord,
-  SessionRecord,
-  StatePatchRecord,
-  WorldRecord,
-} from "../api.js";
+import type { MessageRecord, StatePatchRecord, WorldRecord } from "../api.js";
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
@@ -33,13 +28,16 @@ export class RemoteDataService implements DataService {
     }
   }
   async createWorld(name: string, description: string) {
-    return api.createWorld(name, description);
+    return api.createWorld({ name, description });
   }
   async saveGeneratedWorld(world: WorldRecord) {
     return world;
   }
   async updateWorld(id: string, patch: WorldPatch) {
     return api.updateWorld(id, patch);
+  }
+  async prepareWorldForServer() {
+    // No-op: the remote store is already the server's authority.
   }
 
   async listSessions(worldId: string) {
@@ -73,7 +71,7 @@ export class RemoteDataService implements DataService {
   }
   async listMessagesPage(
     sessionId: string,
-    opts: { limit?: number; before?: { createdAt: string; id: string } },
+    opts: { limit?: number; cursor?: import("@covel/shared").PageCursor },
   ) {
     return api.listMessagesPage(sessionId, opts);
   }

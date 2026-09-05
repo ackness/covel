@@ -38,3 +38,5 @@
 ## 开发
 
 修改掷骰规则、回执 schema、展示字段或 UI spec 后，运行本包测试。
+
+Invalid automatic receipts are reported as failed runtime tasks and remain visible in the execution timeline. No unverifiable check is stored. If a batch contains both valid and invalid receipts, the message identifies that some checks were rejected and displays only audited results. Manual `/roll` results are separate from automatic checks.

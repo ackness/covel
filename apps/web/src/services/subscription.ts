@@ -10,7 +10,7 @@
  */
 
 import type { SubscriptionEvent, SubscriptionTopic } from "@covel/shared";
-import { getSessionToken } from "./session-credentials.js";
+import { ApiError, requestResponse } from "./api/request.js";
 import { parseJsonSseData, readSseStream } from "./sse.js";
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -153,37 +153,16 @@ export function createSessionSubscription(
     setState(connectionState === "connecting" ? "connecting" : "reconnecting");
 
     try {
-      // This SSE client is fetch-based, so it can send the owner token as a
-      // header (preferred over the `?session_token=` query fallback that plain
-      // EventSource is stuck with). Re-read per connect so reconnects pick up a
-      // token stored after the first attempt.
-      const token = getSessionToken(sessionId);
-      const res = await fetch(buildUrl(), {
+      // Keep connection backoff in this client, while sharing credential and
+      // HTTP error handling with every other API request. Passing sessionId is
+      // required because this endpoint carries it in the query string.
+      const res = await requestResponse(buildUrl(), {
         signal: abortController.signal,
-        headers: {
-          Accept: "text/event-stream",
-          ...(token ? { "X-Session-Token": token } : {}),
-        },
+        headers: { Accept: "text/event-stream" },
+        sessionId,
+        silentErrors: true,
+        retry: false,
       });
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        if (isClientError(res.status)) {
-          clientErrorStreak += 1;
-          if (clientErrorStreak >= MAX_CLIENT_ERROR_RETRIES) {
-            // Not self-healing: the session is really gone, or the token is
-            // really wrong. Retrying every 30s for the life of the tab just
-            // leaves the UI stuck on "reconnecting" forever.
-            console.error(
-              `[subscription] giving up after ${clientErrorStreak} client errors: SSE stream ${res.status} ${body}`,
-            );
-            closed = true;
-            setState("closed");
-            return;
-          }
-        }
-        throw new Error(`SSE stream ${res.status}: ${body}`);
-      }
 
       // Connected successfully — reset backoff and the client-error streak
       setState("connected");
@@ -237,6 +216,20 @@ export function createSessionSubscription(
       if ((err as Error).name === "AbortError") {
         // Intentional abort from close() — don't reconnect
         return;
+      }
+      if (err instanceof ApiError && isClientError(err.status)) {
+        clientErrorStreak += 1;
+        if (clientErrorStreak >= MAX_CLIENT_ERROR_RETRIES) {
+          // Not self-healing: the session is really gone, or the token is
+          // really wrong. Retrying every 30s for the life of the tab just
+          // leaves the UI stuck on "reconnecting" forever.
+          console.error(
+            `[subscription] giving up after ${clientErrorStreak} client errors: SSE stream ${err.status} ${err.body}`,
+          );
+          closed = true;
+          setState("closed");
+          return;
+        }
       }
       if (!closed) {
         scheduleReconnect();

@@ -30,7 +30,7 @@ function renderScreen(onSelectWorld: (id: string) => void) {
   return render(
     <WorldSelectScreen
       worlds={WORLDS}
-      packages={[]}
+      plugins={[]}
       resolvedSlots={[]}
       settingsOpen={false}
       onSettingsOpenChange={() => {}}

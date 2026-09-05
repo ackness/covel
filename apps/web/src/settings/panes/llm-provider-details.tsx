@@ -1,17 +1,18 @@
-import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Trash2 } from "lucide-react";
-import {
-  lookupModelCapabilityDetails,
-  type ModelCapabilityLookupResult,
-  type ProviderModelProfile,
-} from "@/services/api.js";
+import { type ProviderModelProfile } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { PingButton } from "@/components/shared/ping-button.js";
 import { LlmKeysPane } from "./LlmKeysPane.js";
 import type { ProviderCatalogEntry } from "./llm-provider-catalog.js";
 import { ProtocolSelect } from "./llm-provider-dialogs.js";
+import { useModelCapability } from "./use-model-capability.js";
+import { resolveDisplayCapability } from "./llm-effective-capability.js";
+import {
+  SettingsDraftConflict,
+  useSettingDraft,
+} from "../use-setting-draft.js";
 
 export function ProviderDetails({
   provider,
@@ -30,14 +31,15 @@ export function ProviderDetails({
   const isServerProvider = provider.serverModels.length > 0;
   const localProfile = provider.localProfile;
   const committedBaseUrl = localProfile?.baseUrl ?? provider.baseUrl;
-  const [baseUrlDraft, setBaseUrlDraft] = useState(committedBaseUrl);
-  useEffect(() => {
-    setBaseUrlDraft(committedBaseUrl);
-  }, [committedBaseUrl, provider.id]);
+  const baseUrl = useSettingDraft(committedBaseUrl, provider.id);
 
   const commitBaseUrl = () => {
-    if (localProfile && baseUrlDraft !== committedBaseUrl) {
-      onPatchLocalProfile({ baseUrl: baseUrlDraft });
+    if (
+      localProfile &&
+      !baseUrl.conflict &&
+      baseUrl.draft !== committedBaseUrl
+    ) {
+      onPatchLocalProfile({ baseUrl: baseUrl.draft });
     }
   };
   return (
@@ -74,6 +76,7 @@ export function ProviderDetails({
         key={provider.id}
         providerId={provider.id}
         showIntro={false}
+        showPresetTests={false}
       />
 
       <div className="grid grid-cols-1 gap-2">
@@ -82,9 +85,10 @@ export function ProviderDetails({
             {t("settings.baseUrl", "API endpoint")}
           </span>
           <input
-            value={baseUrlDraft}
+            value={baseUrl.draft}
+            aria-invalid={baseUrl.conflict}
             readOnly={!localProfile}
-            onChange={(event) => setBaseUrlDraft(event.target.value)}
+            onChange={(event) => baseUrl.setDraft(event.target.value)}
             onBlur={commitBaseUrl}
             onKeyDown={(event) => {
               if (event.key === "Enter") event.currentTarget.blur();
@@ -92,6 +96,7 @@ export function ProviderDetails({
             className="w-full border border-border bg-background px-2 py-1.5 font-mono text-xs outline-none read-only:bg-muted/30 read-only:text-muted-foreground focus:ring-1 focus:ring-primary"
           />
         </label>
+        {baseUrl.conflict && <SettingsDraftConflict onReload={baseUrl.reset} />}
         <label className="space-y-1">
           <span className="text-[10px] text-muted-foreground">
             {t("settings.protocol", "API protocol")}
@@ -128,6 +133,7 @@ export function ProviderDetails({
             <ProviderModelRow
               key={`server:${model.id}`}
               provider={provider.provider}
+              protocol={model.protocol ?? provider.protocol}
               modelId={model.model}
               presetId={model.id}
               source="server"
@@ -137,6 +143,7 @@ export function ProviderDetails({
             <ProviderModelRow
               key={model.ref}
               provider={provider.provider}
+              protocol={localProfile.protocol ?? provider.protocol}
               modelId={model.modelId}
               presetId={model.ref}
               source="local"
@@ -157,12 +164,14 @@ export function ProviderDetails({
 
 function ProviderModelRow({
   provider,
+  protocol,
   modelId,
   presetId,
   source,
   onDelete,
 }: {
   provider: string;
+  protocol: string;
   modelId: string;
   presetId: string;
   source: "server" | "local";
@@ -176,7 +185,11 @@ function ProviderModelRow({
           <div className="truncate font-mono text-xs" title={modelId}>
             {modelId}
           </div>
-          <ModelCapabilitySummary provider={provider} modelId={modelId} />
+          <ModelCapabilitySummary
+            provider={provider}
+            modelId={modelId}
+            protocol={protocol}
+          />
         </div>
         <Badge variant="outline" className="shrink-0 text-[9px]">
           {source === "server"
@@ -202,41 +215,34 @@ function ProviderModelRow({
 function ModelCapabilitySummary({
   provider,
   modelId,
+  protocol,
 }: {
   provider: string;
   modelId: string;
+  protocol: string;
 }) {
   const { t } = useTranslation();
-  const [result, setResult] = useState<ModelCapabilityLookupResult | null>(
-    null,
-  );
-  useEffect(() => {
-    let active = true;
-    lookupModelCapabilityDetails(modelId, provider)
-      .then((value) => {
-        if (active) setResult(value);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, [modelId, provider]);
+  const result = useModelCapability(modelId, provider, protocol);
+  const capability = resolveDisplayCapability(result);
 
-  if (!result) {
+  if (result === undefined) {
     return <div className="mt-0.5 text-[9px] text-muted-foreground">…</div>;
   }
-  const supportsImage = result.capability.input.includes("image");
+  const supportsImage = capability?.input.includes("image");
   return (
     <div className="mt-0.5 flex flex-wrap gap-x-2 text-[9px] text-muted-foreground">
       <span>
-        {result.matchedModelId ??
-          t("settings.capabilityEstimatedShort", "Protocol defaults")}
+        {result?.found
+          ? result.matchedModelId
+          : t("settings.modelLimitsUnknown", {
+              defaultValue: "Model limits unknown",
+            })}
       </span>
       {supportsImage && (
         <span>{t("settings.modalInImage", "Image input")}</span>
       )}
-      {result.capability.contextWindow && (
-        <span>{result.capability.contextWindow.toLocaleString()} ctx</span>
+      {capability?.contextWindow && (
+        <span>{capability.contextWindow.toLocaleString()} ctx</span>
       )}
     </div>
   );

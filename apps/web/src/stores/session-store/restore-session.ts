@@ -3,7 +3,8 @@ import type { DataService, SessionWorkspace } from "@/services/data-service.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { setActiveSession as setActivePluginDataSession } from "@/stores/plugin-data-store.js";
 import { clearAllStreamingText } from "@/stores/streaming-text-store.js";
-import type { SnapshotMessage, SnapshotTraceEvent } from "@covel/shared";
+import type { SnapshotMessage } from "@covel/shared";
+import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
 import type { ExecutionStep, SessionDispatch, StreamMessage } from "./types.js";
 
@@ -37,61 +38,15 @@ export function toStreamMessages(
   }));
 }
 
-function buildSnapshotExecutionSteps(
-  events: readonly SnapshotTraceEvent[],
-): ExecutionStep[] {
-  const byKey = new Map<string, ExecutionStep>();
-  for (const event of events) {
-    if (!event.type.startsWith("runtime.")) continue;
-    const payload = event.payload as Record<string, unknown>;
-    const runtimeId = (payload.runtimeId as string) ?? "";
-    if (!runtimeId || runtimeId === "__turn__") continue;
-
-    const runtimeTurnId =
-      event.type === "runtime.deferred" &&
-      typeof payload.sourceTurnId === "string"
-        ? payload.sourceTurnId
-        : event.turnId;
-    const key = `${runtimeTurnId ?? "__no_turn__"}|${runtimeId}`;
-    const prev = byKey.get(key);
-    const status: ExecutionStep["status"] =
-      event.type === "runtime.completed"
-        ? "completed"
-        : event.type === "runtime.deferred"
-          ? "deferred"
-          : event.type === "runtime.failed"
-            ? "failed"
-            : event.type === "runtime.skipped"
-              ? "skipped"
-              : "running";
-    byKey.set(key, {
-      runtimeId,
-      pluginId: (payload.pluginId as string) ?? prev?.pluginId ?? "",
-      status,
-      turnId: runtimeTurnId,
-      label: (payload.label as string | undefined) ?? prev?.label,
-      durationMs:
-        (payload.durationMs as number | undefined) ?? prev?.durationMs,
-      startedAt:
-        event.type === "runtime.started" ? event.timestamp : prev?.startedAt,
-      ...(event.type === "runtime.deferred"
-        ? {
-            detached: true,
-            jobState: "queued",
-            jobId: payload.jobId as string | undefined,
-          }
-        : {}),
-    });
-  }
-  return [...byKey.values()];
-}
-
 async function restoreServerSnapshot(
   sessionId: string,
   dispatch: SessionDispatch,
+  localSteps: readonly ExecutionStep[],
+  isCurrent: () => boolean,
 ): Promise<boolean> {
   try {
-    const snapshot = await api.getSessionSnapshot(sessionId);
+    const snapshot = await api.getSessionView(sessionId);
+    if (!isCurrent()) return false;
     dispatch({
       type: "LOAD_MESSAGES",
       messages: toStreamMessages(snapshot.messages),
@@ -114,10 +69,23 @@ async function restoreServerSnapshot(
       });
     }
 
-    const steps = buildSnapshotExecutionSteps(snapshot.executionSteps);
-    if (steps.length > 0) {
-      dispatch({ type: "LOAD_EXECUTION_STEPS", steps });
-    }
+    dispatch({
+      type: "LOAD_EXECUTION_STEPS",
+      steps: reconcileExecutionSteps(
+        localSteps,
+        snapshot.executionSteps,
+        snapshot.execution,
+      ),
+    });
+    dispatch({
+      type: "SET_EXECUTION_RECOVERY",
+      recovery: {
+        sessionId,
+        status: snapshot.execution ?? null,
+        hydrating: false,
+        checking: !snapshot.execution,
+      },
+    });
 
     return true;
   } catch {
@@ -180,6 +148,20 @@ function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
     detail: raw.detail as string | undefined,
     durationMs: raw.durationMs as number | undefined,
     turnId: raw.turnId as string | undefined,
+    sourceTurnId:
+      typeof raw.sourceTurnId === "string" ? raw.sourceTurnId : undefined,
+    ...(raw.sourceCommitted === true ? { sourceCommitted: true } : {}),
+    ...(Array.isArray(raw.sourceFailedRuntimeIds) &&
+    raw.sourceFailedRuntimeIds.every((id) => typeof id === "string")
+      ? { sourceFailedRuntimeIds: raw.sourceFailedRuntimeIds as string[] }
+      : {}),
+    attemptStatus: ["pending", "committed", "failed", "interrupted"].includes(
+      String(raw.attemptStatus),
+    )
+      ? (raw.attemptStatus as ExecutionStep["attemptStatus"])
+      : undefined,
+    turnStartedAt:
+      typeof raw.turnStartedAt === "string" ? raw.turnStartedAt : undefined,
     startedAt: raw.startedAt as string | undefined,
     jobId: raw.jobId as string | undefined,
     detached: raw.detached === true,
@@ -191,17 +173,14 @@ function toExecutionStep(raw: Record<string, unknown>): ExecutionStep {
 async function restorePersistedExecutionSteps(
   ds: DataService,
   sessionId: string,
-  dispatch: SessionDispatch,
-): Promise<void> {
+): Promise<ExecutionStep[]> {
   try {
     const raw = (await ds.loadExecutionSteps(sessionId)) as Array<
       Record<string, unknown>
     >;
-    for (const step of raw.map(toExecutionStep)) {
-      dispatch({ type: "UPSERT_EXECUTION_STEP", step });
-    }
+    return raw.map(toExecutionStep);
   } catch {
-    // Execution-step persistence is best-effort browser state.
+    return [];
   }
 }
 
@@ -217,8 +196,8 @@ function refreshSessionSideData(
       if (sessionIdRef.current === targetSessionId) {
         dispatch({
           type: "LOAD_SESSION_PLUGINS",
-          plugins: res.available,
-          commands: res.commands,
+          plugins: [...res.items],
+          commands: [...res.commands],
         });
       }
     })
@@ -244,6 +223,15 @@ export async function restoreSessionState({
 }: RestoreSessionOptions): Promise<void> {
   clearAllStreamingText();
   dispatch({ type: "RESET_SESSION" });
+  dispatch({
+    type: "SET_EXECUTION_RECOVERY",
+    recovery: {
+      sessionId: session.id,
+      status: null,
+      hydrating: true,
+      checking: true,
+    },
+  });
   setActivePluginDataSession(null);
 
   const world = worlds.find((candidate) => candidate.id === session.worldId);
@@ -263,7 +251,16 @@ export async function restoreSessionState({
     await workspace.hydrate(targetSessionId);
   } catch (error) {
     if (sessionIdRef.current === targetSessionId) {
-      sessionIdRef.current = null;
+      dispatch({
+        type: "SET_EXECUTION_RECOVERY",
+        recovery: {
+          sessionId: targetSessionId,
+          status: null,
+          hydrating: true,
+          checking: true,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
       setActivePluginDataSession(null);
       dispatch({
         type: "SET_EXECUTION_ERROR",
@@ -276,20 +273,36 @@ export async function restoreSessionState({
 
   api.markServerAck();
   setActivePluginDataSession(targetSessionId);
-  dispatch({ type: "SET_SESSION", session });
+  const freshSession = await api.getSession(session.id).catch(() => session);
+  if (sessionIdRef.current !== targetSessionId) return;
+  dispatch({ type: "SET_SESSION", session: freshSession });
 
-  const snapshotLoaded = await restoreServerSnapshot(session.id, dispatch);
+  const localSteps = await restorePersistedExecutionSteps(ds, session.id);
+  if (sessionIdRef.current !== targetSessionId) return;
+  const snapshotLoaded = await restoreServerSnapshot(
+    session.id,
+    dispatch,
+    localSteps,
+    () => sessionIdRef.current === targetSessionId,
+  );
   if (sessionIdRef.current !== targetSessionId) return;
 
   if (!snapshotLoaded) {
     await restoreLocalFallback(ds, session.id, dispatch);
     if (sessionIdRef.current !== targetSessionId) return;
+    dispatch({ type: "LOAD_EXECUTION_STEPS", steps: localSteps });
+    dispatch({
+      type: "SET_EXECUTION_RECOVERY",
+      recovery: {
+        sessionId: session.id,
+        status: null,
+        hydrating: false,
+        checking: true,
+      },
+    });
   }
 
   await restoreSubmittedBlocks(ds, session.id, dispatch);
-  if (sessionIdRef.current !== targetSessionId) return;
-
-  await restorePersistedExecutionSteps(ds, session.id, dispatch);
   if (sessionIdRef.current !== targetSessionId) return;
 
   refreshSessionSideData(session.id, targetSessionId, sessionIdRef, dispatch);

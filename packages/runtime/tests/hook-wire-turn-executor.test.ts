@@ -685,6 +685,8 @@ describe("Turn executor hook wire-in", () => {
       );
 
       expect(seenPayload?.outputKind).toBe("story");
+      expect(seenPayload?.promptTemplate).toBe("Say something.");
+      expect(seenPayload?.inputSlots).toEqual({});
       // The payload still carries the assembled prompt/messages it always did.
       expect(typeof seenPayload?.systemPrompt).toBe("string");
       expect(Array.isArray(seenPayload?.messages)).toBe(true);

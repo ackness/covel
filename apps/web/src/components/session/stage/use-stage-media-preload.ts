@@ -10,7 +10,7 @@
  * resolve from IDB instantly.
  */
 import { useEffect, useRef } from "react";
-import type { MediaRef } from "@covel/shared";
+import { FrameworkCapability, type MediaRef } from "@covel/shared";
 import { listPluginData } from "@/services/api/plugin-data.js";
 import { isMediaRef } from "@/lib/media-ref-utils.js";
 import { resolveMediaSrc } from "@/lib/media-resolve.js";
@@ -22,14 +22,11 @@ import {
   loadPluginDataForSession,
   usePluginNamespace,
 } from "@/stores/plugin-data-store.js";
-import {
-  pluginIdForCapability,
-  STAGE_CAPABILITIES,
-} from "./stage-selectors.js";
+import { pluginIdForCapability } from "./stage-selectors.js";
 
 interface CapabilityCarrier {
   readonly id: string;
-  readonly isActive?: boolean;
+  readonly active?: boolean;
   readonly capabilities?: readonly string[];
 }
 
@@ -54,9 +51,12 @@ export function useStageMediaPreload(
   sessionPlugins: readonly CapabilityCarrier[],
 ): void {
   const presenceId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.presence) ?? "";
+    pluginIdForCapability(
+      sessionPlugins,
+      FrameworkCapability.CharacterPresence,
+    ) ?? "";
   const sceneStageId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.scene) ?? "";
+    pluginIdForCapability(sessionPlugins, FrameworkCapability.SceneStage) ?? "";
 
   // presence is hydrated at session open and updated over SSE, so this
   // effect re-fires as new records (e.g. pre-game generated portraits) land.

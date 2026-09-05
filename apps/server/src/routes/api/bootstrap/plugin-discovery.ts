@@ -1,4 +1,5 @@
 import { validateRuntimeManifestSemantics } from "@covel/shared";
+import path from "node:path";
 import type { EventBus } from "@covel/events";
 import {
   createPluginRegistry,
@@ -88,6 +89,12 @@ export async function discoverAndRegisterPlugins(
         id: discovery.id,
         summary,
         rootPath: discovery.rootPath,
+        runtimeManifestPaths: Object.fromEntries(
+          manifests.map((parsed, index) => [
+            parsed.manifest.name,
+            path.resolve(discovery.pluginMdPaths[index]!),
+          ]),
+        ),
         manifest: manifests[0],
         manifests,
         loadedRuntimes: new Map(),

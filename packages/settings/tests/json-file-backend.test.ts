@@ -145,9 +145,7 @@ describe("json-file backend REST secrets contract", () => {
   it("preserves opaque configured providers and translates omissions to deletes", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(
-        res(200, { providers: ["deepseek", "open-router"] }),
-      )
+      .mockResolvedValueOnce(res(200, { items: ["deepseek", "open-router"] }))
       .mockResolvedValueOnce(res(200, { ok: true }));
     const backend = createJsonFileBackend({ fetchImpl });
 

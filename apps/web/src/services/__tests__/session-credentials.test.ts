@@ -110,11 +110,8 @@ describe("request() session-token injection", () => {
     text: async () => "{}",
   });
 
-  function lastHeaders(mock: ReturnType<typeof vi.fn>): Record<string, string> {
-    return (mock.mock.calls.at(-1)?.[1]?.headers ?? {}) as Record<
-      string,
-      string
-    >;
+  function lastHeaders(mock: ReturnType<typeof vi.fn>): Headers {
+    return new Headers(mock.mock.calls.at(-1)?.[1]?.headers);
   }
 
   it("attaches X-Session-Token for a session-scoped path", async () => {
@@ -122,9 +119,9 @@ describe("request() session-token injection", () => {
     const fetchMock = vi.fn().mockResolvedValue(okRes());
     vi.stubGlobal("fetch", fetchMock);
 
-    await request("/api/sessions/world-abc12345/snapshot");
+    await request("/api/sessions/world-abc12345/view");
 
-    expect(lastHeaders(fetchMock)["X-Session-Token"]).toBe("tok-xyz");
+    expect(lastHeaders(fetchMock).get("X-Session-Token")).toBe("tok-xyz");
   });
 
   it("decodes an encoded id segment before lookup", async () => {
@@ -136,16 +133,16 @@ describe("request() session-token injection", () => {
       `/api/sessions/${encodeURIComponent("world-abc12345")}/messages`,
     );
 
-    expect(lastHeaders(fetchMock)["X-Session-Token"]).toBe("tok-xyz");
+    expect(lastHeaders(fetchMock).get("X-Session-Token")).toBe("tok-xyz");
   });
 
   it("omits the header when no token is stored", async () => {
     const fetchMock = vi.fn().mockResolvedValue(okRes());
     vi.stubGlobal("fetch", fetchMock);
 
-    await request("/api/sessions/world-notoken/snapshot");
+    await request("/api/sessions/world-notoken/view");
 
-    expect(lastHeaders(fetchMock)["X-Session-Token"]).toBeUndefined();
+    expect(lastHeaders(fetchMock).get("X-Session-Token")).toBeNull();
   });
 
   it("omits the header for non-session-scoped paths", async () => {
@@ -156,7 +153,7 @@ describe("request() session-token injection", () => {
     // Cross-session list endpoint — no id segment to key on.
     await request("/api/sessions?worldId=world");
 
-    expect(lastHeaders(fetchMock)["X-Session-Token"]).toBeUndefined();
+    expect(lastHeaders(fetchMock).get("X-Session-Token")).toBeNull();
   });
 
   it("attaches a session token when sessionId is explicit", async () => {
@@ -166,7 +163,7 @@ describe("request() session-token injection", () => {
 
     await request("/api/actions", { sessionId: "session-from-body" });
 
-    expect(lastHeaders(fetchMock)["X-Session-Token"]).toBe("owner-secret");
+    expect(lastHeaders(fetchMock).get("X-Session-Token")).toBe("owner-secret");
   });
 
   it("attaches the operator token only when explicitly requested", async () => {
@@ -175,9 +172,11 @@ describe("request() session-token injection", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await request("/api/worlds", { method: "POST", operatorAuth: true });
-    expect(lastHeaders(fetchMock).Authorization).toBe("Bearer operator-secret");
+    expect(lastHeaders(fetchMock).get("Authorization")).toBe(
+      "Bearer operator-secret",
+    );
 
     await request("/api/worlds");
-    expect(lastHeaders(fetchMock).Authorization).toBeUndefined();
+    expect(lastHeaders(fetchMock).get("Authorization")).toBeNull();
   });
 });

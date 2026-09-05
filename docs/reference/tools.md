@@ -458,7 +458,7 @@ interface UIRenderPart {
 
 ### suspend
 
-声明在 `packages/tools/src/builtin/suspend.ts`。Agent runtime 调用 `suspend({ reason, resumeSchema })` 时，工具直接返回一个 sentinel 对象 `{ _covelSuspend: true, reason, resumeSchema }`。turn-executor 在每次 tool 执行后通过 `isSuspendSentinel()` 检测：识别到 sentinel 后会序列化当前 pendingContinuation（含 execution identity、已缓冲 proposal/event 和完整 provider transcript）写入 `suspensions` 表，并发出 `turn.suspended` 事件，整个 tool loop 立即停止。同一 assistant 消息含多个 tool call 时，suspend call 保留可替换的 tool result placeholder，其后未执行 call 写入 cancellation result，因此 resume 后 transcript 仍符合 provider 的 tool-call 成对要求。后续可通过 `POST /api/sessions/:id/resume` 提交匹配 `resumeSchema` 的数据重新启动该 runtime（详见 `docs/reference/api.md`）。
+声明在 `packages/tools/src/builtin/suspend.ts`。Agent runtime 调用 `suspend({ reason, resumeSchema })` 时，工具直接返回一个 sentinel 对象 `{ _covelSuspend: true, reason, resumeSchema }`。turn-executor 在每次 tool 执行后通过 `isSuspendSentinel()` 检测：识别到 sentinel 后会序列化当前 pendingContinuation（含 execution identity、已缓冲 proposal/event 和完整 provider transcript）写入 `suspensions` 表，并发出 `turn.suspended` 事件，整个 tool loop 立即停止。同一 assistant 消息含多个 tool call 时，suspend call 保留可替换的 tool result placeholder，其后未执行 call 写入 cancellation result，因此 resume 后 transcript 仍符合 provider 的 tool-call 成对要求。后续可通过 `POST /api/sessions/:id/suspensions/:suspensionId/resume` 提交匹配 `resumeSchema` 的数据重新启动该 runtime（详见 `docs/reference/api.md`）。
 
 | 参数         | 类型   | 必需 | 描述                                                                                                                                             |
 | ------------ | ------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -518,7 +518,11 @@ interface UIRenderPart {
 
 ### create-character
 
-`create-character` 与 `update-character` 的 LLM wire schema 把 `fields` 保持为紧凑对象，不在两份工具定义中重复整个世界属性表。权威 id、类型、范围、enum、默认值和说明仍保存在会话 world schema；执行边界按该 schema 合并默认值、校验并返回 warning。这样 8k 等小窗口 slot 不会仅因角色属性较多就被两份重复 JSON Schema 占满。
+`create-character` 与 `update-character` 的 LLM wire schema 把 `fields` 保持为紧凑对象，不在两份工具定义中重复整个世界属性表。权威 id、类型、范围、enum、默认值和说明仍保存在会话 world schema；执行边界按该 schema 合并默认值、强制校验已声明字段，对未声明字段返回 warning。这样 8k 等小窗口 slot 不会仅因角色属性较多就被两份重复 JSON Schema 占满。
+
+已声明属性的类型、范围、enum 与嵌套结构在产生写入 proposal **之前**强制校验；非法字符串、null 或非有限数值不能替代数值属性。`create-character` 合并缺省值后校验；`update-character` 校验本次 patch，允许逐字段修复既有旧数据。未声明键仍保留并返回 warning。`mergeSchemaDefaults` 与 `assertCharacterFields` 向插件提供相同边界，失败抛出 `CharacterFieldValidationError`。
+
+`char-creator/player-init` 使用插件工具 `create-character-form` 包装通用 `create-form`，只允许必填 `characterName` 及世界 schema 中的 string/enum 字段，enum 提交值必须来自原始 options。数字与复合属性保留默认值，不能转换成叙事 select。校验使用同轮上游 schema，发生在展示表单之前；普通 `create-form` 不受角色专属规则影响。旧的非法已接受提交保留审计记录，不改写其 values；须重新开始建角会话，普通 setup retry 不会清除该输入。
 
 创建一个新的角色记录（玩家、NPC 或同伴）。同 session 内同 `(name, type)` 会自动去重 —— 返回已存在的角色 id，不会创建重复项。
 
@@ -1025,6 +1029,7 @@ execute: async (params) => ({
 POST /api/sessions/:id/plugin-rpc
 
 {
+  "kind": "action",
   "pluginId": "framework",
   "action": "submit-form",
   "payload": {

@@ -38,6 +38,7 @@ export interface SettingEntry<T = unknown> {
   readonly max?: number;
   readonly step?: number;
   readonly backend?: SettingBackend;
+  /** Secret entries always use the separate keys channel, never ordinary exports. */
   readonly secret?: boolean;
 }
 
@@ -64,7 +65,10 @@ export interface SettingsBackendAdapter {
 export class SettingsRevisionConflictError extends Error {
   readonly code = "settings_revision_conflict";
 
-  constructor(readonly currentRevision: number) {
+  constructor(
+    readonly currentRevision: number,
+    readonly conflictingKeys: readonly SettingKey[] = [],
+  ) {
     super(`Settings changed in another instance (revision ${currentRevision})`);
     this.name = "SettingsRevisionConflictError";
   }
@@ -93,6 +97,8 @@ export interface SettingsStoreApi {
   ): () => void;
   register<T>(entry: SettingEntry<T>): void;
   ready(): Promise<void>;
+  /** Refresh non-secret settings without overwriting pending local mutations. */
+  refresh(): Promise<void>;
   /**
    * Whether persisted state was read successfully at `init()`. When false the
    * store serves defaults and refuses writes — saving a full snapshot from a

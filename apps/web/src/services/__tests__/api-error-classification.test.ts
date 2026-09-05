@@ -10,7 +10,12 @@
  *    as a bare SyntaxError far from the cause.
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, isNotFound } from "../api/request.js";
+import {
+  ApiError,
+  ApiResponseError,
+  isNotFound,
+  request,
+} from "../api/request.js";
 import { fetchServerHealth } from "../api/health.js";
 import { createSessionSubscription } from "../subscription.js";
 
@@ -35,6 +40,43 @@ describe("ApiError classification", () => {
     expect(isNotFound(new ApiError(401, "/api/worlds/x", ""))).toBe(false);
     expect(isNotFound(new ApiError(500, "/api/worlds/x", ""))).toBe(false);
     expect(isNotFound(new Error("boom"))).toBe(false);
+  });
+
+  it("exposes the shared error code and structured details", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      jsonResponse(409, {
+        error: "World already exists",
+        code: "world_already_exists",
+        details: { id: "world-1" },
+      }),
+    );
+
+    const error = await request("/api/worlds", {
+      method: "POST",
+      body: "{}",
+      silentErrors: true,
+    }).catch((cause: unknown) => cause);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({
+      status: 409,
+      code: "world_already_exists",
+      details: { id: "world-1" },
+    });
+  });
+
+  it("classifies an invalid successful JSON response at the boundary", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => {
+        throw new SyntaxError("Unexpected token <");
+      },
+    } as unknown as Response);
+
+    await expect(
+      request("/api/worlds", { silentErrors: true }),
+    ).rejects.toBeInstanceOf(ApiResponseError);
   });
 });
 

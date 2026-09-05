@@ -13,7 +13,7 @@
  */
 
 import type { EventBus } from "@covel/events";
-import type { CovelEventType } from "@covel/shared";
+import type { CovelEventType, RuntimeRetryScope } from "@covel/shared";
 
 export interface TurnEmitterStore {
   addTraceEvent(record: {
@@ -56,6 +56,7 @@ export interface CreateTurnEmitterOptions {
   readonly sessionId: string;
   readonly turnId: string;
   readonly traceId?: string;
+  readonly retryScope?: RuntimeRetryScope;
 }
 
 export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
@@ -70,7 +71,12 @@ export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
       // flowId mirrors traceId (protocol.md: `flowId = traceId`) so the
       // /api/traces payload carries a populated correlation id instead of "".
       // A payload that already sets flowId wins (spread after).
-      const enriched = { flowId: traceId, ...payload, seq: seq++ };
+      const enriched = {
+        flowId: traceId,
+        ...payload,
+        ...opts.retryScope,
+        seq: seq++,
+      };
       const createdAt = new Date().toISOString();
 
       const persist = opts.store

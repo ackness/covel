@@ -193,12 +193,15 @@ pluginInstallRoutes.post("/plugin", async (c) => {
     const finalDir = path.join(root, summary.pluginId);
     await materializeEntries(finalDir, entries);
 
-    return c.json({
-      ok: true,
-      kind: "plugin",
-      id: summary.pluginId,
-      restartRequired: true,
-    });
+    return c.json(
+      {
+        ok: true,
+        kind: "plugin",
+        id: summary.pluginId,
+        restartRequired: true,
+      },
+      201,
+    );
   } catch (err) {
     const { status, body } = errorResponse(err);
     return c.json(body, status as 400 | 409 | 413 | 500);

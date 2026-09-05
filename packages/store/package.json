@@ -1,6 +1,6 @@
 {
   "name": "@covel/store",
-  "version": "0.0.30",
+  "version": "0.0.31",
   "type": "module",
   "private": true,
   "exports": {
@@ -30,7 +30,8 @@
     "drizzle-orm": "^0.45.2",
     "idb": "^8.0.3",
     "postgres": "^3.4.9",
-    "sqlite-vec": "^0.1.9"
+    "sqlite-vec": "^0.1.9",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",

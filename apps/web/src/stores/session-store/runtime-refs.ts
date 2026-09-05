@@ -13,6 +13,27 @@ export interface MutableRef<T> {
   current: T;
 }
 
+export interface SessionActionOwner {
+  readonly requestId: string;
+  readonly isCurrent: () => boolean;
+}
+
+/** Claim synchronously before any await; React's state mirror may still be stale. */
+export function claimSessionAction(
+  activeActionRef: MutableRef<symbol | null>,
+  sessionIdRef: MutableRef<string | null>,
+  sessionId: string,
+  requestId: string = crypto.randomUUID(),
+): SessionActionOwner {
+  const token = Symbol("session-action");
+  activeActionRef.current = token;
+  return {
+    requestId,
+    isCurrent: () =>
+      activeActionRef.current === token && sessionIdRef.current === sessionId,
+  };
+}
+
 export interface SessionRuntimeRefs {
   stateRef: MutableRef<SessionState>;
   sessionIdRef: MutableRef<string | null>;
@@ -35,7 +56,11 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
   const lastBackfilledTurnIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const nextId = state.session?.id ?? null;
+    const nextId =
+      state.session?.id ??
+      (state.executionRecovery?.hydrating
+        ? state.executionRecovery.sessionId
+        : null);
     if (sessionIdRef.current === nextId) return;
     if (sessionIdRef.current) {
       clearDomainEventPreviews(sessionIdRef.current);
@@ -44,7 +69,11 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
     setActivePluginDataSession(nextId);
     clearNarrativeDeltaBuffer(deltaBufferRef, deltaRafRef);
     clearAllStreamingText();
-  }, [state.session]);
+  }, [
+    state.session,
+    state.executionRecovery?.hydrating,
+    state.executionRecovery?.sessionId,
+  ]);
 
   return {
     stateRef,

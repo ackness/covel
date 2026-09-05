@@ -170,8 +170,6 @@ export function useGameViewComposer({
     [pendingDrafts, clearInteractionDrafts, onSendMessage, submitBlock],
   );
 
-  const handleConfirmDrafts = useCallback(() => commitDrafts(), [commitDrafts]);
-
   const applyCommandCompletion = useCallback((command: SessionSlashCommand) => {
     setInputValue(completeSlashCommand(command));
     setCommandMenuDismissed(false);
@@ -190,17 +188,13 @@ export function useGameViewComposer({
       try {
         const response = await postPluginRpcWithApproval({
           sessionId: session.id,
-          request: { commandId: command.id, input: raw },
+          request: { kind: "command", commandId: command.id, input: raw },
           pluginId: command.pluginId,
           actionLabel: `/${command.name}`,
           confirm: requestConfirm,
           t,
         });
         if (!response) return;
-        if (response.status === "error") {
-          setCommandFeedback({ tone: "error", message: response.error });
-          return;
-        }
         if (response.status !== "ok") {
           setCommandFeedback({
             tone: "info",
@@ -270,7 +264,11 @@ export function useGameViewComposer({
 
   const handleSubmit = useCallback(() => {
     const val = inputValue.trim();
-    if (!val || composerDisabled || commandExecuting) return;
+    if (composerDisabled || commandExecuting) return;
+    if (!val) {
+      if (!executing) commitDrafts();
+      return;
+    }
     if (commandQuery && selectedCommand) {
       if (!commandAcceptsTypedName(selectedCommand, val)) {
         if (!commandMenuDismissed) applyCommandCompletion(selectedCommand);
@@ -291,10 +289,15 @@ export function useGameViewComposer({
       // Merge with anything typed during the round-trip instead of dropping it:
       // steered text first, newer draft after.
       setInputValue("");
-      void steerMessage(val).then((ok) => {
-        if (!ok)
+      void steerMessage(val)
+        .then((ok) => {
+          if (!ok) {
+            setInputValue((current) => (current ? `${val}\n${current}` : val));
+          }
+        })
+        .catch(() => {
           setInputValue((current) => (current ? `${val}\n${current}` : val));
-      });
+        });
       return;
     }
     onSendMessage(val);
@@ -316,7 +319,9 @@ export function useGameViewComposer({
   ]);
 
   const handleAbort = useCallback(() => {
-    void abortActiveTurn();
+    void abortActiveTurn().catch(() => {
+      // The API transport already surfaced the actionable failure.
+    });
   }, [abortActiveTurn]);
 
   const handleKeyDown = useCallback(
@@ -373,7 +378,7 @@ export function useGameViewComposer({
     commandExecuting,
     commandFeedback,
     applyCommandCompletion,
-    handleConfirmDrafts,
+    handleConfirmDrafts: handleSubmit,
     handleSubmit,
     handleAbort,
     handleKeyDown,

@@ -1,5 +1,5 @@
 import type { AssetGenerateView } from "@covel/shared";
-import { deepMerge } from "@covel/shared";
+import { deepMerge, encodePageCursor } from "@covel/shared";
 import {
   mergeGameStateForReplacement,
   rebuildGameStateFromPatches,
@@ -9,6 +9,9 @@ import {
   buildLegacyJobExecutionStep,
 } from "./execution-steps.js";
 import { applyPluginMessageSurface } from "./plugin-message-surface.js";
+import { mergeRecoveredMessages } from "./recovered-messages.js";
+import { settleExecutionAttempt } from "./execution-attempts.js";
+import { orderStoryBeforePluginMessages } from "./message-order.js";
 import type {
   AssetProgressEvent,
   SessionAction,
@@ -27,8 +30,24 @@ function upsertExecutionStep(
     (item) => `${item.turnId ?? "__no_turn__"}|${item.runtimeId}` === key,
   );
   const next = [...steps];
-  if (idx >= 0) next[idx] = { ...next[idx], ...step };
-  else next.push(step);
+  // A later transport/trace failure cannot undo a transaction already committed.
+  const committed =
+    step.turnId &&
+    steps.some(
+      (row) => row.turnId === step.turnId && row.attemptStatus === "committed",
+    );
+  const updated = {
+    ...(idx >= 0 ? next[idx] : undefined),
+    ...step,
+    ...(committed ? { attemptStatus: "committed" as const } : {}),
+    ...(idx >= 0 &&
+    next[idx].attemptStatus === "committed" &&
+    step.attemptStatus === "pending"
+      ? { sourceFailedRuntimeIds: next[idx].sourceFailedRuntimeIds }
+      : {}),
+  };
+  if (idx >= 0) next[idx] = updated;
+  else next.push(updated);
   return next.length > EXEC_STEPS_MAX
     ? next.slice(next.length - EXEC_STEPS_MAX)
     : next;
@@ -65,6 +84,7 @@ function capLiveMessages(
   state: SessionState,
   messages: StreamMessage[],
 ): Pick<SessionState, "messages"> & Partial<SessionState> {
+  messages = orderStoryBeforePluginMessages(messages);
   if (messages.length <= messagesWindowCap) return { messages };
   const dropCount = messages.length - messagesWindowCap;
   const dropped = messages.slice(0, dropCount);
@@ -79,14 +99,14 @@ function capLiveMessages(
     // (timestamp = server createdAt); stream placeholders with client wall
     // clocks never reach the front of a full window.
     olderMessagesCursor: edge
-      ? { createdAt: edge.timestamp, id: edge.id }
+      ? encodePageCursor({ createdAt: edge.timestamp, id: edge.id })
       : state.olderMessagesCursor,
   };
 }
 
 export const initialState: SessionState = {
   presets: [],
-  packages: [],
+  plugins: [],
   pluginLoadErrors: [],
   worlds: [],
   llmConfig: null,
@@ -100,6 +120,8 @@ export const initialState: SessionState = {
   executing: false,
   executionError: null,
   executionSteps: [],
+  executionRecovery: null,
+  actionGeneration: 0,
   statePatches: [],
   gameState: {},
   pluginData: {},
@@ -129,6 +151,8 @@ const SESSION_RESET: Partial<SessionState> = {
   executing: false,
   executionError: null,
   executionSteps: [],
+  executionRecovery: null,
+  actionGeneration: 0,
   submittedBlockIds: new Set<string>(),
   submittedBlockValues: {},
   sessionPlugins: [],
@@ -145,13 +169,26 @@ export function reducer(
   action: SessionAction,
 ): SessionState {
   switch (action.type) {
+    case "SET_EXECUTION_RECOVERY":
+      return {
+        ...state,
+        executionRecovery: action.recovery,
+        ...(action.recovery
+          ? {
+              executing:
+                action.recovery.hydrating ||
+                action.recovery.checking ||
+                action.recovery.status?.state === "running",
+            }
+          : {}),
+      };
     case "BOOT_SUCCESS":
       return {
         ...state,
         booted: true,
         bootError: null,
         presets: action.presets,
-        packages: action.packages,
+        plugins: action.plugins,
         pluginLoadErrors: action.pluginLoadErrors,
         worlds: action.worlds,
         llmConfig: action.llmConfig,
@@ -209,7 +246,7 @@ export function reducer(
       if (existingIdx >= 0) {
         const next = [...state.messages];
         next[existingIdx] = { ...next[existingIdx], ...action.message };
-        return { ...state, messages: next };
+        return { ...state, messages: orderStoryBeforePluginMessages(next) };
       }
       return {
         ...state,
@@ -231,7 +268,7 @@ export function reducer(
           ...action.message,
           kind: "story",
         };
-        return { ...state, messages: next };
+        return { ...state, messages: orderStoryBeforePluginMessages(next) };
       }
       const authoritativeIdx = state.messages.findIndex(
         (message) => message.id === action.message.id,
@@ -239,7 +276,7 @@ export function reducer(
       if (authoritativeIdx >= 0) {
         const next = [...state.messages];
         next[authoritativeIdx] = { ...action.message, kind: "story" };
-        return { ...state, messages: next };
+        return { ...state, messages: orderStoryBeforePluginMessages(next) };
       }
       return {
         ...state,
@@ -278,7 +315,20 @@ export function reducer(
       };
     }
     case "SET_EXECUTING":
-      return { ...state, executing: action.value };
+      return {
+        ...state,
+        ...(action.value
+          ? { actionGeneration: (state.actionGeneration ?? 0) + 1 }
+          : {}),
+        executing:
+          action.value ||
+          !!(
+            state.executionRecovery &&
+            (state.executionRecovery.hydrating ||
+              state.executionRecovery.checking ||
+              state.executionRecovery.status?.state === "running")
+          ),
+      };
     case "DISCARD_TURN_STREAMS": {
       // Streaming placeholders use the `stream_<turnId>_<runtimeId>` id
       // convention (APPEND_DELTA above). No turnId → discard all placeholders.
@@ -304,6 +354,15 @@ export function reducer(
         gameState: newGameState,
       };
     }
+    case "MERGE_RECOVERED_MESSAGES":
+      return {
+        ...state,
+        messages: mergeRecoveredMessages(
+          state.messages,
+          action.messages,
+          state.executing,
+        ),
+      };
     case "LOAD_MESSAGES": {
       // LOAD_MESSAGES overwrites `messages` with the server snapshot, so any
       // plugin-message entries previously synthesised from plugin-data hydration
@@ -364,6 +423,16 @@ export function reducer(
     }
     case "LOAD_EXECUTION_STEPS":
       return { ...state, executionSteps: action.steps };
+    case "SET_TURN_ATTEMPT_STATUS":
+      return {
+        ...state,
+        executionSteps: settleExecutionAttempt(
+          state.executionSteps,
+          action.turnId,
+          action.status,
+          action.sourceFailedRuntimeIds,
+        ),
+      };
     case "FINALIZE_HANGING_RUNTIMES": {
       // Backend runtimes whose LLM call hangs never emit runtime.completed —
       // the executor's timeoutMs is a loop guard, not an HTTP AbortSignal,
@@ -432,13 +501,18 @@ export function reducer(
         sessionPlugins: action.plugins,
         sessionCommands: action.commands ?? state.sessionCommands,
       };
-    case "TOGGLE_SESSION_PLUGIN":
+    case "TOGGLE_SESSION_PLUGIN": {
+      const plugin = state.sessionPlugins.find(
+        (item) => item.id === action.pluginId,
+      );
+      if (!plugin || plugin.active === action.active) return state;
       return {
         ...state,
         sessionPlugins: state.sessionPlugins.map((p) =>
-          p.id === action.pluginId ? { ...p, isActive: action.isActive } : p,
+          p.id === action.pluginId ? { ...p, active: action.active } : p,
         ),
       };
+    }
     case "BACKFILL_TURN_ID": {
       // Assign turnId to the last user message that has no turnId.
       // This links the player's input to the server-generated turnId so the

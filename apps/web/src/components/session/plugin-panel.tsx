@@ -205,6 +205,7 @@ export function PluginPanel({
           return;
         }
         const req: PluginRpcRequest = {
+          kind: "runtime",
           pluginId,
           runtimeId,
           payload: params.payload as unknown,
@@ -248,6 +249,7 @@ export function PluginPanel({
           return;
         }
         const req: PluginRpcRequest = {
+          kind: "action",
           pluginId,
           action,
           payload: params.payload as unknown,
@@ -294,10 +296,6 @@ export function PluginPanel({
             t,
           });
           if (!response) return;
-          if (response.status === "error") {
-            emitToast("error", response.error);
-            return;
-          }
           if (response.status !== "ok") return;
 
           const result =

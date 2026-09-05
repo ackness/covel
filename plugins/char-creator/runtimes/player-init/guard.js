@@ -1,5 +1,9 @@
 import { pickLocaleText as pick } from "@covel/plugin-handlers-utils";
-import { mergeSchemaDefaults, mirrorCharacterToPluginData } from "@covel/tools";
+import {
+  CharacterFieldValidationError,
+  mergeSchemaDefaults,
+  mirrorCharacterToPluginData,
+} from "@covel/tools";
 
 const CHARACTER_PLUGIN_ID = "char-creator";
 
@@ -99,6 +103,13 @@ export default async function guard(ctx) {
             preGameDone: true,
           };
         } catch (err) {
+          // A valid UI submission can still violate the world attribute types.
+          // Preserve it for correction; never let an LLM silently reinterpret it.
+          if (err instanceof CharacterFieldValidationError) {
+            err.message +=
+              " The original form submission is retained for audit. Start a new character-creation session to submit a corrected form; retrying this accepted submission cannot change its values.";
+            throw err;
+          }
           await logger?.warn?.(
             "player-init guard: deterministic create-character failed, falling back to LLM",
             { error: err instanceof Error ? err.message : String(err) },
@@ -112,6 +123,7 @@ export default async function guard(ctx) {
     await logger?.debug("player-init guard proceeding to form generation");
     return { skip: false };
   } catch (err) {
+    if (err instanceof CharacterFieldValidationError) throw err;
     await logger?.warn?.("player-init guard error", {
       error: err instanceof Error ? err.message : String(err),
     });

@@ -68,6 +68,7 @@
         "tests/**",
         "vitest.config.ts",
         "$TURBO_ROOT$/vitest.base.ts",
+        "$TURBO_ROOT$/scripts/e2e-plugin-verify.ts",
         "$TURBO_ROOT$/plugins/*/*.md",
         "$TURBO_ROOT$/plugins/*/*.js",
         "$TURBO_ROOT$/plugins/*/package.json",

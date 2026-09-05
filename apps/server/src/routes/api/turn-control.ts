@@ -13,6 +13,8 @@ import type { TurnControl } from "@covel/runtime";
 
 interface ActiveTurnEntry {
   readonly turnId: string;
+  readonly requestId?: string;
+  readonly startedAt: string;
   readonly controller: AbortController;
   readonly steering: string[];
 }
@@ -32,9 +34,12 @@ export interface RegisteredTurn {
 export function registerActiveTurn(
   sessionId: string,
   turnId: string,
+  requestId?: string,
 ): RegisteredTurn {
   const entry: ActiveTurnEntry = {
     turnId,
+    requestId,
+    startedAt: new Date().toISOString(),
     controller: new AbortController(),
     steering: [],
   };
@@ -91,4 +96,20 @@ export function abortActiveTurn(sessionId: string): { turnId: string } | null {
 /** Introspection for tests. */
 export function hasActiveTurn(sessionId: string): boolean {
   return activeTurns.has(sessionId);
+}
+
+/** Safe public metadata; abort controllers and steering content stay private. */
+export function getActiveTurn(sessionId: string): {
+  turnId: string;
+  requestId?: string;
+  startedAt: string;
+} | null {
+  const entry = activeTurns.get(sessionId);
+  return entry
+    ? {
+        turnId: entry.turnId,
+        requestId: entry.requestId,
+        startedAt: entry.startedAt,
+      }
+    : null;
 }

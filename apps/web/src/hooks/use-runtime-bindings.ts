@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { PackageSummary, SessionPluginInfo } from "@/services/api.js";
+import type { PluginSummary, SessionPlugin } from "@/services/api.js";
 import { updateSession } from "@/services/api.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import type { ResolvedSlot } from "./use-slot-config.js";
@@ -40,11 +40,12 @@ export interface UseRuntimeBindingsResult {
  */
 export function useRuntimeBindings(
   sessionId: string | undefined,
-  packages: PackageSummary[],
+  plugins: PluginSummary[],
   resolvedSlots: ResolvedSlot[],
-  sessionPlugins?: SessionPluginInfo[],
+  sessionPlugins?: SessionPlugin[],
   runtimeModelOverrides?: Record<string, string>,
   onPersist?: (bindings: Record<string, string>) => void,
+  runtimesReady = true,
 ): UseRuntimeBindingsResult {
   // Seed from the supplied snapshot so the auto-assign effect in this first
   // commit cannot race the hydration effect and overwrite saved bindings.
@@ -55,43 +56,37 @@ export function useRuntimeBindings(
   const runtimeTargets = useMemo(() => {
     const result: Array<Omit<RuntimeBindingEntry, "slotName">> = [];
 
-    if (packages.length === 0 && sessionPlugins && sessionPlugins.length > 0) {
+    if (plugins.length === 0 && sessionPlugins && sessionPlugins.length > 0) {
       for (const sp of sessionPlugins) {
-        if (
-          sp.status === "error" ||
-          sp.runtimeType === "function" ||
-          sp.model === undefined
-        )
-          continue;
-        const defaultSlot = sp.model;
-        result.push({
-          qualifiedId: sp.id,
-          pluginId: sp.id.includes("/")
-            ? sp.id.slice(0, sp.id.indexOf("/"))
-            : sp.id,
-          pluginDisplayName: text(sp.displayName) || sp.id,
-          defaultSlot,
-        });
+        if (sp.status === "error") continue;
+        for (const runtime of sp.runtimes) {
+          if (runtime.runtimeType === "function" || !runtime.model) continue;
+          result.push({
+            qualifiedId: runtime.id,
+            pluginId: sp.id,
+            pluginDisplayName: text(sp.displayName) || sp.id,
+            defaultSlot: runtime.model,
+          });
+        }
       }
       return result;
     }
 
-    for (const pkg of packages) {
-      if (!pkg.enabled || !pkg.runtimes) continue;
-      for (const rt of pkg.runtimes) {
-        if (rt.kind === "function" || rt.model === undefined) continue;
+    for (const plugin of plugins) {
+      for (const rt of plugin.runtimes) {
+        if (rt.runtimeType === "function" || rt.model === undefined) continue;
         const defaultSlot = rt.model;
         result.push({
           qualifiedId: rt.id,
-          pluginId: pkg.name,
-          pluginDisplayName: text(pkg.displayName) || pkg.name,
+          pluginId: plugin.id,
+          pluginDisplayName: text(plugin.displayName) || plugin.id,
           defaultSlot,
         });
       }
     }
 
     return result;
-  }, [packages, sessionPlugins]);
+  }, [plugins, sessionPlugins]);
 
   const runtimeTargetIdsKey = useMemo(
     () => runtimeTargets.map((target) => target.qualifiedId).join("\n"),
@@ -114,6 +109,8 @@ export function useRuntimeBindings(
 
   // Load server-side overrides (filtering to known runtimes).
   useEffect(() => {
+    // An incomplete discovery result cannot identify obsolete bindings.
+    if (!runtimesReady) return;
     if (!sessionId) {
       setBindingsState({});
       return;
@@ -127,11 +124,17 @@ export function useRuntimeBindings(
     if (Object.keys(saved).length > Object.keys(filtered).length && sessionId) {
       persist(sessionId, filtered);
     }
-  }, [sessionId, runtimeTargetIdsKey, runtimeTargets, runtimeModelOverrides]);
+  }, [
+    sessionId,
+    runtimeTargetIdsKey,
+    runtimeTargets,
+    runtimeModelOverrides,
+    runtimesReady,
+  ]);
 
   // Auto-generate defaults on first load when a session has no saved bindings.
   useEffect(() => {
-    if (!sessionId) return;
+    if (!runtimesReady || !sessionId) return;
     if (runtimeTargets.length === 0 || resolvedSlots.length === 0) return;
     if (Object.keys(bindings).length > 0) return;
 
@@ -144,7 +147,7 @@ export function useRuntimeBindings(
 
     setBindingsState(defaults);
     persist(sessionId, defaults);
-  }, [bindings, resolvedSlots, runtimeTargets, sessionId]);
+  }, [bindings, resolvedSlots, runtimeTargets, sessionId, runtimesReady]);
 
   const entries = useMemo((): RuntimeBindingEntry[] => {
     return runtimeTargets.map((target) => ({
@@ -164,25 +167,28 @@ export function useRuntimeBindings(
   );
 
   const allBound = useMemo(() => {
+    if (!runtimesReady) return false;
     return entries.every((e) => {
       const effectiveSlotName = e.slotName || e.defaultSlot;
       if (effectiveSlotName === "default") return resolvedSlots.length > 0;
       return resolvedSlots.some((s) => s.slotId === effectiveSlotName);
     });
-  }, [entries, resolvedSlots]);
+  }, [entries, resolvedSlots, runtimesReady]);
 
   const setBinding = useCallback(
     (qualifiedId: string, slotName: string) => {
+      if (!runtimesReady) return;
       setBindingsState((prev) => {
         const next = { ...prev, [qualifiedId]: slotName };
         if (sessionId) persist(sessionId, next);
         return next;
       });
     },
-    [sessionId, persist],
+    [sessionId, persist, runtimesReady],
   );
 
   const autoAssign = useCallback(() => {
+    if (!runtimesReady) return;
     setBindingsState((prev) => {
       const next = autoAssignRuntimeBindings(
         prev,
@@ -192,7 +198,7 @@ export function useRuntimeBindings(
       if (sessionId) persist(sessionId, next);
       return next;
     });
-  }, [runtimeTargets, resolvedSlots, sessionId, persist]);
+  }, [runtimeTargets, resolvedSlots, sessionId, persist, runtimesReady]);
 
   return {
     entries,

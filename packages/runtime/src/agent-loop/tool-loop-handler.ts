@@ -92,6 +92,7 @@ export async function requestLLMResponse(
     messages,
     tools: toolDefs,
     responseFormat,
+    defaults: manifest.llm,
     ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
     policy: retryPolicy,
     deadline,
@@ -254,6 +255,7 @@ async function malformedToolArgsFallback(args: {
       messages,
       tools: toolDefs,
       responseFormat,
+      defaults: manifest.llm,
       ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
       onTargetAttempt: (target) => {
         actualTarget = target;

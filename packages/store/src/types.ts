@@ -363,6 +363,8 @@ export interface PluginDataStore {
 export interface WorldStore {
   listWorlds(): Promise<WorldRecord[]>;
   getWorld(id: string): Promise<WorldRecord | null>;
+  /** Atomically insert a world, returning false when its id already exists. */
+  createWorld(record: WorldRecord): Promise<boolean>;
   upsertWorld(record: WorldRecord): Promise<void>;
   deleteWorld(id: string): Promise<void>;
 }
@@ -554,7 +556,7 @@ export interface SuspensionStore {
    * was already claimed/resolved.
    *
    * Used by the resume route to guarantee exactly-once execution of a
-   * suspended runtime even under concurrent POST /api/sessions/:id/resume
+   * suspended runtime even under concurrent resume requests
    * (audit 2026-04-20 finding 2). Callers should treat a `false` return as
    * "409 Conflict" and abandon the request.
    *

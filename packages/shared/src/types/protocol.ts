@@ -546,6 +546,9 @@ export interface TimeCursor {
   readonly id: string;
 }
 
+/** Opaque cursor exposed by paginated HTTP APIs. */
+export type PageCursor = string;
+
 /**
  * A keyset page of an append-only log. `items` are oldest-first; `nextCursor`
  * is the position to request the next (older) page, or `null` when the returned
@@ -553,7 +556,27 @@ export interface TimeCursor {
  */
 export interface CursorPage<T> {
   readonly items: readonly T[];
-  readonly nextCursor: TimeCursor | null;
+  readonly nextCursor: PageCursor | null;
+}
+
+/** Read-only recovery state for the latest foreground action. */
+export interface SessionExecutionStatus {
+  readonly state: "idle" | "running" | "completed" | "failed" | "interrupted";
+  readonly turnId?: string;
+  readonly requestId?: string;
+  readonly startedAt?: string;
+  readonly origin?: "player" | "continuation";
+  /** An explicit retry uses a new requestId and includes recoverFromTurnId. */
+  readonly retry?: {
+    readonly type:
+      | "start_session"
+      | "send_message"
+      | "execute_command"
+      | "retry_turn"
+      | "retry_failed_runtimes"
+      | "retry_runtime";
+    readonly payload: Readonly<Record<string, unknown>>;
+  };
 }
 
 export interface SessionSnapshot {
@@ -571,10 +594,11 @@ export interface SessionSnapshot {
    * window, not the full history). `null` when the window already reaches the
    * start of the chat — i.e. there is nothing older to load.
    */
-  readonly messagesCursor?: TimeCursor | null;
+  readonly messagesCursor?: PageCursor | null;
   readonly characters: readonly SnapshotCharacter[];
   readonly gameState: Readonly<Record<string, unknown>>;
   readonly executionSteps: readonly SnapshotTraceEvent[];
+  readonly execution?: SessionExecutionStatus;
   readonly plugins: readonly SnapshotPluginStatus[];
   /** Character attribute schema from world-data-provider plugin (if available). */
   readonly characterSchema?: Readonly<Record<string, unknown>>;
@@ -608,8 +632,8 @@ export interface SnapshotTraceEvent {
 
 export interface SnapshotPluginStatus {
   readonly id: string;
-  readonly name: string;
-  readonly isActive: boolean;
+  readonly displayName: import("./world.js").I18nText;
+  readonly active: boolean;
   /** Named stage; absent for event/manual/UI-only plugins. */
   readonly stage?: import("./runtime-scheduling.js").Stage;
 }

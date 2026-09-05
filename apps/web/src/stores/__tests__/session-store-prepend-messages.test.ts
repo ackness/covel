@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { encodePageCursor } from "@covel/shared";
 import { initialState, reducer } from "../session-store/reducer.js";
 import type { StreamMessage } from "../session-store/types.js";
 
@@ -26,30 +27,30 @@ function msg(id: string, createdAt: string): StreamMessage {
   };
 }
 
+const cursor = (createdAt: string, id: string) =>
+  encodePageCursor({ createdAt, id });
+
 describe("session-store — PREPEND_MESSAGES slice", () => {
   it("prepends older messages to the front and advances the cursor", () => {
     const state = {
       ...initialState,
       messages: [msg("c", "2026-01-03"), msg("d", "2026-01-04")],
-      olderMessagesCursor: { createdAt: "2026-01-03", id: "c" },
+      olderMessagesCursor: cursor("2026-01-03", "c"),
     };
     const next = reducer(state, {
       type: "PREPEND_MESSAGES",
       messages: [msg("a", "2026-01-01"), msg("b", "2026-01-02")],
-      cursor: { createdAt: "2026-01-01", id: "a" },
+      cursor: cursor("2026-01-01", "a"),
     });
     expect(next.messages.map((m) => m.id)).toEqual(["a", "b", "c", "d"]);
-    expect(next.olderMessagesCursor).toEqual({
-      createdAt: "2026-01-01",
-      id: "a",
-    });
+    expect(next.olderMessagesCursor).toBe(cursor("2026-01-01", "a"));
   });
 
   it("dedupes by id when the older batch overlaps the boundary", () => {
     const state = {
       ...initialState,
       messages: [msg("b", "2026-01-02"), msg("c", "2026-01-03")],
-      olderMessagesCursor: { createdAt: "2026-01-02", id: "b" },
+      olderMessagesCursor: cursor("2026-01-02", "b"),
     };
     // "b" is already present; only "a" is genuinely older.
     const next = reducer(state, {
@@ -64,7 +65,7 @@ describe("session-store — PREPEND_MESSAGES slice", () => {
   });
 
   it("prepends the older page in front, preserving order", () => {
-    // `older` comes from listMessagesPage(before=oldest-loaded), so by contract
+    // `older` comes from listMessagesPage(cursor=oldest-loaded), so by contract
     // it is already ascending AND strictly older than everything in `messages`.
     // The reducer must NOT re-sort by timestamp (that would let a client
     // wall-clock stream placeholder reorder server history under clock skew) —
@@ -72,12 +73,12 @@ describe("session-store — PREPEND_MESSAGES slice", () => {
     const state = {
       ...initialState,
       messages: [msg("d", "2026-01-04")],
-      olderMessagesCursor: { createdAt: "2026-01-04", id: "d" },
+      olderMessagesCursor: cursor("2026-01-04", "d"),
     };
     const next = reducer(state, {
       type: "PREPEND_MESSAGES",
       messages: [msg("a", "2026-01-01"), msg("c", "2026-01-03")],
-      cursor: { createdAt: "2026-01-01", id: "a" },
+      cursor: cursor("2026-01-01", "a"),
     });
     expect(next.messages.map((m) => m.timestamp)).toEqual([
       "2026-01-01",
@@ -96,7 +97,7 @@ describe("session-store — PREPEND_MESSAGES slice", () => {
       // Placeholder's client timestamp (2020) is absurdly behind the real
       // server createdAt of the older page (2026).
       messages: [msg("stream_x", "2020-01-01")],
-      olderMessagesCursor: { createdAt: "2026-01-02", id: "b" },
+      olderMessagesCursor: cursor("2026-01-02", "b"),
     };
     const next = reducer(state, {
       type: "PREPEND_MESSAGES",
@@ -112,7 +113,7 @@ describe("session-store — PREPEND_MESSAGES slice", () => {
     const state = {
       ...initialState,
       messages: original,
-      olderMessagesCursor: { createdAt: "2026-01-01", id: "a" },
+      olderMessagesCursor: cursor("2026-01-01", "a"),
     };
     const next = reducer(state, {
       type: "PREPEND_MESSAGES",
@@ -129,12 +130,12 @@ describe("session-store — PREPEND_MESSAGES slice", () => {
     const state = {
       ...initialState,
       messages: original,
-      olderMessagesCursor: { createdAt: "2026-01-03", id: "c" },
+      olderMessagesCursor: cursor("2026-01-03", "c"),
     };
     const next = reducer(state, {
       type: "PREPEND_MESSAGES",
       messages: [msg("a", "2026-01-01")],
-      cursor: { createdAt: "2026-01-01", id: "a" },
+      cursor: cursor("2026-01-01", "a"),
     });
     expect(original).toHaveLength(1);
     expect(original.map((m) => m.id)).toEqual(["c"]);
@@ -147,12 +148,9 @@ describe("session-store — PREPEND_MESSAGES slice", () => {
     const state = { ...initialState, messages: original };
     const withCursor = reducer(state, {
       type: "SET_OLDER_MESSAGES_CURSOR",
-      cursor: { createdAt: "2026-01-01", id: "a" },
+      cursor: cursor("2026-01-01", "a"),
     });
-    expect(withCursor.olderMessagesCursor).toEqual({
-      createdAt: "2026-01-01",
-      id: "a",
-    });
+    expect(withCursor.olderMessagesCursor).toBe(cursor("2026-01-01", "a"));
     expect(withCursor.messages).toBe(original);
 
     const cleared = reducer(withCursor, {

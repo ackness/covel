@@ -18,14 +18,15 @@ import { WorldDataPreflightPanel } from "./world-data-preflight-panel.js";
 import type { PrepSectionStatus } from "./types.js";
 
 interface PluginSelectionCardProps {
-  world: api.WorldRecord;
-  packages: api.PackageSummary[];
+  pluginPlan: api.WorldPluginPlan | null;
+  pluginPlanLoading: boolean;
+  plugins: api.PluginSummary[];
   selectedPluginIds: string[];
   selectedPluginIdSet: ReadonlySet<string>;
-  selectedPackages: api.PackageSummary[];
+  selectedPluginSummaries: api.PluginSummary[];
   expanded: boolean;
   onToggleExpanded: () => void;
-  pluginPacks: PluginPack[];
+  pluginPacks: readonly PluginPack[];
   activePluginPack: PluginPack | null;
   activePluginTags: ReadonlySet<string>;
   availablePluginTags: string[];
@@ -54,11 +55,11 @@ function PluginPackSelector({
   activePluginPack,
   onApplyPack,
 }: {
-  pluginPacks: PluginPack[];
+  pluginPacks: readonly PluginPack[];
   activePluginPack: PluginPack | null;
   onApplyPack: (packId: string) => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
 
   if (pluginPacks.length === 0) return null;
 
@@ -79,28 +80,18 @@ function PluginPackSelector({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-semibold truncate">
-                {pack.labelKey
-                  ? t(
-                      pack.labelKey,
-                      textValue(pack.label, i18n.language) || pack.id,
-                    )
-                  : textValue(pack.label, i18n.language) || pack.id}
+                {textValue(pack.label, i18n.language) || pack.id}
               </span>
               <Badge
                 variant={isActive ? "secondary" : "outline"}
                 className="text-xs shrink-0"
               >
-                {pack.plugins.length}
+                {pack.pluginIds.length}
               </Badge>
             </div>
             {pack.description && (
               <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                {pack.descriptionKey
-                  ? t(
-                      pack.descriptionKey,
-                      textValue(pack.description, i18n.language),
-                    )
-                  : textValue(pack.description, i18n.language)}
+                {textValue(pack.description, i18n.language)}
               </p>
             )}
           </button>
@@ -111,11 +102,12 @@ function PluginPackSelector({
 }
 
 export function PluginSelectionCard({
-  world,
-  packages,
+  pluginPlan,
+  pluginPlanLoading,
+  plugins,
   selectedPluginIds,
   selectedPluginIdSet,
-  selectedPackages,
+  selectedPluginSummaries,
   expanded,
   onToggleExpanded,
   pluginPacks,
@@ -142,7 +134,7 @@ export function PluginSelectionCard({
   selectedFlowSteps,
 }: PluginSelectionCardProps) {
   const { t } = useTranslation();
-  const totalRuntimes = selectedPackages.reduce(
+  const totalRuntimes = selectedPluginSummaries.reduce(
     (sum, pkg) => sum + (pkg.runtimes?.length ?? 0),
     0,
   );
@@ -155,14 +147,14 @@ export function PluginSelectionCard({
         contentId="plugin-selection-card-content"
         summary={t("session.pluginsSelectionSummary", {
           selectedCount: selectedPluginIds.length,
-          pluginCount: packages.length,
+          pluginCount: plugins.length,
           runtimeCount: totalRuntimes,
         })}
       >
         <Puzzle className="w-4 h-4" />
         {t("session.plugins", "Plugins & Runtimes")}
         <Badge variant="secondary" className="text-xs ml-1">
-          {selectedPluginIds.length}/{packages.length}
+          {selectedPluginIds.length}/{plugins.length}
         </Badge>
       </CollapsibleCardHeader>
       {expanded && (
@@ -191,14 +183,14 @@ export function PluginSelectionCard({
                     {group.label}
                   </h4>
                   <span className="text-xs text-muted-foreground">
-                    {group.packages.length}
+                    {group.plugins.length}
                   </span>
                 </div>
-                {group.packages.map((pkg) => (
+                {group.plugins.map((pkg) => (
                   <PluginPackageRow
-                    key={pkg.name}
+                    key={pkg.id}
                     pkg={pkg}
-                    world={world}
+                    pluginPlan={pluginPlan}
                     activePluginPack={activePluginPack}
                     selectedPluginIdSet={selectedPluginIdSet}
                     corePluginIds={corePluginIds}
@@ -220,6 +212,12 @@ export function PluginSelectionCard({
             error={worldDataPreflightError}
             onRetry={onRetryWorldDataPreflight}
           />
+
+          {pluginPlanLoading && (
+            <p className="text-xs text-muted-foreground">
+              {t("session.pluginPlanLoading", "Resolving world plugin plan...")}
+            </p>
+          )}
 
           <ExecutionFlowPreview
             flowData={flowData}

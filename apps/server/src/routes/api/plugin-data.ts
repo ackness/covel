@@ -15,7 +15,7 @@ import { z } from "zod";
 import type { DataStore } from "@covel/store";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import { reservedPluginDataNamespaceError } from "@covel/shared";
-import { errorBody, readJsonBody } from "../../api-error.js";
+import { errorBody, okBody, readJsonBody } from "../../api-error.js";
 import { buildPluginDataIndex } from "./discovery.js";
 import {
   resolveSessionParam,
@@ -218,7 +218,7 @@ pluginDataRoutes.put(
           createdAt: now,
           updatedAt: now,
         });
-        return c.json({ success: true, namespace, key });
+        return c.json(okBody({ namespace, key }));
       },
     });
   },
@@ -259,7 +259,7 @@ pluginDataRoutes.delete(
         if (accessErr)
           return c.json(errorBody(accessErr.error), accessErr.status);
         await store.deletePluginData(sessionId, pluginId, namespace, key);
-        return c.json({ success: true });
+        return c.json(okBody());
       },
     });
   },

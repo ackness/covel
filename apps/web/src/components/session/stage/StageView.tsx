@@ -12,24 +12,23 @@
  */
 import { useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { FrameworkCapability } from "@covel/shared";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog.js";
-import { Button } from "@/components/ui/button.js";
 import { useMediaQuery } from "@/hooks/use-media-query.js";
-import { usePluginNamespace } from "@/stores/plugin-data-store.js";
 import { useDomainEventPreview } from "@/stores/domain-event-preview-store.js";
 import { useStreamingText } from "@/stores/streaming-text-store.js";
 import type { StreamMessage, ExecutionStep } from "@/stores/session-store.js";
 import type {
   SessionRecord,
   WorldRecord,
-  PackageSummary,
-  SessionPluginInfo,
+  PluginSummary,
+  SessionPlugin,
 } from "@/services/api.js";
 import { ChatMessages } from "../chat-messages.js";
 import { MessageBlockRenderer } from "../chat-messages/message-blocks.js";
@@ -38,6 +37,9 @@ import { StageSprites } from "./StageSprites.js";
 import { StageHud } from "./StageHud.js";
 import { StageDialog } from "./StageDialog.js";
 import { StageChoices } from "./StageChoices.js";
+import { StageExecutionStatus } from "./StageExecutionStatus.js";
+import { resolveStageParagraphSpeakers } from "./stage-dialogue-selectors.js";
+import { useStageData, useStageNamespace } from "./use-stage-data.js";
 import {
   applySceneSetPreview,
   applyStageDirectionPreview,
@@ -49,7 +51,6 @@ import {
   pluginIdForCapability,
   resolveStageSpeakers,
   stageStoryKey,
-  STAGE_CAPABILITIES,
   type PresenceRecord,
   type StageCurrentRecord,
   type StageDirectionRecord,
@@ -64,8 +65,8 @@ export interface StageViewProps {
   readonly executing: boolean;
   readonly executionError: string | null;
   readonly executionSteps: ExecutionStep[];
-  readonly packages: PackageSummary[];
-  readonly sessionPlugins: SessionPluginInfo[];
+  readonly plugins: PluginSummary[];
+  readonly sessionPlugins: SessionPlugin[];
   readonly submittedBlockIds: ReadonlySet<string>;
   readonly submittedBlockValues: Readonly<
     Record<string, Record<string, unknown>>
@@ -81,7 +82,7 @@ export interface StageViewProps {
     submitBehavior?: { echoFilledNarrative?: boolean },
   ) => Promise<void>;
   readonly onRetryRuntime?: (
-    runtimeId: string | undefined,
+    runtimeId: string | readonly string[] | undefined,
     sourceTurnId?: string,
   ) => void;
   readonly onBeginAdventure: () => void;
@@ -111,14 +112,12 @@ export function StageView(props: StageViewProps): ReactElement {
     world,
     messages,
     executing,
-    executionError,
     sessionPlugins,
     submittedBlockIds,
     submittedBlockValues,
     onSendMessage,
     onSubmitBlock,
     onSubmitInteraction,
-    onRetryRuntime,
     onViewModeChange,
     immersive,
     onToggleImmersive,
@@ -136,33 +135,59 @@ export function StageView(props: StageViewProps): ReactElement {
   // Namespaces below ("stage", "active-cast", …) are intra-plugin data keys
   // defined by the resolved plugin, not plugin ids.
   const sceneStageId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.scene) ?? "";
+    pluginIdForCapability(sessionPlugins, FrameworkCapability.SceneStage) ?? "";
   const sceneCastId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.cast) ?? "";
+    pluginIdForCapability(sessionPlugins, FrameworkCapability.SceneCast) ?? "";
   const scenePromptsId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.prompts) ?? "";
+    pluginIdForCapability(sessionPlugins, FrameworkCapability.ScenePrompts) ??
+    "";
   const presenceId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.presence) ?? "";
+    pluginIdForCapability(
+      sessionPlugins,
+      FrameworkCapability.CharacterPresence,
+    ) ?? "";
   const stageDirectionId =
-    pluginIdForCapability(sessionPlugins, STAGE_CAPABILITIES.direction) ?? "";
+    pluginIdForCapability(sessionPlugins, FrameworkCapability.StageDirection) ??
+    "";
 
-  const sceneCurrent = usePluginNamespace(sceneStageId, "stage")["current"] as
-    StageCurrentRecord | undefined;
-  const sceneRegistry = usePluginNamespace(sceneStageId, "scenes")[
+  const initialData = useStageData(session.id, [
+    sceneStageId,
+    sceneCastId,
+    scenePromptsId,
+    presenceId,
+    stageDirectionId,
+  ]);
+  const sceneCurrent = useStageNamespace(initialData, sceneStageId, "stage")[
+    "current"
+  ] as StageCurrentRecord | undefined;
+  const sceneRegistry = useStageNamespace(initialData, sceneStageId, "scenes")[
     "scene-registry"
   ] as StageSceneRegistry | undefined;
-  const activeCast = usePluginNamespace(sceneCastId, "active-cast")[
+  const activeCast = useStageNamespace(initialData, sceneCastId, "active-cast")[
     "current"
   ] as { speakers?: readonly StageSpeaker[] } | undefined;
-  const directionCurrent = usePluginNamespace(stageDirectionId, "direction")[
-    "current"
-  ] as StageDirectionRecord | undefined;
-  const promptsNamespace = usePluginNamespace(scenePromptsId, "message");
+  const directionCurrent = useStageNamespace(
+    initialData,
+    stageDirectionId,
+    "direction",
+  )["current"] as StageDirectionRecord | undefined;
+  const dialogueNamespace = useStageNamespace(
+    initialData,
+    stageDirectionId,
+    "dialogue",
+  );
+  const promptsNamespace = useStageNamespace(
+    initialData,
+    scenePromptsId,
+    "message",
+  );
   // Mirror portrait-gallery-panel: the presence namespace is consumed as a
   // characterId-keyed record of `{ sprite, avatar, ... }`.
-  const presence = usePluginNamespace(presenceId, "presence") as Readonly<
-    Record<string, PresenceRecord | undefined>
-  >;
+  const presence = useStageNamespace(
+    initialData,
+    presenceId,
+    "presence",
+  ) as Readonly<Record<string, PresenceRecord | undefined>>;
   const directionPreview = useDomainEventPreview(session.id, "stage.direction");
   const scenePreview = useDomainEventPreview(session.id, "scene.set");
   const effectiveSceneCurrent = useMemo(() => {
@@ -205,6 +230,14 @@ export function StageView(props: StageViewProps): ReactElement {
   const storyKey = stageStoryKey(storyMsg);
   const isStreaming =
     executing && (storyMsg?.id.startsWith("stream_") ?? false);
+  const paragraphSpeakers = resolveStageParagraphSpeakers({
+    turnId: storyTurnId,
+    record: storyTurnId ? dialogueNamespace[storyTurnId] : undefined,
+    preview: directionPreview,
+    speakers,
+    presence,
+    isStreaming,
+  });
 
   // ── Cross-layer state ─────────────────────────────────────────
   const [autoPlay, setAutoPlay] = useState(false);
@@ -282,7 +315,7 @@ export function StageView(props: StageViewProps): ReactElement {
           turnId={storyTurnId}
           storyText={storyText}
           streamEnded={!isStreaming}
-          speakerName={speakers[0]?.name}
+          paragraphSpeakers={paragraphSpeakers}
           autoPlay={autoPlay}
           reducedMotion={reducedMotion}
           onAllRead={() => setReadStoryKey(storyKey)}
@@ -314,35 +347,7 @@ export function StageView(props: StageViewProps): ReactElement {
         </div>
       )}
 
-      {/* Execution error — a failed turn otherwise just stops the typewriter
-          silently on stage; surface it with a retry affordance. */}
-      {executionError && (
-        <div
-          className="pointer-events-none absolute inset-x-0 top-14 z-50 flex justify-center px-4"
-          data-testid="stage-error"
-        >
-          <div className="ui-stage-panel pointer-events-auto flex max-w-2xl items-start gap-2 rounded-(--radius-card) border border-destructive/60 px-4 py-3 text-sm">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-            <div className="min-w-0 flex-1">
-              <p className="font-medium text-destructive">
-                {t("common.error")}
-              </p>
-              <p className="mt-1 wrap-break-word text-xs text-muted-foreground">
-                {executionError}
-              </p>
-            </div>
-            {onRetryRuntime && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => onRetryRuntime(undefined)}
-              >
-                {t("session.retryAll")}
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
+      <StageExecutionStatus {...props} />
 
       {/* History drawer — the full parsed chat, needs a bounded flex column
           for its internal scroll viewport (flex-1 min-h-0). Zero out executionSteps

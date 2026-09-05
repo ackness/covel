@@ -1,4 +1,9 @@
-import type { RuntimeManifest, SetupRuntimeState, Stage } from "@covel/shared";
+import type {
+  RuntimeManifest,
+  SetupRuntimeState,
+  Stage,
+  TurnInput,
+} from "@covel/shared";
 import {
   getRuntimeSpec,
   isMainLoopRuntime,
@@ -13,8 +18,17 @@ import type { ScheduledGroup, TriggerContext } from "../types.js";
 
 export interface TriggeredRuntimeSelection {
   readonly manualTarget: RuntimeManifest | undefined;
+  readonly manualTargets?: readonly RuntimeManifest[];
   readonly triggered: readonly RuntimeManifest[];
   readonly abortReason: string | undefined;
+}
+
+/** Recovery must stay inside its selected targets; ordinary manual RPC may fan out. */
+export function isScopedRuntimeRecovery(input: TurnInput): boolean {
+  return (
+    input.manualTrigger?.sourceTurnId !== undefined ||
+    input.manualTrigger?.runtimeIds !== undefined
+  );
 }
 
 /**
@@ -128,6 +142,7 @@ function setupSessionGateSatisfied(
 export function selectTriggeredRuntimes(args: {
   readonly activeRuntimes: readonly RuntimeManifest[];
   readonly manualRuntimeId: string | undefined;
+  readonly manualRuntimeIds?: readonly string[];
   readonly messageHistory: readonly TurnMessageRecord[];
   readonly runtimeTriggerCounts: ReadonlyMap<string, number>;
   readonly setupRuntimes: Readonly<Record<string, SetupRuntimeState>>;
@@ -146,6 +161,22 @@ export function selectTriggeredRuntimes(args: {
     turnNumber,
     logicalTurn,
   } = args;
+  if (args.manualRuntimeIds !== undefined) {
+    const ids = new Set(args.manualRuntimeIds);
+    const targets = activeRuntimes.filter((rt) => ids.has(rt.name));
+    const valid =
+      ids.size > 0 &&
+      ids.size === args.manualRuntimeIds.length &&
+      targets.length === ids.size;
+    return {
+      manualTarget: undefined,
+      manualTargets: valid ? targets : [],
+      triggered: valid ? targets : [],
+      abortReason: valid
+        ? undefined
+        : "manual-trigger: invalid or inactive runtime targets",
+    };
+  }
   const manualTarget = manualRuntimeId
     ? activeRuntimes.find((rt) => rt.name === manualRuntimeId)
     : undefined;
@@ -198,10 +229,20 @@ export function selectTriggeredRuntimes(args: {
 
 export function scheduleTriggeredRuntimes(args: {
   readonly manualTarget: RuntimeManifest | undefined;
+  readonly manualTargets?: readonly RuntimeManifest[];
   readonly triggered: readonly RuntimeManifest[];
   readonly isPreGamePending: boolean;
 }): ScheduleResult {
   const { manualTarget, triggered, isPreGamePending } = args;
+
+  if (args.manualTargets) {
+    // Recovery keeps stage barriers and each stage's dependency DAG. An
+    // unstaged manual runtime remains runnable after the staged targets.
+    return scheduleMainLoopByStage(args.manualTargets, [
+      ...STAGE_ORDER,
+      undefined,
+    ]);
+  }
 
   if (manualTarget) {
     return { groups: [{ runtimes: [manualTarget] }], cyclic: [] };
@@ -231,17 +272,17 @@ const MAIN_LOOP_STAGES: readonly Stage[] = STAGE_ORDER.filter(
 
 function scheduleMainLoopByStage(
   runtimes: readonly RuntimeManifest[],
+  stages: readonly (Stage | undefined)[] = MAIN_LOOP_STAGES,
 ): ScheduleResult {
-  const byStage = new Map<Stage, RuntimeManifest[]>();
+  const byStage = new Map<Stage | undefined, RuntimeManifest[]>();
   for (const rt of runtimes) {
     const stage = getRuntimeSpec(rt).stage;
-    if (stage === undefined) continue;
     (byStage.get(stage) ?? byStage.set(stage, []).get(stage)!).push(rt);
   }
 
   const groups: ScheduledGroup[] = [];
   const cyclic: RuntimeManifest[] = [];
-  for (const stage of MAIN_LOOP_STAGES) {
+  for (const stage of stages) {
     const stageRuntimes = byStage.get(stage);
     if (!stageRuntimes || stageRuntimes.length === 0) continue;
     const result = runDag(stageRuntimes);

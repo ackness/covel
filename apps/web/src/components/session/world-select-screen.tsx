@@ -16,7 +16,7 @@ import { WorldEditor } from "@/components/world/world-editor.js";
 import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
 import { WorldListView } from "@/components/world/world-list-view.js";
 import * as api from "@/services/api.js";
-import type { WorldRecord, PackageSummary } from "@/services/api.js";
+import type { PluginSummary, WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 import {
@@ -31,7 +31,7 @@ type ViewMode = "list" | "detail" | "edit";
 
 interface WorldSelectScreenProps {
   worlds: WorldRecord[];
-  packages: PackageSummary[];
+  plugins: PluginSummary[];
   resolvedSlots: ResolvedSlot[];
   settingsOpen: boolean;
   onSettingsOpenChange: (v: boolean) => void;
@@ -73,7 +73,7 @@ export function worldStorageLabel(world: WorldRecord): string {
 
 export function WorldSelectScreen({
   worlds,
-  packages,
+  plugins,
   resolvedSlots,
   settingsOpen,
   onSettingsOpenChange,
@@ -85,7 +85,7 @@ export function WorldSelectScreen({
 }: WorldSelectScreenProps) {
   const { t, i18n: translation } = useTranslation();
   const primarySlotLabel = formatSlotLabel(resolvedSlots[0]);
-  const enabledPluginCount = packages.filter((p) => p.enabled).length;
+  const enabledPluginCount = plugins.length;
   const prioritizedWorlds = useMemo(
     () =>
       prioritizeWorldsByLocale(
@@ -98,6 +98,7 @@ export function WorldSelectScreen({
   const [mode, setMode] = useState<ViewMode>("list");
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
   const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [settingsTarget, setSettingsTarget] = useState<string>();
   const [enteringWorldId, setEnteringWorldId] = useState<string | null>(null);
   const [pendingWorldId, setPendingWorldId] = useState<string | null>(null);
   const [deletingWorldId, setDeletingWorldId] = useState<string | null>(null);
@@ -372,9 +373,12 @@ export function WorldSelectScreen({
       {deleteDialog}
       <SettingsDialog
         open={settingsOpen}
-        onOpenChange={onSettingsOpenChange}
-        initialKey={settingsInitialKey}
-        packages={packages}
+        onOpenChange={(open) => {
+          if (!open) setSettingsTarget(undefined);
+          onSettingsOpenChange(open);
+        }}
+        initialKey={settingsTarget ?? settingsInitialKey}
+        plugins={plugins}
       />
       <AiWorldGenerator
         open={generatorOpen}
@@ -390,7 +394,10 @@ export function WorldSelectScreen({
         enteringWorldId={enteringWorldId}
         storageLabel={worldStorageLabel}
         onOpenGenerator={() => setGeneratorOpen(true)}
-        onOpenSettings={() => onSettingsOpenChange(true)}
+        onOpenSettings={() => {
+          setSettingsTarget("llm.providers");
+          onSettingsOpenChange(true);
+        }}
         onEnterWorld={handleEnterWorld}
         onViewDetails={handleViewDetails}
         onDeleteWorld={handleDeleteClick}

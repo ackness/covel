@@ -11,6 +11,7 @@ describe("model database refresh", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     if (previousUserConfigDir === undefined) {
       delete process.env.COVEL_USER_CONFIG_DIR;
     } else {
@@ -53,5 +54,30 @@ describe("model database refresh", () => {
     });
     expect(ai.modelDb?.lookup("openai/test-model")?.contextWindow).toBe(128000);
     expect(fs.existsSync(path.join(tmpDir, "model-db.json"))).toBe(true);
+  });
+
+  it("returns the standard list envelope when the database is unavailable", async () => {
+    const app = createModelDbRoutes({ modelDb: null } as AiStack);
+
+    const response = await app.request("/api/model-db/search?q=test");
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ items: [] });
+  });
+
+  it("returns a coded non-2xx error when refresh fails", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const app = createModelDbRoutes({ modelDb: null } as AiStack);
+
+    const response = await app.request("/api/model-db/refresh", {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: "offline",
+      code: "model_db_refresh_failed",
+    });
   });
 });

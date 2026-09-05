@@ -1,4 +1,4 @@
-import type { I18nText } from "@covel/shared";
+import type { PageCursor, PluginDetail } from "@covel/shared";
 import { request } from "./request.js";
 
 // -- Trace API -------------------------------------------------
@@ -90,34 +90,9 @@ export interface PluginDataDiscoveryIndex {
   namespaces: PluginDataNamespaceIndex[];
 }
 
-export interface PluginContract {
-  id: string;
-  name: I18nText | unknown;
-  description?: I18nText | unknown;
-  pluginType?: string;
-  runtimeCount?: number;
-  status?: string;
-  source?: string;
-  capabilities?: string[];
-  declaredPluginDataNamespaces?: string[];
-  tools?: {
-    builtin?: string[];
-    local?: Array<{ runtimeId: string; path: string; name: string }>;
-  };
-  rpc?: Array<Record<string, unknown>>;
-  ui?: {
-    right?: Array<{ runtimeId: string; path: string }>;
-    message?: Array<{ runtimeId: string; path: string }>;
-    left?: Array<{ runtimeId: string; path: string }>;
-  };
-  runtimes?: Array<Record<string, unknown>>;
-  dataSchemas?: Record<string, unknown>;
-  worldProjections?: Record<string, unknown>;
-}
-
 export interface TraceDiscovery {
   framework: Record<string, unknown>;
-  plugins: PluginContract[];
+  plugins: PluginDetail[];
   pluginData: PluginDataDiscoveryIndex[];
 }
 
@@ -131,35 +106,26 @@ export async function fetchTraceTurns(sessionId: string): Promise<{
   });
 }
 
-/** 事件游标：定位窗口内最旧一条事件，用于向更早方向翻页。 */
-export interface TraceCursor {
-  createdAt: string;
-  id: string;
-}
-
 /**
  * 游标分页拉取 turn 追踪：默认返回「最近一段事件窗口」按 turnId 分组的结果。
  *
  * - `limit` 是**事件**数（非 turn 数），默认由后端决定（400，上限 500）。
- * - `before` 传入上一页的 `nextCursor` 向更早方向翻页；一个 turn 可能跨窗口
+ * - `cursor` 传入上一页的 `nextCursor` 向更早方向翻页；一个 turn 可能跨窗口
  *   边界被切开，调用方需按 turnId 合并（见 `mergeTurnPages`）。
  * - `nextCursor` 为 null 表示已到 trace 起点，没有更早事件。
  */
 export async function fetchTraceTurnsPage(
   sessionId: string,
-  opts: { limit?: number; before?: TraceCursor } = {},
+  opts: { limit?: number; cursor?: PageCursor } = {},
 ): Promise<{
   sessionId: string;
   turns: TurnTrace[];
-  nextCursor: TraceCursor | null;
+  nextCursor: PageCursor | null;
   discovery?: TraceDiscovery;
 }> {
   const params = new URLSearchParams();
   if (opts.limit != null) params.set("limit", String(opts.limit));
-  if (opts.before) {
-    params.set("before_created_at", opts.before.createdAt);
-    params.set("before_id", opts.before.id);
-  }
+  if (opts.cursor) params.set("cursor", opts.cursor);
   const qs = params.toString();
   return request(
     `/api/traces/${encodeURIComponent(sessionId)}/turns/page${qs ? `?${qs}` : ""}`,

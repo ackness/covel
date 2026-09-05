@@ -209,6 +209,57 @@ describe("builtin character tools", () => {
     ]);
   });
 
+  it("rejects invalid create/update fields before exposing any proposal", async () => {
+    const schemaStore = Object.assign(store, {
+      getPluginData: async () => ({
+        value: {
+          version: 1,
+          attributes: [
+            {
+              id: "systems",
+              name: "Systems",
+              type: "number",
+              category: "abilities",
+              min: 0,
+              max: 5,
+              defaultValue: 2,
+            },
+          ],
+        },
+        updatedAt: "2026-09-05T00:00:00Z",
+      }),
+    });
+    loop = new Loop(
+      createCharacterTools(schemaStore, {
+        findWorldDataPluginId: () => "schema-source",
+      }),
+      store,
+    );
+    await expect(
+      loop.call("create-character", {
+        name: "Alex",
+        type: "player",
+        fields: { systems: "self-taught" },
+      }),
+    ).rejects.toThrow(/systems/);
+    expect(loop.pending).toHaveLength(0);
+    const created = await loop.call("create-character", {
+      name: "Alex",
+      type: "player",
+    });
+    loop.commit();
+    await expect(
+      loop.call("update-character", {
+        id: created.characterId,
+        fields: { systems: 6 },
+      }),
+    ).rejects.toThrow(/systems/);
+    expect(loop.pending).toHaveLength(0);
+    expect((await store.listCharacters("sess-1"))[0]?.fields).toEqual({
+      systems: 2,
+    });
+  });
+
   it("mirror helper upserts one plugin-data row keyed by character id", async () => {
     const character = {
       id: "char-player-1",

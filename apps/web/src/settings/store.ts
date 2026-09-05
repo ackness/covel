@@ -13,6 +13,8 @@ import {
 import i18n from "i18next";
 import { getDesktopRestAuthHeaders, isDesktopApp } from "@/lib/desktop-bridge";
 import { emitToast } from "@/lib/toast-channel";
+import { synchronizeSettings } from "./synchronize-settings.js";
+import { resolveSettingEntryText } from "./framework-i18n.js";
 
 let singleton: SettingsStore | null = null;
 let readyPromise: Promise<void> | null = null;
@@ -36,12 +38,23 @@ function createStore(): SettingsStore {
   // by their owning UI paths and would otherwise duplicate toasts.
   store.subscribePersistenceErrors((error) => {
     if (error instanceof SettingsRevisionConflictError) {
+      const entries = store.listEntries();
+      const labels = error.conflictingKeys.map((key) => {
+        const entry = entries.find((item) => item.key === key);
+        return entry
+          ? resolveSettingEntryText(entry, "label", i18n.language)
+          : key;
+      });
       emitToast(
         "error",
-        i18n.t("settings.saveFailed", {
-          defaultValue: "Could not save setting",
+        i18n.t("settings.conflictTitle", {
+          defaultValue: "Settings changed in another window",
         }) as string,
-        error.message,
+        i18n.t("settings.conflictDetail", {
+          keys: labels.join(", ") || i18n.t("settings.title"),
+          defaultValue:
+            "{{keys}} was not saved. The latest saved values have been loaded. Review them and retry your change.",
+        }) as string,
       );
     }
   });
@@ -63,7 +76,9 @@ export function getSettings(): SettingsStoreApi {
 export function initSettings(): Promise<void> {
   if (!readyPromise) {
     const store = getSettings() as SettingsStore;
-    readyPromise = store.init();
+    readyPromise = store.init().then(() => {
+      synchronizeSettings(store);
+    });
   }
   return readyPromise;
 }

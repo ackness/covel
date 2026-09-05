@@ -180,13 +180,13 @@ export function createJsonFileBackend(
         throw new Error(`[settings] secrets load failed: HTTP ${res.status}`);
       }
       const body = (await res.json().catch(() => ({}))) as {
-        providers?: unknown;
+        items?: unknown;
       };
-      if (!Array.isArray(body.providers)) {
+      if (!Array.isArray(body.items)) {
         throw new Error("[settings] secrets load returned an invalid body");
       }
       restConfiguredProviders = new Set(
-        body.providers.filter(
+        body.items.filter(
           (provider): provider is string =>
             typeof provider === "string" && provider.length > 0,
         ),

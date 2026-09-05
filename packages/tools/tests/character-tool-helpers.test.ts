@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CharacterAttributeSchema } from "@covel/shared";
 import {
   buildFieldsZod,
+  assertCharacterFields,
   formatFields,
   formatFieldValue,
   loadCharacterSchema,
@@ -37,6 +38,18 @@ function createStore(overrides: Partial<CharacterStore> = {}): CharacterStore {
 }
 
 describe("character tool helpers", () => {
+  it.each(["self-taught", -1, 101, null, Infinity])(
+    "rejects invalid declared attribute %j at the write boundary",
+    (hp) => {
+      expect(() => mergeSchemaDefaults({ hp }, sampleSchema)).toThrow(/hp/);
+      expect(() => assertCharacterFields({ hp }, sampleSchema)).toThrow(/hp/);
+    },
+  );
+  it("preserves valid zero values and separate descriptive fields", () => {
+    expect(
+      mergeSchemaDefaults({ hp: 0, background: "self-taught" }, sampleSchema),
+    ).toEqual({ hp: 0, background: "self-taught" });
+  });
   it("formats primitive, array, object, and empty field values", () => {
     expect(formatFieldValue(undefined)).toBe("—");
     expect(formatFieldValue("ready")).toBe("ready");

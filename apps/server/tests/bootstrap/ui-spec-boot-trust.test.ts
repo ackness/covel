@@ -1,9 +1,4 @@
-/**
- * Regression: a community (non-autoLoad) plugin that declares a `ui`
- * block must NOT have its handler / wires JS imported by the boot-time
- * eager UI-spec load (bootstrap step 6b). Builtin plugins keep loading
- * fully at boot.
- */
+/** Regression: UI discovery is declaration-only and never imports runtime code. */
 
 import fs from "node:fs";
 import os from "node:os";
@@ -12,10 +7,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/runtime";
 import { createMemoryStore } from "@covel/store";
 import { bootstrapApi } from "../../src/routes/api/bootstrap.js";
+import { buildUiSpecsResponse } from "../../src/routes/misc-api/ui-specs.js";
 
 const BUILTIN_FLAG = "__covelBuiltinHandlerImported";
 const COMMUNITY_HANDLER_FLAG = "__covelCommunityHandlerImported";
-const COMMUNITY_WIRES_FLAG = "__covelCommunityWiresImported";
+const COMMUNITY_ENTRY_FLAG = "__covelCommunityEntryImported";
 
 const stubLLM: LLMAdapter = {
   async generate(): Promise<LLMResponse> {
@@ -34,7 +30,7 @@ const PANEL_JSON = JSON.stringify({
 function writeUiPlugin(
   dir: string,
   pluginId: string,
-  importFlags: { handler: string; wires?: string },
+  importFlags: { handler: string; entry?: string },
 ): void {
   const root = path.join(dir, pluginId);
   fs.mkdirSync(path.join(root, "ui"), { recursive: true });
@@ -47,7 +43,7 @@ name: ${pluginId}
 description: boot trust fixture
 runtimeType: function
 handler: ./server/handler.mjs
-${importFlags.wires ? "wires: ./server/wires.mjs" : ""}
+${importFlags.entry ? "entry: ./server/entry.mjs" : ""}
 trigger:
   type: manual
 ui:
@@ -63,15 +59,15 @@ Fixture prompt.
     path.join(root, "server", "handler.mjs"),
     `globalThis.${importFlags.handler} = true;\nexport default async function handler() { return { proposals: [] }; }\n`,
   );
-  if (importFlags.wires) {
+  if (importFlags.entry) {
     fs.writeFileSync(
-      path.join(root, "server", "wires.mjs"),
-      `globalThis.${importFlags.wires} = true;\nexport default { image: [] };\n`,
+      path.join(root, "server", "entry.mjs"),
+      `globalThis.${importFlags.entry} = true;\nexport default function entry() {}\n`,
     );
   }
 }
 
-describe("bootstrap step 6b: UI-spec eager load respects plugin trust", () => {
+describe("bootstrap UI-spec declaration discovery", () => {
   let tmpRoot: string;
   let result: Awaited<ReturnType<typeof bootstrapApi>>;
 
@@ -86,7 +82,7 @@ describe("bootstrap step 6b: UI-spec eager load respects plugin trust", () => {
     writeUiPlugin(builtinDir, "builtin-ui-plugin", { handler: BUILTIN_FLAG });
     writeUiPlugin(communityDir, "community-ui-plugin", {
       handler: COMMUNITY_HANDLER_FLAG,
-      wires: COMMUNITY_WIRES_FLAG,
+      entry: COMMUNITY_ENTRY_FLAG,
     });
 
     result = await bootstrapApi({
@@ -103,23 +99,31 @@ describe("bootstrap step 6b: UI-spec eager load respects plugin trust", () => {
     const g = globalThis as Record<string, unknown>;
     delete g[BUILTIN_FLAG];
     delete g[COMMUNITY_HANDLER_FLAG];
-    delete g[COMMUNITY_WIRES_FLAG];
+    delete g[COMMUNITY_ENTRY_FLAG];
   });
 
-  it("does not import a community plugin's handler or wires JS at boot", () => {
+  it("does not import community runtime or entry code at boot", () => {
     const g = globalThis as Record<string, unknown>;
     expect(g[COMMUNITY_HANDLER_FLAG]).toBeUndefined();
-    expect(g[COMMUNITY_WIRES_FLAG]).toBeUndefined();
+    expect(g[COMMUNITY_ENTRY_FLAG]).toBeUndefined();
     expect(
       result.registry.get("community-ui-plugin")?.loadedRuntimes.size,
     ).toBe(0);
   });
 
-  it("still fully loads builtin UI-declaring runtimes at boot", () => {
+  it("reads builtin UI declarations without loading the runtime", async () => {
     const g = globalThis as Record<string, unknown>;
-    expect(g[BUILTIN_FLAG]).toBe(true);
+    expect(g[BUILTIN_FLAG]).toBeUndefined();
     const entry = result.registry.get("builtin-ui-plugin");
-    const loaded = entry?.loadedRuntimes.get("builtin-ui-plugin");
-    expect(loaded?.uiSpecs?.right).toHaveLength(1);
+    expect(entry?.loadedRuntimes.size).toBe(0);
+
+    const response = await buildUiSpecsResponse({
+      registry: result.registry,
+      store: result.store,
+    });
+    expect(response.right).toEqual([
+      expect.objectContaining({ pluginId: "builtin-ui-plugin" }),
+      expect.objectContaining({ pluginId: "community-ui-plugin" }),
+    ]);
   });
 });

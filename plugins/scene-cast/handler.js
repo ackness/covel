@@ -230,7 +230,7 @@ function formatActiveCastContext(activeCast) {
   const lines = ["## Active Cast"];
   for (const speaker of activeCast.speakers) {
     const parts = [
-      `- ${speaker.name}`,
+      `- ${speaker.name} (id: ${speaker.id})`,
       speaker.description ? `: ${speaker.description}` : "",
       speaker.signals?.length ? ` [${speaker.signals.join("; ")}]` : "",
     ];

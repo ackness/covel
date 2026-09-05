@@ -1,8 +1,8 @@
 /**
  * Resume route — resumes a suspended runtime.
  *
- * POST /api/sessions/:id/resume
- *   Body: { suspensionId: string, data: unknown }
+ * POST /api/sessions/:id/suspensions/:suspensionId/resume
+ *   Body: { data: unknown }
  *
  * Browser callers may supply `X-Provider-Keys` for request-scoped overrides.
  * Desktop callers may omit it and use the server's configured provider keys.
@@ -25,6 +25,7 @@
  */
 
 import { Hono } from "hono";
+import { z } from "zod";
 // Ajv 8 ships as CJS with both `module.exports = Ajv` and `exports.default = Ajv`.
 // Under NodeNext + esModuleInterop, TS sees the default-import as the module's
 // namespace rather than the class constructor. The named export works cleanly.
@@ -40,10 +41,14 @@ import {
   runWithHookScope,
   saveAutoSnapshot,
 } from "@covel/runtime";
-import type { ExecutionContext, RuntimeManifest } from "@covel/shared";
+import type {
+  ExecutionContext,
+  RuntimeManifest,
+  SuspensionSummary,
+} from "@covel/shared";
 import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
 import type { EventBus } from "@covel/events";
-import { errorBody } from "../../api-error.js";
+import { errorBody, listBody, okBody, parseJsonBody } from "../../api-error.js";
 import {
   checkSessionOwner,
   resolveSessionParam,
@@ -58,6 +63,7 @@ import {
   mergePluginUserSettings,
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
+import { buildResumeTurnExecutorDeps } from "./turn-execution-deps.js";
 
 type Env = {
   Variables: {
@@ -131,8 +137,9 @@ function validateAgainstJsonSchema(
 
 // ── Route ────────────────────────────────────────────────────────
 
-resumeRoutes.post("/:id/resume", async (c) => {
+resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   const sessionId = c.req.param("id");
+  const suspensionId = c.req.param("suspensionId");
   const store = c.get("store");
   const sessionLock = c.get("sessionLock");
   const decodedUserSettings = decodePluginUserSettingsHeader(
@@ -147,24 +154,13 @@ resumeRoutes.post("/:id/resume", async (c) => {
   // Opportunistic, time-gated, best-effort: never blocks the resume.
   void maybeSweepExpiredSuspensions(store);
   const pluginRegistry = c.get("pluginRegistry");
-  const llmAdapter = c.get("llmAdapter");
-  const pluginGateway = c.get("pluginGateway");
-  const pluginUtils = c.get("pluginUtils");
-  const loadRuntimeFn = c.get("loadRuntimeFn");
-  const toolExecutor = c.get("toolExecutor");
-  const resolveModel = c.get("resolveModel");
 
-  let body: { suspensionId?: unknown; data?: unknown };
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json(errorBody("Invalid JSON body"), 400);
-  }
-
-  const { suspensionId, data } = body;
-  if (!suspensionId || typeof suspensionId !== "string") {
-    return c.json(errorBody("suspensionId is required"), 400);
-  }
+  const parsedBody = await parseJsonBody(
+    c,
+    z.object({ data: z.unknown() }).strict(),
+  );
+  if (parsedBody instanceof Response) return parsedBody;
+  const { data } = parsedBody.body;
 
   // Verify session exists
   const guard = await resolveSessionParam(c);
@@ -372,18 +368,7 @@ resumeRoutes.post("/:id/resume", async (c) => {
             liveSuspension,
             data,
             effectiveManifest!,
-            {
-              loadRuntime: loadRuntimeFn,
-              llm: llmAdapter,
-              ...(pluginGateway ? { gateway: pluginGateway } : {}),
-              ...(pluginUtils ? { utils: pluginUtils } : {}),
-              store,
-              toolExecutor,
-              resolveModel,
-              ...(hookPipeline ? { hookPipeline } : {}),
-              ...(eventBus ? { eventBus } : {}),
-              emitter,
-            },
+            buildResumeTurnExecutorDeps(c, emitter),
             { userSettings },
           );
 
@@ -578,7 +563,7 @@ resumeRoutes.delete("/:id/suspensions/:suspensionId", async (c) => {
       }
 
       await store.deleteSuspension(suspensionId);
-      return c.json({ deleted: true, suspensionId });
+      return c.json(okBody({ suspensionId }));
     },
   });
 });
@@ -595,5 +580,21 @@ resumeRoutes.get("/:id/suspensions", async (c) => {
   if (!guard.ok) return guard.response;
 
   const suspensions = await store.listSuspensions(sessionId);
-  return c.json({ suspensions });
+  return c.json(
+    listBody(
+      suspensions.map(
+        (suspension) =>
+          ({
+            id: suspension.id,
+            sessionId: suspension.sessionId,
+            turnId: suspension.turnId,
+            runtimeId: suspension.runtimeId,
+            pluginId: suspension.pluginId,
+            reason: suspension.reason,
+            resumeSchema: suspension.resumeSchema,
+            createdAt: suspension.createdAt,
+          }) satisfies SuspensionSummary,
+      ),
+    ),
+  );
 });

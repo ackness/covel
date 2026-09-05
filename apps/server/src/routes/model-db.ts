@@ -16,6 +16,7 @@ import {
 import { rateLimiter, singleFlight } from "../middleware/rate-limit.js";
 import type { AiStack } from "../ai-setup.js";
 import { checkHostedOperator } from "./api/session/session-guard.js";
+import { errorBody, listBody, okBody } from "../api-error.js";
 
 const MAX_SEARCH_LIMIT = 200;
 
@@ -36,7 +37,7 @@ export function createModelDbRoutes(ai: AiStack): Hono {
   });
 
   app.get("/api/model-db/search", (c) => {
-    if (!ai.modelDb) return c.json({ results: [] });
+    if (!ai.modelDb) return c.json(listBody([]));
     const q = c.req.query("q") ?? "";
     const rawLimit = parseInt(c.req.query("limit") ?? "20", 10);
     const limit = Number.isNaN(rawLimit)
@@ -50,7 +51,7 @@ export function createModelDbRoutes(ai: AiStack): Hono {
       inputPerMToken: entry.inputPerMToken,
       outputPerMToken: entry.outputPerMToken,
     }));
-    return c.json({ results });
+    return c.json(listBody(results));
   });
 
   app.get("/api/model-db/lookup", (c) => {
@@ -123,11 +124,14 @@ export function createModelDbRoutes(ai: AiStack): Hono {
             console.warn("[model-db] persist failed:", err);
           }
         }
-        return c.json({ ok: true, count: ai.modelDb.count, persisted });
+        return c.json(okBody({ count: ai.modelDb.count, persisted }));
       } catch (err) {
         console.error("[model-db] refresh failed:", err);
         const message = err instanceof Error ? err.message : String(err);
-        return c.json({ ok: false, error: message });
+        return c.json(
+          errorBody(message, { code: "model_db_refresh_failed" }),
+          502,
+        );
       }
     },
   );

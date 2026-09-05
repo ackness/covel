@@ -18,6 +18,7 @@
  */
 
 import type { Proposal, RuntimeManifest, RuntimeResult } from "@covel/shared";
+import { storyOutputError } from "./story-output.js";
 import { withPendingProposals, type EmittedEvent } from "@covel/tools";
 import {
   findLastStructuredToolOutput,
@@ -68,6 +69,7 @@ export interface FinalizeAgentOutputParams {
 export type FinalizeAgentOutput =
   | { readonly kind: "ok"; readonly output: Record<string, unknown> }
   | { readonly kind: "tool-failed" }
+  | { readonly kind: "invalid-output"; readonly error: string }
   | { readonly kind: "short-circuit"; readonly result: RuntimeResult };
 
 export function finalizeAgentOutput(
@@ -156,6 +158,9 @@ export function finalizeAgentOutput(
     >;
   }
 
+  const storyError =
+    manifest.outputKind === "story" ? storyOutputError(output) : undefined;
+  if (storyError) return { kind: "invalid-output", error: storyError };
   return { kind: "ok", output };
 }
 

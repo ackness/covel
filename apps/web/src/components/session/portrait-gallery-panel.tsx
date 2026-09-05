@@ -62,6 +62,7 @@ export function PortraitGalleryPanel({ pluginId }: { pluginId: string }) {
         `plugin-rpc:${crypto.randomUUID()}`,
         () =>
           requestPluginRpc(sessionId, {
+            kind: "runtime",
             pluginId,
             runtimeId: pluginId,
             payload: {

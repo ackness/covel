@@ -156,4 +156,31 @@ describe("StageChoices", () => {
     ).toBe(true);
     expect(screen.getByText("叙事生成中…")).toBeDefined();
   });
+
+  it("keeps the recap collapsed while decisions and free input remain available", () => {
+    const onSendMessage = vi.fn();
+    render(
+      <StageChoices
+        {...baseProps}
+        promptsNamespace={{
+          recap: "A long recap. ".repeat(80),
+          prompt1Text: "Ask Rin",
+        }}
+        onSendMessage={onSendMessage}
+      />,
+    );
+    const summary = screen.getByText("当前信息");
+    const disclosure = summary.closest("details");
+    expect(disclosure?.open).toBe(false);
+    fireEvent.click(summary);
+    expect(disclosure?.open).toBe(true);
+    fireEvent.click(summary);
+    expect(disclosure?.open).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Ask Rin" }));
+    expect(onSendMessage).toHaveBeenCalledWith("Ask Rin");
+    expect(
+      (screen.getByTestId("stage-decision-input") as HTMLTextAreaElement)
+        .disabled,
+    ).toBe(false);
+  });
 });

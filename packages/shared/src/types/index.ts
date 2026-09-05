@@ -28,6 +28,7 @@ export type {
   LLMResponse,
   LLMToolDefinition,
   LLMResponseFormat,
+  LLMRequestDefaults,
   LLMStreamEvent,
   LLMTargetIdentity,
   LLMAdapter,
@@ -45,6 +46,40 @@ export type {
   WorldDataSourceSummary,
   WorldDataMetadataSummary,
 } from "./world-data.js";
+
+export type {
+  ApiErrorResponse,
+  ApiListResponse,
+  ApiOkResponse,
+  ActionRequest,
+  ActionRequestValidation,
+  ActionType,
+  ValidatedActionRequest,
+  SseEnvelope,
+  SuspensionSummary,
+  UntrustedActionRequest,
+  WorldCreateRequest,
+  WorldPatchRequest,
+} from "./api-contract.js";
+
+export type {
+  PluginDataSchemaContract,
+  PluginDetail,
+  PluginLoadError,
+  PluginPack,
+  PluginMutationResponse,
+  PluginRuntimeSummary,
+  PluginRuntimeTrigger,
+  PluginSource,
+  PluginStatus,
+  PluginSummary,
+  PluginToolSummary,
+  RuntimePluginContract,
+  ResolvedWorldPluginPolicy,
+  SessionPlugin,
+  SessionPluginsResponse,
+  WorldPluginPlan,
+} from "./plugin-api.js";
 
 export type {
   WorldIRJsonValue,
@@ -123,6 +158,7 @@ export type {
   ToolCallRecord,
   TokenUsage,
   RuntimeResult,
+  RuntimeRetryScope,
   DeferredRuntimeJob,
   DetachedStageInput,
   TurnInput,
@@ -230,10 +266,12 @@ export { PROPOSAL_TYPES } from "./proposal.js";
 export type {
   ProtocolEvent,
   SessionSnapshot,
+  SessionExecutionStatus,
   SnapshotMessage,
   SnapshotCharacter,
   SnapshotTraceEvent,
   SnapshotPluginStatus,
+  PageCursor,
   TimeCursor,
   CursorPage,
 } from "./protocol.js";
@@ -335,6 +373,7 @@ export type {
 export type {
   I18nText,
   World,
+  WorldWireRecord,
   WorldLandmark,
   WorldRegion,
   WorldGeography,

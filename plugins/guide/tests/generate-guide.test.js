@@ -55,8 +55,8 @@ describe("generate-guide tool", () => {
     expect(proposal.source).toEqual({ pluginId: "guide", runtimeId: "guide" });
 
     const items = proposal.payload.items;
-    // 2 header keys + 2 categories × (3 meta + 3 suggestion slots).
-    expect(items).toHaveLength(2 + 2 * 6);
+    // 2 header keys + 3 category slots × (3 meta + 3 suggestion slots).
+    expect(items).toHaveLength(2 + 3 * 6);
     for (const item of items) {
       expect(Object.keys(item).sort()).toEqual(["key", "namespace", "value"]);
       expect(item.namespace).toBe("message");
@@ -70,5 +70,10 @@ describe("generate-guide tool", () => {
     // Unused suggestion slots are written as empty strings, not omitted.
     expect(byKey.get("category1Suggestion3")).toBe("");
     expect(byKey.get("category2Suggestion1")).toBe("c");
+    // Clear a previous turn's third category when the new guide has only two.
+    expect(byKey.get("category3Label")).toBe("");
+    expect(byKey.get("category3Suggestion1")).toBe("");
+    expect(byKey.get("category3Suggestion2")).toBe("");
+    expect(byKey.get("category3Suggestion3")).toBe("");
   });
 });

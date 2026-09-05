@@ -20,6 +20,7 @@ import {
   steerActiveTurn,
 } from "./turn-control.js";
 import { checkSessionOwner } from "./session/session-guard.js";
+import { getSessionExecutionStatus } from "./actions/execution-recovery.js";
 
 type Env = {
   Variables: {
@@ -28,6 +29,18 @@ type Env = {
 };
 
 export const turnControlRoutes = new Hono<Env>();
+
+turnControlRoutes.get("/:id/execution", async (c) => {
+  const sessionId = c.req.param("id");
+  const store = c.get("store");
+  const session = await store.getSession(sessionId);
+  if (!session) return c.json(errorBody("Session not found"), 404);
+  const denied = checkSessionOwner(c, session);
+  if (denied) return denied;
+  return c.json(
+    await getSessionExecutionStatus(store, sessionId, c.get("sessionLock")),
+  );
+});
 
 turnControlRoutes.post("/:id/steer", rateLimiter({ max: 30 }), async (c) => {
   const sessionId = c.req.param("id");

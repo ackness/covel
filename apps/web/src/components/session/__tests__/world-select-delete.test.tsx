@@ -22,7 +22,7 @@ function renderScreen(onWorldDeleted = vi.fn()) {
   render(
     <WorldSelectScreen
       worlds={[BUILT_IN_WORLD, CUSTOM_WORLD]}
-      packages={[]}
+      plugins={[]}
       resolvedSlots={[]}
       settingsOpen={false}
       onSettingsOpenChange={() => {}}

@@ -18,13 +18,14 @@ import { useSessionRuntimeRefs } from "./session-store/runtime-refs.js";
 import { selectSessionId } from "./session-store/selectors.js";
 import { createSseEventHandler } from "./session-store/sse-handler.js";
 import { useSessionSubscription } from "./session-store/subscription.js";
+import { useExecutionRecovery } from "./session-store/execution-recovery.js";
 
 export type {
   AssetProgressEvent,
   ExecutionStep,
   PendingInteractionDraft,
   StreamMessage,
-  SuspensionRecord,
+  SuspensionSummary,
 } from "./session-store/types.js";
 export {
   mergeGameStateForReplacement,
@@ -64,6 +65,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   });
 
   useBootEffect(state, actions.boot);
+  useExecutionRecovery({
+    state,
+    stateRef: refs.stateRef,
+    sessionIdRef: refs.sessionIdRef,
+    dispatch,
+    workspace,
+  });
   usePersistExecutionStepsEffect(state, ds);
   useMessageUiSpecHydrationEffect(sessionId, dispatch);
   useSessionSubscription({
@@ -72,6 +80,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     workspace,
     sessionIdRef: refs.sessionIdRef,
     stateRef: refs.stateRef,
+    activeTurnIdRef: refs.lastBackfilledTurnIdRef,
   });
 
   // Two providers: the actions value is referentially stable across streaming

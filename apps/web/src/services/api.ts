@@ -1,11 +1,10 @@
 /**
  * API client for communicating with the Covel server.
  *
- * This file stays as the public compatibility entrypoint. Implementation is
- * split by endpoint family under ./api/.
+ * This facade exposes the web app's remote API and persisted client settings.
+ * Endpoint implementations are split by family under ./api/.
  */
 
-export { getDesktopRestToken } from "@/lib/desktop-bridge";
 export {
   clearOperatorToken,
   clearSessionToken,
@@ -18,7 +17,7 @@ export {
 export * from "./api/types.js";
 export * from "./api/worlds.js";
 export * from "./api/sessions.js";
-export * from "./api/packages.js";
+export * from "./api/plugins.js";
 export * from "./api/llm.js";
 export * from "./api/media.js";
 export * from "./api/actions.js";
@@ -65,3 +64,5 @@ export * from "./api/plugin-rpc.js";
 export * from "./api/approvals.js";
 export * from "./api/traces.js";
 export * from "./api/health.js";
+export * from "./api/install.js";
+export * from "./api/provider-keys.js";

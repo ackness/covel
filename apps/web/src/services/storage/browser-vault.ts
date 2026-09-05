@@ -101,8 +101,6 @@ const SECRET_KEY_NAMES = new Set([
   "password",
   "privateKey",
   "refreshToken",
-  "secret",
-  "secrets",
   "sessionToken",
 ]);
 

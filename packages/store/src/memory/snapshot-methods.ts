@@ -1,12 +1,18 @@
 import { applyCursorPage, sortByCursorAsc } from "../common/pagination.js";
 import type { SnapshotMetadata } from "../types.js";
 import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
+import { assertSessionRecordScope } from "./session-record-scope.js";
 
 export function createSuspensionMethods(
   state: MemoryState,
 ): MemoryStoreMethods {
   return {
     async saveSuspension(record) {
+      assertSessionRecordScope(
+        "suspension",
+        record,
+        state.suspensions.get(record.id)?.sessionId,
+      );
       state.suspensions.set(record.id, record);
     },
 
@@ -63,6 +69,11 @@ export function createSuspensionMethods(
 export function createSnapshotMethods(state: MemoryState): MemoryStoreMethods {
   return {
     async saveSnapshot(record) {
+      assertSessionRecordScope(
+        "snapshot",
+        record,
+        state.snapshots.get(record.id)?.sessionId,
+      );
       state.snapshots.set(record.id, structuredClone(record));
     },
 

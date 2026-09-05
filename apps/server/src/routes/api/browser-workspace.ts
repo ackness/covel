@@ -3,6 +3,7 @@ import { canonicalizeLocale } from "@covel/shared";
 import {
   BrowserSyncValidationError,
   RevisionConflictError,
+  SessionRecordScopeConflictError,
   exportSessionCheckpoint,
   replaceSessionFromCheckpoint,
   validateBrowserCheckpoint,
@@ -14,6 +15,10 @@ import { errorBody, readJsonBody } from "../../api-error.js";
 import {
   publicSessionMetadata,
   resolveSessionParam,
+  hasOperatorToken,
+  isSessionOwnerAuthEnforced,
+  sessionIncarnationIdentity,
+  withLockedSessionMutation,
 } from "./session/session-guard.js";
 
 type Env = {
@@ -23,6 +28,7 @@ type Env = {
 };
 
 interface WorkspaceHead {
+  readonly incarnation: string;
   revision: number;
   actionId: string;
   readonly commits: Map<string, SessionCommit>;
@@ -90,6 +96,15 @@ export function createBrowserWorkspaceRoutes(): Hono<Env> {
   const routes = new Hono<Env>();
   const heads = new Map<string, WorkspaceHead>();
 
+  function currentHead(sessionId: string, incarnation: string) {
+    const head = heads.get(sessionId);
+    if (head && head.incarnation !== incarnation) {
+      heads.delete(sessionId);
+      return undefined;
+    }
+    return head;
+  }
+
   routes.put("/:id/browser-checkpoint", async (c) => {
     const wrongProfile = browserPrivateOnly(c);
     if (wrongProfile) return wrongProfile;
@@ -125,58 +140,91 @@ export function createBrowserWorkspaceRoutes(): Hono<Env> {
       );
     }
 
-    return c.get("sessionLock").withLock(sessionId, async () => {
-      const head = heads.get(sessionId);
-      if (head && checkpoint.revision < head.revision) {
-        return c.json(
-          errorBody("Browser checkpoint revision is stale", {
-            code: "revision_conflict",
-            details: {
-              expectedRevision: head.revision,
-              actualRevision: checkpoint.revision,
-            },
-          }),
-          409,
-        );
-      }
-      if (head?.revision === checkpoint.revision) {
-        if (head.actionId !== checkpoint.actionId) {
+    return withLockedSessionMutation({
+      c,
+      store: c.get("store"),
+      sessionLock: c.get("sessionLock"),
+      sessionId,
+      expectedSession: guard.session,
+      allowedStatuses: "any",
+      mutate: async (live) => {
+        const incarnation = sessionIncarnationIdentity(live);
+        const head = currentHead(sessionId, incarnation);
+        if (head && checkpoint.revision < head.revision) {
           return c.json(
-            errorBody("Browser checkpoint revision already has another head", {
+            errorBody("Browser checkpoint revision is stale", {
               code: "revision_conflict",
               details: {
-                expectedActionId: head.actionId,
-                actualActionId: checkpoint.actionId,
+                expectedRevision: head.revision,
+                actualRevision: checkpoint.revision,
               },
             }),
             409,
           );
         }
-        return c.json({ ok: true, revision: head.revision, unchanged: true });
-      }
+        if (head?.revision === checkpoint.revision) {
+          if (head.actionId !== checkpoint.actionId) {
+            return c.json(
+              errorBody(
+                "Browser checkpoint revision already has another head",
+                {
+                  code: "revision_conflict",
+                  details: {
+                    expectedActionId: head.actionId,
+                    actualActionId: checkpoint.actionId,
+                  },
+                },
+              ),
+              409,
+            );
+          }
+          return c.json({ ok: true, revision: head.revision, unchanged: true });
+        }
 
-      const live = await c.get("store").getSession(sessionId);
-      if (!live) {
-        return c.json(errorBody(`Session not found: ${sessionId}`), 404);
-      }
-      await replaceSessionFromCheckpoint(c.get("store"), checkpoint, {
-        session: {
-          ...checkpoint.session,
-          phase: checkpoint.session.phase,
-          completedPlayerTurns: checkpoint.session.completedPlayerTurns,
-          setupRuntimes: checkpoint.session.setupRuntimes,
-          metadata: {
-            ...checkpoint.session.metadata,
-            ...live.metadata,
-          },
-        },
-      });
-      heads.set(sessionId, {
-        revision: checkpoint.revision,
-        actionId: checkpoint.actionId,
-        commits: new Map(),
-      });
-      return c.json({ ok: true, revision: checkpoint.revision });
+        const writeWorld =
+          !isSessionOwnerAuthEnforced(c) || hasOperatorToken(c);
+        if (checkpoint.world && !writeWorld) {
+          const world = await c.get("store").getWorld(checkpoint.world.id);
+          // Ordinary session sync uses the server's existing catalog record.
+          // Seed timestamps and derived metadata may change across restarts.
+          if (!world) {
+            return c.json(
+              errorBody("Operator token required to write a global world", {
+                code: "operator_token_required",
+              }),
+              401,
+            );
+          }
+        }
+        try {
+          await replaceSessionFromCheckpoint(c.get("store"), checkpoint, {
+            writeWorld,
+            session: {
+              ...checkpoint.session,
+              createdAt: live.createdAt,
+              phase: checkpoint.session.phase,
+              completedPlayerTurns: checkpoint.session.completedPlayerTurns,
+              setupRuntimes: checkpoint.session.setupRuntimes,
+              metadata: {
+                ...publicSessionMetadata(checkpoint.session.metadata),
+                ...live.metadata,
+              },
+            },
+          });
+        } catch (error) {
+          if (error instanceof SessionRecordScopeConflictError) {
+            return c.json(errorBody(error.message, { code: error.code }), 400);
+          }
+          throw error;
+        }
+        heads.set(sessionId, {
+          incarnation,
+          revision: checkpoint.revision,
+          actionId: checkpoint.actionId,
+          commits: new Map(),
+        });
+        return c.json({ ok: true, revision: checkpoint.revision });
+      },
     });
   });
 
@@ -204,66 +252,77 @@ export function createBrowserWorkspaceRoutes(): Hono<Env> {
     }
 
     const sessionId = c.req.param("id");
-    return c.get("sessionLock").withLock(sessionId, async () => {
-      const head = heads.get(sessionId);
-      if (!head) {
-        return c.json(
-          errorBody("Upload a browser checkpoint before requesting a commit", {
-            code: "browser_checkpoint_required",
-          }),
-          409,
-        );
-      }
-      const cached = head.commits.get(actionId);
-      if (cached) return c.json(cached);
-      if (head.revision !== baseRevision) {
-        const conflict = new RevisionConflictError(
-          sessionId,
-          head.revision,
-          baseRevision as number,
-        );
-        return c.json(
-          errorBody(conflict.message, {
-            code: conflict.code,
-            details: {
-              expectedRevision: conflict.expectedRevision,
-              actualRevision: conflict.actualRevision,
-            },
-          }),
-          409,
-        );
-      }
-
-      try {
-        const revision = head.revision + 1;
-        const rawCheckpoint = await exportSessionCheckpoint(
-          c.get("store"),
-          sessionId,
-          { revision, actionId },
-        );
-        const checkpoint = validateBrowserCheckpoint({
-          ...rawCheckpoint,
-          session: {
-            ...rawCheckpoint.session,
-            metadata: publicSessionMetadata(rawCheckpoint.session.metadata),
-          },
-        });
-        const commit: SessionCommit = {
-          baseRevision: head.revision,
-          revision,
-          actionId,
-          checkpoint,
-        };
-        head.revision = revision;
-        head.actionId = actionId;
-        cacheCommit(head, commit);
-        return c.json(commit);
-      } catch (error) {
-        if (error instanceof BrowserSyncValidationError) {
-          return c.json(errorBody(error.message, { code: error.code }), 500);
+    return withLockedSessionMutation({
+      c,
+      store: c.get("store"),
+      sessionLock: c.get("sessionLock"),
+      sessionId,
+      expectedSession: guard.session,
+      allowedStatuses: "any",
+      mutate: async (live) => {
+        const head = currentHead(sessionId, sessionIncarnationIdentity(live));
+        if (!head) {
+          return c.json(
+            errorBody(
+              "Upload a browser checkpoint before requesting a commit",
+              {
+                code: "browser_checkpoint_required",
+              },
+            ),
+            409,
+          );
         }
-        throw error;
-      }
+        const cached = head.commits.get(actionId);
+        if (cached) return c.json(cached);
+        if (head.revision !== baseRevision) {
+          const conflict = new RevisionConflictError(
+            sessionId,
+            head.revision,
+            baseRevision as number,
+          );
+          return c.json(
+            errorBody(conflict.message, {
+              code: conflict.code,
+              details: {
+                expectedRevision: conflict.expectedRevision,
+                actualRevision: conflict.actualRevision,
+              },
+            }),
+            409,
+          );
+        }
+
+        try {
+          const revision = head.revision + 1;
+          const rawCheckpoint = await exportSessionCheckpoint(
+            c.get("store"),
+            sessionId,
+            { revision, actionId },
+          );
+          const checkpoint = validateBrowserCheckpoint({
+            ...rawCheckpoint,
+            session: {
+              ...rawCheckpoint.session,
+              metadata: publicSessionMetadata(rawCheckpoint.session.metadata),
+            },
+          });
+          const commit: SessionCommit = {
+            baseRevision: head.revision,
+            revision,
+            actionId,
+            checkpoint,
+          };
+          head.revision = revision;
+          head.actionId = actionId;
+          cacheCommit(head, commit);
+          return c.json(commit);
+        } catch (error) {
+          if (error instanceof BrowserSyncValidationError) {
+            return c.json(errorBody(error.message, { code: error.code }), 500);
+          }
+          throw error;
+        }
+      },
     });
   });
 

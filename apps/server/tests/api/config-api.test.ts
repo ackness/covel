@@ -103,7 +103,7 @@ describe("config API env and file contracts", () => {
 
     const listRes = await app.request("/api/config/keys");
     expect(listRes.status).toBe(200);
-    await expect(listRes.json()).resolves.toEqual({ providers: [] });
+    await expect(listRes.json()).resolves.toEqual({ items: [] });
 
     const putRes = await app.request("/api/config/keys", {
       method: "PUT",
@@ -139,9 +139,9 @@ describe("config API env and file contracts", () => {
     expect(file).not.toContain("invalidEmpty");
 
     const listBody = (await (await app.request("/api/config/keys")).json()) as {
-      providers: string[];
+      items: string[];
     };
-    expect(listBody.providers.sort()).toEqual(["deepseek", "open-router"]);
+    expect(listBody.items.sort()).toEqual(["deepseek", "open-router"]);
     expect(JSON.stringify(listBody)).not.toContain("sk-");
   });
 
@@ -498,7 +498,7 @@ describe("config API env and file contracts", () => {
       const response = await app.request("/api/config/keys");
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual({
-        providers: ["deepseek"],
+        items: ["deepseek"],
       });
     });
 

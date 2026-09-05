@@ -6,7 +6,9 @@ import {
   seedAppSettings,
   selectWorldByText,
   sendPlayerMessage,
+  useServerWorlds,
   waitForTurnIdle,
+  waitForTurnStarted,
 } from "./helpers/player.js";
 
 const liveLlmEnabled = /^(1|true|yes|on)$/i.test(
@@ -33,7 +35,9 @@ test.describe("Game Session — 3 Round Flow", () => {
     "Set LIVE_LLM_ENABLED=1 to run provider-backed browser tests",
   );
   test.use({ viewport: { width: 1280, height: 720 } });
-  test.setTimeout(600_000); // 10 min for 3 rounds of LLM calls
+  // Even with unrelated optional plugins disabled below, start-up and three
+  // provider-backed rounds can exceed ten minutes on queued external models.
+  test.setTimeout(1_200_000);
   let hasProviderKeys = false;
 
   test.beforeAll(async ({ request }) => {
@@ -58,6 +62,10 @@ test.describe("Game Session — 3 Round Flow", () => {
   }) => {
     test.skip(!hasProviderKeys, "No provider keys configured for live LLM e2e");
 
+    // This flow asserts Mistport's authored plugin package. The default memory
+    // deployment is browser-private and exposes same-named minimal starter
+    // worlds, so opt into the server-backed catalog explicitly.
+    await useServerWorlds(page);
     await seedAppSettings(page);
 
     // ── Start Game ───────────────────────────────────────────
@@ -68,6 +76,9 @@ test.describe("Game Session — 3 Round Flow", () => {
       .getByRole("button", { name: /^(start game|开始游戏)$/i })
       .first();
     await expect(startButton).toBeVisible({ timeout: 10_000 });
+    await expect(startButton).toBeEnabled({ timeout: 30_000 });
+    await keepFocusedGuidePluginSet(page);
+    await expect(startButton).toBeEnabled({ timeout: 30_000 });
     await startButton.click();
 
     // Wait for game view
@@ -83,6 +94,7 @@ test.describe("Game Session — 3 Round Flow", () => {
     await beginButton.click();
 
     // Wait for start_session to complete (narrator + init plugins)
+    await waitForTurnStarted(page);
     await waitForTurnIdle(page);
     await page.screenshot({
       path: "tests/e2e/artifacts/game-r0-session-start.png",
@@ -92,6 +104,7 @@ test.describe("Game Session — 3 Round Flow", () => {
     // Round 1: Character creation — enter name and submit
     // ══════════════════════════════════════════════════════════
     await handleCharacterCreation(page);
+    await waitForTurnStarted(page);
     await waitForTurnIdle(page);
     await page.screenshot({
       path: "tests/e2e/artifacts/game-r1-char-created.png",
@@ -177,14 +190,41 @@ async function handleCharacterCreation(page: Page) {
 
   // Submit — target the stable data-testid, not the LLM-generated label.
   const submitBtn = actionableInteractionSubmits(page);
-  if (
-    await submitBtn
-      .first()
-      .isVisible()
-      .catch(() => false)
-  ) {
-    // The transcript is chronological; the last visible live block is current.
-    await submitBtn.last().click();
+  await expect(submitBtn.last()).toBeVisible({ timeout: 180_000 });
+  // The transcript is chronological; the last visible live block is current.
+  await submitBtn.last().click();
+}
+
+/**
+ * Keep this live spec focused on the contract it asserts. Mistport's default
+ * pack deliberately enables expensive retrieval, codex, memory, and character
+ * tracking runtimes; those have their own coverage and can push three external
+ * model rounds beyond the browser-test budget.
+ */
+async function keepFocusedGuidePluginSet(page: Page) {
+  await page
+    .locator('button[aria-controls="plugin-selection-card-content"]')
+    .click();
+  const unrelatedOptionalPlugins = [
+    "codex",
+    "npc-graph",
+    "memory",
+    "living-world-rules",
+    "character-blueprint",
+    "character-presence",
+    "cost-gate",
+  ];
+  for (const pluginId of unrelatedOptionalPlugins) {
+    const toggle = page
+      .locator(`[data-plugin-id="${pluginId}"]`)
+      .getByRole("switch");
+    if (
+      (await toggle.isEnabled()) &&
+      (await toggle.getAttribute("aria-checked")) === "true"
+    ) {
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+    }
   }
 }
 

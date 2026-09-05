@@ -3,7 +3,7 @@ import type * as api from "@/services/api.js";
 
 export interface SessionPrepScreenProps {
   world: api.WorldRecord;
-  packages: api.PackageSummary[];
+  plugins: api.PluginSummary[];
   presets: api.PresetSummary[];
   llmConfig?: api.LlmConfigResponse | null;
   /** Last session-creation error, surfaced while the prep screen stays mounted. */

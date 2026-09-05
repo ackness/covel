@@ -1,24 +1,16 @@
 import { parseJsonSseData, readSseStream } from "../sse.js";
-import { sessionAuthHeaders } from "../session-credentials.js";
-import { buildAiHeaders } from "./model-settings.js";
-import type { SseEnvelope } from "./types.js";
+import {
+  actionRequestSchema,
+  sseEnvelopeSchema,
+  type ActionRequest,
+  type ActionType,
+  type SseEnvelope,
+} from "@covel/shared";
+import { ApiError, request, requestResponse } from "./request.js";
 
 // -- Actions (SSE) -------------------------------------------------
 
-export type ActionType =
-  | "send_message"
-  | "execute_command"
-  | "start_session"
-  | "retry_runtime"
-  | "retry_turn";
-
-export interface ActionRequest {
-  requestId: string;
-  type: ActionType;
-  sessionId: string;
-  locale?: string;
-  payload: Record<string, unknown>;
-}
+export type { ActionRequest, ActionType } from "@covel/shared";
 
 /**
  * Send an action and receive SSE events via callback.
@@ -34,26 +26,23 @@ export function sendAction(
 
   (async () => {
     try {
-      const res = await fetch("/api/actions", {
+      const body = actionRequestSchema.parse(req);
+      const res = await requestResponse("/api/actions", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...buildAiHeaders(),
-          ...sessionAuthHeaders(req.sessionId),
-        },
-        body: JSON.stringify(req),
+        body: JSON.stringify(body),
         signal: controller.signal,
+        sessionId: req.sessionId,
       });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(`Action failed ${res.status}: ${text}`);
-      }
 
       await readSseStream({
         response: res,
         signal: controller.signal,
-        parse: parseJsonSseData<SseEnvelope>,
+        parse: (data) => {
+          const decoded = parseJsonSseData<unknown>(data);
+          return decoded === undefined
+            ? undefined
+            : sseEnvelopeSchema.parse(decoded);
+        },
         onMessage: onEvent,
       });
 
@@ -80,18 +69,20 @@ export async function steerTurn(
   sessionId: string,
   message: string,
 ): Promise<boolean> {
-  const res = await fetch(
-    `/api/sessions/${encodeURIComponent(sessionId)}/steer`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...sessionAuthHeaders(sessionId),
+  try {
+    await request<{ ok: true; turnId: string }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/steer`,
+      {
+        method: "POST",
+        body: JSON.stringify({ message }),
+        silentStatuses: [409],
       },
-      body: JSON.stringify({ message }),
-    },
-  );
-  return res.ok;
+    );
+    return true;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) return false;
+    throw error;
+  }
 }
 
 /**
@@ -99,9 +90,14 @@ export async function steerTurn(
  * discards uncommitted proposals. Resolves false when no turn is active.
  */
 export async function abortTurn(sessionId: string): Promise<boolean> {
-  const res = await fetch(
-    `/api/sessions/${encodeURIComponent(sessionId)}/abort`,
-    { method: "POST", headers: sessionAuthHeaders(sessionId) },
-  );
-  return res.ok;
+  try {
+    await request<{ ok: true; turnId: string }>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/abort`,
+      { method: "POST", silentStatuses: [409] },
+    );
+    return true;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409) return false;
+    throw error;
+  }
 }

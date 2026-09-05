@@ -1,7 +1,7 @@
 /**
  * Tests for the suspend/resume API routes.
  *
- * POST   /api/sessions/:id/resume
+ * POST   /api/sessions/:id/suspensions/:suspensionId/resume
  * DELETE /api/sessions/:id/suspensions/:suspensionId
  * GET    /api/sessions/:id/suspensions
  */
@@ -248,19 +248,21 @@ describe("Resume Routes", () => {
     await createSession(store);
   });
 
-  describe("POST /api/sessions/:id/resume", () => {
+  describe("POST /api/sessions/:id/suspensions/:suspensionId/resume", () => {
     it("uses the server-configured adapter when X-Provider-Keys is missing", async () => {
       const app = createTestApp(makeDefaultDeps(store));
       await createSuspension(store);
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          suspensionId: "susp-1",
-          data: { name: "Alice" },
-        }),
-      });
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
+        },
+      );
 
       expect(res.status).toBe(200);
     });
@@ -297,17 +299,19 @@ describe("Resume Routes", () => {
         "utf8",
       ).toString("base64");
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Plugin-User-Settings": playerSettings,
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Plugin-User-Settings": playerSettings,
+          },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "susp-1",
-          data: { name: "Alice" },
-        }),
-      });
+      );
 
       expect(res.status).toBe(200);
       expect(runtimeInputSettings).toEqual({
@@ -361,17 +365,19 @@ describe("Resume Routes", () => {
         makeDefaultDeps(store, { llmAdapter, hookPipeline }),
       );
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "susp-1",
-          data: { name: "Alice" },
-        }),
-      });
+      );
 
       expect(res.status).toBe(200);
       // The resumed plugin's own PreToolUse hook fired — it was in hook scope.
@@ -385,17 +391,19 @@ describe("Resume Routes", () => {
       deps.pluginRegistry.activate("test-plugin", "sess-1");
       const app = createTestApp(deps);
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "susp-1",
-          data: { name: "Alice" },
-        }),
-      });
+      );
 
       expect(res.status).toBe(404);
       expect(deps.pluginRegistry.getActiveRuntimes("sess-1")).toEqual([]);
@@ -404,52 +412,60 @@ describe("Resume Routes", () => {
     it("returns 400 when body is not valid JSON", async () => {
       const app = createTestApp(makeDefaultDeps(store));
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: "not-json",
         },
-        body: "not-json",
-      });
+      );
 
       expect(res.status).toBe(400);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/JSON/i);
     });
 
-    it("returns 400 when suspensionId is missing", async () => {
+    it("returns 400 when the body shape is invalid", async () => {
       const app = createTestApp(makeDefaultDeps(store));
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({ data: { name: "Alice" }, extra: true }),
         },
-        body: JSON.stringify({ data: { name: "Alice" } }),
-      });
+      );
 
       expect(res.status).toBe(400);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body.error).toMatch(/suspensionId/);
+      expect(body.code).toBe("invalid_request_body");
     });
 
     it("returns 404 when session does not exist", async () => {
       const app = createTestApp(makeDefaultDeps(store));
       await createSuspension(store, { sessionId: "sess-1" });
 
-      const res = await app.request("/api/sessions/sess-nonexistent/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-nonexistent/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "susp-1",
-          data: { name: "Alice" },
-        }),
-      });
+      );
 
       expect(res.status).toBe(404);
     });
@@ -457,17 +473,19 @@ describe("Resume Routes", () => {
     it("returns 404 when suspension does not exist", async () => {
       const app = createTestApp(makeDefaultDeps(store));
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/nonexistent-susp/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "nonexistent-susp",
-          data: { name: "Alice" },
-        }),
-      });
+      );
 
       expect(res.status).toBe(404);
       const body = (await res.json()) as Record<string, unknown>;
@@ -483,17 +501,19 @@ describe("Resume Routes", () => {
       });
       const app = createTestApp(makeDefaultDeps(store));
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-other/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "susp-other",
-          data: { name: "Alice" },
-        }),
-      });
+      );
 
       expect(res.status).toBe(404);
     });
@@ -502,17 +522,19 @@ describe("Resume Routes", () => {
       await createSuspension(store, { resolvedAt: new Date().toISOString() });
       const app = createTestApp(makeDefaultDeps(store));
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "susp-1",
-          data: { name: "Alice" },
-        }),
-      });
+      );
 
       // 409 Conflict: the resolved-already check and the atomic claim both
       // reject with "already resolved" — 409 distinguishes this from the
@@ -527,14 +549,17 @@ describe("Resume Routes", () => {
       const app = createTestApp(makeDefaultDeps(store));
 
       // Schema requires { name: string } but we pass { count: 42 }
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({ data: { count: 42 } }),
         },
-        body: JSON.stringify({ suspensionId: "susp-1", data: { count: 42 } }),
-      });
+      );
 
       expect(res.status).toBe(400);
       const body = (await res.json()) as Record<string, unknown>;
@@ -550,17 +575,19 @@ describe("Resume Routes", () => {
       });
       const app = createTestApp(makeDefaultDeps(store));
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            data: { age: "not-a-number" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "susp-1",
-          data: { age: "not-a-number" },
-        }),
-      });
+      );
 
       expect(res.status).toBe(400);
       const body = (await res.json()) as Record<string, unknown>;
@@ -571,17 +598,19 @@ describe("Resume Routes", () => {
       await createSuspension(store);
       const app = createTestApp(makeDefaultDeps(store));
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "susp-1",
-          data: { name: "Alice" },
-        }),
-      });
+      );
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
@@ -611,14 +640,13 @@ describe("Resume Routes", () => {
       const app = createTestApp(makeDefaultDeps(store));
 
       const resume = () =>
-        app.request("/api/sessions/sess-1/resume", {
+        app.request("/api/sessions/sess-1/suspensions/susp-1/resume", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "X-Provider-Keys": "dGVzdA==",
           },
           body: JSON.stringify({
-            suspensionId: "susp-1",
             data: { name: "Alice" },
           }),
         });
@@ -650,13 +678,13 @@ describe("Resume Routes", () => {
       });
       const app = createTestApp(makeDefaultDeps(store));
       const resume = (suspensionId: string) =>
-        app.request("/api/sessions/sess-1/resume", {
+        app.request(`/api/sessions/sess-1/suspensions/${suspensionId}/resume`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "X-Provider-Keys": "dGVzdA==",
           },
-          body: JSON.stringify({ suspensionId, data: { name: "Alice" } }),
+          body: JSON.stringify({ data: { name: "Alice" } }),
         });
 
       expect((await resume("susp-a")).status).toBe(200);
@@ -703,17 +731,19 @@ describe("Resume Routes", () => {
         makeDefaultDeps(failingStore, { hookPipeline }),
       );
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "susp-1",
-          data: { name: "Alice" },
-        }),
-      });
+      );
 
       expect(res.status).toBe(500);
       const body = (await res.json()) as Record<string, unknown>;
@@ -754,17 +784,19 @@ describe("Resume Routes", () => {
         sessionLock,
       );
 
-      const request = app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const request = app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "susp-1",
-          data: { name: "Alice" },
-        }),
-      });
+      );
       await prepareStarted;
 
       // Queue delete/recreate behind the in-flight resume. Its slot is ahead
@@ -805,17 +837,19 @@ describe("Resume Routes", () => {
       await createSuspension(store);
       const app = createTestApp(makeDefaultDeps(store));
 
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Provider-Keys": "dGVzdA==",
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Provider-Keys": "dGVzdA==",
+          },
+          body: JSON.stringify({
+            data: { name: "Alice" },
+          }),
         },
-        body: JSON.stringify({
-          suspensionId: "susp-1",
-          data: { name: "Alice" },
-        }),
-      });
+      );
 
       expect(res.status).toBe(200);
 
@@ -845,7 +879,7 @@ describe("Resume Routes", () => {
       expect(res.status).toBe(404);
     });
 
-    it("returns 200 with deleted: true when suspension is removed", async () => {
+    it("returns 200 with ok: true when suspension is removed", async () => {
       await createSuspension(store);
       const app = createTestApp(makeDefaultDeps(store));
 
@@ -855,7 +889,7 @@ describe("Resume Routes", () => {
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body.deleted).toBe(true);
+      expect(body.ok).toBe(true);
       expect(body.suspensionId).toBe("susp-1");
     });
 
@@ -936,7 +970,7 @@ describe("Resume Routes", () => {
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body.suspensions).toEqual([]);
+      expect(body.items).toEqual([]);
     });
 
     it("returns 404 when session does not exist", async () => {
@@ -956,8 +990,39 @@ describe("Resume Routes", () => {
 
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
-      const suspensions = body.suspensions as unknown[];
+      const suspensions = body.items as unknown[];
       expect(suspensions).toHaveLength(2);
+    });
+
+    it("returns only the public suspension summary", async () => {
+      const createdAt = "2026-09-04T01:02:03.000Z";
+      await createSuspension(store, { createdAt });
+      const app = createTestApp(makeDefaultDeps(store));
+
+      const res = await app.request("/api/sessions/sess-1/suspensions");
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        items: Array<Record<string, unknown>>;
+      };
+      expect(body.items).toEqual([
+        {
+          id: "susp-1",
+          sessionId: "sess-1",
+          turnId: "turn-1",
+          runtimeId: "test-plugin",
+          pluginId: "test-plugin",
+          reason: "Need player input",
+          resumeSchema: {
+            type: "object",
+            properties: { name: { type: "string" } },
+            required: ["name"],
+          },
+          createdAt,
+        },
+      ]);
+      expect(body.items[0]).not.toHaveProperty("pendingContinuation");
+      expect(body.items[0]).not.toHaveProperty("resolvedAt");
     });
 
     it("does not include suspensions from other sessions", async () => {
@@ -972,7 +1037,7 @@ describe("Resume Routes", () => {
       const res = await app.request("/api/sessions/sess-1/suspensions");
 
       const body = (await res.json()) as Record<string, unknown>;
-      const suspensions = body.suspensions as Array<Record<string, unknown>>;
+      const suspensions = body.items as Array<Record<string, unknown>>;
       expect(suspensions).toHaveLength(1);
       expect(suspensions[0]!.id).toBe("susp-mine");
     });
@@ -1016,18 +1081,21 @@ describe("Resume Routes", () => {
       expect(await store.getSuspension("susp-claimed")).not.toBeNull();
     });
 
-    it("POST /:id/resume opportunistically sweeps an expired unresolved suspension", async () => {
+    it("POST resume opportunistically sweeps an expired unresolved suspension", async () => {
       await createSuspension(store, { id: "susp-old-post", createdAt: OLD });
       await createSuspension(store, { id: "susp-fresh-post" });
       const app = createTestApp(makeDefaultDeps(store));
 
       // The sweep fires at the very top of the POST handler. The requested
       // suspension does not exist, but the opportunistic sweep still runs.
-      const res = await app.request("/api/sessions/sess-1/resume", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ suspensionId: "irrelevant" }),
-      });
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/irrelevant/resume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: null }),
+        },
+      );
       expect(res.status).toBe(404);
       await flush();
 

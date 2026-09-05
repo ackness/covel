@@ -3,8 +3,6 @@ import {
   PROPOSAL_TYPES,
   WORLD_IR_V1_JSON_SCHEMA,
   WORLD_IR_V1_SCHEMA_URI,
-  effectiveTurnCompletion,
-  getRuntimeSpec,
   inputInjectDeclSchema,
   outputKindSchema,
   triggerTypeSchema,
@@ -12,122 +10,13 @@ import {
   worldDataMergeModeSchema,
   worldDataSourceKindSchema,
 } from "@covel/shared";
-import type {
-  DependencyRef,
-  EffectResource,
-  EffectiveTurnCompletion,
-  RuntimeManifest,
-  Stage,
-} from "@covel/shared";
-import { deriveEffects, resolveEffectsPolicy } from "@covel/runtime";
-import type {
-  ParsedPluginMd,
-  PluginRegistry,
-  PluginRegistryEntry,
-} from "@covel/plugin-loader";
+import type { PluginDetail } from "@covel/shared";
+import { resolveEffectsPolicy } from "@covel/runtime";
+import type { PluginRegistry, PluginRegistryEntry } from "@covel/plugin-loader";
 import type { DataStore, PluginDataRecord } from "@covel/store";
+import { buildPluginDetail } from "../../lib/plugin-descriptor.js";
 
 type JsonRecord = Record<string, unknown>;
-
-export interface PluginManifestSummary {
-  capabilities: string[];
-  tags: string[];
-  relations?: unknown;
-  outputKind?: string;
-}
-
-export interface RuntimePluginContract {
-  id: string;
-  name: string;
-  description?: unknown;
-  runtimeType: string;
-  outputKind: string;
-  capabilities: string[];
-  tags: string[];
-  relations?: unknown;
-  /** Named stage; absent for event/manual/UI-only runtimes. */
-  stage?: Stage;
-  /** Weak ordering dependencies in the normalized runtime DAG. */
-  after: readonly DependencyRef[];
-  /** Success-gated dependencies in the normalized runtime DAG. */
-  needs: readonly DependencyRef[];
-  trigger?: unknown;
-  execution?: unknown;
-  /** Effective foreground-turn completion policy (always present). */
-  turnCompletion: EffectiveTurnCompletion;
-  model?: unknown;
-  tools: {
-    builtin: string[];
-    /** Entry-registered plugin tools, by name. */
-    local: Array<{ name: string }>;
-  };
-  input: {
-    inject: unknown[];
-    tools: unknown[];
-  };
-  /** Same-turn typed data bindings used to derive DAG edges and gates. */
-  inputs: Readonly<Record<string, unknown>>;
-  /** Normalized read/write sets used by the scheduler's hazard policy. */
-  effects: {
-    reads: readonly EffectResource[];
-    writes: readonly EffectResource[];
-    parallelSafe: boolean;
-  };
-  output: JsonRecord;
-  dataSchemas: string[];
-  writablePluginDataNamespaces: string[];
-  readablePluginDataNamespaces: string[];
-  ui: {
-    right: string[];
-    message: string[];
-    left: string[];
-  };
-  userSettings: unknown[];
-}
-
-export interface PluginDataSchemaContract {
-  namespace: string;
-  schemaVersion?: number;
-  acceptsWorldData?: boolean;
-  schema: unknown;
-  description?: unknown;
-}
-
-export interface PluginContract {
-  id: string;
-  name: unknown;
-  description?: unknown;
-  pluginType?: string;
-  runtimeCount: number;
-  status: string;
-  source?: string;
-  capabilities: string[];
-  tags: string[];
-  relations?: unknown;
-  dataSchemas: Record<string, PluginDataSchemaContract>;
-  worldProjections: Readonly<
-    Record<
-      string,
-      {
-        readonly from: string;
-        readonly outputs: Readonly<
-          Record<string, { readonly namespace: string; readonly key: string }>
-        >;
-      }
-    >
-  >;
-  declaredPluginDataNamespaces: string[];
-  tools: {
-    builtin: string[];
-    local: Array<{ runtimeId: string; path?: string; name: string }>;
-  };
-  ui: {
-    right: Array<{ runtimeId: string; path: string }>;
-    message: Array<{ runtimeId: string; path: string }>;
-    left: Array<{ runtimeId: string; path: string }>;
-  };
-  runtimes: RuntimePluginContract[];
-}
 
 export interface FrameworkCapabilities {
   schemaVersion: 1;
@@ -150,7 +39,7 @@ export interface PluginDataNamespaceIndex {
 
 export interface SessionDiscoverySnapshot {
   framework: JsonRecord;
-  plugins: PluginContract[];
+  plugins: PluginDetail[];
   pluginData: Array<{
     pluginId: string;
     namespaces: PluginDataNamespaceIndex[];
@@ -210,168 +99,6 @@ function enumValues<T extends string>(schema: { options: readonly T[] }): T[] {
   return [...schema.options];
 }
 
-function getManifestRecords(
-  entry: PluginRegistryEntry,
-): readonly ParsedPluginMd[] {
-  return entry.manifests ?? (entry.manifest ? [entry.manifest] : []);
-}
-
-export function summarizePluginManifests(
-  entry: PluginRegistryEntry,
-): PluginManifestSummary {
-  const manifests = getManifestRecords(entry);
-  const capabilities = Array.from(
-    new Set(manifests.flatMap((m) => m.manifest.capabilities ?? [])),
-  );
-  const tags = uniqueSorted([
-    ...(entry.summary.tags ?? []),
-    ...manifests.flatMap((m) => m.manifest.tags ?? []),
-  ]);
-  const outputKind = entry.manifest?.manifest.outputKind;
-  return {
-    capabilities,
-    tags,
-    ...(entry.summary.relations ? { relations: entry.summary.relations } : {}),
-    outputKind,
-  };
-}
-
-function runtimeIdFromName(pluginId: string, runtimeName: string): string {
-  return runtimeName === pluginId && !runtimeName.includes("/")
-    ? pluginId
-    : runtimeName;
-}
-
-function buildRuntimeContract(
-  pluginId: string,
-  manifest: RuntimeManifest,
-): RuntimePluginContract {
-  const runtimeSpec = getRuntimeSpec(manifest);
-  const effects = deriveEffects(manifest);
-  const dataSchemaNamespaces = Object.keys(manifest.dataSchemas ?? {});
-  const pluginDataInjectNamespaces =
-    manifest.input?.inject
-      ?.filter((inject) => inject.kind === "plugin-data")
-      .map((inject) => inject.namespace) ?? [];
-  const ui = {
-    right: [...(manifest.ui?.right ?? [])],
-    message: [...(manifest.ui?.message ?? [])],
-    left: [...(manifest.ui?.left ?? [])],
-  };
-
-  return {
-    id: runtimeIdFromName(pluginId, manifest.name),
-    name: manifest.name,
-    description: manifest.description,
-    runtimeType: manifest.runtimeType ?? "agent",
-    outputKind: manifest.outputKind ?? "plugin",
-    capabilities: [...(manifest.capabilities ?? [])],
-    tags: [...(manifest.tags ?? [])],
-    ...(manifest.relations ? { relations: manifest.relations } : {}),
-    ...(runtimeSpec.stage !== undefined ? { stage: runtimeSpec.stage } : {}),
-    after: [...runtimeSpec.deps.after],
-    needs: [...runtimeSpec.deps.needs],
-    ...(manifest.trigger ? { trigger: manifest.trigger } : {}),
-    ...(manifest.execution ? { execution: manifest.execution } : {}),
-    turnCompletion: effectiveTurnCompletion(manifest),
-    ...(manifest.model ? { model: manifest.model } : {}),
-    tools: {
-      builtin: [...(manifest.tools?.builtin ?? [])],
-      local: (manifest.tools?.plugin ?? []).map((name) => ({ name })),
-    },
-    input: {
-      inject: [...(manifest.input?.inject ?? [])],
-      tools: [...(manifest.input?.tools ?? [])],
-    },
-    inputs: { ...manifest.inputs },
-    effects: {
-      reads: [...effects.reads].sort(),
-      writes: [...effects.writes].sort(),
-      parallelSafe: effects.parallelSafe,
-    },
-    output: (manifest.output ?? {}) as JsonRecord,
-    dataSchemas: dataSchemaNamespaces,
-    writablePluginDataNamespaces: uniqueSorted([
-      ...dataSchemaNamespaces,
-      ...pluginDataInjectNamespaces,
-    ]),
-    readablePluginDataNamespaces: uniqueSorted(pluginDataInjectNamespaces),
-    ui,
-    userSettings: [...(manifest.userSettings ?? [])],
-  };
-}
-
-export function buildPluginContract(
-  entry: PluginRegistryEntry,
-): PluginContract {
-  const runtimes = getManifestRecords(entry).map((parsed) =>
-    buildRuntimeContract(entry.id, parsed.manifest),
-  );
-  const dataSchemas = Object.fromEntries(
-    Object.entries(entry.dataSchemas ?? {}).map(([namespace, decl]) => [
-      namespace,
-      {
-        namespace,
-        schemaVersion: decl.schemaVersion,
-        acceptsWorldData: decl.acceptsWorldData,
-        schema: decl.schema,
-        ...(decl.description ? { description: decl.description } : {}),
-      },
-    ]),
-  );
-
-  return {
-    id: entry.id,
-    name: entry.summary.name,
-    description: entry.summary.description,
-    pluginType: entry.summary.pluginType,
-    runtimeCount: entry.summary.runtimeCount,
-    status: entry.status,
-    source: entry.source,
-    capabilities: uniqueSorted(
-      runtimes.flatMap((runtime) => runtime.capabilities),
-    ),
-    tags: uniqueSorted([
-      ...(entry.summary.tags ?? []),
-      ...runtimes.flatMap((runtime) => runtime.tags),
-    ]),
-    ...(entry.summary.relations ? { relations: entry.summary.relations } : {}),
-    dataSchemas,
-    worldProjections: Object.fromEntries(
-      Object.entries(entry.worldProjections ?? {}).map(
-        ([projectionId, projection]) => [
-          projectionId,
-          { from: projection.from, outputs: projection.outputs },
-        ],
-      ),
-    ),
-    declaredPluginDataNamespaces: uniqueSorted([
-      ...Object.keys(dataSchemas),
-      ...runtimes.flatMap((runtime) => runtime.writablePluginDataNamespaces),
-    ]),
-    tools: {
-      builtin: uniqueSorted(
-        runtimes.flatMap((runtime) => runtime.tools.builtin),
-      ),
-      local: runtimes.flatMap((runtime) =>
-        runtime.tools.local.map((tool) => ({ runtimeId: runtime.id, ...tool })),
-      ),
-    },
-    ui: {
-      right: runtimes.flatMap((runtime) =>
-        runtime.ui.right.map((path) => ({ runtimeId: runtime.id, path })),
-      ),
-      message: runtimes.flatMap((runtime) =>
-        runtime.ui.message.map((path) => ({ runtimeId: runtime.id, path })),
-      ),
-      left: runtimes.flatMap((runtime) =>
-        runtime.ui.left.map((path) => ({ runtimeId: runtime.id, path })),
-      ),
-    },
-    runtimes,
-  };
-}
-
 export function buildFrameworkCapabilities(
   builtinToolNames?: readonly string[],
 ): FrameworkCapabilities {
@@ -396,13 +123,7 @@ export function buildFrameworkCapabilities(
       },
       pluginData: {
         scope: "(sessionId, pluginId, namespace, key)",
-        reservedNamespaces: [
-          "_jobs",
-          "_runtime_jobs",
-          "_logs",
-          "__ui_right__",
-          "__ui_message__",
-        ],
+        reservedNamespaces: ["_jobs", "_runtime_jobs", "_logs"],
         writePaths: [
           "builtin-tool:plugin-data-set",
           "builtin-tool:plugin-data-set-batch",
@@ -513,7 +234,7 @@ export async function buildSessionDiscoverySnapshot(options: {
 
   return {
     framework: buildFrameworkCapabilities(options.builtinToolNames).framework,
-    plugins: pluginEntries.map(buildPluginContract),
+    plugins: pluginEntries.map(buildPluginDetail),
     pluginData: await Promise.all(
       activePluginIds.map(async (pluginId) => ({
         pluginId,

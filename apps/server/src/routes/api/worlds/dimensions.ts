@@ -11,7 +11,7 @@ import { validateDimensions } from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
 import { errorBody, readJsonBody } from "../../../api-error.js";
 import { type WorldEnv } from "./shared.js";
-import { checkHostedOperator } from "../session/session-guard.js";
+import { checkWorldWriteAccess } from "./world-write-guard.js";
 
 export const worldDimensionRoutes = new Hono<WorldEnv>();
 
@@ -49,7 +49,7 @@ worldDimensionRoutes.get("/:id/dimensions/export", async (c) => {
 
 // POST /worlds/:id/dimensions/import — import dimensions from JSON body
 worldDimensionRoutes.post("/:id/dimensions/import", async (c) => {
-  const denied = checkHostedOperator(c);
+  const denied = checkWorldWriteAccess(c);
   if (denied) return denied;
   const store = c.get("store");
   const eventBus = c.get("eventBus");

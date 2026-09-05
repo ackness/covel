@@ -20,6 +20,7 @@ type ParsedCreateSessionBody =
       ok: true;
       worldId: string | undefined;
       id: string | undefined;
+      presetId: string | undefined;
       requestedPlugins: string[];
     }
   | { ok: false; error: string };
@@ -51,7 +52,21 @@ export function parseCreateSessionBody(
       )
     : [];
 
-  return { ok: true, worldId: rawWorldId, id: rawId, requestedPlugins };
+  const presetId =
+    typeof body.presetId === "string" && body.presetId.length > 0
+      ? body.presetId
+      : undefined;
+  if (body.presetId !== undefined && presetId === undefined) {
+    return { ok: false, error: "presetId must be a non-empty string" };
+  }
+
+  return {
+    ok: true,
+    worldId: rawWorldId,
+    id: rawId,
+    presetId,
+    requestedPlugins,
+  };
 }
 
 type Writable<T> = { -readonly [K in keyof T]: T[K] };
@@ -60,7 +75,11 @@ export type SessionPatchUpdates = Partial<
   Writable<
     Pick<
       SessionRecord,
-      "status" | "activePlugins" | "updatedAt" | "runtimeModelOverrides"
+      | "status"
+      | "activePlugins"
+      | "presetId"
+      | "updatedAt"
+      | "runtimeModelOverrides"
     >
   >
 >;
@@ -85,6 +104,13 @@ export function buildSessionPatchUpdates(
       };
     }
     updates.status = body.status;
+  }
+
+  if (body.presetId !== undefined) {
+    if (typeof body.presetId !== "string" || body.presetId.length === 0) {
+      return { ok: false, error: "presetId must be a non-empty string" };
+    }
+    updates.presetId = body.presetId;
   }
 
   // Per-runtime model slot overrides. Validates shape (object of

@@ -3,7 +3,7 @@
  */
 
 import type { z, ZodType } from "zod";
-import type { Proposal } from "@covel/shared";
+import type { InputSlot, Proposal } from "@covel/shared";
 import type { ToolExecutionEnvelope } from "./result.js";
 
 // ── Tool execution context ───────────────────────────────────────
@@ -13,6 +13,8 @@ export interface ToolExecutionContext {
   readonly turnId: string;
   readonly pluginId: string;
   readonly runtimeId: string;
+  /** Authoritative values of inputs explicitly declared by this runtime. */
+  readonly inputSlots?: Readonly<Record<string, InputSlot>>;
   /**
    * Proposal writes buffered earlier in the same tool loop.
    * Tools can consult this view to read same-turn plugin-data updates

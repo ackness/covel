@@ -1,8 +1,7 @@
-import { resolve, relative } from "node:path";
+import { relative } from "node:path";
 import {
   DEFAULT_LOCALE,
   FrameworkCapability,
-  readRuntimeEnv,
   resolveI18nText,
   type Stage,
 } from "@covel/shared";
@@ -15,33 +14,7 @@ export type FlowSegmentId = Stage | "event-manual";
 
 export type UiSlotName = "right" | "message" | "left";
 
-export const UI_NAMESPACE_BY_SLOT: Record<UiSlotName, string> = {
-  right: "__ui_right__",
-  message: "__ui_message__",
-  left: "__ui_left__",
-};
-
 export { bearerToken } from "../privileged-auth.js";
-
-/**
- * All plugin directories the server should scan — bundled first, user
- * install dir second. Mirrors `apps/server/src/app.ts:199` so `/api/ui-specs`
- * and sibling endpoints see the same plugin set the kernel bootstrapped
- * against. Without this, user-installed plugins (e.g. ~/.covel/plugins/*)
- * never get their UI specs materialised into `plugin_data.__ui_right__`
- * and the frontend right panel silently drops their buttons.
- */
-
-export function resolvePluginsDirs(): readonly string[] {
-  const env = readRuntimeEnv();
-  const bundled =
-    env.pluginsDir ?? resolve(import.meta.dirname, "../../../../../plugins");
-  const dirs = [bundled];
-  if (env.userPluginsDir && env.userPluginsDir !== bundled) {
-    dirs.push(env.userPluginsDir);
-  }
-  return dirs;
-}
 
 export function textValue(
   value: unknown,

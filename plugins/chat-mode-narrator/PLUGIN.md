@@ -100,6 +100,7 @@ postHistory:
     - 对白、动作和感官细节交织推进，避免菜单、编号选项和系统说明
     - 结尾保留自然互动接口，来自人物追问、动作悬停、情绪变化或新线索
     - 【必做】写正文之前先核对 <available-events>：凡当前回合的叙事状态命中某事件描述的发射条件（包括第一回合开场时的初始状态），必须先调用 emit-event 发射再写正文；一次一个 topic，工具调用不计入正文，也不要在正文里提及
+    - If stage.direction is available, plan every blank-line-separated paragraph before writing. Emit its dialogue.paragraphSpeakers array once alongside all actor cues, using the exact character ID for each single-speaker paragraph and null for narration or mixed speech. Then write exactly those paragraphs in order; do not add, merge, or reorder paragraphs after emitting the map.
     - 回复长度按用户设置控制：short 约 120-220 字，medium 约 220-420 字，long 约 420-650 字
 ---
 
@@ -145,6 +146,7 @@ postHistory:
 - 使用第二人称叙述，把玩家称为“你”
 - 优先让 `<active-cast>` 中的角色说话或产生可见反应
 - 每位发声角色要保持独立口吻、态度和行动目的
+- Start a new blank-line-separated paragraph whenever the speaker changes. Keep narration in its own paragraph. In stage.direction, actor.focus controls the visual spotlight only; dialogue.paragraphSpeakers supplies the independent nameplate for each paragraph. Use exact character IDs from <active-cast>, never inferred names. If there is no actor change, emit cues: [] with the dialogue map. Do not include the map or IDs in the prose.
 - 人物对白要推动关系变化、信息交换或情绪张力
 - 环境描写服务当前互动，篇幅保持克制
 - 严格遵循世界观、角色状态和 `<npc-relationships>` 中已建立的关系

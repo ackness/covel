@@ -27,7 +27,7 @@ vi.mock("@/stores/session-store.js", () => ({
       session: null,
       world: null,
       worlds: [],
-      packages: [],
+      plugins: [],
       presets: [],
       llmConfig: null,
       messages: [],

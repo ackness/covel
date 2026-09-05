@@ -73,30 +73,31 @@ export default function ({ tool, z }) {
         { namespace: "message", key: "topic", value: topic },
       ];
 
-      for (const category of resolvedCategories.slice(0, 3)) {
+      for (let slot = 1; slot <= 3; slot += 1) {
+        const category = resolvedCategories[slot - 1];
         items.push(
           {
             namespace: "message",
-            key: `category${category.slot}Label`,
-            value: category.label,
+            key: `category${slot}Label`,
+            value: category?.label ?? "",
           },
           {
             namespace: "message",
-            key: `category${category.slot}Icon`,
-            value: category.icon,
+            key: `category${slot}Icon`,
+            value: category?.icon ?? "",
           },
           {
             namespace: "message",
-            key: `category${category.slot}Color`,
-            value: category.color,
+            key: `category${slot}Color`,
+            value: category?.color ?? "",
           },
         );
 
         for (let i = 0; i < 3; i += 1) {
           items.push({
             namespace: "message",
-            key: `category${category.slot}Suggestion${i + 1}`,
-            value: category.suggestions[i] ?? "",
+            key: `category${slot}Suggestion${i + 1}`,
+            value: category?.suggestions[i] ?? "",
           });
         }
       }

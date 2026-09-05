@@ -16,10 +16,10 @@ export interface ApprovalRecord {
 export async function listApprovals(
   sessionId: string,
 ): Promise<ApprovalRecord[]> {
-  const res = await request<{ pending: ApprovalRecord[] }>(
+  const res = await request<{ items: ApprovalRecord[] }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/approvals`,
   );
-  return res.pending;
+  return res.items;
 }
 
 export async function resolveApproval(

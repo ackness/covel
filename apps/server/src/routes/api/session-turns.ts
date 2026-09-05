@@ -15,6 +15,7 @@
 import { Hono } from "hono";
 import type { DataStore } from "@covel/store";
 import { rateLimiter } from "../../middleware/rate-limit.js";
+import { listBody } from "../../api-error.js";
 import { resolveSessionParam } from "./session/session-guard.js";
 
 type Env = {
@@ -37,5 +38,5 @@ sessionTurnRoutes.get("/:id/turns", rateLimiter({ max: 120 }), async (c) => {
 
   const store = c.get("store");
   const turns = await store.listTurnResults(resolved.session.id, limit);
-  return c.json({ turns });
+  return c.json(listBody(turns));
 });

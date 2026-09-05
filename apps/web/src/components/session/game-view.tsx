@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog.js";
 import { SuspensionsPanel } from "./suspensions-panel.js";
+import { ExecutionRecoveryNotice } from "./execution-recovery-notice.js";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -61,6 +62,9 @@ export function GameView({ session }: GameViewProps) {
     submitInteraction: onSubmitInteraction,
     beginAdventure: onBeginAdventure,
     retryRuntime: onRetryRuntime,
+    retryInterruptedTurn,
+    refreshExecutionRecovery,
+    abortActiveTurn,
     resetSession: onResetSession,
     backToWorldSelect: onBackToWorldSelect,
     resumeSession: onSwitchSession,
@@ -74,7 +78,7 @@ export function GameView({ session }: GameViewProps) {
     messages,
     executing,
     executionError,
-    packages,
+    plugins,
     pluginLoadErrors,
     sessionPlugins,
     sessionCommands,
@@ -191,11 +195,11 @@ export function GameView({ session }: GameViewProps) {
     handleRightResize,
     toggleLeftPanel,
     toggleRightPanel,
-  } = usePanelCollapse(isMobile, isTablet);
+  } = usePanelCollapse();
 
   // Immersive stage: collapse both rails on enter, restore prior expansion on
-  // exit. On mobile/tablet the rails are already collapsed by usePanelCollapse,
-  // so we only drive the imperative panels on wide viewports.
+  // exit. Only an explicit mode change drives mounted desktop panels; resize
+  // transitions must not query the panel registry while rails re-register.
   const priorRailState = useRef<{ left: boolean; right: boolean } | null>(null);
   useEffect(() => {
     if (isMobile || isTablet) return;
@@ -214,7 +218,7 @@ export function GameView({ session }: GameViewProps) {
       if (!priorRailState.current.right) right.expand();
       priorRailState.current = null;
     }
-  }, [immersive, isMobile, isTablet, leftPanelRef, rightPanelRef]);
+  }, [immersive, leftPanelRef, rightPanelRef]);
 
   // Esc leaves immersive — but only when nothing editable is focused (the stage
   // free-text composer owns Esc to cancel input) and no modal already ate it.
@@ -279,7 +283,7 @@ export function GameView({ session }: GameViewProps) {
 
   // ── Left Panel ─────────────────────────────────────────────────
 
-  const enabledPackages = packages.filter((p) => p.enabled);
+  const enabledPlugins = plugins;
   const [showSessionList, setShowSessionList] = useState(false);
   const otherSessions = worldSessions.filter((s) => s.id !== session.id);
 
@@ -296,7 +300,7 @@ export function GameView({ session }: GameViewProps) {
         open={settings.open}
         onOpenChange={settings.onOpenChange}
         initialKey={settings.initialKey}
-        packages={packages}
+        plugins={plugins}
       />
 
       <Dialog open={suspensionsOpen} onOpenChange={setSuspensionsOpen}>
@@ -325,7 +329,7 @@ export function GameView({ session }: GameViewProps) {
             isLeftCollapsed={!mobileLeftOpen}
             showSessionList={showSessionList}
             otherSessions={otherSessions}
-            enabledPackages={enabledPackages}
+            enabledPlugins={enabledPlugins}
             pluginLoadErrors={pluginLoadErrors}
             sessionPlugins={sessionPlugins}
             executing={executing}
@@ -384,7 +388,7 @@ export function GameView({ session }: GameViewProps) {
                 isLeftCollapsed={isLeftCollapsed}
                 showSessionList={showSessionList}
                 otherSessions={otherSessions}
-                enabledPackages={enabledPackages}
+                enabledPlugins={enabledPlugins}
                 pluginLoadErrors={pluginLoadErrors}
                 sessionPlugins={sessionPlugins}
                 executing={executing}
@@ -410,7 +414,7 @@ export function GameView({ session }: GameViewProps) {
         {/* Center Panel */}
         <ResizablePanel
           id="center-panel"
-          defaultSize={isMobile ? "100%" : "55%"}
+          defaultSize={isMobile ? "100%" : "74%"}
           minSize={isMobile ? "100%" : "30%"}
           className="relative flex flex-col min-w-0 min-h-0 overflow-hidden"
           style={
@@ -447,6 +451,7 @@ export function GameView({ session }: GameViewProps) {
               <GameViewHeader
                 t={t}
                 sessionId={session.id}
+                sessionPhase={session.phase}
                 world={world}
                 executing={executing}
                 viewMode={viewMode}
@@ -465,6 +470,12 @@ export function GameView({ session }: GameViewProps) {
           )}
 
           {/* Messages */}
+          <ExecutionRecoveryNotice
+            recovery={state.executionRecovery}
+            onRetry={retryInterruptedTurn}
+            onRefresh={refreshExecutionRecovery}
+            onStop={abortActiveTurn}
+          />
           {viewMode === "stage" && stageReady ? (
             <StageView
               key={session.id}
@@ -474,7 +485,7 @@ export function GameView({ session }: GameViewProps) {
               executing={executing}
               executionError={executionError}
               executionSteps={executionSteps}
-              packages={packages}
+              plugins={plugins}
               sessionPlugins={sessionPlugins}
               submittedBlockIds={submittedBlockIds}
               submittedBlockValues={submittedBlockValues}
@@ -497,7 +508,7 @@ export function GameView({ session }: GameViewProps) {
                 executing={executing}
                 session={session}
                 world={world}
-                packages={packages}
+                plugins={plugins}
                 sessionPlugins={sessionPlugins}
                 submittedBlockIds={submittedBlockIds}
                 submittedBlockValues={submittedBlockValues}
@@ -531,6 +542,7 @@ export function GameView({ session }: GameViewProps) {
                 onSubmit={handleSubmit}
                 onAbort={handleAbort}
                 onKeyDown={handleKeyDown}
+                pendingDraftCount={pendingDrafts.length}
                 commandMatches={commandMatches}
                 commandMenuOpen={commandMenuOpen}
                 selectedCommandIndex={selectedCommandIndex}
@@ -553,8 +565,8 @@ export function GameView({ session }: GameViewProps) {
             <ResizablePanel
               id="right-panel"
               panelRef={rightPanelRef}
-              defaultSize="22%"
-              minSize="18%"
+              defaultSize={isTablet || immersive ? "0%" : "26%"}
+              minSize="320px"
               maxSize="42%"
               collapsible={true}
               collapsedSize="0%"

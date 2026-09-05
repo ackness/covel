@@ -116,7 +116,7 @@ describe("Plugin Data REST API routes", () => {
     );
     expect(putRes.status).toBe(200);
     expect(await putRes.json()).toEqual({
-      success: true,
+      ok: true,
       namespace: "settings",
       key: "theme",
     });
@@ -165,7 +165,7 @@ describe("Plugin Data REST API routes", () => {
       { method: "DELETE" },
     );
     expect(delRes.status).toBe(200);
-    expect(await delRes.json()).toEqual({ success: true });
+    expect(await delRes.json()).toEqual({ ok: true });
 
     const getRes = await app.request(
       `/api/sessions/${sessionId}/plugin-data/${pluginId}/entries/k1`,

@@ -1,5 +1,13 @@
 import type { Context, ErrorHandler } from "hono";
+import type { ZodType } from "zod";
+import type {
+  ApiErrorResponse,
+  ApiListResponse,
+  ApiOkResponse,
+} from "@covel/shared";
 import { SessionLockTimeoutError } from "./lib/session-lock.js";
+
+export type { ApiErrorResponse } from "@covel/shared";
 
 /**
  * Standard API error envelope.
@@ -19,12 +27,6 @@ import { SessionLockTimeoutError } from "./lib/session-lock.js";
  *                           `{ error, details }` cases. The single factory all
  *                           JSON error responses converge on.
  */
-export interface ApiErrorResponse<Code extends string = string> {
-  readonly error: string;
-  readonly code?: Code;
-  readonly details?: unknown;
-}
-
 /**
  * Build a flexible error envelope. Message first; `code` and `details` are
  * optional and omitted from the body when not provided.
@@ -39,6 +41,20 @@ export function errorBody<Code extends string = string>(
   if (options?.code !== undefined) body.code = options.code;
   if (options?.details !== undefined) body.details = options.details;
   return body;
+}
+
+/** Build the only envelope used by ordinary collection endpoints. */
+export function listBody<T>(items: readonly T[]): ApiListResponse<T> {
+  return { items };
+}
+
+/** Build a successful command acknowledgement with optional result metadata. */
+export function okBody<
+  Details extends Readonly<Record<string, unknown>> = Readonly<
+    Record<never, never>
+  >,
+>(details?: Details): ApiOkResponse<Details> {
+  return { ...details, ok: true } as ApiOkResponse<Details>;
 }
 
 /**
@@ -60,6 +76,26 @@ export async function readJsonBody<T = unknown>(
       400,
     );
   }
+}
+
+/** Parse and validate a JSON body with the standard coded 400 response. */
+export async function parseJsonBody<Schema extends ZodType>(
+  c: Context,
+  schema: Schema,
+): Promise<{ body: Schema["_output"] } | Response> {
+  const json = await readJsonBody(c);
+  if (json instanceof Response) return json;
+  const parsed = schema.safeParse(json.body);
+  if (!parsed.success) {
+    return c.json(
+      errorBody("Invalid request body", {
+        code: "invalid_request_body",
+        details: parsed.error.flatten(),
+      }),
+      400,
+    );
+  }
+  return { body: parsed.data };
 }
 
 /**

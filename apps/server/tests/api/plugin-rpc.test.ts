@@ -171,6 +171,7 @@ function submitFormRequest(
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
+      kind: "action",
       pluginId: "framework",
       action: "submit-form",
       payload: { turnId: "turn-1", submissions },
@@ -195,6 +196,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "action",
         pluginId: "framework",
         action: "echo",
         payload: {},
@@ -203,20 +205,21 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(res.status).toBe(404);
   });
 
-  it("returns 400 when neither action nor runtimeId is set", async () => {
+  it("returns 400 when kind action omits action", async () => {
     const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pluginId: "framework" }),
+      body: JSON.stringify({ kind: "action", pluginId: "framework" }),
     });
     expect(res.status).toBe(400);
   });
 
-  it("returns 400 when both action and runtimeId are set", async () => {
+  it("returns 400 when kind action includes a runtime selector", async () => {
     const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "action",
         pluginId: "framework",
         action: "echo",
         runtimeId: "narrator",
@@ -227,20 +230,22 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
 
   it("returns 404 when runtime is not active in session", async () => {
     // With an empty pluginRegistry in setup(), no runtime is active; the
-    // handler should surface this as 404 "runtime-not-active" rather than
+    // handler should surface this as 404 "runtime_not_active" rather than
     // attempting to execute a nonexistent runtime.
     const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: "codex",
         runtimeId: "codex",
         payload: {},
       }),
     });
     expect(res.status).toBe(404);
-    const body = (await res.json()) as { code?: string };
-    expect(body.code).toBe("runtime-not-active");
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.code).toBe("runtime_not_active");
+    expect(body).not.toHaveProperty("status");
   });
 
   it("dispatches a framework default action and returns the result", async () => {
@@ -248,6 +253,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "action",
         pluginId: "framework",
         action: "echo",
         payload: { hello: "world" },
@@ -329,6 +335,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "command",
         commandId: "inspector:inspect",
         input: "/i 3",
       }),
@@ -366,6 +373,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "command",
         commandId: "inspector:inspect",
         args: { depth: 3 },
       }),
@@ -428,12 +436,15 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "command",
         commandId: "inactive:inspect",
         input: "/inspect",
       }),
     });
     expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ code: "command-not-active" });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body).toMatchObject({ code: "command_not_active" });
+    expect(body).not.toHaveProperty("status");
   });
 
   it("rejects an action paused while it waits for the session lock", async () => {
@@ -467,6 +478,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "action",
         pluginId: "framework",
         action: "echo",
         payload: { shouldNotRun: true },
@@ -480,7 +492,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     const res = await request;
     getSpy.mockRestore();
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ code: "session-not-active" });
+    expect(await res.json()).toMatchObject({ code: "session_not_active" });
   });
 
   it("dispatches an entry-registered plugin action", async () => {
@@ -496,6 +508,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "action",
         pluginId: "codex",
         action: "regenerate",
         payload: { card: "shrine" },
@@ -507,19 +520,21 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(body.result).toEqual({ pluginEcho: { card: "shrine" } });
   });
 
-  it('returns 404 with code "unknown-action" when action not registered', async () => {
+  it('returns 404 with code "unknown_action" when action not registered', async () => {
     const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "action",
         pluginId: "nonexistent",
         action: "whatever",
         payload: null,
       }),
     });
     expect(res.status).toBe(404);
-    const body = (await res.json()) as { code?: string };
-    expect(body.code).toBe("unknown-action");
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.code).toBe("unknown_action");
+    expect(body).not.toHaveProperty("status");
   });
 
   it("forwards submit-form payload to the framework default handler", async () => {
@@ -552,6 +567,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "action",
         pluginId: "framework",
         action: "submit-form",
         payload: {
@@ -726,6 +742,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "action",
         pluginId: "codex",
         action: "echo",
         payload: {},
@@ -733,7 +750,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     });
     expect(res.status).toBe(404);
     const body = (await res.json()) as { code?: string };
-    expect(body.code).toBe("unknown-action");
+    expect(body.code).toBe("unknown_action");
   });
 
   it("returns 400 when submit-form payload is missing turnId", async () => {
@@ -741,6 +758,7 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "action",
         pluginId: "framework",
         action: "submit-form",
         payload: { submissions: [] },
@@ -813,7 +831,12 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     return app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pluginId: PLUGIN_ID, action, payload: { n: 1 } }),
+      body: JSON.stringify({
+        kind: "action",
+        pluginId: PLUGIN_ID,
+        action,
+        payload: { n: 1 },
+      }),
     });
   }
 
@@ -896,7 +919,7 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     const res = await call(app, "does-not-exist");
     expect(res.status).toBe(404);
     const body = (await res.json()) as { code?: string };
-    expect(body.code).toBe("unknown-action");
+    expect(body.code).toBe("unknown_action");
   });
 });
 
@@ -1253,7 +1276,12 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const request = env.app.request(`/api/sessions/${SESSION_ID}/plugin-rpc`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ pluginId: PLUGIN_ID, runtimeId, payload: {} }),
+      body: JSON.stringify({
+        kind: "runtime",
+        pluginId: PLUGIN_ID,
+        runtimeId,
+        payload: {},
+      }),
     });
     await initialRead;
     await env.store.updateSession(SESSION_ID, { status: "paused" });
@@ -1263,7 +1291,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
     const res = await request;
     getSpy.mockRestore();
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ code: "session-not-active" });
+    expect(await res.json()).toMatchObject({ code: "session_not_active" });
     expect(handler).not.toHaveBeenCalled();
   }
 
@@ -1292,6 +1320,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: SYNC_RUNTIME,
         payload: { clicked: "button" },
@@ -1410,7 +1439,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         locale: "zh-CN",
       }),
     });
-    expect(createSession.status).toBe(200);
+    expect(createSession.status).toBe(201);
     const session = (await createSession.json()) as {
       id: string;
       activePlugins: string[];
@@ -1449,6 +1478,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          kind: "runtime",
           pluginId: "branch-reply",
           runtimeId: "branch-reply",
           payload: {
@@ -1468,6 +1498,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          kind: "runtime",
           pluginId: "branch-reply",
           runtimeId: "branch-reply",
           payload: {
@@ -1562,6 +1593,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: SYNC_RUNTIME,
       }),
@@ -1592,6 +1624,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: SYNC_RUNTIME,
         expectsBackgroundFollower: true,
@@ -1681,6 +1714,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         "X-Plugin-User-Settings": settingsHeader,
       },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: SYNC_RUNTIME,
         payload: {},
@@ -1720,6 +1754,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: SYNC_RUNTIME,
         payload: {},
@@ -1759,6 +1794,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
         "X-Plugin-User-Settings": "not@@base64",
       },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: SYNC_RUNTIME,
         payload: {},
@@ -1801,6 +1837,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: SYNC_RUNTIME,
         payload: {},
@@ -1849,7 +1886,11 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ pluginId: PLUGIN_ID, runtimeId: BG_RUNTIME }),
+        body: JSON.stringify({
+          kind: "runtime",
+          pluginId: PLUGIN_ID,
+          runtimeId: BG_RUNTIME,
+        }),
       },
     );
     expect(res.status).toBe(202);
@@ -1892,6 +1933,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: BG_RUNTIME,
         payload: { prompt: "a sunset" },
@@ -1993,6 +2035,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: BG_RUNTIME,
       }),
@@ -2029,6 +2072,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: BG_RUNTIME,
         payload: {},
@@ -2095,6 +2139,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: SYNC_RUNTIME,
         payload: { n: 1 },
@@ -2125,6 +2170,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: SYNC_RUNTIME,
         payload: { n: 2 },
@@ -2155,6 +2201,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: SYNC_RUNTIME,
         payload: { n: 3 },
@@ -2235,6 +2282,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: SYNC_RUNTIME,
         payload: {},
@@ -2403,6 +2451,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: TARGET,
         payload: {},
@@ -2468,6 +2517,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: targetRuntimeId,
       }),
@@ -2658,6 +2708,7 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        kind: "runtime",
         pluginId: PLUGIN_ID,
         runtimeId: targetRuntimeId,
         payload: {},

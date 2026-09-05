@@ -42,6 +42,7 @@ import { usePluginSelection } from "./session-prep/use-plugin-selection.js";
 import { useWorldDataPreflight } from "./session-prep/use-world-data-preflight.js";
 import { usePrepRuntimeBindings } from "./session-prep/use-prep-runtime-bindings.js";
 import { ignoreError } from "@/lib/ignore-error.js";
+import { getDataService } from "@/services/data-service.js";
 import {
   defaultSelectedPluginIdsForWorld,
   isLockedCorePackage,
@@ -51,7 +52,7 @@ export { defaultSelectedPluginIdsForWorld, isLockedCorePackage };
 
 export function SessionPrepScreen({
   world,
-  packages,
+  plugins,
   presets,
   llmConfig,
   startError,
@@ -69,12 +70,31 @@ export function SessionPrepScreen({
     llmConfig,
   );
 
+  const prepareWorldForServer = useMemo(() => {
+    let prepared = false;
+    let pending: Promise<void> | null = null;
+    return async () => {
+      if (prepared) return;
+      pending ??= getDataService().prepareWorldForServer(world.id);
+      try {
+        await pending;
+        prepared = true;
+      } catch (error) {
+        pending = null;
+        throw error;
+      }
+    };
+  }, [world.id]);
+
   const {
     corePluginIds,
     lockedPluginIds,
-    selectedPackages,
+    selectedPluginSummaries,
     selectedPluginIds,
     selectedPluginIdSet,
+    pluginPlan,
+    pluginPlanLoading,
+    pluginPlanError,
     pluginPacks,
     activePluginPack,
     pluginSearch,
@@ -85,19 +105,23 @@ export function SessionPrepScreen({
     togglePluginTag,
     applyPack,
     togglePlugin,
-  } = usePluginSelection(world, packages);
+    retryPluginPlan,
+  } = usePluginSelection(world.id, plugins, prepareWorldForServer);
 
   const {
     worldDataPreflight,
     worldDataPreflightStatus,
     worldDataPreflightError,
     runWorldDataPreflight,
-  } = useWorldDataPreflight(world.id, selectedPluginIds);
+  } = useWorldDataPreflight(world.id, selectedPluginIds, prepareWorldForServer);
 
+  const pluginPlanUnavailable =
+    pluginPlanLoading || pluginPlanError !== null || pluginPlan === null;
   const { bindingState } = usePrepRuntimeBindings(
     world.id,
-    selectedPackages,
+    selectedPluginSummaries,
     resolvedSlots,
+    !pluginPlanUnavailable,
   );
 
   const [flowData, setFlowData] = useState<api.PluginFlowResponse | null>(null);
@@ -122,7 +146,7 @@ export function SessionPrepScreen({
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    api
+    getDataService()
       .listSessions(world.id)
       .then(setExistingSessions)
       .catch(ignoreError("list existing sessions"));
@@ -186,10 +210,10 @@ export function SessionPrepScreen({
   const selectedFlowSteps = useMemo(() => {
     if (!flowData) return [];
     const runtimeMetadata = new Map(
-      packages.map(
+      plugins.map(
         (pkg) =>
           [
-            pkg.name,
+            pkg.id,
             new Map(
               (pkg.runtimes ?? []).map(
                 (runtime) => [runtime.id, runtime] as const,
@@ -205,7 +229,7 @@ export function SessionPrepScreen({
         if (!runtime) return step;
         return {
           ...step,
-          runtimeType: step.runtimeType ?? runtime.kind,
+          runtimeType: step.runtimeType ?? runtime.runtimeType,
           outputKind: step.outputKind ?? runtime.outputKind,
           capabilities: step.capabilities ?? runtime.capabilities,
           execution: step.execution ?? runtime.execution,
@@ -213,7 +237,7 @@ export function SessionPrepScreen({
             runtime.turnCompletion ?? { mode: "await" },
         };
       });
-  }, [flowData, packages, selectedPluginIdSet]);
+  }, [flowData, plugins, selectedPluginIdSet]);
 
   const resolveSelectedDeclaredSlot = useCallback(
     (slotId: string) => resolveDeclaredSlot(resolvedSlots, slotId),
@@ -231,7 +255,7 @@ export function SessionPrepScreen({
   const [resumingId, setResumingId] = useState<string | null>(null);
 
   const handleStart = useCallback(async () => {
-    if (isStarting) return;
+    if (isStarting || pluginPlanUnavailable) return;
     setIsStarting(true);
     try {
       await onStart(startPluginsPayload(selectedPluginIds));
@@ -241,7 +265,7 @@ export function SessionPrepScreen({
     } finally {
       setIsStarting(false);
     }
-  }, [isStarting, selectedPluginIds, onStart]);
+  }, [isStarting, pluginPlanUnavailable, selectedPluginIds, onStart]);
 
   const handleResume = useCallback(
     async (session: api.SessionRecord) => {
@@ -265,7 +289,7 @@ export function SessionPrepScreen({
         open={settingsOpen}
         onOpenChange={handleSettingsOpenChange}
         initialKey={settingsInitialKey}
-        packages={packages}
+        plugins={plugins}
       />
       <div className="h-full w-full overflow-y-auto overscroll-contain">
         <div className="mx-auto max-w-6xl px-4 pb-24 pt-5 md:px-8 md:py-8">
@@ -311,7 +335,7 @@ export function SessionPrepScreen({
                 <Button
                   size="sm"
                   className="h-10 shrink-0 px-5 font-bold uppercase tracking-widest"
-                  disabled={isStarting}
+                  disabled={isStarting || pluginPlanUnavailable}
                   onClick={() => void handleStart()}
                 >
                   {isStarting ? (
@@ -363,6 +387,37 @@ export function SessionPrepScreen({
             </div>
           )}
 
+          {pluginPlanError && (
+            <div
+              className="mb-5 flex items-start justify-between gap-3 rounded-(--radius-card) border border-destructive/50 bg-destructive/5 px-4 py-3 text-sm"
+              role="alert"
+            >
+              <div className="flex min-w-0 items-start gap-2">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <div className="min-w-0">
+                  <p className="font-medium text-destructive">
+                    {t(
+                      "session.pluginPlanFailed",
+                      "Could not resolve the world plugin plan",
+                    )}
+                  </p>
+                  <p className="mt-1 wrap-break-word text-xs text-muted-foreground">
+                    {pluginPlanError}
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={retryPluginPlan}
+              >
+                {t("common.retry", "Retry")}
+              </Button>
+            </div>
+          )}
+
           <div className="grid gap-5 lg:grid-cols-[minmax(0,0.86fr)_minmax(0,1.14fr)] lg:items-start">
             <section className="order-2 min-w-0 space-y-4 lg:order-1">
               <WorldInfoCard
@@ -405,11 +460,12 @@ export function SessionPrepScreen({
               />
 
               <PluginSelectionCard
-                world={world}
-                packages={packages}
+                pluginPlan={pluginPlan}
+                pluginPlanLoading={pluginPlanLoading}
+                plugins={plugins}
                 selectedPluginIds={selectedPluginIds}
                 selectedPluginIdSet={selectedPluginIdSet}
-                selectedPackages={selectedPackages}
+                selectedPluginSummaries={selectedPluginSummaries}
                 expanded={pluginSectionExpanded}
                 onToggleExpanded={() =>
                   setPluginSectionExpanded(!pluginSectionExpanded)
@@ -445,7 +501,7 @@ export function SessionPrepScreen({
       <div className="absolute inset-x-0 bottom-0 z-30 border-t border-border bg-background/92 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl md:hidden">
         <Button
           className="h-12 w-full font-semibold uppercase tracking-wider shadow-(--shadow-pop)"
-          disabled={isStarting}
+          disabled={isStarting || pluginPlanUnavailable}
           onClick={() => void handleStart()}
         >
           {isStarting ? (

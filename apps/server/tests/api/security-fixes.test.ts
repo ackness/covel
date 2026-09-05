@@ -109,7 +109,7 @@ describe("[HIGH] Client-supplied session ID validation", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: "my-custom-session-01" }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     const body = (await json(res)) as { id: string };
     expect(body.id).toBe("my-custom-session-01");
   });
@@ -122,7 +122,7 @@ describe("[HIGH] Client-supplied session ID validation", () => {
         body: JSON.stringify({ id: "duplicate-session" }),
       });
 
-    expect((await create()).status).toBe(200);
+    expect((await create()).status).toBe(201);
     const duplicate = await create();
     expect(duplicate.status).toBe(409);
     expect(await duplicate.json()).toMatchObject({
@@ -209,6 +209,7 @@ describe("[P2] provider keys raw exposure", () => {
     savedEnv = {
       COVEL_DESKTOP_REST_TOKEN: process.env.COVEL_DESKTOP_REST_TOKEN,
       OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      QWEN_API_KEY: process.env.QWEN_API_KEY,
       DEPLOYMENT_TIER: process.env.DEPLOYMENT_TIER,
     };
   });
@@ -223,6 +224,7 @@ describe("[P2] provider keys raw exposure", () => {
   it("returns masked availability without desktop bearer token", async () => {
     process.env.COVEL_DESKTOP_REST_TOKEN = "desktop-token";
     process.env.OPENAI_API_KEY = "sk-openai-secret";
+    process.env.QWEN_API_KEY = "sk-qwen-secret";
     const app = new Hono();
     app.route(
       "/",
@@ -243,6 +245,8 @@ describe("[P2] provider keys raw exposure", () => {
     expect(body.keys).toEqual({});
     expect(body.providers.openai).toMatchObject({ configured: true });
     expect(body.providers.openai.masked).toContain("...");
+    expect(body.providers.qwen).toMatchObject({ configured: true });
+    expect(body.providers.qwen.masked).toContain("...");
   });
 
   it("denies the masked listing to an anonymous caller on a hosted tier", async () => {
@@ -270,6 +274,7 @@ describe("[P2] provider keys raw exposure", () => {
   it("returns raw keys with the desktop bearer token", async () => {
     process.env.COVEL_DESKTOP_REST_TOKEN = "desktop-token";
     process.env.OPENAI_API_KEY = "sk-openai-secret";
+    process.env.QWEN_API_KEY = "sk-qwen-secret";
     const app = new Hono();
     app.route(
       "/",
@@ -283,10 +288,15 @@ describe("[P2] provider keys raw exposure", () => {
     const res = await app.request("http://localhost/api/provider-keys", {
       headers: { Authorization: "Bearer desktop-token" },
     });
-    const body = (await res.json()) as { keys: Record<string, string> };
+    const body = (await res.json()) as {
+      keys: Record<string, string>;
+      providers: Record<string, { configured: boolean; masked: string }>;
+    };
 
     expect(res.status).toBe(200);
     expect(body.keys.openai).toBe("sk-openai-secret");
+    expect(body.keys.qwen).toBe("sk-qwen-secret");
+    expect(body.providers.qwen).toMatchObject({ configured: true });
   });
 });
 
@@ -360,40 +370,6 @@ function registerPresenceAssetsPlugin(pluginRegistry: PluginRegistry): void {
   });
 }
 
-// ── HIGH: plugins/disable must validate pluginId ────────────────
-
-describe("[HIGH] plugins/disable validates pluginId", () => {
-  let app: Hono;
-
-  beforeEach(() => {
-    const store = createMemoryStore();
-    app = createTestApp({
-      store,
-      pluginRegistry: createPluginRegistry(),
-    });
-  });
-
-  it("rejects missing pluginId", async () => {
-    const { id } = await createSession(app);
-    const res = await app.request(`/api/sessions/${id}/plugins/disable`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-    });
-    expect(res.status).toBe(400);
-  });
-
-  it("rejects empty pluginId", async () => {
-    const { id } = await createSession(app);
-    const res = await app.request(`/api/sessions/${id}/plugins/disable`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pluginId: "" }),
-    });
-    expect(res.status).toBe(400);
-  });
-});
-
 // ── HIGH: state-patches IDs must be stable ──────────────────────
 
 describe("[HIGH] state-patches returns stable IDs", () => {
@@ -445,10 +421,12 @@ describe("[HIGH] state-patches returns stable IDs", () => {
 
     const res = await app.request(`/api/sessions/${id}/state-patches`);
     expect(res.status).toBe(200);
-    const patches = (await json(res)) as Array<{
-      id: string;
-      createdAt: string;
-    }>;
+    const { items: patches } = (await json(res)) as {
+      items: Array<{
+        id: string;
+        createdAt: string;
+      }>;
+    };
     expect(patches).toHaveLength(1);
     // ID should NOT be "character.hp.0" (array index pattern)
     expect(patches[0].id).not.toMatch(/\.\d+$/);
@@ -494,7 +472,7 @@ describe("[HIGH] Plugin activation happens after session persist", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plugins: ["test-plugin"] }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
 
     const body = (await json(res)) as { id: string; activePlugins: string[] };
     // Session must be persisted

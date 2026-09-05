@@ -465,7 +465,7 @@ export const drainServerResources = async (): Promise<void> => {
 // ── Mount routes ─────────────────────────────────────────────────
 app.route("/", api.app);
 app.route("/", createModelDbRoutes(ai));
-app.route("/", createMiscApiRoutes(ai, api.registry, store, sessionLock));
+app.route("/", createMiscApiRoutes(ai, api.registry, store));
 app.route("/", createConfigApiRoutes({ apiKeys }));
 app.route("/", createAppUpdateRoutes());
 

@@ -100,13 +100,24 @@ describe("browser-authoritative persistence contract", () => {
         ...firstCheckpoint,
         session: { ...firstCheckpoint.session, phase: undefined },
       }),
-    ).toThrow("session.phase must be one of");
+    ).toThrow("session.phase");
     expect(() =>
       validateBrowserCheckpoint({
         ...firstCheckpoint,
-        turnResults: [{ origin: "follower", commitStatus: "committed" }],
+        turnResults: [
+          {
+            id: "result-1",
+            sessionId: "session-1",
+            turnId: "turn-1",
+            runtimeResults: [],
+            origin: "follower",
+            commitStatus: "committed",
+            durationMs: 1,
+            createdAt: firstCheckpoint.committedAt,
+          },
+        ],
       }),
-    ).toThrow("turnResults[0].origin must be one of");
+    ).toThrow("turnResults[0].origin");
   });
 
   it("accepts the first commit and advances revisions without mutation", () => {
@@ -126,8 +137,16 @@ describe("browser-authoritative persistence contract", () => {
 
     const changed = {
       ...firstCheckpoint,
-      messages: [{ id: "message-1" }],
-    } as BrowserCheckpoint;
+      messages: [
+        {
+          id: "message-1",
+          sessionId: firstCheckpoint.sessionId,
+          role: "assistant",
+          content: "changed",
+          createdAt: firstCheckpoint.committedAt,
+        },
+      ],
+    };
     expect(() =>
       applySessionCommit(firstCheckpoint, commitFrom(changed)),
     ).toThrow(ActionIdConflictError);

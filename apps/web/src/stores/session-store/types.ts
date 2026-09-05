@@ -1,7 +1,8 @@
 import type {
   AssetGenerateView,
+  PageCursor,
   SnapshotCharacter,
-  TimeCursor,
+  SessionExecutionStatus,
 } from "@covel/shared";
 import type * as api from "@/services/api";
 
@@ -51,8 +52,18 @@ export interface ExecutionStep {
   /** Qualified tool name when status is "tool". */
   toolName?: string;
   durationMs?: number;
-  /** Turn this step belongs to — enables grouping across multiple turns. */
+  /** Actual execution attempt, retained for recovery and trace correlation. */
   turnId?: string;
+  /** Original turn whose task this retry attempts to repair. */
+  sourceTurnId?: string;
+  /** Server-validated source commit proof, retained when its trace window expires. */
+  sourceCommitted?: true;
+  /** Complete failure ledger before the attempt, or after its committed settlement. */
+  sourceFailedRuntimeIds?: readonly string[];
+  /** Turn commit evidence, independent of each runtime's result. */
+  attemptStatus?: "pending" | "committed" | "failed" | "interrupted";
+  /** Attempt start time, independent of when an individual runtime starts. */
+  turnStartedAt?: string;
   /** Wall-clock start time (for on-device duration fallback). */
   startedAt?: string;
   /** Background job identity when this runtime no longer blocks its source turn. */
@@ -71,9 +82,9 @@ export interface ExecutionStep {
  * The backend persists a fuller record in the store (pendingContinuation etc.);
  * only the UI-visible fields travel through api.ts via `listSuspensions` and
  * the SSE payloads; we re-export that shape from session-store.tsx so callers
- * can keep using `import type { SuspensionRecord } from "@/stores/session-store"`.
+ * can keep using `import type { SuspensionSummary } from "@/stores/session-store"`.
  */
-export type SuspensionRecord = api.SuspensionRecord;
+export type SuspensionSummary = api.SuspensionSummary;
 
 export interface PendingInteractionDraft {
   id: string;
@@ -109,7 +120,7 @@ export interface AssetProgressEvent {
 export interface SessionState {
   // Boot data
   presets: api.PresetSummary[];
-  packages: api.PackageSummary[];
+  plugins: api.PluginSummary[];
   /** Plugins that failed to load (manifest or dependency errors). */
   pluginLoadErrors: api.PluginLoadError[];
   worlds: api.WorldRecord[];
@@ -119,7 +130,7 @@ export interface SessionState {
   bootError: string | null;
 
   /** Session-scoped plugin list (active + available). Loaded after session is set. */
-  sessionPlugins: api.SessionPluginInfo[];
+  sessionPlugins: api.SessionPlugin[];
   /** Framework + active-plugin slash command directory from the same snapshot. */
   sessionCommands: import("@covel/shared").SessionSlashCommand[];
 
@@ -135,7 +146,7 @@ export interface SessionState {
    * oldest loaded message. `null` ⇒ the window already reaches the start of the
    * chat (nothing older to load) — the scroll-up loader stops.
    */
-  olderMessagesCursor: TimeCursor | null;
+  olderMessagesCursor: PageCursor | null;
 
   /** All sessions for the current world (for switching). */
   worldSessions: api.SessionRecord[];
@@ -145,6 +156,9 @@ export interface SessionState {
   executionError: string | null;
   /** Real-time execution progress steps from kernel. */
   executionSteps: ExecutionStep[];
+  executionRecovery?: ExecutionRecovery | null;
+  /** Browser action generation; rejects recovery reads from an older POST. */
+  actionGeneration?: number;
 
   /**
    * Active suspensions awaiting external resume.
@@ -153,7 +167,7 @@ export interface SessionState {
    * maintained live via `turn.suspended` / `turn.resumed` SSE events. Cleared
    * when the matching resume/cancel call succeeds.
    */
-  suspensions: SuspensionRecord[];
+  suspensions: SuspensionSummary[];
 
   // State patches from kernel
   statePatches: Array<{
@@ -209,11 +223,19 @@ export interface SessionState {
   submittedBlockValues: Readonly<Record<string, Record<string, unknown>>>;
 }
 
+export interface ExecutionRecovery {
+  sessionId: string;
+  status: SessionExecutionStatus | null;
+  hydrating: boolean;
+  checking: boolean;
+  error?: string;
+}
+
 export type SessionAction =
   | {
       type: "BOOT_SUCCESS";
       presets: api.PresetSummary[];
-      packages: api.PackageSummary[];
+      plugins: api.PluginSummary[];
       pluginLoadErrors: api.PluginLoadError[];
       worlds: api.WorldRecord[];
       llmConfig: api.LlmConfigResponse | null;
@@ -241,6 +263,7 @@ export type SessionAction =
     }
   | { type: "SET_EXECUTING"; value: boolean }
   | { type: "SET_EXECUTION_ERROR"; error: string | null }
+  | { type: "SET_EXECUTION_RECOVERY"; recovery: ExecutionRecovery | null }
   // Player abort terminal state: drop the uncommitted streaming placeholder
   // message(s) — the server never commits partial narrative on abort, so
   // keeping them would show text that vanishes on refresh (audit A-04).
@@ -255,14 +278,15 @@ export type SessionAction =
       };
     }
   | { type: "LOAD_MESSAGES"; messages: StreamMessage[] }
+  | { type: "MERGE_RECOVERED_MESSAGES"; messages: StreamMessage[] }
   | {
       // 把更旧的一批消息合并到 messages 前部（按 id 去重、整体保持 createdAt 正序），
       // 并把 olderMessagesCursor 更新为返回的 nextCursor。区别于 LOAD_MESSAGES（整体覆盖）。
       type: "PREPEND_MESSAGES";
       messages: StreamMessage[];
-      cursor: TimeCursor | null;
+      cursor: PageCursor | null;
     }
-  | { type: "SET_OLDER_MESSAGES_CURSOR"; cursor: TimeCursor | null }
+  | { type: "SET_OLDER_MESSAGES_CURSOR"; cursor: PageCursor | null }
   | {
       type: "LOAD_STATE_PATCHES";
       patches: Array<{
@@ -273,6 +297,12 @@ export type SessionAction =
       }>;
     }
   | { type: "UPSERT_EXECUTION_STEP"; step: ExecutionStep }
+  | {
+      type: "SET_TURN_ATTEMPT_STATUS";
+      turnId: string;
+      status: NonNullable<ExecutionStep["attemptStatus"]>;
+      sourceFailedRuntimeIds?: readonly string[];
+    }
   | { type: "LOAD_EXECUTION_STEPS"; steps: ExecutionStep[] }
   | { type: "CLEAR_EXECUTION_STEPS" }
   | { type: "FINALIZE_HANGING_RUNTIMES"; reason: string }
@@ -288,10 +318,10 @@ export type SessionAction =
   | { type: "REMOVE_SESSION"; sessionId: string }
   | {
       type: "LOAD_SESSION_PLUGINS";
-      plugins: api.SessionPluginInfo[];
+      plugins: api.SessionPlugin[];
       commands?: import("@covel/shared").SessionSlashCommand[];
     }
-  | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; isActive: boolean }
+  | { type: "TOGGLE_SESSION_PLUGIN"; pluginId: string; active: boolean }
   | { type: "BACKFILL_TURN_ID"; turnId: string }
   | {
       type: "PLUGIN_DATA_CHANGED";
@@ -312,8 +342,8 @@ export type SessionAction =
   | { type: "UPSERT_DRAFT"; draft: PendingInteractionDraft }
   | { type: "REMOVE_DRAFT"; draftId: string }
   | { type: "CLEAR_DRAFTS" }
-  | { type: "SET_SUSPENSIONS"; suspensions: SuspensionRecord[] }
-  | { type: "ADD_SUSPENSION"; suspension: SuspensionRecord }
+  | { type: "SET_SUSPENSIONS"; suspensions: SuspensionSummary[] }
+  | { type: "ADD_SUSPENSION"; suspension: SuspensionSummary }
   | { type: "REMOVE_SUSPENSION"; suspensionId: string }
   | { type: "ASSET_GENERATED"; turnId: string; asset: AssetGenerateView }
   | { type: "ASSET_PROGRESS"; turnId: string; progress: AssetProgressEvent };

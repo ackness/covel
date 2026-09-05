@@ -89,8 +89,8 @@ describe("Lorebook API routes", () => {
     it("returns empty list when no entries exist", async () => {
       const res = await app.request(`/api/sessions/${SESSION_ID}/lorebook`);
       expect(res.status).toBe(200);
-      const body = await res.json<{ entries: LorebookEntryRecord[] }>();
-      expect(body.entries).toEqual([]);
+      const body = await res.json<{ items: LorebookEntryRecord[] }>();
+      expect(body.items).toEqual([]);
     });
 
     it("returns all session-scoped entries sorted by insertionOrder", async () => {
@@ -101,10 +101,10 @@ describe("Lorebook API routes", () => {
 
       const res = await app.request(`/api/sessions/${SESSION_ID}/lorebook`);
       expect(res.status).toBe(200);
-      const body = await res.json<{ entries: LorebookEntryRecord[] }>();
-      expect(body.entries).toHaveLength(2);
-      expect(body.entries[0].id).toBe("a");
-      expect(body.entries[1].id).toBe("b");
+      const body = await res.json<{ items: LorebookEntryRecord[] }>();
+      expect(body.items).toHaveLength(2);
+      expect(body.items[0].id).toBe("a");
+      expect(body.items[1].id).toBe("b");
     });
 
     it("returns 404 when session does not exist", async () => {
@@ -130,8 +130,8 @@ describe("Lorebook API routes", () => {
       });
 
       expect(res.status).toBe(201);
-      const body = await res.json<{ entry: LorebookEntryRecord }>();
-      expect(body.entry).toMatchObject({
+      const body = await res.json<LorebookEntryRecord>();
+      expect(body).toMatchObject({
         id: "manual-rule",
         sessionId: SESSION_ID,
         pluginId: "manual-lorebook",
@@ -184,8 +184,8 @@ describe("Lorebook API routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json<{ entry: LorebookEntryRecord }>();
-      expect(body.entry).toMatchObject({
+      const body = await res.json<LorebookEntryRecord>();
+      expect(body).toMatchObject({
         id: "e1",
         pluginId: "owner-plugin",
         content: "new content",

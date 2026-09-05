@@ -12,6 +12,12 @@ export function createWorldMethods(state: MemoryState): MemoryStoreMethods {
       return world ? normalizeWorldRecord(world) : null;
     },
 
+    async createWorld(record) {
+      if (state.worlds.has(record.id)) return false;
+      state.worlds.set(record.id, normalizeWorldRecord(record));
+      return true;
+    },
+
     async upsertWorld(record) {
       state.worlds.set(record.id, normalizeWorldRecord(record));
     },

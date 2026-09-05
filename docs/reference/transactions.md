@@ -59,6 +59,15 @@ Any new store backend MUST pass this suite.
 
 ## Backend implementations
 
+Story completion is a commit precondition: a failed `outputKind: story` runtime,
+or a successful story result without non-empty sanitized `narrativeOutput`,
+rejects execution finalization before any buffered proposals, journal messages,
+or player-turn counters commit. Already durable client messages remain outside
+this transaction. A premature `runtime-done` first requests narrative with the
+remaining bounded model steps; an empty result becomes a failed runtime. This
+does not retry or reverse external tool side effects. Optional system extractors
+can still fail after a valid story; their failure does not discard the story.
+
 ### MemoryStore
 
 Two-phase snapshot using a **shallow reference copy** of each collection
@@ -194,7 +203,19 @@ the IndexedDB transaction and schema lifecycle in
 - browser checkpoint upload/download operations are serialized by
   `LocalDataService`;
 - the transient server workspace uses `MemoryStore.withTransaction` when a
-  checkpoint replaces a session.
+  checkpoint replaces a session;
+- checkpoint imports validate every record's structure and session scope,
+  including snapshot payloads, before entering the write transaction;
+- trusted fork copies use `rebindSnapshotPayloadSession` to bind nested state
+  to the child session; exports normalize legacy fork payloads before wire
+  validation. External checkpoint input is never rebound to bypass ownership
+  checks;
+- `replaceSessionFromCheckpoint` preserves global worlds by default. Callers
+  must explicitly opt into `writeWorld` after independently authorizing global
+  writes; session ownership alone does not authorize a shared-world update;
+- upload and commit routes recheck owner, incarnation and deletion status
+  under the session lock before using revision or idempotency caches. Cache
+  entries belong to one incarnation and are discarded after same-id recreation.
 
 This is a synchronization contract, not an attempt to reproduce the full
 server transaction API in the browser.

@@ -27,6 +27,7 @@ import type {
 import type {
   PluginDiscoveryResult,
   PluginSummary,
+  PluginEntryDefinition,
   LoadedRuntime,
   ParsedPluginMd,
   FunctionHandler,
@@ -248,6 +249,48 @@ export async function loadPluginManifest(
   }
 
   return results;
+}
+
+/**
+ * Compile the declaration-time server entry definition for a plugin package.
+ *
+ * Runtime manifests come from the caller's already-loaded definition cache.
+ * Multi-runtime discovery intentionally excludes the metadata-only root
+ * PLUGIN.md, so this function reads that root exactly once and folds its entry
+ * into the same immutable result. Consumers use this result for both pending
+ * approval checks and activation, ensuring the two paths cannot disagree.
+ */
+export async function loadPluginEntryDefinition(
+  discovery: PluginDiscoveryResult,
+  runtimeManifests: readonly ParsedPluginMd[],
+): Promise<PluginEntryDefinition> {
+  const entryPaths = new Set<string>();
+  for (const parsed of runtimeManifests) {
+    if (parsed.manifest.entry) entryPaths.add(parsed.manifest.entry);
+  }
+
+  let rootManifestIssue: PluginEntryDefinition["rootManifestIssue"];
+  if (discovery.isMultiRuntime) {
+    const rootManifestPath = path.join(discovery.rootPath, "PLUGIN.md");
+    if (await fileExists(rootManifestPath)) {
+      try {
+        const root = await parsePluginMdForLocale(discovery.rootPath);
+        if (root.manifest.entry) entryPaths.add(root.manifest.entry);
+      } catch (error) {
+        rootManifestIssue = {
+          path: rootManifestPath,
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }
+  }
+
+  return {
+    pluginId: discovery.id,
+    pluginRoot: discovery.rootPath,
+    entryPaths: [...entryPaths],
+    ...(rootManifestIssue ? { rootManifestIssue } : {}),
+  };
 }
 
 /**

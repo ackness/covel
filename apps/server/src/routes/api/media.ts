@@ -103,6 +103,11 @@ const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 /** Scriptable image type — rejected on upload, neutered on read. */
 const SVG_MIME = "image/svg+xml";
 
+function normalizeMimeType(value: string): string {
+  // Browsers compare the MIME essence without case or parameter differences.
+  return value.split(";", 1)[0]!.trim().toLowerCase();
+}
+
 // 20 MB per request — keep the per-IP budget tight so repeat uploads can't
 // hammer storage.
 mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
@@ -119,10 +124,9 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
     );
   }
   // Owner guard: the upload records ownership + a media ref for
-  // `sessionId`, so on hosted tiers the caller must own that session.
-  // Self tier skips the token check, but the live-session/incarnation check
-  // below is required everywhere so uploads cannot attach to a deleted or
-  // same-id-recreated session.
+  // `sessionId`, so hosted and production browser-private requests must own
+  // that session. The live-session/incarnation check below is required
+  // everywhere so uploads cannot attach to a deleted or recreated session.
   const denied = await checkSessionOwnerById(c, c.get("store"), sessionId);
   if (denied) return denied;
   const initialSession = await c.get("store").getSession(sessionId);
@@ -130,7 +134,7 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
     return jsonError("not_found", `session ${sessionId} not found`, 404);
   }
   const expectedIncarnation = sessionIncarnationIdentity(initialSession);
-  const mime = (c.req.header("content-type") ?? "").split(";")[0]!.trim();
+  const mime = normalizeMimeType(c.req.header("content-type") ?? "");
   if (!mime.startsWith("image/")) {
     return jsonError(
       "invalid_request",
@@ -188,7 +192,7 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
     // the session changed while the request body was uploading; GC reclaims it.
     await mediaStore.recordOwnership(ref.id, sessionId);
     await mediaStore.addRef(ref.id, sessionId);
-    return c.json({ id: ref.id, mime: ref.mime, size: ref.size });
+    return c.json({ id: ref.id, mime: ref.mime, size: ref.size }, 201);
   });
 });
 
@@ -506,7 +510,7 @@ mediaRoutes.post("/cleanup", singleFlight(), async (c) => {
       );
     }
     const result = await mediaStore.cleanup(scan.protectedIds, policy);
-    return new Response(JSON.stringify({ policy, result }), {
+    return new Response(JSON.stringify({ ok: true, policy, result }), {
       status: 200,
       headers: { "content-type": "application/json; charset=utf-8" },
     });
@@ -600,7 +604,7 @@ mediaRoutes.get("/:id", async (c) => {
     "x-content-type-options": "nosniff",
     // Uploads reject SVG, but rows predating that ban (or written by another
     // media producer) must still never render inline on the app origin.
-    ...(lookup.mime === SVG_MIME
+    ...(normalizeMimeType(lookup.mime) === SVG_MIME
       ? {
           "content-disposition": "attachment",
           "content-security-policy": "sandbox",

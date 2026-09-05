@@ -6,7 +6,7 @@
   "properties": {
     "cues": {
       "type": "array",
-      "minItems": 1,
+      "minItems": 0,
       "maxItems": 12,
       "items": {
         "oneOf": [
@@ -16,8 +16,28 @@
           { "$ref": "#/$defs/stageClear" }
         ]
       }
+    },
+    "dialogue": {
+      "type": "object",
+      "required": ["paragraphSpeakers"],
+      "properties": {
+        "paragraphSpeakers": {
+          "description": "One exact character ID or null per blank-line-separated narrative paragraph, in order. Use null for narration or a paragraph without a single speaker.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 80,
+          "items": {
+            "oneOf": [{ "$ref": "#/$defs/safeKey" }, { "type": "null" }]
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
+  "anyOf": [
+    { "properties": { "cues": { "minItems": 1 } } },
+    { "required": ["dialogue"] }
+  ],
   "additionalProperties": false,
   "$defs": {
     "safeKey": {

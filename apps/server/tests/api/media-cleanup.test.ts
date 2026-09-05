@@ -176,9 +176,11 @@ describe("POST /api/media/cleanup gate", () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
+      ok: boolean;
       policy: { dryRun: boolean };
       result: { deleted: number };
     };
+    expect(body.ok).toBe(true);
     expect(body.policy.dryRun).toBe(true);
     expect(body.result.deleted).toBe(0);
     expect(await mediaStore.exists(ref.id)).toBe(true);
@@ -204,9 +206,11 @@ describe("POST /api/media/cleanup gate", () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
+      ok: boolean;
       policy: { dryRun: boolean };
       result: { deleted: number; deletedIds: string[] };
     };
+    expect(body.ok).toBe(true);
     expect(body.policy.dryRun).toBe(false);
     expect(body.result.deleted).toBe(1);
     expect(body.result.deletedIds).toEqual([ref.id]);

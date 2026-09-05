@@ -104,7 +104,7 @@ describe("hosted global operator guard", () => {
       headers: OPERATOR_HEADERS,
       body: JSON.stringify({ id: "new", name: "New" }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
   });
 
   it("is a no-op on self tier", async () => {
@@ -114,6 +114,6 @@ describe("hosted global operator guard", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id: "local", name: "Local" }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
   });
 });

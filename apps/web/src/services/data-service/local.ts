@@ -1,7 +1,8 @@
 import {
   DEFAULT_LOCALE,
   characterBlueprintToCharacterUpsert,
-  resolveI18nText,
+  decodePageCursor,
+  encodePageCursor,
   type CharacterBlueprint,
   type CursorPage,
 } from "@covel/shared";
@@ -19,7 +20,6 @@ import type {
   StatePatchRecord,
   WorldRecord,
 } from "../api.js";
-import i18n from "i18next";
 import * as api from "../api.js";
 import { isNotFound } from "../api/request.js";
 import * as appKv from "../app-kv-store.js";
@@ -31,6 +31,10 @@ import {
   toFrontendWorld,
 } from "./mappers.js";
 import { LOCAL_SEED_WORLDS } from "./seed-worlds.js";
+import {
+  serverCheckpointWorld,
+  syncWorldToServer,
+} from "./local-world-sync.js";
 import type { DataService, SessionPatch, WorldPatch } from "./types.js";
 
 /** Default keyset page size when a caller omits `limit` (mirrors the API default). */
@@ -377,6 +381,14 @@ export class LocalDataService implements DataService {
     return toFrontendWorld(updated);
   }
 
+  async prepareWorldForServer(worldId: string): Promise<void> {
+    return this.enqueueWorkspace(async () => {
+      const world = await (await this.ready()).getWorld(worldId);
+      if (!world) throw new Error(`World not found: ${worldId}`);
+      await syncWorldToServer(world);
+    });
+  }
+
   // Sessions
 
   async listSessions(worldId: string): Promise<SessionRecord[]> {
@@ -509,7 +521,7 @@ export class LocalDataService implements DataService {
 
   async listMessagesPage(
     sessionId: string,
-    opts: { limit?: number; before?: { createdAt: string; id: string } },
+    opts: { limit?: number; cursor?: import("@covel/shared").PageCursor },
   ): Promise<CursorPage<MessageRecord>> {
     const limit = opts.limit ?? DEFAULT_MESSAGES_PAGE_LIMIT;
     const all = [
@@ -519,12 +531,12 @@ export class LocalDataService implements DataService {
       (a, b) =>
         a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
     );
-    const eligible = opts.before
+    const before = opts.cursor ? decodePageCursor(opts.cursor) : undefined;
+    const eligible = before
       ? all.filter(
           (row) =>
-            row.createdAt < opts.before!.createdAt ||
-            (row.createdAt === opts.before!.createdAt &&
-              row.id < opts.before!.id),
+            row.createdAt < before.createdAt ||
+            (row.createdAt === before.createdAt && row.id < before.id),
         )
       : all;
     const rows = eligible.slice(-limit);
@@ -532,7 +544,7 @@ export class LocalDataService implements DataService {
     // 按契约：拿满一页（可能还有更旧）时游标指向最旧一条，否则到历史开头 → null。
     const nextCursor =
       items.length >= limit && items.length > 0
-        ? { createdAt: items[0].createdAt, id: items[0].id }
+        ? encodePageCursor({ createdAt: items[0].createdAt, id: items[0].id })
         : null;
     return { items, nextCursor };
   }
@@ -664,19 +676,9 @@ export class LocalDataService implements DataService {
     const serverWorldId = world.id;
     const serverSessionId = session.id;
 
-    // Ensure world exists on server (pass local ID so server uses the same ID).
-    // Only a 404 means "not there yet" — a transient 500 must not be answered
-    // by creating a second, empty world over the top of the real one.
-    try {
-      await api.getWorld(serverWorldId, { silentErrors: true });
-    } catch (err) {
-      if (!isNotFound(err)) throw err;
-      await api.createWorld(
-        resolveI18nText(world.name, i18n.language) ?? "",
-        resolveI18nText(world.description, i18n.language) ?? "",
-        serverWorldId,
-      );
-    }
+    // Keep the transient mirror current as well as present. Plugin planning and
+    // world-data preflight run before session creation and depend on metadata.
+    await syncWorldToServer(world);
 
     // Ensure session exists on server (pass local ID so server uses the same ID)
     try {
@@ -711,7 +713,10 @@ export class LocalDataService implements DataService {
       }
     }
 
-    await api.uploadBrowserCheckpoint(serverSessionId, checkpoint);
+    await api.uploadBrowserCheckpoint(serverSessionId, {
+      ...checkpoint,
+      world: serverCheckpointWorld(world),
+    });
   }
 
   async commitFromServer(sessionId: string, actionId: string): Promise<void> {
@@ -732,7 +737,19 @@ export class LocalDataService implements DataService {
       actionId,
       current.revision,
     );
-    await vault.applySessionCommit(commit);
+    // The server mirror deliberately uses locale-resolved WorldRecord strings.
+    // The browser remains authoritative for the richer local world document,
+    // so do not let a returned execution commit downgrade its i18n fields.
+    const browserWorld = current.session.worldId
+      ? await vault.getWorld(current.session.worldId)
+      : current.world;
+    await vault.applySessionCommit({
+      ...commit,
+      checkpoint: {
+        ...commit.checkpoint,
+        world: browserWorld,
+      },
+    });
     await vault.clearPendingCommit(sessionId, actionId);
   }
 

@@ -200,7 +200,7 @@ stateRoutes.get("/:id/state-patches", async (c) => {
   }
 
   const patches = (await Promise.all(fieldQueries)).flat();
-  return c.json(patches);
+  return c.json({ items: patches });
 });
 
 async function getTableSchemas(

@@ -18,7 +18,11 @@ export {
   createSqliteMediaStore,
 } from "./media-store.js";
 export { supportsVector } from "./vector-store.js";
-export { SessionAlreadyExistsError } from "./errors.js";
+export { rebindSnapshotPayloadSession } from "./records/snapshot-session-scope.js";
+export {
+  SessionAlreadyExistsError,
+  SessionRecordScopeConflictError,
+} from "./errors.js";
 export {
   BROWSER_CHECKPOINT_SCHEMA_VERSION,
   PERSISTENCE_PROFILES,

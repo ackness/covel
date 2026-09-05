@@ -5,7 +5,7 @@
  */
 
 import { Hono } from "hono";
-import { readEnvString, readRuntimeEnv } from "@covel/shared";
+import { providerApiKeysFromEnv, readRuntimeEnv } from "@covel/shared";
 import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import {
   applySlotOverlay,
@@ -15,24 +15,20 @@ import {
 } from "@covel/ai-provider";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
-import type { SessionLock } from "../lib/session-lock.js";
-import { createInProcessSessionLock } from "../lib/session-lock.js";
-import { buildPackagesResponse } from "./misc-api/plugin-catalog.js";
 import { buildPluginFlowResponse } from "./misc-api/plugin-flow.js";
 import { bearerToken } from "./misc-api/shared.js";
 import { buildUiSpecsResponse } from "./misc-api/ui-specs.js";
 import {
   checkHostedOperator,
   checkSessionOwner,
-  withLockedSessionMutation,
 } from "./api/session/session-guard.js";
 import { decodeBase64Json } from "../lib/base64-json.js";
+import { errorBody } from "../api-error.js";
 
 export function createMiscApiRoutes(
   ai: AiStack,
   registry: PluginRegistry,
   store: DataStore,
-  sessionLock: SessionLock = createInProcessSessionLock(),
 ): Hono {
   const app = new Hono();
 
@@ -83,17 +79,12 @@ export function createMiscApiRoutes(
         slotBindings: slotBindingsByPreset.get(p.id) ?? [],
       };
     });
-    return c.json(presets);
-  });
-
-  // GET /api/packages — list loaded plugin packages with runtime/tool info
-  app.get("/api/packages", async (c) => {
-    return c.json(await buildPackagesResponse(registry));
+    return c.json({ items: presets });
   });
 
   // GET /api/plugin-flows — framework-orchestrated flow data for pre-game preview
-  app.get("/api/plugin-flows", async (c) => {
-    const payload = await buildPluginFlowResponse();
+  app.get("/api/plugin-flows", (c) => {
+    const payload = buildPluginFlowResponse(registry);
     return c.json(payload);
   });
 
@@ -104,37 +95,31 @@ export function createMiscApiRoutes(
   // are loaded globally but not enabled for the active session.)
   app.get("/api/ui-specs", async (c) => {
     const sessionId = c.req.query("sessionId");
-    // Owner guard: a session-scoped request both reads that
-    // session's active-plugin set and synchronously (re)writes its
-    // plugin_data UI-spec rows, so hosted tiers require the owner token
-    // BEFORE buildUiSpecsResponse touches the store. No-op on self.
+    // Owner guard: a session-scoped request reads the session's active plugin
+    // set. The response itself is a pure projection of the registry snapshot;
+    // it never materialises static UI definitions into plugin_data.
     // misc-api routes mount on the root app (no bootstrap middleware), so
     // the closure `store` is passed explicitly.
     if (sessionId) {
       const initialSession = await store.getSession(sessionId);
-      if (initialSession) {
-        const denied = checkSessionOwner(c, initialSession);
-        if (denied) return denied;
-        return withLockedSessionMutation({
-          c,
-          store,
-          sessionLock,
-          sessionId,
-          expectedSession: initialSession,
-          // Paused/ended sessions may still render their final UI. Only an
-          // in-progress/failed deletion is excluded by the helper.
-          allowedStatuses: "any",
-          mutate: async (liveSession) =>
-            c.json(
-              await buildUiSpecsResponse({
-                sessionId,
-                session: liveSession,
-                registry,
-                store,
-              }),
-            ),
-        });
+      if (!initialSession) {
+        return c.json(
+          errorBody(`Session not found: ${sessionId}`, {
+            code: "session_not_found",
+          }),
+          404,
+        );
       }
+      const denied = checkSessionOwner(c, initialSession);
+      if (denied) return denied;
+      return c.json(
+        await buildUiSpecsResponse({
+          sessionId,
+          session: initialSession,
+          registry,
+          store,
+        }),
+      );
     }
     return c.json(
       await buildUiSpecsResponse({
@@ -193,7 +178,7 @@ export function createMiscApiRoutes(
   app.post("/api/llm-config/reload", (c) => {
     const env = readRuntimeEnv();
     if (env.desktopRestToken && bearerToken(c) !== env.desktopRestToken) {
-      return c.json({ error: "Unauthorized" }, 401);
+      return c.json(errorBody("Unauthorized", { code: "unauthorized" }), 401);
     }
     return c.json(reloadAiStack(ai));
   });
@@ -205,43 +190,21 @@ export function createMiscApiRoutes(
     // on self/desktop, where the raw-key branch below is the real path.
     const denied = checkHostedOperator(c);
     if (denied) return denied;
-    const KNOWN_PROVIDERS = [
-      "DEEPSEEK",
-      "DASHSCOPE",
-      "OPENAI",
-      "ANTHROPIC",
-      "OPENROUTER",
-    ] as const;
-
     const env = readRuntimeEnv();
     const allowRawKeys =
       !!env.desktopRestToken && bearerToken(c) === env.desktopRestToken;
-
-    if (allowRawKeys) {
-      const keys: Record<string, string> = {};
-      for (const provider of KNOWN_PROVIDERS) {
-        const envKey = `${provider}_API_KEY`;
-        const value = readEnvString(envKey);
-        if (value) keys[provider.toLowerCase()] = value;
-      }
-      return c.json({ keys });
-    }
-
-    // Non-T1 or non-localhost: return availability + masked metadata only
+    const configuredKeys = providerApiKeysFromEnv();
     const providers: Record<string, { configured: boolean; masked: string }> =
       {};
-    for (const provider of KNOWN_PROVIDERS) {
-      const envKey = `${provider}_API_KEY`;
-      const value = readEnvString(envKey);
-      if (value) {
-        const masked =
-          value.length > 8
-            ? `${value.slice(0, 4)}...${value.slice(-4)}`
-            : "****";
-        providers[provider.toLowerCase()] = { configured: true, masked };
-      }
+    for (const [provider, value] of Object.entries(configuredKeys)) {
+      const masked =
+        value.length > 8 ? `${value.slice(0, 4)}...${value.slice(-4)}` : "****";
+      providers[provider] = { configured: true, masked };
     }
-    return c.json({ keys: {}, providers });
+    return c.json({
+      keys: allowRawKeys ? configuredKeys : {},
+      providers,
+    });
   });
 
   // POST /api/ai/ping — real provider latency probe.

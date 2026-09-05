@@ -48,7 +48,7 @@ import {
   parseSettingsPersistenceBundle,
   type SettingsPersistenceBundle,
 } from "@covel/shared/settings-persistence";
-import { errorBody, readJsonBody } from "../api-error.js";
+import { errorBody, listBody, readJsonBody } from "../api-error.js";
 import { parseEnvLines } from "../lib/env-file.js";
 import { makeDesktopRestTokenGuard } from "./privileged-auth.js";
 import {
@@ -124,7 +124,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
   // not configured" rather than echoing secrets back across HTTP.
   app.get("/api/config/keys", (c) => {
     const covelHome = resolveCovelHome();
-    if (!covelHome) return c.json({ providers: [] });
+    if (!covelHome) return c.json(listBody([]));
 
     const file = join(covelHome, "keys.env");
     let entries: Record<string, string>;
@@ -144,7 +144,7 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
         providers.push(key);
       }
     }
-    return c.json({ providers });
+    return c.json(listBody(providers));
   });
 
   // PUT /api/config/keys — body: { [provider]: value }

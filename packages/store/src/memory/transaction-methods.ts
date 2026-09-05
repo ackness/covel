@@ -115,6 +115,7 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   // runtime exports (output.recordAs publications)
   appendRuntimeExport: ["runtimeExports"],
   // worlds + vectors
+  createWorld: ["worlds"],
   upsertWorld: ["worlds"],
   deleteWorld: ["worlds"],
   upsertVector: ["vectorRows"],

@@ -13,6 +13,7 @@
  * never swallows an unread segment.
  */
 import { useCallback, useEffect, useReducer, useRef } from "react";
+import { splitStageParagraphs } from "./stage-dialogue-selectors.js";
 
 export type TypewriterStatus = "idle" | "typing" | "pause" | "done";
 
@@ -42,12 +43,6 @@ export type TypewriterEvent =
       readonly turnId?: string;
       readonly reducedMotion?: boolean;
     };
-
-const PARAGRAPH_BREAK = "\n\n";
-
-function splitSegments(buffer: string): string[] {
-  return buffer.replace(/\n{3,}/g, PARAGRAPH_BREAK).split(PARAGRAPH_BREAK);
-}
 
 export function typewriterInit(reducedMotion = false): TypewriterState {
   return {
@@ -106,7 +101,7 @@ function applyReveal(
 ): TypewriterState {
   if (state.status !== "typing") return state;
 
-  const segments = splitSegments(state.buffer);
+  const segments = splitStageParagraphs(state.buffer);
   const segment = segments[state.segmentIndex] ?? "";
   const shownLen = Math.min(segment.length, state.shownLen + maxChars);
   const visible = segment.slice(0, shownLen);
@@ -149,7 +144,7 @@ function applySkip(state: TypewriterState): TypewriterState {
 function applyStreamEnd(state: TypewriterState): TypewriterState {
   if (state.status !== "typing") return { ...state, streamEnded: true };
 
-  const segments = splitSegments(state.buffer);
+  const segments = splitStageParagraphs(state.buffer);
   const segment = segments[state.segmentIndex] ?? "";
   const isLastSegment = state.segmentIndex === segments.length - 1;
   const caughtUp = state.shownLen >= segment.length;
@@ -171,6 +166,7 @@ export interface UseTypewriterOptions {
 
 export interface UseTypewriterResult {
   readonly visible: string;
+  readonly segmentIndex: number;
   readonly status: TypewriterStatus;
   readonly advance: () => void;
   readonly skip: () => void;
@@ -249,5 +245,11 @@ export function useTypewriter(
   const advance = useCallback(() => dispatch({ type: "advance" }), []);
   const skip = useCallback(() => dispatch({ type: "skip" }), []);
 
-  return { visible: state.visible, status: state.status, advance, skip };
+  return {
+    visible: state.visible,
+    segmentIndex: state.segmentIndex,
+    status: state.status,
+    advance,
+    skip,
+  };
 }

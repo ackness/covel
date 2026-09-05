@@ -4,6 +4,7 @@ description:
   zh: 开局引导你填写主角信息，并把主角加入故事。
   en: Guides you through creating your hero at the start and brings them into the story.
 pluginType: core-plugin
+entry: ./server/index.js
 stage: setup
 outputKind: system
 model: plugin
@@ -22,7 +23,7 @@ tags:
 guard: ./guard.js
 trigger:
   type: auto
-completeAfterTools: [create-form]
+completeAfterTools: [create-character-form]
 # Turn-scoped needs order player-init AFTER pregame and world-init/schema-gen in
 # the same setup pass (the DAG edge) and gate it same-turn (the upstream gate):
 # without a successful pregame there is no world summary to seed the opening form
@@ -50,8 +51,8 @@ input:
       field: worldSchema
       as: "<same-turn-world-schema>"
 tools:
-  builtin:
-    - create-form
+  plugin:
+    - create-character-form
 dataSchemas:
   characters:
     schemaVersion: 1
@@ -65,7 +66,7 @@ postHistory:
   role: system
   content: |
     本 runtime 工作流：
-    - 调用一次 `create-form` 生成开场角色表单；工具成功后框架自动结束
+    - 调用一次 `create-character-form` 生成开场角色表单；工具成功后框架自动结束
     - `preGameDone: false`（玩家未提交 → Pre-Game 仍未结束）
     - 角色落库由 guard.js 在玩家提交下一轮时自动完成，**不要自行尝试创建角色**
 ---
@@ -95,13 +96,13 @@ postHistory:
 ## 工作流
 
 1. 依据 `<pregame-opening>` 写 150-250 字、第二人称的角色诞生短叙事。
-2. 调用 `create-form` 一次；工具成功后框架自动结束，不要输出额外文本。
+2. 调用 `create-character-form` 一次；工具成功后框架自动结束，不要输出额外文本。
 
 表单规则：
 
 - `characterName` 必须是 `required: true` 的 text 字段。
-- 从 Schema 的 `character-attributes.attributes` 最多选 3 个字段，优先 `bio`、其次 `abilities`；不要选择数值型 `stats`。字段 `name` 必须严格等于属性 `id`，其余字段均为可选。
-- 类型映射：`enum` → `select`，`string` → `text`，`number` → 3-5 个合理的 select 选项，`array` → 逗号分隔的 text。
+- 从 Schema 的 `character-attributes.attributes` 最多选 3 个 string 或 enum 字段，优先 `bio`、其次 `abilities`；所有 number、array、object、map、boolean 字段都不进入开场表单，保留 schema 默认值。字段 `name` 必须严格等于属性 `id`，其余字段均为可选。不要把数值属性改成背景风格选项。
+- 类型映射：`enum` → `select`，option value 必须逐字等于 schema options 中的值；`string` → `text`。没有合适属性时只收集 characterName。
 - 需要解释 select 选项时使用 `{ value, label }`；`value` 保持适合嵌入叙事的短词。被 `narrativeTemplate` 引用的可选字段必须有自然的 `defaultValue`，select 默认值必须等于某个 option value。
 - 固定传入 `formId: "char-creation"` 和 `submitBehavior: { "echoFilledNarrative": true, "immediate": true }`，加上合适的标题、提交文案、字段以及含字段占位符的 `narrativeTemplate`。
-- 总字段数不超过 4。只调用一次 `create-form`，不要调用 `runtime-done`。
+- 总字段数不超过 4。只调用一次 `create-character-form`，不要调用 `runtime-done`。

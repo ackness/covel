@@ -1,5 +1,4 @@
 import {
-  SettingsRevisionConflictError,
   type SettingEntry,
   type SettingGroup,
   type SettingKey,
@@ -10,6 +9,10 @@ import {
   type SettingsStoreApi,
 } from "./types.js";
 import type { SettingsPersistenceBundle } from "@covel/shared/settings-persistence";
+import {
+  VersionedSettingsPersistence,
+  sameSettingValue,
+} from "./versioned-persistence.js";
 
 /**
  * Core settings store. Tier-aware via the injected backend adapter.
@@ -53,8 +56,7 @@ export class SettingsStore implements SettingsStoreApi {
   private hydrationState: "pending" | "ready" | "failed" = "pending";
   /** Set when `init()` could not read existing state. See {@link assertHydrated}. */
   private hydrationError: Error | null = null;
-  /** Current v2 backend revision; null means a legacy adapter. */
-  private settingsRevision: number | null = null;
+  private versionedPersistence: VersionedSettingsPersistence | null = null;
 
   constructor(private readonly adapter: SettingsBackendAdapter) {
     this.loaded = new Promise<void>((resolve) => {
@@ -78,9 +80,9 @@ export class SettingsStore implements SettingsStoreApi {
       const entries = versioned
         ? versionedStored.entries
         : (stored as Record<SettingKey, unknown>);
-      const revision = versioned ? versionedStored.revision : null;
       const hydratedValues = new Map<SettingKey, unknown>();
       for (const [key, value] of Object.entries(entries)) {
+        this.assertNonSecretEntry(key);
         const entry = this.registry.get(key);
         if (entry && !entry.schema.safeParse(value).success) {
           throw new Error(`Settings hydration validation failed for ${key}`);
@@ -97,7 +99,25 @@ export class SettingsStore implements SettingsStoreApi {
       this.restore(this.secrets, hydratedSecrets);
       this.restore(this.persistedSnapshots.values, this.values);
       this.restore(this.persistedSnapshots.secrets, this.secrets);
-      this.settingsRevision = revision;
+      if (versioned) {
+        this.versionedPersistence = new VersionedSettingsPersistence(
+          this.adapter,
+          versionedStored,
+          (next) => {
+            this.assertHydrated();
+            for (const [key, value] of Object.entries(next)) {
+              this.assertNonSecretEntry(key);
+              const entry = this.registry.get(key);
+              if (entry && !entry.schema.safeParse(value).success) {
+                throw new Error(
+                  `Settings synchronization validation failed for ${key}`,
+                );
+              }
+            }
+          },
+          (next) => this.replaceVisibleValues(next),
+        );
+      }
       this.hydrationError = null;
       this.hydrationState = "ready";
     } catch (err) {
@@ -146,8 +166,14 @@ export class SettingsStore implements SettingsStoreApi {
   private async persist(
     target: "values" | "secrets",
     mutate: () => void,
+    keys: readonly SettingKey[] = [],
   ): Promise<void> {
     this.assertHydrated();
+    if (target === "values" && this.versionedPersistence) {
+      mutate();
+      await this.versionedPersistence.persist(keys, this.serializeEntries());
+      return;
+    }
     // Mutate synchronously so callers retain read-after-write behaviour, then
     // capture this mutation's full snapshot and enqueue only the backend I/O.
     mutate();
@@ -160,10 +186,6 @@ export class SettingsStore implements SettingsStoreApi {
       await this.enqueueSnapshot(target, snapshot);
       this.replacePersistedSnapshot(target, snapshot);
     } catch (err) {
-      if (target === "values" && err instanceof SettingsRevisionConflictError) {
-        this.hydrationError = err;
-        this.hydrationState = "failed";
-      }
       if (this.persistRevisions[target] === revision) {
         this.restore(
           target === "values" ? this.values : this.secrets,
@@ -181,7 +203,7 @@ export class SettingsStore implements SettingsStoreApi {
     const persisted = this.persistedSnapshots[target] as Map<string, unknown>;
     persisted.clear();
     for (const [key, value] of Object.entries(snapshot)) {
-      persisted.set(key, value);
+      persisted.set(key, structuredClone(value));
     }
   }
 
@@ -199,15 +221,7 @@ export class SettingsStore implements SettingsStoreApi {
         await this.adapter.saveSecrets(snapshot as Record<string, string>);
         return;
       }
-      if (!this.hasVersionedPersistence()) {
-        await this.adapter.save(snapshot as Record<SettingKey, unknown>);
-        return;
-      }
-      const saved = await this.adapter.saveWithRevision!(
-        snapshot as Record<SettingKey, unknown>,
-        this.settingsRevision ?? 0,
-      );
-      this.settingsRevision = saved.revision;
+      await this.adapter.save(snapshot as Record<SettingKey, unknown>);
     });
     // Keep the queue usable after a rejected write while returning the
     // original rejection to the caller that owns that mutation.
@@ -217,6 +231,25 @@ export class SettingsStore implements SettingsStoreApi {
 
   ready(): Promise<void> {
     return this.loaded;
+  }
+
+  async refresh(): Promise<void> {
+    this.assertHydrated();
+    await this.versionedPersistence?.refresh();
+  }
+
+  private replaceVisibleValues(next: Record<SettingKey, unknown>): void {
+    const previous = this.serializeEntries();
+    this.restore(this.values, new Map(Object.entries(next)));
+    const keys = new Set([...Object.keys(previous), ...Object.keys(next)]);
+    for (const key of keys) {
+      if (
+        !sameSettingValue(previous[key], next[key]) ||
+        Object.hasOwn(previous, key) !== Object.hasOwn(next, key)
+      ) {
+        this.notify(key, this.get(key));
+      }
+    }
   }
 
   private hasVersionedPersistence(): boolean {
@@ -244,7 +277,8 @@ export class SettingsStore implements SettingsStoreApi {
     if (
       this.hydrationState === "ready" &&
       this.values.has(entry.key) &&
-      !entry.schema.safeParse(this.values.get(entry.key)).success
+      (this.isSecretKey(entry.key) ||
+        !entry.schema.safeParse(this.values.get(entry.key)).success)
     ) {
       this.invalidHydratedKeys.add(entry.key);
       this.hydrationError = new Error(
@@ -257,9 +291,7 @@ export class SettingsStore implements SettingsStoreApi {
 
   get<T>(key: SettingKey): T {
     const entry = this.registry.get(key);
-    const backend =
-      entry?.backend ?? (key.startsWith("keys.") ? "keys" : "settings");
-    if (backend === "keys") {
+    if (this.isSecretKey(key)) {
       const provider = this.stripKeysPrefix(key);
       const val = this.secrets.get(provider);
       if (val !== undefined) return val as T;
@@ -272,10 +304,7 @@ export class SettingsStore implements SettingsStoreApi {
   }
 
   has(key: SettingKey): boolean {
-    const entry = this.registry.get(key);
-    const backend =
-      entry?.backend ?? (key.startsWith("keys.") ? "keys" : "settings");
-    if (backend === "keys") {
+    if (this.isSecretKey(key)) {
       return this.secrets.has(this.stripKeysPrefix(key));
     }
     if (this.invalidHydratedKeys.has(key)) return false;
@@ -293,22 +322,22 @@ export class SettingsStore implements SettingsStoreApi {
           );
         }
       }
-      const backend =
-        entry?.backend ?? (key.startsWith("keys.") ? "keys" : "settings");
-      const operation =
-        backend === "keys"
-          ? this.persist("secrets", () => {
-              const provider = this.stripKeysPrefix(key);
-              const str =
-                typeof value === "string" ? value : String(value ?? "");
-              if (str.trim().length === 0) this.secrets.delete(provider);
-              else this.secrets.set(provider, str);
-            })
-          : this.persist("values", () => {
+      const operation = this.isSecretKey(key)
+        ? this.persist("secrets", () => {
+            const provider = this.stripKeysPrefix(key);
+            const str = typeof value === "string" ? value : String(value ?? "");
+            if (str.trim().length === 0) this.secrets.delete(provider);
+            else this.secrets.set(provider, str);
+          })
+        : this.persist(
+            "values",
+            () => {
               this.values.set(key, value);
-            });
+            },
+            [key],
+          );
       return this.observePersistence(
-        operation.then(() => this.notify(key, value)),
+        operation.then(() => this.notify(key, this.get(key))),
       );
     } catch (error) {
       return this.observePersistence(Promise.reject(error));
@@ -318,16 +347,17 @@ export class SettingsStore implements SettingsStoreApi {
   clear(key: SettingKey): Promise<void> {
     try {
       const entry = this.registry.get(key);
-      const backend =
-        entry?.backend ?? (key.startsWith("keys.") ? "keys" : "settings");
-      const operation =
-        backend === "keys"
-          ? this.persist("secrets", () => {
-              this.secrets.delete(this.stripKeysPrefix(key));
-            })
-          : this.persist("values", () => {
+      const operation = this.isSecretKey(key)
+        ? this.persist("secrets", () => {
+            this.secrets.delete(this.stripKeysPrefix(key));
+          })
+        : this.persist(
+            "values",
+            () => {
               this.values.delete(key);
-            });
+            },
+            [key],
+          );
       return this.observePersistence(
         operation.then(() =>
           this.notify(key, entry ? entry.default : undefined),
@@ -347,7 +377,9 @@ export class SettingsStore implements SettingsStoreApi {
       this.assertHydrated();
       return this.observePersistence(
         Promise.all([
-          this.persist("values", () => this.values.clear()),
+          this.persist("values", () => this.values.clear(), [
+            ...this.values.keys(),
+          ]),
           this.persist("secrets", () => this.secrets.clear()),
         ]).then(() => {
           for (const entry of this.registry.values()) {
@@ -362,7 +394,7 @@ export class SettingsStore implements SettingsStoreApi {
 
   private restore<V>(target: Map<string, V>, snapshot: Map<string, V>): void {
     target.clear();
-    for (const [k, v] of snapshot) target.set(k, v);
+    for (const [k, v] of snapshot) target.set(k, structuredClone(v));
   }
 
   list(group?: SettingGroup): readonly SettingEntry[] {
@@ -408,6 +440,7 @@ export class SettingsStore implements SettingsStoreApi {
     const secretUpdates: Array<[string, string]> = [];
     for (const [key, value] of Object.entries(bundle.entries)) {
       if (!selected.has(key)) continue;
+      this.assertNonSecretEntry(key);
       const entry = this.registry.get(key);
       if (entry) {
         const parsed = entry.schema.safeParse(value);
@@ -425,10 +458,14 @@ export class SettingsStore implements SettingsStoreApi {
     // An import merges into existing state, so a failed write must not leave
     // the map holding values that never reached storage.
     if (nonSecretUpdates.length > 0) {
-      await this.persist("values", () => {
-        for (const [key, value] of nonSecretUpdates)
-          this.values.set(key, value);
-      });
+      await this.persist(
+        "values",
+        () => {
+          for (const [key, value] of nonSecretUpdates)
+            this.values.set(key, value);
+        },
+        nonSecretUpdates.map(([key]) => key),
+      );
     }
     if (secretUpdates.length > 0) {
       await this.persist("secrets", () => {
@@ -479,7 +516,28 @@ export class SettingsStore implements SettingsStoreApi {
   }
 
   private serializeEntries(): Record<SettingKey, unknown> {
-    return Object.fromEntries(this.values);
+    return structuredClone(
+      Object.fromEntries(
+        [...this.values].filter(([key]) => !this.isSecretKey(key)),
+      ),
+    );
+  }
+
+  private isSecretKey(key: SettingKey): boolean {
+    const entry = this.registry.get(key);
+    return (
+      key.startsWith("keys.") ||
+      entry?.backend === "keys" ||
+      entry?.secret === true
+    );
+  }
+
+  private assertNonSecretEntry(key: SettingKey): void {
+    if (this.isSecretKey(key)) {
+      throw new Error(
+        `Secret setting ${key} must use the separate keys channel`,
+      );
+    }
   }
 
   private stripKeysPrefix(key: SettingKey): string {

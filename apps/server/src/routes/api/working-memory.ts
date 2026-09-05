@@ -17,7 +17,7 @@ import {
   resolveSessionParam,
   withLockedSessionMutation,
 } from "./session/session-guard.js";
-import { errorBody, readJsonBody } from "../../api-error.js";
+import { errorBody, listBody, okBody, readJsonBody } from "../../api-error.js";
 
 type Env = {
   Variables: {
@@ -54,7 +54,7 @@ workingMemoryRoutes.get("/:id/memory-blocks", async (c) => {
       updatedAt: r.updatedAt,
     }));
 
-  return c.json({ blocks });
+  return c.json(listBody(blocks));
 });
 
 // GET /sessions/:id/working-memory
@@ -65,7 +65,7 @@ workingMemoryRoutes.get("/:id/working-memory", async (c) => {
   if (!guard.ok) return guard.response;
 
   const entries = await store.listWorkingMemory(sessionId);
-  return c.json({ entries });
+  return c.json(listBody(entries));
 });
 
 // PUT /sessions/:id/working-memory/:scope/:key
@@ -129,7 +129,9 @@ workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
       );
       if (violation)
         return c.json(
-          errorBody(violation.message, { code: violation.kind }),
+          errorBody(violation.message, {
+            code: violation.kind.replaceAll("-", "_"),
+          }),
           violation.kind === "value-too-large" ? 413 : 409,
         );
       await store.upsertWorkingMemory({
@@ -141,7 +143,7 @@ workingMemoryRoutes.put("/:id/working-memory/:scope/:key", async (c) => {
         schemaRef: parsed.data.schemaRef,
         updatedAt: new Date().toISOString(),
       });
-      return c.json({ success: true, scope, key });
+      return c.json(okBody({ scope, key }));
     },
   });
 });
@@ -177,7 +179,7 @@ workingMemoryRoutes.delete("/:id/working-memory/:scope/:key", async (c) => {
         scope as "player" | "story" | "shared",
         key,
       );
-      return c.json({ success: true });
+      return c.json(okBody());
     },
   });
 });

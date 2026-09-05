@@ -38,7 +38,7 @@ LLM itself.
 ## Enabling
 
 Add `director` to a world's plugin set, or enable it for a session via
-`POST /api/sessions/:id/plugins/enable`. Its hook then scopes to that session
+`PUT /api/sessions/:id/plugins/:pluginId`. Its hook then scopes to that session
 only (framework hook scoping); other sessions are unaffected.
 
 ## Tests

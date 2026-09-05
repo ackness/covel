@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import i18n from "i18next";
 import * as api from "@/services/api";
 import { ignoreError } from "@/lib/ignore-error.js";
@@ -12,18 +12,24 @@ import {
   resetPluginData,
   setActiveSession as setActivePluginDataSession,
 } from "@/stores/plugin-data-store.js";
-import { clearStreamingTextsForTurn } from "@/stores/streaming-text-store.js";
 import { bootSessionStore } from "./boot.js";
 import type { SessionActions } from "./context.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
-import { enrichGameStateFromSnapshot } from "./game-state.js";
+import { submitInteractionBlock } from "./interaction-submission.js";
+import { useExecutionRecoveryActions } from "./execution-recovery-actions.js";
 import { restoreSessionState, toStreamMessages } from "./restore-session.js";
 import {
   finalizeActionExecution,
   reportWorkspaceSyncError,
   runActionStream,
+  runSingleSessionAction,
+  resyncSessionRecord,
 } from "./runtime-rpc.js";
-import type { MutableRef, SessionRuntimeRefs } from "./runtime-refs.js";
+import {
+  claimSessionAction,
+  type SessionActionOwner,
+  type SessionRuntimeRefs,
+} from "./runtime-refs.js";
 import { canRunSessionAction } from "./selectors.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import { applyResumeEvents as applyResumeSseEvents } from "./sse-handler.js";
@@ -46,27 +52,7 @@ interface UseSessionActionsOptions {
 /** Page size for the scroll-up "load older messages" fetch. */
 const OLDER_MESSAGES_PAGE_SIZE = 40;
 
-/**
- * The server evolves SessionRecord during a turn (the phase/clock advances,
- * pre-game completion, status) but the SSE stream carries none of it —
- * without a resync the stage view's phase gate stays stale until a
- * full page reload.
- */
-export async function resyncSessionRecord(
-  sessionId: string,
-  sessionIdRef: MutableRef<string | null>,
-  dispatch: SessionDispatch,
-): Promise<void> {
-  try {
-    const session = await api.getSession(sessionId);
-    // A stale response after a session switch must not overwrite the
-    // now-active session's record (and yank the URL back to it).
-    if (sessionIdRef.current !== sessionId) return;
-    dispatch({ type: "SET_SESSION", session });
-  } catch {
-    /* next action or reload will resync */
-  }
-}
+export { resyncSessionRecord } from "./runtime-rpc.js";
 
 export function useBuildSessionActions({
   state,
@@ -77,6 +63,12 @@ export function useBuildSessionActions({
   handleSseEvent,
 }: UseSessionActionsOptions): SessionActions {
   const { sessionIdRef, stateRef } = refs;
+  const activeActionRef = useRef<symbol | null>(null);
+  const claimAction = useCallback(
+    (sessionId: string, requestId?: string) =>
+      claimSessionAction(activeActionRef, sessionIdRef, sessionId, requestId),
+    [sessionIdRef],
+  );
 
   const boot = useCallback(async () => {
     await bootSessionStore({ dispatch, ds });
@@ -124,8 +116,14 @@ export function useBuildSessionActions({
   );
 
   const resyncSession = useCallback(
-    (sessionId: string): void => {
-      void resyncSessionRecord(sessionId, sessionIdRef, dispatch);
+    (sessionId: string, isCurrentAction?: () => boolean): void => {
+      if (isCurrentAction && !isCurrentAction()) return;
+      void resyncSessionRecord(
+        sessionId,
+        sessionIdRef,
+        dispatch,
+        isCurrentAction,
+      );
     },
     [dispatch, sessionIdRef],
   );
@@ -135,15 +133,17 @@ export function useBuildSessionActions({
     const sessionId = state.session?.id;
     if (!sessionId) return;
     const worldId = state.world?.id ?? "";
+    const owner = claimAction(sessionId);
 
     const postStart = (loreOverride?: unknown) => {
-      if (sessionIdRef.current !== sessionId) return;
+      if (!owner.isCurrent()) return;
+      dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-      const requestId = crypto.randomUUID();
+      const requestId = owner.requestId;
       void workspace
         .run(sessionId, requestId, () => {
-          if (sessionIdRef.current !== sessionId) {
+          if (!owner.isCurrent()) {
             return Promise.reject(
               new Error("Session changed before action start"),
             );
@@ -158,15 +158,20 @@ export function useBuildSessionActions({
             },
             handleSseEvent,
             dispatch,
-            { sessionIdRef },
+            { sessionIdRef, isCurrentAction: owner.isCurrent },
           );
         })
         .catch((error: unknown) => {
-          reportWorkspaceSyncError(error, dispatch);
+          if (owner.isCurrent()) reportWorkspaceSyncError(error, dispatch);
         })
         .finally(() => {
-          finalizeActionExecution(dispatch, sessionId, sessionIdRef);
-          resyncSession(sessionId);
+          finalizeActionExecution(
+            dispatch,
+            sessionId,
+            sessionIdRef,
+            owner.isCurrent,
+          );
+          resyncSession(sessionId, owner.isCurrent);
         });
     };
 
@@ -174,7 +179,15 @@ export function useBuildSessionActions({
       .getWorldOverlay(worldId)
       .then((overlay) => postStart(overlay?.lore))
       .catch(() => postStart());
-  }, [workspace, state, handleSseEvent, dispatch, resyncSession, sessionIdRef]);
+  }, [
+    workspace,
+    state,
+    handleSseEvent,
+    dispatch,
+    resyncSession,
+    sessionIdRef,
+    claimAction,
+  ]);
 
   const resumeSession = useCallback(
     async (session: api.SessionRecord) => {
@@ -218,97 +231,58 @@ export function useBuildSessionActions({
   );
 
   const runSingleAction = useCallback(
-    (content: string, opts: { echoUserMessage: boolean }): Promise<void> => {
-      const session = state.session;
-      if (!session) return Promise.resolve();
-      const sessionId = session.id;
-
-      let persistInput: Promise<void> = Promise.resolve();
-      if (opts.echoUserMessage && content) {
-        const userMsgId = crypto.randomUUID();
-        const userTimestamp = new Date().toISOString();
-        dispatch({
-          type: "ADD_MESSAGE",
-          message: {
-            id: userMsgId,
-            role: "user",
+    (
+      content: string,
+      opts: { echoUserMessage: boolean; owner: SessionActionOwner },
+    ): Promise<void> =>
+      state.session
+        ? runSingleSessionAction({
             content,
-            timestamp: userTimestamp,
-          },
-        });
-        persistInput = ds.addMessage({
-          id: userMsgId,
-          sessionId,
-          role: "user",
-          content,
-          createdAt: userTimestamp,
-        });
-      }
-
-      return new Promise<void>((resolve) => {
-        const fireAction = () => {
-          const isCommand = content.startsWith("/");
-          const requestId = crypto.randomUUID();
-          return workspace.run(sessionId, requestId, () => {
-            if (sessionIdRef.current !== sessionId) {
-              return Promise.reject(
-                new Error("Session changed before action start"),
-              );
-            }
-            return runActionStream(
-              {
-                requestId,
-                type: isCommand ? "execute_command" : "send_message",
-                sessionId,
-                locale: session.locale ?? i18n.language,
-                payload: isCommand ? { command: content } : { content },
-              },
-              handleSseEvent,
-              dispatch,
-              { toastOnError: true, sessionIdRef },
-            );
-          });
-        };
-
-        // Settle the promise on an aborted sync too, or `sendMessage`'s
-        // `.finally(finalizeActionExecution)` never runs and the UI stays
-        // stuck on "executing".
-        persistInput.then(
-          () =>
-            fireAction().then(resolve, (error: unknown) => {
-              reportWorkspaceSyncError(error, dispatch);
-              resolve();
-            }),
-          (error: unknown) => {
-            ignoreError("persist user message")(error);
-            resolve();
-          },
-        );
-      });
-    },
-    [workspace, ds, dispatch, state.session, handleSseEvent],
+            ...opts,
+            session: state.session,
+            ds,
+            workspace,
+            dispatch,
+            handleSseEvent,
+            sessionIdRef,
+          })
+        : Promise.resolve(),
+    [workspace, ds, dispatch, state.session, handleSseEvent, sessionIdRef],
   );
 
   const sendMessage = useCallback(
     (content: string) => {
-      if (!canRunSessionAction(state)) return;
+      if (!canRunSessionAction(state) || !state.session) return;
+      const owner = claimAction(state.session.id);
 
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
-      runSingleAction(content, { echoUserMessage: true }).finally(() => {
-        finalizeActionExecution(dispatch, state.session?.id, sessionIdRef);
-        if (state.session) resyncSession(state.session.id);
+      runSingleAction(content, { echoUserMessage: true, owner }).finally(() => {
+        finalizeActionExecution(
+          dispatch,
+          state.session?.id,
+          sessionIdRef,
+          owner.isCurrent,
+        );
+        if (state.session) resyncSession(state.session.id, owner.isCurrent);
       });
     },
-    [dispatch, state, runSingleAction, resyncSession],
+    [
+      dispatch,
+      state,
+      runSingleAction,
+      resyncSession,
+      sessionIdRef,
+      claimAction,
+    ],
   );
 
   const steerMessage = useCallback(
     async (content: string): Promise<boolean> => {
       const session = state.session;
       if (!session || !content) return false;
-      const ok = await api.steerTurn(session.id, content).catch(() => false);
+      const ok = await api.steerTurn(session.id, content);
       if (!ok) return false;
       // Echo in the UI. The in-flight action commit captures the authoritative
       // server copy; writing a second local revision here would conflict with
@@ -325,10 +299,9 @@ export function useBuildSessionActions({
   );
 
   const abortActiveTurn = useCallback(async (): Promise<void> => {
-    const session = state.session;
-    if (!session) return;
-    await api.abortTurn(session.id).catch(() => false);
-  }, [state.session]);
+    const sid = state.session?.id ?? state.executionRecovery?.sessionId;
+    if (sid) await api.abortTurn(sid);
+  }, [state.session, state.executionRecovery?.sessionId]);
 
   const loadOlderMessages = useCallback(async () => {
     const sid = sessionIdRef.current;
@@ -337,7 +310,7 @@ export function useBuildSessionActions({
     if (!sid || !cursor) return;
     try {
       const page = await ds.listMessagesPage(sid, {
-        before: { createdAt: cursor.createdAt, id: cursor.id },
+        cursor,
         limit: OLDER_MESSAGES_PAGE_SIZE,
       });
       // 会话可能在请求期间被切换 —— 丢弃过期响应。
@@ -372,114 +345,74 @@ export function useBuildSessionActions({
     [ds, dispatch, sessionIdRef],
   );
 
-  const submitInteraction = useCallback(
-    async (
-      blockId: string,
-      turnId: string,
-      interactionId: string,
-      type: "form" | "choice" | "confirmation",
-      values: Record<string, unknown>,
-      submitBehavior?: { echoFilledNarrative?: boolean },
-    ) => {
-      const sid = sessionIdRef.current;
-      if (!sid) return;
-      const echo = submitBehavior?.echoFilledNarrative !== false;
-
-      // Persist the player's input and fill the interaction template. If this
-      // fails we cannot run the turn, so fall back to a plain message so the
-      // player's input is never silently dropped.
-      let filled: string;
-      try {
-        submitBlock(blockId, values);
-        const result = await workspace.run(
-          sid,
-          `interaction:${crypto.randomUUID()}`,
-          () =>
-            api.submitInputs(sid, {
-              turnId,
-              submissions: [{ interactionId, type, values }],
-            }),
-        );
-        filled = result.results?.[0]?.filledNarrative ?? "";
-      } catch (err) {
-        if (sessionIdRef.current !== sid) return;
-        if (reportWorkspaceSyncError(err, dispatch)) return;
-        console.error("[submitInteraction] submit-form failed:", err);
-        sendMessage(Object.values(values).join(", "));
-        return;
-      }
-
-      // Run the resulting narrative turn, then re-sync the character snapshot.
-      //
-      // Proposal-backed character writes (including the builtin
-      // create/update-character tools and player-init guard) emit
-      // `character.upserted`, so characters update incrementally.
-      // `characterSchema` still has no SSE carrier; refresh the snapshot after
-      // setup input so the schema and character slices are reconciled together.
-      //
-      // So after the turn that may have created/updated the player, we pull a
-      // snapshot to refresh both `characters` and `characterSchema`. Done after
-      // the turn (not before) so a just-created character is included.
-      if (sessionIdRef.current !== sid) return;
-      dispatch({ type: "SET_EXECUTING", value: true });
-      dispatch({ type: "SET_EXECUTION_ERROR", error: null });
-      try {
-        await runSingleAction(echo ? filled : "", {
-          echoUserMessage: echo && Boolean(filled),
-        });
-        try {
-          const snapshot = await api.getSessionSnapshot(sid);
-          if (sessionIdRef.current === sid) {
-            dispatch({
-              type: "SET_GAME_STATE",
-              state: enrichGameStateFromSnapshot(snapshot),
-            });
-          }
-        } catch {
-          // Non-critical: the character panel refreshes on reconnect/restore.
-        }
-      } finally {
-        finalizeActionExecution(dispatch, sid, sessionIdRef);
-        const currentSid = sessionIdRef.current;
-        if (currentSid) resyncSession(currentSid);
-      }
-    },
+  const submittingInteractions = useRef(new Set<string>());
+  const submitInteraction = useCallback<SessionActions["submitInteraction"]>(
+    (...submission) =>
+      submitInteractionBlock(
+        {
+          dispatch,
+          workspace,
+          sessionIdRef,
+          submitBlock,
+          runSingleAction,
+          resyncSession,
+          inFlight: submittingInteractions.current,
+          claimAction,
+        },
+        submission,
+      ),
     [
       dispatch,
+      workspace,
       sessionIdRef,
       submitBlock,
-      sendMessage,
       runSingleAction,
       resyncSession,
+      claimAction,
     ],
   );
 
   const runKernelAction = useCallback(
     (request: api.ActionRequest): void => {
       if (sessionIdRef.current !== request.sessionId) return;
+      const owner = claimAction(request.sessionId, request.requestId);
+      dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
       dispatch({ type: "SET_EXECUTING", value: true });
       dispatch({ type: "SET_EXECUTION_ERROR", error: null });
 
       void workspace
         .run(request.sessionId, request.requestId, () => {
-          if (sessionIdRef.current !== request.sessionId) {
+          if (!owner.isCurrent()) {
             return Promise.reject(
               new Error("Session changed before action start"),
             );
           }
           return runActionStream(request, handleSseEvent, dispatch, {
             sessionIdRef,
+            isCurrentAction: owner.isCurrent,
           });
         })
         .catch((error: unknown) => {
-          reportWorkspaceSyncError(error, dispatch);
+          if (owner.isCurrent()) reportWorkspaceSyncError(error, dispatch);
         })
         .finally(() => {
-          finalizeActionExecution(dispatch, request.sessionId, sessionIdRef);
-          if (request.sessionId) resyncSession(request.sessionId);
+          finalizeActionExecution(
+            dispatch,
+            request.sessionId,
+            sessionIdRef,
+            owner.isCurrent,
+          );
+          resyncSession(request.sessionId, owner.isCurrent);
         });
     },
-    [dispatch, workspace, handleSseEvent, resyncSession, sessionIdRef],
+    [
+      dispatch,
+      workspace,
+      handleSseEvent,
+      resyncSession,
+      sessionIdRef,
+      claimAction,
+    ],
   );
 
   const executeCommand = useCallback(
@@ -499,41 +432,54 @@ export function useBuildSessionActions({
     [state, runKernelAction],
   );
 
+  const { retryInterruptedTurn, refreshExecutionRecovery } =
+    useExecutionRecoveryActions({
+      state,
+      dispatch,
+      runKernelAction,
+      resumeSessionById,
+    });
+
   const retryRuntime = useCallback(
-    (runtimeId?: string, sourceTurnId?: string) => {
+    (runtimeId?: string | readonly string[], sourceTurnId?: string) => {
       if (!canRunSessionAction(state)) return;
       const sessionId = state.session?.id;
       if (!sessionId) return;
-
-      // Whole-turn retry regenerates the narrative, so the turn's messages
-      // go. A chip-scoped retry (sourceTurnId set) replays ONE auxiliary
-      // runtime against that turn's recorded outputs — the narrative stays.
-      const lastTurnId =
-        state.messages.length > 0
-          ? [...state.messages].reverse().find((message) => message.turnId)
-              ?.turnId
-          : undefined;
-      if (lastTurnId && !sourceTurnId) {
-        clearStreamingTextsForTurn(lastTurnId);
-        dispatch({
-          type: "REMOVE_MESSAGES_FROM_TURN",
-          turnId: lastTurnId,
-          keepRuntimeIds: new Set<string>(),
-        });
+      const recovery = state.executionRecovery?.status;
+      if (
+        (recovery?.state === "interrupted" || recovery?.state === "failed") &&
+        (!sourceTurnId || sourceTurnId === recovery.turnId)
+      ) {
+        retryInterruptedTurn();
+        return;
       }
-
+      if (typeof runtimeId !== "string" && runtimeId !== undefined) {
+        if (!sourceTurnId || runtimeId.length === 0) return;
+        runKernelAction({
+          requestId: crypto.randomUUID(),
+          type: "retry_failed_runtimes",
+          sessionId,
+          locale: state.session?.locale ?? i18n.language,
+          payload: {
+            runtimeIds: [...new Set(runtimeId)],
+            retryFromTurnId: sourceTurnId,
+          },
+        });
+        return;
+      }
+      if (!runtimeId) return;
       runKernelAction({
         requestId: crypto.randomUUID(),
-        type: runtimeId ? "retry_runtime" : "retry_turn",
+        type: "retry_runtime",
         sessionId,
         locale: state.session?.locale ?? i18n.language,
         payload: {
-          ...(runtimeId ? { runtimeId } : {}),
+          runtimeId,
           ...(sourceTurnId ? { retryFromTurnId: sourceTurnId } : {}),
         },
       });
     },
-    [dispatch, state, runKernelAction],
+    [state, runKernelAction, retryInterruptedTurn],
   );
 
   const resetSession = useCallback(() => {
@@ -575,8 +521,8 @@ export function useBuildSessionActions({
       if (sessionIdRef.current !== sid) return;
       dispatch({
         type: "LOAD_SESSION_PLUGINS",
-        plugins: res.available,
-        commands: res.commands,
+        plugins: [...res.items],
+        commands: [...res.commands],
       });
     } catch {
       // Non-critical: plugins panel is optional.
@@ -587,7 +533,7 @@ export function useBuildSessionActions({
     async (pluginId: string, enable: boolean) => {
       const sid = sessionIdRef.current;
       if (!sid) return;
-      dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, isActive: enable });
+      dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, active: enable });
       try {
         if (!enable) {
           await workspace.run(
@@ -624,7 +570,7 @@ export function useBuildSessionActions({
           dispatch({
             type: "TOGGLE_SESSION_PLUGIN",
             pluginId,
-            isActive: false,
+            active: false,
           });
           await workspace.run(sid, `plugin-deny:${crypto.randomUUID()}`, () =>
             api.resolveApproval(firstResult.approvalId, "deny", "session", sid),
@@ -660,7 +606,7 @@ export function useBuildSessionActions({
         dispatch({
           type: "TOGGLE_SESSION_PLUGIN",
           pluginId,
-          isActive: !enable,
+          active: !enable,
         });
       }
     },
@@ -755,6 +701,8 @@ export function useBuildSessionActions({
       submitInteraction,
       executeCommand,
       retryRuntime,
+      retryInterruptedTurn,
+      refreshExecutionRecovery,
       resetSession,
       backToWorldSelect,
       updateWorldLocal,
@@ -784,6 +732,8 @@ export function useBuildSessionActions({
       submitInteraction,
       executeCommand,
       retryRuntime,
+      retryInterruptedTurn,
+      refreshExecutionRecovery,
       resetSession,
       backToWorldSelect,
       updateWorldLocal,

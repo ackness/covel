@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { subscribeToast } from "../../lib/toast-channel.js";
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
@@ -28,6 +29,7 @@ Object.defineProperty(globalThis, "localStorage", {
 const apiModule = await import("../api.js");
 const {
   generateWorld,
+  createWorld,
   updateWorld,
   importDimensions,
   preflightWorldData,
@@ -77,6 +79,25 @@ describe("world API mapping", () => {
     );
   });
 
+  it("lets POST /api/worlds mint the id when createWorld omits one", async () => {
+    storeOperatorToken("operator-secret");
+    mockFetchOnce({
+      id: "world-abc12345",
+      name: "World",
+      description: "Description",
+      createdAt: "2026-09-04T00:00:00.000Z",
+      updatedAt: "2026-09-04T00:00:00.000Z",
+    });
+
+    await createWorld({ name: "World", description: "Description" });
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const body = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body),
+    ) as Record<string, unknown>;
+    expect(body).toEqual({ name: "World", description: "Description" });
+  });
+
   it("generateWorld sends the requested save target", async () => {
     storeOperatorToken("operator-secret");
     const stream = new ReadableStream({
@@ -119,8 +140,7 @@ describe("world API mapping", () => {
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/ai/generate-world");
     expect(
-      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)
-        .Authorization,
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization"),
     ).toBe("Bearer operator-secret");
     expect(
       JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)),
@@ -160,9 +180,56 @@ describe("world API mapping", () => {
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/worlds/world-1");
     expect(
-      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)
-        .Authorization,
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Authorization"),
     ).toBe("Bearer operator-secret");
+  });
+
+  it.each(["create", "update"])(
+    "reports an explicit %s world authorization failure",
+    async (operation) => {
+      const toast = vi.fn();
+      const unsubscribe = subscribeToast(toast);
+      mockFetchOnce(
+        { error: "Operator required", code: "operator_token_required" },
+        401,
+      );
+      try {
+        const request =
+          operation === "create"
+            ? createWorld({ name: "World" })
+            : updateWorld("world-1", { name: "World" });
+
+        await expect(request).rejects.toMatchObject({
+          status: 401,
+          code: "operator_token_required",
+        });
+
+        expect(toast).toHaveBeenCalledOnce();
+      } finally {
+        unsubscribe();
+      }
+    },
+  );
+
+  it("keeps automatic world-sync authorization probes silent without swallowing the error", async () => {
+    const toast = vi.fn();
+    const unsubscribe = subscribeToast(toast);
+    mockFetchOnce(
+      { error: "Operator required", code: "operator_token_required" },
+      401,
+    );
+    try {
+      await expect(
+        updateWorld("world-1", { name: "World" }, { silentStatuses: [401] }),
+      ).rejects.toMatchObject({
+        status: 401,
+        code: "operator_token_required",
+      });
+
+      expect(toast).not.toHaveBeenCalled();
+    } finally {
+      unsubscribe();
+    }
   });
 
   it("importDimensions maps metadata.dimensions onto the frontend record", async () => {
@@ -225,17 +292,15 @@ describe("world API mapping", () => {
       sessionId: "sess-1",
     });
     expect(
-      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)[
-        "X-Session-Token"
-      ],
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("X-Session-Token"),
     ).toBe("owner-secret");
   });
 });
 
 describe("approvals API helpers", () => {
-  it("listApprovals reads the pending envelope from the server", async () => {
+  it("listApprovals reads the standard items envelope from the server", async () => {
     mockFetchOnce({
-      pending: [
+      items: [
         {
           approvalId: "approval-1",
           sessionId: "sess-1",
@@ -273,9 +338,7 @@ describe("approvals API helpers", () => {
 
     const fetchMock = vi.mocked(globalThis.fetch);
     expect(
-      (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)[
-        "X-Session-Token"
-      ],
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("X-Session-Token"),
     ).toBe("owner-secret");
   });
 });

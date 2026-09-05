@@ -33,6 +33,7 @@ export {
   toJsonValueOrDiagnostic,
 } from "./utils/json-value.js";
 export { reservedPluginDataNamespaceError } from "./utils/plugin-data-namespace.js";
+export { decodePageCursor, encodePageCursor } from "./utils/page-cursor.js";
 export {
   parseSlashCommandInvocation,
   parseStructuredSlashCommandInvocation,
@@ -169,6 +170,22 @@ export {
 
 export type { WorldManifestInput } from "./schemas/world.js";
 
+// ── API Transport Contracts ────────────────────────────────────
+export {
+  actionRequestSchema,
+  actionTypeSchema,
+  apiListResponseSchema,
+  apiErrorResponseSchema,
+  pluginSummarySchema,
+  sseEnvelopeSchema,
+  suspensionSummarySchema,
+  validateActionRequest,
+  worldPluginPlanSchema,
+  worldCreateRequestSchema,
+  worldPatchRequestSchema,
+  worldWireRecordSchema,
+} from "./schemas/api-contract.js";
+
 export {
   WORLD_IR_V1_SCHEMA_URI,
   WORLD_IR_V1_JSON_SCHEMA,
@@ -251,3 +268,4 @@ export type {
   AssetGenerateLLMTextPart,
   AssetGenerateView,
 } from "./proposals/asset-generate.js";
+export { resolvePluginSelection } from "./plugin-selection.js";

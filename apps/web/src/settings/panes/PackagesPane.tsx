@@ -2,34 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Package, Upload, Globe, Puzzle, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
-import {
-  getDesktopRestAuthHeaders,
-  hasElectronIpc,
-  reloadServerAndWait,
-} from "@/lib/desktop-bridge.js";
+import { hasElectronIpc, reloadServerAndWait } from "@/lib/desktop-bridge.js";
 import { text } from "@/components/world/editor-helpers.js";
-import { operatorAuthHeaders } from "@/services/session-credentials.js";
-
-type InstallKind = "plugin" | "world";
-
-interface InstallResult {
-  ok: boolean;
-  kind: InstallKind;
-  id: string;
-  restartRequired: boolean;
-}
+import {
+  installPackage,
+  listInstalledPlugins,
+  uninstallPlugin,
+  type InstallKind,
+  type InstallResult,
+} from "@/services/api.js";
+import type { PluginSummary } from "@covel/shared";
 
 interface ToastState {
   message: string;
   tone: "success" | "error";
-}
-
-interface InstalledPlugin {
-  id: string;
-  name?: string;
-  displayName?: string | Record<string, string>;
-  source: string;
-  pluginType?: string;
 }
 
 /**
@@ -43,16 +29,15 @@ export function PackagesPane() {
   const [busy, setBusy] = useState<InstallKind | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [lastResult, setLastResult] = useState<InstallResult | null>(null);
-  const [installed, setInstalled] = useState<InstalledPlugin[]>([]);
+  const [installed, setInstalled] = useState<PluginSummary[]>([]);
   const [removing, setRemoving] = useState<string | null>(null);
   const toastTimer = useRef<number | null>(null);
 
   const refreshInstalled = useCallback(async () => {
     try {
-      const res = await fetch("/api/plugins");
-      const body = (await res.json()) as { plugins?: InstalledPlugin[] };
+      const plugins = await listInstalledPlugins({ silentErrors: true });
       // Only third-party (non-builtin) plugins can be uninstalled.
-      setInstalled((body.plugins ?? []).filter((p) => p.source !== "builtin"));
+      setInstalled(plugins.filter((plugin) => plugin.source !== "builtin"));
     } catch {
       /* non-fatal — the list just stays as-is */
     }
@@ -77,27 +62,7 @@ export function PackagesPane() {
     setBusy(kind);
     setLastResult(null);
     try {
-      const form = new FormData();
-      form.append("file", file, file.name);
-      const res = await fetch(`/api/install/${kind}`, {
-        method: "POST",
-        headers: {
-          ...operatorAuthHeaders(),
-          ...getDesktopRestAuthHeaders(),
-        },
-        body: form,
-      });
-      const body = (await res.json()) as Partial<InstallResult> & {
-        error?: string;
-      };
-      if (!res.ok || !body.ok) {
-        flash({
-          message: body.error ?? t("settings.packages.uploadFailed"),
-          tone: "error",
-        });
-        return;
-      }
-      const result = body as InstallResult;
+      const result = await installPackage(kind, file);
       setLastResult(result);
       flash({
         message: result.restartRequired
@@ -121,26 +86,7 @@ export function PackagesPane() {
   async function uninstall(id: string) {
     setRemoving(id);
     try {
-      const res = await fetch(`/api/plugins/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-        headers: {
-          ...operatorAuthHeaders(),
-          ...getDesktopRestAuthHeaders(),
-        },
-      });
-      const body = (await res.json()) as {
-        ok?: boolean;
-        error?: string;
-      };
-      if (!res.ok || !body.ok) {
-        flash({
-          message:
-            body.error ??
-            t("settings.packages.uninstallFailed", "Uninstall failed"),
-          tone: "error",
-        });
-        return;
-      }
+      await uninstallPlugin(id);
       flash({
         message: t("settings.packages.uninstalledRestart", { id }),
         tone: "success",
@@ -255,7 +201,7 @@ export function PackagesPane() {
               >
                 <div className="min-w-0">
                   <div className="text-xs font-medium truncate">
-                    {text(p.displayName) || p.name || p.id}
+                    {text(p.displayName) || p.id}
                   </div>
                   <div className="text-[10px] font-mono text-muted-foreground truncate">
                     {p.id}

@@ -169,6 +169,7 @@
     "noModelsConfigured": "未配置模型",
     "preparation": "会话配置",
     "startFailed": "创建会话失败",
+    "pluginPlanFailed": "无法解析世界插件方案",
     "history": "历史会话",
     "worldLore": "世界文档",
     "worldTab": "世界",
@@ -230,10 +231,8 @@
       "post-turn": "叙事后",
       "audit": "审计"
     },
-    "retryAll": "重试全部",
-    "retryAllTitle": "重新执行所有",
     "statusLlm": "调用模型",
-    "statusPreparing": "准备中",
+    "statusPreparing": "执行中",
     "breadcrumbWorldSelect": "选择世界",
     "breadcrumbPrep": "配置",
     "breadcrumbGame": "游戏中",
@@ -274,20 +273,6 @@
       "guidance": "引导",
       "utility": "工具"
     },
-    "pluginPacks": {
-      "traditional-story": {
-        "label": "传统故事模式",
-        "description": "主叙事器、行动建议、图鉴和关系图，适合长篇探索。"
-      },
-      "dialogue-mode": {
-        "label": "对话模式",
-        "description": "对话优先叙事、场景演员、快速短句和角色资料。"
-      },
-      "low-cost": {
-        "label": "低成本",
-        "description": "保留核心流程和函数型插件，减少下游 LLM 调用；cost-gate 为每局设置 token 花费上限。"
-      }
-    },
     "recommendationReasons": {
       "requiredByWorld": "世界必需",
       "packOptional": "组合包可选",
@@ -307,7 +292,7 @@
     "viewDetailedAria": "详情视图",
     "viewRawAria": "原始视图",
     "viewStageAria": "舞台视图",
-    "stateStreaming": "生成中",
+    "stateStreaming": "回合执行中",
     "statePlaying": "进行中",
     "toggleStoryPanel": "切换故事侧栏",
     "debugTraces": "调试追踪",
@@ -370,7 +355,35 @@
     "blockLabel": "区块",
     "exportEmpty": "暂无可导出的消息",
     "exportSuccess": "聊天记录已导出",
-    "exportFailed": "导出聊天记录失败"
+    "exportFailed": "导出聊天记录失败",
+    "executionFailures": "失败 {{count}} 项",
+    "partialCompletion": "部分更新未完成，请查看下方受影响的任务。",
+    "runtimeFailedDetail": "这项任务未完成，可以重试或查看执行追踪。",
+    "stateSetup": "准备中",
+    "recoveryChecking": "正在确认未完成回合",
+    "recoveryRunning": "上一回合仍在执行",
+    "recoveryInterrupted": "此回合已中断",
+    "recoveryFailed": "此回合未能完成",
+    "recoveryHydrating": "正在恢复存档",
+    "recoveryUnknownDetail": "暂时无法确认执行结果，正在重新连接。这里只检查原任务，不会重复发起回合。",
+    "recoveryRunningDetail": "服务端仍在继续原任务，完成后会自动恢复结果。你可以等待，也可以停止任务。",
+    "recoveryInterruptedDetail": "未完成的任务已停止运行，已保存的进度会保留。只有点击重试，才会发起新的尝试。",
+    "recoveryHydratingDetail": "正在取回最新保存的结果，随后即可继续游玩。",
+    "recoveryRetry": "重试未完成回合",
+    "recoveryRefresh": "检查状态",
+    "recoveryStop": "停止任务",
+    "recoveryStopFailed": "未能停止任务，请检查状态后再试。",
+    "reasonInterrupted": "此任务在完成前已中断，没有提交结果。此处保留当时的执行记录。",
+    "retryTask": "重试此任务",
+    "executionHistory": "历史记录",
+    "retryFailedTasks": "重试失败任务（{{count}}）",
+    "retryScopeHint": "只重试选中的失败任务，正文和其他已完成结果会保留。",
+    "reasonAwaitingCommit": "等待保存重试结果",
+    "reasonCommitFailed": "重试结果未能保存，请重试此任务。",
+    "pluginPlanLoading": "正在加载插件执行计划…",
+    "reasonRetryNotCompleted": "此任务尚未完成，请重试。",
+    "retryFailedBatch": "先重试 {{count}} 个失败任务",
+    "retryBatchLimit": "每批最多 {{count}} 个任务，完成后可继续重试其余任务。"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -665,18 +678,34 @@
         "label": "主题库",
         "description": "导入、移除并复用自定义主题包。"
       },
-      "uiLocale": { "label": "界面语言" },
-      "chatMessageWindow": { "label": "聊天窗口消息上限" },
-      "onboardedVersion": { "label": "Onboarding 版本" },
+      "uiLocale": {
+        "label": "界面语言"
+      },
+      "chatMessageWindow": {
+        "label": "聊天窗口消息上限"
+      },
+      "onboardedVersion": {
+        "label": "Onboarding 版本"
+      },
       "llmSlotConfig": {
         "label": "用途分配",
         "description": "为每种模型用途选择服务商和模型"
       },
-      "llmProviders": { "label": "服务商与模型" },
-      "llmProviderPriceMultipliers": { "label": "服务商价格倍率" },
-      "llmParamOverrides": { "label": "参数覆盖" },
-      "llmCapabilityOverrides": { "label": "能力覆盖" },
-      "llmPrepRuntimeBindings": { "label": "准备阶段 Runtime 绑定" }
+      "llmProviders": {
+        "label": "服务商与模型"
+      },
+      "llmProviderPriceMultipliers": {
+        "label": "服务商价格倍率"
+      },
+      "llmParamOverrides": {
+        "label": "参数覆盖"
+      },
+      "llmCapabilityOverrides": {
+        "label": "能力覆盖"
+      },
+      "llmPrepRuntimeBindings": {
+        "label": "准备阶段 Runtime 绑定"
+      }
     },
     "operatorAccessTitle": "托管服务运维访问",
     "operatorAccessConfigured": "已配置",
@@ -910,7 +939,15 @@
       "high": "较高",
       "xhigh": "很高",
       "max": "最高"
-    }
+    },
+    "modelLimitsUnknown": "模型上限未知",
+    "capabilityUnknownHint": "未找到对应模型记录。协议支持为估计值；模型 token 上限未知，可手动指定。",
+    "backToProviders": "返回服务商列表",
+    "maxOutputTokensInvalid": "请输入正整数，且不要超过已显示的上限。",
+    "conflictTitle": "其他窗口已修改设置",
+    "conflictDetail": "{{keys}} 未保存。已加载最新值，请核对后重新修改。",
+    "draftConflict": "其他窗口已修改此设置。已保留你的草稿，请先加载已保存值，再继续编辑。",
+    "reloadSavedValue": "加载已保存值"
   },
   "appearance": {
     "customizeTitle": "精细调整",
@@ -1463,7 +1500,7 @@
       "server": "服务商暂时不可用，请稍后重试。",
       "timeout": "请求超时，请检查网络或代理。",
       "network": "无法连接服务商，请检查网络或代理。",
-      "invalidOutput": "模型返回的数据不符合该任务要求的格式，可重试或查看详情。",
+      "invalidOutput": "模型未产出有效结果。可重试此任务，或查看详情检查原因。",
       "incomplete": "任务流已结束，但未收到最终状态，请重试该任务。",
       "generic": "请求失败，可展开查看原始错误。",
       "unknown": "请求失败，服务端未返回错误详情。",
@@ -1687,7 +1724,11 @@
       "namespaces": "{{count}} 个命名空间",
       "keys": "{{count}} 个键",
       "empty": "空"
-    }
+    },
+    "snapshotRefreshFailed": "会话数据刷新失败，当前数据可能已过期，请点击刷新重试。",
+    "snapshotUpdatedAt": "数据更新于 {{time}}",
+    "interrupted": "已中断",
+    "interruptedHint": "服务端确认此执行已中断。原始追踪已保留，可能没有终止事件。"
   },
   "reload": {
     "reloading": "正在重启服务…",

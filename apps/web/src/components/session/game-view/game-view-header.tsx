@@ -13,7 +13,7 @@ import {
 import type { TFunction } from "i18next";
 import { Button } from "@/components/ui/button.js";
 import { Toggle } from "@/components/ui/toggle.js";
-import type { WorldRecord } from "@/services/api.js";
+import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { SessionBreadcrumb } from "../session-breadcrumb.js";
 import { ConnectionStatus } from "./connection-status.js";
@@ -23,6 +23,7 @@ export type GameViewMode = "parsed" | "detailed" | "raw" | "stage";
 interface GameViewHeaderProps {
   t: TFunction;
   sessionId: string;
+  sessionPhase: SessionRecord["phase"];
   world: WorldRecord | null;
   executing: boolean;
   viewMode: GameViewMode;
@@ -41,6 +42,7 @@ interface GameViewHeaderProps {
 export function GameViewHeader({
   t,
   sessionId,
+  sessionPhase,
   world,
   executing,
   viewMode,
@@ -70,6 +72,9 @@ export function GameViewHeader({
         </Button>
         <SessionBreadcrumb
           step="game"
+          currentStepLabel={
+            sessionPhase === "setup" ? t("session.stateSetup") : undefined
+          }
           worldName={text(world?.name)}
           onGoWorldSelect={onBackToWorldSelect}
           onGoPrep={onResetSession}
@@ -86,7 +91,11 @@ export function GameViewHeader({
           <span
             className={`w-1.25 h-1.25 rounded-full bg-current ${executing ? "ui-pulse-dot" : ""}`}
           />
-          {executing ? t("session.stateStreaming") : t("session.statePlaying")}
+          {executing
+            ? t("session.stateStreaming")
+            : sessionPhase === "setup"
+              ? t("session.stateSetup")
+              : t("session.statePlaying")}
         </span>
         <ConnectionStatus />
       </div>

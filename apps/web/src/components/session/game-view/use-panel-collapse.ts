@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import type { PanelImperativeHandle } from "react-resizable-panels";
+import { useCallback, useRef, useState } from "react";
+import type { PanelImperativeHandle, PanelSize } from "react-resizable-panels";
 
 export interface PanelCollapseControls {
   /** Ref to attach to the left ResizablePanel. */
@@ -11,9 +11,9 @@ export interface PanelCollapseControls {
   /** Live collapsed state of the right panel. */
   isRightCollapsed: boolean;
   /** Sync handler for the left panel's `onResize`. */
-  handleLeftResize: () => void;
+  handleLeftResize: (size: PanelSize) => void;
   /** Sync handler for the right panel's `onResize`. */
-  handleRightResize: () => void;
+  handleRightResize: (size: PanelSize) => void;
   /** Toggle the left panel between collapsed and expanded. */
   toggleLeftPanel: () => void;
   /** Toggle the right panel between collapsed and expanded. */
@@ -23,14 +23,10 @@ export interface PanelCollapseControls {
 /**
  * Owns the collapse state of the left/right resizable panels.
  *
- * Keeps imperative panel refs in sync with React state, auto-collapses both
- * rails on small viewports, and exposes toggles. Behaviour is identical to the
- * inline logic previously embedded in GameView.
+ * Resize callbacks own observed state. Breakpoint changes must never call
+ * imperative methods while the panel registry is adding or removing rails.
  */
-export function usePanelCollapse(
-  isMobile: boolean,
-  isTablet: boolean,
-): PanelCollapseControls {
+export function usePanelCollapse(): PanelCollapseControls {
   const leftPanelRef = useRef<PanelImperativeHandle>(null);
   const rightPanelRef = useRef<PanelImperativeHandle>(null);
   // Mirrors the left panel's `defaultSize="0%"` in GameView — the handle and
@@ -38,24 +34,12 @@ export function usePanelCollapse(
   const [isLeftCollapsed, setIsLeftCollapsed] = useState(true);
   const [isRightCollapsed, setIsRightCollapsed] = useState(false);
 
-  const isLeftCollapsedRef = useRef(isLeftCollapsed);
-  const isRightCollapsedRef = useRef(isRightCollapsed);
-  isLeftCollapsedRef.current = isLeftCollapsed;
-  isRightCollapsedRef.current = isRightCollapsed;
-
-  useEffect(() => {
-    if (isMobile || isTablet) {
-      if (leftPanelRef.current && !isLeftCollapsedRef.current)
-        leftPanelRef.current.collapse();
-      if (rightPanelRef.current && !isRightCollapsedRef.current)
-        rightPanelRef.current.collapse();
-    }
-  }, [isMobile, isTablet]);
-
-  const handleLeftResize = () =>
-    setIsLeftCollapsed(leftPanelRef.current?.isCollapsed() ?? false);
-  const handleRightResize = () =>
-    setIsRightCollapsed(rightPanelRef.current?.isCollapsed() ?? false);
+  const handleLeftResize = useCallback((size: PanelSize) => {
+    setIsLeftCollapsed(size.asPercentage === 0);
+  }, []);
+  const handleRightResize = useCallback((size: PanelSize) => {
+    setIsRightCollapsed(size.asPercentage === 0);
+  }, []);
 
   const toggleLeftPanel = () => {
     const panel = leftPanelRef.current;

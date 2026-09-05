@@ -33,7 +33,12 @@ function msg(over: Partial<StreamMessage> & { id: string }): StreamMessage {
 function step(
   over: Partial<ExecutionStep> & { runtimeId: string },
 ): ExecutionStep {
-  return { pluginId: over.runtimeId, status: "completed", ...over };
+  return {
+    pluginId: over.runtimeId,
+    status: "completed",
+    attemptStatus: "committed",
+    ...over,
+  };
 }
 
 /** Row keys as rendered (each row is a `.chat-row` wrapper keyed by child key). */
@@ -43,7 +48,106 @@ function rowKeys(rows: ReactNode[]): (string | null)[] {
 
 const renderMessage = (m: StreamMessage) => <div key={m.id}>{m.content}</div>;
 
+interface TimelineProps {
+  canRetryTasks: boolean;
+  steps: ExecutionStep[];
+  executing: boolean;
+  isLatestTurn: boolean;
+  turnNumberStart: number;
+  onRetryRuntime?: (runtimeId: string | readonly string[]) => void;
+}
+
+function timeline(rows: ReactNode[], turnId: string): TimelineProps {
+  const row = rows.find(
+    (value) => isValidElement(value) && value.key === `exec-${turnId}`,
+  ) as ReactElement<{ children: ReactElement<TimelineProps> }>;
+  return row.props.children.props;
+}
+
 describe("useMessageGrouping", () => {
+  it("leaves uncommitted story recovery to the authoritative recovery notice", () => {
+    const retry = vi.fn();
+    const { result } = renderHook(() =>
+      useMessageGrouping({
+        messages: [],
+        executionSteps: [
+          step({
+            runtimeId: "story",
+            turnId: "source",
+            status: "failed",
+            attemptStatus: "failed",
+          }),
+        ],
+        executing: false,
+        plugins: [],
+        onRetryRuntime: retry,
+        renderMessage,
+      }),
+    );
+    const props = timeline(result.current, "source");
+    expect(props.canRetryTasks).toBe(false);
+    expect(props.onRetryRuntime).toBeUndefined();
+    expect(props).not.toHaveProperty("onRetryAll");
+    expect(retry).not.toHaveBeenCalled();
+  });
+  it("keeps retry attempts in their source group and retries remaining tasks against that source", () => {
+    const onRetryRuntime = vi.fn();
+    const { result } = renderHook(() =>
+      useMessageGrouping({
+        messages: [msg({ id: "story", turnId: "source" })],
+        executionSteps: [
+          step({
+            runtimeId: "story",
+            turnId: "source",
+            startedAt: "2026-01-01T00:00:00Z",
+          }),
+          step({
+            runtimeId: "a",
+            turnId: "source",
+            status: "failed",
+            startedAt: "2026-01-01T00:00:00Z",
+          }),
+          step({
+            runtimeId: "b",
+            turnId: "source",
+            status: "failed",
+            startedAt: "2026-01-01T00:00:00Z",
+          }),
+          step({
+            runtimeId: "a",
+            turnId: "retry",
+            sourceTurnId: "source",
+            attemptStatus: "committed",
+            startedAt: "2026-01-02T00:00:00Z",
+          }),
+        ],
+        executing: false,
+        plugins: [],
+        onRetryRuntime,
+        renderMessage,
+      }),
+    );
+    expect(rowKeys(result.current)).toEqual([
+      "story",
+      "exec-source",
+      "assets-source",
+    ]);
+    const projected = timeline(result.current, "source");
+    expect(
+      projected.steps.map((value) => [value.runtimeId, value.status]),
+    ).toEqual([
+      ["story", "completed"],
+      ["a", "completed"],
+      ["b", "failed"],
+    ]);
+    projected.onRetryRuntime?.("b");
+    projected.onRetryRuntime?.(["a", "b"]);
+    expect(onRetryRuntime.mock.calls).toEqual([
+      ["b", "source"],
+      [["a", "b"], "source"],
+    ]);
+  });
+
   it("inserts a turn's execution timeline after that turn's last message", () => {
     const messages = [
       msg({ id: "u1", role: "user", turnId: "t1" }),
@@ -56,7 +160,7 @@ describe("useMessageGrouping", () => {
         messages,
         executionSteps,
         executing: false,
-        packages: [],
+        plugins: [],
         renderMessage,
       }),
     );
@@ -70,18 +174,162 @@ describe("useMessageGrouping", () => {
     ]);
   });
 
-  it("renders orphan steps (no messages yet) at the bottom as exec-active", () => {
+  it("renders a turn without messages using its own stable identity", () => {
     const { result } = renderHook(() =>
       useMessageGrouping({
         messages: [],
         executionSteps: [step({ runtimeId: "boot", turnId: "t9" })],
         executing: true,
-        packages: [],
+        plugins: [],
         renderMessage,
       }),
     );
 
-    expect(rowKeys(result.current)).toEqual(["exec-active"]);
+    expect(rowKeys(result.current)).toEqual(["exec-t9"]);
+  });
+
+  it("places an old interrupted turn before newer messages and permits only the latest turn retry", () => {
+    const onRetryRuntime = vi.fn();
+    const { result } = renderHook(() =>
+      useMessageGrouping({
+        messages: [
+          msg({
+            id: "new-story",
+            turnId: "new-turn",
+            timestamp: "2026-01-01T02:00:00Z",
+          }),
+        ],
+        executionSteps: [
+          step({
+            runtimeId: "narrator",
+            turnId: "old-turn",
+            status: "failed",
+            startedAt: "2026-01-01T01:00:00Z",
+          }),
+          step({
+            runtimeId: "tracker",
+            turnId: "new-turn",
+            status: "failed",
+            startedAt: "2026-01-01T02:00:01Z",
+          }),
+        ],
+        executing: false,
+        plugins: [],
+        onRetryRuntime,
+        renderMessage,
+      }),
+    );
+    expect(rowKeys(result.current)).toEqual([
+      "exec-old-turn",
+      "new-story",
+      "exec-new-turn",
+      "assets-new-turn",
+    ]);
+    const oldTurn = timeline(result.current, "old-turn");
+    expect(oldTurn).toMatchObject({
+      executing: false,
+      isLatestTurn: false,
+      turnNumberStart: 1,
+    });
+    expect(oldTurn.onRetryRuntime).toBeUndefined();
+    expect(oldTurn).not.toHaveProperty("onRetryAll");
+    const latest = timeline(result.current, "new-turn");
+    expect(latest).toMatchObject({
+      executing: false,
+      isLatestTurn: true,
+      turnNumberStart: 2,
+    });
+    latest.onRetryRuntime?.("tracker");
+    expect(onRetryRuntime.mock.calls).toEqual([["tracker", "new-turn"]]);
+  });
+
+  it("does not mark an older orphan turn active while the latest turn runs", () => {
+    const { result } = renderHook(() =>
+      useMessageGrouping({
+        messages: [
+          msg({
+            id: "latest-user",
+            role: "user",
+            turnId: "latest",
+            timestamp: "2026-01-01T02:00:00Z",
+          }),
+        ],
+        executionSteps: [
+          step({
+            runtimeId: "narrator",
+            turnId: "old",
+            status: "failed",
+            startedAt: "2026-01-01T01:00:00Z",
+          }),
+          step({
+            runtimeId: "narrator",
+            turnId: "latest",
+            status: "running",
+            startedAt: "2026-01-01T02:00:01Z",
+          }),
+        ],
+        executing: true,
+        plugins: [],
+        onRetryRuntime: vi.fn(),
+        renderMessage,
+      }),
+    );
+    expect(timeline(result.current, "old")).toMatchObject({
+      isLatestTurn: false,
+      executing: false,
+    });
+    expect(timeline(result.current, "latest")).toMatchObject({
+      isLatestTurn: true,
+      executing: true,
+    });
+    expect(timeline(result.current, "latest").onRetryRuntime).toBeUndefined();
+  });
+
+  it("keeps the source turn when retrying the newest turn without messages", () => {
+    const onRetryRuntime = vi.fn();
+    const { result } = renderHook(() =>
+      useMessageGrouping({
+        messages: [msg({ id: "old-story", turnId: "old" })],
+        executionSteps: [
+          step({
+            runtimeId: "narrator",
+            turnId: "latest",
+            status: "failed",
+            startedAt: "2026-01-02T00:00:00Z",
+          }),
+        ],
+        executing: false,
+        plugins: [],
+        onRetryRuntime,
+        renderMessage,
+      }),
+    );
+    timeline(result.current, "latest").onRetryRuntime?.("narrator");
+    expect(onRetryRuntime).toHaveBeenCalledWith("narrator", "latest");
+  });
+
+  it("does not reuse a historical turn as active before the new message has a turn ID", () => {
+    const { result } = renderHook(() =>
+      useMessageGrouping({
+        messages: [
+          msg({ id: "old-story", turnId: "old" }),
+          msg({
+            id: "pending",
+            role: "user",
+            timestamp: "2026-01-02T00:00:00Z",
+          }),
+        ],
+        executionSteps: [step({ runtimeId: "narrator", turnId: "old" })],
+        executing: true,
+        plugins: [],
+        onRetryRuntime: vi.fn(),
+        renderMessage,
+      }),
+    );
+    expect(timeline(result.current, "old")).toMatchObject({
+      isLatestTurn: false,
+      executing: false,
+    });
   });
 
   it("does not rebuild grouping maps when only `executing` changes", () => {
@@ -99,7 +347,7 @@ describe("useMessageGrouping", () => {
           messages,
           executionSteps,
           executing,
-          packages: [],
+          plugins: [],
           renderMessage,
         }),
       { initialProps: { executing: false } },

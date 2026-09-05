@@ -5,7 +5,7 @@
  * cutoff + cadence live ONLY here so every caller stays consistent:
  *   - a one-time forced sweep at server startup (bootstrap), and
  *   - a time-gated lazy sweep triggered by the suspension-touching routes
- *     (GET /:id/suspensions, POST /:id/resume) — mirroring the per-request
+ *     (GET /:id/suspensions, POST /:id/suspensions/:suspensionId/resume) — mirroring the per-request
  *     lazy cleanup in `middleware/rate-limit.ts`.
  *
  * Only UNRESOLVED records older than the TTL are swept; claimed (in-flight)

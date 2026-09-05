@@ -76,6 +76,14 @@ export interface LLMToolDefinition {
   readonly parameters: Readonly<Record<string, unknown>>; // JSON Schema
 }
 
+/** Runtime preferences applied only when compatible with explicit user settings. */
+export interface LLMRequestDefaults {
+  /** Deterministic extraction can opt out of optional reasoning by default. */
+  readonly reasoningEffort?: "disabled";
+  /** Prefer this declared tool; reasoning-only models may require automatic choice. */
+  readonly toolChoice?: { readonly name: string };
+}
+
 export interface LLMResponseFormat {
   readonly type: "json_schema";
   readonly schema: Readonly<Record<string, unknown>>;
@@ -153,6 +161,7 @@ export interface LLMAdapter {
     readonly model?: string;
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
+    readonly defaults?: LLMRequestDefaults;
     readonly responseFormat?: LLMResponseFormat;
     /** Hard per-request generation limit forwarded to the provider wire. */
     readonly maxOutputTokens?: number;
@@ -174,6 +183,7 @@ export interface LLMAdapter {
     readonly model?: string;
     readonly messages: readonly LLMMessage[];
     readonly tools?: readonly LLMToolDefinition[];
+    readonly defaults?: LLMRequestDefaults;
     /** @see generate.maxOutputTokens */
     readonly maxOutputTokens?: number;
     /** @see generate.onTargetAttempt */

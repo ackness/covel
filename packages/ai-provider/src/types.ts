@@ -1,5 +1,6 @@
 import type {
   LLMResponseFormat,
+  LLMRequestDefaults,
   LLMUsageSummary,
   MediaRef,
 } from "@covel/shared";
@@ -303,6 +304,7 @@ export interface TextGenerationParams {
   messages: TextMessage[];
   /** Tool definitions to pass to the model (OpenAI function calling format). */
   tools?: ToolDefinition[];
+  defaults?: LLMRequestDefaults;
   /** Structured response contract requested by an agent runtime. */
   responseFormat?: LLMResponseFormat;
   providerRequestMetadata?: Record<string, unknown>;

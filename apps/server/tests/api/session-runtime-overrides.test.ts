@@ -90,6 +90,32 @@ describe("PATCH /api/sessions/:id runtimeModelOverrides", () => {
     });
   });
 
+  it("persists presetId through the shared PATCH helper", async () => {
+    const res = await app.request("/api/sessions/sess-overrides-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ presetId: "story-fast" }),
+    });
+    expect(res.status).toBe(200);
+
+    const fresh = await store.getSession("sess-overrides-1");
+    expect(fresh?.presetId).toBe("story-fast");
+    expect(fresh?.metadata?.presetId).toBe("story-fast");
+  });
+
+  it("rejects an invalid presetId", async () => {
+    const res = await app.request("/api/sessions/sess-overrides-1", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ presetId: "" }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: "presetId must be a non-empty string",
+    });
+  });
+
   it("strips empty / non-string entries before persisting", async () => {
     const res = await app.request("/api/sessions/sess-overrides-1", {
       method: "PATCH",

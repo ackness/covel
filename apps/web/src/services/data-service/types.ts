@@ -1,4 +1,4 @@
-import type { CursorPage } from "@covel/shared";
+import type { CursorPage, PageCursor, WorldPatchRequest } from "@covel/shared";
 import type {
   MessageRecord,
   SessionRecord,
@@ -6,12 +6,7 @@ import type {
   WorldRecord,
 } from "../api.js";
 
-export type WorldPatch = Partial<
-  Pick<
-    WorldRecord,
-    "name" | "description" | "lore" | "locale" | "tags" | "dimensions"
-  >
->;
+export type WorldPatch = WorldPatchRequest;
 
 export type SessionPatch = Partial<
   Pick<SessionRecord, "status" | "presetId" | "runtimeModelOverrides">
@@ -24,6 +19,8 @@ export interface DataService {
   createWorld(name: string, description: string): Promise<WorldRecord>;
   saveGeneratedWorld(world: WorldRecord): Promise<WorldRecord>;
   updateWorld(id: string, patch: WorldPatch): Promise<WorldRecord>;
+  /** Ensure APIs needed before session creation can resolve this world. */
+  prepareWorldForServer(worldId: string): Promise<void>;
 
   // Sessions
   listSessions(worldId: string): Promise<SessionRecord[]>;
@@ -45,14 +42,14 @@ export interface DataService {
   listMessages(sessionId: string): Promise<MessageRecord[]>;
   /**
    * Keyset page of messages, oldest-first. `before` omitted ⇒ the newest
-   * window; `before` set ⇒ the page immediately older than that position
+   * window; `cursor` set ⇒ the page immediately older than that position
    * (scroll-up "load older"). `nextCursor` is the oldest returned row, or
    * `null` once the start of history is reached. Remote透传后端端点；local 直连
    * IDB 并按契约包成 `{ items, nextCursor }`。
    */
   listMessagesPage(
     sessionId: string,
-    opts: { limit?: number; before?: { createdAt: string; id: string } },
+    opts: { limit?: number; cursor?: PageCursor },
   ): Promise<CursorPage<MessageRecord>>;
   /** Persist a browser-authored input before its action is dispatched. */
   addMessage(msg: MessageRecord): Promise<void>;

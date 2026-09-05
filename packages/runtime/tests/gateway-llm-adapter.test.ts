@@ -116,6 +116,44 @@ describe("createGatewayAdapter target resolution", () => {
     });
   });
 
+  it("forwards runtime defaults separately from user slot overrides for generate and stream", async () => {
+    const seen: Array<Parameters<GatewayLike["generateText"]>[0]> = [];
+    const gateway: GatewayLike = {
+      resolveSlot: () => ({ provider: "qwen", model: "qwen3.8-flash" }),
+      async generateText(input) {
+        seen.push(input);
+        return {
+          text: "ok",
+          finishReason: "stop",
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+      },
+      async *streamText(input) {
+        seen.push(input);
+        yield { type: "done", finishReason: "stop" };
+      },
+    };
+    const defaults = {
+      reasoningEffort: "disabled",
+      toolChoice: { name: "submit-facts" },
+    } as const;
+    const adapter = createGatewayAdapter(gateway, {
+      slotOverrides: {
+        parameterOverrides: { plugin: { reasoningEffort: "automatic" } },
+      },
+    });
+    await adapter.generate({ model: "plugin", messages: [], defaults });
+    for await (const _event of adapter.stream!({
+      model: "plugin",
+      messages: [],
+      defaults,
+    })) {
+      /* drain */
+    }
+    expect(seen).toHaveLength(2);
+    for (const input of seen) expect(input.defaults).toEqual(defaults);
+  });
+
   it("forwards responseFormat and exposes the exact schema to the model", async () => {
     let inputSeen: Parameters<GatewayLike["generateText"]>[0] | undefined;
     const gateway: GatewayLike = {

@@ -27,21 +27,21 @@ import { LlmPresetsPane } from "./panes/LlmPresetsPane.js";
 import { PackagesPane } from "./panes/PackagesPane.js";
 import { AppearancePane } from "./panes/AppearancePane.js";
 import { OperatorAccessPane } from "./panes/OperatorAccessPane.js";
-import type { PackageSummary } from "@/services/api.js";
+import type { PluginSummary } from "@/services/api.js";
 
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Deep-link target — either a nav node id ("llm.slots") or a setting key. */
   initialKey?: string;
-  packages?: readonly Pick<PackageSummary, "name" | "displayName">[];
+  plugins?: readonly Pick<PluginSummary, "id" | "displayName">[];
 }
 
 export function SettingsDialog({
   open,
   onOpenChange,
   initialKey,
-  packages = [],
+  plugins = [],
 }: SettingsDialogProps) {
   const store = useSettingsStore();
   const { t, i18n } = useTranslation();
@@ -51,9 +51,9 @@ export function SettingsDialog({
   const pluginDisplayNames = useMemo(
     () =>
       Object.fromEntries(
-        packages.map((pkg) => [pkg.name, pkg.displayName] as const),
+        plugins.map((plugin) => [plugin.id, plugin.displayName] as const),
       ),
-    [packages],
+    [plugins],
   );
 
   useEffect(
@@ -92,20 +92,26 @@ export function SettingsDialog({
 
   const [selected, setSelected] = useState<string>("");
   const contentRef = useRef<HTMLElement>(null);
+  const appliedInitialKey = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (contentRef.current) contentRef.current.scrollTop = 0;
   }, [selected]);
 
   useEffect(() => {
-    if (!open) return;
-    if (initialKey) {
-      const exact = filtered.find((n) => n.id === initialKey);
+    if (!open) {
+      appliedInitialKey.current = undefined;
+      return;
+    }
+    if (initialKey && appliedInitialKey.current !== initialKey) {
+      appliedInitialKey.current = initialKey;
+      setQuery("");
+      const exact = tree.find((n) => n.id === initialKey);
       if (exact && isSelectable(exact)) {
         setSelected(exact.id);
         return;
       }
-      const byChild = filtered.find((n) =>
+      const byChild = tree.find((n) =>
         n.children.some(
           (e) => e.key === initialKey || e.key.startsWith(initialKey),
         ),
@@ -118,7 +124,7 @@ export function SettingsDialog({
     if (!selected || !filtered.find((n) => n.id === selected)) {
       setSelected(firstSelectable?.id ?? "");
     }
-  }, [open, initialKey, filtered, firstSelectable, selected]);
+  }, [open, initialKey, tree, filtered, firstSelectable, selected]);
 
   const selectedNode: NavNode | null =
     filtered.find((n) => n.id === selected) ?? firstSelectable ?? null;

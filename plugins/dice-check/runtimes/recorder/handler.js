@@ -50,6 +50,9 @@ const OUTCOME_PRESENTATION = {
  * @param {import('@covel/plugin-loader').FunctionHandlerContext} ctx
  */
 export default async function handler(ctx) {
+  if (!ctx.triggerEvent) {
+    return { outcome: "skipped", skipReason: "No check event to record" };
+  }
   const data = ctx.triggerEvent?.data;
   // Tolerate a bare single-check payload (schema forbids it, but a hand-made
   // event should degrade to "one check" rather than a skip).
@@ -68,9 +71,9 @@ export default async function handler(ctx) {
   }
   if (records.length === 0) {
     return {
-      outcome: "skipped",
-      skipReason:
-        "check.resolved payload carried no auditable check (roll must consume this turn's pre-rolled pool; modifier, total, difficulty, DC, and outcome must agree)",
+      outcome: "failed",
+      error:
+        "The reported check could not be verified against this turn's dice and rules. No check was recorded. The roll, modifier, total, difficulty, DC, and outcome must agree.",
     };
   }
 
@@ -105,6 +108,7 @@ export default async function handler(ctx) {
             __turnId: ctx.turnId,
             turnId: ctx.turnId,
             checks: [...previousChecks, ...entries],
+            rejectedCount: rawChecks.length - records.length,
           },
         },
       ],

@@ -67,6 +67,19 @@ export interface RuntimeResult {
   readonly timestamp: string;
 }
 
+/** Durable link between a scoped recovery attempt and its committed source. */
+export interface RuntimeRetryScope {
+  readonly sourceTurnId: string;
+  readonly runtimeIds: readonly string[];
+  /** Verified by the mutation owner; older traces may omit this proof. */
+  readonly sourceCommitted?: true;
+  /**
+   * Complete committed failure ledger, including inactive IDs. Inflight events
+   * carry the pre-attempt ledger; committed terminal events carry its settlement.
+   */
+  readonly sourceFailedRuntimeIds?: readonly string[];
+}
+
 /**
  * Frozen work item produced when a scheduler-driven runtime is moved beyond
  * the foreground turn barrier. `upstreamResults` is the source execution's
@@ -116,6 +129,9 @@ export interface TurnInput {
    * Manual trigger descriptor. When set, the turn executor runs only the
    * targeted runtime (bypassing scheduling of auto/event runtimes), then
    * processes any events the runtime emitted as a chained mini-pipeline.
+   * A `runtimeIds` batch instead keeps the selected runtimes' stage/DAG
+   * dependencies, resolves normal stage inputs, and commits in the foreground.
+   * It cannot expand its explicit scope through recursion or event followers.
    * Used by `POST /api/sessions/:id/plugin-rpc` with a `runtimeId` body.
    *
    * `triggerEvent` is an optional event payload forwarded to the targeted
@@ -125,8 +141,12 @@ export interface TurnInput {
    * synchronous event-chain fan-out. Independent of `payload`, which is
    * the manual click payload from the UI.
    */
-  readonly manualTrigger?: {
-    readonly runtimeId: string;
+  readonly manualTrigger?: (
+    | { readonly runtimeId: string; readonly runtimeIds?: never }
+    | { readonly runtimeIds: readonly string[]; readonly runtimeId?: never }
+  ) & {
+    /** Original committed turn; the attempt keeps its own turnId. */
+    readonly sourceTurnId?: string;
     readonly payload?: Readonly<Record<string, unknown>>;
     readonly triggerEvent?: {
       readonly topic: string;
@@ -135,7 +155,7 @@ export interface TurnInput {
     /**
      * Retry seeding: the recorded runtime results of a PRIOR turn, loaded from
      * its persisted `turn_results` artifact. The executor pre-populates
-     * `completedResults` with them (minus the target runtime) so the target's
+     * `completedResults` with them (minus all target runtimes) so each target's
      * `input.inject` / `needs` resolve against the original turn's outputs —
      * a plain manual trigger resolves them empty. Seeds are context, not
      * products: the executor drops any seed that was not re-executed before

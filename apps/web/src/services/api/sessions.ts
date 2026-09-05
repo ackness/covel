@@ -1,12 +1,14 @@
 import type {
   CursorPage,
-  I18nText,
+  PageCursor,
+  PluginMutationResponse,
   PluginRpcResponse,
   RuntimeResult,
-  SessionSlashCommand,
   SessionEvent,
-  Stage,
+  SessionPluginsResponse,
+  SuspensionSummary,
 } from "@covel/shared";
+import { apiListResponseSchema, suspensionSummarySchema } from "@covel/shared";
 import type {
   BrowserCheckpoint,
   SessionCommit,
@@ -26,126 +28,20 @@ import type {
 
 // -- Session Plugin API -------------------------------------------
 
-export interface SessionPluginInfo {
-  id: string;
-  displayName: I18nText;
-  description?: I18nText;
-  isActive: boolean;
-  /** Core plugins that are always required and cannot be disabled. */
-  locked?: boolean;
-  pluginType?: string;
-  /**
-   * Authoritative trust tier resolved by the kernel from the plugin's
-   * discovery path: `builtin` (shipped under `plugins/`) or `community`
-   * (everything else, e.g. user-installed
-   * under `~/.covel/plugins/`). Use this - not `pluginType` - when the UI
-   * needs to mark "core" vs "third-party"; plugin authors can forge
-   * `pluginType` but cannot forge the directory the framework loaded them
-   * from.
-   */
-  source?: "builtin" | "community";
-  /** Plugin load status: 'registered' = ok, 'error' = failed to load. */
-  status?: string;
-  /** Error message when status is 'error'. */
-  error?: string;
-  /** Named stage of the plugin's primary runtime; absent for event/manual/UI-only. */
-  stage?: Stage;
-  runtimeType?: string;
-  model?: string;
-  /** How the framework treats this plugin's output in the UI ('story' | 'plugin' | 'system'). */
-  outputKind?: string;
-  /** Capability tags declared by this plugin (e.g. 'image-generation', 'world-data-provider'). */
-  capabilities?: string[];
-  tags?: string[];
-  relations?: Record<string, unknown>;
-  trigger?: {
-    type: string;
-    interval?: number;
-    maxTriggerCount?: number;
-    cooldownTurns?: number;
-  };
-  tools?: { builtin: string[]; local: string[] };
-  config?: Record<
-    string,
-    {
-      type: string;
-      default?: unknown;
-      label?: string;
-      description?: string;
-      options?: string[];
-    }
-  >;
-  /** Slash commands declared by this plugin (active or inactive). */
-  commands?: readonly Omit<SessionSlashCommand, "id" | "pluginId" | "source">[];
-  /**
-   * Per-runtime breakdown so framework UI surfaces (e.g. inline action buttons
-   * in the chat stream) can discover which runtime to invoke via plugin-rpc by
-   * matching `capabilities` + `trigger.type`, instead of hardcoding plugin or
-   * runtime IDs (forbidden by the framework-plugin isolation rule).
-   */
-  runtimes?: Array<{
-    id: string;
-    runtimeType?: string;
-    stage?: Stage;
-    model?: string;
-    outputKind?: string;
-    trigger?: { type: string; topic?: string };
-    capabilities?: string[];
-    tags?: string[];
-    relations?: Record<string, unknown>;
-    execution?: "sync" | "background";
-    turnCompletion?: import("./types.js").TurnCompletionSummary;
-  }>;
-}
-
-export interface SessionPluginsResponse {
-  active: string[];
-  available: SessionPluginInfo[];
-  /** Framework + active-plugin command directory, resolved by the server. */
-  commands: SessionSlashCommand[];
-}
+export type { SessionPlugin, SessionPluginsResponse } from "@covel/shared";
 
 /** Fetch the active + available plugins for a session. */
 export async function listSessionPlugins(
   sessionId: string,
 ): Promise<SessionPluginsResponse> {
-  const raw = await request<{
-    active: string[];
-    available: Array<Record<string, unknown>>;
-    commands?: SessionSlashCommand[];
-  }>(`/api/sessions/${encodeURIComponent(sessionId)}/plugins`);
-  // Map API field `active` → frontend field `isActive`
-  const available: SessionPluginInfo[] = raw.available.map((p) => ({
-    ...p,
-    id: p.id as string,
-    // Prefer the friendly manifest displayName; fall back to name (which is the
-    // plugin id today) then the id. Resolved to the UI locale at render time.
-    displayName: (p.displayName ?? p.name ?? p.id) as I18nText,
-    isActive: Boolean(p.active),
-    capabilities: p.capabilities as string[] | undefined,
-    tags: p.tags as string[] | undefined,
-    relations: p.relations as Record<string, unknown> | undefined,
-    pluginType: p.pluginType as string | undefined,
-    source: p.source as SessionPluginInfo["source"],
-    runtimes: Array.isArray(p.runtimes)
-      ? (p.runtimes as Array<Record<string, unknown>>).map((runtime) => ({
-          ...runtime,
-          turnCompletion:
-            (runtime.turnCompletion as { mode?: string } | undefined)?.mode ===
-            "detached"
-              ? (runtime.turnCompletion as NonNullable<
-                  SessionPluginInfo["runtimes"]
-                >[number]["turnCompletion"])
-              : { mode: "await" },
-        }))
-      : undefined,
-  })) as SessionPluginInfo[];
-  return { active: raw.active, available, commands: raw.commands ?? [] };
+  return request<SessionPluginsResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/plugins`,
+  );
 }
 
 /** Enable a plugin for a session. Returns updated active list. */
 export type EnableSessionPluginResponse =
-  | { ok: boolean; active: string[] }
+  | PluginMutationResponse
   | {
       status: "approval-required";
       approvalId: string;
@@ -161,10 +57,9 @@ export async function enableSessionPlugin(
   pluginId: string,
 ): Promise<EnableSessionPluginResponse> {
   return request<EnableSessionPluginResponse>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/plugins/enable`,
+    `/api/sessions/${encodeURIComponent(sessionId)}/plugins/${encodeURIComponent(pluginId)}`,
     {
-      method: "POST",
-      body: JSON.stringify({ pluginId }),
+      method: "PUT",
       operatorAuth: true,
     },
   );
@@ -174,10 +69,10 @@ export async function enableSessionPlugin(
 export async function disableSessionPlugin(
   sessionId: string,
   pluginId: string,
-): Promise<{ ok: boolean; active: string[] }> {
-  return request<{ ok: boolean; active: string[] }>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/plugins/disable`,
-    { method: "POST", body: JSON.stringify({ pluginId }) },
+): Promise<PluginMutationResponse> {
+  return request<PluginMutationResponse>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/plugins/${encodeURIComponent(pluginId)}`,
+    { method: "DELETE" },
   );
 }
 
@@ -224,6 +119,7 @@ export async function submitInputs(
     {
       method: "POST",
       body: JSON.stringify({
+        kind: "action",
         pluginId: "framework",
         action: "submit-form",
         payload: body,
@@ -231,22 +127,27 @@ export async function submitInputs(
     },
   );
   if (response.status !== "ok") {
-    throw new Error(
-      response.status === "error"
-        ? response.error
-        : `submit-form returned ${response.status}`,
-    );
+    throw new Error(`submit-form returned ${response.status}`);
   }
   return response.result as SubmitInputsResult;
 }
 
 // -- Session Snapshot (restore/reconnection) -------------------
 
-export async function getSessionSnapshot(
+export async function getSessionExecution(
+  sessionId: string,
+): Promise<import("@covel/shared").SessionExecutionStatus> {
+  return request<import("@covel/shared").SessionExecutionStatus>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/execution`,
+    { silentErrors: true },
+  );
+}
+
+export async function getSessionView(
   sessionId: string,
 ): Promise<import("@covel/shared").SessionSnapshot> {
   return request<import("@covel/shared").SessionSnapshot>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/snapshot`,
+    `/api/sessions/${encodeURIComponent(sessionId)}/view`,
   );
 }
 
@@ -273,9 +174,10 @@ export async function getSession(
 export async function listStatePatches(
   sessionId: string,
 ): Promise<StatePatchRecord[]> {
-  return request<StatePatchRecord[]>(
+  const response = await request<{ items: StatePatchRecord[] }>(
     `/api/sessions/${encodeURIComponent(sessionId)}/state-patches`,
   );
+  return response.items;
 }
 
 export interface StateTableEntry {
@@ -359,10 +261,13 @@ export async function updateSession(
     runtimeModelOverrides?: Record<string, string>;
   },
 ): Promise<SessionRecord> {
-  return request<SessionRecord>(`/api/sessions/${sessionId}`, {
-    method: "PATCH",
-    body: JSON.stringify(updates),
-  });
+  return request<SessionRecord>(
+    `/api/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    },
+  );
 }
 
 export async function deleteSession(sessionId: string): Promise<void> {
@@ -380,26 +285,26 @@ export async function deleteSession(sessionId: string): Promise<void> {
 export async function listMessages(
   sessionId: string,
 ): Promise<MessageRecord[]> {
-  return request<MessageRecord[]>(`/api/sessions/${sessionId}/messages`);
+  const response = await request<{ items: MessageRecord[] }>(
+    `/api/sessions/${encodeURIComponent(sessionId)}/messages`,
+  );
+  return response.items;
 }
 
 /**
- * Keyset page of messages, oldest-first. `before` omitted ⇒ the newest window;
- * `before` set ⇒ the page immediately older than that `(createdAt, id)`
- * position (scroll-up "load older"). `nextCursor` points at the oldest returned
+ * Keyset page of messages, oldest-first. `cursor` omitted ⇒ the newest window;
+ * `cursor` set ⇒ the page immediately older than that opaque position.
+ * `nextCursor` points at the oldest returned
  * row, or is `null` once the window reaches the start of history. Keeps the
- * full-history `listMessages` above untouched.
+ * The full-history `listMessages` endpoint uses the same `{ items }` envelope.
  */
 export async function listMessagesPage(
   sessionId: string,
-  opts: { limit?: number; before?: { createdAt: string; id: string } } = {},
+  opts: { limit?: number; cursor?: PageCursor } = {},
 ): Promise<CursorPage<MessageRecord>> {
   const params = new URLSearchParams();
   if (opts.limit != null) params.set("limit", String(opts.limit));
-  if (opts.before) {
-    params.set("before_created_at", opts.before.createdAt);
-    params.set("before_id", opts.before.id);
-  }
+  if (opts.cursor) params.set("cursor", opts.cursor);
   const qs = params.toString();
   return request<CursorPage<MessageRecord>>(
     `/api/sessions/${encodeURIComponent(sessionId)}/messages/page${
@@ -462,51 +367,28 @@ export async function fetchBrowserCommit(
 //
 // Mirrors the backend surface:
 //   GET    /api/sessions/:id/suspensions                   → list active
-//   POST   /api/sessions/:id/resume                        → resume one
+//   POST   /api/sessions/:id/suspensions/:suspensionId/resume → resume one
 //   DELETE /api/sessions/:id/suspensions/:suspensionId     → cancel one
 //
 // The web client surfaces suspensions inside GameView (badge + dialog) so
 // players can feed resume data for runtimes that declared a wait-point
 // (e.g. image generation, manual review, external callbacks).
 
-export interface SuspensionRecord {
-  readonly id: string;
-  readonly sessionId: string;
-  readonly turnId: string;
-  readonly runtimeId: string;
-  readonly pluginId: string;
-  /** Normalised from backend `createdAt` - timestamp the runtime was paused. */
-  readonly suspendedAt: string;
-  readonly reason?: string;
-  /** Plain JSON schema describing the shape the plugin expects for resume data. */
-  readonly resumeSchema?: unknown;
-}
+export type { SuspensionSummary } from "@covel/shared";
 
 export interface ResumeSuspensionResponse {
   readonly result: RuntimeResult;
   readonly events: readonly SessionEvent[];
 }
 
-function normaliseSuspension(raw: Record<string, unknown>): SuspensionRecord {
-  return {
-    id: String(raw.id ?? ""),
-    sessionId: String(raw.sessionId ?? ""),
-    turnId: String(raw.turnId ?? ""),
-    runtimeId: String(raw.runtimeId ?? ""),
-    pluginId: String(raw.pluginId ?? ""),
-    suspendedAt: String(raw.suspendedAt ?? raw.createdAt ?? ""),
-    reason: typeof raw.reason === "string" ? raw.reason : undefined,
-    resumeSchema: raw.resumeSchema,
-  };
-}
-
 export async function listSuspensions(
   sessionId: string,
-): Promise<SuspensionRecord[]> {
-  const res = await request<{ suspensions: Array<Record<string, unknown>> }>(
+): Promise<SuspensionSummary[]> {
+  const res = await request(
     `/api/sessions/${encodeURIComponent(sessionId)}/suspensions`,
+    { schema: apiListResponseSchema(suspensionSummarySchema) },
   );
-  return res.suspensions.map(normaliseSuspension);
+  return res.items;
 }
 
 export async function resumeSuspension(
@@ -515,10 +397,10 @@ export async function resumeSuspension(
   data: unknown,
 ): Promise<ResumeSuspensionResponse> {
   return request<ResumeSuspensionResponse>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/resume`,
+    `/api/sessions/${encodeURIComponent(sessionId)}/suspensions/${encodeURIComponent(suspensionId)}/resume`,
     {
       method: "POST",
-      body: JSON.stringify({ suspensionId, data }),
+      body: JSON.stringify({ data }),
     },
   );
 }

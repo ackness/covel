@@ -17,6 +17,7 @@ import {
 } from "@covel/plugin-loader";
 import type { Hono } from "hono";
 import { createMiscApiRoutes } from "../../src/routes/misc-api.js";
+import { registerTestPlugins } from "../helpers/register-test-plugins.js";
 
 const stubAi = {
   presetRegistry: { listPresets: () => [] },
@@ -117,6 +118,7 @@ describe("GET /api/ui-specs — multi-dir plugin discovery", () => {
 
     store = createMemoryStore();
     registry = createPluginRegistry();
+    await registerTestPlugins(registry, [bundledDir, userDir]);
 
     await store.createSession({
       phase: "playing",
@@ -147,7 +149,7 @@ describe("GET /api/ui-specs — multi-dir plugin discovery", () => {
     await rm(userDir, { recursive: true, force: true });
   });
 
-  it("materialises UI specs for both bundled and user plugins into plugin_data", async () => {
+  it("projects UI specs for both bundled and user registry entries without plugin_data writes", async () => {
     const res = await app.request(`/api/ui-specs?sessionId=${sessionId}`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -156,13 +158,12 @@ describe("GET /api/ui-specs — multi-dir plugin discovery", () => {
     const ids = body.right.map((entry) => entry.pluginId).sort();
     expect(ids).toEqual(["bundled-greeter", "user-imagebox"]);
 
-    // plugin_data rows should also be populated — the frontend subscribes
-    // to `plugin-data.changed` SSE on these namespaces.
+    // Static UI definitions are catalog data, not mutable session state.
     const userRows = await store.listPluginData(
       sessionId,
       "user-imagebox",
       "__ui_right__",
     );
-    expect(userRows.length).toBeGreaterThan(0);
+    expect(userRows).toHaveLength(0);
   });
 });

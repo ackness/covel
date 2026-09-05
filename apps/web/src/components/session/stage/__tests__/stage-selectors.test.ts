@@ -884,9 +884,9 @@ describe("filterStalePrompts", () => {
 });
 
 describe("pluginIdForCapability", () => {
-  const carrier = (id: string, isActive: boolean, capabilities: string[]) => ({
+  const carrier = (id: string, active: boolean, capabilities: string[]) => ({
     id,
-    isActive,
+    active,
     capabilities,
   });
 

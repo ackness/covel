@@ -9,7 +9,7 @@ import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
 import type { CovelMessage } from "@covel/shared";
 import { isEnvTruthy, readRuntimeEnv } from "@covel/shared";
-import { errorBody, readJsonBody } from "../../api-error.js";
+import { errorBody, okBody, readJsonBody } from "../../api-error.js";
 import type { SessionLock } from "../../lib/session-lock.js";
 import {
   checkSessionOwner,
@@ -88,7 +88,7 @@ eventRoutes.post("/emit", async (c) => {
       // the lifecycle lock so delete/recreate cannot be followed by a late
       // audit row belonging to the old incarnation.
       await eventBus.flush();
-      return c.json({ id: message.id, emitted: true });
+      return c.json(okBody({ id: message.id }));
     },
   });
 });

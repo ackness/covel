@@ -21,7 +21,7 @@ function stateFor(
 ): SessionState {
   return {
     presets: [],
-    packages: [],
+    plugins: [],
     pluginLoadErrors: [],
     worlds: [],
     llmConfig: null,
