@@ -6,7 +6,9 @@ import {
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
 import { createMemoryStore, type DataStore } from "@covel/store";
+import type { PluginRelations, WorldPluginPlan } from "@covel/shared";
 import { worldPluginPlanRoutes } from "../../src/routes/api/worlds/plugin-plan.js";
+import { resolveSessionPlugins } from "../../src/routes/api/session/plugins.js";
 
 type Env = {
   Variables: { store: DataStore; pluginRegistry: PluginRegistry };
@@ -16,6 +18,8 @@ function entry(
   id: string,
   pluginType: "core-plugin" | "plugin",
   tags: string[] = [],
+  relations?: PluginRelations,
+  source: PluginRegistryEntry["source"] = "builtin",
 ): PluginRegistryEntry {
   return {
     id,
@@ -26,11 +30,12 @@ function entry(
       pluginType,
       runtimeCount: 0,
       tags,
+      ...(relations ? { relations } : {}),
     },
     manifests: [],
     loadedRuntimes: new Map(),
     status: "registered",
-    source: "builtin",
+    source,
   };
 }
 
@@ -87,7 +92,7 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
       packs: Array<{ id: string; label: Record<string, string> }>;
     };
     expect(body.selectedPackId).toBe("custom-dialogue");
-    expect(body.defaultPluginIds).toEqual(["core", "dialogue"]);
+    expect(body.defaultPluginIds.toSorted()).toEqual(["core", "dialogue"]);
     expect(body.packs[0]?.label).toEqual({ "zh-CN": "自定义对话" });
     expect(
       body.packs.find((pack) => pack.id === "dialogue-mode")?.label["ru-RU"],
@@ -109,20 +114,21 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
       description: "",
       metadata: {
         requiredPlugins: ["dialogue"],
-        excludedPlugins: ["traditional"],
+        excludedPlugins: ["traditional", "dialogue"],
       },
       createdAt: new Date().toISOString(),
     });
 
     const response = await app.request("/api/worlds/legacy-world/plugin-plan");
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
+    const body = (await response.json()) as WorldPluginPlan;
+    expect(body).toMatchObject({
       policy: {
         requiredPluginIds: ["dialogue"],
-        excludedPluginIds: ["traditional"],
+        excludedPluginIds: ["traditional", "dialogue"],
       },
-      defaultPluginIds: ["core", "dialogue"],
     });
+    expect(body.defaultPluginIds.toSorted()).toEqual(["core", "dialogue"]);
   });
 
   it("merges and deduplicates legacy and nested selection lists", async () => {
@@ -145,13 +151,69 @@ describe("GET /api/worlds/:id/plugin-plan", () => {
 
     const response = await app.request("/api/worlds/mixed-world/plugin-plan");
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
+    const body = (await response.json()) as WorldPluginPlan;
+    expect(body).toMatchObject({
       policy: {
         requiredPluginIds: ["dialogue", "nested-required"],
         recommendedPluginIds: ["legacy-recommended", "nested-recommended"],
         excludedPluginIds: ["traditional", "nested-excluded"],
       },
-      defaultPluginIds: ["core", "dialogue"],
     });
+    expect(body.defaultPluginIds.toSorted()).toEqual(["core", "dialogue"]);
   });
+
+  it.each(["builtin", "community"] as const)(
+    "applies session dependency and core replacement rules to a %s provider",
+    async (source) => {
+      registry.register(
+        entry("core", "core-plugin", [], {
+          provides: ["story-provider"],
+        }),
+      );
+      registry.register(
+        entry(
+          "replacement",
+          "plugin",
+          [],
+          {
+            provides: ["story-provider"],
+            conflicts: ["core"],
+            requires: ["dependency/helper"],
+          },
+          source,
+        ),
+      );
+      registry.register(entry("dependency", "plugin"));
+      await store.createWorld({
+        id: "replacement-world",
+        name: "Replacement world",
+        description: "",
+        metadata: {
+          pluginPolicy: {
+            requiredPlugins: ["replacement"],
+            excludedPlugins: ["core"],
+          },
+        },
+        createdAt: new Date().toISOString(),
+      });
+
+      const response = await app.request(
+        "/api/worlds/replacement-world/plugin-plan",
+      );
+      expect(response.status).toBe(200);
+      const plan = (await response.json()) as WorldPluginPlan;
+      expect(plan.defaultPluginIds.toSorted()).toEqual(
+        resolveSessionPlugins(["replacement"], registry).toSorted(),
+      );
+      if (source === "builtin") {
+        expect(plan.defaultPluginIds.toSorted()).toEqual([
+          "dependency",
+          "replacement",
+        ]);
+      } else {
+        expect(plan.defaultPluginIds).toContain("core");
+        expect(plan.defaultPluginIds).not.toContain("replacement");
+      }
+    },
+  );
 });

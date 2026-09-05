@@ -8,6 +8,7 @@ import type {
 import { errorBody } from "../../../api-error.js";
 import { BUILTIN_PLUGIN_PACKS } from "../../../config/plugin-packs.js";
 import { buildPluginSummary } from "../../../lib/plugin-descriptor.js";
+import { resolveSessionPlugins } from "../session/plugins.js";
 import { isRecord, type WorldEnv } from "./shared.js";
 
 export const worldPluginPlanRoutes = new Hono<WorldEnv>();
@@ -132,8 +133,9 @@ function defaultPluginIds(
     .filter((plugin) => {
       const locked =
         plugin.pluginType === "core-plugin" && plugin.source === "builtin";
-      if (locked || required.has(plugin.id)) return true;
+      if (required.has(plugin.id)) return true;
       if (excluded.has(plugin.id)) return false;
+      if (locked) return true;
       return hasPolicy ? recommended.has(plugin.id) : true;
     })
     .map((plugin) => plugin.id);
@@ -160,7 +162,10 @@ worldPluginPlanRoutes.get("/:id/plugin-plan", async (c) => {
     packs,
     policy,
     ...(selectedPack ? { selectedPackId: selectedPack.id } : {}),
-    defaultPluginIds: defaultPluginIds(plugins, policy, selectedPack),
+    defaultPluginIds: resolveSessionPlugins(
+      defaultPluginIds(plugins, policy, selectedPack),
+      c.get("pluginRegistry"),
+    ),
   };
   return c.json(plan);
 });

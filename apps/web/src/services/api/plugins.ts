@@ -21,16 +21,24 @@ export interface PluginCatalog {
   loadErrors: PluginLoadError[];
 }
 
-export async function getPluginCatalog(options?: {
+/** Include load failures so installed plugins remain manageable. */
+export async function listInstalledPlugins(options?: {
   silentErrors?: boolean;
-}): Promise<PluginCatalog> {
+}): Promise<PluginSummary[]> {
   const response = await request("/api/plugins", {
     ...options,
     schema: apiListResponseSchema(pluginSummarySchema),
   });
+  return response.items;
+}
+
+export async function getPluginCatalog(options?: {
+  silentErrors?: boolean;
+}): Promise<PluginCatalog> {
+  const plugins = await listInstalledPlugins(options);
   return {
-    items: response.items.filter((plugin) => plugin.status !== "error"),
-    loadErrors: response.items
+    items: plugins.filter((plugin) => plugin.status !== "error"),
+    loadErrors: plugins
       .filter(
         (plugin): plugin is PluginSummary & { error: string } =>
           plugin.status === "error" && typeof plugin.error === "string",

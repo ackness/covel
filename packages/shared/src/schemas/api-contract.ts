@@ -16,6 +16,7 @@ import {
   pluginRelationsSchema,
   pluginUserSettingSpecSchema,
   stageSchema,
+  triggerConfigSchema,
 } from "./plugin-schemas.js";
 import { i18nTextSchema, worldDimensionsSchema } from "./world.js";
 
@@ -202,16 +203,7 @@ const pluginRuntimeSummarySchema: z.ZodType<PluginRuntimeSummary> = z
     id: z.string().min(1),
     runtimeType: z.enum(["agent", "function"]),
     stage: stageSchema.optional(),
-    trigger: z
-      .object({
-        type: z.enum(["auto", "manual", "scheduled", "event"]),
-        interval: z.number().int().positive().optional(),
-        cooldownTurns: z.number().int().nonnegative().optional(),
-        maxTriggerCount: z.number().int().positive().optional(),
-        startTurn: z.number().int().nonnegative().optional(),
-        topic: z.string().min(1).optional(),
-      })
-      .strict(),
+    trigger: triggerConfigSchema,
     execution: z.enum(["sync", "background"]),
     turnCompletion: effectiveTurnCompletionSchema,
     model: z.string().optional(),

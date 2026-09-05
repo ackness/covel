@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { resolvePluginSelection } from "@covel/shared";
 import {
   applyPluginPackSelection,
   collectPluginTags,
@@ -8,7 +9,6 @@ import {
   groupPlugins,
 } from "@/lib/session-plugin-selection.js";
 import {
-  excludedPluginIdsForWorld,
   isLockedCorePackage,
   requiredPluginIdsForWorld,
 } from "./plugin-selection-helpers.js";
@@ -97,33 +97,34 @@ export function usePluginSelection(
     () => requiredPluginIdsForWorld(pluginPlan),
     [pluginPlan],
   );
-  const worldExcludedPluginIds = useMemo(
-    () => excludedPluginIdsForWorld(pluginPlan),
-    [pluginPlan],
-  );
-  const lockedPluginIds = useMemo(
-    () => new Set([...corePluginIds, ...worldRequiredPluginIds]),
-    [corePluginIds, worldRequiredPluginIds],
-  );
-
   const [selectedPlugins, setSelectedPlugins] = useState<Set<string>>(
     () => new Set(corePluginIds),
   );
-  const selectedPluginSummaries = useMemo(
-    () =>
-      plugins.filter(
-        (plugin) =>
-          selectedPlugins.has(plugin.id) || lockedPluginIds.has(plugin.id),
-      ),
-    [plugins, selectedPlugins, lockedPluginIds],
-  );
   const selectedPluginIds = useMemo(
-    () => [...new Set([...selectedPlugins, ...lockedPluginIds])],
-    [selectedPlugins, lockedPluginIds],
+    () =>
+      resolvePluginSelection({
+        activePluginIds: [...selectedPlugins, ...worldRequiredPluginIds],
+        requestedPluginIds: [...worldRequiredPluginIds, ...selectedPlugins],
+        plugins,
+      }),
+    [plugins, selectedPlugins, worldRequiredPluginIds],
   );
   const selectedPluginIdSet = useMemo(
     () => new Set(selectedPluginIds),
     [selectedPluginIds],
+  );
+  const lockedPluginIds = useMemo(
+    () =>
+      new Set(
+        [...corePluginIds, ...worldRequiredPluginIds].filter((id) =>
+          selectedPluginIdSet.has(id),
+        ),
+      ),
+    [corePluginIds, worldRequiredPluginIds, selectedPluginIdSet],
+  );
+  const selectedPluginSummaries = useMemo(
+    () => plugins.filter((plugin) => selectedPluginIdSet.has(plugin.id)),
+    [plugins, selectedPluginIdSet],
   );
   const pluginPacks = pluginPlan?.packs ?? [];
   const [activePluginPackId, setActivePluginPackId] = useState<string | null>(
@@ -154,24 +155,6 @@ export function usePluginSelection(
     [visiblePlugins, t],
   );
 
-  // Sync locked/excluded plugin lists whenever they change
-  useEffect(() => {
-    setSelectedPlugins((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const id of worldExcludedPluginIds) {
-        if (!lockedPluginIds.has(id) && next.delete(id)) changed = true;
-      }
-      for (const id of lockedPluginIds) {
-        if (!next.has(id)) {
-          next.add(id);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [lockedPluginIds, worldExcludedPluginIds]);
-
   const togglePluginTag = useCallback((tag: string) => {
     setActivePluginTags((prev) => {
       const next = new Set(prev);
@@ -186,31 +169,58 @@ export function usePluginSelection(
       const pack = pluginPacks.find((item) => item.id === packId);
       if (!pack) return;
       setActivePluginPackId(pack.id);
-      setSelectedPlugins((prev) =>
-        applyPluginPackSelection(prev, pack, plugins, lockedPluginIds),
+      setSelectedPlugins(
+        new Set(
+          resolvePluginSelection({
+            activePluginIds: [
+              ...applyPluginPackSelection(
+                selectedPluginIdSet,
+                pack,
+                plugins,
+                worldRequiredPluginIds,
+              ),
+            ],
+            requestedPluginIds: [
+              ...worldRequiredPluginIds,
+              ...pack.pluginIds,
+              ...pack.optionalPluginIds,
+            ],
+            plugins,
+          }),
+        ),
       );
     },
-    [pluginPacks, plugins, lockedPluginIds],
+    [pluginPacks, plugins, selectedPluginIdSet, worldRequiredPluginIds],
   );
 
   const togglePlugin = useCallback(
     (name: string) => {
       if (lockedPluginIds.has(name)) return;
       setActivePluginPackId(null);
-      setSelectedPlugins((prev) => {
-        const next = new Set(prev);
-        if (next.has(name)) next.delete(name);
-        else next.add(name);
-        return next;
-      });
+      const next = new Set(selectedPluginIdSet);
+      const enabling = !next.has(name);
+      if (enabling) next.add(name);
+      else next.delete(name);
+      setSelectedPlugins(
+        new Set(
+          resolvePluginSelection({
+            activePluginIds: [...next],
+            requestedPluginIds: [
+              ...worldRequiredPluginIds,
+              ...(enabling ? [name] : next),
+            ],
+            plugins,
+          }),
+        ),
+      );
     },
-    [lockedPluginIds],
+    [lockedPluginIds, plugins, selectedPluginIdSet, worldRequiredPluginIds],
   );
 
   return {
     corePluginIds,
     lockedPluginIds,
-    selectedPlugins,
+    selectedPlugins: selectedPluginIdSet,
     selectedPluginSummaries,
     selectedPluginIds,
     selectedPluginIdSet,

@@ -10,6 +10,33 @@ import {
   worldPluginPlanSchema,
   worldWireRecordSchema,
 } from "../src/schemas/api-contract.js";
+import { runtimeManifestAuthoringSchema } from "../src/schemas/plugin-schemas.js";
+
+const plugin = {
+  id: "memory",
+  displayName: "Memory",
+  description: "Memory plugin",
+  pluginType: "plugin",
+  source: "builtin",
+  status: "registered",
+  runtimeCount: 1,
+  capabilities: ["memory"],
+  tags: [],
+  runtimes: [
+    {
+      id: "memory",
+      runtimeType: "agent",
+      trigger: { type: "auto" },
+      execution: "sync",
+      turnCompletion: { mode: "await" },
+      outputKind: "plugin",
+      capabilities: ["memory"],
+      tags: [],
+    },
+  ],
+  tools: [],
+  userSettings: [],
+};
 
 describe("shared API contracts", () => {
   it("parses and narrows an action request", () => {
@@ -94,31 +121,6 @@ describe("shared API contracts", () => {
   });
 
   it("validates canonical plugin discovery and world-plan responses", () => {
-    const plugin = {
-      id: "memory",
-      displayName: "Memory",
-      description: "Memory plugin",
-      pluginType: "plugin",
-      source: "builtin",
-      status: "registered",
-      runtimeCount: 1,
-      capabilities: ["memory"],
-      tags: [],
-      runtimes: [
-        {
-          id: "memory",
-          runtimeType: "agent",
-          trigger: { type: "auto" },
-          execution: "sync",
-          turnCompletion: { mode: "await" },
-          outputKind: "plugin",
-          capabilities: ["memory"],
-          tags: [],
-        },
-      ],
-      tools: [],
-      userSettings: [],
-    };
     expect(
       apiListResponseSchema(pluginSummarySchema).parse({ items: [plugin] }),
     ).toEqual({ items: [plugin] });
@@ -138,5 +140,66 @@ describe("shared API contracts", () => {
         defaultPluginIds: ["memory"],
       }).success,
     ).toBe(true);
+  });
+
+  it.each([
+    { stage: "pre-turn", trigger: { type: "auto", topic: "" } },
+    { trigger: { type: "manual", topic: "" } },
+    {
+      stage: "pre-turn",
+      trigger: {
+        type: "scheduled",
+        interval: 1,
+        startTurn: 1,
+        cooldownTurns: 0,
+        maxTriggerCount: 1,
+      },
+    },
+    { trigger: { type: "event", topic: "memory.updated" } },
+  ])(
+    "accepts authored trigger declarations in discovery: $trigger.type",
+    (input) => {
+      const manifest = runtimeManifestAuthoringSchema.parse({
+        name: "memory",
+        description: "Memory plugin",
+        ...input,
+      });
+      const response = {
+        items: [
+          {
+            ...plugin,
+            runtimes: [
+              {
+                ...plugin.runtimes[0],
+                stage: manifest.stage,
+                trigger: manifest.trigger,
+              },
+            ],
+          },
+        ],
+      };
+
+      expect(
+        apiListResponseSchema(pluginSummarySchema).parse(response),
+      ).toEqual(response);
+    },
+  );
+
+  it("rejects a zero startTurn in both authoring and discovery", () => {
+    const trigger = { type: "scheduled", startTurn: 0 };
+    expect(
+      runtimeManifestAuthoringSchema.safeParse({
+        name: "memory",
+        description: "Memory plugin",
+        stage: "pre-turn",
+        trigger,
+      }).success,
+    ).toBe(false);
+    expect(
+      pluginSummarySchema.safeParse({
+        ...plugin,
+        runtimes: [{ ...plugin.runtimes[0], trigger }],
+      }).success,
+    ).toBe(false);
   });
 });

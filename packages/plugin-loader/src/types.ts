@@ -727,6 +727,8 @@ export interface PluginRegistryEntry {
   readonly summary: PluginSummary;
   /** Absolute plugin root path, used by tooling that resolves plugin-relative assets. */
   readonly rootPath?: string;
+  /** Discovery-time absolute PLUGIN.md paths keyed by declared runtime ID. */
+  readonly runtimeManifestPaths?: Readonly<Record<string, string>>;
   /** Primary manifest (first runtime). */
   readonly manifest?: ParsedPluginMd;
   /** All manifests for multi-runtime plugins. */

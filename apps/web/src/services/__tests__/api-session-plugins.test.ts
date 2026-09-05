@@ -28,6 +28,7 @@ const {
   fetchPluginFlows,
   getPluginCatalog,
   listPlugins,
+  listInstalledPlugins,
   listSessionPlugins,
 } = await import("../api.js");
 
@@ -131,7 +132,14 @@ describe("plugin discovery API", () => {
     });
     expect(vi.mocked(fetch).mock.calls[0]?.[0]).toBe("/api/plugins");
 
-    mockFetchOnce({ items: [plugin()] });
+    const installed = [
+      plugin(),
+      plugin({ id: "broken", status: "error", error: "bad manifest" }),
+    ];
+    mockFetchOnce({ items: installed });
+    await expect(listInstalledPlugins()).resolves.toEqual(installed);
+
+    mockFetchOnce({ items: installed });
     await expect(listPlugins()).resolves.toEqual([plugin()]);
   });
 

@@ -230,9 +230,11 @@ export async function requestResponse(
         headers: mergeRequestHeaders(url, fetchInit, sessionId, operatorAuth),
       });
     } catch (err) {
+      // Intentional cancellation is neither a network failure nor retryable.
+      if (isAbortError(err)) throw err;
       // Transport-level failure (offline, DNS, CORS preflight, or the dev proxy
       // resetting the socket because the runtime server isn't up yet).
-      if (canRetry && !isLastAttempt && !isAbortError(err)) {
+      if (canRetry && !isLastAttempt) {
         await delay(backoffMs(attempt));
         continue;
       }
@@ -245,7 +247,10 @@ export async function requestResponse(
         await delay(backoffMs(attempt));
         continue;
       }
-      const text = await res.text().catch(() => "");
+      const text = await res.text().catch((error: unknown) => {
+        if (isAbortError(error)) throw error;
+        return "";
+      });
       if (!silentErrors && !silentStatuses?.includes(res.status)) {
         emitHttpErrorToast(url, res.status, text);
       }
@@ -269,6 +274,7 @@ export async function request<T>(
     const body: unknown = await res.json();
     return schema ? schema.parse(body) : (body as T);
   } catch (cause) {
+    if (isAbortError(cause)) throw cause;
     const error = new ApiResponseError(
       res.status,
       url,

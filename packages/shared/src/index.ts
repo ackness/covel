@@ -268,3 +268,4 @@ export type {
   AssetGenerateLLMTextPart,
   AssetGenerateView,
 } from "./proposals/asset-generate.js";
+export { resolvePluginSelection } from "./plugin-selection.js";

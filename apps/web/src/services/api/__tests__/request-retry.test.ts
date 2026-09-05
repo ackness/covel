@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { ApiResponseError, request } from "../request.js";
+import * as toastChannel from "@/lib/toast-channel.js";
 
 /**
  * `request()` retries idempotent GETs on a boot-race / transient gateway
@@ -58,15 +59,54 @@ describe("request() boot-race retry", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("does NOT retry a deliberately aborted GET", async () => {
-    const abortError = new DOMException("aborted", "AbortError");
-    const fetchMock = vi.fn().mockRejectedValue(abortError);
-    vi.stubGlobal("fetch", fetchMock);
+  it.each(["GET", "POST"])(
+    "does not retry or toast an aborted %s",
+    async (method) => {
+      const abortError = new DOMException("aborted", "AbortError");
+      const fetchMock = vi.fn().mockRejectedValue(abortError);
+      const emitToast = vi.spyOn(toastChannel, "emitToast");
+      vi.stubGlobal("fetch", fetchMock);
 
-    await expect(request("/api/worlds", { silentErrors: true })).rejects.toBe(
-      abortError,
+      await expect(request("/api/worlds", { method })).rejects.toBe(abortError);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(emitToast).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([200, 500])(
+    "preserves cancellation while reading a %s response body without a toast",
+    async (status) => {
+      const abortError = new DOMException("aborted", "AbortError");
+      const fetchMock = vi.fn().mockResolvedValue({
+        ...okRes({}),
+        ok: status === 200,
+        status,
+        json: vi.fn().mockRejectedValue(abortError),
+        text: vi.fn().mockRejectedValue(abortError),
+      });
+      const emitToast = vi.spyOn(toastChannel, "emitToast");
+      vi.stubGlobal("fetch", fetchMock);
+
+      await expect(request("/api/worlds")).rejects.toBe(abortError);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(emitToast).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still reports an actual network failure", async () => {
+    const failure = new TypeError("Failed to fetch");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(failure));
+    const emitToast = vi.spyOn(toastChannel, "emitToast");
+
+    await expect(request("/api/worlds", { method: "POST" })).rejects.toBe(
+      failure,
     );
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(emitToast).toHaveBeenCalledWith(
+      "error",
+      expect.any(String),
+      expect.stringContaining("Failed to fetch"),
+    );
   });
 
   it("does NOT retry a POST (avoids double-submit)", async () => {

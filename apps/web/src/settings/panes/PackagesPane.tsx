@@ -6,7 +6,7 @@ import { hasElectronIpc, reloadServerAndWait } from "@/lib/desktop-bridge.js";
 import { text } from "@/components/world/editor-helpers.js";
 import {
   installPackage,
-  listPlugins,
+  listInstalledPlugins,
   uninstallPlugin,
   type InstallKind,
   type InstallResult,
@@ -35,7 +35,7 @@ export function PackagesPane() {
 
   const refreshInstalled = useCallback(async () => {
     try {
-      const plugins = await listPlugins({ silentErrors: true });
+      const plugins = await listInstalledPlugins({ silentErrors: true });
       // Only third-party (non-builtin) plugins can be uninstalled.
       setInstalled(plugins.filter((plugin) => plugin.source !== "builtin"));
     } catch {

@@ -626,7 +626,7 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 
 **校验与 `specVersion`**：聚合时对每个 spec 执行 Zod 校验（结构包络 + `specVersion`）。`specVersion` 可省略（按 v1 处理），声明高于服务端支持版本（当前 `CURRENT_UI_SPEC_VERSION = 1`）会被拒绝。校验失败的 spec **不污染整个响应**——只从对应 slot 中剔除，并在顶层 `diagnostics[]` 中按 `{ pluginId, runtimeId, slot, specIndex, specId?, issues[{ path, message, code }] }` 给出具体诊断（哪个插件、哪个字段、什么问题）。带 `sessionId` 时 `diagnostics` 仅包含该会话激活集中的插件。
 
-**读取模型**：UI 声明来自启动时发布到 registry 的 manifest 快照，静态 `ui/*` 资源按该快照惰性加载并缓存。GET 请求不会重新发现插件、重读 `PLUGIN.md`，也不会把 UI 定义写入 `plugin_data`。开发时修改 manifest 或 UI 文件后需重载 registry（通常重启 server）。
+**读取模型**：UI 声明来自启动时发布到 registry 的 manifest 快照，静态 `ui/*` 资源按该快照惰性加载并缓存。runtime 的 UI 资源目录和文档路径由 discovery 快照保存的实际 `PLUGIN.md` 路径确定，不根据逻辑 runtime ID 中的斜杠推断目录。GET 请求不会重新发现插件、重读 `PLUGIN.md`，也不会把 UI 定义写入 `plugin_data`。开发时修改 manifest 或 UI 文件后需重载 registry（通常重启 server）。
 
 ## 详细文档
 
@@ -1829,7 +1829,9 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 
 #### `GET /api/plugins`
 
-列出 registry 中的 canonical `PluginSummary`。`displayName` 与 `description` 是 `I18nText`；`capabilities`、`tags`、`tools`、`userSettings` 和 `runtimes` 都由同一服务端投影生成。加载失败不会进入另一套错误数组，而是作为 `status: "error"` 且带 `error` 的 item 返回。
+列出 registry 中的 canonical `PluginSummary`。`displayName` 与 `description` 是 `I18nText`；`capabilities`、`tags`、`tools`、`userSettings` 和 `runtimes` 都由同一服务端投影生成。加载失败不会进入另一套错误数组，而是作为 `status: "error"` 且带 `error` 的 item 返回。安装管理使用包含失败条目的完整目录，以便显示原因和卸载第三方插件；运行选择可以过滤失败条目。
+
+`runtimes[].trigger` 的 DTO 校验与 manifest 共用 `triggerConfigSchema`，字段及数值约束保持一致，例如 `interval`、`maxTriggerCount`、`startTurn` 为正整数，`cooldownTurns` 为非负整数。
 
 UI 与第三方调用方应优先按 `capabilities` / `outputKind` / `source` 派发，**不要**根据 `id` 字符串硬编码（违反框架/插件隔离规则）。
 
@@ -2750,7 +2752,7 @@ id: evt-002
 | `runtimeId`       | `retry_runtime`   | 必填。仅重跑指定 runtime（走 manual-trigger 路径），不会推进玩家回合时钟。                                                                                                                                                                                          |
 | `retryFromTurnId` | `retry_runtime`   | 可选（需与 `runtimeId` 同用）。指定作为上下文种子的源回合：服务端加载该回合的 `turn_results` 工件播种执行，使被重试 runtime 的 `input.inject`/`needs` 按原回合叙事解析。缺省回退到最近一个 player-origin 工件。前端失败 chip 的重试按钮走这条路径（不删叙事消息）。 |
 
-**`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建请求的 `plugins` 数组决定；Web Prep 先读取服务端 `GET /api/worlds/:id/plugin-plan` 的解析结果，再把玩家最终选择显式传给创建接口。服务端创建路由不再次读取 world policy，只补 builtin core、`requires` 关系并处理 conflicts。`start_session` 只负责在注册表里激活已持久化集合。空集合会被 **400** 拒绝（`Session has no active plugins. …`），不会回退到"激活全部已注册插件"；该回退会把玩家从未选择的社区插件及互斥叙事引擎同时拉进会话，并持久化到会话生命周期结束。
+**`start_session` 的前置条件**：会话必须已有非空 `activePlugins`。插件集合由会话创建请求的 `plugins` 数组决定；Web Prep 先读取服务端 `GET /api/worlds/:id/plugin-plan` 的解析结果，再把玩家最终选择显式传给创建接口。`plugin-plan.defaultPluginIds` 使用与会话相同的 `requires`、`conflicts` 和可信 builtin core 替换规则解析；准备页遵守该结果，不重新锁定已被替代的 core 插件。服务端创建路由不再次读取 world policy，只补 builtin core、`requires` 关系并处理 conflicts。`start_session` 只负责在注册表里激活已持久化集合。空集合会被 **400** 拒绝（`Session has no active plugins. …`），不会回退到"激活全部已注册插件"；该回退会把玩家从未选择的社区插件及互斥叙事引擎同时拉进会话，并持久化到会话生命周期结束。
 
 **开场接力（opening continuation）**：当一次玩家动作（`send_message` / `execute_command` / `start_session`）完成了**最后一个** setup runtime（setup 执行独立提交，phase 翻转到 `playing`），同一个请求会在同一条 SSE 流上**自动接力一个主循环回合**（全新的 `turnId`、独立事务，读取刚提交的 setup 状态），让叙事 runtime 直接产出开场叙事——玩家提交完开局表单后无需再手动发一条消息。接力回合是第一个计数的玩家回合（`completedPlayerTurns` 0 → 1）。整条流仍只发**一个** `execution.completed`（取接力回合的数据）。守卫：`retry_turn` / `retry_runtime` 不接力；执行被中止（`abortReason`）、提交失败、或 setup 仍有未完成项（还有后续开局交互）时不接力。
 

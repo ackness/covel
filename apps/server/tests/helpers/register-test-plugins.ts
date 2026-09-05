@@ -4,6 +4,7 @@ import {
   loadPluginSummary,
   type PluginRegistry,
 } from "@covel/plugin-loader";
+import path from "node:path";
 
 /** Register disk fixtures the same way bootstrap publishes its canonical snapshot. */
 export async function registerTestPlugins(
@@ -20,6 +21,12 @@ export async function registerTestPlugins(
       id: discovery.id,
       summary,
       rootPath: discovery.rootPath,
+      runtimeManifestPaths: Object.fromEntries(
+        manifests.map((parsed, index) => [
+          parsed.manifest.name,
+          path.resolve(discovery.pluginMdPaths[index]!),
+        ]),
+      ),
       manifest: manifests[0],
       manifests,
       loadedRuntimes: new Map(),
