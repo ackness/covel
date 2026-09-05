@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.31] - 2026-09-05
+
+This release makes story completion and session recovery more reliable, improves the complete configuration and gameplay flow, unifies API contracts, and hardens browser checkpoints and shared-resource access.
+
+### Fixed
+
+- **A completed player action must contain a story.** A narrator that finishes its tools without prose gets a bounded chance to produce the missing text; an empty or failed story cannot commit pending state changes or advance the player-turn counter. Optional state-extraction failures remain visible without discarding a valid story.
+- **Character creation preserves numeric attributes.** Opening forms only collect schema-compatible text and enum fields, while numeric and compound attributes retain their defaults. Character writes reject invalid types and ranges before producing proposals; rejected form submissions remain editable instead of becoming free-form story input.
+- **World-fact extraction uses a smaller, task-specific request.** WorldIR consumes the current narrative and canonical character identities, defaults to disabling optional reasoning, and requests its submission tool through each provider's native protocol. Explicit user reasoning settings take precedence, and the existing execution deadline remains in force.
+- **Reconnects recover missing story messages as well as plugin state.** Recovery preserves live streams and loaded history, restores committed prose, and keeps each turn's story ahead of its derived guidance and status cards.
+- **Refresh and transport loss track the original execution.** The player and debugger distinguish running, completed, failed, and interrupted work. Refresh only observes the existing action; an interrupted action offers an explicit retry with duplicate protection, and opening recovery does not advance the player-turn counter.
+- **Failed tasks can be retried without regenerating the story.** Single-task and selected-failure retries reuse committed upstream results, preserve successful tasks, and report each recovery attempt back on its original turn. A batch shares one commit boundary; uncommitted results never appear as repaired, and refresh preserves the pending recovery scope. Historical interruptions stay in chronological, expandable records rather than appearing as current progress.
+- **Character tracking can finish its permitted read-and-submit workflow.** Character lookup is directly available within the existing two-step budget, removing a tool-discovery step that could exhaust the budget before the tracker submitted its result. Output failures, interrupted history, task retry, and recovery of uncommitted actions have distinct explanations. The misleading whole-turn retry control has been removed; completed turns offer scoped task recovery.
+- **Settings persist correctly under concurrent edits and failures.** Disjoint changes can rebase under revision checks, conflicting edits retain their drafts, queued identical writes cannot report false success, and mutable object references cannot bypass persistence. Secret entries remain outside ordinary settings import, export, and synchronization.
+- **Responsive sessions remain usable across viewport changes.** Sidebars no longer query panel constraints while registration changes; settings use separate provider-list and detail views on phones, queued choices share the main composer, and debug refresh updates traces, session data, and the session list together. Invalid dice reports and failed runtime updates are surfaced explicitly.
+- **Browser checkpoints and media access enforce ownership and lifecycle boundaries.** Restores validate checkpoint contents and session identity, scoped media access follows the current session lifecycle, and shared-world mutations require operator access.
+
+### Changed
+
+- **API responses and plugin controls use unified contracts.** Server and Web consumers now share validated response envelopes, resource routes, pagination, discovery, selection, and plugin-control schemas instead of maintaining parallel legacy shapes.
+- **Story and stage presentation are clearer.** Theme-aware prose has improved contrast, type size, line spacing, and paragraph spacing. Guidance shows one primary suggestion per category with expandable alternatives. Stage dialogue uses explicit per-turn paragraph identities instead of actor focus; mobile choices scroll above a fixed composer and character portraits remain visible above them.
+- **Plugin authors can declare bounded extraction defaults and inspect typed inputs.** Runtime LLM preferences, read-only hook/tool input slots, suspension restoration, and stage dialogue attribution are documented alongside their generated schemas and regression tests.
+
+### Upgrade notes
+
+- External API consumers and custom integrations must follow the updated [API reference](./reference/api.md) and [plugin contracts](./reference/plugins.md); legacy request and response assumptions may require changes. Update the server and bundled Web client together.
+- Existing saves are retained. Invalid character values already written by older versions are not silently migrated, and an already accepted invalid character form retains its audit record; start a new character session to use the corrected creation flow. Model-generated facts can still contain semantic mistakes despite schema validation.
+- macOS Apple Silicon and Windows x64 binaries are unsigned. Review the platform's first-launch guidance and back up custom content before upgrading.
+
 ## [0.0.30] - 2026-09-03
 
 This release moves eligible media follow-up work into durable background jobs, exposes effective runtime model routing in the UI, and converts structured plugin agents to bounded atomic Function Calling workflows for faster, more reliable world and story updates.
@@ -1035,7 +1064,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.30...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.31...HEAD
+[0.0.31]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.31
 [0.0.30]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.30
 [0.0.29]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.29
 [0.0.28]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.28
