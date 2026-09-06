@@ -427,7 +427,7 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 }
 ```
 
-完整属性表见 [theme-packages.md §6.6](../reference/theme-packages.md)。内置的 `aurora` 主题是可直接抄的参考实现，涵盖 `@property` 渐变动画、`backdrop-filter` 玻璃、伪元素光层和上面这套状态特效——它同样要通过玩家主题的导入校验，所以照抄不会踩到作用域规则。
+完整属性表见 [theme-packages.md §6.6](../reference/theme-packages.md)。内置的 `aurora` 主题是可直接抄的参考实现，涵盖渐变图层旋转、`backdrop-filter` 玻璃、伪元素光层和上面这套状态特效——它同样要通过玩家主题的导入校验，所以照抄不会踩到作用域规则。连续流光优先用静态渐变配合 `transform` 动画，让浏览器复用已绘制的图层；旋转范围须覆盖视口，并为模糊保留边缘空间。
 
 ---
 

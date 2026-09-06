@@ -143,7 +143,6 @@ describe("aurora reference theme", () => {
 
   it("uses the turn-state hook the framework publishes", () => {
     expect(auroraCss).toContain('[data-turn="executing"]');
-    expect(auroraCss).toContain("@property --aurora-angle");
     expect(auroraCss).toContain("prefers-reduced-motion");
   });
 });
