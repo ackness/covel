@@ -101,7 +101,7 @@ apps/web/src/themes/builtins/
     theme.css
 ```
 
-`aurora` 是效果参考实现：玻璃拟态、`@property` 驱动的流动渐变、消息入场动画、以及 §6.6 的状态驱动特效。要写"花哨"主题时直接抄它。
+`aurora` 是效果参考实现：玻璃拟态、通过 `transform` 旋转静态渐变图层实现的流光、消息入场动画、以及 §6.6 的状态驱动特效。渐变图层按视口对角线加模糊留白确定尺寸，旋转时覆盖横竖屏；避免逐帧修改渐变角度，从而减少滚动期间的重复栅格化。要写"花哨"主题时直接抄它。
 
 `manifest.json` 结构：
 
@@ -150,6 +150,7 @@ apps/web/src/themes/builtins/
 ### 5.2 表面 token
 
 - `--surface-page`
+- `--surface-session`：游戏中央面板底色，未设置时回退到 `--surface-page`；可用半透明色让底层主题流光透出。
 - `--surface-rail`
 - `--surface-inset`
 - `--surface-elevated`
@@ -216,6 +217,7 @@ apps/web/src/themes/builtins/
 - `--title-font-weight`
 - `--title-letter-spacing`
 - `--title-text-transform`
+- `--story-color`（叙事正文颜色，默认跟随 `--color-foreground`；外观设置按明暗模式分别保存）
 - `--story-font-family`
 - `--story-font-size`
 - `--story-line-height`
@@ -226,6 +228,8 @@ apps/web/src/themes/builtins/
 - `--meta-font-size`
 - `--meta-letter-spacing`
 - `--meta-text-transform`
+
+Markdown 的正文、标题、强调和引用使用主题文字色，链接和行内代码使用主题主色；叙事区域的正文、标题、强调和引用使用 `--story-color`。叙事 Markdown 的字号、行高、字重、字距和栏宽由 `--story-*` 控制。样式位于 `apps/web/src/styles/narrative.css`，使用不分层的规则覆盖 Typography 的 `utilities` 默认值。
 
 ### 5.6 阴影 token
 
@@ -264,6 +268,7 @@ apps/web/src/themes/builtins/
 ### 6.4 会话体验
 
 - `.ui-session-column`
+- `.ui-session-backdrop`：中央面板顶部的世界装饰图和渐隐层；可加静态遮罩使其融入半透明底色。
 - `.ui-message-row`
 - `.ui-player-message-row`
 - `.ui-message-player`

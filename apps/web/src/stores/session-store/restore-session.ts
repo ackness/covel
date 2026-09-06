@@ -17,8 +17,29 @@ interface RestoreSessionOptions {
   workspace: SessionWorkspace;
   dispatch: SessionDispatch;
   sessionIdRef: MutableRef<string | null>;
+  sessionGenerationRef: MutableRef<number>;
+  generation?: number;
   worlds: readonly api.WorldRecord[];
   session: api.SessionRecord;
+}
+
+export async function restoreSessionById({
+  sessionId,
+  ...options
+}: Omit<RestoreSessionOptions, "session" | "generation"> & {
+  sessionId: string;
+}): Promise<void> {
+  const generation = ++options.sessionGenerationRef.current;
+  let session: api.SessionRecord | null;
+  try {
+    session = await options.ds.getSession(sessionId);
+  } catch (error) {
+    if (generation !== options.sessionGenerationRef.current) return;
+    throw error;
+  }
+  if (generation !== options.sessionGenerationRef.current) return;
+  if (!session) throw new Error("Session not found: " + sessionId);
+  await restoreSessionState({ ...options, generation, session });
 }
 
 export function toStreamMessages(
@@ -218,9 +239,22 @@ export async function restoreSessionState({
   workspace,
   dispatch,
   sessionIdRef,
+  sessionGenerationRef,
+  generation = ++sessionGenerationRef.current,
   worlds,
   session,
 }: RestoreSessionOptions): Promise<void> {
+  if (generation !== sessionGenerationRef.current) return;
+  const targetSessionId = session.id;
+  const isCurrent = (): boolean =>
+    generation === sessionGenerationRef.current &&
+    sessionIdRef.current === targetSessionId;
+  const dispatchCurrent: SessionDispatch = (action) => {
+    if (isCurrent()) dispatch(action);
+  };
+  // Retain the recovery target while hydration is pending, without publishing
+  // an executable session. A new visit invalidates all pending restore work.
+  sessionIdRef.current = targetSessionId;
   clearAllStreamingText();
   dispatch({ type: "RESET_SESSION" });
   dispatch({
@@ -239,9 +273,6 @@ export async function restoreSessionState({
     dispatch({ type: "SET_WORLD", world });
   }
 
-  const targetSessionId = session.id;
-  sessionIdRef.current = targetSessionId;
-
   // Browser-private sessions only become executable after their durable
   // checkpoint has rebuilt the ephemeral server workspace. Publishing the
   // session first starts snapshot/plugin/SSE effects against an empty
@@ -250,46 +281,46 @@ export async function restoreSessionState({
   try {
     await workspace.hydrate(targetSessionId);
   } catch (error) {
-    if (sessionIdRef.current === targetSessionId) {
-      dispatch({
-        type: "SET_EXECUTION_RECOVERY",
-        recovery: {
-          sessionId: targetSessionId,
-          status: null,
-          hydrating: true,
-          checking: true,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      setActivePluginDataSession(null);
-      dispatch({
-        type: "SET_EXECUTION_ERROR",
+    if (!isCurrent()) return;
+    dispatch({
+      type: "SET_EXECUTION_RECOVERY",
+      recovery: {
+        sessionId: targetSessionId,
+        status: null,
+        hydrating: true,
+        checking: true,
         error: error instanceof Error ? error.message : String(error),
-      });
-    }
+      },
+    });
+    setActivePluginDataSession(null);
+    dispatch({
+      type: "SET_EXECUTION_ERROR",
+      error: error instanceof Error ? error.message : String(error),
+    });
     throw error;
   }
-  if (sessionIdRef.current !== targetSessionId) return;
+  if (!isCurrent()) return;
 
   api.markServerAck();
+  sessionIdRef.current = targetSessionId;
   setActivePluginDataSession(targetSessionId);
   const freshSession = await api.getSession(session.id).catch(() => session);
-  if (sessionIdRef.current !== targetSessionId) return;
+  if (!isCurrent()) return;
   dispatch({ type: "SET_SESSION", session: freshSession });
 
   const localSteps = await restorePersistedExecutionSteps(ds, session.id);
-  if (sessionIdRef.current !== targetSessionId) return;
+  if (!isCurrent()) return;
   const snapshotLoaded = await restoreServerSnapshot(
     session.id,
-    dispatch,
+    dispatchCurrent,
     localSteps,
-    () => sessionIdRef.current === targetSessionId,
+    isCurrent,
   );
-  if (sessionIdRef.current !== targetSessionId) return;
+  if (!isCurrent()) return;
 
   if (!snapshotLoaded) {
-    await restoreLocalFallback(ds, session.id, dispatch);
-    if (sessionIdRef.current !== targetSessionId) return;
+    await restoreLocalFallback(ds, session.id, dispatchCurrent);
+    if (!isCurrent()) return;
     dispatch({ type: "LOAD_EXECUTION_STEPS", steps: localSteps });
     dispatch({
       type: "SET_EXECUTION_RECOVERY",
@@ -302,8 +333,13 @@ export async function restoreSessionState({
     });
   }
 
-  await restoreSubmittedBlocks(ds, session.id, dispatch);
-  if (sessionIdRef.current !== targetSessionId) return;
+  await restoreSubmittedBlocks(ds, session.id, dispatchCurrent);
+  if (!isCurrent()) return;
 
-  refreshSessionSideData(session.id, targetSessionId, sessionIdRef, dispatch);
+  refreshSessionSideData(
+    session.id,
+    targetSessionId,
+    sessionIdRef,
+    dispatchCurrent,
+  );
 }

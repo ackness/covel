@@ -26,27 +26,46 @@ export async function* iterateSsePayloads(
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = "";
+  let line = "";
+  let skipLf = false;
+  let dataLines: string[] = [];
+  let finished = false;
+
+  // CR, LF, and CRLF are all valid, including CRLF split across reads.
+  // Dispatch only at a blank line; EOF must not complete a partial event.
+  function* consume(text: string): Generator<string> {
+    for (const char of text) {
+      if (skipLf) {
+        skipLf = false;
+        if (char === "\n") continue;
+      }
+      if (char !== "\r" && char !== "\n") {
+        line += char;
+        continue;
+      }
+      skipLf = char === "\r";
+      const completeLine = line;
+      line = "";
+      if (completeLine === "") {
+        const data = dataLines.join("\n");
+        dataLines = [];
+        if (data) yield data;
+      } else if (completeLine.startsWith("data:")) {
+        const value = completeLine.slice(5);
+        dataLines.push(value.startsWith(" ") ? value.slice(1) : value);
+      } else if (completeLine === "data") {
+        dataLines.push("");
+      }
+    }
+  }
 
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      while (buffer.includes("\n\n")) {
-        const boundary = buffer.indexOf("\n\n");
-        const frame = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
-
-        const dataLine = frame
-          .split("\n")
-          .find((line) => line.startsWith("data: "));
-        if (!dataLine) continue;
-
-        const data = dataLine.slice(6).trim();
-        if (data === "[DONE]") continue;
+      finished = done;
+      const text = decoder.decode(value, { stream: !done });
+      for (const data of consume(text)) {
+        if (data.trim() === "[DONE]") return;
 
         let parsed: Record<string, unknown>;
         try {
@@ -58,8 +77,10 @@ export async function* iterateSsePayloads(
         }
         yield parsed;
       }
+      if (done) break;
     }
   } finally {
+    if (!finished) await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
 }

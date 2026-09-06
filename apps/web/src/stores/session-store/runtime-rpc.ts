@@ -11,8 +11,56 @@ import { ignoreError } from "@/lib/ignore-error.js";
 import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import type { SessionDispatch } from "./types.js";
+import { toExecutionStepStatus } from "./execution-steps.js";
 
 const CONNECTION_CLOSED_REASON = "__i18n:session.reasonConnectionClosed__";
+
+export async function resumeSessionSuspension(
+  suspensionId: string,
+  data: unknown,
+  {
+    workspace,
+    sessionIdRef,
+    sessionGenerationRef,
+    dispatch,
+    applyResumeEvents,
+  }: {
+    workspace: SessionWorkspace;
+    sessionIdRef: MutableRef<string | null>;
+    sessionGenerationRef: MutableRef<number>;
+    dispatch: SessionDispatch;
+    applyResumeEvents: (events: api.ResumeSuspensionResponse["events"]) => void;
+  },
+): Promise<void> {
+  const sid = sessionIdRef.current;
+  if (!sid) return;
+  const generation = sessionGenerationRef.current;
+  const { result, events } = await workspace.run(
+    sid,
+    `resume:${crypto.randomUUID()}`,
+    () => api.resumeSuspension(sid, suspensionId, data),
+  );
+  if (
+    sessionIdRef.current !== sid ||
+    sessionGenerationRef.current !== generation
+  )
+    return;
+  applyResumeEvents(events);
+  dispatch({
+    type: "UPSERT_EXECUTION_STEP",
+    step: {
+      runtimeId: result.runtimeId,
+      pluginId: result.pluginId,
+      status: toExecutionStepStatus(result.status),
+      turnId: result.turnId,
+      ...(typeof result.durationMs === "number"
+        ? { durationMs: result.durationMs }
+        : {}),
+      ...(result.error ? { detail: result.error } : {}),
+    },
+  });
+  dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
+}
 
 export function reportWorkspaceSyncError(
   error: unknown,
@@ -226,14 +274,17 @@ export async function resyncSessionRecord(
   sessionId: string,
   sessionIdRef: MutableRef<string | null>,
   dispatch: SessionDispatch,
+  sessionGenerationRef: MutableRef<number>,
   isCurrentAction?: () => boolean,
 ): Promise<void> {
+  const generation = sessionGenerationRef.current;
   try {
     const session = await api.getSession(sessionId);
     // A stale response after a session switch must not overwrite the
     // now-active session's record (and yank the URL back to it).
     if (
       sessionIdRef.current !== sessionId ||
+      sessionGenerationRef.current !== generation ||
       (isCurrentAction && !isCurrentAction())
     )
       return;

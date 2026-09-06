@@ -290,7 +290,8 @@ checkpoint 不允许携带 provider key、owner token 或其他凭据。
 启用会话所有者鉴权的共享部署中，普通 checkpoint 同步保留服务端已有的全局
 世界记录，忽略上传的世界内容；后续 commit 返回服务端世界版本。通过 checkpoint
 创建或修改全局世界必须另持 operator token；普通所有者引用尚不存在的世界时
-返回 `401 operator_token_required`。此 checkpoint 限制同样适用于 production +
+返回 `401 operator_token_required`，即使 checkpoint 省略 `world` 内容亦如此。
+此 checkpoint 限制同样适用于 production +
 MemoryStore 的 self 部署。开发及桌面单用户模式保持原有世界同步行为。
 
 两个端点都在取得会话锁后重新验证所有者、会话实例及删除状态，然后才读取

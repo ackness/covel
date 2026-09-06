@@ -105,6 +105,12 @@ export function withoutDeletionControl(
   };
 }
 
+/**
+ * Run the observe-only SessionEnd hook under the session's plugin scope, then
+ * await the audit persistence barrier before returning. Mutation already
+ * succeeded, so hook failures are logged; dropped or failed saves remain
+ * best-effort because ending sessions have no later flush.
+ */
 export async function fireSessionEnd(
   pipeline: HookPipeline | undefined,
   eventBus: EventBus | undefined,

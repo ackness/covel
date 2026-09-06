@@ -39,6 +39,19 @@ interface MediaStore {
 
 `put()` computes a SHA-256 id from the bytes and deduplicates repeated content. The first stored metadata wins for duplicate content.
 
+## HTTP content safety
+
+`POST /api/media` accepts image uploads and normalizes the MIME type/subtype to
+lowercase without parameters before storing it. SVG uploads are rejected because
+SVG can execute scripts when opened on the application origin. MIME comparison is
+case-insensitive and ignores parameters, so `image/SVG+xml; charset=utf-8` is also
+rejected.
+
+`GET /api/media/:id` applies `Content-Disposition: attachment` and
+`Content-Security-Policy: sandbox` to stored SVG assets, including historical or
+producer-written MIME values with mixed casing or parameters. Both ordinary
+responses and `304` cache revalidation responses carry these protections.
+
 ## Backends
 
 | Backend         | Factory                                         | Byte storage                                           | `openReadStream()`          |

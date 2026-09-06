@@ -144,6 +144,56 @@ describe("MemoryStore transaction rollback (H3 shallow snapshot)", () => {
     expect(await store.listPluginData("sess-1", "p1")).toHaveLength(1);
   });
 
+  it("restores the embedding target and vector search after a session deletion rolls back", async () => {
+    const target = await store.ensureVectorModel({
+      modelId: "test/embed",
+      provider: "test",
+      modelName: "embed",
+      dim: 2,
+    });
+    await store.lockSessionEmbeddingModel("sess-1", target);
+    await store.upsertVector({
+      sessionId: "sess-1",
+      pluginId: "p1",
+      namespace: "memory",
+      key: "kept",
+      embedding: new Float32Array([1, 2]),
+      payload: JSON.stringify({ text: "Keep this memory" }),
+    });
+
+    await expect(
+      store.withTransaction(async (tx) => {
+        await tx.deleteSession("sess-1");
+        throw new Error("rollback");
+      }),
+    ).rejects.toThrow("rollback");
+
+    expect(await store.getSession("sess-1")).not.toBeNull();
+    expect(await store.resolveSessionVectorTarget("sess-1")).toEqual(target);
+    expect(
+      await store.searchVectors({
+        sessionId: "sess-1",
+        query: new Float32Array([1, 2]),
+        topK: 1,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        key: "kept",
+        distance: 0,
+        payload: JSON.stringify({ text: "Keep this memory" }),
+      }),
+    ]);
+    await expect(
+      store.upsertVector({
+        sessionId: "sess-1",
+        pluginId: "p1",
+        namespace: "memory",
+        key: "new",
+        embedding: new Float32Array([2, 3]),
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it("every WRITE_METHOD_TOUCHES key names a real store method", async () => {
     const { WRITE_METHOD_TOUCHES } =
       await import("../src/memory/transaction-methods.js");

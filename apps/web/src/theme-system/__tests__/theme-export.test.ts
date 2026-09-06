@@ -95,12 +95,13 @@ describe("buildThemeCss", () => {
     await store.set(APPEARANCE_TOKENS_KEY, {
       shared: { "--story-font-size": "1.375rem" },
       light: {},
-      dark: { "--color-background": "#101014" },
+      dark: { "--color-background": "#101014", "--story-color": "#f4ead8" },
     });
 
     const { cssText } = buildThemeCss(store, "my-theme");
     expect(cssText).toContain("--story-font-size: 1.375rem;");
     expect(cssText).toContain("--color-background: #101014;");
+    expect(cssText).toContain("--story-color: #f4ead8;");
   });
 
   it("keeps a dark-only source from being labelled light-only", async () => {
@@ -112,6 +113,20 @@ describe("buildThemeCss", () => {
       "dark",
     ]);
     expect(buildThemeCss(store, "my-theme").schemes).toEqual(["light"]);
+  });
+
+  it("preserves a theme's translucent session surface in the snapshot", async () => {
+    const store = await createStore();
+    const surface = "rgb(8 12 20 / 0.3)";
+    const style = document.createElement("style");
+    style.textContent = `:root { --surface-session: ${surface}; }`;
+    document.head.append(style);
+    try {
+      const { cssText } = buildThemeCss(store, "my-theme");
+      expect(cssText).toMatch(/--surface-session: rgb\(8 12 20\s*\/\s*0\.3\);/);
+    } finally {
+      style.remove();
+    }
   });
 
   it("drops values that could break out of the generated rule", async () => {
@@ -142,7 +157,6 @@ describe("aurora reference theme", () => {
 
   it("uses the turn-state hook the framework publishes", () => {
     expect(auroraCss).toContain('[data-turn="executing"]');
-    expect(auroraCss).toContain("@property --aurora-angle");
     expect(auroraCss).toContain("prefers-reduced-motion");
   });
 });

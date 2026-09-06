@@ -40,6 +40,7 @@ const SNAPSHOT_TOKENS: readonly string[] = [
   "--color-input",
   "--color-ring",
   "--surface-page",
+  "--surface-session",
   "--surface-rail",
   "--surface-inset",
   "--surface-elevated",
@@ -86,6 +87,7 @@ const SNAPSHOT_TOKENS: readonly string[] = [
   "--title-font-weight",
   "--title-letter-spacing",
   "--title-text-transform",
+  "--story-color",
   "--story-font-family",
   "--story-font-size",
   "--story-line-height",
@@ -156,8 +158,8 @@ export interface ThemeCssSnapshot {
  * Build the CSS for a theme that reproduces what is on screen right now.
  *
  * Both schemes are captured by briefly forcing each one and reading the
- * cascade — all inside one synchronous block, and with the player's inline
- * overrides lifted first so the theme's own values are what gets read.
+ * cascade with that scheme's overrides applied. Dependent tokens must resolve
+ * against those overrides too, such as story colour following foreground.
  */
 export function buildThemeCss(
   store: SettingsStoreApi,
@@ -174,30 +176,27 @@ export function buildThemeCss(
   ).filter(([, value]) => value !== "");
   for (const [name] of lifted) root.style.removeProperty(name);
 
-  let light: Record<string, string>;
-  let dark: Record<string, string>;
+  const readScheme = (scheme: ThemeScheme): Record<string, string> =>
+    withScheme(scheme, () => {
+      const active = Object.entries(
+        resolveActiveOverrides(overrides, scheme),
+      ).filter(([, value]) => isSafeDeclaration(value));
+      try {
+        for (const [name, value] of active) root.style.setProperty(name, value);
+        return { ...readSnapshot(), ...Object.fromEntries(active) };
+      } finally {
+        for (const [name] of active) root.style.removeProperty(name);
+      }
+    });
+
+  let lightValues: Record<string, string>;
+  let darkValues: Record<string, string>;
   try {
-    light = withScheme("light", readSnapshot);
-    dark = withScheme("dark", readSnapshot);
+    lightValues = readScheme("light");
+    darkValues = readScheme("dark");
   } finally {
     for (const [name, value] of lifted) root.style.setProperty(name, value);
   }
-
-  const applyOverrides = (
-    base: Record<string, string>,
-    scheme: ThemeScheme,
-  ): Record<string, string> => {
-    const next = { ...base };
-    for (const [name, value] of Object.entries(
-      resolveActiveOverrides(overrides, scheme),
-    )) {
-      if (isSafeDeclaration(value)) next[name] = value;
-    }
-    return next;
-  };
-
-  const lightValues = applyOverrides(light, "light");
-  const darkValues = applyOverrides(dark, "dark");
   // Only the deltas go in the `.dark` block — a full duplicate would double
   // the file and hide which tokens actually differ between schemes.
   const darkDelta = Object.fromEntries(

@@ -228,4 +228,62 @@ describe("plugin-data reads see this loop's own pending writes", () => {
     // Falls through to the store — the overlay must not widen plugin scope.
     expect(result.value).toEqual({ saved: true });
   });
+
+  it("keeps NUL-containing namespace/key tuples distinct in pending reads", async () => {
+    store.listPluginData.mockResolvedValue([]);
+    const items = [
+      { namespace: "a", key: "b\u0000c", value: "first" },
+      { namespace: "a\u0000b", key: "c", value: "second" },
+    ];
+    const result = await findByName(tools, "plugin-data-set-batch").execute(
+      { items },
+      ctx(),
+    );
+    const context = { ...ctx(), pendingProposals: getPendingProposals(result) };
+
+    for (const item of items) {
+      expect(
+        await findByName(tools, "plugin-data-get").execute(item, context),
+      ).toMatchObject({ found: true, ...item });
+    }
+    expect(
+      await findByName(tools, "plugin-data-list").execute({}, context),
+    ).toMatchObject({ count: 2, items });
+    expect(
+      await findByName(tools, "plugin-data-list").execute(
+        { namespace: "a\u0000b" },
+        context,
+      ),
+    ).toMatchObject({ count: 1, items: [items[1]] });
+  });
+
+  it("merges stored and pending rows using their exact namespace/key tuples", async () => {
+    const stored = [
+      {
+        namespace: "a",
+        key: "b\u0000c",
+        value: { saved: true },
+        updatedAt: "2026-09-06T00:00:00.000Z",
+      },
+      {
+        namespace: "a\u0000b",
+        key: "c",
+        value: { saved: true },
+        updatedAt: "2026-09-06T00:00:00.000Z",
+      },
+    ];
+    store.listPluginData.mockResolvedValue(stored);
+    const pending = { namespace: "a\u0000b", key: "c", value: "updated" };
+    const result = await findByName(tools, "plugin-data-set").execute(
+      pending,
+      ctx(),
+    );
+
+    expect(
+      await findByName(tools, "plugin-data-list").execute(
+        {},
+        { ...ctx(), pendingProposals: getPendingProposals(result) },
+      ),
+    ).toMatchObject({ count: 2, items: [stored[0], pending] });
+  });
 });

@@ -578,6 +578,15 @@ mediaRoutes.get("/:id", async (c) => {
     return jsonError("forbidden", "session does not reference this media", 403);
   }
 
+  // Harden historical SVG values on cache revalidation as well as full reads.
+  const svgHeaders: Record<string, string> =
+    normalizeMimeType(lookup.mime) === SVG_MIME
+      ? {
+          "content-disposition": "attachment",
+          "content-security-policy": "sandbox",
+        }
+      : {};
+
   // ETag short-circuit. id is the SHA-256 of the bytes, so any cached
   // response is permanently fresh.
   const etag = `"${id}"`;
@@ -588,6 +597,7 @@ mediaRoutes.get("/:id", async (c) => {
       headers: {
         etag,
         "cache-control": "private, max-age=300, immutable",
+        ...svgHeaders,
       },
     });
   }
@@ -604,12 +614,7 @@ mediaRoutes.get("/:id", async (c) => {
     "x-content-type-options": "nosniff",
     // Uploads reject SVG, but rows predating that ban (or written by another
     // media producer) must still never render inline on the app origin.
-    ...(normalizeMimeType(lookup.mime) === SVG_MIME
-      ? {
-          "content-disposition": "attachment",
-          "content-security-policy": "sandbox",
-        }
-      : {}),
+    ...svgHeaders,
   };
 
   try {

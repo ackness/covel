@@ -24,19 +24,24 @@ export function claimSessionAction(
   sessionIdRef: MutableRef<string | null>,
   sessionId: string,
   requestId: string = crypto.randomUUID(),
+  sessionGenerationRef?: MutableRef<number>,
 ): SessionActionOwner {
   const token = Symbol("session-action");
+  const generation = sessionGenerationRef?.current;
   activeActionRef.current = token;
   return {
     requestId,
     isCurrent: () =>
-      activeActionRef.current === token && sessionIdRef.current === sessionId,
+      activeActionRef.current === token &&
+      sessionIdRef.current === sessionId &&
+      sessionGenerationRef?.current === generation,
   };
 }
 
 export interface SessionRuntimeRefs {
   stateRef: MutableRef<SessionState>;
   sessionIdRef: MutableRef<string | null>;
+  sessionGenerationRef: MutableRef<number>;
   runtimeKindRef: MutableRef<Map<string, string>>;
   deltaBufferRef: DeltaBufferRef;
   deltaRafRef: DeltaRafRef;
@@ -50,22 +55,36 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
   }, [state]);
 
   const sessionIdRef = useRef<string | null>(null);
+  const sessionGenerationRef = useRef(0);
+  const publishedSessionIdRef = useRef<string | null>(null);
   const runtimeKindRef = useRef<Map<string, string>>(new Map());
   const deltaBufferRef = useRef<DeltaBufferRef["current"]>(new Map());
   const deltaRafRef = useRef<DeltaRafRef["current"]>(null);
   const lastBackfilledTurnIdRef = useRef<string | null>(null);
 
+  useEffect(
+    () => () => {
+      sessionGenerationRef.current += 1;
+      sessionIdRef.current = null;
+      publishedSessionIdRef.current = null;
+    },
+    [],
+  );
+
   useEffect(() => {
-    const nextId =
-      state.session?.id ??
+    const nextId = state.session?.id ?? null;
+    // Recovery observes the target before an executable session is published.
+    sessionIdRef.current =
+      nextId ??
       (state.executionRecovery?.hydrating
         ? state.executionRecovery.sessionId
         : null);
-    if (sessionIdRef.current === nextId) return;
-    if (sessionIdRef.current) {
-      clearDomainEventPreviews(sessionIdRef.current);
+    const previousId = publishedSessionIdRef.current;
+    if (previousId === nextId) return;
+    publishedSessionIdRef.current = nextId;
+    if (previousId) {
+      clearDomainEventPreviews(previousId);
     }
-    sessionIdRef.current = nextId;
     setActivePluginDataSession(nextId);
     clearNarrativeDeltaBuffer(deltaBufferRef, deltaRafRef);
     clearAllStreamingText();
@@ -78,6 +97,7 @@ export function useSessionRuntimeRefs(state: SessionState): SessionRuntimeRefs {
   return {
     stateRef,
     sessionIdRef,
+    sessionGenerationRef,
     runtimeKindRef,
     deltaBufferRef,
     deltaRafRef,

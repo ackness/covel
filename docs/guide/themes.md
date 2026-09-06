@@ -365,13 +365,15 @@ Covel 为主题包暴露了一组稳定的语义 hook。玩家可以通过这些
 - 你在 §6 里定义的 token 越完整，玩家能调的东西就越多；漏定义的 token 会回退到 `index.css` 的基础值。
 - 玩家可以覆盖你的任何一个可调 token，所以**不要把关键可读性（对比度、行高）寄托在某个 token 一定不被改**。
 
+打开「设置 → 外观 → 叙事正文」即可调整正文颜色、字体、字号、行高、字重、字距与栏宽，并通过阅读预览查看效果。正文颜色只影响叙事区域，亮色和暗色模式分别保存；点击该项的重置按钮可恢复主题默认值。
+
 ### 8.1 分组与作用范围
 
 面板按玩家能理解的区域分组，而不是按 CSS 变量名分组：
 
 | 分组       | 覆盖的 token                                                                        |
 | ---------- | ----------------------------------------------------------------------------------- |
-| 叙事正文   | `--story-*`（字体、字号、行高、字重、字距、栏宽）                                   |
+| 叙事正文   | `--story-*`（颜色、字体、字号、行高、字重、字距、栏宽）                             |
 | 界面文字   | `--font-sans`、`--title-*`、`--meta-*`、`--eyebrow-*`                               |
 | 区域背景   | `--color-background`、`--surface-page/rail/inset/elevated/dialog/player`            |
 | 文字与描边 | `--color-foreground`、`--color-muted-foreground`、`--color-primary`、`--rule-*`     |
@@ -425,7 +427,7 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 }
 ```
 
-完整属性表见 [theme-packages.md §6.6](../reference/theme-packages.md)。内置的 `aurora` 主题是可直接抄的参考实现，涵盖 `@property` 渐变动画、`backdrop-filter` 玻璃、伪元素光层和上面这套状态特效——它同样要通过玩家主题的导入校验，所以照抄不会踩到作用域规则。
+完整属性表见 [theme-packages.md §6.6](../reference/theme-packages.md)。内置的 `aurora` 主题是可直接抄的参考实现，涵盖渐变图层旋转、`backdrop-filter` 玻璃、伪元素光层和上面这套状态特效——它同样要通过玩家主题的导入校验，所以照抄不会踩到作用域规则。连续流光优先用静态渐变配合 `transform` 动画，让浏览器复用已绘制的图层；旋转范围须覆盖视口，并为模糊保留边缘空间。
 
 ---
 

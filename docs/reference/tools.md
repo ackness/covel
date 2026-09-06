@@ -362,6 +362,8 @@ interface UIRenderPart {
 
 与 `plugin-data-get` 一样叠加本 loop 内未提交的 pending 写入；`namespace` 过滤同样作用于 pending 项。
 
+读取和合并按完整的 `(namespace, key)` 字符串元组精确匹配，不以控制字符拆分或改写字段。框架导出的 `overlayPluginDataRows()` 使用 `JSON.stringify([namespace, key])` 作为 Map key；function runtime / guard 的缓冲读取遵循同样规则。
+
 ---
 
 ### world-dimension-get

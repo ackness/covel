@@ -183,8 +183,10 @@ export function createBrowserWorkspaceRoutes(): Hono<Env> {
 
         const writeWorld =
           !isSessionOwnerAuthEnforced(c) || hasOperatorToken(c);
-        if (checkpoint.world && !writeWorld) {
-          const world = await c.get("store").getWorld(checkpoint.world.id);
+        if (checkpoint.session.worldId && !writeWorld) {
+          const world = await c
+            .get("store")
+            .getWorld(checkpoint.session.worldId);
           // Ordinary session sync uses the server's existing catalog record.
           // Seed timestamps and derived metadata may change across restarts.
           if (!world) {

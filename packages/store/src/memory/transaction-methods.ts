@@ -17,9 +17,9 @@ import type { MemoryState, MemoryStoreMethods } from "./memory-types.js";
  *
  * Derived from {@link SESSION_SCOPED_TABLES} (so a newly-registered session
  * table is snapshottable automatically) plus the parent `sessions` map and the
- * non-session-scoped mutable collections (`worlds`, `vectorRows`) a transaction
- * may also touch. `tests/table-registry-consistency.test.ts` pins this list
- * against the registry.
+ * memory-only vector collections and the non-session-scoped `worlds` map a
+ * transaction may also touch. `tests/table-registry-consistency.test.ts` pins
+ * this list against the registry.
  */
 export const MEMORY_SNAPSHOT_COLLECTIONS: ReadonlyArray<{
   readonly key: keyof MemoryState;
@@ -30,9 +30,10 @@ export const MEMORY_SNAPSHOT_COLLECTIONS: ReadonlyArray<{
     key: t.memoryKey as keyof MemoryState,
     kind: t.memoryKind,
   })),
-  // Non-session-scoped mutable collections a transaction may also write.
+  // Mutable collections without a session-table registry entry.
   { key: "worlds", kind: "map" },
   { key: "vectorRows", kind: "map" },
+  { key: "sessionVectorTargets", kind: "map" },
 ];
 
 const SNAPSHOT_KIND_BY_KEY: ReadonlyMap<
@@ -51,9 +52,8 @@ type Touched = readonly (keyof MemoryState)[];
  * Drives touched-only snapshotting (audit 2026-07-11 R-16): a transaction
  * captures a shallow copy of a collection lazily, the first time a method
  * that writes it is invoked — instead of eagerly copying every collection per
- * transaction. Methods mapped to `[]` mutate only state that was never part
- * of the snapshot (vector model registry / session vector targets), preserving
- * pre-existing rollback semantics for them.
+ * transaction. Methods mapped to `[]` either do not mutate state or only touch
+ * the shared vector model registry, which is outside transaction snapshots.
  *
  * Safety net: a mutating method missing from this map (and not matching a
  * read prefix) falls back to capturing ALL collections — new write methods
@@ -120,10 +120,10 @@ export const WRITE_METHOD_TOUCHES: Readonly<Record<string, Touched>> = {
   deleteWorld: ["worlds"],
   upsertVector: ["vectorRows"],
   deleteVectors: ["vectorRows"],
-  // Mutate only never-snapshotted state (vector model registry / targets) —
-  // parity with the previous eager snapshot, which excluded them too.
+  lockSessionEmbeddingModel: ["sessionVectorTargets"],
+  // The shared model registry is independent of session lifecycle; resolving
+  // an existing target does not mutate state.
   ensureVectorModel: [],
-  lockSessionEmbeddingModel: [],
   resolveSessionVectorTarget: [],
 };
 

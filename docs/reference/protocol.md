@@ -284,7 +284,7 @@ data: {
 
 - `reason: "epoch-change"` —— 游标 epoch 与当前不符（含驱逐/重启后的换代，及无法解析的旧格式游标）。
 - `reason: "gap"` —— epoch 相符但环形缓存已越过游标（`afterSeq` 早于 `oldestSeq`），或游标 seq 超前于 `latestSeq`。
-- `reason: "transport-gap"` —— 跨 pod transport 检测到真实序号缺口。每个 `(origin, session, stream)` 从 `seq=1` 开始校验；新 stream 首帧大于 `1`，或接收状态被淘汰后首帧大于 `1`，均会触发缺口处理。本地 replay 清空并换 epoch，所有已连接客户端收到 reset 后断线重连。
+- `reason: "transport-gap"` —— 跨 pod transport 检测到真实序号缺口，或已收到的大事件引用无法还原（记录不存在、读取失败或接收端无 store）。每个 `(origin, session, stream)` 从 `seq=1` 开始校验；新 stream 首帧大于 `1`，或接收状态被淘汰后首帧大于 `1`，均会触发缺口处理。失败帧的前序交付完成后、后继交付前，本地 replay 清空并换 epoch，所有已连接客户端收到 reset 后断线重连。
 
 该帧与 `system.connected` / `system.heartbeat` 一样**不带 `id:` 头**，因此不会污染 `EventSource` 的 `lastEventId`。
 

@@ -23,7 +23,9 @@ describe("resyncSessionRecord", () => {
     vi.mocked(api.getSession).mockResolvedValue(SESSION);
     const dispatch = vi.fn();
 
-    await resyncSessionRecord("sess-1", { current: "sess-1" }, dispatch);
+    await resyncSessionRecord("sess-1", { current: "sess-1" }, dispatch, {
+      current: 0,
+    });
 
     expect(dispatch).toHaveBeenCalledWith({
       type: "SET_SESSION",
@@ -35,7 +37,9 @@ describe("resyncSessionRecord", () => {
     vi.mocked(api.getSession).mockResolvedValue(SESSION);
     const dispatch = vi.fn();
 
-    await resyncSessionRecord("sess-1", { current: "sess-2" }, dispatch);
+    await resyncSessionRecord("sess-1", { current: "sess-2" }, dispatch, {
+      current: 0,
+    });
 
     expect(dispatch).not.toHaveBeenCalled();
   });
@@ -44,7 +48,9 @@ describe("resyncSessionRecord", () => {
     vi.mocked(api.getSession).mockResolvedValue(SESSION);
     const dispatch = vi.fn();
 
-    await resyncSessionRecord("sess-1", { current: null }, dispatch);
+    await resyncSessionRecord("sess-1", { current: null }, dispatch, {
+      current: 0,
+    });
 
     expect(dispatch).not.toHaveBeenCalled();
   });
@@ -54,7 +60,9 @@ describe("resyncSessionRecord", () => {
     const dispatch = vi.fn();
 
     await expect(
-      resyncSessionRecord("sess-1", { current: "sess-1" }, dispatch),
+      resyncSessionRecord("sess-1", { current: "sess-1" }, dispatch, {
+        current: 0,
+      }),
     ).resolves.toBeUndefined();
     expect(dispatch).not.toHaveBeenCalled();
   });
@@ -75,11 +83,37 @@ describe("resyncSessionRecord", () => {
       "sess-1",
       sessionIdRef,
       dispatch,
+      { current: 0 },
       old.isCurrent,
     );
     claimSessionAction(actionRef, sessionIdRef, "sess-1");
     resolve(SESSION);
     await pending;
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("drops metadata from a previous visit to the same session id", async () => {
+    let resolveSession!: (session: api.SessionRecord) => void;
+    vi.mocked(api.getSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSession = resolve;
+      }),
+    );
+    const dispatch = vi.fn();
+    const sessionIdRef = { current: "sess-1" as string | null };
+    const sessionGenerationRef = { current: 1 };
+    const syncing = resyncSessionRecord(
+      "sess-1",
+      sessionIdRef,
+      dispatch,
+      sessionGenerationRef,
+    );
+    sessionIdRef.current = null;
+    sessionGenerationRef.current += 1;
+    sessionIdRef.current = "sess-1";
+    sessionGenerationRef.current += 1;
+    resolveSession(SESSION);
+    await syncing;
     expect(dispatch).not.toHaveBeenCalled();
   });
 });

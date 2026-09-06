@@ -194,8 +194,12 @@ export async function extractZipSafely(
   }
 
   // If all entries share a single top-level dir we consider that the "package root"
-  const rootPrefix =
+  const soleRoot =
     rootPrefixes.size === 1 ? Array.from(rootPrefixes.values())[0] : null;
+  const rootPrefix =
+    soleRoot && fs.statSync(path.join(targetDir, soleRoot)).isDirectory()
+      ? soleRoot
+      : null;
 
   return { entries: extracted, rootPrefix };
 }

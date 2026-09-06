@@ -59,7 +59,7 @@ export interface DataService {
   addStatePatch(sessionId: string, patch: StatePatchRecord): Promise<void>;
 
   /**
-   * Persist submitted block IDs and their submitted form values for a session.
+   * Atomically merge submitted block IDs and their form values into a session.
    * Tracks which interactive blocks have been submitted (locks their UI) and
    * keeps the values around so disabled forms can re-display the input.
    */

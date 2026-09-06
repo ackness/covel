@@ -34,6 +34,9 @@ overrides:
   tsx: 4.23.12
   "@tailwindcss/language-service>postcss": 8.5.26
   "@esbuild-kit/core-utils>esbuild": 0.28.2
+  # Security patches for Ajv URI parsing and desktop plist serialization.
+  "ajv>fast-uri": 3.1.6
+  "plist>@xmldom/xmldom": 0.8.15
 
 # @tailwindcss/language-service currently combines media-query-list-parser
 # 2.0.4 with the csstools v3 parser/tokenizer family. Its transitive peer
