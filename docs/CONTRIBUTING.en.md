@@ -93,33 +93,32 @@ Common types: `feat` / `fix` / `refactor` / `docs` / `test` / `chore` / `perf` /
 Covel releases are driven by Git tags.
 
 1. All changes merged into `main` with green CI
-2. Add a `## [<version>] - YYYY-MM-DD` section at the top of [`CHANGELOG.md`](./CHANGELOG.md)
-3. Unify version numbers across workspace packages (semver: `0.0.1-beta` / `0.1.0` / `1.0.0` …)
-4. Run release preflight, commit, and tag:
+2. Move the `[Unreleased]` entries in [`CHANGELOG.md`](./CHANGELOG.md) into a `## [<version>] - YYYY-MM-DD` section and add upgrade notes
+3. Set the root and every active workspace `package.json` to the target SemVer, and update the version badges, Release links, and current-version notices in [`README.md`](../README.md) and [`README.zh-CN.md`](../README.zh-CN.md). No npm publication is required; independent plugin manifest versions do not automatically follow the workspace version
+4. Run release preflight, review and stage the release changes, then commit and tag:
 
    ```bash
    pnpm release:preflight
-   git commit -am "chore(release): v0.0.4"
-   git tag -a v0.0.4 -m "Covel v0.0.4"
+   RELEASE_VERSION=$(node -p "require('./package.json').version")
+   # Review and stage only the release changes before committing.
+   git commit -m "chore(release): v${RELEASE_VERSION}"
+   git tag -a "v${RELEASE_VERSION}" -m "Covel v${RELEASE_VERSION}"
    git push origin main
-   git push origin v0.0.4
+   git push origin "v${RELEASE_VERSION}"
    ```
 
 5. [`.github/workflows/release.yml`](../.github/workflows/release.yml) will, on any `v*` tag push:
    - Validate the tag, immutable commit SHA, workspace versions, CHANGELOG, and release gates
    - Build and verify Electron macOS arm64 `.dmg` / `.zip` and Windows x64 `.exe` artifacts
-   - Sign and notarize macOS artifacts and Authenticode-sign Windows artifacts
+   - Produce unsigned macOS and Windows artifacts; macOS artifacts are also unnotarized
    - Extract the matching release notes from `docs/CHANGELOG.md`
    - Publish or update the GitHub Release only after every gate passes
 
 6. Open the Releases page and verify the published release notes and assets
 
-### Code signing (required for publication)
+### Code signing
 
-- macOS: configure `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` in repository Secrets
-- Windows: configure `WIN_CSC_LINK` (`.pfx`) and `WIN_CSC_KEY_PASSWORD`; `WIN_CSC_TIMESTAMP_SERVER` is optional
-
-The release workflow fails when any required credential is absent and never publishes unsigned artifacts. Local non-publishing builds may remain unsigned. See [`guide/desktop-packaging.md`](./guide/desktop-packaging.md).
+Official releases intentionally use unsigned artifacts and require no platform signing credentials. Release notes must disclose this and explain that macOS Gatekeeper or Windows SmartScreen may warn on first launch. Enabling signing later requires changing the electron-builder configuration and release workflow together; local signing setup is documented in [`guide/desktop-packaging.md`](./guide/desktop-packaging.md).
 
 ## Reporting issues
 

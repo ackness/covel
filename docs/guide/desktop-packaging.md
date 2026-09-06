@@ -148,7 +148,7 @@ Release CI verifies the unpacked application resources on each platform before u
 
 ## Auto-update publishing
 
-Auto-update is **off** by default. `apps/desktop/electron-builder.yml` ships with
+Automatic downloading and installation are **not enabled**. `apps/desktop/electron-builder.yml` ships with
 `publish: null` and `apps/desktop/scripts/cleanup-artifacts.mjs` strips `latest-*.yml` /
 `*.blockmap`. The intentional output is two files only: the `.dmg`
 installer and the `.zip` containing the `.app`.
@@ -162,16 +162,18 @@ To enable auto-update later:
 3. Pass `GH_TOKEN` (or the matching provider credential) in CI. The Release
    workflow's `--publish=never` flag will need to flip to `--publish=always`.
 
-In-app update checks are not currently wired up (the earlier `apps/desktop/src/auto-updater.ts`
-module was removed as dead scaffolding). Re-adding them requires an
-`electron-updater` dependency, an `apps/desktop/src/main.ts` startup call, and the `publish`
-config above.
+Packaged apps already check for a newer stable GitHub Release once per launch
+and offer to open the download page or ignore that version. This prompt does
+not download or install an update; see [desktop configuration](./desktop-config.en.md#new-version-prompt).
+Automatic installation would require an `electron-updater` dependency,
+integration in `apps/desktop/src/main.ts`, and the publishing configuration above.
 
 ## Release checklist
 
 - [ ] Bump workspace package versions, including root `package.json` and `apps/desktop/package.json`
 - [ ] Update `docs/CHANGELOG.md` with the target version
-- [ ] Bump `ONBOARDING_VERSION` in `apps/web/src/components/onboarding-wizard.tsx` if the tutorial changed
+- [ ] Sync version badges, Release links, and current-version notices in `README.md` and `README.zh-CN.md`
+- [ ] Bump `ONBOARDING_VERSION` in `apps/web/src/components/onboarding-wizard/constants.ts` if the tutorial changed
 - [ ] Run `pnpm release:preflight`
 - [ ] Run `pnpm lint` and `pnpm test` green
 - [ ] Run `pnpm --filter @covel/desktop build`

@@ -19,10 +19,13 @@ function start() {
   const handle = vi.fn();
   const sessionIdRef = { current: request.sessionId as string | null };
   const activeActionRef = { current: null as symbol | null };
+  const sessionGenerationRef = { current: 0 };
   const owner = claimSessionAction(
     activeActionRef,
     sessionIdRef,
     request.sessionId,
+    request.requestId,
+    sessionGenerationRef,
   );
   const pending = runActionStream(request, handle, dispatch, {
     sessionIdRef,
@@ -34,6 +37,7 @@ function start() {
     handle,
     pending,
     sessionIdRef,
+    sessionGenerationRef,
     onEvent,
     onError,
     onDone,
@@ -133,6 +137,16 @@ describe("action stream recovery", () => {
     run.onDone();
     await run.pending;
     expect(run.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("ignores the old stream after revisiting the same session without a new action", async () => {
+    const run = start();
+    run.sessionGenerationRef.current += 1;
+    run.onEvent(envelope("execution.completed", { committed: false }));
+    run.onDone();
+    await run.pending;
+    expect(run.dispatch).not.toHaveBeenCalled();
+    expect(run.handle).not.toHaveBeenCalled();
   });
 
   it.each([500, 502, 503, 504])(

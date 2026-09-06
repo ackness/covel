@@ -69,7 +69,10 @@ function makeWorkspace(ds: DataService): SessionWorkspace {
   };
 }
 
+const sessionGenerationRef = { current: 0 };
+
 beforeEach(() => {
+  sessionGenerationRef.current = 0;
   vi.clearAllMocks();
   api.getSlotConfig.mockReturnValue({});
   api.getPrepRuntimeBindings.mockReturnValue({ narrator: "fast" });
@@ -87,6 +90,7 @@ describe("startGameSession bootstrap order", () => {
       workspace: makeWorkspace(ds),
       dispatch: vi.fn(),
       sessionIdRef: { current: null },
+      sessionGenerationRef,
       world: { ...world, locale: "en-US" },
       presets: [],
       llmConfig: null,
@@ -120,6 +124,7 @@ describe("startGameSession bootstrap order", () => {
       workspace: makeWorkspace(ds),
       dispatch,
       sessionIdRef: { current: null },
+      sessionGenerationRef,
       world,
       presets: [],
       llmConfig: null,
@@ -146,6 +151,7 @@ describe("startGameSession bootstrap order", () => {
       workspace: makeWorkspace(ds),
       dispatch,
       sessionIdRef: { current: null },
+      sessionGenerationRef,
       world,
       presets: [],
       llmConfig: null,
@@ -168,6 +174,7 @@ describe("startGameSession bootstrap order", () => {
         workspace: makeWorkspace(ds),
         dispatch,
         sessionIdRef: { current: null },
+        sessionGenerationRef,
         world,
         presets: [],
         llmConfig: null,
@@ -197,6 +204,7 @@ describe("startGameSession bootstrap order", () => {
         workspace: makeWorkspace(ds),
         dispatch,
         sessionIdRef,
+        sessionGenerationRef,
         world,
         presets: [],
         llmConfig: null,
@@ -229,6 +237,7 @@ describe("startGameSession bootstrap order", () => {
       workspace: makeWorkspace(ds),
       dispatch,
       sessionIdRef,
+      sessionGenerationRef,
       world,
       presets: [],
       llmConfig: null,
@@ -242,6 +251,36 @@ describe("startGameSession bootstrap order", () => {
       expect.objectContaining({ type: "SET_GAME_STATE" }),
     );
     expect(dispatch).not.toHaveBeenCalledWith({ type: "RESET_SESSION" });
+    expect(ds.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it("does not delete a reopened session when an older bootstrap snapshot fails", async () => {
+    let rejectSnapshot!: (error: Error) => void;
+    api.getSessionView.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectSnapshot = reject;
+      }),
+    );
+    const ds = makeDataService([]);
+    const dispatch = vi.fn();
+    const sessionIdRef = { current: null as string | null };
+    const starting = startGameSession({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch,
+      sessionIdRef,
+      sessionGenerationRef,
+      world,
+      presets: [],
+      llmConfig: null,
+    });
+    await vi.waitFor(() => expect(api.getSessionView).toHaveBeenCalled());
+    sessionGenerationRef.current += 1;
+    dispatch.mockClear();
+    rejectSnapshot(new Error("old snapshot failed"));
+    await starting;
+    expect(sessionIdRef.current).toBe(session.id);
+    expect(dispatch).not.toHaveBeenCalled();
     expect(ds.deleteSession).not.toHaveBeenCalled();
   });
 });

@@ -14,7 +14,7 @@ export const Prose: ComponentRenderer = ({ element }) => {
   return (
     <div className="ui-narrative space-y-5 max-w-(--story-max-width)">
       {paragraphs.map((p, i) => (
-        <p key={i} className="text-sm text-foreground leading-relaxed">
+        <p key={i}>
           {p.split(/(\*\*[^*]+\*\*)/).map((segment, j) =>
             segment.startsWith("**") && segment.endsWith("**") ? (
               <strong key={j} className="font-semibold">

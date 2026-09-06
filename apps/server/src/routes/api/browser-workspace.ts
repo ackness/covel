@@ -34,6 +34,27 @@ interface WorkspaceHead {
   readonly commits: Map<string, SessionCommit>;
 }
 
+/** One API instance's replay state, released with the session lifecycle. */
+export function createBrowserWorkspaceCache() {
+  const heads = new Map<string, WorkspaceHead>();
+  return {
+    get(sessionId: string, incarnation: string): WorkspaceHead | undefined {
+      const head = heads.get(sessionId);
+      if (head && head.incarnation !== incarnation) {
+        heads.delete(sessionId);
+        return undefined;
+      }
+      return head;
+    },
+    set(sessionId: string, head: WorkspaceHead): void {
+      heads.set(sessionId, head);
+    },
+    clearSession(sessionId: string): void {
+      heads.delete(sessionId);
+    },
+  };
+}
+
 function canonicalizeCheckpointLocales(
   checkpoint: BrowserCheckpoint,
 ): BrowserCheckpoint | undefined {
@@ -92,18 +113,10 @@ function cacheCommit(head: WorkspaceHead, commit: SessionCommit): void {
  * browser uploads its latest checkpoint before a turn and atomically applies
  * the returned commit after the SSE stream closes.
  */
-export function createBrowserWorkspaceRoutes(): Hono<Env> {
+export function createBrowserWorkspaceRoutes(
+  cache = createBrowserWorkspaceCache(),
+): Hono<Env> {
   const routes = new Hono<Env>();
-  const heads = new Map<string, WorkspaceHead>();
-
-  function currentHead(sessionId: string, incarnation: string) {
-    const head = heads.get(sessionId);
-    if (head && head.incarnation !== incarnation) {
-      heads.delete(sessionId);
-      return undefined;
-    }
-    return head;
-  }
 
   routes.put("/:id/browser-checkpoint", async (c) => {
     const wrongProfile = browserPrivateOnly(c);
@@ -149,7 +162,7 @@ export function createBrowserWorkspaceRoutes(): Hono<Env> {
       allowedStatuses: "any",
       mutate: async (live) => {
         const incarnation = sessionIncarnationIdentity(live);
-        const head = currentHead(sessionId, incarnation);
+        const head = cache.get(sessionId, incarnation);
         if (head && checkpoint.revision < head.revision) {
           return c.json(
             errorBody("Browser checkpoint revision is stale", {
@@ -183,8 +196,10 @@ export function createBrowserWorkspaceRoutes(): Hono<Env> {
 
         const writeWorld =
           !isSessionOwnerAuthEnforced(c) || hasOperatorToken(c);
-        if (checkpoint.world && !writeWorld) {
-          const world = await c.get("store").getWorld(checkpoint.world.id);
+        if (checkpoint.session.worldId && !writeWorld) {
+          const world = await c
+            .get("store")
+            .getWorld(checkpoint.session.worldId);
           // Ordinary session sync uses the server's existing catalog record.
           // Seed timestamps and derived metadata may change across restarts.
           if (!world) {
@@ -217,7 +232,7 @@ export function createBrowserWorkspaceRoutes(): Hono<Env> {
           }
           throw error;
         }
-        heads.set(sessionId, {
+        cache.set(sessionId, {
           incarnation,
           revision: checkpoint.revision,
           actionId: checkpoint.actionId,
@@ -260,7 +275,7 @@ export function createBrowserWorkspaceRoutes(): Hono<Env> {
       expectedSession: guard.session,
       allowedStatuses: "any",
       mutate: async (live) => {
-        const head = currentHead(sessionId, sessionIncarnationIdentity(live));
+        const head = cache.get(sessionId, sessionIncarnationIdentity(live));
         if (!head) {
           return c.json(
             errorBody(

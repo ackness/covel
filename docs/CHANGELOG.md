@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.32] - 2026-09-06
+
+This release improves theme rendering and appearance controls, strengthens session isolation and asynchronous recovery, and corrects configuration examples and release documentation.
+
+### Changed
+
+- **Aurora keeps its flowing gradient with less repeated painting.** The theme rotates a reusable gradient layer, strengthens the cyan and violet colours, and lets them show through the reading surface. World art fades into that surface, and reduced-motion preferences remain supported.
+- **Appearance controls offer independent story colours and a live reading preview.** Light and dark modes keep separate text colours; colour swatches and saved theme snapshots preserve the displayed values, including translucent session surfaces.
+- **Concurrent audit flushes share one drain barrier.** Queue draining retains its best-effort persistence semantics and now has explicit coverage for overlapping flushes, newly queued events, and failed saves.
+
+### Fixed
+
+- **Media uploads recheck ownership inside the session mutation lock.** Uploads cannot attach to a replaced session or a session whose owner changed after the initial authorization check.
+- **Deleting a browser-private session releases its full commit replay cache.** Failed deletions retain retry state, and other sessions keep their existing replay history.
+- **Late plugin operations stay scoped to their original session visit.** Errors and approval decisions no longer change another session's plugin display, including leaving and reopening the same session.
+- **Pending appearance edits stay with the colour scheme in which they began.** Switching schemes or leaving a control saves its final value without leaking a preview into the next scheme.
+- **Saved themes retain their gradient layers, animations and conditional styling.** Derived themes preserve scoped CSS through reload and export/import, isolate animation names, and replace their generated token snapshot when saved again.
+- **Old asynchronous session work cannot overwrite a newer visit.** Navigation and creation use visit-scoped cancellation alongside action recovery, including leaving and reopening the same session. Submitted forms merge atomically in browser storage instead of overwriting concurrent submissions.
+- **Provider event streams handle legal SSE framing and cancellation.** Parsing supports mixed line endings and multiple data lines, and stops the reader when completion or consumer cancellation ends the stream.
+- **Missing event payload references trigger resynchronization.** Replay state resets when a transported event cannot be recovered, preventing clients from silently continuing with missing updates.
+- **Data writes preserve boundary values and rollback state.** Plugin data keys containing NUL characters remain distinct, and a rolled-back session deletion restores its embedding target as well as its vectors.
+- **Media and archive handling preserve their security boundaries.** SVG responses retain sandbox and download headers on conditional requests, and a single-file ZIP no longer loses its filename to root-directory detection. Browser checkpoint restoration cannot create an unknown world by omitting its world payload.
+- **Transitive URI and XML parser dependencies receive patch updates.** The workspace pins `fast-uri` 3.1.6 and `@xmldom/xmldom` 0.8.15 for their existing consumers.
+- **Configuration examples and documentation match current behavior.** Image slots use `providerRequestMetadata.imageWire`; guides clarify production MemoryStore authorization, local key and world storage, supported locales, theme overrides, unsigned releases, and desktop update notifications.
+
+### Upgrade notes
+
+- If your image slot still uses `imageApi`, replace it with `providerRequestMetadata = { imageWire = "dashscope-wan" }` for DashScope WAN. OpenAI-compatible image generation defaults to `openai-images`; see [`llm.toml.example`](../llm.toml.example).
+- Production MemoryStore deployments enforce session owner tokens and require an operator token for shared-world writes even with `DEPLOYMENT_TIER=self`. Follow the [API authorization contract](./reference/api.md) and update the server and bundled Web client together.
+- macOS Apple Silicon and Windows x64 binaries are unsigned; macOS Gatekeeper or Windows SmartScreen may warn on first launch. Desktop updates provide a version notification and manual download, without automatic installation. Back up custom content before upgrading.
+
 ## [0.0.31] - 2026-09-05
 
 This release makes story completion and session recovery more reliable, improves the complete configuration and gameplay flow, unifies API contracts, and hardens browser checkpoints and shared-resource access.

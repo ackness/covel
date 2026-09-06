@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.31-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.31)
+[![Version](https://img.shields.io/badge/version-v0.0.32-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.32)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **当前公开版本：v0.0.31**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，且尚未签名；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
+> **发布版本：v0.0.32**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，且尚未签名；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
 
 ## 亮点
 
@@ -23,7 +23,7 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 - 🧩 **插件保持可替换** —— 内核通过 `capabilities` 和 `outputKind` 发现能力，框架代码不按具体插件 ID 分支。
 - 🌍 **可移植世界包** —— 用同一套 `WorldData` 导入协议携带世界观、角色 schema、主要角色、规则、记忆块、任务、物品、立绘、场景与插件默认值。
 - 🔄 **共享 WorldIR** —— 回合后先生成一次插件中立事实投影，任务、行囊、好感、图鉴与关系插件复用同一份证据，不再各自重读故事。
-- 🔌 **自带模型** —— OpenAI / Anthropic / DeepSeek / Qwen 模型槽位。本地优先：SQLite 落盘，API 密钥绝不在服务端持久化。
+- 🔌 **自带模型** —— OpenAI / Anthropic / DeepSeek / Qwen 模型槽位。本地优先：SQLite 落盘；Web 模式将 API 密钥存入浏览器 localStorage，桌面模式将密钥以明文保存到 `~/.covel/keys.env`。
 
 ## 两种玩法
 
@@ -95,7 +95,7 @@ worlds/my-world/
 
 ## 贯穿界面、插件与世界包的 i18n
 
-Covel 内置 `zh-CN` 与 `en-US` 两套界面词典。玩家选择的 locale 会统一用于界面标签、插件 metadata 与提示词、世界 metadata、角色字段和 WorldData source。短自然语言字段使用 `{ zh, en }` 这样的 `I18nText`；较长内容则使用独立的语言变体文件：
+Covel 内置 `zh-CN`、`en-US` 与 `ru-RU` 三套界面词典。玩家选择的 locale 会统一用于界面标签、插件 metadata 与提示词、世界 metadata、角色字段和 WorldData source。短自然语言字段使用 `{ zh, en }` 这样的 `I18nText`；较长内容则使用独立的语言变体文件：
 
 ```text
 apps/web/src/i18n/locales/ja-JP.json       # 应用界面词典
@@ -107,7 +107,7 @@ worlds/my-world/data/rules/core.ja.yaml
 
 世界包通过 `defaultLocale` 与 `supportedLocales` 声明语言。加载器会优先读取当前语言的变体，缺失时回退到权威 source，因此只完成部分翻译也不会影响游玩。雾港展示了包含世界观、角色、规则和媒体 metadata 变体的中英双语世界包。**Emberback Relay** 则是内置的英文默认世界包（`defaultLocale: en-US`），manifest、设定、角色、规则、任务和其他开局内容均以英文提供。
 
-玩家、世界作者和插件作者都可以按照 [i18n 指南](./docs/reference/i18n.md)自行加入新的语言支持。若要让整个应用提供新语言选项，需要新增 UI 词典并注册 locale；若要本地化内容，则可按需补充 `I18nText`、`PLUGIN.<lang>.md`、`WORLD.<lang>.md` 与 WorldData source 变体。只翻译自然语言内容，稳定 ID、capability、工具、路径和调度配置继续以权威定义为准。完成后可运行 `pnpm check:i18n` 校验。
+玩家、世界作者和插件作者都可以按照 [i18n 指南](./docs/reference/i18n.md)自行加入新的语言支持。`apps/web/src/i18n/locales/` 中的完整 JSON 词典会在构建时自动发现并加入 Web 语言选项，无需手工注册；新增词典后需要重新构建，未随包提供对应翻译的 Electron 原生文案会回退英文。若要本地化内容，则可按需补充 `I18nText`、`PLUGIN.<lang>.md`、`WORLD.<lang>.md` 与 WorldData source 变体。只翻译自然语言内容，稳定 ID、capability、工具、路径和调度配置继续以权威定义为准。完成后可运行 `pnpm check:i18n` 校验。
 
 ## 端到端调试每个回合
 
@@ -160,7 +160,7 @@ pnpm dev                            # web :5173 + server :3001（SQLite）
 
 仓库作者也可以使用内置辅助工具：
 
-- **`/create-world`** —— 生成并校验 `world.yaml`、`WORLD.md` 与 WorldData 文件，可放入 `~/.covel/worlds/`。
+- **`/create-world`** —— 生成并校验 `world.yaml`、`WORLD.md` 与 WorldData 文件。桌面版世界包放入 `<data_root>/worlds/`（默认 `~/.covel/data/worlds/`）；源码运行使用 `COVEL_USER_WORLDS_DIR`，开发模式在 `~/.covel/` 已存在时默认使用 `~/.covel/worlds/`。
 - **`/create-plugin`** —— 按能力需求搭建 runtime manifest、handler、schema、工具、UI 与测试的正确组合。
 
 插件与世界包的官方分享社区在路线图上 —— 目前可通过 Gist 或 fork 分享。

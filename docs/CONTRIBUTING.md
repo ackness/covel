@@ -91,39 +91,32 @@ pnpm e2e                                   # Playwright 端到端
 Covel 的发布由 Git tag 驱动。
 
 1. 所有改动合并到 `main` 且 CI 通过
-2. 在 [`CHANGELOG.md`](./CHANGELOG.md) 顶部新增 `## [<version>] - YYYY-MM-DD` 版本段落
-3. 统一版本号：
-
-   ```bash
-   # 所有 workspace package 版本同步（直接改 package.json 即可，无需发布到 npm）
-   # 版本号遵循 semver：0.0.1-beta / 0.1.0 / 1.0.0 …
-   ```
-
-4. 运行发布前检查，提交并打 tag：
+2. 将 [`CHANGELOG.md`](./CHANGELOG.md) 的 `[Unreleased]` 内容整理为 `## [<version>] - YYYY-MM-DD` 版本段落，补充升级说明
+3. 将根目录与所有当前 workspace 的 `package.json` 统一为目标 SemVer，并同步 [`README.md`](../README.md) 和 [`README.zh-CN.md`](../README.zh-CN.md) 的版本徽标、Release 链接与当前版本说明。无需发布到 npm；插件 manifest 的独立版本不随 workspace 版本机械修改
+4. 运行发布前检查，核对并暂存本次发布改动，再提交并打 tag：
 
    ```bash
    pnpm release:preflight
-   git commit -am "chore(release): v0.0.4"
-   git tag -a v0.0.4 -m "Covel v0.0.4"
+   RELEASE_VERSION=$(node -p "require('./package.json').version")
+   # Review and stage only the release changes before committing.
+   git commit -m "chore(release): v${RELEASE_VERSION}"
+   git tag -a "v${RELEASE_VERSION}" -m "Covel v${RELEASE_VERSION}"
    git push origin main
-   git push origin v0.0.4
+   git push origin "v${RELEASE_VERSION}"
    ```
 
 5. [`.github/workflows/release.yml`](../.github/workflows/release.yml) 将在 `v*` tag 推送时自动：
    - 校验 tag、提交 SHA、workspace 版本、CHANGELOG 与完整发布前检查
    - 构建并验证 Electron macOS arm64 `.dmg` / `.zip` 和 Windows x64 `.exe`
-   - 对 macOS 产物签名并公证，对 Windows 产物执行 Authenticode 签名
+   - 产出未签名的 macOS 与 Windows 安装包；macOS 产物也未公证
    - 从 `docs/CHANGELOG.md` 抽取对应版本说明
    - 所有检查通过后发布或更新 GitHub Release
 
 6. 在 Releases 页面检查正式发布页、release notes 与附件
 
-### 代码签名（正式发布必需）
+### 代码签名
 
-- macOS：在仓库 Secrets 配置 `MAC_CSC_LINK`、`MAC_CSC_KEY_PASSWORD`、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`
-- Windows：在仓库 Secrets 配置 `WIN_CSC_LINK`（`.pfx`）、`WIN_CSC_KEY_PASSWORD`；可选配置 `WIN_CSC_TIMESTAMP_SERVER`
-
-发布工作流缺少任一必需凭据时会直接失败，不会发布 unsigned 产物。本地非发布构建仍可保持 unsigned。详见 [`guide/desktop-packaging.md`](./guide/desktop-packaging.md)。
+当前正式发布有意使用 unsigned 产物，不需要平台签名凭据。发布说明必须披露这一点，并说明首次启动可能触发 macOS Gatekeeper 或 Windows SmartScreen 提示。未来启用签名时，需要同时更新 electron-builder 配置与发布工作流；本地签名配置见 [`guide/desktop-packaging.md`](./guide/desktop-packaging.md)。
 
 ## 报告问题
 

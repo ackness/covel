@@ -1,21 +1,16 @@
 /* ─────────────────────────────────────────────────────────────────
    Aurora — glassmorphism + drifting light
    Doubles as the reference for what a theme package can actually do:
-   @property-driven gradients, keyframes, backdrop blur, pseudo-element
+   Composited gradient motion, keyframes, backdrop blur, pseudo-element
    layers, and turn-state driven effects via [data-turn].
    ───────────────────────────────────────────────────────────────── */
 
-/* Registering the angle as a real <angle> is what makes the conic gradient
-   animate — a plain custom property would jump between keyframes. */
-@property --aurora-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-
 @keyframes aurora-drift {
+  from {
+    transform: rotate(0deg);
+  }
   to {
-    --aurora-angle: 360deg;
+    transform: rotate(360deg);
   }
 }
 
@@ -73,6 +68,7 @@ html[data-theme="aurora"] {
 
   /* Translucent surfaces — required for backdrop-filter to read as glass. */
   --surface-page: oklch(12% 0.028 265);
+  --surface-session: color-mix(in oklab, var(--surface-page) 30%, transparent);
   --surface-rail: color-mix(in oklab, oklch(22% 0.045 268) 72%, transparent);
   --surface-inset: color-mix(in oklab, oklch(18% 0.04 265) 82%, transparent);
   --surface-elevated: color-mix(in oklab, oklch(25% 0.05 270) 72%, transparent);
@@ -137,23 +133,34 @@ html[data-theme="aurora"] {
 
 /* ── Animated aurora layer ───────────────────────────────────────
    body::before is already the noise layer, so the drifting light goes on
-   ::after. Heavily blurred and low-opacity so it reads as atmosphere. */
+   ::after. Rotate the painted gradient instead of changing its colour stops
+   or angle every frame, so scrolling can reuse the rasterized layer. */
 html[data-theme="aurora"] body::after {
   content: "";
   position: fixed;
-  inset: -30%;
+  top: 50%;
+  left: 50%;
+  /* Cover the viewport at every angle, plus two blur radii on each edge. */
+  width: calc(hypot(100vw, 100vh) + 360px);
+  height: calc(hypot(100vw, 100vh) + 360px);
+  translate: -50% -50%;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.5;
+  opacity: 0.75;
   filter: blur(90px);
   background: conic-gradient(
-    from var(--aurora-angle),
-    oklch(60% 0.18 200 / 0.35),
-    oklch(58% 0.2 310 / 0.3),
-    oklch(55% 0.16 260 / 0.35),
-    oklch(60% 0.18 200 / 0.35)
+    oklch(64% 0.2 195 / 0.65),
+    oklch(61% 0.23 310 / 0.65),
+    oklch(56% 0.21 265 / 0.65),
+    oklch(64% 0.2 195 / 0.65)
   );
   animation: aurora-drift 42s linear infinite;
+}
+
+/* Keep state overrides in the same cascade layer as the base animation. */
+html[data-theme="aurora"][data-turn="executing"] body::after {
+  opacity: 0.9;
+  animation-duration: 14s;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -164,6 +171,11 @@ html[data-theme="aurora"] body::after {
 
 /* ── Glass surfaces ──────────────────────────────────────────────── */
 @layer components {
+  /* Fade world art into the translucent reading surface without a hard edge. */
+  html[data-theme="aurora"] .ui-session-backdrop {
+    mask-image: linear-gradient(black, transparent 18rem);
+  }
+
   html[data-theme="aurora"] .ui-rail,
   html[data-theme="aurora"] .ui-panel-header,
   html[data-theme="aurora"] .ui-card-surface,
@@ -217,11 +229,6 @@ html[data-theme="aurora"] body::after {
   /* ── Turn-state driven effects ───────────────────────────────────────
    `data-turn` is published on <html> by the framework (idle / executing /
    waiting / error), which is what lets pure CSS react to the game. */
-  html[data-theme="aurora"][data-turn="executing"] body::after {
-    opacity: 0.85;
-    animation-duration: 14s;
-  }
-
   html[data-theme="aurora"][data-turn="executing"] .ui-composer-input {
     border-color: color-mix(in oklab, var(--accent-secondary) 55%, transparent);
     animation: aurora-breathe 2.4s ease-in-out infinite;

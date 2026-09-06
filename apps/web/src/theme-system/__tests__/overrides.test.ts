@@ -68,6 +68,39 @@ describe("appearance token overrides", () => {
     expect(overrides.dark["--story-font-size"]).toBeUndefined();
   });
 
+  it("restores each scheme's story colour and resets to the theme", async () => {
+    const store = await createStore("dark");
+    await setTokenOverride(store, "--story-color", "#f4ead8");
+    applyTokenOverrides(store);
+    expect(
+      document.documentElement.style.getPropertyValue("--story-color"),
+    ).toBe("#f4ead8");
+
+    await store.set(THEME_SCHEME_KEY, "light");
+    applyTokenOverrides(store);
+    expect(
+      document.documentElement.style.getPropertyValue("--story-color"),
+    ).toBe("");
+    await setTokenOverride(store, "--story-color", "#292018");
+    expect(loadOverrides(store)).toEqual({
+      shared: {},
+      light: { "--story-color": "#292018" },
+      dark: { "--story-color": "#f4ead8" },
+    });
+
+    await store.set(THEME_SCHEME_KEY, "dark");
+    applyTokenOverrides(store);
+    expect(
+      document.documentElement.style.getPropertyValue("--story-color"),
+    ).toBe("#f4ead8");
+    await clearTokenOverride(store, "--story-color");
+    applyTokenOverrides(store);
+    expect(
+      document.documentElement.style.getPropertyValue("--story-color"),
+    ).toBe("");
+    expect(loadOverrides(store).light["--story-color"]).toBe("#292018");
+  });
+
   it("keeps light and dark colours independent", async () => {
     const store = await createStore("dark");
     await setTokenOverride(store, "--color-primary", "#ff8844");
@@ -80,6 +113,28 @@ describe("appearance token overrides", () => {
     expect(getTokenOverride(overrides, "--color-primary", "light")).toBe(
       "#3311aa",
     );
+  });
+
+  it("commits a delayed edit to the scheme where editing began", async () => {
+    const store = await createStore("dark");
+    await store.set(THEME_SCHEME_KEY, "light");
+    await setTokenOverride(store, "--story-color", "#f4ead8", "dark");
+    expect(loadOverrides(store)).toEqual({
+      shared: {},
+      light: {},
+      dark: { "--story-color": "#f4ead8" },
+    });
+  });
+
+  it("clears uncommitted previews when applying another scheme", async () => {
+    const store = await createStore("dark");
+    applyTokenOverrides(store);
+    document.documentElement.style.setProperty("--story-color", "#f4ead8");
+    await store.set(THEME_SCHEME_KEY, "light");
+    applyTokenOverrides(store);
+    expect(
+      document.documentElement.style.getPropertyValue("--story-color"),
+    ).toBe("");
   });
 
   it("shared tokens resolve in both schemes, colours only in their own", async () => {

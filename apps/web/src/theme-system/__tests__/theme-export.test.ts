@@ -95,12 +95,13 @@ describe("buildThemeCss", () => {
     await store.set(APPEARANCE_TOKENS_KEY, {
       shared: { "--story-font-size": "1.375rem" },
       light: {},
-      dark: { "--color-background": "#101014" },
+      dark: { "--color-background": "#101014", "--story-color": "#f4ead8" },
     });
 
     const { cssText } = buildThemeCss(store, "my-theme");
     expect(cssText).toContain("--story-font-size: 1.375rem;");
     expect(cssText).toContain("--color-background: #101014;");
+    expect(cssText).toContain("--story-color: #f4ead8;");
   });
 
   it("keeps a dark-only source from being labelled light-only", async () => {
@@ -112,6 +113,20 @@ describe("buildThemeCss", () => {
       "dark",
     ]);
     expect(buildThemeCss(store, "my-theme").schemes).toEqual(["light"]);
+  });
+
+  it("preserves a theme's translucent session surface in the snapshot", async () => {
+    const store = await createStore();
+    const surface = "rgb(8 12 20 / 0.3)";
+    const style = document.createElement("style");
+    style.textContent = `:root { --surface-session: ${surface}; }`;
+    document.head.append(style);
+    try {
+      const { cssText } = buildThemeCss(store, "my-theme");
+      expect(cssText).toMatch(/--surface-session: rgb\(8 12 20\s*\/\s*0\.3\);/);
+    } finally {
+      style.remove();
+    }
   });
 
   it("drops values that could break out of the generated rule", async () => {
@@ -131,6 +146,58 @@ describe("buildThemeCss", () => {
     expect(cssText).not.toContain("display: none");
     expect(cssText).toContain("--story-line-height: 1.8;");
   });
+
+  it("keeps Aurora's effects in a standalone package across repeated saves", async () => {
+    const store = await createStore();
+    await store.set(APPEARANCE_TOKENS_KEY, {
+      shared: { "--story-font-size": "1.375rem" },
+      light: {},
+      dark: { "--story-color": "#f4ead8" },
+    });
+    const first = buildThemeCss(store, "first", ["dark"], {
+      id: "aurora",
+      cssText: auroraCss,
+    });
+    expect(first.schemes).toEqual(["light", "dark"]);
+    expect(first.cssText).toContain('html[data-theme="first"] body::after');
+    expect(first.cssText).toContain("conic-gradient(");
+    expect(first.cssText).toContain("@layer components");
+    expect(first.cssText).toContain("prefers-reduced-motion");
+    expect(first.cssText).toContain(
+      "animation: covel-first-0 42s linear infinite;",
+    );
+    expect(first.cssText).toContain("--story-color: #f4ead8;");
+
+    const imported = parseImportedThemeFile(
+      JSON.stringify({
+        id: "first",
+        label: "First",
+        cssText: first.cssText,
+        schemes: first.schemes,
+      }),
+      "first.json",
+    ).theme;
+    let next = buildThemeCss(store, "second", imported.schemes, imported);
+    const once = next.cssText;
+    for (let index = 0; index < 4; index++) {
+      next = buildThemeCss(store, "second", next.schemes, {
+        id: "second",
+        cssText: next.cssText,
+      });
+    }
+    expect(next.cssText).toBe(once);
+    expect(next.cssText).not.toContain('data-theme="first"');
+    expect(next.cssText).not.toContain("covel-first-");
+    expect(next.cssText.match(/conic-gradient\(/g)).toHaveLength(1);
+    expect(next.cssText.match(/covel-token-snapshot:start/g)).toHaveLength(1);
+    expect(next.cssText.match(/@keyframes/g)).toHaveLength(4);
+    expect(next.cssText).toContain(
+      "animation: covel-second-0 42s linear infinite;",
+    );
+    expect(() =>
+      parseImportedThemeFile(next.cssText, "second.css"),
+    ).not.toThrow();
+  });
 });
 
 describe("aurora reference theme", () => {
@@ -142,7 +209,6 @@ describe("aurora reference theme", () => {
 
   it("uses the turn-state hook the framework publishes", () => {
     expect(auroraCss).toContain('[data-turn="executing"]');
-    expect(auroraCss).toContain("@property --aurora-angle");
     expect(auroraCss).toContain("prefers-reduced-motion");
   });
 });

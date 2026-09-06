@@ -36,6 +36,7 @@ export function registerSessionDeleteRoute(
       pluginRegistry.clearSession(id);
       c.get("rpcApprovalGate")?.revoke(id);
       c.get("clearSessionToolOverrides")?.(id);
+      c.get("clearBrowserWorkspace")?.(id);
     };
 
     const prepared = await sessionLock.withLock(id, async () => {

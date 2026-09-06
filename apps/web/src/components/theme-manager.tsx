@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
 import { Check, Download, Palette, Trash2, Upload } from "lucide-react";
@@ -40,7 +40,7 @@ export function ThemeManagerWidget() {
   const [busy, setBusy] = useState(false);
 
   const customThemeList = customThemes ?? [];
-  const themes = useMemo(() => getRegisteredThemes(), [customThemeList]);
+  const themes = getRegisteredThemes();
 
   function flash(message: string) {
     setNotice(message);

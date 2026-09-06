@@ -137,6 +137,8 @@ declare module "hono" {
      * test DI need not wire it.
      */
     clearSessionToolOverrides?: (sessionId: string) => void;
+    /** Release revision and full-commit replay state after session deletion. */
+    clearBrowserWorkspace?: (sessionId: string) => void;
     getPluginSource?: GetPluginSourceFn;
     /**
      * Reserved plugin IDs (the bundled `plugins/` set, derived at boot from

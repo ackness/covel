@@ -11,11 +11,12 @@
   --tw-prose-links: var(--color-primary);
   --tw-prose-bold: var(--color-foreground);
   --tw-prose-counters: var(--color-muted-foreground);
-  --tw-prose-bullets: var(--color-border);
+  --tw-prose-bullets: var(--color-muted-foreground);
   --tw-prose-hr: var(--color-border);
   --tw-prose-quotes: var(--color-foreground);
   --tw-prose-quote-borders: var(--color-primary);
   --tw-prose-captions: var(--color-muted-foreground);
+  --tw-prose-kbd: var(--color-foreground);
   --tw-prose-code: var(--color-primary);
   --tw-prose-pre-code: var(--color-foreground);
   --tw-prose-pre-bg: var(--surface-inset);
@@ -25,12 +26,23 @@
 
 /* Narrative copy */
 .ui-narrative {
+  color: var(--story-color);
   font-family: var(--story-font-family);
   font-size: var(--story-font-size);
   line-height: var(--story-line-height);
   font-weight: var(--story-font-weight);
   letter-spacing: var(--story-letter-spacing);
   max-width: var(--story-max-width);
+}
+
+/* Both inline and nested Markdown follow the player's story colour. */
+.ui-narrative.prose,
+.ui-narrative .prose {
+  --tw-prose-body: var(--story-color);
+  --tw-prose-headings: var(--story-color);
+  --tw-prose-bold: var(--story-color);
+  --tw-prose-quotes: var(--story-color);
+  --tw-prose-pre-code: var(--story-color);
 }
 
 .ui-narrative.prose p,

@@ -334,6 +334,14 @@ describe("GET /api/media/:id", () => {
       const body = new Uint8Array(await res.arrayBuffer());
       expect(body.byteLength).toBe(bytes.byteLength);
       expect(Buffer.compare(body, bytes)).toBe(0);
+      const cached = await app.request(
+        `/api/media/${ref.id}?token=${encodeURIComponent(token)}`,
+        { headers: { "if-none-match": `"${ref.id}"` } },
+      );
+      expect(cached.status).toBe(304);
+      expect(cached.headers.get("content-disposition")).toBe("attachment");
+      expect(cached.headers.get("content-security-policy")).toBe("sandbox");
+      expect(streamCallCounter.count).toBe(size > 1024 * 1024 ? 1 : 0);
     },
   );
 

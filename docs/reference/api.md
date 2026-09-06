@@ -61,7 +61,7 @@ HTTP/API 失败统一使用非 2xx 状态码和以下错误信封（`apps/server
 
 | `DEPLOYMENT_TIER`     | 行为                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `self`（默认）/ 桌面  | **不强制**。单机本地游玩零 token 可用；网络边界由默认回环监听保障（`COVEL_BIND_HOST=127.0.0.1`，见 env-registry）。带 token 也不校验。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `self`（默认）/ 桌面  | **通常不强制**（生产 MemoryStore 例外见下文）。单机本地游玩零 token 可用；网络边界由默认回环监听保障（`COVEL_BIND_HOST=127.0.0.1`，见 env-registry）。带 token 也不校验。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `demo` / `commercial` | **硬性强制**。所有会话作用域端点（session CRUD、messages、traces、actions、plugin-rpc、steer/abort、SSE subscribe、snapshots、state 等经 `resolveSessionParam` 的路由，以及会话 id 走 query/body/间接引用的端点：approvals 列表/撤销/决策、`POST /api/media?sessionId=`、`/api/worlds/:id/world-data/preflight`、`sync-data`、`sync-dimensions`、`GET /api/ui-specs?sessionId=`）缺失或错误 token 一律返回 `401 { code: "session_owner_required" }`（未知会话返回 404）。无哈希的历史会话 fail-closed。`GET /api/sessions` 列表在这两个层级仅对持有运维 token 的调用方返回内容，其余返回空列表；`POST /api/sessions` **创建会话需运维 token**（缺失返回 `401 { code: "operator_token_required" }`）——这是单运维方门禁，完整的用户身份/租户隔离/配额属产品级工作，尚未实现。 |
 
 **生产 MemoryStore 例外**：即使 `DEPLOYMENT_TIER=self`，`NODE_ENV=production`
@@ -290,12 +290,17 @@ checkpoint 不允许携带 provider key、owner token 或其他凭据。
 启用会话所有者鉴权的共享部署中，普通 checkpoint 同步保留服务端已有的全局
 世界记录，忽略上传的世界内容；后续 commit 返回服务端世界版本。通过 checkpoint
 创建或修改全局世界必须另持 operator token；普通所有者引用尚不存在的世界时
-返回 `401 operator_token_required`。此 checkpoint 限制同样适用于 production +
+返回 `401 operator_token_required`，即使 checkpoint 省略 `world` 内容亦如此。
+此 checkpoint 限制同样适用于 production +
 MemoryStore 的 self 部署。开发及桌面单用户模式保持原有世界同步行为。
 
 两个端点都在取得会话锁后重新验证所有者、会话实例及删除状态，然后才读取
 revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/head/commit；
 排队请求遇到所有者变化返回 `401`，实例变化或正在删除返回 `409`。
+
+每个会话最多缓存最近 16 个完整 commit 供幂等重放。成功删除会话会同时释放
+该 API 实例持有的 revision/head 和所有重放 payload；其他会话的重试缓存保持
+有效。删除失败且会话仍存在时保留缓存，只有数据已经删除时才完成缓存清理。
 
 `PUT /api/sessions/:id/browser-checkpoint` 的完整 JSON 请求体上限为 **64 MiB**，
 包含全部消息、轨迹与快照；超过上限返回 `413`。此专用额度仅适用于该路径的
@@ -1117,7 +1122,7 @@ source 读取、schema 校验与 projection Worker 在 session 写锁外完成�
 
 **响应字段**:
 
-- `ownerToken`(string) — 会话 owner token，**仅此一次返回**（服务端只存哈希）。`DEPLOYMENT_TIER=demo|commercial` 下所有会话作用域端点都要求携带它（见「鉴权」章节）；`self` 层级可忽略
+- `ownerToken`(string) — 会话 owner token，**仅此一次返回**（服务端只存哈希）。`DEPLOYMENT_TIER=demo|commercial` 下所有会话作用域端点都要求携带它；`self` 在 `NODE_ENV=production` 且实际存储为 MemoryStore 时也要求携带，其余本地会话可忽略（见「鉴权」章节）
 - `status`(`'active' \| 'paused' \| 'ended'`) — 会话生命周期状态
 - `phase`(必填,`'setup' \| 'playing'`) — setup/主循环频段真相字段。会话激活集含 setup runtime 时初始为 `setup`，否则为 `playing`；全部 setup runtime 完成后翻转为 `playing`
 - `completedPlayerTurns`(必填,number) — 已提交的主循环玩家逻辑回合数；setup 交互不计入，由 finalize 事务内的 logical-turn ledger 幂等推进
@@ -1418,7 +1423,7 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 - handler 本身不写 `turn_messages`；Web 把该文本作为下一次 action 的玩家消息，供叙事者参考
 - 模板由插件提供，使用 `{{fieldName}}` 占位符语法
 - 已提交交互缺少模板时会生成简单的回退叙事（如 `[玩家输入] name: 艾尔文, class: 战士`）
-- **本地化**：`confirmation` 的 `{{confirmed}}` 取值（确认/取消）与回退叙事前缀（`[玩家输入]`/`[玩家选择]`/`[玩家确认]`/`[玩家取消]`）按**会话 locale** 解析——框架据 `session.locale` 把这些文案注入 handler（resolution order：请求 → 会话 → world → app 默认 `zh-CN`）。`en-US` 会产出 `Confirm`/`Cancel` 与 `[Player input]`/`[Player choice]`/`[Player confirmed]`/`[Player cancelled]`；未知 locale 回落 `zh-CN`（与历史输出逐字一致）。
+- **本地化**：`confirmation` 的 `{{confirmed}}` 取值（确认/取消）与回退叙事前缀（`[玩家输入]`/`[玩家选择]`/`[玩家确认]`/`[玩家取消]`）按**会话 locale** 解析——框架把 `session.locale` 注入 handler，由共享 locale 解析器选择文案。内置交互文案支持 `zh-CN`、`en-US` 和 `ru-RU`；未提供 locale 时保留 `zh-CN` 默认输出，指定但不受支持的 locale 按共享解析规则回退 `en-US`。`en-US` 会产出 `Confirm`/`Cancel` 与 `[Player input]`/`[Player choice]`/`[Player confirmed]`/`[Player cancelled]`。
 
 ---
 

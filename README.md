@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.31-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.31)
+[![Version](https://img.shields.io/badge/version-v0.0.32-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.32)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 
-> **Current public release: v0.0.31**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; read [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) and back up custom content before upgrading.
+> **Release version: v0.0.32**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; read [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) and back up custom content before upgrading.
 
 ## Highlights
 
@@ -23,7 +23,7 @@ Covel is an AI RPG framework and playable studio where NPC relationships, lore, 
 - 🧩 **Plugins stay replaceable** — the kernel discovers `capabilities` and `outputKind`; framework code does not branch on concrete plugin IDs.
 - 🌍 **Portable world packs** — bundle lore, character schemas, cast, rules, memory blocks, quests, items, portraits, scenes, and plugin defaults behind one `WorldData` import protocol.
 - 🔄 **One shared WorldIR** — a post-turn fact projection lets quests, inventory, affinity, the codex, and relationship plugins reuse the same evidence instead of independently re-reading the story.
-- 🔌 **Bring your own model** — OpenAI / Anthropic / DeepSeek / Qwen model slots. Local-first: SQLite on disk, API keys never persisted server-side.
+- 🔌 **Bring your own model** — OpenAI / Anthropic / DeepSeek / Qwen model slots. Local-first: SQLite on disk; Web mode stores API keys in browser localStorage, while desktop mode saves them as plaintext in `~/.covel/keys.env`.
 
 ## Two ways to play
 
@@ -95,7 +95,7 @@ worlds/my-world/
 
 ## Internationalization across UI, plugins, and worlds
 
-Covel ships with `zh-CN` and `en-US` UI catalogs. The selected locale is used consistently for interface labels, plugin metadata and prompts, world metadata, character fields, and WorldData sources. Short natural-language fields use `I18nText` maps such as `{ zh, en }`; longer content lives in locale-specific files:
+Covel ships with `zh-CN`, `en-US`, and `ru-RU` UI catalogs. The selected locale is used consistently for interface labels, plugin metadata and prompts, world metadata, character fields, and WorldData sources. Short natural-language fields use `I18nText` maps such as `{ zh, en }`; longer content lives in locale-specific files:
 
 ```text
 apps/web/src/i18n/locales/ja-JP.json       # application UI catalog
@@ -107,7 +107,7 @@ worlds/my-world/data/rules/core.ja.yaml
 
 World packs declare `defaultLocale` and `supportedLocales`. The loader first tries the current language variant and then falls back to the canonical source, so a partial translation remains playable. Mistport demonstrates a bilingual pack with localized lore, characters, rules, and media metadata. **Emberback Relay** is the built-in English-default world pack (`defaultLocale: en-US`), with its manifest, setting, cast, rules, quests, and other starting content authored in English.
 
-Players, world authors, and plugin authors can follow the [i18n guide](./docs/reference/i18n.md) to add another language. Full application support requires adding a UI catalog and registering its locale; content support adds translated `I18nText` values plus `PLUGIN.<lang>.md`, `WORLD.<lang>.md`, and WorldData source variants as needed. Only natural-language content is translated—stable IDs, capabilities, tools, paths, and scheduling remain canonical. Run `pnpm check:i18n` to validate the result.
+Players, world authors, and plugin authors can follow the [i18n guide](./docs/reference/i18n.md) to add another language. Complete JSON catalogs in `apps/web/src/i18n/locales/` are discovered automatically at build time and appear in Web language selectors without manual registration. Rebuild to include a new catalog; Electron-native messages use English when that language is not bundled. Content support adds translated `I18nText` values plus `PLUGIN.<lang>.md`, `WORLD.<lang>.md`, and WorldData source variants as needed. Only natural-language content is translated—stable IDs, capabilities, tools, paths, and scheduling remain canonical. Run `pnpm check:i18n` to validate the result.
 
 ## Debug every turn end to end
 
@@ -160,7 +160,7 @@ Use **AI Create World** in the world picker to turn a creative brief into a vali
 
 Repository authors can also use the bundled helpers:
 
-- **`/create-world`** — generate and validate `world.yaml`, `WORLD.md`, and WorldData files for `~/.covel/worlds/`.
+- **`/create-world`** — generate and validate `world.yaml`, `WORLD.md`, and WorldData files. Desktop packs go in `<data_root>/worlds/` (default `~/.covel/data/worlds/`); source runs use `COVEL_USER_WORLDS_DIR`, with development defaulting to `~/.covel/worlds/` when `~/.covel/` exists.
 - **`/create-plugin`** — scaffold the right combination of runtime manifests, handlers, schemas, tools, UI, and tests for a capability package.
 
 An official hub for sharing plugins and world packs is on the roadmap — for now, share via Gist or fork.

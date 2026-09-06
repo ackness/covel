@@ -14,13 +14,17 @@ import {
 } from "@/stores/plugin-data-store.js";
 import { bootSessionStore } from "./boot.js";
 import type { SessionActions } from "./context.js";
-import { toExecutionStepStatus } from "./execution-steps.js";
 import { submitInteractionBlock } from "./interaction-submission.js";
 import { useExecutionRecoveryActions } from "./execution-recovery-actions.js";
-import { restoreSessionState, toStreamMessages } from "./restore-session.js";
+import {
+  restoreSessionById,
+  restoreSessionState,
+  toStreamMessages,
+} from "./restore-session.js";
 import {
   finalizeActionExecution,
   reportWorkspaceSyncError,
+  resumeSessionSuspension,
   runActionStream,
   runSingleSessionAction,
   resyncSessionRecord,
@@ -62,12 +66,18 @@ export function useBuildSessionActions({
   refs,
   handleSseEvent,
 }: UseSessionActionsOptions): SessionActions {
-  const { sessionIdRef, stateRef } = refs;
+  const { sessionIdRef, sessionGenerationRef, stateRef } = refs;
   const activeActionRef = useRef<symbol | null>(null);
   const claimAction = useCallback(
     (sessionId: string, requestId?: string) =>
-      claimSessionAction(activeActionRef, sessionIdRef, sessionId, requestId),
-    [sessionIdRef],
+      claimSessionAction(
+        activeActionRef,
+        sessionIdRef,
+        sessionId,
+        requestId,
+        sessionGenerationRef,
+      ),
+    [sessionIdRef, sessionGenerationRef],
   );
 
   const boot = useCallback(async () => {
@@ -83,11 +93,14 @@ export function useBuildSessionActions({
 
   const selectWorld = useCallback(
     (worldId: string) => {
+      sessionGenerationRef.current += 1;
+      sessionIdRef.current = null;
+      setActivePluginDataSession(null);
       dispatch({ type: "RESET_SESSION" });
       const world = state.worlds.find((item) => item.id === worldId);
       if (world) dispatch({ type: "SET_WORLD", world });
     },
-    [dispatch, state.worlds],
+    [dispatch, state.worlds, sessionGenerationRef, sessionIdRef],
   );
 
   const startGame = useCallback(
@@ -98,6 +111,7 @@ export function useBuildSessionActions({
         workspace,
         dispatch,
         sessionIdRef,
+        sessionGenerationRef,
         world: state.world,
         presets: state.presets,
         llmConfig: state.llmConfig,
@@ -109,6 +123,7 @@ export function useBuildSessionActions({
       workspace,
       dispatch,
       sessionIdRef,
+      sessionGenerationRef,
       state.world,
       state.presets,
       state.llmConfig,
@@ -122,10 +137,11 @@ export function useBuildSessionActions({
         sessionId,
         sessionIdRef,
         dispatch,
+        sessionGenerationRef,
         isCurrentAction,
       );
     },
-    [dispatch, sessionIdRef],
+    [dispatch, sessionIdRef, sessionGenerationRef],
   );
 
   const beginAdventure = useCallback(() => {
@@ -196,20 +212,27 @@ export function useBuildSessionActions({
         workspace,
         dispatch,
         sessionIdRef,
+        sessionGenerationRef,
         worlds: state.worlds,
         session,
       });
     },
-    [ds, workspace, dispatch, sessionIdRef, state.worlds],
+    [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, state.worlds],
   );
 
   const resumeSessionById = useCallback(
     async (sessionId: string) => {
-      const session = await ds.getSession(sessionId);
-      if (!session) throw new Error("Session not found: " + sessionId);
-      await resumeSession(session);
+      await restoreSessionById({
+        ds,
+        workspace,
+        dispatch,
+        sessionIdRef,
+        sessionGenerationRef,
+        worlds: state.worlds,
+        sessionId,
+      });
     },
-    [ds, resumeSession],
+    [ds, workspace, dispatch, sessionIdRef, sessionGenerationRef, state.worlds],
   );
 
   const loadWorldSessions = useCallback(async () => {
@@ -282,8 +305,14 @@ export function useBuildSessionActions({
     async (content: string): Promise<boolean> => {
       const session = state.session;
       if (!session || !content) return false;
-      const ok = await api.steerTurn(session.id, content);
-      if (!ok) return false;
+      const generation = sessionGenerationRef.current;
+      const ok = await api.steerTurn(session.id, content).catch(() => false);
+      if (
+        !ok ||
+        sessionIdRef.current !== session.id ||
+        sessionGenerationRef.current !== generation
+      )
+        return false;
       // Echo in the UI. The in-flight action commit captures the authoritative
       // server copy; writing a second local revision here would conflict with
       // that commit.
@@ -295,7 +324,7 @@ export function useBuildSessionActions({
       });
       return true;
     },
-    [ds, dispatch, state.session],
+    [dispatch, state.session, sessionIdRef, sessionGenerationRef],
   );
 
   const abortActiveTurn = useCallback(async (): Promise<void> => {
@@ -330,17 +359,11 @@ export function useBuildSessionActions({
       dispatch({ type: "SUBMIT_BLOCK", blockId, values });
       const sid = sessionIdRef.current;
       if (!sid) return;
-      ds.loadSubmittedBlocks(sid)
-        .then(({ ids, values: existingValues }) => {
-          const nextIds = ids.includes(blockId) ? ids : [...ids, blockId];
-          const nextValues = values
-            ? { ...existingValues, [blockId]: values }
-            : existingValues;
-          ds.saveSubmittedBlocks(sid, nextIds, nextValues).catch(
-            ignoreError("save submitted blocks"),
-          );
-        })
-        .catch(ignoreError("load submitted blocks for update"));
+      ds.saveSubmittedBlocks(
+        sid,
+        [blockId],
+        values ? { [blockId]: values } : {},
+      ).catch(ignoreError("save submitted blocks"));
     },
     [ds, dispatch, sessionIdRef],
   );
@@ -483,14 +506,18 @@ export function useBuildSessionActions({
   );
 
   const resetSession = useCallback(() => {
+    sessionGenerationRef.current += 1;
+    sessionIdRef.current = null;
     dispatch({ type: "RESET_SESSION" });
     resetPluginData();
-  }, [dispatch]);
+  }, [dispatch, sessionGenerationRef, sessionIdRef]);
 
   const backToWorldSelect = useCallback(() => {
+    sessionGenerationRef.current += 1;
+    sessionIdRef.current = null;
     dispatch({ type: "RESET_TO_WORLD_SELECT" });
     setActivePluginDataSession(null);
-  }, [dispatch]);
+  }, [dispatch, sessionGenerationRef, sessionIdRef]);
 
   const updateWorldLocal = useCallback(
     (world: api.WorldRecord) => {
@@ -533,6 +560,10 @@ export function useBuildSessionActions({
     async (pluginId: string, enable: boolean) => {
       const sid = sessionIdRef.current;
       if (!sid) return;
+      const generation = sessionGenerationRef.current;
+      const isCurrent = () =>
+        sessionIdRef.current === sid &&
+        sessionGenerationRef.current === generation;
       dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, active: enable });
       try {
         if (!enable) {
@@ -557,21 +588,25 @@ export function useBuildSessionActions({
         // The confirmation dialog must not hold the session workspace FIFO;
         // background checkpoints and other actions remain free to settle while
         // the player decides.
-        const approved = await requestConfirm({
-          title: i18n.t("plugin.approval.title"),
-          message: i18n.t("plugin.approval.confirmMessage", {
-            pluginId: firstResult.pending.pluginId,
-            action: firstResult.pending.action,
-          }),
-          confirmLabel: i18n.t("plugin.approval.allow"),
-          cancelLabel: i18n.t("plugin.approval.deny"),
-        });
-        if (!approved) {
-          dispatch({
-            type: "TOGGLE_SESSION_PLUGIN",
-            pluginId,
-            active: false,
-          });
+        const approved =
+          isCurrent() &&
+          (await requestConfirm({
+            title: i18n.t("plugin.approval.title"),
+            message: i18n.t("plugin.approval.confirmMessage", {
+              pluginId: firstResult.pending.pluginId,
+              action: firstResult.pending.action,
+            }),
+            confirmLabel: i18n.t("plugin.approval.allow"),
+            cancelLabel: i18n.t("plugin.approval.deny"),
+          }));
+        if (!approved || !isCurrent()) {
+          if (isCurrent()) {
+            dispatch({
+              type: "TOGGLE_SESSION_PLUGIN",
+              pluginId,
+              active: false,
+            });
+          }
           await workspace.run(sid, `plugin-deny:${crypto.randomUUID()}`, () =>
             api.resolveApproval(firstResult.approvalId, "deny", "session", sid),
           );
@@ -582,6 +617,16 @@ export function useBuildSessionActions({
           sid,
           `plugin-approve:${crypto.randomUUID()}`,
           async () => {
+            // Navigation may happen while this job waits for the workspace.
+            if (!isCurrent()) {
+              await api.resolveApproval(
+                firstResult.approvalId,
+                "deny",
+                "session",
+                sid,
+              );
+              return;
+            }
             await api.resolveApproval(
               firstResult.approvalId,
               "allow",
@@ -595,6 +640,7 @@ export function useBuildSessionActions({
           },
         );
       } catch (error) {
+        if (!isCurrent()) return;
         if (
           error instanceof SessionWorkspaceSyncError &&
           error.stage === "checkpoint"
@@ -610,7 +656,7 @@ export function useBuildSessionActions({
         });
       }
     },
-    [dispatch, workspace, sessionIdRef],
+    [dispatch, workspace, sessionIdRef, sessionGenerationRef],
   );
 
   const upsertInteractionDraft = useCallback(
@@ -633,30 +679,21 @@ export function useBuildSessionActions({
 
   const resumeSuspension = useCallback(
     async (suspensionId: string, data: unknown) => {
-      const sid = sessionIdRef.current;
-      if (!sid) return;
-      const { result, events } = await workspace.run(
-        sid,
-        `resume:${crypto.randomUUID()}`,
-        () => api.resumeSuspension(sid, suspensionId, data),
-      );
-      applyResumeEvents(events);
-      dispatch({
-        type: "UPSERT_EXECUTION_STEP",
-        step: {
-          runtimeId: result.runtimeId,
-          pluginId: result.pluginId,
-          status: toExecutionStepStatus(result.status),
-          turnId: result.turnId,
-          ...(typeof result.durationMs === "number"
-            ? { durationMs: result.durationMs }
-            : {}),
-          ...(result.error ? { detail: result.error } : {}),
-        },
+      await resumeSessionSuspension(suspensionId, data, {
+        workspace,
+        sessionIdRef,
+        sessionGenerationRef,
+        dispatch,
+        applyResumeEvents,
       });
-      dispatch({ type: "REMOVE_SUSPENSION", suspensionId });
     },
-    [dispatch, workspace, sessionIdRef, applyResumeEvents],
+    [
+      dispatch,
+      workspace,
+      sessionIdRef,
+      sessionGenerationRef,
+      applyResumeEvents,
+    ],
   );
 
   const cancelSuspension = useCallback(

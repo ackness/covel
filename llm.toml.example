@@ -49,11 +49,12 @@ fallback = "story"
 
 # ── Image Slot (optional) ───────────────────────────────────────
 #
-# Image generation requires `imageApi` to specify which API format the model uses.
-# Two formats are supported:
+# `providerRequestMetadata.imageWire` selects the image API format:
 #   "dashscope-wan" — DashScope WAN async task API (wan2.x models, Chinese prompts)
-#   "openai-chat"   — Chat completions returning image (gpt-4o-image etc., English prompts)
-# Default when omitted: "openai-chat"
+#   "openai-images" — OpenAI-compatible Images API (gpt-image models)
+# Default when omitted: "openai-images". The slot's `protocol` still describes
+# its text protocol; image generation uses the selected image wire instead.
+# Both image wires are built in.
 #
 # Option A: DashScope WAN (async task API, Chinese prompts recommended)
 # [covel.image]
@@ -63,17 +64,17 @@ fallback = "story"
 # protocol  = "openai-chat-v1"
 # tag       = "image"
 # output    = ["image"]
-# imageApi  = "dashscope-wan"          # ← required: selects WAN async task API
+# providerRequestMetadata = { imageWire = "dashscope-wan" }
 #
-# Option B: OpenAI chat completions image format (English prompts recommended)
+# Option B: OpenAI Images API (English prompts recommended)
 # [covel.image]
 # provider  = "openai"
 # model     = "gpt-image-1.5"
-# baseUrl   = "https://api.openai.com"
+# baseUrl   = "https://api.openai.com/v1"
 # protocol  = "openai-chat-v1"
 # tag       = "image"
 # output    = ["image"]
-# imageApi  = "openai-chat"            # ← optional: this is the default
+# # providerRequestMetadata = { imageWire = "openai-images" } # Default; optional
 
 # ── Embedding Slots (RAG / Graph-RAG) ────────────────────────────
 #
@@ -139,7 +140,7 @@ fallback = "story"
 # ── Capability Override (optional) ───────────────────────────────
 #
 # Model capabilities (input/output modalities, features, token limits,
-# pricing) are auto-inferred from a built-in database of ~60 common models.
+# pricing) are auto-inferred from the bundled model database.
 # Override any field if the auto-detection is wrong or for custom/private models.
 #
 # NOTE: "image" in input = vision (can see images), NOT image generation.

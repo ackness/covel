@@ -45,9 +45,10 @@ function analyzeThemeSelectors(cssText: string): ThemeSelectorInfo {
   const ids: string[] = [];
   const darkIds: string[] = [];
   const selectorPattern = /([^{}]+)\{/g;
+  const code = blankCssNonCode(cssText);
   let match: RegExpExecArray | null;
 
-  while ((match = selectorPattern.exec(cssText))) {
+  while ((match = selectorPattern.exec(code))) {
     const selectorList = match[1] ?? "";
     for (const selector of selectorList.split(",")) {
       const idMatch = selector.match(THEME_ID_PATTERN);
@@ -98,12 +99,14 @@ const NON_SELECTOR_AT_RULES = new Set([
  * Neutralise comments entirely, and braces *inside string literals*, preserving
  * length so offsets still line up.
  *
- * Only the braces: a string's contents must survive, because the scope token
+ * By default only braces are blanked in strings: their contents must survive,
+ * because the scope token
  * itself lives inside one (`[data-theme="paper"]`). But an unbalanced brace in
  * a declaration (`content: "{"`) would desync the depth tracking and make every
- * later rule look nested — and therefore skipped.
+ * later rule look nested — and therefore skipped. Rule rewriting can opt into
+ * blanking entire strings to locate punctuation without changing offsets.
  */
-function blankNonCode(cssText: string): string {
+export function blankCssNonCode(cssText: string, blankStrings = false): string {
   const out = cssText.split("");
   for (let i = 0; i < cssText.length; i++) {
     if (cssText[i] === "/" && cssText[i + 1] === "*") {
@@ -115,12 +118,18 @@ function blankNonCode(cssText: string): string {
     }
     if (cssText[i] === '"' || cssText[i] === "'") {
       const quote = cssText[i];
+      if (blankStrings) out[i] = " ";
       let j = i + 1;
       while (j < cssText.length && cssText[j] !== quote) {
-        if (cssText[j] === "\\") j++;
-        else if (cssText[j] === "{" || cssText[j] === "}") out[j] = " ";
+        if (blankStrings || cssText[j] === "{" || cssText[j] === "}")
+          out[j] = " ";
+        if (cssText[j] === "\\") {
+          if (blankStrings && j + 1 < cssText.length) out[j + 1] = " ";
+          j++;
+        }
         j++;
       }
+      if (blankStrings && j < cssText.length) out[j] = " ";
       i = j;
       continue;
     }
@@ -152,7 +161,7 @@ function stripFunctionalArgs(selector: string): string {
  * guessed at.
  */
 function assertThemeCssIsScoped(cssText: string, themeId: string): void {
-  const css = blankNonCode(cssText);
+  const css = blankCssNonCode(cssText);
   // After blanking, so an `@import` mentioned in a comment doesn't trip it.
   if (AT_IMPORT_PATTERN.test(css)) {
     throw new Error("Theme CSS must not use @import.");

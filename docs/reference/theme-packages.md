@@ -101,7 +101,7 @@ apps/web/src/themes/builtins/
     theme.css
 ```
 
-`aurora` 是效果参考实现：玻璃拟态、`@property` 驱动的流动渐变、消息入场动画、以及 §6.6 的状态驱动特效。要写"花哨"主题时直接抄它。
+`aurora` 是效果参考实现：玻璃拟态、通过 `transform` 旋转静态渐变图层实现的流光、消息入场动画、以及 §6.6 的状态驱动特效。渐变图层按视口对角线加模糊留白确定尺寸，旋转时覆盖横竖屏；避免逐帧修改渐变角度，从而减少滚动期间的重复栅格化。要写"花哨"主题时直接抄它。
 
 `manifest.json` 结构：
 
@@ -150,6 +150,7 @@ apps/web/src/themes/builtins/
 ### 5.2 表面 token
 
 - `--surface-page`
+- `--surface-session`：游戏中央面板底色，未设置时回退到 `--surface-page`；可用半透明色让底层主题流光透出。
 - `--surface-rail`
 - `--surface-inset`
 - `--surface-elevated`
@@ -216,6 +217,7 @@ apps/web/src/themes/builtins/
 - `--title-font-weight`
 - `--title-letter-spacing`
 - `--title-text-transform`
+- `--story-color`（叙事正文颜色，默认跟随 `--color-foreground`；外观设置按明暗模式分别保存）
 - `--story-font-family`
 - `--story-font-size`
 - `--story-line-height`
@@ -226,6 +228,8 @@ apps/web/src/themes/builtins/
 - `--meta-font-size`
 - `--meta-letter-spacing`
 - `--meta-text-transform`
+
+Markdown 的正文、标题、强调和引用使用主题文字色，链接和行内代码使用主题主色；叙事区域的正文、标题、强调和引用使用 `--story-color`。叙事 Markdown 的字号、行高、字重、字距和栏宽由 `--story-*` 控制。样式位于 `apps/web/src/styles/narrative.css`，使用不分层的规则覆盖 Typography 的 `utilities` 默认值。
 
 ### 5.6 阴影 token
 
@@ -264,6 +268,7 @@ apps/web/src/themes/builtins/
 ### 6.4 会话体验
 
 - `.ui-session-column`
+- `.ui-session-backdrop`：中央面板顶部的世界装饰图和渐隐层；可加静态遮罩使其融入半透明底色。
 - `.ui-message-row`
 - `.ui-player-message-row`
 - `.ui-message-player`
@@ -333,9 +338,9 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 玩家不写 CSS 也能改外观：设置 → 外观提供逐 token 的控件（`token-schema.ts` 的 `TOKEN_GROUPS` 定义哪些 token 可编辑、用什么控件、有哪些预设值，包括字体栈 `FONT_STACKS` 与氛围底纹 `AMBIENCE_PRESETS`）。
 
 - **存储**：覆盖值存在设置项 `ui.appearanceTokens`，形状为 `{ shared, light, dark }`——**颜色按明暗模式分开存，尺寸 / 字体 / 圆角在两种模式间共享**。单个值上限 2048 字符（防止粘贴 data-URL 撑爆 localStorage 配额、连累其它设置）。
-- **生效方式**：`applyTokenOverrides()` 把 `{...shared, ...当前 scheme}` 作为**内联 style 写到 `<html>`**，因此优先级高于主题包 CSS；上一轮写入但本轮已移除的属性会被显式清掉，不留孤儿。非法 CSS 值由 CSSOM 直接丢弃——失败即回落到主题自己的值。
+- **生效方式**：`applyTokenOverrides()` 把 `{...shared, ...当前 scheme}` 作为**内联 style 写到 `<html>`**，优先于主题包的普通声明；源主题的 `!important` 声明仍可压过覆盖，因此可调 token 应避免使用 `!important`。上一轮写入但本轮已移除的属性会被显式清掉，不留孤儿。非法 CSS 值由 CSSOM 直接丢弃——失败即回落到主题自己的值。
 - **基线读取**：`readTokenDefaults()` 临时撤下覆盖读出主题原值，再在同一同步块里恢复，所以控件能显示「未覆盖时是什么」且浏览器不会画出中间态。
-- **另存为主题**：`theme-export.ts` 的 `buildThemeCss()` 把当前覆盖编译成标准 `html[data-theme="..."]` CSS，`slugifyThemeId()` / `ensureThemeId()` 生成不冲突的 ID，产物就是一个普通自定义主题包（走 §8 的 `ui.customThemes` 持久化），可导出分发。
+- **另存为主题**：`theme-export.ts` 的 `buildThemeCss()` 接收当前主题定义，将源 CSS 的作用域重绑定到新 ID，再追加完整 token 快照。伪元素、渐变、媒体查询、回合状态和 `@layer` 顺序全部保留；源 CSS 的 `!important` 优先级不变。`theme-css-derive.ts` 只替换选择器和动画标识符，不通过 CSSOM 重新序列化，因此不会丢弃当前浏览器尚未支持的规则。动画定义、`animation` / `animation-name` 及其引用的自定义属性同步使用新主题独立的动画名。再次另存时只替换生成的尾部快照，不累积源规则或动画名称前缀。源 CSS 与最终产物均走导入校验，产物不依赖原主题 ID，可以按 §8 导出、删除原主题后重新导入。`slugifyThemeId()` / `ensureThemeId()` 生成不冲突的主题 ID。
 
 覆盖是**全局的、不按主题分桶**（`ui.appearanceTokens` 只有 `shared` / `light` / `dark` 三个桶）：换主题后同一批覆盖继续叠加在新主题之上。想回到主题原貌需显式清除覆盖（`clearOverrides` / 逐项 `clearTokenOverride`）。写入前经 `isAdjustableToken` 过滤——只有 `TOKEN_GROUPS` 声明过的 token 能被覆盖，任意 CSS 变量无法经此通道注入。
 

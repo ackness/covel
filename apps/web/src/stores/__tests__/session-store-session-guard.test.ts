@@ -210,6 +210,7 @@ describe("runtime RPC — originating session", () => {
     const refs: SessionRuntimeRefs = {
       stateRef: { current: state },
       sessionIdRef,
+      sessionGenerationRef: { current: 0 },
       runtimeKindRef: { current: new Map() },
       deltaBufferRef: { current: new Map() },
       deltaRafRef: { current: null },
