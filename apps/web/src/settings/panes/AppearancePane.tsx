@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronRight, Download, RotateCcw, Save, Upload } from "lucide-react";
 import { resolveI18nText } from "@covel/shared";
 import { Button } from "@/components/ui/button.js";
+import { Markdown } from "@/components/ui/markdown.js";
 import { ThemeManagerWidget } from "@/components/theme-manager.js";
 import { TokenControl } from "@/components/appearance/TokenControl.js";
 import { useSetting, useSettingsStore } from "@/settings/use-settings.js";
@@ -150,7 +151,17 @@ export function AppearancePane() {
 
   return (
     <div className="space-y-5">
-      <ThemeManagerWidget />
+      <details className="ui-frame group/library [&_summary::-webkit-details-marker]:hidden">
+        <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 hover:bg-(--surface-inset)">
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 transition-transform group-open/library:rotate-90" />
+          <span className="ui-section-title">
+            {t("settings.themeLibraryTitle")}
+          </span>
+        </summary>
+        <div className="border-t border-(--rule-color) p-3">
+          <ThemeManagerWidget />
+        </div>
+      </details>
 
       <div className="ui-section pb-3">
         <div className="ui-section-head">
@@ -317,6 +328,18 @@ function TokenGroupSection({
       </summary>
 
       <div className="border-t border-(--rule-color) px-3 pb-2">
+        {group.id === "story" && (
+          <div className="border-b border-(--rule-color) py-3">
+            <p className="ui-meta mb-2 normal-case tracking-normal">
+              {t("appearance.previewTitle")}
+            </p>
+            <div className="rounded-(--radius-card) bg-(--surface-page) p-4">
+              <div className="ui-narrative prose prose-sm [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                <Markdown>{t("appearance.previewText")}</Markdown>
+              </div>
+            </div>
+          </div>
+        )}
         {group.tokens.map((spec) => (
           <TokenControl
             key={spec.name}

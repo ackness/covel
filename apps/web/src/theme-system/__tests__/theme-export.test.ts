@@ -95,12 +95,13 @@ describe("buildThemeCss", () => {
     await store.set(APPEARANCE_TOKENS_KEY, {
       shared: { "--story-font-size": "1.375rem" },
       light: {},
-      dark: { "--color-background": "#101014" },
+      dark: { "--color-background": "#101014", "--story-color": "#f4ead8" },
     });
 
     const { cssText } = buildThemeCss(store, "my-theme");
     expect(cssText).toContain("--story-font-size: 1.375rem;");
     expect(cssText).toContain("--color-background: #101014;");
+    expect(cssText).toContain("--story-color: #f4ead8;");
   });
 
   it("keeps a dark-only source from being labelled light-only", async () => {

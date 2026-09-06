@@ -216,6 +216,7 @@ apps/web/src/themes/builtins/
 - `--title-font-weight`
 - `--title-letter-spacing`
 - `--title-text-transform`
+- `--story-color`（叙事正文颜色，默认跟随 `--color-foreground`；外观设置按明暗模式分别保存）
 - `--story-font-family`
 - `--story-font-size`
 - `--story-line-height`
@@ -226,6 +227,8 @@ apps/web/src/themes/builtins/
 - `--meta-font-size`
 - `--meta-letter-spacing`
 - `--meta-text-transform`
+
+Markdown 的正文、标题、强调和引用使用主题文字色，链接和行内代码使用主题主色；叙事区域的正文、标题、强调和引用使用 `--story-color`。叙事 Markdown 的字号、行高、字重、字距和栏宽由 `--story-*` 控制。样式位于 `apps/web/src/styles/prose.css`，在 Tailwind 导入之后的 `utilities` 层覆盖 Typography 默认值。
 
 ### 5.6 阴影 token
 

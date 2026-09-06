@@ -3,9 +3,8 @@
  *
  * Themes author colours in `oklch()`, but `<input type="color">` only speaks
  * `#rrggbb`. Canvas 2D's `fillStyle` setter is the browser's own CSS colour
- * parser: assigning any valid colour normalises it to `#rrggbb` (or
- * `rgba(...)` when translucent), and assigning an *invalid* one leaves the
- * previous value untouched — which is what makes validation possible.
+ * parser; pixel readback converts modern colour spaces to sRGB. Assigning an
+ * invalid colour leaves the previous value untouched, allowing validation.
  */
 
 let cachedContext: CanvasRenderingContext2D | null | undefined;
@@ -21,7 +20,7 @@ function getContext(): CanvasRenderingContext2D | null {
 }
 
 /**
- * Normalise any CSS colour to `#rrggbb` / `rgba(...)`, or null if invalid.
+ * Return the browser's CSS colour serialization, or null if invalid.
  *
  * Probing twice with different seeds is the validity check: a rejected
  * assignment leaves each seed in place, so the two reads disagree.
@@ -46,24 +45,25 @@ export function normalizeCssColor(input: string): string | null {
 }
 
 /**
- * Best-effort `#rrggbb` for a swatch input. Translucent colours normalise to
- * `rgba(...)`, whose opaque part still drives the swatch — the exact value
- * stays editable in the paired text field.
+ * Best-effort sRGB `#rrggbb` for a swatch input. Canvas can preserve oklch()
+ * in fillStyle, so read its painted pixel instead of treating coordinates in
+ * that colour space as RGB channels. The text field retains the exact value.
  */
 export function toSwatchHex(input: string): string | null {
   const normalized = normalizeCssColor(input);
   if (!normalized) return null;
-  if (normalized.startsWith("#")) return normalized;
+  if (/^#[\da-f]{6}$/i.test(normalized)) return normalized;
 
-  const parts = normalized.match(/[\d.]+/g);
-  if (!parts || parts.length < 3) return null;
-
-  const toHex = (raw: string): string =>
-    Math.max(0, Math.min(255, Math.round(Number(raw))))
-      .toString(16)
-      .padStart(2, "0");
-
-  return `#${toHex(parts[0]!)}${toHex(parts[1]!)}${toHex(parts[2]!)}`;
+  const ctx = getContext();
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, 1, 1);
+  ctx.fillStyle = normalized;
+  ctx.fillRect(0, 0, 1, 1);
+  const channels = ctx.getImageData(0, 0, 1, 1).data;
+  return `#${[...channels]
+    .slice(0, 3)
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")}`;
 }
 
 export function isValidCssColor(input: string): boolean {

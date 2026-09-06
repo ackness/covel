@@ -197,6 +197,17 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
     },
     tokens: [
       {
+        name: "--story-color",
+        label: { "zh-CN": "正文颜色", "en-US": "Body color" },
+        control: "color",
+        perScheme: true,
+        hint: {
+          "zh-CN": "单独调整叙事正文，亮色与暗色模式分别保存。",
+          "en-US":
+            "Adjust story text independently, saved separately for light and dark modes.",
+        },
+      },
+      {
         name: "--story-font-family",
         label: { "zh-CN": "正文字体", "en-US": "Body typeface" },
         control: "font",

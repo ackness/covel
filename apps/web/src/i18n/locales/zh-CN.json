@@ -913,6 +913,8 @@
     }
   },
   "appearance": {
+    "previewTitle": "阅读预览",
+    "previewText": "雾渐渐散去，远处的灯火照亮了街道。**每一次选择**，都让故事继续向前。\n\n你翻开旅途中的下一页，新的冒险正在等待。",
     "customizeTitle": "精细调整",
     "customizeDesc": "在当前主题之上微调。颜色只作用于{{scheme}}模式，字体与尺寸两种模式通用。",
     "customizedCount": "已自定义 {{count}} 项",
@@ -966,6 +968,10 @@
         }
       },
       "tokens": {
+        "--story-color": {
+          "label": "正文颜色",
+          "hint": "单独调整叙事正文，亮色与暗色模式分别保存。"
+        },
         "--story-font-family": {
           "label": "正文字体",
           "options": {

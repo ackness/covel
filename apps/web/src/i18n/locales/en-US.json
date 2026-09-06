@@ -917,6 +917,8 @@
     }
   },
   "appearance": {
+    "previewTitle": "Reading preview",
+    "previewText": "The mist clears, and distant lights brighten the street. **Every choice** carries the story forward.\n\nYou turn the next page of your journey. A new adventure awaits.",
     "customizeTitle": "Fine tuning",
     "customizeDesc": "Adjust on top of the current theme. Colours apply to {{scheme}} only; fonts and sizes apply to both schemes.",
     "customizedCount": "{{count}} customised",
@@ -970,6 +972,10 @@
         }
       },
       "tokens": {
+        "--story-color": {
+          "label": "Body color",
+          "hint": "Adjust story text independently, saved separately for light and dark modes."
+        },
         "--story-font-family": {
           "label": "Body typeface",
           "options": {
