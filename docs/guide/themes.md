@@ -232,6 +232,7 @@ html[data-theme="jade-paper"] {
 这组 token 决定界面的空间关系：
 
 - `--surface-page`
+- `--surface-session`：游戏中央面板底色，未设置时回退到 `--surface-page`；可用半透明色让主题底层效果透出。
 - `--surface-rail`
 - `--surface-inset`
 - `--surface-elevated`
@@ -291,6 +292,7 @@ html[data-theme="jade-paper"] {
 - `--eyebrow-font-weight`
 - `--eyebrow-letter-spacing`
 - `--eyebrow-text-transform`
+- `--story-color`：叙事正文颜色，默认跟随 `--color-foreground`；外观设置按明暗模式分别保存。
 - `--story-font-family`
 - `--story-font-size`
 - `--story-line-height`
@@ -339,6 +341,7 @@ Covel 为主题包暴露了一组稳定的语义 hook。玩家可以通过这些
 ### 7.4 会话与消息
 
 - `.ui-session-column`
+- `.ui-session-backdrop`：中央面板顶部的世界装饰图和渐隐层，可用静态遮罩融入半透明底色。
 - `.ui-message-row`
 - `.ui-player-message-row`
 - `.ui-message-player`
@@ -358,7 +361,7 @@ Covel 为主题包暴露了一组稳定的语义 hook。玩家可以通过这些
 
 ## 8. 玩家侧精细调整（设置 → 外观）
 
-主题包定的是**整体方案**；在它之上还有一层玩家自己的 **token 覆盖**，入口在「设置 → 外观 → 精细调整」。它不修改任何主题 CSS，而是把选中的 token 作为**内联样式写到 `<html>` 上**——内联样式天然压过任何样式表规则，取消覆盖后主题原值原样恢复。
+主题包定的是**整体方案**；在它之上还有一层玩家自己的 **token 覆盖**，入口在「设置 → 外观 → 精细调整」。它不修改任何主题 CSS，而是把选中的 token 作为**内联样式写到 `<html>` 上**，优先于主题的普通声明；主题中的 `!important` 声明仍可压过这些覆盖，因此可调 token 应避免使用 `!important`。取消覆盖后主题原值原样恢复。
 
 对主题作者来说，这意味着两件事：
 
@@ -412,7 +415,7 @@ Covel 为主题包暴露了一组稳定的语义 hook。玩家可以通过这些
 
 几个细节：
 
-- 主题 ID 由名称推导；中文名推不出合法 ID 时回退到 `custom-theme`，显示名保留你填的原文。
+- 主题 ID 由名称推导；无法从名称生成至少两个字符的合法 ID 时，使用名称哈希生成 `custom-theme-<name-hash>`，显示名保留你填的原文。同名再次保存会更新对应的自定义主题。
 - ID 不会落到内置主题的命名空间上（会自动加后缀），否则下次注册时会被内置主题顶掉而"静默消失"。
 - 单模式主题（如 `abyss` / `aurora`）另存后仍是单模式，不会被误标成亮色主题。
 - 生成的声明会过滤掉含 `;` 或大括号的值——那份 CSS 会被重新解析成主题，这类值可以提前闭合规则、逃出作用域。

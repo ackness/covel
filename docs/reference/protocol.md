@@ -288,7 +288,7 @@ data: {
 
 该帧与 `system.connected` / `system.heartbeat` 一样**不带 `id:` 头**，因此不会污染 `EventSource` 的 `lastEventId`。
 
-`DEPLOYMENT_TIER=demo|commercial` 时该端点强制 session owner token 鉴权。内置 Web 使用 fetch-based SSE 并提交 `X-Session-Token`；原生 `EventSource` 客户端可用 `?session_token=<ownerToken>`。缺失或错误返回 `401 { code: "session_owner_required" }`。`self`（默认）层级不强制。详见 [`docs/reference/api.md`](./api.md) 鉴权章节。
+`DEPLOYMENT_TIER=demo|commercial` 时该端点强制 session owner token 鉴权。`self`（默认）通常不强制，但 `NODE_ENV=production` 且实际注入的存储后端为 MemoryStore 时同样强制，不只依据 `STORE_BACKEND` 环境值。内置 Web 使用 fetch-based SSE 并提交 `X-Session-Token`；原生 `EventSource` 客户端可用 `?session_token=<ownerToken>`。缺失或错误返回 `401 { code: "session_owner_required" }`。详见 [`docs/reference/api.md`](./api.md) 鉴权章节。
 
 Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot、plugins、全部 active plugin data、未解决 suspensions 与 world，并缓冲期间到达的 live events 后重放。服务端对 SSE write 使用单一有界串行队列（256），连接预算为每 session 8、进程总计 512；超限返回 429，慢客户端溢出时主动断开。
 

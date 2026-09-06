@@ -338,7 +338,7 @@ html[data-theme="my-theme"][data-turn="executing"] .ui-composer-input {
 玩家不写 CSS 也能改外观：设置 → 外观提供逐 token 的控件（`token-schema.ts` 的 `TOKEN_GROUPS` 定义哪些 token 可编辑、用什么控件、有哪些预设值，包括字体栈 `FONT_STACKS` 与氛围底纹 `AMBIENCE_PRESETS`）。
 
 - **存储**：覆盖值存在设置项 `ui.appearanceTokens`，形状为 `{ shared, light, dark }`——**颜色按明暗模式分开存，尺寸 / 字体 / 圆角在两种模式间共享**。单个值上限 2048 字符（防止粘贴 data-URL 撑爆 localStorage 配额、连累其它设置）。
-- **生效方式**：`applyTokenOverrides()` 把 `{...shared, ...当前 scheme}` 作为**内联 style 写到 `<html>`**，因此优先级高于主题包 CSS；上一轮写入但本轮已移除的属性会被显式清掉，不留孤儿。非法 CSS 值由 CSSOM 直接丢弃——失败即回落到主题自己的值。
+- **生效方式**：`applyTokenOverrides()` 把 `{...shared, ...当前 scheme}` 作为**内联 style 写到 `<html>`**，优先于主题包的普通声明；源主题的 `!important` 声明仍可压过覆盖，因此可调 token 应避免使用 `!important`。上一轮写入但本轮已移除的属性会被显式清掉，不留孤儿。非法 CSS 值由 CSSOM 直接丢弃——失败即回落到主题自己的值。
 - **基线读取**：`readTokenDefaults()` 临时撤下覆盖读出主题原值，再在同一同步块里恢复，所以控件能显示「未覆盖时是什么」且浏览器不会画出中间态。
 - **另存为主题**：`theme-export.ts` 的 `buildThemeCss()` 接收当前主题定义，将源 CSS 的作用域重绑定到新 ID，再追加完整 token 快照。伪元素、渐变、媒体查询、回合状态和 `@layer` 顺序全部保留；源 CSS 的 `!important` 优先级不变。`theme-css-derive.ts` 只替换选择器和动画标识符，不通过 CSSOM 重新序列化，因此不会丢弃当前浏览器尚未支持的规则。动画定义、`animation` / `animation-name` 及其引用的自定义属性同步使用新主题独立的动画名。再次另存时只替换生成的尾部快照，不累积源规则或动画名称前缀。源 CSS 与最终产物均走导入校验，产物不依赖原主题 ID，可以按 §8 导出、删除原主题后重新导入。`slugifyThemeId()` / `ensureThemeId()` 生成不冲突的主题 ID。
 

@@ -1,9 +1,9 @@
 name: CI
 
-# The full verification gate (lint + tests + build). release.yml only type
-# checks, so this is the only place the suite runs. Setup steps mirror
-# release.yml (pnpm/action-setup + actions/setup-node with pnpm cache) so both
-# workflows install identically.
+# Verify lint and tests on PRs and main; main also runs the full build.
+# release.yml repeats the test gates and release preflight before packaging.
+# Setup steps mirror release.yml (pnpm/action-setup + actions/setup-node with
+# pnpm cache) so both workflows install identically.
 #
 # Push is scoped to main deliberately. A `*-dev` branch with an open PR gets
 # two runs of the same commit otherwise — the PR ref and the branch ref hash
