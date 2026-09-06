@@ -115,6 +115,28 @@ describe("appearance token overrides", () => {
     );
   });
 
+  it("commits a delayed edit to the scheme where editing began", async () => {
+    const store = await createStore("dark");
+    await store.set(THEME_SCHEME_KEY, "light");
+    await setTokenOverride(store, "--story-color", "#f4ead8", "dark");
+    expect(loadOverrides(store)).toEqual({
+      shared: {},
+      light: {},
+      dark: { "--story-color": "#f4ead8" },
+    });
+  });
+
+  it("clears uncommitted previews when applying another scheme", async () => {
+    const store = await createStore("dark");
+    applyTokenOverrides(store);
+    document.documentElement.style.setProperty("--story-color", "#f4ead8");
+    await store.set(THEME_SCHEME_KEY, "light");
+    applyTokenOverrides(store);
+    expect(
+      document.documentElement.style.getPropertyValue("--story-color"),
+    ).toBe("");
+  });
+
   it("shared tokens resolve in both schemes, colours only in their own", async () => {
     const store = await createStore("dark");
     await setTokenOverride(store, "--story-font-size", "1.25rem");

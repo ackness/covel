@@ -33,9 +33,8 @@ import {
 } from "../../middleware/media-token.js";
 import {
   checkHostedOperator,
-  checkSessionOwnerById,
-  sessionIncarnationIdentity,
-  SESSION_DELETION_PENDING_KEY,
+  checkSessionOwner,
+  withLockedSessionMutation,
 } from "./session/session-guard.js";
 import { rateLimiter, singleFlight } from "../../middleware/rate-limit.js";
 import { errorBody } from "../../api-error.js";
@@ -127,13 +126,12 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
   // `sessionId`, so hosted and production browser-private requests must own
   // that session. The live-session/incarnation check below is required
   // everywhere so uploads cannot attach to a deleted or recreated session.
-  const denied = await checkSessionOwnerById(c, c.get("store"), sessionId);
-  if (denied) return denied;
   const initialSession = await c.get("store").getSession(sessionId);
   if (!initialSession) {
     return jsonError("not_found", `session ${sessionId} not found`, 404);
   }
-  const expectedIncarnation = sessionIncarnationIdentity(initialSession);
+  const denied = checkSessionOwner(c, initialSession);
+  if (denied) return denied;
   const mime = normalizeMimeType(c.req.header("content-type") ?? "");
   if (!mime.startsWith("image/")) {
     return jsonError(
@@ -165,34 +163,19 @@ mediaRoutes.post("/", rateLimiter({ max: 10 }), async (c) => {
     );
   }
   const ref = await mediaStore.put(bytes, mime);
-  return c.get("sessionLock").withLock(sessionId, async () => {
-    const liveSession = await c.get("store").getSession(sessionId);
-    if (
-      !liveSession ||
-      sessionIncarnationIdentity(liveSession) !== expectedIncarnation
-    ) {
-      return jsonError(
-        "conflict",
-        "session was replaced while the upload was being stored",
-        409,
-      );
-    }
-    if (
-      liveSession.status !== "active" ||
-      liveSession.metadata?.[SESSION_DELETION_PENDING_KEY]
-    ) {
-      return jsonError(
-        "conflict",
-        `session is ${liveSession.status}; media binding refused`,
-        409,
-      );
-    }
-    // Owner for GC/quota; ref guarantees this incarnation can read it back
-    // through the signed media-token. The blob itself may remain unowned if
-    // the session changed while the request body was uploading; GC reclaims it.
-    await mediaStore.recordOwnership(ref.id, sessionId);
-    await mediaStore.addRef(ref.id, sessionId);
-    return c.json({ id: ref.id, mime: ref.mime, size: ref.size }, 201);
+  return withLockedSessionMutation({
+    c,
+    store: c.get("store"),
+    sessionLock: c.get("sessionLock"),
+    sessionId,
+    expectedSession: initialSession,
+    allowedStatuses: ["active"],
+    mutate: async () => {
+      // Unbound bytes from a rejected upload remain eligible for GC.
+      await mediaStore.recordOwnership(ref.id, sessionId);
+      await mediaStore.addRef(ref.id, sessionId);
+      return c.json({ id: ref.id, mime: ref.mime, size: ref.size }, 201);
+    },
   });
 });
 

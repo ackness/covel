@@ -96,12 +96,6 @@ export function resolveActiveOverrides(
   return { ...overrides.shared, ...overrides[scheme] };
 }
 
-/**
- * Properties currently written to `<html>`, so a later pass can remove the
- * ones that went away instead of leaving orphans behind.
- */
-let appliedProperties: readonly string[] = [];
-
 export function applyTokenOverrides(store: SettingsStoreApi): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
@@ -110,7 +104,9 @@ export function applyTokenOverrides(store: SettingsStoreApi): void {
     currentScheme(store),
   );
 
-  for (const name of appliedProperties) {
+  // Include live control previews that have not reached the store yet. They
+  // must not leak into another scheme during the debounce window.
+  for (const name of listAdjustableTokens()) {
     if (!(name in active)) root.style.removeProperty(name);
   }
   for (const [name, value] of Object.entries(active)) {
@@ -118,7 +114,6 @@ export function applyTokenOverrides(store: SettingsStoreApi): void {
     // want: the theme's own value simply stays in effect.
     root.style.setProperty(name, value);
   }
-  appliedProperties = Object.keys(active);
 }
 
 /**
@@ -150,17 +145,19 @@ export function readTokenDefaults(): Record<string, string> {
   return defaults;
 }
 
+/** Deferred UI writes pass the scheme captured when the player edited. */
 export async function setTokenOverride(
   store: SettingsStoreApi,
   tokenName: string,
   value: string,
+  scheme: ThemeScheme = currentScheme(store),
 ): Promise<void> {
   if (!isAdjustableToken(tokenName)) return;
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > MAX_VALUE_LENGTH) return;
 
   const current = loadOverrides(store);
-  const bucket = bucketFor(tokenName, currentScheme(store));
+  const bucket = bucketFor(tokenName, scheme);
   await saveOverrides(store, {
     ...current,
     [bucket]: { ...current[bucket], [tokenName]: trimmed },

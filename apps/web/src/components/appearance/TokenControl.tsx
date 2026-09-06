@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RotateCcw } from "lucide-react";
 import { resolveI18nText } from "@covel/shared";
 import { toSwatchHex, isValidCssColor } from "@/theme-system/color.js";
+import type { ThemeScheme } from "@/theme-system/types.js";
 import {
   formatLength,
   parseLength,
@@ -15,6 +16,7 @@ const COMMIT_DELAY_MS = 200;
 
 interface TokenControlProps {
   readonly spec: TokenSpec;
+  readonly scheme: ThemeScheme;
   /** Value from the theme when nothing is overridden. */
   readonly themeDefault: string;
   /** Player override, or null when the theme value is in effect. */
@@ -33,39 +35,59 @@ interface TokenControlProps {
  */
 function useLiveValue(
   spec: TokenSpec,
+  scheme: ThemeScheme,
   committed: string,
   onCommit: (value: string) => void,
 ) {
   const [draft, setDraft] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pending = useRef<{
+    timer: ReturnType<typeof setTimeout>;
+    commit: () => void;
+  } | null>(null);
+  const cancel = useCallback(() => {
+    if (pending.current) clearTimeout(pending.current.timer);
+    pending.current = null;
+  }, []);
+  const flush = useCallback(() => {
+    const commit = pending.current?.commit;
+    cancel();
+    commit?.();
+  }, [cancel]);
+
+  // Save the last edit in its original scheme before switching or closing.
+  useEffect(() => flush, [scheme, flush]);
 
   // A scheme or theme switch changes `committed` underneath us; drop the stale
   // draft so the control shows what is actually on screen.
   useEffect(() => {
+    cancel();
     setDraft(null);
-  }, [committed]);
-
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
+  }, [committed, scheme, cancel]);
 
   function preview(next: string): void {
     setDraft(next);
     if (typeof document !== "undefined") {
       document.documentElement.style.setProperty(spec.name, next);
     }
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => onCommit(next), COMMIT_DELAY_MS);
+    cancel();
+    pending.current = {
+      timer: setTimeout(flush, COMMIT_DELAY_MS),
+      commit: () => onCommit(next),
+    };
   }
 
-  return { value: draft ?? committed, preview };
+  function reset(): void {
+    cancel();
+    setDraft(null);
+    document.documentElement.style.removeProperty(spec.name);
+  }
+
+  return { value: draft ?? committed, preview, flush, reset };
 }
 
 export function TokenControl({
   spec,
+  scheme,
   themeDefault,
   override,
   onCommit,
@@ -73,7 +95,16 @@ export function TokenControl({
 }: TokenControlProps) {
   const { t, i18n } = useTranslation();
   const committed = override ?? themeDefault;
-  const { value, preview } = useLiveValue(spec, committed, onCommit);
+  const { value, preview, flush, reset } = useLiveValue(
+    spec,
+    scheme,
+    committed,
+    onCommit,
+  );
+  const resetToken = () => {
+    reset();
+    onReset();
+  };
   const label = resolveI18nText(spec.label, i18n.language) ?? spec.name;
   const labelId = useId();
   const hint = spec.hint ? resolveI18nText(spec.hint, i18n.language) : null;
@@ -81,7 +112,10 @@ export function TokenControl({
   return (
     // Deliberately not `.ui-band`: that atom is display:block and paints an
     // accent bar per row, which reads as noise across 45 stacked controls.
-    <div className="flex items-center justify-between gap-4 border-b border-(--rule-color) py-2 last:border-b-0">
+    <div
+      onBlur={flush}
+      className="flex items-center justify-between gap-4 border-b border-(--rule-color) py-2 last:border-b-0"
+    >
       <div className="min-w-0 flex-1 space-y-0.5">
         <div className="flex items-center gap-1.5">
           {override !== null && (
@@ -108,11 +142,11 @@ export function TokenControl({
           value={value}
           labelId={labelId}
           onPreview={preview}
-          onReset={onReset}
+          onReset={resetToken}
         />
         <button
           type="button"
-          onClick={onReset}
+          onClick={resetToken}
           disabled={override === null}
           aria-label={t("appearance.resetToken")}
           title={t("appearance.resetToken")}

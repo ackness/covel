@@ -560,6 +560,10 @@ export function useBuildSessionActions({
     async (pluginId: string, enable: boolean) => {
       const sid = sessionIdRef.current;
       if (!sid) return;
+      const generation = sessionGenerationRef.current;
+      const isCurrent = () =>
+        sessionIdRef.current === sid &&
+        sessionGenerationRef.current === generation;
       dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, active: enable });
       try {
         if (!enable) {
@@ -584,21 +588,25 @@ export function useBuildSessionActions({
         // The confirmation dialog must not hold the session workspace FIFO;
         // background checkpoints and other actions remain free to settle while
         // the player decides.
-        const approved = await requestConfirm({
-          title: i18n.t("plugin.approval.title"),
-          message: i18n.t("plugin.approval.confirmMessage", {
-            pluginId: firstResult.pending.pluginId,
-            action: firstResult.pending.action,
-          }),
-          confirmLabel: i18n.t("plugin.approval.allow"),
-          cancelLabel: i18n.t("plugin.approval.deny"),
-        });
-        if (!approved) {
-          dispatch({
-            type: "TOGGLE_SESSION_PLUGIN",
-            pluginId,
-            active: false,
-          });
+        const approved =
+          isCurrent() &&
+          (await requestConfirm({
+            title: i18n.t("plugin.approval.title"),
+            message: i18n.t("plugin.approval.confirmMessage", {
+              pluginId: firstResult.pending.pluginId,
+              action: firstResult.pending.action,
+            }),
+            confirmLabel: i18n.t("plugin.approval.allow"),
+            cancelLabel: i18n.t("plugin.approval.deny"),
+          }));
+        if (!approved || !isCurrent()) {
+          if (isCurrent()) {
+            dispatch({
+              type: "TOGGLE_SESSION_PLUGIN",
+              pluginId,
+              active: false,
+            });
+          }
           await workspace.run(sid, `plugin-deny:${crypto.randomUUID()}`, () =>
             api.resolveApproval(firstResult.approvalId, "deny", "session", sid),
           );
@@ -609,6 +617,16 @@ export function useBuildSessionActions({
           sid,
           `plugin-approve:${crypto.randomUUID()}`,
           async () => {
+            // Navigation may happen while this job waits for the workspace.
+            if (!isCurrent()) {
+              await api.resolveApproval(
+                firstResult.approvalId,
+                "deny",
+                "session",
+                sid,
+              );
+              return;
+            }
             await api.resolveApproval(
               firstResult.approvalId,
               "allow",
@@ -622,6 +640,7 @@ export function useBuildSessionActions({
           },
         );
       } catch (error) {
+        if (!isCurrent()) return;
         if (
           error instanceof SessionWorkspaceSyncError &&
           error.stage === "checkpoint"
@@ -637,7 +656,7 @@ export function useBuildSessionActions({
         });
       }
     },
-    [dispatch, workspace, sessionIdRef],
+    [dispatch, workspace, sessionIdRef, sessionGenerationRef],
   );
 
   const upsertInteractionDraft = useCallback(

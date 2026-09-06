@@ -2,7 +2,7 @@
  * Integration tests for `POST /api/media` (player image upload).
  */
 
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
   createMemoryMediaStore,
@@ -13,9 +13,22 @@ import {
 import { mediaRoutes } from "../../src/routes/api/media.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 import type { SessionLock } from "../../src/lib/session-lock.js";
+import { hashSessionOwnerToken } from "../../src/routes/api/session/session-guard.js";
 
 // A few non-empty bytes — content is irrelevant, the store content-addresses.
 const IMG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
+const OWNER = "synthetic-media-owner-a";
+let requestTime = Date.now();
+
+beforeEach(() => {
+  // The exported route shares a rate-limit bucket across test app instances.
+  vi.spyOn(Date, "now").mockReturnValue((requestTime += 60_001));
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 async function makeApp(withStore = true): Promise<{
   app: Hono;
@@ -31,6 +44,7 @@ async function makeApp(withStore = true): Promise<{
     completedPlayerTurns: 0,
     setupRuntimes: {},
     metadata: {
+      ownerTokenHash: hashSessionOwnerToken(OWNER),
       approvalScopeNonce: globalThis.crypto.randomUUID(),
       sessionIncarnationNonce: globalThis.crypto.randomUUID(),
     },
@@ -47,6 +61,7 @@ async function makeApp(withStore = true): Promise<{
   }
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("storeBackend", "memory");
     c.set("sessionLock", sessionLock);
     if (mediaStore) c.set("mediaStore", mediaStore);
     await next();
@@ -56,6 +71,84 @@ async function makeApp(withStore = true): Promise<{
 }
 
 describe("POST /api/media (upload)", () => {
+  it.each([
+    { owner: OWNER, status: 409, code: "session_incarnation_changed" },
+    {
+      owner: "synthetic-media-owner-b",
+      status: 401,
+      code: "session_owner_required",
+    },
+  ])(
+    "keeps the authorized incarnation when the session is replaced before its initial read returns ($status)",
+    async ({ owner, status, code }) => {
+      vi.stubEnv("NODE_ENV", "production");
+      vi.stubEnv("DEPLOYMENT_TIER", "self");
+      vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "");
+      const { app, mediaStore, store, sessionLock } = await makeApp();
+      const getSession = store.getSession.bind(store);
+      vi.spyOn(store, "getSession").mockImplementationOnce(async (id) => {
+        const initial = await getSession(id);
+        await sessionLock.withLock(id, async () => {
+          await store.deleteSession(id);
+          await store.createSession({
+            ...initial!,
+            metadata: {
+              ownerTokenHash: hashSessionOwnerToken(owner),
+              sessionIncarnationNonce: "replacement-incarnation",
+            },
+          });
+        });
+        return initial;
+      });
+
+      const response = await app.request("/api/media?sessionId=s1", {
+        method: "POST",
+        headers: { "content-type": "image/png", "x-session-token": OWNER },
+        body: IMG,
+      });
+
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ code });
+      expect((await getSession("s1"))?.metadata?.sessionIncarnationNonce).toBe(
+        "replacement-incarnation",
+      );
+      const [asset] = await mediaStore!.listAssets();
+      expect(asset?.ownerSessionId).toBeNull();
+      expect(await mediaStore!.isReferencedBy(asset!.id, "s1")).toBe(false);
+    },
+  );
+
+  it("revalidates the owner after storing the upload even without an incarnation change", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DEPLOYMENT_TIER", "self");
+    vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "");
+    const { app, mediaStore, store } = await makeApp();
+    const put = mediaStore!.put.bind(mediaStore);
+    vi.spyOn(mediaStore!, "put").mockImplementationOnce(async (...args) => {
+      const ref = await put(...args);
+      await store.updateSession("s1", {
+        metadata: {
+          ownerTokenHash: hashSessionOwnerToken("replacement-owner"),
+        },
+      });
+      return ref;
+    });
+
+    const response = await app.request("/api/media?sessionId=s1", {
+      method: "POST",
+      headers: { "content-type": "image/png", "x-session-token": OWNER },
+      body: IMG,
+    });
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({
+      code: "session_owner_required",
+    });
+    const [asset] = await mediaStore!.listAssets();
+    expect(asset?.ownerSessionId).toBeNull();
+    expect(await mediaStore!.isReferencedBy(asset!.id, "s1")).toBe(false);
+  });
+
   it.each(["image/png", " IMAGE/PNG ; charset=binary"])(
     "stores %s with a normalized image MIME the session can read",
     async (mime) => {

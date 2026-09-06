@@ -298,6 +298,10 @@ MemoryStore 的 self 部署。开发及桌面单用户模式保持原有世界�
 revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/head/commit；
 排队请求遇到所有者变化返回 `401`，实例变化或正在删除返回 `409`。
 
+每个会话最多缓存最近 16 个完整 commit 供幂等重放。成功删除会话会同时释放
+该 API 实例持有的 revision/head 和所有重放 payload；其他会话的重试缓存保持
+有效。删除失败且会话仍存在时保留缓存，只有数据已经删除时才完成缓存清理。
+
 `PUT /api/sessions/:id/browser-checkpoint` 的完整 JSON 请求体上限为 **64 MiB**，
 包含全部消息、轨迹与快照；超过上限返回 `413`。此专用额度仅适用于该路径的
 `PUT` 请求，`browser-commit` 等普通 API 仍使用 **1 MiB** 上限。当前协议不支持

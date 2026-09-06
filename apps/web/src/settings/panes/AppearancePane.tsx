@@ -84,10 +84,13 @@ export function AppearancePane() {
       const id = ensureThemeId(slugifyThemeId(label), builtinIds);
       // Carry the source theme's scheme support: a dark-only theme must not
       // come out of the snapshot labelled light-only.
-      const sourceSchemes = registered.find(
-        (theme) => theme.id === appearance,
-      )?.schemes;
-      const snapshot = buildThemeCss(store, id, sourceSchemes);
+      const sourceTheme = registered.find((theme) => theme.id === appearance);
+      const snapshot = buildThemeCss(
+        store,
+        id,
+        sourceTheme?.schemes,
+        sourceTheme,
+      );
 
       await saveCustomTheme(store, {
         id,
@@ -267,7 +270,7 @@ export function AppearancePane() {
             scheme={activeScheme}
             defaults={defaults}
             onCommit={(name, value) =>
-              void setTokenOverride(store, name, value)
+              void setTokenOverride(store, name, value, activeScheme)
             }
             onReset={(name) => void clearTokenOverride(store, name)}
             onResetGroup={() =>
@@ -344,6 +347,7 @@ function TokenGroupSection({
           <TokenControl
             key={spec.name}
             spec={spec}
+            scheme={scheme}
             themeDefault={defaults[spec.name] ?? ""}
             override={getTokenOverride(overrides, spec.name, scheme)}
             onCommit={(value) => onCommit(spec.name, value)}

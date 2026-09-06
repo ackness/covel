@@ -252,3 +252,53 @@ test("saving a theme preserves story colour inherited from primary text", async 
     "rgb(244, 234, 216)",
   );
 });
+
+test("a pending story colour stays in the edited scheme during a quick switch", async ({
+  page,
+}) => {
+  await seedBrowserSettings(page, {
+    "ui.onboardedVersion": 3,
+    "ui.locale": "en-US",
+    "ui.appearance": "paper",
+    "ui.scheme": "dark",
+  });
+  await page.goto("/session");
+  const preview = await openAppearance(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.locator("summary").filter({ hasText: "Theme Library" }).click();
+  const field = dialog
+    .getByRole("textbox", { name: "Body color", exact: true })
+    .and(dialog.locator('input[type="text"]'));
+  // Dispatch both interactions in one task, before the 200 ms save timer.
+  await field.evaluate((input) => {
+    Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )!.set!.call(input, "#f4ead8");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    const light = [...document.querySelectorAll("[role=dialog] button")].find(
+      (button) => button.textContent === "Light",
+    ) as HTMLButtonElement;
+    light.click();
+  });
+  await expect(page.locator("html")).toHaveAttribute("data-scheme", "light");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("covel:settings") ?? "{}").entries?.[
+            "ui.appearanceTokens"
+          ],
+      ),
+    )
+    .toEqual({ shared: {}, light: {}, dark: { "--story-color": "#f4ead8" } });
+  await expect(preview.locator("p").first()).not.toHaveCSS(
+    "color",
+    "rgb(244, 234, 216)",
+  );
+  await dialog.getByRole("button", { name: "Dark", exact: true }).click();
+  await expect(preview.locator("p").first()).toHaveCSS(
+    "color",
+    "rgb(244, 234, 216)",
+  );
+});

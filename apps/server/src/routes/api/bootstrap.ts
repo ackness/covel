@@ -82,7 +82,10 @@ import { runtimeOutputRoutes } from "./runtime-outputs.js";
 import { runtimeJobRoutes } from "./runtime-jobs.js";
 import { pluginRpcRoutes } from "./plugin-rpc.js";
 import { approvalRoutes, sessionApprovalRoutes } from "./approvals.js";
-import { createBrowserWorkspaceRoutes } from "./browser-workspace.js";
+import {
+  createBrowserWorkspaceCache,
+  createBrowserWorkspaceRoutes,
+} from "./browser-workspace.js";
 export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
 import {
   createBootstrapCompactorRunner,
@@ -721,6 +724,7 @@ export async function bootstrapApi(
 
   // 9. Create app with dependency injection middleware
   const app = new Hono();
+  const browserWorkspaceCache = createBrowserWorkspaceCache();
 
   const isDev = runtimeEnv.nodeEnv !== "production";
   app.onError(makeErrorHandler("[api] Route error", isDev));
@@ -754,6 +758,7 @@ export async function bootstrapApi(
     c.set("runtimeJobWorker", runtimeJobWorker);
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("clearSessionToolOverrides", clearSessionToolOverrides);
+    c.set("clearBrowserWorkspace", browserWorkspaceCache.clearSession);
     c.set("getPluginSource", getPluginSource);
     c.set("activatePluginServerCode", activatePluginServerCode);
     c.set("hasPendingPluginEntry", pluginEntries.hasPendingEntry);
@@ -837,7 +842,10 @@ export async function bootstrapApi(
   app.route("/api/sessions", sessionTurnRoutes); // turn_results artifact listing
   app.route("/api/sessions", setupRuntimeControlRoutes); // setup retry / waive
   app.route("/api/sessions", sessionApprovalRoutes); // per-session approvals listing
-  app.route("/api/sessions", createBrowserWorkspaceRoutes());
+  app.route(
+    "/api/sessions",
+    createBrowserWorkspaceRoutes(browserWorkspaceCache),
+  );
   app.route("/api/approvals", approvalRoutes); // approval lookup + decision
   app.route("/api/plugins", pluginRoutes);
   app.route("/api/framework", frameworkRoutes);

@@ -12,6 +12,11 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ### Fixed
 
+- **Media uploads recheck ownership inside the session mutation lock.** Uploads cannot attach to a replaced session or a session whose owner changed after the initial authorization check.
+- **Deleting a browser-private session releases its full commit replay cache.** Failed deletions retain retry state, and other sessions keep their existing replay history.
+- **Late plugin operations stay scoped to their original session visit.** Errors and approval decisions no longer change another session's plugin display, including leaving and reopening the same session.
+- **Pending appearance edits stay with the colour scheme in which they began.** Switching schemes or leaving a control saves its final value without leaking a preview into the next scheme.
+- **Saved themes retain their gradient layers, animations and conditional styling.** Derived themes preserve scoped CSS through reload and export/import, isolate animation names, and replace their generated token snapshot when saved again.
 - **Old asynchronous session work cannot overwrite a newer visit.** Navigation and creation use visit-scoped cancellation alongside action recovery, including leaving and reopening the same session. Submitted forms merge atomically in browser storage instead of overwriting concurrent submissions.
 - **Provider event streams handle legal SSE framing and cancellation.** Parsing supports mixed line endings and multiple data lines, and stops the reader when completion or consumer cancellation ends the stream.
 - **Missing event payload references trigger resynchronization.** Replay state resets when a transported event cannot be recovered, preventing clients from silently continuing with missing updates.
