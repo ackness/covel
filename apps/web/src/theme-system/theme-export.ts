@@ -40,6 +40,7 @@ const SNAPSHOT_TOKENS: readonly string[] = [
   "--color-input",
   "--color-ring",
   "--surface-page",
+  "--surface-session",
   "--surface-rail",
   "--surface-inset",
   "--surface-elevated",

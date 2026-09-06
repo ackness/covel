@@ -1,13 +1,18 @@
 import { expect, test } from "@playwright/test";
-import { seedBrowserSettings } from "./helpers/player.js";
+import {
+  seedBrowserSettings,
+  selectWorldByText,
+  useServerWorlds,
+} from "./helpers/player.js";
 
 test.beforeEach(async ({ page }) => {
   await seedBrowserSettings(page, {
     "ui.onboardedVersion": 3,
-    "ui.locale": "en-US",
+    "ui.locale": "zh-CN",
     "ui.appearance": "aurora",
     "ui.scheme": "dark",
   });
+  await useServerWorlds(page);
   await page.goto("/session");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "aurora");
   await expect
@@ -104,7 +109,7 @@ test("motion stays active, responds to turn state and respects reduced motion", 
   });
   await expect
     .poll(readMotion)
-    .toMatchObject({ name: "aurora-drift", duration: "42s", opacity: "0.5" });
+    .toMatchObject({ name: "aurora-drift", duration: "42s", opacity: "0.75" });
   const first = await readMotion();
   await expect
     .poll(async () => (await readMotion()).transform)
@@ -114,7 +119,7 @@ test("motion stays active, responds to turn state and respects reduced motion", 
   });
   await expect
     .poll(readMotion)
-    .toMatchObject({ name: "aurora-drift", duration: "14s", opacity: "0.85" });
+    .toMatchObject({ name: "aurora-drift", duration: "14s", opacity: "0.9" });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect
     .poll(readMotion)
@@ -123,4 +128,43 @@ test("motion stays active, responds to turn state and respects reduced motion", 
   await expect
     .poll(readMotion)
     .toMatchObject({ name: "aurora-drift", duration: "14s" });
+});
+
+test("the game surface lets the aurora show through and fades the world art", async ({
+  page,
+}) => {
+  await selectWorldByText(page, /雾港.*裂潮纪|Mistport/i);
+  await page
+    .getByRole("button", { name: /^(start game|开始游戏)$/i })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/sid=/);
+  const sessionId = new URL(page.url()).searchParams.get("sid")!;
+
+  try {
+    const backdrop = page.locator(".ui-session-backdrop");
+    await expect(backdrop).toBeVisible();
+    const surface = await backdrop.evaluate((element) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      const context = canvas.getContext("2d")!;
+      context.fillStyle = getComputedStyle(
+        element.parentElement!,
+      ).backgroundColor;
+      context.fillRect(0, 0, 1, 1);
+      return {
+        alpha: context.getImageData(0, 0, 1, 1).data[3]!,
+        mask: getComputedStyle(element).maskImage,
+      };
+    });
+    expect(surface.alpha).toBeGreaterThan(0);
+    expect(surface.alpha).toBeLessThan(128);
+    expect(surface.mask).toContain("linear-gradient");
+    await expect(backdrop.locator("img")).toHaveAttribute("src", /.+/);
+  } finally {
+    const cleanup = await page.request.delete(
+      `/api/sessions/${encodeURIComponent(sessionId)}`,
+    );
+    expect(cleanup.ok(), "aurora test session cleanup failed").toBeTruthy();
+  }
 });

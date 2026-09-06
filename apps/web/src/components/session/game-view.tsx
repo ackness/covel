@@ -416,11 +416,11 @@ export function GameView({ session }: GameViewProps) {
           style={
             {
               "--world-accent": visual.accent,
-              background: "var(--surface-page)",
+              background: "var(--surface-session, var(--surface-page))",
             } as React.CSSProperties
           }
         >
-          <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="ui-session-backdrop pointer-events-none absolute inset-0 overflow-hidden">
             <img
               src={visual.image}
               alt=""

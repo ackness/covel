@@ -115,6 +115,20 @@ describe("buildThemeCss", () => {
     expect(buildThemeCss(store, "my-theme").schemes).toEqual(["light"]);
   });
 
+  it("preserves a theme's translucent session surface in the snapshot", async () => {
+    const store = await createStore();
+    const surface = "rgb(8 12 20 / 0.3)";
+    const style = document.createElement("style");
+    style.textContent = `:root { --surface-session: ${surface}; }`;
+    document.head.append(style);
+    try {
+      const { cssText } = buildThemeCss(store, "my-theme");
+      expect(cssText).toMatch(/--surface-session: rgb\(8 12 20\s*\/\s*0\.3\);/);
+    } finally {
+      style.remove();
+    }
+  });
+
   it("drops values that could break out of the generated rule", async () => {
     const store = await createStore();
     await store.set(APPEARANCE_TOKENS_KEY, {

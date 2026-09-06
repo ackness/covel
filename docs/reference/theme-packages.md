@@ -150,6 +150,7 @@ apps/web/src/themes/builtins/
 ### 5.2 表面 token
 
 - `--surface-page`
+- `--surface-session`：游戏中央面板底色，未设置时回退到 `--surface-page`；可用半透明色让底层主题流光透出。
 - `--surface-rail`
 - `--surface-inset`
 - `--surface-elevated`
@@ -267,6 +268,7 @@ Markdown 的正文、标题、强调和引用使用主题文字色，链接和�
 ### 6.4 会话体验
 
 - `.ui-session-column`
+- `.ui-session-backdrop`：中央面板顶部的世界装饰图和渐隐层；可加静态遮罩使其融入半透明底色。
 - `.ui-message-row`
 - `.ui-player-message-row`
 - `.ui-message-player`
