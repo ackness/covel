@@ -278,4 +278,83 @@ describe("session navigation lifecycle", () => {
     expect(result.current.state.session).toBeNull();
     expect(result.current.state.world).toBeNull();
   });
+
+  it.each([
+    { stage: "workspace", nextId: null },
+    { stage: "workspace", nextId: "sess-2" },
+    { stage: "snapshot", nextId: null },
+    { stage: "snapshot", nextId: "sess-2" },
+  ])(
+    "handles a failed $stage bootstrap after navigating to $nextId",
+    async ({ stage, nextId }) => {
+      const { result, ds, workspace } = setup();
+      const failure = deferred<never>();
+      if (stage === "workspace") {
+        workspace.hydrate.mockReturnValueOnce(failure.promise);
+      } else {
+        api.getSessionView.mockReturnValueOnce(failure.promise);
+      }
+
+      let starting!: Promise<void>;
+      await act(async () => {
+        starting = result.current.actions.startGame();
+      });
+      expect(workspace.hydrate).toHaveBeenCalledOnce();
+      if (stage === "snapshot") {
+        expect(api.getSessionView).toHaveBeenCalledOnce();
+        expect(result.current.state.session?.id).toBe(session.id);
+      }
+
+      act(() => result.current.actions.backToWorldSelect());
+      if (nextId) {
+        await act(async () => {
+          await result.current.actions.resumeSession({
+            ...session,
+            id: nextId,
+          });
+        });
+      }
+      const stateAfterNavigation = result.current.state;
+
+      await act(async () => {
+        failure.reject(new Error("old bootstrap failed"));
+        await starting;
+      });
+
+      if (stage === "workspace") {
+        expect(ds.deleteSession).toHaveBeenCalledExactlyOnceWith(session.id);
+      } else {
+        expect(ds.deleteSession).not.toHaveBeenCalled();
+      }
+      expect(result.current.state).toBe(stateAfterNavigation);
+      expect(result.current.state.executionError).toBeNull();
+    },
+  );
+
+  it("preserves a published session reopened and left before its old snapshot fails", async () => {
+    const { result, ds } = setup();
+    const snapshot = deferred<never>();
+    api.getSessionView.mockReturnValueOnce(snapshot.promise);
+    let starting!: Promise<void>;
+    await act(async () => {
+      starting = result.current.actions.startGame();
+    });
+    expect(result.current.state.session?.id).toBe(session.id);
+
+    act(() => result.current.actions.backToWorldSelect());
+    await act(async () => {
+      await result.current.actions.resumeSession(session);
+    });
+    expect(result.current.state.session?.id).toBe(session.id);
+    act(() => result.current.actions.backToWorldSelect());
+    const stateAfterNavigation = result.current.state;
+
+    await act(async () => {
+      snapshot.reject(new Error("old snapshot failed"));
+      await starting;
+    });
+
+    expect(ds.deleteSession).not.toHaveBeenCalled();
+    expect(result.current.state).toBe(stateAfterNavigation);
+  });
 });

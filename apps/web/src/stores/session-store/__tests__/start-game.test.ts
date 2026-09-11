@@ -283,4 +283,68 @@ describe("startGameSession bootstrap order", () => {
     expect(dispatch).not.toHaveBeenCalled();
     expect(ds.deleteSession).not.toHaveBeenCalled();
   });
+
+  it("does not delete a session adopted while its initial workspace hydration is pending", async () => {
+    const ds = makeDataService([]);
+    let rejectHydration!: (error: Error) => void;
+    vi.mocked(ds.syncToServer).mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectHydration = reject;
+      }),
+    );
+    const dispatch = vi.fn();
+    const sessionIdRef = { current: null as string | null };
+    const starting = startGameSession({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch,
+      sessionIdRef,
+      sessionGenerationRef,
+      world,
+      presets: [],
+      llmConfig: null,
+    });
+    await vi.waitFor(() => expect(ds.syncToServer).toHaveBeenCalled());
+    sessionGenerationRef.current += 1;
+    sessionIdRef.current = session.id;
+    dispatch.mockClear();
+
+    rejectHydration(new Error("old hydration failed"));
+    await starting;
+
+    expect(sessionIdRef.current).toBe(session.id);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(ds.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it("suppresses a bootstrap error when the player leaves during rollback", async () => {
+    const ds = makeDataService([]);
+    vi.mocked(ds.syncToServer).mockRejectedValueOnce(new Error("offline"));
+    let resolveDeletion!: () => void;
+    vi.mocked(ds.deleteSession).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDeletion = resolve;
+      }),
+    );
+    const dispatch = vi.fn();
+    const starting = startGameSession({
+      ds,
+      workspace: makeWorkspace(ds),
+      dispatch,
+      sessionIdRef: { current: null },
+      sessionGenerationRef,
+      world,
+      presets: [],
+      llmConfig: null,
+    });
+    await vi.waitFor(() => expect(ds.deleteSession).toHaveBeenCalled());
+    sessionGenerationRef.current += 1;
+    dispatch.mockClear();
+
+    resolveDeletion();
+    await starting;
+
+    expect(ds.deleteSession).toHaveBeenCalledExactlyOnceWith(session.id);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
 });

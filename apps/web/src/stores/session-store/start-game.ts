@@ -142,9 +142,9 @@ export async function startGameSession({
       // Right-panel hydration will retry when its own ui-spec loader runs.
     }
   } catch (err) {
-    if (!isCurrent()) return;
+    const current = isCurrent();
     const error = err instanceof Error ? err : new Error(String(err));
-    if (published) {
+    if (published && current) {
       try {
         sessionIdRef.current = null;
         setActivePluginDataSession(null);
@@ -153,10 +153,15 @@ export async function startGameSession({
         // Recovery must not replace the bootstrap error reported to the caller.
       }
     }
-    if (createdSessionId) {
+    // Unpublished resources still need rollback after navigation. A published
+    // session may have been reopened by a newer visit, so leave it intact.
+    if (
+      createdSessionId &&
+      (current || (!published && sessionIdRef.current !== createdSessionId))
+    ) {
       await ds.deleteSession(createdSessionId).catch(() => undefined);
     }
-    if (generation !== sessionGenerationRef.current) return;
+    if (!current || generation !== sessionGenerationRef.current) return;
     dispatch({
       type: "SET_EXECUTION_ERROR",
       error: error.message,
