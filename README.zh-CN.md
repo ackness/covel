@@ -138,7 +138,8 @@ worlds/my-world/data/rules/core.ja.yaml
 ### 从源码运行
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
+cp .env.example .env              # server and storage settings
 cp llm.toml.example llm.toml        # 模型 ID 与端点
 cp .env.llm.example .env.llm        # provider API 密钥
 pnpm dev                            # web :5173 + server :3001（SQLite）

@@ -173,7 +173,7 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 
 **职责**: 游戏开始时第一个执行的插件。读取世界观设定，发送欢迎通知，输出世界观摘要供后续叙事插件（narrator、codex、char-creator）作为上下文引导。
 
-**setup 契约**: 位于 `setup` stage（`phase === "setup"` 期间运行），`maxTriggerCount: 1` 保证仅在 session 首轮执行。完成后可在 `RuntimeOutput` 中声明 `preGameDone: true`，框架据此在 `session.setupRuntimes` 中记录本 runtime 的解析状态。
+**setup 契约**: 位于 `setup` stage（`phase === "setup"` 期间运行），`maxTriggerCount: 1` 是执行预算。handler 成功返回 `completion: "done"` 后，框架将其物化为内部 `preGameDone: true`，据此在 `session.setupRuntimes` 中记录完成状态。耗尽预算而未完成会阻塞 setup，不会自动视为成功。
 
 ---
 
@@ -1422,7 +1422,7 @@ tools:
 | `skipped`   | `skipReason` | 仅 `jobStatus` / `diagnostics` 等观测 effects                                                           |
 | `failed`    | `error`      | 仅 `jobStatus` / `diagnostics` 等观测 effects                                                           |
 
-`success.value` 必须是 JSON 值。领域 effects 仅在 `success` 中生效，由内核在 proposal 提交前物化；非 success 的领域 effects 会被剥离并记录诊断。完整 TypeScript 类型见 `packages/shared/src/types/handler-result.ts`。
+`resultFormat` 已从 manifest schema 移除；function handler 不能返回缺少 `outcome` 的旧式普通对象。业务数据放入 `success.value`，它必须是 JSON 值。`ctx.pluginData.set/delete` 写入执行 buffer，成功提交后才持久化并通知前端；实时进度使用 `ctx.progress.report`。领域 effects 仅在 `success` 中生效，由内核在 proposal 提交前物化；非 success 的领域 effects 会被剥离并记录诊断。完整 TypeScript 类型见 `packages/shared/src/types/handler-result.ts`。
 
 ### recursiveCall
 
@@ -1515,7 +1515,7 @@ outputKind: story
 
 ### execution（手动触发执行模式）
 
-仅在通过 `POST /api/sessions/:id/plugin-rpc` 的 `runtimeId` 分支手动触发时生效；调度器驱动的 runtime 忽略此字段。
+用于 manual/event 激活，包括 `POST /api/sessions/:id/plugin-rpc` 的 `runtimeId` 分支及其事件 follower；stage scheduler 不用它决定前台完成屏障。下表的 HTTP 状态码描述手动 RPC 响应。
 
 它与下节的 `turnCompletion` **正交**：`execution: background` 控制 manual/event 激活是否脱离 RPC 请求；`turnCompletion.mode: detached` 控制 stage scheduler 是否等待该 runtime。不要用其中一个字段代替另一个。
 
@@ -1958,7 +1958,13 @@ tools:
 
 ### Runtime 输出字段：`preGameDone`
 
-`setup` stage runtime 可在 `RuntimeOutput` 中声明：
+`preGameDone` 是内核物化后的完成标记。`setup` function runtime 的公开返回值应为：
+
+```json
+{ "outcome": "success", "completion": "done" }
+```
+
+框架将其转换为下列内部输出；agent runtime 的结构化输出和业务工具结果仍可使用该标记（`runtime-done` 只结束当次工具循环，不单独表示 setup 完成）：
 
 ```json
 { "preGameDone": true }

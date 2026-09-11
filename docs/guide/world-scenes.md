@@ -6,13 +6,25 @@
 - 每张图的最终提示词 = `style.prefix` + 该场景 `subject`（夜图优先用 `subjectNight`，缺省回退 `subject`）+ `style.suffix`（+ 夜图追加 `style.nightSuffix`），`negative` 作为负向提示。
 - 文件名规则：`<id>-day.png` / `<id>-night.png`，落在 `worlds/<world>/media/scenes/`。
 
+## 配置与预览
+
+从仓库根运行，先执行 `pnpm install --frozen-lockfile`。配置优先取 `COVEL_LLM_TOML`，否则 `$COVEL_HOME/llm.toml`（默认 `~/.covel/llm.toml`）；密钥优先级与[立绘脚本](./world-portraits.md#生成方式框架统一-image-wire)一致。下面的默认命令使用用户配置。需要使用仓库根环境文件时：
+
+```bash
+COVEL_LLM_TOML=llm.toml pnpm exec tsx \
+  --env-file-if-exists=.env --env-file-if-exists=.env.llm \
+  scripts/generate-scenes.mjs haruka-academy --dry-run
+```
+
+`--scaffold` 写入场景清单，`--dry-run` 只展示生成队列；两者都不请求 provider。实际生成需要有效 slot 和凭据，会产生图片服务费用，`--force` 会覆盖已有图片。
+
 ## 作者工作流（四步）
 
 ```bash
 # 1. 从 dimensions.yaml 的 regions 派生草稿清单（幂等，不覆盖已有条目）
-npx tsx scripts/generate-scenes.mjs haruka-academy --scaffold
+pnpm exec tsx scripts/generate-scenes.mjs haruka-academy --scaffold
 # 想连地标一起生成草稿：
-npx tsx scripts/generate-scenes.mjs haruka-academy --scaffold --landmarks
+pnpm exec tsx scripts/generate-scenes.mjs haruka-academy --scaffold --landmarks
 
 # 2. 人工润色 worlds/<world>/media/scenes.json
 #    - id 改成有意义的英文 slug（如 classroom-2b、library）
@@ -21,10 +33,10 @@ npx tsx scripts/generate-scenes.mjs haruka-academy --scaffold --landmarks
 #    - style 按世界气质微调，与该世界 portraits.json 的风格词汇对齐（同一世界背景和立绘是一套画风）
 
 # 3. dry-run 审查 — 不出图、不联网，先审后花钱
-npx tsx scripts/generate-scenes.mjs haruka-academy --dry-run
+pnpm exec tsx scripts/generate-scenes.mjs haruka-academy --dry-run
 
 # 4. 确认无误后批量生成 + 生成注册表
-npx tsx scripts/generate-scenes.mjs haruka-academy
+pnpm exec tsx scripts/generate-scenes.mjs haruka-academy
 node scripts/emit-scenes.mjs haruka-academy
 ```
 
@@ -49,7 +61,7 @@ node scripts/emit-scenes.mjs haruka-academy
 | `--limit N`            | 只取清单前 N 个场景。                                                                      |
 | `--concurrency N`      | 并发数（默认 5）。                                                                         |
 | `--force`              | 覆盖已存在的文件（默认已存在的文件跳过）。                                                 |
-| `--slot`               | 指定 `~/.covel/llm.toml` 的图像 slot（默认 `gpt-image-2`）。                               |
+| `--slot`               | 指定生效 `llm.toml` 中的图像 slot（默认 `gpt-image-2`）。                                  |
 | `--dry-run`            | 只打印 prompt 队列，不出图、不联网。                                                       |
 
 ## 接入插件

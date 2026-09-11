@@ -79,7 +79,7 @@ mkdir -p ~/.covel/plugins/my-narrator
 pnpm validate:plugin ~/.covel/plugins/my-narrator
 ```
 
-预期输出为该文件的 `✓`。`(loader parse)` 表示先修复 YAML/frontmatter 或路径；`(authoring schema)` 则按输出的字段路径修复闭集字段或字段组合。验证通过后重启 server；默认会合并仓库内置 `plugins/` 与 `COVEL_USER_PLUGINS_DIR`（默认 `~/.covel/plugins`）中的插件。
+预期输出为该文件的 `✓`。`(loader parse)` 表示先修复 YAML/frontmatter 或路径；`(authoring schema)` 则按输出的字段路径修复闭集字段或字段组合。验证通过后重启 server；默认会合并仓库内置 `plugins/` 与 `COVEL_USER_PLUGINS_DIR`（否则 `$COVEL_HOME/plugins`，再回退到 `~/.covel/plugins`）中的插件。
 
 零代码 agent 没有本地测试 case 时，可直接用 `pnpm test:runtime -- my-narrator --plugins-dir ~/.covel/plugins --pretty` 检查发现和一次 mock 执行；需要固定输出时，在插件目录加入 `tests/runtime-cases.json`，再重复该命令。
 

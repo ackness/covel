@@ -59,7 +59,7 @@ stateDiagram-v2
         direction LR
         [*] --> RunningSetupStage
         RunningSetupStage --> RunningSetupStage: 玩家多次提交 /\n setupRuntimes 镜像逐个记 done
-        RunningSetupStage --> AllSetupDone: 所有 setup runtime\n 输出 preGameDone: true
+        RunningSetupStage --> AllSetupDone: 所有 setup runtime\n 已成功报告完成
         AllSetupDone --> [*]
     }
 
@@ -81,7 +81,7 @@ stateDiagram-v2
 
 **业务真值** = `(status, phase, completedPlayerTurns, setupRuntimes)`：
 
-- **Setup**：`status === 'active' && phase === 'setup'`。调度器只运行 `stage: setup` 的 runtime；每个 runtime 以显式完成信号（输出 `preGameDone: true`，或 guard 返回 `{ skip: true }`）记入 `setupRuntimes` 状态镜像（`pending` / `done` / `blocked`），玩家可以多次提交表单/消息迭代（例如 `char-creator` 的 `framework.submit-form`）。耗尽重试预算（`maxTriggerCount`）不算完成——该 runtime 落到 `blocked`，会话停留在 setup 阶段等待玩家重试或豁免，不再"跳过坏掉的 setup 继续推进"。
+- **Setup**：`status === 'active' && phase === 'setup'`。调度器只运行 `stage: setup` 的 runtime；每个 runtime 以显式完成信号（function 返回 `outcome: "success"` + `completion: "done"`，agent 输出 `preGameDone: true`，或 guard 返回 `{ skip: true }`）记入 `setupRuntimes` 状态镜像（`pending` / `done` / `blocked`），玩家可以多次提交表单/消息迭代（例如 `char-creator` 的 `framework.submit-form`）。耗尽重试预算（`maxTriggerCount`）不算完成——该 runtime 落到 `blocked`，会话停留在 setup 阶段等待玩家重试或豁免，不再"跳过坏掉的 setup 继续推进"。
 - **phase 翻转**：所有 setup runtime 都报告完成后，Kernel 在 setup 提交事务内把 `phase` 从 `'setup'` 翻到 `'playing'`；该事务的 `completedPlayerTurns` 仍为 0。提交失败时 phase 翻转和 setup 镜像一并回滚。
 - **Setup completion followup**：角色表单这类最后一个 setup 输入提交后，`/api/actions` 的同一个请求会先提交 setup，再以新的 `turnId` 和独立事务立即补跑主循环 runtime。接力事务成功后才把 `completedPlayerTurns` 从 0 推进到 1。玩家可直接看到第一段正式叙事；同一 SSE 流、trace 和 snapshot 会覆盖 setup completion 与 main-loop followup 两次执行。
 - **会话提交原子边界**：同一 session 的玩家输入、runtime 执行、proposal commit、对话 execution journal（玩家/runtime `TurnMessage`）、会话时钟写入（`phase` / `completedPlayerTurns` / `setupRuntimes`）、suspension artifact 和自动 snapshot 由同一 session lock 串行化；journal、proposal、时钟与 suspension 在同一 `finalizeExecution` transaction 中提交或回滚。`turn.suspended` 只在 commit 后发出。自动 snapshot 在全部 proposal 提交后捕获，确保对话 cursor、角色、state 与 plugin data 属于同一个已提交回合。`execution.completed.committed` 是客户端收敛 optimistic 输出的终态信号。
@@ -112,7 +112,10 @@ flowchart TB
       direction TB
       G1["guard? (agent runtime)"] --> G2["SSE: runtime.started"]
       G2 --> G3["PreRuntime hook"]
-      G3 --> G4["buildContext<br/>PLUGIN.md + 注入块 + 消息历史<br/>→ 首个 agent 按真实 system prompt 压缩并重建<br/>→ PostContextAssembly hook 后再次预算"]
+      G3 --> RT{"runtimeType"}
+      RT -->|function| F1["handler(ctx) → HandlerResult<br/>校验 outcome，物化 success.value / effects"]
+      F1 --> G6
+      RT -->|agent| G4["buildContext<br/>PLUGIN.md + 注入块 + 消息历史<br/>→ 首个 agent 按真实 system prompt 压缩并重建<br/>→ PostContextAssembly hook 后再次预算"]
       G4 --> G5["LLM + ToolExecutor loop<br/>每次调用: PreLLMCall → LLM → PostLLMResponse<br/>每个工具: PreToolUse → execute → PostToolUse(可 terminate)"]
       G5 --> G6["normalizeOutput → Proposal[]"]
       G6 --> G7["PostRuntime hook"]
@@ -700,10 +703,15 @@ sequenceDiagram
     Note over Server,Plugin: 首次执行 · setup stage (phase === 'setup')
     loop 每个 setup runtime (DAG: needs / after / inputs)
         Server-->>Web: SSE: runtime.started
-        Kernel->>Plugin: guard / buildContext
-        Plugin->>LLM: generate() + tool loop
-        LLM-->>Plugin: tool 结果 / finishReason=stop
-        Plugin-->>Kernel: RuntimeOutput<br/>(narrativeOutput / interactions / preGameDone)
+        alt function runtime
+            Kernel->>Plugin: handler(ctx)
+            Plugin-->>Kernel: HandlerResult<br/>(outcome / value / effects / completion)
+        else agent runtime
+            Kernel->>Plugin: guard / buildContext
+            Plugin->>LLM: generate() + tool loop
+            LLM-->>Plugin: tool 结果 / finishReason=stop
+            Plugin-->>Kernel: RuntimeOutput<br/>(narrativeOutput / interactions / preGameDone)
+        end
         Kernel-->>Web: SSE: narrative.delta (流式)
         Kernel-->>Web: SSE: narrative.completed
         Kernel-->>Web: SSE: interaction.requested (若有表单/按钮)
@@ -718,7 +726,7 @@ sequenceDiagram
     Web->>Server: POST /api/sessions/:id/plugin-rpc submit-form
     Server-->>Web: 返回 filledNarrative (仅模板填充，不写 turn_messages)
 
-    Note over Server,Plugin: setup 可能多次迭代；<br/>最后一个 setup runtime 报 preGameDone: true 后<br/>setup 事务把 phase 翻到 'playing'，completedPlayerTurns 保持 0
+    Note over Server,Plugin: setup 可能多次迭代；<br/>所有 setup runtime 的完成信号成功提交后<br/>setup 事务把 phase 翻到 'playing'，completedPlayerTurns 保持 0
     Web->>Server: POST /api/actions { type: 'send_message', content: filledNarrative }
     Server-->>Web: SSE: setup execution.started (turnId A)
     Note over Server,Plugin: setup 提交成功后，同一请求以 turnId B 自动接力主循环；<br/>接力提交成功才把 completedPlayerTurns 0 → 1
@@ -728,8 +736,13 @@ sequenceDiagram
     Note over Server,Plugin: Turn 2+ · 主循环 (phase === 'playing'，pre-turn → narrative → post-turn → audit)
     loop 每个主循环 runtime (stage 间屏障串行 / stage 内 DAG 并行)
         Server-->>Web: SSE: runtime.started
-        Plugin->>LLM: buildContext + generate + tool loop
-        Plugin-->>Kernel: RuntimeOutput → normalizeOutput → Proposal[]
+        alt function runtime
+            Kernel->>Plugin: handler(ctx)
+            Plugin-->>Kernel: HandlerResult → 物化成功输出 → Proposal[]
+        else agent runtime
+            Plugin->>LLM: buildContext + generate + tool loop
+            Plugin-->>Kernel: RuntimeOutput → normalizeOutput → Proposal[]
+        end
         Kernel-->>Web: SSE: narrative.delta / narrative.completed
         Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
         Kernel-->>Web: SSE: plugin-data.changed (plugin-data-set 工具写入)

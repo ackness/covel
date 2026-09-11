@@ -3311,6 +3311,15 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 | `ENABLE_DEBUG_PAGE` | 启用调试页面          | -                 |
 | `RATE_LIMIT_RPM`    | 速率限制 (请求/分钟)  | -                 |
 
+### Opening the effective configuration
+
+`POST /api/config/open-folder` accepts `{ "target": "llm.toml" }` and opens
+`COVEL_LLM_TOML` when configured (relative paths resolve from the server working
+directory), otherwise `<covelHome>/llm.toml`. The `keys.env` target always resolves
+under `covelHome`. Missing files return `400` with `open_target_unavailable`;
+opening a file does not reload the running gateway. Use
+`POST /api/llm-config/reload` after editing to apply model configuration.
+
 ### Installed resource storage and vector configuration
 
 `POST /api/install/world` loads the installed package into the DataStore before

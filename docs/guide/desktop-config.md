@@ -118,6 +118,8 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 **Settings → Desktop** tab 暴露所有路径、一键打开目录、切换 `data_root`。不想改文件就在 UI 里点。
 
+“打开 `llm.toml`”使用当前生效的 `COVEL_LLM_TOML` 路径，未设置时才回退到配置根的 `llm.toml`；`keys.env` 始终位于配置根。打开操作要求目标已存在，缺失时返回 `open_target_unavailable`。源码开发中的根 `llm.toml` 优先级、用户资源目录和 Docker 挂载与桌面不同，见[环境变量说明](./env-registry.md#加载路径与环境差异)。
+
 ## 桌面 REST 写接口的 token 门
 
 桌面版 sidecar 会在每次启动时生成一个一次性 bearer token，并以 `COVEL_DESKTOP_REST_TOKEN` 注入子进程环境。所有写接口（`PUT /api/config/keys`、`PUT /api/config/settings`、`PUT /api/config/proxy`、`PUT /api/config/data-root`、`POST /api/config/open-folder`）以及会返回本地配置或代发外部请求的 `GET /api/config/settings` / `GET /api/config/proxy` / `GET /api/app-update/latest` 都会校验请求头 `Authorization: Bearer <token>`，缺失或不匹配返回 `401`。真正开放的只有 `GET /api/config/info` 和 `GET /api/config/keys`（仅返回 provider 列表，不含 key 值）。

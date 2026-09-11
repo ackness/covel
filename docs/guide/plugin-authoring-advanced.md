@@ -432,7 +432,9 @@ export default async function handler(ctx): Promise<HandlerResult> {
 }
 ```
 
-`success.value` 必须是 JSON 值；领域 effects 只允许出现在 `success`，`skipped` / `failed` 只能携带 `jobStatus` 与 `diagnostics` 等观测 effects。框架会在提交前校验并物化这些结果。
+`success.value` 必须是 JSON 值；领域 effects 只允许出现在 `success`，`skipped` / `failed` 只能携带 `jobStatus` 与 `diagnostics` 等观测 effects。框架会在提交前校验并物化这些结果。`resultFormat` 已移除；缺少 `outcome` 的旧式返回值会执行失败，不能通过增加兼容开关继续使用。setup function 完成时返回 `completion: "done"`；agent 的 setup 完成仍由结构化输出中的 `preGameDone: true` 表示。
+
+`ctx.pluginData.set/delete` 进入执行 buffer，只有成功提交才持久化并发送 SSE；失败、跳过或取消不会提交领域写入。运行中的进度应通过 `ctx.progress.report(...)` 发布，成功后的业务记录通过 `effects.pluginData` 或 buffer 提交。
 
 ### `permissions.http`
 
@@ -661,7 +663,7 @@ handler: ./handler.js
 
 **background 下的四个强约束:**
 
-1. 插件**禁止**直接写 `_jobs` 命名空间 —— 框架独占。业务状态请写到自己的命名空间(如 `images/{jobId}` `{status: 'pending'}` → `{status: 'ready', ref: ...}`)。
+1. 插件**禁止**直接写 `_jobs` 命名空间，由框架独占。实时进度用 `ctx.progress.report(...)`；自己的命名空间（如 `images/{jobId}`）保存成功提交后的最终记录，不能用 buffer 中的 pending 写入代替实时进度。
 2. `setImmediate` 中抛出的异常**不会**映射为 5xx —— 响应已发。失败信息会被框架写入 `_jobs/<jobId>.value.error`,前端通过 SSE 感知。
 3. **handler 不持会话锁**。只有提交阶段进锁——否则一次几分钟的出图会把玩家的下一条消息一起堵住。两个后果要写 handler 时记住:
    - 同一 runtime 的并发执行由框架按 `<sessionId>::<runtimeId>` 串行,所以"这张图是不是已经生成过"这类 check-then-act **在同一 runtime 内是原子的**,不会重复计费;**跨 runtime 不保证**。

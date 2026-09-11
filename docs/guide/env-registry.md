@@ -45,9 +45,36 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 - 源码开发的 server 读取仓库根 `.env` 和 `.env.llm`，显式进程环境优先。`llm.toml` 优先级为 `COVEL_LLM_TOML` > 仓库根 `llm.toml` > `$COVEL_HOME/llm.toml`（默认 `~/.covel/llm.toml`）> 内置默认配置。后两级仅在前一级文件不存在时采用；显式路径解析失败会报告错误并使用内置配置。
 - Vite 从仓库根读取 `.env`、`.env.local` 和对应 mode 文件；只有 `VITE_*` 会暴露到浏览器。开发代理使用 `RUNTIME_HOST`（默认 `127.0.0.1`）以及 `RUNTIME_PORT` > `SERVER_PORT` > `3001`。Shell 值优先。构建缓存包含这些根环境文件和 `VITE_*`，修改公开配置后不会复用旧产物。
 - `pnpm dev:pg` 预检读取根 `.env`，默认跟随 `DATABASE_URL`。没有 URL 时检查 `127.0.0.1:POSTGRES_PORT`（默认 `5432`）；`COVEL_PG_PREFLIGHT_HOST/PORT` 可显式覆盖。设置了不带端口的 URL 时使用 PostgreSQL 默认端口 `5432`。
-- Docker 使用只读挂载的 `/app/llm.toml`。命名卷 `appdata` 挂载到 `/home/node/.covel`，保存用户世界和插件；`pgdata18` 保存数据库。`pnpm docker:down` 保留这些卷，`pnpm docker:down-all` 会删除它们。升级前若已有旧容器内安装的资源，应先导出 `/home/node/.covel` 并导入新卷；新增卷不会自动搬运旧容器的可写层。
+- Docker 的进程环境由 Compose 注入，模型配置从宿主机只读挂载；路径与持久化规则见下节。
 - 用户包安装和启动发现统一使用 `COVEL_USER_WORLDS_DIR` / `COVEL_USER_PLUGINS_DIR`，未设置时使用 `$COVEL_HOME/worlds` / `plugins`（默认 `~/.covel`）。桌面继续使用 shell 注入的目录。世界安装成功即可查询和使用；插件安装后仍需重启服务。
 - 离线图片脚本复用应用 TOML loader，支持 metadata 内联表、子表以及 `${VAR}` 插值。配置路径为 `COVEL_LLM_TOML`，否则 `$COVEL_HOME/llm.toml`；密钥优先级为 `COVEL_IMG_KEY` > provider 环境变量 > `$COVEL_HOME/keys.env` 中 provider key > `OPENAI_API_KEY` 环境变量 / 文件回退。源码使用根配置时可运行 `COVEL_LLM_TOML=llm.toml pnpm exec tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm scripts/generate-scenes.mjs haruka-academy --dry-run` 预览生成任务；实际生成时去掉 `--dry-run` 并选定配置中的 `--slot`。
+
+### 用户资源目录
+
+| 入口               | 世界目录                                           | 插件目录                                             |
+| ------------------ | -------------------------------------------------- | ---------------------------------------------------- |
+| 源码 / 普通 server | `COVEL_USER_WORLDS_DIR`，否则 `$COVEL_HOME/worlds` | `COVEL_USER_PLUGINS_DIR`，否则 `$COVEL_HOME/plugins` |
+| Electron           | shell 注入 `<data_root>/worlds`                    | shell 注入 `<config_root>/plugins`                   |
+| Docker Compose     | `/home/node/.covel/worlds`                         | `/home/node/.covel/plugins`                          |
+
+普通 server 未设置 `COVEL_HOME` 时使用 `~/.covel`。`COVEL_WORLDS_DIR` / `COVEL_PLUGINS_DIR` 是**内置资源**目录，安装及 AI 生成的文件世界写入用户目录。插件脚手架和 `test:runtime` 同样遵循用户插件目录配置，显式 `--target` / `--plugins-dir` 优先；`--with-tools` 脚手架仍固定输出到仓库 `plugins/`。
+
+### Docker Compose
+
+先复制 `.env.example` 为 `.env`、`llm.toml.example` 为 `llm.toml`。只运行 `pnpm db:up` 时仅需 PostgreSQL 配置；运行整套应用还需填写 `COVEL_DESKTOP_REST_TOKEN`、`COVEL_MEDIA_TOKEN_SECRET` 和 `CORS_ORIGIN`。服务端 provider keys 可放在可选的 `.env.llm`。准备完成后：
+
+```bash
+pnpm docker:build
+pnpm docker:logs
+```
+
+Compose 固定应用容器的 `SERVER_PORT=3001`，宿主机入口由 `APP_BIND_IP`（默认 `127.0.0.1`）和 `APP_PORT`（默认 `3001`）决定；内置健康检查访问容器内的 `http://127.0.0.1:3001/api/health`。容器内数据库地址固定为 `postgres:5432`，与宿主机 `POSTGRES_PORT` 分开。
+
+根 `llm.toml` 只读挂载到 `/app/llm.toml`，文件缺失时 Compose 会报错。`appdata` 挂载到 `/home/node/.covel`，保存用户世界与插件；`pgdata18` 保存数据库。`pnpm docker:down` 保留这些卷，**`pnpm docker:down-all` 会删除两个卷及其中数据**。升级前若已有旧容器内安装的资源，应先导出 `/home/node/.covel` 并导入新卷；新增卷不会自动搬运旧容器的可写层。
+
+### 向量记忆
+
+`VECTOR_BACKEND=none` 关闭自动 embedding model lock、语义记忆摄取和向量 recall/archival search，保留关键词记忆及已存向量。它不禁止记忆系统之外的显式 embedding 请求。`embedded` 在 store 具备向量能力且已接入 embedding 函数时使用语义检索，失败或不可用时保留关键词回退；`external` 仍需宿主显式注入适配器。详见 [API 配置说明](../reference/api.md#installed-resource-storage-and-vector-configuration)。
 
 ## 数据库维护命令
 
@@ -99,7 +126,6 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 ## Runtime Contract
 
 - `STORE_BACKEND` 的代码默认值为 `sqlite`。
-- `VECTOR_BACKEND=none` 关闭语义记忆的模型锁定、embedding 摄取与向量检索；关键词记忆继续工作，已有向量和模型锁定记录不会删除。显式调用独立 provider embedding API 不受此存储开关控制。
 - `DEPLOYMENT_TIER=self` 对应本地自部署；localhost 请求可以读取 server 注入的 provider key 元数据。`demo` / `commercial` 会硬性强制 session owner token 鉴权。即使为 `self`，当 `NODE_ENV=production` 且实际注入的存储后端为 MemoryStore 时，也强制会话 owner token，并对全局世界写入强制 operator token；该判断不只依赖 `STORE_BACKEND` 环境值。详见 [`docs/reference/api.md`](../reference/api.md) 鉴权章节。未知 tier 会被规范化并 fail-closed 到最严格的 `commercial`。
 - `COVEL_DESKTOP_REST_TOKEN` 是运维 master / operator 凭证：以该值作为 Bearer token 可通过任意会话的 owner 校验（管理工具 / e2e harness 用），并且是 hosted（`demo` / `commercial`）层级创建/列出会话、世界写入与维度导入、AI 世界生成、模型探测/刷新以及 community server-code 激活的必需凭证。`DEPLOYMENT_TIER=demo|commercial` 启动时若未配置该 token，`validateSecurityPosture` 会直接拒绝启动（fail-closed）。`self` 层级启动不要求该 token；但生产 MemoryStore 的全局世界创建、修改、删除、维度导入和服务端生成保存会校验它，未配置时这些写入保持关闭，公开读取和合法会话访问仍可使用。普通本地或桌面会话仍可无 token 访问；桌面配置接口另有其自身的 token 校验。这是当前单运维方信任模型，不提供多租户身份或代码沙箱（见 [`docs/reference/api.md`](../reference/api.md) 鉴权章节）。
 - Electron 桌面端选择 `system` 时，sidecar 会针对每个目标 URL 通过 IPC 调用 Chromium 系统代理解析，并按系统返回的代理列表顺序处理连接级 fallback。Electron 会注入内部 capability `COVEL_DESKTOP_SYSTEM_PROXY_IPC=1`，因此普通 Node IPC/cluster 进程不会误启用该协议。`COVEL_SYSTEM_PROXY_URL` 仅作为不支持动态 IPC 的旧 shell 兼容入口；该配置只用于核心 provider 与模型数据库请求，不应用到第三方插件的 `fetchWithRetry`。
