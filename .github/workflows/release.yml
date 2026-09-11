@@ -156,6 +156,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Reuse successful CI tasks for the resolved source, including manual
+      # releases whose source differs from github.sha. Turbo still validates
+      # every task's inputs; a missing or stale cache runs the checks normally.
+      # Restore only: main CI owns the shared cache, so tags need no duplicate.
+      - name: Restore CI task cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ needs.prepare.outputs.commit }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            turbo-${{ runner.os }}-
+
       - name: Type check
         run: pnpm lint
 
@@ -203,9 +216,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Type check
-        run: pnpm lint
-
+      # verify-release has already type-checked this exact commit. Keep the
+      # platform build and packaged-resource checks on each target OS.
       - name: Build desktop (web + server staging + native rebuild for Electron)
         run: pnpm --filter @covel/desktop build
 
