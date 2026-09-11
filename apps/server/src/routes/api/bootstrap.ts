@@ -569,7 +569,9 @@ export async function bootstrapApi(
     manifestCache,
     store,
     llmAdapter: config.llmAdapter,
-    ...(config.memoryEmbed ? { embed: config.memoryEmbed } : {}),
+    ...(config.vectorBackend !== "none" && config.memoryEmbed
+      ? { embed: config.memoryEmbed }
+      : {}),
     runIngestExclusive: (sessionId, task) =>
       memoryIngestLock.withLock(
         `memory-ingest:${JSON.stringify([sessionId])}`,
@@ -769,7 +771,7 @@ export async function bootstrapApi(
     if (config.covelHome) {
       c.set("covelHome", config.covelHome);
     }
-    if (config.ensureEmbeddingLock) {
+    if (config.vectorBackend !== "none" && config.ensureEmbeddingLock) {
       c.set("ensureEmbeddingLock", config.ensureEmbeddingLock);
     }
     if (config.mediaStore) {

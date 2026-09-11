@@ -7,7 +7,8 @@
  *   night : style.prefix + (subjectNight || subject) + style.suffix + style.nightSuffix
  * Files land in worlds/<world>/media/scenes/<id>-day.png / <id>-night.png.
  *
- * Provider config comes from ~/.covel/llm.toml via --slot (see
+ * Provider config comes from COVEL_LLM_TOML or $COVEL_HOME/llm.toml
+ * (default ~/.covel/llm.toml), selected via --slot. See
  * scripts/lib/image-gen-common.mjs). Runs under tsx:
  *
  *   npx tsx scripts/generate-scenes.mjs <world> [--slot gpt-image-2]

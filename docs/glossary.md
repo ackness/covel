@@ -98,7 +98,7 @@ See: [docs/architecture/flow.md](./architecture/flow.md), [docs/reference/protoc
 
 ## World
 
-A bundled content package (`worlds/<id>/`) containing `world.yaml`, `WORLD.md`, and optional `data/world.data.yaml` sources for dimensions, character blueprints, rules, scene templates, and media indexes. Loaded at server boot from `COVEL_WORLDS_DIR`; one world powers many sessions.
+A bundled content package (`worlds/<id>/`) containing `world.yaml`, `WORLD.md`, and optional `data/world.data.yaml` sources for dimensions, character blueprints, rules, scene templates, and media indexes. Loaded at server boot from the bundled `COVEL_WORLDS_DIR` and the user world directory (`COVEL_USER_WORLDS_DIR`, otherwise `<COVEL_HOME>/worlds`, with `~/.covel` as the default home); one world powers many sessions. See [world loading](./reference/world-data.md#启动加载与收敛seed--reconcile).
 
 See: [docs/reference/world-data.md](./reference/world-data.md).
 

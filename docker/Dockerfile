@@ -94,7 +94,8 @@ ENV SERVE_STATIC=true
 ENV STATIC_DIR=./web-dist
 EXPOSE 3001
 
-RUN mkdir -p /app/apps/server/data && chown node:node /app/apps/server/data
+RUN mkdir -p /app/apps/server/data /home/node/.covel/worlds /home/node/.covel/plugins \
+    && chown -R node:node /app/apps/server/data /home/node/.covel
 USER node
 
 CMD ["pnpm", "exec", "tsx", "src/index.ts"]

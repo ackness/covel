@@ -138,7 +138,8 @@ Your data lives in `~/.covel/` (config, keys, SQLite, custom worlds, logs). If `
 ### Run from source
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
+cp .env.example .env              # server and storage settings
 cp llm.toml.example llm.toml        # model IDs and endpoints
 cp .env.llm.example .env.llm        # provider API keys
 pnpm dev                            # web :5173 + server :3001 (SQLite)
@@ -160,7 +161,7 @@ Use **AI Create World** in the world picker to turn a creative brief into a vali
 
 Repository authors can also use the bundled helpers:
 
-- **`/create-world`** — generate and validate `world.yaml`, `WORLD.md`, and WorldData files. Desktop packs go in `<data_root>/worlds/` (default `~/.covel/data/worlds/`); source runs use `COVEL_USER_WORLDS_DIR`, with development defaulting to `~/.covel/worlds/` when `~/.covel/` exists.
+- **`/create-world`** — generate and validate `world.yaml`, `WORLD.md`, and WorldData files. Desktop packs go in `<data_root>/worlds/` (default `~/.covel/data/worlds/`); source runs use `COVEL_USER_WORLDS_DIR`, defaulting to `$COVEL_HOME/worlds/` (otherwise `~/.covel/worlds/`).
 - **`/create-plugin`** — scaffold the right combination of runtime manifests, handlers, schemas, tools, UI, and tests for a capability package.
 
 An official hub for sharing plugins and world packs is on the roadmap — for now, share via Gist or fork.

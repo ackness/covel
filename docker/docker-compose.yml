@@ -93,7 +93,12 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-}
 
       # World package seed directory (inside container)
+      COVEL_LLM_TOML: /app/llm.toml
+      COVEL_PLUGINS_DIR: /app/plugins
       COVEL_WORLDS_DIR: /app/worlds
+      COVEL_HOME: /home/node/.covel
+      COVEL_USER_WORLDS_DIR: /home/node/.covel/worlds
+      COVEL_USER_PLUGINS_DIR: /home/node/.covel/plugins
     env_file:
       # Root scripts already require .env via `--env-file`; keep this service
       # source optional so Compose can resolve the postgres-only service with
@@ -106,6 +111,8 @@ services:
       - path: ../.env.llm
         required: false
     volumes:
+      # Installed worlds/plugins survive app container recreation.
+      - appdata:/home/node/.covel
       # Model slot configuration (required — copy llm.toml.example to llm.toml)
       - type: bind
         source: ../llm.toml
@@ -121,7 +128,7 @@ services:
         condition: service_healthy
     healthcheck:
       test:
-        ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health || exit 1"]
+        ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/api/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 15
@@ -131,3 +138,4 @@ volumes:
   # New name prevents Docker Compose from attaching the incompatible PG17
   # development volume. The old `pgdata` volume remains untouched.
   pgdata18:
+  appdata:

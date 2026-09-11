@@ -9,53 +9,28 @@
 import { readFile, access } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { parseEnv } from "node:util";
+import { loadLlmConfig } from "../../packages/ai-provider/src/config/llm-loader.ts";
+import { providerApiKeyEnvName } from "../../packages/shared/src/env/index.ts";
 import {
   getImageWire,
   DEFAULT_IMAGE_WIRE,
 } from "../../packages/ai-provider/src/image/wire-registry.ts";
 import { validateBaseUrl } from "../../packages/ai-provider/src/adapters/http.ts";
 
-/**
- * Read a `[covel.<slot>]` block from ~/.covel/llm.toml into a flat object,
- * plus `imageWire` from either a `[covel.<slot>.providerRequestMetadata]`
- * subtable (the real schema field) or a flat `imageWire` key directly under
- * `[covel.<slot>]` (script-only convenience).
- */
-async function readSlot(slotName) {
-  const p = path.join(os.homedir(), ".covel", "llm.toml");
-  const txt = await readFile(p, "utf-8");
-  const out = {};
-  let section = null;
-  for (const line of txt.split("\n")) {
-    const sec = /^\s*\[([^\]]+)\]\s*$/.exec(line);
-    if (sec) {
-      section = sec[1];
-      continue;
-    }
-    const inSlot = section === `covel.${slotName}`;
-    const inMeta = section === `covel.${slotName}.providerRequestMetadata`;
-    if (!inSlot && !inMeta) continue;
-    const kv = /^\s*([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
-    if (!kv) continue;
-    const value = kv[2].replace(/^["']|["']$/g, "").trim();
-    if (inMeta && kv[1] === "imageWire") out.imageWire = value;
-    else if (inSlot) out[kv[1]] = value;
-  }
-  return out;
+function covelHome() {
+  return process.env.COVEL_HOME || path.join(os.homedir(), ".covel");
 }
 
-async function readKeysEnv(name) {
-  const p = path.join(os.homedir(), ".covel", "keys.env");
+async function readKeysEnv() {
   try {
-    const txt = await readFile(p, "utf-8");
-    for (const line of txt.split("\n")) {
-      const m = /^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
-      if (m && m[1] === name) return m[2].replace(/^["']|["']$/g, "").trim();
-    }
-  } catch {
-    /* ignore */
+    return parseEnv(
+      await readFile(path.join(covelHome(), "keys.env"), "utf-8"),
+    );
+  } catch (err) {
+    if (err.code === "ENOENT") return {};
+    throw err;
   }
-  return undefined;
 }
 
 export const exists = (p) =>
@@ -133,36 +108,39 @@ export function reportResults(results) {
 
 /**
  * Resolve slot → { wire, config, model, slot } for offline generation.
- * Exits the process with a readable error when config is incomplete —
- * these are author-facing CLI tools, not library code.
+ * Uses the application TOML loader, including validation and env interpolation.
+ * Throws before making a request when configuration is incomplete.
  */
 export async function resolveImageWire(slotName) {
-  const slot = await readSlot(slotName);
+  const configPath =
+    process.env.COVEL_LLM_TOML || path.join(covelHome(), "llm.toml");
+  const slot = loadLlmConfig(configPath)?.llmConfig.covel[slotName];
+  if (!slot) {
+    throw new Error(
+      `Slot [covel.${slotName}] missing in ${configPath}. Configure it or pick another --slot.`,
+    );
+  }
   const { baseUrl, model } = slot;
-  const provider = (slot.provider || "openai").toUpperCase();
-  if (!baseUrl || !model) {
-    console.error(
-      `Slot [covel.${slotName}] missing baseUrl/model in ~/.covel/llm.toml. Configure it (or pick another --slot).`,
-    );
-    process.exit(1);
-  }
+  const keyName = providerApiKeyEnvName(slot.provider);
+  if (!keyName) throw new Error(`Invalid provider id in slot ${slotName}.`);
+  const explicitKey = process.env.COVEL_IMG_KEY || process.env[keyName];
+  const keys = explicitKey ? {} : await readKeysEnv();
   const apiKey =
-    process.env.COVEL_IMG_KEY ||
-    (await readKeysEnv(`${provider}_API_KEY`)) ||
-    (await readKeysEnv("OPENAI_API_KEY"));
+    explicitKey ||
+    keys[keyName] ||
+    process.env.OPENAI_API_KEY ||
+    keys.OPENAI_API_KEY;
   if (!apiKey) {
-    console.error(
-      `No API key. Set ${provider}_API_KEY in ~/.covel/keys.env (or COVEL_IMG_KEY env).`,
+    throw new Error(
+      `No API key. Set ${keyName} in the environment or ${path.join(covelHome(), "keys.env")} (or use COVEL_IMG_KEY).`,
     );
-    process.exit(1);
   }
-  const wireId = slot.imageWire || DEFAULT_IMAGE_WIRE;
+  const wireId = slot.providerRequestMetadata?.imageWire ?? DEFAULT_IMAGE_WIRE;
   const wire = getImageWire(wireId);
   if (!wire) {
-    console.error(
-      `unknown image wire "${wireId}" — register it via registerImageWire() or fix llm.toml providerRequestMetadata.imageWire`,
+    throw new Error(
+      `Unknown image wire "${wireId}". Check llm.toml providerRequestMetadata.imageWire.`,
     );
-    process.exit(1);
   }
   return {
     wire,

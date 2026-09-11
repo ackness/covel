@@ -56,7 +56,7 @@ export const STORAGE_ENV_VARS = [
     defaultValue: "embedded",
     example: "embedded",
     description:
-      "VectorStore backend. embedded uses the active DataStore vector capability; none disables vector search; external is reserved for an injected adapter.",
+      "VectorStore backend. embedded uses the active DataStore vector capability; none disables automatic embedding model locks, ingestion and vector search; external is reserved for an injected adapter.",
   },
   {
     name: "COVEL_PG_LOCK_POOL_MAX",

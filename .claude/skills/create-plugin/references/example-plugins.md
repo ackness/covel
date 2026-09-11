@@ -258,40 +258,25 @@ ui:
 ### runtimes/image-generator/handler.js
 
 ```js
-/**
- * DashScope wan2.x 文生图 function handler.
- *
- * 由 event trigger 激活,通过 ctx.gateway.resolveSlot 取 image slot 配置,
- * 自管 provider wire 生成图片,落 MediaStore,再把 MediaRef 写到
- * 插件的 `images` 命名空间。
- */
-// 单参签名 —— 运行时只传 ctx。返回普通 JSON:框架识别 pluginData[] /
-// events[] / statePatches[] 等字段,normalizeOutput 转成 Proposal 走
-// commit pipeline。其它字段作为 runtime output 持久化供下游 runtime 读取。
 import { generateDashScopeImage } from "../../lib/dashscope.js";
 
 export default async function handler(ctx) {
+  const jobId = ctx.turnId;
+  await ctx.progress?.report({ jobId, state: "running", sequence: 1 });
+  const fail = async (error) => {
+    await ctx.progress?.report({
+      jobId,
+      state: "failed",
+      message: error,
+      sequence: 2,
+    });
+    return { outcome: "failed", error };
+  };
   const prompt = ctx.triggerEvent?.data?.prompt ?? ctx.manualPayload?.prompt;
   if (typeof prompt !== "string" || prompt.length === 0) {
-    // 失败时也通过 pluginData 写入一条状态记录,前端 gallery 看到即可展示 failed。
-    return {
-      pluginData: [
-        {
-          namespace: "images",
-          key: ctx.turnId,
-          value: {
-            status: "failed",
-            error: "missing prompt",
-            completedAt: new Date().toISOString(),
-          },
-        },
-      ],
-    };
+    return fail("missing prompt");
   }
 
-  // 玩家可调设置通过 ctx.userSettings 注入(框架 resolveUserSettings
-  // 已把 manifest 默认和玩家值合并好)。按钮透传 ctx.manualPayload
-  // 作为临时覆盖。
   const settings = ctx.userSettings ?? {};
   const model =
     ctx.manualPayload?.model ?? settings.model ?? "wan2.7-image-pro";
@@ -304,48 +289,13 @@ export default async function handler(ctx) {
       presetId: "image",
       fallbackTag: "image",
     });
-    if (!slot?.baseUrl || !slot?.apiKey) {
-      return {
-        status: "failed",
-        error: "image slot missing baseUrl/apiKey",
-        pluginData: [
-          {
-            namespace: "images",
-            key: ctx.turnId,
-            value: {
-              status: "failed",
-              prompt,
-              error: "image slot missing baseUrl/apiKey",
-              startedAt,
-            },
-          },
-        ],
-      };
-    }
-
+    if (!slot?.baseUrl || !slot?.apiKey)
+      return fail("image slot missing baseUrl/apiKey");
     const guard = ctx.utils.validateBaseUrl(slot.baseUrl);
-    if (!guard.ok) {
-      return {
-        status: "failed",
-        error: `invalid image baseUrl: ${guard.reason}`,
-        pluginData: [
-          {
-            namespace: "images",
-            key: ctx.turnId,
-            value: {
-              status: "failed",
-              prompt,
-              error: `invalid image baseUrl: ${guard.reason}`,
-              startedAt,
-            },
-          },
-        ],
-      };
-    }
+    if (!guard.ok) return fail(`invalid image baseUrl: ${guard.reason}`);
 
-    // 自管 provider wire。真实 DashScope wan2.x 通常是 submit + poll;
-    // 生产插件把 provider 细节放到 lib/dashscope.js,handler 只处理
-    // Covel ctx / MediaRef / pluginData 契约。
+    // This example uses a custom provider wire. Prefer ctx.images.generate
+    // when the framework already supports the provider.
     const generated = await generateDashScopeImage({
       baseUrl: slot.baseUrl,
       apiKey: slot.apiKey,
@@ -353,7 +303,6 @@ export default async function handler(ctx) {
       prompt,
       imageSize,
     });
-
     const ref = generated.url
       ? await ctx.media.ingestUrl(generated.url, {
           allowedMimes: ["image/png", "image/jpeg", "image/webp"],
@@ -370,54 +319,38 @@ export default async function handler(ctx) {
           },
         );
 
-    const completedAt = new Date().toISOString();
-    const expiresAt = generated.url
-      ? new Date(Date.parse(completedAt) + 24 * 60 * 60 * 1000).toISOString()
-      : null;
     return {
-      ref,
-      mimeType: ref.mime,
-      pluginData: [
-        {
-          namespace: "images",
-          key: ctx.turnId,
-          value: {
-            status: "done",
-            prompt,
-            imageSize,
-            startedAt,
-            completedAt,
-            ref,
-            mimeType: ref.mime,
-            ...(expiresAt ? { expiresAt } : {}),
+      outcome: "success",
+      value: { ref, mimeType: ref.mime },
+      effects: {
+        jobStatus: [{ jobId, state: "succeeded", sequence: 2 }],
+        pluginData: [
+          {
+            namespace: "images",
+            key: ctx.turnId,
+            value: {
+              status: "done",
+              prompt,
+              imageSize,
+              startedAt,
+              completedAt: new Date().toISOString(),
+              ref,
+              mimeType: ref.mime,
+            },
           },
-        },
-      ],
-      assetGenerations: [
-        { ref, modality: "image", meta: { prompt, imageSize, model } },
-      ],
+        ],
+        assetGenerations: [
+          { ref, modality: "image", meta: { prompt, imageSize, model } },
+        ],
+      },
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      error: msg,
-      pluginData: [
-        {
-          namespace: "images",
-          key: ctx.turnId,
-          value: {
-            status: "failed",
-            prompt,
-            error: msg,
-            startedAt,
-            completedAt: new Date().toISOString(),
-          },
-        },
-      ],
-    };
+    return fail(err instanceof Error ? err.message : String(err));
   }
 }
 ```
+
+进度与失败通过 kernel job-status 流展示；下面的 gallery 只展示已提交的图片。MediaStore 已持久化的图片不再依赖供应商临时 URL，也不需要按源 URL 的过期时间隐藏。
 
 ### runtimes/image-generator/ui/gallery.json
 

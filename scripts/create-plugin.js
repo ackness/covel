@@ -11,7 +11,7 @@
  *   node scripts/create-plugin.js <plugin-name> --with-tools                        # 旧：单 runtime + tools/（仓库内）
  *
  * 选项：
- *   -t, --target <dir>    目标目录，默认 ~/.covel/plugins
+ *   -t, --target <dir>    Override COVEL_USER_PLUGINS_DIR / COVEL_HOME/plugins / ~/.covel/plugins
  *   -r, --runtimes <list> 用逗号分隔的 runtime 列表，每项为 name 或 name:type
  *                         type ∈ { function, agent }（默认 agent）
  *   --with-tools          旧式单 runtime 带 tools/，目标固定为 <repo>/plugins/
@@ -38,7 +38,9 @@ import { homedir } from "node:os";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT = resolve(__dirname, "..");
-const DEFAULT_TARGET = join(homedir(), ".covel", "plugins");
+const DEFAULT_TARGET =
+  process.env.COVEL_USER_PLUGINS_DIR?.trim() ||
+  join(process.env.COVEL_HOME?.trim() || join(homedir(), ".covel"), "plugins");
 const VALID_RUNTIME_TYPES = new Set(["function", "agent"]);
 const DEFAULT_RUNTIME_TYPE = "agent";
 
@@ -242,7 +244,7 @@ if (mode === "legacy-with-tools") {
   }
   if (targetBaseDir !== DEFAULT_TARGET) {
     console.log(
-      `  5. 如未在默认插件目录，请确认 COVEL_PLUGINS_DIR 指向 ${targetBaseDir}`,
+      `  5. Set COVEL_USER_PLUGINS_DIR to ${targetBaseDir} so the server discovers this plugin.`,
     );
     console.log(
       `  6. 运行 pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty`,
@@ -405,7 +407,7 @@ export default async function ${camelize(runtimeName)}Handler(ctx) {
 
   if (!pluginData || typeof pluginData.set !== 'function') {
     return {
-      status: 'failed',
+      outcome: 'failed',
       error: 'ctx.pluginData.set is unavailable. Upgrade @covel/runtime.',
     };
   }
@@ -427,7 +429,7 @@ export default async function ${camelize(runtimeName)}Handler(ctx) {
   await pluginData.set(NOTES_NAMESPACE, key, note);
   await logger?.info?.('${runtimeName}.recorded', { key, title });
 
-  return { status: 'ok', note };
+  return { outcome: 'success', value: { note } };
 }
 `;
 }
@@ -516,7 +518,7 @@ ${lines}
 1. 修改 \`README.md\`，维护给人类和开发者看的说明。
 2. 修改 \`runtimes/<name>/PLUGIN.md\`，维护 runtime 元信息和模型指令。
 3. 函数 runtime 修改 \`handler.js\`；agent runtime 修改 Markdown prompt。
-4. 运行 \`pnpm test:runtime -- ${pluginName} --plugins-dir ${targetBaseDir} --pretty\` 验证模板 case。
+4. Run \`pnpm test:runtime -- ${pluginName} --plugins-dir <plugins-dir> --pretty\` from the Covel repository, using this plugin's parent directory.
 `;
 }
 
@@ -602,7 +604,9 @@ function printUsage() {
   );
   console.log("");
   console.log("选项：");
-  console.log("  -t, --target <dir>    目标目录，默认 ~/.covel/plugins");
+  console.log(
+    "  -t, --target <dir>    Target directory; overrides COVEL_USER_PLUGINS_DIR, COVEL_HOME/plugins, ~/.covel/plugins.",
+  );
   console.log(
     "  -r, --runtimes <list> 逗号分隔的 runtime 列表，每项为 name 或 name:type",
   );

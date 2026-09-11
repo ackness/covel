@@ -147,7 +147,7 @@ a ref between the ref cleanup and asset deletion.
 > CREATE UNIQUE INDEX pg_media_refs_unique_session_media_idx
 >   ON media_refs(session_id, media_id);
 >
-> -- SQLite (apply through pnpm db:migrate after deduplicating)
+> -- SQLite (review and apply manually to a backed-up database)
 > DELETE FROM media_refs
 >  WHERE rowid NOT IN (
 >    SELECT MIN(rowid) FROM media_refs GROUP BY session_id, media_id

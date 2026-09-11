@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+### Fixed
+
+- **Development configuration is shared across entry points.** The API prefers the root `llm.toml` over home defaults, Vite reads root environment files, and proxy settings and web build cache inputs follow the effective configuration. Explicit process environment values retain precedence.
+- **Docker preserves installed and generated user resources.** The `appdata` volume backs user worlds/plugins, the model configuration remains a read-only host mount, and health checks use IPv4 loopback. World installation activates the package before returning success and removes a newly created package if activation fails.
+- **Configured resource paths are honored consistently.** AI file generation, plugin scaffolding, and runtime tests use the configured user directories; opening `llm.toml` follows its effective override. Existing world dimensions can reload on Linux through Node's recursive file watcher.
+- **Generated function runtimes use the current handler contract.** Default and custom scaffolds return `HandlerResult`; authoring examples now distinguish success effects, buffered data writes, and live progress. Regression cases exercise all three scaffold modes.
+- **Media generation supports existing outputs as input.** Video, poster, and GIF conversions finish in temporary files before replacing assets. Conversion failures preserve existing assets, and missing explicit source paths fail without selecting another recording.
+- **Environment switches and maintenance commands match their implementations.** `VECTOR_BACKEND=none` disables automatic semantic-memory work, PostgreSQL preflight follows the configured URL/port, and image scripts share TOML/key resolution. The nonfunctional `db:migrate` command and unused environment switches were removed; database upgrades remain an explicit maintenance task.
+
 ## [0.0.32] - 2026-09-06
 
 This release improves theme rendering and appearance controls, strengthens session isolation and asynchronous recovery, and corrects configuration examples and release documentation.

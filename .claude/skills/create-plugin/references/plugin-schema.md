@@ -31,8 +31,7 @@ Schema 使用 Zod **strict** 模式 — 不允许未定义字段，拼错会直�
 | `pluginType` | enum | | `core-plugin` / `plugin`（默认） |
 | `outputKind` | enum | | `story` / `plugin`（默认） / `system` — 决定前端展示 |
 | `capabilities` | string[] | | 能力标签数组，框架按标签发现插件。常用:`narrative-engine`、`world-data-provider`、`image-generation`、`memory-panel`。自由标签合法，但拼错框架已知标签会在 bootstrap 时 warn |
-| `execution` | enum | | **仅对手动触发(`POST /plugin-rpc`)的 runtime 生效。** `sync`（默认） / `background`。background 返回 202 + `jobId`,框架走 kernel job-status 流,前端通过 `plugin-data.changed` SSE 感知 |
-| `resultFormat` | enum | | `legacy`（默认）/ `envelope-v1`。envelope-v1 时 handler 返回 `{outcome: success\|suspended\|skipped\|failed, ...}` 判别联合；setup 完成信号用 `completion: "done"` |
+| `execution` | enum | | **用于 manual/event 激活；stage 调度的后台化由 `turnCompletion` 控制。** `sync`（默认） / `background`。background 返回 202 + `jobId`,框架走 kernel job-status 流,前端通过 `plugin-data.changed` SSE 感知 |
 | `effects` | object | | `{reads?, writes?, parallelSafe?}` 显式读写集声明，用于同层并行冒险检测。资源键如 `state:*`、`plugin-data:self:<ns>`、`event:<topic>`、`http:https://<host>` |
 | `permissions` | object | | `{http: [{origin, methods?}]}` — 出网 allowlist，管的是 `ctx.utils.fetchWithRetry`（entry 侧同一组 helper 叫 `covel.http`）。`origin` 必须是规范 https origin（无路径/查询），`methods` 默认仅 GET。**只对 community 插件 fail-closed 强制**；builtin / official 视为可信直接放行（SSRF 校验两边都照跑） |
 | `relations` | object | | `{provides?, requires?, recommends?, conflicts?}`，元素是插件 id 或 `{id, ...}`。**插件选择 UI 和 pack 解析读它**——`requires` 会把上游插件一并带进会话。它不改变执行语义（那是 trigger + 调度声明的事），但少写会让玩家只勾了你的插件时缺依赖 |
@@ -66,7 +65,7 @@ handler 里读：`ctx.inputs.narrative?.value`（`cardinality: all` 时是 `.ite
 **跨字段硬约束**（违反即校验失败）：
 
 - `auto` / `scheduled` runtime **必须**声明 `stage`（authoring schema）；`event` / `manual` runtime **不可**声明 `stage`（它们由事件/RPC 拉起，不进阶段 DAG）。
-- `stage: setup` 的 trigger 必须是 `auto`，且不可带 `interval` / `startTurn` / `cooldownTurns`（`maxTriggerCount` 可作重试预算）。setup runtime 通过输出 `preGameDone: true`（legacy）或 `completion: "done"`（envelope-v1）报告完成。
+- `stage: setup` 的 trigger 必须是 `auto`，且不可带 `interval` / `startTurn` / `cooldownTurns`（`maxTriggerCount` 可作重试预算）。setup function runtime 通过 `{ outcome: "success", completion: "done" }` 报告完成；agent runtime 仍由输出 `preGameDone: true` 报告 setup 完成，`runtime-done` 仅结束当前工具循环。`resultFormat` 已移除，不能再声明。
 - `needs` 的 `scope: session` **只在 `stage: setup` 上合法**（它对准持久 setup 快照判定；其它 stage 声明会被两套 schema 直接拒绝）。
 - `event` / `manual` + `execution: background` 的 runtime 不可声明 `inputs` 绑定（永远 detached，绑定无法满足）。
 
@@ -352,12 +351,12 @@ export default async function handler(ctx) {
   // ctx.gateway 是 PluginRuntimeGateway — 调 LLM/图像的唯一入口
   // ctx.inputs.<name> — frontmatter inputs 绑定的解析结果(读同回合上游的唯一通道,见「调度声明」)
   return {
-    // 任意 JSON 字段作为 runtime output 持久化给下游。以下字段会被框架
-    // normalizeOutput 提取为 Proposal,走标准 commit pipeline:
-    events: [{ topic: 'my.event', data: {} }],                    // → event.emit
-    pluginData: [{ namespace: 'ns', key: 'k', value: { ... } }],  // → plugin.data / plugin.data.batch
-    statePatches: [{ table: 'world', field: 'time', value: 'night' }], // → state.patch
-    interactions: [{ type: 'form', interactionId: 'f1', ... }],   // → interaction.request
+    outcome: "success",
+    value: { recorded: true },
+    effects: {
+      events: [{ topic: "my.event", data: {} }],
+      pluginData: [{ namespace: "ns", key: "k", value: { recorded: true } }],
+    },
   };
 }
 ```

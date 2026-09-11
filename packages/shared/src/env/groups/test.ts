@@ -35,14 +35,6 @@ export const TEST_ENV_VARS = [
     description: "Enables live LLM provider tests.",
   },
   {
-    name: "LIVE_IMAGE_ENABLED",
-    group: "test",
-    type: "boolean",
-    status: "active",
-    defaultValue: "false",
-    description: "Enables live image-generation provider tests.",
-  },
-  {
     name: "BASE_URL",
     group: "test",
     type: "url",
@@ -63,7 +55,8 @@ export const TEST_ENV_VARS = [
     type: "string",
     status: "active",
     defaultValue: "127.0.0.1",
-    description: "dev:pg TCP preflight target host.",
+    description:
+      "dev:pg TCP preflight host override; otherwise follows DATABASE_URL.",
   },
   {
     name: "COVEL_PG_PREFLIGHT_PORT",
@@ -71,28 +64,15 @@ export const TEST_ENV_VARS = [
     type: "integer",
     status: "active",
     defaultValue: "5432",
-    description: "dev:pg TCP preflight target port.",
+    description:
+      "dev:pg TCP preflight port override; otherwise follows DATABASE_URL, then POSTGRES_PORT.",
   },
   {
     name: "COVEL_PG_PREFLIGHT_SKIP",
     group: "test",
     type: "boolean",
-    status: "documented",
+    status: "active",
     defaultValue: "false",
-    description: "Documented dev:pg preflight bypass flag.",
-  },
-  {
-    name: "COVEL_STORY_BASE_URL",
-    group: "test",
-    type: "url",
-    status: "documented",
-    description: "Documented story LLM endpoint override for e2e tests.",
-  },
-  {
-    name: "COVEL_PLUGIN_BASE_URL",
-    group: "test",
-    type: "url",
-    status: "documented",
-    description: "Documented plugin LLM endpoint override for e2e tests.",
+    description: "Set to 1 to skip the dev:pg TCP preflight.",
   },
 ] as const satisfies readonly EnvVarDefinition[];

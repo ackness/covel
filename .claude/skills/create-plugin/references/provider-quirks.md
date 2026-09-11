@@ -87,15 +87,17 @@ export default async function handler(ctx) {
   const bytes = decodeBytesFrom(payload);
   const ref = await media.put(bytes, sniffedMime, { plugin: '<plugin-id>', turnId: ctx.turnId });
 
-  // 7. 返回（normalizeOutput 走 commit pipeline）
+  // 7. Commit the generated asset and its plugin-owned index.
   return {
-    status: 'done',
-    pluginData: [{ namespace: 'tracks', key: ctx.turnId, value: { ref, ... } }],
-    assetGenerations: [{ ref, modality: 'audio', meta: {...} }],
+    outcome: 'success',
+    effects: {
+      pluginData: [{ namespace: 'tracks', key: ctx.turnId, value: { ref } }],
+      assetGenerations: [{ ref, modality: 'audio' }],
+    },
   };
 }
 
-function failed(msg) { return { status: 'failed', error: msg }; }
+function failed(msg) { return { outcome: 'failed', error: msg }; }
 ```
 
 ## 鉴权头差异表（常见 provider）
@@ -168,31 +170,24 @@ my-plugin/
 
 ## 失败处理通用范式
 
-1. 先**预占** plugin-data（pending）→ 让前端 SSE 立刻看到"正在生成"
-2. **每一段 try/catch** 都要写 `recordFailure` 方法把 status: 'failed' + error 写回**同一个** key，前端就从 pending 切到 failed
-3. **error message 必须 actionable**：错在配置就告诉怎么改 llm.toml；错在 key 就告诉 env 变量名；错在 provider 限流就建议 `requestTimeoutMs` 调大
+1. 用 `ctx.progress.report({ jobId, state: "running", sequence: 1 })` 发布实时进度。
+2. 成功后通过 `success.effects.pluginData` 提交最终领域记录；失败时发布 job-status 并返回 `outcome: "failed"`。失败执行的 plugin-data buffer 不会提交。
+3. 错误信息说明配置、凭据或供应商错误的具体原因。UI 从 job-status 订阅读取进度，从 plugin-data 读取已提交成品。
 
 ```js
-async function recordFailure(ctx, key, message) {
-  const value = {
-    status: "failed",
-    error: message,
-    completedAt: new Date().toISOString(),
-  };
-  await ctx.pluginData.set("tracks", key, value);
-  await ctx.logger.error("failed", { key, error: message });
-  return {
-    status: "failed",
-    error: message,
-    pluginData: [{ namespace: "tracks", key, value }],
-  };
+async function recordFailure(ctx, jobId, message, sequence) {
+  await ctx.progress?.report({ jobId, state: "failed", message, sequence });
+  await ctx.logger.error("failed", { jobId, error: message });
+  return { outcome: "failed", error: message };
 }
 ```
+
+同一 job 的 `sequence` 必须递增。不要通过失败结果的 `effects.pluginData` 写错误占位，这类领域写入会被剥离。
 
 ## 流式响应（参考）
 
 第一版插件**不做流式**。如果未来要做：
 
-- **OpenAI 风格 SSE**：循环 `response.body.getReader()`，按 `data: {...}` 切分；每个 chunk `choices[0].delta.content` 拼到累积 buffer，期间 `ctx.pluginData.set('tracks', turnId, { partial: buffer, status: 'streaming' })` 让前端实时看到字
+- **OpenAI 风格 SSE**：循环 `response.body.getReader()`，按 `data: {...}` 切分；每个 chunk `choices[0].delta.content` 拼到累积 buffer，期间通过 `ctx.progress.report({jobId, state: 'progress', data: {partial: buffer}, sequence})` 发布片段，`sequence` 每次递增
 - **PCM 流式音频**：浏览器 `<audio>` 不能直接吃 PCM frames，需要前端 framework 改进（提供 `<AudioStream>` 组件解码 PCM → Web Audio buffer），或后端先聚合再 mp3 转码。**当前框架不支持**。
 - **结构化 JSON 流式**：function runtime 用不上，agent runtime 配 `output.schema` + `responseFormat` 框架已自动处理。

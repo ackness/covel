@@ -13,7 +13,8 @@ Thanks for considering contributing! This document outlines the process for cont
 - Optional: Docker (for PostgreSQL mode)
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
+cp .env.example .env              # server and storage settings
 cp llm.toml.example llm.toml   # configure LLM slots
 cp .env.llm.example .env.llm   # fill in API keys
 pnpm dev                       # start frontend + backend
@@ -21,19 +22,32 @@ pnpm dev                       # start frontend + backend
 
 ### PostgreSQL 18 development environment
 
-Docker Compose uses PostgreSQL 18 with pgvector 0.8.6 and stores data in the
-new `pgdata18` volume. The previous PG17 `pgdata` volume is not mounted,
-migrated, or deleted; the first `pnpm docker:build` after this upgrade creates
-an empty PG18 development database.
-
-To rebuild the current PG18 development database, run the commands below.
-`docker:down-all` deletes the current Compose project's `pgdata18` volume and
-all of its data, but does not delete the old `pgdata` volume:
+Create the root `.env` as above and keep `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, and `DATABASE_URL` consistent. Starting only the database does not require the Docker app's operator token:
 
 ```bash
-pnpm docker:down-all
-pnpm docker:build
+pnpm db:up
+pnpm dev:pg                    # PostgreSQL-backed API server
 ```
+
+On first initialization, wait for the database to become ready before running `dev:pg`; check for `healthy` with `docker compose -f docker/docker-compose.yml --env-file .env ps postgres`. For the frontend, run `pnpm dev:web` in another terminal. `dev:pg` loads the root `.env` before checking the host/port from `DATABASE_URL`; without a URL, it checks `127.0.0.1:POSTGRES_PORT`. Update the URL when changing the port. See the [environment loading rules](./guide/env-registry.md#加载路径与环境差异) for overrides.
+
+Compose uses PostgreSQL 18 with pgvector 0.8.6 and stores the database in `pgdata18`. The previous PG17 `pgdata` volume is not mounted, automatically migrated, or deleted.
+
+`pnpm docker:build` builds and starts **both the database and the app**. The app uses the `commercial` configuration and also requires `COVEL_DESKTOP_REST_TOKEN`, `COVEL_MEDIA_TOKEN_SECRET`, and `CORS_ORIGIN` in `.env`, plus the root `llm.toml`. The `appdata` volume persists installed/generated user worlds and plugins; model configuration remains a read-only host mount. See [Docker configuration](./guide/env-registry.md#docker-compose).
+
+`pnpm docker:down` stops containers and preserves data. **`pnpm docker:down-all` deletes the current Compose project's `pgdata18` and `appdata`, including the database, user worlds, and plugins**; use it only after backing up and choosing to reset the entire environment. `db:generate` / `db:studio` are PostgreSQL maintenance tools, not automatic database upgrades; see [database maintenance](./guide/env-registry.md#数据库维护命令).
+
+### Homepage demo media
+
+Install FFmpeg first. Run these commands from the repository root to update the homepage video, poster, and README GIF:
+
+```bash
+pnpm --filter @covel/web build:media
+# Replace recording.mp4 with an existing source file.
+node apps/web/scripts/build-media.mjs ./recording.mp4 --speed 3
+```
+
+The default source search is `.assets/demo.dev1.mp4`, `.assets/demo.dev0.mp4`, then `.assets/images/demo.gif`. A missing explicit path fails immediately. Outputs are `apps/web/public/media/demo.mp4`, `demo-poster.jpg`, and `.assets/images/demo.gif`. Existing assets are replaced only after all conversions finish; conversion failures preserve them and clean up temporary files. An existing output can also be the input. Relative paths passed through `pnpm --filter @covel/web build:media` are relative to `apps/web/`; direct Node invocation uses the current directory.
 
 ## Development conventions
 

@@ -1,4 +1,4 @@
-import { defineConfig, type ProxyOptions } from "vite";
+import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
@@ -58,7 +58,11 @@ export function resolveRuntimeProxyTarget(
   env: Record<string, string | undefined> = process.env,
 ): string {
   const host = readEnvString("RUNTIME_HOST", "127.0.0.1", env);
-  const port = readEnvInt("RUNTIME_PORT", 3001, env);
+  const port = readEnvInt(
+    "RUNTIME_PORT",
+    readEnvInt("SERVER_PORT", 3001, env),
+    env,
+  );
   return `http://${host}:${port}`;
 }
 
@@ -75,7 +79,8 @@ export function resolveWorkspaceRoot(): string {
   return fileURLToPath(new URL("../../", import.meta.url));
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  envDir: resolveWorkspaceRoot(),
   root: fileURLToPath(new URL("./", import.meta.url)),
   resolve: {
     alias: {
@@ -91,7 +96,7 @@ export default defineConfig({
     react(),
   ],
   server: {
-    proxy: createRuntimeProxyConfig(),
+    proxy: createRuntimeProxyConfig(loadEnv(mode, resolveWorkspaceRoot(), "")),
     fs: {
       allow: [resolveWorkspaceRoot()],
     },
@@ -175,4 +180,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

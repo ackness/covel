@@ -22,7 +22,7 @@ import type { ArchivalSearchResult, ArchivalSearcher } from "./types.js";
 
 /**
  * Create a keyword-based archival searcher.
- * Searches across plugin_data values, lorebook content, and character descriptions.
+ * Searches lorebook content and character descriptions.
  */
 export function createKeywordArchivalSearcher(
   store: DataStore,

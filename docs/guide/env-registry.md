@@ -40,6 +40,48 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 | `~/.covel/keys.env`    | 桌面端持久化 provider API key                                        |
 | `~/.covel/config.toml` | 桌面端数据目录与日志轮转配置                                         |
 
+## 加载路径与环境差异
+
+- 源码开发的 server 读取仓库根 `.env` 和 `.env.llm`，显式进程环境优先。`llm.toml` 优先级为 `COVEL_LLM_TOML` > 仓库根 `llm.toml` > `$COVEL_HOME/llm.toml`（默认 `~/.covel/llm.toml`）> 内置默认配置。后两级仅在前一级文件不存在时采用；显式路径解析失败会报告错误并使用内置配置。
+- Vite 从仓库根读取 `.env`、`.env.local` 和对应 mode 文件；只有 `VITE_*` 会暴露到浏览器。开发代理使用 `RUNTIME_HOST`（默认 `127.0.0.1`）以及 `RUNTIME_PORT` > `SERVER_PORT` > `3001`。Shell 值优先。构建缓存包含这些根环境文件和 `VITE_*`，修改公开配置后不会复用旧产物。
+- `pnpm dev:pg` 预检读取根 `.env`，默认跟随 `DATABASE_URL`。没有 URL 时检查 `127.0.0.1:POSTGRES_PORT`（默认 `5432`）；`COVEL_PG_PREFLIGHT_HOST/PORT` 可显式覆盖。设置了不带端口的 URL 时使用 PostgreSQL 默认端口 `5432`。
+- Docker 的进程环境由 Compose 注入，模型配置从宿主机只读挂载；路径与持久化规则见下节。
+- 用户包安装和启动发现统一使用 `COVEL_USER_WORLDS_DIR` / `COVEL_USER_PLUGINS_DIR`，未设置时使用 `$COVEL_HOME/worlds` / `plugins`（默认 `~/.covel`）。桌面继续使用 shell 注入的目录。世界安装成功即可查询和使用；插件安装后仍需重启服务。
+- 离线图片脚本复用应用 TOML loader，支持 metadata 内联表、子表以及 `${VAR}` 插值。配置路径为 `COVEL_LLM_TOML`，否则 `$COVEL_HOME/llm.toml`；密钥优先级为 `COVEL_IMG_KEY` > provider 环境变量 > `$COVEL_HOME/keys.env` 中 provider key > `OPENAI_API_KEY` 环境变量 / 文件回退。源码使用根配置时可运行 `COVEL_LLM_TOML=llm.toml pnpm exec tsx --env-file-if-exists=.env --env-file-if-exists=.env.llm scripts/generate-scenes.mjs haruka-academy --dry-run` 预览生成任务；实际生成时去掉 `--dry-run` 并选定配置中的 `--slot`。
+
+### 用户资源目录
+
+| 入口               | 世界目录                                           | 插件目录                                             |
+| ------------------ | -------------------------------------------------- | ---------------------------------------------------- |
+| 源码 / 普通 server | `COVEL_USER_WORLDS_DIR`，否则 `$COVEL_HOME/worlds` | `COVEL_USER_PLUGINS_DIR`，否则 `$COVEL_HOME/plugins` |
+| Electron           | shell 注入 `<data_root>/worlds`                    | shell 注入 `<config_root>/plugins`                   |
+| Docker Compose     | `/home/node/.covel/worlds`                         | `/home/node/.covel/plugins`                          |
+
+普通 server 未设置 `COVEL_HOME` 时使用 `~/.covel`。`COVEL_WORLDS_DIR` / `COVEL_PLUGINS_DIR` 是**内置资源**目录，安装及 AI 生成的文件世界写入用户目录。插件脚手架和 `test:runtime` 同样遵循用户插件目录配置，显式 `--target` / `--plugins-dir` 优先；`--with-tools` 脚手架仍固定输出到仓库 `plugins/`。
+
+### Docker Compose
+
+先复制 `.env.example` 为 `.env`、`llm.toml.example` 为 `llm.toml`。只运行 `pnpm db:up` 时仅需 PostgreSQL 配置；运行整套应用还需填写 `COVEL_DESKTOP_REST_TOKEN`、`COVEL_MEDIA_TOKEN_SECRET` 和 `CORS_ORIGIN`。服务端 provider keys 可放在可选的 `.env.llm`。准备完成后：
+
+```bash
+pnpm docker:build
+pnpm docker:logs
+```
+
+Compose 固定应用容器的 `SERVER_PORT=3001`，宿主机入口由 `APP_BIND_IP`（默认 `127.0.0.1`）和 `APP_PORT`（默认 `3001`）决定；内置健康检查访问容器内的 `http://127.0.0.1:3001/api/health`。容器内数据库地址固定为 `postgres:5432`，与宿主机 `POSTGRES_PORT` 分开。
+
+根 `llm.toml` 只读挂载到 `/app/llm.toml`，文件缺失时 Compose 会报错。`appdata` 挂载到 `/home/node/.covel`，保存用户世界与插件；`pgdata18` 保存数据库。`pnpm docker:down` 保留这些卷，**`pnpm docker:down-all` 会删除两个卷及其中数据**。升级前若已有旧容器内安装的资源，应先导出 `/home/node/.covel` 并导入新卷；新增卷不会自动搬运旧容器的可写层。
+
+### 向量记忆
+
+`VECTOR_BACKEND=none` 关闭自动 embedding model lock、语义记忆摄取和向量 recall/archival search，保留关键词记忆及已存向量。它不禁止记忆系统之外的显式 embedding 请求。`embedded` 在 store 具备向量能力且已接入 embedding 函数时使用语义检索，失败或不可用时保留关键词回退；`external` 仍需宿主显式注入适配器。详见 [API 配置说明](../reference/api.md#installed-resource-storage-and-vector-configuration)。
+
+## 数据库维护命令
+
+当前 SQLite / PostgreSQL 在应用启动时创建当前 schema，不提供已有 schema 的自动升级链。旧的 `db:migrate` 命令已移除：仓库没有受版本控制的 Drizzle migration journal，不能把新生成的初始建表 SQL 直接应用到已有数据库。
+
+`pnpm db:generate` 生成供开发维护评审的 PostgreSQL schema 快照与 SQL（`apps/server/drizzle/`，不入库）；`pnpm db:studio` 打开 PostgreSQL 查看工具。两者直接执行 Drizzle，读取根 `.env`，并保留 shell 的 `DATABASE_URL` 覆盖。已有数据库升级需要针对旧 schema 编写并审核 SQL，在备份副本验证后手动应用；这些维护工具不负责 SQLite 升级。
+
 ## Registry 中的其他运行变量
 
 以下变量同样属于当前 `registry.ts` 契约，但不需要在上面的运行说明中展开：
@@ -65,12 +107,12 @@ Covel 的环境变量清单由 `packages/shared/src/env/registry.ts` 维护。�
 | `RUNTIME_HOST` / `RUNTIME_PORT`                       | `127.0.0.1` / `3001`            | Vite 开发代理的 server 目标                            |
 | `VITE_ROUTER_DEVTOOLS`                                | `true`                          | 开启 Vite 路由开发工具                                 |
 
-`LIVE_LLM_ENABLED`、`LIVE_IMAGE_ENABLED`、`BASE_URL`、`SESSION_ID` 属于测试或
+`LIVE_LLM_ENABLED`、`BASE_URL`、`SESSION_ID` 属于测试或
 截图脚本专用变量；`CSC_LINK`、`CSC_KEY_PASSWORD`、`WIN_CSC_TIMESTAMP_SERVER`、
 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID` 只由 Electron
 打包工具读取，详见 [`desktop-packaging.md`](./desktop-packaging.md)。
 
-> Registry 元数据仍有一处待代码侧收敛：`COVEL_PG_PREFLIGHT_SKIP` 已由 `scripts/dev-pg-preflight.mjs` 读取，但 registry 状态仍标为 `documented`。本页按实际运行行为列值。
+`COVEL_PG_PREFLIGHT_SKIP` 已登记为 `active`。旧变量 `COVEL_MEMORY_V1`、`COVEL_STORY_BASE_URL`、`COVEL_PLUGIN_BASE_URL`、`VITE_API_URL`、`LIVE_IMAGE_ENABLED` 没有读取方，不属于当前配置入口，可从本地配置中删除。`*_API_KEY` 由 helper 动态枚举；`*_BASE_URL` 仅在生效的 `llm.toml` 使用 `${VAR}` 引用时有效。
 
 ## 迁移规则
 

@@ -274,22 +274,18 @@ export interface RecallSearchResult {
   readonly role: string;
   readonly content: string;
   /**
-   * Relevance score (higher = more relevant). Currently a lexical term-overlap
-   * score from the keyword searcher — NOT vector similarity. A future
-   * vector-backed searcher would populate this with a normalized cosine score
-   * while keeping the same field contract.
+   * Relevance score (higher = more relevant). Keyword search uses lexical
+   * term overlap; vector search converts distance via distanceToScore.
+   * Scores are implementation-specific, not calibrated probabilities.
    */
   readonly score: number;
   readonly timestamp: string;
 }
 
 /**
- * Conversation-history search. The active implementation is keyword-based
- * (`createKeywordRecallSearcher`); this interface is also the **extension seam**
- * for a future semantic (vector) searcher — `createMemorySystem` picks the
- * concrete implementation, so callers (tools, prompt assembly) are unaffected
- * by the swap. Vector recall additionally needs an embed-on-write ingestion
- * path (not yet built); see recall-search.ts.
+ * Conversation-history search. `createMemorySystem` selects vector search
+ * when embeddings and vector storage are available, with keyword fallback.
+ * The vector ingestor indexes conversation history after turns.
  */
 export interface RecallSearcher {
   search(
@@ -304,12 +300,12 @@ export interface RecallSearcher {
 export interface ArchivalSearchResult {
   readonly key: string;
   readonly content: string;
-  /** Lexical term-overlap score (higher = more relevant); see {@link RecallSearchResult.score}. */
+  /** Relevance score (higher = more relevant); see {@link RecallSearchResult.score}. */
   readonly score: number;
   /**
-   * Origin of the matched record. `"plugin_data"` is reserved for a future
-   * vector path — the current keyword searcher only emits `"lorebook"` and
-   * `"character"` (see archival-search.ts).
+   * Origin of the matched record. Built-in keyword and vector searchers
+   * index lorebook and character records. `"plugin_data"` remains reserved
+   * for searchers that index plugin-owned knowledge.
    */
   readonly source: "plugin_data" | "lorebook" | "character";
   readonly pluginId?: string;
@@ -317,9 +313,8 @@ export interface ArchivalSearchResult {
 }
 
 /**
- * Cross-plugin knowledge search. Keyword-based today
- * (`createKeywordArchivalSearcher`); same **extension seam** as
- * {@link RecallSearcher} for a future vector implementation.
+ * Cross-plugin knowledge search. Like {@link RecallSearcher}, the memory
+ * system selects vector search when configured, with keyword fallback.
  */
 export interface ArchivalSearcher {
   search(
@@ -350,7 +345,7 @@ export interface MemorySystemDeps {
    * Optional embedding function. When present AND the store supports vectors,
    * recall/archival upgrade from keyword to semantic (vector) search and the
    * memory system gains a real embed-on-write {@link MemorySystem.ingest} path.
-   * When absent, the system stays keyword-only (every existing deployment).
+   * When absent, the system stays keyword-only.
    */
   readonly embed?: import("./vector-common.js").EmbedFn;
   /**

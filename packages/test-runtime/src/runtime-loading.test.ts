@@ -1,11 +1,12 @@
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeManifest } from "@covel/shared";
 
 import {
   expandPath,
+  defaultPluginsDir,
   loadEntryTools,
   pluginIdFromRuntime,
   prepareRuntimeManifests,
@@ -22,6 +23,18 @@ function manifest(patch: Partial<RuntimeManifest> = {}): RuntimeManifest {
 }
 
 describe("test-runtime runtime loading helpers", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("resolves the configured user plugin directory before home defaults", () => {
+    vi.stubEnv("COVEL_USER_PLUGINS_DIR", "");
+    vi.stubEnv("COVEL_HOME", "");
+    expect(defaultPluginsDir()).toBe(path.join(os.homedir(), ".covel/plugins"));
+    vi.stubEnv("COVEL_HOME", "custom-home");
+    expect(defaultPluginsDir()).toBe(path.resolve("custom-home/plugins"));
+    vi.stubEnv("COVEL_USER_PLUGINS_DIR", "custom-plugins");
+    expect(defaultPluginsDir()).toBe(path.resolve("custom-plugins"));
+  });
+
   it("derives plugin ids and expands shell-style paths", () => {
     expect(pluginIdFromRuntime("plugin/main")).toBe("plugin");
     expect(pluginIdFromRuntime("single")).toBe("single");

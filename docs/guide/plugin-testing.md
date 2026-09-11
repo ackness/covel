@@ -23,7 +23,7 @@ See also: [plugin-authoring.md](./plugin-authoring.md) · [e2e-plugin-verify.md]
 3. `pnpm test:runtime -- <plugin-id> --plugins-dir <dir> --pretty`：mock 执行 runtime case；多 runtime 可传 `<plugin-id>/<runtime-id>`，跨插件 `needs` 不满足时加 `--ignore-upstreams` 仅用于隔离调试。
 4. 最后再跑 `scripts/e2e-plugin-verify.ts` 验证 server、SSE、approval 和真实 session store。mock 通过不代表 provider/API 或审批链路已通过。
 
-`test:runtime` 的 `--mode mock` 是默认值；`--mode live` 会读取 `llm.toml` 和 `~/.covel/keys.env`。缺少凭据时应停留在 mock，不要把凭据写进仓库。
+`test:runtime` 的插件目录依次取 `--plugins-dir`、`COVEL_USER_PLUGINS_DIR`、`$COVEL_HOME/plugins`、`~/.covel/plugins`。`--mode mock` 是默认值；live 配置路径见下文。缺少凭据时应停留在 mock，不要把凭据写进仓库。
 
 没有 runtime case 时，CLI 会对同名的单 runtime 做一次默认 mock smoke test。默认 mock
 不会自行构造业务 tool call：声明了 `requireToolUse` 的 runtime 应添加
@@ -118,18 +118,16 @@ harness 只加载被测插件，所以跨插件的 `needs`（如 `{ capability: 
 # 跑仓库内插件声明的 cases
 pnpm test:runtime -- my-plugin --plugins-dir plugins --pretty
 
-# 跑外部插件声明的 cases
-pnpm test:runtime -- my-plugin --plugins-dir ~/.covel/plugins --pretty
+# Use the configured user plugin directory.
+pnpm test:runtime -- my-plugin --pretty
 
 # 直接调试一个 runtime
 pnpm test:runtime -- my-plugin/manual-runtime \
-  --plugins-dir ~/.covel/plugins \
   --payload '{"debug":true}' \
   --pretty
 
 # 使用真实 provider 跑一个 case
 pnpm test:runtime -- my-plugin \
-  --plugins-dir ~/.covel/plugins \
   --case happy-path \
   --mode live \
   --pretty
@@ -155,14 +153,26 @@ pnpm test:runtime -- my-plugin \
 }
 ```
 
-`--mode mock` 是默认值，会提供 fake LLM 和 synthetic `ctx.gateway.resolveSlot()`；`--mode live` 会读取 `llm.toml` 与 `~/.covel/keys.env`，走真实 provider。Live 模式适合发布前人工验证，CI 默认使用 mock。
+`--mode mock` 是默认值，会提供 fake LLM 和 synthetic `ctx.gateway.resolveSlot()`。脚手架的默认、自定义多 runtime 和 `--with-tools` 三种模板均有 mock 回归，测试会检查实际运行结果和已提交 plugin-data；Turbo 缓存同时包含脚手架与模板文件。
+
+`--mode live` 会请求真实 provider，可能产生费用。CLI 按顺序尝试 `COVEL_LLM_TOML`、`$COVEL_HOME/llm.toml`、当前目录 `llm.toml`，缺失或解析失败时继续尝试下一份，全部失败则使用测试工具内置配置。未设置 `COVEL_HOME` 时使用 `~/.covel`；key 从该目录的 `keys.env` 补入，已有同名进程环境变量优先。CLI 不自动读取根 `.env` / `.env.llm`，这一点与开发 server 不同。
+
+需要使用仓库根配置时显式加载；执行前检查目标 slot、provider 和凭据：
+
+```bash
+COVEL_LLM_TOML=llm.toml pnpm exec tsx \
+  --env-file-if-exists=.env --env-file-if-exists=.env.llm \
+  packages/test-runtime/src/cli.ts my-plugin --case happy-path --mode live --pretty
+```
+
+Live 模式适合发布前人工验证，CI 默认使用 mock。
 
 ## HTTP E2E
 
 当你要验证 API、SSE、approval policy 或真实 session store 行为时，使用 `scripts/e2e-plugin-verify.ts`：
 
 ```bash
-npx tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts \
+pnpm exec tsx --env-file=.env --env-file=.env.llm scripts/e2e-plugin-verify.ts \
   --slot e2e_local \
   --turns 3 \
   --plugins my-plugin

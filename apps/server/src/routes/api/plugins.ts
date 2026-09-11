@@ -3,12 +3,11 @@
  * contracts for developer tooling and AI agents.
  */
 
-import { homedir } from "node:os";
 import path from "node:path";
 import { rm, stat } from "node:fs/promises";
 import { Hono } from "hono";
 import type { PluginRegistry } from "@covel/plugin-loader";
-import { readRuntimeEnv } from "@covel/shared";
+import { resolveUserResourceDirs } from "../../lib/user-resource-dirs.js";
 import {
   buildPluginDetail,
   buildPluginSummary,
@@ -21,17 +20,6 @@ type Env = {
     pluginRegistry: PluginRegistry;
   };
 };
-
-/** Resolve the user plugins directory the same way the install route does. */
-function resolveUserPluginsDir(): string {
-  const env = readRuntimeEnv();
-  return (
-    env.userPluginsDir ??
-    (env.covelHome
-      ? path.join(env.covelHome, "plugins")
-      : path.join(homedir(), ".covel", "plugins"))
-  );
-}
 
 const PLUGIN_ID_RE = /^[a-z0-9][a-z0-9-_]{0,63}$/i;
 
@@ -76,7 +64,7 @@ pluginRoutes.delete("/:id", makeInstallApiGuard(), async (c) => {
     return c.json(errorBody(`cannot uninstall builtin plugin "${id}"`), 409);
   }
 
-  const root = resolveUserPluginsDir();
+  const root = resolveUserResourceDirs().plugins;
   const finalDir = path.join(root, id);
   // Defense in depth: the resolved dir must stay strictly under the root.
   const rel = path.relative(root, finalDir);

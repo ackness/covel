@@ -1,4 +1,12 @@
+import { existsSync } from "node:fs";
+import { loadEnvFile } from "node:process";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "drizzle-kit";
+
+// Drizzle is a maintenance tool, not the application schema upgrade path.
+// loadEnvFile preserves explicit shell overrides.
+const envPath = fileURLToPath(new URL("../../.env", import.meta.url));
+if (existsSync(envPath)) loadEnvFile(envPath);
 
 export default defineConfig({
   out: "./drizzle",

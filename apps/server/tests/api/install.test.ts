@@ -22,16 +22,23 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import yazl from "yazl";
+import { createMemoryStore } from "@covel/store";
+import { worldRoutes } from "../../src/routes/api/worlds.js";
 import { installRoutes } from "../../src/routes/api/install.js";
 import { createRequestBodyLimitMiddleware } from "../../src/middleware/request-body-limit.js";
 
 // ── Env override helpers ────────────────────────────────────────
 
-function createTestApp(): Hono {
+function createTestApp(store = createMemoryStore()): Hono {
   const app = new Hono();
+  app.use("*", async (c, next) => {
+    c.set("store", store);
+    await next();
+  });
   app.route("/api/install", installRoutes);
+  app.route("/api/worlds", worldRoutes);
   return app;
 }
 
@@ -631,6 +638,22 @@ describe("POST /api/install/plugin", () => {
 // ── World install ───────────────────────────────────────────────
 
 describe("POST /api/install/world", () => {
+  it("rolls back the new directory when activation fails so the upload can be retried", async () => {
+    const store = createMemoryStore();
+    vi.spyOn(store, "upsertWorld").mockRejectedValueOnce(
+      new Error("Synthetic persistence failure"),
+    );
+    const app = createTestApp(store);
+    const zip = await buildZip({
+      "world.yaml": VALID_WORLD_YAML,
+      "WORLD.md": VALID_WORLD_MD,
+    });
+    expect((await postZip(app, "/api/install/world", zip)).status).toBe(500);
+    expect(await dirExists(path.join(worldsDir, "test-world"))).toBe(false);
+    expect((await postZip(app, "/api/install/world", zip)).status).toBe(201);
+    expect(await store.getWorld("test-world")).not.toBeNull();
+  });
+
   it("accepts a valid world package", async () => {
     const app = createTestApp();
     const zip = await buildZip({
@@ -648,6 +671,11 @@ describe("POST /api/install/world", () => {
     expect(body.id).toBe("test-world");
     expect(body.restartRequired).toBe(false);
     expect(await dirExists(path.join(worldsDir, "test-world"))).toBe(true);
+    const listing = await app.request("/api/worlds");
+    expect(listing.status).toBe(200);
+    expect((await listing.json()).items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "test-world" })]),
+    );
   });
 
   it("rejects missing world.yaml", async () => {

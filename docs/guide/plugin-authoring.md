@@ -24,8 +24,19 @@
 
 1. 创建插件目录并写入 `PLUGIN.md`（至少需要 `name`、`description`；未声明 `trigger` 时按 schema 默认行为处理，`auto` / `scheduled` runtime 需要 `stage`）。仓库内置插件同时创建 `package.json`，本地用户目录则可只放 manifest 与它实际引用的资源。
 2. 在仓库根目录运行 `pnpm validate:plugin <插件目录>`。预期看到每个 manifest 的 `✓`；解析失败会标记 `(loader parse)`，字段/组合不合法会标记 `(authoring schema)` 并列出字段路径。
-3. 在 `COVEL_USER_PLUGINS_DIR`（默认 `~/.covel/plugins`）下放置插件，重启 server 后即可发现；也可在 runtime case 中显式传 `--plugins-dir <目录>`。多 runtime 扫描 `runtimes/*/PLUGIN.md`。
+3. 在 `COVEL_USER_PLUGINS_DIR` 下放置插件（未设置时使用 `$COVEL_HOME/plugins`，再回退到 `~/.covel/plugins`），重启 server 后即可发现；也可在 runtime case 中显式传 `--plugins-dir <目录>`。多 runtime 扫描 `runtimes/*/PLUGIN.md`。
 4. 用 `pnpm test:runtime -- <plugin-id> --plugins-dir <目录> --pretty` 跑 mock case；没有 case 时，用 `<plugin-id>/<runtime-id>` 直接调试，并按需传 `--payload` / `--show-prompts`。
+
+也可以从仓库根直接生成带 mock cases 的骨架：
+
+```bash
+pnpm create-plugin session-notes
+pnpm test:runtime -- session-notes --pretty
+```
+
+默认生成 `note` function 与 `analyst` agent 两个 runtime。使用 `--runtimes recorder:function,analyst:agent` 自定义组合，或 `--target ./plugins` 指定父目录；指定目录后测试时同步传 `--plugins-dir ./plugins`。默认目录与 server 用户插件目录一致。`--with-tools` 生成带 entry 注册工具的单 agent runtime，固定写入仓库 `plugins/`，不能与 `--target` / `--runtimes` 混用。
+
+function handler 返回 `{ outcome: "success", value, effects }`，失败使用 `{ outcome: "failed", error }`；`ctx.pluginData` 的写入在成功提交后才可见。完整协议见[函数 runtime 返回值](./plugin-authoring-advanced.md#function-handler-返回值handlerresult)，不要把 agent 的结构化输出直接当作 function 返回值。
 
 需要检查真实 HTTP、SSE 或审批时，再运行 `scripts/e2e-plugin-verify.ts`（见 [plugin-testing.md](./plugin-testing.md)）。
 
@@ -172,7 +183,7 @@ CI 的 `check-plugin-i18n` 校验 `ui/*.json` spec、`PLUGIN.md` frontmatter，*
 
 完整注册表（含 stage 分带、capabilities、frontmatter 全字段）见 [docs/reference/plugins.md](../reference/plugins.md)。
 
-> **要做手动按钮 / 后台任务 / 多 runtime 协作**？这些范式没有内置插件作为模板,直接看 [`.claude/skills/create-plugin/references/example-plugins.md`](../../.claude/skills/create-plugin/references/example-plugins.md) 的 dashscope-image-gen 综合样例（注意：该样例的图像生成部分示范的是 `resolveSlot` 自管 wire 这条逃生口路径；新插件写**图像生成**本身请优先看 [plugin-authoring-advanced.md 第 6 节的 `ctx.images`](./plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)）。
+> **手动按钮 / 后台任务 / 多 runtime 协作**：可参考内置 `scene-stage`、`mimo-tts`，或查看 [`.claude/skills/create-plugin/references/example-plugins.md`](../../.claude/skills/create-plugin/references/example-plugins.md) 的 dashscope-image-gen 综合样例（注意：该样例的图像生成部分示范的是 `resolveSlot` 自管 wire 这条逃生口路径；新插件写**图像生成**本身请优先看 [plugin-authoring-advanced.md 第 6 节的 `ctx.images`](./plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)）。
 
 ### C. Hook 组合行为
 
@@ -270,7 +281,7 @@ minimum-release-age=10080
 
 - `minimumReleaseAge` 是**安装方**（consumer-side）的策略，不是发布到 npm 的元数据；它由"谁在跑 `pnpm install`"决定，不会随 package 元信息分发。
 - 在 Covel 主仓 workspace 内，根 `pnpm-workspace.yaml` 已声明 `minimumReleaseAge: 10080`，覆盖所有 workspace member。本字段对 workspace 内插件是冗余但无害。
-- 当插件被**第三方独立 clone / 安装 / 作为 community plugin 通过 `COVEL_PLUGINS_DIR` 加载**时，下游用户在插件目录里跑 `pnpm install` 会读到本 `.npmrc`，7 天延迟规则即时生效。这是阻断"刚发布的恶意包"进入插件运行环境的最后一道防线。
+- 当插件被**第三方独立 clone / 安装 / 作为 community plugin 通过 `COVEL_USER_PLUGINS_DIR` 加载**时，下游用户在插件目录里跑 `pnpm install` 会读到本 `.npmrc`，7 天延迟规则即时生效。这是阻断"刚发布的恶意包"进入插件运行环境的最后一道防线。
 
 **注意：**
 

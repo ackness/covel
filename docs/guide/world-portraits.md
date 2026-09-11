@@ -28,21 +28,31 @@
 
 ## 生成方式（框架统一 image wire）
 
-调用走框架的 `packages/ai-provider/src/image/wire-registry.ts`（`openai-images` / `dashscope-wan` 等，与 `openai-image-gen`/`dashscope-image-gen` 插件同一套 wire，无手写 HTTP）。**脚本不硬编码任何服务地址**——`baseUrl`/`model`/`provider` 从 `~/.covel/llm.toml` 的指定 slot 读取，wire 选择从 slot 的 `providerRequestMetadata.imageWire`（缺省 `openai-images`）读取，key 从 `~/.covel/keys.env` 按 `<PROVIDER>_API_KEY` 约定读取。换服务只改 llm.toml，不动脚本。
+调用走框架的 `packages/ai-provider/src/image/wire-registry.ts`（`openai-images` / `dashscope-wan` 等，与 `openai-image-gen`/`dashscope-image-gen` 插件同一套 wire，无手写 HTTP）。**脚本不硬编码任何服务地址**——`baseUrl`/`model`/`provider` 从指定 slot 读取，wire 选择取 slot 的 `providerRequestMetadata.imageWire`（缺省 `openai-images`）。配置优先使用 `COVEL_LLM_TOML`，否则 `$COVEL_HOME/llm.toml`（默认 `~/.covel/llm.toml`）；复用应用 TOML loader，支持 metadata 内联表、子表及 `${VAR}` 插值。
+
+密钥优先级为 `COVEL_IMG_KEY` > provider 环境变量 > `$COVEL_HOME/keys.env` 中 provider key > `OPENAI_API_KEY` 环境变量 / 文件回退。脚本不会自动读取仓库根 `.env` / `.env.llm`。以下默认命令使用用户配置；使用根配置时可显式指定：
+
+```bash
+COVEL_LLM_TOML=llm.toml pnpm exec tsx \
+  --env-file-if-exists=.env --env-file-if-exists=.env.llm \
+  scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
+```
+
+`--dry-run` 只预览任务和提示词，不验证 provider 凭据。检查完成后选定配置中存在的 `--slot`，去掉 `--dry-run` 才会请求付费图片服务；`--force` 会覆盖已有图片。换服务只改 TOML 与凭据，不动脚本。
 
 脚本直接 import 框架 TS 源码，需用 **tsx** 运行（`node` 直接跑不了）。生成脚本 `scripts/generate-portraits.mjs`（**并发**批量）：
 
 ```bash
 # 并发生成某世界全部立绘（默认 slot gpt-image-2，并发 5；已存在的跳过）
-npx tsx scripts/generate-portraits.mjs mistport
-npx tsx scripts/generate-portraits.mjs haruka-academy
-npx tsx scripts/generate-portraits.mjs emberback
+pnpm exec tsx scripts/generate-portraits.mjs mistport
+pnpm exec tsx scripts/generate-portraits.mjs haruka-academy
+pnpm exec tsx scripts/generate-portraits.mjs emberback
 # 指定 slot / 并发数 / 只重跑某角色 / 覆盖
-npx tsx scripts/generate-portraits.mjs mistport --slot gpt-image-2 --concurrency 6 --only iron-meg --force
+pnpm exec tsx scripts/generate-portraits.mjs mistport --slot gpt-image-2 --concurrency 6 --only iron-meg --force
 # 只打印 prompt 队列，不出图、不联网
-npx tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
+pnpm exec tsx scripts/generate-portraits.mjs haruka-academy --limit 1 --dry-run
 # 精确重跑一个角色变体
-npx tsx scripts/generate-portraits.mjs haruka-academy --only shiina-kaho:uniform-concerned --force
+pnpm exec tsx scripts/generate-portraits.mjs haruka-academy --only shiina-kaho:uniform-concerned --force
 ```
 
 流程：读该世界 `portraits.json` → 展开每个角色的默认图和可选 `variants[]` → 逐图合成 `prefix+subject+suffix` → **并发** POST → PNG 存到 `worlds/<world>/media/portraits/<filename>`。已存在文件默认跳过，失败直接重跑（只补缺的）。`--only <character-id>` 会包含该角色全部变体；`--only <character-id>:<variant-id>` 只生成一个变体。

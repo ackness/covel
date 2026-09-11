@@ -12,7 +12,9 @@
 
 ## 启用
 
-复制本目录到 `COVEL_PLUGINS_DIR`（默认 `~/.covel/plugins/`）后重启服务，框架会自动发现并加载。
+将插件放到 `COVEL_USER_PLUGINS_DIR` 指定的目录后重启服务，框架会自动发现并加载。未设置时使用 `$COVEL_HOME/plugins`，再回退到 `~/.covel/plugins/`。`COVEL_PLUGINS_DIR` 用于内置插件目录。
+
+使用默认目录时：
 
 ```bash
 cp -r {{pluginName}}/ ~/.covel/plugins/
@@ -24,7 +26,7 @@ pnpm install --dir ~/.covel/plugins/{{pluginName}}   # 如果有依赖
 模板自带 `tests/runtime-cases.json`，可用仓库测试包验证 manifest 加载、runtime 调用和 plugin-data 写入：
 
 ```bash
-pnpm test:runtime -- {{pluginName}} --plugins-dir ~/.covel/plugins --pretty
+pnpm test:runtime -- {{pluginName}} --pretty
 ```
 
 ## 文档分工

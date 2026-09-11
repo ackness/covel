@@ -15,14 +15,8 @@ export const WEB_ENV_VARS = [
     type: "integer",
     status: "active",
     defaultValue: "3001",
-    description: "Vite dev proxy target port for server API calls.",
-  },
-  {
-    name: "VITE_API_URL",
-    group: "web",
-    type: "url",
-    status: "documented",
-    description: "Typed browser env placeholder from vite-env.d.ts.",
+    description:
+      "Vite dev proxy target port override; defaults to SERVER_PORT, then 3001.",
   },
   {
     name: "VITE_ROUTER_DEVTOOLS",

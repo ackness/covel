@@ -118,6 +118,8 @@ Plugins such as image generation may declare a `modelPresetId` provider slot. If
 
 **Settings → Desktop** surfaces every path, proxy selection, one-click folder actions, and the `data_root` picker.
 
+Opening `llm.toml` follows the effective `COVEL_LLM_TOML` override and only falls back to the config root when no override is set. `keys.env` remains under the config root. The target must exist; otherwise the endpoint returns `open_target_unavailable`. Source development and Docker use different model-config and resource-path defaults; see the [environment loading rules](./env-registry.md#加载路径与环境差异).
+
 ## Desktop REST authentication
 
 Packaged desktop sidecars generate a one-time bearer token at every launch and

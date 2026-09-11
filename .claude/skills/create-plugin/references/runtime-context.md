@@ -8,7 +8,8 @@
 export default async function handler(ctx: FunctionHandlerContext) {
   // ctx 的全字段见下方
   return {
-    /* normalized output, 见末尾「返回值」一节 */
+    outcome: "success",
+    value: {},
   };
 }
 ```
@@ -106,7 +107,7 @@ const slot = ctx.gateway.resolveSlot({
 });
 
 if (!slot) {
-  return { status: "failed", error: 'Slot "mimo-tts" not configured. ...' };
+  return { outcome: "failed", error: 'Slot "mimo-tts" not configured. ...' };
 }
 
 // slot 完整字段（ResolvedSlotForPlugin）：
@@ -250,18 +251,13 @@ const bytes = await synthesizeAudio(...);
 // 2. 入 MediaStore
 const ref = await ctx.media.put(bytes, 'audio/mpeg', { ... });
 
-// 3. 同时 plugin-data 索引 + assetGenerations[] 触发 asset.generate proposal
+// 3. Commit plugin data and publish a media asset on success.
 return {
-  pluginData: [{
-    namespace: 'tracks',
-    key: ctx.turnId,
-    value: { ref, status: 'done', ... },   // 注意是 `ref` 而不是裸 url/base64
-  }],
-  assetGenerations: [{
-    ref,
-    modality: 'audio',          // 'image' | 'audio' | 'video' | 'file'
-    meta: { plugin: 'X', ... },
-  }],
+  outcome: "success",
+  effects: {
+    pluginData: [{ namespace: "tracks", key: ctx.turnId, value: { ref } }],
+    assetGenerations: [{ ref, modality: "audio" }],
+  },
 };
 
 // 4. UI spec 用 <Media as="audio" ref={...} /> 直接渲染（见 ui-components-quickref.md）
@@ -285,7 +281,7 @@ const all = await ctx.pluginData.list("namespace");
 await ctx.pluginData.delete("namespace", "key");
 ```
 
-**绕过 proposal pipeline 直接落库**——立即可被 SSE `plugin-data.changed` 观察到，前端 spec 立刻刷新。常用于 placeholder（pending state），最终成品再通过 `return { pluginData: [...] }` 走 proposal。
+写入进入本次执行的 write buffer，成功后经 proposal 管线提交；失败、跳过或取消时不会留下领域写入。实时进度使用 `ctx.progress.report(...)`，由 kernel job-status 流及 SSE 发布，不能用 `pluginData` 的 pending 记录代替。
 
 > **保留 namespace**：以 `_` 开头的（`_jobs`, `_logs`）是框架保留，插件**不要写**——`_jobs` 由 `execution: background` 框架自动管理，`_logs` 由 `ctx.logger` 自动写。
 
@@ -326,7 +322,7 @@ const slot = ctx.inputs?.narrative;
 // cardinality: one → { cardinality: 'one', value, source: {pluginId, runtimeId, resultId} }
 // cardinality: all → { cardinality: 'all', items: [{ value, source }, ...] }
 const text = slot?.value; // select 之后的值,这里是 string
-if (!text) return { status: "skipped", reason: "no narrative this turn" };
+if (!text) return { outcome: "skipped", skipReason: "no narrative this turn" };
 ```
 
 参考实现：`plugins/mimo-tts/runtimes/auto-narrate/`（capability 绑定在 narrator 与 chat-mode-narrator 两种模式下都命中）。
@@ -337,25 +333,22 @@ if (!text) return { status: "skipped", reason: "no narrative this turn" };
 
 ---
 
-## Handler 返回值（normalizeOutput 契约）
+## Handler 返回值（`HandlerResult`）
 
-返回 `Record<string, unknown>`。框架识别**这些字段**并转成 Proposal：
+function handler 必须通过 `outcome` 返回判别联合。未提供 `outcome` 的旧式普通对象会执行失败。
 
-| 返回字段                                     | 转成 Proposal                                       | 仅当                                                                                                                 |
-| -------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `narrativeOutput` 或 `content`               | `narrative.append`                                  | `manifest.outputKind === 'story'`；其他 outputKind 时这个字段被**静默丢弃**到 chat（仍保留为 runtime output 给下游） |
-| `interactions: [{type, interactionId, ...}]` | `interaction.request`                               | type ∈ `'form' \| 'choices' \| ...`                                                                                  |
-| `statePatches: [{table, field, value}]`      | `state.patch`                                       | 一对一                                                                                                               |
-| `events: [{topic, data}]`                    | `event.emit`                                        | 同 turn 内下游 `trigger:{type:event,topic}` runtime 会被拉起                                                         |
-| `assetGenerations: [...]` 或 `assets: [...]` | `asset.generate`                                    | `[{ref: MediaRef, modality, meta?}]`；`assets` 是 alias，两者都接受                                                  |
-| `pluginData: [{namespace, key, value}]`      | `plugin.data`（1 条）/ `plugin.data.batch`（≥2 条） | 框架自动选                                                                                                           |
-| `notifications: [{title, message}]`          | `narrative.append`（kind=system）                   | 走 chat feed                                                                                                         |
+| `outcome` | 必填字段 | 其他字段 |
+| --- | --- | --- |
+| `success` | 无 | `value`、`effects`、`completion` |
+| `suspended` | `reason` | `resumeSchema` |
+| `skipped` | `skipReason` | 仅观测 `effects` |
+| `failed` | `error` | 仅观测 `effects` |
 
-**其它字段**：原样存为 `RuntimeResult.output`，下游 runtime 通过 `inputs` 绑定（`select: "/<field>"`）读取。
+业务输出放在 `success.value`；JSON 对象字段被物化为 `RuntimeResult.output`，下游 `inputs` 仍按 `select: "/<field>"` 读取。领域写入放在 `success.effects`：`statePatches`、`events`、`interactions`、`ui`、`assetGenerations`、`pluginData`、`notifications`。叙事正文可放在 `value.narrativeOutput`，仅 `outputKind: story` 会生成叙事 proposal。
 
-⚠️ **不要返回顶层 `proposals: [...]`**——这是 tools 层的内部 Symbol channel，handler 输出里的 `proposals` 字段会被 normalizeOutput **完全忽略**。
+setup 函数通过 `completion: "done"` 报告完成。`skipped` / `failed` 仅允许 `jobStatus` / `diagnostics` 观测 effects，领域写入会被剥离。顶层 `status`、`pluginData`、`proposals` 不能替代这些字段。agent runtime 使用自己的结构化输出路径，不套用 function 返回协议。
 
-⚠️ **特殊状态字段**：handler 输出里可以放 `status: 'failed' | 'skipped' | 'done'` 和 `error` / `reason`。这些不被 normalizeOutput 翻译成 proposal，但会上报到 `RuntimeResult.status` 和 trace。
+完整字段以 [`HandlerResult` 参考](../../../../docs/reference/plugins.md#function-handler-返回值handlerresult) 和 `packages/shared/src/types/handler-result.ts` 为准。
 
 ---
 
@@ -364,7 +357,7 @@ if (!text) return { status: "skipped", reason: "no narrative this turn" };
 | Manifest `pluginType`         | `ctx.store` 是                                                                                       | 写入策略                                                                 |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `core-plugin`                 | 完整 `DataStore`（含跨插件读写）                                                                     | bootstrap 仅给特定 builtin 插件用，**社区插件无法声明**                  |
-| `plugin`（默认；社区/第三方） | `FunctionStoreView`（只读 4 方法：`getPluginData / listPluginData / getSession / listTurnMessages`） | 写入只能用 `ctx.pluginData.set(...)` 或 handler 返回 `pluginData: [...]` |
+| `plugin`（默认；社区/第三方） | `FunctionStoreView`（只读 4 方法：`getPluginData / listPluginData / getSession / listTurnMessages`） | 写入只能用 `ctx.pluginData.set(...)` 或 handler 返回 `success.effects.pluginData` |
 
 `pluginType: core-plugin` 由 framework trust signal 决定。社区插件（`~/.covel/plugins/` 下）即使把 `pluginType` 写成 `core-plugin` 也会被 bootstrap 降级到 `plugin`。第三方作者**只能**写 `pluginType: plugin`。
 
@@ -378,7 +371,7 @@ export default async function handler(ctx) {
 
   // 1. 先 null check 关键依赖
   if (!gateway || !media) {
-    return { status: 'failed', error: 'gateway/media unavailable; framework too old' };
+    return { outcome: 'failed', error: 'gateway/media unavailable; framework too old' };
   }
 
   // 2. 配置（manifest userSettings 已合并默认值）
@@ -388,14 +381,14 @@ export default async function handler(ctx) {
   const slot = gateway.resolveSlot({ presetId, fallbackTag: 'speech' });
   if (!slot?.baseUrl || !slot?.apiKey) {
     return {
-      status: 'failed',
+      outcome: 'failed',
       error: `Slot "${presetId}" missing baseUrl/apiKey — fix [covel.${presetId}] in llm.toml`,
     };
   }
 
   // 4. SSRF 检查
   const guard = utils.validateBaseUrl(slot.baseUrl);
-  if (!guard.ok) return { status: 'failed', error: `Invalid baseUrl: ${guard.reason}` };
+  if (!guard.ok) return { outcome: 'failed', error: `Invalid baseUrl: ${guard.reason}` };
 
   // 5. 自管 wire（见 provider-quirks.md）
   const bytes = await myProviderClient(slot, ...);
@@ -403,15 +396,17 @@ export default async function handler(ctx) {
   // 6. 落 MediaStore
   const ref = await media.put(bytes, 'audio/mpeg', { turnId });
 
-  // 7. 立即写 placeholder（前端 SSE 看到）
+  // 7. Buffer the final record for the success commit.
   await pluginData.set('tracks', turnId, { ref, status: 'done' });
   await logger.info('done', { turnId, bytes: bytes.byteLength });
 
-  // 8. 返回让 normalizeOutput 走 commit pipeline + asset.generate
+  // 8. Publish the generated asset through the commit pipeline.
   return {
-    status: 'done',
-    pluginData: [{ namespace: 'tracks', key: turnId, value: { ref, status: 'done' } }],
-    assetGenerations: [{ ref, modality: 'audio', meta: { turnId } }],
+    outcome: 'success',
+    value: { ref },
+    effects: {
+      assetGenerations: [{ ref, modality: 'audio', meta: { turnId } }],
+    },
   };
 }
 ```

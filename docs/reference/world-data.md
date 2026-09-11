@@ -87,7 +87,7 @@ AI 创建器可按创作简报生成 `characters/main-cast.json` 与 `data/loreb
 
 ### 启动加载与收敛（seed & reconcile）
 
-服务器启动时按目录顺序 seed 世界：先 bundled（`COVEL_WORLDS_DIR`，默认仓库 `worlds/`），再 user（桌面版 `COVEL_USER_WORLDS_DIR=<data_root>/worlds`）。seed 是 **idempotent upsert**——每个世界包的 `WorldRecord` 写入 DB，`metadata.source = "file"`。
+服务器启动时按目录顺序 seed 世界：先 bundled（`COVEL_WORLDS_DIR`，源码默认仓库 `worlds/`），再 user（`COVEL_USER_WORLDS_DIR`，否则 `$COVEL_HOME/worlds`，未设置 home 时为 `~/.covel/worlds`；桌面由 shell 注入 `<data_root>/worlds`）。seed 是 **idempotent upsert**——每个世界包的 `WorldRecord` 写入 DB，`metadata.source = "file"`。
 
 seed 本身**只新增/更新、从不删除**，所以一个曾经内建、后被归档（从包里移除）的世界会**残留在所有老用户的 DB 里**并继续出现在世界列表。为此 seed 完所有目录后会跑一次 **收敛（reconcile）**，删除"已不在任何世界源里"的陈旧 seed 记录。三重安全栏，确保只清死 seed、绝不误删用户数据：
 
@@ -96,6 +96,14 @@ seed 本身**只新增/更新、从不删除**，所以一个曾经内建、后�
 3. **空集护栏**：本次一个世界都没 seed 成功时，**整体跳过收敛**——避免 seed 路径瞬时故障把 DB 里的世界一扫而空。
 
 > 想清掉一个**仍有存档**的内建世界（收敛会因安全栏保留它），需显式删除其世界记录与关联 session。
+
+### 文件更新与安装
+
+世界包安装与 AI 生成的 `server-file` 目标写入用户世界目录，不回写内置资源。安装接口成功激活后返回 `restartRequired: false`，立即可从世界列表查询；激活失败只移除本次新建目录，允许重试。
+
+server 使用 Node 26 的递归 `fs.watch` 监听内置与用户世界目录，包含 Linux。已有世界的 YAML / Markdown 文件变化会按世界延迟 500ms 合并后重读；**仅维度发生变化时**更新存储，并向使用该世界的 session 发出 `world.dimensions.changed`。它不是完整世界包或插件的热重载：直接放入一个新世界目录需重启 seed 或走安装入口，其他世界内容更新也应重启加载。
+
+若文件系统不支持监听，启动会记录 warning；维度也可通过 `POST /api/worlds/:id/dimensions/import` 导入。插件安装后仍需重启服务。实现见 `apps/server/src/world-file-watcher.ts`，安装响应见 [API 参考](./api.md#installed-resource-storage-and-vector-configuration)。
 
 ### 插件配置默认值（`pluginSettings`）
 

@@ -115,8 +115,8 @@ npx tsx --env-file=.env --env-file=.env.llm \
 | `E2E_BASE_URL`          | `http://127.0.0.1:5181` | Playwright 页面导航地址；设值表示使用调用方管理的外部环境 |
 | `E2E_MODEL_SLOT`        | `e2e`                   | `scripts/e2e-plugin-verify.ts` 使用的 slot                |
 | `LIVE_LLM_ENABLED`      | `false`                 | 显式启用会访问真实 provider 的 Playwright/Vitest 流程     |
-| `COVEL_STORY_BASE_URL`  | 仅登记、未读取          | 不会覆盖 slot；代理地址应直接写入 `llm.toml`              |
-| `COVEL_PLUGIN_BASE_URL` | 仅登记、未读取          | 不会覆盖 slot；代理地址应直接写入 `llm.toml`              |
+| `COVEL_STORY_BASE_URL`  | 已移除、无读取方        | 不会覆盖 slot；代理地址应直接写入 `llm.toml`              |
+| `COVEL_PLUGIN_BASE_URL` | 已移除、无读取方        | 不会覆盖 slot；代理地址应直接写入 `llm.toml`              |
 | `CI`                    | `false`                 | CI 模式下 Playwright 启用重试并限制 worker                |
 
 ## PostgreSQL 模式

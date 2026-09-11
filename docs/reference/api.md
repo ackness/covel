@@ -2906,6 +2906,8 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 
 `server-store` 和 `return-only` 会先把世界包写入临时目录做校验，然后删除临时目录。这两个模式保存的 `WorldRecord.metadata` 会移除文件路径型 `worldDataPath`、`worldData`、`dimensionSources` 和 `characterBlueprintSources`，保留已归一化的 `metadata.dimensions`，并用 `metadata.characterBlueprints` 与 `metadata.embeddedLorebook` 携带经过校验的角色/资料/规则文本。创建 session 时，文件世界优先走 descriptor；没有世界包目录时走这份便携内容，避免数据库和浏览器本地世界丢失补充内容。
 
+`server-file` 的目录依次取 `COVEL_USER_WORLDS_DIR`、`$COVEL_HOME/worlds`、`~/.covel/worlds`，与世界包安装入口一致；`COVEL_WORLDS_DIR` 仅用于内置世界包。
+
 生产 MemoryStore 的 self 部署中，`server-file`（含省略 `saveTarget` 的默认值）
 与 `server-store` 在生成及写入前要求 operator token；`return-only` 继续公开，
 不会改写服务端共享世界。hosted 层级仍对所有 AI 世界生成请求要求 operator token。
@@ -3308,3 +3310,30 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 | `CORS_ORIGIN`       | CORS 允许的源         | -                 |
 | `ENABLE_DEBUG_PAGE` | 启用调试页面          | -                 |
 | `RATE_LIMIT_RPM`    | 速率限制 (请求/分钟)  | -                 |
+
+### Opening the effective configuration
+
+`POST /api/config/open-folder` accepts `{ "target": "llm.toml" }` and opens
+`COVEL_LLM_TOML` when configured (relative paths resolve from the server working
+directory), otherwise `<covelHome>/llm.toml`. The `keys.env` target always resolves
+under `covelHome`. Missing files return `400` with `open_target_unavailable`;
+opening a file does not reload the running gateway. Use
+`POST /api/llm-config/reload` after editing to apply model configuration.
+
+### Installed resource storage and vector configuration
+
+`POST /api/install/world` loads the installed package into the DataStore before
+returning `201` with `restartRequired: false`. The world is immediately available
+through `GET /api/worlds`, including on hosts without a recursive file watcher.
+A failed activation removes only the new package directory so installation can
+be retried. Plugin installation still returns `restartRequired: true`.
+
+Installation and discovery share `COVEL_USER_WORLDS_DIR` and
+`COVEL_USER_PLUGINS_DIR`, defaulting to `worlds/` and `plugins/` under
+`COVEL_HOME` (otherwise `~/.covel`). Docker Compose persists these directories in
+its `appdata` volume; desktop paths remain controlled by the shell.
+
+`VECTOR_BACKEND=none` disables automatic embedding model locks, semantic-memory
+ingestion and vector recall/archival search. Keyword memory remains available,
+and existing embeddings are preserved. This does not disable explicit provider
+embedding requests outside the memory subsystem.

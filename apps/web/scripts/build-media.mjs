@@ -20,8 +20,15 @@
  * Requires ffmpeg in PATH.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  statSync,
+} from "node:fs";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
@@ -44,12 +51,13 @@ const positional = args.filter(
 );
 const sourceArg = positional[0];
 
-const candidates = [
-  sourceArg && resolve(process.cwd(), sourceArg),
-  resolve(REPO_ROOT, ".assets/demo.dev1.mp4"),
-  resolve(REPO_ROOT, ".assets/demo.dev0.mp4"),
-  resolve(REPO_ROOT, ".assets/images/demo.gif"),
-].filter(Boolean);
+const candidates = sourceArg
+  ? [resolve(process.cwd(), sourceArg)]
+  : [
+      resolve(REPO_ROOT, ".assets/demo.dev1.mp4"),
+      resolve(REPO_ROOT, ".assets/demo.dev0.mp4"),
+      resolve(REPO_ROOT, ".assets/images/demo.gif"),
+    ];
 
 const source = candidates.find((p) => existsSync(p));
 
@@ -61,94 +69,101 @@ if (!source) {
 
 mkdirSync(PUBLIC_MEDIA, { recursive: true });
 
-const outVideo = resolve(PUBLIC_MEDIA, "demo.mp4");
-const outPoster = resolve(PUBLIC_MEDIA, "demo-poster.jpg");
+// Stage every conversion before replacing assets: a fallback source may itself
+// be one of the outputs, and ffmpeg cannot edit files in place.
+const stagingDir = mkdtempSync(resolve(PUBLIC_MEDIA, ".build-media-"));
+const outVideo = resolve(stagingDir, "demo.mp4");
+const outPoster = resolve(stagingDir, "demo-poster.jpg");
+const outGif = resolve(stagingDir, "demo.gif");
 
 console.log(`[build-media] source: ${source}`);
 console.log(
   `[build-media] speed:  ${SPEED}×, width: ${WIDTH}, gif width: ${GIF_WIDTH}`,
 );
 
-// 1) MP4 — speed-up via setpts (no audio: -an)
-const speedFilter = SPEED === 1 ? "" : `,setpts=${(1 / SPEED).toFixed(4)}*PTS`;
-const mp4Vf = `scale=${WIDTH}:-2:flags=lanczos${speedFilter}`;
-
-run("ffmpeg", [
-  "-y",
-  "-i",
-  source,
-  "-an",
-  "-movflags",
-  "+faststart",
-  "-pix_fmt",
-  "yuv420p",
-  "-vf",
-  mp4Vf,
-  "-c:v",
-  "libx264",
-  "-preset",
-  "slow",
-  "-crf",
-  "26",
-  outVideo,
-]);
-report("demo.mp4", outVideo);
-
-// 2) Poster — first frame at output width
-run("ffmpeg", [
-  "-y",
-  "-i",
-  source,
-  "-frames:v",
-  "1",
-  "-vf",
-  `scale=${WIDTH}:-2:flags=lanczos`,
-  "-q:v",
-  "3",
-  outPoster,
-]);
-report("demo-poster.jpg", outPoster);
-
-// 3) README gif — two-pass with palette for sharper colors at small size
-const palette = resolve(PUBLIC_MEDIA, ".palette.png");
-const gifVf = `fps=15,scale=${GIF_WIDTH}:-2:flags=lanczos${speedFilter}`;
-
-run("ffmpeg", [
-  "-y",
-  "-i",
-  source,
-  "-vf",
-  `${gifVf},palettegen=stats_mode=diff`,
-  palette,
-]);
-run("ffmpeg", [
-  "-y",
-  "-i",
-  source,
-  "-i",
-  palette,
-  "-lavfi",
-  `${gifVf} [v]; [v][1:v] paletteuse=dither=bayer:bayer_scale=4`,
-  README_GIF,
-]);
-
 try {
-  // tidy up the intermediate palette
-  execFileSync("rm", ["-f", palette]);
-} catch {
-  /* ignore */
-}
-report("demo.gif", README_GIF);
+  // 1) MP4 — speed-up via setpts (no audio: -an)
+  const speedFilter =
+    SPEED === 1 ? "" : `,setpts=${(1 / SPEED).toFixed(4)}*PTS`;
+  const mp4Vf = `scale=${WIDTH}:-2:flags=lanczos${speedFilter}`;
 
-console.log("[build-media] done");
+  run("ffmpeg", [
+    "-y",
+    "-i",
+    source,
+    "-an",
+    "-movflags",
+    "+faststart",
+    "-pix_fmt",
+    "yuv420p",
+    "-vf",
+    mp4Vf,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "slow",
+    "-crf",
+    "26",
+    outVideo,
+  ]);
+
+  // 2) Poster — first frame at output width
+  run("ffmpeg", [
+    "-y",
+    "-i",
+    source,
+    "-frames:v",
+    "1",
+    "-vf",
+    `scale=${WIDTH}:-2:flags=lanczos`,
+    "-q:v",
+    "3",
+    outPoster,
+  ]);
+
+  // 3) README gif — two-pass with palette for sharper colors at small size
+  const palette = resolve(stagingDir, "palette.png");
+  const gifVf = `fps=15,scale=${GIF_WIDTH}:-2:flags=lanczos${speedFilter}`;
+
+  run("ffmpeg", [
+    "-y",
+    "-i",
+    source,
+    "-vf",
+    `${gifVf},palettegen=stats_mode=diff`,
+    palette,
+  ]);
+  run("ffmpeg", [
+    "-y",
+    "-i",
+    source,
+    "-i",
+    palette,
+    "-lavfi",
+    `${gifVf} [v]; [v][1:v] paletteuse=dither=bayer:bayer_scale=4`,
+    outGif,
+  ]);
+
+  mkdirSync(dirname(README_GIF), { recursive: true });
+  for (const [sourcePath, targetPath] of [
+    [outVideo, resolve(PUBLIC_MEDIA, "demo.mp4")],
+    [outPoster, resolve(PUBLIC_MEDIA, "demo-poster.jpg")],
+    [outGif, README_GIF],
+  ]) {
+    renameSync(sourcePath, targetPath);
+    report(basename(targetPath), targetPath);
+  }
+
+  console.log("[build-media] done");
+} catch (err) {
+  console.error("[build-media] build failed:", err.message);
+  process.exitCode = typeof err.status === "number" ? err.status : 1;
+} finally {
+  rmSync(stagingDir, { recursive: true, force: true });
+}
 
 function run(cmd, args) {
-  try {
-    execFileSync(cmd, args, { stdio: ["ignore", "ignore", "inherit"] });
-  } catch (err) {
-    console.error(`[build-media] ${cmd} failed`);
-    process.exit(typeof err.status === "number" ? err.status : 1);
-  }
+  execFileSync(cmd, args, { stdio: ["ignore", "ignore", "inherit"] });
 }
 
 function report(name, path) {

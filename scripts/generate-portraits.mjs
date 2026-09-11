@@ -10,9 +10,10 @@
  * worlds/<world>/media/portraits/<filename>.
  *
  * Provider config is NOT hardcoded here — it is read from a slot in
- * ~/.covel/llm.toml (baseUrl / model / provider / providerRequestMetadata
- * .imageWire). The API key is read from ~/.covel/keys.env by the
- * `<PROVIDER>_API_KEY` convention. Pick the slot with --slot; switch
+ * COVEL_LLM_TOML or $COVEL_HOME/llm.toml (default ~/.covel/llm.toml).
+ * The application loader resolves baseUrl, model and providerRequestMetadata.
+ * Keys come from the environment or $COVEL_HOME/keys.env using
+ * `<PROVIDER>_API_KEY`. Pick the slot with --slot; switch
  * providers by editing llm.toml, never this script.
  *
  * This script imports framework TS source directly (no build step for

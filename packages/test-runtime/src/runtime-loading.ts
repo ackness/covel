@@ -40,7 +40,11 @@ export function expandPath(input: string): string {
 }
 
 export function defaultPluginsDir(): string {
-  return expandPath(process.env.COVEL_USER_PLUGINS_DIR ?? "~/.covel/plugins");
+  const pluginsDir = process.env.COVEL_USER_PLUGINS_DIR?.trim();
+  const covelHome = process.env.COVEL_HOME?.trim();
+  return expandPath(
+    pluginsDir || path.join(covelHome || "~/.covel", "plugins"),
+  );
 }
 
 export function pluginIdFromRuntime(runtimeId: string): string {

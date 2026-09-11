@@ -13,7 +13,8 @@
 - 可选：Docker（用于 PostgreSQL 模式）
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
+cp .env.example .env              # server and storage settings
 cp llm.toml.example llm.toml   # 配置 LLM slot
 cp .env.llm.example .env.llm   # 填写 API Key
 pnpm dev                       # 同时启动前端与后端
@@ -21,17 +22,32 @@ pnpm dev                       # 同时启动前端与后端
 
 ### PostgreSQL 18 开发环境
 
-Docker Compose 使用 PostgreSQL 18 + pgvector 0.8.6，并把数据写入新的
-`pgdata18` 卷。原 PG17 `pgdata` 卷不会被挂载、迁移或删除；升级后第一次运行
-`pnpm docker:build` 会初始化一个空的 PG18 开发数据库。
-
-需要重建当前 PG18 开发数据库时运行以下命令。`docker:down-all` 会删除当前
-Compose 项目的 `pgdata18` 卷及其中全部数据，但不会删除旧的 `pgdata` 卷：
+先按上面的步骤创建根 `.env`，核对 `POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`、`POSTGRES_PORT` 与 `DATABASE_URL`。仅启动数据库，不需要 Docker 应用服务的 operator token：
 
 ```bash
-pnpm docker:down-all
-pnpm docker:build
+pnpm db:up
+pnpm dev:pg                    # PostgreSQL-backed API server
 ```
+
+首次初始化时先确认数据库已就绪，再运行 `dev:pg`；可用 `docker compose -f docker/docker-compose.yml --env-file .env ps postgres` 查看 `healthy` 状态。需要前端时，在另一个终端运行 `pnpm dev:web`。`dev:pg` 先读取根 `.env` 做连接预检，默认检查 `DATABASE_URL` 的 host/port；未设置 URL 时使用 `127.0.0.1:POSTGRES_PORT`。更换端口时同步更新 URL；完整覆盖规则见[环境变量说明](./guide/env-registry.md#加载路径与环境差异)。
+
+Compose 使用 PostgreSQL 18 + pgvector 0.8.6，数据库存入 `pgdata18` 卷。旧 PG17 `pgdata` 卷不会被挂载、自动迁移或删除。
+
+`pnpm docker:build` 会构建并启动**数据库和应用**，应用采用 `commercial` 配置，还需在 `.env` 设置 `COVEL_DESKTOP_REST_TOKEN`、`COVEL_MEDIA_TOKEN_SECRET` 和 `CORS_ORIGIN`，并准备根 `llm.toml`。`appdata` 卷持久化安装及生成的用户世界与插件；模型配置仍从宿主机只读挂载。详见[Docker 配置](./guide/env-registry.md#docker-compose)。
+
+`pnpm docker:down` 停止容器并保留数据。**`pnpm docker:down-all` 会删除当前 Compose 项目的 `pgdata18` 和 `appdata`，包括数据库及用户世界、插件**；仅在备份后明确需要清空整套环境时使用。`db:generate` / `db:studio` 是 PostgreSQL 开发维护工具，不是数据库自动升级命令，见[数据库维护](./guide/env-registry.md#数据库维护命令)。
+
+### 首页演示媒体
+
+先安装 FFmpeg。以下命令从仓库根运行，会更新首页视频、封面和 README 动图：
+
+```bash
+pnpm --filter @covel/web build:media
+# Replace recording.mp4 with an existing source file.
+node apps/web/scripts/build-media.mjs ./recording.mp4 --speed 3
+```
+
+默认依次选择 `.assets/demo.dev1.mp4`、`.assets/demo.dev0.mp4`、`.assets/images/demo.gif`；显式路径不存在时直接报错。输出为 `apps/web/public/media/demo.mp4`、`demo-poster.jpg` 和 `.assets/images/demo.gif`。全部转换完成后才替换现有素材，转换失败会保留原素材并清理临时文件；输入可以是现有输出文件。通过 `pnpm --filter @covel/web build:media` 传入的相对路径以 `apps/web/` 为基准，直接调用 Node 时以当前目录为基准。
 
 ## 开发规范
 
