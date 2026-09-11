@@ -11,7 +11,7 @@ description: 创建 Covel 插件。通过对话了解需求，直接生成 PLUGI
 
 `references/` 下的 4 份合约文档**承诺**覆盖第三方插件作者的所有需求：
 
-- [`runtime-context.md`](references/runtime-context.md) — `ctx` 全字段（gateway/media/utils/pluginData/logger 等）+ handler 返回值 normalizeOutput 契约
+- [`runtime-context.md`](references/runtime-context.md) — `ctx` 全字段（gateway/media/utils/pluginData/logger 等）+ handler 返回值 `HandlerResult` 契约
 - [`llm-toml-slots.md`](references/llm-toml-slots.md) — slot schema 全字段、所有枚举值、`tag` 自动推断踩雷点、apiKey 解析规则、SSRF 真相
 - [`ui-components-quickref.md`](references/ui-components-quickref.md) — 36 个 UI 组件 + 全部 props + binding 语法（`$item` / `$state` / `repeat`）+ 5 个 `on.click.action`
 - [`provider-quirks.md`](references/provider-quirks.md) — 自管 wire 决策树、鉴权头差异表、body 形态差异表、响应解析差异表
@@ -33,13 +33,13 @@ description: 创建 Covel 插件。通过对话了解需求，直接生成 PLUGI
   - `after`: 弱依赖（只排序，不设门）。
   - `inputs`: 类型化上游数据绑定 → function 的 `ctx.inputs.<name>.value` / agent 的保留 prompt 块。**这是 function runtime 读同回合上游输出的唯一通道**（旧 `ctx.completedResults` 已从 handler ctx 移除）。字段详见 [`plugin-schema.md`](references/plugin-schema.md) 调度声明节。
 - **手动触发按钮**：UI JSON 里设 `on.click.action: "invokeRuntime"` + `params.runtimeId`，框架默认 handler 会自动 POST `/plugin-rpc`，插件**不需要**写 React 代码。所有 `on.click.action` 见 [`ui-components-quickref.md`](references/ui-components-quickref.md)。
-- **同步 / 后台执行**（仅手动触发）：`execution: sync`（默认，阻塞 turn）/ `background`（202 + `jobId`，框架在 `_jobs/<jobId>` 写状态，前端通过 `plugin-data.changed` SSE 感知）。
+- **同步 / 后台执行**：`execution: sync` / `background` 控制 manual/event 激活；stage 调度使用 `turnCompletion`。手动 RPC 的 background 返回 202 + `jobId`，框架在 `_jobs/<jobId>` 写状态，前端通过 `plugin-data.changed` SSE 感知。
   - 插件**禁止**主动写 `_jobs/*` / `_logs/*`，框架会覆盖。
-- **事件链**：runtime 在返回里带 `events: [{topic, data}]`，下游 `trigger: {type: event, topic}` runtime 在同 turn 被拉起。
+- **事件链**：function runtime 在 `success.effects.events` 中发射事件；agent runtime 的结构化输出使用 `events: [{topic, data}]`。下游 `trigger: {type: event, topic}` runtime 在同 turn 被拉起。
 - **事件契约声明（统一事件层）**：消费方在 frontmatter 用 `events: [{topic, schema, description, advertise?}]` 声明契约（`schema` 为插件根相对 JSON Schema 路径，校验事件 payload；`advertise: false` = 仅插件内部信令，agent 不可发射）。发射方 agent 声明 `advertiseEvents: true` + `tools.builtin: [emit-event]`，prompt 会自动收到当前 session 所有已声明事件的目录，LLM 命中时调 `emit-event`（同 topic 每回合去重）。参考实现：`plugins/scene-stage/runtimes/resolver/PLUGIN.md`（`scene.set` 消费方）。**去重的设计后果**：预期一回合内多次回执的契约（逐次判定、逐条通知）必须把 payload 批量化成数组、整回合一次发射——逐次 emit 从第二次起会被静默丢弃，这是契约设计问题而非发射方 prompt 问题。批量范例：`plugins/dice-check`（`check.resolved` 的 `{ checks: [1..3] }`）。
 - **`requireToolUse: true`**（仅 agent）：唯一职责就是调某个工具的 runtime 容易漂移成续写正文——开启后零成功工具调用即收场时框架注入一条纠正消息重试一次（如 `scene-prompts`）。
-- **存储**：runtime 返回里带 `pluginData: [{namespace, key, value}, ...]`，框架自动转成 `plugin.data` / `plugin.data.batch` Proposal，写到 `plugin_data` 表 `(sessionId, pluginId, namespace, key)`。也可以用 `ctx.pluginData.set(...)` 立即落库（前端立刻通过 SSE 看到），适合 placeholder。
-- **多媒体（图像 / 音频 / 视频 / 文件）**：用 `ctx.media`（不是 `pluginData` 直接塞 bytes）。`ctx.media.put(bytes, mime, meta) → MediaRef`；`ctx.media.ingestUrl(url, {allowedMimes})` 从 URL 拉取到 MediaStore。把 ref 写进 `pluginData.value.ref`，并在 runtime output 返回 `assetGenerations: [{ref, modality, meta}]` 让框架 emit `asset.generate` proposal（`assets` 仍是兼容 alias）。前端用 `<Media as="auto" ref={…}>` 渲染（自动按 mime 选 `<img>/<audio>/<video>/<a>` 控件）。完整契约见 [`runtime-context.md`](references/runtime-context.md) §`ctx.media`。
+- **存储**：function runtime 在 `success.effects.pluginData` 中声明写入，框架自动转成 `plugin.data` / `plugin.data.batch` Proposal。`ctx.pluginData.set(...)` 同样写入执行 buffer，成功提交后才持久化并发送 SSE。实时进度用 `ctx.progress.report(...)`，失败或取消时不提交领域占位记录。
+- **多媒体（图像 / 音频 / 视频 / 文件）**：用 `ctx.media`（不是 `pluginData` 直接塞 bytes）。`ctx.media.put(bytes, mime, meta) → MediaRef`；`ctx.media.ingestUrl(url, {allowedMimes})` 从 URL 拉取到 MediaStore。把 ref 写进 `pluginData.value.ref`，并在 function 返回值的 `success.effects.assetGenerations` 中声明 `{ref, modality, meta}`，让框架生成 `asset.generate` proposal。前端用 `<Media as="auto" ref={…}>` 渲染（自动按 mime 选 `<img>/<audio>/<video>/<a>` 控件）。完整契约见 [`runtime-context.md`](references/runtime-context.md) §`ctx.media`。
 - **UI**：`ui: { right | message | left: [./ui/xxx.json] }` 指向 json-render spec。`dataSource.namespace` 让 spec 自动从本插件的 plugin-data 读数据。所有组件 + binding 见 [`ui-components-quickref.md`](references/ui-components-quickref.md)。
 - **图像生成用 `ctx.images.generate`（首选，不要手写 provider fetch）**：框架统一原语——选 wire（openai-images / dashscope-wan / 插件注册的）、调 provider、落 MediaStore、按 promptHash 去重全由框架完成，handler 只给 prompt + metadata，返回 `{refs, warnings, cached}`。参考实现：`plugins/scene-stage/runtimes/background-gen/handler.js`。
 - **Gateway 其余能力**：`ctx.gateway` 有六个方法——`generateText` / `generateObject` / `resolveSlot` / `generateImage` / `synthesizeSpeech` / `transcribeAudio`，**没有** `embed` / `streamText`。但媒体别直接调 gateway：图像用 `ctx.images.generate`、语音与转录用 `ctx.speech.generate` / `.transcribe`（多做去重 + MediaStore 落库）。只有 embedding / 视频这类框架没有 wire 的模态才需要 `resolveSlot` + 自管 wire，详见 [`provider-quirks.md`](references/provider-quirks.md)。
@@ -144,17 +144,14 @@ export default async function handler(ctx) {
   // ctx.exports.<name>.value          // input.inject kind: runtime-export 的跨执行导出
   // ctx.progress.report({jobId, state, progress, message, sequence}) // 长任务实时进度(job-status 流)
 
-  // 返回普通 JSON。框架识别这些字段并走 commit pipeline:
-  //   narrativeOutput | content      → narrative.append
-  //   events: [{topic, data}]        → event.emit
-  //   statePatches: [...]            → state.patch
-  //   pluginData: [{namespace, key, value}] → plugin.data / plugin.data.batch
-  //   interactions: [{type:'form', ...}]    → interaction.request
-  //   notifications: [{title, message}]     → narrative.append(kind='system')
-  // 其它字段作为 runtime output 持久化供下游 runtime 读取。
+  // Return business output in value and domain writes in success.effects.
   return {
-    events: [{ topic: "my.topic", data: {} }],
-    pluginData: [{ namespace: "foo", key: "bar", value: { ok: true } }],
+    outcome: "success",
+    value: { recorded: true },
+    effects: {
+      events: [{ topic: "my.topic", data: {} }],
+      pluginData: [{ namespace: "foo", key: "bar", value: { ok: true } }],
+    },
   };
 }
 ```
@@ -243,7 +240,7 @@ trigger:
   maxTriggerCount: 3 # 可选:重试预算
 ```
 
-setup runtime 输出 `preGameDone: true`（legacy）或 `completion: "done"`（envelope-v1）报告完成；全部 setup 报告完成后 kernel 才把 `phase` 切进主循环。
+setup function runtime 返回 `{ outcome: "success", completion: "done" }`，agent runtime 仍由输出 `preGameDone: true` 报告 setup 完成（`runtime-done` 仅结束工具循环）；全部 setup 报告完成后 kernel 才把 `phase` 切进主循环。
 
 ### 主循环内只跑一次
 
@@ -267,15 +264,18 @@ needs:
 
 ### 多媒体 / 音频 / 视频（mimo-tts、dashscope-image-gen 范式）
 
-任何"生成内容并要播放/展示"的插件流程（**图像直接用 `ctx.images.generate`，下面的自管 wire 流程只针对音频/视频/embed 等框架 wire 不覆盖的模态**）：
+任何"生成内容并要播放/展示"的插件流程（**图像直接用 `ctx.images.generate`，语音使用 `ctx.speech`；下面的自管 wire 流程只针对框架 wire 不覆盖的供应商或视频/embed 等模态**）：
 
 1. **拿字节** — `ctx.gateway.resolveSlot({presetId, fallbackTag})` 取 `baseUrl/apiKey/model`，自己 `fetch` 拿到原始字节。短链 URL 用 `ctx.media.ingestUrl(url, {allowedMimes})`。
 2. **存进 MediaStore** — `ref = await ctx.media.put(bytes, mime, meta)`。
 3. **发 plugin-data + assetGenerations**：
    ```js
    return {
-     pluginData: [{ namespace: 'tracks'|'images'|..., key: turnId, value: { ref, status:'done', ... } }],
-     assetGenerations: [{ ref, modality: 'audio'|'image'|'video'|'file', meta: { ... } }],
+     outcome: "success",
+     effects: {
+       pluginData: [{ namespace: "tracks", key: turnId, value: { ref } }],
+       assetGenerations: [{ ref, modality: "audio" }],
+     },
    };
    ```
 4. **UI** — spec 里用 `Media`（自动按 mime 选控件）或 `Image`。
@@ -292,7 +292,7 @@ needs:
 
 **SDK 级合约（独立于源码）**——任何场景都能查：
 
-- [`runtime-context.md`](references/runtime-context.md) — function handler `ctx` 全字段 + 返回值 normalizeOutput 契约 + cheatsheet
+- [`runtime-context.md`](references/runtime-context.md) — function handler `ctx` 全字段 + 返回值 `HandlerResult` 契约 + cheatsheet
 - [`llm-toml-slots.md`](references/llm-toml-slots.md) — 用户 slot 配置全字段 + 枚举值表 + 4 个常见踩雷点 + apiKey 解析规则 + SSRF 真相
 - [`ui-components-quickref.md`](references/ui-components-quickref.md) — 36 个 json-render 组件 + 全 props + 5 个 `on.click.action` + binding cheatsheet + 完整 spec 样例
 - [`provider-quirks.md`](references/provider-quirks.md) — 自管 wire 决策树 + 鉴权/body/响应差异表 + 排查流程

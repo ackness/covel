@@ -138,8 +138,9 @@ describe("image-generator handler", () => {
     expect(ctx.gateway.resolveSlot).toHaveBeenCalledWith(
       expect.objectContaining({ presetId: "image", fallbackTag: "image" }),
     );
-    expect(result.pluginData[0].namespace).toBe("images");
-    expect(result.assetGenerations[0]).toMatchObject({
+    expect(result.outcome).toBe("success");
+    expect(result.effects.pluginData[0].namespace).toBe("images");
+    expect(result.effects.assetGenerations[0]).toMatchObject({
       ref: mediaRef,
       modality: "image",
     });

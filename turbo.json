@@ -85,6 +85,15 @@
         "$TURBO_ROOT$/scripts/dev-pg-preflight.mjs"
       ]
     },
+    "@covel/test-runtime#test": {
+      "dependsOn": ["^build"],
+      "cache": true,
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/scripts/create-plugin.js",
+        "$TURBO_ROOT$/templates/**"
+      ]
+    },
     "lint": {
       "dependsOn": ["^build"]
     },

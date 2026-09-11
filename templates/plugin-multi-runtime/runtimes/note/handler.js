@@ -13,7 +13,7 @@ export default async function noteHandler(ctx) {
 
   if (!pluginData || typeof pluginData.set !== "function") {
     return {
-      status: "failed",
+      outcome: "failed",
       error: "ctx.pluginData.set is unavailable. Upgrade @covel/runtime.",
     };
   }
@@ -40,7 +40,7 @@ export default async function noteHandler(ctx) {
   await pluginData.set(NOTES_NAMESPACE, key, record);
   await logger?.info?.("note.recorded", { key, title });
 
-  return { status: "ok", note: record };
+  return { outcome: "success", value: { note: record } };
 }
 
 function isRecord(value) {

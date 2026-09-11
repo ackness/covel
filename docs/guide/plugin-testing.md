@@ -23,7 +23,7 @@ See also: [plugin-authoring.md](./plugin-authoring.md) · [e2e-plugin-verify.md]
 3. `pnpm test:runtime -- <plugin-id> --plugins-dir <dir> --pretty`：mock 执行 runtime case；多 runtime 可传 `<plugin-id>/<runtime-id>`，跨插件 `needs` 不满足时加 `--ignore-upstreams` 仅用于隔离调试。
 4. 最后再跑 `scripts/e2e-plugin-verify.ts` 验证 server、SSE、approval 和真实 session store。mock 通过不代表 provider/API 或审批链路已通过。
 
-`test:runtime` 的 `--mode mock` 是默认值；`--mode live` 会读取 `llm.toml` 和 `~/.covel/keys.env`。缺少凭据时应停留在 mock，不要把凭据写进仓库。
+`test:runtime` 的插件目录依次取 `--plugins-dir`、`COVEL_USER_PLUGINS_DIR`、`$COVEL_HOME/plugins`、`~/.covel/plugins`。`--mode mock` 是默认值；`--mode live` 会读取 `llm.toml` 和 `~/.covel/keys.env`。缺少凭据时应停留在 mock，不要把凭据写进仓库。
 
 没有 runtime case 时，CLI 会对同名的单 runtime 做一次默认 mock smoke test。默认 mock
 不会自行构造业务 tool call：声明了 `requireToolUse` 的 runtime 应添加

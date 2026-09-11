@@ -164,7 +164,7 @@ OPEN_ROUTER_API_KEY ↔ provider = "open-router"  (下划线变连字符！)
    ```js
    if (!slot) {
      return {
-       status: 'failed',
+       outcome: 'failed',
        error: `Slot "${presetId}" not configured. Add to ~/.covel/llm.toml:
 [covel.${presetId}]
 provider = "..."
@@ -177,7 +177,7 @@ output   = ["audio"]`,
    }
    if (!slot.apiKey) {
      return {
-       status: 'failed',
+       outcome: 'failed',
        error: `Slot resolved without apiKey — set ${slot.provider.toUpperCase().replace(/-/g, '_')}_API_KEY in ~/.covel/keys.env`,
      };
    }

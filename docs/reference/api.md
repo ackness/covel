@@ -2906,6 +2906,8 @@ AI 生成世界包。LLM 根据概念和可选创作简报决定 id、name、tag
 
 `server-store` 和 `return-only` 会先把世界包写入临时目录做校验，然后删除临时目录。这两个模式保存的 `WorldRecord.metadata` 会移除文件路径型 `worldDataPath`、`worldData`、`dimensionSources` 和 `characterBlueprintSources`，保留已归一化的 `metadata.dimensions`，并用 `metadata.characterBlueprints` 与 `metadata.embeddedLorebook` 携带经过校验的角色/资料/规则文本。创建 session 时，文件世界优先走 descriptor；没有世界包目录时走这份便携内容，避免数据库和浏览器本地世界丢失补充内容。
 
+`server-file` 的目录依次取 `COVEL_USER_WORLDS_DIR`、`$COVEL_HOME/worlds`、`~/.covel/worlds`，与世界包安装入口一致；`COVEL_WORLDS_DIR` 仅用于内置世界包。
+
 生产 MemoryStore 的 self 部署中，`server-file`（含省略 `saveTarget` 的默认值）
 与 `server-store` 在生成及写入前要求 operator token；`return-only` 继续公开，
 不会改写服务端共享世界。hosted 层级仍对所有 AI 世界生成请求要求 operator token。

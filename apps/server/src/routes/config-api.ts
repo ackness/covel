@@ -454,7 +454,11 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       config: covelHome,
       data: resolveDataRoot(),
       logs: env.logsDir,
-      "llm.toml": covelHome ? join(covelHome, "llm.toml") : null,
+      "llm.toml": env.llmToml
+        ? resolve(env.llmToml)
+        : covelHome
+          ? join(covelHome, "llm.toml")
+          : null,
       "keys.env": covelHome ? join(covelHome, "keys.env") : null,
     };
 

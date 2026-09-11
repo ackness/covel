@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
@@ -117,7 +117,7 @@ describe("ai world generation route", () => {
     delete process.env.COVEL_WORLDS_DIR;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllEnvs();
     if (previousStoreBackend === undefined) {
       delete process.env.STORE_BACKEND;
@@ -134,7 +134,39 @@ describe("ai world generation route", () => {
     } else {
       process.env.COVEL_WORLDS_DIR = previousWorldsDir;
     }
+    await rm(worldsDir, { recursive: true, force: true });
   });
+
+  it.each([false, true])(
+    "saves files in the user directory with explicit override=%s",
+    async (explicitOverride) => {
+      const bundledDir = path.join(worldsDir, "bundled");
+      const userDir = path.join(
+        worldsDir,
+        explicitOverride ? "custom" : "worlds",
+      );
+      await mkdir(bundledDir);
+      vi.stubEnv("COVEL_HOME", worldsDir);
+      vi.stubEnv("COVEL_WORLDS_DIR", bundledDir);
+      vi.stubEnv("COVEL_USER_WORLDS_DIR", explicitOverride ? userDir : "");
+
+      const res = await app.request("/api/ai/generate-world", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ concept: "A clockwork city" }),
+      });
+      expect(res.status).toBe(200);
+      const events = await readSseJson(res);
+      const done = events.find((event) => event.type === "done");
+      expect(done?.world.metadata.storage).toMatchObject({
+        backend: "file",
+        path: userDir,
+      });
+      expect(await readdir(userDir)).toEqual(["generated-world"]);
+      expect(await readdir(bundledDir)).toEqual([]);
+      expect(await store.getWorld("generated-world")).not.toBeNull();
+    },
+  );
 
   it("server-store saves generated worlds only in the configured DataStore", async () => {
     const res = await app.request("/api/ai/generate-world", {

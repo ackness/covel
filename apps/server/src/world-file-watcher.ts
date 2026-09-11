@@ -2,7 +2,7 @@
  * World file watcher — monitors worlds/ directory for changes and
  * updates the DataStore + notifies active sessions via EventBus.
  *
- * Uses Node.js native `fs.watch` with recursive mode (macOS/Windows).
+ * Uses Node.js native `fs.watch` with recursive mode.
  * Changes are debounced per world directory to handle multi-file writes.
  */
 
@@ -150,15 +150,6 @@ export function createWorldFileWatcher(
 
   return {
     start() {
-      // fs.watch({ recursive: true }) is only supported on macOS and Windows.
-      // On Linux (Docker/production), skip gracefully with a clear message.
-      if (process.platform === "linux") {
-        console.log(
-          `[world-watcher] Skipped — recursive fs.watch not supported on Linux. Use POST /api/worlds/:id/dimensions/import for updates.`,
-        );
-        return;
-      }
-
       try {
         watcher = watch(
           worldsDir,

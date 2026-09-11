@@ -31,7 +31,8 @@ const HELP = `Usage:
 
 Options:
   --plugin <id>              Plugin id. Defaults to runtimeId prefix.
-  --plugins-dir <path>       Plugin directory. Defaults to ~/.covel/plugins.
+  --plugins-dir <path>       Plugin directory. Defaults to COVEL_USER_PLUGINS_DIR,
+                            then <COVEL_HOME>/plugins, then ~/.covel/plugins.
   --session <id>             Session id. Defaults to debug-<timestamp>.
   --case <name>              Run one plugin-defined case by name.
   --mode <mock|live>         mock uses fake LLM/gateway; live uses real llm.toml/provider APIs.

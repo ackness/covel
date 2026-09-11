@@ -8,7 +8,7 @@
 
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import path, { resolve } from "node:path";
+import path from "node:path";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { createWorld, type GeneratedWorldPackageContent } from "@covel/create";
@@ -27,6 +27,7 @@ import { errorBody, readJsonBody } from "../../api-error.js";
 import { checkHostedOperator } from "./session/session-guard.js";
 import { checkWorldWriteAccess } from "./worlds/world-write-guard.js";
 import { normalizeLocale } from "../../lib/validators.js";
+import { resolveUserResourceDirs } from "../../lib/user-resource-dirs.js";
 
 type Env = {
   Variables: {
@@ -240,10 +241,7 @@ aiRoutes.post(
     }
 
     const env = readRuntimeEnv();
-    const worldsDir =
-      env.userWorldsDir ??
-      env.worldsDir ??
-      resolve(import.meta.dirname, "../../../../../worlds");
+    const worldsDir = resolveUserResourceDirs(env).worlds;
 
     const outputDir =
       saveTarget === "server-file"

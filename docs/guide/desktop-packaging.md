@@ -150,8 +150,9 @@ Release CI verifies the unpacked application resources on each platform before u
 
 Automatic downloading and installation are **not enabled**. `apps/desktop/electron-builder.yml` ships with
 `publish: null` and `apps/desktop/scripts/cleanup-artifacts.mjs` strips `latest-*.yml` /
-`*.blockmap`. The intentional output is two files only: the `.dmg`
-installer and the `.zip` containing the `.app`.
+`*.blockmap`. On macOS, the final distributables are the `.dmg` installer and the `.zip`
+containing the `.app`. Windows produces NSIS and portable `.exe` files; local
+Linux packaging produces the configured `.AppImage` and `.deb` targets.
 
 To enable auto-update later:
 

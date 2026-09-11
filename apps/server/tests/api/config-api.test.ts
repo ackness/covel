@@ -1,9 +1,12 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { createConfigApiRoutes } from "../../src/routes/config-api.js";
+
+vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
 
 const ENV_KEYS = [
   "COVEL_HOME",
@@ -68,6 +71,30 @@ describe("config API env and file contracts", () => {
       llmTomlPath: null,
       pluginsDir: null,
       worldsDir: null,
+    });
+  });
+
+  it("opens the effective LLM config override instead of the home default", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    const override = path.join(tmpHome, "custom-llm.toml");
+    process.env.COVEL_LLM_TOML = path.relative(process.cwd(), override);
+    fs.writeFileSync(override, "# Test config\n", "utf8");
+    fs.writeFileSync(path.join(tmpHome, "llm.toml"), "# Home config\n", "utf8");
+    vi.mocked(spawn).mockReturnValue({
+      on: vi.fn(),
+      unref: vi.fn(),
+    } as unknown as ReturnType<typeof spawn>);
+
+    const res = await buildApp(apiKeys).request("/api/config/open-folder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: "llm.toml" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(spawn).toHaveBeenCalledWith(expect.any(String), [override], {
+      detached: true,
+      stdio: "ignore",
     });
   });
 
