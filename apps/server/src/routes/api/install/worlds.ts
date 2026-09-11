@@ -3,20 +3,18 @@
  *
  * POST /api/install/world — multipart (field `file`), accepts a .zip containing
  *   world.yaml + WORLD.md at the root. Extracts to the user worlds dir and
- *   returns `{ ok, id, restartRequired: false }` (worlds reload on demand).
+ *   returns `{ ok, id, restartRequired: false }` after activating the world.
  */
 
-import { homedir } from "node:os";
 import path from "node:path";
+import { rm } from "node:fs/promises";
+import { loadSingleWorld } from "../../../world-seed-loader.js";
 import { Hono } from "hono";
+import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import { parse as parseYaml } from "yaml";
 import { errorBody } from "../../../api-error.js";
 import { checkWorldWriteAccess } from "../worlds/world-write-guard.js";
-import {
-  readRuntimeEnv,
-  validateWorldManifest,
-  formatValidationErrors,
-} from "@covel/shared";
+import { validateWorldManifest, formatValidationErrors } from "@covel/shared";
 import {
   SAFE_WORLD_ID_RE,
   SAFE_WORLD_ID_DESC,
@@ -98,15 +96,28 @@ worldInstallRoutes.post("/world", async (c) => {
     );
     const summary = validateWorldBundle(entries);
 
-    const env = readRuntimeEnv();
-    const root =
-      env.userWorldsDir ??
-      (env.covelHome
-        ? path.join(env.covelHome, "worlds")
-        : path.join(homedir(), ".covel", "worlds"));
+    const root = resolveUserResourceDirs().worlds;
 
     const finalDir = path.join(root, summary.worldId);
     await materializeEntries(finalDir, entries);
+    try {
+      const record = await loadSingleWorld(finalDir);
+      if (!record) throw httpError(400, "Installed world could not be loaded");
+      await c
+        .get("store")
+        .upsertWorld(record)
+        .catch(() => {
+          throw httpError(
+            500,
+            "World activation failed; please retry the upload",
+          );
+        });
+    } catch (err) {
+      // Only remove the directory created by this request so a failed
+      // activation can be retried without colliding with a partial install.
+      await rm(finalDir, { recursive: true, force: true });
+      throw err;
+    }
 
     return c.json(
       {

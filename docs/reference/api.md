@@ -3308,3 +3308,21 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 | `CORS_ORIGIN`       | CORS 允许的源         | -                 |
 | `ENABLE_DEBUG_PAGE` | 启用调试页面          | -                 |
 | `RATE_LIMIT_RPM`    | 速率限制 (请求/分钟)  | -                 |
+
+### Installed resource storage and vector configuration
+
+`POST /api/install/world` loads the installed package into the DataStore before
+returning `201` with `restartRequired: false`. The world is immediately available
+through `GET /api/worlds`, including on hosts without a recursive file watcher.
+A failed activation removes only the new package directory so installation can
+be retried. Plugin installation still returns `restartRequired: true`.
+
+Installation and discovery share `COVEL_USER_WORLDS_DIR` and
+`COVEL_USER_PLUGINS_DIR`, defaulting to `worlds/` and `plugins/` under
+`COVEL_HOME` (otherwise `~/.covel`). Docker Compose persists these directories in
+its `appdata` volume; desktop paths remain controlled by the shell.
+
+`VECTOR_BACKEND=none` disables automatic embedding model locks, semantic-memory
+ingestion and vector recall/archival search. Keyword memory remains available,
+and existing embeddings are preserved. This does not disable explicit provider
+embedding requests outside the memory subsystem.

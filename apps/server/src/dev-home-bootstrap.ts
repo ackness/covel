@@ -11,8 +11,8 @@
  *
  * The packaged desktop already sets `COVEL_DESKTOP_REST=1` plus explicit
  * `COVEL_USER_*` paths via `apps/desktop/src/main.ts`, so this module is
- * a no-op there. It is also a no-op when the user's home directory has
- * no `~/.covel/` (fresh checkouts on CI, ephemeral sandboxes, etc.).
+ * a no-op there. A workspace llm.toml is selected before home bootstrap,
+ * including on fresh checkouts without a user home directory.
  *
  * Existing process env values always win — `.env` / `.env.llm` overrides
  * are never overwritten. Each path is set only if both the env var is
@@ -103,17 +103,22 @@ export function bootstrap(): BootstrapSummary {
     };
   }
 
+  const applied: string[] = [];
+  // Source development uses the configuration copied by the root README.
+  // Explicit overrides win; user-home configuration is the fallback.
+  const workspaceLlm = path.resolve(import.meta.dirname, "../../../llm.toml");
+  setIfMissing("COVEL_LLM_TOML", workspaceLlm, applied);
+
   const home = process.env.COVEL_HOME ?? path.join(os.homedir(), ".covel");
   if (!fs.existsSync(home)) {
     return {
-      applied: false,
-      setVars: [],
+      applied: applied.length > 0,
+      setVars: applied,
       loadedKeys: 0,
       skipReason: "no-covel-home",
     };
   }
 
-  const applied: string[] = [];
   setIfMissing("COVEL_USER_PLUGINS_DIR", path.join(home, "plugins"), applied);
   setIfMissing("COVEL_USER_WORLDS_DIR", path.join(home, "worlds"), applied);
   setIfMissing("COVEL_LLM_TOML", path.join(home, "llm.toml"), applied);

@@ -45,6 +45,12 @@ describe("dev-home-bootstrap", () => {
       savedEnv[k] = process.env[k];
       delete process.env[k];
     }
+    const exists = fs.existsSync;
+    vi.spyOn(fs, "existsSync").mockImplementation((candidate) =>
+      candidate === path.resolve(import.meta.dirname, "../../../../llm.toml")
+        ? false
+        : exists(candidate),
+    );
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "covel-home-"));
     process.env.COVEL_HOME = tmpHome;
     process.env.NODE_ENV = "development";
@@ -54,11 +60,32 @@ describe("dev-home-bootstrap", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const k of ENV_KEYS) {
       if (savedEnv[k] === undefined) delete process.env[k];
       else process.env[k] = savedEnv[k];
     }
     fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  it("prefers the workspace llm.toml even without a user home", async () => {
+    const workspaceLlm = path.resolve(
+      import.meta.dirname,
+      "../../../../llm.toml",
+    );
+    vi.mocked(fs.existsSync).mockImplementation(
+      (candidate) => candidate === workspaceLlm || candidate === tmpHome,
+    );
+    process.env.COVEL_HOME = path.join(tmpHome, "missing");
+    const result = await freshBootstrap();
+    expect(result.setVars).toContain("COVEL_LLM_TOML");
+    expect(process.env.COVEL_LLM_TOML).toBe(workspaceLlm);
+  });
+
+  it("preserves an explicit llm.toml override", async () => {
+    process.env.COVEL_LLM_TOML = path.join(tmpHome, "custom.toml");
+    await freshBootstrap();
+    expect(process.env.COVEL_LLM_TOML).toBe(path.join(tmpHome, "custom.toml"));
   });
 
   it("sets SQLITE_PATH even when the db file does not exist yet", async () => {

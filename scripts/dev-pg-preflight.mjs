@@ -15,8 +15,31 @@ if (process.env.COVEL_PG_PREFLIGHT_SKIP === "1") {
   process.exit(0);
 }
 
-const host = process.env.COVEL_PG_PREFLIGHT_HOST ?? "127.0.0.1";
-const port = Number(process.env.COVEL_PG_PREFLIGHT_PORT ?? 5432);
+// Follow the same connection URL as the server; explicit probe overrides win.
+let database;
+try {
+  database = process.env.DATABASE_URL
+    ? new URL(process.env.DATABASE_URL)
+    : undefined;
+  if (database && !["postgres:", "postgresql:"].includes(database.protocol)) {
+    throw new Error("Unsupported database protocol");
+  }
+} catch {
+  console.error("[dev:pg] DATABASE_URL must be a valid PostgreSQL URL.");
+  process.exit(1);
+}
+const host =
+  process.env.COVEL_PG_PREFLIGHT_HOST ||
+  database?.hostname.replace(/^\[|\]$/g, "") ||
+  "127.0.0.1";
+const port = Number(
+  process.env.COVEL_PG_PREFLIGHT_PORT ||
+    (database ? database.port || 5432 : process.env.POSTGRES_PORT || 5432),
+);
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  console.error("[dev:pg] PostgreSQL port must be an integer from 1 to 65535.");
+  process.exit(1);
+}
 const timeoutMs = 1500;
 
 /**

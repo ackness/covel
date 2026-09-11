@@ -19,6 +19,7 @@ import {
   createStoreFromEnv,
   resolveBackendFromEnv,
 } from "@covel/store";
+import { resolveUserResourceDirs } from "./lib/user-resource-dirs.js";
 import { createEmbeddingLockHelper } from "./embedding-lock.js";
 import {
   createGatewayAdapter,
@@ -293,7 +294,8 @@ const resolveNarrativeBudget = () => {
 // plugins can augment but not shadow core functionality.
 const bundledPluginsDir =
   env.pluginsDir ?? resolve(import.meta.dirname, "../../../plugins");
-const pluginsDirs = mergeDirs(bundledPluginsDir, env.userPluginsDir);
+const userDirs = resolveUserResourceDirs(env);
+const pluginsDirs = mergeDirs(bundledPluginsDir, userDirs.plugins);
 const ensureEmbeddingLock = createEmbeddingLockHelper({ store, ai, apiKeys });
 // Embedding seam for the semantic memory tier. The memory package never
 // imports a provider — it gets this injected (mirrors the LLM adapter). Routes
@@ -315,12 +317,11 @@ const perRequestLlm = createPerRequestLlmMiddleware({
   defaultPluginGateway: pluginGateway,
 });
 // ── Seed worlds ──────────────────────────────────────────────────
-// Bundled worlds are always seeded. When COVEL_USER_WORLDS_DIR is set
-// (desktop app points it at userData/worlds), user-created worlds are
-// merged on top and hot-reloaded alongside.
+// User worlds use the same resolved directory as the install API, even
+// on a fresh installation where that directory does not exist yet.
 const bundledWorldsDir =
   env.worldsDir ?? resolve(import.meta.dirname, "../../../worlds");
-const worldsDirs = mergeDirs(bundledWorldsDir, env.userWorldsDir);
+const worldsDirs = mergeDirs(bundledWorldsDir, userDirs.worlds);
 
 const api = await bootstrapApi({
   pluginsDir: bundledPluginsDir,

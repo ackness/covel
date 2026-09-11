@@ -7,16 +7,12 @@
  *   returns `{ ok, id, restartRequired: true }`.
  */
 
-import { homedir } from "node:os";
 import path from "node:path";
 import { Hono } from "hono";
+import { resolveUserResourceDirs } from "../../../lib/user-resource-dirs.js";
 import matter from "gray-matter";
 import { errorBody } from "../../../api-error.js";
-import {
-  readRuntimeEnv,
-  validatePluginManifest,
-  formatValidationErrors,
-} from "@covel/shared";
+import { validatePluginManifest, formatValidationErrors } from "@covel/shared";
 import {
   collectUpload,
   errorResponse,
@@ -183,12 +179,7 @@ pluginInstallRoutes.post("/plugin", async (c) => {
     const reservedPluginIds = c.get("reservedPluginIds") ?? new Set<string>();
     const summary = validatePluginBundle(entries, reservedPluginIds);
 
-    const env = readRuntimeEnv();
-    const root =
-      env.userPluginsDir ??
-      (env.covelHome
-        ? path.join(env.covelHome, "plugins")
-        : path.join(homedir(), ".covel", "plugins"));
+    const root = resolveUserResourceDirs().plugins;
 
     const finalDir = path.join(root, summary.pluginId);
     await materializeEntries(finalDir, entries);

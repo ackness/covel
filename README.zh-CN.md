@@ -160,7 +160,7 @@ pnpm dev                            # web :5173 + server :3001（SQLite）
 
 仓库作者也可以使用内置辅助工具：
 
-- **`/create-world`** —— 生成并校验 `world.yaml`、`WORLD.md` 与 WorldData 文件。桌面版世界包放入 `<data_root>/worlds/`（默认 `~/.covel/data/worlds/`）；源码运行使用 `COVEL_USER_WORLDS_DIR`，开发模式在 `~/.covel/` 已存在时默认使用 `~/.covel/worlds/`。
+- **`/create-world`** —— 生成并校验 `world.yaml`、`WORLD.md` 与 WorldData 文件。桌面版世界包放入 `<data_root>/worlds/`（默认 `~/.covel/data/worlds/`）；源码运行使用 `COVEL_USER_WORLDS_DIR`，默认使用 `$COVEL_HOME/worlds/`（未设置时为 `~/.covel/worlds/`）。
 - **`/create-plugin`** —— 按能力需求搭建 runtime manifest、handler、schema、工具、UI 与测试的正确组合。
 
 插件与世界包的官方分享社区在路线图上 —— 目前可通过 Gist 或 fork 分享。
