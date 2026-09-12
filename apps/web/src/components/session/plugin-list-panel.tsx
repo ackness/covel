@@ -20,6 +20,7 @@ export function PluginListPanel({
   setupRuntimes,
 }: PluginListPanelProps) {
   const { t } = useTranslation();
+  const [advanced, setAdvanced] = useState(false);
   const [effectiveOverrides, setEffectiveOverrides] = useState<
     Record<string, string>
   >(() => runtimeModelOverrides ?? {});
@@ -122,6 +123,14 @@ export function PluginListPanel({
 
   return (
     <div className="space-y-1.5">
+      <label className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={advanced}
+          onChange={(event) => setAdvanced(event.target.checked)}
+        />
+        {t("session.advancedPluginSettings")}
+      </label>
       {loadErrors.length > 0 && (
         <div className="space-y-1.5">
           {loadErrors.map((err) => (
@@ -133,6 +142,7 @@ export function PluginListPanel({
         ? sortedPlugins.map((sp) => (
             <SessionPluginItem
               key={sp.id}
+              advanced={advanced}
               plugin={sp}
               executing={executing}
               onToggle={onTogglePlugin}
@@ -146,6 +156,7 @@ export function PluginListPanel({
         : plugins.map((pkg) => (
             <PluginItem
               key={pkg.id}
+              advanced={advanced}
               pkg={pkg}
               sessionPlugin={sessionPluginMap.get(pkg.id)}
               executing={executing}

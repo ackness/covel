@@ -133,6 +133,8 @@ export function getTraceError(event: api.TraceEvent):
     type.endsWith(".failed") ||
     type === "error.occurred" ||
     type === "proposal.failed" ||
+    (type === "runtime.completed" && data.status === "failed") ||
+    (type === "turn.completed" && data.committed === false) ||
     (type === "llm.responded" && data.finishReason === "error");
   if (!isFailure) return undefined;
   const message = [data.error, data.message, data.reason, data.detail].find(
@@ -150,6 +152,10 @@ export function isTerminalTraceFailure(event: api.TraceEvent): boolean {
   const type = getDisplayType(event);
   return (
     type === "runtime.failed" ||
+    (type === "runtime.completed" &&
+      getTraceData(event.payload).status === "failed") ||
+    (type === "turn.completed" &&
+      getTraceData(event.payload).committed === false) ||
     type === "flow.failed" ||
     type === "turn.failed" ||
     type === "proposal.failed" ||
@@ -204,7 +210,7 @@ export function deriveRuntimesFromTurn(
 
     const displayType = getDisplayType(event);
     if (displayType === "runtime.completed") {
-      info.status = "completed";
+      info.status = payload.status === "failed" ? "failed" : "completed";
       info.completedAt = event.timestamp;
     } else if (displayType === "runtime.failed") {
       info.status = "failed";

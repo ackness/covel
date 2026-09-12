@@ -6,11 +6,16 @@ import type { SessionRecord } from "@/services/api.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { slashCommandUsage } from "./slash-command.js";
 import type { CommandFeedback } from "./use-game-view-composer.js";
+import {
+  executionTone,
+  type ExecutionPresentation,
+} from "../execution-presentation.js";
 
 interface MessageComposerProps {
   t: TFunction;
   session: SessionRecord;
   executing: boolean;
+  executionState?: ExecutionPresentation;
   inputValue: string;
   composerBlocked: boolean;
   composerDisabled: boolean;
@@ -33,6 +38,7 @@ export function MessageComposer({
   t,
   session,
   executing,
+  executionState,
   inputValue,
   composerBlocked,
   composerDisabled,
@@ -225,6 +231,15 @@ export function MessageComposer({
               }`}
             >
               {commandFeedback.message}
+            </p>
+          ) : executionState &&
+            !["idle", "completed"].includes(executionState) ? (
+            <p
+              role="status"
+              aria-live="polite"
+              className={`px-1 mt-1.5 text-xs ${executionTone(executionState)}`}
+            >
+              {t(`session.executionState.${executionState}`)}
             </p>
           ) : composerBlocked ? (
             <p className="ui-meta text-[10px] text-muted-foreground/80 px-1 mt-1.5">

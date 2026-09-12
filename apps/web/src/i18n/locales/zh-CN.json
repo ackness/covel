@@ -222,8 +222,8 @@
     "backgroundRunning": "后台运行中",
     "backgroundCount": "{{count}} 个后台任务",
     "executionFlow": "执行流程",
-    "executionFlowHint": "回合内的执行顺序 — 越靠前的阶段越先跑。",
-    "executionFlowTitle": "插件每回合按阶段依次执行：开场准备、叙事前、叙事、叙事后。",
+    "executionFlowHint": "按阶段展示任务；同阶段按实际依赖调度，无依赖的任务可并行。",
+    "executionFlowTitle": "这是阶段分组预览，实际执行情况以回合追踪为准。",
     "stage": {
       "setup": "开场准备",
       "pre-turn": "叙事前",
@@ -383,7 +383,22 @@
     "pluginPlanLoading": "正在加载插件执行计划…",
     "reasonRetryNotCompleted": "此任务尚未完成，请重试。",
     "retryFailedBatch": "先重试 {{count}} 个失败任务",
-    "retryBatchLimit": "每批最多 {{count}} 个任务，完成后可继续重试其余任务。"
+    "retryBatchLimit": "每批最多 {{count}} 个任务，完成后可继续重试其余任务。",
+    "executionState": {
+      "idle": "等待输入",
+      "generating": "正在生成剧情",
+      "updating": "剧情已生成，正在更新游戏状态",
+      "stopped": "已停止，本轮未提交",
+      "partial": "剧情已保存，部分更新未完成",
+      "failed": "本轮失败，未提交",
+      "interrupted": "执行中断，等待恢复",
+      "completed": "本轮已完成"
+    },
+    "stoppedDetail": "本轮生成内容未写入存档，可使用原输入重新尝试。",
+    "submittedInteraction": "已完成的交互 · 展开查看",
+    "previousSuggestions": "历史建议 · 展开查看",
+    "advancedPluginSettings": "自定义插件与高级设置",
+    "currentSuggestions": "本轮建议与补充 · 展开查看"
   },
   "blocks": {
     "actionPlaceholder": "或输入自定义行动...",
@@ -1473,7 +1488,14 @@
     "empty": "关系图当前为空——等待 NPC 出现。",
     "clearSelection": "清除选中",
     "loading": "加载关系图……",
-    "stats": "{{nodes}} 个节点 · {{links}} 条关系"
+    "stats": "{{nodes}} 个节点 · {{links}} 条关系",
+    "fit": "适配全部节点",
+    "zoomIn": "放大关系图",
+    "zoomOut": "缩小关系图",
+    "characters": "选择关系节点",
+    "relationships": "当前关系（{{count}}）",
+    "relationshipList": "关系列表",
+    "noRelationships": "该节点暂无有效关系。"
   },
   "form": {
     "defaultTitle": "表单",
@@ -1734,7 +1756,28 @@
     "snapshotRefreshFailed": "会话数据刷新失败，当前数据可能已过期，请点击刷新重试。",
     "snapshotUpdatedAt": "数据更新于 {{time}}",
     "interrupted": "已中断",
-    "interruptedHint": "服务端确认此执行已中断。原始追踪已保留，可能没有终止事件。"
+    "interruptedHint": "服务端确认此执行已中断。原始追踪已保留，可能没有终止事件。",
+    "requestView": "请求视图",
+    "providerRequest": "实际 Provider 请求",
+    "logicalRequest": "框架逻辑请求",
+    "providerRequestHint": "显示适配器序列化后实际发送的 JSON 请求体，不包含 HTTP 头。HTTP 状态仅表示传输结果，模型调用结果见尝试记录。",
+    "providerRequestUnavailable": "此记录未采集实际请求体，可切换查看框架逻辑请求。",
+    "transportAttempt": "传输重试序号",
+    "httpHeadersDuration": "HTTP 响应头等待",
+    "requestOmitted": "请求体已安全裁剪，省略 {{count}} 个字段。",
+    "copyProviderBody": "复制实际请求体",
+    "attemptHistory": "本任务的模型调用与重试",
+    "callAttempt": "调用 / 尝试",
+    "queueWait": "并发队列等待",
+    "modelDuration": "模型调用耗时",
+    "attemptOutcome": "尝试结果",
+    "attemptStatus": {
+      "pending": "尚无响应记录",
+      "succeeded": "成功",
+      "failed": "失败",
+      "recovered": "失败后重试成功"
+    },
+    "attemptTimingHint": "“—”表示未采集；模型耗时包含响应流读取，不含并发队列等待。工具耗时见工具详情。"
   },
   "reload": {
     "reloading": "正在重启服务…",

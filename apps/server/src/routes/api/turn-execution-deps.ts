@@ -20,10 +20,12 @@ export function buildManualTurnExecutorDeps(
   const mediaStore = c.get("mediaStore");
   const contextBudget = c.get("turnContextBudget");
   const eventDirectory = c.get("eventDirectory");
+  const hookPipeline = c.get("hookPipeline");
 
   return {
     loadRuntime: c.get("loadRuntimeFn"),
     llm: c.get("llmAdapter"),
+    ...(hookPipeline ? { hookPipeline } : {}),
     ...(gateway ? { gateway } : {}),
     ...(utils ? { utils } : {}),
     ...(getPluginSource ? { getPluginSource } : {}),

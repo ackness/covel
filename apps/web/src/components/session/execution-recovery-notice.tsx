@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AlertCircle, Loader2, RefreshCw, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { ExecutionRecovery } from "@/stores/session-store/types.js";
+import { PLAYER_ABORT_REASON } from "@covel/shared";
 
 export function ExecutionRecoveryNotice({
   recovery,
@@ -26,6 +27,7 @@ export function ExecutionRecoveryNotice({
   const running = status?.state === "running";
   const interrupted = status?.state === "interrupted";
   const failed = status?.state === "failed";
+  const stopped = failed && status?.abortReason === PLAYER_ABORT_REASON;
   if (!unknown && !running && !interrupted && !failed && !recovery.hydrating)
     return null;
   const waiting = recovery.hydrating || running || unknown;
@@ -46,16 +48,20 @@ export function ExecutionRecoveryNotice({
       ? "session.recoveryRunning"
       : interrupted
         ? "session.recoveryInterrupted"
-        : failed
-          ? "session.recoveryFailed"
-          : "session.recoveryHydrating";
+        : stopped
+          ? "session.executionState.stopped"
+          : failed
+            ? "session.recoveryFailed"
+            : "session.recoveryHydrating";
   const detail = unknown
     ? "session.recoveryUnknownDetail"
     : running
       ? "session.recoveryRunningDetail"
-      : interrupted || failed
-        ? "session.recoveryInterruptedDetail"
-        : "session.recoveryHydratingDetail";
+      : stopped
+        ? "session.stoppedDetail"
+        : interrupted || failed
+          ? "session.recoveryInterruptedDetail"
+          : "session.recoveryHydratingDetail";
   return (
     <div
       role={waiting ? "status" : "alert"}

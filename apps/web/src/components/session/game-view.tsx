@@ -41,6 +41,7 @@ import { useGameViewComposer } from "./game-view/use-game-view-composer.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { emitNavEvent } from "@/lib/nav-events.js";
+import { latestExecutionPresentation } from "./execution-presentation.js";
 
 // ── Extracted Panel Components (see left-panel.tsx, right-panel.tsx) ──
 
@@ -91,6 +92,7 @@ export function GameView({ session }: GameViewProps) {
     submittedBlockValues,
   } = state;
   const { t } = useTranslation();
+  const executionState = latestExecutionPresentation(state);
   const navigate = useNavigate();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(
     presets,
@@ -449,6 +451,7 @@ export function GameView({ session }: GameViewProps) {
           {!(immersive && viewMode === "stage") && (
             <div className="animate-in fade-in-0 duration-200">
               <GameViewHeader
+                executionState={executionState}
                 t={t}
                 sessionId={session.id}
                 sessionPhase={session.phase}
@@ -531,6 +534,7 @@ export function GameView({ session }: GameViewProps) {
 
               {/* Input — always fixed at bottom */}
               <MessageComposer
+                executionState={executionState}
                 t={t}
                 session={session}
                 executing={executing}

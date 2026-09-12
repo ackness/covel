@@ -54,6 +54,11 @@ describe("event directory — real scene-stage manifest", () => {
     expect(topics).toContain("scene.set");
     expect(topics).toContain("stage.direction");
     expect(topics).not.toContain("scene-stage.generate.requested");
+    const catalog = await directory.catalogText(SESSION_ID, "en-US");
+    expect(catalog).toContain('"enum":["actor.enter","actor.update"]');
+    expect(catalog).toContain('"required":["type","character"]');
+    expect(catalog).toContain('"$defs"');
+    expect(catalog).not.toContain("scene-stage.generate.requested");
   });
 
   it("validates a conforming scene.set payload against the on-disk schema", async () => {

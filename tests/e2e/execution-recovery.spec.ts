@@ -12,6 +12,37 @@ test.use({ viewport: { width: 1280, height: 900 } });
 const originalRequestId = "e2e-original-request";
 const playerAction = "Ask the archivist to examine the sealed notebook.";
 
+test("a stopped turn stays uncommitted after reload and retries only on request", async ({
+  page,
+}) => {
+  const fixture = await createRecoveryFixture(page, "interrupted", false, {
+    execution: () => ({
+      state: "failed",
+      turnId: sourceTurnId,
+      abortReason: "aborted-by-player",
+      retry: { type: "send_message", payload: { content: playerAction } },
+    }),
+    steps: () => [],
+  });
+  try {
+    await page.goto(`/session?sid=${fixture.id}`);
+    await page.reload();
+    const notice = page.getByTestId("execution-recovery-notice");
+    await expect(notice).toContainText("已停止，本轮未提交");
+    await expect(notice).not.toContainText("执行失败");
+    await expect(composer(page)).toHaveAttribute("data-executing", "false");
+    expect(fixture.actions).toEqual([]);
+    await notice.getByRole("button", { name: "重试未完成回合" }).click();
+    await expect.poll(() => fixture.actions.length).toBe(1);
+    expect(fixture.actions[0]).toMatchObject({
+      type: "send_message",
+      payload: { content: playerAction, recoverFromTurnId: sourceTurnId },
+    });
+  } finally {
+    await fixture.dispose();
+  }
+});
+
 test("refresh waits for the existing running turn and restores its completed story", async ({
   page,
 }) => {
@@ -117,9 +148,11 @@ test("older orphaned execution stays before the latest story while an optional t
     );
     await fold.click();
 
+    await expect(current.getByRole("alert")).toBeHidden();
+    await current.getByRole("button").first().click();
     await expect(current.getByRole("alert")).toContainText("未产出有效结果");
     const retry = current.getByRole("button", {
-      name: /重试此任务/,
+      name: /重试此任务:/,
     });
     await expect(retry).toBeVisible();
     await expect(retry).toHaveText("重试此任务");
@@ -168,7 +201,7 @@ test("a new running turn keeps historical interruption folded and shows its own 
     await expect(current).toHaveAttribute("data-turn-current", "true");
     await expect(current.getByRole("button").first()).toHaveAttribute(
       "aria-expanded",
-      "true",
+      "false",
     );
     await expect(current.locator(".animate-spin").first()).toBeVisible();
     await expect(composer(page)).toHaveAttribute("data-executing", "true");

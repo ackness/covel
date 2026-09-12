@@ -8,11 +8,13 @@ import {
 import { createMemoryStore } from "../../../packages/store/src/index.js";
 import {
   createToolExecutor,
+  createHookPipeline,
   executeTurn,
   finalizeExecution,
 } from "../../../packages/runtime/src/index.js";
 import { MockLLM } from "../../../packages/plugin-test-utils/src/mock-llm.js";
 import { loadRuntimeBundle } from "../../../packages/test-runtime/src/runtime-loading.js";
+import trackerReadBudget from "../hooks/tracker-read-budget.js";
 
 const sessionId = "tracker-test-session";
 const runtimeId = "char-creator/character-tracker";
@@ -94,6 +96,13 @@ async function run(secondResponse) {
     ].map((tool) => [tool.name, tool]),
   );
   const toolResults = [];
+  const hookPipeline = createHookPipeline();
+  hookPipeline.register({
+    id: "tracker-read-budget",
+    pluginId: "char-creator",
+    event: "PreLLMCall",
+    handler: trackerReadBudget,
+  });
   const executor = createToolExecutor({
     store,
     findTool: (name) => tools.get(name),
@@ -125,6 +134,7 @@ async function run(secondResponse) {
     {
       store,
       llm,
+      hookPipeline,
       loadRuntime: async (manifest) => loadedCache.get(manifest.name),
       toolExecutor: {
         ...executor,
@@ -153,6 +163,9 @@ async function run(secondResponse) {
   );
   expect(llm.calls).toHaveLength(2);
   expect(llm.calls[0].toolNames).toContain("get-character");
+  expect(llm.calls[1].toolNames).not.toContain("get-character");
+  expect(llm.calls[1].toolNames).toContain("sync-characters");
+  expect(llm.calls[1].toolNames).toContain("runtime-done");
   expect(toolResults[0]).toMatchObject({
     name: "get-character",
     success: true,

@@ -41,6 +41,8 @@ export interface LlmCallingPayloadInput {
   /** Actual provider request start, independent of trace persistence time. */
   readonly startedAt: string;
   readonly streaming?: boolean;
+  /** Measured wait for the framework concurrency slot, before provider timing. */
+  readonly queueWaitMs?: number;
 }
 
 export function buildLlmCallingPayload(
@@ -68,6 +70,9 @@ export function buildLlmCallingPayload(
     })),
     attempt: input.attempt,
     startedAt: input.startedAt,
+    ...(input.queueWaitMs !== undefined
+      ? { queueWaitMs: input.queueWaitMs }
+      : {}),
     ...(input.streaming ? { streaming: true } : {}),
   };
 }

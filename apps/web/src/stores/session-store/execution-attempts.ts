@@ -81,6 +81,7 @@ export function reconcileExecutionAttempts(
   const sources = new Map<string, string>();
   const started = new Map<string, string>();
   const terminal = new Map<string, ExecutionStep["attemptStatus"]>();
+  const abortReasons = new Map<string, string>();
   const scopeMetadata = new Map<string, Partial<ExecutionStep>>();
   const scopePriority = new Map<string, number>();
   for (const step of steps) {
@@ -90,6 +91,11 @@ export function reconcileExecutionAttempts(
   for (const event of events) {
     if (!event.turnId) continue;
     const payload = asRecord(event.payload) ?? {};
+    if (
+      event.type === "turn.completed" &&
+      typeof payload.abortReason === "string"
+    )
+      abortReasons.set(event.turnId, payload.abortReason);
     // Detached jobs use sourceTurnId for their handoff, not a retry relation.
     const source =
       event.type === "runtime.deferred" ? undefined : recoverySource(payload);
@@ -165,6 +171,12 @@ export function reconcileExecutionAttempts(
       ...(sourceTurnId !== step.turnId ? { sourceTurnId } : {}),
       ...(turnStartedAt ? { turnStartedAt } : {}),
       ...(attemptStatus ? { attemptStatus } : {}),
+      abortReason:
+        abortReasons.get(step.turnId) ??
+        (execution?.turnId === step.turnId
+          ? execution.abortReason
+          : undefined) ??
+        step.abortReason,
     };
   });
 }
@@ -175,6 +187,7 @@ export function settleExecutionAttempt(
   turnId: string,
   status: NonNullable<ExecutionStep["attemptStatus"]>,
   sourceFailedRuntimeIds?: readonly string[],
+  abortReason?: string,
 ): ExecutionStep[] {
   return steps.map((step) =>
     step.turnId === turnId
@@ -182,6 +195,7 @@ export function settleExecutionAttempt(
           ...step,
           attemptStatus:
             step.attemptStatus === "committed" ? "committed" : status,
+          ...(abortReason ? { abortReason } : {}),
           ...(step.sourceTurnId && sourceFailedRuntimeIds
             ? { sourceCommitted: true, sourceFailedRuntimeIds }
             : {}),

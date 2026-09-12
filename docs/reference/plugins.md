@@ -1407,7 +1407,7 @@ events:
 
 同一 session 内若两个不同插件声明了同一 `topic` 但 `schema` 路径不同，服务端按插件激活优先级顺序**首胜**（保留先声明者的 schema）并 `console.warn` 一次（同一 `(session, topic)` 不重复告警）。
 
-顶层 `advertiseEvents: true` 让该 runtime 在 prompt 段 5 收到当前会话已声明事件（`advertise !== false` 的那些）的目录文本（`<available-events>` 块，含 topic、locale 描述与必填字段名）；要真正发射还需要在 `tools.builtin` 里加 `emit-event`。两者职责分离：`advertiseEvents` 只控制"是否看得到目录"，`tools.builtin: [emit-event]` 才控制"能不能调用"。
+顶层 `advertiseEvents: true` 让该 runtime 在 prompt 段 5 收到当前会话已声明事件（`advertise !== false` 的那些）的目录文本（`<available-events>` 块，含 topic、locale 描述、必填字段摘要与压缩后的 payload JSON Schema，包括嵌套 union、局部 `$ref` 和 `$defs`；仅省略 schema 根级的标题、描述及元数据，保留属性定义）；要真正发射还需要在 `tools.builtin` 里加 `emit-event`。两者职责分离：`advertiseEvents` 只控制"是否看得到目录"，`tools.builtin: [emit-event]` 才控制"能不能调用"。
 
 ```yaml
 advertiseEvents: true

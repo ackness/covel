@@ -290,6 +290,7 @@ describe("callLLMWithRetry", () => {
     ]);
     const policy = buildRetryPolicy({ runtimeTimeoutMs: 10_000 });
     const waits: number[] = [];
+    const emitter = makeEmitterSpy();
 
     // Act
     try {
@@ -299,12 +300,17 @@ describe("callLLMWithRetry", () => {
         policy,
         deadline: Date.now() + 10_000,
         onQueueWait: (ms) => waits.push(ms),
+        emitter,
       });
 
       // Assert — the queued call succeeded and reported its wait upward.
       expect(res.content).toBe("hello");
       expect(waits).toHaveLength(1);
       expect(waits[0]).toBeGreaterThanOrEqual(30);
+      expect(
+        emitter.events.find((event) => event.type === "llm.calling")?.payload
+          .queueWaitMs,
+      ).toBe(waits[0]);
     } finally {
       setLLMSlotCapForTests(undefined);
     }

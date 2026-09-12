@@ -115,6 +115,11 @@ describe("PluginListPanel runtime model overrides", () => {
       />,
     );
 
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Customize plugins and advanced settings",
+      }),
+    );
     fireEvent.click(screen.getByText("Fixture"));
     const select = screen.getByRole("combobox") as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "fast" } });
@@ -176,6 +181,11 @@ describe("PluginListPanel runtime model overrides", () => {
       />,
     );
 
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Customize plugins and advanced settings",
+      }),
+    );
     fireEvent.click(screen.getByText("Fixture"));
     const select = screen.getByRole("combobox") as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "fast" } });
@@ -209,6 +219,11 @@ describe("PluginListPanel runtime model overrides", () => {
       <PluginListPanel {...props} sessionId="sess-a" />,
     );
 
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Customize plugins and advanced settings",
+      }),
+    );
     fireEvent.click(screen.getByText("Fixture"));
     const select = screen.getByRole("combobox") as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "fast" } });

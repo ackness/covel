@@ -55,9 +55,7 @@ describe("StageExecutionStatus", () => {
         onRetryRuntime={retry}
       />,
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Retry this task: world" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry this task" }));
     expect(retry).toHaveBeenCalledWith("world", "source");
   });
   it("leaves uncommitted turn recovery to the authoritative notice without misleading retry actions", () => {
@@ -160,12 +158,12 @@ describe("StageExecutionStatus", () => {
     expect(
       screen.queryByRole("button", { name: "Retry this task: tracker" }),
     ).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Execution/ }));
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(screen.getByText("world failed")).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Retry this task: world" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry this task" }));
     expect(retry).toHaveBeenCalledWith("world", "source");
   });
 

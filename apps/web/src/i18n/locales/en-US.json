@@ -222,8 +222,8 @@
     "backgroundRunning": "running in background",
     "backgroundCount": "{{count}} in background",
     "executionFlow": "Execution Flow",
-    "executionFlowHint": "Turn order — earlier stages run first.",
-    "executionFlowTitle": "Plugins run stage by stage each turn: setup, then pre-turn, narrative, and post-turn.",
+    "executionFlowHint": "Tasks grouped by stage. Dependencies determine scheduling within a stage; independent tasks may run in parallel.",
+    "executionFlowTitle": "This is a stage preview. Consult the turn trace for actual execution.",
     "stage": {
       "setup": "Setup",
       "pre-turn": "Pre-Turn",
@@ -383,7 +383,22 @@
     "pluginPlanLoading": "Loading the plugin execution plan…",
     "reasonRetryNotCompleted": "This task has not completed. Retry it.",
     "retryFailedBatch": "Retry the first {{count}} failed tasks",
-    "retryBatchLimit": "Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward."
+    "retryBatchLimit": "Each batch handles up to {{count}} tasks. Retry the remaining tasks afterward.",
+    "executionState": {
+      "idle": "Ready",
+      "generating": "Generating the story",
+      "updating": "Story ready, updating game state",
+      "stopped": "Stopped; turn not committed",
+      "partial": "Story saved; some updates incomplete",
+      "failed": "Turn failed; not committed",
+      "interrupted": "Execution interrupted; recovery available",
+      "completed": "Turn complete"
+    },
+    "stoppedDetail": "Generated content was not saved. Retry with the original input.",
+    "submittedInteraction": "Completed interaction · expand to review",
+    "previousSuggestions": "Earlier suggestions · expand to review",
+    "advancedPluginSettings": "Customize plugins and advanced settings",
+    "currentSuggestions": "Current suggestions and extras · expand to review"
   },
   "blocks": {
     "actionPlaceholder": "Or type your own action...",
@@ -1473,7 +1488,14 @@
     "empty": "Graph is currently empty — waiting for NPCs to appear.",
     "clearSelection": "Clear selection",
     "loading": "Loading graph…",
-    "stats": "{{nodes}} nodes · {{links}} relations"
+    "stats": "{{nodes}} nodes · {{links}} relations",
+    "fit": "Fit all nodes",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "characters": "Select a node",
+    "relationships": "Current relationships ({{count}})",
+    "relationshipList": "Relationship list",
+    "noRelationships": "This node has no current relationships."
   },
   "form": {
     "defaultTitle": "Form",
@@ -1734,7 +1756,28 @@
     "snapshotRefreshFailed": "Could not refresh session data. Displayed data may be outdated; use Refresh to retry.",
     "snapshotUpdatedAt": "Data updated at {{time}}",
     "interrupted": "Interrupted",
-    "interruptedHint": "The server reports this execution was interrupted. The trace is preserved and may have no terminal event."
+    "interruptedHint": "The server reports this execution was interrupted. The trace is preserved and may have no terminal event.",
+    "requestView": "Request view",
+    "providerRequest": "Actual provider request",
+    "logicalRequest": "Framework request",
+    "providerRequestHint": "Serialized JSON actually sent by the adapter, without HTTP headers. HTTP status describes transport; see attempts for model outcomes.",
+    "providerRequestUnavailable": "No provider body was captured. The framework request is still available.",
+    "transportAttempt": "Transport retry index",
+    "httpHeadersDuration": "HTTP response-header wait",
+    "requestOmitted": "The captured body omits {{count}} fields.",
+    "copyProviderBody": "Copy provider body",
+    "attemptHistory": "Model calls and retries for this task",
+    "callAttempt": "Call / attempt",
+    "queueWait": "Concurrency queue wait",
+    "modelDuration": "Model call duration",
+    "attemptOutcome": "Attempt outcome",
+    "attemptStatus": {
+      "pending": "No response recorded",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "recovered": "Recovered by retry"
+    },
+    "attemptTimingHint": "“—” means not recorded. Model time includes reading the response stream and excludes queue wait. Tool durations appear in tool details."
   },
   "reload": {
     "reloading": "Restarting server…",

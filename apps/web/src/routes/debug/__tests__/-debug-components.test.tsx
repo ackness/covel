@@ -368,6 +368,7 @@ describe("debug route components", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("tab", { name: "框架逻辑请求" }));
     expect(screen.getByText("SYSTEM RULES: stay in character")).toBeDefined();
     expect(screen.getByText("USER PROMPT: open the door")).toBeDefined();
     expect(screen.getByText("openai / gpt-test")).toBeDefined();

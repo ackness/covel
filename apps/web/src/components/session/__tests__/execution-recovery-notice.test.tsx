@@ -40,6 +40,23 @@ function setup(recovery: ExecutionRecovery) {
 }
 
 describe("execution recovery notice", () => {
+  it("offers an explicit retry for a stopped uncommitted turn", () => {
+    const { onRetry } = setup({
+      ...interrupted,
+      status: {
+        ...interrupted.status!,
+        state: "failed",
+        abortReason: "aborted-by-player",
+      },
+    });
+    expect(screen.getByText("Stopped; turn not committed")).toBeTruthy();
+    expect(screen.queryByText("This turn failed")).toBeNull();
+    expect(onRetry).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry unfinished turn" }),
+    );
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
   it("names a recovered batch by its task count instead of offering a whole-turn retry", () => {
     const { onRetry } = setup({
       ...interrupted,

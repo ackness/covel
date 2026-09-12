@@ -414,6 +414,10 @@ function buildTraceError(
     displayType.endsWith(".failed") ||
     displayType === "error.occurred" ||
     displayType === "proposal.failed" ||
+    (displayType === "runtime.completed" &&
+      readString(payload, legacyData, "status") === "failed") ||
+    (displayType === "turn.completed" &&
+      (payload.committed ?? legacyData?.committed) === false) ||
     (displayType === "llm.responded" && finishReason === "error");
   if (!isFailure) return undefined;
 

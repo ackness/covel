@@ -19,6 +19,7 @@ import { RuntimeCollectionFeatureBadges } from "../runtime-feature-badges.js";
 export function SessionPluginItem({
   plugin,
   executing,
+  advanced = false,
   onToggle,
   resolvedSlots,
   sessionId,
@@ -104,7 +105,7 @@ export function SessionPluginItem({
           <span className="text-xs font-medium truncate flex-1 min-w-0">
             {displayName}
           </span>
-          {stageLabel(primaryRuntime?.stage, t) && (
+          {advanced && stageLabel(primaryRuntime?.stage, t) && (
             <Badge
               variant="secondary"
               className="ui-chip text-xs px-1.5 py-0 h-4 shrink-0"
@@ -112,10 +113,12 @@ export function SessionPluginItem({
               {stageLabel(primaryRuntime?.stage, t)}
             </Badge>
           )}
-          <RuntimeCollectionFeatureBadges
-            runtimes={featureRuntimes}
-            display="summary"
-          />
+          {advanced && (
+            <RuntimeCollectionFeatureBadges
+              runtimes={featureRuntimes}
+              display="summary"
+            />
+          )}
           {isLocked && (
             <span
               title={t("plugin.locked", "Core plugin — cannot be disabled")}
@@ -124,7 +127,8 @@ export function SessionPluginItem({
             </span>
           )}
         </button>
-        {primaryRuntime?.runtimeType !== "function" &&
+        {advanced &&
+          primaryRuntime?.runtimeType !== "function" &&
           (resolvedSlots && resolvedSlots.length > 0 ? (
             <select
               value={boundSlot}
@@ -174,11 +178,11 @@ export function SessionPluginItem({
             type="button"
             role="switch"
             aria-checked={plugin.active}
-            aria-label={
+            aria-label={`${displayName}: ${
               plugin.active
                 ? t("plugin.disable", "Disable plugin")
                 : t("plugin.enable", "Enable plugin")
-            }
+            }`}
             disabled={toggleDisabled}
             className={[
               "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent mr-2.5",
@@ -214,48 +218,52 @@ export function SessionPluginItem({
             </p>
           )}
 
-          <RuntimeCollectionFeatureBadges runtimes={featureRuntimes} />
+          {advanced && (
+            <>
+              <RuntimeCollectionFeatureBadges runtimes={featureRuntimes} />
 
-          <div className="flex flex-wrap gap-1">
-            {primaryRuntime?.model && (
-              <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
-                model: {primaryRuntime.model}
-              </Badge>
-            )}
-            <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
-              trigger: {triggerLabel}
-              {primaryRuntime?.trigger.interval
-                ? ` (${primaryRuntime.trigger.interval})`
-                : ""}
-              {primaryRuntime?.trigger.maxTriggerCount
-                ? ` max:${primaryRuntime.trigger.maxTriggerCount}`
-                : ""}
-            </Badge>
-            {plugin.pluginType && (
-              <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
-                {plugin.pluginType}
-              </Badge>
-            )}
-          </div>
-
-          {allTools.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Wrench className="w-3 h-3" />
-                Tools ({allTools.length})
-              </div>
               <div className="flex flex-wrap gap-1">
-                {allTools.map((tool) => (
-                  <Badge
-                    key={tool}
-                    variant="outline"
-                    className="text-xs px-1.5 py-0 h-4 font-mono"
-                  >
-                    {tool}
+                {primaryRuntime?.model && (
+                  <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
+                    model: {primaryRuntime.model}
                   </Badge>
-                ))}
+                )}
+                <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
+                  trigger: {triggerLabel}
+                  {primaryRuntime?.trigger.interval
+                    ? ` (${primaryRuntime.trigger.interval})`
+                    : ""}
+                  {primaryRuntime?.trigger.maxTriggerCount
+                    ? ` max:${primaryRuntime.trigger.maxTriggerCount}`
+                    : ""}
+                </Badge>
+                {plugin.pluginType && (
+                  <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
+                    {plugin.pluginType}
+                  </Badge>
+                )}
               </div>
-            </div>
+
+              {allTools.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Wrench className="w-3 h-3" />
+                    Tools ({allTools.length})
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {allTools.map((tool) => (
+                      <Badge
+                        key={tool}
+                        variant="outline"
+                        className="text-xs px-1.5 py-0 h-4 font-mono"
+                      >
+                        {tool}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

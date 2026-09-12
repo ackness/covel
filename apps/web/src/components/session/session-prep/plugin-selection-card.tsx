@@ -76,6 +76,7 @@ function PluginPackSelector({
                 ? "border-primary/50 bg-primary/10"
                 : "border-border bg-muted/20 hover:bg-muted/40"
             }`}
+            aria-pressed={isActive}
             onClick={() => onApplyPack(pack.id)}
           >
             <div className="flex items-center justify-between gap-2">
@@ -168,42 +169,55 @@ export function PluginSelectionCard({
               activePluginPack={activePluginPack}
               onApplyPack={onApplyPack}
             />
-            <PluginFilterBar
-              pluginSearch={pluginSearch}
-              onPluginSearchChange={onPluginSearchChange}
-              availablePluginTags={availablePluginTags}
-              activePluginTags={activePluginTags}
-              onTogglePluginTag={onTogglePluginTag}
-            />
+            <details
+              className="space-y-2"
+              data-testid="advanced-plugin-settings"
+            >
+              <summary className="cursor-pointer py-2 text-xs font-medium text-muted-foreground">
+                {t("session.advancedPluginSettings")}
+              </summary>
+              <PluginFilterBar
+                pluginSearch={pluginSearch}
+                onPluginSearchChange={onPluginSearchChange}
+                availablePluginTags={availablePluginTags}
+                activePluginTags={activePluginTags}
+                onTogglePluginTag={onTogglePluginTag}
+              />
 
-            {pluginGroups.map((group) => (
-              <div key={group.id} className="space-y-1.5">
-                <div className="flex items-center justify-between gap-3 pt-2">
-                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
-                    {group.label}
-                  </h4>
-                  <span className="text-xs text-muted-foreground">
-                    {group.plugins.length}
-                  </span>
+              {pluginGroups.map((group) => (
+                <div key={group.id} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3 pt-2">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                      {group.label}
+                    </h4>
+                    <span className="text-xs text-muted-foreground">
+                      {group.plugins.length}
+                    </span>
+                  </div>
+                  {group.plugins.map((pkg) => (
+                    <PluginPackageRow
+                      key={pkg.id}
+                      pkg={pkg}
+                      pluginPlan={pluginPlan}
+                      activePluginPack={activePluginPack}
+                      selectedPluginIdSet={selectedPluginIdSet}
+                      corePluginIds={corePluginIds}
+                      lockedPluginIds={lockedPluginIds}
+                      bindingState={bindingState}
+                      resolvedSlots={resolvedSlots}
+                      resolveDeclaredSlot={resolveDeclaredSlot}
+                      isMissingDeclaredSlot={isMissingDeclaredSlot}
+                      onTogglePlugin={onTogglePlugin}
+                    />
+                  ))}
                 </div>
-                {group.plugins.map((pkg) => (
-                  <PluginPackageRow
-                    key={pkg.id}
-                    pkg={pkg}
-                    pluginPlan={pluginPlan}
-                    activePluginPack={activePluginPack}
-                    selectedPluginIdSet={selectedPluginIdSet}
-                    corePluginIds={corePluginIds}
-                    lockedPluginIds={lockedPluginIds}
-                    bindingState={bindingState}
-                    resolvedSlots={resolvedSlots}
-                    resolveDeclaredSlot={resolveDeclaredSlot}
-                    isMissingDeclaredSlot={isMissingDeclaredSlot}
-                    onTogglePlugin={onTogglePlugin}
-                  />
-                ))}
-              </div>
-            ))}
+              ))}
+              <ExecutionFlowPreview
+                flowData={flowData}
+                selectedFlowSteps={selectedFlowSteps}
+                bindingState={bindingState}
+              />
+            </details>
           </div>
 
           <WorldDataPreflightPanel
@@ -218,12 +232,6 @@ export function PluginSelectionCard({
               {t("session.pluginPlanLoading", "Resolving world plugin plan...")}
             </p>
           )}
-
-          <ExecutionFlowPreview
-            flowData={flowData}
-            selectedFlowSteps={selectedFlowSteps}
-            bindingState={bindingState}
-          />
         </CardContent>
       )}
     </Card>

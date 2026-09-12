@@ -152,6 +152,7 @@ function createAttemptTrace(
   attempt: number,
   startedAt: string,
   streaming = false,
+  queueWaitMs?: number,
 ): {
   readonly onTargetAttempt: (target: LLMTargetIdentity) => void;
   readonly onProviderRequest: (request: LLMProviderRequest) => void;
@@ -186,6 +187,7 @@ function createAttemptTrace(
         providerRequests,
         tools: params.tools,
         attempt,
+        queueWaitMs,
         startedAt,
         ...(streaming ? { streaming: true } : {}),
       });
@@ -232,6 +234,8 @@ export async function callLLMWithRetry(
       attemptMessages,
       attempt,
       new Date(callStart).toISOString(),
+      false,
+      slot.waitedMs,
     );
     try {
       throwIfTurnAborted(params.abortSignal);
@@ -403,6 +407,7 @@ export async function streamLLMWithRetry(
       attempt,
       new Date(streamStart).toISOString(),
       true,
+      slot.waitedMs,
     );
 
     try {

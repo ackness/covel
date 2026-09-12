@@ -184,14 +184,29 @@ export function createEventDirectory(deps: EventDirectoryDeps): EventDirectory {
         const description =
           resolveI18nText(entry.decl.description, locale) ?? "";
         let fields = "";
+        let payloadSchema = "";
         try {
-          fields = requiredFieldsSummary((await loadSchema(entry)).raw);
+          const raw = (await loadSchema(entry)).raw;
+          fields = requiredFieldsSummary(raw);
+          // Required top-level names alone cannot describe array unions or local
+          // $refs. Advertise the actual contract so agents need not guess cues.
+          payloadSchema = JSON.stringify(
+            typeof raw === "object" && raw !== null
+              ? Object.fromEntries(
+                  Object.entries(raw).filter(
+                    ([key]) =>
+                      !["$schema", "$id", "title", "description"].includes(key),
+                  ),
+                )
+              : raw,
+          );
         } catch {
           fields = "(schema unavailable)";
         }
         lines.push(
           `- ${entry.decl.topic}: ${description}${fields ? ` (required: ${fields})` : ""}`,
         );
+        if (payloadSchema) lines.push(`  payload schema: ${payloadSchema}`);
       }
       return lines.join("\n");
     },

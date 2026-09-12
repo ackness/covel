@@ -1,12 +1,9 @@
 /**
  * graph-canvas-sync — pure pool-reconciliation for GraphCanvas.
  *
- * Keeps a single stable `{ nodes, links }` object alive across plugin-data
- * updates by mutating its arrays in place. `react-force-graph` compares
- * `graphData` by reference, so preserving that identity preserves the d3-force
- * simulation state (positions, pins, velocities) and prevents agent-driven
- * drift. These helpers own only the diffing; the d3-force `x/y/vx/vy/fx/fy`
- * fields on existing nodes are never touched here.
+ * Mutates pooled nodes and links in place while reporting topology changes.
+ * The view publishes a new graph wrapper only for those changes so d3 can
+ * initialize newcomers. Existing x/y/vx/vy/fx/fy values are never touched here.
  */
 
 import type { ForceLink, ForceNode, MutableForceNode } from "./graph-types.js";
@@ -35,8 +32,9 @@ function seedPosition(
   index: number,
   total: number,
 ): { x: number; y: number } {
-  const cx = geom.width / 2;
-  const cy = geom.height / 2;
+  // Force-graph world coordinates are centered on the origin.
+  const cx = 0;
+  const cy = 0;
   const seedRadius = Math.min(geom.width, geom.height) * 0.28;
   const angle = -Math.PI / 2 + (index / Math.max(total, 1)) * 2 * Math.PI;
   return {

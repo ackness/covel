@@ -95,20 +95,24 @@ describe("sse-handler execution.completed abort terminal state", () => {
     };
   }
 
-  it("player abort → discard placeholders, no execution error", () => {
-    const dispatch = vi.fn();
-    const handle = createSseEventHandler(makeDeps(dispatch));
+  it.each([true, false])(
+    "player abort (committed=%s) discards placeholders without an execution error",
+    (committed) => {
+      const dispatch = vi.fn();
+      const handle = createSseEventHandler(makeDeps(dispatch));
 
-    handle(completedEnvelope(PLAYER_ABORT_REASON));
+      const envelope = completedEnvelope(PLAYER_ABORT_REASON);
+      handle({ ...envelope, payload: { ...envelope.payload, committed } });
 
-    const types = dispatch.mock.calls.map(([a]) => a.type);
-    expect(types).toContain("DISCARD_TURN_STREAMS");
-    expect(types).not.toContain("SET_EXECUTION_ERROR");
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "DISCARD_TURN_STREAMS",
-      turnId: "turn-1",
-    });
-  });
+      const types = dispatch.mock.calls.map(([a]) => a.type);
+      expect(types).toContain("DISCARD_TURN_STREAMS");
+      expect(types).not.toContain("SET_EXECUTION_ERROR");
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "DISCARD_TURN_STREAMS",
+        turnId: "turn-1",
+      });
+    },
+  );
 
   it("non-player abort reasons still surface as an execution error", () => {
     const dispatch = vi.fn();

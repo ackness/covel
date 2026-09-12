@@ -117,6 +117,39 @@ async function commitStatusOf(store: DataStore): Promise<string | undefined> {
 }
 
 describe("finalizeExecution", () => {
+  it.each(["before", "during"])(
+    "rolls back a completed story when stopped %s finalization",
+    async (when) => {
+      const store = createMemoryStore();
+      await savePendingTurn(store);
+      const controller = new AbortController();
+      if (when === "before") controller.abort();
+      const outcome = await finalizeExecution({
+        store,
+        signal: controller.signal,
+        sessionId: SESSION_ID,
+        executionContext: {
+          executionId: TURN_ID,
+          origin: "player",
+          countPolicy: "none",
+        },
+        runtimes: [makeRuntime("story", "story"), makeRuntime("tracker")],
+        results: [
+          makeResult("story", { narrativeOutput: "A complete, valid scene." }),
+          makeResult("tracker", statePatch("hp", 99)),
+        ],
+        turnIds: [TURN_ID],
+        extraInTx: async () => {
+          controller.abort();
+        },
+      });
+      expect(outcome.status).toBe("failed");
+      expect(outcome.events).toEqual([]);
+      expect(await store.getStateEntry(SESSION_ID, "stats", "hp")).toBeNull();
+      expect(await store.listTurnMessages(SESSION_ID)).toEqual([]);
+      expect(await commitStatusOf(store)).toBe("failed");
+    },
+  );
   it("publishes turn.suspended only after its continuation commits", async () => {
     const store = createMemoryStore();
     await savePendingTurn(store);

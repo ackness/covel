@@ -8,6 +8,10 @@ import {
 } from "lucide-react";
 import type * as api from "@/services/api.js";
 import {
+  LLMRequestInspector,
+  RuntimeAttemptHistory,
+} from "./-llm-request-inspector.js";
+import {
   categorize,
   CATEGORY_STYLES,
   fmtTime,
@@ -172,7 +176,22 @@ export function EventDetail({
         />
       </section>
 
-      {renderStructuredData(displayType, data, diagnostic, toolInvocation, t)}
+      <RuntimeAttemptHistory event={event} relatedEvents={relatedEvents} />
+      {displayType === "llm.calling" ? (
+        <LLMRequestInspector
+          key={event.id ?? event.seq}
+          event={event}
+          logical={renderStructuredData(
+            displayType,
+            data,
+            diagnostic,
+            toolInvocation,
+            t,
+          )}
+        />
+      ) : (
+        renderStructuredData(displayType, data, diagnostic, toolInvocation, t)
+      )}
 
       <details className="group">
         <summary className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1.5 flex items-center gap-1 cursor-pointer">

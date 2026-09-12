@@ -28,6 +28,7 @@ export function PluginItem({
   pkg,
   sessionPlugin,
   executing,
+  advanced = false,
   onToggle,
   resolvedSlots,
   sessionId,
@@ -100,7 +101,7 @@ export function PluginItem({
               )}
             </Badge>
           )}
-          {mainRuntime && stageLabel(mainRuntime.stage, t) && (
+          {advanced && mainRuntime && stageLabel(mainRuntime.stage, t) && (
             <Badge
               variant="secondary"
               className="ui-chip text-xs px-1.5 py-0 h-4 shrink-0"
@@ -108,7 +109,7 @@ export function PluginItem({
               {stageLabel(mainRuntime.stage, t)}
             </Badge>
           )}
-          {runtimes.length > 0 && (
+          {advanced && runtimes.length > 0 && (
             <RuntimeCollectionFeatureBadges
               runtimes={runtimes}
               display="summary"
@@ -127,11 +128,11 @@ export function PluginItem({
             type="button"
             role="switch"
             aria-checked={isActive}
-            aria-label={
+            aria-label={`${displayName}: ${
               isActive
                 ? t("plugin.disable", "Disable plugin")
                 : t("plugin.enable", "Enable plugin")
-            }
+            }`}
             disabled={toggleDisabled}
             className={[
               "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent mr-2.5",
@@ -160,7 +161,7 @@ export function PluginItem({
         setupRuntimes={setupRuntimes}
       />
 
-      {primaryRuntime && (
+      {advanced && primaryRuntime && (
         <div className="px-2.5 pb-1 -mt-0.5 flex items-center gap-1 text-xs text-muted-foreground/80">
           <Cpu className="w-2.5 h-2.5" />
           {resolvedSlots && resolvedSlots.length > 0 ? (
@@ -201,120 +202,124 @@ export function PluginItem({
             </p>
           )}
 
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            {pkg.version && <span>v{pkg.version}</span>}
-          </div>
-
-          {runtimes.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Zap className="w-3 h-3" />
-                {t("plugin.runtimes", "Runtimes")}
+          {advanced && (
+            <>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {pkg.version && <span>v{pkg.version}</span>}
               </div>
-              <div className="space-y-0.5">
-                {runtimes.map((rt) => (
-                  <div
-                    key={rt.id}
-                    className="flex min-w-0 flex-wrap items-center gap-2 pl-1 text-xs text-muted-foreground"
-                  >
-                    <span className="font-mono">{rt.id}</span>
-                    <RuntimeFeatureBadges runtime={rt} />
-                    {rt.model && (
-                      <span className="text-muted-foreground/60">
-                        @ {rt.model}
-                      </span>
-                    )}
+
+              {advanced && runtimes.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Zap className="w-3 h-3" />
+                    {t("plugin.runtimes", "Runtimes")}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                  <div className="space-y-0.5">
+                    {runtimes.map((rt) => (
+                      <div
+                        key={rt.id}
+                        className="flex min-w-0 flex-wrap items-center gap-2 pl-1 text-xs text-muted-foreground"
+                      >
+                        <span className="font-mono">{rt.id}</span>
+                        <RuntimeFeatureBadges runtime={rt} />
+                        {rt.model && (
+                          <span className="text-muted-foreground/60">
+                            @ {rt.model}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          {tools.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Wrench className="w-3 h-3" />
-                {t("plugin.tools", "Tools")}
-                <span className="font-normal">({tools.length})</span>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {tools.map((tool) => (
-                  <Badge
-                    key={tool.id}
-                    variant="outline"
-                    className="text-xs px-1.5 py-0 h-4 font-mono"
+              {tools.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Wrench className="w-3 h-3" />
+                    {t("plugin.tools", "Tools")}
+                    <span className="font-normal">({tools.length})</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {tools.map((tool) => (
+                      <Badge
+                        key={tool.id}
+                        variant="outline"
+                        className="text-xs px-1.5 py-0 h-4 font-mono"
+                      >
+                        {tool.id}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {requires.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Link className="w-3 h-3" />
+                    {t("plugin.requires", "Requires")}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {requires.map((dep) => (
+                      <Badge
+                        key={dep}
+                        variant="secondary"
+                        className="text-xs px-1.5 py-0 h-4"
+                      >
+                        {dep}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {primaryRuntime && resolvedSlots && resolvedSlots.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Cpu className="w-3 h-3" />
+                    {t("plugin.modelBinding", "Model")}
+                  </div>
+                  <select
+                    value={boundSlot}
+                    onChange={(e) => handleSlotChange(e.target.value)}
+                    disabled={executing}
+                    className="w-full text-xs bg-background border border-border rounded px-1.5 py-1 disabled:opacity-50"
                   >
-                    {tool.id}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {requires.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Link className="w-3 h-3" />
-                {t("plugin.requires", "Requires")}
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {requires.map((dep) => (
-                  <Badge
-                    key={dep}
-                    variant="secondary"
-                    className="text-xs px-1.5 py-0 h-4"
-                  >
-                    {dep}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {primaryRuntime && resolvedSlots && resolvedSlots.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Cpu className="w-3 h-3" />
-                {t("plugin.modelBinding", "Model")}
-              </div>
-              <select
-                value={boundSlot}
-                onChange={(e) => handleSlotChange(e.target.value)}
-                disabled={executing}
-                className="w-full text-xs bg-background border border-border rounded px-1.5 py-1 disabled:opacity-50"
-              >
-                <option value="">
-                  {primaryRuntime.model
-                    ? `${t("plugin.defaultSlot", "default")}: ${primaryRuntime.model}`
-                    : t("plugin.autoSlot", "auto (system default)")}
-                </option>
-                {resolvedSlots
-                  .filter((s) => s.tag === "text")
-                  .map((slot) => (
-                    <option key={slot.slotId} value={slot.slotId}>
-                      {slot.slotId.toUpperCase()} —{" "}
-                      {effectiveSlotModel(slot) ?? slot.presetId}
+                    <option value="">
+                      {primaryRuntime.model
+                        ? `${t("plugin.defaultSlot", "default")}: ${primaryRuntime.model}`
+                        : t("plugin.autoSlot", "auto (system default)")}
                     </option>
-                  ))}
-              </select>
-              {boundSlot && (
-                <p className="text-xs text-muted-foreground">
-                  {t(
-                    "plugin.modelOverrideHint",
-                    "Override active — next turn will use this model",
+                    {resolvedSlots
+                      .filter((s) => s.tag === "text")
+                      .map((slot) => (
+                        <option key={slot.slotId} value={slot.slotId}>
+                          {slot.slotId.toUpperCase()} —{" "}
+                          {effectiveSlotModel(slot) ?? slot.presetId}
+                        </option>
+                      ))}
+                  </select>
+                  {boundSlot && (
+                    <p className="text-xs text-muted-foreground">
+                      {t(
+                        "plugin.modelOverrideHint",
+                        "Override active — next turn will use this model",
+                      )}
+                    </p>
                   )}
-                </p>
+                  {overrideError && (
+                    <span
+                      className="text-xs text-destructive"
+                      role="alert"
+                      title={overrideError}
+                    >
+                      {t("plugin.modelOverrideFailed", "Save failed")}
+                    </span>
+                  )}
+                </div>
               )}
-              {overrideError && (
-                <span
-                  className="text-xs text-destructive"
-                  role="alert"
-                  title={overrideError}
-                >
-                  {t("plugin.modelOverrideFailed", "Save failed")}
-                </span>
-              )}
-            </div>
+            </>
           )}
         </div>
       )}
