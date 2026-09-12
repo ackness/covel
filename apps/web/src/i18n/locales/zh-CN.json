@@ -883,7 +883,7 @@
     "pingSlotFallbackTitle": "当前模型用途尚未配置，测试已改用 {{resolvedVia}}。",
     "pingFailed": "失败",
     "saveFailed": "设置保存失败",
-    "runtimeSlotsDiscoveredHint": "以下模型用途由当前启用插件自动声明；请为它们分配合适的服务商和模型。",
+    "runtimeSlotsDiscoveredHint": "以下模型用途来自已加载插件及其保存的设置；请为它们分配合适的服务商和模型。",
     "providerConnections": "服务商连接",
     "providerConnectionsHint": "每个服务商只需配置一次；其 API 密钥和接口地址由下方所有模型 ID 共用。",
     "customProviders": "自定义服务商与模型",
@@ -962,7 +962,9 @@
     "conflictTitle": "其他窗口已修改设置",
     "conflictDetail": "{{keys}} 未保存。已加载最新值，请核对后重新修改。",
     "draftConflict": "其他窗口已修改此设置。已保留你的草稿，请先加载已保存值，再继续编辑。",
-    "reloadSavedValue": "加载已保存值"
+    "reloadSavedValue": "加载已保存值",
+    "dataOperationFailed": "设置操作未完成，请检查存储访问后重试。",
+    "importInvalidEntries": "{{count}} 项配置不符合当前格式，将跳过导入。"
   },
   "appearance": {
     "previewTitle": "阅读预览",
@@ -1277,7 +1279,7 @@
     "useDefault": "使用默认",
     "useDefaultWith": "使用默认（{{value}}）",
     "modelBindingAria": "选择该插件任务使用的模型用途；通常保持默认即可。",
-    "modelBindingSource": "模型绑定 — 在「会话准备」中修改",
+    "modelBindingSource": "当前运行单元实际使用的模型绑定",
     "modelBindingFallback": "模型绑定：前往「会话准备」查看",
     "modelBinding": "模型",
     "modelOverrideHint": "已覆盖 — 下一回合将使用该模型",
@@ -1304,8 +1306,8 @@
     "providerSlotMissingTitle": "请在 llm.toml 添加 [covel.{{slot}}]，或在 设置 > 插件 中修改 {{plugin}}.modelPresetId。",
     "providerSlotMissingDetail": "请在 llm.toml 配置 [covel.{{slot}}]，或在 设置 > 插件 > {{plugin}} 中修改 modelPresetId。",
     "providerSlotSettingDetail": "来自插件设置 modelPresetId；可在 设置 > 插件 > {{plugin}} 修改",
-    "slotMissingTitle": "请在 llm.toml 添加 [covel.{{slot}}]",
-    "slotMissingShort": "缺少 [covel.{{slot}}]",
+    "slotMissingTitle": "在用途分配中配置 {{slot}}，或选择其他已配置的用途。",
+    "slotMissingShort": "用途未配置：{{slot}}",
     "runtimeDefaultSummary": "插件默认用途 · {{slot}}",
     "runtimeDefaultSummaryWithModel": "插件默认用途 · {{slot}} · {{model}}",
     "runtimeDefaultMissing": "插件默认用途 · {{slot}}（缺少配置）",
@@ -1377,7 +1379,8 @@
       "missingView": "缺少 view 字段",
       "badView": "view 必须是对象",
       "conversionFailed": "无法渲染 view"
-    }
+    },
+    "runtimeModelMissing": "模型用途 {{slot}} 不可用，请选择已配置的用途或前往用途分配补齐。"
   },
   "pluginJob": {
     "completed": "{{target}} 已完成（耗时 {{duration}}）",

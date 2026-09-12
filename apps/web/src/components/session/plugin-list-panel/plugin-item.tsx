@@ -1,22 +1,10 @@
 import { useState } from "react";
-import {
-  ChevronRight,
-  Cpu,
-  Link,
-  Lock,
-  Puzzle,
-  Wrench,
-  Zap,
-} from "lucide-react";
+import { ChevronRight, Link, Lock, Puzzle, Wrench, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
-import { stageLabel } from "@/lib/stage-label.js";
-import {
-  effectiveSlotModel,
-  formatSlotLabel,
-} from "@/hooks/use-slot-config.js";
-import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
+import { RuntimeStageBadges } from "../runtime-stage-badges.js";
+import { RuntimeModelBindings } from "./runtime-model-bindings.js";
 import { SetupRecovery } from "./setup-recovery.js";
 import type { PluginItemProps } from "./types.js";
 import {
@@ -39,25 +27,11 @@ export function PluginItem({
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
-  const agentRuntimes = (pkg.runtimes ?? []).filter(
-    (rt) => rt.runtimeType !== "function" && rt.model,
-  );
-  const primaryRuntime = agentRuntimes[0];
-  const runtimeKey = primaryRuntime?.id ?? "";
-  const [boundSlot, handleSlotChange, overrideError] =
-    useRuntimeModelSlotOverride({
-      runtimeKey,
-      sessionId,
-      runtimeModelOverrides,
-      onChange: onRuntimeModelOverrideChange,
-    });
-
   const displayName = text(pkg.displayName) || pkg.id;
   const description = text(pkg.description);
   const runtimes = pkg.runtimes ?? [];
   const tools = pkg.tools ?? [];
   const requires = pkg.relations?.requires ?? [];
-  const mainRuntime = runtimes[0];
 
   const hasSessionScope = sessionPlugin !== undefined;
   const isActive = sessionPlugin?.active ?? true;
@@ -101,20 +75,6 @@ export function PluginItem({
               )}
             </Badge>
           )}
-          {advanced && mainRuntime && stageLabel(mainRuntime.stage, t) && (
-            <Badge
-              variant="secondary"
-              className="ui-chip text-xs px-1.5 py-0 h-4 shrink-0"
-            >
-              {stageLabel(mainRuntime.stage, t)}
-            </Badge>
-          )}
-          {advanced && runtimes.length > 0 && (
-            <RuntimeCollectionFeatureBadges
-              runtimes={runtimes}
-              display="summary"
-            />
-          )}
           {isLocked && (
             <span
               title={t("plugin.locked", "Core plugin — cannot be disabled")}
@@ -155,43 +115,31 @@ export function PluginItem({
         )}
       </div>
 
+      {advanced && (
+        <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2">
+          <RuntimeStageBadges runtimes={runtimes} />
+          <RuntimeCollectionFeatureBadges
+            runtimes={runtimes}
+            display="summary"
+          />
+        </div>
+      )}
+
       <SetupRecovery
         pluginId={pkg.id}
         sessionId={sessionId}
         setupRuntimes={setupRuntimes}
       />
 
-      {advanced && primaryRuntime && (
-        <div className="px-2.5 pb-1 -mt-0.5 flex items-center gap-1 text-xs text-muted-foreground/80">
-          <Cpu className="w-2.5 h-2.5" />
-          {resolvedSlots && resolvedSlots.length > 0 ? (
-            (() => {
-              const activeSlot = boundSlot
-                ? (resolvedSlots.find((s) => s.slotId === boundSlot) ??
-                  resolvedSlots[0])
-                : resolvedSlots[0];
-              const label = formatSlotLabel(activeSlot);
-              return (
-                <span
-                  className="truncate"
-                  title={t(
-                    "plugin.modelBindingSource",
-                    "Model binding — edit in Session Prep",
-                  )}
-                >
-                  {label ?? activeSlot?.slotId ?? "—"}
-                </span>
-              );
-            })()
-          ) : (
-            <span className="italic">
-              {t(
-                "plugin.modelBindingFallback",
-                "Model binding: see Session Prep",
-              )}
-            </span>
-          )}
-        </div>
+      {advanced && (
+        <RuntimeModelBindings
+          runtimes={runtimes}
+          resolvedSlots={resolvedSlots}
+          sessionId={sessionId}
+          executing={executing}
+          runtimeModelOverrides={runtimeModelOverrides}
+          onChange={onRuntimeModelOverrideChange}
+        />
       )}
 
       {expanded && (
@@ -271,52 +219,6 @@ export function PluginItem({
                       </Badge>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {primaryRuntime && resolvedSlots && resolvedSlots.length > 0 && (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    <Cpu className="w-3 h-3" />
-                    {t("plugin.modelBinding", "Model")}
-                  </div>
-                  <select
-                    value={boundSlot}
-                    onChange={(e) => handleSlotChange(e.target.value)}
-                    disabled={executing}
-                    className="w-full text-xs bg-background border border-border rounded px-1.5 py-1 disabled:opacity-50"
-                  >
-                    <option value="">
-                      {primaryRuntime.model
-                        ? `${t("plugin.defaultSlot", "default")}: ${primaryRuntime.model}`
-                        : t("plugin.autoSlot", "auto (system default)")}
-                    </option>
-                    {resolvedSlots
-                      .filter((s) => s.tag === "text")
-                      .map((slot) => (
-                        <option key={slot.slotId} value={slot.slotId}>
-                          {slot.slotId.toUpperCase()} —{" "}
-                          {effectiveSlotModel(slot) ?? slot.presetId}
-                        </option>
-                      ))}
-                  </select>
-                  {boundSlot && (
-                    <p className="text-xs text-muted-foreground">
-                      {t(
-                        "plugin.modelOverrideHint",
-                        "Override active — next turn will use this model",
-                      )}
-                    </p>
-                  )}
-                  {overrideError && (
-                    <span
-                      className="text-xs text-destructive"
-                      role="alert"
-                      title={overrideError}
-                    >
-                      {t("plugin.modelOverrideFailed", "Save failed")}
-                    </span>
-                  )}
                 </div>
               )}
             </>

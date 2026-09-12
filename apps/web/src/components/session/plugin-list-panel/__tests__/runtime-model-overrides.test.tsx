@@ -238,3 +238,101 @@ describe("PluginListPanel runtime model overrides", () => {
     expect(select.value).toBe("");
   });
 });
+
+it("uses session metadata and exposes every agent runtime with text-only role choices", async () => {
+  const first = fixturePlugin.runtimes[0]!;
+  const sessionPlugin = {
+    ...fixturePlugin,
+    displayName: "Current session plugin",
+    active: true,
+    locked: false,
+    runtimes: [
+      {
+        ...first,
+        id: "fixture/function",
+        runtimeType: "function" as const,
+        stage: "pre-turn" as const,
+        model: undefined,
+      },
+      {
+        ...first,
+        id: "fixture/story",
+        model: "story",
+        stage: "narrative" as const,
+      },
+      {
+        ...first,
+        id: "fixture/tracker",
+        model: "tracker",
+        stage: "post-turn" as const,
+      },
+    ],
+  };
+  api.updateSession.mockImplementation(async (_id, update) => ({
+    ...session,
+    ...update,
+  }));
+  render(
+    <PluginListPanel
+      plugins={[
+        { ...fixturePlugin, displayName: "Obsolete catalogue description" },
+      ]}
+      sessionPlugins={[sessionPlugin]}
+      sessionId={session.id}
+      runtimeModelOverrides={{ "fixture/story": "story" }}
+      resolvedSlots={[
+        {
+          slotId: "story",
+          label: "story",
+          tag: "text",
+          presetId: "",
+          preset: null,
+          serverModel: "story-model",
+        },
+        {
+          slotId: "tracker",
+          label: "tracker",
+          tag: "text",
+          presetId: "",
+          preset: null,
+          serverModel: "tracker-model",
+        },
+        {
+          slotId: "image",
+          label: "image",
+          tag: "image",
+          presetId: "",
+          preset: null,
+          serverModel: "image-model",
+        },
+      ]}
+    />,
+  );
+  expect(screen.queryByText("Obsolete catalogue description")).toBeNull();
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Customize plugins and advanced settings",
+    }),
+  );
+  expect(screen.getAllByRole("combobox")).toHaveLength(2);
+  expect(screen.getByText("Narrative")).toBeTruthy();
+  expect(screen.getByText("Post-Turn")).toBeTruthy();
+  const tracker = screen.getByRole("combobox", {
+    name: "Model · fixture/tracker",
+  }) as HTMLSelectElement;
+  expect(
+    Array.from(tracker.options).map((option) => option.value),
+  ).not.toContain("image");
+  expect(
+    screen.getByText("tracker · tracker-model", { selector: "span" }),
+  ).toBeTruthy();
+  fireEvent.change(tracker, { target: { value: "story" } });
+  await waitFor(() =>
+    expect(api.updateSession).toHaveBeenCalledWith(session.id, {
+      runtimeModelOverrides: {
+        "fixture/story": "story",
+        "fixture/tracker": "story",
+      },
+    }),
+  );
+});

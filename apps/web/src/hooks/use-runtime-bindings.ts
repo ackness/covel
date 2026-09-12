@@ -141,7 +141,7 @@ export function useRuntimeBindings(
     const defaults = autoAssignRuntimeBindings(
       bindings,
       runtimeTargets,
-      resolvedSlots,
+      resolvedSlots.filter((slot) => slot.tag === "text"),
     );
     if (Object.keys(defaults).length === 0) return;
 
@@ -170,8 +170,12 @@ export function useRuntimeBindings(
     if (!runtimesReady) return false;
     return entries.every((e) => {
       const effectiveSlotName = e.slotName || e.defaultSlot;
-      if (effectiveSlotName === "default") return resolvedSlots.length > 0;
-      return resolvedSlots.some((s) => s.slotId === effectiveSlotName);
+      return resolvedSlots.some(
+        (slot) =>
+          slot.tag === "text" &&
+          (effectiveSlotName === "default" ||
+            slot.slotId === effectiveSlotName),
+      );
     });
   }, [entries, resolvedSlots, runtimesReady]);
 
@@ -193,7 +197,7 @@ export function useRuntimeBindings(
       const next = autoAssignRuntimeBindings(
         prev,
         runtimeTargets,
-        resolvedSlots,
+        resolvedSlots.filter((slot) => slot.tag === "text"),
       );
       if (sessionId) persist(sessionId, next);
       return next;

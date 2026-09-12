@@ -110,7 +110,9 @@ export function PluginListPanel({
   const sessionPluginMap = new Map<string, SessionPlugin>(
     (sessionPlugins ?? []).map((p) => [p.id, p]),
   );
-  const useDetailView = plugins.length === 0 && hasSessionPlugins;
+  // The session catalogue carries the effective active/locked/runtime metadata.
+  // Global packages can include plugins that this world never selected.
+  const useDetailView = sessionPlugins !== undefined;
   const sortedPlugins = useDetailView
     ? [...(sessionPlugins ?? [])].sort(
         (a, b) =>

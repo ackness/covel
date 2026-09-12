@@ -180,9 +180,10 @@ export function LeftPanel({
           <div className="ui-panel-section border-b border-border space-y-3">
             <h3 className="ui-eyebrow text-xs flex items-center justify-between">
               <span>{t("session.plugins", "Plugins")}</span>
-              {enabledPlugins.length > 0 && (
+              {sessionPlugins.length > 0 && (
                 <span className="ml-1 font-normal text-muted-foreground">
-                  {enabledPlugins.length}
+                  {sessionPlugins.filter((plugin) => plugin.active).length}/
+                  {sessionPlugins.length}
                 </span>
               )}
             </h3>

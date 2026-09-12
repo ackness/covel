@@ -18,6 +18,7 @@ import { WorldDataPreflightPanel } from "./world-data-preflight-panel.js";
 import type { PrepSectionStatus } from "./types.js";
 
 interface PluginSelectionCardProps {
+  worldPluginSettings?: import("@covel/shared").WorldPluginSettings;
   pluginPlan: api.WorldPluginPlan | null;
   pluginPlanLoading: boolean;
   plugins: api.PluginSummary[];
@@ -103,6 +104,7 @@ function PluginPackSelector({
 }
 
 export function PluginSelectionCard({
+  worldPluginSettings,
   pluginPlan,
   pluginPlanLoading,
   plugins,
@@ -196,6 +198,7 @@ export function PluginSelectionCard({
                   </div>
                   {group.plugins.map((pkg) => (
                     <PluginPackageRow
+                      worldPluginSettings={worldPluginSettings}
                       key={pkg.id}
                       pkg={pkg}
                       pluginPlan={pluginPlan}

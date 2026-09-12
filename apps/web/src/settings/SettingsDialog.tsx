@@ -12,6 +12,7 @@ import { isDesktopApp } from "@/lib/desktop-bridge.js";
 import {
   buildNavTree,
   filterNav,
+  resolveSettingsNode,
   APPEARANCE_NODE_ID,
   OPERATOR_ACCESS_NODE_ID,
   PACKAGES_NODE_ID,
@@ -27,6 +28,7 @@ import { LlmPresetsPane } from "./panes/LlmPresetsPane.js";
 import { PackagesPane } from "./panes/PackagesPane.js";
 import { AppearancePane } from "./panes/AppearancePane.js";
 import { OperatorAccessPane } from "./panes/OperatorAccessPane.js";
+import { PluginSettingsPane } from "./panes/PluginSettingsPane.js";
 import type { PluginSummary } from "@/services/api.js";
 
 interface SettingsDialogProps {
@@ -106,18 +108,9 @@ export function SettingsDialog({
     if (initialKey && appliedInitialKey.current !== initialKey) {
       appliedInitialKey.current = initialKey;
       setQuery("");
-      const exact = tree.find((n) => n.id === initialKey);
-      if (exact && isSelectable(exact)) {
-        setSelected(exact.id);
-        return;
-      }
-      const byChild = tree.find((n) =>
-        n.children.some(
-          (e) => e.key === initialKey || e.key.startsWith(initialKey),
-        ),
-      );
-      if (byChild) {
-        setSelected(byChild.id);
+      const target = resolveSettingsNode(tree, initialKey);
+      if (target) {
+        setSelected(target.id);
         return;
       }
     }
@@ -280,6 +273,8 @@ function renderPane(
   if (node.id === APPEARANCE_NODE_ID) return <AppearancePane />;
   if (node.id === OPERATOR_ACCESS_NODE_ID) return <OperatorAccessPane />;
   if (node.id === PACKAGES_NODE_ID) return <PackagesPane />;
+  if (node.kind === "plugin")
+    return <PluginSettingsPane entries={node.children} />;
 
   if (node.children.length === 0) {
     return (

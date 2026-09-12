@@ -1,9 +1,17 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Download, RotateCw, Upload } from "lucide-react";
+import { z } from "zod";
 import type { SettingsExportBundle } from "@covel/settings";
 import { Button } from "@/components/ui/button.js";
 import { useSettingsStore } from "./use-settings.js";
+
+const importBundleSchema = z.object({
+  schemaVersion: z.literal(1),
+  exportedAt: z.string().default(""),
+  entries: z.record(z.string(), z.unknown()),
+  keys: z.record(z.string(), z.string()).optional(),
+});
 
 /**
  * Import / Export / Reset pane. Always visible, even when no entries exist
@@ -18,64 +26,99 @@ export function DataPane() {
     bundle: SettingsExportBundle;
     keys: Set<string>;
     includeSecrets: boolean;
+    invalidKeys: Set<string>;
   } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function handleExport() {
-    const bundle = await store.export({ includeSecrets });
-    const blob = new Blob([JSON.stringify(bundle, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `covel-settings-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    flash(t("settings.exported"));
+    setError(null);
+    try {
+      const bundle = await store.export({ includeSecrets });
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `covel-settings-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      flash(t("settings.exported"));
+    } catch {
+      setError(t("settings.dataOperationFailed"));
+    }
   }
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
+    setError(null);
     try {
-      const bundle = JSON.parse(text) as SettingsExportBundle;
-      if (
-        !bundle ||
-        bundle.schemaVersion !== 1 ||
-        typeof bundle.entries !== "object"
-      ) {
-        throw new Error("bad bundle");
-      }
+      const bundle = importBundleSchema.parse(JSON.parse(await file.text()));
+      const registry = new Map(
+        store.listEntries().map((entry) => [entry.key, entry]),
+      );
+      const invalidKeys = new Set(
+        Object.entries(bundle.entries).flatMap(([key, value]) => {
+          const entry = registry.get(key);
+          return key.startsWith("keys.") ||
+            entry?.secret ||
+            entry?.backend === "keys" ||
+            (entry && !entry.schema.safeParse(value).success)
+            ? [key]
+            : [];
+        }),
+      );
       setPending({
         bundle,
-        keys: new Set(Object.keys(bundle.entries)),
+        keys: new Set(
+          Object.keys(bundle.entries).filter((key) => !invalidKeys.has(key)),
+        ),
         includeSecrets: Boolean(bundle.keys),
+        invalidKeys,
       });
     } catch {
-      flash(t("settings.importInvalid"));
+      setPending(null);
+      setError(t("settings.importInvalid"));
     } finally {
       if (fileRef.current) fileRef.current.value = "";
     }
   }
 
   async function handleApplyImport() {
-    if (!pending) return;
-    await store.import(pending.bundle, {
-      keys: [...pending.keys],
-      includeSecrets: pending.includeSecrets,
-    });
-    setPending(null);
-    flash(t("settings.imported"));
+    if (!pending || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await store.import(pending.bundle, {
+        keys: [...pending.keys],
+        includeSecrets: pending.includeSecrets,
+      });
+      setPending(null);
+      flash(t("settings.imported"));
+    } catch {
+      setError(t("settings.dataOperationFailed"));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleResetAll() {
-    if (!confirm(t("settings.resetAllConfirm"))) return;
-    await store.clearAll();
-    flash(t("settings.reset"));
+    if (busy || !confirm(t("settings.resetAllConfirm"))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await store.clearAll();
+      flash(t("settings.reset"));
+    } catch {
+      setError(t("settings.dataOperationFailed"));
+    } finally {
+      setBusy(false);
+    }
   }
 
   function flash(msg: string) {
@@ -85,6 +128,11 @@ export function DataPane() {
 
   return (
     <div className="space-y-5">
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
       {toast && (
         <div className="text-xs px-3 py-2 rounded bg-primary/10 border border-primary/20 text-primary">
           {toast}
@@ -103,7 +151,12 @@ export function DataPane() {
           />
           {t("settings.exportIncludeKeys")}
         </label>
-        <Button size="sm" variant="outline" onClick={handleExport}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleExport}
+          disabled={busy}
+        >
           <Download className="w-3 h-3 mr-1" />
           {t("settings.exportDownload")}
         </Button>
@@ -116,6 +169,7 @@ export function DataPane() {
         <Button
           size="sm"
           variant="outline"
+          disabled={busy}
           onClick={() => fileRef.current?.click()}
         >
           <Upload className="w-3 h-3 mr-1" />
@@ -132,11 +186,20 @@ export function DataPane() {
         {pending && (
           <div className="border border-border rounded p-3 space-y-2 text-xs">
             <div className="font-medium">{t("settings.importPreview")}</div>
+            {pending.invalidKeys.size > 0 && (
+              <p role="status">
+                {t("settings.importInvalidEntries", {
+                  count: pending.invalidKeys.size,
+                })}
+              </p>
+            )}
             <ul className="space-y-1 max-h-40 overflow-y-auto">
               {Object.entries(pending.bundle.entries).map(([key, value]) => (
                 <li key={key} className="flex items-center gap-2">
                   <input
                     type="checkbox"
+                    aria-label={key}
+                    disabled={busy || pending.invalidKeys.has(key)}
                     checked={pending.keys.has(key)}
                     onChange={(e) => {
                       const next = new Set(pending.keys);
@@ -156,6 +219,7 @@ export function DataPane() {
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
+                  disabled={busy}
                   checked={pending.includeSecrets}
                   onChange={(e) =>
                     setPending({ ...pending, includeSecrets: e.target.checked })
@@ -170,13 +234,21 @@ export function DataPane() {
               <Button
                 size="sm"
                 onClick={handleApplyImport}
-                disabled={pending.keys.size === 0}
+                disabled={
+                  busy ||
+                  (pending.keys.size === 0 &&
+                    !(
+                      pending.includeSecrets &&
+                      Object.keys(pending.bundle.keys ?? {}).length > 0
+                    ))
+                }
               >
                 {t("settings.importApply", { count: pending.keys.size })}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
+                disabled={busy}
                 onClick={() => setPending(null)}
               >
                 {t("common.cancel")}
@@ -190,7 +262,12 @@ export function DataPane() {
         <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           {t("settings.resetHeader")}
         </h3>
-        <Button size="sm" variant="outline" onClick={handleResetAll}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleResetAll}
+          disabled={busy}
+        >
           <RotateCw className="w-3 h-3 mr-1" />
           {t("settings.resetAll")}
         </Button>

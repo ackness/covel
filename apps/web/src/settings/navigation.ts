@@ -13,7 +13,7 @@ export interface NavNode {
   id: string;
   label: string;
   kind: NavNodeKind;
-  /** Registered entries rendered in this node (empty if node uses a custom pane). */
+  /** Registered entries owned by this pane, also used for search and deep links. */
   children: SettingEntry[];
   /** Parent id for sub-nodes (rendered indented in the left nav). */
   parentId?: string;
@@ -112,7 +112,21 @@ export function buildNavTree(
           label: sub.label,
           kind: "subgroup",
           parentId: "llm",
-          children: [],
+          children: all.filter((entry) => {
+            if (sub.id === "llm.providers") {
+              return (
+                entry.key.startsWith("keys.") ||
+                ["llm.providers", "llm.providerPriceMultipliers"].includes(
+                  entry.key,
+                )
+              );
+            }
+            if (sub.id === "llm.advanced")
+              return entry.key === "llm.paramOverrides";
+            return ["llm.slotConfig", "llm.capabilityOverrides"].includes(
+              entry.key,
+            );
+          }),
         });
       }
     } else if (group === "plugin") {
@@ -159,7 +173,9 @@ export function buildNavTree(
         children: entries,
       });
     } else if (group === "general") {
-      const generalEntries = entries.filter((e) => !APPEARANCE_KEYS.has(e.key));
+      const generalEntries = entries.filter(
+        (e) => !APPEARANCE_KEYS.has(e.key) && e.key !== "ui.onboardedVersion",
+      );
       if (generalEntries.length > 0) {
         nodes.push({
           id: group,
@@ -172,7 +188,7 @@ export function buildNavTree(
         id: APPEARANCE_NODE_ID,
         label: labels.appearance,
         kind: "group",
-        children: [],
+        children: entries.filter((entry) => APPEARANCE_KEYS.has(entry.key)),
       });
     } else if (entries.length > 0) {
       nodes.push({
@@ -205,6 +221,32 @@ export function buildNavTree(
 
 export { APPEARANCE_NODE_ID, OPERATOR_ACCESS_NODE_ID, PACKAGES_NODE_ID };
 
+/** Resolve old links and composite setting keys to their current pane. */
+export function resolveSettingsNode(
+  nodes: readonly NavNode[],
+  key: string,
+): NavNode | undefined {
+  const aliases: Record<string, string> = {
+    "llm.keys": "llm.providers",
+    "llm.presets": "llm.providers",
+    "llm.customPresets": "llm.providers",
+  };
+  const target = key.startsWith("keys.")
+    ? "llm.providers"
+    : (aliases[key] ?? key);
+  const exact = nodes.find((node) => node.id === target);
+  if (exact) {
+    return exact.id === "llm" || exact.id === "plugin"
+      ? nodes.find((node) => node.parentId === exact.id)
+      : exact;
+  }
+  return nodes.find((node) =>
+    node.children.some(
+      (entry) => entry.key === target || entry.key.startsWith(`${target}.`),
+    ),
+  );
+}
+
 export function filterNav(
   nodes: NavNode[],
   query: string,
@@ -214,9 +256,15 @@ export function filterNav(
   if (!q) return nodes;
   // Keep parent nodes whose subgroups match; keep children that match.
   const result = nodes.filter((node) => {
-    const labelHit = node.label.toLowerCase().includes(q);
+    const labelHit = `${node.id} ${node.label}`.toLowerCase().includes(q);
     const childHit = node.children.some((e) =>
-      (e.key + " " + resolveSettingEntryText(e, "label", locale))
+      (
+        e.key +
+        " " +
+        resolveSettingEntryText(e, "label", locale) +
+        " " +
+        resolveSettingEntryText(e, "description", locale)
+      )
         .toLowerCase()
         .includes(q),
     );

@@ -6,6 +6,7 @@ import {
   type CSSProperties,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { z } from "zod";
 import { AlertCircle, Play, ArrowLeft, Loader2 } from "lucide-react";
 import * as api from "@/services/api.js";
 import { Button } from "@/components/ui/button.js";
@@ -50,6 +51,11 @@ import {
 
 export { defaultSelectedPluginIdsForWorld, isLockedCorePackage };
 
+const worldPluginSettingsSchema = z.record(
+  z.string(),
+  z.record(z.string(), z.unknown()),
+);
+
 export function SessionPrepScreen({
   world,
   plugins,
@@ -65,6 +71,9 @@ export function SessionPrepScreen({
   settingsInitialKey,
 }: SessionPrepScreenProps) {
   const { t } = useTranslation();
+  const worldPluginSettings = worldPluginSettingsSchema.safeParse(
+    world.metadata?.pluginSettings,
+  );
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(
     presets,
     llmConfig,
@@ -240,7 +249,11 @@ export function SessionPrepScreen({
   }, [flowData, plugins, selectedPluginIdSet]);
 
   const resolveSelectedDeclaredSlot = useCallback(
-    (slotId: string) => resolveDeclaredSlot(resolvedSlots, slotId),
+    (slotId: string) =>
+      resolveDeclaredSlot(
+        resolvedSlots.filter((slot) => slot.tag === "text"),
+        slotId,
+      ),
     [resolvedSlots],
   );
   const isSelectedDeclaredSlotMissing = useCallback(
@@ -460,6 +473,11 @@ export function SessionPrepScreen({
               />
 
               <PluginSelectionCard
+                worldPluginSettings={
+                  worldPluginSettings.success
+                    ? worldPluginSettings.data
+                    : undefined
+                }
                 pluginPlan={pluginPlan}
                 pluginPlanLoading={pluginPlanLoading}
                 plugins={plugins}

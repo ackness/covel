@@ -883,7 +883,7 @@
     "pingSlotFallbackTitle": "Slot fell through to {{resolvedVia}}; the slot you requested is not configured.",
     "pingFailed": "Failed",
     "saveFailed": "Could not save setting",
-    "runtimeSlotsDiscoveredHint": "These model roles were declared by enabled plugins. Assign an appropriate provider and model to each one.",
+    "runtimeSlotsDiscoveredHint": "These model roles come from loaded plugins and their saved settings. Assign an appropriate provider and model to each one.",
     "providerConnections": "Provider connections",
     "providerConnectionsHint": "Configure each provider once. Its API key and endpoint are shared by all model IDs below.",
     "customProviders": "Custom providers and models",
@@ -962,7 +962,9 @@
     "conflictTitle": "Settings changed in another window",
     "conflictDetail": "{{keys}} was not saved. The latest saved values have been loaded. Review them and retry your change.",
     "draftConflict": "This setting changed in another window. Your draft has been kept. Reload the saved value before editing again.",
-    "reloadSavedValue": "Reload saved value"
+    "reloadSavedValue": "Reload saved value",
+    "dataOperationFailed": "Could not complete the settings operation. Check storage access and try again.",
+    "importInvalidEntries": "{{count}} entries do not match the current settings schema and will be skipped."
   },
   "appearance": {
     "previewTitle": "Reading preview",
@@ -1277,7 +1279,7 @@
     "useDefault": "Use default",
     "useDefaultWith": "Use default ({{value}})",
     "modelBindingAria": "Which model slot this plugin's runtime will use. Leave at default unless you have a reason to override.",
-    "modelBindingSource": "Model binding — edit in Session Prep",
+    "modelBindingSource": "Effective model binding for this runtime",
     "modelBindingFallback": "Model binding: see Session Prep",
     "modelBinding": "Model",
     "modelOverrideHint": "Override active — next turn will use this model",
@@ -1304,8 +1306,8 @@
     "providerSlotMissingTitle": "Add [covel.{{slot}}] to llm.toml, or change {{plugin}}.modelPresetId in Settings > Plugins.",
     "providerSlotMissingDetail": "Configure [covel.{{slot}}] in llm.toml, or change modelPresetId in Settings > Plugins > {{plugin}}.",
     "providerSlotSettingDetail": "from plugin setting modelPresetId; edit in Settings > Plugins > {{plugin}}",
-    "slotMissingTitle": "Add [covel.{{slot}}] to llm.toml",
-    "slotMissingShort": "missing [covel.{{slot}}]",
+    "slotMissingTitle": "Configure {{slot}} in Model Roles, or choose another configured role.",
+    "slotMissingShort": "Unconfigured role: {{slot}}",
     "runtimeDefaultSummary": "runtime default · {{slot}}",
     "runtimeDefaultSummaryWithModel": "runtime default · {{slot}} · {{model}}",
     "runtimeDefaultMissing": "runtime default · {{slot}} (missing)",
@@ -1377,7 +1379,8 @@
       "missingView": "missing `view`",
       "badView": "`view` must be an object",
       "conversionFailed": "could not render `view`"
-    }
+    },
+    "runtimeModelMissing": "Model role {{slot}} is unavailable. Choose a configured role or update Model Roles."
   },
   "pluginJob": {
     "completed": "{{target}} completed in {{duration}}",
