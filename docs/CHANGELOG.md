@@ -4,14 +4,46 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.33] - 2026-09-12
+
+This release improves agent execution and cancellation, brings onboarding and configuration in line with the current runtime, and makes world editing, session navigation, and portrait replacement more reliable.
+
+### Added
+
+- **The debugger exposes the model requests actually sent to providers.** Agent traces include protocol JSON, effective generation parameters, target fallback and transport attempts, alongside the logical prompt. Authorization headers and arbitrary provider metadata are excluded; redacted resource URLs and omitted fields are marked explicitly.
+- **Relationship retrieval can use the current scene's cast.** When the player names no graph node, an optional same-execution input supplies scene speakers for unambiguous name/alias matching. Retrieval follows only current relationships and adds no model or embedding calls.
+
+### Changed
+
+- **The getting-started guide follows the current configuration and play flow.** New players use the same provider/model editor and model-role assignments as Settings, can reuse existing configuration, and learn about world selection, play packs and opening choices. The guide can be skipped and reopened from world selection.
+- **Settings and plugin controls reflect discovered runtime contracts.** Role assignment and generation panes include configured and plugin-declared slots, multi-runtime plugins expose their individual model overrides, and provider-slot choices retain the active selection. Legacy settings links resolve to the current panes.
+- **Play and debug views distinguish current work from historical attempts.** Execution stages, cancellation and recovery are presented consistently. The relationship view supports clear selection and inspection while retaining the graph's saved layout.
+- **Plugin activation publishes registrations as one batch.** Tools, hooks, RPC handlers and media wires become available only after every entry factory succeeds. Failed activation remains retryable, and rollback removes only registrations owned by that attempt.
+
 ### Fixed
 
+- **Local desktop builds no longer bundle the developer's model configuration.** Staging and installer verification reject private server configuration files; startup checks use temporary synthetic settings and also cover a fresh installation without configuration.
+- **Partial model capability settings no longer break the configuration screen.** Schema defaults and normalized values are applied on hydration, writes, imports and synchronization. Invalid import entries are isolated without discarding valid selected settings, and failed writes restore normalized persisted values. This includes the fix for [#60](https://github.com/ackness/covel/issues/60).
+- **Stopping a turn cancels queued model work and prevents an uncommitted turn from being saved.** Cancelled waiters leave the concurrency queue promptly, hooks receive cancellation signals, and finalization checks cancellation before committing. Explicit retry remains available for an unfinished player action; refresh does not silently restart provider work.
+- **Hooks and event guidance reach the actual execution path.** The turn executor receives the configured hook pipeline, advertised events include their payload schemas, and the character tracker reserves its final bounded step for a write or an explicit no-op.
+- **Browser-owned world edits and deletion use the correct storage path.** Edits validate dimensions and survive later checkpoint writes; deletion atomically clears related browser checkpoints and pending commits, with best-effort cleanup of owned session mirrors. Deleting a private copy does not delete the shared server world.
+- **Failed session startup still rolls back after navigation.** A late startup failure cleans up its partially created session without changing the world or session the player has since opened.
+- **Panel navigation survives route changes and delayed rendering.** Plugin and image requests wait for session restoration, mobile drawers and plugin UI specifications. Session switches reset view-local state, and stale debugger responses cannot overwrite a newer visit.
+- **Portrait replacement completes the workspace, approval and persistence flow.** Uploads follow workspace restoration, approval retries reuse the uploaded media, and concurrent replacement is blocked. Runtime failures remain visible even in successful HTTP responses; failed slash commands retain their input, and image downloads release temporary object URLs.
+- **Data and appearance controls handle malformed input and failed operations.** Settings export, import and reset failures stay visible, invalid saved themes are filtered before rendering, and provider connectivity controls remain usable within the current settings layout.
 - **Development configuration is shared across entry points.** The API prefers the root `llm.toml` over home defaults, Vite reads root environment files, and proxy settings and web build cache inputs follow the effective configuration. Explicit process environment values retain precedence.
 - **Docker preserves installed and generated user resources.** The `appdata` volume backs user worlds/plugins, the model configuration remains a read-only host mount, and health checks use IPv4 loopback. World installation activates the package before returning success and removes a newly created package if activation fails.
 - **Configured resource paths are honored consistently.** AI file generation, plugin scaffolding, and runtime tests use the configured user directories; opening `llm.toml` follows its effective override. Existing world dimensions can reload on Linux through Node's recursive file watcher.
 - **Generated function runtimes use the current handler contract.** Default and custom scaffolds return `HandlerResult`; authoring examples now distinguish success effects, buffered data writes, and live progress. Regression cases exercise all three scaffold modes.
 - **Media generation supports existing outputs as input.** Video, poster, and GIF conversions finish in temporary files before replacing assets. Conversion failures preserve existing assets, and missing explicit source paths fail without selecting another recording.
 - **Environment switches and maintenance commands match their implementations.** `VECTOR_BACKEND=none` disables automatic semantic-memory work, PostgreSQL preflight follows the configured URL/port, and image scripts share TOML/key resolution. The nonfunctional `db:migrate` command and unused environment switches were removed; database upgrades remain an explicit maintenance task.
+
+### Upgrade notes
+
+- Update the server and bundled Web client together. Existing worlds, saves and model settings are retained; no automatic data migration is introduced in this release.
+- Custom plugin entry factories must await initialization and register capabilities before returning. Hooks should honor `ctx.signal` for cooperative cancellation; the framework cannot forcibly stop arbitrary in-process plugin code. Multi-runtime portrait panels should declare `runtimeId` explicitly.
+- Debug request traces can contain prompts, story text and tool arguments. They use the existing session access and retention boundaries, require care when sharing, and increase trace storage size. The recorded JSON is a diagnostic projection, not an authenticated replay artifact.
+- macOS Apple Silicon and Windows x64 binaries remain unsigned; first launch may trigger Gatekeeper or SmartScreen. Updates provide a version notification and manual download, without automatic installation. Back up custom content before upgrading.
 
 ## [0.0.32] - 2026-09-06
 

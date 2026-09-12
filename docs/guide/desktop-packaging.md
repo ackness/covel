@@ -11,6 +11,8 @@ The bundled snapshot is generated from the fixed LiteLLM commit declared in `pac
 
 Running `pnpm --filter @covel/desktop dist` after that invokes electron-builder.
 
+Builds do not bundle the developer's `llm.toml` or other private server configuration. Staging and unpacked-installer checks reject these files at the server resource root. Startup smoke tests use a temporary synthetic configuration and a separate no-configuration run; neither requires provider credentials or calls a model. Installed applications continue to load the user's configuration from their data directory.
+
 ## macOS
 
 ### Official unsigned build

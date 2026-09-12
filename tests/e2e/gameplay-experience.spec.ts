@@ -148,15 +148,24 @@ test("story remains legible in both themes and failed updates stay visible", asy
     }
     expect(seenModes.size).toBe(2);
     await expect(
-      page.getByText(/部分更新未完成|Some updates failed/),
+      page
+        .getByTestId("game-composer")
+        .getByRole("status")
+        .filter({ hasText: /部分更新未完成|some updates failed/i }),
     ).toBeVisible();
     const summary = page.getByRole("button", {
       name: /执行.*失败|Execution.*Failed/i,
     });
     await expect(summary).toHaveAttribute("aria-expanded", "false");
-    await expect(
-      page.getByRole("alert").filter({ hasText: /世界|World/ }),
-    ).toBeVisible();
+    const failure = page.getByRole("alert").filter({ hasText: /世界|World/ });
+    await expect(failure).not.toBeVisible();
+    await summary.click();
+    await expect(summary).toHaveAttribute("aria-expanded", "true");
+    await expect(failure).toBeVisible();
+    await failure
+      .getByRole("button", { name: /查看详情|Show details/i })
+      .click();
+    await expect(failure).toContainText("Extraction timed out");
     await page.screenshot({ path: "debugs/e2e-logs/gameplay-reading.png" });
   } finally {
     await page.unrouteAll({ behavior: "wait" });
