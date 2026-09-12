@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   LlmSlotInfo,
+  ModelCapabilityInfo,
   ModelCapabilityLookupResult,
 } from "@/services/api.js";
 import {
@@ -35,6 +36,39 @@ const fallback: ModelCapabilityLookupResult = {
 };
 
 describe("effective model capabilities", () => {
+  it.each([undefined, null])(
+    "normalizes partial overrides when the lookup is %s",
+    (lookup) => {
+      expect(
+        resolveDisplayCapability(lookup, server.capability, {
+          contextWindow: 64_000,
+        }),
+      ).toEqual({
+        input: ["text"],
+        output: ["text"],
+        contextWindow: 64_000,
+      });
+    },
+  );
+
+  it.each<{
+    override: Partial<ModelCapabilityInfo>;
+    input: ModelCapabilityInfo["input"];
+    output: ModelCapabilityInfo["output"];
+  }>([
+    { override: { input: ["image"] }, input: ["image"], output: ["text"] },
+    { override: { output: ["audio"] }, input: ["text"], output: ["audio"] },
+    { override: { input: [], output: [] }, input: [], output: [] },
+  ])(
+    "preserves explicit modalities in $override",
+    ({ override, input, output }) => {
+      expect(resolveDisplayCapability(undefined, undefined, override)).toEqual({
+        input,
+        output,
+      });
+    },
+  );
+
   it("uses the bound target and its protocol without inheriting the old slot limits", () => {
     const target = resolveEffectiveModelTarget(
       {

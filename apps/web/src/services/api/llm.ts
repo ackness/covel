@@ -233,7 +233,14 @@ export function mergeCapability(
 ): ModelCapabilityInfo | undefined {
   if (!base && !override) return undefined;
   if (!override) return base;
-  if (!base) return override as ModelCapabilityInfo;
+  if (!base) {
+    // Local overrides can omit modalities while the server lookup is pending.
+    return {
+      ...override,
+      input: override.input ?? ["text"],
+      output: override.output ?? ["text"],
+    };
+  }
   return {
     input: override.input ?? base.input,
     output: override.output ?? base.output,
