@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { seedBrowserSettings } from "./helpers/player.js";
+import { seedBrowserSettings, ONBOARDING_VERSION } from "./helpers/player.js";
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -16,7 +16,7 @@ test("malformed stored themes do not prevent appearance settings from loading", 
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await seedBrowserSettings(page, {
-    "ui.onboardedVersion": 3,
+    "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
     "ui.appearance": "synthetic-valid",
     "ui.customThemes": [
@@ -55,7 +55,7 @@ test("provider import keeps valid profiles alongside malformed legacy entries", 
   page,
 }) => {
   await seedBrowserSettings(page, {
-    "ui.onboardedVersion": 3,
+    "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
   });
   await page.goto("/session");

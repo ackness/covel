@@ -6,6 +6,7 @@ import {
   Wand2,
   FolderOpen,
   ArrowRight,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import type { WorldRecord } from "@/services/api.js";
@@ -25,6 +26,7 @@ export interface WorldListViewProps {
   interfaceLocale: string;
   onOpenGenerator: () => void;
   onOpenSettings: () => void;
+  onOpenOnboarding?: () => void;
   onEnterWorld: (worldId: string) => void;
   onViewDetails: (e: React.MouseEvent, worldId: string) => void;
   onDeleteWorld: (e: React.MouseEvent, worldId: string) => void;
@@ -45,6 +47,7 @@ export function WorldListView({
   interfaceLocale,
   onOpenGenerator,
   onOpenSettings,
+  onOpenOnboarding,
   onEnterWorld,
   onViewDetails,
   onDeleteWorld,
@@ -73,6 +76,16 @@ export function WorldListView({
                 "Each world is a self-contained setting with its own tone, characters, and ruleset.",
               )}
             </p>
+            {onOpenOnboarding && (
+              <Button
+                variant="link"
+                className="mt-2 h-auto px-0 py-1.5"
+                onClick={onOpenOnboarding}
+              >
+                <BookOpen className="h-4 w-4" aria-hidden />
+                {t("onboarding.guide")}
+              </Button>
+            )}
           </div>
 
           {/* Compact action rail keeps creation and setup nearby without pushing worlds down. */}

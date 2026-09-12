@@ -37,6 +37,7 @@ interface WorldSelectScreenProps {
   onSettingsOpenChange: (v: boolean) => void;
   settingsInitialKey?: string;
   onSelectWorld: (worldId: string) => void;
+  onOpenOnboarding?: () => void;
   onWorldUpdated?: (world: WorldRecord) => void;
   onWorldCreated?: (world: WorldRecord) => void;
   onWorldDeleted?: (worldId: string) => void;
@@ -79,6 +80,7 @@ export function WorldSelectScreen({
   onSettingsOpenChange,
   settingsInitialKey,
   onSelectWorld,
+  onOpenOnboarding,
   onWorldUpdated,
   onWorldCreated,
   onWorldDeleted,
@@ -386,6 +388,7 @@ export function WorldSelectScreen({
         onWorldCreated={(world) => onWorldCreated?.(world)}
       />
       <WorldListView
+        onOpenOnboarding={onOpenOnboarding}
         worlds={prioritizedWorlds}
         t={t}
         interfaceLocale={activeLocale ?? DEFAULT_FALLBACK_LOCALE}

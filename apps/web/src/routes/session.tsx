@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Suspense, lazy, useEffect, useRef } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
@@ -14,6 +14,7 @@ import { initDesktopBridge } from "@/lib/desktop-bridge.js";
 import { WorldSelectScreen } from "@/components/session/world-select-screen.js";
 import { SessionPrepScreen } from "@/components/session/session-prep-screen.js";
 import { OnboardingWizard } from "@/components/onboarding-wizard.js";
+import { isOnboarded } from "@/components/onboarding-wizard/persistence.js";
 import { ExecutionRecoveryNotice } from "@/components/session/execution-recovery-notice.js";
 
 // Lazy-load the in-game surface (chat + stage + json-render panels + plugin
@@ -61,6 +62,7 @@ function SessionPage() {
     state.llmConfig,
   );
   const settings = useSettingsDialog(refreshSlots);
+  const [onboardingOpen, setOnboardingOpen] = useState(() => !isOnboarded());
   const { sid } = Route.useSearch();
   const navigate = useNavigate();
   const autoResumeAttempted = useRef(false);
@@ -332,8 +334,15 @@ function SessionPage() {
   // not on the marketing home page.
   return (
     <>
-      <OnboardingWizard />
+      <OnboardingWizard
+        open={onboardingOpen}
+        onOpenChange={setOnboardingOpen}
+        settingsOpen={settings.open}
+        onOpenSettings={settings.openWithKey}
+        resolvedSlots={resolvedSlots}
+      />
       <WorldSelectScreen
+        onOpenOnboarding={() => setOnboardingOpen(true)}
         worlds={state.worlds}
         plugins={state.plugins}
         resolvedSlots={resolvedSlots}

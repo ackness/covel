@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import {
   seedBrowserSettings,
+  ONBOARDING_VERSION,
   useIsolatedBrowserSettings,
 } from "./helpers/player.js";
 
@@ -57,7 +58,7 @@ test.describe("Locale preference", () => {
     page,
   }) => {
     await seedBrowserSettings(page, {
-      "ui.onboardedVersion": 3,
+      "ui.onboardedVersion": ONBOARDING_VERSION,
       "ui.locale": "zh-CN",
     });
     await page.goto("/");

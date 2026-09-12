@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { seedBrowserSettings } from "./helpers/player.js";
+import { seedBrowserSettings, ONBOARDING_VERSION } from "./helpers/player.js";
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -17,7 +17,7 @@ test("partial capability overrides survive reopening and a failed lookup", async
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await seedBrowserSettings(page, {
-    "ui.onboardedVersion": 3,
+    "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
   });
   const capability = {
