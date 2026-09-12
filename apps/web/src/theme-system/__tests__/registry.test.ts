@@ -112,6 +112,40 @@ describe("theme registry", () => {
     ).toBeNull();
   });
 
+  it("isolates malformed theme labels in settings backups", async () => {
+    const store = await createStore();
+    await store.import(
+      {
+        schemaVersion: 1,
+        exportedAt: "2026-09-12T00:00:00Z",
+        entries: {
+          [CUSTOM_THEMES_KEY]: [
+            {
+              id: "valid",
+              label: { "en-US": "Valid" },
+              description: null,
+              cssText: "",
+            },
+            null,
+            ...[null, [], { "en-US": 42 }].map((label, index) => ({
+              id: `invalid-${index}`,
+              label,
+              cssText: "",
+            })),
+          ],
+        },
+      },
+      { keys: [CUSTOM_THEMES_KEY] },
+    );
+
+    const customThemes = syncThemeRegistry(store).filter(
+      (theme) => theme.source === "custom",
+    );
+    expect(customThemes.map((theme) => theme.id)).toEqual(["valid"]);
+    expect(customThemes[0]?.label).toEqual({ "en-US": "Valid" });
+    expect(customThemes[0]?.description).toBeUndefined();
+  });
+
   it("locks the color scheme to the selected theme support", async () => {
     const store = await createStore();
     await store.set(THEME_SCHEME_KEY, "light");

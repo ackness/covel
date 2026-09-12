@@ -4,6 +4,14 @@
 
 `@covel/settings` provides schema registration, in-memory values, subscriptions, and persistence. Web uses localStorage; desktop uses the configuration API and `settings.json`. API keys use a separate secrets channel.
 
+## Schema normalization
+
+Registered non-secret settings expose the schema's parsed result during hydration, dynamic registration, `set()`, import, refresh, and rollback after a failed write. Nested `.default()` values and string trimming appear in `get()`, exports, and subscriber notifications; explicit writes persist the parsed result. Unregistered keys retain their original values.
+
+Normalization during hydration or refresh does not independently trigger a save. Revision conflict checks still compare the original backend-confirmed snapshots, so filling defaults is not mistaken for a remote edit. Setting schemas must accept their own persisted output and normalize idempotently to support reloads, repeated registration, and synchronization.
+
+Invalid custom themes in settings backups are skipped individually while valid themes continue to load. Provider imports filter legacy entries with incorrectly typed connection fields while preserving valid legacy and current profiles in the same file.
+
 ## Multiple instances and synchronization
 
 Backends implementing `loadWithRevision` / `saveWithRevision` must check a monotonic revision. Each local mutation records explicit target keys, captured desired values, and the last confirmed base, then persists in mutation order. Two consecutive `set` calls with the same value cannot assume the value was already saved.

@@ -80,15 +80,9 @@ export class SettingsStore implements SettingsStoreApi {
       const entries = versioned
         ? versionedStored.entries
         : (stored as Record<SettingKey, unknown>);
-      const hydratedValues = new Map<SettingKey, unknown>();
-      for (const [key, value] of Object.entries(entries)) {
-        this.assertNonSecretEntry(key);
-        const entry = this.registry.get(key);
-        if (entry && !entry.schema.safeParse(value).success) {
-          throw new Error(`Settings hydration validation failed for ${key}`);
-        }
-        hydratedValues.set(key, value);
-      }
+      const hydratedValues = new Map(
+        Object.entries(this.normalizeEntries(entries, "hydration")),
+      );
       const hydratedSecrets = new Map<string, string>();
       for (const [provider, keyValue] of Object.entries(secrets)) {
         if (typeof keyValue === "string" && keyValue.length > 0) {
@@ -105,15 +99,9 @@ export class SettingsStore implements SettingsStoreApi {
           versionedStored,
           (next) => {
             this.assertHydrated();
-            for (const [key, value] of Object.entries(next)) {
-              this.assertNonSecretEntry(key);
-              const entry = this.registry.get(key);
-              if (entry && !entry.schema.safeParse(value).success) {
-                throw new Error(
-                  `Settings synchronization validation failed for ${key}`,
-                );
-              }
-            }
+            // CAS compares the raw persisted values. Normalize only the
+            // visible snapshot, keeping the confirmed revision base intact.
+            this.normalizeEntries(next, "synchronization");
           },
           (next) => this.replaceVisibleValues(next),
         );
@@ -187,9 +175,22 @@ export class SettingsStore implements SettingsStoreApi {
       this.replacePersistedSnapshot(target, snapshot);
     } catch (err) {
       if (this.persistRevisions[target] === revision) {
+        const snapshot = this.persistedSnapshots[target] as Map<
+          string,
+          unknown
+        >;
         this.restore(
           target === "values" ? this.values : this.secrets,
-          this.persistedSnapshots[target] as Map<string, unknown>,
+          target === "values"
+            ? new Map(
+                Object.entries(
+                  this.normalizeEntries(
+                    Object.fromEntries(snapshot),
+                    "restoration",
+                  ),
+                ),
+              )
+            : snapshot,
         );
       }
       throw err;
@@ -239,6 +240,7 @@ export class SettingsStore implements SettingsStoreApi {
   }
 
   private replaceVisibleValues(next: Record<SettingKey, unknown>): void {
+    next = this.normalizeEntries(next, "synchronization");
     const previous = this.serializeEntries();
     this.restore(this.values, new Map(Object.entries(next)));
     const keys = new Set([...Object.keys(previous), ...Object.keys(next)]);
@@ -250,6 +252,24 @@ export class SettingsStore implements SettingsStoreApi {
         this.notify(key, this.get(key));
       }
     }
+  }
+
+  private normalizeEntries(
+    entries: Record<SettingKey, unknown>,
+    phase: string,
+  ): Record<SettingKey, unknown> {
+    return Object.fromEntries(
+      Object.entries(entries).map(([key, value]) => {
+        this.assertNonSecretEntry(key);
+        const entry = this.registry.get(key);
+        if (!entry) return [key, value];
+        const parsed = entry.schema.safeParse(value);
+        if (!parsed.success) {
+          throw new Error(`Settings ${phase} validation failed for ${key}`);
+        }
+        return [key, parsed.data];
+      }),
+    );
   }
 
   private hasVersionedPersistence(): boolean {
@@ -274,18 +294,18 @@ export class SettingsStore implements SettingsStoreApi {
 
   register<T>(entry: SettingEntry<T>): void {
     this.registry.set(entry.key, entry as SettingEntry);
-    if (
-      this.hydrationState === "ready" &&
-      this.values.has(entry.key) &&
-      (this.isSecretKey(entry.key) ||
-        !entry.schema.safeParse(this.values.get(entry.key)).success)
-    ) {
-      this.invalidHydratedKeys.add(entry.key);
-      this.hydrationError = new Error(
-        `Settings hydration validation failed for dynamically registered ${entry.key}`,
-      );
-      this.hydrationState = "failed";
-      this.emitPersistenceError(this.hydrationError);
+    if (this.hydrationState === "ready" && this.values.has(entry.key)) {
+      const parsed = entry.schema.safeParse(this.values.get(entry.key));
+      if (this.isSecretKey(entry.key) || !parsed.success) {
+        this.invalidHydratedKeys.add(entry.key);
+        this.hydrationError = new Error(
+          `Settings hydration validation failed for dynamically registered ${entry.key}`,
+        );
+        this.hydrationState = "failed";
+        this.emitPersistenceError(this.hydrationError);
+      } else {
+        this.values.set(entry.key, parsed.data);
+      }
     }
   }
 
@@ -313,6 +333,7 @@ export class SettingsStore implements SettingsStoreApi {
 
   set<T>(key: SettingKey, value: T): Promise<void> {
     try {
+      let normalized: unknown = value;
       const entry = this.registry.get(key);
       if (entry) {
         const parsed = entry.schema.safeParse(value);
@@ -321,6 +342,7 @@ export class SettingsStore implements SettingsStoreApi {
             `Settings validation failed for ${key}: ${parsed.error.message}`,
           );
         }
+        normalized = parsed.data;
       }
       const operation = this.isSecretKey(key)
         ? this.persist("secrets", () => {
@@ -332,7 +354,7 @@ export class SettingsStore implements SettingsStoreApi {
         : this.persist(
             "values",
             () => {
-              this.values.set(key, value);
+              this.values.set(key, normalized);
             },
             [key],
           );
@@ -442,11 +464,13 @@ export class SettingsStore implements SettingsStoreApi {
       if (!selected.has(key)) continue;
       this.assertNonSecretEntry(key);
       const entry = this.registry.get(key);
+      let normalized: unknown = value;
       if (entry) {
         const parsed = entry.schema.safeParse(value);
         if (!parsed.success) continue;
+        normalized = parsed.data;
       }
-      nonSecretUpdates.push([key, value]);
+      nonSecretUpdates.push([key, normalized]);
     }
     if (opts.includeSecrets && bundle.keys) {
       for (const [provider, keyValue] of Object.entries(bundle.keys)) {
