@@ -7,6 +7,7 @@
  * arbitrary output shapes. The session kernel normalizes them into typed Proposals.
  */
 
+import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import type {
   DeferredRuntimeJob,
   RuntimeManifest,
@@ -255,6 +256,7 @@ async function executeTurnImpl(
     const tsResult = await runTurnStartHook(
       {
         pipeline: deps.hookPipeline,
+        signal: getTurnExecutionSignal(deps.turnControl),
         sessionId: input.sessionId,
         turnId: input.turnId,
         eventBus: deps.eventBus,
@@ -412,6 +414,7 @@ async function executeTurnImpl(
   const preScheduleResult = await runPreScheduleHook(
     {
       pipeline: deps.hookPipeline,
+      signal: getTurnExecutionSignal(deps.turnControl),
       sessionId: input.sessionId,
       turnId: input.turnId,
       eventBus: deps.eventBus,
@@ -540,6 +543,7 @@ async function executeTurnImpl(
 
         const hookOpts = {
           pipeline: deps.hookPipeline,
+          signal: getTurnExecutionSignal(deps.turnControl),
           sessionId: input.sessionId,
           turnId: input.turnId,
           eventBus: deps.eventBus,

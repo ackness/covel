@@ -1,5 +1,6 @@
 import type {
   LLMResponseFormat,
+  LLMProviderRequest,
   LLMRequestDefaults,
   LLMUsageSummary,
   MediaRef,
@@ -135,6 +136,12 @@ export type CacheStrategy = "anthropic-explicit" | "auto-prefix" | "none";
 // ── Provider Config ────────────────────────────────────────────────
 
 export interface ProviderConfig {
+  /** Framework observation only; never populated from provider/user metadata. */
+  requestObservation?: {
+    provider: string;
+    protocol: string;
+    onRequest: (request: LLMProviderRequest) => void;
+  };
   baseUrl?: string;
   apiKey?: string;
   headers?: Record<string, string>;

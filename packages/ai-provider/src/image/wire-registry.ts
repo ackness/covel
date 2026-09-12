@@ -8,11 +8,18 @@ export const DEFAULT_IMAGE_WIRE = "openai-images";
 // registration is a designed extension point, not speculative flexibility.
 const wires = new Map<string, ImageWire>();
 
-export function registerImageWire(wire: ImageWire): void {
+export function registerImageWire(wire: ImageWire): () => void {
   if (wires.has(wire.id)) {
     throw new Error(`image wire "${wire.id}" already registered`);
   }
-  wires.set(wire.id, wire);
+  const id = wire.id;
+  wires.set(id, wire);
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    if (wires.get(id) === wire) wires.delete(id);
+  };
 }
 
 export function getImageWire(id: string): ImageWire | null {

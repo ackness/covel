@@ -289,7 +289,9 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 
 每个主循环回合开始时自动运行：从 `playerMessage` 中匹配 NPC 节点名（含别名，case-insensitive），沿邻接索引做 2-hop BFS，只保留**有效区间仍开放**的边（`invalidAt === undefined`；被新版本取代的旧边保留在库里做溯源，但不进 prompt，否则同一对人物会出现两条互相矛盾的事实），按 `(validAt, |strength|)` 排序后取 top-20，输出 markdown 列表到 `npcContext` 字段。`narrator` 通过 `input.inject` 把这段文本作为 `<npc-relationships>` 块注入 prompt 末尾。
 
-当前检索路径是纯结构化匹配与图遍历，不生成 embedding，也不查询 vector store。
+玩家输入没有命中人物时，检索器通过可选 `inputs.currentCast` 绑定消费本轮 `scene-cast` capability 输出的 `/speakers`（带 accepts schema 校验），用完整姓名/别名唯一匹配图节点。角色 ID 与图节点 ID 不等同；重名歧义不猜测，无场景插件时保持原有检索路径。显式点名优先于演员候选。BFS 只沿有效的最新关系扩展，过期关系也不能作为中转。
+
+该输入同时建立本轮 DAG 先后关系并传递结果；`after` 或 strict 串行本身不会让另一 runtime 读到未提交的 plugin-data。这里不读共享可变写缓冲，也不提前提交演员状态。当前检索不增加 LLM、embedding 或 vector store 调用。
 
 ### npc-graph/extractor
 
@@ -1234,9 +1236,12 @@ export default function (covel) {
 }
 ```
 
-- **类型可导入**：`PluginAPI` / `PluginToolkit` / `PluginHookOptions` / `PluginRpcOptions` / `PluginEntryFactory` 从 `@covel/runtime` 导出（Public Plugin API 的稳定契约）。JS 插件用 JSDoc `@param {import('@covel/runtime').PluginAPI} covel` 标注工厂参数，TS 插件直接 `import type`。服务端实现按同一类型做编译期对齐（`buildApi(): PluginAPI`），不会与文档 / 作者可见类型漂移。
+- **类型可导入**：`PluginAPI` / `PluginToolkit` / `PluginHookOptions` / `PluginRpcOptions` / `PluginEntryFactory` 从 `@covel/runtime` 导出（Public Plugin API 的稳定契约）。JS 插件用 JSDoc `@param {import('@covel/runtime').PluginAPI} covel` 标注工厂参数，TS 插件直接 `import type`。服务端实现按同一类型做编译期对齐（`buildEntryApi(): PluginAPI`），不会与文档 / 作者可见类型漂移。
 - **来源门控**与 local tools 一致：builtin 在启动时执行 entry；community 延迟到插件激活（`ensurePluginEntry`，与 runtime 加载同刻）。
-- entry 抛错 / 非函数导出 / 路径逃逸只 warn 跳过，不影响启动；工厂每插件只执行一次（幂等）。
+- **注册批次**：同插件的全部 entry 工厂成功后，工具、Hook、RPC 与媒体 wire 才同步发布；初始化失败丢弃暂存注册，发布失败逆序撤销本批次已经发布的注册，不影响其它插件。非法单条注册与名称冲突保留警告跳过行为。
+- entry 抛错、非函数导出、缺失文件或路径逃逸均视为激活失败。builtin 启动时记录失败并继续其它插件；`ensurePluginEntry` 调用方收到错误，失败不记作已加载，后续调用可以重试。并发激活共享一次尝试，成功后才去重。
+- 注册 API 仅在工厂执行期间有效；工厂必须 await 自己的初始化，返回后再注册会抛错。回滚只涵盖框架托管注册，不撤销模块顶层 I/O、外部请求或插件自行启动的任务；会话停用不卸载进程共享注册。
+- 底层 Hook、RPC 与媒体 wire registry 的注册返回幂等撤销函数，仅清理该注册实例；旧句柄不会删除同名后继注册。PluginAPI 继续返回 `void`，批次由框架管理。
 - **agent runtime 暴露给 LLM 的工具**仍需在各 runtime manifest 声明：entry 注册的工具用 `tools.plugin`（名字列表）声明可见性，替代旧 `tools.local` 的路径列表：
 
 ```yaml
@@ -1246,6 +1251,8 @@ tools:
   builtin: # builtin 启用列表（不变）
     - plugin-data-get
 ```
+
+Hook 调用总会获得 `ctx.signal`（类型可选以兼容直接构造上下文的调用方）：超时或传入的父执行取消会通知协作式 I/O 并结束等待，迟到返回的 `replace` 不再进入流水线。同进程不合作代码无法被强制终止。顺序 pipeline 中 abort 停止后续 handler；各 wire helper 保持原有拦截/转换策略，例如 `PreLLMCall` 的 abort 表示保留原请求，真正的执行取消仍由模型调用边界检查。观察型事件不因 Hook 失败撤销已完成的领域提交；`TurnStop`、提交和会话生命周期的收尾 Hook 使用自己的超时界限。
 
 ### commands（输入框斜线命令）
 
@@ -1669,6 +1676,8 @@ relations:
 Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用时长**（`callTimeoutMs` / `firstTokenTimeoutMs`）和**运行总时长**（`timeoutMs`）。框架会自动在 transient 错误、call-timeout、first-token-timeout、tool-call 循环四种情形下重试，并在每次重试时向 prompt 追加一条短 system 提示打破 KV-cache 命中。
 
 **LLM 并发闸门**：进程内所有 LLM 调用共享一个 FIFO 并发上限（`COVEL_LLM_MAX_CONCURRENT`，默认 4，`0` 关闭）——post-turn 阶段多个 agent 并行时不再裸并发打满 provider。排队等槽的时间**顺延**该 runtime 的 deadline（排队是框架的成本，不占 runtime 预算），流式调用在整个流消费期间持有槽位。实现见 `packages/runtime/src/retry/llm-slots.ts`。
+
+模型重试的并发队列支持取消：已取消 waiter 立即退出，不等待在途请求完成，不发起新的 provider 请求，不占用后继请求配额；有效排队时长仍按原契约补偿 runtime deadline。
 
 **Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse` / `completeAfterTools`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。超时后框架会**吊销 handler 的全部副作用能力**——`store`、`pluginData`、`media`、`images`、`speech`、`gateway`、`utils`、`recursiveCall`、`logger`、`assetProgress`——脱离的 handler 再调用会同步抛出 `capability ... is revoked`，避免它在本次执行已经收场之后仍然写入。吊销挂在超时本身、不挂在任何锁上，因此对持锁与不持锁的执行路径一样有效。协作式 handler 应监听 `ctx.signal` 主动取消。
 

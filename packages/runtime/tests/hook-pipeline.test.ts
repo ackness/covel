@@ -128,7 +128,10 @@ describe("HookPipeline", () => {
       await pipeline.run("TurnStart", ctx, payload);
 
       expect(handler).toHaveBeenCalledOnce();
-      expect(handler).toHaveBeenCalledWith(ctx, payload);
+      expect(handler).toHaveBeenCalledWith(
+        { ...ctx, signal: expect.any(AbortSignal) },
+        payload,
+      );
     });
 
     it("runs multiple handlers in registration order", async () => {

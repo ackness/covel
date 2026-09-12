@@ -162,7 +162,7 @@ describe("HookPipeline getOwnSettings injection", () => {
     const pipeline = createHookPipeline();
     let hadGetter = true;
 
-    // No runWithHookScope wrapper → no scope → context passed through untouched.
+    // Scope-less calls have no settings getter, but still receive cancellation.
     const ctx = { ...baseCtx };
     const handler = vi.fn(async (c: HookContext) => {
       hadGetter = c.getOwnSettings !== undefined;
@@ -178,8 +178,11 @@ describe("HookPipeline getOwnSettings injection", () => {
     await pipeline.run("TurnStart", ctx, { playerMessage: "hi" });
 
     expect(hadGetter).toBe(false);
-    // The exact context object is forwarded unchanged when no scope is active.
-    expect(handler).toHaveBeenCalledWith(ctx, { playerMessage: "hi" });
+    // Identity metadata is preserved; only the cancellation signal is added.
+    expect(handler).toHaveBeenCalledWith(
+      { ...ctx, signal: expect.any(AbortSignal) },
+      { playerMessage: "hi" },
+    );
   });
 });
 

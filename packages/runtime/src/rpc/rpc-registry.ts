@@ -120,7 +120,7 @@ export interface PluginRpcRegistry {
       readonly trustLevel?: RpcTrustLevel;
     },
     pluginTrust: RpcTrustLevel,
-  ): void;
+  ): () => void;
   /** Register a framework default. Always succeeds; later registrations overwrite. */
   registerFrameworkDefault(
     action: string,
@@ -150,13 +150,17 @@ export function createPluginRpcRegistry(): PluginRpcRegistry {
           `[plugin-rpc] duplicate registration: plugin "${pluginId}" already declares action "${action}"`,
         );
       }
-      pluginEntries.set(key, {
+      const entry: RpcRegistryEntry = {
         action,
         pluginId,
         trustLevel: resolveActionTrust(pluginId, action, options, pluginTrust),
         description: options.description,
         handler,
-      });
+      };
+      pluginEntries.set(key, entry);
+      return () => {
+        if (pluginEntries.get(key) === entry) pluginEntries.delete(key);
+      };
     },
 
     registerFrameworkDefault(action, handler, options) {

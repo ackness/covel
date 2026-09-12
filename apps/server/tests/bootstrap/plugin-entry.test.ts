@@ -302,6 +302,59 @@ export default async function (covel) {
     ).toBeDefined();
   });
 
+  it("keeps a failed multi-entry activation pending and retries the entire batch", async () => {
+    const p = writePlugin(
+      "entry-retry-batch",
+      `
+      let calls = 0;
+      export default function (covel) {
+        calls++;
+        covel.registerRpc("count", async () => calls);
+        covel.on("TurnStart", async () => ({ action: "abort", reason: "registered" }));
+      }
+    `,
+      { source: "community" },
+    );
+    fs.writeFileSync(
+      path.join(p.discovery.rootPath, "server/second.mjs"),
+      `
+      let calls = 0;
+      export default function () { if (++calls === 1) throw new Error("first activation failed"); }
+    `,
+    );
+    const params = makeParams([p]);
+    params.manifestCache.set(p.discovery.id, [
+      p.parsed,
+      {
+        ...p.parsed,
+        manifest: { ...p.parsed.manifest, entry: "server/second.mjs" },
+      },
+    ]);
+    const entries = await createBootstrapPluginEntries(params);
+    const attempts = await Promise.allSettled([
+      entries.ensurePluginEntry(p.discovery.id),
+      entries.ensurePluginEntry(p.discovery.id),
+    ]);
+    expect(attempts.map((r) => r.status)).toEqual(["rejected", "rejected"]);
+    expect(entries.hasPendingEntry(p.discovery.id)).toBe(true);
+    expect(params.rpcRegistry.list()).toEqual([]);
+    expect(await params.hookPipeline.run("TurnStart", hookCtx, {})).toEqual({
+      action: "continue",
+    });
+    await entries.ensurePluginEntry(p.discovery.id);
+    expect(entries.hasPendingEntry(p.discovery.id)).toBe(false);
+    const entry = params.rpcRegistry.getPluginAction(p.discovery.id, "count");
+    expect(
+      await entry?.handler(
+        {},
+        { sessionId: "s1", pluginId: p.discovery.id, store: params.store },
+      ),
+    ).toBe(2);
+    expect(
+      (await params.hookPipeline.run("TurnStart", hookCtx, {})).action,
+    ).toBe("abort");
+  });
+
   it("warn-skips a throwing entry without breaking other plugins", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const bad = writePlugin(

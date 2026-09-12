@@ -388,6 +388,7 @@ export async function executeAgentGuard({
       const postResult = await runPostRuntimeHook(
         {
           pipeline: hookPipeline,
+          signal: getTurnExecutionSignal(deps.turnControl),
           sessionId: input.sessionId,
           turnId: input.turnId,
           pluginId: manifest.pluginId,

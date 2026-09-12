@@ -120,7 +120,10 @@ export function createGateway(deps: GatewayDependencies) {
           deps.presetRegistry.resolveTextTargetChain({ presetId }),
         execute: async (target, resolved) => {
           const result = await resolved.adapter.generateText(
-            configWithSignal(resolved.config, options),
+            configWithSignal(resolved.config, options, {
+              provider: targetProvider(target),
+              protocol: resolved.protocol,
+            }),
             {
               model: targetModel(target),
               messages: input.messages,
@@ -168,7 +171,10 @@ export function createGateway(deps: GatewayDependencies) {
           deps.presetRegistry.resolveTextTargetChain({ presetId }),
         execute: async (target, resolved) => {
           const result = await resolved.adapter.generateObject(
-            configWithSignal(resolved.config, options),
+            configWithSignal(resolved.config, options, {
+              provider: targetProvider(target),
+              protocol: resolved.protocol,
+            }),
             {
               model: targetModel(target),
               schema: input.schema,
@@ -265,7 +271,10 @@ export function createGateway(deps: GatewayDependencies) {
         let finalUsage: UsageSummary | null = null;
 
         for await (const event of resolved.adapter.streamText(
-          configWithSignal(resolved.config, options),
+          configWithSignal(resolved.config, options, {
+            provider: targetProvider(target),
+            protocol: resolved.protocol,
+          }),
           {
             model: targetModel(target),
             messages: input.messages,
@@ -609,7 +618,19 @@ export function createGateway(deps: GatewayDependencies) {
   function configWithSignal(
     config: ProviderConfig,
     options?: GatewayOptions,
+    requestTarget?: { provider: string; protocol: string },
   ): ProviderConfig {
-    return options?.signal ? { ...config, signal: options.signal } : config;
+    return {
+      ...config,
+      ...(options?.signal ? { signal: options.signal } : {}),
+      ...(requestTarget && options?.onProviderRequest
+        ? {
+            requestObservation: {
+              ...requestTarget,
+              onRequest: options.onProviderRequest,
+            },
+          }
+        : {}),
+    };
   }
 }

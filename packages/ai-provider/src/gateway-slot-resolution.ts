@@ -1,3 +1,4 @@
+import type { LLMProviderRequest } from "@covel/shared";
 import type { ProviderDefaults } from "./types.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
@@ -50,6 +51,7 @@ export interface GatewaySlotResolutionDependencies {
 }
 
 export interface GatewayOptions {
+  onProviderRequest?: (request: LLMProviderRequest) => void;
   /**
    * Request-supplied API keys (X-Provider-Keys header). Applied to any
    * resolved target — the caller explicitly chose to send these keys.

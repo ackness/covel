@@ -10,6 +10,7 @@
  * - All aborts/timeouts/errors emit observability events via the EventBus.
  */
 
+import { invokeWithSignal } from "./invoke-with-signal.js";
 import type { EventBus } from "@covel/events";
 import { HOOK_SEMANTICS } from "./types.js";
 import {
@@ -40,10 +41,20 @@ export class HookPipeline {
     Array<HookRegistration<unknown>>
   >();
 
-  register<P>(reg: HookRegistration<P>): void {
+  register<P>(reg: HookRegistration<P>): () => void {
     const list = this.registrations.get(reg.event) ?? [];
-    list.push(reg as HookRegistration<unknown>);
+    const entry = { ...reg } as HookRegistration<unknown>;
+    list.push(entry);
     this.registrations.set(reg.event, list);
+    return () => {
+      const current = this.registrations.get(reg.event);
+      if (current) {
+        this.registrations.set(
+          reg.event,
+          current.filter((item) => item !== entry),
+        );
+      }
+    };
   }
 
   unregister(id: string): void {
@@ -227,15 +238,16 @@ export class HookPipeline {
     // Inject a read-only, per-plugin settings accessor bound to *this* handler's
     // plugin, reusing the same session hook scope that carries activePluginIds.
     // Only attached when a scope is active — mirrors the run()-level ctxScoped
-    // gate so scope-less `pipeline.run` calls forward the context untouched
-    // (behaviour-preserving). Framework hooks (no pluginId) get a getter → `{}`.
+    // gate. Scope-less calls still receive the per-handler cancellation signal.
+    // Framework hooks (no pluginId) get a getter returning `{}`.
     const ctxForHandler: HookContext = isHookScopeActive()
       ? { ...ctx, getOwnSettings: () => currentOwnSettings(reg.pluginId) }
       : ctx;
 
     try {
-      result = await withTimeout(
-        handler(ctxForHandler, payload),
+      result = await invokeWithSignal(
+        (signal) => handler({ ...ctxForHandler, signal }, payload),
+        ctx.signal,
         timeoutMs,
         timeoutMessage,
       );
@@ -323,33 +335,6 @@ function orderHandlers(
       return a.index - b.index;
     })
     .map(({ reg }) => reg);
-}
-
-/**
- * Race a promise against a timeout.
- * On timeout, rejects with the given `timeoutMessage`.
- */
-function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  timeoutMessage: string,
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(timeoutMessage));
-    }, ms);
-
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (err: unknown) => {
-        clearTimeout(timer);
-        reject(err);
-      },
-    );
-  });
 }
 
 function emitHookEvent(

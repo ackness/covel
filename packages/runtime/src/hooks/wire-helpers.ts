@@ -39,6 +39,7 @@ import type {
 // ── Shared options ───────────────────────────────────────────────
 
 interface BaseOpts {
+  readonly signal?: AbortSignal;
   readonly pipeline: HookPipeline | undefined;
   readonly sessionId: string;
   readonly turnId: string;
@@ -64,6 +65,7 @@ function buildHookCtx(
     event,
     sessionId: opts.sessionId,
     turnId: opts.turnId,
+    signal: opts.signal,
     ...extra,
   };
 }

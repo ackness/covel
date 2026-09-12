@@ -97,7 +97,12 @@ export interface PluginRpcOptions {
   readonly trustLevel?: RpcTrustLevel;
 }
 
-/** The facade an entry factory receives. */
+/**
+ * The facade an entry factory receives. Registrations are staged until all
+ * entries of this plugin succeed, then published as one synchronous batch.
+ * Register only while the factory is running; late registrations are rejected.
+ * Initialization failures discard the batch and permit a later activation retry.
+ */
 export interface PluginAPI {
   readonly pluginId: string;
   readonly toolkit: PluginToolkit;

@@ -4,8 +4,8 @@
  * Pulls the NPC subgraph relevant to the current player message and
  * returns it as a markdown list for narrator consumption. Entirely
  * structured retrieval (name matching + adjacency BFS) — no LLM, no
- * embeddings. Phase 3.5 will upgrade to hybrid retrieval once the
- * framework exposes gateway access to function runtimes.
+ * embeddings. Current cast is an optional same-execution input, used only
+ * when the player's message does not name a graph node.
  *
  */
 import { pickLocaleText } from "@covel/plugin-handlers-utils";
@@ -71,6 +71,31 @@ export default async function handler(ctx) {
       }
     }
 
+    // Character ids and graph node ids belong to different namespaces. Only
+    // unambiguous full names/aliases connect the current cast to graph nodes.
+    const cast = ctx.inputs?.currentCast?.value;
+    if (seedNodeIds.size === 0 && Array.isArray(cast)) {
+      for (const speaker of cast) {
+        if (typeof speaker?.name !== "string") continue;
+        const name = speaker.name.trim().toLowerCase();
+        if (!name) continue;
+        const matches = nodes.filter(
+          (node) =>
+            node?.id &&
+            (!node.type || node.type === "individual") &&
+            [
+              node.name,
+              ...(Array.isArray(node.aliases) ? node.aliases : []),
+            ].some(
+              (candidate) =>
+                typeof candidate === "string" &&
+                candidate.trim().toLowerCase() === name,
+            ),
+        );
+        if (matches.length === 1) seedNodeIds.add(matches[0].id);
+      }
+    }
+
     if (seedNodeIds.size === 0) {
       return {
         outcome: "success",
@@ -81,6 +106,18 @@ export default async function handler(ctx) {
         },
       };
     }
+
+    const openByRelation = new Map();
+    for (const edge of edges) {
+      if (edge.invalidAt !== undefined) continue;
+      const key = JSON.stringify([edge.source, edge.target, edge.relation]);
+      const prior = openByRelation.get(key);
+      if (!prior || (edge.validAt ?? -1) > (prior.validAt ?? -1)) {
+        openByRelation.set(key, edge);
+      }
+    }
+    const currentEdges = Array.from(openByRelation.values());
+    const edgeById = new Map(currentEdges.map((edge) => [edge.id, edge]));
 
     // ── 2. 2-hop BFS via adjacency index ─────────────────────────
     /** @type {Set<string>} */
@@ -96,12 +133,12 @@ export default async function handler(ctx) {
       for (const nodeId of frontier) {
         const neighbourEdgeIds = await loadAdjacency(pluginData, nodeId);
         for (const edgeId of neighbourEdgeIds) {
-          collectedEdgeIds.add(edgeId);
+          if (edgeById.has(edgeId)) collectedEdgeIds.add(edgeId);
         }
       }
       // Expand the frontier using the edges we just collected.
       for (const edgeId of collectedEdgeIds) {
-        const edge = edges.find((e) => e.id === edgeId);
+        const edge = edgeById.get(edgeId);
         if (!edge) continue;
         for (const endpoint of [edge.source, edge.target]) {
           if (!visitedNodeIds.has(endpoint)) {
@@ -114,36 +151,10 @@ export default async function handler(ctx) {
       frontier = Array.from(nextFrontier);
     }
 
-    // ── 3. Select, filter by valid interval, rank, cap ───────────
-    //
-    // Only edges whose valid interval is still open reach the narrator. A
-    // superseded version keeps its row for provenance but must not be
-    // injected — otherwise the prompt carries two contradictory facts about
-    // the same pair. Rows written before edge versioning have no `invalidAt`
-    // and read as open, so old sessions keep rendering.
-    //
-    // The previous filter compared `invalidAt` against `edges.length`, i.e.
-    // the number of stored edges used as a stand-in clock. Nothing ever set
-    // `invalidAt`, so it was a no-op; now that the upsert tool closes
-    // superseded versions at a real turn index, plain openness is the whole
-    // predicate and no clock is needed here.
-    const openEdges = edges
-      .filter((e) => collectedEdgeIds.has(e.id))
-      .filter((e) => e.invalidAt === undefined);
-
-    // Defence in depth against a relation that momentarily has two open
-    // versions (a same-turn double revision the upsert tool heals on its next
-    // write): inject only the newest by validAt per (source, target, relation)
-    // so the narrator never sees two contradictory facts about one pair.
-    const openByRelation = new Map();
-    for (const e of openEdges) {
-      const key = `${e.source}::${e.target}::${e.relation}`;
-      const prior = openByRelation.get(key);
-      if (!prior || (e.validAt ?? -1) > (prior.validAt ?? -1)) {
-        openByRelation.set(key, e);
-      }
-    }
-    const eligibleEdges = Array.from(openByRelation.values());
+    // ── 3. Rank the reachable current relations and cap the prompt ─────
+    const eligibleEdges = currentEdges.filter((edge) =>
+      collectedEdgeIds.has(edge.id),
+    );
 
     eligibleEdges.sort((a, b) => {
       const recencyDiff = (b.validAt ?? 0) - (a.validAt ?? 0);

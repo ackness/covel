@@ -581,5 +581,10 @@ Payload notes:
   请求开始时间。事件自身 `timestamp` 仍是 trace 行持久化时间；部分 adapter 为了先确认
   最终 provider/model 会稍后写入 calling 事件，耗时判断应结合 `startedAt` 与 responded
   的 `durationMs`。
-- `llm.calling.tools` is `Array<{ name, description, jsonSchema }>` — mapped from `LLMToolDefinition.parameters` so the recorded schema matches what the provider actually received.
+- `llm.calling` 可附带 `responseFormat`、`defaults`、`maxOutputTokens`，描述 runtime 请求的结构化输出与生成约束；实际协议请求见可选 `providerRequests` 数组。仅提供自定义 LLM adapter 且未实现观察入口时，该数组缺失，不应从逻辑消息猜测最终请求。
+- `providerRequests[]` 格式：`{ schemaVersion: 1, provider, protocol, body, complete, omittedFieldCount, startedAt, durationMs, transportAttempt, statusCode?, failed? }`。`body` 来自 HTTP adapter 序列化后的 JSON 投影，包括 adapter 附加的结构化提示、消息/工具转换以及参数覆盖后的值；数组顺序保留目标 fallback 和 HTTP 重试，`transportAttempt` 在每个协议请求内从 0 开始。外层 trace/turn/runtime/attempt 标识负责关联，不新增领域写入或恢复权威。
+- 观察入口在 HTTP 返回或失败时报告，因此 `statusCode: 200` 仅代表 HTTP 接受，流式输出仍可能随后失败；以 `llm.responded` 和 runtime 结算为准。文本流第一个增量发出前已保存对应 HTTP 请求投影。进程在 HTTP 返回前退出时可能没有记录，trace 仍为 best-effort，不承诺崩溃审计完整性。
+- 不收集认证头、API key、provider base URL 或配置对象。任意额外 metadata 只记录遗漏字段数量；带查询/凭据/片段的资源 URL 隐去并标记 `complete: false`。版本不支持、`complete: false` 或外部资源已经失效时，离线工具必须报告无法完整重建。`complete: true` 仅说明 JSON 请求投影完整，不保证资源永久有效、HTTP 头可重建或真实模型结果确定。
+- 请求正文沿用现有 trace 的敏感上下文访问与留存边界，包含玩家文本，不能当作可公开导出的脱敏日志。function runtime 的 `gateway.*` 继续只记录形状，不扩大其正文收集范围。
+- `llm.calling.tools` is `Array<{ name, description, jsonSchema }>` — mapped from `LLMToolDefinition.parameters` to preserve the logical schema; providerRequests contains the final protocol representation.
 - `llm.calling.provider` is `null` at direct `generate` / `generateStream` sites where the resolved provider string is not available; slot-routed calls populate it with the provider name (`openai`, `anthropic`, `deepseek`, `qwen`).

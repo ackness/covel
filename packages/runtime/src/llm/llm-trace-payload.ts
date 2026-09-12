@@ -1,3 +1,8 @@
+import type {
+  LLMProviderRequest,
+  LLMResponseFormat,
+  LLMRequestDefaults,
+} from "@covel/shared";
 /**
  * Shared builders for `llm.calling` / `llm.responded` trace payloads.
  *
@@ -17,6 +22,10 @@ import type {
 } from "./llm-adapter.js";
 
 export interface LlmCallingPayloadInput {
+  readonly providerRequests?: readonly LLMProviderRequest[];
+  readonly responseFormat?: LLMResponseFormat;
+  readonly defaults?: LLMRequestDefaults;
+  readonly maxOutputTokens?: number;
   readonly runtimeId: string | undefined;
   readonly pluginId: string | undefined;
   readonly slot: string | undefined;
@@ -38,6 +47,14 @@ export function buildLlmCallingPayload(
   input: LlmCallingPayloadInput,
 ): Record<string, unknown> {
   return {
+    ...(input.providerRequests?.length
+      ? { providerRequests: input.providerRequests }
+      : {}),
+    ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}),
+    ...(input.defaults ? { defaults: input.defaults } : {}),
+    ...(input.maxOutputTokens !== undefined
+      ? { maxOutputTokens: input.maxOutputTokens }
+      : {}),
     runtimeId: input.runtimeId,
     pluginId: input.pluginId,
     slot: input.slot,

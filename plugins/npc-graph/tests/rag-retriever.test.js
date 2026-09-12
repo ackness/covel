@@ -285,6 +285,80 @@ describe("rag-retriever handler", () => {
     expect(result.value.matchedNodes).toEqual([]);
   });
 
+  it("uses the current cast for an unnamed follow-up without equating character and graph ids", async () => {
+    await seedSmallChain(store);
+    const result = await handler({
+      ...makeCtx(store, "Ask her about the promise."),
+      inputs: {
+        currentCast: {
+          cardinality: "one",
+          value: [{ id: "character-42", name: "Ali" }],
+        },
+      },
+    });
+    expect(result.value.npcContext).toContain("Alice");
+    expect(result.value.npcContext).toContain("sandstorm");
+    expect(result.value.matchedNodes).not.toContain("npc-dave");
+  });
+
+  it("uses explicitly named people before cast fallback and does not retain previous cast seeds", async () => {
+    await seedSmallChain(store);
+    const inputs = {
+      currentCast: {
+        cardinality: "one",
+        value: [{ id: "character-42", name: "Alice" }],
+      },
+    };
+    const named = await handler({ ...makeCtx(store, "Dave speaks."), inputs });
+    expect(named.value.matchedNodes).not.toContain("npc-alice");
+    const changed = await handler({
+      ...makeCtx(store, "Ask her."),
+      inputs: {
+        currentCast: {
+          cardinality: "one",
+          value: [{ id: "character-99", name: "Dave" }],
+        },
+      },
+    });
+    expect(changed.value.matchedNodes).not.toContain("npc-alice");
+  });
+
+  it("does not guess between graph nodes that share a cast member's name", async () => {
+    await seedSmallChain(store);
+    await store.setPluginData({
+      sessionId: SESSION,
+      pluginId: PLUGIN,
+      namespace: "nodes",
+      key: "another-alice",
+      value: { id: "another-alice", name: "Alice", type: "individual" },
+    });
+    const result = await handler({
+      ...makeCtx(store, "Ask her."),
+      inputs: {
+        currentCast: {
+          cardinality: "one",
+          value: [{ id: "character-42", name: "Alice" }],
+        },
+      },
+    });
+    expect(result.value.npcContext).toBe("");
+  });
+
+  it("does not traverse an expired rumor to retrieve unrelated live facts", async () => {
+    await seedSmallChain(store);
+    const row = await store.getPluginData(SESSION, PLUGIN, "edges", "edge-1");
+    await store.setPluginData({
+      sessionId: SESSION,
+      pluginId: PLUGIN,
+      namespace: "edges",
+      key: "edge-1",
+      value: { ...row.value, invalidAt: 2 },
+    });
+    const result = await handler(makeCtx(store, "Alice asks."));
+    expect(result.value.npcContext).toBe("");
+    expect(result.value.matchedNodes).toEqual(["npc-alice"]);
+  });
+
   it("retrieves 1-hop facts when a node name matches", async () => {
     await seedSmallChain(store);
     const result = await handler(
