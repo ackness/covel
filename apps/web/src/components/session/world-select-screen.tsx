@@ -15,7 +15,8 @@ import { isWorldDeletable } from "@/components/world/world-deletion.js";
 import { WorldEditor } from "@/components/world/world-editor.js";
 import { AiWorldGenerator } from "@/components/world/ai-world-generator.js";
 import { WorldListView } from "@/components/world/world-list-view.js";
-import * as api from "@/services/api.js";
+import { getDataService } from "@/services/data-service.js";
+import { emitToast } from "@/lib/toast-channel.js";
 import type { PluginSummary, WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
@@ -182,11 +183,14 @@ export function WorldSelectScreen({
     if (!deletingWorldId || deleting) return;
     setDeleting(true);
     try {
-      await api.deleteWorld(deletingWorldId);
+      await getDataService().deleteWorld(deletingWorldId);
       onWorldDeleted?.(deletingWorldId);
       handleBack();
-    } catch {
-      // toast already shown by api request handler
+    } catch (error) {
+      emitToast(
+        "error",
+        error instanceof Error ? error.message : String(error),
+      );
     } finally {
       setDeleting(false);
       setDeletingWorldId(null);

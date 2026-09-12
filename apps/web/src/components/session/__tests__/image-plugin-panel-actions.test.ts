@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { postPluginRpcWithApproval } from "../plugin-rpc-ui.js";
 import { rerunImagePrompt } from "../image-plugin-panels/actions.js";
 
-vi.mock("../plugin-rpc-ui.js", () => ({
+vi.mock("../plugin-rpc-ui.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../plugin-rpc-ui.js")>()),
   postPluginRpcWithApproval: vi.fn(),
 }));
 

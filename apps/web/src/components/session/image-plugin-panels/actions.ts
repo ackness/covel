@@ -5,7 +5,10 @@ import { emitToast } from "@/lib/toast-channel.js";
 import { compactJobId } from "@/lib/job-ui.js";
 import { FrameworkRuntimeCapability } from "@covel/shared";
 import type { MediaRef } from "@covel/shared";
-import { postPluginRpcWithApproval } from "../plugin-rpc-ui.js";
+import {
+  getPluginRpcFailureMessage,
+  postPluginRpcWithApproval,
+} from "../plugin-rpc-ui.js";
 import type { ImagePromptPayload } from "./image-records.js";
 
 // Discover the image-generator runtime by capability rather than baking in a
@@ -55,11 +58,8 @@ async function triggerImageFromPrompt(
     return;
   }
   if (res.status !== "ok") return;
-  const failed = res.runtimeResults?.find(
-    (r) => r.status === "failed" || r.error,
-  )?.error;
-  if (failed || res.abortReason)
-    throw new Error(failed ?? res.abortReason ?? "image generation failed");
+  const failed = getPluginRpcFailureMessage(res);
+  if (failed) throw new Error(failed);
   emitToast("info", i18n.t("coreImage.panel.rerunSubmittedSimple"));
 }
 
@@ -75,8 +75,12 @@ async function downloadRef(
   a.href = resolved.url;
   a.download = filename;
   document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  try {
+    a.click();
+  } finally {
+    a.remove();
+    if (resolved.url.startsWith("blob:")) URL.revokeObjectURL(resolved.url);
+  }
 }
 
 function showActionError(err: unknown): void {

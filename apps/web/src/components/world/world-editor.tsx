@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/tabs.js";
 import type { WorldDimensions } from "@covel/shared";
 import type { WorldRecord } from "@/services/api.js";
-import * as api from "@/services/api.js";
+import { getDataService } from "@/services/data-service.js";
 import { GeographyTab } from "./tabs/geography-tab.js";
 import { FactionsTab } from "./tabs/factions-tab.js";
 import { PowerSystemTab } from "./tabs/power-system-tab.js";
@@ -107,7 +107,9 @@ export function WorldEditor({ world, onSave, onCancel }: WorldEditorProps) {
     setSaving(true);
     setError(null);
     try {
-      const updated = await api.updateWorld(world.id, { dimensions });
+      const updated = await getDataService().updateWorld(world.id, {
+        dimensions,
+      });
       onSave(updated);
     } catch (err: unknown) {
       const message =

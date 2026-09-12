@@ -83,7 +83,7 @@ describe("LocalDataService browser-authoritative sync", () => {
       lore: "Local lore",
       locale: "en-US",
       tags: ["mystery"],
-      dimensions: { custom: { enabled: true } },
+      dimensions: { history: [] },
     });
     api.getWorld.mockRejectedValueOnce(
       new ApiError(404, "/api/worlds/world-local", ""),
@@ -98,7 +98,7 @@ describe("LocalDataService browser-authoritative sync", () => {
       lore: "Local lore",
       tags: ["mystery"],
       locale: "en-US",
-      dimensions: { custom: { enabled: true } },
+      dimensions: { history: [] },
       metadata: {
         pluginPolicy: { requiredPluginIds: ["world-notes"] },
         source: "browser-indexeddb",
@@ -500,7 +500,9 @@ describe("LocalDataService browser-authoritative sync", () => {
     await service.deleteSession("sess-1");
 
     await expect(vault.getLatestCheckpoint("sess-1")).resolves.toBeNull();
-    expect(api.deleteSession).toHaveBeenCalledWith("sess-1");
+    expect(api.deleteSession).toHaveBeenCalledWith("sess-1", {
+      silentErrors: true,
+    });
   });
 
   it("serializes concurrent server commits against the latest browser revision", async () => {

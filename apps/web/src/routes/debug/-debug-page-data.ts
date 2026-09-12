@@ -44,7 +44,13 @@ export function useDebugPageData(sid: string | undefined) {
   );
   const [debugView, setDebugView] = useState<DebugView>("traces");
   const currentSession = useRef(selectedSessionId);
+  const traceEpoch = useRef(0);
+  if (currentSession.current !== selectedSessionId) traceEpoch.current += 1;
   currentSession.current = selectedSessionId;
+  const latestInFlight = useRef<{ epoch: number } | null>(null);
+  useEffect(() => {
+    setSelectedSessionId(sid ?? null);
+  }, [sid]);
   const updateSession = useCallback((session: SessionSnapshot["session"]) => {
     setSessions((previous) =>
       previous.map((item) =>
@@ -87,12 +93,12 @@ export function useDebugPageData(sid: string | undefined) {
           sid && allSessions.some((session) => session.id === sid)
             ? sid
             : allSessions[0].id;
-        setSelectedSessionId(target);
+        selectSession(target);
       }
     } catch {
       // The debugger remains usable when the server is unavailable.
     }
-  }, [sid]);
+  }, [sid, selectSession]);
 
   // 展开最新（正序数组的最后一个）turn，便于用户直接看到最近一轮。
   const expandLatestTurn = useCallback((loaded: api.TurnTrace[]) => {
@@ -108,21 +114,35 @@ export function useDebugPageData(sid: string | undefined) {
   // 默认加载：拉最近一段窗口（第一页），重置游标。切换会话 / 手动刷新走这里。
   const loadTraces = useCallback(async () => {
     if (!selectedSessionId) return;
+    const epoch = ++traceEpoch.current;
+    setLoadingOlder(false);
     setLoading(true);
     try {
       const data = await apiClient.fetchTraceTurnsPage(selectedSessionId);
-      if (currentSession.current !== selectedSessionId) return;
+      if (
+        currentSession.current !== selectedSessionId ||
+        traceEpoch.current !== epoch
+      )
+        return;
       setTurns(data.turns);
       setOlderCursor(data.nextCursor);
       setTraceDiscovery(data.discovery ?? null);
       expandLatestTurn(data.turns);
     } catch {
-      if (currentSession.current !== selectedSessionId) return;
+      if (
+        currentSession.current !== selectedSessionId ||
+        traceEpoch.current !== epoch
+      )
+        return;
       setTurns([]);
       setOlderCursor(null);
       setTraceDiscovery(null);
     } finally {
-      if (currentSession.current === selectedSessionId) setLoading(false);
+      if (
+        currentSession.current === selectedSessionId &&
+        traceEpoch.current === epoch
+      )
+        setLoading(false);
     }
   }, [selectedSessionId, expandLatestTurn]);
 
@@ -130,18 +150,27 @@ export function useDebugPageData(sid: string | undefined) {
   // turn），并前移游标；已加载页不受影响。
   const loadOlder = useCallback(async () => {
     if (!selectedSessionId || !olderCursor || loadingOlder) return;
+    const epoch = traceEpoch.current;
     setLoadingOlder(true);
     try {
       const data = await apiClient.fetchTraceTurnsPage(selectedSessionId, {
         cursor: olderCursor,
       });
-      if (currentSession.current !== selectedSessionId) return;
+      if (
+        currentSession.current !== selectedSessionId ||
+        traceEpoch.current !== epoch
+      )
+        return;
       setTurns((prev) => mergeTurnPages(prev, data.turns));
       setOlderCursor(data.nextCursor);
     } catch {
       // 保留已加载数据；失败不清空。
     } finally {
-      if (currentSession.current === selectedSessionId) setLoadingOlder(false);
+      if (
+        currentSession.current === selectedSessionId &&
+        traceEpoch.current === epoch
+      )
+        setLoadingOlder(false);
     }
   }, [selectedSessionId, olderCursor, loadingOlder]);
 
@@ -149,23 +178,39 @@ export function useDebugPageData(sid: string | undefined) {
   // 不 wipe 已加载的更早页，也不动 olderCursor（它可能指向更前的位置）。
   const refreshLatest = useCallback(async () => {
     if (!selectedSessionId) return;
+    const epoch = traceEpoch.current;
+    if (latestInFlight.current?.epoch === epoch) return;
+    const request = { epoch };
+    latestInFlight.current = request;
     try {
       const data = await apiClient.fetchTraceTurnsPage(selectedSessionId);
-      if (currentSession.current !== selectedSessionId) return;
+      if (
+        currentSession.current !== selectedSessionId ||
+        traceEpoch.current !== epoch
+      )
+        return;
       setTurns((prev) => mergeTurnPages(prev, data.turns));
       if (data.discovery) setTraceDiscovery(data.discovery);
     } catch {
-      // 轮询失败静默：保留已加载数据。
+      // Keep the loaded window when polling fails.
+    } finally {
+      if (latestInFlight.current === request) latestInFlight.current = null;
     }
   }, [selectedSessionId]);
 
   // 兜底：拉全量 turn，整体替换并清空游标（展示数据即完整）。
   const loadAll = useCallback(async () => {
     if (!selectedSessionId) return;
+    const epoch = ++traceEpoch.current;
+    setLoadingOlder(false);
     setLoading(true);
     try {
       const data = await apiClient.fetchTraceTurns(selectedSessionId);
-      if (currentSession.current !== selectedSessionId) return;
+      if (
+        currentSession.current !== selectedSessionId ||
+        traceEpoch.current !== epoch
+      )
+        return;
       setTurns(data.turns);
       setOlderCursor(null);
       setTraceDiscovery(data.discovery ?? null);
@@ -173,7 +218,11 @@ export function useDebugPageData(sid: string | undefined) {
     } catch {
       // 保留已加载数据；失败不清空。
     } finally {
-      if (currentSession.current === selectedSessionId) setLoading(false);
+      if (
+        currentSession.current === selectedSessionId &&
+        traceEpoch.current === epoch
+      )
+        setLoading(false);
     }
   }, [selectedSessionId, expandLatestTurn]);
 

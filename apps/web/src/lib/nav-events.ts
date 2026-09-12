@@ -19,6 +19,11 @@ export type NavEvent =
 
 type Listener = (event: NavEvent) => void;
 
+export type SessionPanel = "plugins" | "images";
+export interface RightPanelRequest {
+  readonly event: Exclude<NavEvent, "open-plugins">;
+}
+
 const listeners = new Set<Listener>();
 
 export function emitNavEvent(event: NavEvent): void {

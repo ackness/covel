@@ -32,7 +32,7 @@ import {
 } from "@/lib/plugin-panel-tabs.js";
 import { loadPluginDataForSession } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
-import { onNavEvent } from "@/lib/nav-events.js";
+import { type RightPanelRequest } from "@/lib/nav-events.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { resolveIcon } from "@/lib/catalog/helpers.js";
 
@@ -82,6 +82,7 @@ function resolvePluginIcon(name: string): LucideIcon {
 }
 
 export interface RightPanelProps {
+  panelRequest?: RightPanelRequest | null;
   sessionId: string;
   /** Currently loaded world — its `lore` (WORLD.md) is rendered in the World tab. */
   world: WorldRecord | null;
@@ -111,6 +112,7 @@ function SessionRightPanel({
   sessionId,
   world,
   statePatches,
+  panelRequest,
 }: RightPanelProps) {
   const { t, i18n } = useTranslation();
   const pluginPanelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
@@ -124,10 +126,8 @@ function SessionRightPanel({
     Record<string, string>
   >({});
   const [activeTab, setActiveTab] = useState("world");
-  const [pendingPluginPanelTarget, setPendingPluginPanelTarget] = useState<{
-    readonly pluginId: string;
-    readonly panelId: string;
-  } | null>(null);
+  const [pendingPanelRequest, setPendingPanelRequest] =
+    useState<RightPanelRequest | null>(null);
   const { state: sessionState } = useSession();
   const activePluginKey = useMemo(
     () =>
@@ -172,53 +172,51 @@ function SessionRightPanel({
 
   const storageStatus = resolveStorageStatus(storageData);
 
-  // Topbar nav → controlled tab switch. Previously this dispatched synthetic
-  // mouse events at the trigger DOM node matched by aria-label, which silently
-  // broke whenever the label translation drifted.
   useEffect(() => {
-    return onNavEvent((event) => {
-      if (event === "open-database") {
-        setActiveTab("database");
-      } else if (event === "open-images") {
-        // ponytail: match by declared icon — a first-class "media surface"
-        // capability flag on panel specs would be sturdier if this grows.
-        const target = pluginTabGroups.find((group) =>
-          group.subPanels.some((sub) => sub.icon === "image"),
-        );
-        if (target) setActiveTab(`plugin-${target.id}`);
-      } else if (
-        typeof event === "object" &&
-        event.type === "open-plugin-panel"
-      ) {
-        setPendingPluginPanelTarget({
-          pluginId: event.pluginId,
-          panelId: event.panelId,
-        });
-      }
-    });
-  }, [pluginTabGroups]);
+    if (panelRequest) setPendingPanelRequest(panelRequest);
+  }, [panelRequest]);
 
-  // Command results may arrive before /api/ui-specs. Keep the intent pending
-  // and replay it once the command owner's exact sub-panel becomes available.
+  // Preserve the intent until both the drawer and asynchronous plugin specs
+  // exist. Repeated requests use a new object even when the target is the same.
   useEffect(() => {
-    if (!pendingPluginPanelTarget) return;
-    const target = resolvePluginPanelTarget(
-      pluginTabGroups,
-      pendingPluginPanelTarget.pluginId,
-      pendingPluginPanelTarget.panelId,
+    if (!pendingPanelRequest) return;
+    const { event } = pendingPanelRequest;
+    if (event === "open-database") {
+      setActiveTab("database");
+      setPendingPanelRequest(null);
+      return;
+    }
+    const imageGroup =
+      event === "open-images"
+        ? pluginTabGroups.find((group) =>
+            group.subPanels.some((sub) => sub.icon === "image"),
+          )
+        : undefined;
+    const imagePanel = imageGroup?.subPanels.find(
+      (sub) => sub.icon === "image",
     );
+    const target =
+      typeof event === "object"
+        ? resolvePluginPanelTarget(
+            pluginTabGroups,
+            event.pluginId,
+            event.panelId,
+          )
+        : imageGroup && imagePanel
+          ? {
+              groupId: imageGroup.id,
+              subPanelIndex: imageGroup.subPanels.indexOf(imagePanel),
+            }
+          : null;
     if (!target) return;
-    setActivePluginSubTab((prev) => ({
-      ...prev,
-      [target.groupId]: pluginPanelKey(
-        pluginTabGroups.find((group) => group.id === target.groupId)!.subPanels[
-          target.subPanelIndex
-        ]!,
-      ),
+    const group = pluginTabGroups.find((item) => item.id === target.groupId)!;
+    setActivePluginSubTab((previous) => ({
+      ...previous,
+      [target.groupId]: pluginPanelKey(group.subPanels[target.subPanelIndex]!),
     }));
     setActiveTab(`plugin-${target.groupId}`);
-    setPendingPluginPanelTarget(null);
-  }, [pendingPluginPanelTarget, pluginTabGroups]);
+    setPendingPanelRequest(null);
+  }, [pendingPanelRequest, pluginTabGroups]);
 
   // Load plugin panel specs from /api/ui-specs and seed plugin-data-store.
   useEffect(() => {

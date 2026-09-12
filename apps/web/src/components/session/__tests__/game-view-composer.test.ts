@@ -2,17 +2,20 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamMessage } from "@/stores/session-store.js";
 import type { SessionRecord } from "@/services/api.js";
-import type { SessionSlashCommand } from "@covel/shared";
+import type { PluginRpcResponse, SessionSlashCommand } from "@covel/shared";
 import { useGameViewComposer } from "../game-view/use-game-view-composer.js";
 
 const { postPluginRpcWithApproval } = vi.hoisted(() => ({
-  postPluginRpcWithApproval: vi.fn(async () => ({
+  postPluginRpcWithApproval: vi.fn(async (): Promise<PluginRpcResponse> => ({
     status: "ok" as const,
     result: { ok: true, message: "rolled" },
   })),
 }));
 
-vi.mock("@/components/session/plugin-rpc-ui.js", () => ({
+vi.mock("@/components/session/plugin-rpc-ui.js", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/components/session/plugin-rpc-ui.js")
+  >()),
   postPluginRpcWithApproval,
 }));
 
@@ -303,5 +306,26 @@ describe("useGameViewComposer", () => {
 
     await waitFor(() => expect(postPluginRpcWithApproval).toHaveBeenCalled());
     expect(sessionMock.steerMessage).not.toHaveBeenCalled();
+  });
+  it("retains command input and reports a failed runtime even without error text", async () => {
+    postPluginRpcWithApproval.mockResolvedValueOnce({
+      status: "ok",
+      runtimeResults: [
+        {
+          runtimeId: "dice-check/roll",
+          pluginId: "dice-check",
+          status: "failed",
+          durationMs: 1,
+          output: null,
+        },
+      ],
+    });
+    const { result } = setup([], false, "playing", [rollCommand]);
+    act(() => result.current.setInputValue("/roll 2d6"));
+    act(() => result.current.handleSubmit());
+    await waitFor(() =>
+      expect(result.current.commandFeedback?.tone).toBe("error"),
+    );
+    expect(result.current.inputValue).toBe("/roll 2d6");
   });
 });

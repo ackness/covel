@@ -199,6 +199,11 @@ the IndexedDB transaction and schema lifecycle in
 - a checkpoint and its compact action-idempotency row commit in one `rw`
   transaction;
 - only the latest full checkpoint is retained;
+- deleting a browser world atomically removes its associated checkpoints,
+  commit metadata and pending commits; owned session mirrors are cleaned up
+  best-effort, without deleting the shared server world;
+- world edits and local checkpoint writes use the current browser world record,
+  so an older session checkpoint cannot undo a saved edit;
 - `baseRevision`, `revision`, and `actionId` reject stale or divergent writes;
 - browser checkpoint upload/download operations are serialized by
   `LocalDataService`;

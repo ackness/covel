@@ -111,3 +111,30 @@ it("returns to World when the active plugin panel disappears", async () => {
   expect(await screen.findByText("World content")).toBeTruthy();
   expect(screen.queryByRole("tab", { name: "Shared panels" })).toBeNull();
 });
+
+it("retains an image navigation request until lazy specs load and supports repeated requests", async () => {
+  let release!: (value: UISpecsResponse) => void;
+  mocks.fetchSpecs.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  const props = { sessionId: "session-a", world: null, statePatches: [] };
+  const view = render(
+    <RightPanel {...props} panelRequest={{ event: "open-images" }} />,
+  );
+  expect(screen.getByText("World content")).toBeTruthy();
+  const gallery = spec("provider-a", "portraits");
+  gallery.specs[0]!.icon = "image";
+  await act(async () => release({ ...mocks.specs, right: [gallery] }));
+  expect(await screen.findByText("Mounted panel: provider-a")).toBeTruthy();
+  fireEvent.keyDown(screen.getByRole("tab", { name: "World" }), {
+    key: "Enter",
+  });
+  expect(screen.getByText("World content")).toBeTruthy();
+  view.rerender(
+    <RightPanel {...props} panelRequest={{ event: "open-images" }} />,
+  );
+  expect(await screen.findByText("Mounted panel: provider-a")).toBeTruthy();
+});

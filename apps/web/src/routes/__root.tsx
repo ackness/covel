@@ -26,7 +26,6 @@ import { AppErrorBoundary } from "@/components/error-boundary";
 import { useLocalePreference } from "@/hooks/useLocalePreference";
 import { getCovelIpc } from "@/lib/desktop-bridge";
 import { useSession } from "@/stores/session-store";
-import { emitNavEvent } from "@/lib/nav-events";
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -55,8 +54,8 @@ function RootLayout() {
   // clicking Studio from /debug would always boot the user back to world-select.
   //
   // /debug doesn't restore the session into SessionProvider, so we must also
-  // honour `?sid=` already in the URL. The session-store value takes priority
-  // (matches the Studio's authoritative state); the URL is a read-only fallback.
+  // honour `?sid=` already in the URL. It names the session being inspected,
+  // even when Studio still holds a different session from an earlier visit.
   const { state: sessionState, backToWorldSelect } = useSession();
   const urlSid = (() => {
     const search = location.search as unknown;
@@ -70,9 +69,9 @@ function RootLayout() {
     }
     return null;
   })();
-  const activeSid = sessionState.session?.id ?? urlSid;
+  const activeSid = urlSid ?? sessionState.session?.id;
   const navSearch = activeSid ? { sid: activeSid } : {};
-  const hasSession = sessionState.session !== null;
+  const hasSession = !!activeSid;
   const sessionSearch = activeSid ? { sid: activeSid } : {};
 
   // Active state for the primary nav. The 5 tabs map to either real routes
@@ -95,12 +94,13 @@ function RootLayout() {
   };
   const goSession = () => navigate({ to: "/session", search: sessionSearch });
   const goPlugins = () => {
-    navigate({ to: "/session", search: sessionSearch });
-    emitNavEvent("open-plugins");
+    navigate({
+      to: "/session",
+      search: { ...sessionSearch, panel: "plugins" },
+    });
   };
   const goImages = () => {
-    navigate({ to: "/session", search: sessionSearch });
-    emitNavEvent("open-images");
+    navigate({ to: "/session", search: { ...sessionSearch, panel: "images" } });
   };
   const goDebug = () => navigate({ to: "/debug", search: navSearch });
 

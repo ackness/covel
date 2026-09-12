@@ -30,12 +30,13 @@ export type ConfirmPluginRpcApproval = (
 
 export function getPluginRpcFailureMessage(res: PluginRpcResponse): string {
   if (res.status !== "ok") return "";
-  const runtimeError = res.runtimeResults?.find(
+  const runtimeFailure = res.runtimeResults?.find(
     (r) =>
       r.status === "failed" ||
       (typeof r.error === "string" && r.error.length > 0),
-  )?.error;
-  if (runtimeError) return runtimeError;
+  );
+  if (runtimeFailure)
+    return runtimeFailure.error || `Runtime ${runtimeFailure.runtimeId} failed`;
   return res.abortReason ?? "";
 }
 
@@ -115,7 +116,8 @@ export function emitPluginRpcRuntimeResponse(params: {
 
 export async function postPluginRpcWithApproval(params: {
   readonly sessionId: string;
-  readonly request: PluginRpcRequest;
+  /** Prepare uploads inside the hydrated workspace; may run again after approval. */
+  readonly request: PluginRpcRequest | (() => Promise<PluginRpcRequest>);
   readonly pluginId: string;
   readonly actionLabel: string;
   readonly confirm: ConfirmPluginRpcApproval;
@@ -125,7 +127,13 @@ export async function postPluginRpcWithApproval(params: {
     getSessionWorkspace().run(
       params.sessionId,
       `plugin-rpc:${crypto.randomUUID()}`,
-      () => requestPluginRpc(params.sessionId, params.request),
+      async () =>
+        requestPluginRpc(
+          params.sessionId,
+          typeof params.request === "function"
+            ? await params.request()
+            : params.request,
+        ),
     );
   const first = await postPluginRpc();
   return resolvePluginRpcApprovalResponse({

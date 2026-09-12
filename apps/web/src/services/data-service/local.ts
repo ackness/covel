@@ -1,5 +1,6 @@
 import {
   DEFAULT_LOCALE,
+  worldDimensionsSchema,
   characterBlueprintToCharacterUpsert,
   decodePageCursor,
   encodePageCursor,
@@ -282,6 +283,11 @@ export class LocalDataService implements DataService {
     const committedAt = new Date().toISOString();
     const checkpoint = jsonCheckpoint({
       ...mutate(current),
+      // A world can be edited after this session's last checkpoint. A local
+      // message or session update must not publish the checkpoint's old copy.
+      world: current.session.worldId
+        ? await vault.getWorld(current.session.worldId)
+        : current.world,
       schemaVersion: BROWSER_CHECKPOINT_SCHEMA_VERSION,
       sessionId,
       profile: "browser-private",
@@ -369,9 +375,18 @@ export class LocalDataService implements DataService {
   }
 
   async updateWorld(id: string, patch: WorldPatch): Promise<WorldRecord> {
+    return this.enqueueWorkspace(() => this.updateWorldNow(id, patch));
+  }
+
+  private async updateWorldNow(
+    id: string,
+    patch: WorldPatch,
+  ): Promise<WorldRecord> {
     const vault = await this.ready();
     const existing = await vault.getWorld(id);
     if (!existing) throw new Error("World not found: " + id);
+    if (patch.dimensions !== undefined)
+      worldDimensionsSchema.parse(patch.dimensions);
     const updated: StoreWorldRecord = {
       ...existing,
       ...patch,
@@ -379,6 +394,18 @@ export class LocalDataService implements DataService {
     } as StoreWorldRecord;
     await vault.upsertWorld(updated);
     return toFrontendWorld(updated);
+  }
+
+  async deleteWorld(id: string): Promise<void> {
+    return this.enqueueWorkspace(async () => {
+      const sessions = await this.listSessions(id);
+      await (await this.ready()).deleteWorld(id);
+      // Only clean up mirrors owned by these browser sessions. The server's
+      // shared world may still be used by another browser or player.
+      await Promise.all(
+        sessions.map((session) => this.deleteSession(session.id)),
+      );
+    });
   }
 
   async prepareWorldForServer(worldId: string): Promise<void> {
@@ -494,7 +521,7 @@ export class LocalDataService implements DataService {
       // syncToServer. Its cleanup is best-effort so offline users can still
       // delete their browser data, but always attempt it to avoid orphaned
       // sessions when startup rolls back after a partial or completed sync.
-      api.deleteSession(sessionId).catch((error) => {
+      api.deleteSession(sessionId, { silentErrors: true }).catch((error) => {
         if (!isNotFound(error)) {
           ignoreError("delete server session mirror")(error);
         }

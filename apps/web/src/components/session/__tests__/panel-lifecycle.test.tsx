@@ -70,4 +70,32 @@ describe("responsive panel lifecycle", () => {
     act(() => emitNavEvent("open-database"));
     expect(expand).toHaveBeenCalledTimes(2);
   });
+  it("retains navigation while a mobile drawer has not mounted yet", () => {
+    const onOpenContext = vi.fn();
+    const onPanelHandled = vi.fn();
+    const { result } = renderHook(() =>
+      useNavTabActivation({
+        rightPanelRef: { current: null },
+        onOpenPlugins: vi.fn(),
+        onOpenContext,
+        requestedPanel: "images",
+        onPanelHandled,
+      }),
+    );
+    expect(onOpenContext).toHaveBeenCalledOnce();
+    expect(onPanelHandled).toHaveBeenCalledOnce();
+    expect(result.current?.event).toBe("open-images");
+    act(() =>
+      emitNavEvent({
+        type: "open-plugin-panel",
+        pluginId: "custom",
+        panelId: "tools",
+      }),
+    );
+    expect(result.current?.event).toEqual({
+      type: "open-plugin-panel",
+      pluginId: "custom",
+      panelId: "tools",
+    });
+  });
 });

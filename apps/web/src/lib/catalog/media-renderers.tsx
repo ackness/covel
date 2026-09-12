@@ -244,7 +244,13 @@ export const ImageJobs: ComponentRenderer = ({ element }) => {
 
 export const PortraitGallery: ComponentRenderer = ({ element }) => {
   const pluginId = element.props?.pluginId as string | undefined;
-  return pluginId ? <PortraitGalleryPanel pluginId={pluginId} /> : null;
+  const runtimeId =
+    typeof element.props?.runtimeId === "string"
+      ? element.props.runtimeId
+      : undefined;
+  return pluginId ? (
+    <PortraitGalleryPanel pluginId={pluginId} runtimeId={runtimeId} />
+  ) : null;
 };
 
 export const Source: ComponentRenderer = ({ element }) => {

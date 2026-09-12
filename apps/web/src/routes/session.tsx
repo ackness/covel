@@ -1,5 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, AlertCircle } from "lucide-react";
 import { useSession } from "@/stores/session-store.js";
@@ -8,6 +15,8 @@ import { mergeChatExportMessages } from "@/lib/chat-export.js";
 import { getStreamingText } from "@/stores/streaming-text-store.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { useSlotConfig } from "@/hooks/use-slot-config.js";
+import { useSessionNavigation } from "@/hooks/use-session-navigation.js";
+import type { SessionPanel } from "@/lib/nav-events.js";
 import { useSettingsDialog } from "@/hooks/use-settings-dialog.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
 import { initDesktopBridge } from "@/lib/desktop-bridge.js";
@@ -30,12 +39,17 @@ const GameView = lazy(() =>
 
 interface SessionSearchParams {
   sid?: string;
+  panel?: SessionPanel;
 }
 
 export const Route = createFileRoute("/session")({
   component: SessionPage,
   validateSearch: (search: Record<string, unknown>): SessionSearchParams => ({
-    sid: typeof search.sid === "string" ? search.sid : undefined,
+    sid: typeof search.sid === "string" && search.sid ? search.sid : undefined,
+    panel:
+      search.panel === "plugins" || search.panel === "images"
+        ? search.panel
+        : undefined,
   }),
 });
 
@@ -63,75 +77,30 @@ function SessionPage() {
   );
   const settings = useSettingsDialog(refreshSlots);
   const [onboardingOpen, setOnboardingOpen] = useState(() => !isOnboarded());
-  const { sid } = Route.useSearch();
+  const { sid, panel } = Route.useSearch();
   const navigate = useNavigate();
-  const autoResumeAttempted = useRef(false);
-  // Tracks the session id currently reflected in the URL. Updated whenever
-  // state.session.id matches the URL sid (URL/state are in sync). When the URL
-  // drops its sid while state.session still references the matching id, the
-  // user navigated back to world select and we clear the session.
-  //
-  // Initialised from state.session?.id so a stale session carried over from a
-  // previous navigation (e.g. user clicked the brand back to /session) is
-  // recognised at mount and dropped on the first sync pass.
-  const lastSyncedSessionIdRef = useRef<string | null>(
-    state.session?.id ?? null,
-  );
-  useEffect(() => {
-    if (state.session?.id && state.session.id === sid) {
-      lastSyncedSessionIdRef.current = state.session.id;
-    }
-  }, [state.session?.id, sid]);
-
-  // Sync URL with session state
-  useEffect(() => {
-    if (state.session && state.session.id !== sid) {
-      if (!sid && state.session.id === lastSyncedSessionIdRef.current) {
-        // URL dropped its sid while state.session still references the matching
-        // session — user navigated back to world select. Drop the session.
-        // Without this the transient render between TanStack Router's URL
-        // commit and the queued dispatch would push the sid right back.
-        backToWorldSelect();
-        lastSyncedSessionIdRef.current = null;
-      } else {
-        navigate({
-          to: "/session",
-          search: { sid: state.session.id },
-          replace: true,
-        });
-      }
-    } else if (
-      !state.session &&
-      !state.executionRecovery &&
-      sid &&
-      autoResumeAttempted.current
-    ) {
-      // Session was cleared (back to world select) — remove sid from URL
-      navigate({ to: "/session", search: {}, replace: true });
-    }
-  }, [
-    state.session,
-    state.executionRecovery,
-    sid,
-    navigate,
-    backToWorldSelect,
-  ]);
-
-  // Auto-resume from URL sid on boot
-  useEffect(() => {
-    if (state.booted && sid && !state.session && !autoResumeAttempted.current) {
-      autoResumeAttempted.current = true;
-      resumeSessionById(sid).catch((error: unknown) => {
-        // Keep recoverable network/workspace failures visible at this URL.
-        if (
-          error instanceof Error &&
-          error.message === `Session not found: ${sid}`
-        ) {
-          navigate({ to: "/session", search: {}, replace: true });
-        }
+  const replaceSessionUrl = useCallback(
+    (id?: string) => {
+      void navigate({
+        to: "/session",
+        search: id ? { sid: id, panel } : {},
+        replace: true,
       });
-    }
-  }, [state.booted, sid, state.session, resumeSessionById, navigate]);
+    },
+    [navigate, panel],
+  );
+  const navigation = useSessionNavigation({
+    booted: state.booted,
+    sid,
+    sessionId: state.session?.id,
+    hasRecovery: !!state.executionRecovery,
+    resumeSessionById,
+    backToWorldSelect,
+    replaceSessionUrl,
+  });
+  const handlePanelHandled = useCallback(() => {
+    void navigate({ to: "/session", search: { sid }, replace: true });
+  }, [navigate, sid]);
 
   // Update document.title for Electron window title sync
   useEffect(() => {
@@ -148,18 +117,6 @@ function SessionPage() {
   sessionIdRef.current = state.session?.id;
   const tRef = useRef(t);
   tRef.current = t;
-
-  // NOTE: `open-plugins` is deliberately NOT handled here. `nav-events` is a
-  // broadcast, and GameView already subscribes (use-nav-tab-activation.ts) with
-  // the dialog instance it actually renders. A second subscription here only
-  // flipped this page's own, never-rendered dialog instance to open — which
-  // then popped up unbidden the next time the player navigated back to world
-  // select.
-  //
-  // Known gap, unchanged by the removal: `nav-events` has no replay, so firing
-  // from /debug or during GameView's lazy Suspense window drops the event and
-  // the player lands on /session without the panel opening. The old
-  // subscription here was equally unmounted in those states.
 
   useEffect(() => {
     return initDesktopBridge({
@@ -235,6 +192,26 @@ function SessionPage() {
     );
   }
 
+  if (navigation.error && !state.executionRecovery) {
+    return (
+      <div className="flex h-full items-center justify-center p-6">
+        <div
+          role="alert"
+          className="max-w-lg space-y-4 border border-border p-6"
+        >
+          <p className="text-sm text-destructive">{navigation.error}</p>
+          <button
+            type="button"
+            onClick={navigation.retry}
+            className="border border-border px-3 py-2 text-sm"
+          >
+            {t("error.boot.retry", "Retry")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Auto-resuming from URL — show spinner while loading
   if (!state.session && state.executionRecovery) {
     return (
@@ -250,7 +227,7 @@ function SessionPage() {
       </div>
     );
   }
-  if (state.booted && sid && !state.session && !state.world) {
+  if (state.booted && sid && state.session?.id !== sid) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -304,7 +281,12 @@ function SessionPage() {
           </div>
         }
       >
-        <GameView session={state.session} />
+        <GameView
+          key={state.session.id}
+          session={state.session}
+          requestedPanel={panel}
+          onPanelHandled={handlePanelHandled}
+        />
       </Suspense>
     );
   }
