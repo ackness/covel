@@ -8,17 +8,20 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
-import { formatSlotBindingLabel } from "@/hooks/use-slot-config.js";
 import { resolveI18n } from "@/lib/catalog/helpers.js";
-import { stageLabel } from "@/lib/stage-label.js";
-import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
+import { RuntimeStageBadges } from "../runtime-stage-badges.js";
+import { RuntimeModelBindings } from "./runtime-model-bindings.js";
 import { SetupRecovery } from "./setup-recovery.js";
-import { TRIGGER_TYPE_I18N, type SessionPluginItemProps } from "./types.js";
-import { RuntimeCollectionFeatureBadges } from "../runtime-feature-badges.js";
+import type { SessionPluginItemProps } from "./types.js";
+import {
+  RuntimeCollectionFeatureBadges,
+  RuntimeFeatureBadges,
+} from "../runtime-feature-badges.js";
 
 export function SessionPluginItem({
   plugin,
   executing,
+  advanced = false,
   onToggle,
   resolvedSlots,
   sessionId,
@@ -28,16 +31,6 @@ export function SessionPluginItem({
 }: SessionPluginItemProps) {
   const { t, i18n } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-
-  const primaryRuntime = plugin.runtimes[0];
-  const runtimeKey = primaryRuntime?.id ?? plugin.id;
-  const [boundSlot, handleSlotChange, overrideError] =
-    useRuntimeModelSlotOverride({
-      runtimeKey,
-      sessionId,
-      runtimeModelOverrides,
-      onChange: onRuntimeModelOverrideChange,
-    });
 
   if (plugin.status === "error") {
     return (
@@ -82,11 +75,6 @@ export function SessionPluginItem({
   const isLocked = plugin.locked === true;
   const toggleDisabled = executing === true || isLocked;
   const allTools = plugin.tools.map((tool) => tool.id);
-  const triggerEntry =
-    TRIGGER_TYPE_I18N[primaryRuntime?.trigger.type ?? "auto"];
-  const triggerLabel = triggerEntry
-    ? t(triggerEntry.key, triggerEntry.fallback)
-    : (primaryRuntime?.trigger.type ?? "auto");
   const featureRuntimes = plugin.runtimes;
 
   return (
@@ -104,18 +92,6 @@ export function SessionPluginItem({
           <span className="text-xs font-medium truncate flex-1 min-w-0">
             {displayName}
           </span>
-          {stageLabel(primaryRuntime?.stage, t) && (
-            <Badge
-              variant="secondary"
-              className="ui-chip text-xs px-1.5 py-0 h-4 shrink-0"
-            >
-              {stageLabel(primaryRuntime?.stage, t)}
-            </Badge>
-          )}
-          <RuntimeCollectionFeatureBadges
-            runtimes={featureRuntimes}
-            display="summary"
-          />
           {isLocked && (
             <span
               title={t("plugin.locked", "Core plugin — cannot be disabled")}
@@ -124,61 +100,16 @@ export function SessionPluginItem({
             </span>
           )}
         </button>
-        {primaryRuntime?.runtimeType !== "function" &&
-          (resolvedSlots && resolvedSlots.length > 0 ? (
-            <select
-              value={boundSlot}
-              onChange={(e) => handleSlotChange(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              disabled={executing}
-              title={t(
-                "plugin.modelOverrideHint",
-                "Override active — next turn will use this model",
-              )}
-              aria-label={t("plugin.modelBinding", "Model")}
-              className="ui-input-shell min-w-0 shrink mr-2 max-w-35 text-xs bg-background border border-border px-1 py-0.5 disabled:opacity-50"
-            >
-              <option value="">
-                {primaryRuntime?.model
-                  ? t("plugin.autoWithModel", { model: primaryRuntime.model })
-                  : t("plugin.autoSlot")}
-              </option>
-              {resolvedSlots.map((slot) => (
-                <option key={slot.slotId} value={slot.slotId}>
-                  {formatSlotBindingLabel(slot)}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span
-              className="shrink-0 mr-2 text-xs text-muted-foreground italic"
-              title={t(
-                "plugin.slotsMissing",
-                "Configure model slots in llm.toml to override",
-              )}
-            >
-              {t("plugin.noSlots")}
-            </span>
-          ))}
-        {overrideError && (
-          <span
-            className="mr-2 text-xs text-destructive"
-            role="alert"
-            title={overrideError}
-          >
-            {t("plugin.modelOverrideFailed", "Save failed")}
-          </span>
-        )}
         {onToggle && !isLocked && (
           <button
             type="button"
             role="switch"
             aria-checked={plugin.active}
-            aria-label={
+            aria-label={`${displayName}: ${
               plugin.active
                 ? t("plugin.disable", "Disable plugin")
                 : t("plugin.enable", "Enable plugin")
-            }
+            }`}
             disabled={toggleDisabled}
             className={[
               "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent mr-2.5",
@@ -206,6 +137,27 @@ export function SessionPluginItem({
         />
       </div>
 
+      {advanced && (
+        <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2">
+          <RuntimeStageBadges runtimes={plugin.runtimes} />
+          <RuntimeCollectionFeatureBadges
+            runtimes={featureRuntimes}
+            display="summary"
+          />
+        </div>
+      )}
+
+      {advanced && (
+        <RuntimeModelBindings
+          runtimes={plugin.runtimes}
+          resolvedSlots={resolvedSlots}
+          sessionId={sessionId}
+          executing={executing}
+          runtimeModelOverrides={runtimeModelOverrides}
+          onChange={onRuntimeModelOverrideChange}
+        />
+      )}
+
       {expanded && (
         <div className="px-3 pb-2.5 pt-1 space-y-2 border-t border-border bg-muted/20">
           {description && (
@@ -214,48 +166,48 @@ export function SessionPluginItem({
             </p>
           )}
 
-          <RuntimeCollectionFeatureBadges runtimes={featureRuntimes} />
-
-          <div className="flex flex-wrap gap-1">
-            {primaryRuntime?.model && (
-              <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
-                model: {primaryRuntime.model}
-              </Badge>
-            )}
-            <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
-              trigger: {triggerLabel}
-              {primaryRuntime?.trigger.interval
-                ? ` (${primaryRuntime.trigger.interval})`
-                : ""}
-              {primaryRuntime?.trigger.maxTriggerCount
-                ? ` max:${primaryRuntime.trigger.maxTriggerCount}`
-                : ""}
-            </Badge>
-            {plugin.pluginType && (
-              <Badge variant="outline" className="text-xs px-1.5 py-0 h-4">
-                {plugin.pluginType}
-              </Badge>
-            )}
-          </div>
-
-          {allTools.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Wrench className="w-3 h-3" />
-                Tools ({allTools.length})
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {allTools.map((tool) => (
-                  <Badge
-                    key={tool}
-                    variant="outline"
-                    className="text-xs px-1.5 py-0 h-4 font-mono"
-                  >
-                    {tool}
-                  </Badge>
+          {advanced && (
+            <>
+              <div className="space-y-2">
+                {plugin.runtimes.map((runtime) => (
+                  <div key={runtime.id} className="space-y-1">
+                    <p className="break-all font-mono text-xs">{runtime.id}</p>
+                    <RuntimeStageBadges runtimes={[runtime]} />
+                    <RuntimeFeatureBadges runtime={runtime} />
+                    {runtime.trigger.interval && (
+                      <p className="break-all font-mono text-xs">
+                        interval: {runtime.trigger.interval}
+                      </p>
+                    )}
+                    {runtime.trigger.maxTriggerCount !== undefined && (
+                      <p className="font-mono text-xs">
+                        max: {runtime.trigger.maxTriggerCount}
+                      </p>
+                    )}
+                  </div>
                 ))}
               </div>
-            </div>
+
+              {allTools.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Wrench className="w-3 h-3" />
+                    Tools ({allTools.length})
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {allTools.map((tool) => (
+                      <Badge
+                        key={tool}
+                        variant="outline"
+                        className="text-xs px-1.5 py-0 h-4 font-mono"
+                      >
+                        {tool}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

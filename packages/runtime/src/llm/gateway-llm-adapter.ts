@@ -1,3 +1,4 @@
+import type { LLMProviderRequest } from "@covel/shared";
 /**
  * Bridge adapter: @covel/ai-provider gateway → LLMAdapter interface.
  *
@@ -137,6 +138,7 @@ export interface GatewayLike {
       /** Request-hard generation limit; gateway applies it after metadata. */
       parameterOverrides?: { maxOutputTokens?: number };
       onTargetAttempt?: (target: LLMTargetIdentity) => void;
+      onProviderRequest?: (request: LLMProviderRequest) => void;
     },
   ): Promise<{
     text: string;
@@ -177,6 +179,7 @@ export interface GatewayLike {
       /** @see generateText options.parameterOverrides */
       parameterOverrides?: { maxOutputTokens?: number };
       onTargetAttempt?: (target: LLMTargetIdentity) => void;
+      onProviderRequest?: (request: LLMProviderRequest) => void;
     },
   ): AsyncIterable<{
     type: string;
@@ -284,6 +287,9 @@ export function createGatewayAdapter(
           ...(params.onTargetAttempt
             ? { onTargetAttempt: params.onTargetAttempt }
             : {}),
+          ...(params.onProviderRequest
+            ? { onProviderRequest: params.onProviderRequest }
+            : {}),
         },
       );
 
@@ -342,6 +348,9 @@ export function createGatewayAdapter(
           ...(params.signal ? { signal: params.signal } : {}),
           ...(params.onTargetAttempt
             ? { onTargetAttempt: params.onTargetAttempt }
+            : {}),
+          ...(params.onProviderRequest
+            ? { onProviderRequest: params.onProviderRequest }
             : {}),
         },
       )) {

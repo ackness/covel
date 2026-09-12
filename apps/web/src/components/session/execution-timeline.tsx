@@ -11,6 +11,11 @@ import { resolveI18nText } from "@covel/shared";
 import type { ExecutionStep } from "@/stores/session-store.js";
 import type { PluginSummary } from "@/services/api.js";
 import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
+import {
+  executionPresentation,
+  executionTone,
+} from "./execution-presentation.js";
+import type { StreamMessage } from "@/stores/session-store.js";
 
 import {
   formatDuration,
@@ -121,6 +126,7 @@ export function ExecutionTimeline({
   isLatestTurn = true,
   turnNumberStart = 1,
   canRetryTasks = true,
+  messages = [],
 }: {
   steps: ExecutionStep[];
   executing: boolean;
@@ -132,11 +138,11 @@ export function ExecutionTimeline({
   isLatestTurn?: boolean;
   turnNumberStart?: number;
   canRetryTasks?: boolean;
+  messages?: readonly StreamMessage[];
 }) {
   const { i18n, t } = useTranslation();
-  // Per-turn explicit fold override. Without one, the runtime chips only show
-  // while the turn is actually running (useful progress); once it settles they
-  // fold away so per-runtime ids and timings don't sit in the story flow.
+  // Keep runtime details folded until explicitly opened; the summary carries
+  // live progress and retry actions without interrupting the story flow.
   const [foldOverrides, setFoldOverrides] = useState<Record<string, boolean>>(
     {},
   );
@@ -172,6 +178,12 @@ export function ExecutionTimeline({
       {turnGroups.map((group, groupIdx) => {
         const statuses = deriveStatuses(group.steps, RUNTIME_LABELS);
         const isLatest = isLatestTurn && group.turnId === latestTurnId;
+        const presentation = executionPresentation({
+          executing: executing && isLatest,
+          steps: group.steps,
+          messages,
+        });
+        const stopped = presentation === "stopped";
         const active = statuses.find(
           (r) =>
             r.status === "running" ||
@@ -189,7 +201,7 @@ export function ExecutionTimeline({
         );
         const allDone = (!executing || !isLatest) && !activeForeground;
         const canRetry =
-          allDone && isLatest && canRetryTasks && !!onRetryRuntime;
+          allDone && isLatest && !stopped && canRetryTasks && !!onRetryRuntime;
         const failures = statuses.filter(
           (runtime) => runtime.status === "failed",
         );
@@ -205,8 +217,7 @@ export function ExecutionTimeline({
         );
         // The action contract bounds one atomic retry to twenty targets.
         const retryBatch = retryableFailures.slice(0, 20);
-        const isCollapsed =
-          foldOverrides[group.turnId] ?? !(executing && isLatest);
+        const isCollapsed = foldOverrides[group.turnId] ?? true;
         const turnNumber = groupIdx + turnNumberStart;
 
         return (
@@ -230,14 +241,23 @@ export function ExecutionTimeline({
                   <ChevronUp className="w-3 h-3" />
                 )}
                 <span className="uppercase tracking-wider font-mono">
+                  {executing && isLatest && (
+                    <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
+                  )}
+                  <span className={executionTone(presentation)}>
+                    {t(`session.executionState.${presentation}`)}
+                  </span>
+                  {" · "}
                   {t("session.executionSummary", { count: statuses.length })}
                 </span>
                 <span className="text-[9px] text-muted-foreground/50 font-mono">
                   #{turnNumber}
                 </span>
                 {!isLatest && <span>{t("session.executionHistory")}</span>}
-                {failures.length > 0 && (
-                  <span className="text-destructive font-medium normal-case tracking-normal">
+                {failures.length > 0 && !stopped && (
+                  <span
+                    className={`${executionTone(presentation)} font-medium normal-case tracking-normal`}
+                  >
                     {t("session.executionFailures", {
                       count: failures.length,
                       defaultValue: "{{count}} failed",
@@ -252,12 +272,14 @@ export function ExecutionTimeline({
                   </span>
                 )}
               </button>
-              {canRetry && retryableFailures.length > 1 && (
+              {canRetry && retryableFailures.length > 0 && (
                 <button
                   type="button"
                   onClick={() =>
                     onRetryRuntime?.(
-                      retryBatch.map((rt) => rt.runtimeId),
+                      retryBatch.length === 1
+                        ? retryBatch[0].runtimeId
+                        : retryBatch.map((rt) => rt.runtimeId),
                       group.turnId,
                     )
                   }
@@ -265,9 +287,11 @@ export function ExecutionTimeline({
                 >
                   <RotateCw className="h-3 w-3" />
                   {t(
-                    retryableFailures.length > retryBatch.length
-                      ? "session.retryFailedBatch"
-                      : "session.retryFailedTasks",
+                    retryBatch.length === 1
+                      ? "session.retryTask"
+                      : retryableFailures.length > retryBatch.length
+                        ? "session.retryFailedBatch"
+                        : "session.retryFailedTasks",
                     {
                       count: retryBatch.length,
                     },
@@ -276,7 +300,9 @@ export function ExecutionTimeline({
               )}
             </div>
 
-            {isLatest &&
+            {!isCollapsed &&
+              !stopped &&
+              isLatest &&
               allDone &&
               canRetryTasks &&
               failures.length > 0 &&
@@ -288,7 +314,7 @@ export function ExecutionTimeline({
                   })}
                 </p>
               )}
-            {canRetry && retryableFailures.length > 0 && (
+            {!isCollapsed && canRetry && retryableFailures.length > 0 && (
               <p className="text-xs leading-relaxed text-muted-foreground">
                 {t("session.retryScopeHint")}
                 {retryableFailures.length > retryBatch.length &&
@@ -321,7 +347,7 @@ export function ExecutionTimeline({
               </>
             )}
 
-            {failures.length > 0 && (isLatest || !isCollapsed) && (
+            {!stopped && failures.length > 0 && !isCollapsed && (
               <div className="mt-1.5 flex min-w-0 flex-col gap-1.5">
                 {failures.map((rt) => (
                   <RuntimeFailureNotice
@@ -342,7 +368,7 @@ export function ExecutionTimeline({
             )}
 
             {/* Active detail line (latest turn only) */}
-            {(isLatest || active?.detached) && active && (
+            {!isCollapsed && (isLatest || active?.detached) && active && (
               <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground animate-pulse">
                 <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                 <span className="truncate">

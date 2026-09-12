@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ImageIcon, Loader2, Upload } from "lucide-react";
 import type { MediaRef } from "@covel/shared";
@@ -6,11 +6,12 @@ import { Media } from "@/components/Media.js";
 import { MediaPreviewDialog } from "@/components/MediaPreviewDialog.js";
 import { usePluginNamespace } from "@/stores/plugin-data-store.js";
 import { useActiveSessionId } from "@/lib/catalog/session-context.js";
+import { uploadSessionMedia } from "@/services/api.js";
 import {
-  postPluginRpc as requestPluginRpc,
-  uploadSessionMedia,
-} from "@/services/api.js";
-import { getSessionWorkspace } from "@/services/data-service.js";
+  postPluginRpcWithApproval,
+  emitPluginRpcRuntimeResponse,
+} from "./plugin-rpc-ui.js";
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import {
   replaceDefaultCharacterVisual,
@@ -35,12 +36,19 @@ interface PresenceEntry {
  * `pluginId` comes from the panel spec (the plugin names itself), so this stays
  * a generic framework component with no hard-coded plugin id.
  */
-export function PortraitGalleryPanel({ pluginId }: { pluginId: string }) {
+export function PortraitGalleryPanel({
+  pluginId,
+  runtimeId = pluginId,
+}: {
+  pluginId: string;
+  runtimeId?: string;
+}) {
   const { t } = useTranslation();
   const sessionId = useActiveSessionId();
   const presence = usePluginNamespace(pluginId, "presence");
   const [preview, setPreview] = useState<MediaRef | null>(null);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const uploading = useRef(false);
 
   const entries = useMemo<PresenceEntry[]>(
     () =>
@@ -53,18 +61,24 @@ export function PortraitGalleryPanel({ pluginId }: { pluginId: string }) {
 
   async function replacePortrait(entry: PresenceEntry, file: File) {
     const characterId = entry.value.characterId;
-    if (!sessionId || !characterId) return;
+    if (!sessionId || !characterId || uploading.current) return;
+    uploading.current = true;
     setUploadingKey(entry.key);
     try {
-      const ref = await uploadSessionMedia(sessionId, file);
-      await getSessionWorkspace().run(
+      let ref: MediaRef | undefined;
+      const response = await postPluginRpcWithApproval({
         sessionId,
-        `plugin-rpc:${crypto.randomUUID()}`,
-        () =>
-          requestPluginRpc(sessionId, {
+        pluginId,
+        actionLabel: t("characterPresence.replace", "Replace"),
+        confirm: requestConfirm,
+        t,
+        request: async () => {
+          // Upload only after hydration, and reuse the media across approval retries.
+          ref ??= await uploadSessionMedia(sessionId, file);
+          return {
             kind: "runtime",
             pluginId,
-            runtimeId: pluginId,
+            runtimeId,
             payload: {
               presence: {
                 schemaVersion: 1,
@@ -77,13 +91,16 @@ export function PortraitGalleryPanel({ pluginId }: { pluginId: string }) {
                 visuals: replaceDefaultCharacterVisual(entry.value, ref),
               },
             },
-          }),
-      );
+          };
+        },
+      });
+      if (response) emitPluginRpcRuntimeResponse({ response, t, runtimeId });
       // The plugin.data commit emits `plugin-data.changed`, which refreshes the
       // presence store and re-renders this gallery with the new portrait.
     } catch (err) {
       emitToast("error", err instanceof Error ? err.message : String(err));
     } finally {
+      uploading.current = false;
       setUploadingKey(null);
     }
   }
@@ -155,7 +172,7 @@ export function PortraitGalleryPanel({ pluginId }: { pluginId: string }) {
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    disabled={busy}
+                    disabled={uploadingKey !== null || !sessionId}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       e.target.value = "";

@@ -76,6 +76,7 @@ export function useMessageGrouping({
         `exec-${group.turnId ?? "__unknown__"}`,
         <ExecutionTimeline
           steps={group.steps}
+          messages={group.messages.map((entry) => entry.message)}
           executing={executing && isLatestTurn}
           isLatestTurn={isLatestTurn}
           turnNumberStart={group.turnNumber}

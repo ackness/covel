@@ -37,6 +37,27 @@ async function fixture() {
 }
 
 describe("foreground execution recovery", () => {
+  it("retains the player-stop reason and original retry after reload", async () => {
+    const { store, trace } = await fixture();
+    await trace("turn.started", {
+      recoveryAction: {
+        type: "send_message",
+        payload: { content: "Open the door" },
+      },
+    });
+    await trace("turn.completed", {
+      committed: false,
+      abortReason: "aborted-by-player",
+    });
+    expect(await getSessionExecutionStatus(store, "recovery")).toMatchObject({
+      state: "failed",
+      abortReason: "aborted-by-player",
+      retry: { type: "send_message", payload: { content: "Open the door" } },
+    });
+    await expect(
+      assertRecoverableTurn(store, "recovery", "opening"),
+    ).resolves.toMatchObject({ state: "failed" });
+  });
   it("reports an interrupted legacy opening without mutating its trace", async () => {
     const { store, trace } = await fixture();
     await store.addTraceEvent({

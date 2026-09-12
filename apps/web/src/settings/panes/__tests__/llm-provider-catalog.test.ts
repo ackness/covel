@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { profilesFromLegacyPresets } from "@/services/api/provider-model-profiles.js";
 import {
   bindFirstProviderModel,
   buildProviderCatalog,
+  isLegacyPreset,
   normalizeProviderId,
   normalizeProviderProfiles,
   parseModelIds,
@@ -10,6 +12,42 @@ import {
 } from "../llm-provider-catalog.js";
 
 describe("provider catalogue", () => {
+  it.each([{ baseUrl: 42 }, { protocol: {} }])(
+    "isolates malformed legacy connection fields %j during import",
+    (invalidFields) => {
+      const candidates: unknown[] = [
+        {
+          id: "broken",
+          name: "Broken",
+          provider: "synthetic",
+          model: "broken-model",
+          ...invalidFields,
+        },
+        {
+          id: "legacy",
+          name: "Legacy",
+          provider: "synthetic",
+          model: "legacy-model",
+        },
+        {
+          id: "current",
+          name: "Current",
+          baseUrl: "",
+          models: [{ ref: "current-model", modelId: "current-model" }],
+        },
+      ];
+      const imported = [
+        ...sanitizeImportedProfiles(
+          profilesFromLegacyPresets(candidates.filter(isLegacyPreset)),
+        ),
+        ...sanitizeImportedProfiles(candidates),
+      ];
+      expect(
+        imported.flatMap((profile) => profile.models.map((m) => m.ref)),
+      ).toEqual(["legacy", "current-model"]);
+    },
+  );
+
   it("binds the first manually created model to story and plugin", () => {
     expect(bindFirstProviderModel({}, [], "model_first", [], [])).toEqual({
       story: { modelRef: "model_first" },

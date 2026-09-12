@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { TFunction } from "i18next";
 import { isAssetGenerateView } from "@covel/shared";
 import { AssetRender } from "@/components/asset-render/index.js";
@@ -81,19 +82,26 @@ export function ChatBlockRenderer({
       ((block.data as Record<string, unknown> | undefined)?.pluginId as
         string | undefined) ?? msg.runtimeId;
     return (
-      <div className="flex flex-col gap-1.5">
-        {viewMode === "detailed" && pluginId && (
-          <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
-            plugin · {pluginId}
-          </span>
+      <HistoryBlock
+        collapsed={viewMode === "parsed"}
+        label={t(
+          locked ? "session.previousSuggestions" : "session.currentSuggestions",
         )}
-        <PluginMessageBlock
-          block={block}
-          sourceBlockId={msg.id}
-          locked={locked}
-        />
-        <SubmittedSelectionFooter values={submittedValues} />
-      </div>
+      >
+        <div className="flex flex-col gap-1.5">
+          {viewMode === "detailed" && pluginId && (
+            <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
+              plugin · {pluginId}
+            </span>
+          )}
+          <PluginMessageBlock
+            block={block}
+            sourceBlockId={msg.id}
+            locked={locked}
+          />
+          <SubmittedSelectionFooter values={submittedValues} />
+        </div>
+      </HistoryBlock>
     );
   }
 
@@ -132,29 +140,61 @@ export function ChatBlockRenderer({
     );
   }
 
+  const submitted = submittedBlockIds.has(msg.id) || locked;
+  const collapseInteraction =
+    viewMode === "parsed" &&
+    submitted &&
+    ["interactive_form", "choice", "confirmation"].includes(blockType);
+
   // Every other block (interactive_form, notification, choice, …) resolves
   // through messageToSpec and json-render.
   return (
-    <div className="flex flex-col gap-1.5">
-      {viewMode === "detailed" && (msg.runtimeId || blockType) && (
-        <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
-          {blockType ? `block · ${blockType}` : "block"}
-          {msg.runtimeId && (
-            <span className="ml-1.5 opacity-60">· {msg.runtimeId}</span>
-          )}
-        </span>
-      )}
-      <MessageBlockRenderer
-        msg={msg}
-        block={block}
-        submitted={submittedBlockIds.has(msg.id) || locked}
-        submittedValues={submittedValues}
-        executing={executing}
-        onSubmitInteraction={onSubmitInteraction}
-        onSendMessage={onSendMessage}
-        onSubmitBlock={onSubmitBlock}
-      />
-      <SubmittedSelectionFooter values={submittedValues} />
-    </div>
+    <HistoryBlock
+      collapsed={collapseInteraction}
+      label={t("session.submittedInteraction")}
+    >
+      <div className="flex flex-col gap-1.5">
+        {viewMode === "detailed" && (msg.runtimeId || blockType) && (
+          <span className="text-[10px] font-mono text-muted-foreground/70 uppercase tracking-wider">
+            {blockType ? `block · ${blockType}` : "block"}
+            {msg.runtimeId && (
+              <span className="ml-1.5 opacity-60">· {msg.runtimeId}</span>
+            )}
+          </span>
+        )}
+        <MessageBlockRenderer
+          msg={msg}
+          block={block}
+          submitted={submitted}
+          submittedValues={submittedValues}
+          executing={executing}
+          onSubmitInteraction={onSubmitInteraction}
+          onSendMessage={onSendMessage}
+          onSubmitBlock={onSubmitBlock}
+        />
+        <SubmittedSelectionFooter values={submittedValues} />
+      </div>
+    </HistoryBlock>
+  );
+}
+
+function HistoryBlock({
+  collapsed,
+  label,
+  children,
+}: {
+  collapsed: boolean;
+  label: string;
+  children: ReactNode;
+}) {
+  if (!collapsed) return children;
+  return (
+    <details
+      className="rounded border border-border/50 px-3 py-2 text-xs text-muted-foreground"
+      data-testid="history-interaction"
+    >
+      <summary className="cursor-pointer">{label}</summary>
+      <div className="mt-3">{children}</div>
+    </details>
   );
 }

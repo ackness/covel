@@ -355,7 +355,22 @@ export class BrowserVault {
   }
 
   async deleteWorld(id: string): Promise<void> {
-    await this.db.worlds.delete(id);
+    await this.db.transaction(
+      "rw",
+      this.db.worlds,
+      this.db.checkpoints,
+      this.db.commits,
+      this.db.pendingCommits,
+      async () => {
+        const sessions = await this.db.checkpoints
+          .filter((record) => record.checkpoint.session.worldId === id)
+          .primaryKeys();
+        await this.db.checkpoints.bulkDelete(sessions);
+        await this.db.pendingCommits.bulkDelete(sessions);
+        await this.db.commits.where("sessionId").anyOf(sessions).delete();
+        await this.db.worlds.delete(id);
+      },
+    );
   }
 
   async deleteSession(sessionId: string): Promise<void> {

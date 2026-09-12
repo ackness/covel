@@ -1,3 +1,4 @@
+import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import type {
   ExecutionContext,
   InputSlot,
@@ -752,6 +753,7 @@ export async function executeOneRuntime(
     return runPostRuntimeHook(
       {
         pipeline: hookPipeline,
+        signal: getTurnExecutionSignal(deps.turnControl),
         sessionId: input.sessionId,
         turnId: input.turnId,
         pluginId: manifest.pluginId,

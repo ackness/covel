@@ -35,6 +35,7 @@ import type {
 } from "@covel/shared";
 import {
   FORWARDED_EVENT_TYPES,
+  PLAYER_ABORT_REASON,
   assertJsonValue,
   getRuntimeSpec,
 } from "@covel/shared";
@@ -705,6 +706,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             readonly status: JobStatusRecord;
           }> = [];
           const outcome = await finalizeExecution({
+            signal: registeredTurn.turnControl.signal,
             store,
             sessionId,
             // A suspension persists the original counting responsibility for
@@ -895,7 +897,10 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           }
 
           return {
-            result,
+            result:
+              !committed && registeredTurn.turnControl.signal?.aborted
+                ? { ...result, abortReason: PLAYER_ABORT_REASON }
+                : result,
             trace,
             userSettings,
             committed,
@@ -999,6 +1004,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           durationMs: result.durationMs,
           resultCount: result.runtimeResults.length,
           committed,
+          ...(result.abortReason ? { abortReason: result.abortReason } : {}),
         },
         currentRetryScope,
       );

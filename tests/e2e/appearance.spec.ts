@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { seedBrowserSettings } from "./helpers/player.js";
+import { seedBrowserSettings, ONBOARDING_VERSION } from "./helpers/player.js";
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
@@ -27,7 +27,7 @@ for (const { theme, scheme, size, lineHeight } of themes) {
     page,
   }) => {
     await seedBrowserSettings(page, {
-      "ui.onboardedVersion": 3,
+      "ui.onboardedVersion": ONBOARDING_VERSION,
       "ui.locale": "en-US",
       "ui.appearance": theme,
       "ui.scheme": scheme,
@@ -103,7 +103,7 @@ test("reading preferences preview, persist, switch schemes and reset", async ({
   page,
 }) => {
   await seedBrowserSettings(page, {
-    "ui.onboardedVersion": 3,
+    "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
     "ui.appearance": "paper",
     "ui.scheme": "dark",
@@ -205,7 +205,7 @@ test("saving a theme preserves story colour inherited from primary text", async 
   page,
 }) => {
   await seedBrowserSettings(page, {
-    "ui.onboardedVersion": 3,
+    "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
     "ui.appearance": "paper",
     "ui.scheme": "dark",
@@ -257,7 +257,7 @@ test("a pending story colour stays in the edited scheme during a quick switch", 
   page,
 }) => {
   await seedBrowserSettings(page, {
-    "ui.onboardedVersion": 3,
+    "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
     "ui.appearance": "paper",
     "ui.scheme": "dark",

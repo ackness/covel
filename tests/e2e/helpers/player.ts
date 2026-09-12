@@ -10,6 +10,8 @@
  * is already true mid-turn. Read the flags instead.
  */
 import { expect, type Locator, type Page } from "@playwright/test";
+import { ONBOARDING_VERSION } from "../../../apps/web/src/components/onboarding-wizard/constants.js";
+export { ONBOARDING_VERSION };
 
 export function composer(page: Page): Locator {
   return page.getByTestId("game-composer");
@@ -66,7 +68,7 @@ export async function seedBrowserSettings(
 /** Seed onboarding + locale so specs land straight on the world list. */
 export async function seedAppSettings(page: Page) {
   await seedBrowserSettings(page, {
-    "ui.onboardedVersion": 3,
+    "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "zh-CN",
   });
 }

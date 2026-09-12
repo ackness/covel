@@ -1,3 +1,4 @@
+import type { LLMProviderRequest } from "@covel/shared";
 /**
  * Smart LLM retry helpers used by turn-executor.
  *
@@ -151,16 +152,22 @@ function createAttemptTrace(
   attempt: number,
   startedAt: string,
   streaming = false,
+  queueWaitMs?: number,
 ): {
   readonly onTargetAttempt: (target: LLMTargetIdentity) => void;
+  readonly onProviderRequest: (request: LLMProviderRequest) => void;
   readonly ensureCalling: () => Promise<void>;
 } {
   let target: LLMTargetIdentity | undefined =
     params.provider && params.resolvedModel
       ? { provider: params.provider, model: params.resolvedModel }
       : undefined;
+  const providerRequests: LLMProviderRequest[] = [];
   let callingEmitted = false;
   return {
+    onProviderRequest(request) {
+      providerRequests.push(request);
+    },
     onTargetAttempt(nextTarget) {
       target = nextTarget;
     },
@@ -174,8 +181,13 @@ function createAttemptTrace(
         model: target?.model ?? params.resolvedModel ?? params.model,
         provider: target?.provider ?? params.provider,
         messages,
+        responseFormat: params.responseFormat,
+        defaults: params.defaults,
+        maxOutputTokens: params.maxOutputTokens,
+        providerRequests,
         tools: params.tools,
         attempt,
+        queueWaitMs,
         startedAt,
         ...(streaming ? { streaming: true } : {}),
       });
@@ -196,7 +208,16 @@ export async function callLLMWithRetry(
     assertDeadlineNotReached(effectiveDeadline, attempt, lastError);
     // Queue for a concurrency slot before arming any timers; time spent
     // queued extends the deadline — it is the gate's cost, not the runtime's.
-    const slot = await acquireLLMSlot();
+    const slot = await acquireLLMSlot(params.abortSignal).catch(
+      (error: unknown) => {
+        throwIfTurnAborted(params.abortSignal);
+        throw error;
+      },
+    );
+    if (params.abortSignal?.aborted) {
+      slot.release();
+      throwIfTurnAborted(params.abortSignal);
+    }
     effectiveDeadline += slot.waitedMs;
     if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
 
@@ -213,8 +234,11 @@ export async function callLLMWithRetry(
       attemptMessages,
       attempt,
       new Date(callStart).toISOString(),
+      false,
+      slot.waitedMs,
     );
     try {
+      throwIfTurnAborted(params.abortSignal);
       const response = await llm.generate({
         model,
         messages: attemptMessages,
@@ -226,6 +250,9 @@ export async function callLLMWithRetry(
           : {}),
         signal,
         onTargetAttempt: trace.onTargetAttempt,
+        ...(params.emitter
+          ? { onProviderRequest: trace.onProviderRequest }
+          : {}),
       });
       await trace.ensureCalling();
       await emitLlmRespondedSuccess(params.emitter, {
@@ -329,7 +356,16 @@ export async function streamLLMWithRetry(
     assertDeadlineNotReached(effectiveDeadline, attempt, lastError);
     // Queue for a concurrency slot before arming any timers; time spent
     // queued extends the deadline — it is the gate's cost, not the runtime's.
-    const slot = await acquireLLMSlot();
+    const slot = await acquireLLMSlot(params.abortSignal).catch(
+      (error: unknown) => {
+        throwIfTurnAborted(params.abortSignal);
+        throw error;
+      },
+    );
+    if (params.abortSignal?.aborted) {
+      slot.release();
+      throwIfTurnAborted(params.abortSignal);
+    }
     effectiveDeadline += slot.waitedMs;
     if (slot.waitedMs > 0) params.onQueueWait?.(slot.waitedMs);
 
@@ -371,9 +407,11 @@ export async function streamLLMWithRetry(
       attempt,
       new Date(streamStart).toISOString(),
       true,
+      slot.waitedMs,
     );
 
     try {
+      throwIfTurnAborted(params.abortSignal);
       for await (const event of llm.stream({
         model,
         messages: attemptMessages,
@@ -384,6 +422,9 @@ export async function streamLLMWithRetry(
           : {}),
         signal: callAborter.signal,
         onTargetAttempt: trace.onTargetAttempt,
+        ...(params.emitter
+          ? { onProviderRequest: trace.onProviderRequest }
+          : {}),
       })) {
         if (event.type === "text-delta") {
           firstTokenSeen = true;

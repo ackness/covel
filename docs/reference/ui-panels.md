@@ -29,11 +29,19 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+## 跨页面导航
+
+`/session?sid=<sessionId>&panel=plugins|images` 可携带一次性的面板打开请求。
+会话恢复和 `GameView` 挂载完成后消费请求并清理 `panel` 参数；图像或插件面板请求
+保留在移动端抽屉之外，等抽屉与异步 UI spec 准备好后再选择目标。会话 ID 改变时
+重建会话视图，避免草稿、面板选择与上一个会话混用。调试页按 URL 中的 `sid`
+切换数据，从调试页返回会话时同样以当前查看的 ID 为准。
+
 ## 右侧面板（Plugin-Driven）
 
 ### 设计原则
 
-- **所有右侧面板均由插件通过 `ui.right` 声明**（无框架固定 Tab；Lorebook 只有 HTTP API，见下方「世界文档」章节后的说明）
+- **插件状态面板由 `ui.right` 声明**，与框架提供的世界文档、数据库入口共同显示；Lorebook 只有 HTTP API，见下方「世界文档」章节后的说明。
 - **框架不知道具体插件**，通过 `/api/ui-specs` 发现面板
 - **json-render 渲染**，插件提供 JSON spec，框架提供组件 catalog
 - **pluginData 驱动数据**，通过 `plugin-data.changed` SSE 事件实时更新
@@ -50,6 +58,8 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 ```
 
 > 不带 `sessionId` 的请求返回 registry 快照中的全部插件（用于 boot/debug）。`right-panel.tsx` 在 session 切换时会清空状态并以新 sessionId 重新拉取，避免跨会话的 Tab 残留。
+
+切换会话时同时重置所选分组、子面板及其本地 UI 状态。插件数据加载带有目标 sessionId，旧会话响应不能写入当前会话。所选插件分组移除后回到世界文档；纵向导航可独立滚动，窄屏弹层同样支持长面板列表。
 
 ### 当前注册的面板
 
@@ -341,6 +351,8 @@ type I18nText = string | Record<LocaleTag, string>;
 ### 排序
 
 外层 Tab 按 `groupOrder` 排序（稳定排序，相同 order 保持加载顺序）。子 Tab 按贡献顺序展示。
+
+子面板选择和渲染状态以 `(pluginId, spec.id)` 标识，重新排序时保持选中同一个面板；所选面板移除后回到该组首项。不同插件可以使用相同 `spec.id`，不会共享本地 UI 状态。
 
 ## 消息区（Message Area）
 

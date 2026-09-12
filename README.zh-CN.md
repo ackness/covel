@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.32-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.32)
+[![Version](https://img.shields.io/badge/version-v0.0.33-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.33)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **发布版本：v0.0.32**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，且尚未签名；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
+> **发布版本：v0.0.33**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，且尚未签名；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
 
 ## 亮点
 
@@ -131,7 +131,9 @@ worlds/my-world/data/rules/core.ja.yaml
 
 ### 直接玩
 
-从 [Releases](https://github.com/ackness/covel/releases) 下载 **macOS Apple Silicon** 或 **Windows x64** 安装包，然后：打开设置 → 粘贴 LLM API 密钥 → 选一个世界 → 开玩。
+从 [Releases](https://github.com/ackness/covel/releases) 下载 **macOS Apple Silicon** 或 **Windows x64** 安装包。首次进入世界选择页会显示引导：在“配置服务商与模型”中添加连接和模型、测试连接，在“用途分配”中检查模型绑定，再选世界、确认玩法包并开始游戏。已有配置可以直接沿用。
+
+可以先跳过引导浏览世界，但生成剧情前需要完成模型配置；以后可在世界选择页点击“新手引导”重看。游戏可能先要求创建角色或完成开场选择，之后再输入行动推进故事。
 
 配置、密钥、SQLite、自定义世界和日志默认都在 `~/.covel/`；如果 `config.toml` 重定向了 `data_root`，数据也会位于那个独立目录。升级前请阅读[桌面配置指南](./docs/guide/desktop-config.md)和[`docs/CHANGELOG.md`](./docs/CHANGELOG.md)。
 

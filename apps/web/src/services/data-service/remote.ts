@@ -36,6 +36,9 @@ export class RemoteDataService implements DataService {
   async updateWorld(id: string, patch: WorldPatch) {
     return api.updateWorld(id, patch);
   }
+  async deleteWorld(id: string) {
+    return api.deleteWorld(id);
+  }
   async prepareWorldForServer() {
     // No-op: the remote store is already the server's authority.
   }

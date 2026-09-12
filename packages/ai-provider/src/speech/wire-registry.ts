@@ -10,22 +10,36 @@ export const DEFAULT_TRANSCRIPTION_WIRE = "openai-transcription";
 const speechWires = new Map<string, SpeechWire>();
 const transcriptionWires = new Map<string, TranscriptionWire>();
 
-export function registerSpeechWire(wire: SpeechWire): void {
+export function registerSpeechWire(wire: SpeechWire): () => void {
   if (speechWires.has(wire.id)) {
     throw new Error(`speech wire "${wire.id}" already registered`);
   }
-  speechWires.set(wire.id, wire);
+  const id = wire.id;
+  speechWires.set(id, wire);
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    if (speechWires.get(id) === wire) speechWires.delete(id);
+  };
 }
 
 export function getSpeechWire(id: string): SpeechWire | null {
   return speechWires.get(id) ?? null;
 }
 
-export function registerTranscriptionWire(wire: TranscriptionWire): void {
+export function registerTranscriptionWire(wire: TranscriptionWire): () => void {
   if (transcriptionWires.has(wire.id)) {
     throw new Error(`transcription wire "${wire.id}" already registered`);
   }
-  transcriptionWires.set(wire.id, wire);
+  const id = wire.id;
+  transcriptionWires.set(id, wire);
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    if (transcriptionWires.get(id) === wire) transcriptionWires.delete(id);
+  };
 }
 
 export function getTranscriptionWire(id: string): TranscriptionWire | null {

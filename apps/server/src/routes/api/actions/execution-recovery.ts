@@ -167,6 +167,9 @@ async function readExecutionStatus(
   return {
     ...identity,
     state: failed ? "failed" : "interrupted",
+    ...(typeof terminalPayload?.abortReason === "string"
+      ? { abortReason: terminalPayload.abortReason }
+      : {}),
     ...(retry ? { retry } : {}),
   };
 }

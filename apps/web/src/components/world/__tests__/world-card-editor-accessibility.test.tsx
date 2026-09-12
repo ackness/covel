@@ -1,12 +1,25 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n/index.js";
 import type { WorldRecord } from "@/services/api.js";
 import { HistoryTab } from "../tabs/history-tab.js";
 import { WorldCard } from "../world-card.js";
+import { getDataService } from "@/services/data-service.js";
 import { WorldEditor } from "../world-editor.js";
 
 afterEach(cleanup);
+
+const dataService = vi.hoisted(() => ({ updateWorld: vi.fn() }));
+vi.mock("@/services/data-service.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/data-service.js")>()),
+  getDataService: () => dataService,
+}));
 
 const world = {
   id: "test-world",
@@ -64,6 +77,23 @@ describe("WorldCard", () => {
 });
 
 describe("WorldEditor", () => {
+  it("persists editor changes through the configured data service", async () => {
+    const updated = { ...world, updatedAt: "2026-09-12" };
+    const update = vi
+      .spyOn(getDataService(), "updateWorld")
+      .mockResolvedValue(updated);
+    const onSave = vi.fn();
+    render(<WorldEditor world={world} onSave={onSave} onCancel={vi.fn()} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: i18n.t("common.save") }),
+    );
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(updated));
+    expect(update).toHaveBeenCalledWith(world.id, {
+      dimensions: world.dimensions,
+    });
+    update.mockRestore();
+  });
+
   it("gives every icon tab an accessible localized name", () => {
     render(<WorldEditor world={world} onSave={vi.fn()} onCancel={vi.fn()} />);
 

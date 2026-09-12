@@ -18,6 +18,7 @@ import { createServer } from "node:net";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { assertNoPrivateConfig } from "./private-config.mjs";
 
 const require = createRequire(import.meta.url);
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -62,27 +63,7 @@ const entry = path.join(serverStaging, "src/index.ts");
 if (!fs.existsSync(tsxCli)) die(`tsx CLI missing at ${tsxCli}`);
 if (!fs.existsSync(entry)) die(`server entry missing at ${entry}`);
 
-// If smoke test needs to simulate "no llm.toml", rename it for the duration
-// and restore on exit.
-const stagedLlmToml = path.join(serverStaging, "llm.toml");
-const hiddenLlmToml = stagedLlmToml + ".smoke-hidden";
-let restoreLlmToml = () => {};
-if (noLlmToml && fs.existsSync(stagedLlmToml)) {
-  fs.renameSync(stagedLlmToml, hiddenLlmToml);
-  restoreLlmToml = () => {
-    try {
-      if (fs.existsSync(hiddenLlmToml))
-        fs.renameSync(hiddenLlmToml, stagedLlmToml);
-    } catch {
-      /* best effort */
-    }
-  };
-  process.on("exit", restoreLlmToml);
-  process.on("SIGINT", () => {
-    restoreLlmToml();
-    process.exit(130);
-  });
-}
+assertNoPrivateConfig(serverStaging);
 
 async function findFreePort() {
   return await new Promise((resolve, reject) => {
@@ -126,6 +107,14 @@ const logsDir = path.join(tmpUserRoot, "logs");
 for (const dir of [userPluginsDir, userWorldsDir, userConfigDir, logsDir]) {
   fs.mkdirSync(dir, { recursive: true });
 }
+const smokeLlmToml = path.join(userConfigDir, "llm.toml");
+if (!noLlmToml) {
+  fs.writeFileSync(
+    smokeLlmToml,
+    '[covel.story]\nprovider = "deepseek"\nmodel = "smoke-model"\nbaseUrl = "https://example.invalid/v1"\nprotocol = "openai-chat-v1"\n',
+    "utf-8",
+  );
+}
 
 const electronBinary = electronNode ? resolveElectronBinaryPath() : null;
 const useElectronNode = Boolean(electronBinary);
@@ -151,8 +140,7 @@ if (electronNode && !electronBinary) {
   );
 }
 
-// The smoke env intentionally avoids any DEEPSEEK_API_KEY or similar: we're
-// verifying the server *boots* with whatever config it finds (or doesn't).
+// Exercise synthetic and absent config independently of the developer's paths.
 const env = {
   ...process.env,
   ...(useElectronNode ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
@@ -167,6 +155,8 @@ const env = {
   COVEL_USER_PLUGINS_DIR: userPluginsDir,
   COVEL_USER_WORLDS_DIR: userWorldsDir,
   COVEL_USER_CONFIG_DIR: userConfigDir,
+  COVEL_HOME: tmpUserRoot,
+  COVEL_LLM_TOML: smokeLlmToml,
   COVEL_LOGS_DIR: logsDir,
   STATIC_DIR: path.join(stagingDir, "web-dist"),
 };
@@ -201,7 +191,6 @@ child.stderr.on("data", (data) => {
 let booted = false;
 child.on("exit", (code, signal) => {
   if (!booted) {
-    restoreLlmToml();
     cleanupDb();
     const tail = stderrBuf.slice(-80).join("");
     die(
@@ -264,7 +253,6 @@ try {
 } catch (err) {
   const tail = stderrBuf.slice(-80).join("");
   child.kill("SIGKILL");
-  restoreLlmToml();
   cleanupDb();
   die(
     `${err instanceof Error ? err.message : err}\n--- stderr tail ---\n${tail}`,
@@ -275,6 +263,5 @@ child.kill("SIGTERM");
 // Give the process a moment to exit cleanly
 await new Promise((r) => setTimeout(r, 500));
 if (!child.killed) child.kill("SIGKILL");
-restoreLlmToml();
 cleanupDb();
 console.log("[smoke] ✓ staging server is bootable");

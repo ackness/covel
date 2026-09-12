@@ -1,412 +1,170 @@
-import {
-  ChevronRight,
-  Globe,
-  KeyRound,
-  Package,
-  Rocket,
-  Sparkles,
-} from "lucide-react";
+import { BookOpen, Globe, MessageSquare, Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { resolveI18nText } from "@covel/shared";
-import { localeDefinitions } from "@/i18n/catalog-registry.js";
 import { Button } from "@/components/ui/button.js";
-import { Label } from "@/components/ui/label.js";
-import type { PresetSummary } from "@/services/api.js";
-import { CUSTOM_PROVIDER_ID, PROVIDERS } from "./constants.js";
-import { ProviderForm } from "./provider-form.js";
-import type {
-  LocaleControlsProps,
-  PluginMode,
-  ProviderFormState,
-} from "./types.js";
+import { PingButton } from "@/components/shared/ping-button.js";
+import { formatSlotLabel, type ResolvedSlot } from "@/hooks/use-slot-config.js";
 
-interface WelcomeStepProps extends LocaleControlsProps {
-  onNext: () => void;
-}
-
-export function WelcomeStep({ locale, setLocale, onNext }: WelcomeStepProps) {
+export function WelcomeStep() {
   const { t } = useTranslation();
-
   return (
-    <div className="space-y-8 text-center">
-      <div className="space-y-4">
-        <div className="flex items-center justify-center">
-          <div className="h-12 w-12 rounded-(--radius-card) bg-primary flex items-center justify-center">
-            <div className="h-4 w-4 bg-(--surface-dialog) rounded-full" />
-          </div>
-        </div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          {t("onboarding.welcome", "Welcome to Covel")}
-        </h1>
-        <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-          {t(
-            "onboarding.tagline",
-            "AI-driven RPG engine. Craft interactive stories powered by large language models.",
-          )}
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <Label className="ui-eyebrow text-[10px]">
-          {t("onboarding.language", "Language")}
-        </Label>
-        <div className="flex max-h-32 flex-wrap items-center justify-center gap-2 overflow-y-auto">
-          {localeDefinitions.map((definition) => (
-            <button
-              key={definition.code}
-              type="button"
-              onClick={() => setLocale(definition.code)}
-              className={`rounded-(--radius-control) px-4 py-2 text-xs font-medium border transition-colors ${
-                locale === definition.code
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:border-primary/40"
-              }`}
-            >
-              {resolveI18nText(definition.label, locale) ?? definition.code}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <Button
-        onClick={onNext}
-        className="w-full text-xs uppercase tracking-widest"
-      >
-        {t("onboarding.getStarted", "Get Started")}
-        <ChevronRight className="w-3.5 h-3.5" />
-      </Button>
+    <div className="rounded-(--radius-card) border border-border bg-muted/30 p-4 space-y-3">
+      <BookOpen className="h-6 w-6 text-primary" aria-hidden />
+      <p className="text-sm leading-relaxed">{t("onboarding.welcomeRoute")}</p>
+      <p className="text-xs leading-relaxed text-muted-foreground">
+        {t("onboarding.existingSettingsHint")}
+      </p>
     </div>
   );
 }
 
-interface StoryStepProps {
-  storyForm: ProviderFormState;
-  setStoryForm: (next: ProviderFormState) => void;
-  availablePresets: PresetSummary[];
-  storyContinueDisabled: boolean;
-  onBeforePingStory: () => Promise<void>;
-  onContinue: () => void | Promise<void>;
-  onSkip: () => void;
+interface SettingsActionProps {
+  onOpenSettings: (key: string) => void;
 }
 
-export function StoryStep({
-  storyForm,
-  setStoryForm,
-  availablePresets,
-  storyContinueDisabled,
-  onBeforePingStory,
-  onContinue,
-  onSkip,
-}: StoryStepProps) {
+export function ModelStep({
+  slots,
+  onOpenSettings,
+}: SettingsActionProps & { slots: ResolvedSlot[] }) {
   const { t } = useTranslation();
-
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <KeyRound className="w-4 h-4 text-primary" />
-          <h2 className="ui-title text-sm">
-            {t("onboarding.narratorModel", "Narrator Model")}
-          </h2>
-          <code className="text-[10px] text-muted-foreground font-mono">
-            covel.story
-          </code>
-        </div>
+    <div className="space-y-4">
+      <section className="rounded-(--radius-card) border border-border p-4 space-y-3">
+        <p className="text-sm font-medium" role="status">
+          {t(
+            slots.length
+              ? "onboarding.modelsDetected"
+              : "onboarding.modelsMissing",
+          )}
+        </p>
         <p className="text-xs text-muted-foreground leading-relaxed">
           {t(
-            "onboarding.narratorModelDesc",
-            "The core model that drives the main story. Pick a provider and paste your key.",
+            slots.length
+              ? "onboarding.modelsDetectedHint"
+              : "onboarding.modelsMissingHint",
           )}
         </p>
-      </div>
-
-      <ProviderForm
-        state={storyForm}
-        onChange={setStoryForm}
-        onBeforePing={onBeforePingStory}
-        presets={availablePresets}
-        slotName="story"
-      />
-
-      {storyContinueDisabled && (
-        <p className="text-[11px] text-amber-500/80 leading-relaxed">
-          {t(
-            "onboarding.disabledHint",
-            "Fill in API Key and Model ID to continue, or skip below to configure later.",
-          )}
-        </p>
-      )}
-
-      <div className="flex items-center gap-2 pt-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="rounded-none text-xs text-muted-foreground"
-          onClick={onSkip}
-          title={t(
-            "onboarding.skipTitle",
-            "You can configure this later in Settings.",
-          )}
-        >
-          {t("onboarding.skip", "Skip for now")}
+        {slots.length > 0 && (
+          <details>
+            <summary className="cursor-pointer text-xs font-medium text-primary">
+              {t("onboarding.testBindings", { count: slots.length })}
+            </summary>
+            <ul className="mt-3 space-y-3">
+              {slots.map((slot) => (
+                <li
+                  key={slot.slotId}
+                  className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2"
+                >
+                  <div className="min-w-0 flex-1 text-xs">
+                    <p className="font-medium break-all">{slot.slotId}</p>
+                    <p className="text-muted-foreground break-all">
+                      {formatSlotLabel(slot)}
+                    </p>
+                  </div>
+                  <PingButton target={{ kind: "slot", slotId: slot.slotId }} />
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </section>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => onOpenSettings("llm.providers")}>
+          <Settings2 className="h-4 w-4" aria-hidden />
+          {t("session.configureKeys")}
         </Button>
-        <div className="flex-1" />
-        <Button
-          onClick={onContinue}
-          className="text-xs uppercase tracking-widest"
-          disabled={storyContinueDisabled}
-        >
-          {t("onboarding.continue", "Continue")}
-          <ChevronRight className="w-3.5 h-3.5" />
+        <Button variant="outline" onClick={() => onOpenSettings("llm.slots")}>
+          {t("onboarding.checkBindings", { roles: t("settings.llmSlots") })}
         </Button>
       </div>
+      <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed">
+        <li>
+          {t("onboarding.providerInstruction", {
+            providers: t("session.configureKeys"),
+          })}
+        </li>
+        <li>{t("onboarding.connectionInstruction")}</li>
+        <li>
+          {t("onboarding.bindingInstruction", {
+            roles: t("settings.llmSlots"),
+          })}
+        </li>
+      </ol>
+      <p className="text-xs text-muted-foreground">
+        {t("onboarding.returnFromSettings")}
+      </p>
     </div>
   );
 }
 
-interface PluginStepProps {
-  storySummary: string;
-  pluginMode: PluginMode;
-  setPluginMode: (next: PluginMode) => void;
-  pluginForm: ProviderFormState;
-  setPluginForm: (next: ProviderFormState) => void;
-  availablePresets: PresetSummary[];
-  pluginContinueDisabled: boolean;
-  onBeforePingPlugin: () => Promise<void>;
-  onBack: () => void;
-  onContinue: () => void | Promise<void>;
-}
-
-export function PluginStep({
-  storySummary,
-  pluginMode,
-  setPluginMode,
-  pluginForm,
-  setPluginForm,
-  availablePresets,
-  pluginContinueDisabled,
-  onBeforePingPlugin,
-  onBack,
-  onContinue,
-}: PluginStepProps) {
+export function PlayStep({
+  hasModel,
+  onOpenSettings,
+}: SettingsActionProps & { hasModel: boolean }) {
   const { t } = useTranslation();
-
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Package className="w-4 h-4 text-primary" />
-          <h2 className="ui-title text-sm">
-            {t("onboarding.pluginModel", "Plugin Model")}
-          </h2>
-          <code className="text-[10px] text-muted-foreground font-mono">
-            covel.plugin
-          </code>
+    <div className="space-y-4">
+      {!hasModel && (
+        <div
+          role="status"
+          className="rounded-(--radius-card) border border-border bg-muted/30 p-3 text-xs leading-relaxed"
+        >
+          <p>{t("onboarding.browseOnlyHint")}</p>
+          <Button
+            variant="link"
+            className="h-auto px-0 py-1"
+            onClick={() => onOpenSettings("llm.providers")}
+          >
+            {t("session.configureKeys")}
+          </Button>
         </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          {t(
-            "onboarding.pluginModelDesc",
-            "Plugins (character tracker, world generator, codex, …) can share the narrator model or use a cheaper one.",
-          )}
-        </p>
-      </div>
-
-      <div className="space-y-2">
-        <button
-          onClick={() => setPluginMode("same")}
-          className={`w-full flex items-start gap-3 p-3 rounded-(--radius-card) border text-left transition-colors ${
-            pluginMode === "same"
-              ? "border-primary bg-primary/10"
-              : "border-border hover:border-primary/40"
-          }`}
-        >
-          <div
-            className={`mt-0.5 h-3.5 w-3.5 rounded-full border shrink-0 ${
-              pluginMode === "same"
-                ? "border-primary bg-primary"
-                : "border-border"
-            }`}
-          />
-          <div className="min-w-0">
-            <div className="text-xs font-medium">
-              {t("onboarding.pluginSame", "Use same as narrator")}
-            </div>
-            <div className="text-[11px] text-muted-foreground font-mono truncate">
-              {storySummary}
-            </div>
-          </div>
-        </button>
-        <button
-          onClick={() => setPluginMode("different")}
-          className={`w-full flex items-start gap-3 p-3 rounded-(--radius-card) border text-left transition-colors ${
-            pluginMode === "different"
-              ? "border-primary bg-primary/10"
-              : "border-border hover:border-primary/40"
-          }`}
-        >
-          <div
-            className={`mt-0.5 h-3.5 w-3.5 rounded-full border shrink-0 ${
-              pluginMode === "different"
-                ? "border-primary bg-primary"
-                : "border-border"
-            }`}
-          />
-          <div className="min-w-0">
-            <div className="text-xs font-medium">
-              {t("onboarding.pluginDifferent", "Use a different model")}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              {t(
-                "onboarding.pluginDifferentHint",
-                "Route plugins to a faster/cheaper provider.",
-              )}
-            </div>
-          </div>
-        </button>
-      </div>
-
-      {pluginMode === "different" && (
-        <ProviderForm
-          state={pluginForm}
-          onChange={setPluginForm}
-          onBeforePing={onBeforePingPlugin}
-          presets={availablePresets}
-          slotName="plugin"
-        />
       )}
-
-      {pluginContinueDisabled && (
-        <p className="text-[11px] text-amber-500/80 leading-relaxed">
-          {t(
-            "onboarding.disabledHint",
-            "Fill in API Key and Model ID to continue, or skip below to configure later.",
-          )}
+      <ol className="space-y-4">
+        {[
+          {
+            icon: Globe,
+            title: "chooseWorldTitle",
+            description: "chooseWorldDesc",
+          },
+          {
+            icon: Settings2,
+            title: "prepareTitle",
+            description: "prepareDesc",
+          },
+          {
+            icon: MessageSquare,
+            title: "interactTitle",
+            description: "interactDesc",
+          },
+        ].map(({ icon: Icon, title, description }, index) => (
+          <li key={title} className="flex gap-3">
+            <Icon
+              className="mt-0.5 h-5 w-5 shrink-0 text-primary"
+              aria-hidden
+            />
+            <div className="space-y-1">
+              <h3 className="text-sm font-medium">
+                {index + 1}. {t(`onboarding.${title}`)}
+              </h3>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t(`onboarding.${description}`, {
+                  advanced: t("session.advancedPluginSettings"),
+                })}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <details className="rounded-(--radius-card) border border-border p-3 text-xs">
+        <summary className="cursor-pointer font-medium">
+          {t("onboarding.duringTurnTitle")}
+        </summary>
+        <p className="mt-2 leading-relaxed text-muted-foreground">
+          {t("onboarding.duringTurnDesc")}
         </p>
-      )}
-
-      <div className="flex items-center gap-2 pt-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="rounded-none text-xs text-muted-foreground"
-          onClick={onBack}
-        >
-          {t("onboarding.back", "Back")}
-        </Button>
-        <div className="flex-1" />
-        <Button
-          onClick={onContinue}
-          className="text-xs uppercase tracking-widest"
-          disabled={pluginContinueDisabled}
-        >
-          {t("onboarding.continue", "Continue")}
-          <ChevronRight className="w-3.5 h-3.5" />
-        </Button>
-      </div>
+      </details>
+      <p className="text-xs text-muted-foreground">
+        {t("onboarding.reopenHint")}
+      </p>
     </div>
-  );
-}
-
-interface ReadyStepProps {
-  onDismiss: () => void;
-}
-
-export function ReadyStep({ onDismiss }: ReadyStepProps) {
-  const { t } = useTranslation();
-
-  return (
-    <div className="space-y-8 text-center">
-      <div className="space-y-4">
-        <div className="flex items-center justify-center">
-          <Rocket className="w-10 h-10 text-primary" />
-        </div>
-        <h2 className="text-xl font-bold tracking-tight">
-          {t("onboarding.ready", "You're all set")}
-        </h2>
-        <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-          {t(
-            "onboarding.readyDesc",
-            "Select a world, then start your adventure. You can adjust settings anytime from the top bar.",
-          )}
-        </p>
-      </div>
-
-      <div className="border border-border p-4 text-left space-y-3 rounded-(--radius-card) bg-card/35">
-        <div className="flex items-start gap-3">
-          <Globe className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-          <div>
-            <div className="text-xs font-medium">
-              {t("onboarding.step1Label", "Pick a world")}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              {t(
-                "onboarding.step1Desc",
-                "Choose from built-in worlds or create your own.",
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-start gap-3">
-          <Sparkles className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-          <div>
-            <div className="text-xs font-medium">
-              {t("onboarding.step2Label", "Start your adventure")}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              {t(
-                "onboarding.step2Desc",
-                "The AI narrator will build a story around you.",
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <Button
-        onClick={onDismiss}
-        className="w-full text-xs uppercase tracking-widest"
-      >
-        {t("onboarding.enter", "Enter Covel")}
-        <ChevronRight className="w-3.5 h-3.5" />
-      </Button>
-    </div>
-  );
-}
-
-export function summarizeStoryProvider(storyForm: ProviderFormState): string {
-  const storyCustom = storyForm.selected === CUSTOM_PROVIDER_ID;
-  if (storyCustom) {
-    return (
-      (storyForm.customProviderName.trim() || "custom") +
-      (storyForm.customModel.trim() ? ` — ${storyForm.customModel.trim()}` : "")
-    );
-  }
-
-  const storyProvider =
-    PROVIDERS.find((p) => p.id === storyForm.selected) ?? PROVIDERS[0];
-  return `${storyProvider.name}${storyForm.builtInModel.trim() ? ` — ${storyForm.builtInModel.trim()}` : ""}`;
-}
-
-export function isStoryContinueDisabled(storyForm: ProviderFormState): boolean {
-  const storyCustom = storyForm.selected === CUSTOM_PROVIDER_ID;
-  return (
-    !storyForm.apiKey.trim() ||
-    (storyCustom
-      ? !storyForm.customBaseUrl.trim()
-      : !storyForm.builtInModel.trim())
-  );
-}
-
-export function isPluginContinueDisabled(
-  pluginMode: PluginMode,
-  pluginForm: ProviderFormState,
-): boolean {
-  const pluginCustom = pluginForm.selected === CUSTOM_PROVIDER_ID;
-  return (
-    pluginMode === "different" &&
-    (!pluginForm.apiKey.trim() ||
-      (pluginCustom
-        ? !pluginForm.customBaseUrl.trim()
-        : !pluginForm.builtInModel.trim()))
   );
 }

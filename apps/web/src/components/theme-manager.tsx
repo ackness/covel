@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveI18nText } from "@covel/shared";
 import { Check, Download, Palette, Trash2, Upload } from "lucide-react";
@@ -10,7 +10,10 @@ import {
   saveCustomTheme,
   THEME_SCHEME_KEY,
 } from "@/theme-system/registry.js";
-import { CUSTOM_THEMES_KEY } from "@/theme-system/storage.js";
+import {
+  CUSTOM_THEMES_KEY,
+  loadStoredCustomThemes,
+} from "@/theme-system/storage.js";
 import { parseImportedThemeFile } from "@/theme-system/validate.js";
 import type { StoredCustomTheme, ThemeScheme } from "@/theme-system/types.js";
 
@@ -33,13 +36,16 @@ export function ThemeManagerWidget() {
   const store = useSettingsStore();
   const [appearance, setAppearance] = useSetting<string>("ui.appearance");
   const [scheme, setScheme] = useSetting<ThemeScheme>(THEME_SCHEME_KEY);
-  const [customThemes] = useSetting<StoredCustomTheme[]>(CUSTOM_THEMES_KEY);
+  const [customThemes] = useSetting<unknown>(CUSTOM_THEMES_KEY);
   const fileRef = useRef<HTMLInputElement>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const customThemeList = customThemes ?? [];
+  const customThemeList = useMemo(
+    () => loadStoredCustomThemes(store),
+    [store, customThemes],
+  );
   const themes = getRegisteredThemes();
 
   function flash(message: string) {

@@ -26,11 +26,13 @@ import {
   panelProviderLabel,
   planPluginPanelProviders,
   resolvePluginPanelTarget,
+  pluginPanelKey,
+  selectedPluginPanelIndex,
   type PluginPanelTabGroup,
 } from "@/lib/plugin-panel-tabs.js";
-import { loadPluginData } from "@/stores/plugin-data-store.js";
+import { loadPluginDataForSession } from "@/stores/plugin-data-store.js";
 import { useSession } from "@/stores/session-store.js";
-import { onNavEvent } from "@/lib/nav-events.js";
+import { type RightPanelRequest } from "@/lib/nav-events.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { resolveIcon } from "@/lib/catalog/helpers.js";
 
@@ -80,6 +82,7 @@ function resolvePluginIcon(name: string): LucideIcon {
 }
 
 export interface RightPanelProps {
+  panelRequest?: RightPanelRequest | null;
   sessionId: string;
   /** Currently loaded world — its `lore` (WORLD.md) is rendered in the World tab. */
   world: WorldRecord | null;
@@ -101,10 +104,15 @@ export interface RightPanelProps {
  * "世界维度"); the pretty world-dimensions rendering moved into the
  * plugin tab via the `WorldDimensions` covelRegistry component.
  */
-export function RightPanel({
+export function RightPanel({ ...props }: RightPanelProps) {
+  return <SessionRightPanel key={props.sessionId} {...props} />;
+}
+
+function SessionRightPanel({
   sessionId,
   world,
   statePatches,
+  panelRequest,
 }: RightPanelProps) {
   const { t, i18n } = useTranslation();
   const pluginPanelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
@@ -115,13 +123,11 @@ export function RightPanel({
     [],
   );
   const [activePluginSubTab, setActivePluginSubTab] = useState<
-    Record<string, number>
+    Record<string, string>
   >({});
   const [activeTab, setActiveTab] = useState("world");
-  const [pendingPluginPanelTarget, setPendingPluginPanelTarget] = useState<{
-    readonly pluginId: string;
-    readonly panelId: string;
-  } | null>(null);
+  const [pendingPanelRequest, setPendingPanelRequest] =
+    useState<RightPanelRequest | null>(null);
   const { state: sessionState } = useSession();
   const activePluginKey = useMemo(
     () =>
@@ -166,49 +172,51 @@ export function RightPanel({
 
   const storageStatus = resolveStorageStatus(storageData);
 
-  // Topbar nav → controlled tab switch. Previously this dispatched synthetic
-  // mouse events at the trigger DOM node matched by aria-label, which silently
-  // broke whenever the label translation drifted.
   useEffect(() => {
-    return onNavEvent((event) => {
-      if (event === "open-database") {
-        setActiveTab("database");
-      } else if (event === "open-images") {
-        // ponytail: match by declared icon — a first-class "media surface"
-        // capability flag on panel specs would be sturdier if this grows.
-        const target = pluginTabGroups.find((group) =>
-          group.subPanels.some((sub) => sub.icon === "image"),
-        );
-        if (target) setActiveTab(`plugin-${target.id}`);
-      } else if (
-        typeof event === "object" &&
-        event.type === "open-plugin-panel"
-      ) {
-        setPendingPluginPanelTarget({
-          pluginId: event.pluginId,
-          panelId: event.panelId,
-        });
-      }
-    });
-  }, [pluginTabGroups]);
+    if (panelRequest) setPendingPanelRequest(panelRequest);
+  }, [panelRequest]);
 
-  // Command results may arrive before /api/ui-specs. Keep the intent pending
-  // and replay it once the command owner's exact sub-panel becomes available.
+  // Preserve the intent until both the drawer and asynchronous plugin specs
+  // exist. Repeated requests use a new object even when the target is the same.
   useEffect(() => {
-    if (!pendingPluginPanelTarget) return;
-    const target = resolvePluginPanelTarget(
-      pluginTabGroups,
-      pendingPluginPanelTarget.pluginId,
-      pendingPluginPanelTarget.panelId,
+    if (!pendingPanelRequest) return;
+    const { event } = pendingPanelRequest;
+    if (event === "open-database") {
+      setActiveTab("database");
+      setPendingPanelRequest(null);
+      return;
+    }
+    const imageGroup =
+      event === "open-images"
+        ? pluginTabGroups.find((group) =>
+            group.subPanels.some((sub) => sub.icon === "image"),
+          )
+        : undefined;
+    const imagePanel = imageGroup?.subPanels.find(
+      (sub) => sub.icon === "image",
     );
+    const target =
+      typeof event === "object"
+        ? resolvePluginPanelTarget(
+            pluginTabGroups,
+            event.pluginId,
+            event.panelId,
+          )
+        : imageGroup && imagePanel
+          ? {
+              groupId: imageGroup.id,
+              subPanelIndex: imageGroup.subPanels.indexOf(imagePanel),
+            }
+          : null;
     if (!target) return;
-    setActivePluginSubTab((prev) => ({
-      ...prev,
-      [target.groupId]: target.subPanelIndex,
+    const group = pluginTabGroups.find((item) => item.id === target.groupId)!;
+    setActivePluginSubTab((previous) => ({
+      ...previous,
+      [target.groupId]: pluginPanelKey(group.subPanels[target.subPanelIndex]!),
     }));
     setActiveTab(`plugin-${target.groupId}`);
-    setPendingPluginPanelTarget(null);
-  }, [pendingPluginPanelTarget, pluginTabGroups]);
+    setPendingPanelRequest(null);
+  }, [pendingPanelRequest, pluginTabGroups]);
 
   // Load plugin panel specs from /api/ui-specs and seed plugin-data-store.
   useEffect(() => {
@@ -257,7 +265,7 @@ export function RightPanel({
                 byNs.set(item.namespace, arr);
               }
               for (const [ns, entries] of byNs) {
-                loadPluginData(pid, ns, entries);
+                loadPluginDataForSession(sessionId, pid, ns, entries);
               }
             })
             .catch(ignoreError("seed plugin data store"));
@@ -272,19 +280,23 @@ export function RightPanel({
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
       <Tabs
-        value={activeTab}
+        value={
+          tabItems.some((item) => item.value === activeTab)
+            ? activeTab
+            : "world"
+        }
         onValueChange={setActiveTab}
         className="flex-1 flex min-h-0 min-w-0"
         orientation="vertical"
       >
         <div
-          className="border-r border-(--rule-color) shrink-0 w-12 overflow-hidden"
+          className="border-r border-(--rule-color) shrink-0 w-12 min-h-0 overflow-y-auto overscroll-contain"
           style={{
             background:
               "color-mix(in oklab, var(--surface-rail) 70%, var(--surface-page))",
           }}
         >
-          <TabsList className="flex h-full w-full flex-col items-center justify-start rounded-none bg-transparent p-0 text-muted-foreground">
+          <TabsList className="flex h-auto min-h-full w-full flex-col items-center justify-start rounded-none bg-transparent p-0 text-muted-foreground">
             {tabItems.map((item, idx) => {
               const ItemIcon = item.icon;
               const afterFrameworkTabs = idx === 2;
@@ -346,7 +358,10 @@ export function RightPanel({
 
           {/* Dynamic plugin panel content (memory, codex, npc-graph, etc.) */}
           {pluginTabGroups.map((group) => {
-            const subIdx = activePluginSubTab[group.id] ?? 0;
+            const subIdx = selectedPluginPanelIndex(
+              group,
+              activePluginSubTab[group.id],
+            );
             const currentSub = group.subPanels[subIdx];
             const providerPlan = planPluginPanelProviders(group, subIdx);
             const GroupIcon = resolvePluginIcon(group.icon);
@@ -382,7 +397,9 @@ export function RightPanel({
                               if (typeof firstIdx === "number") {
                                 setActivePluginSubTab((prev) => ({
                                   ...prev,
-                                  [group.id]: firstIdx,
+                                  [group.id]: pluginPanelKey(
+                                    group.subPanels[firstIdx]!,
+                                  ),
                                 }));
                               }
                             }}
@@ -420,12 +437,12 @@ export function RightPanel({
                       const isActive = idx === subIdx;
                       return (
                         <button
-                          key={sub.id}
+                          key={pluginPanelKey(sub)}
                           type="button"
                           onClick={() =>
                             setActivePluginSubTab((prev) => ({
                               ...prev,
-                              [group.id]: idx,
+                              [group.id]: pluginPanelKey(sub),
                             }))
                           }
                           className={`flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium border-b-2 -mb-px transition-colors ${
@@ -444,7 +461,7 @@ export function RightPanel({
 
                 {currentSub && (
                   <PluginPanel
-                    key={currentSub.id}
+                    key={pluginPanelKey(currentSub)}
                     pluginId={currentSub.pluginId}
                     spec={currentSub.spec}
                     stateCache={pluginPanelStateCacheRef.current}

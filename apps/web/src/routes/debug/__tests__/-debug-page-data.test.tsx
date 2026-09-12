@@ -191,4 +191,63 @@ describe("debugger refresh", () => {
     expect(result.current.snapshotData?.session.id).toBe("session-b");
     expect(result.current.snapshotError).toBe(false);
   });
+  it("follows a changed URL session without remounting the debugger", async () => {
+    const { result, rerender } = renderHook(
+      ({ sid }) => useDebugPageData(sid),
+      { initialProps: { sid: "session-a" } },
+    );
+    await waitFor(() =>
+      expect(result.current.snapshotData?.session.id).toBe("session-a"),
+    );
+    rerender({ sid: "session-b" });
+    await waitFor(() =>
+      expect(result.current.snapshotData?.session.id).toBe("session-b"),
+    );
+    expect(result.current.selectedSessionId).toBe("session-b");
+    expect(mocks.fetchTraceTurnsPage).toHaveBeenLastCalledWith("session-b");
+  });
+
+  it("ignores a stale trace refresh even after returning to the same session", async () => {
+    const { result } = renderHook(() => useDebugPageData("session-a"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let release!: (data: { turns: api.TurnTrace[]; nextCursor: null }) => void;
+    mocks.fetchTraceTurnsPage.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    let oldRequest!: Promise<void>;
+    act(() => {
+      oldRequest = result.current.loadTraces();
+    });
+    act(() => result.current.selectSession("session-b"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.selectSession("session-a"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      release({ turns: [trace("stale")], nextCursor: null });
+      await oldRequest;
+    });
+    expect(result.current.turns.map((item) => item.turnId)).toEqual(["2"]);
+  });
+
+  it("does not overlap slow automatic trace requests", async () => {
+    const { result } = renderHook(() => useDebugPageData("session-a"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let release!: (data: { turns: api.TurnTrace[]; nextCursor: null }) => void;
+    mocks.fetchTraceTurnsPage.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const reads = mocks.fetchTraceTurnsPage.mock.calls.length;
+    vi.useFakeTimers();
+    act(() => result.current.setAutoRefresh(true));
+    await act(async () => vi.advanceTimersByTimeAsync(9000));
+    expect(mocks.fetchTraceTurnsPage).toHaveBeenCalledTimes(reads + 1);
+    await act(async () => release({ turns: [trace("3")], nextCursor: null }));
+    expect(result.current.turns.map((item) => item.turnId)).toEqual(["2", "3"]);
+  });
 });

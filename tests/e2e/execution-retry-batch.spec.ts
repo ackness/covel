@@ -171,7 +171,11 @@ test("batch retry survives refresh, retains only its failed task and clears reso
     const alerts = current.getByRole("alert");
     const story = page.locator(".ui-narrative");
     await expect(story).toContainText(recoveredStory);
-    await expect(alerts).toHaveCount(2);
+    await expect(alerts).toHaveCount(0);
+    await expect(current.getByRole("button").first()).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     const batch = current.getByRole("button", { name: /重试失败任务.*2/ });
     await expect(batch).toBeVisible();
     await batch.click();
@@ -198,8 +202,11 @@ test("batch retry survives refresh, retains only its failed task and clears reso
     await expect(current.locator(".animate-spin").first()).toBeVisible();
 
     finishBatch();
-    await expect(alerts).toHaveCount(1, { timeout: 10_000 });
-    await expect(page.getByTestId("execution-recovery-notice")).toHaveCount(0);
+    await expect(page.getByTestId("execution-recovery-notice")).toHaveCount(0, {
+      timeout: 10_000,
+    });
+    await current.getByRole("button").first().click();
+    await expect(alerts).toHaveCount(1);
     await expect(alerts).toContainText("任务日志");
     await expect(page.locator('[data-row-kind="execution"]')).toHaveCount(1);
     const retry = alerts.getByRole("button", { name: /重试此任务/ });

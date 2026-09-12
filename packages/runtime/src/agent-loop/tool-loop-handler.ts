@@ -1,3 +1,4 @@
+import type { LLMProviderRequest } from "@covel/shared";
 /**
  * LLM request machinery for the agent tool-call loop.
  *
@@ -232,6 +233,7 @@ async function malformedToolArgsFallback(args: {
   const fallbackCallStart = Date.now();
   let actualTarget =
     provider && resolvedModel ? { provider, model: resolvedModel } : undefined;
+  const providerRequests: LLMProviderRequest[] = [];
   let callingEmitted = false;
   const ensureCalling = async (): Promise<void> => {
     if (callingEmitted) return;
@@ -244,6 +246,10 @@ async function malformedToolArgsFallback(args: {
       provider: actualTarget?.provider ?? provider,
       messages,
       tools: toolDefs,
+      responseFormat,
+      defaults: manifest.llm,
+      maxOutputTokens,
+      providerRequests,
       attempt: 0,
       startedAt: new Date(fallbackCallStart).toISOString(),
     });
@@ -257,6 +263,13 @@ async function malformedToolArgsFallback(args: {
       responseFormat,
       defaults: manifest.llm,
       ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+      ...(deps.emitter
+        ? {
+            onProviderRequest: (request: LLMProviderRequest) => {
+              providerRequests.push(request);
+            },
+          }
+        : {}),
       onTargetAttempt: (target) => {
         actualTarget = target;
       },

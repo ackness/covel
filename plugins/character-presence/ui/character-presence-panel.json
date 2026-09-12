@@ -19,6 +19,9 @@
   "alwaysRender": true,
   "view": {
     "component": "PortraitGallery",
-    "props": { "pluginId": "character-presence" }
+    "props": {
+      "pluginId": "character-presence",
+      "runtimeId": "character-presence"
+    }
   }
 }

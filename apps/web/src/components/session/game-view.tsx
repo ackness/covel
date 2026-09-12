@@ -40,7 +40,8 @@ import { PendingDraftsBar } from "./game-view/pending-drafts-bar.js";
 import { useGameViewComposer } from "./game-view/use-game-view-composer.js";
 import { worldVisual } from "@/lib/world-visuals.js";
 import { ignoreError } from "@/lib/ignore-error.js";
-import { emitNavEvent } from "@/lib/nav-events.js";
+import { emitNavEvent, type SessionPanel } from "@/lib/nav-events.js";
+import { latestExecutionPresentation } from "./execution-presentation.js";
 
 // ── Extracted Panel Components (see left-panel.tsx, right-panel.tsx) ──
 
@@ -52,9 +53,15 @@ interface GameViewProps {
    * is the narrowing). Everything else is read from the session store.
    */
   session: SessionRecord;
+  requestedPanel?: SessionPanel;
+  onPanelHandled?: () => void;
 }
 
-export function GameView({ session }: GameViewProps) {
+export function GameView({
+  session,
+  requestedPanel,
+  onPanelHandled,
+}: GameViewProps) {
   const {
     state,
     sendMessage: onSendMessage,
@@ -91,6 +98,7 @@ export function GameView({ session }: GameViewProps) {
     submittedBlockValues,
   } = state;
   const { t } = useTranslation();
+  const executionState = latestExecutionPresentation(state);
   const navigate = useNavigate();
   const { resolvedSlots, refresh: refreshSlots } = useSlotConfig(
     presets,
@@ -254,10 +262,12 @@ export function GameView({ session }: GameViewProps) {
 
   // Topbar nav → in-page panel actions. The global topbar dispatches via
   // nav-events because it can't reach this component's local state directly.
-  useNavTabActivation({
+  const panelRequest = useNavTabActivation({
     rightPanelRef,
     onOpenPlugins: () => settings.openWithKey("plugin"),
     onOpenContext: isMobile ? () => setMobileRightOpen(true) : undefined,
+    requestedPanel,
+    onPanelHandled,
   });
 
   const direction = "horizontal";
@@ -352,6 +362,7 @@ export function GameView({ session }: GameViewProps) {
             {t("session.toggleContextPanel")}
           </DialogTitle>
           <RightPanel
+            panelRequest={panelRequest}
             sessionId={session.id}
             world={world}
             statePatches={statePatches}
@@ -449,6 +460,7 @@ export function GameView({ session }: GameViewProps) {
           {!(immersive && viewMode === "stage") && (
             <div className="animate-in fade-in-0 duration-200">
               <GameViewHeader
+                executionState={executionState}
                 t={t}
                 sessionId={session.id}
                 sessionPhase={session.phase}
@@ -531,6 +543,7 @@ export function GameView({ session }: GameViewProps) {
 
               {/* Input — always fixed at bottom */}
               <MessageComposer
+                executionState={executionState}
                 t={t}
                 session={session}
                 executing={executing}
@@ -574,6 +587,7 @@ export function GameView({ session }: GameViewProps) {
               className="ui-rail flex flex-col min-h-0 min-w-0"
             >
               <RightPanel
+                panelRequest={panelRequest}
                 sessionId={session.id}
                 world={world}
                 statePatches={statePatches}

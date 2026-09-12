@@ -69,6 +69,8 @@ export type { HookEnforce, HookDeclaration } from "@covel/shared";
 // ── Hook context (read-only metadata about the current hook site) ──
 
 export interface HookContext {
+  /** Pipeline-provided cancellation: parent execution abort or this hook's timeout. */
+  readonly signal?: AbortSignal;
   readonly event: HookEvent;
   readonly sessionId: string;
   readonly turnId: string;

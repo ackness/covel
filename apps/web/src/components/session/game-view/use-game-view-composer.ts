@@ -13,7 +13,10 @@ import {
 import { useSession, type StreamMessage } from "@/stores/session-store.js";
 import { isPreGameSession } from "@/stores/session-store/selectors.js";
 import type { SessionRecord } from "@/services/api.js";
-import { postPluginRpcWithApproval } from "../plugin-rpc-ui.js";
+import {
+  getPluginRpcFailureMessage,
+  postPluginRpcWithApproval,
+} from "../plugin-rpc-ui.js";
 import { requestConfirm } from "@/lib/confirm-channel.js";
 import { resolveDisplayText } from "@/lib/i18n-text.js";
 import { isPendingInteractionMessage } from "./interaction-blocks.js";
@@ -195,6 +198,11 @@ export function useGameViewComposer({
           t,
         });
         if (!response) return;
+        const failure = getPluginRpcFailureMessage(response);
+        if (failure) {
+          setCommandFeedback({ tone: "error", message: failure });
+          return;
+        }
         if (response.status !== "ok") {
           setCommandFeedback({
             tone: "info",

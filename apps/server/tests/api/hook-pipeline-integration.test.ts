@@ -22,6 +22,8 @@ import {
 import { createHookPipeline, type HookPipeline } from "@covel/runtime";
 import { actionRoutes } from "../../src/routes/api/actions.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import { abortActiveTurn } from "../../src/routes/api/turn-control.js";
+import { getSessionExecutionStatus } from "../../src/routes/api/actions/execution-recovery.js";
 import {
   makeFakeLLM,
   makeFakeLoadedRuntime,
@@ -164,6 +166,96 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       await next();
     });
     app.route("/api/actions", actionRoutes);
+  });
+
+  it("shapes the actual main-turn LLM call through active context and request hooks", async () => {
+    let inactiveCalled = false;
+    hookPipeline.register({
+      id: "context-shaping",
+      event: "PostContextAssembly",
+      pluginId: RUNTIME_ID,
+      handler: async (ctx, payload) => {
+        expect(ctx.signal).toBeInstanceOf(AbortSignal);
+        const input = payload as { systemPrompt: string };
+        return {
+          action: "continue",
+          replace: {
+            systemPrompt: input.systemPrompt + "\nSynthetic directing note.",
+          },
+        };
+      },
+    });
+    hookPipeline.register({
+      id: "request-shaping",
+      event: "PreLLMCall",
+      pluginId: RUNTIME_ID,
+      handler: async (_ctx, payload) => {
+        expect(JSON.stringify(payload)).toContain("Synthetic directing note.");
+        return { action: "continue", replace: { model: "hook-shaped-model" } };
+      },
+    });
+    hookPipeline.register({
+      id: "inactive-context",
+      event: "PostContextAssembly",
+      pluginId: "inactive-plugin",
+      handler: async () => {
+        inactiveCalled = true;
+        throw new Error("Inactive hook must not run");
+      },
+    });
+    const response = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "request-shaping",
+        type: "send_message",
+        sessionId,
+        payload: { content: "look around" },
+      }),
+    });
+    const events = await drainActionStream(response);
+    expect(llmCalls).toEqual([
+      expect.objectContaining({ model: "hook-shaped-model" }),
+    ]);
+    expect(inactiveCalled).toBe(false);
+    expect(
+      events.find((event) => event.type === "execution.completed")?.payload
+        .committed,
+    ).toBe(true);
+  });
+
+  it("does not commit a complete story when a player stop arrives inside finalization", async () => {
+    hookPipeline.register({
+      id: "stop-at-commit",
+      event: "PreStateCommit",
+      handler: async () => {
+        abortActiveTurn(sessionId);
+        return { action: "continue" };
+      },
+    });
+    const response = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "stop-at-commit",
+        type: "send_message",
+        sessionId,
+        payload: { content: "look around" },
+      }),
+    });
+    const events = await drainActionStream(response);
+    expect(
+      events.find((event) => event.type === "execution.completed")?.payload,
+    ).toMatchObject({ committed: false, abortReason: "aborted-by-player" });
+    expect(
+      (await store.listTurnMessages(sessionId)).some(
+        (message) => message.content === NARRATIVE,
+      ),
+    ).toBe(false);
+    expect(await getSessionExecutionStatus(store, sessionId)).toMatchObject({
+      state: "failed",
+      abortReason: "aborted-by-player",
+    });
   });
 
   it("invokes a PreStateCommit hook on every normalized proposal", async () => {

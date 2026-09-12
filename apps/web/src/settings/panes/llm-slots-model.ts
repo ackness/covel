@@ -98,6 +98,7 @@ export function createVisibleSlotIds(args: {
   readonly isConfigured: boolean;
   readonly configuredSlots: readonly string[];
   readonly discoveredSlotIds: readonly string[];
+  readonly savedSlotIds?: readonly string[];
 }): string[] {
   const out: string[] = [];
   const add = (slotId: string | undefined) => {
@@ -110,6 +111,7 @@ export function createVisibleSlotIds(args: {
     DEFAULT_LLM_SLOT_IDS.forEach(add);
   }
   args.discoveredSlotIds.forEach(add);
+  args.savedSlotIds?.forEach(add);
   return out;
 }
 
@@ -182,12 +184,7 @@ function findAutoBindPreset(
 }
 
 function isRuntimeSlotId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value !== "default" &&
-    value !== "text"
-  );
+  return typeof value === "string" && value.length > 0 && value !== "default";
 }
 
 function isSettingsSlotId(value: unknown): value is string {

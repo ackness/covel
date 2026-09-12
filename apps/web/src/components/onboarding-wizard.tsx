@@ -1,200 +1,108 @@
-import { useCallback, useEffect, useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
-import type { PresetSummary } from "@/services/api.js";
-import { listPresets } from "@/services/api.js";
-import { useLocalePreference } from "@/hooks/useLocalePreference";
-import { TOTAL_STEPS } from "./onboarding-wizard/constants.js";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Button } from "@/components/ui/button.js";
 import {
-  CloseButton,
-  LocaleToggle,
-  StepIndicator,
-} from "./onboarding-wizard/chrome.js";
-import {
-  bindPluginSlotToStory,
-  isOnboarded,
-  markOnboarded,
-  persistPluginModeSame,
-  persistSlot,
-} from "./onboarding-wizard/persistence.js";
-import {
-  defaultModelForProvider,
-  emptyFormState,
-} from "./onboarding-wizard/provider-state.js";
-import {
-  isPluginContinueDisabled,
-  isStoryContinueDisabled,
-  PluginStep,
-  ReadyStep,
-  StoryStep,
-  summarizeStoryProvider,
-  WelcomeStep,
-} from "./onboarding-wizard/steps.js";
-import type {
-  OnboardingStep,
-  PluginMode,
-  ProviderFormState,
-} from "./onboarding-wizard/types.js";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
+import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
+import { LocaleToggle, StepIndicator } from "./onboarding-wizard/chrome.js";
+import { markOnboarded } from "./onboarding-wizard/persistence.js";
+import { ModelStep, PlayStep, WelcomeStep } from "./onboarding-wizard/steps.js";
+import { configuredTextSlots } from "./onboarding-wizard/model-state.js";
+import type { OnboardingStep } from "./onboarding-wizard/types.js";
 
 export { resetOnboarding } from "./onboarding-wizard/persistence.js";
 
-function nextStep(step: OnboardingStep): OnboardingStep {
-  return Math.min(step + 1, TOTAL_STEPS - 1) as OnboardingStep;
+interface OnboardingWizardProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  settingsOpen: boolean;
+  onOpenSettings: (key: string) => void;
+  resolvedSlots: ResolvedSlot[];
 }
 
-function previousStep(step: OnboardingStep): OnboardingStep {
-  return Math.max(step - 1, 0) as OnboardingStep;
-}
-
-function useAvailablePresets(): PresetSummary[] {
-  const [availablePresets, setAvailablePresets] = useState<PresetSummary[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    void listPresets()
-      .then((presets) => {
-        if (!alive) return;
-        setAvailablePresets(presets.filter((preset) => preset.enabled));
-      })
-      .catch(() => {
-        if (!alive) return;
-        setAvailablePresets([]);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  return availablePresets;
-}
-
-function useDefaultModelSelection(
-  form: ProviderFormState,
-  setForm: Dispatch<SetStateAction<ProviderFormState>>,
-  availablePresets: PresetSummary[],
-): void {
-  useEffect(() => {
-    if (form.selected === "__custom__" || form.builtInModel.trim()) return;
-
-    const nextModel = defaultModelForProvider(availablePresets, form.selected);
-    if (!nextModel) return;
-
-    setForm((current) =>
-      current.selected === "__custom__" || current.builtInModel.trim()
-        ? current
-        : { ...current, builtInModel: nextModel },
-    );
-  }, [availablePresets, form.selected, form.builtInModel, setForm]);
-}
-
-export function OnboardingWizard() {
-  const [visible, setVisible] = useState(() => !isOnboarded());
-  const { locale, setLocale } = useLocalePreference();
+export function OnboardingWizard({
+  open,
+  onOpenChange,
+  settingsOpen,
+  onOpenSettings,
+  resolvedSlots,
+}: OnboardingWizardProps) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<OnboardingStep>(0);
-  const availablePresets = useAvailablePresets();
-
-  const [storyForm, setStoryForm] = useState<ProviderFormState>(() =>
-    emptyFormState(),
-  );
-  const [pluginMode, setPluginMode] = useState<PluginMode>("same");
-  const [pluginForm, setPluginForm] = useState<ProviderFormState>(() =>
-    emptyFormState(),
-  );
-
-  useDefaultModelSelection(storyForm, setStoryForm, availablePresets);
-  useDefaultModelSelection(pluginForm, setPluginForm, availablePresets);
-
-  const dismiss = useCallback(() => {
+  const slots = configuredTextSlots(resolvedSlots);
+  const dismiss = () => {
     markOnboarded();
-    setVisible(false);
-  }, []);
-
-  const handleNext = useCallback(() => {
-    if (step < TOTAL_STEPS - 1) {
-      setStep((current) => nextStep(current));
-      return;
-    }
-    dismiss();
-  }, [step, dismiss]);
-
-  const handleBack = useCallback(() => {
-    setStep((current) => previousStep(current));
-  }, []);
-
-  const handleBeforePingStory = useCallback(async () => {
-    await persistSlot(storyForm, "story", availablePresets);
-  }, [storyForm, availablePresets]);
-
-  const handleBeforePingPlugin = useCallback(async () => {
-    await persistSlot(pluginForm, "plugin", availablePresets);
-  }, [pluginForm, availablePresets]);
-
-  const handleContinueFromStory = useCallback(async () => {
-    await persistSlot(storyForm, "story", availablePresets);
-    bindPluginSlotToStory();
-    setStep((current) => nextStep(current));
-  }, [storyForm, availablePresets]);
-
-  const handleContinueFromPlugin = useCallback(async () => {
-    if (pluginMode === "different" && pluginForm.apiKey.trim()) {
-      await persistSlot(pluginForm, "plugin", availablePresets);
-    } else {
-      persistPluginModeSame();
-    }
-    setStep((current) => nextStep(current));
-  }, [pluginForm, pluginMode, availablePresets]);
-
-  if (!visible) return null;
+    onOpenChange(false);
+    setStep(0);
+  };
+  const stepNames = ["welcome", "modelsTitle", "playTitle"] as const;
 
   return (
-    <div className="fixed inset-0 z-100 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm">
-      <LocaleToggle locale={locale} setLocale={setLocale} />
-      <CloseButton onDismiss={dismiss} />
-
-      <div className="relative w-full max-w-md max-h-full flex flex-col min-h-0">
-        <StepIndicator step={step} />
-
-        <div className="ui-dialog-shell border border-border p-5 sm:p-8 overflow-y-auto min-h-0">
-          {step === 0 && (
-            <WelcomeStep
-              locale={locale}
-              setLocale={setLocale}
-              onNext={handleNext}
-            />
-          )}
-
+    <Dialog
+      open={open && !settingsOpen}
+      onOpenChange={(next) => {
+        if (!next) dismiss();
+      }}
+    >
+      <DialogContent
+        className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl flex-col gap-5 p-5 sm:p-7"
+        data-testid="onboarding-wizard"
+        onPointerDownOutside={(event) => event.preventDefault()}
+      >
+        <DialogHeader className="shrink-0 gap-3 text-left">
+          <LocaleToggle />
+          <StepIndicator step={step} />
+          <DialogTitle>{t(`onboarding.${stepNames[step]}`)}</DialogTitle>
+          <DialogDescription>
+            {t(`onboarding.${["tagline", "modelsDesc", "playDesc"][step]}`)}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 overflow-y-auto space-y-4 pr-1">
+          {step === 0 && <WelcomeStep />}
           {step === 1 && (
-            <StoryStep
-              storyForm={storyForm}
-              setStoryForm={setStoryForm}
-              availablePresets={availablePresets}
-              storyContinueDisabled={isStoryContinueDisabled(storyForm)}
-              onBeforePingStory={handleBeforePingStory}
-              onContinue={handleContinueFromStory}
-              onSkip={handleNext}
-            />
+            <ModelStep slots={slots} onOpenSettings={onOpenSettings} />
           )}
-
           {step === 2 && (
-            <PluginStep
-              storySummary={summarizeStoryProvider(storyForm)}
-              pluginMode={pluginMode}
-              setPluginMode={setPluginMode}
-              pluginForm={pluginForm}
-              setPluginForm={setPluginForm}
-              availablePresets={availablePresets}
-              pluginContinueDisabled={isPluginContinueDisabled(
-                pluginMode,
-                pluginForm,
-              )}
-              onBeforePingPlugin={handleBeforePingPlugin}
-              onBack={handleBack}
-              onContinue={handleContinueFromPlugin}
+            <PlayStep
+              hasModel={slots.length > 0}
+              onOpenSettings={onOpenSettings}
             />
           )}
-
-          {step === 3 && <ReadyStep onDismiss={dismiss} />}
         </div>
-      </div>
-    </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
+          {step === 0 ? (
+            <Button variant="ghost" onClick={dismiss}>
+              {t("onboarding.browseFirst")}
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              onClick={() => setStep((step - 1) as OnboardingStep)}
+            >
+              {t("onboarding.back")}
+            </Button>
+          )}
+          <Button
+            onClick={() => {
+              if (step === 2) dismiss();
+              else setStep((step + 1) as OnboardingStep);
+            }}
+          >
+            {t(
+              step === 0
+                ? "onboarding.getStarted"
+                : step === 1
+                  ? "onboarding.learnToPlay"
+                  : "onboarding.chooseWorld",
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

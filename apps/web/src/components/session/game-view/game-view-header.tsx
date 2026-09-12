@@ -17,6 +17,10 @@ import type { SessionRecord, WorldRecord } from "@/services/api.js";
 import { text } from "@/components/world/editor-helpers.js";
 import { SessionBreadcrumb } from "../session-breadcrumb.js";
 import { ConnectionStatus } from "./connection-status.js";
+import {
+  executionTone,
+  type ExecutionPresentation,
+} from "../execution-presentation.js";
 
 export type GameViewMode = "parsed" | "detailed" | "raw" | "stage";
 
@@ -26,6 +30,7 @@ interface GameViewHeaderProps {
   sessionPhase: SessionRecord["phase"];
   world: WorldRecord | null;
   executing: boolean;
+  executionState?: ExecutionPresentation;
   viewMode: GameViewMode;
   isLeftCollapsed: boolean;
   isRightCollapsed: boolean;
@@ -45,6 +50,7 @@ export function GameViewHeader({
   sessionPhase,
   world,
   executing,
+  executionState,
   viewMode,
   isLeftCollapsed,
   isRightCollapsed,
@@ -81,21 +87,21 @@ export function GameViewHeader({
           disabled={executing}
         />
         <span
-          className={`ui-chip hidden lg:inline-flex ml-1 text-[10px] ${
-            executing
-              ? "border-transparent bg-[color-mix(in_oklab,var(--accent-primary)_12%,transparent)] text-(--accent-primary)"
-              : "border-transparent bg-[color-mix(in_oklab,var(--accent-success)_14%,transparent)] text-(--accent-success)"
-          }`}
+          className={`ui-chip hidden lg:inline-flex ml-1 text-[10px] ${executionTone(executionState ?? "idle")}`}
           aria-live="polite"
         >
           <span
             className={`w-1.25 h-1.25 rounded-full bg-current ${executing ? "ui-pulse-dot" : ""}`}
           />
-          {executing
-            ? t("session.stateStreaming")
-            : sessionPhase === "setup"
-              ? t("session.stateSetup")
-              : t("session.statePlaying")}
+          {executionState &&
+          executionState !== "idle" &&
+          executionState !== "completed"
+            ? t(`session.executionState.${executionState}`)
+            : executing
+              ? t("session.stateStreaming")
+              : sessionPhase === "setup"
+                ? t("session.stateSetup")
+                : t("session.statePlaying")}
         </span>
         <ConnectionStatus />
       </div>

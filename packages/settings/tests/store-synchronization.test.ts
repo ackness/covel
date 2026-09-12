@@ -36,6 +36,46 @@ function backend(initial: Record<string, unknown> = {}) {
 }
 
 describe("settings synchronization", () => {
+  it("normalizes refreshed values and preserves the raw revision baseline", async () => {
+    const { adapter, read } = backend({ display: { title: "Initial" } });
+    const remote = new SettingsStore(adapter);
+    const local = new SettingsStore(adapter);
+    local.register({
+      key: "display",
+      schema: z.object({
+        title: z.string(),
+        input: z.array(z.string()).default(["text"]),
+      }),
+      default: { title: "Default", input: ["text"] },
+      group: "general",
+      label: "Display",
+    });
+    await Promise.all([remote.init(), local.init()]);
+    expect(local.get("display")).toEqual({ title: "Initial", input: ["text"] });
+
+    const observe = vi.fn();
+    local.subscribe("display", observe);
+    await remote.set("display", { title: "Remote" });
+    await local.refresh();
+    expect(observe).toHaveBeenLastCalledWith({
+      title: "Remote",
+      input: ["text"],
+    });
+    expect(read().entries.display).toEqual({ title: "Remote" });
+
+    await local.set("display", { title: "Local" });
+    expect(read().entries.display).toEqual({ title: "Local", input: ["text"] });
+
+    await remote.refresh();
+    await remote.set("display", { title: "Latest" });
+    await expect(
+      local.set("display", { title: "Conflicting" }),
+    ).rejects.toMatchObject({
+      conflictingKeys: ["display"],
+    });
+    expect(local.get("display")).toEqual({ title: "Latest", input: ["text"] });
+  });
+
   it("rejects every queued same-value intent when the original field changed remotely", async () => {
     const { adapter, read } = backend({ shared: "original" });
     const remote = new SettingsStore(adapter);

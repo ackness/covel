@@ -1,13 +1,14 @@
 import { expect, test } from "@playwright/test";
 import {
   seedBrowserSettings,
+  ONBOARDING_VERSION,
   selectWorldByText,
   useServerWorlds,
 } from "./helpers/player.js";
 
 test.beforeEach(async ({ page }) => {
   await seedBrowserSettings(page, {
-    "ui.onboardedVersion": 3,
+    "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "zh-CN",
     "ui.appearance": "aurora",
     "ui.scheme": "dark",

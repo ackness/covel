@@ -431,6 +431,7 @@ export function reducer(
           action.turnId,
           action.status,
           action.sourceFailedRuntimeIds,
+          action.abortReason,
         ),
       };
     case "FINALIZE_HANGING_RUNTIMES": {

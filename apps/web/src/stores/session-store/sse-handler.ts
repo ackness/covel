@@ -295,6 +295,7 @@ export function createSseEventHandler(
               id: msgId,
               role: "assistant",
               content,
+              kind: "story",
               timestamp: envelope.timestamp,
               turnId,
               runtimeId: runtimeId !== "unknown" ? runtimeId : undefined,
@@ -458,6 +459,9 @@ export function createSseEventHandler(
             status: payload.committed === true ? "committed" : "failed",
             sourceFailedRuntimeIds: retryStepMetadata(payload, turnId)
               .sourceFailedRuntimeIds,
+            ...(typeof payload.abortReason === "string"
+              ? { abortReason: payload.abortReason }
+              : {}),
           });
         if (currentSessionId) {
           clearDomainEventPreviewsForTurn(currentSessionId, turnId);
@@ -468,7 +472,7 @@ export function createSseEventHandler(
         // server never commits the partial narrative, so discard the streaming
         // placeholder instead of showing ghost text + a red retry affordance.
         const abortReason = payload.abortReason as string | undefined;
-        if (!committed) {
+        if (!committed && abortReason !== PLAYER_ABORT_REASON) {
           clearNarrativeDeltaBuffer(deps.deltaBufferRef, deps.deltaRafRef);
           if (turnId) clearStreamingTextsForTurn(turnId);
           deps.dispatch({

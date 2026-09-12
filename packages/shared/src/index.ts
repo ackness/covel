@@ -269,3 +269,5 @@ export type {
   AssetGenerateView,
 } from "./proposals/asset-generate.js";
 export { resolvePluginSelection } from "./plugin-selection.js";
+
+export type { LLMProviderRequest } from "./types/llm-provider-request.js";

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { projectExecutionTurns } from "@/stores/session-store/execution-projection.js";
 import { ExecutionTimeline } from "../execution-timeline.js";
 import type { StageViewProps } from "./StageView.js";
+import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
 
 type Props = Pick<
   StageViewProps,
@@ -48,6 +49,7 @@ export function StageExecutionStatus({
         {showTasks && turn && (
           <ExecutionTimeline
             steps={turn.steps}
+            messages={turn.messages.map((entry) => entry.message)}
             executing={executing}
             plugins={plugins}
             turnNumberStart={turn.turnNumber}
@@ -66,9 +68,7 @@ export function StageExecutionStatus({
               <p className="font-medium text-destructive">
                 {t("common.error")}
               </p>
-              <p className="mt-1 wrap-break-word text-xs text-muted-foreground">
-                {executionError}
-              </p>
+              <ActionableErrorNotice error={executionError} layout="panel" />
             </div>
           </div>
         )}

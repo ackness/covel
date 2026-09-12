@@ -79,6 +79,8 @@ interface FailedProposal {
 }
 
 export interface FinalizeExecutionArgs {
+  /** Roll back when cancelled before the transaction commits; post-commit fan-out still runs. */
+  readonly signal?: AbortSignal;
   readonly store: DataStore;
   readonly sessionId: string;
   /** Canonical identity of the execution being finalized. */
@@ -413,6 +415,7 @@ export async function finalizeExecution(
     let committedEvents: readonly SessionEvent[] = [];
     try {
       committedEvents = await store.withTransaction(async (tx) => {
+        args.signal?.throwIfAborted();
         // A failed story cannot complete a player action. Optional state
         // extractors may fail independently after a valid narrative exists.
         for (const result of results) {
@@ -427,6 +430,7 @@ export async function finalizeExecution(
         }
         const events: SessionEvent[] = [];
         for (const result of results) {
+          args.signal?.throwIfAborted();
           const out = await processRuntimeResult(
             result,
             tx,
@@ -443,6 +447,7 @@ export async function finalizeExecution(
           await tx.appendTurnMessage(message);
         }
         await extraInTx?.(tx);
+        args.signal?.throwIfAborted();
         await saveSuspensions(tx, (fn) => postCommit.push(fn));
         if (shouldWriteClock) {
           await applySessionClockTx(tx, {
@@ -455,6 +460,7 @@ export async function finalizeExecution(
         for (const turnId of turnIds) {
           await tx.setTurnResultCommitStatus(sessionId, turnId, "committed");
         }
+        args.signal?.throwIfAborted();
         return events;
       });
     } catch (err) {

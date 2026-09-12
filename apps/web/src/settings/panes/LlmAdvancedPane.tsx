@@ -24,16 +24,7 @@ import {
 import { useModelCapability } from "./use-model-capability.js";
 import { MaxOutputTokensCard, ValueCell } from "./llm-max-output-tokens.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
-
-const DEFAULT_FALLBACK_SLOTS = [
-  "story",
-  "plugin",
-  "memory",
-  "image",
-  "fast",
-  "balance",
-  "default",
-];
+import { useLlmSlotIds } from "./use-llm-slot-ids.js";
 
 type NumericParameter = Exclude<
   keyof ModelParameterOverrides,
@@ -121,16 +112,13 @@ export function LlmAdvancedPane() {
   const { t } = useTranslation();
   const { state } = useSession();
   const llm = state.llmConfig;
-  const isConfigured = llm?.configured ?? false;
-  const configuredSlots = isConfigured ? Object.keys(llm!.slots) : [];
-  const slots = isConfigured ? configuredSlots : DEFAULT_FALLBACK_SLOTS;
+  const { slots } = useLlmSlotIds();
 
   const [paramOverrides, setParamOverridesLocal] = useState<
     Record<string, ModelParameterOverrides>
   >(() => getParamOverrides());
-  const [selectedSlot, setSelectedSlot] = useState<string>(
-    slots[0] ?? "default",
-  );
+  const [selected, setSelectedSlot] = useState<string>(slots[0] ?? "");
+  const selectedSlot = slots.includes(selected) ? selected : (slots[0] ?? "");
   const revision = useSettingsRevision([
     "llm.paramOverrides",
     "llm.slotConfig",

@@ -24,6 +24,7 @@ export interface TraceRecorder {
       durationMs: number;
       resultCount: number;
       committed?: boolean;
+      abortReason?: string;
     },
     settledRetryScope?: RuntimeRetryScope,
   ): Promise<void>;

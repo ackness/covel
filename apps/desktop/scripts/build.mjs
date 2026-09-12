@@ -402,12 +402,8 @@ for (const entry of sideCarResources) {
 }
 console.log("  ✓ plugins/prompts/worlds copied (node_modules/dist excluded)");
 
-// Copy llm.toml if present
-const llmToml = path.join(projectRoot, "llm.toml");
-if (fs.existsSync(llmToml)) {
-  fs.copyFileSync(llmToml, path.join(serverStaging, "llm.toml"));
-  console.log("  ✓ llm.toml copied");
-}
+// User configuration belongs to the installed app's data directory. Never
+// copy the developer's llm.toml into distributable resources or Turbo caches.
 verifyStagedServerRuntime();
 console.log("  ✓ server runtime verified");
 console.log("  ✓ server resources staged");
@@ -421,7 +417,7 @@ console.log("  ✓ server resources staged");
 // The runtime binary must be materialised first — electron@42+ no longer
 // downloads it on install (see ensure-electron.mjs).
 ensureElectronBinary();
-console.log("\n[3b/4] Smoke-testing staged server (with llm.toml)...");
+console.log("\n[3b/4] Smoke-testing staged server (with synthetic config)...");
 execSync(
   `node "${path.join(desktopRoot, "scripts/verify-staging.mjs")}" --electron-node`,
   {

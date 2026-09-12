@@ -18,7 +18,7 @@ const DEFAULT_MAX_CONCURRENT = 4;
 
 let capOverride: number | undefined;
 let active = 0;
-const waiters: Array<() => void> = [];
+const waiters: Array<{ grant: () => void }> = [];
 
 function resolveCap(): number {
   if (capOverride !== undefined) return capOverride;
@@ -34,24 +34,50 @@ export interface LLMSlot {
   readonly release: () => void;
 }
 
-export async function acquireLLMSlot(): Promise<LLMSlot> {
-  const start = Date.now();
-  // FIFO: newcomers queue behind existing waiters instead of barging.
-  if (active >= resolveCap() || waiters.length > 0) {
-    await new Promise<void>((resolve) => {
-      waiters.push(resolve);
-    });
+function releaseSlot(): void {
+  active--;
+  // Reserve capacity synchronously before waking a caller. A newcomer must
+  // not take the slot between resolve() and the queued caller's continuation.
+  while (active < resolveCap() && waiters.length > 0) {
+    waiters.shift()!.grant();
   }
-  active++;
+}
+
+export async function acquireLLMSlot(signal?: AbortSignal): Promise<LLMSlot> {
+  signal?.throwIfAborted();
+  const start = Date.now();
+  if (active >= resolveCap() || waiters.length > 0) {
+    await new Promise<void>((resolve, reject) => {
+      const onAbort = (): void => {
+        const index = waiters.indexOf(waiter);
+        if (index >= 0) waiters.splice(index, 1);
+        reject(signal?.reason);
+      };
+      const waiter = {
+        grant: () => {
+          signal?.removeEventListener("abort", onAbort);
+          active++;
+          resolve();
+        },
+      };
+      waiters.push(waiter);
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
+    // Cancellation can race the handoff after the abort listener is removed.
+    if (signal?.aborted) {
+      releaseSlot();
+      signal.throwIfAborted();
+    }
+  } else {
+    active++;
+  }
   let released = false;
   return {
     waitedMs: Date.now() - start,
     release: () => {
       if (released) return;
       released = true;
-      active--;
-      const next = waiters.shift();
-      if (next) next();
+      releaseSlot();
     },
   };
 }

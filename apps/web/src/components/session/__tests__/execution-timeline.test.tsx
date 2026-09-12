@@ -62,6 +62,7 @@ describe("ExecutionTimeline plugin names", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /Execution/ }));
     expect(screen.getByText("Dice Check / roller")).toBeTruthy();
     expect(screen.getByText("Relationship Graph / rag-retriever")).toBeTruthy();
     expect(screen.queryByText(/骰子判定|关系图谱/)).toBeNull();
@@ -89,6 +90,7 @@ describe("ExecutionTimeline plugin names", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: /Execution/ }));
     const callout = screen.getByRole("alert");
     const chip = container.querySelector(".ui-chip");
     expect(chip).toBeTruthy();
@@ -116,7 +118,7 @@ describe("ExecutionTimeline plugin names", () => {
     ).toBeTruthy();
   });
 
-  it("keeps failures and retry visible after completion and manual folding", () => {
+  it("keeps a compact failure summary and retry visible while details are folded", () => {
     const { rerender } = render(
       <ExecutionTimeline
         executing
@@ -162,16 +164,14 @@ describe("ExecutionTimeline plugin names", () => {
     const summary = screen.getByRole("button", { name: /Execution/ });
     expect(summary.getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByText("Failed: 1")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(
-      screen.getByText("Some updates failed. Review the affected tasks below."),
-    ).toBeTruthy();
-    expect(screen.getByRole("alert")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: /Retry this task.*extract/ }),
+      screen.getByRole("button", { name: "Retry this task" }),
     ).toBeTruthy();
     fireEvent.click(summary);
-    fireEvent.click(summary);
     expect(screen.getByRole("alert")).toBeTruthy();
+    fireEvent.click(summary);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("renders a detached runtime as a compact background task with progress", () => {
@@ -300,6 +300,7 @@ describe("ExecutionTimeline plugin names", () => {
       steps.slice(0, 20).map((step) => step.runtimeId),
       "source",
     );
+    fireEvent.click(screen.getByRole("button", { name: /Execution/ }));
     expect(
       screen.getAllByRole("button", { name: /Retry this task:/ }),
     ).toHaveLength(21);
@@ -329,6 +330,7 @@ describe("ExecutionTimeline plugin names", () => {
         ]}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: /Execution/ }));
     expect(screen.getAllByRole("alert")).toHaveLength(2);
     expect(
       screen.queryByRole("button", {

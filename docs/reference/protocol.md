@@ -85,7 +85,7 @@
 回合中控制走 HTTP 端点而非 SSE 事件（见 [api.md § 回合中控制](./api.md#回合中控制w4)）：
 
 - **steer**（`POST /api/sessions/:id/steer`）：玩家在回合进行中插话。消息进入服务端 per-session 队列，story runtime 在下一次 LLM 调用前把队列并入实时 transcript；若插话在最终响应流式期间才到达，story runtime 会在收尾前追加一步 LLM 调用消化它（受 maxSteps 约束）。同时持久化为 user 消息（后续回合的历史自然包含）；持久化失败时撤回队列项并返回 500，保证队列与历史一致。客户端本地回显即可，无新增 SSE 事件。
-- **abort**（`POST /api/sessions/:id/abort`）：触发回合级 AbortSignal——重试层立刻切断在途 LLM 调用/流（玩家 abort 不可重试、**绕过流式 salvage**，不会把半截叙事当作结果提交），executor 停止调度后续 runtime 组并跳过事件链。被中止的 runtime 以 failed 上报（`runtime.failed`），其提案不产出；abort 前已完成的 runtime 结果照常提交。当次 `execution.completed` 带 `abortReason: "aborted-by-player"`（常量 `PLAYER_ABORT_REASON`，定义于 `@covel/shared`）。客户端收到该值时把它当作玩家主动的终态而非错误：丢弃该回合未提交的流式占位消息（服务端从不提交半截叙事，保留会造成刷新后消失的“幽灵文本”），不显示错误/重试提示；其他 `abortReason`（如 cost-gate）仍按错误提示展示。
+- **abort**（`POST /api/sessions/:id/abort`）：触发回合级 AbortSignal——重试层立刻切断在途 LLM 调用/流（玩家 abort 不自动重试、**绕过流式 salvage**，不会把半截叙事当作结果提交），executor 停止调度后续 runtime 组并跳过事件链。被中止的 runtime 以 failed 上报（`runtime.failed`），其提案不产出；最终提交检查玩家取消信号，提交前收到取消时整个回合不提交。当次 `execution.completed` 带 `abortReason: "aborted-by-player"`（常量 `PLAYER_ABORT_REASON`，定义于 `@covel/shared`）。客户端收到该值时把它当作玩家主动的终态而非错误：丢弃该回合未提交的流式占位消息（服务端从不提交半截叙事，保留会造成刷新后消失的“幽灵文本”），显示“已停止，本轮未提交”及显式重试入口，不显示通用错误；其他 `abortReason`（如 cost-gate）仍按错误提示展示。
 
 ### 会话生命周期事件
 
@@ -544,7 +544,7 @@ These events ride the standard SSE envelope and are also persisted into `trace_e
 | `tool.completed`         | `{ runtimeId, pluginId, toolName, toolCallId, label, result, parsedResult, durationMs, approvalStatus, success: true }`                                                                                                                                                                                                                    |
 | `tool.failed`            | `{ runtimeId, pluginId, toolName, toolCallId, label, code, error, details?, durationMs, approvalStatus, success: false }`                                                                                                                                                                                                                  |
 | `domain-event.previewed` | `{ runtimeId, pluginId, toolCallId, topic, data }` — `emit-event` 校验成功后的临时表现层信号；持久业务状态仍由正常事件链提交。                                                                                                                                                                                                             |
-| `llm.calling`            | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, streaming? }`；`slot` 是 runtime 请求的 slot；生产 gateway 在调用前把它解析为 `model` / `provider` 目标身份。不支持 slot 解析的自定义 adapter 可省略 `provider`。                                                                     |
+| `llm.calling`            | `{ runtimeId, pluginId, slot, model, provider?: string \| null, messages, tools, attempt, startedAt, queueWaitMs?, streaming? }`；`slot` 是 runtime 请求的 slot；生产 gateway 在调用前把它解析为 `model` / `provider` 目标身份。不支持 slot 解析的自定义 adapter 可省略 `provider`。                                                       |
 | `llm.responded`          | `{ runtimeId, pluginId, text?, toolCalls?, usage, finishReason, durationMs, attempt, error? }`；`usage` 为 `{ inputTokens, outputTokens, cachedInputTokens?, cacheWriteInputTokens? }`，其中 `inputTokens` 是包含缓存读写的总输入，后两项是 provider 报告的子集。                                                                          |
 | `gateway.responded`      | function-runtime gateway 的成功结果；文本/对象调用带 `{ runtimeId, pluginId, method, finishReason, usage, model?, provider?, durationMs }`，`model/provider` 是 fallback 后实际命中的目标。转写调用同样携带可用的 `usage/model/provider`；旧 trace 或不支持该元数据的自定义 gateway 可以省略。                                             |
 | `message.completed`      | `{ runtimeId, pluginId, content, len, deltaCount }` — `deltaCount` is the number of upstream `narrative.delta` events the runtime produced. Frontend views aggregating live `narrative.delta` streams use a separate synthesized `_aggregated` field; the two are not interchangeable — `deltaCount` is the authoritative persisted count. |
@@ -581,5 +581,12 @@ Payload notes:
   请求开始时间。事件自身 `timestamp` 仍是 trace 行持久化时间；部分 adapter 为了先确认
   最终 provider/model 会稍后写入 calling 事件，耗时判断应结合 `startedAt` 与 responded
   的 `durationMs`。
-- `llm.calling.tools` is `Array<{ name, description, jsonSchema }>` — mapped from `LLMToolDefinition.parameters` so the recorded schema matches what the provider actually received.
+- `llm.calling.queueWaitMs` 是该次尝试实际等待框架并发槽的毫秒数；模型调用 `durationMs` 从取得并发槽后开始计时，包含响应流读取。历史或不经过重试层的调用可以缺少队列指标，不能将缺失解释为零。
+- `runtime.completed` 的 `status: "failed"`、`turn.completed` 的 `committed: false` 均属于诊断失败；LLM 尝试失败后重试成功仍保留失败记录，界面应将“已恢复的尝试”与任务最终状态区分。
+- `llm.calling` 可附带 `responseFormat`、`defaults`、`maxOutputTokens`，描述 runtime 请求的结构化输出与生成约束；实际协议请求见可选 `providerRequests` 数组。仅提供自定义 LLM adapter 且未实现观察入口时，该数组缺失，不应从逻辑消息猜测最终请求。
+- `providerRequests[]` 格式：`{ schemaVersion: 1, provider, protocol, body, complete, omittedFieldCount, startedAt, durationMs, transportAttempt, statusCode?, failed? }`。`body` 来自 HTTP adapter 序列化后的 JSON 投影，包括 adapter 附加的结构化提示、消息/工具转换以及参数覆盖后的值；数组顺序保留目标 fallback 和 HTTP 重试，`transportAttempt` 在每个协议请求内从 0 开始。外层 trace/turn/runtime/attempt 标识负责关联，不新增领域写入或恢复权威。
+- 观察入口在 HTTP 返回或失败时报告，因此 `statusCode: 200` 仅代表 HTTP 接受，流式输出仍可能随后失败；以 `llm.responded` 和 runtime 结算为准。文本流第一个增量发出前已保存对应 HTTP 请求投影。进程在 HTTP 返回前退出时可能没有记录，trace 仍为 best-effort，不承诺崩溃审计完整性。
+- 不收集认证头、API key、provider base URL 或配置对象。任意额外 metadata 只记录遗漏字段数量；带查询/凭据/片段的资源 URL 隐去并标记 `complete: false`。版本不支持、`complete: false` 或外部资源已经失效时，离线工具必须报告无法完整重建。`complete: true` 仅说明 JSON 请求投影完整，不保证资源永久有效、HTTP 头可重建或真实模型结果确定。
+- 请求正文沿用现有 trace 的敏感上下文访问与留存边界，包含玩家文本，不能当作可公开导出的脱敏日志。function runtime 的 `gateway.*` 继续只记录形状，不扩大其正文收集范围。
+- `llm.calling.tools` is `Array<{ name, description, jsonSchema }>` — mapped from `LLMToolDefinition.parameters` to preserve the logical schema; providerRequests contains the final protocol representation.
 - `llm.calling.provider` is `null` at direct `generate` / `generateStream` sites where the resolved provider string is not available; slot-routed calls populate it with the provider name (`openai`, `anthropic`, `deepseek`, `qwen`).

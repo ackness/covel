@@ -1,3 +1,4 @@
+import { observeJsonRequest } from "./request-observation.js";
 import type { FormData as UndiciFormData } from "undici";
 import type { ProviderConfig } from "../../types.js";
 import { outboundFetch } from "../../outbound-network.js";
@@ -68,16 +69,25 @@ export async function postJson(
   const serializedBody = JSON.stringify(body);
   const effectiveSignal = signal ?? config.signal;
 
+  let transportAttempt = 0;
   const doFetch = async (): Promise<Response> =>
-    rejectRedirect(
-      await pinnedFetch(url, {
-        method: "POST",
-        headers,
-        body: serializedBody,
-        redirect: "manual",
-        signal: effectiveSignal,
-      }),
-      url,
+    observeJsonRequest(
+      config.requestObservation,
+      serializedBody,
+      transportAttempt++,
+      async () => {
+        effectiveSignal?.throwIfAborted();
+        return rejectRedirect(
+          await pinnedFetch(url, {
+            method: "POST",
+            headers,
+            body: serializedBody,
+            redirect: "manual",
+            signal: effectiveSignal,
+          }),
+          url,
+        );
+      },
     );
 
   if (isRetryDisabled()) {

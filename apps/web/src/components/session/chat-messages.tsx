@@ -1,3 +1,4 @@
+import { ActionableErrorNotice } from "@/components/shared/actionable-error-notice.js";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertCircle, ArrowDown, Loader2, MessageSquare } from "lucide-react";
@@ -267,9 +268,10 @@ export function ChatMessages({
                   <p className="font-medium text-destructive">
                     {t("common.error", "Error")}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1 break-all">
-                    {executionError}
-                  </p>
+                  <ActionableErrorNotice
+                    error={executionError}
+                    layout="panel"
+                  />
                 </div>
               </div>
             )}

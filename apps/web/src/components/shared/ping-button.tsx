@@ -32,10 +32,8 @@ interface PingButtonProps {
   /**
    * Runs before the HTTP request. Return false (or throw) to abort.
    *
-   * Onboarding uses this to persist API keys + slot bindings before
-   * probing `slot-<name>` — without it the server would resolve against
-   * stale slot state. Returning a rejected promise surfaces the error
-   * as a normal ping failure.
+   * A caller can finish pending connection edits before probing. Returning
+   * a rejected promise surfaces the error as a normal ping failure.
    */
   onBeforePing?: () => Promise<boolean | void> | boolean | void;
   className?: string;
@@ -115,7 +113,7 @@ export function PingButton({
     setTesting(true);
     let requestGeneration: number | undefined;
     try {
-      // Run pre-ping side effects (e.g. persist keys in onboarding). A
+      // Run pre-ping side effects (e.g. finish pending connection edits). A
       // thrown error or explicit `false` short-circuits and surfaces via
       // the error display; we deliberately don't cache these results
       // because the environment wasn't fully set up.

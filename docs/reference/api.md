@@ -325,7 +325,9 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 
 ### 刷新与未完成回合恢复
 
-`GET /api/sessions/:id/execution` 返回 `SessionExecutionStatus`，遵循相同的会话归属校验；`GET /api/sessions/:id/view` 的可选 `execution` 字段提供同一状态。`state` 为 `idle`、`running`、`completed`、`failed` 或 `interrupted`，可带 `turnId`、`requestId`、`startedAt`、`origin` 和显式重试用的 `retry: { type, payload }`。此接口不会等待长回合锁；PG 使用非阻塞 advisory lock 探测，另一进程仍持锁或暂时无法取得连接时保守返回 `running`，可能没有回合标识。
+`GET /api/sessions/:id/execution` 返回 `SessionExecutionStatus`，遵循相同的会话归属校验；`GET /api/sessions/:id/view` 的可选 `execution` 字段提供同一状态。`state` 为 `idle`、`running`、`completed`、`failed` 或 `interrupted`，可带 `turnId`、`requestId`、`startedAt`、`origin`、`abortReason` 和显式重试用的 `retry: { type, payload }`。此接口不会等待长回合锁；PG 使用非阻塞 advisory lock 探测，另一进程仍持锁或暂时无法取得连接时保守返回 `running`，可能没有回合标识。
+
+玩家停止但未提交的回合仍使用可重试的 `state: "failed"`，并携带 `abortReason: "aborted-by-player"`；界面应显示主动停止，而不是通用错误。停止原因从持久化的 `turn.completed` 读取，刷新不会丢失，也不会自动重试。
 
 网页刷新或 SSE 断开不会自动取消原回合。客户端仅查询状态并恢复已提交的消息、时钟和任务步骤，不自动重新调用模型。服务器进程停止会丢失前台内存执行；无活跃锁、无已提交工件且缺少终止记录时显示 `interrupted`。已经提交但来不及记录终止 trace 的回合仍为 `completed`。浏览器旧步骤只补充服务端快照缺失的信息，不能把终态覆盖为 `running`；`runtime.completed` 的 `payload.status` 决定成功、失败、跳过或挂起状态。
 

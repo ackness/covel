@@ -1,4 +1,5 @@
 import type { SettingsStoreApi } from "@covel/settings";
+import { i18nTextSchema } from "@covel/shared";
 import type { StoredCustomTheme } from "./types.js";
 
 export const CUSTOM_THEMES_KEY = "ui.customThemes";
@@ -17,16 +18,17 @@ function stripAtImports(cssText: string): string {
 }
 
 function normalizeStoredTheme(value: unknown): StoredCustomTheme | null {
-  if (!value || typeof value !== "object") return null;
-  const raw = value as Partial<StoredCustomTheme>;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
   if (typeof raw.id !== "string" || typeof raw.cssText !== "string")
     return null;
-  if (typeof raw.label !== "string" && typeof raw.label !== "object")
-    return null;
+  const label = i18nTextSchema.safeParse(raw.label);
+  if (!label.success) return null;
+  const description = i18nTextSchema.safeParse(raw.description);
 
   return {
     id: raw.id,
-    label: raw.label,
+    label: label.data,
     cssText: stripAtImports(raw.cssText),
     schemes:
       Array.isArray(raw.schemes) && raw.schemes.length > 0
@@ -35,7 +37,7 @@ function normalizeStoredTheme(value: unknown): StoredCustomTheme | null {
               scheme === "light" || scheme === "dark",
           )
         : ["light", "dark"],
-    description: raw.description,
+    description: description.success ? description.data : undefined,
     importedAt:
       typeof raw.importedAt === "string" && raw.importedAt.length > 0
         ? raw.importedAt

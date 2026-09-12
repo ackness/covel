@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Database, Info, Loader2, RotateCw } from "lucide-react";
 import {
@@ -25,9 +25,8 @@ import { LlmSlotCard } from "./llm-slot-card.js";
 import {
   autoBindDiscoveredSlots as resolveAutoBindDiscoveredSlots,
   collectLlmSlotPresetCandidates,
-  createVisibleSlotIds,
-  discoverRuntimeSlotIds,
 } from "./llm-slots-model.js";
+import { useLlmSlotIds } from "./use-llm-slot-ids.js";
 import { ignoreError } from "@/lib/ignore-error.js";
 import { clearChangedSlotReasoningEfforts } from "./llm-reasoning-effort.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
@@ -75,20 +74,7 @@ export function LlmSlotsPane() {
     customPresets,
   );
 
-  const configuredSlots = isConfigured ? Object.keys(llm!.slots) : [];
-  const discoveredSlotIds = useMemo(
-    () => discoverRuntimeSlotIds(state.plugins),
-    [state.plugins],
-  );
-  const slots = useMemo(
-    () =>
-      createVisibleSlotIds({
-        isConfigured,
-        configuredSlots,
-        discoveredSlotIds,
-      }),
-    [isConfigured, configuredSlots.join("\n"), discoveredSlotIds.join("\n")],
-  );
+  const { slots, configuredSlots, discoveredSlotIds } = useLlmSlotIds();
 
   const commitSlot = (next: Record<string, SlotConfigEntry>) => {
     const currentParamOverrides = getParamOverrides();

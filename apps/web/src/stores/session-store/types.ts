@@ -62,6 +62,7 @@ export interface ExecutionStep {
   sourceFailedRuntimeIds?: readonly string[];
   /** Turn commit evidence, independent of each runtime's result. */
   attemptStatus?: "pending" | "committed" | "failed" | "interrupted";
+  abortReason?: string;
   /** Attempt start time, independent of when an individual runtime starts. */
   turnStartedAt?: string;
   /** Wall-clock start time (for on-device duration fallback). */
@@ -302,6 +303,7 @@ export type SessionAction =
       turnId: string;
       status: NonNullable<ExecutionStep["attemptStatus"]>;
       sourceFailedRuntimeIds?: readonly string[];
+      abortReason?: string;
     }
   | { type: "LOAD_EXECUTION_STEPS"; steps: ExecutionStep[] }
   | { type: "CLEAR_EXECUTION_STEPS" }

@@ -42,6 +42,23 @@ export interface PluginPanelTarget {
   readonly subPanelIndex: number;
 }
 
+/** Panel ids are local to their declaring plugin, including shared groups. */
+export function pluginPanelKey(
+  panel: Pick<PluginPanelSubPanel, "pluginId" | "id">,
+): string {
+  return JSON.stringify([panel.pluginId, panel.id]);
+}
+
+export function selectedPluginPanelIndex(
+  group: PluginPanelTabGroup,
+  key?: string,
+): number {
+  const index = group.subPanels.findIndex(
+    (panel) => pluginPanelKey(panel) === key,
+  );
+  return index >= 0 ? index : 0;
+}
+
 export function pluginShortLabel(
   pluginId: string,
   sessionPlugins: readonly {

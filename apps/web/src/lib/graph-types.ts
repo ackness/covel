@@ -15,8 +15,8 @@ export interface ForceNode {
 }
 
 export interface ForceLink {
-  source: string;
-  target: string;
+  source: string | ForceNode;
+  target: string | ForceNode;
   edgeId: string;
   relation: string;
   strength: number;

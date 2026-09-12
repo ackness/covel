@@ -1,3 +1,4 @@
+import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import type {
   Proposal,
   ExecutionContext,
@@ -231,6 +232,7 @@ export async function runAgentToolLoop({
   // Shared hook wiring reused across the LLM-call and tool-call sites below.
   const hookOpts = {
     pipeline: hookPipeline,
+    signal: getTurnExecutionSignal(deps.turnControl),
     sessionId: input.sessionId,
     turnId: input.turnId,
     pluginId: manifest.pluginId,

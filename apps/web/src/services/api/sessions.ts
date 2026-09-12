@@ -270,11 +270,15 @@ export async function updateSession(
   );
 }
 
-export async function deleteSession(sessionId: string): Promise<void> {
+export async function deleteSession(
+  sessionId: string,
+  options?: { silentErrors?: boolean },
+): Promise<void> {
   await request<{ ok: boolean }>(
     `/api/sessions/${encodeURIComponent(sessionId)}`,
     {
       method: "DELETE",
+      ...options,
     },
   );
   // Drop the stored owner token — the session is gone, keeping it only leaks

@@ -19,6 +19,8 @@ export interface DataService {
   createWorld(name: string, description: string): Promise<WorldRecord>;
   saveGeneratedWorld(world: WorldRecord): Promise<WorldRecord>;
   updateWorld(id: string, patch: WorldPatch): Promise<WorldRecord>;
+  /** Delete the world and its sessions from the authoritative store. */
+  deleteWorld(id: string): Promise<void>;
   /** Ensure APIs needed before session creation can resolve this world. */
   prepareWorldForServer(worldId: string): Promise<void>;
 

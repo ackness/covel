@@ -562,6 +562,8 @@ export interface CursorPage<T> {
 /** Read-only recovery state for the latest foreground action. */
 export interface SessionExecutionStatus {
   readonly state: "idle" | "running" | "completed" | "failed" | "interrupted";
+  /** A stopped, uncommitted turn remains retryable through the failed state. */
+  readonly abortReason?: string;
   readonly turnId?: string;
   readonly requestId?: string;
   readonly startedAt?: string;

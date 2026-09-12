@@ -71,6 +71,10 @@ vi.mock("@/components/onboarding-wizard.js", () => ({
   OnboardingWizard: () => null,
 }));
 
+vi.mock("@/components/onboarding-wizard/persistence.js", () => ({
+  isOnboarded: () => true,
+}));
+
 vi.mock("@/lib/desktop-bridge.js", () => ({
   initDesktopBridge: () => vi.fn(),
 }));

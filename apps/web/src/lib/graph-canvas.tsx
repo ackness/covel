@@ -9,12 +9,17 @@
 import {
   Suspense,
   lazy,
-  useReducer,
   useState,
   useRef,
   useEffect,
   useCallback,
+  type ComponentProps,
+  type ComponentType,
+  type Ref,
 } from "react";
+import { Maximize, Minus, Plus } from "lucide-react";
+import { GraphRelationships, linkTouches } from "./graph-relationships.js";
+import { buildNodes, buildLinks, drawNodeLabel } from "./graph-canvas-model.js";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
 import type { ForceGraphMethods } from "react-force-graph-2d";
@@ -24,154 +29,18 @@ import { createGraphDataPools, syncGraphData } from "./graph-canvas-sync.js";
 
 const ForceGraph2D = lazy(async () => {
   const mod = await import("react-force-graph-2d");
-  return { default: mod.default };
+  // The wrapper uses React refs; its published type only lists object refs.
+  type Props = Omit<ComponentProps<typeof mod.default>, "ref"> & {
+    ref?: Ref<ForceGraphMethods>;
+  };
+  return { default: mod.default as ComponentType<Props> };
 });
-
-interface GraphNodeRecord {
-  id: string;
-  name: string;
-  type: "individual" | "group" | "faction";
-  summary?: string;
-  labels?: readonly string[];
-}
-
-interface GraphEdgeRecord {
-  id: string;
-  source: string;
-  target: string;
-  relation: string;
-  strength: number;
-  fact?: string;
-}
 
 interface GraphCanvasProps {
   pluginId: string;
   nodesNamespace: string;
   edgesNamespace: string;
   height?: number;
-}
-
-const NODE_COLORS = {
-  individual: "#60a5fa",
-  group: "#a78bfa",
-  faction: "#f59e0b",
-} as const;
-
-const POSITIVE_EDGE = "#22c55e";
-const NEGATIVE_EDGE = "#ef4444";
-const NEUTRAL_EDGE = "#94a3b8";
-
-function pickEdgeColor(strength: number): string {
-  if (strength >= 0.33) return POSITIVE_EDGE;
-  if (strength <= -0.33) return NEGATIVE_EDGE;
-  return NEUTRAL_EDGE;
-}
-
-function isGraphNodeRecord(value: unknown): value is GraphNodeRecord {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === "string" &&
-    typeof record.name === "string" &&
-    (record.type === "individual" ||
-      record.type === "group" ||
-      record.type === "faction")
-  );
-}
-
-function isGraphEdgeRecord(value: unknown): value is GraphEdgeRecord {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === "string" &&
-    typeof record.source === "string" &&
-    typeof record.target === "string" &&
-    typeof record.relation === "string" &&
-    typeof record.strength === "number"
-  );
-}
-
-function buildNodes(nodes: Record<string, unknown>): ForceNode[] {
-  return Object.values(nodes)
-    .filter(isGraphNodeRecord)
-    .map((node) => ({
-      id: node.id,
-      name: node.name,
-      type: node.type,
-      summary: node.summary ?? "",
-      labels: [...(node.labels ?? [])],
-      color: NODE_COLORS[node.type] ?? "#9ca3af",
-      radius: nodeRadius(node.name),
-    }));
-}
-
-function buildLinks(edges: Record<string, unknown>): ForceLink[] {
-  return Object.values(edges)
-    .filter(isGraphEdgeRecord)
-    .map((edge) => ({
-      source: edge.source,
-      target: edge.target,
-      edgeId: edge.id,
-      relation: edge.relation,
-      strength: edge.strength,
-      fact: edge.fact ?? "",
-      color: pickEdgeColor(edge.strength),
-      width: 1 + Math.abs(edge.strength) * 2,
-    }));
-}
-
-function nodeRadius(name: string): number {
-  const glyphs = Array.from(name ?? "");
-  return Math.max(18, Math.min(32, 14 + Math.max(0, glyphs.length - 2) * 2.6));
-}
-
-function splitNodeLabel(name: string): string[] {
-  const glyphs = Array.from(name ?? "");
-  if (glyphs.length <= 4) return [glyphs.join("")];
-  const middle = Math.ceil(glyphs.length / 2);
-  return [glyphs.slice(0, middle).join(""), glyphs.slice(middle).join("")];
-}
-
-function drawNodeLabel(
-  ctx: CanvasRenderingContext2D,
-  node: ForceNode,
-  x: number,
-  y: number,
-  _globalScale: number,
-  selected: boolean,
-): void {
-  const lines = splitNodeLabel(node.name);
-  const fontSize = Math.max(
-    8,
-    Math.min(
-      12,
-      (node.radius * 0.8) /
-        Math.max(...lines.map((line) => Array.from(line).length), 1),
-    ),
-  );
-  const lineHeight = fontSize + 1;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.fillStyle = node.color;
-  ctx.arc(x, y, node.radius, 0, 2 * Math.PI, false);
-  ctx.fill();
-
-  ctx.lineWidth = selected ? 2.5 : 1.25;
-  ctx.strokeStyle = selected ? "#f8fafc" : "rgba(255,255,255,0.32)";
-  ctx.stroke();
-
-  ctx.fillStyle = "#f8fafc";
-  ctx.font = `${fontSize}px sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  const startY = y - ((lines.length - 1) * lineHeight) / 2;
-  for (const [index, line] of lines.entries()) {
-    ctx.fillText(line, x, startY + index * lineHeight);
-  }
-
-  ctx.restore();
 }
 
 const Inner = ({
@@ -183,43 +52,14 @@ const Inner = ({
   const { t } = useTranslation();
   const nodes = usePluginNamespace(pluginId, nodesNamespace);
   const edges = usePluginNamespace(pluginId, edgesNamespace);
-  // Untyped generics on purpose: `<ForceGraph2D ref={graphRef} .../>` infers
-  // the component's NodeType/LinkType from all props at once, and JSX gives
-  // no explicit type arguments — a ref pinned to `ForceGraphMethods<ForceNode,
-  // ForceLink>` narrows that inference and breaks against `graphData`'s
-  // actual (structurally compatible, index-signature-based) prop type.
-  //
-  // `d3VelocityDecay` is missing from react-force-graph-2d's `ForceGraphMethods`
-  // typings even though the underlying `force-graph` kapsule it wraps declares
-  // it (see force-graph/dist/*.d.ts) — patched in locally rather than losing
-  // the rest of the interface's typing to `any`.
-  const graphRef = useRef<
-    | (ForceGraphMethods & { d3VelocityDecay?(velocityDecay: number): void })
-    | undefined
-  >(undefined);
+  // Keep the library's default structural node/link generics at the ref boundary.
+  const graphRef = useRef<ForceGraphMethods | undefined>(undefined);
 
   const [selected, setSelected] = useState<ForceNode | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(320);
 
-  // ── Stable graphData (the key to no-drift) ───────────────────────
-  //
-  // `react-force-graph` compares `graphData` by reference: every new
-  // reference it sees triggers an alpha=1 simulation restart. With the
-  // centre force kicking in on each restart the whole graph drifts in
-  // whichever direction the first few ticks happen to push it. The
-  // `plugin-data.changed` SSE channel can fire frequently and expose the
-  // underlying instability.
-  //
-  // Fix: keep ONE `{nodes, links}` object behind a ref and mutate its
-  // arrays in place whenever plugin-data changes. The ref never changes
-  // identity, so force-graph's simulation state is preserved. The pool
-  // bookkeeping (id → object maps + the diffing) lives in graph-canvas-sync.
-  //
-  // Canvas width is handled orthogonally: it only flows into the `width`
-  // prop of `<ForceGraph2D>` (force-graph handles reflow internally) and
-  // into the *initial* seed position of brand-new nodes. It never
-  // triggers graphData rebuilds.
+  // Reuse node objects and pins; publish a new graph only when topology changes.
   const poolsRef = useRef(createGraphDataPools());
   // Latest canvas geometry held in a ref so the data-sync effect can read
   // it without depending on it — the effect deps stay limited to `nodes`
@@ -228,11 +68,18 @@ const Inner = ({
   canvasGeomRef.current.width = width;
   canvasGeomRef.current.height = height;
 
-  // Re-render trigger for in-place graphData mutations. The stable ref
-  // identity is load-bearing for d3-force, so React can't observe topology
-  // changes by reference — we bump a version counter when the id-set changes.
-  const [, bumpVersion] = useReducer((n: number) => n + 1, 0);
-  const lastFitCountRef = useRef<number>(-1);
+  const [graphData, setGraphData] = useState(poolsRef.current.graphData);
+  const fitPending = useRef(true);
+  const fitGraph = useCallback(() => graphRef.current?.zoomToFit(250, 40), []);
+  const attachGraph = useCallback((graph: ForceGraphMethods | null) => {
+    graphRef.current = graph ?? undefined;
+    if (!graph) return;
+    graph.d3Force("charge")?.strength?.(-320);
+    graph
+      .d3Force("link")
+      ?.distance?.((link: ForceLink) => 110 + Math.abs(link.strength) * 30);
+    fitPending.current = true;
+  }, []);
 
   // Attach the observer through a callback ref so we always connect to
   // whatever DOM node the latest render produced (e.g. empty-state <div>
@@ -248,8 +95,7 @@ const Inner = ({
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      // Canvas占容器的92%宽度 — 避免右侧 panel padding 把画布推出可视区。
-      const rounded = Math.max(200, Math.round(entry.contentRect.width * 0.92));
+      const rounded = Math.max(1, Math.floor(entry.contentRect.width) - 2);
       setWidth((prev) => (prev === rounded ? prev : rounded));
     });
     // observe() synchronously fires once with the current geometry so
@@ -268,46 +114,37 @@ const Inner = ({
   );
 
   useEffect(() => {
-    // Sync plugin-data → in-place mutation of the stable graphData ref.
-    // Only bump the version when the id-set actually changed so mid-drag
-    // echoes from other plugins don't force React to re-render this tree.
+    // Update pooled objects in place; notify the simulation only when the
+    // topology changes so metadata updates preserve its positions and pins.
+    const builtNodes = buildNodes(nodes);
+    const ids = new Set(builtNodes.map((node) => node.id));
     const changed = syncGraphData(
       poolsRef.current,
-      { nodes: buildNodes(nodes), links: buildLinks(edges) },
+      {
+        nodes: builtNodes,
+        links: buildLinks(edges).filter(
+          (link) =>
+            ids.has(String(link.source)) && ids.has(String(link.target)),
+        ),
+      },
       canvasGeomRef.current,
     );
-    if (changed) bumpVersion();
+    if (changed) {
+      // Notify the simulation about topology; pooled nodes retain positions and pins.
+      fitPending.current = true;
+      setGraphData({ ...poolsRef.current.graphData });
+    }
+    setSelected(
+      (previous) =>
+        (previous && poolsRef.current.nodePool.get(previous.id)) || null,
+    );
   }, [nodes, edges]);
 
-  const graphData = poolsRef.current.graphData;
-
   useEffect(() => {
-    if (!graphRef.current) return;
-    const chargeForce = graphRef.current.d3Force("charge");
-    const linkForce = graphRef.current.d3Force("link");
-    const collisionForce = graphRef.current.d3Force("collision");
-
-    chargeForce?.strength?.(-320);
-    linkForce?.distance?.(
-      (link: ForceLink) => 110 + Math.abs(link.strength) * 30,
-    );
-    collisionForce?.radius?.((node: MutableForceNode) => node.radius + 16);
-
-    graphRef.current.d3VelocityDecay?.(0.28);
-    // Auto-fit on topology change (new node added) so the user sees the
-    // updated graph. Doesn't restart the simulation — camera-only op.
-    const count = graphData.nodes.length;
-    if (lastFitCountRef.current !== count) {
-      lastFitCountRef.current = count;
-      graphRef.current.zoomToFit?.(250, 28);
-    }
-  }, [graphData, graphData.nodes.length]);
-
-  // Intentionally no "refit on width change" effect here — calling
-  // zoomToFit on every ResizeObserver notification was racing with
-  // react-force-graph's internal canvas resize and reintroduced the
-  // drift. The canvas still resizes (the `width` prop propagates) and
-  // node positions stay put; the user can drag/zoom to recentre.
+    fitPending.current = true;
+    const frame = requestAnimationFrame(fitGraph);
+    return () => cancelAnimationFrame(frame);
+  }, [width, height, graphData, fitGraph]);
 
   const handleNodeClick = useCallback((node: object) => {
     setSelected(node as ForceNode);
@@ -346,6 +183,41 @@ const Inner = ({
           </button>
         )}
       </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={fitGraph}
+          aria-label={t("graph.fit")}
+          title={t("graph.fit")}
+          className="rounded border p-2 hover:bg-muted"
+        >
+          <Maximize className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const graph = graphRef.current;
+            if (graph) graph.zoom(graph.zoom() * 1.3, 200);
+          }}
+          aria-label={t("graph.zoomIn")}
+          title={t("graph.zoomIn")}
+          className="rounded border p-2 hover:bg-muted"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const graph = graphRef.current;
+            if (graph) graph.zoom(graph.zoom() / 1.3, 200);
+          }}
+          aria-label={t("graph.zoomOut")}
+          title={t("graph.zoomOut")}
+          className="rounded border p-2 hover:bg-muted"
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+      </div>
       <div className="border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden bg-zinc-50 dark:bg-zinc-900/40">
         <Suspense
           fallback={
@@ -358,7 +230,7 @@ const Inner = ({
           }
         >
           <ForceGraph2D
-            ref={graphRef}
+            ref={attachGraph}
             graphData={graphData}
             width={width}
             height={height}
@@ -371,6 +243,17 @@ const Inner = ({
             nodeVal={(n: object) => (n as ForceNode).radius}
             nodeCanvasObject={(node: object, ctx, globalScale) => {
               const forceNode = node as ForceNode & { x?: number; y?: number };
+              ctx.save();
+              if (
+                selected &&
+                selected.id !== forceNode.id &&
+                !graphData.links.some(
+                  (link) =>
+                    linkTouches(link, selected.id) &&
+                    linkTouches(link, forceNode.id),
+                )
+              )
+                ctx.globalAlpha = 0.25;
               drawNodeLabel(
                 ctx,
                 forceNode,
@@ -379,6 +262,7 @@ const Inner = ({
                 globalScale,
                 selected?.id === forceNode.id,
               );
+              ctx.restore();
             }}
             nodeCanvasObjectMode={() => "replace"}
             nodePointerAreaPaint={(node: object, color: string, ctx) => {
@@ -398,9 +282,17 @@ const Inner = ({
             nodeLabel={(n: object) =>
               `${(n as ForceNode).name} — ${(n as ForceNode).type}`
             }
-            linkColor={(l: object) => (l as ForceLink).color}
+            linkColor={(l: object) =>
+              selected && !linkTouches(l as ForceLink, selected.id)
+                ? "rgba(148,163,184,0.12)"
+                : (l as ForceLink).color
+            }
             linkWidth={(l: object) => Math.max(2.5, (l as ForceLink).width)}
-            linkDirectionalArrowColor={(l: object) => (l as ForceLink).color}
+            linkDirectionalArrowColor={(l: object) =>
+              selected && !linkTouches(l as ForceLink, selected.id)
+                ? "rgba(148,163,184,0.12)"
+                : (l as ForceLink).color
+            }
             linkDirectionalArrowLength={8}
             linkDirectionalArrowRelPos={0.9}
             linkCurvature={0.28}
@@ -418,6 +310,10 @@ const Inner = ({
             // force idiom for "layout once, then behave as a static
             // diagram" and is what eliminates the agent-driven drift.
             onEngineStop={() => {
+              if (fitPending.current) {
+                fitPending.current = false;
+                fitGraph();
+              }
               for (const node of poolsRef.current.graphData.nodes) {
                 if (typeof node.x === "number" && node.fx === undefined)
                   node.fx = node.x;
@@ -429,6 +325,12 @@ const Inner = ({
           />
         </Suspense>
       </div>
+      <GraphRelationships
+        nodes={graphData.nodes}
+        links={graphData.links}
+        selectedId={selected?.id}
+        onSelect={setSelected}
+      />
       {selected && (
         <div className="border border-zinc-200 dark:border-zinc-800 rounded-md p-2.5 text-xs space-y-1">
           <div className="flex items-center gap-2">

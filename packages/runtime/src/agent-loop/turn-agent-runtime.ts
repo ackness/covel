@@ -1,3 +1,4 @@
+import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
 import type {
   RuntimeManifest,
   RuntimeResult,
@@ -151,6 +152,7 @@ export async function executeAgentRuntime({
   {
     const preRtResult = await runPreRuntimeHook({
       pipeline: hookPipeline,
+      signal: getTurnExecutionSignal(deps.turnControl),
       sessionId: input.sessionId,
       turnId: input.turnId,
       manifest,
@@ -196,6 +198,7 @@ export async function executeAgentRuntime({
       return runPostRuntimeHook(
         {
           pipeline: hookPipeline,
+          signal: getTurnExecutionSignal(deps.turnControl),
           sessionId: input.sessionId,
           turnId: input.turnId,
           pluginId: manifest.pluginId,
@@ -327,6 +330,7 @@ export async function executeAgentRuntime({
   const shapedContext = await runPostContextAssemblyHook(
     {
       pipeline: hookPipeline,
+      signal: getTurnExecutionSignal(deps.turnControl),
       sessionId: input.sessionId,
       turnId: input.turnId,
       pluginId: manifest.pluginId,
@@ -421,6 +425,7 @@ export async function executeAgentRuntime({
   // Shared PostRuntime-hook opts for every terminal path of this runtime.
   const postRuntimeOpts = {
     pipeline: hookPipeline,
+    signal: getTurnExecutionSignal(deps.turnControl),
     sessionId: input.sessionId,
     turnId: input.turnId,
     pluginId: manifest.pluginId,

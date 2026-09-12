@@ -1,3 +1,4 @@
+import type { LLMProviderRequest } from "./llm-provider-request.js";
 /**
  * LLM adapter — thin abstraction for calling language models.
  *
@@ -167,6 +168,8 @@ export interface LLMAdapter {
     readonly maxOutputTokens?: number;
     /** Synchronously reports each concrete provider attempt made by a gateway. */
     readonly onTargetAttempt?: (target: LLMTargetIdentity) => void;
+    /** Optional sanitized protocol request observation; does not change call semantics. */
+    readonly onProviderRequest?: (request: LLMProviderRequest) => void;
     /**
      * Abort the HTTP call when the signal fires. Required for timeouts —
      * turn-executor's `timeoutMs` is a loop guard; without this signal a
@@ -188,6 +191,8 @@ export interface LLMAdapter {
     readonly maxOutputTokens?: number;
     /** @see generate.onTargetAttempt */
     readonly onTargetAttempt?: (target: LLMTargetIdentity) => void;
+    /** Optional sanitized protocol request observation; does not change call semantics. */
+    readonly onProviderRequest?: (request: LLMProviderRequest) => void;
     /** @see generate.signal */
     readonly signal?: AbortSignal;
   }): AsyncIterable<LLMStreamEvent>;

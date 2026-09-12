@@ -96,3 +96,60 @@ describe("acquireLLMSlot", () => {
     }
   });
 });
+
+describe("slot cancellation and handoff", () => {
+  it("cancels a queued caller immediately without blocking surviving waiters", async () => {
+    setLLMSlotCapForTests(1);
+    const first = await acquireLLMSlot();
+    const controller = new AbortController();
+    const queued = acquireLLMSlot(controller.signal);
+    const rejected = expect(queued).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    const survivor = acquireLLMSlot();
+    controller.abort();
+    await rejected;
+    first.release();
+    (await survivor).release();
+    (await acquireLLMSlot()).release();
+  });
+
+  it("returns reserved capacity when cancellation races a handoff", async () => {
+    setLLMSlotCapForTests(1);
+    const first = await acquireLLMSlot();
+    const controller = new AbortController();
+    const queued = acquireLLMSlot(controller.signal);
+    const rejected = expect(queued).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    first.release();
+    controller.abort();
+    await rejected;
+    (await acquireLLMSlot()).release();
+  });
+
+  it("reserves a handed-off slot before a newcomer can acquire it", async () => {
+    setLLMSlotCapForTests(1);
+    const first = await acquireLLMSlot();
+    const second = acquireLLMSlot();
+    first.release();
+    let newcomerStarted = false;
+    const third = acquireLLMSlot().then((slot) => {
+      newcomerStarted = true;
+      return slot;
+    });
+    const holder = await second;
+    await Promise.resolve();
+    expect(newcomerStarted).toBe(false);
+    holder.release();
+    (await third).release();
+  });
+
+  it("rejects an already aborted caller without taking any capacity", async () => {
+    setLLMSlotCapForTests(1);
+    await expect(acquireLLMSlot(AbortSignal.abort())).rejects.toMatchObject({
+      name: "AbortError",
+    });
+    (await acquireLLMSlot()).release();
+  });
+});

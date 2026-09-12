@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertNoPrivateConfig } from "./private-config.mjs";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
@@ -151,6 +152,7 @@ if (resourceDirs.length === 0) {
 }
 
 for (const resourcesDir of resourceDirs) {
+  assertNoPrivateConfig(path.join(resourcesDir, "server"));
   mustExist(resourcesDir, "server/src/index.ts");
   mustExist(resourcesDir, "server/node_modules/tsx/dist/cli.mjs");
   mustExist(resourcesDir, "server/node_modules/esbuild/package.json");

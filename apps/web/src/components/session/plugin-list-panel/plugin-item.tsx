@@ -1,22 +1,10 @@
 import { useState } from "react";
-import {
-  ChevronRight,
-  Cpu,
-  Link,
-  Lock,
-  Puzzle,
-  Wrench,
-  Zap,
-} from "lucide-react";
+import { ChevronRight, Link, Lock, Puzzle, Wrench, Zap } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge.js";
 import { text } from "@/components/world/editor-helpers.js";
-import { stageLabel } from "@/lib/stage-label.js";
-import {
-  effectiveSlotModel,
-  formatSlotLabel,
-} from "@/hooks/use-slot-config.js";
-import { useRuntimeModelSlotOverride } from "./runtime-model-slot-override.js";
+import { RuntimeStageBadges } from "../runtime-stage-badges.js";
+import { RuntimeModelBindings } from "./runtime-model-bindings.js";
 import { SetupRecovery } from "./setup-recovery.js";
 import type { PluginItemProps } from "./types.js";
 import {
@@ -28,6 +16,7 @@ export function PluginItem({
   pkg,
   sessionPlugin,
   executing,
+  advanced = false,
   onToggle,
   resolvedSlots,
   sessionId,
@@ -38,25 +27,11 @@ export function PluginItem({
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
-  const agentRuntimes = (pkg.runtimes ?? []).filter(
-    (rt) => rt.runtimeType !== "function" && rt.model,
-  );
-  const primaryRuntime = agentRuntimes[0];
-  const runtimeKey = primaryRuntime?.id ?? "";
-  const [boundSlot, handleSlotChange, overrideError] =
-    useRuntimeModelSlotOverride({
-      runtimeKey,
-      sessionId,
-      runtimeModelOverrides,
-      onChange: onRuntimeModelOverrideChange,
-    });
-
   const displayName = text(pkg.displayName) || pkg.id;
   const description = text(pkg.description);
   const runtimes = pkg.runtimes ?? [];
   const tools = pkg.tools ?? [];
   const requires = pkg.relations?.requires ?? [];
-  const mainRuntime = runtimes[0];
 
   const hasSessionScope = sessionPlugin !== undefined;
   const isActive = sessionPlugin?.active ?? true;
@@ -100,20 +75,6 @@ export function PluginItem({
               )}
             </Badge>
           )}
-          {mainRuntime && stageLabel(mainRuntime.stage, t) && (
-            <Badge
-              variant="secondary"
-              className="ui-chip text-xs px-1.5 py-0 h-4 shrink-0"
-            >
-              {stageLabel(mainRuntime.stage, t)}
-            </Badge>
-          )}
-          {runtimes.length > 0 && (
-            <RuntimeCollectionFeatureBadges
-              runtimes={runtimes}
-              display="summary"
-            />
-          )}
           {isLocked && (
             <span
               title={t("plugin.locked", "Core plugin — cannot be disabled")}
@@ -127,11 +88,11 @@ export function PluginItem({
             type="button"
             role="switch"
             aria-checked={isActive}
-            aria-label={
+            aria-label={`${displayName}: ${
               isActive
                 ? t("plugin.disable", "Disable plugin")
                 : t("plugin.enable", "Enable plugin")
-            }
+            }`}
             disabled={toggleDisabled}
             className={[
               "relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent mr-2.5",
@@ -154,43 +115,31 @@ export function PluginItem({
         )}
       </div>
 
+      {advanced && (
+        <div className="flex flex-wrap items-center gap-1 px-2.5 pb-2">
+          <RuntimeStageBadges runtimes={runtimes} />
+          <RuntimeCollectionFeatureBadges
+            runtimes={runtimes}
+            display="summary"
+          />
+        </div>
+      )}
+
       <SetupRecovery
         pluginId={pkg.id}
         sessionId={sessionId}
         setupRuntimes={setupRuntimes}
       />
 
-      {primaryRuntime && (
-        <div className="px-2.5 pb-1 -mt-0.5 flex items-center gap-1 text-xs text-muted-foreground/80">
-          <Cpu className="w-2.5 h-2.5" />
-          {resolvedSlots && resolvedSlots.length > 0 ? (
-            (() => {
-              const activeSlot = boundSlot
-                ? (resolvedSlots.find((s) => s.slotId === boundSlot) ??
-                  resolvedSlots[0])
-                : resolvedSlots[0];
-              const label = formatSlotLabel(activeSlot);
-              return (
-                <span
-                  className="truncate"
-                  title={t(
-                    "plugin.modelBindingSource",
-                    "Model binding — edit in Session Prep",
-                  )}
-                >
-                  {label ?? activeSlot?.slotId ?? "—"}
-                </span>
-              );
-            })()
-          ) : (
-            <span className="italic">
-              {t(
-                "plugin.modelBindingFallback",
-                "Model binding: see Session Prep",
-              )}
-            </span>
-          )}
-        </div>
+      {advanced && (
+        <RuntimeModelBindings
+          runtimes={runtimes}
+          resolvedSlots={resolvedSlots}
+          sessionId={sessionId}
+          executing={executing}
+          runtimeModelOverrides={runtimeModelOverrides}
+          onChange={onRuntimeModelOverrideChange}
+        />
       )}
 
       {expanded && (
@@ -201,120 +150,78 @@ export function PluginItem({
             </p>
           )}
 
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            {pkg.version && <span>v{pkg.version}</span>}
-          </div>
-
-          {runtimes.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Zap className="w-3 h-3" />
-                {t("plugin.runtimes", "Runtimes")}
+          {advanced && (
+            <>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {pkg.version && <span>v{pkg.version}</span>}
               </div>
-              <div className="space-y-0.5">
-                {runtimes.map((rt) => (
-                  <div
-                    key={rt.id}
-                    className="flex min-w-0 flex-wrap items-center gap-2 pl-1 text-xs text-muted-foreground"
-                  >
-                    <span className="font-mono">{rt.id}</span>
-                    <RuntimeFeatureBadges runtime={rt} />
-                    {rt.model && (
-                      <span className="text-muted-foreground/60">
-                        @ {rt.model}
-                      </span>
-                    )}
+
+              {advanced && runtimes.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Zap className="w-3 h-3" />
+                    {t("plugin.runtimes", "Runtimes")}
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {tools.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Wrench className="w-3 h-3" />
-                {t("plugin.tools", "Tools")}
-                <span className="font-normal">({tools.length})</span>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {tools.map((tool) => (
-                  <Badge
-                    key={tool.id}
-                    variant="outline"
-                    className="text-xs px-1.5 py-0 h-4 font-mono"
-                  >
-                    {tool.id}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {requires.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Link className="w-3 h-3" />
-                {t("plugin.requires", "Requires")}
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {requires.map((dep) => (
-                  <Badge
-                    key={dep}
-                    variant="secondary"
-                    className="text-xs px-1.5 py-0 h-4"
-                  >
-                    {dep}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {primaryRuntime && resolvedSlots && resolvedSlots.length > 0 && (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                <Cpu className="w-3 h-3" />
-                {t("plugin.modelBinding", "Model")}
-              </div>
-              <select
-                value={boundSlot}
-                onChange={(e) => handleSlotChange(e.target.value)}
-                disabled={executing}
-                className="w-full text-xs bg-background border border-border rounded px-1.5 py-1 disabled:opacity-50"
-              >
-                <option value="">
-                  {primaryRuntime.model
-                    ? `${t("plugin.defaultSlot", "default")}: ${primaryRuntime.model}`
-                    : t("plugin.autoSlot", "auto (system default)")}
-                </option>
-                {resolvedSlots
-                  .filter((s) => s.tag === "text")
-                  .map((slot) => (
-                    <option key={slot.slotId} value={slot.slotId}>
-                      {slot.slotId.toUpperCase()} —{" "}
-                      {effectiveSlotModel(slot) ?? slot.presetId}
-                    </option>
-                  ))}
-              </select>
-              {boundSlot && (
-                <p className="text-xs text-muted-foreground">
-                  {t(
-                    "plugin.modelOverrideHint",
-                    "Override active — next turn will use this model",
-                  )}
-                </p>
+                  <div className="space-y-0.5">
+                    {runtimes.map((rt) => (
+                      <div
+                        key={rt.id}
+                        className="flex min-w-0 flex-wrap items-center gap-2 pl-1 text-xs text-muted-foreground"
+                      >
+                        <span className="font-mono">{rt.id}</span>
+                        <RuntimeFeatureBadges runtime={rt} />
+                        {rt.model && (
+                          <span className="text-muted-foreground/60">
+                            @ {rt.model}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
-              {overrideError && (
-                <span
-                  className="text-xs text-destructive"
-                  role="alert"
-                  title={overrideError}
-                >
-                  {t("plugin.modelOverrideFailed", "Save failed")}
-                </span>
+
+              {tools.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Wrench className="w-3 h-3" />
+                    {t("plugin.tools", "Tools")}
+                    <span className="font-normal">({tools.length})</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {tools.map((tool) => (
+                      <Badge
+                        key={tool.id}
+                        variant="outline"
+                        className="text-xs px-1.5 py-0 h-4 font-mono"
+                      >
+                        {tool.id}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
               )}
-            </div>
+
+              {requires.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    <Link className="w-3 h-3" />
+                    {t("plugin.requires", "Requires")}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {requires.map((dep) => (
+                      <Badge
+                        key={dep}
+                        variant="secondary"
+                        className="text-xs px-1.5 py-0 h-4"
+                      >
+                        {dep}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

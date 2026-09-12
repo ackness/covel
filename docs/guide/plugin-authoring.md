@@ -200,13 +200,17 @@ export default function (covel) {
 
 entry 工厂的完整类型（`PluginAPI` / `PluginToolkit` / `PluginEntryFactory`）从 `@covel/runtime` 导入：JS 用 JSDoc `@param {import('@covel/runtime').PluginAPI} covel`，TS 直接 `import type { PluginAPI } from "@covel/runtime"`——服务端实现按同一类型做编译期对齐，作者代码与框架不会悄悄漂移。
 
-`PreRuntime`、`PostContextAssembly`、`PreLLMCall`、`PostLLMResponse`、`PreToolUse`、`PostToolUse`、`PreStateCommit` 使用 `sequential` 语义：handler 按顺序执行，`replace` 会成为下一个 handler 的输入，`abort` 会停止该生命周期动作。
+`PreRuntime`、`PostContextAssembly`、`PreLLMCall`、`PostLLMResponse`、`PreToolUse`、`PostToolUse`、`PreStateCommit` 使用 `sequential` 语义：handler 按顺序执行，`replace` 会成为下一个 handler 的输入，`abort` 会停止后续 handler；各入口按事件契约决定是否阻止动作，`PreLLMCall` / `PostLLMResponse` 是转换型入口，abort 时保留原请求/响应。
 
 围绕上下文与 LLM 调用的几个事件可改写模型交互本身：`PostContextAssembly` 在 `buildContext` 之后、进 loop 之前 turn 级（每 runtime 一次）改写已装配的 `systemPrompt` / 投影历史；`PreLLMCall` 在每次调用前非破坏性改写发往模型的 `messages` / `model` / `tools`（不动底层 transcript）；`PostLLMResponse` 在响应返回后、工具派发前 patch `content` / `toolCalls`。`PostToolUse` 还可用 `replace.terminate: true` 在记录工具结果后提前结束工具循环。
 
 回合级还有一对压缩 hook：`PreCompaction`（`sequential`，`abort` 可让本回合跳过历史压缩、保留完整上下文）与 `PostCompaction`（`parallel`，观察压缩结果 `compacted` / `summaryId`）。另有 `PreSchedule`（`sequential`）：在触发选择之后、调度之前用 `replace.triggered` 收窄本回合实际运行的 runtime 集（条件门控 / 成本控制）。
 
 会话级（无回合）有 `SessionStart`（会话创建后,payload `{sessionId, worldId}`）与 `SessionEnd`（状态→`ended` 或 DELETE,payload `{sessionId, reason}`）两个 `parallel` 观察 hook,适合 session 级初始化 / 清理。它们在 server 的 session 路由触发,`turnId` 为空。
+
+Hook 的 `ctx.signal` 在超时或父执行取消时触发；把它传给 `fetch` 等协作式 I/O。超时会结束框架等待，迟到返回值不再被采用，但不能强制停止任意 JS 代码。`TurnStart` 与 `PostRuntime` 使用顺序语义；收尾观察 Hook 仍受各自超时约束。
+
+entry 必须在返回前完成注册（异步初始化需要 await）。所有 entry 成功后注册才发布；失败不残留本次注册，允许下次激活重试。不要在工厂返回后的定时器或 RPC 中调用注册 API。详见 [entry 生命周期](../reference/plugins.md#entry统一服务端入口)。
 
 **所有 hook 都是 session 作用域的**：pipeline 虽是全局单例,但执行时按当前 session 的激活插件集过滤——你的 hook **只对启用了你插件的 session 触发**(框架 hook 始终触发)。无需在 handler 里自行判断插件是否激活;`HookContext.activePluginIds` 可读当前激活集。
 
@@ -232,7 +236,7 @@ export default async function validateTool(ctx, payload) {
 - **只看自己**：仅暴露 handler 所属插件的 `userSettings`（manifest 默认值与玩家保存值合并后的结果，回合起始拍一次），读不到其它插件的设置。
 - **安全降级**：框架 / 全局 hook（无 `pluginId`）返回 `{}`；非回合作用域（session / resume / commit / characters 等只带 `activePluginIds`、不带 settings 的 scope）也返回 `{}`；在完全无作用域（例如单测直接调 `pipeline.run`）时 `ctx.getOwnSettings` 可能为 `undefined`——务必写成 `ctx.getOwnSettings?.() ?? {}`。
 
-`TurnStart`、`PostCompaction`、`PostRuntime`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
+`SessionStart`、`SessionEnd`、`PostCompaction`、`PostStateCommit`、`TurnStop` 使用 `parallel` 语义：handler 并发执行，适合审计、日志、指标和通知这类观察型副作用。返回 `replace` 或 `abort` 会进入 hook trace；主 payload 保持原值。
 
 排序先看 `enforce: pre | normal | post`，再看全局 hook 与插件 hook 分组，最后保持声明顺序。完整事件表见 [插件参考 / entry](../reference/plugins.md#entry统一服务端入口)。
 

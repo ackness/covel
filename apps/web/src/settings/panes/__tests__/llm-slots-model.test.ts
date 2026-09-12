@@ -10,7 +10,7 @@ import {
 } from "../llm-slots-model.js";
 
 describe("llm slots model", () => {
-  it("discovers runtime and user-setting slot ids without default text slots", () => {
+  it("discovers concrete runtime and user-setting slots, including text", () => {
     const slots = discoverRuntimeSlotIds([
       {
         runtimes: [
@@ -86,7 +86,7 @@ describe("llm slots model", () => {
       },
     ]);
 
-    expect(slots).toEqual(["image", "image-fast", "plugin"]);
+    expect(slots).toEqual(["image", "image-fast", "plugin", "text"]);
   });
 
   it("merges configured or default slots with discovered slots", () => {
@@ -95,8 +95,9 @@ describe("llm slots model", () => {
         isConfigured: true,
         configuredSlots: ["story", "default", "image"],
         discoveredSlotIds: ["image", "plugin"],
+        savedSlotIds: ["custom-role", "story"],
       }),
-    ).toEqual(["story", "image", "plugin"]);
+    ).toEqual(["story", "image", "plugin", "custom-role"]);
 
     expect(
       createVisibleSlotIds({

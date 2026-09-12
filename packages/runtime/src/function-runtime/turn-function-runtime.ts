@@ -184,6 +184,7 @@ export async function executeFunctionRuntime({
     return runPostRuntimeHook(
       {
         pipeline: hookPipeline,
+        signal: getTurnExecutionSignal(deps.turnControl),
         sessionId: input.sessionId,
         turnId: input.turnId,
         pluginId: manifest.pluginId,
@@ -577,6 +578,7 @@ export async function executeFunctionRuntime({
       await runPostRuntimeHook(
         {
           pipeline: hookPipeline,
+          signal: getTurnExecutionSignal(deps.turnControl),
           sessionId: input.sessionId,
           turnId: input.turnId,
           pluginId: manifest.pluginId,
@@ -677,6 +679,7 @@ export async function executeFunctionRuntime({
   const result = await runPostRuntimeHook(
     {
       pipeline: hookPipeline,
+      signal: getTurnExecutionSignal(deps.turnControl),
       sessionId: input.sessionId,
       turnId: input.turnId,
       pluginId: manifest.pluginId,

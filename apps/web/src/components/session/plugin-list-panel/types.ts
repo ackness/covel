@@ -32,6 +32,7 @@ export interface PluginListPanelProps {
 }
 
 export interface PluginItemProps {
+  advanced?: boolean;
   pkg: PluginSummary;
   sessionPlugin?: SessionPlugin;
   executing?: boolean;
@@ -48,6 +49,7 @@ export interface PluginErrorItemProps {
 }
 
 export interface SessionPluginItemProps {
+  advanced?: boolean;
   plugin: SessionPlugin;
   executing?: boolean;
   onToggle?: (pluginId: string, enable: boolean) => void;

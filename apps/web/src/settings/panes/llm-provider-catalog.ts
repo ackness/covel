@@ -1,9 +1,9 @@
 import type {
-  CustomPreset,
   PresetSummary,
   ProviderModelProfile,
   SlotConfigEntry,
 } from "@/services/api.js";
+import type { LegacyCustomPresetShape } from "@/services/api/provider-model-profiles.js";
 import { providerKeyToId } from "@covel/shared";
 
 export interface ProviderCatalogEntry {
@@ -259,13 +259,17 @@ export function sanitizeImportedProfiles(
     .filter((profile): profile is ProviderModelProfile => profile !== null);
 }
 
-export function isLegacyPreset(value: unknown): value is CustomPreset {
-  if (!value || typeof value !== "object") return false;
-  const preset = value as Partial<CustomPreset>;
+export function isLegacyPreset(
+  value: unknown,
+): value is LegacyCustomPresetShape {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const preset = value as Record<string, unknown>;
   return (
     typeof preset.id === "string" &&
     typeof preset.name === "string" &&
     typeof preset.provider === "string" &&
-    typeof preset.model === "string"
+    typeof preset.model === "string" &&
+    (preset.baseUrl === undefined || typeof preset.baseUrl === "string") &&
+    (preset.protocol === undefined || typeof preset.protocol === "string")
   );
 }

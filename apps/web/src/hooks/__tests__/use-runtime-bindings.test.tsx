@@ -52,6 +52,25 @@ const slots: ResolvedSlot[] = [
 const savedBindings = { "fixture-package/runtime": "custom" };
 
 describe("useRuntimeBindings hydration", () => {
+  it("does not auto-bind an agent to an image-only role or treat it as ready", () => {
+    const onPersist = vi.fn();
+    const imageSlots: ResolvedSlot[] = [{ ...slots[0]!, tag: "image" }];
+    const { result } = renderHook(() =>
+      useRuntimeBindings(
+        "prep:world-1",
+        plugins,
+        imageSlots,
+        undefined,
+        undefined,
+        onPersist,
+      ),
+    );
+
+    expect(result.current.bindings).toEqual({});
+    expect(result.current.allBound).toBe(false);
+    expect(onPersist).not.toHaveBeenCalled();
+  });
+
   it("does not overwrite saved bindings with auto-assigned defaults on mount", async () => {
     const onPersist = vi.fn();
     const { result } = renderHook(() =>

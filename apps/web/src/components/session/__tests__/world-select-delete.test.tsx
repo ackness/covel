@@ -1,8 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import * as api from "@/services/api.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getDataService } from "@/services/data-service.js";
 import type { WorldRecord } from "@/services/api.js";
 import { WorldSelectScreen } from "../world-select-screen.js";
+
+const dataService = vi.hoisted(() => ({ deleteWorld: vi.fn() }));
+vi.mock("@/services/data-service.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/data-service.js")>()),
+  getDataService: () => dataService,
+}));
 
 const BUILT_IN_WORLD = {
   id: "built-in",
@@ -34,6 +40,7 @@ function renderScreen(onWorldDeleted = vi.fn()) {
 }
 
 describe("world select — deleting player-created worlds", () => {
+  beforeEach(() => vi.clearAllMocks());
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -49,7 +56,9 @@ describe("world select — deleting player-created worlds", () => {
   });
 
   it("deletes a custom world after confirmation", async () => {
-    const deleteWorld = vi.spyOn(api, "deleteWorld").mockResolvedValue();
+    const deleteWorld = vi
+      .spyOn(getDataService(), "deleteWorld")
+      .mockResolvedValue();
     const onWorldDeleted = renderScreen();
 
     fireEvent.click(screen.getByRole("button", { name: "删除世界" }));
@@ -64,7 +73,9 @@ describe("world select — deleting player-created worlds", () => {
   });
 
   it("confirms world deletion with Enter", async () => {
-    const deleteWorld = vi.spyOn(api, "deleteWorld").mockResolvedValue();
+    const deleteWorld = vi
+      .spyOn(getDataService(), "deleteWorld")
+      .mockResolvedValue();
     const onWorldDeleted = renderScreen();
 
     fireEvent.click(screen.getByRole("button", { name: "删除世界" }));

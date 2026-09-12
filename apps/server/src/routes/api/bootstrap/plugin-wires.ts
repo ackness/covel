@@ -22,11 +22,12 @@ export function registerNamespaced(
   pluginId: string,
   pluginRelPath: string,
   mod: WireModuleShape,
+  onRegistered: (dispose: () => void) => void = () => {},
 ): void {
   const groups: ReadonlyArray<{
     readonly wires: readonly { id: string }[] | undefined;
     readonly method: string;
-    readonly register: (wire: never) => void;
+    readonly register: (wire: never) => () => void;
   }> = [
     { wires: mod.image, method: "generate", register: registerImageWire },
     { wires: mod.speech, method: "synthesize", register: registerSpeechWire },
@@ -47,7 +48,7 @@ export function registerNamespaced(
       }
       const namespaced = { ...wire, id: `${pluginId}/${wire.id}` };
       try {
-        group.register(namespaced as never);
+        onRegistered(group.register(namespaced as never));
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (/already registered/.test(message)) {
