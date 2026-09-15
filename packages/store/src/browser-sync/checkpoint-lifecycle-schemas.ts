@@ -139,6 +139,13 @@ export const checkpointLifecycleArrays = {
         ...snapshotRecordArrays,
         compactedMessageSummaryIds: z.record(z.string(), z.string()).optional(),
         messagesCursor: z.string(),
+        displayMessagesBoundary: z
+          .object({
+            createdAt: timestamp,
+            ids: z.array(nonEmptyString).min(1),
+          })
+          .nullable()
+          .optional(),
       }),
     }),
   ),

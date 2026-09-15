@@ -43,10 +43,7 @@ export function saveKeysEnv(
       .filter(([k, v]) => {
         if (!k || typeof v !== "string" || !v.trim()) return false;
         if (/[\r\n]/.test(v)) {
-          console.warn(
-            `[env-files] Skipping key "${k}": value contains a newline`,
-          );
-          return false;
+          throw new Error("Provider keys must be single-line strings");
         }
         return true;
       })

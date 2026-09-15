@@ -88,6 +88,10 @@ export async function buildSnapshotPayload(
   const turnMessages = await store.listTurnMessages(sessionId);
   const messagesCursor =
     turnMessages.length > 0 ? turnMessages[turnMessages.length - 1]!.id : "";
+  const displayMessagesBoundary = await captureDisplayMessagesBoundary(
+    store,
+    sessionId,
+  );
 
   // Compaction summaries are part of the durable conversation state. Capture
   // exactly the records referenced by the message prefix represented by this
@@ -158,5 +162,33 @@ export async function buildSnapshotPayload(
     lorebookEntries,
     suspensions,
     messagesCursor,
+    displayMessagesBoundary,
   };
+}
+
+/** Read only the newest timestamp group, even when it spans multiple pages. */
+async function captureDisplayMessagesBoundary(
+  store: DataStore,
+  sessionId: string,
+): Promise<SnapshotPayload["displayMessagesBoundary"]> {
+  let before: { createdAt: string; id: string } | undefined;
+  let createdAt: string | undefined;
+  const ids: string[] = [];
+  while (true) {
+    const page = await store.listMessagesPage(sessionId, {
+      limit: 100,
+      before,
+    });
+    if (page.length === 0) break;
+    createdAt ??= page[page.length - 1]!.createdAt;
+    ids.push(
+      ...page
+        .filter((message) => message.createdAt === createdAt)
+        .map((message) => message.id),
+    );
+    const oldest = page[0]!;
+    if (page.length < 100 || oldest.createdAt < createdAt) break;
+    before = { createdAt: oldest.createdAt, id: oldest.id };
+  }
+  return createdAt === undefined ? null : { createdAt, ids };
 }

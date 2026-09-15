@@ -15,7 +15,7 @@
  *   Path traversal is prevented — all paths must resolve within the world directory.
  */
 
-import { readFile, readdir } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
@@ -356,11 +356,13 @@ async function loadCharacterBlueprints(
  * Validates each world.yaml against worldManifestSchema.
  * Returns WorldRecord[] ready for upsert.
  */
-async function loadWorldPackages(worldsDir: string): Promise<WorldRecord[]> {
-  if (!(await fileExists(worldsDir))) return [];
-
+async function loadWorldPackages(worldsDir: string): Promise<{
+  records: WorldRecord[];
+  complete: boolean;
+}> {
   const entries = await readdir(worldsDir, { withFileTypes: true });
   const records: WorldRecord[] = [];
+  let complete = true;
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
@@ -368,26 +370,36 @@ async function loadWorldPackages(worldsDir: string): Promise<WorldRecord[]> {
     const worldDir = path.join(worldsDir, entry.name);
 
     try {
+      // Containers such as _archive are not world packages. Other access
+      // errors must propagate so a failed inventory cannot authorize deletion.
+      try {
+        await access(path.join(worldDir, "world.yaml"));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
       const record = await loadSingleWorld(worldDir);
       if (record) records.push(record);
+      else complete = false;
     } catch (err) {
+      complete = false;
       console.warn(`[world-seed] Failed to load world ${entry.name}:`, err);
     }
   }
 
-  return records;
+  return { records, complete };
 }
 
 /**
  * Seed all world packages into the DataStore (idempotent via upsert).
- * Returns the ids of the worlds loaded from this directory so callers can build
- * the set of "live" worlds across every source and reconcile stale DB records.
+ * Reports whether every discovered package loaded successfully. Only a complete
+ * inventory across all roots can authorize reconciliation of stale DB records.
  */
 export async function seedWorlds(
   store: DataStore,
   worldsDir: string,
-): Promise<string[]> {
-  const records = await loadWorldPackages(worldsDir);
+): Promise<{ worldIds: string[]; complete: boolean }> {
+  const { records, complete } = await loadWorldPackages(worldsDir);
 
   for (const record of records) {
     await store.upsertWorld(record);
@@ -399,7 +411,7 @@ export async function seedWorlds(
     );
   }
 
-  return records.map((r) => r.id);
+  return { worldIds: records.map((r) => r.id), complete };
 }
 
 export interface WorldReconcileResult {
@@ -423,8 +435,8 @@ export interface WorldReconcileResult {
  *  2. **Save protection** — a stale world that still has saved sessions is KEPT
  *     and reported in `keptWithSessions`; deleting a player's saves is left to an
  *     explicit action, never a silent boot-time sweep.
- *  3. **Empty-set guard (caller)** — the caller must skip this entirely when no
- *     world was seeded, so a transient load failure can never wipe the DB.
+ *  3. **Inventory guard (caller)** — skip when any root/package failed to load
+ *     or no world was seeded. A partial successful set is not a removal list.
  */
 export async function reconcileSeededWorlds(
   store: DataStore,

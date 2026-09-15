@@ -19,6 +19,7 @@
  */
 
 import { Hono } from "hono";
+import { z } from "zod";
 import { resolve, join, dirname, isAbsolute } from "node:path";
 import {
   readFileSync,
@@ -162,10 +163,19 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
 
     const parsed = await readJsonBody(c);
     if (parsed instanceof Response) return parsed;
-    const body = parsed.body;
-    if (!body || typeof body !== "object") {
+    const validated = z
+      .record(
+        z.string(),
+        z
+          .string()
+          .trim()
+          .refine((value) => !/[\r\n]/.test(value))
+          .nullable(),
+      )
+      .safeParse(parsed.body);
+    if (!validated.success) {
       return c.json(
-        errorBody("Body must be { [provider]: value }", {
+        errorBody("Keys must be single-line strings or null", {
           code: "invalid_provider_keys_body",
         }),
         400,
@@ -186,21 +196,26 @@ export function createConfigApiRoutes(deps: ConfigApiDeps): Hono {
       );
     }
 
-    for (const [provider, raw] of Object.entries(
-      body as Record<string, unknown>,
-    )) {
+    const updates = new Map<string, string | null>();
+    for (const [provider, raw] of Object.entries(validated.data)) {
       const providerId = providerKeyToId(provider);
       if (!providerId) continue;
       if (typeof raw === "string" && raw.trim()) {
         entries[providerId] = raw.trim();
-        deps.apiKeys[providerId] = raw.trim();
+        updates.set(providerId, raw.trim());
       } else {
         delete entries[providerId];
-        delete deps.apiKeys[providerId];
+        updates.set(providerId, null);
       }
     }
 
     writeKeysEnv(file, entries);
+    // Publish only after the atomic file replacement succeeds. Leave keys
+    // supplied exclusively by the process environment untouched.
+    for (const [providerId, value] of updates) {
+      if (value === null) delete deps.apiKeys[providerId];
+      else deps.apiKeys[providerId] = value;
+    }
     return c.json({ ok: true });
   });
 
@@ -587,7 +602,6 @@ function writePrivateFileAtomic(file: string, contents: string): void {
     writeFileSync(temp, contents, { mode: 0o600 });
     chmodSync(temp, 0o600);
     renameSync(temp, file);
-    chmodSync(file, 0o600);
   } catch (err) {
     try {
       if (existsSync(temp)) unlinkSync(temp);
@@ -605,18 +619,6 @@ function writeKeysEnv(file: string, entries: Record<string, string>): void {
     `# Managed by Settings → Desktop. Manual edits survive restarts.\n` +
     `# File mode is 0600 — keep it that way.\n\n`;
   const body = Object.entries(envEntries)
-    // audit M2: reject values with CR/LF — a newline would inject extra
-    // `KEY=VALUE` lines and poison other providers' key parsing.
-    .filter(([k, v]) => {
-      if (!k || typeof v !== "string" || !v.trim()) return false;
-      if (/[\r\n]/.test(v)) {
-        console.warn(
-          `[config-api] Skipping key "${k}": value contains a newline`,
-        );
-        return false;
-      }
-      return true;
-    })
     .map(([k, v]) => `${k}=${v.trim()}`)
     .join("\n");
   writePrivateFileAtomic(file, header + body + "\n");

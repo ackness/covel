@@ -633,6 +633,10 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                                                                                                                                                                                                           |
 | POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                                                                                                                                                                                                           |
 
+#### PUT /api/config/keys
+
+桌面 `PUT /api/config/keys` 接受 `{ provider: string | null }`：空字符串或 `null` 删除密钥。整批输入先校验，含内部换行或其它类型时返回 `400`，文件和运行时均保持原状；原子写入成功后才发布运行时密钥。Electron 仅在 sidecar 连接不可用时回退到本地保存，HTTP 拒绝不会触发覆盖。
+
 #### GET /api/ui-specs
 
 返回插件的 UI 声明，按 slot 分组。前端在 boot 时调用，用于动态构建右侧面板 Tab 和消息区 block 渲染器。
@@ -2561,6 +2565,7 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 2. 从当前 schema v3 snapshot payload 恢复 locale / activePlugins / status / phase / completedPlayerTurns / setupRuntimes / presetId / runtimeModelOverrides。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
 3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session；
 4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；按 `compactedMessageSummaryIds` 复制 `payload.sessionSummaries` 中快照时刻实际引用的压缩摘要，为子 session 重建摘要 ID，并重写消息上的 `compactedAtTurnId`。因此父会话后续滚动摘要和重标历史消息不会改变旧快照的分叉结果。早期 schema v3 payload 没有精确映射时回退到父消息当前标签；没有 `sessionSummaries` 时则保留原始消息正文并清除压缩标签，避免产生孤儿引用。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
+   界面聊天记录另按 `payload.displayMessagesBoundary` 复制，保留正文、角色、元数据和显示顺序，重建消息 ID，并为复制消息中的媒体建立子会话引用。消息、状态和运行时导出中的所有媒体都必须已对父会话授权，否则整体返回 `403 media_reference_forbidden`；仅知道媒体 ID 不会获得访问权。边界保存最新消息时间戳及该毫秒内全部已存在的消息 ID，避免混入快照后同毫秒的新消息；边界为 `null` 表示空历史，边界 ID 缺失同样返回 `409 cursor_missing`。早期 v3 快照没有此字段时，以快照 `createdAt` 为兼容截止时间，无法还原该毫秒内的精确成员。子快照写入新的消息边界，支持继续分叉。
 5. 写入一个 `kind="fork"` 的快照到子 session，`parentId` 指向源 snapshot，供 provenance 追踪；
 6. 在 eventBus 上广播 `session.forked`（SSE topic=`session`）。
 

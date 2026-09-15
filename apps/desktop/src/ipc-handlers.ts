@@ -212,6 +212,7 @@ export function registerDesktopIpcHandlers({
       try {
         await saveKeysViaSidecar(keys);
       } catch (err) {
+        if (!isSidecarUnavailable(err)) throw err;
         writeLog("warn", "keys:save sidecar fallback:", err);
         saveKeysEnv(paths.userKeysEnvPath, keys);
       }

@@ -85,6 +85,16 @@ interface SnapshotPayloadBase {
    * Empty string when there are no messages yet.
    */
   readonly messagesCursor: string;
+  /**
+   * Chat history boundary, independent of the model conversation cursor.
+   * Capture every id in the newest millisecond so later same-time messages
+   * cannot enter an older fork. Null means empty; absent legacy v3 payloads
+   * use the snapshot timestamp as a best-effort cutoff.
+   */
+  readonly displayMessagesBoundary?: {
+    readonly createdAt: string;
+    readonly ids: readonly string[];
+  } | null;
 }
 
 /**

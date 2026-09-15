@@ -14,8 +14,8 @@
  *
  * Fork strategy: COPY. We rebuild the child session by persisting the
  * snapshot's characters / state entries / plugin data / working memory
- * into the new sessionId. Messages are copied from the parent up to
- * `payload.messagesCursor` — past that cursor the child starts fresh.
+ * into the new sessionId. Model and display messages use their respective
+ * captured boundaries — past those boundaries the child starts fresh.
  * Copying (rather than referencing) keeps cross-session semantics clean
  * and lets either branch be deleted independently.
  */
@@ -49,6 +49,10 @@ import {
 import { SAFE_SESSION_ID_RE } from "../../lib/validators.js";
 import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
 import {
+  ForkCursorMissingError,
+  copyForkDisplayMessages,
+} from "./fork-display-messages.js";
+import {
   mintSessionOwnerToken,
   mintSessionApprovalScope,
   resolveSessionParam,
@@ -68,13 +72,6 @@ type Env = {
 };
 
 /**
- * Internal sentinel: the snapshot cursor vanished from the parent session
- * mid-fork. Thrown to roll back the fork `withTransaction`, then translated to
- * a 409 by the route handler (rather than the catch-all 500).
- */
-class ForkCursorMissingError extends Error {}
-
-/**
  * Internal sentinel: a MediaRef reachable from the fork's snapshot state or a
  * copied export points at an asset that no longer exists in the MediaStore.
  * Thrown to roll back the fork transaction so the child is never created with a
@@ -86,6 +83,8 @@ class MediaReferenceMissingError extends Error {
     this.name = "MediaReferenceMissingError";
   }
 }
+
+class MediaReferenceForbiddenError extends Error {}
 
 class ForkMediaReferenceWriteError extends Error {
   constructor(
@@ -495,6 +494,16 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               });
             }
 
+            const {
+              messages: displayMessages,
+              boundary: childDisplayMessagesBoundary,
+            } = await copyForkDisplayMessages(
+              tx,
+              parentSessionId,
+              childSessionId,
+              snapshot,
+            );
+
             // Fork media gate (docs 02 §2.1.5): recursively scan the snapshot's
             // visible state AND the copied export revisions for MediaRefs, and
             // verify every referenced asset still exists. A missing asset throws
@@ -504,12 +513,19 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             // if any later operation rolls the transaction back.
             if (mediaStore) {
               const ids = collectMediaRefIds(snapshot.payload);
+              for (const message of displayMessages)
+                collectMediaRefIds(message, ids);
               for (const exp of visibleLatest.values()) {
                 collectMediaRefIds(exp.value, ids);
               }
               for (const mediaId of ids) {
                 const asset = await mediaStore.lookup(mediaId);
                 if (!asset) throw new MediaReferenceMissingError(mediaId);
+                if (
+                  !(await mediaStore.isReferencedBy(mediaId, parentSessionId))
+                ) {
+                  throw new MediaReferenceForbiddenError();
+                }
               }
               for (const mediaId of ids) {
                 try {
@@ -630,6 +646,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 sessionSummaries: childSessionSummaries,
                 compactedMessageSummaryIds: childCompactedMessageSummaryIds,
                 messagesCursor: childMessagesCursor,
+                displayMessagesBoundary: childDisplayMessagesBoundary,
               },
               createdAt: now,
             };
@@ -665,6 +682,17 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 { code: "media_reference_missing" },
               ),
               409,
+            );
+          }
+          if (err instanceof MediaReferenceForbiddenError) {
+            return c.json(
+              errorBody(
+                "Parent session cannot access a referenced media asset",
+                {
+                  code: "media_reference_forbidden",
+                },
+              ),
+              403,
             );
           }
           const message = err instanceof Error ? err.message : String(err);
