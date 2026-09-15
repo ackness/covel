@@ -10,7 +10,7 @@
  *   - Target directory must not already exist (409) — upgrades require manual removal.
  */
 
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import yauzl, { type Entry, type ZipFile } from "yauzl";
 import { errorBody } from "../../../api-error.js";
@@ -288,7 +288,18 @@ export async function materializeAtomically(
     try {
       await rename(staging, finalDir);
     } catch (err) {
-      if (isFsErrorCode(err, "EEXIST", "ENOTEMPTY", "EISDIR", "ENOTDIR")) {
+      // Windows also reports EPERM for an existing destination. Check only
+      // after rename fails: real permission errors must retain their meaning.
+      const windowsTargetExists =
+        isFsErrorCode(err, "EPERM") &&
+        (await lstat(finalDir).then(
+          () => true,
+          () => false,
+        ));
+      if (
+        windowsTargetExists ||
+        isFsErrorCode(err, "EEXIST", "ENOTEMPTY", "EISDIR", "ENOTDIR")
+      ) {
         throw httpError(
           409,
           `target already exists: ${path.basename(finalDir)}`,

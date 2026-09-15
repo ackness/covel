@@ -26,6 +26,8 @@
     "check:i18n": "pnpm --filter @covel/web check:i18n && pnpm run check:plugins",
     "check:plugins": "node --import tsx ./scripts/check-plugin-i18n.mjs && node ./scripts/check-plugin-readmes.mjs",
     "test": "turbo test",
+    "test:plugin-lifecycle": "pnpm --filter @covel/server exec vitest run tests/api/third-party-plugin-lifecycle.test.ts",
+    "pack:test-plugin": "pnpm --filter @covel/server exec tsx tests/helpers/third-party-package.ts",
     "test:coverage": "turbo test -- --coverage",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",

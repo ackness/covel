@@ -3346,6 +3346,19 @@ the user world directory, so DELETE works immediately. An existing world ID
 returns 409 without overwriting its record. Plugin installation still returns
 `restartRequired: true`.
 
+Both ZIP install endpoints reject an existing target directory with
+`409 { error: "target already exists: <id>" }`, including Windows rename
+conflicts reported as `EPERM`. An `EPERM` with no detectable target retains
+its original error. Failed publication removes the staging directory and
+preserves the existing installation.
+
+In Electron, `covel:restart-server` owns both the sidecar restart and native
+window navigation to the new port after the health check succeeds. The Web
+client keeps its reload overlay visible and must not reload the old URL or
+attempt a cross-origin redirect. Development reloads the external Vite page.
+Uninstalling a plugin still requires a restart to unload discovered code and
+does not delete its saved session data.
+
 Generated file worlds are written in a hidden staging directory and published
 only when complete. Existing packages and database identities are preserved;
 a collision or activation failure is reported through an SSE error event.

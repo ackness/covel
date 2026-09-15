@@ -325,8 +325,8 @@ type RestartResult =
   | { readonly ok: false; readonly port: number; readonly error: string };
 
 /**
- * Desktop-only: restart the backend sidecar and then hard-reload the
- * renderer so every stateful client (SSE subscriptions, TanStack Query
+ * Desktop-only: ask the main process to restart the backend sidecar and
+ * navigate the renderer so every stateful client (SSE subscriptions, TanStack Query
  * caches, plugin UI specs, session-store, Error banners) rebuilds against
  * the fresh process.
  *
@@ -346,12 +346,11 @@ export async function reloadServerAndWait(opts?: {
   try {
     const result = await ipc.invoke<RestartResult>("covel:restart-server");
     if (!result.ok) {
-      hideReloadOverlay();
       throw new Error(result.error || "Sidecar restart failed");
     }
-    // Sidecar is healthy again; reload the page so all clients rebuild
-    // cleanly. The overlay stays visible through the navigation.
-    window.location.reload();
+    // Main owns navigation to the new sidecar port. Reloading here would
+    // race that navigation and request the old, stopped server instead.
+    // The overlay stays visible through the main-process navigation.
     return true;
   } catch (err) {
     hideReloadOverlay();
