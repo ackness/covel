@@ -51,7 +51,7 @@ describe("SessionWorkspace", () => {
     expect(order).toEqual(["hydrate", "stage:action-1", "mutate"]);
   });
 
-  it("recovers a failed checkpoint before uploading an older browser revision", async () => {
+  it("delegates failed checkpoint recovery to the next data-service hydration", async () => {
     const order: string[] = [];
     const service = makeService(order);
     vi.mocked(service.commitFromServer)
@@ -75,7 +75,6 @@ describe("SessionWorkspace", () => {
       "hydrate",
       "stage:action-1",
       "mutate:1",
-      "checkpoint:action-1",
       "hydrate",
       "stage:action-2",
       "mutate:2",
@@ -84,7 +83,7 @@ describe("SessionWorkspace", () => {
     expect(service.commitFromServer).toHaveBeenNthCalledWith(
       2,
       "sess-1",
-      "action-1",
+      "action-2",
     );
   });
 

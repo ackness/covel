@@ -32,7 +32,6 @@ export class SessionWorkspaceSyncError extends Error {
 
 class LocalSessionWorkspace implements SessionWorkspace {
   private readonly tails = new Map<string, Promise<void>>();
-  private readonly pendingCommits = new Map<string, string>();
 
   constructor(private readonly dataService: DataService) {}
 
@@ -55,11 +54,7 @@ class LocalSessionWorkspace implements SessionWorkspace {
   private async commit(sessionId: string, actionId: string): Promise<void> {
     try {
       await this.dataService.commitFromServer(sessionId, actionId);
-      if (this.pendingCommits.get(sessionId) === actionId) {
-        this.pendingCommits.delete(sessionId);
-      }
     } catch (error) {
-      this.pendingCommits.set(sessionId, actionId);
       throw new SessionWorkspaceSyncError(
         "checkpoint",
         sessionId,
@@ -83,10 +78,6 @@ class LocalSessionWorkspace implements SessionWorkspace {
   }
 
   private async prepare(sessionId: string): Promise<void> {
-    const pendingActionId = this.pendingCommits.get(sessionId);
-    if (pendingActionId) {
-      await this.commit(sessionId, pendingActionId);
-    }
     try {
       await this.dataService.syncToServer(sessionId);
     } catch (error) {
@@ -112,7 +103,6 @@ class LocalSessionWorkspace implements SessionWorkspace {
       await this.prepare(sessionId);
       await this.stage(sessionId, actionId);
       const result = await mutate();
-      this.pendingCommits.set(sessionId, actionId);
       await this.commit(sessionId, actionId);
       return result;
     });
@@ -120,12 +110,7 @@ class LocalSessionWorkspace implements SessionWorkspace {
 
   checkpoint(sessionId: string, actionId: string): Promise<void> {
     return this.enqueue(sessionId, async () => {
-      const pendingActionId = this.pendingCommits.get(sessionId);
-      if (pendingActionId && pendingActionId !== actionId) {
-        await this.commit(sessionId, pendingActionId);
-      }
       await this.stage(sessionId, actionId);
-      this.pendingCommits.set(sessionId, actionId);
       await this.commit(sessionId, actionId);
     });
   }

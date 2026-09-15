@@ -661,27 +661,37 @@ export class LocalDataService implements DataService {
   // Sync to server
 
   async stageServerCommit(sessionId: string, actionId: string): Promise<void> {
-    await (await this.ready()).stagePendingCommit(sessionId, actionId);
+    return this.enqueueWorkspace(async () => {
+      await this.recoverPendingCommitNow(sessionId, actionId);
+      await (await this.ready()).stagePendingCommit(sessionId, actionId);
+    });
   }
 
   async syncToServer(sessionId: string): Promise<void> {
     return this.enqueueWorkspace(() => this.syncToServerNow(sessionId));
   }
 
-  private async syncToServerNow(sessionId: string): Promise<void> {
+  private async recoverPendingCommitNow(
+    sessionId: string,
+    nextActionId?: string,
+  ): Promise<void> {
     const vault = await this.ready();
     const pendingActionId = await vault.getPendingCommit(sessionId);
-    if (pendingActionId) {
+    if (pendingActionId && pendingActionId !== nextActionId) {
       try {
         await this.commitFromServerNow(sessionId, pendingActionId);
       } catch (error) {
-        // A missing transient session means the MemoryStore restarted and the
-        // pending result no longer exists. The browser checkpoint remains the
-        // only durable authority and can safely rebuild a fresh mirror.
+        // After a MemoryStore restart the pending result is gone; rebuild
+        // from the durable browser checkpoint only when the session is missing.
         if (!isNotFound(error)) throw error;
         await vault.clearPendingCommit(sessionId, pendingActionId);
       }
     }
+  }
+
+  private async syncToServerNow(sessionId: string): Promise<void> {
+    await this.recoverPendingCommitNow(sessionId);
+    const vault = await this.ready();
     let checkpoint = await vault.getLatestCheckpoint(sessionId);
     if (!checkpoint) return;
     const world = checkpoint.session.worldId

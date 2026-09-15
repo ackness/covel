@@ -57,6 +57,8 @@ Model Roles and Generation Parameters resolve the currently bound provider, mode
 
 These presentation rules do not change request protocols or server capability resolution. Verify effective provider defaults, execution limits, and charges against request traces and provider responses.
 
+Custom model overlays are isolated per registry during model-config reloads. A mapping cleared by reload is registered again on its next use and removed after its last request completes. Newly registered server presets take precedence over older same-name overlays.
+
 ## Debug refresh
 
 Initial session selection, manual refresh, and automatic refresh load session data and update the sidebar phase, completed player turns, and setup runtimes. The data view shows its last successful read time; failures retain that snapshot and mark it potentially stale. Late responses from a previous session cannot replace current data. Automatic refresh merges the latest trace page while retaining older loaded pages and their pagination cursor.

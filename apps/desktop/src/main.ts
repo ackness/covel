@@ -231,7 +231,7 @@ async function startServer(
     COVEL_USER_WORLDS_DIR: paths.userWorldsDir,
     COVEL_USER_PLUGINS_DIR: paths.userPluginsDir,
     COVEL_USER_CONFIG_DIR: paths.covelHome,
-    COVEL_LLM_TOML: paths.effectiveLlmToml,
+    COVEL_LLM_TOML: paths.userLlmTomlPath,
     COVEL_LOGS_DIR: paths.logsDir,
     COVEL_LOG_MAX_SIZE_MB: String(paths.logRotation.maxSizeMb),
     COVEL_LOG_MAX_FILES: String(paths.logRotation.maxFiles),
@@ -247,7 +247,7 @@ async function startServer(
   writeLog("info", `entry: ${serverEntry}`);
   writeLog("info", `cwd: ${projectRoot}`);
   writeLog("info", `db: ${paths.dbPath}`);
-  writeLog("info", `llm.toml: ${paths.effectiveLlmToml}`);
+  writeLog("info", `llm.toml: ${paths.userLlmTomlPath}`);
   writeLog("info", "system proxy: dynamic Electron resolver available");
 
   const spawnEnv: Record<string, string> = { ...env };

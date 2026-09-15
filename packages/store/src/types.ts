@@ -204,7 +204,7 @@ export interface RuntimeRecordStore {
   saveRuntimeResult(record: RuntimeResultRecord): Promise<void>;
   listRuntimeResults(
     sessionId: string,
-    turnId: string,
+    turnId?: string,
   ): Promise<RuntimeResultRecord[]>;
 
   // ── Tool Calls ──

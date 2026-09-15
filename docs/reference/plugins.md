@@ -1237,6 +1237,7 @@ export default function (covel) {
 ```
 
 - **类型可导入**：`PluginAPI` / `PluginToolkit` / `PluginHookOptions` / `PluginRpcOptions` / `PluginEntryFactory` 从 `@covel/runtime` 导出（Public Plugin API 的稳定契约）。JS 插件用 JSDoc `@param {import('@covel/runtime').PluginAPI} covel` 标注工厂参数，TS 插件直接 `import type`。服务端实现按同一类型做编译期对齐（`buildEntryApi(): PluginAPI`），不会与文档 / 作者可见类型漂移。
+- 插件来源由目录角色决定；内置目录缺失时仍保留其位置，用户目录中的插件继续要求 community 审批。
 - **来源门控**与 local tools 一致：builtin 在启动时执行 entry；community 延迟到插件激活（`ensurePluginEntry`，与 runtime 加载同刻）。
 - builtin entry 启动失败后保持待激活，首次 RPC 可按真实发现来源重试，无需社区插件审批或管理员凭据。待激活的 community 或来源缺失的插件仍必须经过原有服务器代码和动作审批；托管环境仍要求管理员凭据。
 - **注册批次**：同插件的全部 entry 工厂成功后，工具、Hook、RPC 与媒体 wire 才同步发布；初始化失败丢弃暂存注册，发布失败逆序撤销本批次已经发布的注册，不影响其它插件。非法单条注册与名称冲突保留警告跳过行为。

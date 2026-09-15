@@ -206,7 +206,14 @@ the IndexedDB transaction and schema lifecycle in
   so an older session checkpoint cannot undo a saved edit;
 - `baseRevision`, `revision`, and `actionId` reject stale or divergent writes;
 - browser checkpoint upload/download operations are serialized by
-  `LocalDataService`;
+  `LocalDataService`. It owns durable pending-commit recovery before hydration
+  or staging a different action. A missing transient session clears the pending
+  marker and allows rebuilding from the browser checkpoint; other errors retain
+  the marker and block newer commits;
+- checkpoint export reads runtime results once per session using
+  `listRuntimeResults(sessionId)`. Omitting `turnId` returns all session rows,
+  including interrupted executions without a turn-result row; passing `turnId`
+  retains the existing per-turn filter on every backend;
 - the transient server workspace uses `MemoryStore.withTransaction` when a
   checkpoint replaces a session;
 - checkpoint imports validate every record's structure and session scope,

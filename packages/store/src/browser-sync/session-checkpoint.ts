@@ -35,6 +35,7 @@ export async function exportSessionCheckpoint(
     messages,
     turnMessages,
     turnResults,
+    runtimeResults,
     toolCalls,
     runtimeOutputs,
     interactions,
@@ -59,6 +60,7 @@ export async function exportSessionCheckpoint(
     store.listMessages(sessionId),
     store.listTurnMessages(sessionId),
     store.listTurnResults(sessionId),
+    store.listRuntimeResults(sessionId),
     store.listToolCalls(sessionId),
     store.listRuntimeOutputs(sessionId),
     store.listInteractionRecords(sessionId),
@@ -80,13 +82,6 @@ export async function exportSessionCheckpoint(
     store.listStateSchemas(sessionId),
   ]);
 
-  const runtimeResults = (
-    await Promise.all(
-      [...new Set(turnResults.map((result) => result.turnId))].map((turnId) =>
-        store.listRuntimeResults(sessionId, turnId),
-      ),
-    )
-  ).flat();
   const stateEntries = (
     await Promise.all(
       stateSchemas.map((schema) =>

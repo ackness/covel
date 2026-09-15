@@ -261,6 +261,29 @@ export function registerCoreStoreSuites(getStore: () => DataStore): void {
   });
 
   describe("RuntimeResults", () => {
+    it("lists all session runtime results when turnId is omitted", async () => {
+      const first = makeRuntimeResult({
+        sessionId: "sess-1",
+        turnId: "turn-1",
+      });
+      const second = makeRuntimeResult({
+        sessionId: "sess-1",
+        turnId: "turn-2",
+      });
+      await store.saveRuntimeResult(first);
+      await store.saveRuntimeResult(second);
+      await store.saveRuntimeResult(
+        makeRuntimeResult({ sessionId: "other", turnId: "turn-1" }),
+      );
+      expect(await store.listRuntimeResults("sess-1")).toEqual(
+        expect.arrayContaining([first, second]),
+      );
+      expect(await store.listRuntimeResults("sess-1")).toHaveLength(2);
+      expect(await store.listRuntimeResults("sess-1", "turn-2")).toEqual([
+        second,
+      ]);
+    });
+
     it("should save and list runtime results by sessionId+turnId", async () => {
       const rr = makeRuntimeResult({ sessionId: "sess-1", turnId: "turn-1" });
       await store.saveRuntimeResult(rr);

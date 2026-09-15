@@ -11,7 +11,7 @@ The bundled snapshot is generated from the fixed LiteLLM commit declared in `pac
 
 Running `pnpm --filter @covel/desktop dist` after that invokes electron-builder.
 
-Builds do not bundle the developer's `llm.toml` or other private server configuration. Staging and unpacked-installer checks reject these files at the server resource root. Startup smoke tests use a temporary synthetic configuration and a separate no-configuration run; neither requires provider credentials or calls a model. Installed applications continue to load the user's configuration from their data directory.
+Builds do not bundle the developer's `llm.toml` or other private server configuration. Staging and unpacked-installer checks reject these files at the server resource root. Startup smoke tests use a temporary synthetic configuration and a separate no-configuration run; neither requires provider credentials or calls a model. Installed applications always read `llm.toml` from the user configuration root, including when the file is created after first launch. Missing bundled resource directories retain their positions in discovery; user plugins never inherit builtin trust because installation resources are absent.
 
 The startup smoke test also rejects bundled plugin load failures, including
 `[plugin-entry]` factory initialization failures. A successful health response

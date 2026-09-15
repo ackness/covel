@@ -44,6 +44,14 @@ describe("reloadAiStack", () => {
     await rm(dir, { recursive: true, force: true });
   });
 
+  it("loads a user config created after starting without a file", async () => {
+    const ai = createAiStack();
+    expect(ai.slotRegistry.resolveSlot("story")).toBeTruthy();
+    await writeFile(tomlPath, SLOT_ALPHA);
+    expect(reloadAiStack(ai)).toMatchObject({ ok: true, slots: ["alpha"] });
+    expect(ai.slotRegistry.resolveSlot("alpha")).toBeTruthy();
+  });
+
   it("picks up added/removed slots in place without replacing the gateway", async () => {
     await writeFile(tomlPath, SLOT_ALPHA);
     const ai = createAiStack();

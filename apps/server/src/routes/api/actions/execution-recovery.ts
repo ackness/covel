@@ -78,7 +78,7 @@ async function readExecutionStatus(
   let before: TimeCursor | undefined;
   let started: TraceEventRecord | undefined;
   const trailing: TraceEventRecord[] = [];
-  while (!started) {
+  while (true) {
     const page = await store.listTraceEventsPage(sessionId, {
       limit: 200,
       before,
@@ -86,11 +86,14 @@ async function readExecutionStatus(
     // Events emitted within the same millisecond use random IDs to break
     // pagination ties. A terminal row can sort before its own start marker.
     trailing.push(...page);
-    started = [...page]
+    started ??= [...page]
       .reverse()
       .find((event) => event.type === "turn.started");
-    if (started || page.length < 200) break;
+    if (page.length < 200) break;
     const oldest = page[0]!;
+    // Finish the start marker's millisecond across page boundaries: terminal
+    // rows with smaller random IDs may still be on the next page.
+    if (started && oldest.createdAt < started.createdAt) break;
     before = { createdAt: oldest.createdAt, id: oldest.id };
   }
 
