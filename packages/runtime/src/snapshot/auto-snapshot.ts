@@ -17,7 +17,6 @@ export interface SaveAutoSnapshotOptions {
   readonly store: DataStore;
   readonly sessionId: string;
   readonly turnId: string;
-  readonly createdAt?: string;
   readonly eventBus?: EventBus;
   /**
    * Checkpoint cadence: snapshot only when `completedPlayerTurns` is a multiple
@@ -85,7 +84,9 @@ export async function saveAutoSnapshot(
     turnId: options.turnId,
     kind: "auto",
     payload,
-    createdAt: options.createdAt ?? new Date().toISOString(),
+    // The fork export cutoff must include this turn's committed writes. A
+    // runtime result timestamp predates commit and cannot date this capture.
+    createdAt: new Date().toISOString(),
   };
   await options.store.saveSnapshot(snapshot);
   emitSubEvent(

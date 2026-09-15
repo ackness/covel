@@ -10,7 +10,10 @@ import { watch, type FSWatcher } from "node:fs";
 import path from "node:path";
 import type { DataStore } from "@covel/store";
 import type { EventBus } from "@covel/events";
-import { loadSingleWorld } from "./world-seed-loader.js";
+import {
+  loadSingleWorld,
+  preserveWorldProvenance,
+} from "./world-seed-loader.js";
 
 export interface WorldFileWatcher {
   start(): void;
@@ -90,10 +93,9 @@ export function createWorldFileWatcher(
         }
       }
 
-      // Update store with new data, preserving existing timestamps
+      // Package reloads cannot change the world's storage ownership.
       await store.upsertWorld({
-        ...newRecord,
-        createdAt: existing.createdAt,
+        ...preserveWorldProvenance(newRecord, existing),
         updatedAt: new Date().toISOString(),
       });
 

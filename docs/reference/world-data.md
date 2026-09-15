@@ -105,6 +105,8 @@ server 使用 Node 26 的递归 `fs.watch` 监听内置与用户世界目录，�
 
 若文件系统不支持监听，启动会记录 warning；维度也可通过 `POST /api/worlds/:id/dimensions/import` 导入。插件安装后仍需重启服务。实现见 `apps/server/src/world-file-watcher.ts`，安装响应见 [API 参考](./api.md#installed-resource-storage-and-vector-configuration)。
 
+`dimensionSources` 声明的文件必须全部读取并校验成功；缺失、不可读、YAML 错误或维度校验失败时，整个世界加载失败，保留存储中的上一份完整记录，不发出维度变更通知，也不执行基于该次不完整清单的过期世界清理。文件修复后可继续热更新。热更新与启动加载都保留已有世界的 `metadata.source`、`metadata.storage` 和 `createdAt`，生成世界不会因重新加载而变为不可删除的内置世界。
+
 ### 插件配置默认值（`pluginSettings`）
 
 `world.yaml` 顶层（与 `pluginPolicy` 平级）可声明 `pluginSettings`，为插件 `userSettings` 预置**世界默认值**，键为 `pluginId → settingKey → value`：

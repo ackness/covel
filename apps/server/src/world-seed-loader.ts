@@ -120,24 +120,24 @@ async function loadExternalDimensions(
   sources: Record<string, string>,
   worldId: string,
   defaultLocale?: string,
-): Promise<Record<string, unknown>> {
+): Promise<Record<string, unknown> | null> {
   const result: Record<string, unknown> = {};
 
   for (const [key, relativePath] of Object.entries(sources)) {
     // Validate dimension key
     if (!DIMENSION_KEYS.includes(key)) {
       console.warn(
-        `[world-seed] ${worldId}: unknown dimension key "${key}" in dimensionSources, skipping`,
+        `[world-seed] ${worldId}: unknown dimension key "${key}" in dimensionSources`,
       );
-      continue;
+      return null;
     }
 
     // Path traversal check on the declared path
     if (!(await resolveSafePath(worldDir, relativePath))) {
       console.warn(
-        `[world-seed] ${worldId}: path traversal detected for "${key}": ${relativePath}, skipping`,
+        `[world-seed] ${worldId}: path traversal detected for "${key}": ${relativePath}`,
       );
-      continue;
+      return null;
     }
 
     // Resolve with locale awareness
@@ -150,7 +150,7 @@ async function loadExternalDimensions(
       console.warn(
         `[world-seed] ${worldId}: dimension file not found for "${key}": ${relativePath}`,
       );
-      continue;
+      return null;
     }
 
     try {
@@ -163,7 +163,7 @@ async function loadExternalDimensions(
         console.warn(
           `[world-seed] ${worldId}: invalid dimension file "${relativePath}" for "${key}":\n${formatValidationErrors(validation.errors!)}`,
         );
-        continue;
+        return null;
       }
 
       result[key] = validation.data;
@@ -172,6 +172,7 @@ async function loadExternalDimensions(
         `[world-seed] ${worldId}: failed to load dimension file "${relativePath}":`,
         err,
       );
+      return null;
     }
   }
 
@@ -261,6 +262,9 @@ export async function loadSingleWorld(
         defaultLocale,
       )
     : {};
+  // A declared source is required. Partial reads must not erase the last
+  // valid dimensions or authorize reconciliation against an incomplete scan.
+  if (externalDims === null) return null;
   const mergedDimensions = { ...inlineDims, ...externalDims };
 
   const lore = await readLore(worldDir, defaultLocale);
@@ -401,17 +405,39 @@ export async function seedWorlds(
 ): Promise<{ worldIds: string[]; complete: boolean }> {
   const { records, complete } = await loadWorldPackages(worldsDir);
 
-  for (const record of records) {
-    await store.upsertWorld(record);
-  }
-
   if (records.length > 0) {
+    const existingWorlds = new Map(
+      (await store.listWorlds()).map((world) => [world.id, world]),
+    );
+    for (const record of records) {
+      await store.upsertWorld(
+        preserveWorldProvenance(record, existingWorlds.get(record.id)),
+      );
+    }
     console.log(
       `[world-seed] Loaded ${records.length} world(s): ${records.map((r) => r.id).join(", ")}`,
     );
   }
 
   return { worldIds: records.map((r) => r.id), complete };
+}
+
+/** Disk content does not own a world's origin, storage binding, or creation date. */
+export function preserveWorldProvenance(
+  record: WorldRecord,
+  existing: WorldRecord | undefined,
+): WorldRecord {
+  if (!existing) return record;
+  const { source, storage } = existing.metadata ?? {};
+  return {
+    ...record,
+    createdAt: existing.createdAt,
+    metadata: {
+      ...record.metadata,
+      ...(source === undefined ? {} : { source }),
+      ...(storage === undefined ? {} : { storage }),
+    },
+  };
 }
 
 export interface WorldReconcileResult {

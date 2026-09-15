@@ -232,7 +232,6 @@ export function createPluginRpcRuntimeTurnRunner(
           store: ctx.store,
           sessionId: ctx.sessionId,
           turnId: turnResult.turnId,
-          createdAt: turnResult.timestamp,
           eventBus: ctx.eventBus,
         });
       } catch (err) {
