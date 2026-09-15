@@ -37,6 +37,53 @@ async function fixture() {
 }
 
 describe("foreground execution recovery", () => {
+  it.each([199, 399])(
+    "reads a same-millisecond terminal past %i later events",
+    async (laterEvents) => {
+      const { store } = await fixture();
+      const createdAt = "2026-01-01T00:00:00.000Z";
+      const scope = {
+        sessionId: "recovery",
+        turnId: "opening",
+        traceId: "opening",
+        createdAt,
+      };
+      await store.addTraceEvent({
+        ...scope,
+        id: "1000",
+        type: "turn.started",
+        payload: {
+          recoveryAction: {
+            type: "send_message",
+            payload: { content: "Open the door" },
+          },
+        },
+      });
+      await store.addTraceEvent({
+        ...scope,
+        id: "0000",
+        type: "turn.completed",
+        payload: { committed: false, abortReason: "aborted-by-player" },
+      });
+      for (let i = 0; i < laterEvents; i++) {
+        await store.addTraceEvent({
+          ...scope,
+          id: `later-${i}`,
+          type: "runtime.completed",
+          turnId: "background",
+          payload: {},
+          createdAt: "2026-01-01T00:00:01.000Z",
+        });
+      }
+      expect(await getSessionExecutionStatus(store, "recovery")).toMatchObject({
+        state: "failed",
+        turnId: "opening",
+        abortReason: "aborted-by-player",
+        retry: { type: "send_message", payload: { content: "Open the door" } },
+      });
+    },
+  );
+
   it("retains the player-stop reason and original retry after reload", async () => {
     const { store, trace } = await fixture();
     await trace("turn.started", {

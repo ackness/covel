@@ -10,12 +10,12 @@ NPC graph retriever (function runtime).
 Runs automatically before every narrative turn:
 
 1. Reads this session's NPC nodes, edges, and adjacency indices (`plugin_data[nodes/edges/index]`)
-2. String-matches node names (including aliases) against `playerMessage` and the most recent narrator messages
-3. Performs a 2-hop BFS from the hit nodes, merging the `by-source` and `by-target` indices
+2. Matches node names and aliases against `playerMessage` first. If none match, uses the optional same-turn `currentCast` input from `scene-cast` to match complete names or aliases unambiguously. Character IDs and graph node IDs are separate; without a cast provider, retrieval still works from player input.
+3. Performs a 2-hop BFS from the matched nodes using only the latest currently valid relationships. Expired relationships cannot expand the recalled subgraph.
 4. Keeps only edges whose valid interval is still open (`invalidAt === undefined`); superseded versions stay in storage for provenance but never reach the prompt
 5. Sorts by recency (`validAt` descending) and absolute strength, taking the top 20
 6. Emits `npcContext` (a markdown list) for `narrator` to consume via `input.inject`
 
 When the graph is empty or no node was hit, the output is `npcContext: ""` and the `narrator` prompt naturally skips the corresponding section.
 
-This runtime does NOT perform vector embedding or semantic retrieval — Phase 3.5 will upgrade it to hybrid retrieval once the framework exposes gateway access.
+This runtime calls neither an LLM nor an embedding service. Current cast supplies retrieval candidates without claiming pronoun resolution. Input binding establishes same-turn execution order and data delivery; it does not read another plugin's uncommitted storage.

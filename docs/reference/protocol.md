@@ -585,6 +585,7 @@ Payload notes:
 - `runtime.completed` 的 `status: "failed"`、`turn.completed` 的 `committed: false` 均属于诊断失败；LLM 尝试失败后重试成功仍保留失败记录，界面应将“已恢复的尝试”与任务最终状态区分。
 - `llm.calling` 可附带 `responseFormat`、`defaults`、`maxOutputTokens`，描述 runtime 请求的结构化输出与生成约束；实际协议请求见可选 `providerRequests` 数组。仅提供自定义 LLM adapter 且未实现观察入口时，该数组缺失，不应从逻辑消息猜测最终请求。
 - `providerRequests[]` 格式：`{ schemaVersion: 1, provider, protocol, body, complete, omittedFieldCount, startedAt, durationMs, transportAttempt, statusCode?, failed? }`。`body` 来自 HTTP adapter 序列化后的 JSON 投影，包括 adapter 附加的结构化提示、消息/工具转换以及参数覆盖后的值；数组顺序保留目标 fallback 和 HTTP 重试，`transportAttempt` 在每个协议请求内从 0 开始。外层 trace/turn/runtime/attempt 标识负责关联，不新增领域写入或恢复权威。
+- 同一 `llm.calling.providerRequests` 数组内完全相同的请求体只保存一次。重复项使用 `schemaVersion: 2` 和 `bodyRef` 替代 `body`，其余尝试元数据独立保留；`bodyRef` 是同数组中更早的完整请求体项的零基索引，不允许引用链、前向引用或跨 trace 引用。HTTP 观察回调仍返回完整 v1 请求；仅 trace 序列化采用去重表示。调试页兼容历史完整项，并在查看、复制时解析引用；无效引用显示不可用，不猜测正文。逻辑消息和实际协议请求仍分别保留。
 - 观察入口在 HTTP 返回或失败时报告，因此 `statusCode: 200` 仅代表 HTTP 接受，流式输出仍可能随后失败；以 `llm.responded` 和 runtime 结算为准。文本流第一个增量发出前已保存对应 HTTP 请求投影。进程在 HTTP 返回前退出时可能没有记录，trace 仍为 best-effort，不承诺崩溃审计完整性。
 - 不收集认证头、API key、provider base URL 或配置对象。任意额外 metadata 只记录遗漏字段数量；带查询/凭据/片段的资源 URL 隐去并标记 `complete: false`。版本不支持、`complete: false` 或外部资源已经失效时，离线工具必须报告无法完整重建。`complete: true` 仅说明 JSON 请求投影完整，不保证资源永久有效、HTTP 头可重建或真实模型结果确定。
 - 请求正文沿用现有 trace 的敏感上下文访问与留存边界，包含玩家文本，不能当作可公开导出的脱敏日志。function runtime 的 `gateway.*` 继续只记录形状，不扩大其正文收集范围。

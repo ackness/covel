@@ -34,6 +34,20 @@ async function writePlugin(dir: string, id: string): Promise<void> {
 }
 
 describe("discoverPluginsMulti — load-path-based source tagging", () => {
+  it("keeps user plugins untrusted when the bundled directory is missing", async () => {
+    await writePlugin(userDir, "third-party");
+    const results = await discoverPluginsMulti([
+      path.join(bundledDir, "missing"),
+      userDir,
+    ]);
+    expect(results).toHaveLength(1);
+    expect(getPluginTrustInfo(results[0].id, results[0].source)).toEqual({
+      source: "community",
+      autoLoad: false,
+      requiresApproval: true,
+    });
+  });
+
   it("tags every plugin from the first (bundled) directory with source: 'builtin'", async () => {
     // Regression: dropping the `core-` prefix heuristic (commit 85a7684) shifted
     // trust derivation to load-path-based `source` tagging. discoverPluginsMulti

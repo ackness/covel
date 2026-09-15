@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { TraceEvent } from "@/services/api.js";
 import { llmAttempts } from "../-llm-attempts.js";
 import { LLMRequestInspector } from "../-llm-request-inspector.js";
 import { deriveRuntimesFromTurn, getTraceError } from "../-debug-helpers.js";
+import i18n from "@/i18n";
 
 afterEach(cleanup);
 const event = (
@@ -23,6 +24,36 @@ const event = (
 });
 
 describe("provider request inspection", () => {
+  it("renders and copies referenced retry bodies", () => {
+    const body = {
+      model: "retry-model",
+      messages: [{ role: "user", content: "Retried prompt" }],
+    };
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    try {
+      render(
+        <LLMRequestInspector
+          event={event("llm.calling", 1, {
+            providerRequests: [
+              { schemaVersion: 1, body, statusCode: 429, complete: true },
+              { schemaVersion: 2, bodyRef: 0, statusCode: 200, complete: true },
+            ],
+          })}
+          logical={<p>Logical prompt</p>}
+        />,
+      );
+      expect(screen.getAllByText(/Retried prompt/)).toHaveLength(2);
+      fireEvent.click(
+        screen.getAllByRole("button", {
+          name: i18n.t("debugger.copyProviderBody"),
+        })[1],
+      );
+      expect(writeText).toHaveBeenCalledWith(JSON.stringify(body, null, 2));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it("pairs retries without mixing a later tool-loop call or another runtime", () => {
     const events = [
       event("llm.calling", 1, { attempt: 0 }),

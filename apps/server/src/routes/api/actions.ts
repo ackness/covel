@@ -867,7 +867,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 store,
                 sessionId,
                 turnId: turnArgs.turnId,
-                createdAt: result.timestamp,
                 eventBus,
               });
             } catch (err) {

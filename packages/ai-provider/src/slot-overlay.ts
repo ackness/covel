@@ -66,10 +66,13 @@ const SCOPE_PREFIX = "\u0000overlay:";
 
 /**
  * Reference counts for overlay-owned scoped preset ids. Shared across
- * overlay scopes — the preset registry is a process-wide singleton, and
- * two requests with byte-identical configs share one registration.
+ * scopes on the same registry. Separate gateways must never borrow another
+ * registry's references, even when their request configurations are identical.
  */
-const presetRefs = new Map<string, number>();
+const presetRefs = new WeakMap<
+  OverlayDeps["presetRegistry"],
+  Map<string, number>
+>();
 
 /**
  * Scoped registry id for a custom preset: the canonical (id, config)
@@ -134,6 +137,11 @@ export function applySlotOverlay(
   // Track the scoped ids WE took a reference on so cleanup only
   // decrements refs for them.
   const ownedPresetKeys: string[] = [];
+  let refs = presetRefs.get(deps.presetRegistry);
+  if (!refs) {
+    refs = new Map();
+    presetRefs.set(deps.presetRegistry, refs);
+  }
 
   for (const cp of customPresets) {
     if (!isUsableCustomPreset(cp)) continue;
@@ -143,12 +151,9 @@ export function applySlotOverlay(
     if (hasPreset.call(deps.presetRegistry, cp.id)) continue;
 
     const key = overlayPresetKey(cp);
-    const current = presetRefs.get(key);
-    if (current !== undefined) {
-      // Identical (id, config) already registered by a concurrent
-      // request — safe to share, just take a reference.
-      presetRefs.set(key, current + 1);
-    } else {
+    // Hot-reload clears the registry while earlier requests can still own
+    // references. Restore a missing registration before sharing it again.
+    if (!hasPreset.call(deps.presetRegistry, key)) {
       const capability = resolveCapability(cp.model, cp.provider, cp.protocol);
       addPreset.call(deps.presetRegistry, {
         id: key,
@@ -166,8 +171,8 @@ export function applySlotOverlay(
         // provider registry resolves unknown providers ephemerally for it.
         requestScoped: true,
       });
-      presetRefs.set(key, 1);
     }
+    refs.set(key, (refs.get(key) ?? 0) + 1);
     ownedPresetKeys.push(key);
   }
 
@@ -180,7 +185,7 @@ export function applySlotOverlay(
     if (disposed) return;
     disposed = true;
     for (const key of ownedPresetKeys) {
-      decrementRef(presetRefs, key, () =>
+      decrementRef(refs, key, () =>
         removePreset.call(deps.presetRegistry, key),
       );
     }
@@ -287,7 +292,7 @@ export function resolveOverlayPresetId(
   overrides: SlotOverridesInput | undefined,
   hasPreset: ((id: string) => boolean) | undefined,
 ): string | undefined {
-  if (!presetId || !hasPreset) return presetId;
+  if (!presetId || !hasPreset || hasPreset(presetId)) return presetId;
   const customPresets = overrides?.customPresets;
   if (!customPresets || customPresets.length === 0) return presetId;
 

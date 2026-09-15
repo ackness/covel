@@ -81,6 +81,8 @@
 
 Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填的 runtime 相对路径，目标模块必须 `export default function`。manifest 校验会拒绝缺失 handler，loader 会拒绝没有默认函数导出的模块，避免插件安装后到首次激活才失败。
 
+插件发现忽略以 `.` 开头的包目录，安装中的临时副本在正式发布目录前不会被加载。
+
 runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启动 discovery 快照记录的实际 `PLUGIN.md` 路径；根目录单 runtime 即使声明 `name: plugin-id/manual`，仍从根目录解析 UI，不会被推断为 `runtimes/manual/`。
 
 ---
@@ -1237,7 +1239,9 @@ export default function (covel) {
 ```
 
 - **类型可导入**：`PluginAPI` / `PluginToolkit` / `PluginHookOptions` / `PluginRpcOptions` / `PluginEntryFactory` 从 `@covel/runtime` 导出（Public Plugin API 的稳定契约）。JS 插件用 JSDoc `@param {import('@covel/runtime').PluginAPI} covel` 标注工厂参数，TS 插件直接 `import type`。服务端实现按同一类型做编译期对齐（`buildEntryApi(): PluginAPI`），不会与文档 / 作者可见类型漂移。
+- 插件来源由目录角色决定；内置目录缺失时仍保留其位置，用户目录中的插件继续要求 community 审批。
 - **来源门控**与 local tools 一致：builtin 在启动时执行 entry；community 延迟到插件激活（`ensurePluginEntry`，与 runtime 加载同刻）。
+- builtin entry 启动失败后保持待激活，首次 RPC 可按真实发现来源重试，无需社区插件审批或管理员凭据。待激活的 community 或来源缺失的插件仍必须经过原有服务器代码和动作审批；托管环境仍要求管理员凭据。
 - **注册批次**：同插件的全部 entry 工厂成功后，工具、Hook、RPC 与媒体 wire 才同步发布；初始化失败丢弃暂存注册，发布失败逆序撤销本批次已经发布的注册，不影响其它插件。非法单条注册与名称冲突保留警告跳过行为。
 - entry 抛错、非函数导出、缺失文件或路径逃逸均视为激活失败。builtin 启动时记录失败并继续其它插件；`ensurePluginEntry` 调用方收到错误，失败不记作已加载，后续调用可以重试。并发激活共享一次尝试，成功后才去重。
 - 注册 API 仅在工厂执行期间有效；工厂必须 await 自己的初始化，返回后再注册会抛错。回滚只涵盖框架托管注册，不撤销模块顶层 I/O、外部请求或插件自行启动的任务；会话停用不卸载进程共享注册。
@@ -1252,7 +1256,7 @@ tools:
     - plugin-data-get
 ```
 
-Hook 调用总会获得 `ctx.signal`（类型可选以兼容直接构造上下文的调用方）：超时或传入的父执行取消会通知协作式 I/O 并结束等待，迟到返回的 `replace` 不再进入流水线。同进程不合作代码无法被强制终止。顺序 pipeline 中 abort 停止后续 handler；各 wire helper 保持原有拦截/转换策略，例如 `PreLLMCall` 的 abort 表示保留原请求，真正的执行取消仍由模型调用边界检查。观察型事件不因 Hook 失败撤销已完成的领域提交；`TurnStop`、提交和会话生命周期的收尾 Hook 使用自己的超时界限。
+Hook 调用总会获得 `ctx.signal`（类型可选以兼容直接构造上下文的调用方）：超时或传入的父执行取消会通知协作式 I/O 并结束等待，迟到返回的 `replace` 不再进入流水线。同进程不合作代码无法被强制终止。顺序 pipeline 中 abort 停止后续 handler；各 wire helper 保持原有拦截/转换策略，例如 `PreLLMCall` 的 abort 表示保留原请求，真正的执行取消仍由模型调用边界检查。`PreStateCommit` 继承传入 `finalizeExecution` 的取消信号，取消会停止后续提案并回滚事务。观察型事件不因 Hook 失败撤销已完成的领域提交；`TurnStop`、`PostStateCommit` 和会话生命周期的收尾 Hook 使用自己的超时界限。
 
 ### commands（输入框斜线命令）
 

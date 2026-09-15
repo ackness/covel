@@ -42,6 +42,7 @@ import type {
   WorldDataImportLedgerRecord,
   WorldRecord,
 } from "../types.js";
+import { normalizeWorldRecord } from "../records/world-records.js";
 
 /**
  * The mutable subset of {@link SessionRecord} accepted by `updateSession`.
@@ -374,6 +375,7 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
     },
 
     worldInsert(record) {
+      record = normalizeWorldRecord(record);
       return {
         id: record.id,
         name: record.name,
@@ -387,6 +389,7 @@ export function makeInsertValues(json: JsonWriter): InsertValueBuilders {
       };
     },
     worldUpdate(record) {
+      record = normalizeWorldRecord(record);
       return {
         name: record.name,
         description: record.description,

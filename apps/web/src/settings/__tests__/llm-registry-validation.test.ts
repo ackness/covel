@@ -5,6 +5,10 @@ import {
   type SettingsBackendAdapter,
 } from "@covel/settings";
 import { registerLlmSettings } from "../registry/llm.js";
+import {
+  slotBindingId,
+  type SlotConfigEntry,
+} from "@/services/api/model-settings.js";
 
 function createMemoryAdapter(): SettingsBackendAdapter {
   let entries: Record<SettingKey, unknown> = {};
@@ -27,6 +31,41 @@ function createMemoryAdapter(): SettingsBackendAdapter {
 }
 
 describe("LLM settings registry validation", () => {
+  it("preserves modelRef precedence through hydration, import, writes and reload", async () => {
+    const adapter = createMemoryAdapter();
+    const entries = {
+      "llm.slotConfig": {
+        story: { presetId: "legacy-model", modelRef: "chosen-model" },
+      },
+    };
+    await adapter.save(entries);
+    const store = new SettingsStore(adapter);
+    registerLlmSettings(store);
+    await store.init();
+    const binding = () =>
+      store.get<Record<string, SlotConfigEntry>>("llm.slotConfig").story;
+    expect(slotBindingId(binding())).toBe("chosen-model");
+    await store.set("llm.slotConfig", entries["llm.slotConfig"]);
+    expect(slotBindingId(binding())).toBe("chosen-model");
+    await store.import(
+      { schemaVersion: 1, exportedAt: "", entries },
+      { keys: ["llm.slotConfig"] },
+    );
+    expect(slotBindingId(binding())).toBe("chosen-model");
+    const reloaded = new SettingsStore(adapter);
+    registerLlmSettings(reloaded);
+    await reloaded.init();
+    expect(reloaded.get("llm.slotConfig")).toEqual({
+      story: { modelRef: "chosen-model" },
+    });
+    await reloaded.set("llm.slotConfig", {
+      story: { presetId: "legacy-only" },
+    });
+    expect(reloaded.get("llm.slotConfig")).toEqual({
+      story: { presetId: "legacy-only" },
+    });
+  });
+
   it("rejects imported provider profiles with a non-string provider", async () => {
     const store = new SettingsStore(createMemoryAdapter());
     registerLlmSettings(store);

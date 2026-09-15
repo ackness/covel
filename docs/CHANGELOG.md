@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.34] - 2026-09-15
+
+This patch release preserves saved state through recovery, world-package changes and failed configuration writes, and fixes cancellation and resource cleanup across the client and providers.
+
+### Fixed
+
+- **Snapshots and forks keep the state captured at their commit.** Forks preserve display messages, structured-state schemas and runtime exports without borrowing newer results from the source session. Snapshot export queries respect their session, runtime and revision boundaries.
+- **Browser workspace recovery completes before newer mutations.** Durable pending commits survive failures, missing transient server sessions can be rebuilt, and checkpoint exports retain interrupted runtime results even without a completed turn record.
+- **Stopping a turn cancels pre-commit hooks and rolls back pending proposals.** Already committed snapshots and post-commit cleanup remain valid when cancellation arrives late. Recovery keeps interrupted and failed work distinguishable from completed story.
+- **World loading preserves the active package and its last complete state.** Startup and hot reload share root priority, reject ambiguous IDs and linked manifests, and retain stored worlds when inventories or dimensions cannot be read completely.
+- **World deletion and installation preserve existing data on failure.** File deletion follows the world's storage binding and manifest ID, restores the package after database failure, and refuses missing or ambiguous bindings. Uploads and generated worlds use create-only activation; failed activation cleans only the newly created package.
+- **Generated and imported packages become visible only after validation.** Generated packages and desktop directory imports use staging, hidden directories are excluded from discovery, and imports reject linked manifests and copies into their own source tree.
+- **World dimensions agree across memory, SQLite, PostgreSQL and API responses.** Replacements and explicit removal update the top-level projection, while ordinary edits preserve source and storage ownership.
+- **Configuration failures no longer discard effective settings or removed keys.** Model overlays survive reload boundaries, legacy bindings normalize consistently, default model roles remain editable, and desktop key deletion updates both persisted and running configuration. First launch consistently uses the user's model configuration path.
+- **Plugin activation and relationship updates follow their current contracts.** Pending server entries remain available for authorized lazy activation. Relationship edits refresh labels and changed endpoints while retaining layout; expired edges are excluded even at turn zero.
+- **HTTP retries and event streams stop promptly on cancellation.** Discarded response bodies are cancelled, long Retry-After waits avoid timer overflow, custom abort reasons remain cancellations, and late responses cannot reopen a closed subscription. SSE parsing handles mixed line endings and incomplete final frames.
+- **Invalid JSON requests fail before dispatch.** Object endpoints reject null and scalar bodies; approval scope, event payload and provider-ping fields are validated before consuming approvals or publishing events.
+
+### Performance
+
+- Browser commit replay metadata stores fixed-length checkpoint digests instead of repeated full JSON strings. Completed per-session queue entries are released.
+- Repeated provider request bodies share one trace entry while retaining each attempt's timing and status. Relationship highlighting uses cached neighbor membership, and SSE parsing slices complete text lines.
+
+### Upgrade notes
+
+- Update the server and bundled Web client together. No SQL schema migration is required. BrowserVault upgrades its local IndexedDB metadata to schema v4 atomically; export important saves and custom content before upgrading.
+- Custom trace consumers should support `providerRequests` schema v2 `bodyRef` entries as documented in [the protocol reference](./reference/protocol.md). Historical full-body entries remain readable.
+- File/database deletion recovery handles failures within the running process; it is not a crash-atomic transaction across both systems.
+- macOS Apple Silicon and Windows x64 installers remain unsigned. Gatekeeper or SmartScreen may warn on first launch; updates provide a notification and manual download, without automatic installation.
+
 ## [0.0.33] - 2026-09-12
 
 This release improves agent execution and cancellation, brings onboarding and configuration in line with the current runtime, and makes world editing, session navigation, and portrait replacement more reliable.

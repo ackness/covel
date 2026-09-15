@@ -24,6 +24,26 @@ const errRes = (status: number) => ({
 });
 
 describe("request() boot-race retry", () => {
+  it("cancels the response and pending backoff immediately for a custom abort reason", async () => {
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream({ cancel }), {
+      status: 503,
+    });
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal("fetch", fetchMock);
+    const emitToast = vi.spyOn(toastChannel, "emitToast");
+    const controller = new AbortController();
+    const reason = new Error("navigation changed");
+    const pending = request("/api/worlds", { signal: controller.signal });
+    const rejected = expect(pending).rejects.toBe(reason);
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort(reason);
+    await rejected;
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(emitToast).not.toHaveBeenCalled();
+  });
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => {
     vi.useRealTimers();

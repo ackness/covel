@@ -42,7 +42,7 @@ function isDirectorySafe(p: string): boolean {
 
 function isFileSafe(p: string): boolean {
   try {
-    return fs.statSync(p).isFile();
+    return fs.lstatSync(p).isFile();
   } catch {
     return false;
   }
@@ -109,6 +109,24 @@ export async function importAsset(
 
   // Branch: directory copy vs zip extraction
   if (isDirectorySafe(sourcePath)) {
+    const destinationRelativeToSource = path.relative(
+      fs.realpathSync(sourcePath),
+      fs.realpathSync(targetRoot),
+    );
+    if (
+      destinationRelativeToSource === "" ||
+      (destinationRelativeToSource !== ".." &&
+        !destinationRelativeToSource.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(destinationRelativeToSource))
+    ) {
+      return {
+        ok: false,
+        kind,
+        message: t("import.failedWithReason", {
+          reason: "Import destination is inside the source directory",
+        }),
+      };
+    }
     if (!validate(sourcePath)) {
       return {
         ok: false,
@@ -129,8 +147,39 @@ export async function importAsset(
         message: t("import.alreadyExists", { name }),
       };
     }
-    copyDirRecursive(sourcePath, targetDir);
-    return { ok: true, kind, targetPath: targetDir, itemName: name };
+    const tmpDir = fs.mkdtempSync(path.join(targetRoot, ".import-"));
+    try {
+      copyDirRecursive(sourcePath, tmpDir);
+      // Validate the materialized files: skipped links cannot satisfy a
+      // manifest requirement in the installed package.
+      if (!validate(tmpDir)) {
+        return {
+          ok: false,
+          kind,
+          message: t(
+            kind === "plugin"
+              ? "import.pluginMissingManifest"
+              : "import.worldMissingManifest",
+          ),
+        };
+      }
+      fs.renameSync(tmpDir, targetDir);
+      return { ok: true, kind, targetPath: targetDir, itemName: name };
+    } catch (error) {
+      return {
+        ok: false,
+        kind,
+        message: t("import.failedWithReason", {
+          reason: error instanceof Error ? error.message : String(error),
+        }),
+      };
+    } finally {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // Keep the original import result; hidden staging is never activated.
+      }
+    }
   }
 
   if (isFileSafe(sourcePath) && /\.zip$/i.test(sourcePath)) {

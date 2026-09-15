@@ -7,9 +7,7 @@
  * preset and supplemental package content.
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { parse as parseYaml } from "yaml";
 import {
   canonicalizeLocale,
   DEFAULT_LOCALE,
@@ -30,7 +28,7 @@ import {
 } from "./validation-helpers.js";
 import { requestLlmResponse } from "./llm-request.js";
 import { repairWorldLore } from "./lore-repair.js";
-import { writeWorldDataFiles } from "./world-writer.js";
+import { writeWorldPackage } from "./world-writer.js";
 import {
   applyCreationBriefToManifest,
   normalizeGeneratedPackage,
@@ -322,37 +320,15 @@ export async function createWorld(
     const id = yamlData.id as string;
     log(options, "info", `validation passed id=${id}`);
 
-    // Write files
-    const worldDir = path.join(options.outputDir, id);
-    log(options, "info", "writing to", worldDir);
-    await mkdir(worldDir, { recursive: true });
-
-    const writtenFiles: string[] = [];
-
-    // If dimensions are inline, write them through worldData and rewrite manifest.
-    const dimFiles = await writeWorldDataFiles(
-      worldDir,
+    attemptSignal.throwIfAborted();
+    const writtenFiles = await writeWorldPackage(
+      options.outputDir,
+      id,
       yamlData,
+      normalizedLore,
+      locale,
       generatedPackage.content,
     );
-    if (dimFiles.length > 0) {
-      log(options, "info", "wrote worldData files", dimFiles);
-      writtenFiles.push(...dimFiles.map((f) => `${id}/${f}`));
-    }
-
-    // Re-serialize manifest (may now contain dimensionSources instead of dimensions)
-    const finalYaml = stringifyYaml(yamlData, { lineWidth: 0 });
-    await writeFile(path.join(worldDir, "world.yaml"), finalYaml, "utf-8");
-    writtenFiles.push(`${id}/world.yaml`);
-
-    await writeFile(
-      path.join(worldDir, `WORLD.${locale}.md`),
-      normalizedLore,
-      "utf-8",
-    );
-    writtenFiles.push(`${id}/WORLD.${locale}.md`);
-    await writeFile(path.join(worldDir, "WORLD.md"), normalizedLore, "utf-8");
-    writtenFiles.push(`${id}/WORLD.md`);
 
     log(options, "info", `done wrote ${writtenFiles.length} files`);
 

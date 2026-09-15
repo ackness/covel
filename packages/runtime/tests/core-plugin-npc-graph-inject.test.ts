@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RuntimeManifest, TurnInput } from "@covel/shared";
+import type { Proposal, RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
 import { getPendingProposals, shortIdBatch, tool, z } from "@covel/tools";
@@ -116,6 +116,118 @@ async function seedNpcGraph(
 }
 
 describe("npc-graph core plugin write-read-inject path", () => {
+  it.each([false, true])(
+    "retains graph writes across buffered tool calls (committed seed: %s)",
+    async (committedSeed) => {
+      const sessionId = "sess-buffered-graph";
+      const store = await createMainLoopStore(sessionId);
+      const upsert = createUpsertNpcGraph({ tool, z, shortIdBatch, store });
+      const pending: Proposal[] = [];
+      const context = {
+        sessionId,
+        pluginId: "npc-graph",
+        runtimeId: "npc-graph/extractor",
+        turnId: "turn-buffered",
+        turnNumber: 0,
+        pendingProposals: pending,
+      };
+      const relation = (targetName: string, fact: string) => ({
+        sourceName: "Alice",
+        targetName,
+        relation: "TRUSTS",
+        strength: 0.8,
+        fact,
+      });
+      const first = await upsert.execute(
+        {
+          nodes: ["Alice", "Bob", "Carol"].map((name) => ({
+            name,
+            type: "individual",
+            summary: "Synthetic subject.",
+            labels: ["merchant"],
+            attributes: { home: "Port" },
+          })),
+          edges: [relation("Bob", "Alice initially trusts Bob.")],
+        },
+        context,
+      );
+      const firstProposals = getPendingProposals(first);
+      if (committedSeed)
+        await createCommitPipeline(store).commitAll(firstProposals);
+      else pending.push(...firstProposals);
+      const second = await upsert.execute(
+        {
+          nodes: [
+            {
+              name: "Alice",
+              type: "individual",
+              summary: "Updated subject.",
+              labels: ["leader"],
+              attributes: { rank: "captain" },
+            },
+          ],
+          edges: [relation("Carol", "Alice also trusts Carol.")],
+        },
+        context,
+      );
+      pending.push(...getPendingProposals(second));
+      const third = await upsert.execute(
+        { edges: [relation("Bob", "Alice now trusts Bob with her plans.")] },
+        context,
+      );
+      pending.push(...getPendingProposals(third));
+
+      // No write between tool calls: the real commit pipeline applies their
+      // accumulated proposals only after the execution finishes.
+      expect(
+        await store.listPluginData(sessionId, "npc-graph", "edges"),
+      ).toHaveLength(committedSeed ? 1 : 0);
+      const results = await createCommitPipeline(store).commitAll(pending);
+      expect(results.every((result) => result.committed)).toBe(true);
+      const nodes = await store.listPluginData(sessionId, "npc-graph", "nodes");
+      const alice = nodes.find((row) => row.value.name === "Alice")!;
+      expect(nodes).toHaveLength(3);
+      expect(alice.value).toMatchObject({
+        summary: "Updated subject.",
+        labels: ["merchant", "leader"],
+        attributes: { home: "Port", rank: "captain" },
+      });
+      const edges = await store.listPluginData(sessionId, "npc-graph", "edges");
+      expect(edges).toHaveLength(3);
+      expect(edges.filter((row) => row.value.invalidAt === 0)).toHaveLength(1);
+      const current = edges.filter((row) => row.value.invalidAt === undefined);
+      expect(current).toHaveLength(2);
+      const index = await store.getPluginData(
+        sessionId,
+        "npc-graph",
+        "index",
+        `by-source:${alice.key}`,
+      );
+      expect(new Set(index!.value as string[])).toEqual(
+        new Set(current.map((row) => row.key)),
+      );
+      const recalled = await ragRetrieverHandler({
+        playerMessage: "Alice",
+        locale: "en-US",
+        pluginData: {
+          list: (namespace: string) =>
+            store.listPluginData(sessionId, "npc-graph", namespace),
+          get: async (namespace: string, key: string) =>
+            (await store.getPluginData(sessionId, "npc-graph", namespace, key))
+              ?.value,
+        },
+      });
+      expect(recalled.value.edgeCount).toBe(2);
+      expect(recalled.value.npcContext).toContain("Alice also trusts Carol.");
+      expect(recalled.value.npcContext).toContain(
+        "Alice now trusts Bob with her plans.",
+      );
+      expect(recalled.value.npcContext).not.toContain(
+        "Alice initially trusts Bob.",
+      );
+    },
+  );
+
   it("commits extractor graph writes, retrieves matching facts, and injects them into narrator prompt", async () => {
     const sessionId = "sess-npc-inject";
     const store = await createMainLoopStore(sessionId);

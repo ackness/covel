@@ -15,7 +15,7 @@
  *   Path traversal is prevented — all paths must resolve within the world directory.
  */
 
-import { readFile, readdir } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
@@ -30,7 +30,10 @@ import type { MemoryBlockSchema } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
 import { loadWorldDataSummary } from "./world-data/world-load.js";
-import { fileExists } from "./world-data/session-import/utils.js";
+import {
+  fileExists,
+  readWorldManifest,
+} from "./world-data/session-import/utils.js";
 
 /**
  * Resolve a single I18nText field to a plain display string.
@@ -120,24 +123,24 @@ async function loadExternalDimensions(
   sources: Record<string, string>,
   worldId: string,
   defaultLocale?: string,
-): Promise<Record<string, unknown>> {
+): Promise<Record<string, unknown> | null> {
   const result: Record<string, unknown> = {};
 
   for (const [key, relativePath] of Object.entries(sources)) {
     // Validate dimension key
     if (!DIMENSION_KEYS.includes(key)) {
       console.warn(
-        `[world-seed] ${worldId}: unknown dimension key "${key}" in dimensionSources, skipping`,
+        `[world-seed] ${worldId}: unknown dimension key "${key}" in dimensionSources`,
       );
-      continue;
+      return null;
     }
 
     // Path traversal check on the declared path
     if (!(await resolveSafePath(worldDir, relativePath))) {
       console.warn(
-        `[world-seed] ${worldId}: path traversal detected for "${key}": ${relativePath}, skipping`,
+        `[world-seed] ${worldId}: path traversal detected for "${key}": ${relativePath}`,
       );
-      continue;
+      return null;
     }
 
     // Resolve with locale awareness
@@ -150,7 +153,7 @@ async function loadExternalDimensions(
       console.warn(
         `[world-seed] ${worldId}: dimension file not found for "${key}": ${relativePath}`,
       );
-      continue;
+      return null;
     }
 
     try {
@@ -163,7 +166,7 @@ async function loadExternalDimensions(
         console.warn(
           `[world-seed] ${worldId}: invalid dimension file "${relativePath}" for "${key}":\n${formatValidationErrors(validation.errors!)}`,
         );
-        continue;
+        return null;
       }
 
       result[key] = validation.data;
@@ -172,6 +175,7 @@ async function loadExternalDimensions(
         `[world-seed] ${worldId}: failed to load dimension file "${relativePath}":`,
         err,
       );
+      return null;
     }
   }
 
@@ -222,9 +226,8 @@ export async function loadSingleWorld(
     storage?: Record<string, unknown>;
   },
 ): Promise<WorldRecord | null> {
-  const yamlPath = path.join(worldDir, "world.yaml");
-
-  if (!(await fileExists(yamlPath))) return null;
+  const yamlPath = await resolveSafePath(worldDir, "world.yaml");
+  if (!yamlPath) return null;
 
   const yamlContent = await readFile(yamlPath, "utf-8");
   const raw = parseYaml(yamlContent) as Record<string, unknown>;
@@ -261,6 +264,9 @@ export async function loadSingleWorld(
         defaultLocale,
       )
     : {};
+  // A declared source is required. Partial reads must not erase the last
+  // valid dimensions or authorize reconciliation against an incomplete scan.
+  if (externalDims === null) return null;
   const mergedDimensions = { ...inlineDims, ...externalDims };
 
   const lore = await readLore(worldDir, defaultLocale);
@@ -356,50 +362,109 @@ async function loadCharacterBlueprints(
  * Validates each world.yaml against worldManifestSchema.
  * Returns WorldRecord[] ready for upsert.
  */
-async function loadWorldPackages(worldsDir: string): Promise<WorldRecord[]> {
-  if (!(await fileExists(worldsDir))) return [];
-
+async function loadWorldPackages(worldsDir: string): Promise<{
+  records: WorldRecord[];
+  worldIds: string[];
+  complete: boolean;
+}> {
   const entries = await readdir(worldsDir, { withFileTypes: true });
   const records: WorldRecord[] = [];
+  const identityCounts = new Map<string, number>();
+  let complete = true;
 
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
 
     const worldDir = path.join(worldsDir, entry.name);
 
     try {
+      // Containers such as _archive are not world packages. Other access
+      // errors must propagate so a failed inventory cannot authorize deletion.
+      try {
+        await access(path.join(worldDir, "world.yaml"));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      const manifestPath = await resolveSafePath(worldDir, "world.yaml");
+      if (!manifestPath) {
+        complete = false;
+        continue;
+      }
+      const { id } = await readWorldManifest(worldDir);
+      if (id) identityCounts.set(id, (identityCounts.get(id) ?? 0) + 1);
       const record = await loadSingleWorld(worldDir);
       if (record) records.push(record);
+      else complete = false;
     } catch (err) {
+      complete = false;
       console.warn(`[world-seed] Failed to load world ${entry.name}:`, err);
     }
   }
 
-  return records;
+  const uniqueRecords = records.filter((record) => {
+    if (identityCounts.get(record.id) === 1) return true;
+    complete = false;
+    console.warn(
+      `[world-seed] Duplicate world id "${record.id}"; keeping stored state.`,
+    );
+    return false;
+  });
+  return {
+    records: uniqueRecords,
+    worldIds: [...identityCounts.keys()],
+    complete,
+  };
 }
 
 /**
  * Seed all world packages into the DataStore (idempotent via upsert).
- * Returns the ids of the worlds loaded from this directory so callers can build
- * the set of "live" worlds across every source and reconcile stale DB records.
+ * Reports whether every discovered package loaded successfully. Only a complete
+ * inventory across all roots can authorize reconciliation of stale DB records.
  */
 export async function seedWorlds(
   store: DataStore,
   worldsDir: string,
-): Promise<string[]> {
-  const records = await loadWorldPackages(worldsDir);
-
-  for (const record of records) {
-    await store.upsertWorld(record);
-  }
+  excludedWorldIds: ReadonlySet<string> = new Set(),
+): Promise<{ worldIds: string[]; complete: boolean }> {
+  const inventory = await loadWorldPackages(worldsDir);
+  const records = inventory.records.filter(
+    (record) => !excludedWorldIds.has(record.id),
+  );
 
   if (records.length > 0) {
+    const existingWorlds = new Map(
+      (await store.listWorlds()).map((world) => [world.id, world]),
+    );
+    for (const record of records) {
+      await store.upsertWorld(
+        preserveWorldProvenance(record, existingWorlds.get(record.id)),
+      );
+    }
     console.log(
       `[world-seed] Loaded ${records.length} world(s): ${records.map((r) => r.id).join(", ")}`,
     );
   }
 
-  return records.map((r) => r.id);
+  return { worldIds: inventory.worldIds, complete: inventory.complete };
+}
+
+/** Disk content does not own a world's origin, storage binding, or creation date. */
+export function preserveWorldProvenance(
+  record: WorldRecord,
+  existing: WorldRecord | undefined,
+): WorldRecord {
+  if (!existing) return record;
+  const { source, storage } = existing.metadata ?? {};
+  return {
+    ...record,
+    createdAt: existing.createdAt,
+    metadata: {
+      ...record.metadata,
+      ...(source === undefined ? {} : { source }),
+      ...(storage === undefined ? {} : { storage }),
+    },
+  };
 }
 
 export interface WorldReconcileResult {
@@ -423,8 +488,8 @@ export interface WorldReconcileResult {
  *  2. **Save protection** — a stale world that still has saved sessions is KEPT
  *     and reported in `keptWithSessions`; deleting a player's saves is left to an
  *     explicit action, never a silent boot-time sweep.
- *  3. **Empty-set guard (caller)** — the caller must skip this entirely when no
- *     world was seeded, so a transient load failure can never wipe the DB.
+ *  3. **Inventory guard (caller)** — skip when any root/package failed to load
+ *     or no world was seeded. A partial successful set is not a removal list.
  */
 export async function reconcileSeededWorlds(
   store: DataStore,

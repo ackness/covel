@@ -25,7 +25,7 @@
  * @param {{ tool: Function, z: import('zod'), shortIdBatch: Function, store: any }} injection
  */
 import { makeProposal } from "@covel/plugin-handlers-utils";
-import { withPendingProposals } from "@covel/tools";
+import { overlayPluginDataRows, withPendingProposals } from "@covel/tools";
 
 export default function ({ tool, z, shortIdBatch, store }) {
   const nodeInputSchema = z.object({
@@ -129,14 +129,30 @@ export default function ({ tool, z, shortIdBatch, store }) {
 
       const incomingNodes = params.nodes ?? [];
       const incomingEdges = params.edges ?? [];
+      // Earlier tool calls have not committed yet. Reuse the framework's
+      // plugin-scoped overlay for nodes, edge versions and adjacency alike.
+      const pending = overlayPluginDataRows(
+        context.pendingProposals ?? [],
+        context.pluginId,
+      );
+      const readRows = async (namespace) => {
+        const rows =
+          (await store.listPluginData(
+            context.sessionId,
+            context.pluginId,
+            namespace,
+          )) ?? [];
+        const merged = new Map(rows.map((row) => [row.key, row]));
+        for (const row of pending.values()) {
+          if (row.namespace !== namespace) continue;
+          if (row.deleted) merged.delete(row.key);
+          else merged.set(row.key, row);
+        }
+        return [...merged.values()];
+      };
 
       // ── 1. Load existing nodes and build a name → NpcNode index ──
-      const existingNodeRows =
-        (await store.listPluginData(
-          context.sessionId,
-          context.pluginId,
-          "nodes",
-        )) ?? [];
+      const existingNodeRows = await readRows("nodes");
       /** @type {Map<string, any>} */
       const nodeByName = new Map();
       for (const row of existingNodeRows) {
@@ -244,12 +260,7 @@ export default function ({ tool, z, shortIdBatch, store }) {
       // new one, so a relationship can actually evolve. Rows written before
       // versioning existed carry no `invalidAt` and therefore read as open —
       // an old session keeps working and simply gets superseded from here on.
-      const existingEdgeRows =
-        (await store.listPluginData(
-          context.sessionId,
-          context.pluginId,
-          "edges",
-        )) ?? [];
+      const existingEdgeRows = await readRows("edges");
       // Edge ids closed this call (superseded or self-healed). Their adjacency
       // entries are pruned below so a revised relation nets zero index growth
       // (new id in, old id out) instead of leaving the closed id to accumulate
@@ -268,12 +279,9 @@ export default function ({ tool, z, shortIdBatch, store }) {
           openEdgeByKey.set(key, v);
           continue;
         }
-        // Two open versions of one relation must never coexist. A later tool
-        // call in the same turn (writes don't commit between calls) reads the
-        // pre-turn store and can open a second version, leaving two open rows
-        // after commit — the retriever would then inject contradictory facts
-        // forever. Self-heal on the next write: keep the newest by validAt as
-        // the live version and close the older one at the current turn.
+        // Repair legacy duplicate open versions left by writers without a
+        // pending-write overlay. Keep the newest by validAt as the live
+        // version and close the older one at the current turn.
         const [live, stale] =
           (v.validAt ?? -1) >= (prior.validAt ?? -1) ? [v, prior] : [prior, v];
         openEdgeByKey.set(key, live);
@@ -396,12 +404,14 @@ export default function ({ tool, z, shortIdBatch, store }) {
 
       // ── 5. Load existing index entries for staged keys and merge ──
       for (const [indexKey, bucket] of adjacencyUpdates) {
-        const existing = await store.getPluginData(
-          context.sessionId,
-          context.pluginId,
-          "index",
-          indexKey,
-        );
+        const existing =
+          pending.get(JSON.stringify(["index", indexKey])) ??
+          (await store.getPluginData(
+            context.sessionId,
+            context.pluginId,
+            "index",
+            indexKey,
+          ));
         /** @type {string[]} */
         const prev = Array.isArray(existing?.value) ? existing.value : [];
         const merged = Array.from(

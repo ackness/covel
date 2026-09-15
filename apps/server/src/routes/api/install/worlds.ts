@@ -101,17 +101,26 @@ worldInstallRoutes.post("/world", async (c) => {
     const finalDir = path.join(root, summary.worldId);
     await materializeEntries(finalDir, entries);
     try {
-      const record = await loadSingleWorld(finalDir);
+      const record = await loadSingleWorld(finalDir, {
+        source: "generated-file",
+        storage: {
+          scope: "server",
+          backend: "file",
+          path: root,
+          durable: true,
+        },
+      });
       if (!record) throw httpError(400, "Installed world could not be loaded");
-      await c
+      const created = await c
         .get("store")
-        .upsertWorld(record)
+        .createWorld(record)
         .catch(() => {
           throw httpError(
             500,
             "World activation failed; please retry the upload",
           );
         });
+      if (!created) throw httpError(409, "World already exists");
     } catch (err) {
       // Only remove the directory created by this request so a failed
       // activation can be retried without colliding with a partial install.

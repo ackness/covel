@@ -94,6 +94,13 @@ export function resolveWorldMetadata(
     ...existingMetadata,
     ...metadataPatch,
   };
+  if (existingMetadata !== undefined) {
+    for (const key of ["source", "storage"]) {
+      if (Object.hasOwn(existingMetadata, key))
+        mergedMetadata[key] = existingMetadata[key];
+      else delete mergedMetadata[key];
+    }
+  }
 
   if (hasTopLevelDimensions || hasMetadataDimensions) {
     const validation = validateDimensions(rawDimensions);

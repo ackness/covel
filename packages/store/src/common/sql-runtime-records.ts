@@ -152,13 +152,17 @@ export function createSqlRuntimeRecords(
 
     async listRuntimeResults(
       sessionId: string,
-      turnId: string,
+      turnId?: string,
     ): Promise<RuntimeResultRecord[]> {
+      const where =
+        turnId !== undefined
+          ? and(
+              eq(runtimeResults.sessionId, sessionId),
+              eq(runtimeResults.turnId, turnId),
+            )
+          : eq(runtimeResults.sessionId, sessionId);
       const rows = await runner.select<RuntimeResultRow>(runtimeResults, {
-        where: and(
-          eq(runtimeResults.sessionId, sessionId),
-          eq(runtimeResults.turnId, turnId),
-        ),
+        where,
       });
       return rows.map((row) => toRuntimeResultRecord(row, json));
     },

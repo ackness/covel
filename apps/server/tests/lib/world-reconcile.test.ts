@@ -140,8 +140,9 @@ supportedLocales: [zh-CN]
     await make("beta");
 
     const store = createMemoryStore();
-    const ids = await seedWorlds(store, root);
+    const result = await seedWorlds(store, root);
 
-    expect([...ids].sort()).toEqual(["alpha", "beta"]);
+    expect([...result.worldIds].sort()).toEqual(["alpha", "beta"]);
+    expect(result.complete).toBe(true);
   });
 });

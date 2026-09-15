@@ -204,7 +204,7 @@ export interface RuntimeRecordStore {
   saveRuntimeResult(record: RuntimeResultRecord): Promise<void>;
   listRuntimeResults(
     sessionId: string,
-    turnId: string,
+    turnId?: string,
   ): Promise<RuntimeResultRecord[]>;
 
   // ── Tool Calls ──
@@ -687,12 +687,14 @@ export interface ExportStore {
    * List a session's exports, ordered by `(producerRuntimeId, recordAs,
    * revision)` ascending — so within each export series revisions run oldest to
    * newest. Optionally narrowed to one `producerRuntimeId` and/or `recordAs`.
+   * `latestOnly` returns only the highest revision of each matching series.
    */
   listRuntimeExports(
     sessionId: string,
     filter?: {
       readonly producerRuntimeId?: string;
       readonly recordAs?: string;
+      readonly latestOnly?: boolean;
     },
   ): Promise<readonly RuntimeExportRecord[]>;
 }

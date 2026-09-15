@@ -4,9 +4,10 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import type { Context } from "hono";
+import { Hono, type Context } from "hono";
 import {
   makeErrorHandler,
+  readJsonBody,
   redactSensitiveQueryParamsInText,
 } from "../../src/api-error.js";
 import { SessionLockTimeoutError } from "../../src/lib/session-lock.js";
@@ -127,4 +128,27 @@ describe("redactSensitiveQueryParamsInText", () => {
     expect(logged).not.toContain("owner-secret");
     expect(logged).toContain("session_token=[redacted]");
   });
+});
+
+describe("readJsonBody", () => {
+  it.each(["null", "[]", "42", '"text"', "true", "{"])(
+    "rejects non-object or malformed input %s before dispatch",
+    async (body) => {
+      const dispatched = vi.fn();
+      const app = new Hono();
+      app.post("/", async (c) => {
+        const parsed = await readJsonBody(c);
+        if (parsed instanceof Response) return parsed;
+        dispatched(parsed.body);
+        return c.json({ ok: true });
+      });
+      const response = await app.request("/", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      });
+      expect(response.status).toBe(400);
+      expect(dispatched).not.toHaveBeenCalled();
+    },
+  );
 });

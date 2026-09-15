@@ -371,6 +371,7 @@ export async function finalizeExecution(
     result: FinalizableResult,
     deferPostCommit?: (fn: () => Promise<void>) => void,
   ) => ({
+    ...(args.signal ? { signal: args.signal } : {}),
     ...(hookPipeline ? { hookPipeline } : {}),
     ...(eventBus ? { eventBus } : {}),
     ...(emitter ? { emitter } : {}),

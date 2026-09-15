@@ -1,5 +1,6 @@
 import {
   act,
+  fireEvent,
   render,
   renderHook,
   screen,
@@ -13,6 +14,11 @@ import { registerLlmSettings } from "../../registry/llm.js";
 import { registerPluginUserSettings } from "../../registry/plugin.js";
 import { useLlmSlotIds } from "../use-llm-slot-ids.js";
 import { PluginSettingsPane } from "../PluginSettingsPane.js";
+import { LlmAdvancedPane } from "../LlmAdvancedPane.js";
+
+vi.mock("../use-model-capability.js", () => ({
+  useModelCapability: () => undefined,
+}));
 
 const mocks = vi.hoisted(() => ({
   store: null as unknown as SettingsStore,
@@ -46,6 +52,18 @@ beforeEach(async () => {
     saveSecrets: async () => undefined,
   });
   registerLlmSettings(mocks.store);
+  mocks.llm = {
+    configured: true,
+    providers: [],
+    slots: {
+      story: {
+        provider: "fixture",
+        model: "story-model",
+        tag: "text",
+        protocol: "openai-chat-v1",
+      },
+    },
+  };
   mocks.plugins = [
     {
       id: "fixture",
@@ -88,6 +106,40 @@ beforeEach(async () => {
     ["story"],
   );
   await mocks.store.init();
+});
+
+it("edits saved parameters for a default-only server configuration", async () => {
+  mocks.plugins = [];
+  mocks.llm = { ...mocks.llm, slots: { default: mocks.llm.slots.story } };
+  await mocks.store.set("llm.paramOverrides", {
+    default: { temperature: 0.4 },
+  });
+  render(<LlmAdvancedPane />);
+  expect(
+    (
+      screen.getByRole("combobox", {
+        name: i18n.t("settings.selectSlot"),
+      }) as HTMLSelectElement
+    ).value,
+  ).toBe("default");
+  const input = screen.getByRole("spinbutton", { name: "Temperature" });
+  expect((input as HTMLInputElement).value).toBe("0.4");
+  fireEvent.change(input, { target: { value: "0.7" } });
+  fireEvent.blur(input);
+  await waitFor(() =>
+    expect(mocks.store.get("llm.paramOverrides")).toEqual({
+      default: { temperature: 0.7 },
+    }),
+  );
+});
+
+it("disables generation inputs when no role is available", () => {
+  mocks.plugins = [];
+  mocks.llm = { ...mocks.llm, slots: {} };
+  render(<LlmAdvancedPane />);
+  for (const input of screen.getAllByRole("spinbutton"))
+    expect(input.matches(":disabled")).toBe(true);
+  expect(mocks.store.get("llm.paramOverrides")).toEqual({});
 });
 
 it("keeps saved, runtime and user-selected roles in both settings panes after live edits", async () => {

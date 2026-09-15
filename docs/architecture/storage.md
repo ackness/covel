@@ -91,7 +91,12 @@ Removing the session's submitted-block record remains the explicit reset path.
 
 Only the latest full checkpoint is retained. Snapshot history already exists
 inside the checkpoint; retaining a full checkpoint for every action would grow
-quadratically. The compact `commits` table stores only revision/action metadata.
+quadratically. The compact `commits` table stores revision/action metadata and
+a fixed-length `sha256:` digest of the recursively key-sorted checkpoint JSON.
+BrowserVault schema v4 converts v3's historical JSON strings into these digests
+one record at a time in an atomic upgrade transaction. Checkpoints, worlds and
+pending recovery markers remain intact; replayed action IDs still reject changed
+content. Hashing new commits completes before their IndexedDB write transaction.
 
 `BrowserVault` recursively rejects credential-shaped fields such as `apiKey`,
 access/refresh tokens, passwords, private keys, and client secrets before any

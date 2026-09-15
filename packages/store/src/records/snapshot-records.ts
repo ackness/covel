@@ -4,7 +4,11 @@
  * Split out of `../types.ts` by domain; re-exported there for compatibility.
  */
 
-import type { CharacterRecord, StateEntryRecord } from "./state-records.js";
+import type {
+  CharacterRecord,
+  StateEntryRecord,
+  StateSchemaRecord,
+} from "./state-records.js";
 import type {
   LorebookEntryRecord,
   SessionSummaryRecord,
@@ -12,7 +16,11 @@ import type {
 } from "./memory-records.js";
 import type { PluginDataRecord } from "./plugin-records.js";
 import type { SessionRecord } from "./session-records.js";
-import type { ExecutionContext, InputSlot } from "@covel/shared";
+import type {
+  ExecutionContext,
+  InputSlot,
+  RuntimeExportRecord,
+} from "@covel/shared";
 
 /**
  * Materialized state snapshot.
@@ -36,6 +44,10 @@ interface SnapshotPayloadBase {
   readonly turnId: string;
   readonly characters: readonly CharacterRecord[];
   readonly stateEntries: readonly StateEntryRecord[];
+  /** Frozen table definitions. Legacy v3 payloads omit this field. */
+  readonly stateSchemas?: readonly StateSchemaRecord[];
+  /** Latest visible revision of every export series; absent in legacy v3. */
+  readonly runtimeExports?: readonly RuntimeExportRecord[];
   readonly pluginData: readonly PluginDataRecord[];
   readonly workingMemory: readonly WorkingMemoryRecord[];
   /**
@@ -85,6 +97,16 @@ interface SnapshotPayloadBase {
    * Empty string when there are no messages yet.
    */
   readonly messagesCursor: string;
+  /**
+   * Chat history boundary, independent of the model conversation cursor.
+   * Capture every id in the newest millisecond so later same-time messages
+   * cannot enter an older fork. Null means empty; absent legacy v3 payloads
+   * use the snapshot timestamp as a best-effort cutoff.
+   */
+  readonly displayMessagesBoundary?: {
+    readonly createdAt: string;
+    readonly ids: readonly string[];
+  } | null;
 }
 
 /**

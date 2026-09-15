@@ -1,3 +1,4 @@
+import { compactProviderRequests } from "@covel/shared";
 import type {
   LLMProviderRequest,
   LLMResponseFormat,
@@ -50,7 +51,7 @@ export function buildLlmCallingPayload(
 ): Record<string, unknown> {
   return {
     ...(input.providerRequests?.length
-      ? { providerRequests: input.providerRequests }
+      ? { providerRequests: compactProviderRequests(input.providerRequests) }
       : {}),
     ...(input.responseFormat ? { responseFormat: input.responseFormat } : {}),
     ...(input.defaults ? { defaults: input.defaults } : {}),

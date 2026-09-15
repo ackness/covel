@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { createGateway } from "../src/gateway.js";
 import { createPresetRegistry } from "../src/preset-registry.js";
 import { createProviderRegistry } from "../src/provider-registry.js";
@@ -153,10 +153,6 @@ function setup() {
 }
 
 describe("gateway + slotOverrides", () => {
-  beforeEach(() => {
-    __internals.presetRefs.clear();
-  });
-
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -194,7 +190,7 @@ describe("gateway + slotOverrides", () => {
 
     // Registry state restored after the call completes.
     expect(presetRegistry.hasPreset("custom_abc")).toBe(false);
-    expect(__internals.presetRefs.size).toBe(0);
+    expect(__internals.presetRefs.get(presetRegistry)?.size ?? 0).toBe(0);
   });
 
   it("forwards slot-level parameter overrides into providerRequestMetadata", async () => {
@@ -524,7 +520,7 @@ describe("gateway + slotOverrides", () => {
 
     // Cleanup happened even though the generator completed normally.
     expect(presetRegistry.hasPreset("custom_stream")).toBe(false);
-    expect(__internals.presetRefs.size).toBe(0);
+    expect(__internals.presetRefs.get(presetRegistry)?.size ?? 0).toBe(0);
   });
 
   it("rolls back the overlay even when the call throws", async () => {
@@ -597,7 +593,7 @@ describe("gateway + slotOverrides", () => {
 
     // Even with the throw, the registry must be clean again.
     expect(presetRegistry.hasPreset("custom_err")).toBe(false);
-    expect(__internals.presetRefs.size).toBe(0);
+    expect(__internals.presetRefs.get(presetRegistry)?.size ?? 0).toBe(0);
     expect(calls).toHaveLength(0); // we never reach the recorder
   });
 
@@ -771,7 +767,8 @@ describe("gateway + slotOverrides", () => {
       started += 1;
       if (started === 2) {
         // Both overlays are applied simultaneously right now.
-        refsWhileInterleaved = __internals.presetRefs.size;
+        refsWhileInterleaved =
+          __internals.presetRefs.get(presetRegistry)?.size ?? 0;
         releaseBoth();
       }
       await bothInFlight; // hold call 1 open until call 2 has started
@@ -840,7 +837,7 @@ describe("gateway + slotOverrides", () => {
 
     // Full rollback: no outstanding refs, no leaked registrations, and no
     // provider was ever registered under the shared name.
-    expect(__internals.presetRefs.size).toBe(0);
+    expect(__internals.presetRefs.get(presetRegistry)?.size ?? 0).toBe(0);
     expect(presetRegistry.listPresets()).toHaveLength(0);
     expect(providerRegistry.hasProvider("openai")).toBe(false);
   });

@@ -102,7 +102,7 @@ export function createVisibleSlotIds(args: {
 }): string[] {
   const out: string[] = [];
   const add = (slotId: string | undefined) => {
-    if (!slotId || slotId === "default" || out.includes(slotId)) return;
+    if (!slotId || out.includes(slotId)) return;
     out.push(slotId);
   };
   if (args.isConfigured) {

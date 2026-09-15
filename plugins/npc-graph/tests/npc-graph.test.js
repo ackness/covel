@@ -480,9 +480,9 @@ describe("upsert-npc-graph", () => {
     // relation revised in three separate calls of the same turn — the later
     // versions overwrote the earlier rows' provenance.
     const turn = { ...ctx, turnNumber: 7 };
-    const revise = (strength, fact) =>
-      executeAndCommit(
-        upsertTool,
+    const pending = [];
+    const revise = async (strength, fact) => {
+      const result = await upsertTool.execute(
         {
           nodes: [
             { name: "A", type: "individual", summary: "First subject." },
@@ -498,13 +498,17 @@ describe("upsert-npc-graph", () => {
             },
           ],
         },
-        turn,
-        store,
+        { ...turn, pendingProposals: pending },
       );
+      pending.push(...getPendingProposals(result));
+      return result;
+    };
 
     const r1 = await revise(0.5, "Initial trust.");
     const r2 = await revise(0.1, "Growing doubt.");
     const r3 = await revise(-0.6, "Open betrayal.");
+    for (const result of [r1, r2, r3])
+      await applyPendingPluginData(result, store);
 
     const ids = [
       r1.edges.results[0].id,

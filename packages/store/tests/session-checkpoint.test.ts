@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createMemoryStore,
   exportSessionCheckpoint,
@@ -8,12 +8,48 @@ import {
   makeCharacter,
   makeEvent,
   makeMessage,
+  makeRuntimeResult,
   makeSession,
+  makeTurnResult,
   makeTurnMessage,
   makeWorld,
 } from "../src/contract/test-fixtures.js";
 
 describe("session checkpoint transfer", () => {
+  it("exports runtime results in one session query, including interrupted turns", async () => {
+    const source = createMemoryStore();
+    await source.createSession(makeSession({ id: "session" }));
+    for (let i = 0; i < 20; i++) {
+      await source.saveTurnResult(
+        makeTurnResult({ sessionId: "session", turnId: `turn-${i}` }),
+      );
+      await source.saveRuntimeResult(
+        makeRuntimeResult({ sessionId: "session", turnId: `turn-${i}` }),
+      );
+    }
+    const interrupted = makeRuntimeResult({
+      sessionId: "session",
+      turnId: "interrupted",
+    });
+    await source.saveRuntimeResult(interrupted);
+    await source.saveRuntimeResult(
+      makeRuntimeResult({ sessionId: "other", turnId: "interrupted" }),
+    );
+    const list = vi.spyOn(source, "listRuntimeResults");
+    const checkpoint = await exportSessionCheckpoint(source, "session", {
+      revision: 1,
+      actionId: "export",
+    });
+    expect(list).toHaveBeenCalledExactlyOnceWith("session");
+    expect(checkpoint.runtimeResults).toHaveLength(21);
+    expect(checkpoint.runtimeResults).toContainEqual(interrupted);
+    const target = createMemoryStore();
+    await replaceSessionFromCheckpoint(target, checkpoint);
+    expect(await target.listRuntimeResults("session")).toEqual(
+      checkpoint.runtimeResults,
+    );
+  });
+
   it("exports and atomically restores durable session domains", async () => {
     const source = createMemoryStore();
     const target = createMemoryStore();

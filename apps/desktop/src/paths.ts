@@ -149,10 +149,6 @@ function resolveBundledPluginsDir(): string {
   return path.join(resolveProjectRoot(), "plugins");
 }
 
-function resolveBundledLlmToml(): string {
-  return path.join(resolveProjectRoot(), "llm.toml");
-}
-
 /**
  * Find tsx CLI entry point. Packaged apps include node_modules under
  * `resources/server`.
@@ -207,11 +203,9 @@ export interface ResolvedPaths {
   readonly userLlmTomlPath: string;
   readonly userKeysEnvPath: string;
   readonly userSettingsJsonPath: string;
-  /** llm.toml the server actually reads — user override wins. */
-  readonly effectiveLlmToml: string;
-  /** Bundled worlds first, then user worlds. Filtered by existence. */
+  /** Bundled worlds first, then user worlds. Keep missing paths in position. */
   readonly worldsDirs: readonly string[];
-  /** Bundled plugins first, then user plugins. Filtered by existence. */
+  /** Bundled plugins first, then user plugins. Keep missing paths in position. */
   readonly pluginsDirs: readonly string[];
   readonly logRotation: { maxSizeMb: number; maxFiles: number };
 }
@@ -267,26 +261,10 @@ export function ensureUserPaths(): ResolvedPaths {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  // Seed user llm.toml from bundle on first launch so the Settings UI has
-  // something visible to edit.
-  const userLlm = userLlmTomlPath();
-  const bundledLlm = resolveBundledLlmToml();
-  if (!fs.existsSync(userLlm) && fs.existsSync(bundledLlm)) {
-    try {
-      fs.copyFileSync(bundledLlm, userLlm);
-    } catch (err) {
-      console.warn("[paths] Could not seed user llm.toml:", err);
-    }
-  }
-
-  const effectiveLlmToml = fs.existsSync(userLlm) ? userLlm : bundledLlm;
-
-  const worldsDirs = [resolveBundledWorldsDir(), userWorldsDir()].filter((p) =>
-    fs.existsSync(p),
-  );
-  const pluginsDirs = [resolveBundledPluginsDir(), userPluginsDir()].filter(
-    (p) => fs.existsSync(p),
-  );
+  // The loader skips missing directories without changing their trust tier.
+  // Keep the bundled root first even when installation resources are missing.
+  const worldsDirs = [resolveBundledWorldsDir(), userWorldsDir()];
+  const pluginsDirs = [resolveBundledPluginsDir(), userPluginsDir()];
 
   return {
     covelHome: home,
@@ -296,10 +274,9 @@ export function ensureUserPaths(): ResolvedPaths {
     logsDir: userLogsDir(),
     userPluginsDir: userPluginsDir(),
     userWorldsDir: userWorldsDir(),
-    userLlmTomlPath: userLlm,
+    userLlmTomlPath: userLlmTomlPath(),
     userKeysEnvPath: userKeysEnvPath(),
     userSettingsJsonPath: userSettingsJsonPath(),
-    effectiveLlmToml,
     worldsDirs,
     pluginsDirs,
     logRotation: logRotationConfig(),

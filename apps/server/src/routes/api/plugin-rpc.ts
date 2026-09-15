@@ -228,8 +228,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
     // could be forged by a third-party plugin claiming `core-plugin` to
     // auto-bypass approval. `entry.source` is set by bootstrap from the
     // discovery pipeline, which clamps non-first-dir plugins to 'community'
-    // so they can't escalate. Fallback to id-prefix detection (via
-    // getPluginTrustInfo) when source is absent for defense in depth.
+    // so they can't escalate. A missing source remains community-trusted.
     const entry = pluginRegistry.get(body.pluginId);
     const trustInfo = getPluginTrustInfo(body.pluginId, entry?.source);
     if (trustInfo.source === "community") {
@@ -563,7 +562,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   }
 
   // Approval gate. Look up the resolved entry first so we know its
-  // trust level, then ask the gate whether the call can proceed. Builtin
+  // trust level, then ask the gate whether the call can proceed.
   // Builtin trust auto-allows; community trust either re-uses a cached
   // session approval or returns approval-required for the dialog flow.
   //
@@ -574,10 +573,8 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   // Exception (H2): a community plugin that migrated its rpc actions to a
   // deferred `entry` module has NO registered declaration yet — community
   // entry code must not run before the approval gate clears. So on a miss
-  // for a plugin with a pending entry we route through the gate at community
-  // trust; once the gate allows we activate the entry and let the dispatcher
-  // re-resolve. Builtin entries ran at boot, so their misses stay
-  // hard 404s.
+  // for a plugin with a pending entry we resolve its discovery trust before
+  // activation. This also permits retrying builtin entries that failed at boot.
   //
   // Framework default actions are namespace-less but still need a
   // canonical sentinel for the request shape. The dispatcher requires
@@ -596,7 +593,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
   const hasPendingPluginEntry = c.get("hasPendingPluginEntry");
   let entryTrust: "builtin" | "community" = "community";
   let entryDescription: string | undefined;
-  // When true, the action belongs to a not-yet-activated community entry —
+  // When true, the action belongs to a not-yet-activated entry —
   // activate the entry after the gate allows, then dispatch (which re-resolves).
   let pendingEntryActivation = false;
   const pluginEntry =
@@ -620,11 +617,10 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       );
     }
   } else if (hasPendingPluginEntry?.(pluginId)) {
-    // Deferred community entry — trust is community, no description until the
-    // entry runs. Truly-unknown actions on such a plugin make one round-trip
-    // through approval before 404ing (we can't know the action exists without
-    // running the untrusted entry, and that must wait for approval).
-    entryTrust = "community";
+    // Pending includes failed builtin activations. Unknown sources remain
+    // community-trusted, just as on the runtime-level RPC path above.
+    const source = c.get("pluginRegistry").get(pluginId)?.source;
+    entryTrust = getPluginTrustInfo(pluginId, source).source;
     pendingEntryActivation = true;
   } else {
     return c.json(

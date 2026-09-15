@@ -2,6 +2,11 @@
 
 Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI 的情况下，仅通过 HTTP 请求完成一局完整的 AI RPG 游戏。
 
+JSON object request bodies reject `null`, arrays, and scalar values with `400`
+before dispatch. Approval decisions validate `decision` and `scope` enums before
+consuming a pending approval. Event injection validates string identifiers and
+an object payload before publishing.
+
 ## 概览
 
 - **基础 URL**: `http://localhost:3001/api/`
@@ -242,18 +247,18 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 世界管理
 
-| 方法   | 路径                                   | 描述                                                                                                 |
-| ------ | -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| GET    | `/api/worlds`                          | 列出所有世界                                                                                         |
-| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                                         |
-| POST   | `/api/worlds`                          | 创建/更新世界                                                                                        |
-| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                      |
-| DELETE | `/api/worlds/:id`                      | 删除世界（内置 `source:"file"` 世界禁止删除，返回 403；hosted / 生产 MemoryStore 需 operator token） |
-| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                                            |
-| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                                         |
-| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                     |
-| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                           |
-| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                     |
+| 方法   | 路径                                   | 描述                                                                                                                                                                        |
+| ------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/worlds`                          | 列出所有世界                                                                                                                                                                |
+| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                                                                                                                |
+| POST   | `/api/worlds`                          | 创建/更新世界                                                                                                                                                               |
+| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                                                                                             |
+| DELETE | `/api/worlds/:id`                      | 删除世界（内置 `source:"file"` 世界返回 403；文件世界按存储绑定与清单 ID 定位，缺失或歧义返回 `409 world_package_unresolved`；hosted / 生产 MemoryStore 需 operator token） |
+| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                                                                                                                   |
+| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                                                                                                                |
+| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                                                                                            |
+| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                                                                                                  |
+| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                            |
 
 ### 会话管理
 
@@ -632,6 +637,10 @@ Fork 不继承 community server-code grant；child 中对应插件保持未激�
 | GET  | `/api/app-update/latest`       | 仅桌面：通过当前代理查询 GitHub 最新稳定 Release；返回 `{ version, name, publishedAt }`                                                                                                                                                                                |
 | PUT  | `/api/config/data-root`        | 仅桌面：改写 `config.toml` 的 `data_root` 行，需要重启服务器                                                                                                                                                                                                           |
 | POST | `/api/config/open-folder`      | 仅桌面：打开 config/data/logs 目录或 `llm.toml` / `keys.env`                                                                                                                                                                                                           |
+
+#### PUT /api/config/keys
+
+桌面 `PUT /api/config/keys` 接受 `{ provider: string | null }`：空字符串或 `null` 删除密钥。整批输入先校验，含内部换行或其它类型时返回 `400`，文件和运行时均保持原状；原子写入成功后才发布运行时密钥。Electron 保存完整密钥列表时，会将已有但不再出现的 provider 转成显式删除，清空最后一个密钥也会同时清除文件和运行时值。仅在 sidecar 连接不可用时回退到本地保存，HTTP 拒绝不会触发覆盖。
 
 #### GET /api/ui-specs
 
@@ -2559,8 +2568,10 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 
 1. 创建新 sessionId（`{worldId}-{uuid8}`）；
 2. 从当前 schema v3 snapshot payload 恢复 locale / activePlugins / status / phase / completedPlayerTurns / setupRuntimes / presetId / runtimeModelOverrides。快照中 `status: 'ended'` 会被钳制为 `paused`——ended 是终态且没有取消结束的 API，fork 的目的就是继续游玩；
-3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session；
+3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session。新 v3 payload 用 `stateSchemas` 冻结表结构，空数组表示快照时没有表；fork 重建表 ID，并将子表结构写入子快照，父会话后续修改不影响再次分叉。旧 v3 缺少该字段时兼容使用父会话当前结构；任何状态记录缺少对应表结构时返回 `409 snapshot_schema_missing` 并回滚，不返回状态不完整的分支；
 4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；按 `compactedMessageSummaryIds` 复制 `payload.sessionSummaries` 中快照时刻实际引用的压缩摘要，为子 session 重建摘要 ID，并重写消息上的 `compactedAtTurnId`。因此父会话后续滚动摘要和重标历史消息不会改变旧快照的分叉结果。早期 schema v3 payload 没有精确映射时回退到父消息当前标签；没有 `sessionSummaries` 时则保留原始消息正文并清除压缩标签，避免产生孤儿引用。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
+   界面聊天记录另按 `payload.displayMessagesBoundary` 复制，保留正文、角色、元数据和显示顺序，重建消息 ID，并为复制消息中的媒体建立子会话引用。消息、状态和运行时导出中的所有媒体都必须已对父会话授权，否则整体返回 `403 media_reference_forbidden`；仅知道媒体 ID 不会获得访问权。边界保存最新消息时间戳及该毫秒内全部已存在的消息 ID，避免混入快照后同毫秒的新消息；边界为 `null` 表示空历史，边界 ID 缺失同样返回 `409 cursor_missing`。早期 v3 快照没有此字段时，以快照 `createdAt` 为兼容截止时间，无法还原该毫秒内的精确成员。子快照写入新的消息边界，支持继续分叉。
+   新 v3 payload 的 `runtimeExports` 冻结各生产者/名称在捕获时可见的最新导出修订及其值；空数组表示没有导出。分叉、连续分叉及检查点迁移均使用这份记录，后续同毫秒提交不会混入。早期 v3 缺少该字段时才按 `createdAt` 截止兼容读取，无法重建该毫秒内的精确历史。捕获使用 `listRuntimeExports(sessionId, { latestOnly: true })`，SQL 在数据库内筛选每组最高修订，避免读取全部历史 JSON。自动快照仍使用全部提案提交完成后的实际捕获时间。
 5. 写入一个 `kind="fork"` 的快照到子 session，`parentId` 指向源 snapshot，供 provenance 追踪；
 6. 在 eventBus 上广播 `session.forked`（SSE topic=`session`）。
 
@@ -3155,12 +3166,14 @@ COVEL_MEDIA_CLEANUP_ENABLED=true \
 
 Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 
-| 端点                     | 帧形态                                     | 信封                                                            | 客户端                                                            | 说明                                                          |
-| ------------------------ | ------------------------------------------ | --------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------- |
-| `POST /api/actions`      | data-only（`data: {...}`，无 `event:` 头） | `SseEnvelope`（带 `requestId/traceId/flowId/seq`）              | `fetch()` + `ReadableStream`（`api.ts:sendAction`）               | 回合内主流：narrative / runtime lifecycle / 工具调用 trace 等 |
-| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: {...}`）   | `ProtocolEvent`（带 `id/source`），并由 server 经 EventBus 广播 | `EventSource` + `addEventListener('<type>')`（`subscription.ts`） | 回合外辅助通道：跨 session 通知 / 持久订阅 / 重连补放         |
+| 端点                     | 帧形态                                     | 信封                                                        | 客户端                                              | 说明                                                          |
+| ------------------------ | ------------------------------------------ | ----------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------- |
+| `POST /api/actions`      | data-only（`data: {...}`，无 `event:` 头） | `SseEnvelope`（带 `requestId/traceId/flowId/seq`）          | `fetch()` + `ReadableStream`（`api.ts:sendAction`） | 回合内主流：narrative / runtime lifecycle / 工具调用 trace 等 |
+| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: {...}`）   | `SubscriptionEvent`（带 `id/topic/type`），由 EventBus 广播 | `fetch()` + `ReadableStream`（`subscription.ts`）   | 回合外辅助通道：跨 session 通知 / 持久订阅 / 重连补放         |
 
 > 关键差异：`/api/actions` 使用 data-only 帧，前端**无法**通过 `EventSource.addEventListener` 订阅；`/api/events/stream` 才是命名事件。
+
+客户端流解析支持 LF、CRLF 和 CR 分隔；只在空行处提交完整事件，EOF 不补发未结束的帧。取消或事件处理失败时释放 reader 并取消未结束的响应；已关闭的订阅不会因迟到的响应恢复连接状态。GET 重试等待同样响应取消，不会因自定义 abort reason 继续重试或弹出网络错误。
 
 ### 事件类型枚举（`CovelEventType`）
 
@@ -3328,7 +3341,20 @@ opening a file does not reload the running gateway. Use
 returning `201` with `restartRequired: false`. The world is immediately available
 through `GET /api/worlds`, including on hosts without a recursive file watcher.
 A failed activation removes only the new package directory so installation can
-be retried. Plugin installation still returns `restartRequired: true`.
+be retried. Uploaded worlds carry `source: "generated-file"` and a binding to
+the user world directory, so DELETE works immediately. An existing world ID
+returns 409 without overwriting its record. Plugin installation still returns
+`restartRequired: true`.
+
+Generated file worlds are written in a hidden staging directory and published
+only when complete. Existing packages and database identities are preserved;
+a collision or activation failure is reported through an SSE error event.
+Failed activation removes only the package created by that request.
+
+Desktop directory imports also validate a staged copy before publication. A
+linked manifest, copy failure, or destination inside the source directory is
+rejected without leaving a partially installed package. Hidden staging
+directories are excluded from world and plugin discovery.
 
 Installation and discovery share `COVEL_USER_WORLDS_DIR` and
 `COVEL_USER_PLUGINS_DIR`, defaulting to `worlds/` and `plugins/` under

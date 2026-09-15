@@ -242,16 +242,28 @@ describe("Plugin RPC approval flow", () => {
     expect(second.status).toBe(202); // fresh approvalId, still pending
   });
 
-  it("POST decision with invalid body returns 400", async () => {
-    const initial = await dispatchRpc(app, "sess-approval-1");
+  it("rejects invalid decisions without consuming the pending approval", async () => {
+    const initial = await clearServerCodePhase(app, "sess-approval-1");
     const { approvalId } = (await initial.json()) as { approvalId: string };
-
-    const res = await app.request(`/api/approvals/${approvalId}/decision`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ decision: "maybe" }),
-    });
-    expect(res.status).toBe(400);
+    for (const body of [
+      null,
+      [],
+      { decision: "maybe" },
+      { decision: "allow", scope: false },
+      { decision: "allow", scope: 0 },
+      { decision: "allow", scope: "" },
+    ]) {
+      const response = await app.request(
+        `/api/approvals/${approvalId}/decision`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      expect(response.status).toBe(400);
+      expect(gate.getPending(approvalId)).toBeDefined();
+    }
   });
 
   it("requires session scope for approvals that unlock runtime code", async () => {

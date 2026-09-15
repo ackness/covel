@@ -37,7 +37,9 @@ export function createRuntimeMethods(state: MemoryState): MemoryStoreMethods {
 
     async listRuntimeResults(sessionId, turnId) {
       return state.runtimeResults.filter(
-        (r) => r.sessionId === sessionId && r.turnId === turnId,
+        (r) =>
+          r.sessionId === sessionId &&
+          (turnId === undefined || r.turnId === turnId),
       );
     },
 

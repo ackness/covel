@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseJsonSseData, readSseStream } from "../sse.js";
 
 function responseFromChunks(chunks: readonly string[]): Response {
@@ -14,6 +14,62 @@ function responseFromChunks(chunks: readonly string[]): Response {
 }
 
 describe("readSseStream", () => {
+  it("handles split CRLF and CR boundaries and discards an incomplete final frame", async () => {
+    const messages: string[] = [];
+    const response = responseFromChunks([
+      "data:\r",
+      "\ndata: second\r\n\r",
+      "\ndata: third\r\rdata: uncommitted\n",
+    ]);
+    await readSseStream({
+      response,
+      parse: (data) => data,
+      onMessage: (data) => messages.push(data),
+    });
+    expect(messages).toEqual(["\nsecond", "third"]);
+    expect(response.body?.locked).toBe(false);
+  });
+
+  it("cancels a blocked read and releases the stream on abort", async () => {
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream({ cancel }));
+    const controller = new AbortController();
+    const onMessage = vi.fn();
+    const pending = readSseStream({
+      response,
+      signal: controller.signal,
+      parse: (data) => data,
+      onMessage,
+    });
+    controller.abort();
+    await pending;
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body?.locked).toBe(false);
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+
+  it("cancels the source when an event consumer throws", async () => {
+    const cancel = vi.fn();
+    const response = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("data: event\n\n"));
+        },
+        cancel,
+      }),
+    );
+    await expect(
+      readSseStream({
+        response,
+        parse: (data) => data,
+        onMessage() {
+          throw new Error("consumer failed");
+        },
+      }),
+    ).rejects.toThrow("consumer failed");
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body?.locked).toBe(false);
+  });
   it("reads data-only JSON events split across chunks", async () => {
     const events: unknown[] = [];
 

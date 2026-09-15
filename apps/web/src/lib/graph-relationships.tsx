@@ -1,14 +1,27 @@
 import { useTranslation } from "react-i18next";
-import type { ForceLink, ForceNode } from "./graph-types.js";
-
-export function endpointId(endpoint: ForceLink["source"]): string {
-  return typeof endpoint === "string" ? endpoint : endpoint.id;
-}
+import { endpointId, type ForceLink, type ForceNode } from "./graph-types.js";
 
 export function linkTouches(link: ForceLink, nodeId: string): boolean {
   return (
     endpointId(link.source) === nodeId || endpointId(link.target) === nodeId
   );
+}
+
+/** Compute once per selection/topology change, outside the per-node painter. */
+export function connectedNodeIds(
+  links: readonly ForceLink[],
+  selectedId: string | undefined,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  if (!selectedId) return ids;
+  ids.add(selectedId);
+  for (const link of links) {
+    if (linkTouches(link, selectedId)) {
+      ids.add(endpointId(link.source));
+      ids.add(endpointId(link.target));
+    }
+  }
+  return ids;
 }
 
 /** Accessible navigation also works without interpreting the canvas geometry. */

@@ -5,13 +5,51 @@
  * worldData descriptor so generated worlds use the hand-authored import path.
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import type { GeneratedWorldPackageContent } from "./types.js";
 
 const GENERATED_WORLD_DATA_PATH = "data/world.data.yaml";
 const GENERATED_DIMENSIONS_PATH = "data/dimensions.yaml";
+
+/** Publish one complete package without overwriting an existing world. */
+export async function writeWorldPackage(
+  outputDir: string,
+  id: string,
+  manifest: Record<string, unknown>,
+  lore: string,
+  locale: string,
+  packageContent?: GeneratedWorldPackageContent,
+): Promise<string[]> {
+  const finalDir = path.join(outputDir, id);
+  try {
+    await lstat(finalDir);
+    throw new Error(`World package already exists: ${id}`);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  await mkdir(outputDir, { recursive: true });
+  const staging = await mkdtemp(path.join(outputDir, ".covel-create-"));
+  try {
+    const files = await writeWorldDataFiles(staging, manifest, packageContent);
+    await writeFile(path.join(staging, `WORLD.${locale}.md`), lore, "utf8");
+    await writeFile(path.join(staging, "WORLD.md"), lore, "utf8");
+    await writeFile(
+      path.join(staging, "world.yaml"),
+      stringifyYaml(manifest, { lineWidth: 0 }),
+      "utf8",
+    );
+    // Concurrent creators race only at publication; a complete winner is
+    // non-empty and cannot be replaced by the loser's directory rename.
+    await rename(staging, finalDir);
+    return [...files, "world.yaml", `WORLD.${locale}.md`, "WORLD.md"].map(
+      (file) => `${id}/${file}`,
+    );
+  } finally {
+    await rm(staging, { recursive: true, force: true }).catch(() => {});
+  }
+}
 
 /**
  * Write all generated structured text through a v1 worldData descriptor.

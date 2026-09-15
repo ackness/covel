@@ -226,12 +226,21 @@ describe("world routes", () => {
     const metadata = world?.metadata as Record<string, unknown>;
     expect(metadata.publishing).toEqual({ status: "draft" });
     expect(metadata.dimensions).toEqual(makeDimensions("New Reach", "Guild"));
+    expect(world?.dimensions).toEqual(makeDimensions("New Reach", "Guild"));
+    expect((await res.json()).dimensions).toEqual(
+      makeDimensions("New Reach", "Guild"),
+    );
   });
 
   it("DELETE /api/worlds/:id removes generated-file world packages", async () => {
     const worldsDir = await mkdtemp(path.join(tmpdir(), "covel-delete-world-"));
     const worldRoot = path.join(worldsDir, "generated-world");
     await mkdir(worldRoot, { recursive: true });
+    await writeFile(
+      path.join(worldRoot, "world.yaml"),
+      "id: generated-world\n",
+      "utf8",
+    );
     app = createTestApp(store, {} as PluginRegistry, {
       worldsDirs: [worldsDir],
     });
@@ -287,6 +296,17 @@ describe("world routes", () => {
       createdAt: now,
       updatedAt: now,
     });
+
+    const patch = await app.request("/api/worlds/built-in-world", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Edited",
+        metadata: { source: "generated", storage: { backend: "memory" } },
+      }),
+    });
+    expect(patch.status).toBe(200);
+    expect((await patch.json()).metadata).toEqual({ source: "file" });
 
     const remove = await app.request("/api/worlds/built-in-world", {
       method: "DELETE",
@@ -423,6 +443,18 @@ describe("world routes", () => {
       '[geography]\n{\n  "regions": [\n    {\n      "name": "North",\n      "description": "North description",\n      "climate": "temperate"\n    }\n  ]\n}',
     );
   });
+
+  it.each(["world-data/preflight", "sync-data", "sync-dimensions"])(
+    "rejects null body for %s",
+    async (suffix) => {
+      const response = await app.request(`/api/worlds/test-world/${suffix}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "null",
+      });
+      expect(response.status).toBe(400);
+    },
+  );
 
   it("POST /api/worlds/:id/world-data/preflight reports a read-only import plan", async () => {
     const { worldsDir } = await makeWorldDataFixture();

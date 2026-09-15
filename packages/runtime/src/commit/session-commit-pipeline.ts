@@ -43,6 +43,7 @@ export function createCommitPipeline(
   hookPipeline?: HookPipeline,
   eventBus?: EventBus,
   emitter?: TurnEmitter,
+  signal?: AbortSignal,
 ): CommitPipeline {
   const handlers = createCommitHandlers(store);
 
@@ -70,6 +71,7 @@ export function createCommitPipeline(
     proposal: Proposal,
     defer?: (fn: () => Promise<void>) => void,
   ): Promise<CommitResult> {
+    signal?.throwIfAborted();
     // `handlerMap` is a correlated map (each value expects its own proposal
     // variant). Dispatch by `proposal.type` is sound at runtime, so we erase
     // to the uniform `CommitHandler` here — the single, localized cast for the
@@ -95,6 +97,7 @@ export function createCommitPipeline(
         turnId: proposal.turnId,
         pluginId: proposal.source.pluginId,
         runtimeId: proposal.source.runtimeId,
+        signal,
       };
       const preResult = await hookPipeline.run(
         "PreStateCommit",
@@ -102,6 +105,8 @@ export function createCommitPipeline(
         { proposal },
         { eventBus, emitter },
       );
+      // Parent cancellation stops the whole batch, including later proposals.
+      signal?.throwIfAborted();
       if (preResult.action === "abort") {
         return {
           committed: false,
@@ -243,6 +248,7 @@ export function createCommitPipeline(
             await commitWith(txHandlers, tx, p, (fn) => postCommit.push(fn)),
           );
         }
+        signal?.throwIfAborted();
         return txResults;
       });
       // Transaction committed — flush in proposal order. A failing emit/hook

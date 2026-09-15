@@ -12,6 +12,12 @@ export function rebindSnapshotPayloadSession(
     ...payload,
     characters: rebind(payload.characters),
     stateEntries: rebind(payload.stateEntries),
+    ...(payload.stateSchemas === undefined
+      ? {}
+      : { stateSchemas: rebind(payload.stateSchemas) }),
+    ...(payload.runtimeExports === undefined
+      ? {}
+      : { runtimeExports: rebind(payload.runtimeExports) }),
     pluginData: rebind(payload.pluginData),
     workingMemory: rebind(payload.workingMemory),
     lorebookEntries: rebind(payload.lorebookEntries),

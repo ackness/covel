@@ -54,6 +54,8 @@ const pluginData = {
 };
 const snapshotRecords = {
   characters: [makeCharacter()],
+  stateSchemas: [makeStateSchema()],
+  runtimeExports: [makeRuntimeExport()],
   stateEntries: [makeStateEntry()],
   pluginData: [pluginData],
   workingMemory: [makeWorkingMemory()],
@@ -152,6 +154,28 @@ describe("checkpoint record validation", () => {
   });
   it("preserves valid records in every durable domain and opaque JSON", () => {
     expect(validateBrowserCheckpoint(checkpoint)).toEqual(checkpoint);
+  });
+
+  it.each([
+    { createdAt: "invalid", ids: ["message"] },
+    { createdAt: timestamp, ids: [] },
+    { createdAt: timestamp, ids: [false] },
+    "message",
+  ])("rejects malformed snapshot display boundaries: %j", (boundary) => {
+    expect(() =>
+      validateBrowserCheckpoint({
+        ...checkpoint,
+        snapshots: [
+          {
+            ...checkpoint.snapshots[0],
+            payload: {
+              ...checkpoint.snapshots[0]!.payload,
+              displayMessagesBoundary: boundary,
+            },
+          },
+        ],
+      }),
+    ).toThrow(BrowserSyncValidationError);
   });
 
   it.each(Object.keys(domainRecords) as (keyof typeof domainRecords)[])(

@@ -14,8 +14,8 @@
  *
  * Fork strategy: COPY. We rebuild the child session by persisting the
  * snapshot's characters / state entries / plugin data / working memory
- * into the new sessionId. Messages are copied from the parent up to
- * `payload.messagesCursor` — past that cursor the child starts fresh.
+ * into the new sessionId. Model and display messages use their respective
+ * captured boundaries — past those boundaries the child starts fresh.
  * Copying (rather than referencing) keeps cross-session semantics clean
  * and lets either branch be deleted independently.
  */
@@ -49,6 +49,15 @@ import {
 import { SAFE_SESSION_ID_RE } from "../../lib/validators.js";
 import { nextCursorFrom, parseCursorQuery } from "./cursor-params.js";
 import {
+  ForkCursorMissingError,
+  copyForkDisplayMessages,
+} from "./fork-display-messages.js";
+import {
+  ForkStateSchemaMissingError,
+  copyForkStateSchemas,
+} from "./fork-state-schemas.js";
+import { copyForkRuntimeExports } from "./fork-runtime-exports.js";
+import {
   mintSessionOwnerToken,
   mintSessionApprovalScope,
   resolveSessionParam,
@@ -68,13 +77,6 @@ type Env = {
 };
 
 /**
- * Internal sentinel: the snapshot cursor vanished from the parent session
- * mid-fork. Thrown to roll back the fork `withTransaction`, then translated to
- * a 409 by the route handler (rather than the catch-all 500).
- */
-class ForkCursorMissingError extends Error {}
-
-/**
  * Internal sentinel: a MediaRef reachable from the fork's snapshot state or a
  * copied export points at an asset that no longer exists in the MediaStore.
  * Thrown to roll back the fork transaction so the child is never created with a
@@ -86,6 +88,8 @@ class MediaReferenceMissingError extends Error {
     this.name = "MediaReferenceMissingError";
   }
 }
+
+class MediaReferenceForbiddenError extends Error {}
 
 class ForkMediaReferenceWriteError extends Error {
   constructor(
@@ -383,16 +387,12 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               await tx.upsertCharacter(record);
             }
 
-            // Copy state schemas (needed so stateEntries can be listed by the child)
-            const parentSchemas = await tx.listStateSchemas(parentSessionId);
-            for (const s of parentSchemas) {
-              await tx.saveStateSchema({
-                ...s,
-                id: randomUUID(),
-                sessionId: childSessionId,
-                createdAt: now,
-              });
-            }
+            const childStateSchemas = await copyForkStateSchemas(
+              tx,
+              snapshot,
+              childSessionId,
+              now,
+            );
 
             // Copy state entries
             for (const se of snapshot.payload.stateEntries) {
@@ -469,31 +469,21 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               );
             }
 
-            // Copy persistent recordAs exports visible at the snapshot instant
-            // (docs 02 §3.4.5). The snapshot payload carries no export field, so
-            // its createdAt is the visibility cutoff: for each (producerRuntimeId,
-            // recordAs) series, take the latest revision committed at or before it.
-            // The revision number is preserved so parent and child share history up
-            // to the fork, then diverge on their own subsequent publishes.
-            const parentExports = await tx.listRuntimeExports(parentSessionId);
-            const visibleLatest = new Map<
-              string,
-              (typeof parentExports)[number]
-            >();
-            for (const exp of parentExports) {
-              if (exp.committedAt > snapshot.createdAt) continue;
-              const key = `${exp.producerRuntimeId}\u0000${exp.recordAs}`;
-              const prev = visibleLatest.get(key);
-              if (!prev || exp.revision > prev.revision) {
-                visibleLatest.set(key, exp);
-              }
-            }
-            for (const exp of visibleLatest.values()) {
-              await tx.appendRuntimeExport({
-                ...exp,
-                sessionId: childSessionId,
-              });
-            }
+            const childRuntimeExports = await copyForkRuntimeExports(
+              tx,
+              snapshot,
+              childSessionId,
+            );
+
+            const {
+              messages: displayMessages,
+              boundary: childDisplayMessagesBoundary,
+            } = await copyForkDisplayMessages(
+              tx,
+              parentSessionId,
+              childSessionId,
+              snapshot,
+            );
 
             // Fork media gate (docs 02 §2.1.5): recursively scan the snapshot's
             // visible state AND the copied export revisions for MediaRefs, and
@@ -504,12 +494,19 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             // if any later operation rolls the transaction back.
             if (mediaStore) {
               const ids = collectMediaRefIds(snapshot.payload);
-              for (const exp of visibleLatest.values()) {
+              for (const message of displayMessages)
+                collectMediaRefIds(message, ids);
+              for (const exp of childRuntimeExports) {
                 collectMediaRefIds(exp.value, ids);
               }
               for (const mediaId of ids) {
                 const asset = await mediaStore.lookup(mediaId);
                 if (!asset) throw new MediaReferenceMissingError(mediaId);
+                if (
+                  !(await mediaStore.isReferencedBy(mediaId, parentSessionId))
+                ) {
+                  throw new MediaReferenceForbiddenError();
+                }
               }
               for (const mediaId of ids) {
                 try {
@@ -627,9 +624,12 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                   childSessionId,
                 ),
                 suspensions: childSuspensions,
+                stateSchemas: childStateSchemas,
+                runtimeExports: childRuntimeExports,
                 sessionSummaries: childSessionSummaries,
                 compactedMessageSummaryIds: childCompactedMessageSummaryIds,
                 messagesCursor: childMessagesCursor,
+                displayMessagesBoundary: childDisplayMessagesBoundary,
               },
               createdAt: now,
             };
@@ -652,6 +652,14 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               409,
             );
           }
+          if (err instanceof ForkStateSchemaMissingError) {
+            return c.json(
+              errorBody("Snapshot state table definitions are unavailable", {
+                code: "snapshot_schema_missing",
+              }),
+              409,
+            );
+          }
           if (err instanceof ForkMediaReferenceWriteError) {
             return c.json(
               errorBody(err.message, { code: "fork_media_reference_failed" }),
@@ -665,6 +673,17 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 { code: "media_reference_missing" },
               ),
               409,
+            );
+          }
+          if (err instanceof MediaReferenceForbiddenError) {
+            return c.json(
+              errorBody(
+                "Parent session cannot access a referenced media asset",
+                {
+                  code: "media_reference_forbidden",
+                },
+              ),
+              403,
             );
           }
           const message = err instanceof Error ? err.message : String(err);

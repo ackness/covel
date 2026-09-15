@@ -1,6 +1,7 @@
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { parse as parseYaml } from "yaml";
+import { resolveContainedPath } from "../safe-path.js";
 
 export async function fileExists(filePath: string): Promise<boolean> {
   try {
@@ -40,10 +41,47 @@ export async function resolveWorldRoot(
   worldsDirs: readonly string[],
 ): Promise<string | null> {
   for (const worldsDir of [...worldsDirs].reverse()) {
-    const candidate = path.join(worldsDir, worldId);
-    if (!(await fileExists(path.join(candidate, "world.yaml")))) continue;
-    const manifest = await readWorldManifest(candidate);
-    if (manifest.id === worldId) return candidate;
+    const matches = await findWorldPackageRoots(worldId, worldsDir);
+    if (matches.length > 1) {
+      throw new Error(
+        `Multiple world packages declare id "${worldId}" in one root`,
+      );
+    }
+    if (matches.length === 1) return matches[0]!;
   }
   return null;
+}
+
+/** Locate immediate packages by manifest identity, excluding symlinked packages/manifests. */
+export async function findWorldPackageRoots(
+  worldId: string,
+  worldsDir: string,
+): Promise<string[]> {
+  let entries;
+  try {
+    entries = await readdir(worldsDir, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  const matches: string[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    const worldDir = path.join(worldsDir, entry.name);
+    const manifestPath = await resolveContainedPath(worldDir, "world.yaml", {
+      rejectSymlinks: true,
+    });
+    if (!manifestPath) continue;
+    try {
+      const manifest = await readWorldManifest(path.dirname(manifestPath));
+      if (manifest.id === worldId) matches.push(path.dirname(manifestPath));
+    } catch (error) {
+      // One malformed neighboring package must not disable healthy worlds.
+      console.warn(
+        `[world-data] Cannot read world manifest in ${entry.name}:`,
+        error,
+      );
+    }
+  }
+  return matches;
 }

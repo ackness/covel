@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createPresetRegistry,
   createProviderRegistry,
@@ -50,12 +50,6 @@ function scopedId(
 }
 
 describe("applySlotOverlay", () => {
-  beforeEach(() => {
-    // Isolate the module-level ref counter between tests so a leak in one
-    // case doesn't mask or amplify a bug in another.
-    __internals.presetRefs.clear();
-  });
-
   it("registers a custom preset under a request-scoped id, then cleans up", () => {
     const deps = makeDeps();
     expect(deps.presetRegistry.hasPreset("custom_abc")).toBe(false);
@@ -99,7 +93,7 @@ describe("applySlotOverlay", () => {
     expect(deps.presetRegistry.hasPreset(key!)).toBe(false);
     // With the registration gone the mapping falls back to the public id.
     expect(scopedId(deps, "custom_abc", overrides)).toBe("custom_abc");
-    expect(__internals.presetRefs.size).toBe(0);
+    expect(__internals.presetRefs.get(deps.presetRegistry)?.size ?? 0).toBe(0);
   });
 
   it("keeps routed model ids opaque while attaching recognized capabilities", () => {
@@ -217,7 +211,7 @@ describe("applySlotOverlay", () => {
 
     cleanupVictim();
     expect(deps.presetRegistry.hasPreset(victimId!)).toBe(false);
-    expect(__internals.presetRefs.size).toBe(0);
+    expect(__internals.presetRefs.get(deps.presetRegistry)?.size ?? 0).toBe(0);
   });
 
   it("reference-counts identical configs; cleanup removes only at zero", () => {
@@ -240,17 +234,17 @@ describe("applySlotOverlay", () => {
     const key = scopedId(deps, "custom_shared", overrides)!;
     // Identical (id, config) → one shared registration, two refs.
     expect(deps.presetRegistry.hasPreset(key)).toBe(true);
-    expect(__internals.presetRefs.get(key)).toBe(2);
+    expect(__internals.presetRefs.get(deps.presetRegistry)?.get(key)).toBe(2);
 
     cleanupA();
     // Still alive — B is still holding a ref.
     expect(deps.presetRegistry.hasPreset(key)).toBe(true);
-    expect(__internals.presetRefs.get(key)).toBe(1);
+    expect(__internals.presetRefs.get(deps.presetRegistry)?.get(key)).toBe(1);
 
     cleanupB();
     // Last ref released → gone.
     expect(deps.presetRegistry.hasPreset(key)).toBe(false);
-    expect(__internals.presetRefs.size).toBe(0);
+    expect(__internals.presetRefs.get(deps.presetRegistry)?.size ?? 0).toBe(0);
   });
 
   it("calling cleanup twice is idempotent", () => {
@@ -270,7 +264,7 @@ describe("applySlotOverlay", () => {
 
     cleanup();
     cleanup(); // must not throw or underflow the ref count
-    expect(__internals.presetRefs.size).toBe(0);
+    expect(__internals.presetRefs.get(deps.presetRegistry)?.size ?? 0).toBe(0);
     expect(scopedId(deps, "custom_once", overrides)).toBe("custom_once");
   });
 
@@ -302,7 +296,7 @@ describe("applySlotOverlay", () => {
       ],
     });
     cleanup();
-    expect(__internals.presetRefs.size).toBe(0);
+    expect(__internals.presetRefs.get(deps.presetRegistry)?.size ?? 0).toBe(0);
     expect(deps.presetRegistry.listPresets().map((p) => p.id)).toEqual([
       "ds-chat",
     ]);

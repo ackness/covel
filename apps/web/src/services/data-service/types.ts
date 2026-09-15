@@ -86,7 +86,7 @@ export interface DataService {
    */
   syncToServer(sessionId: string): Promise<void>;
 
-  /** Durably remember which server mutation must become the next checkpoint. */
+  /** Recover any different pending commit, then durably stage this mutation. */
   stageServerCommit(sessionId: string, actionId: string): Promise<void>;
 
   /** Persist the transient server result as the next browser checkpoint. */
