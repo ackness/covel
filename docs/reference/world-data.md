@@ -107,6 +107,10 @@ server 使用 Node 26 的递归 `fs.watch` 监听内置与用户世界目录，�
 
 `dimensionSources` 声明的文件必须全部读取并校验成功；缺失、不可读、YAML 错误或维度校验失败时，整个世界加载失败，保留存储中的上一份完整记录，不发出维度变更通知，也不执行基于该次不完整清单的过期世界清理。文件修复后可继续热更新。热更新与启动加载都保留已有世界的 `metadata.source`、`metadata.storage` 和 `createdAt`，生成世界不会因重新加载而变为不可删除的内置世界。
 
+会话创建、预检和数据同步通过清单 `id` 定位世界包，支持目录名与 ID 不同；多个世界根目录仍按后者优先，同一根目录内出现重复 ID 会报错。查找只扫描直接子目录，不跟随世界包或清单符号链接。
+
+删除 `generated-file` 世界时，先在已配置目录中核对 `metadata.storage.path`，再按清单 ID 定位该目录内的唯一世界包。旧记录没有存储绑定时，必须在所有配置目录中唯一匹配。绑定失效、包缺失或有歧义时返回 `409 world_package_unresolved`，文件和数据库记录均不删除；不会回退删除其他目录中的同名包。
+
 ### 插件配置默认值（`pluginSettings`）
 
 `world.yaml` 顶层（与 `pluginPolicy` 平级）可声明 `pluginSettings`，为插件 `userSettings` 预置**世界默认值**，键为 `pluginId → settingKey → value`：

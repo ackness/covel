@@ -83,6 +83,9 @@ export async function buildSnapshotPayload(
   // Working memory
   const workingMemory: readonly WorkingMemoryRecord[] =
     await store.listWorkingMemory(sessionId);
+  const runtimeExports = await store.listRuntimeExports(sessionId, {
+    latestOnly: true,
+  });
 
   // Messages cursor — last turn_message.id for this session.
   const turnMessages = await store.listTurnMessages(sessionId);
@@ -158,6 +161,7 @@ export async function buildSnapshotPayload(
     stateEntries,
     pluginData,
     workingMemory,
+    runtimeExports,
     sessionSummaries,
     compactedMessageSummaryIds,
     lorebookEntries,

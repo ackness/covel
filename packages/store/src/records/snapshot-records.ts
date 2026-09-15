@@ -16,7 +16,11 @@ import type {
 } from "./memory-records.js";
 import type { PluginDataRecord } from "./plugin-records.js";
 import type { SessionRecord } from "./session-records.js";
-import type { ExecutionContext, InputSlot } from "@covel/shared";
+import type {
+  ExecutionContext,
+  InputSlot,
+  RuntimeExportRecord,
+} from "@covel/shared";
 
 /**
  * Materialized state snapshot.
@@ -42,6 +46,8 @@ interface SnapshotPayloadBase {
   readonly stateEntries: readonly StateEntryRecord[];
   /** Frozen table definitions. Legacy v3 payloads omit this field. */
   readonly stateSchemas?: readonly StateSchemaRecord[];
+  /** Latest visible revision of every export series; absent in legacy v3. */
+  readonly runtimeExports?: readonly RuntimeExportRecord[];
   readonly pluginData: readonly PluginDataRecord[];
   readonly workingMemory: readonly WorkingMemoryRecord[];
   /**

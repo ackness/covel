@@ -6,8 +6,15 @@ import {
   createMemoryStore,
   createSqliteStore,
   type DataStore,
+  exportSessionCheckpoint,
+  replaceSessionFromCheckpoint,
 } from "@covel/store";
-import { makeSession } from "../../../../packages/store/src/contract/test-fixtures.js";
+import {
+  makeSession,
+  makeSnapshot,
+  makeRuntimeExport,
+} from "../../../../packages/store/src/contract/test-fixtures.js";
+import { copyForkRuntimeExports } from "../../src/routes/api/fork-runtime-exports.js";
 import { snapshotRoutes } from "../../src/routes/api/snapshots.js";
 import {
   createInProcessSessionLock,
@@ -19,7 +26,47 @@ afterEach(() => vi.useRealTimers());
 describe.each(["memory", "sqlite"])(
   "auto snapshot export cutoff on %s",
   (backend) => {
-    it("includes the committed turn and excludes later exports, even for callers with an old result timestamp", async () => {
+    it("retains legacy timestamp fallback while honoring an explicitly empty capture", async () => {
+      const store =
+        backend === "sqlite"
+          ? createSqliteStore(":memory:")
+          : createMemoryStore();
+      try {
+        for (const id of ["parent", "legacy-child", "empty-child"])
+          await store.createSession(makeSession({ id }));
+        const first = makeRuntimeExport({
+          sessionId: "parent",
+          revision: 1,
+          committedAt: "2026-01-01T00:00:00.000Z",
+        });
+        await store.appendRuntimeExport(first);
+        await store.appendRuntimeExport({
+          ...first,
+          revision: 2,
+          committedAt: "2026-01-01T00:00:00.020Z",
+        });
+        const snapshot = makeSnapshot({
+          sessionId: "parent",
+          createdAt: "2026-01-01T00:00:00.010Z",
+        });
+        expect(snapshot.payload.runtimeExports).toBeUndefined();
+        expect(
+          await copyForkRuntimeExports(store, snapshot, "legacy-child"),
+        ).toEqual([{ ...first, sessionId: "legacy-child" }]);
+        const empty = {
+          ...snapshot,
+          payload: { ...snapshot.payload, runtimeExports: [] },
+        };
+        expect(
+          await copyForkRuntimeExports(store, empty, "empty-child"),
+        ).toEqual([]);
+        expect(await store.listRuntimeExports("empty-child")).toEqual([]);
+      } finally {
+        await store.close();
+      }
+    });
+
+    it("freezes export revisions through same-millisecond writes, checkpoint transfer, and repeated forks", async () => {
       vi.useFakeTimers({ toFake: ["Date"] });
       const resultAt = "2026-01-01T00:00:00.000Z";
       vi.setSystemTime(resultAt);
@@ -29,7 +76,7 @@ describe.each(["memory", "sqlite"])(
           : createMemoryStore();
       try {
         await store.createSession(makeSession({ id: "parent" }));
-        async function publish(threshold: number) {
+        async function publish(threshold: number, sessionId = "parent") {
           const outcome = await finalizeExecution({
             executionContext: {
               executionId: randomUUID(),
@@ -37,7 +84,7 @@ describe.each(["memory", "sqlite"])(
               countPolicy: "none",
             },
             store,
-            sessionId: "parent",
+            sessionId,
             runtimes: [
               {
                 name: "producer/config",
@@ -83,7 +130,8 @@ describe.each(["memory", "sqlite"])(
         };
         const snapshot = await saveAutoSnapshot(options);
         expect(snapshot!.createdAt).toBe("2026-01-01T00:00:00.010Z");
-        vi.setSystemTime("2026-01-01T00:00:00.020Z");
+        expect(snapshot!.payload.runtimeExports).toHaveLength(1);
+        // The next publish shares the timestamp but is outside the capture.
         await publish(9);
         const app = new Hono<{
           Variables: { store: DataStore; sessionLock: SessionLock };
@@ -109,6 +157,27 @@ describe.each(["memory", "sqlite"])(
           value: { threshold: 7 },
         });
         expect(await store.listRuntimeExports("parent")).toHaveLength(2);
+        const childSnapshot = (await store.listSnapshots(child.sessionId))[0]!;
+        const checkpoint = await exportSessionCheckpoint(
+          store,
+          child.sessionId,
+          { revision: 1, actionId: "transfer" },
+        );
+        await replaceSessionFromCheckpoint(store, checkpoint);
+        await publish(11, child.sessionId);
+        const second = await app.request(
+          `/api/sessions/${child.sessionId}/fork`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fromSnapshotId: childSnapshot.id }),
+          },
+        );
+        expect(second.status).toBe(201);
+        const grandchild = (await second.json()) as { sessionId: string };
+        expect(await store.listRuntimeExports(grandchild.sessionId)).toEqual([
+          { ...exports[0], sessionId: grandchild.sessionId },
+        ]);
       } finally {
         await store.close();
       }

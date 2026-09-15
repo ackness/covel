@@ -708,9 +708,8 @@ describe("Snapshot routes", () => {
     });
 
     it("copies the recordAs export revision visible at the snapshot instant, dropping later ones", async () => {
-      // rev 1 is committed in the past (visible at the snapshot instant); rev 2
-      // carries a future committedAt so it post-dates the snapshot and must NOT
-      // fork. The child inherits the frozen rev 1, revision preserved.
+      // Capture rev 1 before publishing rev 2. The child inherits the exact
+      // captured revision, independently of the parent's later publications.
       const exp = (
         revision: number,
         threshold: number,
@@ -728,10 +727,10 @@ describe("Snapshot routes", () => {
         committedAt,
       });
       await store.appendRuntimeExport(exp(1, 3, "2020-01-01T00:00:00.000Z"));
-      await store.appendRuntimeExport(exp(2, 4, "2099-01-01T00:00:00.000Z"));
 
       const app = createTestApp(store);
       const snapId = await createParentSnapshot(store, app);
+      await store.appendRuntimeExport(exp(2, 4, "2099-01-01T00:00:00.000Z"));
       const res = await app.request("/api/sessions/sess-1/fork", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -865,9 +864,8 @@ describe("Snapshot routes", () => {
     });
 
     it("references media embedded in a copied export atomically on fork (docs 02 §2.1.5)", async () => {
-      // A MediaRef that lives ONLY inside a recordAs export value (never in the
-      // snapshot payload). The fork scan must reach it too, so the child ends up
-      // referencing it.
+      // A MediaRef that lives only inside an export value must be captured and
+      // referenced by the child, with the same ownership gate as other state.
       const mediaStore = createMemoryMediaStore();
       const ref = await mediaStore.put(new Uint8Array([9, 9]), "audio/wav", {
         prompt: "track",

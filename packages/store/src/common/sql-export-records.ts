@@ -12,7 +12,7 @@
  * the list.
  */
 
-import { and, asc, desc, eq, lte } from "drizzle-orm";
+import { and, asc, desc, eq, lte, sql } from "drizzle-orm";
 import type { Column, SQL, Table } from "drizzle-orm";
 
 import type { InsertValueBuilders } from "./insert-values.js";
@@ -102,6 +102,7 @@ export function createSqlExportRecords(
       filter?: {
         readonly producerRuntimeId?: string;
         readonly recordAs?: string;
+        readonly latestOnly?: boolean;
       },
     ): Promise<readonly RuntimeExportRecord[]> {
       const rows = await runner.select<RuntimeExportRow>(runtimeExports, {
@@ -112,6 +113,15 @@ export function createSqlExportRecords(
             : undefined,
           filter?.recordAs !== undefined
             ? eq(runtimeExports.recordAs, filter.recordAs)
+            : undefined,
+          // Filter in SQL so checkpoint capture never transfers old JSON values.
+          filter?.latestOnly
+            ? sql`${runtimeExports.revision} = (
+                select max(newer.revision) from ${runtimeExports} as newer
+                where newer.session_id = ${runtimeExports.sessionId}
+                  and newer.producer_runtime_id = ${runtimeExports.producerRuntimeId}
+                  and newer.record_as = ${runtimeExports.recordAs}
+              )`
             : undefined,
         ]),
         orderBy: [

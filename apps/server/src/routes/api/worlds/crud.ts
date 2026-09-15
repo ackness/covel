@@ -4,14 +4,16 @@
 
 import { Hono } from "hono";
 import { rm } from "node:fs/promises";
-import path from "node:path";
 import {
   worldCreateRequestSchema,
   worldPatchRequestSchema,
 } from "@covel/shared";
 import type { WorldRecord } from "@covel/store";
 import { errorBody, okBody, readJsonBody } from "../../../api-error.js";
-import { resolveContainedPath } from "../../../world-data/safe-path.js";
+import {
+  resolveGeneratedWorldPackage,
+  WorldPackageResolutionError,
+} from "./file-package.js";
 import { checkWorldWriteAccess } from "./world-write-guard.js";
 import { type WorldEnv, resolveWorldMetadata } from "./shared.js";
 
@@ -139,16 +141,20 @@ worldCrudRoutes.delete("/:id", async (c) => {
     return c.json(errorBody("Built-in worlds cannot be deleted"), 403);
   }
   if (meta?.source === "generated-file") {
-    const worldsDirs = c.get("worldsDirs") ?? [];
-    for (const worldsDir of worldsDirs) {
-      const worldPath = await resolveContainedPath(worldsDir, id, {
-        rejectSymlinks: true,
-      });
-      if (worldPath && path.basename(worldPath) === id) {
-        await rm(worldPath, { recursive: true, force: true });
-        break;
-      }
+    let worldPath: string;
+    try {
+      worldPath = await resolveGeneratedWorldPackage(
+        world,
+        c.get("worldsDirs") ?? [],
+      );
+    } catch (error) {
+      if (!(error instanceof WorldPackageResolutionError)) throw error;
+      return c.json(
+        errorBody(error.message, { code: "world_package_unresolved" }),
+        409,
+      );
     }
+    await rm(worldPath, { recursive: true });
   }
   await store.deleteWorld(id);
   return c.json(okBody());

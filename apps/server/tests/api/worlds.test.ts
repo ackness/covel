@@ -232,6 +232,11 @@ describe("world routes", () => {
     const worldsDir = await mkdtemp(path.join(tmpdir(), "covel-delete-world-"));
     const worldRoot = path.join(worldsDir, "generated-world");
     await mkdir(worldRoot, { recursive: true });
+    await writeFile(
+      path.join(worldRoot, "world.yaml"),
+      "id: generated-world\n",
+      "utf8",
+    );
     app = createTestApp(store, {} as PluginRegistry, {
       worldsDirs: [worldsDir],
     });

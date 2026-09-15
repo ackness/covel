@@ -116,9 +116,23 @@ const suspensions = createdRow.extend({
     .optional(),
 });
 
+const runtimeExport = z.looseObject({
+  sessionId: nonEmptyString,
+  producerPluginId: z.string(),
+  producerRuntimeId: z.string(),
+  recordAs: z.string(),
+  revision: z.number(),
+  pluginVersion: z.string(),
+  schemaDigest: z.string(),
+  resultId: z.string(),
+  value: jsonValue,
+  committedAt: timestamp,
+});
+
 export const snapshotRecordArrays = {
   characters: z.array(characters),
   stateSchemas: z.array(stateSchemas).optional(),
+  runtimeExports: z.array(runtimeExport).optional(),
   stateEntries: z.array(stateEntries),
   pluginData: z.array(pluginData),
   workingMemory: z.array(workingMemory),
@@ -195,18 +209,5 @@ export const checkpointLifecycleArrays = {
       createdAt: timestamp,
     }),
   ),
-  runtimeExports: z.array(
-    z.looseObject({
-      sessionId: nonEmptyString,
-      producerPluginId: z.string(),
-      producerRuntimeId: z.string(),
-      recordAs: z.string(),
-      revision: z.number(),
-      pluginVersion: z.string(),
-      schemaDigest: z.string(),
-      resultId: z.string(),
-      value: jsonValue,
-      committedAt: timestamp,
-    }),
-  ),
+  runtimeExports: z.array(runtimeExport),
 };

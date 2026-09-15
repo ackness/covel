@@ -55,6 +55,7 @@ const pluginData = {
 const snapshotRecords = {
   characters: [makeCharacter()],
   stateSchemas: [makeStateSchema()],
+  runtimeExports: [makeRuntimeExport()],
   stateEntries: [makeStateEntry()],
   pluginData: [pluginData],
   workingMemory: [makeWorkingMemory()],

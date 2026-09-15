@@ -242,18 +242,18 @@ curl -X DELETE http://localhost:3001/api/sessions/<sessionId>
 
 ### 世界管理
 
-| 方法   | 路径                                   | 描述                                                                                                 |
-| ------ | -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| GET    | `/api/worlds`                          | 列出所有世界                                                                                         |
-| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                                         |
-| POST   | `/api/worlds`                          | 创建/更新世界                                                                                        |
-| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                      |
-| DELETE | `/api/worlds/:id`                      | 删除世界（内置 `source:"file"` 世界禁止删除，返回 403；hosted / 生产 MemoryStore 需 operator token） |
-| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                                            |
-| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                                         |
-| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                     |
-| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                           |
-| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                     |
+| 方法   | 路径                                   | 描述                                                                                                                                                                        |
+| ------ | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/worlds`                          | 列出所有世界                                                                                                                                                                |
+| GET    | `/api/worlds/:id`                      | 获取世界详情                                                                                                                                                                |
+| POST   | `/api/worlds`                          | 创建/更新世界                                                                                                                                                               |
+| PATCH  | `/api/worlds/:id`                      | 部分更新世界（支持顶层 `dimensions`，并与现有 `metadata` 合并）                                                                                                             |
+| DELETE | `/api/worlds/:id`                      | 删除世界（内置 `source:"file"` 世界返回 403；文件世界按存储绑定与清单 ID 定位，缺失或歧义返回 `409 world_package_unresolved`；hosted / 生产 MemoryStore 需 operator token） |
+| GET    | `/api/worlds/:id/dimensions/export`    | 导出世界维度（YAML/JSON）                                                                                                                                                   |
+| POST   | `/api/worlds/:id/dimensions/import`    | 导入世界维度                                                                                                                                                                |
+| POST   | `/api/worlds/:id/sync-dimensions`      | 将世界维度同步到活跃 session 的 `plugin_data` 与 lorebook 常量词条，并清理旧 key                                                                                            |
+| POST   | `/api/worlds/:id/world-data/preflight` | 只读构建 worldData import plan，返回 diagnostics、planned count 和目标摘要                                                                                                  |
+| POST   | `/api/worlds/:id/sync-data`            | 基于 provenance ledger 同步 importer 管理的 worldData row，支持 dry-run 与 force                                                                                            |
 
 ### 会话管理
 
@@ -2566,7 +2566,7 @@ Query 参数：`limit`（默认 50，最大 500）、`cursor`（上一页 opaque
 3. **拷贝** characters / state entries / plugin data / working memory / state schemas / unresolved suspensions 到新 session。新 v3 payload 用 `stateSchemas` 冻结表结构，空数组表示快照时没有表；fork 重建表 ID，并将子表结构写入子快照，父会话后续修改不影响再次分叉。旧 v3 缺少该字段时兼容使用父会话当前结构；任何状态记录缺少对应表结构时返回 `409 snapshot_schema_missing` 并回滚，不返回状态不完整的分支；
 4. 从 `turn_messages` 中按顺序拷贝消息直到 `payload.messagesCursor`（含），超过 cursor 的消息不拷贝；按 `compactedMessageSummaryIds` 复制 `payload.sessionSummaries` 中快照时刻实际引用的压缩摘要，为子 session 重建摘要 ID，并重写消息上的 `compactedAtTurnId`。因此父会话后续滚动摘要和重标历史消息不会改变旧快照的分叉结果。早期 schema v3 payload 没有精确映射时回退到父消息当前标签；没有 `sessionSummaries` 时则保留原始消息正文并清除压缩标签，避免产生孤儿引用。cursor 在父 session 中已丢失（compact / 删除等）时返回 `409 { code: 'cursor_missing' }`；
    界面聊天记录另按 `payload.displayMessagesBoundary` 复制，保留正文、角色、元数据和显示顺序，重建消息 ID，并为复制消息中的媒体建立子会话引用。消息、状态和运行时导出中的所有媒体都必须已对父会话授权，否则整体返回 `403 media_reference_forbidden`；仅知道媒体 ID 不会获得访问权。边界保存最新消息时间戳及该毫秒内全部已存在的消息 ID，避免混入快照后同毫秒的新消息；边界为 `null` 表示空历史，边界 ID 缺失同样返回 `409 cursor_missing`。早期 v3 快照没有此字段时，以快照 `createdAt` 为兼容截止时间，无法还原该毫秒内的精确成员。子快照写入新的消息边界，支持继续分叉。
-   运行时 `recordAs` 导出按快照 `createdAt` 截止，复制各生产者/名称在截止时间内的最新修订。自动快照使用全部提案提交完成后的实际捕获时间，不接受回合结果时间回填，避免遗漏刚提交的本轮导出。
+   新 v3 payload 的 `runtimeExports` 冻结各生产者/名称在捕获时可见的最新导出修订及其值；空数组表示没有导出。分叉、连续分叉及检查点迁移均使用这份记录，后续同毫秒提交不会混入。早期 v3 缺少该字段时才按 `createdAt` 截止兼容读取，无法重建该毫秒内的精确历史。捕获使用 `listRuntimeExports(sessionId, { latestOnly: true })`，SQL 在数据库内筛选每组最高修订，避免读取全部历史 JSON。自动快照仍使用全部提案提交完成后的实际捕获时间。
 5. 写入一个 `kind="fork"` 的快照到子 session，`parentId` 指向源 snapshot，供 provenance 追踪；
 6. 在 eventBus 上广播 `session.forked`（SSE topic=`session`）。
 

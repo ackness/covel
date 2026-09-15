@@ -56,6 +56,7 @@ import {
   ForkStateSchemaMissingError,
   copyForkStateSchemas,
 } from "./fork-state-schemas.js";
+import { copyForkRuntimeExports } from "./fork-runtime-exports.js";
 import {
   mintSessionOwnerToken,
   mintSessionApprovalScope,
@@ -468,31 +469,11 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               );
             }
 
-            // Copy persistent recordAs exports visible at the snapshot instant
-            // (docs 02 §3.4.5). The snapshot payload carries no export field, so
-            // its createdAt is the visibility cutoff: for each (producerRuntimeId,
-            // recordAs) series, take the latest revision committed at or before it.
-            // The revision number is preserved so parent and child share history up
-            // to the fork, then diverge on their own subsequent publishes.
-            const parentExports = await tx.listRuntimeExports(parentSessionId);
-            const visibleLatest = new Map<
-              string,
-              (typeof parentExports)[number]
-            >();
-            for (const exp of parentExports) {
-              if (exp.committedAt > snapshot.createdAt) continue;
-              const key = `${exp.producerRuntimeId}\u0000${exp.recordAs}`;
-              const prev = visibleLatest.get(key);
-              if (!prev || exp.revision > prev.revision) {
-                visibleLatest.set(key, exp);
-              }
-            }
-            for (const exp of visibleLatest.values()) {
-              await tx.appendRuntimeExport({
-                ...exp,
-                sessionId: childSessionId,
-              });
-            }
+            const childRuntimeExports = await copyForkRuntimeExports(
+              tx,
+              snapshot,
+              childSessionId,
+            );
 
             const {
               messages: displayMessages,
@@ -515,7 +496,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               const ids = collectMediaRefIds(snapshot.payload);
               for (const message of displayMessages)
                 collectMediaRefIds(message, ids);
-              for (const exp of visibleLatest.values()) {
+              for (const exp of childRuntimeExports) {
                 collectMediaRefIds(exp.value, ids);
               }
               for (const mediaId of ids) {
@@ -644,6 +625,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                 ),
                 suspensions: childSuspensions,
                 stateSchemas: childStateSchemas,
+                runtimeExports: childRuntimeExports,
                 sessionSummaries: childSessionSummaries,
                 compactedMessageSummaryIds: childCompactedMessageSummaryIds,
                 messagesCursor: childMessagesCursor,

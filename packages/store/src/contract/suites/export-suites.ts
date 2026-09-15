@@ -219,6 +219,53 @@ export function registerExportStoreSuites(getStore: () => DataStore): void {
   });
 
   describe("RuntimeExports value round-trip", () => {
+    it("lists only the latest revision per series without crossing session or filter boundaries", async () => {
+      for (const sessionId of ["capture", "other"]) {
+        for (const producerRuntimeId of ["a", "b"]) {
+          for (const recordAs of ["one", "two"]) {
+            for (const revision of [3, 1, 2]) {
+              await store.appendRuntimeExport(
+                makeRuntimeExport({
+                  sessionId,
+                  producerRuntimeId,
+                  recordAs,
+                  revision,
+                  value: revision === 3 ? null : { old: true },
+                }),
+              );
+            }
+          }
+        }
+      }
+      const latest = await store.listRuntimeExports("capture", {
+        latestOnly: true,
+      });
+      expect(
+        latest.map((r) => [
+          r.producerRuntimeId,
+          r.recordAs,
+          r.revision,
+          r.value,
+        ]),
+      ).toEqual([
+        ["a", "one", 3, null],
+        ["a", "two", 3, null],
+        ["b", "one", 3, null],
+        ["b", "two", 3, null],
+      ]);
+      expect(
+        await store.listRuntimeExports("capture", {
+          latestOnly: true,
+          producerRuntimeId: "a",
+          recordAs: "two",
+        }),
+      ).toEqual([latest[1]]);
+      expect(await store.listRuntimeExports("capture")).toHaveLength(12);
+      expect(
+        await store.listRuntimeExports("absent", { latestOnly: true }),
+      ).toEqual([]);
+    });
+
     it("round-trips a nested JsonValue verbatim (nested null survives)", async () => {
       const value = {
         nested: { a: 1, b: "two", inner: null },

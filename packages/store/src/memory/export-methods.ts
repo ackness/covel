@@ -60,22 +60,31 @@ export function createExportMethods(state: MemoryState): MemoryStoreMethods {
       filter?: {
         readonly producerRuntimeId?: string;
         readonly recordAs?: string;
+        readonly latestOnly?: boolean;
       },
     ) {
-      return [...state.runtimeExports.values()]
-        .filter(
-          (r) =>
-            r.sessionId === sessionId &&
-            (filter?.producerRuntimeId === undefined ||
-              r.producerRuntimeId === filter.producerRuntimeId) &&
-            (filter?.recordAs === undefined || r.recordAs === filter.recordAs),
-        )
-        .sort(
-          (a, b) =>
-            a.producerRuntimeId.localeCompare(b.producerRuntimeId) ||
-            a.recordAs.localeCompare(b.recordAs) ||
-            a.revision - b.revision,
-        );
+      let rows = [...state.runtimeExports.values()].filter(
+        (r) =>
+          r.sessionId === sessionId &&
+          (filter?.producerRuntimeId === undefined ||
+            r.producerRuntimeId === filter.producerRuntimeId) &&
+          (filter?.recordAs === undefined || r.recordAs === filter.recordAs),
+      );
+      if (filter?.latestOnly) {
+        const latest = new Map<string, RuntimeExportRecord>();
+        for (const row of rows) {
+          const key = JSON.stringify([row.producerRuntimeId, row.recordAs]);
+          if (!latest.has(key) || row.revision > latest.get(key)!.revision)
+            latest.set(key, row);
+        }
+        rows = [...latest.values()];
+      }
+      return rows.sort(
+        (a, b) =>
+          a.producerRuntimeId.localeCompare(b.producerRuntimeId) ||
+          a.recordAs.localeCompare(b.recordAs) ||
+          a.revision - b.revision,
+      );
     },
   };
 }
