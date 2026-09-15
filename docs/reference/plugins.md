@@ -81,6 +81,8 @@
 
 Function runtime 契约：声明 `runtimeType: function` 时 `handler` 为必填的 runtime 相对路径，目标模块必须 `export default function`。manifest 校验会拒绝缺失 handler，loader 会拒绝没有默认函数导出的模块，避免插件安装后到首次激活才失败。
 
+插件发现忽略以 `.` 开头的包目录，安装中的临时副本在正式发布目录前不会被加载。
+
 runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启动 discovery 快照记录的实际 `PLUGIN.md` 路径；根目录单 runtime 即使声明 `name: plugin-id/manual`，仍从根目录解析 UI，不会被推断为 `runtimes/manual/`。
 
 ---

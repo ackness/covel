@@ -122,6 +122,7 @@ export async function fetchWithRetry(
         dispatcher,
       );
       if (response.status >= 300 && response.status < 400) {
+        await response.body?.cancel().catch(() => {});
         throw new Error(
           `baseUrl rejected by SSRF policy: refusing to follow redirect (HTTP ${response.status}) from "${url}".`,
         );
@@ -130,16 +131,14 @@ export async function fetchWithRetry(
     } finally {
       // close() drains active response bodies before releasing the pool, so it
       // is safe to start shutdown once fetch has returned the response headers.
-      void dispatcher.close();
+      void dispatcher.close().catch(() => {});
     }
   };
 
   let response = await doFetch();
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     if (!isRetriableStatus(response.status)) return response;
-    await response.arrayBuffer().catch(() => {
-      /* drain ignored */
-    });
+    await response.body?.cancel().catch(() => {});
     const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
     const delay = retryAfterMs ?? computeBackoffMs(attempt);
     await sleepWithAbort(delay, signal);

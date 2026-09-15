@@ -33,11 +33,28 @@ export function sleepWithAbort(
       reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
       return;
     }
+    if (!Number.isFinite(ms) || ms < 0) {
+      reject(
+        new RangeError("Retry delay must be a finite non-negative number"),
+      );
+      return;
+    }
 
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
+    let remaining = ms;
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      // Node clamps overflowing delays to 1ms. Split long Retry-After waits
+      // instead so a large valid value never causes an immediate retry storm.
+      const delay = Math.min(remaining, 2_147_483_647);
+      timer = setTimeout(() => {
+        remaining -= delay;
+        if (remaining > 0) schedule();
+        else {
+          signal?.removeEventListener("abort", onAbort);
+          resolve();
+        }
+      }, delay);
+    };
 
     const onAbort = () => {
       clearTimeout(timer);
@@ -45,6 +62,7 @@ export function sleepWithAbort(
     };
 
     signal?.addEventListener("abort", onAbort, { once: true });
+    schedule();
   });
 }
 

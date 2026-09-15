@@ -627,3 +627,22 @@ sources:
     expect(await mediaStore.listRefs()).toEqual([]);
   });
 });
+
+describe("provider ping input", () => {
+  it.each([null, [], { presetId: 5 }, { slot: {} }])(
+    "rejects invalid body %j before resolving a provider",
+    async (body) => {
+      const app = createMiscApiRoutes(
+        makeAiStackStub(),
+        createPluginRegistry(),
+        createMemoryStore(),
+      );
+      const response = await app.request("/api/ai/ping", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      expect(response.status).toBe(400);
+    },
+  );
+});

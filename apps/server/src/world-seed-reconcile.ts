@@ -7,14 +7,27 @@ export async function seedAndReconcileWorlds(
   worldsDirs: readonly string[],
 ): Promise<void> {
   const liveWorldIds = new Set<string>();
+  const claimedWorldIds = new Set<string>();
+  const existingIds = (await store.listWorlds()).map((world) => world.id);
   let complete = true;
-  for (const dir of worldsDirs) {
+  // Resolve overrides before writing so a broken override cannot be replaced
+  // by a lower-priority seed during the same startup pass.
+  for (const dir of [...worldsDirs].reverse()) {
     try {
-      const result = await seedWorlds(store, dir);
-      for (const id of result.worldIds) liveWorldIds.add(id);
-      if (!result.complete) complete = false;
+      const result = await seedWorlds(store, dir, claimedWorldIds);
+      for (const id of result.worldIds) {
+        liveWorldIds.add(id);
+        claimedWorldIds.add(id);
+      }
+      if (!result.complete) {
+        complete = false;
+        // An unreadable manifest may hide any existing identity. Keep the
+        // last good records until the higher-priority inventory is complete.
+        for (const id of existingIds) claimedWorldIds.add(id);
+      }
     } catch (error) {
       complete = false;
+      for (const id of existingIds) claimedWorldIds.add(id);
       console.warn(`[world-seed] Could not seed worlds from ${dir}:`, error);
     }
   }

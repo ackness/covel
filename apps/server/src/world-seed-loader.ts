@@ -30,7 +30,10 @@ import type { MemoryBlockSchema } from "@covel/shared";
 import type { DataStore, WorldRecord } from "@covel/store";
 import { resolveContainedPath } from "./world-data/safe-path.js";
 import { loadWorldDataSummary } from "./world-data/world-load.js";
-import { fileExists } from "./world-data/session-import/utils.js";
+import {
+  fileExists,
+  readWorldManifest,
+} from "./world-data/session-import/utils.js";
 
 /**
  * Resolve a single I18nText field to a plain display string.
@@ -223,9 +226,8 @@ export async function loadSingleWorld(
     storage?: Record<string, unknown>;
   },
 ): Promise<WorldRecord | null> {
-  const yamlPath = path.join(worldDir, "world.yaml");
-
-  if (!(await fileExists(yamlPath))) return null;
+  const yamlPath = await resolveSafePath(worldDir, "world.yaml");
+  if (!yamlPath) return null;
 
   const yamlContent = await readFile(yamlPath, "utf-8");
   const raw = parseYaml(yamlContent) as Record<string, unknown>;
@@ -362,14 +364,16 @@ async function loadCharacterBlueprints(
  */
 async function loadWorldPackages(worldsDir: string): Promise<{
   records: WorldRecord[];
+  worldIds: string[];
   complete: boolean;
 }> {
   const entries = await readdir(worldsDir, { withFileTypes: true });
   const records: WorldRecord[] = [];
+  const identityCounts = new Map<string, number>();
   let complete = true;
 
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
 
     const worldDir = path.join(worldsDir, entry.name);
 
@@ -382,6 +386,13 @@ async function loadWorldPackages(worldsDir: string): Promise<{
         if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
         throw error;
       }
+      const manifestPath = await resolveSafePath(worldDir, "world.yaml");
+      if (!manifestPath) {
+        complete = false;
+        continue;
+      }
+      const { id } = await readWorldManifest(worldDir);
+      if (id) identityCounts.set(id, (identityCounts.get(id) ?? 0) + 1);
       const record = await loadSingleWorld(worldDir);
       if (record) records.push(record);
       else complete = false;
@@ -391,7 +402,19 @@ async function loadWorldPackages(worldsDir: string): Promise<{
     }
   }
 
-  return { records, complete };
+  const uniqueRecords = records.filter((record) => {
+    if (identityCounts.get(record.id) === 1) return true;
+    complete = false;
+    console.warn(
+      `[world-seed] Duplicate world id "${record.id}"; keeping stored state.`,
+    );
+    return false;
+  });
+  return {
+    records: uniqueRecords,
+    worldIds: [...identityCounts.keys()],
+    complete,
+  };
 }
 
 /**
@@ -402,8 +425,12 @@ async function loadWorldPackages(worldsDir: string): Promise<{
 export async function seedWorlds(
   store: DataStore,
   worldsDir: string,
+  excludedWorldIds: ReadonlySet<string> = new Set(),
 ): Promise<{ worldIds: string[]; complete: boolean }> {
-  const { records, complete } = await loadWorldPackages(worldsDir);
+  const inventory = await loadWorldPackages(worldsDir);
+  const records = inventory.records.filter(
+    (record) => !excludedWorldIds.has(record.id),
+  );
 
   if (records.length > 0) {
     const existingWorlds = new Map(
@@ -419,7 +446,7 @@ export async function seedWorlds(
     );
   }
 
-  return { worldIds: records.map((r) => r.id), complete };
+  return { worldIds: inventory.worldIds, complete: inventory.complete };
 }
 
 /** Disk content does not own a world's origin, storage binding, or creation date. */

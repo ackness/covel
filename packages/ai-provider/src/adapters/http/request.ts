@@ -42,6 +42,7 @@ function assertAllowedBaseUrl(
  */
 function rejectRedirect(response: Response, url: string): Response {
   if (response.status >= 300 && response.status < 400) {
+    void response.body?.cancel().catch(() => {});
     throw new Error(
       `Provider error: refusing to follow redirect (HTTP ${response.status}) from "${url}".`,
     );
@@ -101,9 +102,8 @@ export async function postJson(
       return response;
     }
 
-    await response.arrayBuffer().catch(() => {
-      /* body already consumed or stream error */
-    });
+    // Discard rejected bodies without buffering an unbounded error stream.
+    await response.body?.cancel().catch(() => {});
 
     const retryAfterMs = parseRetryAfterMs(response.headers.get("retry-after"));
     const delay = retryAfterMs ?? computeBackoffMs(attempt);

@@ -20,10 +20,16 @@ export interface WorldRecord {
 }
 
 export function normalizeWorldRecord(world: WorldRecord): WorldRecord {
+  // Metadata is the persisted canonical field. A projected top-level value
+  // must not undo a later metadata replacement or explicit removal.
+  const dimensions = Object.hasOwn(world.metadata ?? {}, "dimensions")
+    ? (world.metadata?.dimensions as WorldRecord["dimensions"])
+    : world.dimensions;
   return {
     ...world,
-    dimensions:
-      world.dimensions ??
-      (world.metadata?.dimensions as WorldRecord["dimensions"]),
+    dimensions,
+    ...(dimensions === undefined
+      ? {}
+      : { metadata: { ...world.metadata, dimensions } }),
   };
 }

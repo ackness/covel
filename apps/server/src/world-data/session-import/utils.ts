@@ -66,7 +66,7 @@ export async function findWorldPackageRoots(
   }
   const matches: string[] = [];
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     const worldDir = path.join(worldsDir, entry.name);
     const manifestPath = await resolveContainedPath(worldDir, "world.yaml", {
       rejectSymlinks: true,

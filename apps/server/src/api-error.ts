@@ -1,5 +1,5 @@
 import type { Context, ErrorHandler } from "hono";
-import type { ZodType } from "zod";
+import { z, type ZodType } from "zod";
 import type {
   ApiErrorResponse,
   ApiListResponse,
@@ -58,18 +58,30 @@ export function okBody<
 }
 
 /**
- * Parse a JSON request body, or return a 400 envelope Response so a malformed
+ * Parse a JSON object request body, or return a 400 envelope Response so a malformed
  * body converges on the standard error shape instead of throwing into the
  * global 500 handler. Callers do
  * `const parsed = await readJsonBody(c); if (parsed instanceof Response) return parsed;`
  * then read `parsed.body`. Pass a type param to preserve the shape the route
- * expects (`readJsonBody<Record<string, unknown>>(c)`).
+ * expects (`readJsonBody<Record<string, unknown>>(c)`). Route-specific fields
+ * still require validation; null, arrays, and scalar bodies are rejected here.
  */
+const jsonObjectBodySchema = z.record(z.string(), z.unknown());
+
 export async function readJsonBody<T = unknown>(
   c: Context,
 ): Promise<{ body: T } | Response> {
   try {
-    return { body: (await c.req.json()) as T };
+    const parsed = jsonObjectBodySchema.safeParse(await c.req.json());
+    if (!parsed.success) {
+      return c.json(
+        errorBody("Body must be a JSON object", {
+          code: "invalid_request_body",
+        }),
+        400,
+      );
+    }
+    return { body: parsed.data as T };
   } catch {
     return c.json(
       errorBody("Invalid JSON body", { code: "invalid_json_body" }),

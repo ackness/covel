@@ -50,6 +50,23 @@ describe("SSE Events", () => {
   });
 
   describe("POST /api/events/emit", () => {
+    it.each([
+      null,
+      { topic: {}, sessionId: "sess-1" },
+      { topic: "test.event", sessionId: 5 },
+      { topic: "test.event", sessionId: "sess-1", payload: [] },
+      { topic: "test.event", sessionId: "sess-1", targetRuntime: {} },
+    ])("rejects invalid event %j without publishing", async (body) => {
+      const response = await app.request("/api/events/emit", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      expect(response.status).toBe(400);
+      await eventBus.flush();
+      expect(await busStore.listEvents("sess-1")).toEqual([]);
+    });
+
     it("should emit an event and return id", async () => {
       const res = await app.request("/api/events/emit", {
         method: "POST",

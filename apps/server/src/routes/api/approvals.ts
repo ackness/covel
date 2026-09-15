@@ -19,6 +19,7 @@
  */
 
 import { Hono } from "hono";
+import { z } from "zod";
 import {
   COMMUNITY_SERVER_CODE_ACTION,
   type RpcApprovalGate,
@@ -26,7 +27,7 @@ import {
 import type { RpcApprovalDecision } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import type { SessionLock } from "../../lib/session-lock.js";
-import { errorBody, listBody, okBody } from "../../api-error.js";
+import { errorBody, listBody, okBody, parseJsonBody } from "../../api-error.js";
 import {
   checkSessionOwner,
   checkHostedOperator,
@@ -52,10 +53,10 @@ type Env = {
   };
 };
 
-interface DecisionBody {
-  readonly decision?: "allow" | "deny";
-  readonly scope?: "once" | "session";
-}
+const decisionBodySchema = z.object({
+  decision: z.enum(["allow", "deny"]),
+  scope: z.enum(["once", "session"]).optional(),
+});
 
 export const approvalRoutes = new Hono<Env>();
 export const sessionApprovalRoutes = new Hono<Env>();
@@ -157,28 +158,9 @@ approvalRoutes.post("/:approvalId/decision", async (c) => {
     if (operatorDenied) return operatorDenied;
   }
 
-  let body: DecisionBody;
-  try {
-    body = await c.req.json<DecisionBody>();
-  } catch {
-    return c.json(errorBody("invalid JSON body"), 400);
-  }
-
-  if (body.decision !== "allow" && body.decision !== "deny") {
-    return c.json(errorBody('decision must be "allow" or "deny"'), 400);
-  }
-
-  if (
-    body.decision === "allow" &&
-    body.scope &&
-    body.scope !== "once" &&
-    body.scope !== "session"
-  ) {
-    return c.json(
-      errorBody('scope must be "once" or "session" when allowing'),
-      400,
-    );
-  }
+  const parsedBody = await parseJsonBody(c, decisionBodySchema);
+  if (parsedBody instanceof Response) return parsedBody;
+  const body = parsedBody.body;
 
   // Runtime and plugin-enable approvals unlock server modules, hooks and
   // tool registrations that outlive a single HTTP dispatch. Their safe

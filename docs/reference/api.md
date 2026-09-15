@@ -2,6 +2,11 @@
 
 Covel HTTP API 参考文档。通过这些端点，你可以在没有前端 UI 的情况下，仅通过 HTTP 请求完成一局完整的 AI RPG 游戏。
 
+JSON object request bodies reject `null`, arrays, and scalar values with `400`
+before dispatch. Approval decisions validate `decision` and `scope` enums before
+consuming a pending approval. Event injection validates string identifiers and
+an object payload before publishing.
+
 ## 概览
 
 - **基础 URL**: `http://localhost:3001/api/`
@@ -3161,12 +3166,14 @@ COVEL_MEDIA_CLEANUP_ENABLED=true \
 
 Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 
-| 端点                     | 帧形态                                     | 信封                                                            | 客户端                                                            | 说明                                                          |
-| ------------------------ | ------------------------------------------ | --------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------- |
-| `POST /api/actions`      | data-only（`data: {...}`，无 `event:` 头） | `SseEnvelope`（带 `requestId/traceId/flowId/seq`）              | `fetch()` + `ReadableStream`（`api.ts:sendAction`）               | 回合内主流：narrative / runtime lifecycle / 工具调用 trace 等 |
-| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: {...}`）   | `ProtocolEvent`（带 `id/source`），并由 server 经 EventBus 广播 | `EventSource` + `addEventListener('<type>')`（`subscription.ts`） | 回合外辅助通道：跨 session 通知 / 持久订阅 / 重连补放         |
+| 端点                     | 帧形态                                     | 信封                                                        | 客户端                                              | 说明                                                          |
+| ------------------------ | ------------------------------------------ | ----------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------- |
+| `POST /api/actions`      | data-only（`data: {...}`，无 `event:` 头） | `SseEnvelope`（带 `requestId/traceId/flowId/seq`）          | `fetch()` + `ReadableStream`（`api.ts:sendAction`） | 回合内主流：narrative / runtime lifecycle / 工具调用 trace 等 |
+| `GET /api/events/stream` | 命名事件（`event: <type>\ndata: {...}`）   | `SubscriptionEvent`（带 `id/topic/type`），由 EventBus 广播 | `fetch()` + `ReadableStream`（`subscription.ts`）   | 回合外辅助通道：跨 session 通知 / 持久订阅 / 重连补放         |
 
 > 关键差异：`/api/actions` 使用 data-only 帧，前端**无法**通过 `EventSource.addEventListener` 订阅；`/api/events/stream` 才是命名事件。
+
+客户端流解析支持 LF、CRLF 和 CR 分隔；只在空行处提交完整事件，EOF 不补发未结束的帧。取消或事件处理失败时释放 reader 并取消未结束的响应；已关闭的订阅不会因迟到的响应恢复连接状态。GET 重试等待同样响应取消，不会因自定义 abort reason 继续重试或弹出网络错误。
 
 ### 事件类型枚举（`CovelEventType`）
 
@@ -3334,7 +3341,20 @@ opening a file does not reload the running gateway. Use
 returning `201` with `restartRequired: false`. The world is immediately available
 through `GET /api/worlds`, including on hosts without a recursive file watcher.
 A failed activation removes only the new package directory so installation can
-be retried. Plugin installation still returns `restartRequired: true`.
+be retried. Uploaded worlds carry `source: "generated-file"` and a binding to
+the user world directory, so DELETE works immediately. An existing world ID
+returns 409 without overwriting its record. Plugin installation still returns
+`restartRequired: true`.
+
+Generated file worlds are written in a hidden staging directory and published
+only when complete. Existing packages and database identities are preserved;
+a collision or activation failure is reported through an SSE error event.
+Failed activation removes only the package created by that request.
+
+Desktop directory imports also validate a staged copy before publication. A
+linked manifest, copy failure, or destination inside the source directory is
+rejected without leaving a partially installed package. Hidden staging
+directories are excluded from world and plugin discovery.
 
 Installation and discovery share `COVEL_USER_WORLDS_DIR` and
 `COVEL_USER_PLUGINS_DIR`, defaulting to `worlds/` and `plugins/` under

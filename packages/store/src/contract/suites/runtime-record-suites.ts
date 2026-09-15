@@ -42,6 +42,41 @@ export function registerRuntimeRecordStoreSuites(
   });
 
   describe("Worlds", () => {
+    it("persists top-level dimensions and keeps projections aligned after replacement and removal", async () => {
+      const original = {
+        geography: {
+          regions: [
+            { name: "Original", description: "Fixture", climate: "Mild" },
+          ],
+        },
+      };
+      const replacement = {
+        geography: {
+          regions: [
+            { name: "Replacement", description: "Fixture", climate: "Mild" },
+          ],
+        },
+      };
+      const world = makeWorld({ dimensions: original });
+      await store.upsertWorld(world);
+      let stored = (await store.getWorld(world.id))!;
+      expect(stored.dimensions).toEqual(original);
+      expect(stored.metadata?.dimensions).toEqual(original);
+      await store.upsertWorld({
+        ...stored,
+        metadata: { ...stored.metadata, dimensions: replacement },
+      });
+      stored = (await store.getWorld(world.id))!;
+      expect(stored.dimensions).toEqual(replacement);
+      expect(stored.metadata?.dimensions).toEqual(replacement);
+      await store.upsertWorld({
+        ...stored,
+        metadata: { dimensions: undefined },
+      });
+      stored = (await store.getWorld(world.id))!;
+      expect(stored.dimensions).toBeUndefined();
+      expect(stored.metadata?.dimensions).toBeUndefined();
+    });
     it("atomically creates a world only once", async () => {
       const original = makeWorld({ name: "Original" });
       const replacement = makeWorld({

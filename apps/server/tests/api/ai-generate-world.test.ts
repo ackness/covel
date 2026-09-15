@@ -100,6 +100,7 @@ async function readSseJson(
 }
 
 describe("ai world generation route", () => {
+  let requestWindow = 0;
   let store: DataStore;
   let app: Hono<Env>;
   let worldsDir: string;
@@ -108,6 +109,11 @@ describe("ai world generation route", () => {
   const previousWorldsDir = process.env.COVEL_WORLDS_DIR;
 
   beforeEach(async () => {
+    // Each fixture owns a fresh limiter window; added cases must not consume
+    // the validation case's quota through the shared module-level route.
+    vi.spyOn(Date, "now").mockReturnValue(
+      Date.now() + ++requestWindow * 60_001,
+    );
     store = createMemoryStore();
     app = createTestApp(store);
     worldsDir = await mkdtemp(path.join(tmpdir(), "covel-ai-worlds-"));
@@ -118,6 +124,7 @@ describe("ai world generation route", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     vi.unstubAllEnvs();
     if (previousStoreBackend === undefined) {
       delete process.env.STORE_BACKEND;
@@ -136,6 +143,46 @@ describe("ai world generation route", () => {
     }
     await rm(worldsDir, { recursive: true, force: true });
   });
+
+  it.each(["collision", "database-error"])(
+    "cleans a newly generated package after %s without overwriting stored worlds",
+    async (failure) => {
+      if (failure === "collision") {
+        await store.upsertWorld({
+          id: "generated-world",
+          name: "Original world",
+          description: "Preserve me",
+          createdAt: new Date().toISOString(),
+        });
+      } else {
+        vi.spyOn(store, "createWorld").mockRejectedValueOnce(
+          new Error("Synthetic database failure"),
+        );
+      }
+      const before = await store.getWorld("generated-world");
+      const generate = () =>
+        app.request("/api/ai/generate-world", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            concept: "Synthetic world",
+            saveTarget: "server-file",
+          }),
+        });
+      const events = await readSseJson(await generate());
+      expect(events.some((event) => event.type === "error")).toBe(true);
+      expect(events.some((event) => event.type === "done")).toBe(false);
+      expect(await store.getWorld("generated-world")).toEqual(before);
+      expect(await readdir(worldsDir)).toEqual([]);
+      if (failure === "database-error") {
+        expect(
+          (await readSseJson(await generate())).some(
+            (event) => event.type === "done",
+          ),
+        ).toBe(true);
+      }
+    },
+  );
 
   it.each([false, true])(
     "saves files in the user directory with explicit override=%s",

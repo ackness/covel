@@ -83,6 +83,7 @@ worldDimensionRoutes.post("/:id/dimensions/import", async (c) => {
   const updated: WorldRecord = {
     ...existing,
     metadata: { ...meta, dimensions: validation.data },
+    dimensions: validation.data as WorldRecord["dimensions"],
     updatedAt: now,
   };
 

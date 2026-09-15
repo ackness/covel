@@ -35,6 +35,7 @@ function createTestApp(store = createMemoryStore()): Hono {
   const app = new Hono();
   app.use("*", async (c, next) => {
     c.set("store", store);
+    c.set("worldsDirs", [worldsDir]);
     await next();
   });
   app.route("/api/install", installRoutes);
@@ -640,7 +641,7 @@ describe("POST /api/install/plugin", () => {
 describe("POST /api/install/world", () => {
   it("rolls back the new directory when activation fails so the upload can be retried", async () => {
     const store = createMemoryStore();
-    vi.spyOn(store, "upsertWorld").mockRejectedValueOnce(
+    vi.spyOn(store, "createWorld").mockRejectedValueOnce(
       new Error("Synthetic persistence failure"),
     );
     const app = createTestApp(store);
@@ -654,8 +655,9 @@ describe("POST /api/install/world", () => {
     expect(await store.getWorld("test-world")).not.toBeNull();
   });
 
-  it("accepts a valid world package", async () => {
-    const app = createTestApp();
+  it("activates an owned world package that can be deleted without a restart", async () => {
+    const store = createMemoryStore();
+    const app = createTestApp(store);
     const zip = await buildZip({
       "world.yaml": VALID_WORLD_YAML,
       "WORLD.md": VALID_WORLD_MD,
@@ -676,6 +678,31 @@ describe("POST /api/install/world", () => {
     expect((await listing.json()).items).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: "test-world" })]),
     );
+    expect(await store.getWorld("test-world")).toMatchObject({
+      metadata: { source: "generated-file", storage: { path: worldsDir } },
+    });
+    expect(
+      (await app.request("/api/worlds/test-world", { method: "DELETE" }))
+        .status,
+    ).toBe(200);
+    expect(await dirExists(path.join(worldsDir, "test-world"))).toBe(false);
+    await store.close();
+  });
+
+  it("rejects a stored world id collision and preserves the existing record", async () => {
+    const store = createMemoryStore();
+    const app = createTestApp(store);
+    const zip = await buildZip({
+      "world.yaml": VALID_WORLD_YAML,
+      "WORLD.md": VALID_WORLD_MD,
+    });
+    expect((await postZip(app, "/api/install/world", zip)).status).toBe(201);
+    const before = await store.getWorld("test-world");
+    await rm(path.join(worldsDir, "test-world"), { recursive: true });
+    expect((await postZip(app, "/api/install/world", zip)).status).toBe(409);
+    expect(await store.getWorld("test-world")).toEqual(before);
+    expect(await dirExists(path.join(worldsDir, "test-world"))).toBe(false);
+    await store.close();
   });
 
   it("rejects missing world.yaml", async () => {

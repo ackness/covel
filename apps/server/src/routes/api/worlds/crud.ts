@@ -3,7 +3,6 @@
  */
 
 import { Hono } from "hono";
-import { rm } from "node:fs/promises";
 import {
   worldCreateRequestSchema,
   worldPatchRequestSchema,
@@ -12,6 +11,7 @@ import type { WorldRecord } from "@covel/store";
 import { errorBody, okBody, readJsonBody } from "../../../api-error.js";
 import {
   resolveGeneratedWorldPackage,
+  deleteWorldPackage,
   WorldPackageResolutionError,
 } from "./file-package.js";
 import { checkWorldWriteAccess } from "./world-write-guard.js";
@@ -106,7 +106,7 @@ worldCrudRoutes.patch("/:id", async (c) => {
   }
   const body = { ...validated.data };
   const now = new Date().toISOString();
-  const metadataResult = resolveWorldMetadata(body, existing.metadata);
+  const metadataResult = resolveWorldMetadata(body, existing.metadata ?? {});
   if (metadataResult.error) {
     return c.json(metadataResult.error.body, metadataResult.error.status);
   }
@@ -119,6 +119,8 @@ worldCrudRoutes.patch("/:id", async (c) => {
     tags: body.tags ?? existing.tags,
     locale: body.locale ?? existing.locale,
     metadata: metadataResult.metadata,
+    dimensions: metadataResult.metadata
+      ?.dimensions as WorldRecord["dimensions"],
     updatedAt: now,
   };
 
@@ -154,8 +156,9 @@ worldCrudRoutes.delete("/:id", async (c) => {
         409,
       );
     }
-    await rm(worldPath, { recursive: true });
+    await deleteWorldPackage(worldPath, () => store.deleteWorld(id));
+  } else {
+    await store.deleteWorld(id);
   }
-  await store.deleteWorld(id);
   return c.json(okBody());
 });

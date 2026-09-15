@@ -111,6 +111,14 @@ server 使用 Node 26 的递归 `fs.watch` 监听内置与用户世界目录，�
 
 删除 `generated-file` 世界时，先在已配置目录中核对 `metadata.storage.path`，再按清单 ID 定位该目录内的唯一世界包。旧记录没有存储绑定时，必须在所有配置目录中唯一匹配。绑定失效、包缺失或有歧义时返回 `409 world_package_unresolved`，文件和数据库记录均不删除；不会回退删除其他目录中的同名包。
 
+文件删除先将包移入同一根目录下的临时容器，再删除数据库记录；数据库失败时恢复原目录，支持重试。提交成功后的临时文件清理失败只记录日志，容器不会作为世界重新加载。这是进程内失败恢复，不提供文件系统与数据库跨进程崩溃的原子提交。
+
+热更新与 worldData 查找共用根目录优先级；被高优先级同 ID 包覆盖的目录不会改写世界记录或通知会话。
+
+启动加载先处理高优先级根目录，再加载未被覆盖的世界。同一根目录的重复 ID 不写入数据库；高优先级清单或维度加载不完整时，保留已有记录并跳过过期清理，不用低优先级内容替换上一份完整状态。启动加载同样拒绝清单符号链接，忽略隐藏临时目录。
+
+世界的 `metadata.source` 和 `metadata.storage` 在普通 PATCH 中保持原值，防止编辑或浏览器同步改变文件归属。存储以 `metadata.dimensions` 为规范值；顶层 `dimensions` 是一致的读取投影。仅提供顶层维度时写入规范字段，替换或清空规范字段时同步更新投影，Memory、SQLite 和 PostgreSQL 行为相同。
+
 ### 插件配置默认值（`pluginSettings`）
 
 `world.yaml` 顶层（与 `pluginPolicy` 平级）可声明 `pluginSettings`，为插件 `userSettings` 预置**世界默认值**，键为 `pluginId → settingKey → value`：

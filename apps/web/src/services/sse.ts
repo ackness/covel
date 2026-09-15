@@ -21,10 +21,13 @@ export async function readSseStream<T>(
   let buffer = "";
   let eventId = "";
   let eventType = "";
-  let eventData = "";
+  let dataLines: string[] = [];
+  let skipLf = false;
+  let finished = false;
 
   const dispatch = (): void => {
-    if (!eventData) return;
+    if (dataLines.length === 0) return;
+    const eventData = dataLines.join("\n");
     const message: SseMessage = {
       ...(eventId ? { id: eventId } : {}),
       ...(eventType ? { event: eventType } : {}),
@@ -39,7 +42,7 @@ export async function readSseStream<T>(
       dispatch();
       eventId = "";
       eventType = "";
-      eventData = "";
+      dataLines = [];
       return;
     }
     if (line.startsWith(":")) return;
@@ -54,25 +57,47 @@ export async function readSseStream<T>(
     } else if (field === "event") {
       eventType = value;
     } else if (field === "data") {
-      eventData = eventData ? `${eventData}\n${value}` : value;
+      dataLines.push(value);
     }
   };
 
-  while (true) {
-    if (options.signal?.aborted) return;
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() ?? "";
-    for (const line of lines) consumeLine(line);
+  const onAbort = () => {
+    void reader.cancel().catch(() => {});
+  };
+  options.signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    while (!options.signal?.aborted) {
+      const { done, value } = await reader.read();
+      finished = done;
+      if (options.signal?.aborted) return;
+      const chunk = decoder.decode(value, { stream: !done });
+      let start = 0;
+      if (skipLf && chunk.length > 0) {
+        if (chunk.startsWith("\n")) start = 1;
+        skipLf = false;
+      }
+      const endings = /\r\n|\r|\n/g;
+      endings.lastIndex = start;
+      for (
+        let match = endings.exec(chunk);
+        match;
+        match = endings.exec(chunk)
+      ) {
+        buffer += chunk.slice(start, match.index);
+        consumeLine(buffer);
+        buffer = "";
+        start = endings.lastIndex;
+        skipLf = match[0] === "\r" && start === chunk.length;
+      }
+      buffer += chunk.slice(start);
+      if (done) break;
+    }
+    // An interrupted frame is not committed by EOF; only a blank line dispatches.
+  } finally {
+    options.signal?.removeEventListener("abort", onAbort);
+    if (!finished) await reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
-
-  const tail = decoder.decode();
-  if (tail) buffer += tail;
-  if (buffer) consumeLine(buffer);
-  dispatch();
 }
 
 export function parseJsonSseData<T>(data: string): T | undefined {

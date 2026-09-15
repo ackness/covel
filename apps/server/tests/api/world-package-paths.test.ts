@@ -3,6 +3,8 @@ import {
   mkdir,
   mkdtemp,
   realpath,
+  readFile,
+  readdir,
   rm,
   symlink,
   writeFile,
@@ -131,6 +133,26 @@ it("deletes only the bound user package, preserving a bundled package with the s
   await expect(access(owned)).rejects.toMatchObject({ code: "ENOENT" });
   await access(path.join(original, "world.yaml"));
   expect(await store.getWorld("logical-world")).toBeNull();
+});
+
+it("restores the package after a database deletion failure and permits retry", async () => {
+  const owned = await makePackage(user, "renamed-world");
+  await seedWorld();
+  const before = await store.getWorld("logical-world");
+  const content = await readFile(path.join(owned, "data/lore.json"), "utf8");
+  app.onError(() => new Response("Database unavailable", { status: 500 }));
+  vi.spyOn(store, "deleteWorld").mockRejectedValueOnce(
+    new Error("Synthetic database failure"),
+  );
+  expect((await removeWorld()).status).toBe(500);
+  expect(await store.getWorld("logical-world")).toEqual(before);
+  expect(await readFile(path.join(owned, "data/lore.json"), "utf8")).toBe(
+    content,
+  );
+  expect(await readdir(user)).toEqual(["renamed-world"]);
+  expect((await removeWorld()).status).toBe(200);
+  expect(await store.getWorld("logical-world")).toBeNull();
+  expect(await readdir(user)).toEqual([]);
 });
 
 it.each([

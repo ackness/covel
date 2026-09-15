@@ -6,7 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { postJson } from "../src/adapters/http.js";
+import { postJson, sleepWithAbort } from "../src/adapters/http.js";
 import type { ProviderConfig } from "../src/types.js";
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -17,35 +17,21 @@ interface MockResponseInit {
   readonly body?: string;
 }
 
-/**
- * Build a mock Response-like object. We can't use the real Response since
- * we need to track whether arrayBuffer() has been called to confirm body drain.
- */
+/** Real streams expose cancellation through bodyUsed. */
 function makeMockResponse(
   init: MockResponseInit,
 ): Response & { bodyDrained: boolean } {
   const headers = new Headers();
   if (init.retryAfter !== undefined)
     headers.set("retry-after", init.retryAfter);
-
-  const mock = {
-    ok: init.status >= 200 && init.status < 300,
+  const response = new Response(init.body ?? "", {
     status: init.status,
-    statusText: `HTTP ${init.status}`,
     headers,
-    bodyDrained: false,
-    async arrayBuffer() {
-      this.bodyDrained = true;
-      return new ArrayBuffer(0);
-    },
-    async text() {
-      return init.body ?? "";
-    },
-    async json() {
-      return init.body ? JSON.parse(init.body) : {};
-    },
-  };
-  return mock as unknown as Response & { bodyDrained: boolean };
+  });
+  Object.defineProperty(response, "bodyDrained", {
+    get: () => response.bodyUsed,
+  });
+  return response as Response & { bodyDrained: boolean };
 }
 
 const CONFIG: ProviderConfig = {
@@ -180,6 +166,43 @@ describe("postJson retry wrapper", () => {
     await expect(promise).rejects.toThrow();
     // Exactly one fetch fired before abort landed in the backoff wait.
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels an unfinished error body before retrying", async () => {
+    const cancel = vi.fn();
+    const failure = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("partial error"));
+        },
+        cancel,
+      }),
+      { status: 503, headers: { "retry-after": "0" } },
+    );
+    const success = new Response("{}", { status: 200 });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(failure).mockResolvedValueOnce(success),
+    );
+    const pending = postJson(CONFIG, "/chat/completions", {});
+    await vi.runAllTimersAsync();
+    expect(await pending).toBe(success);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("keeps oversized timer waits abortable without clamping them to 1ms", async () => {
+    const controller = new AbortController();
+    const resolved = vi.fn();
+    const pending = sleepWithAbort(2_147_483_700, controller.signal).then(
+      resolved,
+    );
+    const rejected = expect(pending).rejects.toThrow("cancel long retry");
+    await vi.advanceTimersByTimeAsync(2_147_483_648);
+    expect(resolved).not.toHaveBeenCalled();
+    controller.abort(new Error("cancel long retry"));
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(sleepWithAbort(Infinity)).rejects.toThrow(RangeError);
   });
 
   it("escape hatch COVEL_LLM_RETRY_DISABLED=1 bypasses retry entirely", async () => {

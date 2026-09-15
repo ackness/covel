@@ -1,4 +1,12 @@
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -116,6 +124,39 @@ describe("createWorld", () => {
 
   afterEach(async () => {
     if (tmp) await rm(tmp, { recursive: true, force: true });
+  });
+
+  it("preserves an existing package and admits only one concurrent creator", async () => {
+    const options = {
+      llm: new FixedLlm(
+        `===WORLD_YAML===\n${WORLD_YAML}\n===WORLD_MD===\n${WORLD_LORE}\n===END===`,
+      ),
+      concept: "Synthetic world",
+      outputDir: tmp,
+      attemptTimeoutMs: 5_000,
+    };
+    await mkdir(path.join(tmp, "test-world"));
+    await writeFile(
+      path.join(tmp, "test-world/world.yaml"),
+      "id: preserved\n",
+      "utf8",
+    );
+    await expect(createWorld(options)).rejects.toThrow("already exists");
+    expect(
+      await readFile(path.join(tmp, "test-world/world.yaml"), "utf8"),
+    ).toBe("id: preserved\n");
+    await rm(path.join(tmp, "test-world"), { recursive: true });
+    const results = await Promise.allSettled([
+      createWorld(options),
+      createWorld(options),
+    ]);
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(await readdir(tmp)).toEqual(["test-world"]);
+    expect(await readFile(path.join(tmp, "test-world/WORLD.md"), "utf8")).toBe(
+      WORLD_LORE,
+    );
   });
 
   it("writes full lore when the model includes the end delimiter", async () => {

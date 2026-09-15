@@ -7,6 +7,7 @@
  */
 
 import { watch, type FSWatcher } from "node:fs";
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import type { DataStore } from "@covel/store";
 import type { EventBus } from "@covel/events";
@@ -14,6 +15,7 @@ import {
   loadSingleWorld,
   preserveWorldProvenance,
 } from "./world-seed-loader.js";
+import { resolveWorldRoot } from "./world-data/session-import/utils.js";
 
 export interface WorldFileWatcher {
   start(): void;
@@ -33,6 +35,7 @@ export function createWorldFileWatcher(
   worldsDir: string,
   store: DataStore,
   eventBus: EventBus,
+  worldsDirs: readonly string[] = [worldsDir],
 ): WorldFileWatcher {
   let watcher: FSWatcher | null = null;
 
@@ -68,6 +71,8 @@ export function createWorldFileWatcher(
       if (!newRecord) return;
 
       const worldId = newRecord.id;
+      const activeRoot = await resolveWorldRoot(worldId, worldsDirs);
+      if (activeRoot !== (await realpath(worldDir))) return;
       const existing = await store.getWorld(worldId);
       if (!existing) return;
 
@@ -156,6 +161,7 @@ export function createWorldFileWatcher(
 
   return {
     start() {
+      if (watcher) return;
       try {
         watcher = watch(
           worldsDir,
@@ -168,6 +174,7 @@ export function createWorldFileWatcher(
             if (segments.length < 1) return;
 
             const directoryName = segments[0];
+            if (directoryName.startsWith(".")) return;
             // Ignore dotfiles and non-yaml/md files
             const ext = path.extname(filename).toLowerCase();
             if (ext !== ".yaml" && ext !== ".yml" && ext !== ".md") return;

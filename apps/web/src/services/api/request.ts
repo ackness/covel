@@ -153,8 +153,22 @@ function isIdempotent(init: RequestInit): boolean {
   return (init.method ?? "GET").toUpperCase() === "GET";
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, signal?: AbortSignal | null): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 function isAbortError(error: unknown): boolean {
@@ -221,6 +235,7 @@ export async function requestResponse(
   const canRetry = retry !== false && isIdempotent(fetchInit);
 
   for (let attempt = 0; ; attempt++) {
+    fetchInit.signal?.throwIfAborted();
     const isLastAttempt = attempt >= MAX_RETRIES;
 
     let res: Response;
@@ -231,11 +246,12 @@ export async function requestResponse(
       });
     } catch (err) {
       // Intentional cancellation is neither a network failure nor retryable.
+      if (fetchInit.signal?.aborted) throw fetchInit.signal.reason;
       if (isAbortError(err)) throw err;
       // Transport-level failure (offline, DNS, CORS preflight, or the dev proxy
       // resetting the socket because the runtime server isn't up yet).
       if (canRetry && !isLastAttempt) {
-        await delay(backoffMs(attempt));
+        await delay(backoffMs(attempt), fetchInit.signal);
         continue;
       }
       if (!silentErrors) emitNetworkErrorToast(url, err);
@@ -244,10 +260,12 @@ export async function requestResponse(
 
     if (!res.ok) {
       if (canRetry && !isLastAttempt && RETRYABLE_STATUS.has(res.status)) {
-        await delay(backoffMs(attempt));
+        await res.body?.cancel().catch(() => {});
+        await delay(backoffMs(attempt), fetchInit.signal);
         continue;
       }
       const text = await res.text().catch((error: unknown) => {
+        if (fetchInit.signal?.aborted) throw fetchInit.signal.reason;
         if (isAbortError(error)) throw error;
         return "";
       });
@@ -274,6 +292,7 @@ export async function request<T>(
     const body: unknown = await res.json();
     return schema ? schema.parse(body) : (body as T);
   } catch (cause) {
+    if (init?.signal?.aborted) throw init.signal.reason;
     if (isAbortError(cause)) throw cause;
     const error = new ApiResponseError(
       res.status,

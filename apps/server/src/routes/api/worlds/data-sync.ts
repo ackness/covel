@@ -8,6 +8,7 @@
  */
 
 import { Hono } from "hono";
+import { z } from "zod";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import { FrameworkCapability } from "@covel/shared";
 import { errorBody, okBody, readJsonBody } from "../../../api-error.js";
@@ -34,9 +35,13 @@ worldDataSyncRoutes.post("/:id/world-data/preflight", async (c) => {
   const worldsDirs = c.get("worldsDirs");
   const covelHome = c.get("covelHome");
   const worldId = c.req.param("id");
-  const body: Record<string, unknown> = await c.req
-    .json<Record<string, unknown>>()
-    .catch(() => ({}));
+  const parsedBody = z
+    .record(z.string(), z.unknown())
+    .safeParse(await c.req.json().catch(() => ({})));
+  if (!parsedBody.success) {
+    return c.json(errorBody("Body must be a JSON object"), 400);
+  }
+  const body = parsedBody.data;
   const sessionId =
     typeof body.sessionId === "string" ? body.sessionId : "preflight";
   const session =
@@ -91,9 +96,13 @@ worldDataSyncRoutes.post("/:id/sync-data", async (c) => {
   const covelHome = c.get("covelHome");
   const mediaStore = c.get("mediaStore");
   const worldId = c.req.param("id");
-  const body: Record<string, unknown> = await c.req
-    .json<Record<string, unknown>>()
-    .catch(() => ({}));
+  const parsedBody = z
+    .record(z.string(), z.unknown())
+    .safeParse(await c.req.json().catch(() => ({})));
+  if (!parsedBody.success) {
+    return c.json(errorBody("Body must be a JSON object"), 400);
+  }
+  const body = parsedBody.data;
   const sessionId = body.sessionId;
   if (typeof sessionId !== "string") {
     return c.json(errorBody("sessionId (string) is required"), 400);

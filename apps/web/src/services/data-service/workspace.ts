@@ -41,13 +41,16 @@ class LocalSessionWorkspace implements SessionWorkspace {
   ): Promise<T> {
     const tail = this.tails.get(sessionId) ?? Promise.resolve();
     const result = tail.then(operation, operation);
-    this.tails.set(
-      sessionId,
-      result.then(
-        () => undefined,
-        () => undefined,
-      ),
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
     );
+    this.tails.set(sessionId, settled);
+    void settled.then(() => {
+      if (this.tails.get(sessionId) === settled) {
+        this.tails.delete(sessionId);
+      }
+    });
     return result;
   }
 

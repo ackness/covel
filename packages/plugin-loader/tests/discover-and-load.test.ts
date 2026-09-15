@@ -44,6 +44,16 @@ afterEach(async () => {
 // ── discoverPlugins ─────────────────────────────────────────────
 
 describe("discoverPlugins", () => {
+  it("ignores staged installs until their directory is published", async () => {
+    const staged = path.join(tmpDir, ".import-pending");
+    await fs.mkdir(staged);
+    await fs.writeFile(path.join(staged, "PLUGIN.md"), MINIMAL_FRONTMATTER);
+    expect(await discoverPlugins(tmpDir)).toEqual([]);
+    await fs.rename(staged, path.join(tmpDir, "ready-plugin"));
+    expect((await discoverPlugins(tmpDir)).map((entry) => entry.id)).toEqual([
+      "ready-plugin",
+    ]);
+  });
   it("discovers a single-runtime plugin", async () => {
     const pluginDir = path.join(tmpDir, "my-plugin");
     await fs.mkdir(pluginDir, { recursive: true });

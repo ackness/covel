@@ -257,6 +257,8 @@ aiRoutes.post(
         await stream.writeSSE({ data: JSON.stringify(event) });
       };
 
+      let generatedWorldDir: string | undefined;
+      let activated = false;
       try {
         await send({ type: "progress", phase: "generating" });
 
@@ -297,6 +299,7 @@ aiRoutes.post(
           });
           return;
         }
+        generatedWorldDir = path.join(outputDir, result.id);
 
         await send({ type: "progress", phase: "validating" });
 
@@ -326,7 +329,10 @@ aiRoutes.post(
             ? fileRecord
             : recordForStoreOnly(fileRecord, saveTarget);
         if (saveTarget !== "return-only") {
-          await store.upsertWorld(record);
+          if (!(await store.createWorld(record))) {
+            throw new Error(`World already exists: ${record.id}`);
+          }
+          activated = true;
         }
 
         console.log(
@@ -341,6 +347,9 @@ aiRoutes.post(
           message: msg,
         });
       } finally {
+        if (saveTarget === "server-file" && generatedWorldDir && !activated) {
+          await rm(generatedWorldDir, { recursive: true, force: true });
+        }
         if (saveTarget !== "server-file") {
           await rm(outputDir, { recursive: true, force: true });
         }

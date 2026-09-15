@@ -5,11 +5,12 @@
  */
 
 import { Hono } from "hono";
+import { z } from "zod";
 import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
 import type { CovelMessage } from "@covel/shared";
 import { isEnvTruthy, readRuntimeEnv } from "@covel/shared";
-import { errorBody, okBody, readJsonBody } from "../../api-error.js";
+import { errorBody, okBody, parseJsonBody } from "../../api-error.js";
 import type { SessionLock } from "../../lib/session-lock.js";
 import {
   checkSessionOwner,
@@ -36,18 +37,17 @@ eventRoutes.post("/emit", async (c) => {
   }
 
   const eventBus = c.get("eventBus");
-  const parsed = await readJsonBody<{
-    topic?: string;
-    payload?: Record<string, unknown>;
-    sessionId?: string;
-    targetRuntime?: string;
-  }>(c);
+  const parsed = await parseJsonBody(
+    c,
+    z.object({
+      topic: z.string().min(1),
+      sessionId: z.string().min(1),
+      payload: z.record(z.string(), z.unknown()).nullish(),
+      targetRuntime: z.string().optional(),
+    }),
+  );
   if (parsed instanceof Response) return parsed;
   const body = parsed.body;
-
-  if (!body.topic || !body.sessionId) {
-    return c.json(errorBody("topic and sessionId are required"), 400);
-  }
 
   // Audit 2026-07-16 L-3: on hosted tiers, gate event injection on the target
   // session's owner token so a non-production demo boot can't accept arbitrary

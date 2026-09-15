@@ -349,7 +349,7 @@ await seedAndReconcileWorlds(store, worldsDirs);
 
 // ── World file watcher (hot-reload) ─────────────────────────────
 const worldWatchers = worldsDirs.map((dir) =>
-  createWorldFileWatcher(dir, store, api.eventBus),
+  createWorldFileWatcher(dir, store, api.eventBus, worldsDirs),
 );
 for (const watcher of worldWatchers) watcher.start();
 const stopWatchers = () => {

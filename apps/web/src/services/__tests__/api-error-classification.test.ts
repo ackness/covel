@@ -106,6 +106,25 @@ describe("fetchServerHealth", () => {
 });
 
 describe("SSE subscription retry policy", () => {
+  it("stays closed when response headers arrive after cancellation", async () => {
+    let complete!: (response: Response) => void;
+    globalThis.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const states: string[] = [];
+    const sub = createSessionSubscription("sess-1", {
+      onStateChange: (state) => states.push(state),
+    });
+    sub.close();
+    const cancel = vi.fn();
+    complete(new Response(new ReadableStream({ cancel })));
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+    expect(sub.state).toBe("closed");
+    expect(states).toEqual(["closed"]);
+  });
   it("keeps retrying an early 404 — local mode connects before syncToServer", async () => {
     // `startGameSession` dispatches SET_SESSION (which mounts the subscription)
     // several round-trips before `syncToServer` creates the session on the

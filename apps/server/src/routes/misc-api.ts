@@ -5,6 +5,7 @@
  */
 
 import { Hono } from "hono";
+import { z } from "zod";
 import { providerApiKeysFromEnv, readRuntimeEnv } from "@covel/shared";
 import { reloadAiStack, type AiStack } from "../ai-setup.js";
 import {
@@ -220,9 +221,16 @@ export function createMiscApiRoutes(
   app.post("/api/ai/ping", async (c) => {
     const denied = checkHostedOperator(c);
     if (denied) return denied;
-    const body = await c.req
-      .json<{ presetId?: string; slot?: string }>()
-      .catch((): { presetId?: string; slot?: string } => ({}));
+    const parsedBody = z
+      .object({
+        presetId: z.string().optional(),
+        slot: z.string().optional(),
+      })
+      .safeParse(await c.req.json().catch(() => ({})));
+    if (!parsedBody.success) {
+      return c.json(errorBody("Invalid ping request body"), 400);
+    }
+    const body = parsedBody.data;
     const requested =
       body.presetId ?? (body.slot ? `slot-${body.slot}` : "slot-default");
 

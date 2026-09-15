@@ -149,7 +149,8 @@ export function createSessionSubscription(
   async function connect(): Promise<void> {
     if (closed) return;
 
-    abortController = new AbortController();
+    const controller = new AbortController();
+    abortController = controller;
     setState(connectionState === "connecting" ? "connecting" : "reconnecting");
 
     try {
@@ -157,12 +158,16 @@ export function createSessionSubscription(
       // HTTP error handling with every other API request. Passing sessionId is
       // required because this endpoint carries it in the query string.
       const res = await requestResponse(buildUrl(), {
-        signal: abortController.signal,
+        signal: controller.signal,
         headers: { Accept: "text/event-stream" },
         sessionId,
         silentErrors: true,
         retry: false,
       });
+      if (closed || controller.signal.aborted) {
+        await res.body?.cancel().catch(() => {});
+        return;
+      }
 
       // Connected successfully — reset backoff and the client-error streak
       setState("connected");
@@ -171,7 +176,7 @@ export function createSessionSubscription(
 
       await readSseStream({
         response: res,
-        signal: abortController.signal,
+        signal: controller.signal,
         parse: (data, message) => {
           const parsed = parseJsonSseData<Record<string, unknown>>(data);
           if (!parsed) return undefined;
