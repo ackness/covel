@@ -33,7 +33,7 @@ export function createWorldFileWatcher(
 ): WorldFileWatcher {
   let watcher: FSWatcher | null = null;
 
-  // Debounce timers per worldId
+  // Debounce timers per physical directory; manifest ids can differ.
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const DEBOUNCE_MS = 500;
 
@@ -41,15 +41,15 @@ export function createWorldFileWatcher(
    * Handle a file change event for a specific world.
    * Debounced to avoid processing partial writes.
    */
-  function scheduleReload(worldId: string) {
-    const existing = debounceTimers.get(worldId);
+  function scheduleReload(directoryName: string) {
+    const existing = debounceTimers.get(directoryName);
     if (existing) clearTimeout(existing);
 
     debounceTimers.set(
-      worldId,
+      directoryName,
       setTimeout(() => {
-        debounceTimers.delete(worldId);
-        void reloadWorld(worldId);
+        debounceTimers.delete(directoryName);
+        void reloadWorld(directoryName);
       }, DEBOUNCE_MS),
     );
   }
@@ -57,13 +57,14 @@ export function createWorldFileWatcher(
   /**
    * Re-read a world package and update the store if dimensions changed.
    */
-  async function reloadWorld(worldId: string) {
-    const worldDir = path.join(worldsDir, worldId);
+  async function reloadWorld(directoryName: string) {
+    const worldDir = path.join(worldsDir, directoryName);
 
     try {
       const newRecord = await loadSingleWorld(worldDir);
       if (!newRecord) return;
 
+      const worldId = newRecord.id;
       const existing = await store.getWorld(worldId);
       if (!existing) return;
 
@@ -103,7 +104,10 @@ export function createWorldFileWatcher(
       // Notify active sessions using this world
       await notifySessions(worldId, changedKeys);
     } catch (err) {
-      console.warn(`[world-watcher] Failed to reload world ${worldId}:`, err);
+      console.warn(
+        `[world-watcher] Failed to reload world directory ${directoryName}:`,
+        err,
+      );
     }
   }
 
@@ -157,16 +161,16 @@ export function createWorldFileWatcher(
           (_eventType, filename) => {
             if (!filename) return;
 
-            // Extract worldId from the file path (first path segment)
+            // The first segment locates the package, not its logical world id.
             const segments = filename.split(path.sep);
             if (segments.length < 1) return;
 
-            const worldId = segments[0];
+            const directoryName = segments[0];
             // Ignore dotfiles and non-yaml/md files
             const ext = path.extname(filename).toLowerCase();
             if (ext !== ".yaml" && ext !== ".yml" && ext !== ".md") return;
 
-            scheduleReload(worldId);
+            scheduleReload(directoryName);
           },
         );
 

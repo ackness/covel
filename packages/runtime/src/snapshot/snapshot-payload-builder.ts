@@ -154,6 +154,7 @@ export async function buildSnapshotPayload(
       setupRuntimes: session.setupRuntimes,
     },
     characters,
+    stateSchemas,
     stateEntries,
     pluginData,
     workingMemory,

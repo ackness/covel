@@ -5,6 +5,10 @@ import { spawn } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { createConfigApiRoutes } from "../../src/routes/config-api.js";
+import {
+  buildKeysEnvPatch,
+  loadKeysEnv,
+} from "../../../desktop/src/env-files.js";
 
 vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
 
@@ -193,6 +197,30 @@ describe("config API env and file contracts", () => {
     expect(
       fs.readFileSync(path.join(tmpHome, "keys.env"), "utf-8"),
     ).not.toContain("_API_KEY=");
+  });
+
+  it("applies complete desktop key snapshots as deletions, including clearing the last key", async () => {
+    process.env.COVEL_HOME = tmpHome;
+    const file = path.join(tmpHome, "keys.env");
+    fs.writeFileSync(
+      file,
+      "DEEPSEEK_API_KEY=synthetic-old\nOPEN_ROUTER_API_KEY=synthetic-router\n",
+      "utf8",
+    );
+    Object.assign(apiKeys, loadKeysEnv(file), { environment: "synthetic-env" });
+    const app = buildApp(apiKeys);
+    for (const keys of [{ OPEN_ROUTER_API_KEY: "synthetic-new" }, {}]) {
+      const response = await app.request("/api/config/keys", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildKeysEnvPatch(file, keys)),
+      });
+      expect(response.status).toBe(200);
+      const expected =
+        "OPEN_ROUTER_API_KEY" in keys ? { "open-router": "synthetic-new" } : {};
+      expect(loadKeysEnv(file)).toEqual(expected);
+      expect(apiKeys).toEqual({ ...expected, environment: "synthetic-env" });
+    }
   });
 
   it("refuses to replace an unreadable keys.env", async () => {

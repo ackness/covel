@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
-import { loadKeysEnv, saveKeysEnv } from "./env-files.js";
+import { buildKeysEnvPatch, loadKeysEnv, saveKeysEnv } from "./env-files.js";
 import {
   importAsset,
   type ImportKind,
@@ -203,14 +203,17 @@ export function registerDesktopIpcHandlers({
   });
   ipcMain.handle("covel:keys:save", async (event, payload: unknown) => {
     if (!isTrustedSender(event, "covel:keys:save")) return { ok: false };
-    if (!payload || typeof payload !== "object") return { ok: false };
+    if (!payload || typeof payload !== "object" || Array.isArray(payload))
+      return { ok: false };
     const keys: Record<string, string> = {};
     for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
-      if (typeof v === "string") keys[k] = v;
+      if (typeof v !== "string") return { ok: false };
+      keys[k] = v;
     }
     try {
+      const patch = buildKeysEnvPatch(paths.userKeysEnvPath, keys);
       try {
-        await saveKeysViaSidecar(keys);
+        await saveKeysViaSidecar(patch);
       } catch (err) {
         if (!isSidecarUnavailable(err)) throw err;
         writeLog("warn", "keys:save sidecar fallback:", err);

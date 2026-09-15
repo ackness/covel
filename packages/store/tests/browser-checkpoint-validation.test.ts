@@ -54,6 +54,7 @@ const pluginData = {
 };
 const snapshotRecords = {
   characters: [makeCharacter()],
+  stateSchemas: [makeStateSchema()],
   stateEntries: [makeStateEntry()],
   pluginData: [pluginData],
   workingMemory: [makeWorkingMemory()],

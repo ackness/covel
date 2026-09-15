@@ -4,7 +4,11 @@
  * Split out of `../types.ts` by domain; re-exported there for compatibility.
  */
 
-import type { CharacterRecord, StateEntryRecord } from "./state-records.js";
+import type {
+  CharacterRecord,
+  StateEntryRecord,
+  StateSchemaRecord,
+} from "./state-records.js";
 import type {
   LorebookEntryRecord,
   SessionSummaryRecord,
@@ -36,6 +40,8 @@ interface SnapshotPayloadBase {
   readonly turnId: string;
   readonly characters: readonly CharacterRecord[];
   readonly stateEntries: readonly StateEntryRecord[];
+  /** Frozen table definitions. Legacy v3 payloads omit this field. */
+  readonly stateSchemas?: readonly StateSchemaRecord[];
   readonly pluginData: readonly PluginDataRecord[];
   readonly workingMemory: readonly WorkingMemoryRecord[];
   /**

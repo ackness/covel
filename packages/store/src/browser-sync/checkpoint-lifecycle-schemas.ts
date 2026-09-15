@@ -10,6 +10,7 @@ import {
   pluginData,
   sessionSummaries,
   stateEntries,
+  stateSchemas,
   timestamp,
   workingMemory,
 } from "./checkpoint-record-schemas.js";
@@ -117,6 +118,7 @@ const suspensions = createdRow.extend({
 
 export const snapshotRecordArrays = {
   characters: z.array(characters),
+  stateSchemas: z.array(stateSchemas).optional(),
   stateEntries: z.array(stateEntries),
   pluginData: z.array(pluginData),
   workingMemory: z.array(workingMemory),

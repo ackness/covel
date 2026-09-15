@@ -53,6 +53,10 @@ import {
   copyForkDisplayMessages,
 } from "./fork-display-messages.js";
 import {
+  ForkStateSchemaMissingError,
+  copyForkStateSchemas,
+} from "./fork-state-schemas.js";
+import {
   mintSessionOwnerToken,
   mintSessionApprovalScope,
   resolveSessionParam,
@@ -382,16 +386,12 @@ snapshotRoutes.post("/:id/fork", async (c) => {
               await tx.upsertCharacter(record);
             }
 
-            // Copy state schemas (needed so stateEntries can be listed by the child)
-            const parentSchemas = await tx.listStateSchemas(parentSessionId);
-            for (const s of parentSchemas) {
-              await tx.saveStateSchema({
-                ...s,
-                id: randomUUID(),
-                sessionId: childSessionId,
-                createdAt: now,
-              });
-            }
+            const childStateSchemas = await copyForkStateSchemas(
+              tx,
+              snapshot,
+              childSessionId,
+              now,
+            );
 
             // Copy state entries
             for (const se of snapshot.payload.stateEntries) {
@@ -643,6 +643,7 @@ snapshotRoutes.post("/:id/fork", async (c) => {
                   childSessionId,
                 ),
                 suspensions: childSuspensions,
+                stateSchemas: childStateSchemas,
                 sessionSummaries: childSessionSummaries,
                 compactedMessageSummaryIds: childCompactedMessageSummaryIds,
                 messagesCursor: childMessagesCursor,
@@ -665,6 +666,14 @@ snapshotRoutes.post("/:id/fork", async (c) => {
             return c.json(
               errorBody("Snapshot cursor no longer exists in parent session", {
                 code: "cursor_missing",
+              }),
+              409,
+            );
+          }
+          if (err instanceof ForkStateSchemaMissingError) {
+            return c.json(
+              errorBody("Snapshot state table definitions are unavailable", {
+                code: "snapshot_schema_missing",
               }),
               409,
             );

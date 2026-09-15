@@ -29,6 +29,17 @@ export function loadKeysEnvForChild(keysFile: string): Record<string, string> {
   return toApiKeyEnvMap(loadKeysEnv(keysFile));
 }
 
+/** Convert a complete renderer snapshot into the sidecar's patch protocol. */
+export function buildKeysEnvPatch(
+  keysFile: string,
+  keys: Record<string, string>,
+): Record<string, string> {
+  const removals = Object.fromEntries(
+    Object.keys(loadKeysEnv(keysFile)).map((provider) => [provider, ""]),
+  );
+  return { ...removals, ...normalizeProviderKeyMap(keys) };
+}
+
 export function saveKeysEnv(
   keysFile: string,
   keys: Record<string, string>,
