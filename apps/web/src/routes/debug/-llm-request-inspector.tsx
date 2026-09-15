@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { resolveProviderRequestBody } from "@covel/shared";
 import type { TraceEvent } from "@/services/api.js";
 import { getTraceData, traceEventIdentity } from "./-debug-helpers.js";
 import { llmAttempts } from "./-llm-attempts.js";
@@ -19,7 +20,7 @@ export function LLMRequestInspector({
   const [mode, setMode] = useState<"provider" | "logical">("provider");
   const data = getTraceData(event.payload);
   const requests = Array.isArray(data.providerRequests)
-    ? data.providerRequests.filter(isRecord)
+    ? data.providerRequests
     : [];
   return (
     <section className="space-y-3" data-testid="llm-request-inspector">
@@ -54,51 +55,58 @@ export function LLMRequestInspector({
                 {t("debugger.providerRequestUnavailable")}
               </p>
             )}
-            {requests.map((request, index) => (
-              <section key={index} className="space-y-2 rounded border p-3">
-                <div className="flex flex-wrap gap-2 text-xs font-mono">
-                  <span>
-                    #{index + 1} · {String(request.provider ?? "")} /{" "}
-                    {String(request.protocol ?? "")}
-                  </span>
-                  <span>HTTP {String(request.statusCode ?? "—")}</span>
-                  <span>
-                    {t("debugger.transportAttempt")}:{" "}
-                    {String(request.transportAttempt ?? 0)}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {t("debugger.httpHeadersDuration")}:{" "}
-                  {typeof request.durationMs === "number"
-                    ? `${request.durationMs} ms`
-                    : "—"}
-                </p>
-                {request.complete !== true && (
-                  <p className="text-xs text-amber-600">
-                    {t("debugger.requestOmitted", {
-                      count:
-                        typeof request.omittedFieldCount === "number"
-                          ? request.omittedFieldCount
-                          : 0,
-                    })}
+            {requests.map((request, index) => {
+              if (!isRecord(request)) return null;
+              const body = resolveProviderRequestBody(requests, index);
+              return (
+                <section key={index} className="space-y-2 rounded border p-3">
+                  <div className="flex flex-wrap gap-2 text-xs font-mono">
+                    <span>
+                      #{index + 1} · {String(request.provider ?? "")} /{" "}
+                      {String(request.protocol ?? "")}
+                    </span>
+                    <span>HTTP {String(request.statusCode ?? "—")}</span>
+                    <span>
+                      {t("debugger.transportAttempt")}:{" "}
+                      {String(request.transportAttempt ?? 0)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t("debugger.httpHeadersDuration")}:{" "}
+                    {typeof request.durationMs === "number"
+                      ? `${request.durationMs} ms`
+                      : "—"}
                   </p>
-                )}
-                <button
-                  type="button"
-                  className="rounded border px-2 py-1 text-xs"
-                  onClick={() => {
-                    void navigator.clipboard
-                      ?.writeText(JSON.stringify(request.body, null, 2))
-                      .catch(() => undefined);
-                  }}
-                >
-                  {t("debugger.copyProviderBody")}
-                </button>
-                <pre className="max-h-120 overflow-auto whitespace-pre-wrap wrap-break-word border bg-muted/20 p-2 text-xs select-text">
-                  {JSON.stringify(request.body, null, 2)}
-                </pre>
-              </section>
-            ))}
+                  {request.complete !== true && (
+                    <p className="text-xs text-amber-600">
+                      {t("debugger.requestOmitted", {
+                        count:
+                          typeof request.omittedFieldCount === "number"
+                            ? request.omittedFieldCount
+                            : 0,
+                      })}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!body}
+                    className="rounded border px-2 py-1 text-xs"
+                    onClick={() => {
+                      void navigator.clipboard
+                        ?.writeText(JSON.stringify(body, null, 2))
+                        .catch(() => undefined);
+                    }}
+                  >
+                    {t("debugger.copyProviderBody")}
+                  </button>
+                  <pre className="max-h-120 overflow-auto whitespace-pre-wrap wrap-break-word border bg-muted/20 p-2 text-xs select-text">
+                    {body
+                      ? JSON.stringify(body, null, 2)
+                      : t("debugger.providerRequestUnavailable")}
+                  </pre>
+                </section>
+              );
+            })}
           </div>
         )}
       </div>

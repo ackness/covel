@@ -271,3 +271,8 @@ export type {
 export { resolvePluginSelection } from "./plugin-selection.js";
 
 export type { LLMProviderRequest } from "./types/llm-provider-request.js";
+export {
+  compactProviderRequests,
+  resolveProviderRequestBody,
+  type LLMProviderRequestTrace,
+} from "./llm-request-trace.js";

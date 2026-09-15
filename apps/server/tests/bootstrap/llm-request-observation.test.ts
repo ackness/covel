@@ -7,7 +7,11 @@ import {
   type ProviderProtocol,
 } from "@covel/ai-provider";
 import { createGatewayAdapter, createTurnEmitter } from "@covel/runtime";
-import type { LLMProviderRequest } from "@covel/shared";
+import {
+  resolveProviderRequestBody,
+  type LLMProviderRequest,
+  type LLMProviderRequestTrace,
+} from "@covel/shared";
 import {
   callLLMWithRetry,
   streamLLMWithRetry,
@@ -115,11 +119,16 @@ afterEach(() => vi.unstubAllEnvs());
 function recorded(
   rows: Array<{ type: string; payload: unknown }>,
 ): LLMProviderRequest[] {
-  return (
+  const requests = (
     rows.find((row) => row.type === "llm.calling")?.payload as {
-      providerRequests: LLMProviderRequest[];
+      providerRequests: LLMProviderRequestTrace[];
     }
   ).providerRequests;
+  return requests.map((request, index) => ({
+    ...request,
+    schemaVersion: 1,
+    body: resolveProviderRequestBody(requests, index)!,
+  }));
 }
 
 describe("model requests through runtime, gateway, and HTTP adapter", () => {
@@ -247,6 +256,15 @@ describe("model requests through runtime, gateway, and HTTP adapter", () => {
       ["primary", 1, 200],
     ]);
     expect(recorded(rows).map((r) => r.body)).toEqual(calls);
+    const payload = rows.find((row) => row.type === "llm.calling")!.payload as {
+      providerRequests: LLMProviderRequestTrace[];
+    };
+    expect(payload.providerRequests[1]).toMatchObject({
+      schemaVersion: 2,
+      bodyRef: 0,
+      statusCode: 200,
+    });
+    expect(payload.providerRequests[1]).not.toHaveProperty("body");
   });
 
   it("retains failed target requests before a successful fallback", async () => {

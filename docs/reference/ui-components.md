@@ -132,6 +132,12 @@ catalog icon (panel tabs use `HelpCircle` as their fallback).
 | `GraphCanvas`     | Force-directed graph via `react-force-graph-2d` (lazy-loaded, ~60 KB gzip). Reads `pluginData[pluginId][nodesNamespace]` and `[edgesNamespace]`. | `pluginId`, `nodesNamespace`, `edgesNamespace`, `height?` |
 | `WorldDimensions` | Renders the active world's structured dimensions (geography / factions / power system / …). Reads from session context; no bindings required.    | —                                                         |
 
+`GraphCanvas` refreshes node summaries and relationship text on metadata-only
+plugin-data updates. The simulation retains its node identities, positions and
+pins; only topology changes publish a new simulation data wrapper. Selection
+highlighting computes direct neighbors once per data/selection change and uses
+constant-time membership checks while painting nodes.
+
 ### Multimodal
 
 | Component          | Purpose                                                                                                                                                                   | Key props                                                                    |

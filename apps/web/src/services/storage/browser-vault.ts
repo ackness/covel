@@ -7,6 +7,7 @@ import {
   type WorldRecord,
 } from "@covel/store/browser-sync";
 import Dexie, { type Table } from "dexie";
+import { sha256Hex } from "@/lib/media-hash.js";
 
 export interface ApplySessionCommitResult {
   readonly applied: boolean;
@@ -25,7 +26,7 @@ export interface BrowserVaultOptions {
 }
 
 export const BROWSER_VAULT_DB_NAME = "covel-browser-vault";
-export const BROWSER_VAULT_SCHEMA_VERSION = 3;
+export const BROWSER_VAULT_SCHEMA_VERSION = 4;
 
 export class BrowserVaultError extends Error {
   constructor(message: string) {
@@ -79,12 +80,30 @@ class BrowserVaultDatabase extends Dexie {
 
   constructor(name: string) {
     super(name);
-    this.version(BROWSER_VAULT_SCHEMA_VERSION).stores({
+    const schema = {
       checkpoints: "sessionId, revision, committedAt",
       commits: "id, sessionId, actionId, revision, [sessionId+actionId]",
       pendingCommits: "sessionId, actionId, stagedAt",
       worlds: "id, createdAt, updatedAt",
-    });
+    };
+    this.version(3).stores(schema);
+    this.version(BROWSER_VAULT_SCHEMA_VERSION)
+      .stores(schema)
+      .upgrade(async (tx) => {
+        const commits = tx.table<CommitRecord, string>("commits");
+        // Read one old snapshot at a time. Keep the upgrade transaction alive
+        // during Web Crypto, so interruption rolls the entire migration back.
+        for (
+          let record = await commits.orderBy(":id").first();
+          record;
+          record = await commits.where(":id").above(record.id).first()
+        ) {
+          const digest = await Dexie.waitFor(
+            hashCheckpointJson(record.checkpointDigest),
+          );
+          await commits.update(record.id, { checkpointDigest: digest });
+        }
+      });
   }
 }
 
@@ -148,6 +167,10 @@ function stableJson(value: unknown): string {
 
 function commitKey(sessionId: string, actionId: string): string {
   return `${sessionId}\0${actionId}`;
+}
+
+async function hashCheckpointJson(serialized: string): Promise<string> {
+  return `sha256:${await sha256Hex(new TextEncoder().encode(serialized).buffer)}`;
 }
 
 function cloneCheckpoint(checkpoint: BrowserCheckpoint): BrowserCheckpoint {
@@ -214,7 +237,8 @@ export class BrowserVault {
   ): Promise<ApplySessionCommitResult> {
     const commit = validateSessionCommit(value);
     assertNoSecrets(commit.checkpoint);
-    const digest = stableJson(commit.checkpoint);
+    // Hash before opening the write transaction; native crypto is asynchronous.
+    const digest = await hashCheckpointJson(stableJson(commit.checkpoint));
 
     return this.db.transaction(
       "rw",

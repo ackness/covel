@@ -11,6 +11,23 @@ export function linkTouches(link: ForceLink, nodeId: string): boolean {
   );
 }
 
+/** Compute once per selection/topology change, outside the per-node painter. */
+export function connectedNodeIds(
+  links: readonly ForceLink[],
+  selectedId: string | undefined,
+): ReadonlySet<string> {
+  const ids = new Set<string>();
+  if (!selectedId) return ids;
+  ids.add(selectedId);
+  for (const link of links) {
+    if (linkTouches(link, selectedId)) {
+      ids.add(endpointId(link.source));
+      ids.add(endpointId(link.target));
+    }
+  }
+  return ids;
+}
+
 /** Accessible navigation also works without interpreting the canvas geometry. */
 export function GraphRelationships({
   nodes,

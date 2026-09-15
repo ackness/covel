@@ -155,6 +155,7 @@ export function LlmAdvancedPane() {
   ).length;
 
   const commit = (next: Record<string, ModelParameterOverrides>) => {
+    if (!selectedSlot) return;
     setParamOverridesLocal(next);
     setParamOverrides(next);
   };
@@ -236,7 +237,10 @@ export function LlmAdvancedPane() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <fieldset
+        disabled={!selectedSlot}
+        className="grid grid-cols-1 gap-3 md:grid-cols-2"
+      >
         {PARAMETER_DEFINITIONS.map((definition) => (
           <ParameterCard
             key={definition.field}
@@ -256,7 +260,7 @@ export function LlmAdvancedPane() {
           modelLimit={capability?.maxOutputTokens}
           onChange={(value) => setField("maxOutputTokens", value)}
         />
-      </div>
+      </fieldset>
 
       <Button
         variant="outline"

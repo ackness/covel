@@ -18,7 +18,13 @@ test("saved custom roles remain editable in generation, assignment and import pa
         models: [{ ref: "fixture-model", modelId: "fixture-text" }],
       },
     ],
-    "llm.slotConfig": { "custom-analysis": { modelRef: "fixture-model" } },
+    "llm.slotConfig": {
+      "custom-analysis": {
+        presetId: "legacy-model",
+        modelRef: "fixture-model",
+      },
+    },
+    "llm.paramOverrides": { default: { temperature: 0.3 } },
   });
   await page.goto("/session");
   await page
@@ -28,6 +34,13 @@ test("saved custom roles remain editable in generation, assignment and import pa
   await settings
     .getByRole("button", { name: "Generation", exact: true })
     .click();
+  await settings
+    .getByRole("combobox", { name: "Select Slot" })
+    .selectOption("default");
+  await expect(
+    settings.getByRole("spinbutton", { name: "Temperature" }),
+  ).toHaveValue("0.3");
+  await settings.getByRole("spinbutton", { name: "Temperature" }).fill("0.2");
   await settings
     .getByRole("combobox", { name: "Select Slot" })
     .selectOption("custom-analysis");
@@ -74,6 +87,10 @@ test("saved custom roles remain editable in generation, assignment and import pa
     0.4,
   );
   expect(entries["ui.chatMessageWindow"]).not.toBe("old-invalid");
+  expect(entries["llm.paramOverrides"].default.temperature).toBe(0.2);
+  expect(entries["llm.slotConfig"]["custom-analysis"].modelRef).toBe(
+    "fixture-model",
+  );
 });
 
 for (const width of [1512, 390]) {

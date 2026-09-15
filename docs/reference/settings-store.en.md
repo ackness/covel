@@ -10,6 +10,8 @@ Registered non-secret settings expose the schema's parsed result during hydratio
 
 Normalization during hydration or refresh does not independently trigger a save. Revision conflict checks still compare the original backend-confirmed snapshots, so filling defaults is not mistaken for a remote edit. Setting schemas must accept their own persisted output and normalize idempotently to support reloads, repeated registration, and synchronization.
 
+Legacy model-role bindings containing both `modelRef` and `presetId` normalize to `modelRef`, matching routing precedence. Bindings containing only `presetId` remain supported.
+
 Invalid custom themes in settings backups are skipped individually while valid themes continue to load. Provider imports filter legacy entries with incorrectly typed connection fields while preserving valid legacy and current profiles in the same file.
 
 The Data import preview validates each entry against its currently registered schema. Incompatible entries and secrets misplaced in ordinary `entries` cannot be selected; unregistered ordinary keys remain importable. Backups containing only separate `keys` can also be applied. Import and reset report completion only after persistence succeeds; failed imports retain the preview and show an error.
@@ -41,6 +43,8 @@ Hydration and refresh reject ordinary settings snapshots containing secret entri
 The world-list configuration entry opens Providers directly. Narrow screens show the provider list first, then full-width details with a return action. Each model has one connectivity-test entry in provider details.
 
 Model Roles and Generation share a live role catalogue combining server configuration, plugin runtime and `type: slot` declarations, user settings, and saved bindings and parameter overrides. Custom roles remain editable in both panes, and plugin setting options follow current model configuration. Legacy key/preset links resolve to Providers; composite setting keys resolve to their owning pane. The internal onboarding version is no longer exposed as a general setting.
+
+The `default` role remains visible when configured or saved, and in the unconfigured fallback catalogue. Generation inputs are disabled when the catalogue is empty; edits never create an empty role key.
 
 World preparation shows all stages and separate text-model bindings for each agent runtime in a selected plugin. Function runtime provider roles expose every `type: slot` setting, with explicit user overrides taking precedence over world `pluginSettings`, then plugin defaults. Clearing an override restores the current world default. The session sidebar uses current session plugin metadata and edits model overrides per runtime, explicitly indicating missing or incompatible bindings.
 

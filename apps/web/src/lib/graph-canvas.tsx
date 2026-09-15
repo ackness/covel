@@ -13,12 +13,17 @@ import {
   useRef,
   useEffect,
   useCallback,
+  useMemo,
   type ComponentProps,
   type ComponentType,
   type Ref,
 } from "react";
 import { Maximize, Minus, Plus } from "lucide-react";
-import { GraphRelationships, linkTouches } from "./graph-relationships.js";
+import {
+  GraphRelationships,
+  linkTouches,
+  connectedNodeIds,
+} from "./graph-relationships.js";
 import { buildNodes, buildLinks, drawNodeLabel } from "./graph-canvas-model.js";
 import { useTranslation } from "react-i18next";
 import type { ComponentRenderer } from "@json-render/react";
@@ -55,7 +60,23 @@ const Inner = ({
   // Keep the library's default structural node/link generics at the ref boundary.
   const graphRef = useRef<ForceGraphMethods | undefined>(undefined);
 
-  const [selected, setSelected] = useState<ForceNode | null>(null);
+  const [selectedId, setSelectedId] = useState<string>();
+  // React consumes immutable metadata; the simulation keeps its mutable pool.
+  const viewData = useMemo(() => {
+    const builtNodes = buildNodes(nodes);
+    const ids = new Set(builtNodes.map((node) => node.id));
+    return {
+      nodes: builtNodes,
+      links: buildLinks(edges).filter(
+        (link) => ids.has(String(link.source)) && ids.has(String(link.target)),
+      ),
+    };
+  }, [nodes, edges]);
+  const selected = viewData.nodes.find((node) => node.id === selectedId);
+  const connectedIds = useMemo(
+    () => connectedNodeIds(viewData.links, selectedId),
+    [viewData.links, selectedId],
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(320);
 
@@ -116,17 +137,9 @@ const Inner = ({
   useEffect(() => {
     // Update pooled objects in place; notify the simulation only when the
     // topology changes so metadata updates preserve its positions and pins.
-    const builtNodes = buildNodes(nodes);
-    const ids = new Set(builtNodes.map((node) => node.id));
     const changed = syncGraphData(
       poolsRef.current,
-      {
-        nodes: builtNodes,
-        links: buildLinks(edges).filter(
-          (link) =>
-            ids.has(String(link.source)) && ids.has(String(link.target)),
-        ),
-      },
+      viewData,
       canvasGeomRef.current,
     );
     if (changed) {
@@ -134,11 +147,9 @@ const Inner = ({
       fitPending.current = true;
       setGraphData({ ...poolsRef.current.graphData });
     }
-    setSelected(
-      (previous) =>
-        (previous && poolsRef.current.nodePool.get(previous.id)) || null,
-    );
-  }, [nodes, edges]);
+    if (selectedId && !poolsRef.current.nodePool.has(selectedId))
+      setSelectedId(undefined);
+  }, [viewData, selectedId]);
 
   useEffect(() => {
     fitPending.current = true;
@@ -147,7 +158,7 @@ const Inner = ({
   }, [width, height, graphData, fitGraph]);
 
   const handleNodeClick = useCallback((node: object) => {
-    setSelected(node as ForceNode);
+    setSelectedId((node as ForceNode).id);
   }, []);
 
   // IMPORTANT: `containerRef` must always be mounted — otherwise the
@@ -176,7 +187,7 @@ const Inner = ({
         {selected && (
           <button
             type="button"
-            onClick={() => setSelected(null)}
+            onClick={() => setSelectedId(undefined)}
             className="text-blue-500 hover:underline"
           >
             {t("graph.clearSelection")}
@@ -244,15 +255,7 @@ const Inner = ({
             nodeCanvasObject={(node: object, ctx, globalScale) => {
               const forceNode = node as ForceNode & { x?: number; y?: number };
               ctx.save();
-              if (
-                selected &&
-                selected.id !== forceNode.id &&
-                !graphData.links.some(
-                  (link) =>
-                    linkTouches(link, selected.id) &&
-                    linkTouches(link, forceNode.id),
-                )
-              )
+              if (selected && !connectedIds.has(forceNode.id))
                 ctx.globalAlpha = 0.25;
               drawNodeLabel(
                 ctx,
@@ -326,10 +329,10 @@ const Inner = ({
         </Suspense>
       </div>
       <GraphRelationships
-        nodes={graphData.nodes}
-        links={graphData.links}
+        nodes={viewData.nodes}
+        links={viewData.links}
         selectedId={selected?.id}
-        onSelect={setSelected}
+        onSelect={handleNodeClick}
       />
       {selected && (
         <div className="border border-zinc-200 dark:border-zinc-800 rounded-md p-2.5 text-xs space-y-1">

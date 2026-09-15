@@ -3,8 +3,9 @@ import type { SettingsStoreApi } from "@covel/settings";
 import { REASONING_EFFORT_VALUES } from "@/services/api/reasoning-effort.js";
 
 const slotConfigEntrySchema = z.union([
-  z.object({ presetId: z.string().min(1) }),
+  // Match slotBindingId's precedence when legacy imports contain both fields.
   z.object({ modelRef: z.string().min(1) }),
+  z.object({ presetId: z.string().min(1) }),
 ]);
 
 const slotConfigSchema = z.record(z.string(), slotConfigEntrySchema);
