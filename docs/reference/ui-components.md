@@ -134,7 +134,9 @@ catalog icon (panel tabs use `HelpCircle` as their fallback).
 
 `GraphCanvas` refreshes node summaries and relationship text on metadata-only
 plugin-data updates. The simulation retains its node identities, positions and
-pins; only topology changes publish a new simulation data wrapper. Selection
+pins; only topology changes (including changing either endpoint of an existing
+edge ID) publish a new simulation data wrapper. Expired edges are omitted whenever
+`invalidAt` is defined, including turn `0`. Selection
 highlighting computes direct neighbors once per data/selection change and uses
 constant-time membership checks while painting nodes.
 

@@ -25,6 +25,10 @@ export interface ForceLink {
   width: number;
 }
 
+export function endpointId(endpoint: ForceLink["source"]): string {
+  return typeof endpoint === "string" ? endpoint : endpoint.id;
+}
+
 /**
  * A force-graph node after d3-force has had a chance to touch it. The
  * simulation mutates `.x/.y/.vx/.vy` (and `.fx/.fy` when pinned) directly

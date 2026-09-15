@@ -244,7 +244,7 @@ server transaction API in the browser.
 > - **任一 proposal 失败即整回合回滚**——无论是抛出的 store 错误，还是 handler 校验
 >   失败返回的 `{ committed: false }`（如 PreStateCommit veto、缺字段的 state.patch）。
 >   已提交的兄弟 runtime 一并回滚，事务外不留痕迹。
-> - **玩家停止与提交共享边界**：`finalizeExecution` 接受可选 `signal`，在事务开始、结果处理及返回前检查取消。主回合传入玩家控制信号；即使剧情已生成、取消发生在后处理或提交 Hook 中，事务仍整体回滚。数据库已提交后的通知不会因迟到的取消而撤销。
+> - **玩家停止与提交共享边界**：`finalizeExecution` 接受可选 `signal`，在事务开始、结果处理及返回前检查取消，并传递到每个提案的 `PreStateCommit` Hook。取消会立即结束 Hook 等待、停止后续提案并整体回滚。主回合传入玩家控制信号；即使剧情已生成、取消发生在后处理或提交 Hook 中，事务仍整体回滚。数据库已提交后的通知和 `PostStateCommit` Hook 不继承这个取消信号，按自身超时完成收尾。
 > - **对话 execution journal 共享提交命运**：当前玩家输入与非 manual runtime 的
 >   `TurnMessage` 在执行期只缓存在内存 journal；所有 proposal 通过后才由
 >   `finalizeExecution` 在同一事务中 append。回滚执行不会进入后续 Prompt、trigger

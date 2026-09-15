@@ -1253,7 +1253,7 @@ tools:
     - plugin-data-get
 ```
 
-Hook 调用总会获得 `ctx.signal`（类型可选以兼容直接构造上下文的调用方）：超时或传入的父执行取消会通知协作式 I/O 并结束等待，迟到返回的 `replace` 不再进入流水线。同进程不合作代码无法被强制终止。顺序 pipeline 中 abort 停止后续 handler；各 wire helper 保持原有拦截/转换策略，例如 `PreLLMCall` 的 abort 表示保留原请求，真正的执行取消仍由模型调用边界检查。观察型事件不因 Hook 失败撤销已完成的领域提交；`TurnStop`、提交和会话生命周期的收尾 Hook 使用自己的超时界限。
+Hook 调用总会获得 `ctx.signal`（类型可选以兼容直接构造上下文的调用方）：超时或传入的父执行取消会通知协作式 I/O 并结束等待，迟到返回的 `replace` 不再进入流水线。同进程不合作代码无法被强制终止。顺序 pipeline 中 abort 停止后续 handler；各 wire helper 保持原有拦截/转换策略，例如 `PreLLMCall` 的 abort 表示保留原请求，真正的执行取消仍由模型调用边界检查。`PreStateCommit` 继承传入 `finalizeExecution` 的取消信号，取消会停止后续提案并回滚事务。观察型事件不因 Hook 失败撤销已完成的领域提交；`TurnStop`、`PostStateCommit` 和会话生命周期的收尾 Hook 使用自己的超时界限。
 
 ### commands（输入框斜线命令）
 

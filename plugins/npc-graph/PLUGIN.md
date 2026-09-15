@@ -14,3 +14,7 @@ relations:
 ---
 
 # Relationship Tracker
+
+`upsert-npc-graph` reads its own buffered node, edge and adjacency writes from earlier
+calls in the same execution. Multiple calls commit together at the execution
+boundary; shared-node adjacency and relationship version history are preserved.

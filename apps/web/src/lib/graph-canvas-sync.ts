@@ -7,6 +7,7 @@
  */
 
 import type { ForceLink, ForceNode, MutableForceNode } from "./graph-types.js";
+import { endpointId } from "./graph-types.js";
 
 interface CanvasGeometry {
   width: number;
@@ -100,7 +101,7 @@ function syncNodes(
 /**
  * Reconcile freshly built links into the stable pool, mirroring `syncNodes`.
  *
- * @returns whether the link id-set changed.
+ * @returns whether the link id-set or endpoints changed.
  */
 function syncLinks(
   pools: GraphDataPools,
@@ -115,6 +116,15 @@ function syncLinks(
     liveLinkIds.add(l.edgeId);
     const existing = linkPool.get(l.edgeId);
     if (existing) {
+      if (
+        endpointId(existing.source) !== endpointId(l.source) ||
+        endpointId(existing.target) !== endpointId(l.target)
+      ) {
+        // Reset resolved endpoints so d3 binds the new topology to its nodes.
+        existing.source = endpointId(l.source);
+        existing.target = endpointId(l.target);
+        changed = true;
+      }
       existing.relation = l.relation;
       existing.strength = l.strength;
       existing.fact = l.fact;
@@ -122,8 +132,9 @@ function syncLinks(
       existing.width = l.width;
       continue;
     }
-    linkPool.set(l.edgeId, l);
-    currentLinks.push(l);
+    const pooled = { ...l };
+    linkPool.set(l.edgeId, pooled);
+    currentLinks.push(pooled);
     changed = true;
   }
 
@@ -141,7 +152,7 @@ function syncLinks(
 /**
  * Sync both nodes and links into the stable pool.
  *
- * @returns whether either id-set changed (i.e. a re-render is warranted).
+ * @returns whether an id-set or edge endpoints changed.
  */
 export function syncGraphData(
   pools: GraphDataPools,

@@ -14,6 +14,7 @@ import {
   connectedNodeIds,
 } from "../graph-relationships.js";
 import { GraphCanvas } from "../graph-canvas.js";
+import type { ForceLink } from "../graph-types.js";
 import {
   setActiveSession,
   applyChanges,
@@ -108,6 +109,20 @@ describe("relationship graph", () => {
     expect(canvas.graphData).toBe(simulationData);
     await act(async () => {
       applyChanges("graph", [
+        {
+          namespace: "edges",
+          key: edge.id,
+          operation: "set",
+          value: { ...edge, source: "b", target: "a" },
+        },
+      ]);
+    });
+    expect(canvas.graphData).not.toBe(simulationData);
+    expect(canvas.graphData).toMatchObject({
+      links: [{ source: "b", target: "a" }],
+    });
+    await act(async () => {
+      applyChanges("graph", [
         { namespace: "nodes", key: "a", operation: "delete", value: null },
       ]);
     });
@@ -159,7 +174,9 @@ describe("relationship graph", () => {
   });
   it("omits superseded relationships and navigates links after d3 resolves endpoints", () => {
     const links = buildLinks({
-      old: { ...edge, id: "old", invalidAt: "2026-09-01" },
+      old: { ...edge, id: "old", invalidAt: 3 },
+      opening: { ...edge, id: "opening", invalidAt: 0 },
+      unknownTurn: { ...edge, id: "unknown", invalidAt: -1 },
       current: edge,
     });
     expect(links).toHaveLength(1);
@@ -177,4 +194,42 @@ describe("relationship graph", () => {
     fireEvent.click(within(list).getByRole("button", { name: "Kai" }));
     expect(onSelect).toHaveBeenCalledWith(nodes[1]);
   });
+
+  it.each([false, true])(
+    "rebinds changed endpoints without moving pinned nodes (resolved: %s)",
+    (resolved) => {
+      const pools = createGraphDataPools();
+      const geom = { width: 320, height: 480 };
+      const original = buildLinks({ ab: edge });
+      syncGraphData(pools, { nodes, links: original }, geom);
+      const pinned = pools.nodePool.get("a")!;
+      pinned.fx = pinned.x = 17;
+      pinned.fy = pinned.y = -40;
+      const pooled = pools.graphData.links[0];
+      if (resolved) {
+        pooled.source = pinned;
+        pooled.target = pools.nodePool.get("b")!;
+      }
+      expect(original[0].source).toBe("a");
+      expect(original[0].target).toBe("b");
+      expect(syncGraphData(pools, { nodes, links: original }, geom)).toBe(
+        false,
+      );
+      const reversed: ForceLink = {
+        ...original[0],
+        source: "b",
+        target: "a",
+      };
+      expect(syncGraphData(pools, { nodes, links: [reversed] }, geom)).toBe(
+        true,
+      );
+      expect(pools.graphData.links[0]).toBe(pooled);
+      expect(pooled).toMatchObject({ source: "b", target: "a" });
+      expect(pools.nodePool.get("a")).toBe(pinned);
+      expect(pinned).toMatchObject({ x: 17, fx: 17, y: -40, fy: -40 });
+      expect(syncGraphData(pools, { nodes, links: [reversed] }, geom)).toBe(
+        false,
+      );
+    },
+  );
 });

@@ -15,7 +15,7 @@ interface GraphEdgeRecord {
   relation: string;
   strength: number;
   fact?: string;
-  invalidAt?: string | null;
+  invalidAt?: number;
 }
 
 const NODE_COLORS = {
@@ -75,7 +75,7 @@ export function buildNodes(nodes: Record<string, unknown>): ForceNode[] {
 export function buildLinks(edges: Record<string, unknown>): ForceLink[] {
   return Object.values(edges)
     .filter(isGraphEdgeRecord)
-    .filter((edge) => !edge.invalidAt)
+    .filter((edge) => edge.invalidAt === undefined)
     .map((edge) => ({
       source: edge.source,
       target: edge.target,

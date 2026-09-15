@@ -53,6 +53,7 @@ export async function processRuntimeResult(
   sessionId: string,
   outputKind?: string,
   opts?: {
+    readonly signal?: AbortSignal;
     readonly hookPipeline?: HookPipeline;
     readonly eventBus?: EventBus;
     readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
@@ -171,6 +172,7 @@ async function commitProposals(
   sessionId: string,
   result: { readonly runtimeId: string; readonly turnId: string },
   opts?: {
+    readonly signal?: AbortSignal;
     readonly hookPipeline?: HookPipeline;
     readonly eventBus?: EventBus;
     readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
@@ -195,6 +197,7 @@ async function commitProposals(
     opts?.hookPipeline,
     opts?.eventBus,
     opts?.emitter,
+    opts?.signal,
   );
   const commitResults = await pipeline.commitAll(
     proposals,

@@ -1,9 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { ForceLink, ForceNode } from "./graph-types.js";
-
-export function endpointId(endpoint: ForceLink["source"]): string {
-  return typeof endpoint === "string" ? endpoint : endpoint.id;
-}
+import { endpointId, type ForceLink, type ForceNode } from "./graph-types.js";
 
 export function linkTouches(link: ForceLink, nodeId: string): boolean {
   return (
