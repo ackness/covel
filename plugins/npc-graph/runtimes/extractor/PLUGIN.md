@@ -17,6 +17,7 @@ maxRetries: 0
 callTimeoutMs: 60000
 # A successful graph mutation is the complete result; no extra runtime-done
 # round-trip is needed. The no-change path still uses runtime-done explicitly.
+requireExplicitCompletion: true
 completeAfterTools: [upsert-npc-graph]
 capabilities: [npc-graph, relationship-tracking]
 tags:

@@ -37,6 +37,7 @@ const TO_JSON_SCHEMA_OPTIONS = {
 const SHARED_UNREPRESENTABLE_CONSTRAINTS = [
   "runtimeType 'function' requires a non-empty handler path.",
   "output.schema is required when output.recordAs is set.",
+  "requireExplicitCompletion is only valid for non-story agent runtimes without output.schema.",
   "trigger.topic is required when trigger.type is 'event'.",
   "a runtime declaring `stage` cannot use trigger.type 'event' or 'manual'.",
   "stage 'setup' runtimes must use trigger.type 'auto' with no interval/startTurn/cooldownTurns.",

@@ -105,6 +105,11 @@ export function buildAgentLoopPolicy({
   maxSteps,
   timeoutMs,
 }: BuildAgentLoopPolicyOptions): AgentLoopPolicy {
+  if (manifest.requireExplicitCompletion && loaded.outputSchema) {
+    throw new Error(
+      "requireExplicitCompletion cannot be combined with an output schema, including convention-loaded output.schema.json",
+    );
+  }
   // The ToolCallContext is passed so the executor can surface session-
   // specific tool variants (e.g. character tools with schema-typed fields).
   const toolDefs = deps.toolExecutor

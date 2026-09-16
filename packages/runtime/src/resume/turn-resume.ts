@@ -18,6 +18,7 @@ import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
 import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
 import { storyOutputError } from "../agent-loop/story-output.js";
+import { completionContractError } from "../agent-loop/runtime-completion.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
@@ -231,6 +232,7 @@ export async function resumeSuspendedRuntime(
       finalContent: pendingContinuation.partialContent ?? null,
       collectedToolCalls:
         pendingContinuation.toolCallsSoFar as ToolCallRecord[],
+      completionCalls: pendingContinuation.completionCalls,
       pendingProposals: pendingContinuation.pendingProposals as Proposal[],
       emittedEvents:
         (pendingContinuation.emittedEvents as EmittedEvent[] | undefined) ?? [],
@@ -270,6 +272,22 @@ export async function resumeSuspendedRuntime(
         maxSteps: effectiveMaxSteps,
         failedToolCalls,
       }),
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  const completionError = completionContractError(manifest, toolLoop);
+  if (completionError) {
+    return finalizeWithPostRuntime({
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      runId,
+      turnId: suspension.turnId,
+      status: "failed",
+      output: null,
+      toolCalls: collectedToolCalls,
+      durationMs: Date.now() - startTime,
+      error: completionError,
       timestamp: new Date().toISOString(),
     });
   }

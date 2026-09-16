@@ -1508,6 +1508,32 @@ memoryBlocks:
       en: Discovered clues, physical evidence, and their links to suspects.
 ```
 
+### Message cards and recovery
+
+Any installed community package can publish message UI with `ui.message` and
+plugin-data in the `message` namespace. Use `__turnId` as the presentation
+anchor, either a namespace entry or a field on a per-turn record. Tools can
+stamp it with `context.turnId`; function handlers can use `ctx.turnId`.
+
+For a scoped runtime retry, the framework commits message stamps referring to
+the retry execution against its original committed source turn. Per-turn record
+keys matching that stamp are normalized too. Explicit other anchors and other
+namespaces are unchanged. Proposal IDs, trace IDs, runtime results, and their
+`turnId` retain the actual execution identity. If the execution produces a new
+story, its message cards stay with that new story. This is a framework contract,
+independent of plugin ID or installation source, and participates in the same
+transaction and rollback boundary as all other plugin-data writes.
+
+`ExecutionContext.sourceTurnId` carries the scoped retry source through
+suspension/resume. It is distinct from `logicalTurnId`, which owns player-turn
+completion accounting. Both single-runtime and batch retries resolve declared
+inputs from the original successful results; an ordinary manual RPC still
+projects stage inputs away.
+
+Older stored message stamps are resolved from committed retry metadata for both
+stage freshness and transcript placement when that metadata is available. New
+writes persist the correct anchor and do not depend on retained trace history.
+
 ### outputKind
 
 声明该 runtime 输出在 UI 中的处理方式。框架根据此字段决定消息展示策略，**而非硬编码插件 ID**。
@@ -1685,17 +1711,23 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 
 **Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse` / `completeAfterTools`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。超时后框架会**吊销 handler 的全部副作用能力**——`store`、`pluginData`、`media`、`images`、`speech`、`gateway`、`utils`、`recursiveCall`、`logger`、`assetProgress`——脱离的 handler 再调用会同步抛出 `capability ... is revoked`，避免它在本次执行已经收场之后仍然写入。吊销挂在超时本身、不挂在任何锁上，因此对持锁与不持锁的执行路径一样有效。协作式 handler 应监听 `ctx.signal` 主动取消。
 
-| 字段                     | 类型       | 默认                                              | 含义                                                                                                                                                                                                                     |
-| ------------------------ | ---------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `timeoutMs`              | `number`   | 60000                                             | 运行总时长硬上限。任何情况下都不会超过此值                                                                                                                                                                               |
-| `maxRetries`             | `number`   | `1`                                               | transient 错误/超时/循环时的重试次数（不含首次尝试）。`0` 禁用重试。上限 5                                                                                                                                               |
-| `callTimeoutMs`          | `number`   | `min(60000, floor(timeoutMs / (maxRetries + 1)))` | 单次 LLM 调用的总时长。防止一个挂死请求吃掉整轮预算                                                                                                                                                                      |
-| `firstTokenTimeoutMs`    | `number`   | `30000`                                           | 流式 runtime 的首 token（TTFB）上限；非流式忽略                                                                                                                                                                          |
-| `loopDetectionThreshold` | `number`   | `3`                                               | 连续重复相同 `(tool name + JSON arguments)` 的次数；命中则注入扰动继续。`0` 关闭                                                                                                                                         |
-| `requireToolUse`         | `boolean`  | `false`                                           | 仅 agent runtime。循环在“零成功工具调用”下收场（LLM 只回散文）时，注入一条纠正 system 消息并重试一次；第二次仍零工具则放行并 `console.warn`（`maxSteps` 仍兜底）。适合唯一职责就是调某工具、却会漂移成续写正文的 runtime |
-| `completeAfterTools`     | `string[]` | `[]`                                              | 仅 agent runtime。一个响应批次内指定工具至少一个成功且没有业务工具失败时，执行完该批全部调用后直接结束，不再额外请求模型输出 `runtime-done`。读取类工具不在列表即可继续 read → write 工作流                              |
+| 字段                     | 类型       | 默认                                              | 含义                                                                                                                                                                                                                                 |
+| ------------------------ | ---------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `timeoutMs`              | `number`   | 60000                                             | 运行总时长硬上限。任何情况下都不会超过此值                                                                                                                                                                                           |
+| `maxRetries`             | `number`   | `1`                                               | transient 错误/超时/循环时的重试次数（不含首次尝试）。`0` 禁用重试。上限 5                                                                                                                                                           |
+| `callTimeoutMs`          | `number`   | `min(60000, floor(timeoutMs / (maxRetries + 1)))` | 单次 LLM 调用的总时长。防止一个挂死请求吃掉整轮预算                                                                                                                                                                                  |
+| `firstTokenTimeoutMs`    | `number`   | `30000`                                           | 流式 runtime 的首 token（TTFB）上限；非流式忽略                                                                                                                                                                                      |
+| `loopDetectionThreshold` | `number`   | `3`                                               | 连续重复相同 `(tool name + JSON arguments)` 的次数；命中则注入扰动继续。`0` 关闭                                                                                                                                                     |
+| `requireToolUse`         | `boolean`  | `false`                                           | 仅 agent runtime。循环在“零成功工具调用”下收场（LLM 只回散文）时，注入一条纠正 system 消息并重试一次；第二次仍无成功业务调用则标记失败并 `console.warn`（`maxSteps` 仍兜底）。适合唯一职责就是调某工具、却会漂移成续写正文的 runtime |
+| `completeAfterTools`     | `string[]` | `[]`                                              | 仅 agent runtime。一个响应批次内指定工具至少一个成功且没有业务工具失败时，执行完该批全部调用后直接结束，不再额外请求模型输出 `runtime-done`。读取类工具不在列表即可继续 read → write 工作流                                          |
 
 **`requireToolUse` 判定**：仅当本轮 loop 从未有任何工具**成功**执行、且 LLM 本次回复无 tool call 时触发；已经成功干过活再收尾的 runtime 不受影响。纠正消息按 `input.locale` 分支（zh 前缀 → 中文“你没有调用任何工具就结束了……”，其余含无 locale → 英文），记一条 `[runtime-retry] <name> ... reason=no-tool-call`。捆绑插件中，每次执行都必须提交业务工具的 `world-init/schema-gen`、`world-ir`、`char-creator/player-init`、`guide`、`scene-prompts` 与两个图像 prompt-generator 已启用；允许“本轮无变化”的状态追踪器则保留显式 `runtime-done` 分支。
+
+**`requireExplicitCompletion: true`**：用于允许“无变化”的非 story agent。成功执行 `completeAfterTools` 中的工具，或在没有未解决工具错误时显式调用 `runtime-done`，才算完成。纯正文、伪造的工具 JSON、`updated: true` 声明及仅查询数据都不能证明工作完成；框架纠正一次后仍不满足则失败，暂停后恢复也遵循此规则。该选项默认关闭，不改变普通文本 runtime；不能与 `output.schema` 混用，也不适用于 function/story runtime。捆绑的人物关系、好感、图鉴、任务、物品、角色追踪器采用此契约，第三方包可同样声明，无需内置权限。
+
+同一工具随后成功执行可解除该工具此前的失败记录，因此参数修正后成功不会被误判；其他工具成功或单独 `runtime-done` 不能掩盖失败。暂停记录会保存工具名称、成功状态和完成标记，恢复时继续检查这些执行证据。旧暂停记录没有这些证据时，显式完成契约仍要求恢复后调用完成工具或 `runtime-done`。
+
+单一必调用工具的 runtime 可使用 `llm.toolChoice: { name: tool-name }`，并保留 `requireToolUse: true`；`guide`、`scene-prompts`、`world-ir` 已使用此配置。`llm.reasoningEffort: disabled` 是默认值，用户显式推理设置优先；适配器在不兼容的 thinking 模式下可能退回自动工具选择，因此仍需执行结果校验。不要给允许无变化的提取器强制指定写入工具。
 
 **`completeAfterTools` 适用边界**：适合“某个工具成功就是最终产物”的单步或单批 agent runtime。框架仍会执行同一响应中的全部工具调用；只把终结工具列入，不要把需要读取结果后继续决策的查询工具列入。通常 runtime 输出由调用记录组成；当非 story runtime 同时声明 `output.schema`、`requireToolUse: true` 和 `completeAfterTools` 时，框架改用函数调用作为唯一结构化输出通道，不再发送 `responseFormat`，并将成功终结工具返回的对象作为 runtime 输出再次执行 `output.schema` 校验。`output.schema` 必须描述工具的实际对象结果；最简单的做法是原样返回参数，也可以像 `initialize-world` 一样在工具内做确定性组合和补充。
 

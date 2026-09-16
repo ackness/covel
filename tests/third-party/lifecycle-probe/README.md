@@ -46,3 +46,22 @@ ZIP 输出到 `test-results/lifecycle-probe.zip`。测试将该 ZIP 通过真实
 错误回滚可用 runtime payload `{ "key": "rollback", "fail": true }` 验证：runtime 返回失败，`notes/rollback` 不应落库。`probe-status` RPC 返回当前会话的 hook 计数，方便检查禁用和撤销后的执行边界。
 
 Windows 的 `EPERM` 回归由安装 API 测试注入该文件系统错误码；真实 Windows 安装器的完整手动流程仍需在 Windows 上执行。
+
+## Runtime recovery and completion contracts
+
+The package also provides a deterministic `narrative-engine` function runtime
+and a `scene-prompts` agent with a message UI. They use declared capabilities,
+inputs, tools, and ordinary plugin-data proposals, with no bundled-plugin IDs or
+trusted store access. Approve both server code and each runtime before invoking
+scheduled work; approvals are process-local and must be granted again after a
+server restart before executing community code.
+
+`third-party-runtime-contracts.test.ts` uploads the actual ZIP, enables it as a
+community package, and obtains grants through the public approval endpoints.
+A scripted LLM supplies prose drift, native tool calls, and explicit no-change
+responses. The test checks actual committed data and turn accounting across
+single/batch retry, repeated failure, recovery, story advancement, and server
+rebootstrap. It also proves that a manual extractor cannot claim a write via
+JSON prose, while a real `runtime-done` no-op stays successful without writing.
+The scripted responses verify framework behavior, not a live provider's drift
+frequency or quality.

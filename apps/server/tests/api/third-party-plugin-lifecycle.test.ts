@@ -190,7 +190,7 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
     const entry = boot.registry.get(pluginId);
     expect(entry?.source).toBe("community");
     expect(entry?.status).toBe("registered");
-    expect(entry?.manifests).toHaveLength(3);
+    expect(entry?.manifests).toHaveLength(5);
     expect(entry?.loadedRuntimes.size).toBe(0);
     const details = await request(`/api/plugins/${pluginId}`, "GET");
     expect(details.status).toBe(200);
@@ -204,6 +204,7 @@ describe("standalone third-party plugin ZIP lifecycle", () => {
     });
     expect(ui.right).toEqual([expect.objectContaining({ pluginId })]);
     expect(JSON.stringify(ui)).toContain("lifecycle-probe-panel");
+    expect(JSON.stringify(ui.message)).toContain("lifecycle-probe-cards");
     const headers = {
       "X-Plugin-User-Settings": Buffer.from(
         JSON.stringify({

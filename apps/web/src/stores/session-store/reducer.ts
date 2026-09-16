@@ -8,7 +8,10 @@ import {
   buildDurableRuntimeJobExecutionStep,
   buildLegacyJobExecutionStep,
 } from "./execution-steps.js";
-import { applyPluginMessageSurface } from "./plugin-message-surface.js";
+import {
+  applyPluginMessageSurface,
+  refreshPluginMessageSurfaces,
+} from "./plugin-message-surface.js";
 import { mergeRecoveredMessages } from "./recovered-messages.js";
 import { settleExecutionAttempt } from "./execution-attempts.js";
 import { orderStoryBeforePluginMessages } from "./message-order.js";
@@ -422,9 +425,12 @@ export function reducer(
       };
     }
     case "LOAD_EXECUTION_STEPS":
-      return { ...state, executionSteps: action.steps };
+      return refreshPluginMessageSurfaces({
+        ...state,
+        executionSteps: action.steps,
+      });
     case "SET_TURN_ATTEMPT_STATUS":
-      return {
+      return refreshPluginMessageSurfaces({
         ...state,
         executionSteps: settleExecutionAttempt(
           state.executionSteps,
@@ -433,7 +439,7 @@ export function reducer(
           action.sourceFailedRuntimeIds,
           action.abortReason,
         ),
-      };
+      });
     case "FINALIZE_HANGING_RUNTIMES": {
       // Backend runtimes whose LLM call hangs never emit runtime.completed —
       // the executor's timeoutMs is a loop guard, not an HTTP AbortSignal,

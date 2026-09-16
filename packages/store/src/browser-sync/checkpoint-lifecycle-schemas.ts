@@ -90,12 +90,22 @@ const suspensions = createdRow.extend({
     messages: z.array(jsonValue),
     partialContent: z.string().optional(),
     toolCallsSoFar: z.array(jsonValue),
+    completionCalls: z
+      .array(
+        z.object({
+          name: nonEmptyString,
+          success: z.boolean(),
+          done: z.boolean(),
+        }),
+      )
+      .optional(),
     pendingProposals: z.array(jsonValue),
     inputSlots: inputSlots.optional(),
     executionContext: z.looseObject({
       executionId: nonEmptyString,
       origin: executionOrigin,
       logicalTurnId: z.string().optional(),
+      sourceTurnId: z.string().optional(),
       countPolicy: z.enum(["none", "complete-player-turn"]),
     }),
     emittedEvents: z.array(jsonValue).optional(),

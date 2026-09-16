@@ -14,6 +14,7 @@ model: plugin
 maxSteps: 2
 maxRetries: 0
 completeAfterTools: [lifecycle-probe-record]
+requireExplicitCompletion: true
 tools:
   plugin: [lifecycle-probe-record]
 userSettings:
@@ -29,5 +30,6 @@ userSettings:
 ---
 
 Test style: {{ userSettings.voice }}.
-Call lifecycle-probe-record exactly once with key "agent" and text "Agent fixture record".
-Successful completion of this tool ends the runtime. Do not call another tool.
+When a note should be recorded, call lifecycle-probe-record once with key "agent" and text "Agent fixture record".
+If no note should be added, call runtime-done without inventing a write.
+Successful completion of the record tool ends the runtime.

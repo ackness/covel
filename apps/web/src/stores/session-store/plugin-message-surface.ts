@@ -1,4 +1,5 @@
 import { orderStoryBeforePluginMessages } from "./message-order.js";
+import { pluginMessageTurnResolver } from "./plugin-message-turn.js";
 import type { SessionState, StreamMessage } from "./types.js";
 
 function stripPrivateMessageKeys(
@@ -44,7 +45,13 @@ export function applyPluginMessageSurface(
   if (!uiEntry || uiEntry.specs.length === 0) return state;
 
   const namespaceState = state.pluginData[pluginId]?.message ?? {};
-  const messageStates = collectPluginMessageStates(namespaceState);
+  const resolveTurn = pluginMessageTurnResolver(
+    state.executionSteps,
+    state.messages,
+  );
+  const messageStates = collectPluginMessageStates(namespaceState).map(
+    (entry) => ({ ...entry, turnId: resolveTurn(entry.turnId) }),
+  );
   const desiredIds = new Set(
     messageStates.map(({ turnId }) => `plugin-message:${pluginId}:${turnId}`),
   );
@@ -109,4 +116,15 @@ export function applyPluginMessageSurface(
   }
 
   return { ...state, messages: orderStoryBeforePluginMessages(messages) };
+}
+
+export function refreshPluginMessageSurfaces(
+  state: SessionState,
+): SessionState {
+  for (const entry of state.messageUiSpecs) {
+    if (state.pluginData[entry.pluginId]?.message) {
+      state = applyPluginMessageSurface(state, entry.pluginId);
+    }
+  }
+  return state;
 }

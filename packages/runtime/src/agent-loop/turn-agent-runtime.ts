@@ -50,6 +50,7 @@ import {
 } from "../trace/runtime-telemetry.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
+import { completionContractError } from "./runtime-completion.js";
 
 export interface AgentCompactionRefresh {
   readonly compacted: boolean;
@@ -419,7 +420,6 @@ export async function executeAgentRuntime({
     stoppedWithResponse,
     effectiveMaxSteps,
     deadline,
-    requiredToolUseUnmet,
   } = toolLoop;
 
   // Shared PostRuntime-hook opts for every terminal path of this runtime.
@@ -486,7 +486,8 @@ export async function executeAgentRuntime({
   // player an empty panel behind a green check, with nothing in the trace to
   // explain it, so fail with a diagnostic instead. Whatever prose the model
   // produced is not this runtime's contract and is deliberately dropped.
-  if (requiredToolUseUnmet) {
+  const completionError = completionContractError(manifest, toolLoop);
+  if (completionError) {
     return finalizeFailure({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
@@ -496,9 +497,7 @@ export async function executeAgentRuntime({
       output: null,
       toolCalls: collectedToolCalls,
       durationMs: Date.now() - startTime,
-      error:
-        `${manifest.name} declares requireToolUse but finished without calling a business tool ` +
-        `(a bare \`runtime-done\` does not count). The model answered with prose instead of doing the work.`,
+      error: completionError,
       timestamp: new Date().toISOString(),
     });
   }

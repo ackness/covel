@@ -55,6 +55,7 @@ tools:
   builtin:
     - sync-characters
     - get-character
+requireExplicitCompletion: true
 completeAfterTools: [sync-characters]
 dataSchemas:
   characters:

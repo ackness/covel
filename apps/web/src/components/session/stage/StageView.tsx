@@ -14,6 +14,7 @@ import { useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { FrameworkCapability } from "@covel/shared";
+import { pluginMessageTurnResolver } from "@/stores/session-store/plugin-message-turn.js";
 import {
   Dialog,
   DialogContent,
@@ -264,8 +265,13 @@ export function StageView(props: StageViewProps): ReactElement {
   // Drop scene-prompts left over from a previous turn (StageChoices merges them
   // in via mergeChoices, which doesn't itself check freshness).
   const freshPrompts = useMemo(
-    () => filterStalePrompts(promptsNamespace, storyTurnId),
-    [promptsNamespace, storyTurnId],
+    () =>
+      filterStalePrompts(
+        promptsNamespace,
+        storyTurnId,
+        pluginMessageTurnResolver(props.executionSteps, messages),
+      ),
+    [promptsNamespace, storyTurnId, props.executionSteps, messages],
   );
   const activeForm = pendingForms.find((m) => !dismissedFormIds.has(m.id));
   const fallbackRecap = useMemo(

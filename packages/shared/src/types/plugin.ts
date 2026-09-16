@@ -837,6 +837,12 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    */
   readonly requireToolUse?: boolean;
   /**
+   * Require a successful completeAfterTools call or an explicit runtime-done
+   * no-op. Bare text is corrected once, then fails. Unlike requireToolUse,
+   * this preserves the no-change path; read tools alone do not complete work.
+   */
+  readonly requireExplicitCompletion?: boolean;
+  /**
    * Agent runtimes only. Tool names whose successful execution completes the
    * runtime after the current response batch. All calls in that response are
    * executed first; any failed business call keeps the loop alive so the model

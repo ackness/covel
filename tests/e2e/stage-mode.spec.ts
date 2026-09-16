@@ -60,7 +60,7 @@ test.describe("Stage view mode", () => {
     }
   });
 
-  test("mobile restored decisions remain bounded, scrollable, and actionable", async ({
+  test("mobile restored third-party retry decisions remain bounded and actionable", async ({
     page,
   }) => {
     const sessionId = await enterFreshHarukaSession(page);
@@ -68,6 +68,25 @@ test.describe("Stage view mode", () => {
     const lastChoice =
       "Walk to the library and ask the librarian about the old festival journal.";
     try {
+      // ZIP installation and execution are exercised by the server integration
+      // test. This browser fixture checks capability discovery and legacy stamps
+      // with that package's ID, without depending on a live provider.
+      await page.route(`${sessionPath}/plugins`, async (route) => {
+        const response = await route.fetch();
+        const directory = await response.json();
+        await route.fulfill({
+          response,
+          json: {
+            ...directory,
+            items: directory.items.map(
+              (item: { id: string; capabilities?: string[] }) =>
+                item.capabilities?.includes("scene-prompts")
+                  ? { ...item, id: "lifecycle-probe" }
+                  : item,
+            ),
+          },
+        });
+      });
       // Restore a deterministic completed turn without invoking a model.
       await page.route(sessionPath, async (route) => {
         if (route.request().method() !== "GET") return route.fallback();
@@ -88,6 +107,41 @@ test.describe("Stage view mode", () => {
           json: {
             ...snapshot,
             session: { ...snapshot.session, phase: "playing" },
+            executionSteps: [
+              {
+                type: "turn.started",
+                turnId: "stage-mobile-retry",
+                timestamp: "2026-01-01T00:01:00Z",
+                payload: {
+                  sourceTurnId: "stage-mobile-turn",
+                  runtimeIds: ["lifecycle-probe/cards"],
+                  sourceCommitted: true,
+                  sourceFailedRuntimeIds: ["lifecycle-probe/cards"],
+                },
+              },
+              {
+                type: "runtime.completed",
+                turnId: "stage-mobile-retry",
+                timestamp: "2026-01-01T00:01:01Z",
+                payload: {
+                  runtimeId: "lifecycle-probe/cards",
+                  pluginId: "lifecycle-probe",
+                  status: "success",
+                },
+              },
+              {
+                type: "turn.completed",
+                turnId: "stage-mobile-retry",
+                timestamp: "2026-01-01T00:01:02Z",
+                payload: {
+                  committed: true,
+                  sourceTurnId: "stage-mobile-turn",
+                  runtimeIds: ["lifecycle-probe/cards"],
+                  sourceCommitted: true,
+                  sourceFailedRuntimeIds: [],
+                },
+              },
+            ],
             messages: [
               {
                 id: "stage-mobile-story",
@@ -103,10 +157,10 @@ test.describe("Stage view mode", () => {
         });
       });
       await page.route(
-        `${sessionPath}/plugin-data/scene-prompts{,/**}`,
+        `${sessionPath}/plugin-data/lifecycle-probe{,/**}`,
         async (route) => {
           const prompts = {
-            __turnId: "stage-mobile-turn",
+            __turnId: "stage-mobile-retry",
             scene: "After class",
             recap:
               "Mio has offered to help you find an old festival journal. ".repeat(

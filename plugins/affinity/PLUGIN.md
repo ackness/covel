@@ -14,6 +14,7 @@ timeoutMs: 120000
 maxSteps: 2
 maxRetries: 0
 callTimeoutMs: 60000
+requireExplicitCompletion: true
 completeAfterTools: [update-affinity]
 tags:
   - role:affinity

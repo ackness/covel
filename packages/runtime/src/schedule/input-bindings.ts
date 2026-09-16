@@ -170,6 +170,16 @@ export function deriveActivation(
   ) {
     return { source: "stage", detached: true, payload: null };
   }
+  // Recovery replays the source's dependency snapshot. A single selected
+  // runtime must retain bindings just like a batch; ordinary manual RPCs still
+  // project turn inputs away and retain their explicit payload below.
+  if (
+    input.manualTrigger?.sourceTurnId &&
+    (input.manualTrigger.runtimeId === manifest.name ||
+      input.manualTrigger.runtimeIds?.includes(manifest.name))
+  ) {
+    return { source: "stage", detached: false, payload: null };
+  }
   const backgroundWhenDetached =
     getRuntimeSpec(manifest).backgroundWhenDetached;
   if (triggerEvent !== undefined) {
