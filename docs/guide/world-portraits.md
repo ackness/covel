@@ -3,10 +3,12 @@
 为三个内置世界的角色生成**统一风格**的立绘 / 头像，接入 `character-presence` 插件，存入各世界的 `media/`，**生成一次、长期复用**。
 
 - 机器清单（脚本直接读）：`worlds/emberback/media/portraits.json` · `worlds/mistport/media/portraits.json` · `worlds/haruka-academy/media/portraits.json`
-- 每张图的最终提示词 = `style.prefix` + 该角色 `subject` + `style.suffix`（共享前后缀保证**整组同风格**），`negative` 作为负向提示。
-- 清单中的 `characterId` 必须能匹配实例化后的角色 ID：角色卡声明 `instantiate.characterId` 时使用该值（如 `npc-lin-yuanzhou`）；未声明时可使用角色卡 `id`（如 `emberback` 的 `qin-jiulian`，实例化记录会带 session / `char-` 前缀，前端按后缀匹配）。文件名通常使用角色卡 `id` 的 `<id>.png`。
+- 每张新图的提示词 = `style.prefix` + 该角色 `subject` + `style.suffix`，`negative` 作为负向提示。共享前后缀减少风格漂移；同角色变体仍需以批准图为编辑参考，锁定身份和取景。
+- 清单中的 `characterId` 必须能匹配实例化后的角色 ID：角色卡声明 `instantiate.characterId` 时使用该值（如 `npc-lin-yuanzhou`）；未声明时可使用角色卡 `id`（如 `emberback` 的 `tomas-reed`，实例化记录会带 session / `char-` 前缀，前端按后缀匹配）。文件名通常使用角色卡 `id` 的 `<id>.png`。
 
 场景背景的清单、日/夜变体与生成流程见 [场景背景生成指南](./world-scenes.md)。
+
+不同玩家兴趣、题材差异、角色不变量与交付验收见 [世界美术方向](./world-art-direction.md)。统一质量与世界内部语言，不要求三个世界使用同一画风。
 
 ## 三套风格方向
 
@@ -24,7 +26,7 @@
 
 **mistport（7）**：林远舟（学徒·腕有潮纹）· 苏窈（验潮师·鉴定镜）· 铁姑（盐牙·左臂雾蚀半透明）· 陈远山（议长·把玩遗物碎片）· 齐老（公会长·指尖雾蚀·潮汐笔记）· 小霜（雾使·侧耳倾听）· 灰隼（执法队长·遮罩提灯）。每张的世界细节（潮纹、雾蚀、遗物碎片）都写进了 `subject`，让立绘自带世界观。
 
-**haruka-academy（8）**：神代澪（班长/文艺部）· 朝仓凛（新闻部·采访本相机）· 椎名夏帆（轻音部·吉他）· 白石悠真（学生会副会长·眼镜文件夹）· 三枝遥（学生会长·日程本）· 小野寺千寻（班主任·粉笔旧书）· 森川奏太（鼓手·鼓棒）· 东条茜（图书委员·夹干花的书）。全部 teen 尺度、清爽。
+**haruka-academy（8）**：神代澪（班长/文艺部）· 朝仓凛（新闻部·采访本相机）· 椎名夏帆（轻音部·吉他）· 白石悠真（学生会副会长·眼镜文件夹）· 三枝遥（学生会长·日程本）· 小野寺千寻（班主任·粉笔旧书）· 森川奏太（鼓手·鼓棒）· 东条茜（图书委员·夹干花的书）。内容保持清爽、适合青少年；千寻是二十多岁的成年教师，外形与职业着装应和学生有区分。
 
 ## 生成方式（框架统一 image wire）
 
@@ -74,7 +76,7 @@ node scripts/emit-presence.mjs haruka-academy
 node scripts/emit-presence.mjs emberback
 ```
 
-> ⚠️ **重生成立绘后必须重跑 `emit-presence` 刷新哈希**，否则 presence 的 `avatar.id` 与新图对不上。
+> ⚠️ **重生成立绘后必须重跑 `emit-presence` 刷新哈希**，否则 presence 的 `avatar.id` 与新图对不上。脚本只写默认语言文件；如有 `presence.en.json`，须同步媒体引用、保留英文显示名称，并运行世界资源测试。
 
 三个世界都已把 `character-presence` 列入插件策略，session 创建即自动导入、开局右侧面板与对话立绘直接显示。立绘 PNG 通过 `.gitignore` 负向规则 `!worlds/**/media/portraits/*.png` 纳入版本库，随世界包分发。
 

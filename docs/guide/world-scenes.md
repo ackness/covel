@@ -6,6 +6,10 @@
 - 每张图的最终提示词 = `style.prefix` + 该场景 `subject`（夜图优先用 `subjectNight`，缺省回退 `subject`）+ `style.suffix`（+ 夜图追加 `style.nightSuffix`），`negative` 作为负向提示。
 - 文件名规则：`<id>-day.png` / `<id>-night.png`，落在 `worlds/<world>/media/scenes/`。
 
+美术定位和空间不变量见 [世界美术方向](./world-art-direction.md)。这里的昼夜方案服务学园舞台模式；雾港应优先按潮位设计场景，Emberback 应按地理明暗侧和风暴/设备状态设计，不能机械套用地球昼夜。
+
+已有场景的夜图应使用批准的日图作为编辑输入，只调整光照。下面的批量脚本是独立文字生成，**不会自动保持日夜布局**；适合起草新地点，不能以“the same”提示词代替参考图编辑。本轮五组固定机位夜图使用内置 imagegen 编辑，完整提示词见 [记录](./world-art-prompts.json)。
+
 ## 配置与预览
 
 从仓库根运行，先执行 `pnpm install --frozen-lockfile`。配置优先取 `COVEL_LLM_TOML`，否则 `$COVEL_HOME/llm.toml`（默认 `~/.covel/llm.toml`）；密钥优先级与[立绘脚本](./world-portraits.md#生成方式框架统一-image-wire)一致。下面的默认命令使用用户配置。需要使用仓库根环境文件时：
@@ -45,7 +49,7 @@ node scripts/emit-scenes.mjs haruka-academy
 ## 日/夜两张与缺图回退
 
 - 每个场景默认生成 `day` + `night` 两张（`--variant day|night` 只出一种）。
-- 夜图的 subject 优先用 `scene.subjectNight`；留空则回退用 `scene.subject`（配合 `style.nightSuffix` 依然能得到偏暗色调的画面，但效果不如手写夜景描述）。
+- 夜图的 subject 优先用 `scene.subjectNight`；留空则回退用 `scene.subject`。共享 `style.prefix` 不应预设午后阳光，否则与夜景约束冲突；日夜光线分别放在主体和夜景后缀中。
 - `emit-scenes.mjs` 生成 `scenes.registry.json` 时：**缺 day 图的场景整条跳过**（不进注册表，day 是基准变体）；**缺 night 图记为 `night: null`**（运行时消费方回退用日图）。`scenes.registry.json` 是生成产物，**不要手编** — 重新生成场景图后必须重跑 `emit-scenes.mjs` 刷新哈希，否则注册表里的 sha256 与新图对不上。
 
 ## 参数表
