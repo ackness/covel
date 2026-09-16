@@ -15,10 +15,11 @@
 
 ## World Authoring
 
-| Goal             | Start here                                   | Reference                                                    |
-| ---------------- | -------------------------------------------- | ------------------------------------------------------------ |
-| 生成世界角色立绘 | [`world-portraits.md`](./world-portraits.md) | [`../reference/world-data.md`](../reference/world-data.md)   |
-| 生成世界场景背景 | [`world-scenes.md`](./world-scenes.md)       | [`../reference/media-store.md`](../reference/media-store.md) |
+| Goal               | Start here                                           | Reference                                                    |
+| ------------------ | ---------------------------------------------------- | ------------------------------------------------------------ |
+| 规划世界美术与验收 | [`world-art-direction.md`](./world-art-direction.md) | [`../reference/world-data.md`](../reference/world-data.md)   |
+| 生成世界角色立绘   | [`world-portraits.md`](./world-portraits.md)         | [`../reference/world-data.md`](../reference/world-data.md)   |
+| 生成世界场景背景   | [`world-scenes.md`](./world-scenes.md)               | [`../reference/media-store.md`](../reference/media-store.md) |
 
 ## App And Runtime
 

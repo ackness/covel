@@ -13,6 +13,22 @@
       "id": "2d5975625090ac74cb1edca4f97ceb68ff197494279c26760c7e9df142d35deb",
       "mime": "image/png",
       "size": 2169966
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "2d5975625090ac74cb1edca4f97ceb68ff197494279c26760c7e9df142d35deb",
+            "mime": "image/png",
+            "size": 2169966
+          }
+        }
+      ]
     }
   },
   {
@@ -21,14 +37,30 @@
     "displayName": "Su Yao",
     "style": "mistport-fog-noir",
     "avatar": {
-      "id": "579848e3d93ce4d42c83bce33c50599cfe5467d0d0f6587f403eb4175e422ffd",
+      "id": "06f384406974970568f0b533c67a85b40d7a72ac6c34a90be81cd72ad1e1ce23",
       "mime": "image/png",
-      "size": 2110678
+      "size": 2115262
     },
     "sprite": {
-      "id": "579848e3d93ce4d42c83bce33c50599cfe5467d0d0f6587f403eb4175e422ffd",
+      "id": "06f384406974970568f0b533c67a85b40d7a72ac6c34a90be81cd72ad1e1ce23",
       "mime": "image/png",
-      "size": 2110678
+      "size": 2115262
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "06f384406974970568f0b533c67a85b40d7a72ac6c34a90be81cd72ad1e1ce23",
+            "mime": "image/png",
+            "size": 2115262
+          }
+        }
+      ]
     }
   },
   {
@@ -37,14 +69,30 @@
     "displayName": "Iron Meg",
     "style": "mistport-fog-noir",
     "avatar": {
-      "id": "29da2c847d24983dce6b9c4098070b1a01d014e49912762a5f9ebec25304172c",
+      "id": "3acc7807c64eba0c4f0cd9d1d132d93644e713c0669e9458e605ea9e7d944409",
       "mime": "image/png",
-      "size": 1980086
+      "size": 2103315
     },
     "sprite": {
-      "id": "29da2c847d24983dce6b9c4098070b1a01d014e49912762a5f9ebec25304172c",
+      "id": "3acc7807c64eba0c4f0cd9d1d132d93644e713c0669e9458e605ea9e7d944409",
       "mime": "image/png",
-      "size": 1980086
+      "size": 2103315
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "3acc7807c64eba0c4f0cd9d1d132d93644e713c0669e9458e605ea9e7d944409",
+            "mime": "image/png",
+            "size": 2103315
+          }
+        }
+      ]
     }
   },
   {
@@ -61,6 +109,22 @@
       "id": "a459d41dce1c9e86489b129b1b6c2c1f3f97269a5d1ae23e1a3b715799897147",
       "mime": "image/png",
       "size": 2449589
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "a459d41dce1c9e86489b129b1b6c2c1f3f97269a5d1ae23e1a3b715799897147",
+            "mime": "image/png",
+            "size": 2449589
+          }
+        }
+      ]
     }
   },
   {
@@ -77,6 +141,22 @@
       "id": "b4263dbbb034ebb17cccbd8efe22a7b26726b1dd5fd0628d08ece06924411746",
       "mime": "image/png",
       "size": 2385974
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "b4263dbbb034ebb17cccbd8efe22a7b26726b1dd5fd0628d08ece06924411746",
+            "mime": "image/png",
+            "size": 2385974
+          }
+        }
+      ]
     }
   },
   {
@@ -85,14 +165,30 @@
     "displayName": "Frost",
     "style": "mistport-fog-noir",
     "avatar": {
-      "id": "c716e0a100465548a7b571c355474a2f91fbfb8c460e37f0edb9b84cb7eb24da",
+      "id": "84d0037edf561a1dd105e40476676704d498dd06612f92cbd9a7a50682e2bea5",
       "mime": "image/png",
-      "size": 1799922
+      "size": 2011943
     },
     "sprite": {
-      "id": "c716e0a100465548a7b571c355474a2f91fbfb8c460e37f0edb9b84cb7eb24da",
+      "id": "84d0037edf561a1dd105e40476676704d498dd06612f92cbd9a7a50682e2bea5",
       "mime": "image/png",
-      "size": 1799922
+      "size": 2011943
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "84d0037edf561a1dd105e40476676704d498dd06612f92cbd9a7a50682e2bea5",
+            "mime": "image/png",
+            "size": 2011943
+          }
+        }
+      ]
     }
   },
   {
@@ -101,14 +197,30 @@
     "displayName": "Grey Falcon",
     "style": "mistport-fog-noir",
     "avatar": {
-      "id": "49d1a2b1ecc987e5420281662f2d852bb723c30ba362313a624ba370c2837aa8",
+      "id": "369ddd5e11bd8e37bb4e946c407819270f23d4484bf2905169689b3c5d088d2d",
       "mime": "image/png",
-      "size": 2421663
+      "size": 2159696
     },
     "sprite": {
-      "id": "49d1a2b1ecc987e5420281662f2d852bb723c30ba362313a624ba370c2837aa8",
+      "id": "369ddd5e11bd8e37bb4e946c407819270f23d4484bf2905169689b3c5d088d2d",
       "mime": "image/png",
-      "size": 2421663
+      "size": 2159696
+    },
+    "visuals": {
+      "defaultVariant": "default",
+      "variants": [
+        {
+          "id": "default",
+          "outfit": "default",
+          "expression": "neutral",
+          "pose": "default",
+          "sprite": {
+            "id": "369ddd5e11bd8e37bb4e946c407819270f23d4484bf2905169689b3c5d088d2d",
+            "mime": "image/png",
+            "size": 2159696
+          }
+        }
+      ]
     }
   }
 ]

@@ -1,14 +1,18 @@
 {
   "world": "haruka-academy",
-  "note": "Generation manifest for character portraits. The script composes each prompt as style.prefix + character.subject + style.suffix. Keep one unified style across all entries so the cast reads as one set. Sprites are generated with background=transparent for stage compositing; regenerate all portraits and re-run emit-presence after changing the style.",
+  "note": "Soft anime ensemble for dialogue and relationship play. Keep approved faces, hair colors, uniform silhouettes and signature props. Expression variants must edit the matching default portrait, preserving pose, framing and true alpha. The teacher is an adult; teen-appropriate describes content, not every character age. See docs/guide/world-art-direction.md.",
   "style": {
     "direction": "anime visual-novel character sprite (GalGame tachi-e), soft cel-shading",
     "background": "transparent",
     "prefix": "Character sprite for a visual novel, clean anime style, soft cel-shading, crisp lineart, gentle pastel spring palette, warm soft afternoon daylight, seaside Japanese high-school slice-of-life mood, vertical 2:3 three-quarter standing portrait framed from head to mid-thigh, isolated character sprite on a transparent background, ",
-    "suffix": ", wholesome and teen-appropriate, clean and bright, consistent art style, one single character, centered composition, character silhouette fills 88-94% of the canvas height, GalGame tachi-e",
+    "suffix": ", wholesome and teen-appropriate, clean and bright, consistent art style, one single character, centered composition, character silhouette fills 88-94% of the canvas height, GalGame tachi-e, preserve the authored age and professional role; adult teachers must read as adults, not students; expression-only variants keep the same framing, costume and props",
     "negative": "photorealistic, realism, 3d render, dark, gritty, horror, oversaturated, text, caption, signature, watermark, logo, frame, multiple people, crowd, extra fingers, extra limbs, deformed hands, distorted face, nsfw, suggestive, background scenery, gradient background"
   },
-  "defaults": { "size": "1024x1536", "quality": "medium", "mime": "image/png" },
+  "defaults": {
+    "size": "1024x1536",
+    "quality": "medium",
+    "mime": "image/png"
+  },
   "characters": [
     {
       "id": "kamishiro-mio",
@@ -82,7 +86,7 @@
       "characterId": "npc-onodera-chihiro",
       "name": "小野寺千寻",
       "filename": "onodera-chihiro.png",
-      "subject": "a gentle young woman teacher in her late twenties, a soft cardigan over a blouse, loosely tied hair, holding a piece of chalk and a worn paperback, a warm patient unhurried smile",
+      "subject": "a gentle adult homeroom and language teacher in her late twenties, distinct from the teenage students, honey-brown hair in a loose low bun, warm brown eyes, a beige cardigan over a cream blouse and navy professional skirt, holding a piece of chalk and an open worn olive-green paperback, a patient unhurried smile, relaxed upright teaching posture, no school ribbon or student badge",
       "visual": {
         "id": "teacher-warm",
         "outfit": "teacher",
