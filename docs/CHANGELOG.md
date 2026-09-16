@@ -18,6 +18,7 @@ This release fixes plugin installation, restart and recovery failures, protects 
 
 ### Fixed
 
+- **World art keeps its authored identity and scene continuity.** Five Haruka Academy night backgrounds retain their daytime layout, and four Mistport portraits correct fog-rot, expedition lighting and atmospheric detail. Media hashes and localized references are synchronized; Emberback retains its distinct industrial science-fiction direction. Resource checks cover dimensions, transparency and registry references.
 - **Desktop restart navigates to the new server port.** The main process owns navigation after the sidecar is ready, concurrent restart requests share one operation, and destroyed windows release pending state timers ([#65](https://github.com/ackness/covel/issues/65)).
 - **Repeated Windows ZIP imports report an existing target correctly.** A rename permission error maps to HTTP 409 only when the target exists; genuine permission failures remain errors and existing packages are preserved ([#64](https://github.com/ackness/covel/issues/64)).
 - **New entity IDs no longer restart an in-memory counter.** Randomized IDs prevent collisions caused by CJK names, normalized labels and process restarts. Graph creation also rejects occupied keys while preserving old IDs and edge endpoints ([#70](https://github.com/ackness/covel/issues/70)).
