@@ -7,12 +7,8 @@ import type {
   ExecutionContext,
   InputSlot,
 } from "@covel/shared";
-import { attachExecutionJournal } from "../execution-journal.js";
-import {
-  DEFAULT_LOCALE,
-  getRuntimeSpec,
-  stageMessageOrder,
-} from "@covel/shared";
+import { attachRuntimeJournal } from "../execution-journal.js";
+import { DEFAULT_LOCALE, getRuntimeSpec } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
   applyBudget,
@@ -623,47 +619,7 @@ export async function executeAgentRuntime({
     return failed;
   }
 
-  // Stage the runtime output in the execution journal. finalizeExecution
-  // appends it inside the proposal/session-clock transaction. Manual
-  // plugin-rpc calls stay out of conversation history, matching the existing
-  // contract; a PostRuntime non-success also produces no message.
-  if (deps.store && !input.manualTrigger && result.status === "success") {
-    // Extract narrative content.
-    const narrativeContent =
-      typeof finalOutput.narrativeOutput === "string"
-        ? finalOutput.narrativeOutput
-        : typeof finalOutput.content === "string"
-          ? finalOutput.content
-          : JSON.stringify(finalOutput);
-
-    // Extract pendingInput from the interaction array.
-    const interactionsArr = finalOutput.interactions as unknown[] | undefined;
-    const pendingInput =
-      interactionsArr && interactionsArr.length > 0
-        ? interactionsArr
-        : undefined;
-
-    // Extract UI render instructions if present
-    const ui = finalOutput.ui as unknown[] | undefined;
-
-    attachExecutionJournal(result, [
-      {
-        id: crypto.randomUUID(),
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        sourceType: "runtime",
-        sourcePluginId: manifest.pluginId,
-        sourceRuntimeId: manifest.name,
-        role: "assistant",
-        name: manifest.name,
-        content: narrativeContent,
-        order: stageMessageOrder(getRuntimeSpec(manifest).stage),
-        pendingInput,
-        ui,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
-  }
+  if (deps.store) attachRuntimeJournal(result, input, manifest, finalOutput);
 
   try {
     await deps.onRuntimeComplete?.({

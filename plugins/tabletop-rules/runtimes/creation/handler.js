@@ -8,14 +8,25 @@ export default async function (ctx) {
   const { characters } = await ctx.tools.call("list-characters", {
     type: "player",
   });
-  if (characters.length)
+  const storedRules = await ctx.pluginData.get("setup", "rules");
+  if (characters.length) {
+    if (!storedRules)
+      await ctx.pluginData.set(
+        "setup",
+        "rules",
+        creationRules(
+          ctx.inputs?.schema?.value,
+          await ctx.pluginData.get("rules", "creation"),
+          ctx.locale,
+        ),
+      );
     return {
       outcome: "success",
       completion: "done",
       value: { playerId: characters[0].id },
     };
+  }
   const formId = `${ctx.pluginId}-character`;
-  const storedRules = await ctx.pluginData.get("setup", "rules");
   const submissions = await ctx.store.listPlayerInputs(ctx.sessionId);
   const submitted = submissions.findLast((input) => input.formId === formId);
   if (submitted) {

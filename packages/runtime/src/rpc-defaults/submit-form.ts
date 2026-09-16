@@ -576,7 +576,17 @@ export function createSubmitFormHandler(
         (input) =>
           input.turnId === body.turnId && input.formId === sub.interactionId,
       );
-      if (existing && stableJson(existing.values) !== stableJson(values)) {
+      const storedValues = existing?.values;
+      const comparableValues =
+        storedValues &&
+        typeof storedValues === "object" &&
+        !Array.isArray(storedValues)
+          ? validateSubmissionValues(
+              { ...sub, values: storedValues as Record<string, unknown> },
+              located.interaction,
+            )
+          : storedValues;
+      if (existing && stableJson(comparableValues) !== stableJson(values)) {
         throw new RpcValidationError(
           `Interaction ${sub.interactionId} was already submitted with different values`,
         );

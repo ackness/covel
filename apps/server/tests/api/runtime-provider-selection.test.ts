@@ -9,14 +9,14 @@ import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
 describe("runtime provider selection", () => {
   it("rejects conflicts on creation and enable without persisting an ambiguous session", async () => {
     const registry = createPluginRegistry();
-    for (const id of ["default", "first", "second"]) {
+    for (const id of ["default", "default-alt", "first", "second"]) {
       const manifest = {
         name: id,
         pluginId: id,
         description: id,
         stage: "setup" as const,
         capabilities: ["allocation"],
-        ...(id === "default" ? { fallbackFor: "allocation" } : {}),
+        ...(id.startsWith("default") ? { fallbackFor: "allocation" } : {}),
       };
       registry.register({
         id,
@@ -76,6 +76,40 @@ describe("runtime provider selection", () => {
     expect((await store.getSession("session"))?.activePlugins).toEqual([
       "default",
       "first",
+    ]);
+    const competingDefault = await app.request(
+      "/api/sessions/session/plugins/default-alt",
+      { method: "PUT" },
+    );
+    expect(competingDefault.status).toBe(400);
+
+    // A session accepted by an older build must remain recoverable, but disabling
+    // its replacement must not persist an ambiguous active runtime set.
+    await store.updateSession("session", {
+      activePlugins: ["default", "default-alt", "first"],
+    });
+    const invalidDisable = await app.request(
+      "/api/sessions/session/plugins/first",
+      { method: "DELETE" },
+    );
+    expect(invalidDisable.status).toBe(400);
+    expect((await store.getSession("session"))?.activePlugins).toEqual([
+      "default",
+      "default-alt",
+      "first",
+    ]);
+    const removeConflict = await app.request(
+      "/api/sessions/session/plugins/default-alt",
+      { method: "DELETE" },
+    );
+    expect(removeConflict.status).toBe(200);
+    const restoreDefault = await app.request(
+      "/api/sessions/session/plugins/first",
+      { method: "DELETE" },
+    );
+    expect(restoreDefault.status).toBe(200);
+    expect((await store.getSession("session"))?.activePlugins).toEqual([
+      "default",
     ]);
   });
 });

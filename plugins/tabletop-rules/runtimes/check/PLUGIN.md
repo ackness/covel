@@ -11,6 +11,8 @@ handler: ./handler.js
 stage: pre-turn
 outputKind: system
 capabilities: [tabletop-check]
+ui:
+  right: [./ui/check-panel.json]
 trigger: { type: scheduled, interval: 1 }
 tools:
   builtin: [list-characters, create-form]

@@ -23,3 +23,5 @@
 ## 开发
 
 修改提示词或输入注入后，运行 runtime prompt parity 和 story-filter 测试。
+
+人物档案：叙事可通过 `list-characters` / `get-character` 查询当前会话内的完整角色资料，包括尚未出场的 NPC。身份和属性优先核对档案，历史记忆用于查询发生过的事件。

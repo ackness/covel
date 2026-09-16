@@ -1677,7 +1677,7 @@ capabilities: [narrative, world-data-provider]
 
 ### 可替换的默认 runtime
 
-runtime 可声明 `fallbackFor: character-creation`（值必须同时出现在 `capabilities`）。启用另一个同能力的非 fallback runtime 时，只排除默认 runtime，保留同包其他 runtime 和 UI；无需把整个核心插件禁用。替代者必须使用相同 stage，多个替代者或多个默认实现会报错，避免同时展示两套创角流程。禁用替代插件后默认 runtime 自动恢复。社区插件仍须正常安装、启用和授权，安装本身不会替换任何能力。此机制不改变 `relations.conflicts` 的包级语义。
+runtime 可声明 `fallbackFor: character-creation`（值必须同时出现在 `capabilities`）。启用另一个同能力的非 fallback runtime 时，只排除默认 runtime，保留同包其他 runtime 和 UI；无需把整个核心插件禁用。替代者必须使用相同 stage，多个替代者或多个默认实现会报错（即使默认实现当前被替代者隐藏），避免同时展示两套创角流程。禁用替代插件后默认 runtime 自动恢复；启用、创建会话和禁用都会在持久化前检查剩余组合。社区插件仍须正常安装、启用和授权，安装本身不会替换任何能力。此机制不改变 `relations.conflicts` 的包级语义。
 
 `tabletop-rules` 是可选参考实现：`creation` 提供配点创角，`check` 按已接受提交 ID 持久化 d20 检定。规则配置、预算和属性归插件所有；框架不定义职业、配点或战斗规则。官方叙事插件通过 `tabletop-check` capability 的可选 input binding 消费已结算结果。包可独立安装，测试以不同 ID `tabletop-probe` 按 community 来源运行。
 

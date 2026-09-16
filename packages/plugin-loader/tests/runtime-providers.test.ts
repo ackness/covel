@@ -43,4 +43,13 @@ describe("runtime capability defaults", () => {
       ]),
     ).toThrow("Multiple active providers");
   });
+  it("rejects competing defaults even while an explicit provider hides them", () => {
+    expect(() =>
+      resolveRuntimeProviders([
+        creation,
+        { ...creation, name: "other/create", pluginId: "other" },
+        provider,
+      ]),
+    ).toThrow("Multiple active providers");
+  });
 });

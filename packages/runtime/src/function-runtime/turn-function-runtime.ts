@@ -9,8 +9,8 @@ import type {
   InputSlot,
 } from "@covel/shared";
 import { validateWorldIRV1, WORLD_IR_V1_SCHEMA_URI } from "@covel/shared";
-import { attachExecutionJournal } from "../execution-journal.js";
-import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
+import { attachRuntimeJournal } from "../execution-journal.js";
+import { getRuntimeSpec } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
 import {
@@ -741,40 +741,7 @@ export async function executeFunctionRuntime({
 
   const finalOutput = (result.output ?? output) as Record<string, unknown>;
 
-  // Stage function output in the execution journal (same as agent runtimes).
-  // Manual plugin-rpc calls return their output to the caller and commit
-  // proposals through plugin-rpc, so they stay out of conversation history.
-  // Skipped when a PostRuntime hook rewrote the status to a non-success.
-  if (deps.store && !input.manualTrigger && result.status === "success") {
-    const narrativeContent =
-      typeof finalOutput.narrativeOutput === "string"
-        ? finalOutput.narrativeOutput
-        : typeof finalOutput.content === "string"
-          ? finalOutput.content
-          : JSON.stringify(finalOutput);
-    const interactions = Array.isArray(finalOutput.interactions)
-      ? finalOutput.interactions
-      : undefined;
-    const ui = Array.isArray(finalOutput.ui) ? finalOutput.ui : undefined;
-
-    attachExecutionJournal(result, [
-      {
-        id: crypto.randomUUID(),
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        sourceType: "runtime",
-        sourcePluginId: manifest.pluginId,
-        sourceRuntimeId: manifest.name,
-        role: "assistant",
-        name: manifest.name,
-        content: narrativeContent,
-        order: stageMessageOrder(getRuntimeSpec(manifest).stage),
-        pendingInput: interactions,
-        ui,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
-  }
+  if (deps.store) attachRuntimeJournal(result, input, manifest, finalOutput);
 
   try {
     await deps.onRuntimeComplete?.({

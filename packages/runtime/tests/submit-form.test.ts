@@ -691,6 +691,44 @@ describe("submitFormHandler (Epic A)", () => {
 });
 
 describe("typed numeric form constraints", () => {
+  it("replays pre-upgrade string values without rewriting accepted input", async () => {
+    const store = createMemoryStore();
+    await seedTemplate(store, "legacy", "{{points}} {{ready}}", [
+      { type: "number", name: "points", label: "Points", required: true },
+      { type: "checkbox", name: "ready", label: "Ready" },
+    ]);
+    await store.savePlayerInput({
+      id: "legacy-input",
+      sessionId: SESSION,
+      turnId: TURN,
+      formId: "legacy",
+      values: { points: "3", ready: "false" },
+      createdAt: new Date().toISOString(),
+    });
+    for (const values of [
+      { points: "3", ready: "false" },
+      { points: 3, ready: false },
+    ]) {
+      const result = (await submitFormHandler(
+        {
+          turnId: TURN,
+          submissions: [{ interactionId: "legacy", type: "form", values }],
+        },
+        makeCtx(store),
+      )) as { results: Array<{ submissionId: string }> };
+      expect(result.results[0]?.submissionId).toBe("legacy-input");
+    }
+    await expect(
+      submitOne(store, {
+        interactionId: "legacy",
+        type: "form",
+        values: { points: 4, ready: false },
+      }),
+    ).rejects.toThrow("already submitted");
+    expect(await store.listPlayerInputs(SESSION)).toMatchObject([
+      { id: "legacy-input", values: { points: "3", ready: "false" } },
+    ]);
+  });
   it.each(["", "NaN", "Infinity", -1, 6, 2.5])(
     "rejects %s without accepting the form",
     async (value) => {

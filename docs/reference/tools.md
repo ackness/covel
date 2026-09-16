@@ -202,7 +202,7 @@ Plugin tool 承接插件自己的业务封装，例如：
 
 ### Function runtime 调用工具
 
-`await ctx.tools.call(name, args)` 调用 manifest `tools.builtin` / `tools.plugin` 白名单中的工具，复用参数校验、工具审批、Pre/PostToolUse hook、审计和 proposal 提交流程。调用按顺序执行，后续工具可读到先前的待提交写入；任何失败调用使该 runtime 失败，即使 handler 捕获异常也不会提交部分写入。超时/结束后句柄吊销。只有成功的 runtime 将领域写入与 `ctx.pluginData` 一起交给执行事务。此接口只注入 function runtime，不注入 agent guard。
+`await ctx.tools.call(name, args)` 调用 manifest `tools.builtin` / `tools.plugin` 白名单中的工具，复用参数校验、工具审批、Pre/PostToolUse hook、审计和 proposal 提交流程。调用按顺序执行，后续工具可读到先前的待提交写入；任何失败调用使该 runtime 失败，即使 handler 捕获异常也不会提交部分写入。参数序列化失败（例如 BigInt、循环引用）也会使整个 runtime 失败。超时/结束后句柄吊销。只有成功的 runtime 将领域写入与 `ctx.pluginData` 一起交给执行事务。此接口只注入 function runtime，不注入 agent guard。
 
 PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后续的工具调用；handler 可正常返回当前结果。被拒绝的后续调用同样使 runtime 失败。
 
@@ -220,7 +220,7 @@ PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后�
 
 ### create-form
 
-创建一个需要玩家填写的表单。框架渲染表单，玩家提交后结果注入下一轮上下文。
+创建一个需要玩家填写的表单。框架渲染表单，玩家提交后结果注入下一轮上下文。手动 runtime 通过插件 UI 打开的表单同样会在事务内保存模板，支持刷新后继续填写及服务端校验；没有交互的手动输出仍不写入对话历史。
 
 | 参数              | 类型        | 必需 | 描述                                |
 | ----------------- | ----------- | ---- | ----------------------------------- |
@@ -633,6 +633,8 @@ Characters in session (3 total, sorted by frequency then recency):
 
 ### get-character
 
+叙事插件可以声明 `list-characters` 和 `get-character` 两个只读 builtin 工具，无需依赖角色管理插件；读取范围始终是当前会话，包含非活跃、从未出场的角色。
+
 按 id 或 name 查询单个角色的**完整属性**（description、version、时间戳、全部 fields）。必须传入 id 或 name 其中之一。与 `list-characters` 的简洁列表形成对照，适合需要深入了解某个角色全部状态的场景。
 
 | 参数 | 类型   | 必需 | 描述                 |
@@ -790,7 +792,7 @@ Attributes:
 
 批量解锁图鉴条目，每个条目生成一张"知识发现"UI 卡片。
 
-返回的 `entryId` 使用**语义短 ID** 格式（如 `codex-fire-magic`, `codex-3`），方便 LLM 在后续 `update-codex-entry` 调用中精确引用。
+返回的 `entryId` 使用**语义短 ID** 格式（如 `codex-fire-magic-<random>`、`codex-<random>`），方便 LLM 在后续 `update-codex-entry` 调用中精确引用。
 
 | 参数    | 类型         | 必需 | 描述             |
 | ------- | ------------ | ---- | ---------------- |
@@ -809,7 +811,7 @@ Attributes:
 
 **输出**: `{ unlocked, entries, ui }` — 含稀有度分级的 UI 卡片数组。每个 entry 包含 `entryId`（短 ID）。
 
-**ID 生成**: 使用 `shortIdBatch('codex', titles, sessionId)`，英文标题生成语义 slug（`codex-fire-magic`），CJK 标题回退为计数器（`codex-1`），同一批次内自动去重。
+**ID 生成**: 使用 `shortIdBatch('codex', titles, sessionId)`，每个新 ID 都含随机标识；英文标题额外保留可读 slug，中文等非 ASCII 标题不依赖计数器。更新已有条目应保留其返回 ID。
 
 **当前用途**: `sync-codex-entries` 的内部组合原语。为兼容已有插件代码仍注册，但捆绑的 `codex` runtime 不再直接向模型声明它。
 
@@ -851,50 +853,27 @@ Attributes:
 
 ## 短 ID（LLM 友好实体引用）
 
-工具中需要 LLM 传入或引用的实体 ID 应使用**短语义 ID** 而非 UUID。UUID 对 LLM 有两个问题：
+`shortId()` 和 `shortIdBatch()` 为新实体分配不透明 ID。可读的 ASCII 标签会保留最多 24 个字符的 slug，所有 ID 都附带完整 UUID 的 32 位十六进制随机标识。中文、emoji、空标签也使用随机标识，不依赖进程计数器。
 
-1. **Token 效率低** — 36 字符需 8-10 个 token
-2. **难以精确复制** — LLM 容易在长随机字符串中出错
-
-### 设计原则
-
-| 层         | 格式  | 用途                            | 示例                         |
-| ---------- | ----- | ------------------------------- | ---------------------------- |
-| **存储层** | UUID  | DB 主键、API 路由               | `550e8400-e29b-41d4...`      |
-| **LLM 层** | 短 ID | 工具参数、返回值、prompt 中引用 | `codex-fire-magic`, `char-1` |
-
-### 使用方法
-
-框架通过工厂注入提供 `shortId()` 和 `shortIdBatch()`，插件本地工具可直接使用：
-
-```javascript
-// 插件工具文件接收注入
+```js
 export default function ({ tool, z, shortId, shortIdBatch }) {
   return tool({
-    name: 'my-tool',
-    parameters: z.object({ ... }),
+    name: "my-tool",
+    parameters: z.object({ name: z.string() }),
     execute: async (params, context) => {
-      // 单个 ID
-      const id = shortId('item', 'Dragon Sword', context.sessionId);
-      // → 'item-dragon-sword'
-
-      // 批量 ID（自动去重）
-      const ids = shortIdBatch('codex', ['Fire Magic', 'Fire Magic', '龙息术'], context.sessionId);
-      // → ['codex-fire-magic', 'codex-fire-magic-2', 'codex-1']
+      const id = shortId("item", params.name, context.sessionId);
+      // Dragon Sword -> item-dragon-sword-<32 hex characters>
+      // 龙息术 -> item-<32 hex characters>
+      return { id };
     },
   });
 }
 ```
 
-### ID 格式规则
-
-| 输入                                     | 输出                       | 说明                   |
-| ---------------------------------------- | -------------------------- | ---------------------- |
-| `shortId('char', 'Dragon Knight', sid)`  | `char-dragon-knight`       | 英文 → 语义 slug       |
-| `shortId('item', 'Fire Sword', sid)`     | `item-fire-sword`          | 英文 → 语义 slug       |
-| `shortId('codex', '龙息术', sid)`        | `codex-1`                  | CJK → session 内计数器 |
-| `shortId('npc', '林若风', sid)`          | `npc-2`                    | CJK → session 内计数器 |
-| `shortIdBatch('codex', ['A', 'A'], sid)` | `['codex-a', 'codex-a-2']` | 批量自动去重           |
+- `sessionId` 参数保留兼容性；唯一性不依赖该参数或进程内存。
+- 同一名称反复调用、跨批次调用、重启后调用均分配新 ID。名称去重由调用方查询已有实体完成；更新必须使用已保存的 ID，不能重新按名称计算。
+- `shortIdBatch(prefix, labels, sessionId)` 为每项独立分配 ID；英文标点清理、slug 截断和重复标签不会共享同一个编号。
+- 旧 ID（包括 `npc-1` 等计数型编号）继续有效，不迁移、不重编号。新建写入仍应检查目标 key 是否已占用；`npc-graph` 会在持久化前拒绝冲突，包含当前执行中尚未提交的节点。
 
 ---
 

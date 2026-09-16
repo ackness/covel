@@ -43,7 +43,14 @@ export function createRuntimeTools(options: {
   const tools: NonNullable<FunctionHandlerContext["tools"]> = {
     call(name, args) {
       assertLive();
-      const argumentsJson = JSON.stringify(args);
+      let argumentsJson: string;
+      try {
+        argumentsJson = JSON.stringify(args);
+      } catch (error) {
+        failure = error;
+        failed = true;
+        return Promise.reject(error);
+      }
       // Serialize calls so tools see earlier buffered writes even with Promise.all.
       const pending = tail.then(async () => {
         assertLive();

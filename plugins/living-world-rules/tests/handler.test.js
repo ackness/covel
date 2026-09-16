@@ -246,8 +246,8 @@ describe("living-world-rules handler", () => {
 
     expect(result.value).toEqual({
       saved: true,
-      ruleId: "rule-club-room-rule",
-      lorebookEntryId: "lwr-rule-club-room-rule",
+      ruleId: expect.stringMatching(/^rule-club-room-rule-[a-f0-9]{32}$/),
+      lorebookEntryId: `lwr-${result.value.ruleId}`,
     });
   });
 

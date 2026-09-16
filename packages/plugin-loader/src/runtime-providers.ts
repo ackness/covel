@@ -29,10 +29,7 @@ export function resolveRuntimeProviders(
         manifest.fallbackFor === undefined &&
         manifest.capabilities?.includes(capability),
     );
-    if (
-      providers.length > 1 ||
-      (providers.length === 0 && fallbacks.length > 1)
-    ) {
+    if (providers.length > 1 || fallbacks.length > 1) {
       throw new Error(
         `Multiple active providers for ${capability}; enable only one provider`,
       );

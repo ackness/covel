@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteStore, type DataStore } from "@covel/store";
+import { importWorldDataForSession } from "../../src/world-data/session-import.js";
 import type { LLMAdapter } from "@covel/runtime";
 import {
   bootstrapApi,
@@ -89,6 +90,9 @@ describe("tabletop package installed as a third-party ZIP", () => {
     }
   }
   async function action(type: string, payload: Record<string, unknown>) {
+    const previousIds = new Set(
+      (await store.listTurnResults(sessionId)).map((row) => row.turnId),
+    );
     const response = await request("/api/actions", "POST", {
       requestId: crypto.randomUUID(),
       sessionId,
@@ -97,8 +101,29 @@ describe("tabletop package installed as a third-party ZIP", () => {
     });
     const text = await response.text();
     expect(response.status, text).toBe(200);
+    const events = text
+      .split("\n")
+      .filter((line) => line.startsWith("data: "))
+      .map((line) => JSON.parse(line.slice(6)));
+    expect(
+      events.filter((event) => event.type === "error.occurred"),
+      text,
+    ).toEqual([]);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "execution.completed" &&
+          event.payload.committed === true,
+      ),
+      text,
+    ).toBe(true);
     const results = await store.listTurnResults(sessionId);
     const last = results.at(-1)!;
+    expect(previousIds.has(last.turnId), text).toBe(false);
+    expect(
+      events.some((event) => event.turnId === last.turnId),
+      text,
+    ).toBe(true);
     expect(last?.commitStatus, text).toBe("committed");
     expect(
       last.runtimeResults.filter((result) => result.status === "failed"),
@@ -203,16 +228,6 @@ describe("tabletop package installed as a third-party ZIP", () => {
       createdAt: now,
       updatedAt: now,
     });
-    await store.setPluginData({
-      id: "world-rules",
-      sessionId,
-      pluginId,
-      namespace: "rules",
-      key: "creation",
-      value: rules,
-      createdAt: now,
-      updatedAt: now,
-    });
     await restart();
     const zip = await buildTabletopProbeZip();
     const upload = new FormData();
@@ -230,6 +245,42 @@ describe("tabletop package installed as a third-party ZIP", () => {
     await restart();
     expect(boot.registry.get(pluginId)?.source).toBe("community");
     await enable();
+    const worldRoot = path.join(root, "worlds/rules-world");
+    await mkdir(worldRoot, { recursive: true });
+    await writeFile(
+      path.join(worldRoot, "world.yaml"),
+      "schemaVersion: '1'\nid: rules-world\nname: Rules world\nworldData: world.data.yaml\n",
+    );
+    await writeFile(
+      path.join(worldRoot, "world.data.yaml"),
+      `schemaVersion: 1
+sources:
+  tabletop:
+    kind: json
+    path: rules.json
+    schema: plugin://${pluginId}/rules
+    to: plugin:${pluginId}/rules
+    key: id
+`,
+    );
+    await writeFile(
+      path.join(worldRoot, "rules.json"),
+      JSON.stringify({ id: "creation", ...rules }),
+    );
+    const imported = await importWorldDataForSession({
+      store,
+      sessionId,
+      worldId: "rules-world",
+      worldsDirs: [path.join(root, "worlds")],
+      covelHome: path.join(root, "home"),
+      now,
+      preflight: { registry: boot.registry, activePlugins: [pluginId] },
+    });
+    expect(imported.written).toBe(1);
+    expect(
+      (await store.getPluginData(sessionId, pluginId, "rules", "creation"))
+        ?.value,
+    ).toEqual({ id: "creation", ...rules });
   });
   afterEach(async () => {
     boot?.runtimeJobWorker.close();
@@ -253,6 +304,9 @@ describe("tabletop package installed as a third-party ZIP", () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
+    const previousIds = new Set(
+      (await store.listTurnResults(sessionId)).map((row) => row.turnId),
+    );
     const response = await request("/api/actions", "POST", {
       requestId: crypto.randomUUID(),
       sessionId,
@@ -261,6 +315,7 @@ describe("tabletop package installed as a third-party ZIP", () => {
     });
     expect(response.status, await response.text()).toBe(200);
     const result = (await store.listTurnResults(sessionId)).at(-1)!;
+    expect(previousIds.has(result.turnId)).toBe(false);
     expect(
       result.runtimeResults.find(
         (item) => item.runtimeId === `${pluginId}/creation`,
@@ -271,6 +326,35 @@ describe("tabletop package installed as a third-party ZIP", () => {
     });
     expect(await store.listPlayerInputs(sessionId)).toHaveLength(0);
     expect(await store.listCharacters(sessionId)).toHaveLength(0);
+  });
+
+  it("initializes checks without rebuilding an existing player", async () => {
+    const now = new Date().toISOString();
+    await store.upsertCharacter({
+      id: "existing-player",
+      sessionId,
+      name: "Lin",
+      type: "player",
+      description: "An existing adventurer",
+      fields: { tideReading: 3, stealth: 2, diplomacy: 2, combat: 1 },
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const before = await store.listCharacters(sessionId);
+    await action("start_session", {});
+    expect(await store.listCharacters(sessionId)).toEqual(before);
+    expect(
+      (await store.getPluginData(sessionId, pluginId, "setup", "rules"))?.value,
+    ).toMatchObject(rules);
+    const opened = await request(`${sessionPath}/plugin-rpc`, "POST", {
+      kind: "runtime",
+      pluginId,
+      runtimeId: `${pluginId}/check`,
+      payload: { openForm: true },
+    });
+    expect(opened.status, await opened.text()).toBe(200);
+    expect((await latestForm()).form.interactionId).toMatch(/-check-/);
   });
 
   it("derives point buy from the actual mistport ability schema without allocating health", async () => {
@@ -351,12 +435,31 @@ describe("tabletop package installed as a third-party ZIP", () => {
       }),
     ]);
     expect((await store.getSession(sessionId))?.phase).toBe("playing");
-    await action("send_message", { content: "Inspect the tide" });
-    const check = await latestForm();
+    const ordinary = await action("send_message", {
+      content: "Inspect the tide",
+    });
     expect(
-      (await submit(check, { attribute: "tideReading", difficulty: "12" }))
-        .status,
-    ).toBe(200);
+      (await store.listTurnMessages(sessionId)).filter(
+        (message) =>
+          message.turnId === ordinary.turnId &&
+          Array.isArray(message.pendingInput) &&
+          message.pendingInput.length,
+      ),
+    ).toEqual([]);
+    const opened = await request(`${sessionPath}/plugin-rpc`, "POST", {
+      kind: "runtime",
+      pluginId,
+      runtimeId: `${pluginId}/check`,
+      payload: { openForm: true },
+    });
+    expect(opened.status, await opened.text()).toBe(200);
+    const check = await latestForm();
+    const checkAccepted = await submit(check, {
+      action: "Read the tide",
+      attribute: "tideReading",
+      difficulty: "12",
+    });
+    expect(checkAccepted.status, await checkAccepted.text()).toBe(200);
     const resolved = await action("send_message", {
       content: "Resolve the check",
     });
@@ -380,10 +483,15 @@ describe("tabletop package installed as a third-party ZIP", () => {
     ).toContain("Settled tabletop check");
     await restart();
     await enable();
-    await action("retry_runtime", {
-      retryFromTurnId: resolved.turnId,
+    const retried = await action("retry_runtime", {
       runtimeId: `${pluginId}/check`,
     });
+    expect(retried.turnId).not.toBe(resolved.turnId);
+    expect(
+      retried.runtimeResults.find(
+        (result) => result.runtimeId === `${pluginId}/check`,
+      )?.output,
+    ).toMatchObject({ receipt });
     expect(
       (await store.listPluginData(sessionId, pluginId, "checks")).map(
         (row) => row.value,

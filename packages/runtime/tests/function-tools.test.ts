@@ -136,7 +136,7 @@ describe("governed function tools", () => {
     ).not.toBeNull();
   });
 
-  it.each(["throw", "unauthorized", "invalid"])(
+  it.each(["throw", "unauthorized", "invalid", "bigint", "cycle"])(
     "discards all buffered writes on %s",
     async (mode) => {
       const f = await fixture(async (ctx) => {
@@ -146,11 +146,13 @@ describe("governed function tools", () => {
         });
         await ctx.pluginData!.set("audit", "created", true);
         if (mode === "throw") throw new Error("Abort after write");
+        const cyclic: Record<string, unknown> = {};
+        cyclic.self = cyclic;
         // Swallowing a failed command must not accidentally commit an earlier write.
         await ctx
           .tools!.call(
             mode === "unauthorized" ? "update-character" : "create-character",
-            {},
+            mode === "bigint" ? { value: 1n } : mode === "cycle" ? cyclic : {},
           )
           .catch(() => {});
         return { outcome: "success", value: {} };
