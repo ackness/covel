@@ -1,0 +1,14 @@
+{
+  "id": "lifecycle-probe-cards",
+  "dataSource": { "namespace": "message" },
+  "view": {
+    "component": "Button",
+    "props": { "label": { "$state": "/prompt1Text" } },
+    "on": {
+      "click": {
+        "action": "draftMessage",
+        "params": { "text": { "$state": "/prompt1Text" } }
+      }
+    }
+  }
+}

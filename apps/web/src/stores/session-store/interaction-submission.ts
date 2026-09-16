@@ -1,4 +1,7 @@
 import * as api from "@/services/api.js";
+import i18n from "i18next";
+import { requestConfirm } from "@/lib/confirm-channel.js";
+import { resolvePluginRpcApprovalResponse } from "@/components/session/plugin-rpc-ui.js";
 import type { SessionWorkspace } from "@/services/data-service.js";
 import type { SessionActions } from "./context.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
@@ -7,6 +10,7 @@ import type { SessionDispatch } from "./types.js";
 import {
   finalizeActionExecution,
   reportWorkspaceSyncError,
+  refreshApprovedSessionPlugins,
 } from "./runtime-rpc.js";
 
 interface SubmissionDependencies {
@@ -45,13 +49,38 @@ export async function submitInteractionBlock(
       () => {
         if (!owner.isCurrent())
           throw new Error("Action was superseded before submission");
-        return api.submitInputs(sid, {
-          turnId,
-          submissions: [{ interactionId, type, values }],
-        });
+        return api.submitInputs(
+          sid,
+          {
+            turnId,
+            submissions: [{ interactionId, type, values }],
+          },
+          (response, retry) =>
+            resolvePluginRpcApprovalResponse({
+              response,
+              sessionId: sid,
+              pluginId: "framework",
+              actionLabel: "submit-form",
+              t: (key, options) => i18n.t(key, options),
+              confirm: async (request) =>
+                owner.isCurrent() &&
+                (await requestConfirm(request)) &&
+                owner.isCurrent(),
+              retry: () => {
+                if (!owner.isCurrent())
+                  throw new Error("Action was superseded before submission");
+                return retry();
+              },
+              submitApproval: async (...args) => {
+                await api.resolveApproval(...args);
+                if (args[1] === "allow")
+                  refreshApprovedSessionPlugins(sid, dispatch, owner.isCurrent);
+              },
+            }),
+        );
       },
     );
-    if (!owner.isCurrent()) return;
+    if (!result || !owner.isCurrent()) return;
     if (
       !result.results.find((item) => item.interactionId === interactionId)
         ?.accepted

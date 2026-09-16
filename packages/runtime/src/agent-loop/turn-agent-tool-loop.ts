@@ -15,13 +15,9 @@ import {
   isRuntimeDoneSentinel,
   type EmittedEvent,
 } from "@covel/tools";
-import type {
-  LLMMessage,
-  LLMResponseFormat,
-  LLMToolDefinition,
-} from "../llm/llm-adapter.js";
+import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
-import type { RetryInfo, RetryPolicy } from "../retry/llm-retry.js";
+import type { RetryInfo } from "../retry/llm-retry.js";
 import { buildAgentLoopPolicy } from "./agent-loop-policy.js";
 import { createDeltaForwarder } from "./delta-forwarder.js";
 import { executeToolSearch, SEARCH_TOOLS_TOOL_NAME } from "./tool-search.js";
@@ -32,8 +28,8 @@ import {
   runPreToolUseHook,
   runPostToolUseHook,
   runPreLLMCallHook,
-  runPostLLMResponseHook,
 } from "../hooks/wire-helpers.js";
+import { createResponseReviewer } from "./response-review.js";
 import {
   extractToolFailureMessage,
   isRecord,
@@ -49,13 +45,15 @@ import {
 } from "./turn-agent-tool-loop-messages.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
+import { applyPerCallBudget } from "./agent-call-budget.js";
 import { storyOutputError } from "./story-output.js";
 import {
-  applyBudget,
-  resolveBudgetOptions,
-  type BudgetOptions,
-  type TokenEstimator,
-} from "@covel/context";
+  checkTextCompletion,
+  hasExplicitCompletion,
+  captureCompletionCalls,
+  type CompletionCalls,
+} from "./runtime-completion.js";
+import { type BudgetOptions, type TokenEstimator } from "@covel/context";
 
 export interface AgentToolLoopCompleted {
   readonly finalContent: string | null;
@@ -71,24 +69,16 @@ export interface AgentToolLoopCompleted {
   readonly stoppedWithResponse: boolean;
   readonly effectiveMaxSteps: number;
   readonly deadline: number;
-  /**
-   * True when the runtime declared `requireToolUse` but finished without ever
-   * executing a business tool, even after the corrective nudge. The loop
-   * releases rather than wedging; the caller decides the outcome.
-   */
+  /** Required business tool work is still missing after the corrective step. */
   readonly requiredToolUseUnmet: boolean;
+  readonly requiredCompletionUnmet: boolean;
 }
 
 export type AgentToolLoopResult = AgentToolLoopCompleted | RuntimeResult;
 
-/**
- * Mid-loop state seeded into {@link runAgentToolLoop}. The normal execution
- * path leaves this empty (fresh loop); the resume path rebuilds it from a
- * persisted {@link import("@covel/store").SuspensionRecord} so a
- * suspended-then-resumed runtime continues with the same write set it had when
- * it suspended.
- */
+/** Mid-loop state restored from a suspension; omitted for a fresh loop. */
 export interface AgentToolLoopInitialState {
+  readonly completionCalls?: CompletionCalls;
   readonly finalContent?: string | null;
   readonly collectedToolCalls?: readonly ToolCallRecord[];
   readonly pendingProposals?: readonly Proposal[];
@@ -143,9 +133,7 @@ export async function runAgentToolLoop({
   initialState,
   allowSuspend = true,
 }: RunAgentToolLoopOptions): Promise<AgentToolLoopResult> {
-  // LLM call with tool-calling loop. State is seeded from `initialState` so the
-  // resume path continues from the persisted suspension; the normal path passes
-  // nothing and starts fresh.
+  // Resume starts with persisted loop state; ordinary execution starts fresh.
   let finalContent: string | null = initialState?.finalContent ?? null;
   let finalToolOutput: Record<string, unknown> | null = null;
   const collectedToolCalls: ToolCallRecord[] = [
@@ -171,17 +159,11 @@ export async function runAgentToolLoop({
   ];
   let steps = 0;
 
-  // Mutable: LLM-slot queue waits extend it (via onQueueWait below) so
-  // waiting for a concurrency slot doesn't burn the loop's own budget.
-  // Without this a multi-step agent that queued for minutes reaches its
-  // final "produce output" step with the loop deadline already spent and
-  // dies with "timed out while waiting for final output".
+  // Queue waits extend the deadline so they do not consume execution time.
   let deadline = Date.now() + timeoutMs;
   let stoppedWithResponse = false;
 
-  // All HOW-to-run decisions (tool surface, response format, model override,
-  // streaming gate, step/retry budgets) live in the policy module — the loop
-  // below is control flow only.
+  // The policy owns tool surfaces, model settings, and execution budgets.
   const {
     toolDefs,
     deferredToolNames,
@@ -204,9 +186,7 @@ export async function runAgentToolLoop({
     timeoutMs,
   });
 
-  // Working tool surface for this run. Starts as the policy's (possibly
-  // reduced) advertisement and grows when an intercepted `search-tools` call
-  // activates deferred tools — every subsequent LLM step sees the grown list.
+  // search-tools can activate deferred tools for subsequent steps.
   let activeToolDefs = toolDefs;
 
   // The loop's single narrative outlet — counts chunks for `message.completed`.
@@ -243,9 +223,8 @@ export async function runAgentToolLoop({
   // Set by a PostToolUse hook returning `terminate` — ends the loop after the
   // current response's tool calls are recorded.
   let terminatedByHook = false;
-  // requireToolUse: how many times we've already nudged a bare (no-tool-call)
-  // finish back into the loop. Capped at one correction so a model that keeps
-  // refusing to call its tool is released instead of burning maxSteps.
+  const reviewResponse = createResponseReviewer(hookOpts, messages);
+  // One correction for a bare finish that violates the tool-use contract.
   let noToolCallCorrections = 0;
   // Prose captured from steps that were extended by late steering (see the
   // late-steering drain below). Joined into finalContent at the final break
@@ -284,10 +263,7 @@ export async function runAgentToolLoop({
       tools: activeToolDefs,
     });
 
-    // Tool results, steering, loop-guard nudges, and PreLLMCall hooks can all
-    // grow the transcript after the one-time assembly pass. Budget the exact
-    // per-call request, including the advertised tool/response schemas, before
-    // every provider invocation.
+    // Budget the exact request after tools, steering, and hook rewrites.
     const budgetedRequest =
       estimator && contextBudget
         ? applyPerCallBudget({
@@ -316,7 +292,7 @@ export async function runAgentToolLoop({
       });
     }
 
-    let response = await requestLLMResponse({
+    const rawResponse = await requestLLMResponse({
       manifest,
       deps,
       messages:
@@ -334,14 +310,19 @@ export async function runAgentToolLoop({
       onQueueWait: (waitedMs) => {
         deadline += waitedMs;
       },
-      useStreaming,
+      useStreaming: useStreaming && llmRequest.stream !== false,
       reportRetry,
       onStreamDelta: delta.forward,
     });
 
-    // ── PostLLMResponse hook ─────────────────────────────────────
-    // Inspect / patch the response (content, toolCalls) before tool dispatch.
-    response = await runPostLLMResponseHook(hookOpts, response);
+    const response = await reviewResponse(
+      rawResponse,
+      budgetedRequest?.messages ?? llmRequest.messages,
+    );
+    if (!response) {
+      finalContent = null;
+      continue;
+    }
 
     if (response.toolCalls.length > 0) {
       // LLM requested tool calls — execute them and feed results back.
@@ -556,6 +537,10 @@ export async function runAgentToolLoop({
                 messages,
                 finalContent,
                 collectedToolCalls,
+                completionCalls: captureCompletionCalls(
+                  executedToolCalls,
+                  initialState?.completionCalls,
+                ),
                 pendingProposals,
                 emittedEvents,
                 executionContext,
@@ -744,42 +729,20 @@ export async function runAgentToolLoop({
       continue;
     }
 
-    // requireToolUse gate: a runtime whose whole job is to call a tool has
-    // drifted into free-form prose. Nudge it back once with a corrective
-    // system message; on a second bare finish release it (maxSteps still
-    // bounds the loop) so a stubborn model cannot wedge the runtime, but mark
-    // the contract unmet so the caller can fail honestly instead of reporting
-    // an empty success. Only fires when no BUSINESS tool ever executed —
-    // a runtime that did its work and then narrated is left alone.
-    //
-    // `runtime-done` does not count. It is the framework's loop terminator,
-    // and a nudged model will happily call it alone to satisfy "call the
-    // declared tools" while doing no work at all — observed in the wild with
-    // scene-prompts, which reported success with zero prompts generated.
-    const didBusinessToolWork =
-      seededBusinessWork ||
-      executedToolCalls.some(
-        (c) => c.success && !isRuntimeDoneSentinel(c.result),
-      );
-    if (requireToolUse && !didBusinessToolWork) {
-      if (noToolCallCorrections === 0) {
-        noToolCallCorrections++;
-        console.warn(
-          `[covel:warn] [runtime-retry] ${manifest.name} attempt=${noToolCallCorrections} reason=no-tool-call cause=finished without calling any tool`,
-        );
-        messages.push({
-          role: "system",
-          content: isDefaultLocale(input.locale)
-            ? "你没有调用任何工具就结束了。必须先调用声明的工具完成任务，再收尾。"
-            : "You finished without calling any tool. Call the declared tools to complete the task first, then wrap up.",
-        });
-        continue;
-      }
-      console.warn(
-        `[covel:warn] [runtime-retry] ${manifest.name} reason=no-tool-call cause=still no business tool call after correction; releasing`,
-      );
-      requiredToolUseUnmet = true;
+    const completion = checkTextCompletion({
+      manifest,
+      calls: executedToolCalls,
+      seededBusinessWork,
+      corrections: noToolCallCorrections,
+      locale: input.locale,
+      prior: initialState?.completionCalls,
+    });
+    if (completion.correction) {
+      noToolCallCorrections++;
+      messages.push({ role: "system", content: completion.correction });
+      continue;
     }
+    requiredToolUseUnmet ||= completion.requiredToolUseUnmet;
 
     // Late steering: an interjection that arrived while THIS response
     // was streaming would otherwise sit queued until turn release and never
@@ -825,241 +788,12 @@ export async function runAgentToolLoop({
     effectiveMaxSteps,
     deadline,
     requiredToolUseUnmet,
+    requiredCompletionUnmet:
+      manifest.requireExplicitCompletion === true &&
+      !hasExplicitCompletion(
+        manifest,
+        executedToolCalls,
+        initialState?.completionCalls,
+      ),
   };
-}
-
-function contentForBudget(content: LLMMessage["content"]): string {
-  if (typeof content === "string") return content;
-  return content
-    .map((part) =>
-      part.type === "text" ? part.text : `[image:${part.image.id}]`,
-    )
-    .join("\n");
-}
-
-function applyPerCallBudget(params: {
-  readonly runtimeId: string;
-  readonly messages: readonly LLMMessage[];
-  readonly tools: readonly LLMToolDefinition[] | undefined;
-  readonly responseFormat: LLMResponseFormat | undefined;
-  readonly retryPolicy: RetryPolicy;
-  readonly estimator: TokenEstimator;
-  readonly contextBudget: Omit<BudgetOptions, "estimator">;
-}): {
-  readonly messages: LLMMessage[];
-  readonly prunedMessageCount: number;
-  readonly truncatedToolResultCount: number;
-  readonly truncatedSummaryCount: number;
-  readonly maxOutputTokens: number;
-} {
-  const limits = resolveBudgetOptions(params.contextBudget);
-  const [first, ...rest] = params.messages;
-  const hasPrimarySystem = first?.role === "system";
-  const primarySystem = hasPrimarySystem ? first : undefined;
-  const primarySystemText = primarySystem
-    ? contentForBudget(primarySystem.content)
-    : "";
-  const toolDefinitionsText =
-    params.tools && params.tools.length > 0
-      ? `<tool_definitions>${JSON.stringify(params.tools)}</tool_definitions>`
-      : "";
-  const responseFormatText = params.responseFormat
-    ? `<response_format>${JSON.stringify(params.responseFormat)}</response_format>`
-    : "";
-  const retryText =
-    params.retryPolicy.maxRetries > 0
-      ? `[retry ${params.retryPolicy.maxRetries}] The previous attempt called the same tool repeatedly. Vary your approach or finish with runtime-done.${" ".repeat(params.retryPolicy.maxRetries)}`
-      : "";
-  const fixedInput = [
-    primarySystemText,
-    toolDefinitionsText,
-    responseFormatText,
-    retryText,
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const budgeted = applyBudget(
-    fixedInput,
-    hasPrimarySystem ? rest : params.messages,
-    { ...params.contextBudget, estimator: params.estimator },
-  );
-  const fixedInputTokens = params.estimator(fixedInput);
-  const systemTokens = params.estimator(primarySystemText);
-  const toolDefinitionTokens = params.estimator(toolDefinitionsText);
-  const responseFormatTokens = params.estimator(responseFormatText);
-  const inputLimit = limits.maxInputTokens - limits.reservedForResponse;
-  const overflow = Math.max(0, budgeted.totalTokens - inputLimit);
-  const compacted = compactToolResultsToFit(
-    budgeted.messages,
-    overflow,
-    params.estimator,
-  );
-  const afterToolResults = budgeted.totalTokens - compacted.savedTokens;
-  const compactedSummaries = compactSummaryEnvelopesToFit(
-    compacted.messages,
-    Math.max(0, afterToolResults - inputLimit),
-    params.estimator,
-  );
-  const compactedTotal = afterToolResults - compactedSummaries.savedTokens;
-  if (compactedTotal > inputLimit) {
-    throw new RangeError(
-      `Context budget exceeded before LLM call for runtime "${params.runtimeId}": estimated ${compactedTotal} input tokens, limit ${inputLimit} (fixed=${fixedInputTokens}, system=${systemTokens}, tools=${toolDefinitionTokens}, responseFormat=${responseFormatTokens}, messages=${budgeted.totalTokens - fixedInputTokens}, toolResultSaved=${compacted.savedTokens}, summarySaved=${compactedSummaries.savedTokens})`,
-    );
-  }
-  return {
-    messages: [
-      ...(primarySystem ? [primarySystem] : []),
-      ...compactedSummaries.messages,
-    ],
-    prunedMessageCount: budgeted.prunedMessageCount,
-    truncatedToolResultCount: compacted.truncatedCount,
-    truncatedSummaryCount: compactedSummaries.truncatedCount,
-    maxOutputTokens: limits.reservedForResponse,
-  };
-}
-
-const TOOL_RESULT_TRUNCATION_MARKER =
-  "\n...[tool result truncated; query a narrower scope if needed]...\n";
-const SUMMARY_TRUNCATION_MARKER =
-  "\n...[compacted history truncated; durable copy unchanged]...\n";
-
-/**
- * Tool messages after the current user turn cannot be removed without
- * breaking provider tool-call pairing. When a read tool returns more data
- * than the next call can carry, retain a marked head/tail preview while the
- * full parsed result remains available in RuntimeResult.toolCalls and traces.
- */
-function compactToolResultsToFit(
-  messages: readonly LLMMessage[],
-  tokensToSave: number,
-  estimator: TokenEstimator,
-): {
-  readonly messages: LLMMessage[];
-  readonly savedTokens: number;
-  readonly truncatedCount: number;
-} {
-  if (tokensToSave <= 0) {
-    return { messages: [...messages], savedTokens: 0, truncatedCount: 0 };
-  }
-
-  const compacted = [...messages];
-  let remaining = tokensToSave;
-  let savedTokens = 0;
-  let truncatedCount = 0;
-
-  // Oldest tool results lose detail first; the most recent result is usually
-  // the one the model requested to refine an earlier, broader lookup.
-  for (let index = 0; index < compacted.length && remaining > 0; index += 1) {
-    const message = compacted[index]!;
-    if (message.role !== "tool" || typeof message.content !== "string") {
-      continue;
-    }
-    const originalTokens = estimator(message.content);
-    const minimumTokens = estimator(TOOL_RESULT_TRUNCATION_MARKER);
-    if (originalTokens <= minimumTokens) continue;
-
-    // Keep a small safety token because heuristic estimators and integer
-    // boundaries are not perfectly linear under head/tail truncation.
-    const targetTokens = Math.max(
-      minimumTokens,
-      originalTokens - remaining - 1,
-    );
-    const content = truncateContentHeadTail(
-      message.content,
-      targetTokens,
-      estimator,
-      TOOL_RESULT_TRUNCATION_MARKER,
-    );
-    const newTokens = estimator(content);
-    const saved = Math.max(0, originalTokens - newTokens);
-    if (saved === 0) continue;
-
-    compacted[index] = { ...message, content };
-    savedTokens += saved;
-    remaining = Math.max(0, remaining - saved);
-    truncatedCount += 1;
-  }
-
-  return { messages: compacted, savedTokens, truncatedCount };
-}
-
-function compactSummaryEnvelopesToFit(
-  messages: readonly LLMMessage[],
-  tokensToSave: number,
-  estimator: TokenEstimator,
-): {
-  readonly messages: LLMMessage[];
-  readonly savedTokens: number;
-  readonly truncatedCount: number;
-} {
-  if (tokensToSave <= 0) {
-    return { messages: [...messages], savedTokens: 0, truncatedCount: 0 };
-  }
-
-  const compacted = [...messages];
-  let remaining = tokensToSave;
-  let savedTokens = 0;
-  let truncatedCount = 0;
-  for (let index = 0; index < compacted.length && remaining > 0; index += 1) {
-    const message = compacted[index]!;
-    if (
-      typeof message.content !== "string" ||
-      !message.content.trimStart().startsWith("<compacted_history>\n")
-    ) {
-      continue;
-    }
-    const originalTokens = estimator(message.content);
-    const minimumTokens = estimator(SUMMARY_TRUNCATION_MARKER);
-    if (originalTokens <= minimumTokens) continue;
-    const targetTokens = Math.max(
-      minimumTokens,
-      originalTokens - remaining - 1,
-    );
-    const content = truncateContentHeadTail(
-      message.content,
-      targetTokens,
-      estimator,
-      SUMMARY_TRUNCATION_MARKER,
-    );
-    const newTokens = estimator(content);
-    const saved = Math.max(0, originalTokens - newTokens);
-    if (saved === 0) continue;
-    compacted[index] = { ...message, content };
-    savedTokens += saved;
-    remaining = Math.max(0, remaining - saved);
-    truncatedCount += 1;
-  }
-  return { messages: compacted, savedTokens, truncatedCount };
-}
-
-function truncateContentHeadTail(
-  content: string,
-  maxTokens: number,
-  estimator: TokenEstimator,
-  marker: string,
-): string {
-  if (estimator(content) <= maxTokens) return content;
-  if (estimator(marker) >= maxTokens) {
-    return marker.trim();
-  }
-
-  let low = 0;
-  let high = content.length;
-  let best = marker;
-  while (low <= high) {
-    const keepChars = Math.floor((low + high) / 2);
-    const headChars = Math.ceil(keepChars / 2);
-    const tailChars = Math.floor(keepChars / 2);
-    const candidate =
-      content.slice(0, headChars) +
-      marker +
-      (tailChars > 0 ? content.slice(-tailChars) : "");
-    if (estimator(candidate) <= maxTokens) {
-      best = candidate;
-      low = keepChars + 1;
-    } else {
-      high = keepChars - 1;
-    }
-  }
-  return best;
 }

@@ -18,54 +18,37 @@ self-contained **session-scoped knowledge graph** that:
 
 ## Component Map
 
+```mermaid
+flowchart TD
+  Input[Player message and optional current cast] --> Retrieve[pre-turn: deterministic graph retrieval]
+  Retrieve --> Narrate[narrative-engine: story and character lookup tools]
+  Narrate --> IR[post-turn: world-ir-provider typed facts]
+  IR --> Extract[post-turn: relationship extractor]
+  Extract --> Commit[Graph proposals and transaction commit]
+  Commit --> UI[plugin-data.changed and GraphCanvas]
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│  Player turn N                                                       │
-└──────────────────────────────────────────────────────────────────────┘
-        │
-        ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│  stage: pre-turn — npc-graph/rag-retriever (function runtime)   │
-│                                                                      │
-│  • reads playerMessage                                               │
-│  • loads nodes/edges/index from plugin_data                          │
-│  • name + alias matching → seed nodes                                │
-│  • 2-hop BFS via adjacency index                                     │
-│  • time filter (validAt / invalidAt)                                 │
-│  • rank by (validAt desc, |strength| desc), top-20                   │
-│  • emits npcContext markdown via runtime output                      │
-└──────────────────────────────────────────────────────────────────────┘
-        │
-        ▼ injected via input.inject as <npc-relationships>
-┌──────────────────────────────────────────────────────────────────────┐
-│  stage: narrative — narrator (agent runtime)                    │
-│                                                                      │
-│  • sees prior facts in <npc-relationships> tag                       │
-│  • generates narrative consistent with established trust/enmity      │
-└──────────────────────────────────────────────────────────────────────┘
-        │
-        ▼ narrative output
-┌──────────────────────────────────────────────────────────────────────┐
-│  stage: post-turn — npc-graph/extractor (agent runtime)         │
-│                                                                      │
-│  • LLM reads <narrator-output> + the existing graph, both already    │
-│    in the prompt (input.inject pulls nodes/edges as                  │
-│    <existing-npcs> / <existing-relations>) — no per-turn list call   │
-│  • calls upsert-npc-graph once to write; when a summary is too       │
-│    short to prove a change, conservatively skips that relation       │
-│  • upsert tool maintains nodes/edges/index in plugin_data            │
-└──────────────────────────────────────────────────────────────────────┘
-        │
-        ▼ plugin-data.changed SSE
-┌──────────────────────────────────────────────────────────────────────┐
-│  apps/web right panel: GraphCanvas (lazy)                            │
-│                                                                      │
-│  • react-force-graph-2d, lazy-loaded chunk                           │
-│  • reads pluginData[npc-graph][nodes/edges] live                │
-│  • node colour by type, edge colour by sign of strength              │
-│  • click → in-panel detail card                                      │
-└──────────────────────────────────────────────────────────────────────┘
-```
+
+The retriever first matches names and aliases in the player's message. If none
+match, it uses the optional same-execution `currentCast` input and requires an
+unambiguous full-name/alias match to an individual graph node. Character IDs
+and graph IDs are separate namespaces. It keeps the newest open edge for each
+`(source, target, relation)`, excludes invalidated edges from traversal, follows
+at most two adjacency hops, then ranks reachable edges by `validAt` descending
+and absolute `strength` descending, capped at 20. It loads nodes and edges
+before traversal; this is not a vector query or constant-time full retrieval.
+
+The extractor consumes the required typed `worldIR` input from capability
+`world-ir-provider`, rather than independently rereading the entire narrative.
+Existing nodes and relations are injected into its prompt. `toolChoice: required`
+requests a real tool call; `requireExplicitCompletion` accepts a successful
+`upsert-npc-graph` or an explicit `runtime-done` when nothing changed. Prose or
+JSON that merely claims an update cannot commit a graph change. Actual writes
+and the adjacency index are committed before the UI receives data events.
+
+These inputs improve grounding but do not guarantee correct model inference or
+entity classification. Narrators also have session-scoped `list-characters` /
+`get-character` tools for full profiles, including characters not in the cast;
+the graph is supplementary context, not the canonical character record.
 
 ## Data Model
 
@@ -75,7 +58,7 @@ Defined in `packages/shared/src/types/npc-graph.ts`.
 type NpcNodeType = "individual" | "group" | "faction";
 
 interface NpcNode {
-  id: string; // short ID, e.g. "npc-0a7c"
+  id: string; // opaque persistent ID; preserve existing IDs
   name: string; // canonical, used for LLM joins
   aliases?: readonly string[];
   type: NpcNodeType;
@@ -87,7 +70,7 @@ interface NpcNode {
 }
 
 interface NpcEdge {
-  id: string; // short ID, e.g. "edge-1f3a"
+  id: string; // opaque persistent edge ID
   source: string; // node ID
   target: string; // node ID
   relation: string; // UPPER_SNAKE_CASE
@@ -112,7 +95,8 @@ All persisted via `plugin_data` under `pluginId = 'npc-graph'`:
 | `meta`    | `ontology`           | `NpcGraphOntology`    |
 
 The adjacency index is maintained inside `upsert-npc-graph` so the
-retriever can do O(1) neighbour lookups instead of scanning all edges.
+retriever can load each frontier node's adjacent edge IDs by key. Nodes and
+edges are still loaded once to resolve names and current relation versions.
 
 ## Plugin Tools
 
@@ -122,10 +106,16 @@ retriever can do O(1) neighbour lookups instead of scanning all edges.
   The bundled extractor no longer declares it because nodes and edges are
   injected into its prompt before the LLM call.
 - **`upsert-npc-graph.js`** — the heavy-lift tool. Resolves node IDs
-  by name (case-insensitive), assigns short IDs to new nodes via
+  by name (case-insensitive), assigns collision-resistant IDs to new nodes via
   `shortIdBatch`, merges aliases / labels / summary / attributes into
   existing nodes, de-duplicates edges by `(source, target, relation)`,
   and refreshes the adjacency index in one transaction.
+
+New node IDs use `shortIdBatch` with a UUID component; an occupied key rejects
+the operation rather than replacing a different node. Existing node IDs, edge
+endpoints and first-seen turns remain stable across restarts. Already overwritten
+historical data requires an intact backup; installing a new version cannot
+reconstruct it.
 
 Both tools follow the existing zero-dep injection pattern, but only
 `upsert-npc-graph` is exposed to the bundled extractor:

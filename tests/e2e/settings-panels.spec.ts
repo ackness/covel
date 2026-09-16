@@ -187,6 +187,7 @@ for (const width of [1512, 390]) {
     await page.route(`${path}/plugin-data/panel-fixture**`, (route) =>
       route.fulfill({ json: { items: [] } }),
     );
+    let releaseHealth = () => {};
     try {
       await page.goto(`/session?sid=${fixture.id}`);
       await expect(
@@ -221,6 +222,21 @@ for (const width of [1512, 390]) {
           .getByRole("dialog")
           .getByRole("button", { name: "关闭", exact: true })
           .click();
+        const health = await (await page.request.get("/api/health")).json();
+        const healthReady = Promise.withResolvers<void>();
+        releaseHealth = () => healthReady.resolve();
+        await page.route("**/api/health", async (route) => {
+          await healthReady.promise;
+          await route.fulfill({
+            json: {
+              ...health,
+              storage: {
+                ...health.storage,
+                data: { ...health.storage?.data, frontendMode: "remote" },
+              },
+            },
+          });
+        });
         await page
           .getByRole("button", { name: "切换状态与世界上下文" })
           .click();
@@ -235,6 +251,12 @@ for (const width of [1512, 390]) {
       ).toBeVisible();
       await expect(lastTab).toBeInViewport({ ratio: 0.98 });
       if (width === 390) {
+        // A late storage badge reduces the rail height after selection.
+        releaseHealth();
+        await expect(
+          page.getByRole("dialog").getByText("Memory", { exact: true }),
+        ).toBeVisible();
+        await expect(lastTab).toBeInViewport({ ratio: 0.98 });
         await page
           .getByRole("dialog")
           .getByRole("button", { name: "关闭", exact: true })
@@ -262,6 +284,7 @@ for (const width of [1512, 390]) {
       expect(fixture.actions).toHaveLength(0);
       expect(errors).toEqual([]);
     } finally {
+      releaseHealth();
       await fixture.dispose();
     }
   });

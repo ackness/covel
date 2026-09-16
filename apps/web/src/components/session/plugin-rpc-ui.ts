@@ -12,11 +12,6 @@ import { emitToast } from "@/lib/toast-channel.js";
 
 type Translate = (key: string, options?: Record<string, unknown>) => string;
 
-// A deferred community entry requires one grant to load its server code and a
-// second grant for the requested action. Keep the retry bounded so a broken
-// approval backend cannot trap the UI in an authorization loop.
-const MAX_PLUGIN_RPC_APPROVAL_STAGES = 2;
-
 export interface PluginRpcConfirmRequest {
   readonly title: string;
   readonly message: string;
@@ -97,6 +92,25 @@ export function emitPluginRpcRuntimeResponse(params: {
     );
     return;
   }
+  const target = response.runtimeResults?.find(
+    (result) => result.runtimeId === runtimeId,
+  );
+  if (
+    target?.status === "skipped" &&
+    target.output &&
+    typeof target.output === "object" &&
+    "reason" in target.output &&
+    target.output.reason === "setup-incomplete"
+  ) {
+    emitToast(
+      "info",
+      t("plugin.invokeRuntime.setupPending", {
+        defaultValue:
+          "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",
+      }),
+    );
+    return;
+  }
   const deferredJobs = response.deferredJobs ?? [];
   if (params.expectsBackgroundFollower === true && deferredJobs.length === 0) {
     emitToast(
@@ -158,13 +172,8 @@ export async function resolvePluginRpcApprovalResponse(params: {
   readonly submitApproval?: typeof resolveApproval;
 }): Promise<PluginRpcResponse | null> {
   let response = params.response;
-
-  for (
-    let stage = 0;
-    response.status === "approval-required" &&
-    stage < MAX_PLUGIN_RPC_APPROVAL_STAGES;
-    stage += 1
-  ) {
+  const requested = new Set<string>();
+  while (response.status === "approval-required") {
     const pending =
       response.pending && typeof response.pending === "object"
         ? (response.pending as Record<string, unknown>)
@@ -175,6 +184,17 @@ export async function resolvePluginRpcApprovalResponse(params: {
         : params.pluginId;
     const approvedAction =
       typeof pending?.action === "string" ? pending.action : params.actionLabel;
+    const key = JSON.stringify([approvedPluginId, approvedAction]);
+    // A batch may need several providers. Stop on a repeated grant instead of
+    // imposing a plugin count; never approve a response for another session.
+    if (
+      requested.has(key) ||
+      (params.sessionId &&
+        typeof pending?.sessionId === "string" &&
+        pending.sessionId !== params.sessionId)
+    )
+      break;
+    requested.add(key);
 
     const proceed = await params.confirm({
       title: params.t("plugin.approval.title", {

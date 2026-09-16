@@ -46,6 +46,7 @@ function makeEntry(args: {
   };
   return {
     id: args.id,
+    source: "builtin",
     summary,
     manifest: parsed,
     manifests: [parsed],

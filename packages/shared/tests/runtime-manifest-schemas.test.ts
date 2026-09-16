@@ -104,6 +104,14 @@ const newShapeFields = {
 
 const compatCurrentPositives: readonly Fixture[] = [
   {
+    name: "required tool choice for explicit completion",
+    manifest: {
+      ...base,
+      stage: "post-turn",
+      llm: { reasoningEffort: "disabled", toolChoice: "required" },
+    },
+  },
+  {
     name: "stage narrative + auto trigger (narrator)",
     manifest: { ...base, stage: "narrative", trigger: { type: "auto" } },
   },

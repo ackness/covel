@@ -240,14 +240,13 @@ export function MessageBlockRenderer({
         const { data, turnId, interactionId, submitBehavior } = readBlockMeta();
 
         // Extract form field values from json-render state tree (/form/<name>).
-        const formValues: Record<string, string> = {
-          ...((initialFormState.form as Record<string, string> | undefined) ??
-            {}),
+        const formValues: Record<string, unknown> = {
+          ...initialFormState.form,
         };
         for (const [path, value] of Object.entries(formStateRef.current)) {
           const match = path.match(/^\/form\/(.+)$/);
           if (match && value != null) {
-            formValues[match[1]] = String(value);
+            formValues[match[1]] = value;
           }
         }
 
@@ -257,7 +256,13 @@ export function MessageBlockRenderer({
             | undefined) ?? [];
         const missingFields = fields.filter((field) => {
           if (!field?.required || !field.name) return false;
-          return !formValues[field.name]?.trim();
+          const value = formValues[field.name];
+          return (
+            value === undefined ||
+            value === null ||
+            (typeof value === "string" && !value.trim()) ||
+            (typeof value === "number" && !Number.isFinite(value))
+          );
         });
         if (missingFields.length > 0) {
           // Locale-aware list joining — a hardcoded "、" reached en-US players
@@ -394,8 +399,11 @@ export function buildInitialFormState(
     if (!raw || typeof raw !== "object") continue;
     const field = raw as Record<string, unknown>;
     const name = typeof field.name === "string" ? field.name : "";
-    const defaultValue =
-      typeof field.defaultValue === "string" ? field.defaultValue : undefined;
+    const defaultValue = ["string", "number", "boolean"].includes(
+      typeof field.defaultValue,
+    )
+      ? field.defaultValue
+      : undefined;
     if (!name || defaultValue === undefined) continue;
     if (field.type === "select") {
       const options = Array.isArray(field.options) ? field.options : [];

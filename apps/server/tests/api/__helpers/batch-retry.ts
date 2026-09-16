@@ -84,6 +84,7 @@ export async function batchRetryFixture() {
     const parsed = { manifest, promptTemplate: "", rawFrontmatter: {} };
     registry.register({
       id: name,
+      source: "builtin",
       summary: {
         id: name,
         name,

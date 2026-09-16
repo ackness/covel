@@ -117,6 +117,52 @@ async function commitStatusOf(store: DataStore): Promise<string | undefined> {
 }
 
 describe("finalizeExecution", () => {
+  it.each([false, true])(
+    "publishes manual interactions only after a successful commit (rollback=%s)",
+    async (rollback) => {
+      const store = createMemoryStore();
+      await savePendingTurn(store);
+      const eventBus = createEventBus();
+      const events: Array<Record<string, unknown>> = [];
+      eventBus.onEmit((event) => {
+        if (event.topic === "state")
+          events.push({ ...event.payload, type: event.type });
+      });
+      const outcome = await finalizeExecution({
+        store,
+        sessionId: SESSION_ID,
+        eventBus,
+        executionContext: {
+          executionId: TURN_ID,
+          origin: "manual",
+          countPolicy: "none",
+        },
+        runtimes: [makeRuntime("form")],
+        results: [
+          makeResult("form", {
+            interactions: [
+              { interactionId: "check", type: "form", fields: [] },
+            ],
+          }),
+        ],
+        turnIds: [TURN_ID],
+        extraInTx: async () => {
+          expect(events).toEqual([]);
+          if (rollback) throw new Error("Rollback after form persistence");
+        },
+      });
+      expect(outcome.status).toBe(rollback ? "failed" : "committed");
+      expect(events).toHaveLength(rollback ? 0 : 1);
+      if (!rollback)
+        expect(events[0]).toMatchObject({
+          type: "interaction.requested",
+          turnId: TURN_ID,
+          block: { data: { interactionId: "check" } },
+        });
+      await store.close();
+    },
+  );
+
   it.each(["before", "during"])(
     "rolls back a completed story when stopped %s finalization",
     async (when) => {

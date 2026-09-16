@@ -118,6 +118,10 @@ server 会按 `*_API_KEY` 扫描所有条目注入 provider 运行时。Key 名 
 
 ## 前端入口
 
+安装插件或世界包后，按提示点击“立即重启”。主进程等待新服务就绪，再把窗口导航到新端口；
+不会刷新已经退出的旧端口。重启后会话数据保留，community 插件的进程内授权可能需要重新批准。
+框架版本来自应用包；页面、桌面桥接和服务端 health 不应各自维护硬编码版本号。
+
 **Settings → Desktop** tab 暴露所有路径、一键打开目录、切换 `data_root`。不想改文件就在 UI 里点。
 
 “打开 `llm.toml`”使用当前生效的 `COVEL_LLM_TOML` 路径，未设置时才回退到配置根的 `llm.toml`；`keys.env` 始终位于配置根。打开操作要求目标已存在，缺失时返回 `open_target_unavailable`。源码开发中的根 `llm.toml` 优先级、用户资源目录和 Docker 挂载与桌面不同，见[环境变量说明](./env-registry.md#加载路径与环境差异)。

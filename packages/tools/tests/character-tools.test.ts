@@ -13,7 +13,7 @@
  * explicit `commit()` that mimics the commit handler.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Proposal } from "@covel/shared";
 import { getPendingProposals } from "../src/result.js";
 import {
@@ -198,15 +198,56 @@ describe("builtin character tools", () => {
     loop = new Loop(tools, store);
   });
 
-  it("factory returns five named tools", () => {
+  it("registers character read and write tools", () => {
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([
       "create-character",
       "get-character",
+      "get-character-schema",
       "list-characters",
       "sync-characters",
       "update-character",
     ]);
+  });
+
+  it("reads only the current session's resolved character schema without writes", async () => {
+    const schema = {
+      version: 1,
+      attributes: [{ id: "combat", name: "Combat", type: "number" }],
+    };
+    const getPluginData = vi.fn(async (sid: string, pid: string) =>
+      sid === "sess-1" && pid === "custom-provider"
+        ? { value: schema, updatedAt: "2026-01-01T00:00:00Z" }
+        : null,
+    );
+    const scopedTools = createCharacterTools(
+      Object.assign(store, { getPluginData }),
+      {
+        findWorldDataPluginId: () => "custom-provider",
+      },
+    );
+    const caller = new Loop(scopedTools, store, "community-creator");
+    expect(await caller.call("get-character-schema", {})).toMatchObject({
+      schema,
+    });
+    expect(getPluginData).toHaveBeenCalledWith(
+      "sess-1",
+      "custom-provider",
+      "schema",
+      "character-attributes",
+    );
+    expect(caller.pending).toEqual([]);
+    expect(
+      await new Loop(
+        scopedTools,
+        store,
+        "community-creator",
+        "other-session",
+      ).call("get-character-schema", {}),
+    ).toMatchObject({ schema: null });
+    expect(await loop.call("get-character-schema", {})).toMatchObject({
+      schema: null,
+    });
   });
 
   it("rejects invalid create/update fields before exposing any proposal", async () => {

@@ -33,7 +33,6 @@
         "pluginData": [
           {
             "namespace": "notes",
-            "key": "note-opened-vault",
             "field": "title"
           }
         ]

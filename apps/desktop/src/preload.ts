@@ -8,6 +8,7 @@
  */
 
 import { contextBridge, ipcRenderer } from "electron";
+import { version } from "../package.json";
 
 /** Channels the renderer may INVOKE (request/response) on main. */
 const INVOKE_CHANNELS = [
@@ -71,8 +72,8 @@ const api = {
   /** Platform identifier (darwin, win32, linux). */
   platform: process.platform,
 
-  /** Short app version string. Set at preload time via env var injection. */
-  appVersion: process.env.COVEL_APP_VERSION ?? "0.0.1-beta",
+  /** Package version bundled into the sandbox, with an optional host override. */
+  appVersion: process.env.COVEL_APP_VERSION ?? version,
 
   /**
    * Request/response. Rejects if the channel is not allowlisted.

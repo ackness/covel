@@ -35,6 +35,7 @@ import type {
 } from "@covel/tools";
 import type { z } from "zod";
 import type { HookHandler } from "./hooks/types.js";
+import type { FormValidator } from "./rpc/form-validator.js";
 import type { RpcHandler } from "./rpc/rpc-registry.js";
 
 /**
@@ -125,6 +126,8 @@ export interface PluginAPI {
     handler: RpcHandler,
     options?: PluginRpcOptions,
   ): void;
+  /** Validate this plugin's committed forms before accepting input; return an error or undefined. */
+  registerFormValidator(name: string, validator: FormValidator): void;
   /** Register media wires (namespaced `<pluginId>/<wireId>`, like `wires`). */
   registerWires(wires: WireModuleShape): void;
 }

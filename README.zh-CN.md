@@ -4,7 +4,7 @@
 
 [English](./README.md) · **简体中文**
 
-[![Version](https://img.shields.io/badge/version-v0.0.34-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.34)
+[![Version](https://img.shields.io/badge/version-v0.0.35-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.35)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC 关系、世界典籍、任务、行囊、记忆、舞台调度和媒体都会随回合演化。它有三层清晰分工：**内核提供原语与编排**，**插件提供行为**，**世界包提供设定、资源与默认插件组合**。
 
-> **发布版本：v0.0.34**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，且尚未签名；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
+> **发布版本：v0.0.35**，早期阶段。API、世界数据和插件 manifest 可能随版本变化。当前二进制面向 macOS Apple Silicon 与 Windows x64，且尚未签名；升级前请阅读 [`docs/CHANGELOG.md`](./docs/CHANGELOG.md)并备份自定义内容。
 
 ## 亮点
 
@@ -21,6 +21,7 @@ Covel 是一套 AI RPG 框架，也是一间可以直接游玩的工作室：NPC
 - ⚙️ **可组合的插件 runtime** —— 在一条能力驱动的管线中组合 LLM agent、确定性函数、UI 面板、数据 schema、事件和生命周期 hook。
 - 🎲 **内置 RPG 玩法** —— 预掷骰判定（可视化回执）、自动跟踪的任务日志、玩家可直接操作的行囊、逐 NPC 好感度。全部是可选插件；世界包可以预置任务、开局装备与初始好感。
 - 🧩 **插件保持可替换** —— 内核通过 `capabilities` 和 `outputKind` 发现能力，框架代码不按具体插件 ID 分支。
+- 🎲 **可选配点规则** —— `tabletop-rules` 使用第三方 ZIP 包同样可用的类型化表单、校验器和确定性工具接口。两个叙事插件均支持人称设置，正文检查后整段展示。
 - 🌍 **可移植世界包** —— 用同一套 `WorldData` 导入协议携带世界观、角色 schema、主要角色、规则、记忆块、任务、物品、立绘、场景与插件默认值。
 - 🔄 **共享 WorldIR** —— 回合后先生成一次插件中立事实投影，任务、行囊、好感、图鉴与关系插件复用同一份证据，不再各自重读故事。
 - 🔌 **自带模型** —— OpenAI / Anthropic / DeepSeek / Qwen 模型槽位。本地优先：SQLite 落盘；Web 模式将 API 密钥存入浏览器 localStorage，桌面模式将密钥以明文保存到 `~/.covel/keys.env`。
@@ -67,6 +68,9 @@ plugins/npc-graph/
 ```
 
 内核通过声明式能力和类型化输出连接这些模块。因此叙事者、图像服务商、舞台导演或规则系统都能被替换，而无需在框架里为某个插件 ID 添加特例。
+
+扩展应按独立 community 包开发并验证安装、授权、重启和卸载，见[插件测试](./docs/guide/plugin-testing.md)与
+[玩家流程验收](./docs/guide/e2e-testing.md#发版前的玩家流程验收)。框架统一版本，插件和世界包可独立维护版本。
 
 ## 世界包让设定真正可玩
 

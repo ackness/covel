@@ -1,0 +1,74 @@
+[
+  {
+    "world": "haruka-academy",
+    "target": "media/scenes/club-building-night.png",
+    "input": "media/scenes/club-building-day.png",
+    "inputRevision": "e2a9efd7",
+    "mode": "built-in-imagegen",
+    "prompt": "Use case: lighting-weather\nAsset type: shipped Haruka Academy visual novel scene background, club-building night variant.\nInput image 1: edit target and exact architectural reference, the approved daytime scene.\nPrimary request: Relight THIS SAME IMAGE to blue hour just after sunset. Keep the EXACT camera, crop, perspective, three-story wooden building, tiled pitched roof, all window and door positions, ivy column at right, foreground gravel, left sea view, and cherry tree. This must crossfade directly from the input without changing building or location. Warm light glows gently from a few upper-floor club windows and the entrance. Cool soft violet-blue ambient light, still readable wooden detail, quiet spring campus mood. Match the input's delicate anime visual-novel background painting. No people, no figures, no new objects, no writing, no neon, no horror. Change only illumination and sky time of day; no structural redesign. Landscape image 1536x1024, 3:2 aspect ratio."
+  },
+  {
+    "world": "haruka-academy",
+    "target": "media/scenes/classroom-2b-night.png",
+    "input": "media/scenes/classroom-2b-day.png",
+    "inputRevision": "e2a9efd7",
+    "mode": "built-in-imagegen",
+    "prompt": "Use case: lighting-weather\nAsset type: shipped Haruka Academy visual novel night background.\nInput image 1: edit target, approved daytime classroom-2b scene, exact layout reference.\nPrimary request: Make a NIGHT LIGHTING VARIANT OF THIS SAME IMAGE. Preserve exact camera, lens, crop, perspective, object positions, geometry, and the following: all desks and chairs, window mullions, billowing curtains, foreground notebook stack, chalkboard on the right, the schoolyard and sea outside. Change only illumination and sky color. Soft cool blue hour outside, faint violet sky and dim sea, gentle warm light from the existing ceiling fixtures. A calm welcoming classroom after club activities; retain midtone detail.\nStyle: preserve the reference's refined hand-painted anime visual novel scenery, spring pastels under blue-hour illumination. No change of location, no structural redesign, no extra objects or buildings, no people, no figures, no legible text, no logos, no neon, no rain, no scary lighting. Keep foreground readable for character compositing. Output 1536x1024 landscape 3:2, matching the input."
+  },
+  {
+    "world": "haruka-academy",
+    "target": "media/scenes/library-night.png",
+    "input": "media/scenes/library-day.png",
+    "inputRevision": "e2a9efd7",
+    "mode": "built-in-imagegen",
+    "prompt": "Use case: lighting-weather\nAsset type: shipped Haruka Academy visual novel night background.\nInput image 1: edit target, approved daytime library scene, exact layout reference.\nPrimary request: Make a NIGHT LIGHTING VARIANT OF THIS SAME IMAGE. Preserve exact camera, lens, crop, perspective, object positions, geometry, and the following: two-level library, mezzanine railing, every shelf, books and magazines, the long reading counter at right, chairs, right-side window frames, exact outside coast and hills. Change only illumination and sky color. Early night just after sunset, violet-blue sea and sky beyond the existing windows, existing desk lamps switched on with small warm pools, soft warm ambient library lights. Readable wood and book colors, quiet before closing.\nStyle: preserve the reference's refined hand-painted anime visual novel scenery, spring pastels under blue-hour illumination. No change of location, no structural redesign, no extra objects or buildings, no people, no figures, no legible text, no logos, no neon, no rain, no scary lighting. Keep foreground readable for character compositing. Output 1536x1024 landscape 3:2, matching the input."
+  },
+  {
+    "world": "haruka-academy",
+    "target": "media/scenes/sakurazaka-seawall-night.png",
+    "input": "media/scenes/sakurazaka-seawall-day.png",
+    "inputRevision": "e2a9efd7",
+    "mode": "built-in-imagegen",
+    "prompt": "Use case: lighting-weather\nAsset type: shipped Haruka Academy visual novel night background.\nInput image 1: edit target, approved daytime sakurazaka-seawall scene, exact layout reference.\nPrimary request: Make a NIGHT LIGHTING VARIANT OF THIS SAME IMAGE. Preserve exact camera, lens, crop, perspective, object positions, geometry, and the following: downhill lane facing the sea, left school gate and green chainlink fence, large cherry trees, stone seawall and railings, right-side white vending machine and streetlamp. Change only illumination and sky color. Blue hour after sunset, dusky violet sky with only a faint peach horizon, calm dark blue sea; vending machine softly glows and the existing streetlamp gives a gentle warm light on dry pavement. Intimate, peaceful spring walk.\nStyle: preserve the reference's refined hand-painted anime visual novel scenery, spring pastels under blue-hour illumination. No change of location, no structural redesign, no extra objects or buildings, no people, no figures, no legible text, no logos, no neon, no rain, no scary lighting. Keep foreground readable for character compositing. Output 1536x1024 landscape 3:2, matching the input."
+  },
+  {
+    "world": "haruka-academy",
+    "target": "media/scenes/shopping-street-night.png",
+    "input": "media/scenes/shopping-street-day.png",
+    "inputRevision": "e2a9efd7",
+    "mode": "built-in-imagegen",
+    "prompt": "Use case: lighting-weather\nAsset type: shipped Haruka Academy visual novel night background.\nInput image 1: edit target, approved daytime shopping-street scene, exact layout reference.\nPrimary request: Make a NIGHT LIGHTING VARIANT OF THIS SAME IMAGE. Preserve exact camera, lens, crop, perspective, object positions, geometry, and the following: straight street and central vanishing point, left bookstore and flower shop, right restaurant and guitar shop, pastel awnings, banners, parked bicycles, railway crossing and sea at the end. Change only illumination and sky color. After sunset under a soft deep blue-violet sky, shop windows glow gentle amber, existing street lamps on, subtle warm light on the existing dry pavement, peaceful small seaside town atmosphere.\nStyle: preserve the reference's refined hand-painted anime visual novel scenery, spring pastels under blue-hour illumination. No change of location, no structural redesign, no extra objects or buildings, no people, no figures, no legible text, no logos, no neon, no rain, no scary lighting. Keep foreground readable for character compositing. Output 1536x1024 landscape 3:2, matching the input."
+  },
+  {
+    "world": "mistport",
+    "target": "media/portraits/iron-meg.png",
+    "input": "media/portraits/iron-meg.png",
+    "inputRevision": "e2a9efd7",
+    "mode": "built-in-imagegen",
+    "prompt": "Use case: precise-object-edit\nAsset type: Mistport dark-fantasy RPG portrait; anatomical lore correction.\nInput image 1: edit target. Preserve her face identity, short dark hair, age in her thirties, reserved hard expression, worn layered black leather, painterly realism, cold grey/teal/rust palette, vertical half-body composition, and fog harbor backdrop.\nPrimary request: Correct the fog-rot to HER ANATOMICAL LEFT forearm only. Currently the pale translucent forearm is on the viewer's LEFT and belongs to her right arm; that is WRONG. Repose the arms naturally: her LEFT elbow is on the VIEWER'S RIGHT, her LEFT forearm crosses the front of her waist toward the VIEWER'S LEFT and is visibly mist-translucent from elbow through fingertips, with a worn partial glove. Her RIGHT arm on the VIEWER'S LEFT is fully opaque, clothed and rests lower by her side. Do not mirror the whole image. Keep normal anatomy, two arms and two hands. The curse is translucent grey mist through which cloth behind can barely be seen, not ice, lightning or bright magic. Face remains the first focal point. Subdue distant harbor into dense grey-white fog, no distinct sky; no extra objects, text or watermark. Output exactly 1024x1536 PNG, 2:3 portrait."
+  },
+  {
+    "world": "mistport",
+    "target": "media/portraits/grey-falcon.png",
+    "input": "media/portraits/grey-falcon.png",
+    "inputRevision": "e2a9efd7",
+    "mode": "built-in-imagegen",
+    "prompt": "Use case: precise-object-edit\nAsset type: Mistport dark-fantasy RPG character portrait; equipment lore correction.\nInput image 1: edit target. Preserve the SAME face, close-cropped hair, stern expression, scarred texture, costume, insignia, pose, gloved hand, camera and dark fog-noir painterly rendering.\nPrimary request: Change ONLY the handheld warm flame lantern into a SHIELDED TIDE-STONE lantern. Keep the outer worn iron case and its position. Its sides are mostly closed metal shutters, with one narrow partly uncovered slit exposing a small dull cold blue-white mineral inside. Absolutely NO FLAME, no candle, no orange lantern glow. It casts only a small weak cold light on the glove, no beam into the fog, no neon and no electrical components. Maintain character face legibility. Surrounding distant architecture should disappear into soft dense grey sea fog, no clear sky. Preserve all other details. Output exactly 1024x1536 PNG, portrait 2:3. No text or watermark."
+  },
+  {
+    "world": "mistport",
+    "target": "media/portraits/su-yao.png",
+    "input": "media/portraits/su-yao.png",
+    "inputRevision": "e2a9efd7",
+    "mode": "built-in-imagegen",
+    "prompt": "Use case: lighting-weather\nAsset type: Mistport RPG portrait, same character and same painting.\nInput image 1: edit target. Preserve Su Yao's exact face, worried controlled expression, pinned dark hair, high-collared guild uniform, round appraisal mirror, opaque healthy hands, pose and all costume details.\nPrimary request: Make only a subtle atmospheric consistency pass: soften the distant towers into dense grey-white sea fog with no distinct sky; retain dark desaturated grey, teal and aged brass colors. Give the face and the rim of the appraisal mirror a very gentle diffuse lift so both remain legible in a small portrait, without brightening the costume or adding glow. Keep the same painterly semi-realistic rendering and original composition. No new jewelry, objects, people, text or watermark. Export exactly 1024x1536 PNG in 2:3 portrait format; preserve framing and do not crop the head or hands."
+  },
+  {
+    "world": "mistport",
+    "target": "media/portraits/xiao-shuang.png",
+    "input": "media/portraits/xiao-shuang.png",
+    "inputRevision": "e2a9efd7",
+    "mode": "built-in-imagegen",
+    "prompt": "Use case: precise-object-edit\nAsset type: Mistport RPG portrait, subtle lore-correct fog-rot.\nInput image 1: edit target. Preserve the SAME fifteen-year-old oracle's face, long ash-grey hair, pale grey full-coverage acolyte robe, necklace, listening head tilt, two hands and their positions, neutral unglamorous pose, grey/teal painterly fog-noir style.\nPrimary request: Her story describes EARLY fog-rot, only fingertips occasionally translucent. Change the excessive waterfall of glittering glass magic around her raised hand and forearm into extremely subtle grey mist-translucence at FINGERTIPS ONLY. Forearms and palms remain naturally opaque. Remove the large magic trails around both hands; no crystals, sparks, ice, glowing vines, floating objects or spell-casting effect. Let fine mist just soften the fingertips. Keep her quiet ambiguous listening expression, not a powerful sorceress. Subdue background towers into thick grey-white harbor fog, no clear sky. Soft diffuse face light with readable eyes, otherwise preserve composition, clothing and rendering. No text or watermark. Export exactly 1024x1536 PNG, 2:3 portrait."
+  }
+]

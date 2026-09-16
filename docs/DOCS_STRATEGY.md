@@ -19,6 +19,7 @@
 | `docs/reference/`    | 权威契约                                     | schema、types、routes、runtime、tests |
 | `docs/architecture/` | 模块边界和设计原因                           | 实现代码 + 历史决策                   |
 | `docs/glossary.md`   | 统一术语                                     | reference 页面                        |
+| `docs/v2/`           | 按读者目标组织的新入口与逐章迁移             | 已验证教程 + 当前 reference 契约      |
 | `devs/docs/`         | 任务计划、审查、实施日志、临时分析与交接材料 | 稳定结论提炼后迁入正式 `docs/` 分类   |
 
 ## Authoring Rules
@@ -31,3 +32,13 @@
 - 涉及密钥、付费 provider、外部写入或数据删除的步骤必须在执行前标出影响，并提供 dry-run、测试环境或备份路径（如果当前工具支持）。
 - 开发过程资料统一放在 `devs/docs/`；落地后只把面向用户或开发者的稳定结论提炼到 `docs/guide/`、`docs/reference/` 或 `docs/architecture/`。
 - 新增文档要从 `docs/README.md` 或对应目录 `README.md` 可达。
+
+## Gradual v2 migration
+
+新方向见 [`v2/README.md`](./v2/README.md)：游玩 → 创建世界 → 开发插件 → 验证与分发，
+辅以任务示例、契约参考和原理说明。开发 Agent 与人类作者使用同一套接口、教程和验收标准。
+
+当前先维护准确的现有文档，再逐个完成 v2 的可执行任务教程；不批量复制旧页面，也不在
+新入口中把待重写章节当作已完成内容。一个契约只有一个权威页面，迁移完成后更新入口并
+保留旧链接的到达路径。文档维护指令放在 `docs/v2/AGENTS.md`；未来的开发 skills 引用教程，
+不另建一份 API 规范。临时迁移审计、执行计划与测试日志仍放在 `devs/docs/`。

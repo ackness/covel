@@ -7,6 +7,18 @@ import {
   type SseEnvelope,
 } from "@covel/shared";
 import { ApiError, request, requestResponse } from "./request.js";
+import { z } from "zod";
+
+const actionApprovalSchema = z.object({
+  status: z.literal("approval-required"),
+  approvalId: z.string().min(1),
+  pending: z.object({
+    sessionId: z.string(),
+    pluginId: z.string(),
+    action: z.string(),
+  }),
+});
+export type ActionApproval = z.infer<typeof actionApprovalSchema>;
 
 // -- Actions (SSE) -------------------------------------------------
 
@@ -21,18 +33,57 @@ export function sendAction(
   onEvent: (envelope: SseEnvelope) => void,
   onError?: (err: Error) => void,
   onDone?: () => void,
+  onApproval?: (approval: ActionApproval) => Promise<boolean>,
 ): AbortController {
   const controller = new AbortController();
 
   (async () => {
     try {
       const body = actionRequestSchema.parse(req);
-      const res = await requestResponse("/api/actions", {
-        method: "POST",
-        body: JSON.stringify(body),
-        signal: controller.signal,
-        sessionId: req.sessionId,
-      });
+      const send = () =>
+        requestResponse("/api/actions", {
+          method: "POST",
+          body: JSON.stringify(body),
+          signal: controller.signal,
+          sessionId: req.sessionId,
+          operatorAuth: true,
+        });
+      let res = await send();
+      const requested = new Set<string>();
+      while (res.status === 202) {
+        const approval = actionApprovalSchema.parse(await res.json());
+        const key = JSON.stringify([
+          approval.pending.pluginId,
+          approval.pending.action,
+        ]);
+        if (
+          approval.pending.sessionId !== req.sessionId ||
+          requested.has(key) ||
+          !onApproval
+        ) {
+          throw new ApiError(
+            202,
+            "/api/actions",
+            JSON.stringify({
+              error: "Plugin approval is required",
+              code: "approval_required",
+            }),
+          );
+        }
+        requested.add(key);
+        const allowed = await onApproval(approval);
+        controller.signal.throwIfAborted();
+        if (!allowed)
+          throw new ApiError(
+            403,
+            "/api/actions",
+            JSON.stringify({
+              error: "Plugin action was not authorized",
+              code: "plugin_approval_denied",
+            }),
+          );
+        res = await send();
+      }
 
       await readSseStream({
         response: res,

@@ -15,6 +15,7 @@ import {
 import { MockLLM } from "../../../packages/plugin-test-utils/src/mock-llm.js";
 import { loadRuntimeBundle } from "../../../packages/test-runtime/src/runtime-loading.js";
 import trackerReadBudget from "../hooks/tracker-read-budget.js";
+import protectCharacterProfiles from "../hooks/protect-character-profiles.js";
 
 const sessionId = "tracker-test-session";
 const runtimeId = "char-creator/character-tracker";
@@ -107,6 +108,12 @@ async function run(secondResponse) {
     store,
     findTool: (name) => tools.get(name),
   });
+  hookPipeline.register({
+    id: "protect-character-profiles",
+    pluginId: "char-creator",
+    event: "PreToolUse",
+    handler: protectCharacterProfiles,
+  });
   const result = await executeTurn(
     {
       sessionId,
@@ -175,6 +182,25 @@ async function run(secondResponse) {
 }
 
 describe("character tracker two-step runtime", () => {
+  it("rejects a biography rewrite without committing the accompanying state patch", async () => {
+    const { store, tracker } = await run(
+      response("sync-characters", {
+        updates: [
+          {
+            id: characterId,
+            description: "An invented past.",
+            fields: { systems: 3 },
+          },
+        ],
+      }),
+    );
+    expect(tracker.status).toBe("failed");
+    expect((await store.listCharacters(sessionId))[0]).toMatchObject({
+      description: "A synthetic test character.",
+      fields: { systems: 2 },
+      version: 1,
+    });
+  });
   it("reads details then commits a validated update on the second step", async () => {
     const { store, tracker } = await run(
       response("sync-characters", {

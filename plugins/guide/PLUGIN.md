@@ -14,6 +14,9 @@ pluginType: plugin
 # each other's writes.
 stage: post-turn
 model: plugin
+llm:
+  reasoningEffort: disabled
+  toolChoice: { name: generate-guide }
 outputKind: system
 timeoutMs: 120000
 maxSteps: 2

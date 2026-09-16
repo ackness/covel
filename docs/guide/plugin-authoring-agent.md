@@ -78,7 +78,7 @@ export default function ({ tool, z, shortIdBatch }) {
         .describe("要解锁的图鉴条目列表"),
     }),
     execute: async (params, context) => {
-      // 使用 shortIdBatch 生成 LLM 友好的短 ID（如 'codex-fire-magic'）
+      // 使用 shortIdBatch 生成 LLM 友好的短 ID（如 'codex-fire-magic-<random>'）
       const ids = shortIdBatch(
         "codex",
         params.entries.map((e) => e.title),
@@ -122,7 +122,7 @@ export default function ({ tool, z, shortIdBatch }) {
 2. **Zod 定义参数** — 框架自动从 Zod schema 生成 JSON Schema 注入 LLM 上下文，LLM 才知道如何调用
 3. **`.describe()` 很重要** — 每个参数的 describe 会作为参数说明发给 LLM
 4. **`execute(params, context)`** — params 是经过 Zod 验证的输入，context 包含会话信息
-5. **短 ID** — 使用 `shortId()` / `shortIdBatch()` 代替 UUID，让 LLM 能精确引用实体
+5. **短 ID** — 使用 `shortId()` / `shortIdBatch()` 分配带随机标识的新 ID；更新时使用保存的 ID，不按名称重新生成
 6. **持久化写入** — 需要写 plugin-data 时优先返回 `withPendingProposals(...)`，让 commit chain 统一落盘、trace 和触发 SSE
 7. **返回值** — 任意 JSON，会作为 tool result 返回给 LLM
 

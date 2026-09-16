@@ -3,8 +3,9 @@
  * (docs 02 §3, 01 §4).
  *
  * A binding pulls a same-execution value from an upstream producer's success
- * result and injects it — wrapped in provenance (`InputSlot`) — into the
- * consumer's function `ctx.inputs` / agent prompt. `required: true` (default)
+ * result (or a guard's skip:true output) and injects it — wrapped in provenance
+ * (`InputSlot`) — into the consumer's function `ctx.inputs` / agent prompt.
+ * `required: true` (default)
  * makes the binding a turn gate: unsatisfiable → the consumer is skipped with a
  * machine-readable reason; `required: false` is best-effort (omit the slot).
  *
@@ -170,6 +171,16 @@ export function deriveActivation(
   ) {
     return { source: "stage", detached: true, payload: null };
   }
+  // Recovery replays the source's dependency snapshot. A single selected
+  // runtime must retain bindings just like a batch; ordinary manual RPCs still
+  // project turn inputs away and retain their explicit payload below.
+  if (
+    input.manualTrigger?.sourceTurnId &&
+    (input.manualTrigger.runtimeId === manifest.name ||
+      input.manualTrigger.runtimeIds?.includes(manifest.name))
+  ) {
+    return { source: "stage", detached: false, payload: null };
+  }
   const backgroundWhenDetached =
     getRuntimeSpec(manifest).backgroundWhenDetached;
   if (triggerEvent !== undefined) {
@@ -208,7 +219,7 @@ function providersFor(
   };
 }
 
-/** Extract a producer's selected success value + its provenance source. */
+/** Extract a producer's completed value + its provenance source. */
 function extractValue(
   producer: RuntimeManifest,
   binding: RuntimeBinding,
@@ -217,7 +228,11 @@ function extractValue(
   | { ok: true; value: JsonValue; source: InputSource }
   | { ok: false; reason: "upstream-failed" | "input-missing" } {
   const result = completedResults.get(producer.name);
-  if (!result || result.status !== "success") {
+  // A guard can produce the value without an LLM call. Scheduling skips have
+  // no such output and must still gate consumers; failed guards never qualify.
+  const guardProvided =
+    result?.status === "skipped" && result.output?.skip === true;
+  if (!result || (result.status !== "success" && !guardProvided)) {
     return { ok: false, reason: "upstream-failed" };
   }
   let value: unknown = result.output;

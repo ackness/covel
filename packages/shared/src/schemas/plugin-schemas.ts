@@ -666,10 +666,13 @@ export const permissionsDeclSchema = z
  * superRefine has to name Zod's refinement-ctx type.
  */
 interface ManifestCrossFieldView {
+  readonly fallbackFor?: string;
+  readonly capabilities?: readonly string[];
   readonly runtimeType?: string;
   readonly handler?: string;
   readonly stage?: string;
   readonly outputKind?: string;
+  readonly requireExplicitCompletion?: boolean;
   readonly turnCompletion?: {
     readonly mode?: string;
     readonly maxQueueMs?: number;
@@ -703,6 +706,25 @@ function sharedManifestCrossFieldIssues(
   m: ManifestCrossFieldView,
 ): CrossFieldIssue[] {
   const issues: CrossFieldIssue[] = [];
+  if (m.fallbackFor && !m.capabilities?.includes(m.fallbackFor)) {
+    issues.push({
+      path: ["fallbackFor"],
+      message: "fallbackFor must be a declared capability",
+    });
+  }
+
+  if (
+    m.requireExplicitCompletion &&
+    (m.runtimeType === "function" ||
+      m.outputKind === "story" ||
+      m.output?.schema)
+  ) {
+    issues.push({
+      path: ["requireExplicitCompletion"],
+      message:
+        "requireExplicitCompletion is for non-story agent runtimes without output.schema; completion uses tools or runtime-done",
+    });
+  }
 
   if (m.runtimeType === "function" && !m.handler?.trim()) {
     issues.push({
@@ -876,7 +898,12 @@ const runtimeManifestCommonShape = {
   llm: z
     .strictObject({
       reasoningEffort: z.literal("disabled").optional(),
-      toolChoice: z.strictObject({ name: z.string().min(1) }).optional(),
+      toolChoice: z
+        .union([
+          z.literal("required"),
+          z.strictObject({ name: z.string().min(1) }),
+        ])
+        .optional(),
     })
     .optional(),
   timeoutMs: z.number().int().positive().optional(),
@@ -897,6 +924,8 @@ const runtimeManifestCommonShape = {
   loopDetectionThreshold: z.number().int().min(0).max(20).optional(),
   /** Retry a bare (no-tool-call) finish once before releasing. Default false. */
   requireToolUse: z.boolean().optional(),
+  /** Require a completing tool or explicit runtime-done, preserving no-change. */
+  requireExplicitCompletion: z.boolean().optional(),
   /** Complete after a response batch successfully calls one of these tools. */
   completeAfterTools: z.array(z.string().min(1)).min(1).optional(),
   /** Maximum nested ctx.recursiveCall() depth. Default 10. */
@@ -912,6 +941,7 @@ const runtimeManifestCommonShape = {
    * a misspelled framework-known one.
    */
   capabilities: z.array(z.string().min(1)).optional(),
+  fallbackFor: z.string().min(1).optional(),
   tags: z.array(pluginTagSchema).optional(),
   relations: pluginRelationsSchema.optional(),
   /** Coarse scheduling stage: which band this runtime runs in. */

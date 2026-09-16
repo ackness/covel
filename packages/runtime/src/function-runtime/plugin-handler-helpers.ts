@@ -388,7 +388,7 @@ export function createPluginLogger(
 
 /**
  * Build a narrow `FunctionStoreView` for community function-runtime
- * handlers. Only the four documented read methods are
+ * handlers. Only documented, session-scoped read methods are
  * exposed — handlers that try to call `setPluginData`, `upsertCharacter`,
  * etc. will get `undefined` and a runtime TypeError, surfacing the
  * misuse loudly instead of letting third-party code silently bypass
@@ -412,6 +412,9 @@ export function createFunctionStoreView(
     },
     getSession() {
       return store.getSession(ctx.sessionId);
+    },
+    listPlayerInputs() {
+      return store.listPlayerInputs(ctx.sessionId);
     },
     listTurnMessages(limit) {
       // A bounded read from inside a runtime handler means "recent context":

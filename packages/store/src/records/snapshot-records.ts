@@ -194,6 +194,12 @@ export interface SuspensionRecord {
     readonly partialContent?: string;
     /** ToolCallRecord[] accumulated before the suspend point. */
     readonly toolCallsSoFar: readonly unknown[];
+    /** Execution evidence for completion checks after an agent resumes. */
+    readonly completionCalls?: readonly {
+      readonly name: string;
+      readonly success: boolean;
+      readonly done: boolean;
+    }[];
     /**
      * Proposals buffered mid-turn at the suspend point.
      *

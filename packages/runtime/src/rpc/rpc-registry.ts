@@ -6,6 +6,7 @@
  * handlers, while framework defaults are registered eagerly at bootstrap.
  */
 
+import type { ValidatePluginForm } from "./form-validator.js";
 import type {
   RpcCommandEnvironment,
   RpcCommandInvocation,
@@ -107,6 +108,15 @@ export interface RpcRegistryEntry {
 }
 
 export interface PluginRpcRegistry {
+  registerFormValidator(
+    pluginId: string,
+    name: string,
+    validator: ValidatePluginForm,
+  ): () => void;
+  getFormValidator(
+    pluginId: string,
+    name: string,
+  ): ValidatePluginForm | undefined;
   /**
    * Register a plugin action from its entry module. Throws if the
    * (pluginId, action) pair is already registered.
@@ -139,10 +149,23 @@ export interface PluginRpcRegistry {
 }
 
 export function createPluginRpcRegistry(): PluginRpcRegistry {
+  const formValidators = new Map<string, ValidatePluginForm>();
   const pluginEntries = new Map<string, RpcRegistryEntry>(); // key = `${pluginId}::${action}`
   const frameworkEntries = new Map<string, RpcRegistryEntry>();
 
   return {
+    registerFormValidator(pluginId, name, validator) {
+      const key = `${pluginId}::${name}`;
+      if (formValidators.has(key))
+        throw new Error(`Duplicate form validator: ${key}`);
+      formValidators.set(key, validator);
+      return () => {
+        if (formValidators.get(key) === validator) formValidators.delete(key);
+      };
+    },
+    getFormValidator(pluginId, name) {
+      return formValidators.get(`${pluginId}::${name}`);
+    },
     registerPluginHandler(pluginId, action, handler, options, pluginTrust) {
       const key = `${pluginId}::${action}`;
       if (pluginEntries.has(key)) {

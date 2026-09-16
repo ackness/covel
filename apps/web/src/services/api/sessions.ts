@@ -113,19 +113,28 @@ export async function submitInputs(
       values: Record<string, unknown>;
     }>;
   },
-): Promise<SubmitInputsResult> {
-  const response = await request<PluginRpcResponse>(
-    `/api/sessions/${encodeURIComponent(sessionId)}/plugin-rpc`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        kind: "action",
-        pluginId: "framework",
-        action: "submit-form",
-        payload: body,
-      }),
-    },
-  );
+  resolveResponse?: (
+    response: PluginRpcResponse,
+    retry: () => Promise<PluginRpcResponse>,
+  ) => Promise<PluginRpcResponse | null>,
+): Promise<SubmitInputsResult | null> {
+  const send = () =>
+    request<PluginRpcResponse>(
+      `/api/sessions/${encodeURIComponent(sessionId)}/plugin-rpc`,
+      {
+        method: "POST",
+        operatorAuth: true,
+        body: JSON.stringify({
+          kind: "action",
+          pluginId: "framework",
+          action: "submit-form",
+          payload: body,
+        }),
+      },
+    );
+  const first = await send();
+  const response = resolveResponse ? await resolveResponse(first, send) : first;
+  if (!response) return null;
   if (response.status !== "ok") {
     throw new Error(`submit-form returned ${response.status}`);
   }

@@ -7,6 +7,39 @@ import {
 import { batchRetryFixture, seedResult } from "./__helpers/batch-retry.js";
 
 describe("committed runtime recovery projection", () => {
+  it("retains guard-provided inputs but excludes ordinary skipped dependencies", async () => {
+    const f = await batchRetryFixture();
+    const schema = {
+      ...seedResult("schema", "skipped"),
+      output: { skip: true, worldSchema: { version: 1 } },
+    };
+    await f.store.saveTurnResult({
+      id: "setup-source",
+      sessionId: f.sessionId,
+      turnId: "setup-source",
+      origin: "player",
+      commitStatus: "committed",
+      durationMs: 1,
+      createdAt: "2026-01-02T00:00:00Z",
+      runtimeResults: [
+        schema,
+        seedResult("unavailable", "skipped"),
+        seedResult("a", "failed"),
+      ],
+    });
+    const plan = await prepareRuntimeRetry(
+      f.store,
+      f.sessionId,
+      {
+        type: "retry_runtime",
+        requestId: "request",
+        sessionId: f.sessionId,
+        payload: { runtimeId: "a", retryFromTurnId: "setup-source" },
+      },
+      [{ name: "a" }] as RuntimeManifest[],
+    );
+    expect(plan.seedResults).toEqual([schema]);
+  });
   it("keeps the complete failure summary independent of the selected and active runtime limits", async () => {
     const f = await batchRetryFixture();
     const failedIds = [

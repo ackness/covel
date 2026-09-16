@@ -187,6 +187,7 @@ export function findPresentableToolOutput(
   executedToolCalls: readonly ExecutedToolCallState[],
 ): Record<string, unknown> | null {
   for (let i = executedToolCalls.length - 1; i >= 0; i--) {
+    if (!executedToolCalls[i]?.success) continue;
     const result = executedToolCalls[i]?.result;
     if (!isRecord(result)) continue;
     if (Array.isArray(result.ui) || isRecord(result.interaction)) {
@@ -200,6 +201,7 @@ export function findLastStructuredToolOutput(
   executedToolCalls: readonly ExecutedToolCallState[],
 ): Record<string, unknown> | null {
   for (let i = executedToolCalls.length - 1; i >= 0; i--) {
+    if (!executedToolCalls[i]?.success) continue;
     const result = executedToolCalls[i]?.result;
     if (isRecord(result)) return { ...result };
   }

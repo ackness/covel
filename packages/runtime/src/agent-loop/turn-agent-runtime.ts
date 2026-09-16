@@ -7,12 +7,8 @@ import type {
   ExecutionContext,
   InputSlot,
 } from "@covel/shared";
-import { attachExecutionJournal } from "../execution-journal.js";
-import {
-  DEFAULT_LOCALE,
-  getRuntimeSpec,
-  stageMessageOrder,
-} from "@covel/shared";
+import { attachRuntimeJournal } from "../execution-journal.js";
+import { DEFAULT_LOCALE, getRuntimeSpec } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
   applyBudget,
@@ -50,6 +46,7 @@ import {
 } from "../trace/runtime-telemetry.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { runAgentToolLoop } from "./turn-agent-tool-loop.js";
+import { completionContractError } from "./runtime-completion.js";
 
 export interface AgentCompactionRefresh {
   readonly compacted: boolean;
@@ -419,7 +416,6 @@ export async function executeAgentRuntime({
     stoppedWithResponse,
     effectiveMaxSteps,
     deadline,
-    requiredToolUseUnmet,
   } = toolLoop;
 
   // Shared PostRuntime-hook opts for every terminal path of this runtime.
@@ -486,7 +482,8 @@ export async function executeAgentRuntime({
   // player an empty panel behind a green check, with nothing in the trace to
   // explain it, so fail with a diagnostic instead. Whatever prose the model
   // produced is not this runtime's contract and is deliberately dropped.
-  if (requiredToolUseUnmet) {
+  const completionError = completionContractError(manifest, toolLoop);
+  if (completionError) {
     return finalizeFailure({
       pluginId: manifest.pluginId,
       runtimeId: manifest.name,
@@ -496,9 +493,7 @@ export async function executeAgentRuntime({
       output: null,
       toolCalls: collectedToolCalls,
       durationMs: Date.now() - startTime,
-      error:
-        `${manifest.name} declares requireToolUse but finished without calling a business tool ` +
-        `(a bare \`runtime-done\` does not count). The model answered with prose instead of doing the work.`,
+      error: completionError,
       timestamp: new Date().toISOString(),
     });
   }
@@ -624,47 +619,7 @@ export async function executeAgentRuntime({
     return failed;
   }
 
-  // Stage the runtime output in the execution journal. finalizeExecution
-  // appends it inside the proposal/session-clock transaction. Manual
-  // plugin-rpc calls stay out of conversation history, matching the existing
-  // contract; a PostRuntime non-success also produces no message.
-  if (deps.store && !input.manualTrigger && result.status === "success") {
-    // Extract narrative content.
-    const narrativeContent =
-      typeof finalOutput.narrativeOutput === "string"
-        ? finalOutput.narrativeOutput
-        : typeof finalOutput.content === "string"
-          ? finalOutput.content
-          : JSON.stringify(finalOutput);
-
-    // Extract pendingInput from the interaction array.
-    const interactionsArr = finalOutput.interactions as unknown[] | undefined;
-    const pendingInput =
-      interactionsArr && interactionsArr.length > 0
-        ? interactionsArr
-        : undefined;
-
-    // Extract UI render instructions if present
-    const ui = finalOutput.ui as unknown[] | undefined;
-
-    attachExecutionJournal(result, [
-      {
-        id: crypto.randomUUID(),
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        sourceType: "runtime",
-        sourcePluginId: manifest.pluginId,
-        sourceRuntimeId: manifest.name,
-        role: "assistant",
-        name: manifest.name,
-        content: narrativeContent,
-        order: stageMessageOrder(getRuntimeSpec(manifest).stage),
-        pendingInput,
-        ui,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
-  }
+  if (deps.store) attachRuntimeJournal(result, input, manifest, finalOutput);
 
   try {
     await deps.onRuntimeComplete?.({

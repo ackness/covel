@@ -376,6 +376,17 @@ export async function finalizeExecution(
     ...(eventBus ? { eventBus } : {}),
     ...(emitter ? { emitter } : {}),
     capabilities: capabilitiesByRuntime.get(result.runtimeId) ?? [],
+    // A scoped retry repairs existing content unless it actually commits a
+    // replacement story. Do not confuse this anchor with logical-turn counting.
+    ...(executionContext.sourceTurnId &&
+    !results.some(
+      (candidate) =>
+        candidate.turnId === result.turnId &&
+        candidate.status === "success" &&
+        outputKindByRuntime.get(candidate.runtimeId) === "story",
+    )
+      ? { messageSourceTurnId: executionContext.sourceTurnId }
+      : {}),
     ...(args.proposalGuard ? { proposalGuard: args.proposalGuard } : {}),
     ...(deferPostCommit ? { deferPostCommit } : {}),
   });

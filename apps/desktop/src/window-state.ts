@@ -158,4 +158,10 @@ export function attachWindowStateTracking(win: BrowserWindow): void {
     }
     writePersisted(snapshot());
   });
+  // destroy() skips close, so a pending resize write must also be cancelled
+  // on closed before it tries to read geometry from a destroyed window.
+  win.once("closed", () => {
+    if (writeTimer) clearTimeout(writeTimer);
+    writeTimer = null;
+  });
 }

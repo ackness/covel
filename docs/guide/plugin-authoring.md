@@ -20,6 +20,16 @@
 
 不确定时，先从零代码开始；只有当提示词无法可靠完成确定性逻辑或外部动作时，才增加 `entry` 和 JS。
 
+## 先确定扩展属于哪一层
+
+- 世界观、角色、开局数据和插件默认组合放在世界包，使用 [WorldData](../reference/world-data.md)。
+- 可复用规则、创角校验、叙事策略和界面放在第三方插件。框架已有类型化表单、工具调用、Hook、数据 namespace 和 capability 选择，无需为了某个玩法修改内核。
+- 只有现有公共接口无法表达且多个插件都需要的能力，才讨论框架契约扩展；同时更新 reference 和社区包回归测试。
+
+例如 [`tabletop-rules`](../../plugins/tabletop-rules/README.md) 的配点与检定是可选插件，
+其他规则包可以使用相同接口实现不同算法。交付前按[独立插件测试](./plugin-testing.md)覆盖
+ZIP 安装、授权、实际调用、重启和卸载，不依赖仓库内置插件的信任或目录布局。
+
 ## 最小闭环（目录 → 验证 → 加载）
 
 1. 创建插件目录并写入 `PLUGIN.md`（至少需要 `name`、`description`；未声明 `trigger` 时按 schema 默认行为处理，`auto` / `scheduled` runtime 需要 `stage`）。仓库内置插件同时创建 `package.json`，本地用户目录则可只放 manifest 与它实际引用的资源。

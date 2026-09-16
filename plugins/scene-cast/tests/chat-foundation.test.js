@@ -176,6 +176,7 @@ describe("scene-cast handler", () => {
     expect(result.value.speakers).toHaveLength(1);
     expect(result.value.speakers[0].name).toBe("Mira");
     expect(result.value.activeCastContext).toContain("Mira (id: npc-1)");
+    expect(result.value.activeCastContext).toContain('"mood":"guarded"');
 
     const [proposal] = getPendingProposals(result);
     expect(proposal).toMatchObject({

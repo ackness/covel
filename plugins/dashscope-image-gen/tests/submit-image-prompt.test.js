@@ -53,7 +53,9 @@ describe("dashscope image prompt submission tools", () => {
         type: "plugin.data",
         payload: {
           namespace: "prompts",
-          key: "prompt-cinematic-moonlit-harbor",
+          key: expect.stringMatching(
+            /^prompt-cinematic-moonlit-harbor-[a-f0-9]{32}$/,
+          ),
           value: {
             prompt: "cinematic moonlit harbor",
             promptMode: "text",

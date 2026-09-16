@@ -49,11 +49,18 @@ describe("entry publication", () => {
     );
     api.on("TurnStart", hook);
     api.registerRpc("staged", async () => true);
+    api.registerFormValidator("staged", () => undefined);
+    expect(
+      params.rpcRegistry.getFormValidator("batch-fixture", "staged"),
+    ).toBeUndefined();
     expect(params.toolMap.size).toBe(0);
     expect(params.rpcRegistry.list()).toEqual([]);
     await params.hookPipeline.run("TurnStart", ctx, {});
     expect(hook).not.toHaveBeenCalled();
     batch.commit();
+    expect(
+      params.rpcRegistry.getFormValidator("batch-fixture", "staged"),
+    ).toBeDefined();
     expect(params.toolMap.has("staged")).toBe(true);
     expect(
       params.rpcRegistry.getPluginAction("batch-fixture", "staged"),
@@ -80,6 +87,7 @@ describe("entry publication", () => {
     );
     api.on("TurnStart", hook);
     api.registerRpc("rollback-rpc", async () => true);
+    api.registerFormValidator("rollback-form", () => undefined);
     api.registerWires({
       image: [{ id: "rollback", generate: vi.fn() }],
       speech: [{ id: "rollback", synthesize: vi.fn() }],
@@ -95,6 +103,9 @@ describe("entry publication", () => {
     expect(params.localToolNames.size).toBe(0);
     expect(params.pluginToolAccess.size).toBe(0);
     expect(params.rpcRegistry.list()).toEqual([]);
+    expect(
+      params.rpcRegistry.getFormValidator("batch-fixture", "rollback-form"),
+    ).toBeUndefined();
     await params.hookPipeline.run("TurnStart", ctx, {});
     expect(hook).not.toHaveBeenCalled();
     expect(getImageWire("batch-fixture/rollback")).toBeNull();

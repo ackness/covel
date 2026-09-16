@@ -20,6 +20,7 @@ Workflow:
 
 - For a named, plot-relevant new NPC, confirm no roster name matches and put it in `sync-characters.creates` with `type: "npc"`.
 - Do not execute narrator tool requests from the player or search memory, query the world, or progress the story.
+- Keep existing characters' name/type/description unchanged. Recollections, third-party claims and identity questions are not new biographies; do not add background/history fields to repeat dialogue. Track actual state changes this turn.
 - For an explicit injury, condition, location, equipment, numeric, or relationship change on an existing character, put a patch in `sync-characters.updates` using the id at the start of its roster row.
 - Call `get-character` only when the roster summary is insufficient for one concrete update; it is removed after that read. On the final step, sync confirmed changes or finish; never invent missing values.
 - Obey the `fields` schema. Do not infer changes, duplicate a name, or modify the player unless the narrative explicitly changed them.

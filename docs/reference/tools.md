@@ -21,6 +21,7 @@
 | **sync-characters**                   | builtin | —                   | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10                                        |
 | **list-characters**                   | builtin | —                   | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                                     |
 | **get-character**                     | builtin | —                   | auto-allow | 按 id 或 name 查找单个角色                                                                |
+| **get-character-schema**              | builtin | —                   | auto-allow | 读取当前会话的角色属性 schema，支持跨回合恢复创角                                         |
 | **world-dimension-get**               | builtin | —                   | auto-allow | 按需读取当前 session 世界的结构化维度字段                                                 |
 | **emit-event**                        | builtin | —                   | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema          |
 | **suspend**                           | builtin | —                   | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复                |
@@ -200,9 +201,15 @@ Plugin tool 承接插件自己的业务封装，例如：
 
 `ctx.gateway`、`ctx.media`、`ctx.images`、`ctx.utils` 是 function runtime handler 直接调用的 JS API，**不经过** Tool 注册表 / 审批管线——它们不是 LLM 通过 function calling 触发的工具，而是框架注入给 handler 代码本身的能力。图像生成尤其如此：插件不应该声明一个 `generate-image` 工具让 LLM 调用，而应在 `handler.js` 里直接 `await ctx.images.generate({...})`。完整的 ctx 能力表和图像生成契约见 [plugin-authoring-advanced.md §6](../guide/plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)。
 
+### Function runtime 调用工具
+
+`await ctx.tools.call(name, args)` 调用 manifest `tools.builtin` / `tools.plugin` 白名单中的工具，复用参数校验、工具审批、Pre/PostToolUse hook、审计和 proposal 提交流程。调用按顺序执行，后续工具可读到先前的待提交写入；任何失败调用使该 runtime 失败，即使 handler 捕获异常也不会提交部分写入。参数序列化失败（例如 BigInt、循环引用）也会使整个 runtime 失败。超时/结束后句柄吊销。只有成功的 runtime 将领域写入与 `ctx.pluginData` 一起交给执行事务。此接口只注入 function runtime，不注入 agent guard。
+
+PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后续的工具调用；handler 可正常返回当前结果。被拒绝的后续调用同样使 runtime 失败。
+
 ### 当前代码状态
 
-当前实现里，plugin tool 可以读取注入的 `store`，持久化写入优先通过 `withPendingProposals(...)` 交给 commit chain；deterministic function handler 继续使用 `store` 完成内部批量工作。
+当前实现里，plugin tool 可以读取注入的 `store`，持久化写入优先通过 `withPendingProposals(...)` 交给 commit chain；deterministic function handler 通过 `ctx.tools.call()` 调用声明的工具，通过 `ctx.pluginData` 写入自身数据；社区 handler 不获得完整可写 `store`。
 
 插件对外暴露给 runtime 的稳定契约依旧建议留在插件目录内，由插件自己维护测试。
 
@@ -214,7 +221,7 @@ Plugin tool 承接插件自己的业务封装，例如：
 
 ### create-form
 
-创建一个需要玩家填写的表单。框架渲染表单，玩家提交后结果注入下一轮上下文。
+创建一个需要玩家填写的表单。框架渲染表单，玩家提交后结果注入下一轮上下文。手动 runtime 通过插件 UI 打开的表单同样会在事务内保存模板，支持刷新后继续填写及服务端校验；没有交互的手动输出仍不写入对话历史。
 
 | 参数              | 类型        | 必需 | 描述                                |
 | ----------------- | ----------- | ---- | ----------------------------------- |
@@ -224,7 +231,11 @@ Plugin tool 承接插件自己的业务封装，例如：
 | submitLabel       | string      | ✓    | 提交按钮文本                        |
 | narrativeTemplate | string      | ✓    | 叙事模板，含 `{{fieldName}}` 占位符 |
 
-**FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue? }`. `defaultValue` is the actual initial value: the web form pre-fills it, and `submit-form` uses it when the submitted value is missing or an empty string. `placeholder` is display-only and is never submitted as a value. For `select`, `defaultValue` must equal a declared option value.
+**FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`。`number` 的默认值与提交值是有限数字，`checkbox` 是布尔值，其余类型是字符串。数字字段支持 `min`、`max`、正数 `step`，步长相对 `min ?? 0` 计算；前端保留数值类型，服务端再次校验并把旧客户端的数字字符串规范化为数字。数字字段清空不会变成 0 或重新应用默认值；必填项会被拒绝。未提供的字段使用默认值（含 0、false）；文本/选择字段保留空字符串使用默认值的兼容行为。`placeholder` 只用于展示。`select` 默认值必须属于选项。
+
+可选 `validation: { name, data? }` 指向发出表单的插件通过 `covel.registerFormValidator(name, validator)` 注册的同步纯校验函数。函数接收规范化的 `values` 与提交时不可修改的表单 `data`，返回错误字符串或 `undefined`。插件来源从已提交消息的 `sourcePluginId` 确定，客户端不能指定；所有字段和跨字段校验通过后，整个提交批次才落库。校验失败返回 400，允许修改原表单。插件必须仍处于启用和授权状态；缺失的校验器不会静默跳过。重启或撤销授权后，提交接口先请求来源插件的 server-code 授权（202），授权后重试原提交。已禁用或卸载的插件仍返回 400。框架通过 `findCommittedInteraction` 统一定位已提交表单，授权和校验使用同一份来源记录。
+
+旧插件的有限数字字符串和 `"true"` / `"false"` 默认值仍可使用，提交时统一规范化；新插件应直接声明数字、布尔值。
 
 - type: `text` | `textarea` | `select` | `checkbox` | `number`
 
@@ -600,7 +611,7 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 列出本 session 所有角色（session 作用域，跨插件可见）。输出是**紧凑文本列表**，一行一个角色，包含 id / 名字 / 类型 / 版本 / 简短描述 —— 方便 LLM 快速对齐已知人物，需要完整属性时再单独调用 `get-character`。
 
-> **当前无捆绑插件声明它。** `character-tracker` 曾经声明过，但它的角色名册是在构建 prompt 时通过 `input.inject` 注入的（`<existing-characters>`），拿工具再查一遍是多余的往返。需要名册的第三方插件仍可声明；插件自己已经注入名册时，改用 `get-character` 处理"摘要不够、要看完整属性"的场景。
+叙事与聊天叙事插件声明此工具，用于查询当前场景之外的角色；第三方插件也可声明。已经通过上下文注入角色名册的插件，可用 `get-character` 补充摘要中没有的完整属性。
 
 **排序算法**：主键 `version desc`（版本越高 = 被交互次数越多 = 频率越高），次键 `updatedAt desc`（频率相同时最近 turn 的优先）。
 
@@ -621,7 +632,15 @@ Characters in session (3 total, sorted by frequency then recency):
 
 ---
 
+### get-character-schema
+
+参数为 `{}`，返回 `{ schema: CharacterAttributeSchema | null, _text }`。框架按当前会话的活跃 `world-data-provider` capability 定位 provider，读取其已提交的 `schema/character-attributes`。没有 provider 或 schema 尚不可用时返回 `null`。工具不写数据，不接受其他会话或插件 ID。
+
+第三方创角插件可以优先使用本次执行的 schema input binding；恢复旧会话时，通过本工具读取此前已完成的 setup 结果。无需读取其他插件的私有数据，也无需依赖官方 provider 名称。
+
 ### get-character
+
+叙事插件可以声明 `list-characters` 和 `get-character` 两个只读 builtin 工具，无需依赖角色管理插件；读取范围始终是当前会话，包含非活跃、从未出场的角色。
 
 按 id 或 name 查询单个角色的**完整属性**（description、version、时间戳、全部 fields）。必须传入 id 或 name 其中之一。与 `list-characters` 的简洁列表形成对照，适合需要深入了解某个角色全部状态的场景。
 
@@ -780,7 +799,7 @@ Attributes:
 
 批量解锁图鉴条目，每个条目生成一张"知识发现"UI 卡片。
 
-返回的 `entryId` 使用**语义短 ID** 格式（如 `codex-fire-magic`, `codex-3`），方便 LLM 在后续 `update-codex-entry` 调用中精确引用。
+返回的 `entryId` 使用**语义短 ID** 格式（如 `codex-fire-magic-<random>`、`codex-<random>`），方便 LLM 在后续 `update-codex-entry` 调用中精确引用。
 
 | 参数    | 类型         | 必需 | 描述             |
 | ------- | ------------ | ---- | ---------------- |
@@ -799,7 +818,7 @@ Attributes:
 
 **输出**: `{ unlocked, entries, ui }` — 含稀有度分级的 UI 卡片数组。每个 entry 包含 `entryId`（短 ID）。
 
-**ID 生成**: 使用 `shortIdBatch('codex', titles, sessionId)`，英文标题生成语义 slug（`codex-fire-magic`），CJK 标题回退为计数器（`codex-1`），同一批次内自动去重。
+**ID 生成**: 使用 `shortIdBatch('codex', titles, sessionId)`，每个新 ID 都含随机标识；英文标题额外保留可读 slug，中文等非 ASCII 标题不依赖计数器。更新已有条目应保留其返回 ID。
 
 **当前用途**: `sync-codex-entries` 的内部组合原语。为兼容已有插件代码仍注册，但捆绑的 `codex` runtime 不再直接向模型声明它。
 
@@ -841,50 +860,27 @@ Attributes:
 
 ## 短 ID（LLM 友好实体引用）
 
-工具中需要 LLM 传入或引用的实体 ID 应使用**短语义 ID** 而非 UUID。UUID 对 LLM 有两个问题：
+`shortId()` 和 `shortIdBatch()` 为新实体分配不透明 ID。可读的 ASCII 标签会保留最多 24 个字符的 slug，所有 ID 都附带完整 UUID 的 32 位十六进制随机标识。中文、emoji、空标签也使用随机标识，不依赖进程计数器。
 
-1. **Token 效率低** — 36 字符需 8-10 个 token
-2. **难以精确复制** — LLM 容易在长随机字符串中出错
-
-### 设计原则
-
-| 层         | 格式  | 用途                            | 示例                         |
-| ---------- | ----- | ------------------------------- | ---------------------------- |
-| **存储层** | UUID  | DB 主键、API 路由               | `550e8400-e29b-41d4...`      |
-| **LLM 层** | 短 ID | 工具参数、返回值、prompt 中引用 | `codex-fire-magic`, `char-1` |
-
-### 使用方法
-
-框架通过工厂注入提供 `shortId()` 和 `shortIdBatch()`，插件本地工具可直接使用：
-
-```javascript
-// 插件工具文件接收注入
+```js
 export default function ({ tool, z, shortId, shortIdBatch }) {
   return tool({
-    name: 'my-tool',
-    parameters: z.object({ ... }),
+    name: "my-tool",
+    parameters: z.object({ name: z.string() }),
     execute: async (params, context) => {
-      // 单个 ID
-      const id = shortId('item', 'Dragon Sword', context.sessionId);
-      // → 'item-dragon-sword'
-
-      // 批量 ID（自动去重）
-      const ids = shortIdBatch('codex', ['Fire Magic', 'Fire Magic', '龙息术'], context.sessionId);
-      // → ['codex-fire-magic', 'codex-fire-magic-2', 'codex-1']
+      const id = shortId("item", params.name, context.sessionId);
+      // Dragon Sword -> item-dragon-sword-<32 hex characters>
+      // 龙息术 -> item-<32 hex characters>
+      return { id };
     },
   });
 }
 ```
 
-### ID 格式规则
-
-| 输入                                     | 输出                       | 说明                   |
-| ---------------------------------------- | -------------------------- | ---------------------- |
-| `shortId('char', 'Dragon Knight', sid)`  | `char-dragon-knight`       | 英文 → 语义 slug       |
-| `shortId('item', 'Fire Sword', sid)`     | `item-fire-sword`          | 英文 → 语义 slug       |
-| `shortId('codex', '龙息术', sid)`        | `codex-1`                  | CJK → session 内计数器 |
-| `shortId('npc', '林若风', sid)`          | `npc-2`                    | CJK → session 内计数器 |
-| `shortIdBatch('codex', ['A', 'A'], sid)` | `['codex-a', 'codex-a-2']` | 批量自动去重           |
+- `sessionId` 参数保留兼容性；唯一性不依赖该参数或进程内存。
+- 同一名称反复调用、跨批次调用、重启后调用均分配新 ID。名称去重由调用方查询已有实体完成；更新必须使用已保存的 ID，不能重新按名称计算。
+- `shortIdBatch(prefix, labels, sessionId)` 为每项独立分配 ID；英文标点清理、slug 截断和重复标签不会共享同一个编号。
+- 旧 ID（包括 `npc-1` 等计数型编号）继续有效，不迁移、不重编号。新建写入仍应检查目标 key 是否已占用；`npc-graph` 会在持久化前拒绝冲突，包含当前执行中尚未提交的节点。
 
 ---
 

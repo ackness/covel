@@ -14,6 +14,7 @@ import {
   type KernelStore,
 } from "../commit/session-commit-pipeline.js";
 import { normalizeOutput } from "../commit/session-output-normalizer.js";
+import { anchorPluginMessage } from "../commit/plugin-message-turn.js";
 import {
   enforceImageAssetOutput,
   enforceImagePluginDataRefs,
@@ -58,6 +59,8 @@ export async function processRuntimeResult(
     readonly eventBus?: EventBus;
     readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
     readonly capabilities?: readonly string[];
+    /** Source content anchor supplied by the execution finalizer for retries. */
+    readonly messageSourceTurnId?: string;
     /**
      * Optional commit-boundary policy for restricted execution classes such
      * as scheduler-detached jobs. Returning a message rejects the entire
@@ -178,8 +181,12 @@ async function commitProposals(
     readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
     readonly deferPostCommit?: (fn: () => Promise<void>) => void;
     readonly proposalGuard?: (proposal: Proposal) => string | undefined;
+    readonly messageSourceTurnId?: string;
   },
 ): Promise<ProcessRuntimeResultOutput> {
+  proposals = proposals.map((proposal) =>
+    anchorPluginMessage(proposal, opts?.messageSourceTurnId),
+  );
   if (opts?.proposalGuard) {
     const rejected = proposals.flatMap((proposal) => {
       const error = opts.proposalGuard?.(proposal);

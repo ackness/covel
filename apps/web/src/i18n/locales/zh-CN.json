@@ -6,7 +6,7 @@
   "home": {
     "startPlaying": "开始游玩",
     "viewRepository": "查看仓库",
-    "heroEyebrow": "v0.1.0 · 插件式文字 RPG 框架",
+    "heroEyebrow": "v{{version}} · 插件式文字 RPG 框架",
     "heroLine1": "构建世界，",
     "heroLine2": "运行回合。",
     "heroBody": "Covel 是一套用于构建和运行文字 RPG 的插件式框架。世界设定、规则系统、角色状态和叙事流程都可以独立组织，也可以直接组合成可玩的产品。",
@@ -1364,6 +1364,7 @@
       "unexpectedRequired": "授权后仍返回 approval-required，请检查审批后端"
     },
     "invokeRuntime": {
+      "setupPending": "这个插件还需要初始化。请先继续一个故事回合，并完成出现的初始化表单，再重试此操作。",
       "submitted": "已提交 {{count}} 个后台任务：{{ids}}，等待返回…",
       "noFollowerEvents": "{{runtimeId}} 已完成，但未触发任何后台任务（缺少匹配的 events[]）。请检查模型是否输出了正确的 JSON 包络。"
     },

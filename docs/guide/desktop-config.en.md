@@ -118,6 +118,11 @@ Plugins such as image generation may declare a `modelPresetId` provider slot. If
 
 ## Frontend entry point
 
+After installing a plugin or world package, use the restart prompt. The main process waits for the
+new backend and navigates the window to its new port. Saved sessions remain available; process-local
+community plugin grants may need approval again. Application versions come from package manifests,
+rather than separate hardcoded page, preload or health versions.
+
 **Settings → Desktop** surfaces every path, proxy selection, one-click folder actions, and the `data_root` picker.
 
 Opening `llm.toml` follows the effective `COVEL_LLM_TOML` override and only falls back to the config root when no override is set. `keys.env` remains under the config root. The target must exist; otherwise the endpoint returns `open_target_unavailable`. Source development and Docker use different model-config and resource-path defaults; see the [environment loading rules](./env-registry.md#加载路径与环境差异).

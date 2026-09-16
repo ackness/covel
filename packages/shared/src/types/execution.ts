@@ -334,6 +334,8 @@ export interface FormInteraction extends BaseInteraction {
   readonly type: "form";
   readonly title: string;
   readonly fields: readonly Record<string, unknown>[];
+  /** Plugin-owned validation registered through registerFormValidator; source is pinned to the committed message. */
+  readonly validation?: { readonly name: string; readonly data?: unknown };
   readonly submitLabel: string;
 }
 

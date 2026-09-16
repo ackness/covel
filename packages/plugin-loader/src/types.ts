@@ -428,6 +428,13 @@ export interface FunctionHandlerContext {
    * The runtime decides which to inject based on discovery-source trust.
    */
   readonly store: FunctionStoreView | unknown;
+  /** Declared tools, with schema/approval checks and transactional writes. Function runtimes only. */
+  readonly tools?: {
+    call(
+      name: string,
+      args: Readonly<Record<string, unknown>>,
+    ): Promise<unknown>;
+  };
   /**
    * Optional gateway facade for function runtimes that need LLM / image /
    * structured-object generation. Absent when the executor was constructed
@@ -572,11 +579,8 @@ export interface FunctionHandlerContext {
 }
 
 /**
- * Narrow read-only view of `DataStore` exposed to community function
- * runtimes via `FunctionHandlerContext.store`. Replaces the
- * historical "the-whole-DataStore" exposure which let third-party
- * plugins bypass proposal/tool governance and write into any other
- * plugin's data through `setPluginData(...)`.
+ * Read-only DataStore view for community handlers. Session reads bind to the
+ * current session and plugin-data reads bind to the calling plugin.
  *
  * Builtin plugins keep the full `DataStore` because they
  * implement framework primitives that need it
@@ -584,9 +588,8 @@ export interface FunctionHandlerContext {
  * `char-creator`'s guard upserts the player Character record). The
  * runtime decides which surface to inject based on discovery-source trust.
  *
- * Plugins that want to write data should use `ctx.pluginData.set(...)`
- * (placeholders) or return `{ pluginData: [...] }` from the handler so
- * the proposal / commit pipeline runs.
+ * Write own data with `ctx.pluginData` or use `ctx.tools.call` for declared
+ * domain commands; both feed the proposal / commit pipeline.
  */
 export interface FunctionStoreView {
   /** Read a single plugin_data row scoped to the calling plugin. */
@@ -598,6 +601,15 @@ export interface FunctionStoreView {
   listPluginData(
     namespace: string,
   ): Promise<ReadonlyArray<{ readonly key: string; readonly value: unknown }>>;
+  /** Read accepted inputs for this session; values remain immutable. */
+  listPlayerInputs(sessionId?: string): Promise<
+    readonly {
+      readonly id: string;
+      readonly formId: string;
+      readonly turnId: string;
+      readonly values: unknown;
+    }[]
+  >;
   /** Read the canonical session record. */
   getSession(): Promise<unknown>;
   /** List recent turn messages for the session (read-only timeline access). */

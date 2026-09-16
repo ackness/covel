@@ -111,12 +111,18 @@ catalog icon (panel tabs use `HelpCircle` as their fallback).
 
 ### Form
 
-| Component      | Purpose                                    | Key props                                                                                                                                                                              |
-| -------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Form`         | Bordered form container.                   | —                                                                                                                                                                                      |
-| `FormHeader`   | Title bar for a `Form`.                    | see `apps/web/src/lib/catalog/session-renderers.tsx` (props pass through to the header layout)                                                                                         |
-| `FormField`    | Single labelled field (text or select).    | `fieldType` (`text` / `select`), `label` _(I18nText)_, `placeholder` _(I18nText)_, `required` (boolean), `options` (`[{ value, label }]`), `value` (bind via `$bindState`), `disabled` |
-| `SubmitButton` | Primary submit button with disabled state. | `label` _(I18nText)_, `disabled` (boolean); emit `click` via `on.click`                                                                                                                |
+| Component      | Purpose                                    | Key props                                                                                                                                                                                                                                                         |
+| -------------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Form`         | Bordered form container.                   | —                                                                                                                                                                                                                                                                 |
+| `FormHeader`   | Title bar for a `Form`.                    | see `apps/web/src/lib/catalog/session-renderers.tsx` (props pass through to the header layout)                                                                                                                                                                    |
+| `FormField`    | Single labelled, typed field.              | `fieldType` (`text` / `textarea` / `number` / `select` / `checkbox`), `min`, `max`, `step` (number fields), `label` _(I18nText)_, `placeholder` _(I18nText)_, `required` (boolean), `options` (`[{ value, label }]`), `value` (bind via `$bindState`), `disabled` |
+| `SubmitButton` | Primary submit button with disabled state. | `label` _(I18nText)_, `disabled` (boolean); emit `click` via `on.click`                                                                                                                                                                                           |
+
+Number fields bind a number when nonempty; checkboxes bind a boolean. Browser input
+constraints improve interaction but do not replace server validation. Forms created
+through `create-form` retain their declared field types and constraints at submission;
+plugin validators can enforce rules across fields before writes are committed.
+See [form tools](./tools.md#create-form) and [plugin testing](../guide/plugin-testing.md).
 
 ### Message
 

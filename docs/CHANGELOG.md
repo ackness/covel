@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.35] - 2026-09-17
+
+This release fixes plugin installation, restart and recovery failures, protects existing plugin data, and adds optional tabletop character creation and configurable narrative perspective.
+
+### Added
+
+- **Optional tabletop rules use the public plugin interfaces.** The `tabletop-rules` package provides integer point-buy creation, server-side budget validation and explicit d20 checks. Worlds configure rules through world data; recorded checks survive retries and restarts without rerolling. A renamed community ZIP exercises the same installation, approval, creation and uninstall path ([#62](https://github.com/ackness/covel/issues/62)).
+- **Both narrative plugins offer first-, second- and third-person narration.** `narrativePerson` reuses plugin settings and world defaults, with second person unchanged as the default. Dialogue retains each speaker's pronouns; changes affect future narration ([#63](https://github.com/ackness/covel/issues/63)).
+- **Third-party function runtimes can call declared tools and validate forms.** Public tool calls retain permission, argument validation and transaction boundaries. Typed forms preserve numeric values, rejected forms remain editable, and `fallbackFor` replaces a default runtime by capability without disabling its package's other functions.
+- **Plugins can review model responses before tool dispatch or story commit.** Public hooks can buffer a response and request up to two bounded corrections. Rejected drafts do not execute tools or become committed story.
+- **Documentation now includes a gradual v2 reading path.** Current guides are aligned with response review, transactional tools, typed forms, graph retrieval and local-first release checks. The v2 entry organizes play, world creation, plugin authoring and validation, with a development-agent guide; full chapter migration continues in later versions.
+
+### Fixed
+
+- **World art keeps its authored identity and scene continuity.** Five Haruka Academy night backgrounds retain their daytime layout, and four Mistport portraits correct fog-rot, expedition lighting and atmospheric detail. Media hashes and localized references are synchronized; Emberback retains its distinct industrial science-fiction direction. Resource checks cover dimensions, transparency and registry references.
+- **Desktop restart navigates to the new server port.** The main process owns navigation after the sidecar is ready, concurrent restart requests share one operation, and destroyed windows release pending state timers ([#65](https://github.com/ackness/covel/issues/65)).
+- **Repeated Windows ZIP imports report an existing target correctly.** A rename permission error maps to HTTP 409 only when the target exists; genuine permission failures remain errors and existing packages are preserved ([#64](https://github.com/ackness/covel/issues/64)).
+- **New entity IDs no longer restart an in-memory counter.** Randomized IDs prevent collisions caused by CJK names, normalized labels and process restarts. Graph creation also rejects occupied keys while preserving old IDs and edge endpoints ([#70](https://github.com/ackness/covel/issues/70)).
+- **Tool tasks cannot report success from prose or fake tool-call JSON.** Guide and scene prompts request their finishing tools. State extractors require an actual finishing call or an explicit no-change call; unresolved tool failures remain failures. Relationship extraction requests a real tool call while allowing either a write or no change ([#67](https://github.com/ackness/covel/issues/67)).
+- **Retry results remain attached to the story they supplement.** Stage choices stay visible after single or batch retries, including restored legacy records with retained retry metadata. Retries retain declared upstream inputs and guard-provided schemas without regenerating completed story or counting another player turn ([#68](https://github.com/ackness/covel/issues/68)).
+- **Narrators can read non-active character profiles.** Both engines declare session-scoped character lookup tools, active cast includes structured attributes, and character tracking cannot overwrite an existing character's authored name, type or description ([#69](https://github.com/ackness/covel/issues/69)).
+- **Community plugin approvals cover the complete interaction flow.** Automatic runtimes request grants before execution; restored forms can reauthorize their source after restart. Multi-plugin validation, denial and navigation retain editable input and do not commit partial submissions.
+- **Plugin forms and panels refresh after committed changes.** Manual forms persist and appear without a reload, activation waits for server confirmation, and long mobile tab lists keep the selected panel visible. Enabling tabletop rules during play initializes rules without recreating the player and passes same-turn rules to the check runtime.
+- **Character creation and output validation preserve meaningful failures.** String attributes accept string-valued suggestions without weakening numeric or enum constraints. Preparation chatter and failed tool result objects cannot turn a failed form operation into empty success.
+- **The landing page and desktop bridge display the installed package version.** Translated headings and preload no longer fall back to stale hardcoded versions. Release validation checks framework versions while allowing independently versioned plugins and worlds.
+
+### Upgrade notes
+
+- Update the server and bundled Web client together. No SQL schema migration is required. Existing IDs remain valid; data already overwritten by an older version requires an intact backup or snapshot to recover.
+- Tabletop rules are optional. Advanced combat, progression, multiplayer hosting and a live remaining-points counter are not included. Third-party packages can implement their own rules through the documented interfaces.
+- Narration is displayed as a complete response after its text check and may require up to two correction calls. This is a limited perspective check, not a guarantee of factual accuracy; it does not clean previously incorrect history or resolve every model inference or relationship-classification error.
+- Community runtime grants may need approval again after a server restart. Packaged macOS Apple Silicon and Windows x64 artifacts remain unsigned; updates use manual download and installation.
+
 ## [0.0.34] - 2026-09-15
 
 This patch release preserves saved state through recovery, world-package changes and failed configuration writes, and fixes cancellation and resource cleanup across the client and providers.

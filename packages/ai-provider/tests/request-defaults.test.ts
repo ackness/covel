@@ -70,6 +70,44 @@ describe("runtime request defaults", () => {
   it.each([
     {
       create: createOpenAiChatAdapter,
+      model: "deepseek-chat",
+      choice: "required",
+    },
+    {
+      create: createOpenAiResponsesAdapter,
+      model: "gpt-5.4",
+      choice: "required",
+    },
+    {
+      create: createAnthropicMessagesAdapter,
+      model: "claude-opus-4-6",
+      choice: { type: "any" },
+    },
+  ])(
+    "requires an actual tool call while allowing any declared tool for $model",
+    async ({ create, model, choice }) => {
+      const captured = captureResponse();
+      await create().generateText(config, {
+        ...params,
+        model,
+        defaults: { toolChoice: "required" },
+      });
+      expect(captured()).toHaveProperty("tool_choice", choice);
+    },
+  );
+
+  it("keeps required-tool defaults compatible with explicit thinking", async () => {
+    const captured = captureResponse();
+    await createOpenAiChatAdapter().generateText(config, {
+      ...params,
+      defaults: { toolChoice: "required" },
+      providerRequestMetadata: { enable_thinking: true },
+    });
+    expect(captured()).toHaveProperty("tool_choice", "auto");
+  });
+  it.each([
+    {
+      create: createOpenAiChatAdapter,
       model: "qwen3.8-flash",
       choice: { type: "function", function: { name: "submit-facts" } },
       reasoning: { enable_thinking: false },

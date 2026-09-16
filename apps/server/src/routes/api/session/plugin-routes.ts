@@ -7,6 +7,7 @@ import {
   buildAvailablePluginList,
   isRequiredCorePlugin,
   resolveEnabledSessionPlugins,
+  validateSessionRuntimeProviders,
 } from "./plugins.js";
 import { buildSessionCommandList } from "./commands.js";
 import {
@@ -158,6 +159,18 @@ export function registerSessionPluginRoutes(
         pluginId,
         pluginRegistry,
       );
+      try {
+        validateSessionRuntimeProviders(active, pluginRegistry);
+      } catch (error) {
+        return c.json(
+          errorBody(
+            error instanceof Error
+              ? error.message
+              : "Invalid runtime providers",
+          ),
+          400,
+        );
+      }
       await store.updateSession(id, {
         activePlugins: active,
         updatedAt: new Date().toISOString(),
@@ -220,6 +233,18 @@ export function registerSessionPluginRoutes(
       }
 
       const active = session.activePlugins.filter((item) => item !== pluginId);
+      try {
+        validateSessionRuntimeProviders(active, pluginRegistry);
+      } catch (error) {
+        return c.json(
+          errorBody(
+            error instanceof Error
+              ? error.message
+              : "Invalid runtime providers",
+          ),
+          400,
+        );
+      }
       await store.updateSession(id, {
         activePlugins: active,
         metadata: rotateSessionApprovalScope(session, pluginId),

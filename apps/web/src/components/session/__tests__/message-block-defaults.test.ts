@@ -40,3 +40,17 @@ describe("message block form defaults", () => {
     });
   });
 });
+
+it("keeps zero and false as typed form defaults", () => {
+  expect(
+    buildInitialFormState(
+      {
+        fields: [
+          { type: "number", name: "points", defaultValue: 0 },
+          { type: "checkbox", name: "ready", defaultValue: false },
+        ],
+      },
+      false,
+    ),
+  ).toEqual({ form: { points: 0, ready: false } });
+});

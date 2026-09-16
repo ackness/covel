@@ -17,6 +17,7 @@ timeoutMs: 120000
 maxSteps: 2
 maxRetries: 0
 callTimeoutMs: 60000
+requireExplicitCompletion: true
 completeAfterTools: [sync-codex-entries]
 tags:
   - role:codex
