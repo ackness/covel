@@ -128,7 +128,7 @@ export const DESKTOP_ENV_VARS = [
     group: "desktop",
     type: "string",
     status: "active",
-    defaultValue: "0.0.1-beta",
-    description: "Desktop preload app version fallback.",
+    description:
+      "Overrides the package-derived version in desktop preload and server health.",
   },
 ] as const satisfies readonly EnvVarDefinition[];

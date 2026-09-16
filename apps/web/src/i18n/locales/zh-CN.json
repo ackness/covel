@@ -6,7 +6,7 @@
   "home": {
     "startPlaying": "开始游玩",
     "viewRepository": "查看仓库",
-    "heroEyebrow": "v0.1.0 · 插件式文字 RPG 框架",
+    "heroEyebrow": "v{{version}} · 插件式文字 RPG 框架",
     "heroLine1": "构建世界，",
     "heroLine2": "运行回合。",
     "heroBody": "Covel 是一套用于构建和运行文字 RPG 的插件式框架。世界设定、规则系统、角色状态和叙事流程都可以独立组织，也可以直接组合成可玩的产品。",

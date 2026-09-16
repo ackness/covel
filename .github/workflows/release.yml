@@ -69,7 +69,7 @@ jobs:
 
           if [[ "$publish" == "true" ]]; then
             if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
-              echo "::error::Publishing requires an existing semantic-version tag such as v0.0.27."
+              echo "::error::Publishing requires an existing semantic-version tag such as v0.0.35."
               exit 1
             fi
 
@@ -96,7 +96,6 @@ jobs:
               "package.json",
               "apps/*/package.json",
               "packages/*/package.json",
-              "plugins/*/package.json",
             ],
             { encoding: "utf8" },
           )
@@ -117,7 +116,7 @@ jobs:
             );
             process.exit(1);
           }
-          console.log(`Validated version ${expected} across ${files.length} workspace manifests.`);
+          console.log(`Validated version ${expected} across ${files.length} framework manifests; plugin and world packages version independently.`);
           NODE
 
             if ! grep -Fq "## [$version]" docs/CHANGELOG.md; then

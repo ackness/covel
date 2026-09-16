@@ -1762,7 +1762,7 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 
 **`completeAfterTools` 适用边界**：适合“某个工具成功就是最终产物”的单步或单批 agent runtime。框架仍会执行同一响应中的全部工具调用；只把终结工具列入，不要把需要读取结果后继续决策的查询工具列入。通常 runtime 输出由调用记录组成；当非 story runtime 同时声明 `output.schema`、`requireToolUse: true` 和 `completeAfterTools` 时，框架改用函数调用作为唯一结构化输出通道，不再发送 `responseFormat`，并将成功终结工具返回的对象作为 runtime 输出再次执行 `output.schema` 校验。`output.schema` 必须描述工具的实际对象结果；最简单的做法是原样返回参数，也可以像 `initialize-world` 一样在工具内做确定性组合和补充。
 
-**捆绑结构化 agent 的边界**：单步/单批工具型 runtime 统一把 `maxSteps` 收紧为 2、`maxRetries` 设为 0，并设置 50–60 秒 `callTimeoutMs`；成功写入工具列入 `completeAfterTools`。这让一次无响应的 provider 调用不会通过外层重试占满 120 秒以上预算，同时保留一个 step 给工具参数 schema 修正。主叙事 runtime 仍以流式散文为输出，不套用这一配置。
+**捆绑结构化 agent 的边界**：单步/单批工具型 runtime 统一把 `maxSteps` 收紧为 2、`maxRetries` 设为 0，并设置 50–60 秒 `callTimeoutMs`；成功写入工具列入 `completeAfterTools`。这让一次无响应的 provider 调用不会通过外层重试占满 120 秒以上预算，同时保留一个 step 给工具参数 schema 修正。主叙事 runtime 不套用这一工具完成配置；两个内置叙事插件通过输出审查 Hook 缓冲正文，检查通过后整段展示，框架的其他 runtime 仍可选择流式输出。
 
 **四类重试触发条件：**
 

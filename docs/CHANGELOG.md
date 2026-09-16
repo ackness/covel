@@ -14,6 +14,7 @@ This release fixes plugin installation, restart and recovery failures, protects 
 - **Both narrative plugins offer first-, second- and third-person narration.** `narrativePerson` reuses plugin settings and world defaults, with second person unchanged as the default. Dialogue retains each speaker's pronouns; changes affect future narration ([#63](https://github.com/ackness/covel/issues/63)).
 - **Third-party function runtimes can call declared tools and validate forms.** Public tool calls retain permission, argument validation and transaction boundaries. Typed forms preserve numeric values, rejected forms remain editable, and `fallbackFor` replaces a default runtime by capability without disabling its package's other functions.
 - **Plugins can review model responses before tool dispatch or story commit.** Public hooks can buffer a response and request up to two bounded corrections. Rejected drafts do not execute tools or become committed story.
+- **Documentation now includes a gradual v2 reading path.** Current guides are aligned with response review, transactional tools, typed forms, graph retrieval and local-first release checks. The v2 entry organizes play, world creation, plugin authoring and validation, with a development-agent guide; full chapter migration continues in later versions.
 
 ### Fixed
 
@@ -26,6 +27,7 @@ This release fixes plugin installation, restart and recovery failures, protects 
 - **Community plugin approvals cover the complete interaction flow.** Automatic runtimes request grants before execution; restored forms can reauthorize their source after restart. Multi-plugin validation, denial and navigation retain editable input and do not commit partial submissions.
 - **Plugin forms and panels refresh after committed changes.** Manual forms persist and appear without a reload, activation waits for server confirmation, and long mobile tab lists keep the selected panel visible. Enabling tabletop rules during play initializes rules without recreating the player and passes same-turn rules to the check runtime.
 - **Character creation and output validation preserve meaningful failures.** String attributes accept string-valued suggestions without weakening numeric or enum constraints. Preparation chatter and failed tool result objects cannot turn a failed form operation into empty success.
+- **The landing page and desktop bridge display the installed package version.** Translated headings and preload no longer fall back to stale hardcoded versions. Release validation checks framework versions while allowing independently versioned plugins and worlds.
 
 ### Upgrade notes
 

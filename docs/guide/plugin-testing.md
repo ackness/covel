@@ -1,18 +1,19 @@
 # Plugin Testing
 
-Covel 插件测试分五个入口。公开文档只维护路线图、命令和源码入口；面向 AI 生成插件的长模板放在 [`.claude/skills/create-plugin/references/plugin-testing.md`](../../.claude/skills/create-plugin/references/plugin-testing.md)。
+Covel 插件测试包含声明校验、单元/运行时测试、HTTP 和独立安装包验证。公开文档维护路线图、命令和源码入口；面向 AI 生成插件的长模板放在 [`.claude/skills/create-plugin/references/plugin-testing.md`](../../.claude/skills/create-plugin/references/plugin-testing.md)。
 
 See also: [plugin-authoring.md](./plugin-authoring.md) · [e2e-plugin-verify.md](./e2e-plugin-verify.md).
 
 ## 选择测试入口
 
-| 入口            | 包 / 脚本                                   | 适合验证什么                                                                                                                                                                                                                                                                                                                       | 需要 server / API key       |
-| --------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| Manifest schema | `pnpm validate:plugin <file \| plugin-dir>` | `PLUGIN.md` frontmatter：loader compat 解析 + strict authoring schema（缺 `stage` / legacy 字段直接报错；`--compat` 仅校验能否加载）。传**插件目录**时额外检查跨 runtime 的 `userSettings` 同名 key 声明是否冲突（插件级字段的完整合并规则见 [plugin-authoring-advanced.md](./plugin-authoring-advanced.md#插件级字段的合并规则)） | 否                          |
-| 单元测试        | Vitest + `@covel/plugin-test-utils`         | 纯函数、local tool、function handler、trigger helper                                                                                                                                                                                                                                                                               | 否                          |
-| In-process turn | `@covel/runtime` `executeTurn` + `MockLLM`  | agent runtime、tool loop、plugin_data 写入、跨 runtime 协作                                                                                                                                                                                                                                                                        | 否                          |
-| Runtime cases   | `@covel/test-runtime` / `pnpm test:runtime` | 插件自带 `tests/runtime-cases.json`、外部 `~/.covel/plugins` 调试、mock/live 切换                                                                                                                                                                                                                                                  | mock 否，live 需要 key      |
-| HTTP E2E        | `scripts/e2e-plugin-verify.ts`              | 真实 API、SSE、session kernel、approval、store 路径                                                                                                                                                                                                                                                                                | 需要 server，可用 mock slot |
+| 入口            | 包 / 脚本                                              | 适合验证什么                                                                                                                                                                                                                                                                                                                       | 需要 server / API key       |
+| --------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Manifest schema | `pnpm validate:plugin <file \| plugin-dir>`            | `PLUGIN.md` frontmatter：loader compat 解析 + strict authoring schema（缺 `stage` / legacy 字段直接报错；`--compat` 仅校验能否加载）。传**插件目录**时额外检查跨 runtime 的 `userSettings` 同名 key 声明是否冲突（插件级字段的完整合并规则见 [plugin-authoring-advanced.md](./plugin-authoring-advanced.md#插件级字段的合并规则)） | 否                          |
+| 单元测试        | Vitest + `@covel/plugin-test-utils`                    | 纯函数、local tool、function handler、trigger helper                                                                                                                                                                                                                                                                               | 否                          |
+| In-process turn | `@covel/runtime` `executeTurn` + `MockLLM`             | agent runtime、tool loop、plugin_data 写入、跨 runtime 协作                                                                                                                                                                                                                                                                        | 否                          |
+| Runtime cases   | `@covel/test-runtime` / `pnpm test:runtime`            | 插件自带 `tests/runtime-cases.json`、外部 `~/.covel/plugins` 调试、mock/live 切换                                                                                                                                                                                                                                                  | mock 否，live 需要 key      |
+| HTTP E2E        | `scripts/e2e-plugin-verify.ts`                         | 真实 API、SSE、session kernel、approval、store 路径                                                                                                                                                                                                                                                                                | 需要 server，可用 mock slot |
+| 第三方 ZIP      | `pnpm pack:test-plugin` / `pnpm test:plugin-lifecycle` | 安装、重复导入、community 授权、重启发现、运行、禁用、卸载和重新安装                                                                                                                                                                                                                                                               | 自动测试不需要外部 key      |
 
 ## 推荐反馈环
 
@@ -36,7 +37,24 @@ runtime；`--ignore-upstreams` 可隔离该门控，但不会替你生成所需�
 - 只改 `PLUGIN.md`：跑 `pnpm validate:plugin plugins/<id>`（传目录而非单个文件，才能跑到跨 runtime 检查）。
 - 写了 `tools/*.js`、`handler.js`、`hooks/*.js`：加 Vitest 单元测试。
 - 涉及 agent tool loop、`input.inject`、多 runtime 或 event 链：手搓 turn-executor 集成测试（见下）或 `pnpm test:runtime`。
-- 发布前要验证完整 HTTP 行为：跑 `scripts/e2e-plugin-verify.ts`。
+- 发布前要验证完整 HTTP 行为：跑 `scripts/e2e-plugin-verify.ts`，并完成下面的第三方包和玩家流程验证。
+
+## 独立第三方包与玩家流程
+
+[`tests/third-party/lifecycle-probe`](../../tests/third-party/lifecycle-probe/README.md) 是独立 ID、
+独立版本的包，通过真实安装 API 写入临时用户插件目录，以 `community` 来源加载。它覆盖
+agent/function/background runtime、entry、工具、RPC、Hook、设置、UI、数据、失败回滚和恢复，
+不借用内置插件信任或可写 store。运行 `pnpm pack:test-plugin` 得到
+`test-results/lifecycle-probe.zip`，再运行 `pnpm test:plugin-lifecycle`。
+
+配点、跨字段校验和确定性结算另由
+[`third-party-tabletop.test.ts`](../../apps/server/tests/api/third-party-tabletop.test.ts) 验证：
+将可选跑团插件更名后打包，覆盖 setup / playing 两阶段、审批拒绝、非法表单、同轮输入传递、
+保留已有玩家以及重试/重启不重复掷骰。
+
+这些自动测试使用确定性模型回复。发布涉及玩家流程的变更时，还应按
+[浏览器 E2E 指南](./e2e-testing.md#发版前的玩家流程验收) 在正式构建上使用真实模型实玩，
+验证从创角到连续回合、失败重试、重启续玩及卸载重装的页面体验。先完成本地验证，再运行远端 CI。
 
 ## `@covel/plugin-test-utils`
 

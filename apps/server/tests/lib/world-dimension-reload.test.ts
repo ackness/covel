@@ -15,6 +15,7 @@ it.each(["yaml", "schema", "missing", "unreadable"])(
       path.join(os.tmpdir(), "covel-dimension-reload-"),
     );
     const worldDir = path.join(root, "fixture-world");
+    const manifestFile = path.join(worldDir, "world.yaml");
     const toneFile = path.join(worldDir, "tone.yaml");
     const store = createMemoryStore();
     const bus = createEventBus(store);
@@ -23,9 +24,7 @@ it.each(["yaml", "schema", "missing", "unreadable"])(
     const watcher = createWorldFileWatcher(root, store, bus);
     try {
       await mkdir(worldDir);
-      await writeFile(
-        path.join(worldDir, "world.yaml"),
-        `schemaVersion: "1.0"
+      const manifest = `schemaVersion: "1.0"
 id: fixture-world
 name: Fixture world
 summary: Synthetic world for dimension recovery.
@@ -37,9 +36,8 @@ dimensions:
     contentRating: teen
 dimensionSources:
   tone: tone.yaml
-`,
-        "utf8",
-      );
+`;
+      await writeFile(manifestFile, manifest, "utf8");
       await writeFile(
         toneFile,
         "genres: [mystery]\ncontentRating: teen\n",
@@ -54,7 +52,12 @@ dimensionSources:
       watcher.start();
       if (failure === "missing" || failure === "unreadable") {
         await rm(toneFile);
-        if (failure === "unreadable") await mkdir(toneFile);
+        if (failure === "unreadable") {
+          await mkdir(toneFile);
+          // Node's Linux recursive watcher can omit a rapid file-to-directory
+          // replacement. Save the manifest to trigger a reload of the bad source.
+          await writeFile(manifestFile, manifest, "utf8");
+        }
       } else {
         await writeFile(
           toneFile,
@@ -77,6 +80,9 @@ dimensionSources:
         "genres: [adventure]\ncontentRating: teen\n",
         "utf8",
       );
+      if (failure === "unreadable") {
+        await writeFile(manifestFile, manifest, "utf8");
+      }
       await vi.waitFor(
         async () => {
           expect(await store.getWorld("fixture-world")).toMatchObject({

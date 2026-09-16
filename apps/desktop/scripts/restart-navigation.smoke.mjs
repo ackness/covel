@@ -40,6 +40,7 @@ try {
         import { app } from "electron";
         import { createMainWindow } from "./src/windows.ts";
         import { registerDesktopIpcHandlers } from "./src/ipc-handlers.ts";
+        import { version } from "./package.json";
 
         app.setPath("userData", process.env.COVEL_HOME);
         void (async () => {
@@ -82,11 +83,13 @@ try {
           await win.webContents.executeJavaScript(
             'new Promise(resolve => { const check = () => window.probeReady ? resolve() : setTimeout(check, 10); check(); })'
           );
+          assert.equal(await win.webContents.executeJavaScript('window.covelIpc.appVersion'), version);
           const loaded = once(win.webContents, "did-finish-load");
           await win.webContents.executeJavaScript('document.getElementById("restart").click()');
           await loaded;
           assert.equal(win.webContents.getURL(), "http://127.0.0.1:" + newPort + "/session");
           assert.equal(await win.webContents.executeJavaScript('document.querySelector("h1").textContent'), "Restarted sidecar");
+          assert.equal(await win.webContents.executeJavaScript('window.covelIpc.appVersion'), version);
           console.log("Native restart navigation OK: new port loaded through real IPC and origin guard");
           win.destroy();
           servers.forEach(server => { server.closeAllConnections(); server.close(); });
@@ -108,6 +111,7 @@ try {
   });
   const env = { ...process.env, COVEL_HOME: root };
   delete env.ELECTRON_RUN_AS_NODE;
+  delete env.COVEL_APP_VERSION;
   const { stdout, stderr } = await promisify(execFile)(
     electron,
     [path.join(root, "main.mjs")],

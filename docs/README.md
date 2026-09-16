@@ -4,6 +4,12 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 
 > 🇬🇧 English overview: [`../README.md`](../README.md)
 
+当前文档按框架 **0.0.35** 的实现同步。框架版本以根 [`package.json`](../package.json) 为准，
+插件与世界包可独立维护版本；协议/schema 版本和历史变更记录不随应用版本统一替换。
+
+正在逐步建设[文档 v2](./v2/README.md)：按游玩、创建世界、开发插件、验证与分发组织阅读路径，
+并提供[开发 Agent 工作指南](./v2/agent-workflow.md)。目前完整教程与权威契约仍使用下列现有文档。
+
 ## Start Here
 
 | 你要做什么               | 入口                                                                               | 接着看                                                                                                               |
@@ -16,6 +22,7 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 | 调 HTTP API 或自动化测试 | [`reference/api.md`](./reference/api.md)                                           | [`reference/protocol.md`](./reference/protocol.md), [`guide/e2e-plugin-verify.md`](./guide/e2e-plugin-verify.md)     |
 | 理解设计理念             | [`architecture/design-principles.md`](./architecture/design-principles.md)         | [`guide/plugin-authoring.md`](./guide/plugin-authoring.md), [`glossary.md`](./glossary.md)                           |
 | 理解回合执行管线         | [`architecture/flow.md`](./architecture/flow.md)                                   | [`reference/prompt-structure.md`](./reference/prompt-structure.md)                                                   |
+| 验收玩家流程与发布       | [`guide/e2e-testing.md`](./guide/e2e-testing.md)                                   | [`guide/plugin-testing.md`](./guide/plugin-testing.md), [`guide/desktop-packaging.md`](./guide/desktop-packaging.md) |
 | 做主题包                 | [`guide/themes.md`](./guide/themes.md)                                             | [`reference/theme-packages.md`](./reference/theme-packages.md)                                                       |
 | 查一个术语               | [`glossary.md`](./glossary.md)                                                     | 对应 `reference/` 页面                                                                                               |
 | 维护文档体系             | [`DOCS_STRATEGY.md`](./DOCS_STRATEGY.md)                                           | [`CONTRIBUTING.md#文档同步`](./CONTRIBUTING.md#文档同步)                                                             |
@@ -27,6 +34,7 @@ Covel 是一个插件驱动的 AI 交互式叙事引擎。根目录 [`README.md`
 | [`guide/`](./guide/)               | 插件作者、主题作者、贡献者         | 面向任务的教程和操作步骤。先讲如何做，再链接参考页。                                        |
 | [`reference/`](./reference/)       | 框架开发者、第三方开发者、AI Agent | 权威契约：API、协议、frontmatter、工具、URI、schema、数据形状。字段枚举必须来自代码或测试。 |
 | [`architecture/`](./architecture/) | 框架维护者、深入贡献者             | 运行机制、模块边界、历史决策和慢变设计。                                                    |
+| [`v2/`](./v2/README.md)            | 玩家、世界与插件作者、开发 Agent   | 新阅读路径和逐章迁移入口；明确标注已完成内容与后续方向。                                    |
 
 任务计划、审查记录、实施日志、临时分析和交接材料属于开发过程资料，统一放在 `devs/docs/`，不进入正式文档树。
 
@@ -56,7 +64,8 @@ docs/
 ├── glossary.md                # 术语表
 ├── guide/                     # how-to 教程
 ├── reference/                 # 权威框架契约
-└── architecture/              # 架构与历史决策
+├── architecture/              # 架构与历史决策
+└── v2/                        # 新阅读路径、Agent 指南与逐步迁移
 ```
 
 ## Documentation Rules

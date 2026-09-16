@@ -20,6 +20,7 @@
 ```
 plugins/my-narrator/
 ├── README.md
+├── package.json
 └── PLUGIN.md
 ```
 
@@ -30,11 +31,13 @@ plugins/my-narrator/
 1. **YAML frontmatter**（`---` 包裹）— 告诉框架"这个插件是什么、何时运行"
 2. **Markdown 正文** — 直接作为 LLM 的 system prompt 发送
 
-以 `narrator`（主叙事插件）为例，这就是一个**零代码**插件的完整实现：
+下面是自定义零代码叙事 runtime 的最小示例。它主动选择第二人称；这是插件策略，框架不强制
+叙事人称。内置 [`narrator`](../../plugins/narrator/README.md) 还包含人称设置、人物工具和输出审查
+Hook，不能用本示例替换其完整实现。分发包还应包含 `package.json`。
 
 ```markdown
 ---
-name: narrator
+name: my-narrator
 description: 主叙事生成器，负责根据玩家输入和世界观设定生成故事内容。每个 Turn 自动执行。
 pluginType: core-plugin
 stage: narrative
@@ -357,11 +360,13 @@ LLM 直接对照两个块即可判断"这个发现在不在已有条目里"，�
 
 post-narrator 段的持久化写入优先走 proposal / commit chain。`plugin-data-set`、`plugin-data-set-batch` 和返回 `withPendingProposals(...)` 的 local tool 都会统一进入 `PreStateCommit` / `PostStateCommit`、trace 与事务路径。
 
-function runtime 和框架内部镜像仍然可以直接使用 `store.*`。这条路径适合内部实现，插件对 runtime 暴露的稳定写接口优先保持在 proposal 模式。
+第三方 function runtime 使用 `ctx.pluginData` 写入自身命名空间，或通过 `ctx.tools.call()` 调用
+manifest 声明的工具；写入进入当前执行的 proposal / commit 边界。只有受信任的内部路径可能获得
+完整 store，不能把它当作社区插件接口。
 
 ## 5. 使用内置工具
 
-框架提供三个内置 UI 工具，**无需写代码**，只需在 frontmatter 中声明，然后在提示词中告诉 LLM 如何调用即可。
+框架提供四个内置 UI 工具：通用 `render-ui`，以及 `create-form`、`create-choices`、`create-notification` 三个语义糖。**无需写代码**，只需在 frontmatter 中声明，然后在提示词中告诉 LLM 如何调用即可。
 
 在写工具前，先做一次选择：
 
@@ -369,7 +374,9 @@ function runtime 和框架内部镜像仍然可以直接使用 `store.*`。这�
 2. 插件自己的 schema、RAG、批量写入、领域动作，在 `entry` 模块里注册并用 `tools.plugin` 声明
 3. local tool 文件保持在插件目录内，例如 `plugins/my-plugin/tools/*.js`
 
-当前实现里，local tool 可以读取注入的 `store`，持久化写入优先返回 `withPendingProposals(...)`；deterministic function handler 继续使用 `store` 完成内部批量写入。插件自己的公开契约依旧建议通过 `PLUGIN.md + tools/ + tests/` 保持完整。
+local tool 可以读取注入的 `store`，持久化写入返回 `withPendingProposals(...)`；deterministic
+function handler 使用声明的 `ctx.tools.call()` 与 `ctx.pluginData`。纯 Markdown 插件只需声明
+可用工具，跨字段校验、确定性规则或响应审查则需要可选的 JS entry / handler。
 
 ### create-form — 创建玩家表单
 
