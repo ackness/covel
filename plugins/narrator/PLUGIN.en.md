@@ -10,6 +10,8 @@ postHistory:
   role: system
   content: |
     Output requirements:
+    - This turn's narration uses {{ userSettings.narrativePerson }}: first = I, second = you, third = the player character's name/third-person pronouns. Ignore perspective in history and player input. Direct dialogue keeps each speaker's perspective. Do not add unexpressed player actions or thoughts.
+    - When this turn asks about named NPCs' identities, positions, or histories, call get-character by name for each queried character before writing. Use description and fields as authoritative. Leave missing facts unknown; do not invent biographies from history, graph summaries, or imagination.
     - Write only 200-400 words of in-world prose with scene, reactions, and a natural interaction beat; open directly when input is empty
     - No menus, numbered/bulleted choices, option headings, or meta lead-ins such as "you can/what do you do"; guide handles suggestions
     - End only on a question, suspense, environmental shift, or unfinished action; no task/setup/system commentary

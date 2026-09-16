@@ -11,10 +11,12 @@ export default async function (ctx) {
   const storedRules = await ctx.pluginData.get("setup", "rules");
   // Input bindings only cover this execution; a resumed setup may have already
   // committed its world schema in an earlier turn.
-  const schema = storedRules
+  const schemaValue = storedRules
     ? undefined
     : (ctx.inputs?.schema?.value ??
       (await ctx.tools.call("get-character-schema", {})).schema);
+  // World providers publish a schema map; the read tool returns one schema.
+  const schema = schemaValue?.["character-attributes"] ?? schemaValue;
   if (characters.length) {
     if (!storedRules)
       await ctx.pluginData.set(

@@ -564,13 +564,23 @@ export function useBuildSessionActions({
       const isCurrent = () =>
         sessionIdRef.current === sid &&
         sessionGenerationRef.current === generation;
-      dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, active: enable });
+      // UI specs are fetched when active plugins change. Publish that change
+      // only after the server mutation, so panels cannot cache the old specs.
+      const applyActive = () => {
+        if (isCurrent()) {
+          dispatch({ type: "TOGGLE_SESSION_PLUGIN", pluginId, active: enable });
+        }
+      };
       try {
         if (!enable) {
           await workspace.run(
             sid,
             `plugin-disable:${crypto.randomUUID()}`,
-            () => api.disableSessionPlugin(sid, pluginId),
+            async () => {
+              const result = await api.disableSessionPlugin(sid, pluginId);
+              applyActive();
+              return result;
+            },
           );
           return;
         }
@@ -578,7 +588,11 @@ export function useBuildSessionActions({
         const firstResult = await workspace.run(
           sid,
           `plugin-enable:${crypto.randomUUID()}`,
-          () => api.enableSessionPlugin(sid, pluginId),
+          async () => {
+            const result = await api.enableSessionPlugin(sid, pluginId);
+            if (!("status" in result)) applyActive();
+            return result;
+          },
         );
         if (!("status" in firstResult)) return;
         if (firstResult.status !== "approval-required") {
@@ -600,13 +614,6 @@ export function useBuildSessionActions({
             cancelLabel: i18n.t("plugin.approval.deny"),
           }));
         if (!approved || !isCurrent()) {
-          if (isCurrent()) {
-            dispatch({
-              type: "TOGGLE_SESSION_PLUGIN",
-              pluginId,
-              active: false,
-            });
-          }
           await workspace.run(sid, `plugin-deny:${crypto.randomUUID()}`, () =>
             api.resolveApproval(firstResult.approvalId, "deny", "session", sid),
           );
@@ -637,6 +644,7 @@ export function useBuildSessionActions({
             if ("status" in enabled) {
               throw new Error(i18n.t("plugin.approval.unexpectedRequired"));
             }
+            applyActive();
           },
         );
       } catch (error) {
@@ -649,11 +657,6 @@ export function useBuildSessionActions({
           return;
         }
         reportWorkspaceSyncError(error, dispatch);
-        dispatch({
-          type: "TOGGLE_SESSION_PLUGIN",
-          pluginId,
-          active: !enable,
-        });
       }
     },
     [dispatch, workspace, sessionIdRef, sessionGenerationRef],

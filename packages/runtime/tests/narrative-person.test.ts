@@ -41,6 +41,9 @@ describe.each(["narrator", "chat-mode-narrator"])(
               locale,
             },
             completedResults: new Map(),
+            messageHistory: [
+              { role: "assistant", content: "You reach the door." },
+            ],
             userSettings,
           });
           expect(context.systemPrompt).toContain(
@@ -51,6 +54,17 @@ describe.each(["narrator", "chat-mode-narrator"])(
           expect(context.systemPrompt).not.toContain(
             "{{ userSettings.narrativePerson }}",
           );
+          const finalInstruction = context.messages.at(-1);
+          expect(finalInstruction?.role).toBe("system");
+          expect(finalInstruction?.content).toContain(
+            locale === "zh-CN"
+              ? `本轮旁白人称固定为 ${expected}`
+              : `This turn's narration uses ${expected}`,
+          );
+          expect(context.messages).toContainEqual({
+            role: "assistant",
+            content: "You reach the door.",
+          });
           expect(
             manifest.userSettings
               ?.find((setting) => setting.key === "narrativePerson")

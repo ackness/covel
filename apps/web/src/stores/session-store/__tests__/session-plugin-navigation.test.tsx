@@ -242,6 +242,34 @@ describe.each(["session-b", "session-a"])(
 
 describe("plugin operations in the current visit", () => {
   it.each([false, true])(
+    "publishes active=%s only after the server mutation",
+    async (enable) => {
+      const { result } = setup(!enable);
+      const response = deferred<typeof enabled>();
+      (enable
+        ? api.enableSessionPlugin
+        : api.disableSessionPlugin
+      ).mockReturnValueOnce(response.promise);
+      let toggling!: Promise<void>;
+      await act(async () => {
+        toggling = result.current.actions.toggleSessionPlugin(
+          plugin.id,
+          enable,
+        );
+      });
+      expect(result.current.state.sessionPlugins[0]?.active).toBe(!enable);
+      await act(async () => {
+        response.resolve({
+          ok: true,
+          activePluginIds: enable ? [plugin.id] : [],
+        });
+        await toggling;
+      });
+      expect(result.current.state.sessionPlugins[0]?.active).toBe(enable);
+    },
+  );
+
+  it.each([false, true])(
     "honors an approval answer of %s",
     async (approved) => {
       const { result } = setup();
@@ -261,7 +289,7 @@ describe("plugin operations in the current visit", () => {
     },
   );
 
-  it("still rolls back and reports a current hydrate failure", async () => {
+  it("keeps the plugin inactive and reports a current hydrate failure", async () => {
     const { result, workspace } = setup();
     workspace.run.mockRejectedValueOnce(
       new SessionWorkspaceSyncError(

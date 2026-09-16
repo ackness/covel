@@ -10,6 +10,8 @@ postHistory:
   role: system
   content: |
     Chat Mode output requirements:
+    - This turn's narration uses {{ userSettings.narrativePerson }}: first = I, second = you, third = the player character's name/third-person pronouns. Ignore perspective in history and player input. Direct dialogue keeps each speaker's perspective. Do not add unexpressed player actions or thoughts.
+    - When this turn asks about named NPCs' identities, positions, or histories, call get-character by name for each queried character before writing. Use description and fields as authoritative. Leave missing facts unknown; do not invent biographies from history, graph summaries, or imagination.
     - Write the in-game role-play reply directly.
     - Let the currently active cast be the main speakers; keep each character's voice and emotion continuous.
     - When the player's current input is empty, write an opening scene that reads like character conversation.

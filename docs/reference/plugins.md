@@ -207,6 +207,8 @@ runtime 的逻辑 ID 与物理目录独立。UI 资源和文档投影使用启�
 
 无论 guard 复用已存在 schema、采用世界声明、从 dimensions 派生，还是 agent 生成，成功/完成输出都会携带结构化 `worldSchema`。下游 setup runtime 可在同一 execution 中通过 runtime inject 消费它；持久 `world.schema` 仍在 proposal commit 后成为后续 execution 的 store 真值。
 
+`inputs` 绑定也接受 guard 返回 `skip: true` 时携带的同轮输出，保留原 producer 的来源信息，并照常执行 `select` 和 `accepts` 校验。普通调度跳过和失败结果仍不能提供输入。`worldSchema` 是以 schema key 为键的映射，角色属性位于 `worldSchema["character-attributes"]`；公开工具 `get-character-schema` 则直接返回该角色属性 schema，供后续 execution 读取。
+
 **Guard 门控**: `guard.js` 在 LLM 调用前执行（纯函数，零 LLM 开销），按优先级决定角色属性 schema，命中任一即返回 `{ skip: true }` 跳过 LLM：
 
 1. **当前 session 已有 schema + 词条** → 直接复用。
@@ -1690,6 +1692,8 @@ entry 可注册 `covel.registerFormValidator(name, (values, data) => errorOrUnde
 ### 叙事人称
 
 `narrator` 和 `chat-mode-narrator` 声明 `narrativePerson`：`first`、`second`、`third`，默认第二人称。玩家设置覆盖世界 `pluginSettings` 默认值，非法值回退 manifest 默认值。只影响后续旁白，直接对白保留说话者人称，第三人称为跟随玩家角色的有限视角；所有人称都保留玩家自主决定权。
+
+当前人称会同时写入主提示词和历史消息之后的 `postHistory`，避免模型沿用旧回合的人称。`postHistory` 也要求对本轮被问及身份、职位或经历的具名 NPC 逐个调用 `get-character` 核对档案。工具提供的是会话中已存的档案；提示词约束不能保证模型在资料缺失时完全不产生臆测。
 
 ### tags / relations
 
