@@ -275,6 +275,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Test Windows package installation
+        run: pnpm --filter @covel/server exec vitest run tests/api/install.test.ts
+
       - name: Build desktop (web + server staging + native rebuild for Electron)
         run: pnpm --filter @covel/desktop build
 
