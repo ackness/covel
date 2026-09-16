@@ -1364,6 +1364,7 @@
       "unexpectedRequired": "Still got approval-required after grant — please check the approval backend"
     },
     "invokeRuntime": {
+      "setupPending": "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",
       "submitted": "Submitted {{count}} background job(s): {{ids}}. Waiting for completion…",
       "noFollowerEvents": "{{runtimeId}} finished but emitted no background follower (missing matching events[]). Check that the model output a valid JSON envelope."
     },

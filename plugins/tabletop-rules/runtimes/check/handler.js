@@ -7,7 +7,8 @@ export default async function (ctx) {
   });
   const player = characters[0];
   if (!player) throw new Error("Create a player character before rolling");
-  const rules = await ctx.pluginData.get("setup", "rules");
+  const rules =
+    ctx.inputs?.rules?.value ?? (await ctx.pluginData.get("setup", "rules"));
   if (!rules?.attributes?.length)
     throw new Error("Point-buy rules are unavailable");
   if (ctx.manualPayload?.openForm === true) return openForm(ctx, rules);

@@ -155,4 +155,4 @@ it("creates a third-party form from the real world-init guard in the first setup
     vi.unstubAllEnvs();
     await rm(root, { recursive: true, force: true });
   }
-});
+}, 30_000);

@@ -75,6 +75,29 @@ describe("plugin-rpc-ui", () => {
     );
   });
 
+  it("explains a manual action blocked by its plugin setup", () => {
+    emitPluginRpcRuntimeResponse({
+      response: {
+        status: "ok",
+        runtimeResults: [
+          {
+            runtimeId: "community/check",
+            pluginId: "community",
+            status: "skipped",
+            durationMs: 0,
+            output: { skipped: true, reason: "setup-incomplete" },
+          },
+        ],
+      },
+      t,
+      runtimeId: "community/check",
+    });
+    expect(emitToast).toHaveBeenCalledWith(
+      "info",
+      expect.stringContaining("setup first"),
+    );
+  });
+
   it("resolves approval and retries the original request", async () => {
     const retryResponse: PluginRpcResponse = { status: "ok", result: true };
     const retry = vi.fn(async () => retryResponse);

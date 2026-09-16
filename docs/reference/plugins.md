@@ -571,7 +571,7 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 | needs              | `[pregame, world-init/schema-gen]`（turn-scoped：既是同 pass 的 DAG 边，也是同回合上游门控）                           |
 | input.inject       | `world-init/schema-gen.worldSchema` → `<same-turn-world-schema>`；同轮结构化 schema 优先，已提交的 `world.schema` 兜底 |
 | guard              | `./guard.js` — 若 player 已存在或已收到表单提交则 skip LLM                                                             |
-| completeAfterTools | `[create-form]` — 表单创建成功即结束 runtime，不为调用 `runtime-done` 再消耗一次模型请求                               |
+| completeAfterTools | `[create-character-form]` — 表单创建成功即结束 runtime，不为调用 `runtime-done` 再消耗一次模型请求                     |
 | model              | `plugin`                                                                                                               |
 | ui.right           | `../../ui/character-panel.json`                                                                                        |
 
@@ -580,7 +580,8 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 1. **第 1 步 - 生成表单**（`<player-submission>` 为空时）：
    - 读取世界 schema
    - 直接返回 `interaction.request` 形式的角色创建表单
-   - 表单字段从 `worldSchema.character-attributes.attributes` 中选取，最多 4 个字段含 `characterName`
+   - 表单字段从 `worldSchema.character-attributes.attributes` 中选取，最多 4 个字段含 `characterName`。字符串可用文本框、文本域或字符串选项；枚举保持原值，数值和复合属性保留 schema 默认值。
+   - 单项重试保留原回合 guard 的 `skip: true` 输出作为输入；普通依赖失败导致的跳过不提供输入。表单工具失败时，准备说明不能充当成功结果。
 
 2. **第 2 步 - 提交创建**（`<player-submission>` 包含表单值时）：
    - 读取最近一次 player input submission
@@ -1260,6 +1261,12 @@ tools:
 
 Hook 调用总会获得 `ctx.signal`（类型可选以兼容直接构造上下文的调用方）：超时或传入的父执行取消会通知协作式 I/O 并结束等待，迟到返回的 `replace` 不再进入流水线。同进程不合作代码无法被强制终止。顺序 pipeline 中 abort 停止后续 handler；各 wire helper 保持原有拦截/转换策略，例如 `PreLLMCall` 的 abort 表示保留原请求，真正的执行取消仍由模型调用边界检查。`PreStateCommit` 继承传入 `finalizeExecution` 的取消信号，取消会停止后续提案并回滚事务。观察型事件不因 Hook 失败撤销已完成的领域提交；`TurnStop`、`PostStateCommit` 和会话生命周期的收尾 Hook 使用自己的超时界限。
 
+#### 模型响应校验
+
+需要先验证再展示输出的插件，可在 `PreLLMCall` 返回 `replace: { stream: false }`，缓冲本次响应。`PostLLMResponse` 提供 `response` 和实际发送的 `messages`（包含工具结果），可继续用 `replace.response` 改写响应，也可返回 `replace: { correction: "具体的不合格原因与修正要求" }` 拒绝草稿。框架把草稿和反馈交回模型，最多纠正两次，仍受原有步数、超时和取消约束；拒绝的响应不会执行工具或成为最终故事。再次不合格则 runtime 失败，下游依赖按失败门控处理。`abort` 仍不表示重试，请显式返回 `correction`。
+
+该接口对内置和已授权的第三方插件一致，框架不识别人称、NPC 或具体插件 ID。领域校验由插件实现。缓冲会让正文在验证通过后整段显示；没有启用缓冲的插件仍可能展示临时流式草稿。
+
 ### commands（输入框斜线命令）
 
 插件可以在 runtime 的 `PLUGIN.md` frontmatter 声明玩家可发现的斜线命令，并在该插件的 `entry` 中注册对应 RPC action。框架不按插件 ID 写分支：`GET /api/sessions/:id/plugins` 只聚合当前会话已启用插件的声明，输入框据此匹配、补全和展示参数；执行时输入框提交 `{ kind: "command", commandId, input }`，插件 JSON-RENDER UI 提交 `{ kind: "command", commandId, args }`，服务端都再次从当前会话目录解析 action、参数和上下文权限。
@@ -1695,6 +1702,8 @@ entry 可注册 `covel.registerFormValidator(name, (values, data) => errorOrUnde
 
 当前人称会同时写入主提示词和历史消息之后的 `postHistory`，避免模型沿用旧回合的人称。`postHistory` 也要求对本轮被问及身份、职位或经历的具名 NPC 逐个调用 `get-character` 核对档案。工具提供的是会话中已存的档案；提示词约束不能保证模型在资料缺失时完全不产生臆测。
 
+两种叙事插件通过公开 Hook 在每次请求中加入所选人称的具体写法，并在提交前检查引号外的旁白；人物对白不会做代词替换。查询工具的准备说明不作为故事输出。对明确询问但查无档案的人物，要求自然表达信息未知。检查是有限的文本约束，不是通用事实证明，也不能自动修复已经污染的历史资料。
+
 ### tags / relations
 
 `tags` 是面向玩家、作者和准备页筛选的目录标签，例如 `mode:dialogue`、`role:narrator`、`cost:llm`。`capabilities` 保持机器能力契约；框架逻辑依赖 `capabilities`，准备页和组合包匹配使用 `tags`。
@@ -1742,6 +1751,8 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 | `completeAfterTools`     | `string[]` | `[]`                                              | 仅 agent runtime。一个响应批次内指定工具至少一个成功且没有业务工具失败时，执行完该批全部调用后直接结束，不再额外请求模型输出 `runtime-done`。读取类工具不在列表即可继续 read → write 工作流                                          |
 
 **`requireToolUse` 判定**：仅当本轮 loop 从未有任何工具**成功**执行、且 LLM 本次回复无 tool call 时触发；已经成功干过活再收尾的 runtime 不受影响。纠正消息按 `input.locale` 分支（zh 前缀 → 中文“你没有调用任何工具就结束了……”，其余含无 locale → 英文），记一条 `[runtime-retry] <name> ... reason=no-tool-call`。捆绑插件中，每次执行都必须提交业务工具的 `world-init/schema-gen`、`world-ir`、`char-creator/player-init`、`guide`、`scene-prompts` 与两个图像 prompt-generator 已启用；允许“本轮无变化”的状态追踪器则保留显式 `runtime-done` 分支。
+
+**`llm.toolChoice: required`**：请求模型必须实际调用一个已声明的工具，仍由模型选择具体工具和参数；Chat Completions / Responses 映射为 `required`，Anthropic 映射为 `any`。适合关系提取等可写入、也可调用 `runtime-done` 表示无变化的任务。显式用户配置优先，与 thinking 不兼容时仍回退 `auto`，完成契约校验继续生效。
 
 **`requireExplicitCompletion: true`**：用于允许“无变化”的非 story agent。成功执行 `completeAfterTools` 中的工具，或在没有未解决工具错误时显式调用 `runtime-done`，才算完成。纯正文、伪造的工具 JSON、`updated: true` 声明及仅查询数据都不能证明工作完成；框架纠正一次后仍不满足则失败，暂停后恢复也遵循此规则。该选项默认关闭，不改变普通文本 runtime；不能与 `output.schema` 混用，也不适用于 function/story runtime。捆绑的人物关系、好感、图鉴、任务、物品、角色追踪器采用此契约，第三方包可同样声明，无需内置权限。
 

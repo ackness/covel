@@ -104,7 +104,7 @@ postHistory:
 
 - `characterName` 必须是 `required: true` 的 text 字段。
 - 从 Schema 的 `character-attributes.attributes` 最多选 3 个 string 或 enum 字段，优先 `bio`、其次 `abilities`；所有 number、array、object、map、boolean 字段都不进入开场表单，保留 schema 默认值。字段 `name` 必须严格等于属性 `id`，其余字段均为可选。不要把数值属性改成背景风格选项。
-- 类型映射：`enum` → `select`，option value 必须逐字等于 schema options 中的值；`string` → `text`。没有合适属性时只收集 characterName。
+- 类型映射：`enum` → `select`，option value 必须逐字等于 schema options 中的值；`string` 优先用 `text`，也可用 `textarea` 或返回字符串的 `select` 提供建议。没有合适属性时只收集 characterName。
 - 需要解释 select 选项时使用 `{ value, label }`；`value` 保持适合嵌入叙事的短词。被 `narrativeTemplate` 引用的可选字段必须有自然的 `defaultValue`，select 默认值必须等于某个 option value。
 - 固定传入 `formId: "char-creation"` 和 `submitBehavior: { "echoFilledNarrative": true, "immediate": true }`，加上合适的标题、提交文案、字段以及含字段占位符的 `narrativeTemplate`。
 - 总字段数不超过 4。只调用一次 `create-character-form`，不要调用 `runtime-done`。

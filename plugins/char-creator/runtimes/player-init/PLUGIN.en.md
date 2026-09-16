@@ -43,7 +43,7 @@ Form rules:
 
 - `characterName` must be a `required: true` text field.
 - Choose at most 3 string or enum fields from `character-attributes.attributes`, preferring `bio`, then `abilities`. Exclude all number, array, object, map, and boolean fields and retain their schema defaults. Each field `name` must exactly equal its attribute `id`; all non-name fields are optional. Never replace numeric attributes with background-style choices.
-- Map `enum` to `select` with option values copied exactly from the schema options, and `string` to `text`. If no suitable attributes exist, collect only characterName.
+- Map `enum` to `select` with option values copied exactly from the schema options. Prefer `text` for `string`; `textarea` or `select` with string-valued suggestions also works. If no suitable attributes exist, collect only characterName.
 - When options need explanations, use `{ value, label }` and keep `value` short enough for narrative interpolation. Any optional field referenced by `narrativeTemplate` needs a natural `defaultValue`; a select default must equal one option value.
 - Pass `formId: "char-creation"` and `submitBehavior: { "echoFilledNarrative": true, "immediate": true }`, plus a fitting title, submit label, fields, and `narrativeTemplate` with field placeholders.
 - Use at most 4 fields total. Call `create-character-form` exactly once; do not call `runtime-done`.

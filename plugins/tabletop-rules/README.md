@@ -27,3 +27,5 @@
 `pnpm test:tabletop-plugin` 将本目录打成 ZIP，经过真实安装、授权和运行接口验证。测试包没有工作区依赖，安装后按 community 来源加载。
 
 `pnpm pack:tabletop-plugin` 生成 `test-results/tabletop-rules.zip` 和更换包 ID 的 `test-results/tabletop-probe.zip`。两者执行代码相同；probe 用于验证框架没有依赖官方插件 ID。重启测试会关闭并重新打开 SQLite 文件，叙事模型使用测试替身，配点和骰子结算执行真实插件代码。
+
+中途启用后，先继续一个回合完成插件初始化；不会重建已有玩家。初始化与检定在同一回合执行时，规则通过 `inputs.rules` 传递，后续回合读取已提交的规则。初始化前点击检定会提示先完成初始化。

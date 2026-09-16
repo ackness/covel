@@ -92,6 +92,25 @@ export function emitPluginRpcRuntimeResponse(params: {
     );
     return;
   }
+  const target = response.runtimeResults?.find(
+    (result) => result.runtimeId === runtimeId,
+  );
+  if (
+    target?.status === "skipped" &&
+    target.output &&
+    typeof target.output === "object" &&
+    "reason" in target.output &&
+    target.output.reason === "setup-incomplete"
+  ) {
+    emitToast(
+      "info",
+      t("plugin.invokeRuntime.setupPending", {
+        defaultValue:
+          "This plugin needs setup first. Continue the story for one turn and complete any setup form, then try again.",
+      }),
+    );
+    return;
+  }
   const deferredJobs = response.deferredJobs ?? [];
   if (params.expectsBackgroundFollower === true && deferredJobs.length === 0) {
     emitToast(

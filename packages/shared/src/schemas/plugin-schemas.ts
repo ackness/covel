@@ -898,7 +898,12 @@ const runtimeManifestCommonShape = {
   llm: z
     .strictObject({
       reasoningEffort: z.literal("disabled").optional(),
-      toolChoice: z.strictObject({ name: z.string().min(1) }).optional(),
+      toolChoice: z
+        .union([
+          z.literal("required"),
+          z.strictObject({ name: z.string().min(1) }),
+        ])
+        .optional(),
     })
     .optional(),
   timeoutMs: z.number().int().positive().optional(),

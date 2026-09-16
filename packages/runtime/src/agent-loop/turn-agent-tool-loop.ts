@@ -28,8 +28,8 @@ import {
   runPreToolUseHook,
   runPostToolUseHook,
   runPreLLMCallHook,
-  runPostLLMResponseHook,
 } from "../hooks/wire-helpers.js";
+import { createResponseReviewer } from "./response-review.js";
 import {
   extractToolFailureMessage,
   isRecord,
@@ -223,9 +223,8 @@ export async function runAgentToolLoop({
   // Set by a PostToolUse hook returning `terminate` — ends the loop after the
   // current response's tool calls are recorded.
   let terminatedByHook = false;
-  // requireToolUse: how many times we've already nudged a bare (no-tool-call)
-  // finish back into the loop. Capped at one correction so a model that keeps
-  // refusing to call its tool is released instead of burning maxSteps.
+  const reviewResponse = createResponseReviewer(hookOpts, messages);
+  // One correction for a bare finish that violates the tool-use contract.
   let noToolCallCorrections = 0;
   // Prose captured from steps that were extended by late steering (see the
   // late-steering drain below). Joined into finalContent at the final break
@@ -264,10 +263,7 @@ export async function runAgentToolLoop({
       tools: activeToolDefs,
     });
 
-    // Tool results, steering, loop-guard nudges, and PreLLMCall hooks can all
-    // grow the transcript after the one-time assembly pass. Budget the exact
-    // per-call request, including the advertised tool/response schemas, before
-    // every provider invocation.
+    // Budget the exact request after tools, steering, and hook rewrites.
     const budgetedRequest =
       estimator && contextBudget
         ? applyPerCallBudget({
@@ -296,7 +292,7 @@ export async function runAgentToolLoop({
       });
     }
 
-    let response = await requestLLMResponse({
+    const rawResponse = await requestLLMResponse({
       manifest,
       deps,
       messages:
@@ -314,14 +310,19 @@ export async function runAgentToolLoop({
       onQueueWait: (waitedMs) => {
         deadline += waitedMs;
       },
-      useStreaming,
+      useStreaming: useStreaming && llmRequest.stream !== false,
       reportRetry,
       onStreamDelta: delta.forward,
     });
 
-    // ── PostLLMResponse hook ─────────────────────────────────────
-    // Inspect / patch the response (content, toolCalls) before tool dispatch.
-    response = await runPostLLMResponseHook(hookOpts, response);
+    const response = await reviewResponse(
+      rawResponse,
+      budgetedRequest?.messages ?? llmRequest.messages,
+    );
+    if (!response) {
+      finalContent = null;
+      continue;
+    }
 
     if (response.toolCalls.length > 0) {
       // LLM requested tool calls — execute them and feed results back.

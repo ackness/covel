@@ -18,20 +18,18 @@ export default async function (ctx) {
   // World providers publish a schema map; the read tool returns one schema.
   const schema = schemaValue?.["character-attributes"] ?? schemaValue;
   if (characters.length) {
-    if (!storedRules)
-      await ctx.pluginData.set(
-        "setup",
-        "rules",
-        creationRules(
-          schema,
-          await ctx.pluginData.get("rules", "creation"),
-          ctx.locale,
-        ),
+    const rules =
+      storedRules ??
+      creationRules(
+        schema,
+        await ctx.pluginData.get("rules", "creation"),
+        ctx.locale,
       );
+    if (!storedRules) await ctx.pluginData.set("setup", "rules", rules);
     return {
       outcome: "success",
       completion: "done",
-      value: { playerId: characters[0].id },
+      value: { playerId: characters[0].id, rules },
     };
   }
   const formId = `${ctx.pluginId}-character`;
@@ -55,6 +53,7 @@ export default async function (ctx) {
       completion: "done",
       value: {
         playerId: result.characterId,
+        rules: storedRules,
         narrativeOutput: pickLocaleText(
           ctx.locale,
           `角色 ${characterName.trim()} 已创建。`,

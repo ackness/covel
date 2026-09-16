@@ -1,4 +1,12 @@
-import { mkdtemp, mkdir, readFile, writeFile, cp, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  writeFile,
+  cp,
+  rm,
+  symlink,
+} from "node:fs/promises";
 import { parse as parseYaml } from "yaml";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -18,6 +26,10 @@ import {
 const project = path.resolve(import.meta.dirname, "../../../..");
 const pluginId = tabletopProbeId;
 const sessionId = "tabletop-session";
+const client = vi.hoisted(() => ({ address: "" }));
+vi.mock("@hono/node-server/conninfo", () => ({
+  getConnInfo: () => ({ remote: { address: client.address } }),
+}));
 const sessionPath = `/api/sessions/${sessionId}`;
 const auth = {
   Authorization: "Bearer synthetic-tabletop-token",
@@ -157,6 +169,8 @@ describe("tabletop package installed as a third-party ZIP", () => {
   }
 
   beforeEach(async () => {
+    // Each isolated installation has its own rate-limit client bucket.
+    client.address = crypto.randomUUID();
     root = await mkdtemp(path.join(tmpdir(), "covel-tabletop-"));
     await mkdir(path.join(root, "builtin/core-fixture"), { recursive: true });
     await mkdir(path.join(root, "user"));
@@ -201,6 +215,12 @@ describe("tabletop package installed as a third-party ZIP", () => {
       path.join(project, "plugins/narrator"),
       path.join(root, "builtin/narrator"),
       { recursive: true, filter: (source) => !source.includes("node_modules") },
+    );
+    // Builtin plugin dependencies are staged by the desktop/server distribution.
+    await symlink(
+      path.join(project, "plugins/narrator/node_modules"),
+      path.join(root, "builtin/narrator/node_modules"),
+      "dir",
     );
     vi.stubEnv("COVEL_USER_PLUGINS_DIR", path.join(root, "user"));
     vi.stubEnv("COVEL_DESKTOP_REST_TOKEN", "synthetic-tabletop-token");
@@ -363,34 +383,42 @@ sources:
     );
   });
 
-  it("initializes checks without rebuilding an existing player", async () => {
-    const now = new Date().toISOString();
-    await store.upsertCharacter({
-      id: "existing-player",
-      sessionId,
-      name: "Lin",
-      type: "player",
-      description: "An existing adventurer",
-      fields: { tideReading: 3, stealth: 2, diplomacy: 2, combat: 1 },
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const before = await store.listCharacters(sessionId);
-    await action("start_session", {});
-    expect(await store.listCharacters(sessionId)).toEqual(before);
-    expect(
-      (await store.getPluginData(sessionId, pluginId, "setup", "rules"))?.value,
-    ).toMatchObject(rules);
-    const opened = await request(`${sessionPath}/plugin-rpc`, "POST", {
-      kind: "runtime",
-      pluginId,
-      runtimeId: `${pluginId}/check`,
-      payload: { openForm: true },
-    });
-    expect(opened.status, await opened.text()).toBe(200);
-    expect((await latestForm()).form.interactionId).toMatch(/-check-/);
-  });
+  it.each(["setup", "playing"] as const)(
+    "initializes checks without rebuilding an existing player during %s",
+    async (phase) => {
+      const now = new Date().toISOString();
+      await store.upsertCharacter({
+        id: "existing-player",
+        sessionId,
+        name: "Lin",
+        type: "player",
+        description: "An existing adventurer",
+        fields: { tideReading: 3, stealth: 2, diplomacy: 2, combat: 1 },
+        version: 1,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const before = await store.listCharacters(sessionId);
+      await store.updateSession(sessionId, { phase });
+      await action(
+        phase === "setup" ? "start_session" : "send_message",
+        phase === "setup" ? {} : { content: "Continue" },
+      );
+      expect(await store.listCharacters(sessionId)).toEqual(before);
+      expect(
+        (await store.getPluginData(sessionId, pluginId, "setup", "rules"))
+          ?.value,
+      ).toMatchObject(rules);
+      const opened = await request(`${sessionPath}/plugin-rpc`, "POST", {
+        kind: "runtime",
+        pluginId,
+        runtimeId: `${pluginId}/check`,
+        payload: { openForm: true },
+      });
+      expect(opened.status, await opened.text()).toBe(200);
+      expect((await latestForm()).form.interactionId).toMatch(/-check-/);
+    },
+  );
 
   it("reauthorizes a restored form directly without toggling its plugin", async () => {
     await action("start_session", {});

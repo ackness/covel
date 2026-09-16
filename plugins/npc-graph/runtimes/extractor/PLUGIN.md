@@ -11,6 +11,9 @@ pluginType: plugin
 # character-tracker so scheduler runs them in parallel.
 stage: post-turn
 model: plugin
+llm:
+  reasoningEffort: disabled
+  toolChoice: required
 timeoutMs: 120000
 maxSteps: 2
 maxRetries: 0

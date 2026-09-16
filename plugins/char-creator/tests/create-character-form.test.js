@@ -20,6 +20,7 @@ const context = {
         "character-attributes": {
           version: 1,
           attributes: [
+            { id: "motive", name: "Motive", type: "string", category: "bio" },
             {
               id: "systems",
               name: "Systems",
@@ -53,6 +54,38 @@ const params = {
 };
 
 describe("create-character-form schema boundary", () => {
+  it("accepts string-valued select suggestions without weakening numeric or enum validation", async () => {
+    await expect(
+      createCharacterForm.execute(
+        {
+          ...params,
+          fields: [
+            ...params.fields,
+            {
+              name: "motive",
+              type: "select",
+              label: "Motive",
+              options: ["Find a friend", "Explore"],
+              defaultValue: "Explore",
+            },
+          ],
+        },
+        context,
+      ),
+    ).resolves.toMatchObject({ created: true, fieldCount: 2 });
+    await expect(
+      createCharacterForm.execute(
+        {
+          ...params,
+          fields: [
+            ...params.fields,
+            { name: "motive", type: "number", label: "Motive" },
+          ],
+        },
+        context,
+      ),
+    ).rejects.toThrow(/string-valued/);
+  });
   it("rejects a generic-form-valid select that would replace a numeric ability", async () => {
     const invalid = {
       ...params,

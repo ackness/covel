@@ -11,6 +11,11 @@ handler: ./handler.js
 stage: pre-turn
 outputKind: system
 capabilities: [tabletop-check]
+inputs:
+  rules:
+    from: { runtime: tabletop-rules/creation }
+    select: /rules
+    required: false
 ui:
   right: [./ui/check-panel.json]
 trigger: { type: scheduled, interval: 1 }

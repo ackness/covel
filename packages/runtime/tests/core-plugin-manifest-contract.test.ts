@@ -284,7 +284,9 @@ describe("core plugin manifest contract", () => {
       const extractor = requireRuntime(manifests, id);
       expect(extractor.requireExplicitCompletion).toBe(true);
       expect(extractor.requireToolUse).not.toBe(true);
-      expect(extractor.llm?.toolChoice).toBeUndefined();
+      expect(extractor.llm?.toolChoice).toBe(
+        id === "npc-graph/extractor" ? "required" : undefined,
+      );
     }
 
     expect(

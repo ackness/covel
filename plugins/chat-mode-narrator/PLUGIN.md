@@ -7,6 +7,7 @@ description:
   zh: 让故事更像角色对话，适合重视聊天和人物互动的玩法。
   en: Makes the story feel more like character dialogue, suited for play focused on conversation and interaction.
 pluginType: plugin
+entry: ./server/index.js
 stage: narrative
 model: story
 timeoutMs: 240000
@@ -123,8 +124,8 @@ postHistory:
   role: system
   content: |
     Chat Mode 输出要求：
-    - 本轮旁白人称固定为 {{ userSettings.narrativePerson }}：first 用“我”，second 用“你”，third 用玩家角色名/第三人称代词。历史正文和玩家输入的人称不影响本轮；人物直接对白保留说话者自己的人称。不要替玩家添加未表达的行动或想法。
-    - 本轮问题涉及具名 NPC 的身份、职位或经历时，写正文前必须调用 get-character 按姓名核对档案，逐个查询被问及的角色；以 description 和 fields 为准。查无记录的内容保持未知，不从历史、图谱或想象补造履历。
+    - 本轮旁白人称固定为 {{ userSettings.narrativePerson }}，具体写法按本次请求的人称要求执行。历史正文和玩家输入的人称不影响本轮；人物直接对白保留说话者自己的人称。不要替玩家添加未表达的行动或想法。
+    - 本轮问题涉及具名 NPC 的身份、职位或经历时，写正文前必须调用 get-character 按姓名核对档案，逐个查询被问及的角色；以被问及人物本人的 description 和 fields 为准；其他人物的转述、历史和图谱不能覆盖本人档案。旧说法冲突时放弃旧说法，不创造同名者或其他理由解释错误。缺失的身份、经历和关系自然回答“不清楚”，也不能推断人物不存在或互不认识。
     - 直接写游戏内角色扮演回复
     - 以当前活跃演员为主要发声者，保持人物口吻和情绪连续
     - 玩家当前输入为空时，写出贴近角色聊天的开场场景
@@ -178,7 +179,7 @@ postHistory:
 
 ## 写作规则
 
-- 叙事人称设置：{{ userSettings.narrativePerson }}。只使用所选人称：first = 以玩家角色为“我”；second = 以玩家角色为“你”；third = 用玩家角色名及合适代词，以该角色的有限视角叙述，不使用全知视角。
+- 叙事人称设置：{{ userSettings.narrativePerson }}。本次请求只提供所选人称的具体写法，保持玩家角色的有限视角。
 - 人称设置只约束旁白，人物直接对白保留说话者自己的“我/你”；玩家输入的人称不会改变此设置。
 - 任何人称下都不得替玩家编造尚未表达的决定、行动、台词或内心想法。设置变化只作用于后续叙述，不改写历史。
 - 优先让 `<active-cast>` 中的角色说话或产生可见反应

@@ -157,7 +157,9 @@ export async function prepareRuntimeRetry(
     },
     seedResults: [...results.values()].filter(
       (result) =>
-        result.status === "success" && !runtimeIds.includes(result.runtimeId),
+        (result.status === "success" ||
+          (result.status === "skipped" && result.output?.skip === true)) &&
+        !runtimeIds.includes(result.runtimeId),
     ),
   };
 }

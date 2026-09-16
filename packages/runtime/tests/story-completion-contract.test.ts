@@ -224,4 +224,28 @@ describe("story completion contract", () => {
       }),
     ).toMatchObject({ kind: "ok" });
   });
+
+  it.each([null, { error: "Invalid field" }])(
+    "does not treat preparatory prose as success when all system tools failed (%j)",
+    (toolResult) => {
+      expect(
+        finalizeAgentOutput({
+          manifest: { ...manifest, outputKind: "system" },
+          finalContent: "I will create the opening form now.",
+          executedToolCalls: [
+            {
+              name: "create-form",
+              arguments: "{}",
+              success: false,
+              result: toolResult,
+            },
+          ],
+          failedToolCalls: [
+            { toolName: "create-form", message: "Invalid field" },
+          ],
+          pendingProposals: [],
+        }),
+      ).toEqual({ kind: "tool-failed" });
+    },
+  );
 });

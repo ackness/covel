@@ -32,9 +32,11 @@ export default function ({ tool }, createFormTool) {
         }
         if (
           attribute.type === "string" &&
-          !["text", "textarea"].includes(field.type)
+          !["text", "textarea", "select"].includes(field.type)
         ) {
-          throw new Error(`Field ${field.name} requires a text input.`);
+          throw new Error(
+            `Field ${field.name} requires a string-valued input.`,
+          );
         }
         if (attribute.type === "enum") {
           const options =

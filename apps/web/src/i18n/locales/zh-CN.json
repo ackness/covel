@@ -1364,6 +1364,7 @@
       "unexpectedRequired": "授权后仍返回 approval-required，请检查审批后端"
     },
     "invokeRuntime": {
+      "setupPending": "这个插件还需要初始化。请先继续一个故事回合，并完成出现的初始化表单，再重试此操作。",
       "submitted": "已提交 {{count}} 个后台任务：{{ids}}，等待返回…",
       "noFollowerEvents": "{{runtimeId}} 已完成，但未触发任何后台任务（缺少匹配的 events[]）。请检查模型是否输出了正确的 JSON 包络。"
     },
