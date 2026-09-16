@@ -78,27 +78,23 @@ describe("tabletop package installed as a third-party ZIP", () => {
     if (first.status === 202) await allow(first);
     const enabled = await request(`${sessionPath}/plugins/${pluginId}`, "PUT");
     expect(enabled.status, await enabled.text()).toBe(200);
-    for (const runtime of ["creation", "check"]) {
-      await allow(
-        await request(`${sessionPath}/plugin-rpc`, "POST", {
-          kind: "runtime",
-          pluginId,
-          runtimeId: `${pluginId}/${runtime}`,
-          payload: {},
-        }),
-      );
+  }
+  async function actionRequest(type: string, payload: Record<string, unknown>) {
+    const body = { requestId: crypto.randomUUID(), sessionId, type, payload };
+    const previous = await store.listTurnResults(sessionId);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const response = await request("/api/actions", "POST", body);
+      if (response.status !== 202) return response;
+      expect(await store.listTurnResults(sessionId)).toEqual(previous);
+      await allow(response);
     }
+    throw new Error("Action approval did not settle");
   }
   async function action(type: string, payload: Record<string, unknown>) {
     const previousIds = new Set(
       (await store.listTurnResults(sessionId)).map((row) => row.turnId),
     );
-    const response = await request("/api/actions", "POST", {
-      requestId: crypto.randomUUID(),
-      sessionId,
-      type,
-      payload,
-    });
+    const response = await actionRequest(type, payload);
     const text = await response.text();
     expect(response.status, text).toBe(200);
     const events = text
@@ -307,12 +303,7 @@ sources:
     const previousIds = new Set(
       (await store.listTurnResults(sessionId)).map((row) => row.turnId),
     );
-    const response = await request("/api/actions", "POST", {
-      requestId: crypto.randomUUID(),
-      sessionId,
-      type: "start_session",
-      payload: {},
-    });
+    const response = await actionRequest("start_session", {});
     expect(response.status, await response.text()).toBe(200);
     const result = (await store.listTurnResults(sessionId)).at(-1)!;
     expect(previousIds.has(result.turnId)).toBe(false);
@@ -326,6 +317,50 @@ sources:
     });
     expect(await store.listPlayerInputs(sessionId)).toHaveLength(0);
     expect(await store.listCharacters(sessionId)).toHaveLength(0);
+    // The provider completed before creation failed. Retrying must use its
+    // committed schema, not rely on a same-execution input that is now absent.
+    await store.deletePluginData(sessionId, pluginId, "rules", "creation");
+    const recovered = await action("start_session", {});
+    expect(
+      recovered.runtimeResults.some(
+        (runtime) => runtime.runtimeId === "core-fixture/schema",
+      ),
+    ).toBe(false);
+    expect((await latestForm()).form.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "tideReading" }),
+        expect.objectContaining({ name: "stealth" }),
+      ]),
+    );
+  });
+
+  it("requests exact runtime grants before creating any turn and honors denial", async () => {
+    const response = await request("/api/actions", "POST", {
+      requestId: "approval-check",
+      sessionId,
+      type: "start_session",
+      payload: {},
+    });
+    expect(response.status).toBe(202);
+    const pending = await response.json();
+    expect(pending.pending).toMatchObject({
+      pluginId,
+      action: expect.stringMatching(/^runtime:tabletop-probe\//),
+    });
+    const denied = await request(
+      `/api/approvals/${pending.approvalId}/decision`,
+      "POST",
+      { decision: "deny", scope: "session" },
+    );
+    expect(denied.status).toBe(200);
+    expect(await store.listTurnResults(sessionId)).toEqual([]);
+    expect(await store.listTurnMessages(sessionId)).toEqual([]);
+    expect(await store.listCharacters(sessionId)).toEqual([]);
+    expect((await store.getSession(sessionId))?.completedPlayerTurns).toBe(0);
+    await action("start_session", {});
+    expect((await latestForm()).form.interactionId).toBe(
+      `${pluginId}-character`,
+    );
   });
 
   it("initializes checks without rebuilding an existing player", async () => {

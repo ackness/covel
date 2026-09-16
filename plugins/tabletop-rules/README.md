@@ -12,6 +12,8 @@
 
 默认从世界 schema 的有界整数 `abilities` 属性生成配点规则，基础值取该属性默认值，额外预算为 4（不超过剩余容量）。健康、体力等资源不会自动纳入配点。
 
+世界 schema 已在之前的 setup 回合生成时，通过公开的 `get-character-schema` 工具读取已提交结果，支持创角失败后恢复以及已有角色的后补启用。
+
 世界可通过现有 world-data 导入声明 `schema: plugin://tabletop-rules/rules`、`to: plugin:tabletop-rules/rules`、`key: id`，提供 `{ "id": "creation", "budget": 4, "attributes": [{ "id": "combat", "label": "格斗", "base": 1, "max": 5 }] }`。`key` 是 JSON 对象中的字段名。所选属性必须符合世界角色 schema。创角首次显示时冻结规则，避免后续改配置改变已展示表单的含义。
 
 表单先执行类型、范围、步长和插件配点校验，再接受输入。错误可以在原表单上修改；已接受输入不可篡改。角色写入、规则记录和检定回执使用执行事务。检定按提交 ID 去重，重启或重试已提交成功的执行不会重掷。执行失败且没有提交回执时，重试会重新结算；失败结果不会作为已确认事实使用。

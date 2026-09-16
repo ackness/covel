@@ -19,6 +19,7 @@ import {
   reduceTurnSuspended,
 } from "./event-reducers.js";
 import { toStreamMessages } from "./restore-session.js";
+import { addBlockMessageFromSse } from "./sse-handler.js";
 import { reconcileExecutionSteps } from "./snapshot-execution-steps.js";
 import { enrichGameStateFromSnapshot } from "./game-state.js";
 import {
@@ -79,7 +80,7 @@ export function isCurrentSubscriptionEvent(
   );
 }
 
-function createSubscriptionEventHandler(
+export function createSubscriptionEventHandler(
   options: Pick<
     UseSessionSubscriptionOptions,
     "dispatch" | "workspace" | "sessionIdRef" | "stateRef"
@@ -89,6 +90,20 @@ function createSubscriptionEventHandler(
 ) {
   return (event: SubscriptionEvent): void => {
     switch (event.type) {
+      case "interaction.requested":
+      case "ui.rendered": {
+        const payload = event.payload ?? {};
+        const block = payload.block;
+        if (block && typeof block === "object" && !Array.isArray(block)) {
+          addBlockMessageFromSse(
+            options,
+            block as Record<string, unknown>,
+            payload,
+            event.timestamp,
+          );
+        }
+        break;
+      }
       case "system.reset": {
         // The server detected a replay gap or epoch change (ring wrapped,
         // session evicted, or pod/process restart) — our event cursor is
@@ -407,7 +422,7 @@ export function useSessionSubscription({
     // plugin-data.changed arrives on topic="plugin" with
     // _subType="plugin-data.changed". `game` carries turn.suspended/resumed.
     const sub = createSessionSubscription(sessionId, {
-      topics: ["plugin", "system", "game", "runtime", "job"],
+      topics: ["plugin", "system", "game", "runtime", "job", "state"],
       onStateChange: handleConnectionStateChange,
     });
     subscriptionRef.current = sub;

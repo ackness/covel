@@ -16,7 +16,8 @@ inputs:
     select: /worldSchema
     required: false
 tools:
-  builtin: [list-characters, create-character, create-form]
+  builtin:
+    [get-character-schema, list-characters, create-character, create-form]
 dataSchemas:
   rules:
     schemaVersion: 1

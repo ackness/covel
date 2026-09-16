@@ -21,6 +21,7 @@
 | **sync-characters**                   | builtin | —                   | auto-allow | 原子批量创建/更新角色；新角色 ≤5、已有角色更新 ≤10                                        |
 | **list-characters**                   | builtin | —                   | auto-allow | 列出本 session 所有角色（session 作用域，跨插件可见）                                     |
 | **get-character**                     | builtin | —                   | auto-allow | 按 id 或 name 查找单个角色                                                                |
+| **get-character-schema**              | builtin | —                   | auto-allow | 读取当前会话的角色属性 schema，支持跨回合恢复创角                                         |
 | **world-dimension-get**               | builtin | —                   | auto-allow | 按需读取当前 session 世界的结构化维度字段                                                 |
 | **emit-event**                        | builtin | —                   | auto-allow | 发射当前 session 已声明的领域事件（一次一个 topic），校验 topic + payload schema          |
 | **suspend**                           | builtin | —                   | auto-allow | 挂起当前 runtime 等待玩家输入，写 `suspensions` 表，可通过 resume API 恢复                |
@@ -610,7 +611,7 @@ Updated npc "苏婉" (char-abc123) → v2.
 
 列出本 session 所有角色（session 作用域，跨插件可见）。输出是**紧凑文本列表**，一行一个角色，包含 id / 名字 / 类型 / 版本 / 简短描述 —— 方便 LLM 快速对齐已知人物，需要完整属性时再单独调用 `get-character`。
 
-> **当前无捆绑插件声明它。** `character-tracker` 曾经声明过，但它的角色名册是在构建 prompt 时通过 `input.inject` 注入的（`<existing-characters>`），拿工具再查一遍是多余的往返。需要名册的第三方插件仍可声明；插件自己已经注入名册时，改用 `get-character` 处理"摘要不够、要看完整属性"的场景。
+叙事与聊天叙事插件声明此工具，用于查询当前场景之外的角色；第三方插件也可声明。已经通过上下文注入角色名册的插件，可用 `get-character` 补充摘要中没有的完整属性。
 
 **排序算法**：主键 `version desc`（版本越高 = 被交互次数越多 = 频率越高），次键 `updatedAt desc`（频率相同时最近 turn 的优先）。
 
@@ -630,6 +631,12 @@ Characters in session (3 total, sorted by frequency then recency):
 ```
 
 ---
+
+### get-character-schema
+
+参数为 `{}`，返回 `{ schema: CharacterAttributeSchema | null, _text }`。框架按当前会话的活跃 `world-data-provider` capability 定位 provider，读取其已提交的 `schema/character-attributes`。没有 provider 或 schema 尚不可用时返回 `null`。工具不写数据，不接受其他会话或插件 ID。
+
+第三方创角插件可以优先使用本次执行的 schema input binding；恢复旧会话时，通过本工具读取此前已完成的 setup 结果。无需读取其他插件的私有数据，也无需依赖官方 provider 名称。
 
 ### get-character
 

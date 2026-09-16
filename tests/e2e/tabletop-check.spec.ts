@@ -58,6 +58,37 @@ for (const width of [1512, 390]) {
     };
     let form: Record<string, unknown> | undefined;
     let opened = false;
+    const openedForm = Promise.withResolvers<void>();
+    let delivered = false;
+    await page.route("**/api/events/stream?*", async (route) => {
+      await openedForm.promise;
+      if (delivered)
+        return route.fulfill({
+          contentType: "text/event-stream",
+          body: ": connected\n\n",
+        });
+      delivered = true;
+      const event = {
+        id: "committed-form",
+        type: "interaction.requested",
+        topic: "state",
+        sessionId: fixture.id,
+        timestamp: "2026-01-01T00:01:00Z",
+        payload: {
+          turnId: "opened",
+          block: {
+            id: "check-form",
+            type: "interactive_form",
+            data: form,
+            meta: { turnId: "opened" },
+          },
+        },
+      };
+      await route.fulfill({
+        contentType: "text/event-stream",
+        body: `event: interaction.requested\ndata: ${JSON.stringify(event)}\n\n`,
+      });
+    });
     const spec = JSON.parse(
       (
         await readFile(
@@ -144,6 +175,7 @@ for (const width of [1512, 390]) {
             createdAt: new Date().toISOString(),
           });
           opened = true;
+          openedForm.resolve();
           return route.fulfill({
             json: { status: "ok", turnId: "opened", runtimeResults: [] },
           });
@@ -174,11 +206,18 @@ for (const width of [1512, 390]) {
       await page.getByRole("tab", { name: "属性检定", exact: true }).click();
       await request.click({ timeout: 5_000 });
       await expect.poll(() => opened).toBe(true);
-      await page.reload();
+      if (width < 1024)
+        await page
+          .getByRole("button", { name: /关闭|Close/, exact: true })
+          .click();
       await expect(
         page.getByRole("textbox", { name: "Attempted action" }),
       ).toBeVisible();
       await expect(input).toBeDisabled();
+      await page.reload();
+      await expect(
+        page.getByRole("textbox", { name: "Attempted action" }),
+      ).toBeVisible();
       await page
         .getByRole("textbox", { name: "Attempted action" })
         .fill("Climb the harbor wall");

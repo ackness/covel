@@ -2799,6 +2799,8 @@ id: evt-002
 
 支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_turn` · `retry_runtime` · `retry_failed_runtimes`。六种请求都必须显式提供与 type 匹配的 `payload`；不接受未知字段。
 
+**社区插件授权**：缺少授权时，在启动 SSE 和写入回合之前返回 HTTP **202 JSON** `{ status: "approval-required", approvalId, pending }`。客户端通过审批接口授予当前会话权限后，使用同一个 `requestId` 重发原请求；可能依次询问 `covel:plugin-server-code` 及各个 `runtime:<name>`。普通动作检查已选插件中参与自动执行的 runtime（经过 capability provider 替换），显式重试只检查选定的目标；手动 runtime 的普通调用仍走 plugin-RPC 授权。拒绝审批不得执行回合。hosted 模式仍要求 operator 权限；执行器在真正加载代码时继续检查授权。Web 客户端支持连续审批，并拒绝重复或跨会话的审批响应。
+
 | `payload` 字段    | 适用 `type`             | 说明                                                                                                                                                                                   |
 | ----------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `content`         | `send_message`          | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                        |

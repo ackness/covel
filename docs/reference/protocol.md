@@ -217,6 +217,8 @@ Provider 图片输入矩阵：
 
 所有 snapshot 事件由服务端经 eventBus 广播（topic=`session`），SSE 命名事件名来自 payload 的 `_subType`。
 
+已提交的 `interaction.requested` 和 `ui.rendered` 同时通过 `state` topic 推送，包含 `block` 和 `turnId`，让手动或后台 runtime 生成的交互无需刷新即可显示。整个执行事务成功后才发布，回滚不发布。客户端按 `block.id` 合并，避免 action SSE 与订阅或事件重放产生重复消息；断线后的权威恢复仍读取 session view。
+
 | 事件类型                 | 方向 | 描述                                                                                                                                | 负载                                                                            |
 | ------------------------ | ---- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `state.snapshot.created` | S→C  | 新 snapshot 已写入。由 turn-executor（auto）和 snapshots 路由（manual / fork）发出                                                  | `{ turnId, snapshotId, kind: 'auto' \| 'manual' \| 'fork', parentSnapshotId? }` |

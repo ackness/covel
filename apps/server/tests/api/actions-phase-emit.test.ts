@@ -50,6 +50,7 @@ function makeEntry(args: {
   };
   return {
     id: args.id,
+    source: "builtin",
     summary: makeSummary({ id: args.id, name: args.id }),
     manifest: parsed,
     manifests: [parsed],

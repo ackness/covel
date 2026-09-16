@@ -139,8 +139,8 @@ function flushNarrativeDeltaBuffer(
   }
 }
 
-function addBlockMessageFromSse(
-  deps: Pick<SseEventHandlerDeps, "dispatch" | "ds" | "sessionIdRef">,
+export function addBlockMessageFromSse(
+  deps: Pick<SseEventHandlerDeps, "dispatch">,
   block: Record<string, unknown>,
   payload: Record<string, unknown>,
   timestamp: string,

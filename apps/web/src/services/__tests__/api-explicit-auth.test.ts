@@ -54,6 +54,86 @@ afterEach(() => {
 });
 
 describe("explicit session auth on indirect routes", () => {
+  it("retries an action only after each exact approval and preserves its request id", async () => {
+    const pending = (action: string) => ({
+      ...okJson({
+        status: "approval-required",
+        approvalId: action,
+        pending: { sessionId: "sess-1", pluginId: "external", action },
+      }),
+      status: 202,
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(pending("covel:plugin-server-code"))
+      .mockResolvedValueOnce(pending("runtime:external/create"))
+      .mockResolvedValueOnce({
+        ...okJson(),
+        body: new ReadableStream({ start: (controller) => controller.close() }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    const approve = vi.fn(async () => true);
+    const done = vi.fn();
+    const error = vi.fn();
+    api.sendAction(
+      {
+        requestId: "original",
+        sessionId: "sess-1",
+        type: "start_session",
+        payload: {},
+      },
+      vi.fn(),
+      error,
+      done,
+      approve,
+    );
+    await vi.waitFor(() => expect(done).toHaveBeenCalledOnce());
+    expect(error).not.toHaveBeenCalled();
+    expect(approve).toHaveBeenCalledTimes(2);
+    expect(
+      fetchMock.mock.calls.map((call) => JSON.parse(call[1].body).requestId),
+    ).toEqual(["original", "original", "original"]);
+  });
+
+  it.each(["denied", "repeated", "foreign"])(
+    "does not execute past a %s action approval",
+    async (mode) => {
+      const pending = {
+        ...okJson({
+          status: "approval-required",
+          approvalId: "a",
+          pending: {
+            sessionId: mode === "foreign" ? "other" : "sess-1",
+            pluginId: "external",
+            action: "runtime:external/create",
+          },
+        }),
+        status: 202,
+      };
+      const fetchMock = vi.fn().mockResolvedValue(pending);
+      vi.stubGlobal("fetch", fetchMock);
+      const approve = vi.fn(async () => mode !== "denied");
+      const done = vi.fn();
+      const error = vi.fn();
+      api.sendAction(
+        {
+          requestId: "original",
+          sessionId: "sess-1",
+          type: "start_session",
+          payload: {},
+        },
+        vi.fn(),
+        error,
+        done,
+        approve,
+      );
+      await vi.waitFor(() => expect(error).toHaveBeenCalledOnce());
+      expect(done).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(mode === "repeated" ? 2 : 1);
+      expect(approve).toHaveBeenCalledTimes(mode === "foreign" ? 0 : 1);
+    },
+  );
+
   it("authenticates action, steer, abort, media upload, UI specs, and traces", async () => {
     api.storeSessionToken("sess-1", "owner-secret");
     const fetchMock = vi

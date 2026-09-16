@@ -566,6 +566,25 @@ export function createCharacterTools(
   deps: CharacterToolDeps = {},
 ): readonly ToolModule[] {
   return [
+    tool({
+      name: "get-character-schema",
+      description:
+        "Read the current session's character attribute schema from its active world-data provider.",
+      parameters: z.object({}),
+      execute: async (_params, context) => {
+        const schema = await loadCharacterSchema(
+          store,
+          deps,
+          context.sessionId,
+        );
+        return {
+          _text: schema
+            ? JSON.stringify(schema)
+            : "No character schema is available.",
+          schema,
+        };
+      },
+    }),
     createCreateCharacterTool(store, deps),
     createUpdateCharacterTool(store, deps),
     createSyncCharactersTool(store, deps),

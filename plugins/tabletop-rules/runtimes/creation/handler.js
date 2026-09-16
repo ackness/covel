@@ -9,13 +9,19 @@ export default async function (ctx) {
     type: "player",
   });
   const storedRules = await ctx.pluginData.get("setup", "rules");
+  // Input bindings only cover this execution; a resumed setup may have already
+  // committed its world schema in an earlier turn.
+  const schema = storedRules
+    ? undefined
+    : (ctx.inputs?.schema?.value ??
+      (await ctx.tools.call("get-character-schema", {})).schema);
   if (characters.length) {
     if (!storedRules)
       await ctx.pluginData.set(
         "setup",
         "rules",
         creationRules(
-          ctx.inputs?.schema?.value,
+          schema,
           await ctx.pluginData.get("rules", "creation"),
           ctx.locale,
         ),
@@ -58,7 +64,7 @@ export default async function (ctx) {
   const rules =
     storedRules ??
     creationRules(
-      ctx.inputs?.schema?.value,
+      schema,
       await ctx.pluginData.get("rules", "creation"),
       ctx.locale,
     );
