@@ -75,17 +75,18 @@ export async function seedAppSettings(page: Page) {
 
 /**
  * Exercise file-backed worlds even when the clean E2E server advertises its
- * memory store as browser-authoritative. The response otherwise stays real so
- * the test still observes the server's current health contract.
+ * memory store as browser-authoritative. Read the real health once before
+ * navigation; forwarding each intercepted request races with page reloads and
+ * can fulfill an already-cancelled route during fixture cleanup.
  */
 export async function useServerWorlds(page: Page) {
+  const response = await page.request.get("/api/health");
+  expect(response.ok()).toBeTruthy();
+  const health = (await response.json()) as {
+    storage?: { data?: Record<string, unknown> };
+  };
   await page.route("**/api/health", async (route) => {
-    const response = await route.fetch();
-    const health = (await response.json()) as {
-      storage?: { data?: Record<string, unknown> };
-    };
     await route.fulfill({
-      response,
       json: {
         ...health,
         storage: {

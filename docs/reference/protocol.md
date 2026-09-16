@@ -432,7 +432,7 @@ Web 收到 reset 或重连后会以 revision guard 重新拉取 session snapshot
 
 所有非 2xx 响应均使用 `{ error, code?, details? }`，不返回业务 `status`。
 
-带延迟 `entry` 的 community action 会连续返回两次 `approval-required`：先授权 `covel:plugin-server-code`，重试后再授权真实 action。客户端逐阶段展示审批并重试原请求，最多处理两个阶段，超过上限即终止以避免异常审批循环。
+带延迟 `entry` 的 community action 会连续返回两次 `approval-required`：先授权 `covel:plugin-server-code`，重试后再授权真实 action。客户端逐阶段展示审批并重试原请求，同一请求重复索取相同 `(pluginId, action)` 授权时终止，并拒绝跨会话审批响应。`framework.submit-form` 的批次可涉及多个来源插件，不设两阶段数量限制；各来源的 server-code 授权齐全后才校验、原子持久化。
 
 **框架默认 action:** 见 [api.md](api.md#post-apisessionsidplugin-rpc) 的"框架默认 action"小节。
 

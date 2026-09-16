@@ -54,6 +54,45 @@ afterEach(() => {
 });
 
 describe("explicit session auth on indirect routes", () => {
+  it("retries restored form submissions with the same values and both credentials", async () => {
+    api.storeSessionToken("sess-1", "synthetic-owner");
+    api.storeOperatorToken("synthetic-operator");
+    const result = { results: [{ interactionId: "form", accepted: true }] };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        okJson({ status: "approval-required", approvalId: "approval" }),
+      )
+      .mockResolvedValueOnce(okJson({ status: "ok", result }));
+    vi.stubGlobal("fetch", fetchMock);
+    const resolveResponse = vi.fn(async (response, retry) => {
+      expect(response.status).toBe("approval-required");
+      return retry();
+    });
+    expect(
+      await api.submitInputs(
+        "sess-1",
+        {
+          turnId: "turn",
+          submissions: [
+            { interactionId: "form", type: "form", values: { points: 4 } },
+          ],
+        },
+        resolveResponse,
+      ),
+    ).toEqual(result);
+    expect(fetchMock.mock.calls[0][1].body).toBe(
+      fetchMock.mock.calls[1][1].body,
+    );
+    for (const index of [0, 1]) {
+      expect(headersAt(fetchMock, index).get("Authorization")).toBe(
+        "Bearer synthetic-operator",
+      );
+      expect(headersAt(fetchMock, index).get("X-Session-Token")).toBe(
+        "synthetic-owner",
+      );
+    }
+  });
   it("retries an action only after each exact approval and preserves its request id", async () => {
     const pending = (action: string) => ({
       ...okJson({

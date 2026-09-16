@@ -130,7 +130,7 @@ function resolveLabels(locale?: string): SubmitFormLabels {
   };
 }
 
-function findCommittedInteraction(
+export function findCommittedInteraction(
   messages: readonly MessageLike[],
   turnId: string,
   interactionId: string,

@@ -553,7 +553,7 @@ Session 级 lorebook 词条 CRUD。Entries 通常由插件通过 proposal commit
 | GET  | `/api/sessions/:id/snapshots/:snapshotId` | 按 id 获取单个快照（含完整 payload）                                                                  |
 | POST | `/api/sessions/:id/fork`                  | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息；响应一次性返回 child `ownerToken` |
 
-Fork 不继承 community server-code grant；child 中对应插件保持未激活，需由 operator 在新 session 内重新 enable/approve。进程重启后同样不恢复易失 grant，`GET /api/sessions/:id/plugins` 会清理缺少当前 grant 的历史 active community 项。
+Fork 不继承 community server-code grant；child 中对应插件保持未激活，需由 operator 在新 session 内重新 enable/approve。进程重启后同样不恢复易失 grant；`GET /api/sessions/:id/plugins` 将缺少当前 grant 的 community 项显示为未激活，但保留会话中保存的插件选择，便于后续调用重新授权。
 
 ### 角色数据
 
@@ -1320,6 +1320,8 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 #### `POST /api/sessions/:id/plugin-rpc` (`framework.submit-form`)
 
+带插件校验器的旧表单在重启或撤销授权后，提交会先返回 **202** `approval-required`，请求其来源插件的 `covel:plugin-server-code` session grant。来源只从已提交 interaction 的 `sourcePluginId` 读取，客户端不能指定。批量提交可依次请求多个插件；全部授权和校验通过后才一次性写入。拒绝授权保留表单内容；已禁用或卸载的来源插件返回 400，不会自动启用。Web 在授权后重发同一份提交，hosted 部署同时需要 operator 凭证。
+
 提交一个或多个玩家交互响应。
 
 **参数:**
@@ -1674,7 +1676,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 
 > **提交结果是权威判据**：runtime 可能返回 `success` 而其 proposal 提交失败。此时同步 RPC 返回 `500 turn_commit_failed`，诊断位于通用错误信封的 `details`；background job 标记 `failed`（`error` 说明失败的 proposal 数量），且**不会**调度该回合的 deferred follower —— 后续 follower 不应建立在已回滚的状态上。主回合路径（`POST /api/actions`）遵循同一规则。
 
-> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin 的 entry 在 boot 时已运行，其未知 action 直接 404。
+> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并在同一请求重复索取同一 `(pluginId, action)` 授权时终止重试。hosted 层级两个步骤都要求 operator token。builtin 的 entry 在 boot 时已运行，其未知 action 直接 404。
 >
 > **community 插件 + `runtimeId`（runtime 模式）同样采用两阶段授权**：缺少 server-code grant 时第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试返回 `runtime:<runtimeId>` 审批；两个**精确** grant 同时存在，runtime 才会加载执行。entry import 也只认精确 `covel:plugin-server-code` grant，任意其他 action grant 不会解锁模块加载。revoke 按 `(session, plugin)` 前缀清除两类 grant。
 

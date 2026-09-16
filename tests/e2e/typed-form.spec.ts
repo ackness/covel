@@ -15,6 +15,17 @@ for (const width of [1512, 390]) {
       await page.request.get(`/api/sessions/${fixture.id}/view`)
     ).json();
     const submissions: Array<Record<string, unknown>> = [];
+    let authorized = false;
+    const decisions: string[] = [];
+    await page.route(
+      "**/api/approvals/restored-form/decision",
+      async (route) => {
+        const { decision } = route.request().postDataJSON();
+        decisions.push(decision);
+        authorized = decision === "allow";
+        await route.fulfill({ json: { ok: true, decision, scope: "session" } });
+      },
+    );
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
     const form = {
@@ -81,6 +92,19 @@ for (const width of [1512, 390]) {
       async (route) => {
         const body = route.request().postDataJSON();
         if (body.action !== "submit-form") return route.fallback();
+        if (!authorized)
+          return route.fulfill({
+            status: 202,
+            json: {
+              status: "approval-required",
+              approvalId: "restored-form",
+              pending: {
+                sessionId: fixture.id,
+                pluginId: "third-party-form",
+                action: "covel:plugin-server-code",
+              },
+            },
+          });
         const values = body.payload.submissions[0].values;
         submissions.push(values);
         if (values.strength + values.agility !== 4) {
@@ -116,6 +140,18 @@ for (const width of [1512, 390]) {
       await strength.fill("3");
       await agility.fill("3");
       await submit.click();
+      await page.getByRole("button", { name: /^(Deny|拒绝)$/ }).click();
+      await expect.poll(() => decisions).toEqual(["deny"]);
+      await expect(strength).toHaveValue("3");
+      await expect(submit).toBeEnabled();
+      expect(submissions).toHaveLength(0);
+      expect(fixture.actions).toHaveLength(0);
+      await expect(
+        page.getByText(/^(出错了|Something went wrong)$/),
+      ).toHaveCount(0);
+      await submit.click();
+      await page.getByRole("button", { name: /^(Authorize|授权)$/ }).click();
+      await expect.poll(() => decisions).toEqual(["deny", "allow"]);
       await expect.poll(() => submissions.length).toBe(1);
       expect(submissions[0]).toEqual({ strength: 3, agility: 3, ready: false });
       await expect(strength).toBeEnabled();

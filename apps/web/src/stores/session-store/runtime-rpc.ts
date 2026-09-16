@@ -16,6 +16,25 @@ import { toExecutionStepStatus } from "./execution-steps.js";
 
 const CONNECTION_CLOSED_REASON = "__i18n:session.reasonConnectionClosed__";
 
+/** Refresh grant-backed UI state even if the subsequent form/action is rejected. */
+export function refreshApprovedSessionPlugins(
+  sessionId: string,
+  dispatch: SessionDispatch,
+  isCurrent: () => boolean,
+): void {
+  void api
+    .listSessionPlugins(sessionId)
+    .then((plugins) => {
+      if (isCurrent())
+        dispatch({
+          type: "LOAD_SESSION_PLUGINS",
+          plugins: [...plugins.items],
+          commands: [...plugins.commands],
+        });
+    })
+    .catch(ignoreError("refresh plugins after approval"));
+}
+
 export async function resumeSessionSuspension(
   suspensionId: string,
   data: unknown,
@@ -216,17 +235,7 @@ export function runActionStream(
         if (proceed) {
           // A restart revokes community grants without changing activePlugins.
           // Refresh the visible activation state after restoring that grant.
-          void api
-            .listSessionPlugins(request.sessionId)
-            .then((plugins) => {
-              if (isCurrent())
-                dispatch({
-                  type: "LOAD_SESSION_PLUGINS",
-                  plugins: [...plugins.items],
-                  commands: [...plugins.commands],
-                });
-            })
-            .catch(ignoreError("refresh plugins after action approval"));
+          refreshApprovedSessionPlugins(request.sessionId, dispatch, isCurrent);
         }
         return proceed;
       },

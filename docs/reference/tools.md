@@ -233,7 +233,7 @@ PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后�
 
 **FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`。`number` 的默认值与提交值是有限数字，`checkbox` 是布尔值，其余类型是字符串。数字字段支持 `min`、`max`、正数 `step`，步长相对 `min ?? 0` 计算；前端保留数值类型，服务端再次校验并把旧客户端的数字字符串规范化为数字。数字字段清空不会变成 0 或重新应用默认值；必填项会被拒绝。未提供的字段使用默认值（含 0、false）；文本/选择字段保留空字符串使用默认值的兼容行为。`placeholder` 只用于展示。`select` 默认值必须属于选项。
 
-可选 `validation: { name, data? }` 指向发出表单的插件通过 `covel.registerFormValidator(name, validator)` 注册的同步纯校验函数。函数接收规范化的 `values` 与提交时不可修改的表单 `data`，返回错误字符串或 `undefined`。插件来源从已提交消息的 `sourcePluginId` 确定，客户端不能指定；所有字段和跨字段校验通过后，整个提交批次才落库。校验失败返回 400，允许修改原表单。插件必须仍处于启用和授权状态；缺失的校验器不会静默跳过。
+可选 `validation: { name, data? }` 指向发出表单的插件通过 `covel.registerFormValidator(name, validator)` 注册的同步纯校验函数。函数接收规范化的 `values` 与提交时不可修改的表单 `data`，返回错误字符串或 `undefined`。插件来源从已提交消息的 `sourcePluginId` 确定，客户端不能指定；所有字段和跨字段校验通过后，整个提交批次才落库。校验失败返回 400，允许修改原表单。插件必须仍处于启用和授权状态；缺失的校验器不会静默跳过。重启或撤销授权后，提交接口先请求来源插件的 server-code 授权（202），授权后重试原提交。已禁用或卸载的插件仍返回 400。框架通过 `findCommittedInteraction` 统一定位已提交表单，授权和校验使用同一份来源记录。
 
 旧插件的有限数字字符串和 `"true"` / `"false"` 默认值仍可使用，提交时统一规范化；新插件应直接声明数字、布尔值。
 

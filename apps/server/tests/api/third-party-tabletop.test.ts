@@ -392,6 +392,51 @@ sources:
     expect((await latestForm()).form.interactionId).toMatch(/-check-/);
   });
 
+  it("reauthorizes a restored form directly without toggling its plugin", async () => {
+    await action("start_session", {});
+    const creation = await latestForm();
+    const values = { characterName: "Ada", tideReading: 4, combat: 2 };
+    await restart();
+    const approval = await submit(creation, values);
+    expect(approval.status, await approval.clone().text()).toBe(202);
+    const pending = await approval.json();
+    expect(pending.pending).toMatchObject({
+      pluginId,
+      action: "covel:plugin-server-code",
+    });
+    expect(await store.listPlayerInputs(sessionId)).toEqual([]);
+    expect(
+      (
+        await request(`/api/approvals/${pending.approvalId}/decision`, "POST", {
+          decision: "deny",
+          scope: "session",
+        })
+      ).status,
+    ).toBe(200);
+    expect(await store.listPlayerInputs(sessionId)).toEqual([]);
+    await allow(await submit(creation, values));
+    expect((await submit(creation, { ...values, combat: 4 })).status).toBe(400);
+    expect(await store.listPlayerInputs(sessionId)).toEqual([]);
+    expect((await submit(creation, values)).status).toBe(200);
+    expect((await submit(creation, values)).status).toBe(200);
+    expect(await store.listPlayerInputs(sessionId)).toHaveLength(1);
+    expect(
+      (await request(`${sessionPath}/approvals?pluginId=${pluginId}`, "DELETE"))
+        .status,
+    ).toBe(200);
+    await allow(await submit(creation, values));
+    expect((await submit(creation, values)).status).toBe(200);
+    expect(await store.listPlayerInputs(sessionId)).toHaveLength(1);
+    await restart();
+    expect(
+      (await request(`${sessionPath}/plugins/${pluginId}`, "DELETE")).status,
+    ).toBe(200);
+    expect((await submit(creation, values)).status).toBe(400);
+    expect(
+      await (await request(`${sessionPath}/approvals`)).json(),
+    ).toMatchObject({ items: [] });
+  });
+
   it("derives point buy from the actual mistport ability schema without allocating health", async () => {
     await store.deletePluginData(sessionId, pluginId, "rules", "creation");
     await action("start_session", {});
