@@ -200,9 +200,15 @@ Plugin tool 承接插件自己的业务封装，例如：
 
 `ctx.gateway`、`ctx.media`、`ctx.images`、`ctx.utils` 是 function runtime handler 直接调用的 JS API，**不经过** Tool 注册表 / 审批管线——它们不是 LLM 通过 function calling 触发的工具，而是框架注入给 handler 代码本身的能力。图像生成尤其如此：插件不应该声明一个 `generate-image` 工具让 LLM 调用，而应在 `handler.js` 里直接 `await ctx.images.generate({...})`。完整的 ctx 能力表和图像生成契约见 [plugin-authoring-advanced.md §6](../guide/plugin-authoring-advanced.md#6-函数-runtime手动触发与后台执行)。
 
+### Function runtime 调用工具
+
+`await ctx.tools.call(name, args)` 调用 manifest `tools.builtin` / `tools.plugin` 白名单中的工具，复用参数校验、工具审批、Pre/PostToolUse hook、审计和 proposal 提交流程。调用按顺序执行，后续工具可读到先前的待提交写入；任何失败调用使该 runtime 失败，即使 handler 捕获异常也不会提交部分写入。超时/结束后句柄吊销。只有成功的 runtime 将领域写入与 `ctx.pluginData` 一起交给执行事务。此接口只注入 function runtime，不注入 agent guard。
+
+PostToolUse 的 `terminate` 保留当前调用结果，并拒绝该 handler 后续的工具调用；handler 可正常返回当前结果。被拒绝的后续调用同样使 runtime 失败。
+
 ### 当前代码状态
 
-当前实现里，plugin tool 可以读取注入的 `store`，持久化写入优先通过 `withPendingProposals(...)` 交给 commit chain；deterministic function handler 继续使用 `store` 完成内部批量工作。
+当前实现里，plugin tool 可以读取注入的 `store`，持久化写入优先通过 `withPendingProposals(...)` 交给 commit chain；deterministic function handler 通过 `ctx.tools.call()` 调用声明的工具，通过 `ctx.pluginData` 写入自身数据；社区 handler 不获得完整可写 `store`。
 
 插件对外暴露给 runtime 的稳定契约依旧建议留在插件目录内，由插件自己维护测试。
 
@@ -224,7 +230,11 @@ Plugin tool 承接插件自己的业务封装，例如：
 | submitLabel       | string      | ✓    | 提交按钮文本                        |
 | narrativeTemplate | string      | ✓    | 叙事模板，含 `{{fieldName}}` 占位符 |
 
-**FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue? }`. `defaultValue` is the actual initial value: the web form pre-fills it, and `submit-form` uses it when the submitted value is missing or an empty string. `placeholder` is display-only and is never submitted as a value. For `select`, `defaultValue` must equal a declared option value.
+**FormField**: `{ type, name, label, placeholder?, options?, required?, defaultValue?, min?, max?, step? }`。`number` 的默认值与提交值是有限数字，`checkbox` 是布尔值，其余类型是字符串。数字字段支持 `min`、`max`、正数 `step`，步长相对 `min ?? 0` 计算；前端保留数值类型，服务端再次校验并把旧客户端的数字字符串规范化为数字。数字字段清空不会变成 0 或重新应用默认值；必填项会被拒绝。未提供的字段使用默认值（含 0、false）；文本/选择字段保留空字符串使用默认值的兼容行为。`placeholder` 只用于展示。`select` 默认值必须属于选项。
+
+可选 `validation: { name, data? }` 指向发出表单的插件通过 `covel.registerFormValidator(name, validator)` 注册的同步纯校验函数。函数接收规范化的 `values` 与提交时不可修改的表单 `data`，返回错误字符串或 `undefined`。插件来源从已提交消息的 `sourcePluginId` 确定，客户端不能指定；所有字段和跨字段校验通过后，整个提交批次才落库。校验失败返回 400，允许修改原表单。插件必须仍处于启用和授权状态；缺失的校验器不会静默跳过。
+
+旧插件的有限数字字符串和 `"true"` / `"false"` 默认值仍可使用，提交时统一规范化；新插件应直接声明数字、布尔值。
 
 - type: `text` | `textarea` | `select` | `checkbox` | `number`
 

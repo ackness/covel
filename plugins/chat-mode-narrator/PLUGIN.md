@@ -27,6 +27,11 @@ tools:
     - world-dimension-get
     - memory-search
     - emit-event
+inputs:
+  tabletopCheck:
+    from: { capability: tabletop-check, cardinality: one }
+    select: /checkContext
+    required: false
 input:
   inject:
     - kind: runtime
@@ -55,6 +60,28 @@ relations:
     - living-world-rules
     - branch-reply
 userSettings:
+  - key: narrativePerson
+    type: select
+    default: second
+    label:
+      zh: 叙事人称
+      en: Narrative person
+    description:
+      zh: 旁白如何称呼玩家角色；人物对白保持各自的人称。
+      en: How narration refers to the player character; dialogue keeps each speaker's perspective.
+    options:
+      - value: first
+        label:
+          zh: 第一人称（我）
+          en: First person (I)
+      - value: second
+        label:
+          zh: 第二人称（你）
+          en: Second person (you)
+      - value: third
+        label:
+          zh: 第三人称（角色名）
+          en: Third person (character name)
   - key: dialogueRatio
     type: number
     default: 70
@@ -131,6 +158,10 @@ postHistory:
 - 回复长度：{{ userSettings.proseLength }}
 - 目标活跃说话人数：以 `<active-cast>` 中实际列出的角色为准（由 scene-cast 按玩家设置决定）
 
+## 已结算的跑团检定
+
+若 `<runtime-inputs>` 中存在 `tabletopCheck`，以其 `value` 中的结算结果为准，只叙述对应行动的后果，不重掷、不修改修正值或成败，也不再次通过骰池结算同一行动。没有提交检定时，不编造检定结果。
+
 ## 行动判定（由骰子判定注入）
 
 > 若 prompt 末尾存在 `<check-results>` 块，玩家有失败风险的行动必须按其中的骰池与规则判定成败，不可自由心证。块不存在时按一般叙事逻辑处理。
@@ -143,7 +174,9 @@ postHistory:
 
 ## 写作规则
 
-- 使用第二人称叙述，把玩家称为“你”
+- 叙事人称设置：{{ userSettings.narrativePerson }}。只使用所选人称：first = 以玩家角色为“我”；second = 以玩家角色为“你”；third = 用玩家角色名及合适代词，以该角色的有限视角叙述，不使用全知视角。
+- 人称设置只约束旁白，人物直接对白保留说话者自己的“我/你”；玩家输入的人称不会改变此设置。
+- 任何人称下都不得替玩家编造尚未表达的决定、行动、台词或内心想法。设置变化只作用于后续叙述，不改写历史。
 - 优先让 `<active-cast>` 中的角色说话或产生可见反应
 - 每位发声角色要保持独立口吻、态度和行动目的
 - Start a new blank-line-separated paragraph whenever the speaker changes. Keep narration in its own paragraph. In stage.direction, actor.focus controls the visual spotlight only; dialogue.paragraphSpeakers supplies the independent nameplate for each paragraph. Use exact character IDs from <active-cast>, never inferred names. If there is no actor change, emit cues: [] with the dialogue map. Do not include the map or IDs in the prose.

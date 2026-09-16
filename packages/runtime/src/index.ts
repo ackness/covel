@@ -129,6 +129,7 @@ export type {
 } from "./rpc/rpc-executor.js";
 export {
   submitFormHandler,
+  createSubmitFormHandler,
   RpcValidationError,
 } from "./rpc-defaults/submit-form.js";
 
@@ -227,3 +228,8 @@ export {
   createTrustedHandlerStore,
 } from "./function-runtime/plugin-handler-helpers.js";
 export type { HandlerHelperContext } from "./function-runtime/plugin-handler-helpers.js";
+
+export type {
+  FormValidator,
+  ValidatePluginForm,
+} from "./rpc/form-validator.js";

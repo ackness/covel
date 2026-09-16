@@ -1,4 +1,5 @@
 import type { ComponentRenderer } from "@json-render/react";
+import { useId } from "react";
 import { useStateStore } from "@json-render/react";
 import { useTranslation } from "react-i18next";
 import { clsx } from "clsx";
@@ -93,13 +94,18 @@ export const Alert: ComponentRenderer = ({ element }) => {
 export const FormField: ComponentRenderer = ({ element, bindings }) => {
   const { t } = useTranslation();
   const resolve = useI18nResolver();
+  const fieldId = useId();
   const fieldType = (element.props?.fieldType as string) ?? "text";
   const label = resolve(element.props?.label);
   const placeholder = resolve(element.props?.placeholder);
   const required = element.props?.required as boolean;
   const options = element.props?.options as
     Array<{ value: string; label: string }> | undefined;
-  const value = (element.props?.value as string) ?? "";
+  const rawValue = element.props?.value;
+  const value =
+    typeof rawValue === "string" || typeof rawValue === "number"
+      ? rawValue
+      : "";
   const disabled = element.props?.disabled as boolean;
   const { set } = useStateStore();
   const bindPath = bindings?.value;
@@ -109,12 +115,21 @@ export const FormField: ComponentRenderer = ({ element, bindings }) => {
 
   return (
     <div className="space-y-1.5">
-      <label className="ui-eyebrow text-xs text-muted-foreground">
+      <label
+        htmlFor={fieldId}
+        className="ui-eyebrow text-xs text-muted-foreground"
+      >
         {label}
-        {required && <span className="text-destructive ml-0.5">*</span>}
+        {required && (
+          <span aria-hidden="true" className="text-destructive ml-0.5">
+            *
+          </span>
+        )}
       </label>
       {fieldType === "select" && options ? (
         <select
+          id={fieldId}
+          required={required}
           value={value}
           onChange={(e) => bindPath && set(bindPath, e.target.value)}
           disabled={disabled}
@@ -129,11 +144,42 @@ export const FormField: ComponentRenderer = ({ element, bindings }) => {
             </option>
           ))}
         </select>
+      ) : fieldType === "textarea" ? (
+        <textarea
+          id={fieldId}
+          value={value}
+          required={required}
+          disabled={disabled}
+          placeholder={placeholder}
+          className={fieldCls}
+          onChange={(e) => bindPath && set(bindPath, e.target.value)}
+        />
+      ) : fieldType === "checkbox" ? (
+        <input
+          id={fieldId}
+          type="checkbox"
+          checked={rawValue === true || rawValue === "true"}
+          disabled={disabled}
+          onChange={(e) => bindPath && set(bindPath, e.target.checked)}
+        />
       ) : (
         <input
-          type="text"
+          id={fieldId}
+          type={fieldType === "number" ? "number" : "text"}
+          min={element.props?.min as number | undefined}
+          max={element.props?.max as number | undefined}
+          step={element.props?.step as number | undefined}
+          required={required}
           value={value}
-          onChange={(e) => bindPath && set(bindPath, e.target.value)}
+          onChange={(e) =>
+            bindPath &&
+            set(
+              bindPath,
+              fieldType === "number" && e.target.value !== ""
+                ? e.target.valueAsNumber
+                : e.target.value,
+            )
+          }
           placeholder={placeholder}
           disabled={disabled}
           className={fieldCls}

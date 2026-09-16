@@ -16,6 +16,10 @@
 - 读取玩家输入、世界观、玩家角色数据和可选 NPC 关系上下文。
 - 行动建议交给 `guide`、`scene-prompts` 等下游插件。
 
+## 叙事人称
+
+`narrativePerson` 支持 `first`、`second`、`third`，默认 `second`。玩家设置覆盖世界 `pluginSettings` 中的默认值。只调整后续旁白的人称，保留人物对白和玩家自主权；第三人称使用跟随玩家角色的有限视角。
+
 ## 开发
 
 修改提示词或输入注入后，运行 runtime prompt parity 和 story-filter 测试。

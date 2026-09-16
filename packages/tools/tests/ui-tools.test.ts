@@ -96,6 +96,49 @@ describe("builtin ui tools", () => {
 });
 
 describe("create-form select options", () => {
+  it.each([
+    [0, false],
+    ["0", "false"],
+  ])(
+    "accepts typed and legacy numeric/checkbox defaults (%s, %s)",
+    async (points, ready) => {
+      await expect(
+        createFormTool.execute(
+          {
+            formId: "typed",
+            title: "Typed form",
+            submitLabel: "Submit",
+            narrativeTemplate: "{{points}}",
+            fields: [
+              {
+                type: "number",
+                name: "points",
+                label: "Points",
+                defaultValue: points,
+                min: 0,
+                max: 5,
+                step: 1,
+              },
+              {
+                type: "checkbox",
+                name: "ready",
+                label: "Ready",
+                defaultValue: ready,
+              },
+            ],
+          },
+          CTX,
+        ),
+      ).resolves.toMatchObject({
+        interaction: {
+          fields: [
+            expect.objectContaining({ defaultValue: points }),
+            expect.objectContaining({ defaultValue: ready }),
+          ],
+        },
+      });
+    },
+  );
   // The submitted value is what `narrativeTemplate` interpolates. An option
   // written to help the player choose ("旧地重游 —— 与青砾町有过一段旧事") is
   // exactly the wrong thing to splice into a sentence, so the object form has

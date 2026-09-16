@@ -89,14 +89,52 @@ const formFieldSchema = z
         "select 选项。字符串形式下展示文本即提交值；需要「展示详细、叙事简洁」时用 { value, label }",
       ),
     required: z.boolean().optional(),
-    defaultValue: z.string().optional(),
+    defaultValue: z
+      .union([z.string(), z.number().finite(), z.boolean()])
+      .optional(),
+    min: z.number().finite().optional(),
+    max: z.number().finite().optional(),
+    step: z.number().finite().positive().optional(),
   })
   .superRefine((field, ctx) => {
+    if (
+      field.min !== undefined &&
+      field.max !== undefined &&
+      field.min > field.max
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["max"],
+        message: "max must be at least min",
+      });
+    }
+    if (field.defaultValue !== undefined) {
+      const expected =
+        field.type === "number"
+          ? "number"
+          : field.type === "checkbox"
+            ? "boolean"
+            : "string";
+      // Older plugin packages could only declare string defaults.
+      const legacyDefault =
+        typeof field.defaultValue === "string" &&
+        ((field.type === "number" &&
+          field.defaultValue.trim() !== "" &&
+          Number.isFinite(Number(field.defaultValue))) ||
+          (field.type === "checkbox" &&
+            ["true", "false"].includes(field.defaultValue)));
+      if (typeof field.defaultValue !== expected && !legacyDefault)
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["defaultValue"],
+          message: `defaultValue must be ${expected}`,
+        });
+    }
     if (field.type !== "select" || field.defaultValue === undefined) return;
     const values = (field.options ?? []).map((option) =>
       typeof option === "string" ? option : option.value,
     );
-    if (!values.includes(field.defaultValue)) {
+    if (!values.includes(String(field.defaultValue))) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["defaultValue"],
@@ -127,6 +165,9 @@ export const createFormTool = tool({
           "「短标签 —— 长解释」，整串都会进正文；这种情况改用 { value, label }，" +
           "把短标签放 value、解释放 label",
       ),
+    validation: z
+      .object({ name: z.string().min(1), data: z.unknown().optional() })
+      .optional(),
     submitBehavior: submitBehaviorSchema
       .optional()
       .describe("可选的提交行为：是否回显提交内容、是否立即提交"),
@@ -137,7 +178,7 @@ export const createFormTool = tool({
       const values = (field.options ?? []).map((option) =>
         typeof option === "string" ? option : option.value,
       );
-      if (!values.includes(field.defaultValue)) {
+      if (!values.includes(String(field.defaultValue))) {
         throw new Error(
           `select defaultValue must match a declared option value for ${field.name}`,
         );
@@ -152,6 +193,7 @@ export const createFormTool = tool({
         interactionId: params.formId,
         title: params.title,
         fields: params.fields,
+        validation: params.validation,
         submitLabel: params.submitLabel,
         narrativeTemplate: params.narrativeTemplate,
         submitBehavior: params.submitBehavior,

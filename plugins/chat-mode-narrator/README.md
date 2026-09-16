@@ -18,6 +18,10 @@
 - 通过 manifest relations 和默认 `narrator` 互斥。
 - 暴露对白占比、回复长度、活跃说话人数等玩家设置。
 
+## 叙事人称
+
+`narrativePerson` 支持 `first`、`second`、`third`，默认 `second`。玩家设置覆盖世界 `pluginSettings` 中的默认值。只调整后续旁白的人称，保留人物对白和玩家自主权；第三人称使用跟随玩家角色的有限视角。
+
 ## 开发
 
 修改提示词后，运行覆盖 prompt 拼装和对话模式世界策略的 runtime 测试。

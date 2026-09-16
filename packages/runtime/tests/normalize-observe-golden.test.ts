@@ -16,6 +16,7 @@ import {
   discoverPlugins,
   loadPluginManifest,
   normalizeRuntimeManifest,
+  resolveRuntimeProviders,
 } from "@covel/plugin-loader";
 import { scheduleByDag } from "../src/schedule/dag-scheduler.js";
 
@@ -77,7 +78,8 @@ describe("normalize golden (bundled plugin set)", () => {
 
   it("orders the setup stage by declared edges (pregame → schema-gen → player-init)", async () => {
     const manifests = await loadAllManifests();
-    const setup = manifests.filter(isSetupRuntime);
+    const defaults = manifests.filter((m) => m.pluginId !== "tabletop-rules");
+    const setup = resolveRuntimeProviders(defaults).filter(isSetupRuntime);
     // Declared edges carry the whole order now: schema-gen declares
     // `after: [pregame]` and player-init's turn-scoped `needs` orders it
     // after both. Same serial order the legacy priority chain produced.
@@ -87,6 +89,13 @@ describe("normalize golden (bundled plugin set)", () => {
       ["pregame", "scene-stage/seed"],
       ["world-init/schema-gen"],
       ["char-creator/player-init"],
+    ]);
+    expect(
+      levelsOf(resolveRuntimeProviders(manifests).filter(isSetupRuntime)),
+    ).toEqual([
+      ["pregame", "scene-stage/seed"],
+      ["world-init/schema-gen"],
+      ["tabletop-rules/creation"],
     ]);
   });
 

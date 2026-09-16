@@ -689,3 +689,58 @@ describe("submitFormHandler (Epic A)", () => {
     expect([...VALID_TYPES].sort()).toEqual(Object.keys(everyType).sort());
   });
 });
+
+describe("typed numeric form constraints", () => {
+  it.each(["", "NaN", "Infinity", -1, 6, 2.5])(
+    "rejects %s without accepting the form",
+    async (value) => {
+      const store = createMemoryStore();
+      await seedTemplate(store, "points", "{{points}}", [
+        {
+          type: "number",
+          name: "points",
+          label: "Points",
+          required: true,
+          defaultValue: 1,
+          min: 0,
+          max: 5,
+          step: 1,
+        },
+      ]);
+      await expect(
+        submitOne(store, {
+          interactionId: "points",
+          type: "form",
+          values: { points: value },
+        }),
+      ).rejects.toThrow();
+      expect(await store.listPlayerInputs(SESSION)).toHaveLength(0);
+    },
+  );
+  it("normalizes legacy numeric strings and typed defaults before persistence", async () => {
+    const store = createMemoryStore();
+    await seedTemplate(store, "points", "{{points}}", [
+      {
+        type: "number",
+        name: "points",
+        label: "Points",
+        required: true,
+        min: 0,
+        max: 5,
+        step: 0.5,
+      },
+      { type: "number", name: "zero", label: "Zero", defaultValue: 0 },
+      { type: "checkbox", name: "ready", label: "Ready", defaultValue: false },
+    ]);
+    await submitOne(store, {
+      interactionId: "points",
+      type: "form",
+      values: { points: "2.5" },
+    });
+    expect((await store.listPlayerInputs(SESSION))[0]?.values).toEqual({
+      points: 2.5,
+      zero: 0,
+      ready: false,
+    });
+  });
+});

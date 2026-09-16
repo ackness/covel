@@ -1675,6 +1675,22 @@ worker 以 CAS claim 和可续租 lease 防止多 Pod 重复执行，默认全�
 capabilities: [narrative, world-data-provider]
 ```
 
+### 可替换的默认 runtime
+
+runtime 可声明 `fallbackFor: character-creation`（值必须同时出现在 `capabilities`）。启用另一个同能力的非 fallback runtime 时，只排除默认 runtime，保留同包其他 runtime 和 UI；无需把整个核心插件禁用。替代者必须使用相同 stage，多个替代者或多个默认实现会报错，避免同时展示两套创角流程。禁用替代插件后默认 runtime 自动恢复。社区插件仍须正常安装、启用和授权，安装本身不会替换任何能力。此机制不改变 `relations.conflicts` 的包级语义。
+
+`tabletop-rules` 是可选参考实现：`creation` 提供配点创角，`check` 按已接受提交 ID 持久化 d20 检定。规则配置、预算和属性归插件所有；框架不定义职业、配点或战斗规则。官方叙事插件通过 `tabletop-check` capability 的可选 input binding 消费已结算结果。包可独立安装，测试以不同 ID `tabletop-probe` 按 community 来源运行。
+
+### 确定性函数与表单校验
+
+function runtime 可通过 `ctx.tools.call(name, args)` 调用自身声明的工具，领域写入走事务；通过 `ctx.store.listPlayerInputs(ctx.sessionId)` 读取已接受的表单输入。社区视图将 session 绑定到当前调用，传入其他 session ID 也不能越界。其余数据写入使用 `ctx.pluginData`；无需开放完整 DataStore。工具失败、超时和校验机制见 [tools.md](tools.md#function-runtime-调用工具)。
+
+entry 可注册 `covel.registerFormValidator(name, (values, data) => errorOrUndefined)`，用于配点预算等跨字段约束。表单通过 `validation: { name, data }` 引用自己插件的校验器；拒绝发生在接受输入之前。注册跟随 entry 的原子发布/回滚，禁用插件后不得继续处理其表单。
+
+### 叙事人称
+
+`narrator` 和 `chat-mode-narrator` 声明 `narrativePerson`：`first`、`second`、`third`，默认第二人称。玩家设置覆盖世界 `pluginSettings` 默认值，非法值回退 manifest 默认值。只影响后续旁白，直接对白保留说话者人称，第三人称为跟随玩家角色的有限视角；所有人称都保留玩家自主决定权。
+
 ### tags / relations
 
 `tags` 是面向玩家、作者和准备页筛选的目录标签，例如 `mode:dialogue`、`role:narrator`、`cost:llm`。`capabilities` 保持机器能力契约；框架逻辑依赖 `capabilities`，准备页和组合包匹配使用 `tags`。

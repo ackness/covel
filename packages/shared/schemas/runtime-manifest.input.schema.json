@@ -150,6 +150,10 @@
         "minLength": 1
       }
     },
+    "fallbackFor": {
+      "type": "string",
+      "minLength": 1
+    },
     "tags": {
       "type": "array",
       "items": {

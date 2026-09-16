@@ -869,6 +869,8 @@ export interface RuntimeManifest extends PluginScopedManifestFields {
    * Examples: `['narrative']`, `['world-data-provider']`, `['image-generation']`.
    */
   readonly capabilities?: readonly string[];
+  /** Default runtime yields when another active runtime provides this capability. */
+  readonly fallbackFor?: string;
   /**
    * Named scheduling stage. Required for `auto` / `scheduled` runtimes under
    * the strict authoring schema; forbidden for `event` / `manual`. Selects

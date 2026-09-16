@@ -6,6 +6,8 @@ description:
 pluginType: core-plugin
 entry: ./server/index.js
 stage: setup
+capabilities: [character-creation]
+fallbackFor: character-creation
 outputKind: system
 model: plugin
 timeoutMs: 180000

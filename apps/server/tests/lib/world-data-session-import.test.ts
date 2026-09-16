@@ -228,6 +228,7 @@ describe("world data session importer", () => {
       "living-world-rules/rules",
       "scene-stage/assets",
       "scene-stage/scenes",
+      "tabletop-rules/rules",
     ]);
   });
 

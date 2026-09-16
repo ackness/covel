@@ -12,6 +12,7 @@ import {
   type I18nText,
   type InteractionType,
 } from "@covel/shared";
+import type { ValidatePluginForm } from "../rpc/form-validator.js";
 import type { DataStore } from "@covel/store";
 import type { RpcHandler, RpcHandlerContext } from "../rpc/rpc-registry.js";
 
@@ -44,6 +45,7 @@ interface MessageLike {
   readonly pendingInput?: unknown;
   readonly content: string;
   readonly name?: string;
+  readonly sourcePluginId?: string;
   readonly order: number;
 }
 
@@ -224,7 +226,9 @@ function validateFormValues(
   for (const [name, field] of declared) {
     const submitted = values[name];
     const value =
-      isMissingRequired(submitted) && typeof field.defaultValue === "string"
+      (submitted === undefined ||
+        (field.type !== "number" && isMissingRequired(submitted))) &&
+      field.defaultValue !== undefined
         ? field.defaultValue
         : submitted;
     if (value !== undefined) normalizedValues[name] = value;
@@ -233,7 +237,10 @@ function validateFormValues(
         `Required field "${name}" is missing for interactionId: ${interaction.interactionId}`,
       );
     }
-    if (value === undefined || value === null) continue;
+    if (isMissingRequired(value)) {
+      delete normalizedValues[name];
+      continue;
+    }
 
     switch (field.type) {
       case "text":
@@ -242,7 +249,7 @@ function validateFormValues(
           throw new RpcValidationError(`Field "${name}" must be a string`);
         }
         break;
-      case "number":
+      case "number": {
         if (!(
           (typeof value === "number" && Number.isFinite(value)) ||
           (typeof value === "string" &&
@@ -251,7 +258,29 @@ function validateFormValues(
         )) {
           throw new RpcValidationError(`Field "${name}" must be a number`);
         }
+        const numeric = Number(value);
+        if (
+          (typeof field.min === "number" && numeric < field.min) ||
+          (typeof field.max === "number" && numeric > field.max)
+        ) {
+          throw new RpcValidationError(
+            `Field "${name}" is outside its allowed range`,
+          );
+        }
+        if (typeof field.step === "number") {
+          const base = typeof field.min === "number" ? field.min : 0;
+          const steps = (numeric - base) / field.step;
+          if (
+            !(field.step > 0) ||
+            !Number.isFinite(steps) ||
+            Math.abs(steps - Math.round(steps)) > 1e-8
+          ) {
+            throw new RpcValidationError(`Field "${name}" must match its step`);
+          }
+        }
+        normalizedValues[name] = numeric;
         break;
+      }
       case "checkbox":
         if (
           typeof value !== "boolean" &&
@@ -260,6 +289,7 @@ function validateFormValues(
         ) {
           throw new RpcValidationError(`Field "${name}" must be a checkbox`);
         }
+        normalizedValues[name] = value === true || value === "true";
         break;
       case "select": {
         if (typeof value !== "string") {
@@ -409,147 +439,187 @@ export class RpcValidationError extends Error {
   }
 }
 
-export const submitFormHandler: RpcHandler = async (
-  payload: unknown,
-  context: RpcHandlerContext,
-): Promise<SubmitFormResult> => {
-  const { sessionId, store, locale } = context;
-  const labels = resolveLabels(locale);
+export function createSubmitFormHandler(
+  validatePluginForm?: ValidatePluginForm,
+): RpcHandler {
+  return async (
+    payload: unknown,
+    context: RpcHandlerContext,
+  ): Promise<SubmitFormResult> => {
+    const { sessionId, store, locale } = context;
+    const labels = resolveLabels(locale);
 
-  if (!payload || typeof payload !== "object") {
-    throw new RpcValidationError("payload must be an object");
-  }
-  const body = payload as SubmitFormPayload;
-
-  if (!body.turnId || typeof body.turnId !== "string") {
-    throw new RpcValidationError("turnId (string) is required");
-  }
-
-  if (!Array.isArray(body.submissions) || body.submissions.length === 0) {
-    throw new RpcValidationError("submissions[] is required");
-  }
-
-  const submissions: Submission[] = [];
-  for (const rawSubmission of body.submissions) {
-    if (
-      !rawSubmission ||
-      typeof rawSubmission !== "object" ||
-      Array.isArray(rawSubmission)
-    ) {
-      throw new RpcValidationError("Each submission must be an object");
+    if (!payload || typeof payload !== "object") {
+      throw new RpcValidationError("payload must be an object");
     }
-    const sub = rawSubmission as Submission;
-    if (!sub.interactionId || typeof sub.interactionId !== "string") {
-      throw new RpcValidationError(
-        "Each submission requires interactionId (string)",
-      );
-    }
-    if (!VALID_TYPES.has(sub.type)) {
-      throw new RpcValidationError(
-        `Invalid submission type: ${sub.type}. Must be form|choice|confirmation`,
-      );
-    }
-    if (
-      !sub.values ||
-      typeof sub.values !== "object" ||
-      Array.isArray(sub.values)
-    ) {
-      throw new RpcValidationError(
-        `submission.values must be an object for interactionId: ${sub.interactionId}`,
-      );
-    }
-    submissions.push(sub);
-  }
+    const body = payload as SubmitFormPayload;
 
-  // Framework defaults run with the trusted store view, whose runtime surface
-  // is the full DataStore. Keep the public RpcHandlerStore contract narrow for
-  // third-party handlers and narrow this cast to the two framework-only reads /
-  // transaction methods used here.
-  const frameworkStore = store as typeof store &
-    Pick<DataStore, "listPlayerInputs" | "withTransaction">;
-  const messages = (await frameworkStore.listTurnMessages(
-    sessionId,
-  )) as readonly MessageLike[];
-  const existingInputs = await frameworkStore.listPlayerInputs(sessionId);
-  const prepared: Array<{
-    readonly submissionId: string;
-    readonly interactionId: string;
-    readonly values: Record<string, unknown>;
-    readonly filledNarrative: string;
-    readonly shouldPersist: boolean;
-  }> = [];
-  const preparedByKey = new Map<string, (typeof prepared)[number]>();
-
-  for (const sub of submissions) {
-    const located = findCommittedInteraction(
-      messages,
-      body.turnId,
-      sub.interactionId,
-    );
-    if (!located) {
-      throw new RpcValidationError(
-        `No committed interaction found for turnId=${body.turnId}, interactionId=${sub.interactionId}`,
-      );
+    if (!body.turnId || typeof body.turnId !== "string") {
+      throw new RpcValidationError("turnId (string) is required");
     }
-    const values = validateSubmissionValues(sub, located.interaction);
-    const normalizedSub: Submission = { ...sub, values };
-    const key = `${body.turnId}\0${sub.interactionId}`;
-    const duplicateInBatch = preparedByKey.get(key);
-    if (duplicateInBatch) {
-      if (stableJson(duplicateInBatch.values) !== stableJson(values)) {
+
+    if (!Array.isArray(body.submissions) || body.submissions.length === 0) {
+      throw new RpcValidationError("submissions[] is required");
+    }
+
+    const submissions: Submission[] = [];
+    for (const rawSubmission of body.submissions) {
+      if (
+        !rawSubmission ||
+        typeof rawSubmission !== "object" ||
+        Array.isArray(rawSubmission)
+      ) {
+        throw new RpcValidationError("Each submission must be an object");
+      }
+      const sub = rawSubmission as Submission;
+      if (!sub.interactionId || typeof sub.interactionId !== "string") {
         throw new RpcValidationError(
-          `Interaction ${sub.interactionId} is submitted more than once with conflicting values`,
+          "Each submission requires interactionId (string)",
         );
       }
-      prepared.push({ ...duplicateInBatch, shouldPersist: false });
-      continue;
+      if (!VALID_TYPES.has(sub.type)) {
+        throw new RpcValidationError(
+          `Invalid submission type: ${sub.type}. Must be form|choice|confirmation`,
+        );
+      }
+      if (
+        !sub.values ||
+        typeof sub.values !== "object" ||
+        Array.isArray(sub.values)
+      ) {
+        throw new RpcValidationError(
+          `submission.values must be an object for interactionId: ${sub.interactionId}`,
+        );
+      }
+      submissions.push(sub);
     }
 
-    const existing = existingInputs.find(
-      (input) =>
-        input.turnId === body.turnId && input.formId === sub.interactionId,
-    );
-    if (existing && stableJson(existing.values) !== stableJson(values)) {
-      throw new RpcValidationError(
-        `Interaction ${sub.interactionId} was already submitted with different values`,
+    // Framework defaults run with the trusted store view, whose runtime surface
+    // is the full DataStore. Keep the public RpcHandlerStore contract narrow for
+    // third-party handlers and narrow this cast to the two framework-only reads /
+    // transaction methods used here.
+    const frameworkStore = store as typeof store &
+      Pick<DataStore, "listPlayerInputs" | "withTransaction">;
+    const messages = (await frameworkStore.listTurnMessages(
+      sessionId,
+    )) as readonly MessageLike[];
+    const existingInputs = await frameworkStore.listPlayerInputs(sessionId);
+    const prepared: Array<{
+      readonly submissionId: string;
+      readonly interactionId: string;
+      readonly values: Record<string, unknown>;
+      readonly filledNarrative: string;
+      readonly shouldPersist: boolean;
+    }> = [];
+    const preparedByKey = new Map<string, (typeof prepared)[number]>();
+
+    for (const sub of submissions) {
+      const located = findCommittedInteraction(
+        messages,
+        body.turnId,
+        sub.interactionId,
       );
+      if (!located) {
+        throw new RpcValidationError(
+          `No committed interaction found for turnId=${body.turnId}, interactionId=${sub.interactionId}`,
+        );
+      }
+      const values = validateSubmissionValues(sub, located.interaction);
+      const validation = located.interaction.validation;
+      if (validation !== undefined) {
+        const pluginId = located.message.sourcePluginId;
+        if (
+          !pluginId ||
+          !validation ||
+          typeof validation !== "object" ||
+          Array.isArray(validation)
+        ) {
+          throw new RpcValidationError(
+            "Committed form has invalid validation metadata",
+          );
+        }
+        const { name, data } = validation as Record<string, unknown>;
+        if (typeof name !== "string" || !name || !validatePluginForm) {
+          throw new RpcValidationError(
+            "Form validator is unavailable; activate and approve its plugin first",
+          );
+        }
+        try {
+          const error = await validatePluginForm({
+            sessionId,
+            pluginId,
+            name,
+            values,
+            data,
+          });
+          if (error !== undefined) throw new RpcValidationError(String(error));
+        } catch (error) {
+          throw new RpcValidationError(
+            error instanceof Error ? error.message : "Form validation failed",
+          );
+        }
+      }
+      const normalizedSub: Submission = { ...sub, values };
+      const key = `${body.turnId}\0${sub.interactionId}`;
+      const duplicateInBatch = preparedByKey.get(key);
+      if (duplicateInBatch) {
+        if (stableJson(duplicateInBatch.values) !== stableJson(values)) {
+          throw new RpcValidationError(
+            `Interaction ${sub.interactionId} is submitted more than once with conflicting values`,
+          );
+        }
+        prepared.push({ ...duplicateInBatch, shouldPersist: false });
+        continue;
+      }
+
+      const existing = existingInputs.find(
+        (input) =>
+          input.turnId === body.turnId && input.formId === sub.interactionId,
+      );
+      if (existing && stableJson(existing.values) !== stableJson(values)) {
+        throw new RpcValidationError(
+          `Interaction ${sub.interactionId} was already submitted with different values`,
+        );
+      }
+      const item = {
+        submissionId: existing?.id ?? crypto.randomUUID(),
+        interactionId: sub.interactionId,
+        values,
+        filledNarrative: fillTemplate(normalizedSub, located, labels),
+        shouldPersist: !existing,
+      };
+      prepared.push(item);
+      preparedByKey.set(key, item);
     }
-    const item = {
-      submissionId: existing?.id ?? crypto.randomUUID(),
-      interactionId: sub.interactionId,
-      values,
-      filledNarrative: fillTemplate(normalizedSub, located, labels),
-      shouldPersist: !existing,
+
+    const writes = prepared.filter((item) => item.shouldPersist);
+    const persist = async (target: Pick<DataStore, "savePlayerInput">) => {
+      const createdAt = new Date().toISOString();
+      for (const item of writes) {
+        await target.savePlayerInput({
+          id: item.submissionId,
+          sessionId,
+          turnId: body.turnId,
+          formId: item.interactionId,
+          values: item.values,
+          createdAt,
+        });
+      }
     };
-    prepared.push(item);
-    preparedByKey.set(key, item);
-  }
-
-  const writes = prepared.filter((item) => item.shouldPersist);
-  const persist = async (target: Pick<DataStore, "savePlayerInput">) => {
-    const createdAt = new Date().toISOString();
-    for (const item of writes) {
-      await target.savePlayerInput({
-        id: item.submissionId,
-        sessionId,
-        turnId: body.turnId,
-        formId: item.interactionId,
-        values: item.values,
-        createdAt,
-      });
+    if (writes.length > 0) {
+      await frameworkStore.withTransaction(async (tx) => persist(tx));
     }
-  };
-  if (writes.length > 0) {
-    await frameworkStore.withTransaction(async (tx) => persist(tx));
-  }
 
-  return {
-    accepted: true,
-    results: prepared.map((item) => ({
-      submissionId: item.submissionId,
-      interactionId: item.interactionId,
-      filledNarrative: item.filledNarrative,
+    return {
       accepted: true,
-    })),
+      results: prepared.map((item) => ({
+        submissionId: item.submissionId,
+        interactionId: item.interactionId,
+        filledNarrative: item.filledNarrative,
+        accepted: true,
+      })),
+    };
   };
-};
+}
+
+export const submitFormHandler = createSubmitFormHandler();

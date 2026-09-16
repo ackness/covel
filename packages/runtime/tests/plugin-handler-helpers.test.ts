@@ -162,6 +162,23 @@ describe("createFunctionStoreView", () => {
     turnId: TURN_ID,
   };
 
+  it("binds submitted input reads to the current session even with a forged argument", async () => {
+    for (const sessionId of [SESSION_ID, "other-session"]) {
+      await store.savePlayerInput({
+        id: sessionId,
+        sessionId,
+        turnId: TURN_ID,
+        formId: "allocation",
+        values: { points: 3 },
+        createdAt: "2024-01-01T00:00:00Z",
+      });
+    }
+    const view = createFunctionStoreView(store, ctx);
+    expect(
+      (await view.listPlayerInputs("other-session")).map((input) => input.id),
+    ).toEqual([SESSION_ID]);
+  });
+
   it("binds plugin_data reads to the calling pluginId", async () => {
     await store.setPluginData({
       id: "own-row",

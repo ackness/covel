@@ -178,6 +178,32 @@ export function buildEntryApi(
         }
       });
     },
+    registerFormValidator(name, validator) {
+      if (!name || typeof validator !== "function")
+        throw new Error("Invalid form validator registration");
+      batch.stage(() => {
+        batch.track(
+          rpcRegistry.registerFormValidator(pluginId, name, async (request) => {
+            const session = await store.getSession(request.sessionId);
+            if (!session?.activePlugins.includes(pluginId))
+              throw new Error("Form provider is not active");
+            if (
+              pluginTrust === "community" &&
+              !(await params.isCommunityServerCodeApproved?.(
+                request.sessionId,
+                pluginId,
+              ))
+            ) {
+              throw new Error("Form provider requires server-code approval");
+            }
+            return validator(
+              Object.freeze(structuredClone(request.values)),
+              structuredClone(request.data),
+            );
+          }),
+        );
+      });
+    },
     registerWires(wires) {
       batch.stage(() => {
         if (!wires || typeof wires !== "object") {
