@@ -164,11 +164,15 @@ describe("core plugin manifest contract", () => {
     ]);
     expect(narrator.tools?.builtin).toEqual([
       "world-dimension-get",
+      "list-characters",
+      "get-character",
       "memory-search",
       "emit-event",
     ]);
     expect(chatModeNarrator.tools?.builtin).toEqual([
       "world-dimension-get",
+      "list-characters",
+      "get-character",
       "memory-search",
       "emit-event",
     ]);
@@ -176,6 +180,10 @@ describe("core plugin manifest contract", () => {
     const guide = requireRuntime(manifests, "guide");
     expect(guide).toMatchObject({
       requireToolUse: true,
+      llm: {
+        reasoningEffort: "disabled",
+        toolChoice: { name: "generate-guide" },
+      },
       completeAfterTools: ["generate-guide"],
       maxSteps: 2,
       maxRetries: 0,
@@ -261,6 +269,25 @@ describe("core plugin manifest contract", () => {
     expect(requireRuntime(manifests, "codex").completeAfterTools).toEqual([
       "sync-codex-entries",
     ]);
+    expect(requireRuntime(manifests, "scene-prompts").llm).toEqual({
+      reasoningEffort: "disabled",
+      toolChoice: { name: "generate-scene-prompts" },
+    });
+    for (const id of [
+      "npc-graph/extractor",
+      "affinity",
+      "codex",
+      "core-quest",
+      "inventory",
+      "char-creator/character-tracker",
+    ]) {
+      const extractor = requireRuntime(manifests, id);
+      expect(extractor.requireExplicitCompletion).toBe(true);
+      expect(extractor.requireToolUse).not.toBe(true);
+      expect(extractor.llm?.toolChoice).toBe(
+        id === "npc-graph/extractor" ? "required" : undefined,
+      );
+    }
 
     expect(
       [...rawDownstreams, worldIr, ...structuredDownstreams].map(

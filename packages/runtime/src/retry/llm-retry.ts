@@ -123,6 +123,8 @@ export interface CallLLMWithRetryParams {
    * Useful for logging / tracing.
    */
   readonly onRetry?: (info: RetryInfo) => void;
+  /** Actual target, including gateway fallback, for response validation errors. */
+  readonly onTargetAttempt?: (target: LLMTargetIdentity) => void;
   /** Emitter for llm.calling / llm.responded trace events. */
   readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
   /** Identity for trace payload enrichment. */
@@ -170,6 +172,7 @@ function createAttemptTrace(
     },
     onTargetAttempt(nextTarget) {
       target = nextTarget;
+      params.onTargetAttempt?.(nextTarget);
     },
     async ensureCalling() {
       if (callingEmitted) return;

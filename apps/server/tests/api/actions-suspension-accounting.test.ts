@@ -93,6 +93,7 @@ async function runScenario(options: { readonly failCommit: boolean }) {
   const registry = createPluginRegistry();
   registry.register({
     id: PLUGIN_ID,
+    source: "builtin",
     summary: {
       id: PLUGIN_ID,
       name: PLUGIN_ID,

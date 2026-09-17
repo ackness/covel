@@ -36,6 +36,8 @@ Schema：`packages/ai-provider/src/config/llm-schema.ts`。
 
 仓库快照由维护者通过 `pnpm --filter @covel/ai-provider update-model-db` 从固定 commit 生成；设置页的手动刷新会把较新数据写入用户配置目录，并在后续启动时优先于内置快照加载。
 
+调用后的工具完成契约、输出校验和工具循环耗尽等失败也保留最后一次响应的服务商和模型。该身份由 `onTargetAttempt` 跟随实际请求更新，包含备用模型；普通执行和暂停后的恢复执行共用失败身份处理，不能用初始用途绑定冒充最终响应模型。
+
 ## Runtime 覆盖的作用域与 UI
 
 模型配置分两层，值的含义不同：

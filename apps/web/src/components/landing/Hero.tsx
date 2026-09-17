@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowRight, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { version } from "../../../package.json";
 
 const REPO_URL = "https://github.com/ackness/covel";
 
@@ -105,7 +106,10 @@ export function Hero() {
       <div className="relative z-10 w-full max-w-350 mx-auto px-5 sm:px-6 md:px-10 py-12 sm:py-16 md:py-24 flex flex-col justify-between gap-10 md:gap-0">
         <div className="flex-1 flex flex-col justify-center max-w-3xl">
           <span className="ui-eyebrow text-muted-foreground mb-5 md:mb-6">
-            {t("home.heroEyebrow", "v0.1.0 · Plugin-first AI RPG runtime")}
+            {t("home.heroEyebrow", {
+              version,
+              defaultValue: "v{{version}} · A plugin-based text RPG framework",
+            })}
           </span>
           <h1
             id="hero-heading"

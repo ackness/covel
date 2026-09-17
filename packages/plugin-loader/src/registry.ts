@@ -11,6 +11,7 @@ import {
   type WorldProjectionDecl,
   worldProjectionMapSchema,
 } from "@covel/shared";
+import { resolveRuntimeProviders } from "./runtime-providers.js";
 import type { EventBus } from "@covel/events";
 import type { PluginRegistryEntry, RegistryChangeEvent } from "./types.js";
 
@@ -312,14 +313,18 @@ export function createPluginRegistry(
       const sessionSet = sessionActivations.get(sessionId);
       if (sessionSet === undefined || sessionSet.size === 0) return undefined;
 
-      for (const pluginId of sessionSet) {
+      const active = [...sessionSet].flatMap((pluginId) => {
         const entry = entries.get(pluginId);
-        if (!entry) continue;
-        for (const manifest of declaredRuntimeManifests(entry)) {
-          if (manifest.capabilities?.includes(capability)) return pluginId;
-        }
-      }
-      return undefined;
+        return entry
+          ? declaredRuntimeManifests(entry).map((manifest) => ({
+              ...manifest,
+              pluginId,
+            }))
+          : [];
+      });
+      return resolveRuntimeProviders(active).find((manifest) =>
+        manifest.capabilities?.includes(capability),
+      )?.pluginId;
     },
 
     getActiveRuntimes(sessionId: string): readonly RuntimeManifest[] {
@@ -339,7 +344,7 @@ export function createPluginRegistry(
       // Sort by (stage, name). Stage-less runtimes (event / manual / UI-only)
       // rank last — they are never band-scheduled but can appear in listings.
       // event-directory's first-wins topic resolution consumes this order.
-      return manifests.sort((a, b) => {
+      return resolveRuntimeProviders(manifests).sort((a, b) => {
         const ra = stageRank(getRuntimeSpec(a).stage);
         const rb = stageRank(getRuntimeSpec(b).stage);
         return ra - rb || a.name.localeCompare(b.name);

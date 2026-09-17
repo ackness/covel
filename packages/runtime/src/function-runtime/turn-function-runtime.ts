@@ -9,11 +9,15 @@ import type {
   InputSlot,
 } from "@covel/shared";
 import { validateWorldIRV1, WORLD_IR_V1_SCHEMA_URI } from "@covel/shared";
-import { attachExecutionJournal } from "../execution-journal.js";
-import { getRuntimeSpec, stageMessageOrder } from "@covel/shared";
+import { attachRuntimeJournal } from "../execution-journal.js";
+import { getRuntimeSpec } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import type { SuspensionRecord } from "@covel/store";
-import { validateOutput, withPendingProposals } from "@covel/tools";
+import {
+  getPendingProposals,
+  validateOutput,
+  withPendingProposals,
+} from "@covel/tools";
 import {
   createPluginDataWriter,
   createPluginLogger,
@@ -42,6 +46,7 @@ import {
 } from "../turn-executor/turn-runtime-helpers.js";
 import { withGatewayTrace } from "./gateway-trace.js";
 import { withUtilsTrace } from "./utils-trace.js";
+import { createRuntimeTools } from "./runtime-tools.js";
 import { enforceHttpPermissions } from "./http-permissions.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
@@ -339,6 +344,18 @@ export async function executeFunctionRuntime({
   // that covers both the player abort and the deadline.
   let capabilitiesRevoked = false;
   const isRevoked = () => capabilitiesRevoked;
+  const runtimeTools = createRuntimeTools({
+    manifest,
+    context: helperCtx,
+    deps: { ...deps, hookPipeline },
+    buffer: writeBuffer,
+    inputs,
+    signal: handlerAbort.signal,
+    assertLive: () => {
+      if (capabilitiesRevoked)
+        throw new Error("function runtime tools capability is revoked");
+    },
+  });
   const inFlightRecursiveCalls = new Set<Promise<unknown>>();
   const rawRecursiveCall = createRecursiveCall(handlerAbort.signal);
   const trackedRecursiveCall: typeof rawRecursiveCall = (delta, opts) => {
@@ -425,6 +442,7 @@ export async function executeFunctionRuntime({
       playerMessage: input.playerMessage,
       locale: input.locale,
       store: revocable.store,
+      tools: runtimeTools.tools,
       ...(inputs && Object.keys(inputs).length > 0 ? { inputs } : {}),
       ...(exportSlots && Object.keys(exportSlots).length > 0
         ? { exports: exportSlots }
@@ -460,6 +478,7 @@ export async function executeFunctionRuntime({
       // A handler may intentionally launch a recursive call without awaiting
       // it. Keep the invocation lease until all nested turns have settled.
       await drainRecursiveCalls();
+      await runtimeTools.drain();
       return result;
     });
     const aborted = new Promise<never>((_, reject) => {
@@ -650,6 +669,17 @@ export async function executeFunctionRuntime({
       ? materializeHandlerSuccess(handlerOutcome, output)
       : (output as Record<string, unknown>);
 
+  if (
+    !envelopeSchemaError &&
+    handlerOutcome.outcome === "success" &&
+    runtimeTools.events.length > 0
+  ) {
+    runtimeOutput.events = [
+      ...(Array.isArray(runtimeOutput.events) ? runtimeOutput.events : []),
+      ...runtimeTools.events,
+    ];
+  }
+
   // A failed schema gate overrides the handler outcome: the runtime
   // fails with `output-schema-invalid` and no domain effects are committed.
   const rawResult: RuntimeResult = {
@@ -663,7 +693,7 @@ export async function executeFunctionRuntime({
         ? "success"
         : handlerOutcome.outcome,
     output: runtimeOutput,
-    toolCalls: [],
+    toolCalls: runtimeTools.records,
     durationMs: Date.now() - startTime,
     ...(envelopeSchemaError
       ? { error: envelopeSchemaError }
@@ -703,45 +733,15 @@ export async function executeFunctionRuntime({
     result.output &&
     typeof result.output === "object"
   ) {
-    withPendingProposals(result.output as Record<string, unknown>, writeBuffer);
+    withPendingProposals(result.output as Record<string, unknown>, [
+      ...getPendingProposals(result.output),
+      ...writeBuffer,
+    ]);
   }
 
   const finalOutput = (result.output ?? output) as Record<string, unknown>;
 
-  // Stage function output in the execution journal (same as agent runtimes).
-  // Manual plugin-rpc calls return their output to the caller and commit
-  // proposals through plugin-rpc, so they stay out of conversation history.
-  // Skipped when a PostRuntime hook rewrote the status to a non-success.
-  if (deps.store && !input.manualTrigger && result.status === "success") {
-    const narrativeContent =
-      typeof finalOutput.narrativeOutput === "string"
-        ? finalOutput.narrativeOutput
-        : typeof finalOutput.content === "string"
-          ? finalOutput.content
-          : JSON.stringify(finalOutput);
-    const interactions = Array.isArray(finalOutput.interactions)
-      ? finalOutput.interactions
-      : undefined;
-    const ui = Array.isArray(finalOutput.ui) ? finalOutput.ui : undefined;
-
-    attachExecutionJournal(result, [
-      {
-        id: crypto.randomUUID(),
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        sourceType: "runtime",
-        sourcePluginId: manifest.pluginId,
-        sourceRuntimeId: manifest.name,
-        role: "assistant",
-        name: manifest.name,
-        content: narrativeContent,
-        order: stageMessageOrder(getRuntimeSpec(manifest).stage),
-        pendingInput: interactions,
-        ui,
-        createdAt: new Date().toISOString(),
-      },
-    ]);
-  }
+  if (deps.store) attachRuntimeJournal(result, input, manifest, finalOutput);
 
   try {
     await deps.onRuntimeComplete?.({

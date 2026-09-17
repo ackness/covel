@@ -1,4 +1,4 @@
-import type { LLMProviderRequest } from "@covel/shared";
+import type { LLMProviderRequest, LLMTargetIdentity } from "@covel/shared";
 /**
  * LLM request machinery for the agent tool-call loop.
  *
@@ -62,7 +62,7 @@ export interface RequestLLMResponseOptions {
  */
 export async function requestLLMResponse(
   opts: RequestLLMResponseOptions,
-): Promise<LLMResponse> {
+): Promise<LLMResponse & { readonly target?: LLMTargetIdentity }> {
   const {
     manifest,
     deps,
@@ -98,6 +98,9 @@ export async function requestLLMResponse(
     policy: retryPolicy,
     deadline,
     onQueueWait,
+    onTargetAttempt: (target: LLMTargetIdentity) => {
+      resolvedTarget = target;
+    },
     onRetry: reportRetry,
     emitter: deps.emitter,
     runtimeId: manifest.name,
@@ -112,10 +115,10 @@ export async function requestLLMResponse(
     abortSignal: getTurnExecutionSignal(deps.turnControl),
   } as const;
 
-  if (useStreaming) {
-    return requestStreaming(opts, callParams, onStreamDelta);
-  }
-  return requestNonStreaming(opts, callParams);
+  const response = useStreaming
+    ? await requestStreaming(opts, callParams, onStreamDelta)
+    : await requestNonStreaming(opts, callParams);
+  return { ...response, target: resolvedTarget };
 }
 
 type CallParams = Parameters<typeof callLLMWithRetry>[0];
@@ -200,6 +203,7 @@ async function requestNonStreaming(
       deadline,
       resolvedModel: callParams.resolvedModel,
       provider: callParams.provider,
+      onTargetAttempt: callParams.onTargetAttempt,
     });
   }
 }
@@ -216,6 +220,7 @@ async function malformedToolArgsFallback(args: {
   deadline: number;
   resolvedModel: string | undefined;
   provider: string | undefined;
+  onTargetAttempt?: (target: LLMTargetIdentity) => void;
 }): Promise<LLMResponse> {
   const {
     manifest,
@@ -272,6 +277,7 @@ async function malformedToolArgsFallback(args: {
         : {}),
       onTargetAttempt: (target) => {
         actualTarget = target;
+        args.onTargetAttempt?.(target);
       },
       signal: combineAbortSignals(
         getTurnExecutionSignal(deps.turnControl),

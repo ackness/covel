@@ -8,7 +8,14 @@
  * the commit-owning caller.
  */
 
-import type { TurnResult } from "@covel/shared";
+import {
+  getRuntimeSpec,
+  stageMessageOrder,
+  type RuntimeManifest,
+  type RuntimeResult,
+  type TurnInput,
+  type TurnResult,
+} from "@covel/shared";
 import type { TurnMessageRecord } from "@covel/store";
 
 const EXECUTION_JOURNAL = Symbol.for("@covel/runtime/execution-journal");
@@ -54,4 +61,45 @@ export function collectExecutionJournal(
     seen.add(message.id);
     return true;
   });
+}
+
+/** Manual outputs stay out of history unless a committed interaction needs validation. */
+export function attachRuntimeJournal(
+  result: RuntimeResult,
+  input: TurnInput,
+  manifest: RuntimeManifest,
+  output: Readonly<Record<string, unknown>>,
+): void {
+  const interactions = Array.isArray(output.interactions)
+    ? output.interactions
+    : undefined;
+  if (
+    result.status !== "success" ||
+    (input.manualTrigger && !interactions?.length)
+  )
+    return;
+  const content = input.manualTrigger
+    ? ""
+    : typeof output.narrativeOutput === "string"
+      ? output.narrativeOutput
+      : typeof output.content === "string"
+        ? output.content
+        : JSON.stringify(output);
+  attachExecutionJournal(result, [
+    {
+      id: crypto.randomUUID(),
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      sourceType: "runtime",
+      sourcePluginId: manifest.pluginId,
+      sourceRuntimeId: manifest.name,
+      role: "assistant",
+      name: manifest.name,
+      content,
+      order: stageMessageOrder(getRuntimeSpec(manifest).stage),
+      pendingInput: interactions,
+      ui: Array.isArray(output.ui) ? output.ui : undefined,
+      createdAt: new Date().toISOString(),
+    },
+  ]);
 }

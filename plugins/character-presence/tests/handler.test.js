@@ -180,7 +180,7 @@ describe("character-presence handler", () => {
 
     expect(result.value).toEqual({
       saved: true,
-      characterId: "npc-transfer-student",
+      characterId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{32}$/),
     });
   });
 

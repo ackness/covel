@@ -309,13 +309,13 @@ describe("character-blueprint handler", () => {
 
     expect(result.value).toMatchObject({
       imported: true,
-      blueprintId: "npc-transfer-student",
+      blueprintId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{32}$/),
       instantiated: true,
-      characterId: "sess-blueprint-npc-transfer-student",
+      characterId: `sess-blueprint-${result.value.blueprintId}`,
     });
     const proposals = getPendingProposals(result);
     expect(proposals[0].payload.value.blueprint.instantiate.characterId).toBe(
-      "npc-transfer-student",
+      result.value.blueprintId,
     );
   });
 
@@ -332,7 +332,7 @@ describe("character-blueprint handler", () => {
 
     expect(result.value).toMatchObject({
       imported: true,
-      blueprintId: "npc-transfer-student",
+      blueprintId: expect.stringMatching(/^npc-transfer-student-[a-f0-9]{32}$/),
       instantiated: false,
     });
   });

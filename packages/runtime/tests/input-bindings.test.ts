@@ -372,6 +372,40 @@ describe("resolveInputBindings — select & required/optional", () => {
     );
     expect(res).toMatchObject({ ok: false, skipReason: "upstream-failed" });
   });
+
+  it("binds guard-provided output but rejects ordinary skips and failed guards", async () => {
+    for (const [status, output, accepted] of [
+      ["skipped", { skip: true, data: { attributes: [] } }, true],
+      ["skipped", { skipReason: "upstream-failed", data: {} }, false],
+      ["failed", { skip: true, data: {} }, false],
+    ] as const) {
+      const res = await resolveInputBindings(
+        baseArgs({
+          manifest: runtimeBinding(true, "/data"),
+          activeRuntimes: [provider],
+          completedResults: new Map([
+            [provider.name, { ...success(provider.name, output), status }],
+          ]),
+        }),
+      );
+      if (accepted) {
+        expect(res).toMatchObject({
+          ok: true,
+          slots: {
+            data: {
+              value: { attributes: [] },
+              source: {
+                runtimeId: provider.name,
+                resultId: `run-${provider.name}`,
+              },
+            },
+          },
+        });
+      } else {
+        expect(res).toMatchObject({ ok: false, skipReason: "upstream-failed" });
+      }
+    }
+  });
 });
 
 describe("resolveInputBindings — accepts double layer", () => {

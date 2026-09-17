@@ -103,11 +103,20 @@ export function finalizeAgentOutput(
     }
   } else if (finalContent) {
     const parsed = parseFinalOutputEnvelope(finalContent);
-    output = shouldSuppressToolLoopNarrative({
+    const suppressNarrative = shouldSuppressToolLoopNarrative({
       outputKind: manifest.outputKind,
       executedToolCalls,
       parsedAsJson: parsed.parsedAsJson,
-    })
+    });
+    // Preparation prose cannot turn a failed form/write tool into empty success.
+    if (
+      suppressNarrative &&
+      !structured &&
+      !presentable &&
+      failedToolCalls.length
+    )
+      return { kind: "tool-failed" };
+    output = suppressNarrative
       ? (structured ?? presentable ?? { narrativeOutput: "" })
       : parsed.output;
     if (schemaGate) {

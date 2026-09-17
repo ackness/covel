@@ -455,10 +455,7 @@ function stopServer(): Promise<void> {
   }
 
   const child = serverProcess;
-  if (!child) {
-    pendingStop = Promise.resolve();
-    return pendingStop;
-  }
+  if (!child) return Promise.resolve();
 
   pendingStop = new Promise<void>((resolveStop) => {
     let resolved = false;

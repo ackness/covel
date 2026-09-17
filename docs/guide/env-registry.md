@@ -96,6 +96,7 @@ Compose 固定应用容器的 `SERVER_PORT=3001`，宿主机入口由 `APP_BIND_
 | `TRUSTED_PROXY_IPS`                                   | —                               | 允许信任转发 IP 头的代理地址列表                       |
 | `COVEL_MEDIA_TOKEN_SECRET`                            | 生产环境必填                    | 签发媒体短期访问 token 的 HMAC secret                  |
 | `COVEL_INSTALL_API_ENABLED`                           | `false`                         | 无桌面 bearer token 时显式开启插件/世界文件变更接口    |
+| `COVEL_APP_VERSION`                                   | 对应应用的 `package.json`       | 覆盖桌面 preload 和服务端 health 中的框架版本          |
 | `COVEL_LOG_QUIET_PATHS`                               | `/api/health`                   | 逗号分隔的静默请求路径                                 |
 | `MEDIA_BACKEND` / `MEDIA_ROOT`                        | `mirror` / —                    | 媒体存储后端及文件根目录                               |
 | `VECTOR_BACKEND`                                      | `embedded`                      | 向量能力（`embedded` / `none` / `external`）           |

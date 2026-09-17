@@ -14,6 +14,12 @@ import {
   type ProposalType,
 } from "@covel/shared";
 
+export {
+  createNarrativeReview,
+  outsideDialogue,
+  perspectiveError,
+} from "./narrative-review.js";
+
 /**
  * Bound provider work by a timeout while preserving the turn's cancellation
  * signal. The returned signal aborts as soon as either source aborts.

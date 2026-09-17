@@ -17,9 +17,12 @@ import { replaceSessionPluginData } from "@/stores/plugin-data-store.js";
 import { initialState } from "../session-store/reducer.js";
 import type { SessionState } from "../session-store/types.js";
 import {
+  createSubscriptionEventHandler,
   isCurrentSubscriptionEvent,
   rehydrateSessionSideState,
 } from "../session-store/subscription.js";
+import { reducer as sessionReducer } from "../session-store/reducer.js";
+import type { SessionWorkspace } from "@/services/data-service.js";
 
 function sessionPlugin(id: string, active: boolean): api.SessionPlugin {
   return {
@@ -378,6 +381,48 @@ describe("rehydrateSessionSideState", () => {
 });
 
 describe("session subscription event ownership", () => {
+  it("shows committed manual interactions immediately and deduplicates stream/replay delivery", () => {
+    let state = initialState;
+    const handler = createSubscriptionEventHandler({
+      dispatch: (action) => {
+        state = sessionReducer(state, action);
+      },
+      workspace: {} as SessionWorkspace,
+      stateRef: { current: state },
+      sessionIdRef: { current: "s1" },
+      onReset: () => {},
+    });
+    const event = {
+      id: "event-form",
+      type: "interaction.requested",
+      topic: "state" as const,
+      sessionId: "s1",
+      timestamp: "2026-01-01T00:00:00Z",
+      payload: {
+        turnId: "manual-turn",
+        block: {
+          id: "form-proposal",
+          type: "interactive_form",
+          data: { interactionId: "check", fields: [] },
+          meta: { runtimeId: "third-party/check" },
+        },
+      },
+    };
+    handler(event);
+    expect(state.messages).toHaveLength(1);
+    expect(state.messages[0]).toMatchObject({
+      id: "form-proposal",
+      turnId: "manual-turn",
+      runtimeId: "third-party/check",
+    });
+    state = sessionReducer(state, {
+      type: "SUBMIT_BLOCK",
+      blockId: "form-proposal",
+    });
+    handler(event);
+    expect(state.messages).toHaveLength(1);
+    expect(state.submittedBlockIds.has("form-proposal")).toBe(true);
+  });
   const event = {
     id: "e1",
     topic: "plugin" as const,

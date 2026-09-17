@@ -12,6 +12,7 @@ import {
   getMainWindow,
   isTrustedFrameUrl,
   isTrustedStartupFrameUrl,
+  navigateToApp,
 } from "./windows.js";
 import { setDesktopLocaleFromSettings, t } from "./main-i18n.js";
 import {
@@ -159,9 +160,30 @@ export function registerDesktopIpcHandlers({
     await shell.openPath(paths.dataRoot);
   });
 
+  let pendingRestart: ReturnType<
+    DesktopIpcHandlersDeps["restartServer"]
+  > | null = null;
   ipcMain.handle("covel:restart-server", (event) => {
     if (!isTrustedSender(event, "covel:restart-server")) return;
-    return restartServer();
+    // Coalesce the entire restart, not only the stop phase: otherwise two
+    // requests can launch competing sidecars and race their navigation.
+    pendingRestart ??= restartServer()
+      .then((result) => {
+        if (result.ok) {
+          const win = getMainWindow();
+          if (win && !win.isDestroyed()) {
+            // Only main-process navigation may cross the pinned app origin.
+            // Development keeps the frontend on the external Vite server.
+            if (isDev) win.webContents.reload();
+            else navigateToApp(win, result.port);
+          }
+        }
+        return result;
+      })
+      .finally(() => {
+        pendingRestart = null;
+      });
+    return pendingRestart;
   });
 
   // Pick a directory for the next data_root. Does NOT move data — that's

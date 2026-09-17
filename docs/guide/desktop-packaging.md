@@ -177,15 +177,22 @@ integration in `apps/desktop/src/main.ts`, and the publishing configuration abov
 
 ## Release checklist
 
-- [ ] Bump workspace package versions, including root `package.json` and `apps/desktop/package.json`
+- [ ] Align the root, `apps/*` and `packages/*` manifest versions with the release tag; plugin and world packages may version independently
 - [ ] Update `docs/CHANGELOG.md` with the target version
 - [ ] Sync version badges, Release links, and current-version notices in `README.md` and `README.zh-CN.md`
 - [ ] Bump `ONBOARDING_VERSION` in `apps/web/src/components/onboarding-wizard/constants.ts` if the tutorial changed
-- [ ] Run `pnpm release:preflight`
-- [ ] Run `pnpm lint` and `pnpm test` green
+- [ ] Run local `pnpm lint`, `pnpm test`, `pnpm e2e` and `pnpm release:preflight` sequentially; fix known failures before pushing
 - [ ] Run `pnpm --filter @covel/desktop build`
+- [ ] Complete the [player-flow acceptance checks](./e2e-testing.md#发版前的玩家流程验收) with isolated data and a real model; deterministic tests and startup health alone do not cover playability
+- [ ] Run `pnpm --filter @covel/desktop smoke:restart` in a desktop session to verify the preload version and navigation to the new backend port
 - [ ] Confirm the release notes disclose that macOS and Windows artifacts are unsigned
-- [ ] Smoke test on a clean machine (not your dev machine)
-- [ ] Tag the release: `git tag v$(node -p "require('./apps/desktop/package.json').version")`
-- [ ] Push `main` and the `v*` tag; the release workflow publishes the GitHub Release
-- [ ] Verify the published release notes and `.dmg` / `.zip` / `.exe` assets
+- [ ] Push the reviewed PR after local checks pass; wait for CI and PostgreSQL integration tests
+- [ ] Run `Build Desktop` manually on the candidate branch with `publish_release=false`; both platform jobs verify staged resources and boot, and Windows also runs the package-installation API regression
+- [ ] Merge the PR, verify `main`, then create and push an annotated `v*` tag on the exact merge commit; tag pushes build and publish the GitHub Release
+- [ ] Download the published `.dmg` / `.zip` / installer and portable `.exe` assets, verify versions and digests, and repeat startup/plugin-lifecycle checks on the downloaded package
+
+Manual release builds resolve the requested ref once and pass its immutable commit to all jobs.
+Publishing requires an existing semantic-version tag, matching framework manifests and a changelog section;
+the workflow never creates or moves a tag. A dry run builds artifacts without creating a GitHub Release.
+Record which operating systems and player flows were actually exercised; a Windows build and API test
+do not substitute for a full interactive Windows playthrough.

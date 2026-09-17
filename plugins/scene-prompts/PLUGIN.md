@@ -9,6 +9,9 @@ description:
 pluginType: plugin
 stage: post-turn
 model: plugin
+llm:
+  reasoningEffort: disabled
+  toolChoice: { name: generate-scene-prompts }
 outputKind: system
 timeoutMs: 120000
 maxSteps: 2

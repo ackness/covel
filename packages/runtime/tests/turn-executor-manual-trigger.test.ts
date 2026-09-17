@@ -24,6 +24,7 @@ import { describe, it, expect } from "vitest";
 import type { RuntimeManifest, TurnInput } from "@covel/shared";
 import { createMemoryStore } from "@covel/store";
 import type { DataStore } from "@covel/store";
+import { collectExecutionJournal } from "../src/execution-journal.js";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor.js";
 import type { LLMAdapter, LLMResponse } from "../src/llm/llm-adapter.js";
@@ -184,6 +185,7 @@ describe("executeTurn: manual trigger", () => {
     const messages = await store.listTurnMessages("sess-1");
     expect(messages).toHaveLength(1);
     expect(messages[0]?.id).toBe("seed");
+    expect(collectExecutionJournal(result)).toEqual([]);
   });
 
   it("forwards manualPayload only to the targeted function handler", async () => {

@@ -151,22 +151,25 @@ describe("update-inventory", () => {
       mockStore,
     );
 
+    const itemId = result.results[0].itemId;
+    expect(itemId).toMatch(/^item-iron-sword-[a-f0-9]{32}$/);
+
     // Assert — result + persisted item
     expect(result.applied).toBe(1);
     expect(result.results[0]).toMatchObject({
       op: "add",
       status: "created",
-      itemId: "item-iron-sword",
+      itemId,
       quantity: 1,
     });
     const stored = await mockStore.getPluginData(
       "sess-1",
       "inventory",
       "items",
-      "item-iron-sword",
+      itemId,
     );
     expect(stored.value).toMatchObject({
-      id: "item-iron-sword",
+      id: itemId,
       name: "Iron Sword",
       quantity: 1,
       tags: ["weapon"],
@@ -191,12 +194,13 @@ describe("update-inventory", () => {
 
   it("stacks quantity onto an existing item matched by name (case-insensitive)", async () => {
     // Arrange
-    await executeAndCommit(
+    const created = await executeAndCommit(
       updateInventoryTool,
       { changes: [{ op: "add", name: "Torch", quantity: 2 }] },
       ctx,
       mockStore,
     );
+    const itemId = created.results[0].itemId;
 
     // Act
     const result = await executeAndCommit(
@@ -209,7 +213,7 @@ describe("update-inventory", () => {
     // Assert — same id, stacked quantity, no duplicate row
     expect(result.results[0]).toMatchObject({
       status: "updated",
-      itemId: "item-torch",
+      itemId,
       quantity: 5,
     });
     const rows = await mockStore.listPluginData("sess-1", "inventory", "items");
@@ -219,12 +223,13 @@ describe("update-inventory", () => {
 
   it("decrements quantity on remove and defaults the amount to 1", async () => {
     // Arrange
-    await executeAndCommit(
+    const created = await executeAndCommit(
       updateInventoryTool,
       { changes: [{ op: "add", name: "Arrow", quantity: 5 }] },
       ctx,
       mockStore,
     );
+    const itemId = created.results[0].itemId;
 
     // Act
     const result = await executeAndCommit(
@@ -240,7 +245,7 @@ describe("update-inventory", () => {
       "sess-1",
       "inventory",
       "items",
-      "item-arrow",
+      itemId,
     );
     expect(stored.value.quantity).toBe(4);
     expect(stored.value.removed).toBeUndefined();
@@ -248,12 +253,13 @@ describe("update-inventory", () => {
 
   it("tombstones an item when remove drains it to zero", async () => {
     // Arrange
-    await executeAndCommit(
+    const created = await executeAndCommit(
       updateInventoryTool,
       { changes: [{ op: "add", name: "Torch", quantity: 2 }] },
       ctx,
       mockStore,
     );
+    const itemId = created.results[0].itemId;
 
     // Act
     const result = await executeAndCommit(
@@ -266,13 +272,13 @@ describe("update-inventory", () => {
     // Assert — tombstone, hidden from the bag but keeping the stable id
     expect(result.results[0]).toMatchObject({
       status: "removed",
-      itemId: "item-torch",
+      itemId,
     });
     const stored = await mockStore.getPluginData(
       "sess-1",
       "inventory",
       "items",
-      "item-torch",
+      itemId,
     );
     expect(stored.value).toMatchObject({
       quantity: 0,
@@ -290,12 +296,13 @@ describe("update-inventory", () => {
 
   it("revives a tombstoned item under the same id when re-acquired", async () => {
     // Arrange — add then fully remove
-    await executeAndCommit(
+    const created = await executeAndCommit(
       updateInventoryTool,
       { changes: [{ op: "add", name: "Torch" }] },
       ctx,
       mockStore,
     );
+    const itemId = created.results[0].itemId;
     await executeAndCommit(
       updateInventoryTool,
       { changes: [{ op: "remove", name: "Torch" }] },
@@ -314,7 +321,7 @@ describe("update-inventory", () => {
     // Assert — same row, fresh quantity, tombstone cleared
     expect(result.results[0]).toMatchObject({
       status: "created",
-      itemId: "item-torch",
+      itemId,
       quantity: 3,
     });
     const rows = await mockStore.listPluginData("sess-1", "inventory", "items");
@@ -367,12 +374,13 @@ describe("update-inventory", () => {
 
   it("toggles equipped state via equip and unequip", async () => {
     // Arrange
-    await executeAndCommit(
+    const created = await executeAndCommit(
       updateInventoryTool,
       { changes: [{ op: "add", name: "Iron Sword" }] },
       ctx,
       mockStore,
     );
+    const itemId = created.results[0].itemId;
 
     // Act — equip
     await executeAndCommit(
@@ -385,7 +393,7 @@ describe("update-inventory", () => {
       "sess-1",
       "inventory",
       "items",
-      "item-iron-sword",
+      itemId,
     );
     expect(stored.value.equipped).toBe(true);
 
@@ -412,7 +420,7 @@ describe("update-inventory", () => {
       "sess-1",
       "inventory",
       "items",
-      "item-iron-sword",
+      itemId,
     );
     expect(stored.value.equipped).toBe(false);
   });
@@ -435,7 +443,7 @@ describe("update-inventory", () => {
 
   it("updates only the provided fields on set", async () => {
     // Arrange
-    await executeAndCommit(
+    const created = await executeAndCommit(
       updateInventoryTool,
       {
         changes: [
@@ -451,6 +459,7 @@ describe("update-inventory", () => {
       ctx,
       mockStore,
     );
+    const itemId = created.results[0].itemId;
 
     // Act — correct the quantity estimate, leave description/tags alone
     await executeAndCommit(
@@ -465,7 +474,7 @@ describe("update-inventory", () => {
       "sess-1",
       "inventory",
       "items",
-      "item-gold-coin",
+      itemId,
     );
     expect(stored.value.quantity).toBe(50);
     expect(stored.value.description).toBe("Shiny.");
@@ -494,6 +503,8 @@ describe("update-inventory", () => {
       ctx,
     );
 
+    const itemId = first.results[0].itemId;
+
     // Act — second call in the same turn equips it via pending overlay
     const second = await updateInventoryTool.execute(
       { changes: [{ op: "equip", name: "Iron Sword" }] },
@@ -503,7 +514,7 @@ describe("update-inventory", () => {
     // Assert — equip applied, and the merged message keeps both entries
     expect(second.results[0]).toMatchObject({
       status: "updated",
-      itemId: "item-iron-sword",
+      itemId,
     });
     await applyPendingPluginData(first, mockStore);
     await applyPendingPluginData(second, mockStore);
@@ -511,7 +522,7 @@ describe("update-inventory", () => {
       "sess-1",
       "inventory",
       "items",
-      "item-iron-sword",
+      itemId,
     );
     expect(stored.value.equipped).toBe(true);
     const message = await mockStore.getPluginData(

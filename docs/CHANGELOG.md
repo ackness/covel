@@ -4,6 +4,87 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.36] - 2026-09-17
+
+This patch makes model token budgets configurable and consistent across story, plugin, retry and background requests, and identifies the model responsible when a task fails.
+
+### Fixed
+
+- **Failed tasks show the actual provider, model and model role.** Error details retain upstream diagnostics, including failures before dispatch. Tool and output validation errors identify the model that actually responded, including fallback and resumed calls. Players can change the assigned model or its settings and retry unfinished tasks without regenerating completed story.
+- **Model settings expose context, input and output limits together.** Story and plugin roles share the same settings and resolution path. Effective budgets include TOML defaults and explicit overrides; conflicting limits are visible before a request is sent. Manual limits remain available when the model catalog does not match a provider's deployment.
+- **Automatic budgets use a 16,384-token output target and a conservative 32,768-token context when capabilities are unknown.** Known model limits and the available context can reduce that output target. Explicit output budgets can be raised for complex or reasoning calls within the configured model limits.
+- **Every request resolves the budget of its actual target.** Plugin overrides, hook-selected models, fallback targets, resumed work and background memory calls apply their own context and output limits. Settings previews and sidebar connection tests use the same effective model configuration.
+- **Provider failures retain useful attribution without exposing credentials.** Connection tests follow the normal provider-header and key handling policy, and request-scoped background queues keep settings isolated between requests.
+
+### Upgrade notes
+
+- Update the server and bundled Web client together. Existing model assignments, TOML settings and saved overrides remain supported; no SQL schema migration is required.
+- A 16,384-token automatic output target is not a mandatory minimum: smaller model limits and explicit lower settings still apply. Configure the deployment's actual limits when they differ from the catalog, then retry failed work.
+- macOS Apple Silicon and Windows x64 artifacts are unsigned, and macOS artifacts are not notarized. Gatekeeper or Windows SmartScreen may warn on first launch; updates use manual download and installation.
+
+## [0.0.35] - 2026-09-17
+
+This release fixes plugin installation, restart and recovery failures, protects existing plugin data, and adds optional tabletop character creation and configurable narrative perspective.
+
+### Added
+
+- **Optional tabletop rules use the public plugin interfaces.** The `tabletop-rules` package provides integer point-buy creation, server-side budget validation and explicit d20 checks. Worlds configure rules through world data; recorded checks survive retries and restarts without rerolling. A renamed community ZIP exercises the same installation, approval, creation and uninstall path ([#62](https://github.com/ackness/covel/issues/62)).
+- **Both narrative plugins offer first-, second- and third-person narration.** `narrativePerson` reuses plugin settings and world defaults, with second person unchanged as the default. Dialogue retains each speaker's pronouns; changes affect future narration ([#63](https://github.com/ackness/covel/issues/63)).
+- **Third-party function runtimes can call declared tools and validate forms.** Public tool calls retain permission, argument validation and transaction boundaries. Typed forms preserve numeric values, rejected forms remain editable, and `fallbackFor` replaces a default runtime by capability without disabling its package's other functions.
+- **Plugins can review model responses before tool dispatch or story commit.** Public hooks can buffer a response and request up to two bounded corrections. Rejected drafts do not execute tools or become committed story.
+- **Documentation now includes a gradual v2 reading path.** Current guides are aligned with response review, transactional tools, typed forms, graph retrieval and local-first release checks. The v2 entry organizes play, world creation, plugin authoring and validation, with a development-agent guide; full chapter migration continues in later versions.
+
+### Fixed
+
+- **World art keeps its authored identity and scene continuity.** Five Haruka Academy night backgrounds retain their daytime layout, and four Mistport portraits correct fog-rot, expedition lighting and atmospheric detail. Media hashes and localized references are synchronized; Emberback retains its distinct industrial science-fiction direction. Resource checks cover dimensions, transparency and registry references.
+- **Desktop restart navigates to the new server port.** The main process owns navigation after the sidecar is ready, concurrent restart requests share one operation, and destroyed windows release pending state timers ([#65](https://github.com/ackness/covel/issues/65)).
+- **Repeated Windows ZIP imports report an existing target correctly.** A rename permission error maps to HTTP 409 only when the target exists; genuine permission failures remain errors and existing packages are preserved ([#64](https://github.com/ackness/covel/issues/64)).
+- **New entity IDs no longer restart an in-memory counter.** Randomized IDs prevent collisions caused by CJK names, normalized labels and process restarts. Graph creation also rejects occupied keys while preserving old IDs and edge endpoints ([#70](https://github.com/ackness/covel/issues/70)).
+- **Tool tasks cannot report success from prose or fake tool-call JSON.** Guide and scene prompts request their finishing tools. State extractors require an actual finishing call or an explicit no-change call; unresolved tool failures remain failures. Relationship extraction requests a real tool call while allowing either a write or no change ([#67](https://github.com/ackness/covel/issues/67)).
+- **Retry results remain attached to the story they supplement.** Stage choices stay visible after single or batch retries, including restored legacy records with retained retry metadata. Retries retain declared upstream inputs and guard-provided schemas without regenerating completed story or counting another player turn ([#68](https://github.com/ackness/covel/issues/68)).
+- **Narrators can read non-active character profiles.** Both engines declare session-scoped character lookup tools, active cast includes structured attributes, and character tracking cannot overwrite an existing character's authored name, type or description ([#69](https://github.com/ackness/covel/issues/69)).
+- **Community plugin approvals cover the complete interaction flow.** Automatic runtimes request grants before execution; restored forms can reauthorize their source after restart. Multi-plugin validation, denial and navigation retain editable input and do not commit partial submissions.
+- **Plugin forms and panels refresh after committed changes.** Manual forms persist and appear without a reload, activation waits for server confirmation, and long mobile tab lists keep the selected panel visible. Enabling tabletop rules during play initializes rules without recreating the player and passes same-turn rules to the check runtime.
+- **Character creation and output validation preserve meaningful failures.** String attributes accept string-valued suggestions without weakening numeric or enum constraints. Preparation chatter and failed tool result objects cannot turn a failed form operation into empty success.
+- **The landing page and desktop bridge display the installed package version.** Translated headings and preload no longer fall back to stale hardcoded versions. Release validation checks framework versions while allowing independently versioned plugins and worlds.
+
+### Upgrade notes
+
+- Update the server and bundled Web client together. No SQL schema migration is required. Existing IDs remain valid; data already overwritten by an older version requires an intact backup or snapshot to recover.
+- Tabletop rules are optional. Advanced combat, progression, multiplayer hosting and a live remaining-points counter are not included. Third-party packages can implement their own rules through the documented interfaces.
+- Narration is displayed as a complete response after its text check and may require up to two correction calls. This is a limited perspective check, not a guarantee of factual accuracy; it does not clean previously incorrect history or resolve every model inference or relationship-classification error.
+- Community runtime grants may need approval again after a server restart. Packaged macOS Apple Silicon and Windows x64 artifacts remain unsigned; updates use manual download and installation.
+
+## [0.0.34] - 2026-09-15
+
+This patch release preserves saved state through recovery, world-package changes and failed configuration writes, and fixes cancellation and resource cleanup across the client and providers.
+
+### Fixed
+
+- **Snapshots and forks keep the state captured at their commit.** Forks preserve display messages, structured-state schemas and runtime exports without borrowing newer results from the source session. Snapshot export queries respect their session, runtime and revision boundaries.
+- **Browser workspace recovery completes before newer mutations.** Durable pending commits survive failures, missing transient server sessions can be rebuilt, and checkpoint exports retain interrupted runtime results even without a completed turn record.
+- **Stopping a turn cancels pre-commit hooks and rolls back pending proposals.** Already committed snapshots and post-commit cleanup remain valid when cancellation arrives late. Recovery keeps interrupted and failed work distinguishable from completed story.
+- **World loading preserves the active package and its last complete state.** Startup and hot reload share root priority, reject ambiguous IDs and linked manifests, and retain stored worlds when inventories or dimensions cannot be read completely.
+- **World deletion and installation preserve existing data on failure.** File deletion follows the world's storage binding and manifest ID, restores the package after database failure, and refuses missing or ambiguous bindings. Uploads and generated worlds use create-only activation; failed activation cleans only the newly created package.
+- **Generated and imported packages become visible only after validation.** Generated packages and desktop directory imports use staging, hidden directories are excluded from discovery, and imports reject linked manifests and copies into their own source tree.
+- **World dimensions agree across memory, SQLite, PostgreSQL and API responses.** Replacements and explicit removal update the top-level projection, while ordinary edits preserve source and storage ownership.
+- **Configuration failures no longer discard effective settings or removed keys.** Model overlays survive reload boundaries, legacy bindings normalize consistently, default model roles remain editable, and desktop key deletion updates both persisted and running configuration. First launch consistently uses the user's model configuration path.
+- **Plugin activation and relationship updates follow their current contracts.** Pending server entries remain available for authorized lazy activation. Relationship edits refresh labels and changed endpoints while retaining layout; expired edges are excluded even at turn zero.
+- **HTTP retries and event streams stop promptly on cancellation.** Discarded response bodies are cancelled, long Retry-After waits avoid timer overflow, custom abort reasons remain cancellations, and late responses cannot reopen a closed subscription. SSE parsing handles mixed line endings and incomplete final frames.
+- **Invalid JSON requests fail before dispatch.** Object endpoints reject null and scalar bodies; approval scope, event payload and provider-ping fields are validated before consuming approvals or publishing events.
+
+### Performance
+
+- Browser commit replay metadata stores fixed-length checkpoint digests instead of repeated full JSON strings. Completed per-session queue entries are released.
+- Repeated provider request bodies share one trace entry while retaining each attempt's timing and status. Relationship highlighting uses cached neighbor membership, and SSE parsing slices complete text lines.
+
+### Upgrade notes
+
+- Update the server and bundled Web client together. No SQL schema migration is required. BrowserVault upgrades its local IndexedDB metadata to schema v4 atomically; export important saves and custom content before upgrading.
+- Custom trace consumers should support `providerRequests` schema v2 `bodyRef` entries as documented in [the protocol reference](./reference/protocol.md). Historical full-body entries remain readable.
+- File/database deletion recovery handles failures within the running process; it is not a crash-atomic transaction across both systems.
+- macOS Apple Silicon and Windows x64 installers remain unsigned. Gatekeeper or SmartScreen may warn on first launch; updates provide a notification and manual download, without automatic installation.
+
 ## [0.0.33] - 2026-09-12
 
 This release improves agent execution and cancellation, brings onboarding and configuration in line with the current runtime, and makes world editing, session navigation, and portrait replacement more reliable.
@@ -1136,7 +1217,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.31...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.36...HEAD
+[0.0.36]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.36
 [0.0.31]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.31
 [0.0.30]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.30
 [0.0.29]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.29

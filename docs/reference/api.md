@@ -553,7 +553,7 @@ Session 级 lorebook 词条 CRUD。Entries 通常由插件通过 proposal commit
 | GET  | `/api/sessions/:id/snapshots/:snapshotId` | 按 id 获取单个快照（含完整 payload）                                                                  |
 | POST | `/api/sessions/:id/fork`                  | 从指定 snapshotId 物化一个新 session，拷贝状态与截至 cursor 的消息；响应一次性返回 child `ownerToken` |
 
-Fork 不继承 community server-code grant；child 中对应插件保持未激活，需由 operator 在新 session 内重新 enable/approve。进程重启后同样不恢复易失 grant，`GET /api/sessions/:id/plugins` 会清理缺少当前 grant 的历史 active community 项。
+Fork 不继承 community server-code grant；child 中对应插件保持未激活，需由 operator 在新 session 内重新 enable/approve。进程重启后同样不恢复易失 grant；`GET /api/sessions/:id/plugins` 将缺少当前 grant 的 community 项显示为未激活，但保留会话中保存的插件选择，便于后续调用重新授权。
 
 ### 角色数据
 
@@ -1320,6 +1320,8 @@ Turn 是游戏的核心交互单元。每次玩家发言触发一个 Turn，服�
 
 #### `POST /api/sessions/:id/plugin-rpc` (`framework.submit-form`)
 
+带插件校验器的旧表单在重启或撤销授权后，提交会先返回 **202** `approval-required`，请求其来源插件的 `covel:plugin-server-code` session grant。来源只从已提交 interaction 的 `sourcePluginId` 读取，客户端不能指定。批量提交可依次请求多个插件；全部授权和校验通过后才一次性写入。拒绝授权保留表单内容；已禁用或卸载的来源插件返回 400，不会自动启用。Web 在授权后重发同一份提交，hosted 部署同时需要 operator 凭证。
+
 提交一个或多个玩家交互响应。
 
 **参数:**
@@ -1674,7 +1676,7 @@ PostgreSQL 多 Pod 部署不会执行这种 owner 扫描：进程 id 不是租�
 
 > **提交结果是权威判据**：runtime 可能返回 `success` 而其 proposal 提交失败。此时同步 RPC 返回 `500 turn_commit_failed`，诊断位于通用错误信封的 `details`；background job 标记 `failed`（`error` 说明失败的 proposal 数量），且**不会**调度该回合的 deferred follower —— 后续 follower 不应建立在已回滚的状态上。主回合路径（`POST /api/actions`）遵循同一规则。
 
-> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并为审批重试设置两阶段上限。hosted 层级两个步骤都要求 operator token。builtin 的 entry 在 boot 时已运行，其未知 action 直接 404。
+> **community 插件 + `entry` action 的延迟激活**：首次调用时 action 尚未注册，服务端先返回固定 `action: "covel:plugin-server-code"` 的全模块审批，避免由调用方伪造的 action label 诱导加载代码。session-scope 审批后加载 entry 并验证 action：不存在立即 404；存在则再返回该真实 action 的独立审批。客户端应处理这两个连续的 `approval-required` 响应，并在同一请求重复索取同一 `(pluginId, action)` 授权时终止重试。hosted 层级两个步骤都要求 operator token。builtin 的 entry 在 boot 时已运行，其未知 action 直接 404。
 >
 > **community 插件 + `runtimeId`（runtime 模式）同样采用两阶段授权**：缺少 server-code grant 时第一次调用先返回 `covel:plugin-server-code` 审批；批准后重试返回 `runtime:<runtimeId>` 审批；两个**精确** grant 同时存在，runtime 才会加载执行。entry import 也只认精确 `covel:plugin-server-code` grant，任意其他 action grant 不会解锁模块加载。revoke 按 `(session, plugin)` 前缀清除两类 grant。
 
@@ -2799,6 +2801,8 @@ id: evt-002
 
 支持的 `type`：`send_message` · `execute_command` · `start_session` · `retry_turn` · `retry_runtime` · `retry_failed_runtimes`。六种请求都必须显式提供与 type 匹配的 `payload`；不接受未知字段。
 
+**社区插件授权**：缺少授权时，在启动 SSE 和写入回合之前返回 HTTP **202 JSON** `{ status: "approval-required", approvalId, pending }`。客户端通过审批接口授予当前会话权限后，使用同一个 `requestId` 重发原请求；可能依次询问 `covel:plugin-server-code` 及各个 `runtime:<name>`。普通动作检查已选插件中参与自动执行的 runtime（经过 capability provider 替换），显式重试只检查选定的目标；手动 runtime 的普通调用仍走 plugin-RPC 授权。拒绝审批不得执行回合。hosted 模式仍要求 operator 权限；执行器在真正加载代码时继续检查授权。Web 客户端支持连续审批，并拒绝重复或跨会话的审批响应。
+
 | `payload` 字段    | 适用 `type`             | 说明                                                                                                                                                                                   |
 | ----------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `content`         | `send_message`          | 玩家自然语言输入。`actions.ts` 优先读取此字段。                                                                                                                                        |
@@ -3345,6 +3349,19 @@ be retried. Uploaded worlds carry `source: "generated-file"` and a binding to
 the user world directory, so DELETE works immediately. An existing world ID
 returns 409 without overwriting its record. Plugin installation still returns
 `restartRequired: true`.
+
+Both ZIP install endpoints reject an existing target directory with
+`409 { error: "target already exists: <id>" }`, including Windows rename
+conflicts reported as `EPERM`. An `EPERM` with no detectable target retains
+its original error. Failed publication removes the staging directory and
+preserves the existing installation.
+
+In Electron, `covel:restart-server` owns both the sidecar restart and native
+window navigation to the new port after the health check succeeds. The Web
+client keeps its reload overlay visible and must not reload the old URL or
+attempt a cross-origin redirect. Development reloads the external Vite page.
+Uninstalling a plugin still requires a restart to unload discovered code and
+does not delete its saved session data.
 
 Generated file worlds are written in a hidden staging directory and published
 only when complete. Existing packages and database identities are preserved;

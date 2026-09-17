@@ -255,6 +255,8 @@ export interface ExecutionContext {
   readonly executionId: string;
   readonly origin: ExecutionOrigin;
   readonly logicalTurnId?: string;
+  /** Committed content source for a scoped retry; never changes execution identity. */
+  readonly sourceTurnId?: string;
   readonly countPolicy: CountPolicy;
 }
 

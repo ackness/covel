@@ -17,6 +17,8 @@ import {
   rm,
   readFile,
   writeFile,
+  rename,
+  readdir,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -28,6 +30,11 @@ import { createMemoryStore } from "@covel/store";
 import { worldRoutes } from "../../src/routes/api/worlds.js";
 import { installRoutes } from "../../src/routes/api/install.js";
 import { createRequestBodyLimitMiddleware } from "../../src/middleware/request-body-limit.js";
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs/promises")>();
+  return { ...fs, rename: vi.fn(fs.rename) };
+});
 
 // ── Env override helpers ────────────────────────────────────────
 
@@ -423,12 +430,17 @@ describe("POST /api/install/plugin", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects overwrite (target exists)", async () => {
+  it.each(["native", "EPERM"])("rejects overwrite (%s)", async (code) => {
     const app = createTestApp();
     // Simulate a previously-installed plugin: the dir is non-empty.
     const existingDir = path.join(pluginsDir, "test-plugin");
     await mkdir(existingDir, { recursive: true });
     await writeFile(path.join(existingDir, "marker.txt"), "existing-install");
+    if (code === "EPERM") {
+      vi.mocked(rename).mockRejectedValueOnce(
+        Object.assign(new Error("synthetic Windows rename failure"), { code }),
+      );
+    }
 
     const zip = await buildZip({
       "PLUGIN.md": VALID_PLUGIN_MD,
@@ -443,6 +455,25 @@ describe("POST /api/install/plugin", () => {
     await expect(
       readFile(path.join(existingDir, "marker.txt"), "utf-8"),
     ).resolves.toBe("existing-install");
+    expect(await readdir(pluginsDir)).toEqual(["test-plugin"]);
+  });
+
+  it("does not report permission failures as existing packages", async () => {
+    const app = createTestApp();
+    const zip = await buildZip({
+      "PLUGIN.md": VALID_PLUGIN_MD,
+      "package.json": VALID_PACKAGE_JSON,
+    });
+    vi.mocked(rename).mockRejectedValueOnce(
+      Object.assign(new Error("synthetic access denied"), { code: "EPERM" }),
+    );
+
+    const res = await postZip(app, "/api/install/plugin", zip);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: "synthetic access denied",
+    });
+    expect(await readdir(pluginsDir)).toEqual([]);
   });
 
   it("rejects request without multipart file", async () => {
@@ -726,11 +757,16 @@ describe("POST /api/install/world", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects overwrite", async () => {
+  it.each(["native", "EPERM"])("rejects overwrite (%s)", async (code) => {
     const app = createTestApp();
     const existingDir = path.join(worldsDir, "test-world");
     await mkdir(existingDir, { recursive: true });
     await writeFile(path.join(existingDir, "marker.txt"), "existing-world");
+    if (code === "EPERM") {
+      vi.mocked(rename).mockRejectedValueOnce(
+        Object.assign(new Error("synthetic Windows rename failure"), { code }),
+      );
+    }
 
     const zip = await buildZip({
       "world.yaml": VALID_WORLD_YAML,
@@ -738,9 +774,13 @@ describe("POST /api/install/world", () => {
     });
     const res = await postZip(app, "/api/install/world", zip);
     expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: "target already exists: test-world",
+    });
     await expect(
       readFile(path.join(existingDir, "marker.txt"), "utf-8"),
     ).resolves.toBe("existing-world");
+    expect(await readdir(worldsDir)).toEqual(["test-world"]);
   });
 
   it("rejects zip-slip", async () => {

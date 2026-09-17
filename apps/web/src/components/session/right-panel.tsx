@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Database, BookOpen, HelpCircle, type LucideIcon } from "lucide-react";
 import {
@@ -116,6 +116,7 @@ function SessionRightPanel({
 }: RightPanelProps) {
   const { t, i18n } = useTranslation();
   const pluginPanelStateCacheRef = useRef<PluginPanelStateCache>(new Map());
+  const tabRailRef = useRef<HTMLDivElement>(null);
   const [storageData, setStorageData] = useState<StorageStatusData | null>(
     null,
   );
@@ -171,6 +172,14 @@ function SessionRightPanel({
   }, []);
 
   const storageStatus = resolveStorageStatus(storageData);
+
+  // The asynchronous storage footer can shrink the rail after a tab was
+  // selected. Keep that selection visible without moving the content pane.
+  useLayoutEffect(() => {
+    tabRailRef.current
+      ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+      ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [activeTab, tabItems, storageData]);
 
   useEffect(() => {
     if (panelRequest) setPendingPanelRequest(panelRequest);
@@ -290,6 +299,7 @@ function SessionRightPanel({
         orientation="vertical"
       >
         <div
+          ref={tabRailRef}
           className="border-r border-(--rule-color) shrink-0 w-12 min-h-0 overflow-y-auto overscroll-contain"
           style={{
             background:

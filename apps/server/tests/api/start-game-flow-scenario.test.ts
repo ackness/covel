@@ -87,6 +87,7 @@ function makeEntry(id: string, loaded: LoadedRuntime): PluginRegistryEntry {
   };
   return {
     id,
+    source: "builtin",
     summary: makeSummary(id),
     manifest: parsed,
     manifests: [parsed],

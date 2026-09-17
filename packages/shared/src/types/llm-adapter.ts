@@ -81,8 +81,8 @@ export interface LLMToolDefinition {
 export interface LLMRequestDefaults {
   /** Deterministic extraction can opt out of optional reasoning by default. */
   readonly reasoningEffort?: "disabled";
-  /** Prefer this declared tool; reasoning-only models may require automatic choice. */
-  readonly toolChoice?: { readonly name: string };
+  /** Require any declared tool or a named one; thinking may require automatic choice. */
+  readonly toolChoice?: "required" | { readonly name: string };
 }
 
 export interface LLMResponseFormat {

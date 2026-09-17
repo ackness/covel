@@ -60,3 +60,5 @@ export type {
   SpeechGenerateOutput,
   SpeechTranscribeInput,
 } from "./types.js";
+
+export { resolveRuntimeProviders } from "./runtime-providers.js";

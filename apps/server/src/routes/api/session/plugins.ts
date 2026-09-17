@@ -1,5 +1,6 @@
 import {
   getPluginTrustInfo,
+  resolveRuntimeProviders,
   type PluginRegistry,
   type PluginRegistryEntry,
 } from "@covel/plugin-loader";
@@ -13,6 +14,21 @@ import type { SessionPlugin, SnapshotPluginStatus } from "@covel/shared";
 import { buildPluginSummary } from "../../../lib/plugin-descriptor.js";
 import { pluginManifestRecords } from "../../misc-api/registry-projection.js";
 import { sessionApprovalScope } from "./session-guard.js";
+
+/** Reject ambiguous replacements before persisting a session's plugin selection. */
+export function validateSessionRuntimeProviders(
+  pluginIds: readonly string[],
+  registry: PluginRegistry,
+): void {
+  resolveRuntimeProviders(
+    pluginIds.flatMap((id) => {
+      const entry = registry.get(id);
+      return entry
+        ? pluginManifestRecords(entry).map((parsed) => parsed.manifest)
+        : [];
+    }),
+  );
+}
 
 /** Exclude community server code unless this session owns a live grant. */
 export function approvedActivePlugins(

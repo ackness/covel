@@ -36,6 +36,7 @@ export interface HandleSuspensionOptions {
   readonly messages: readonly LLMMessage[];
   readonly finalContent: string | null;
   readonly collectedToolCalls: readonly ToolCallRecord[];
+  readonly completionCalls?: SuspensionRecord["pendingContinuation"]["completionCalls"];
   readonly pendingProposals: readonly Proposal[];
   readonly emittedEvents: readonly EmittedEvent[];
   readonly executionContext: ExecutionContext;
@@ -78,6 +79,7 @@ export async function handleSuspension(
     messages: [...messages],
     partialContent: finalContent ?? undefined,
     toolCallsSoFar: [...collectedToolCalls],
+    ...(opts.completionCalls ? { completionCalls: opts.completionCalls } : {}),
     pendingProposals: [...pendingProposals],
     ...(opts.inputSlots ? { inputSlots: opts.inputSlots } : {}),
     ...(emittedEvents.length > 0 ? { emittedEvents: [...emittedEvents] } : {}),

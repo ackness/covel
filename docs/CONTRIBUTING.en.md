@@ -104,31 +104,15 @@ Common types: `feat` / `fix` / `refactor` / `docs` / `test` / `chore` / `perf` /
 
 ## Release process
 
-Covel releases are driven by Git tags.
+Use the [desktop release checklist](./guide/desktop-packaging.md#release-checklist) as the single operational checklist:
 
-1. All changes merged into `main` with green CI
-2. Move the `[Unreleased]` entries in [`CHANGELOG.md`](./CHANGELOG.md) into a `## [<version>] - YYYY-MM-DD` section and add upgrade notes
-3. Set the root and every active workspace `package.json` to the target SemVer, and update the version badges, Release links, and current-version notices in [`README.md`](../README.md) and [`README.zh-CN.md`](../README.zh-CN.md). No npm publication is required; independent plugin manifest versions do not automatically follow the workspace version
-4. Run release preflight, review and stage the release changes, then commit and tag:
+1. Prepare versions, CHANGELOG and docs on a development branch. Root, `apps/*` and `packages/*` versions must match the target tag; plugin and world packages may version independently.
+2. Complete local `pnpm lint`, `pnpm test`, UI/E2E checks and `pnpm release:preflight` sequentially, then exercise the [real-model player flow](./guide/e2e-testing.md#发版前的玩家流程验收) with isolated data.
+3. Push the PR after local checks pass. Wait for CI / PostgreSQL integration and a `Build Desktop` dry run on the candidate branch (`publish_release=false`).
+4. Merge the PR, verify checks and the exact commit on `main`, then create and push an annotated `v*` tag on that commit.
+5. The [release workflow](../.github/workflows/release.yml) validates the immutable commit, framework versions and release notes, then builds and verifies macOS arm64 / Windows x64 artifacts before publishing. Download the assets to check versions, digests, startup and plugin lifecycle.
 
-   ```bash
-   pnpm release:preflight
-   RELEASE_VERSION=$(node -p "require('./package.json').version")
-   # Review and stage only the release changes before committing.
-   git commit -m "chore(release): v${RELEASE_VERSION}"
-   git tag -a "v${RELEASE_VERSION}" -m "Covel v${RELEASE_VERSION}"
-   git push origin main
-   git push origin "v${RELEASE_VERSION}"
-   ```
-
-5. [`.github/workflows/release.yml`](../.github/workflows/release.yml) will, on any `v*` tag push:
-   - Validate the tag, immutable commit SHA, workspace versions, CHANGELOG, and release gates
-   - Build and verify Electron macOS arm64 `.dmg` / `.zip` and Windows x64 `.exe` artifacts
-   - Produce unsigned macOS and Windows artifacts; macOS artifacts are also unnotarized
-   - Extract the matching release notes from `docs/CHANGELOG.md`
-   - Publish or update the GitHub Release only after every gate passes
-
-6. Open the Releases page and verify the published release notes and assets
+Record the platforms and flows actually exercised; a successful build is not an interactive playthrough. Release notes must disclose unsigned artifacts and the absence of macOS notarization.
 
 ### Code signing
 

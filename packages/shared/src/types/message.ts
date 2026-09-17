@@ -32,7 +32,10 @@ export interface PlayerInputField {
   readonly placeholder?: string;
   readonly options?: readonly string[];
   readonly required?: boolean;
-  readonly defaultValue?: string;
+  readonly defaultValue?: string | number | boolean;
+  readonly min?: number;
+  readonly max?: number;
+  readonly step?: number;
 }
 
 export interface PlayerInputForm {

@@ -173,6 +173,14 @@ export default function ({ tool, z, shortIdBatch, store }) {
         newNodeNames.length > 0
           ? shortIdBatch("npc", newNodeNames, context.sessionId)
           : [];
+      // Fail before staging writes if an allocator reuses a durable or buffered
+      // key. A new node must never replace an unrelated old node.
+      const occupiedIds = new Set(existingNodeRows.map((row) => row.key));
+      for (const id of assignedIds) {
+        if (occupiedIds.has(id))
+          throw new Error(`NPC node ID collision: ${id}`);
+        occupiedIds.add(id);
+      }
       /** @type {Map<string, string>} */
       const newNameToId = new Map();
       for (let i = 0; i < newNodeNames.length; i += 1) {

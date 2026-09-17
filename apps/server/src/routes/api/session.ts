@@ -50,6 +50,7 @@ import {
 import {
   approvedActivePlugins,
   resolveSessionPlugins,
+  validateSessionRuntimeProviders,
   unknownPluginIds,
 } from "./session/plugins.js";
 import {
@@ -213,6 +214,16 @@ sessionRoutes.post("/", async (c) => {
     pluginRegistry,
     c.get("rpcApprovalGate"),
   );
+  try {
+    validateSessionRuntimeProviders(plugins, pluginRegistry);
+  } catch (error) {
+    return c.json(
+      errorBody(
+        error instanceof Error ? error.message : "Invalid runtime providers",
+      ),
+      400,
+    );
+  }
 
   // Owner token: minted on every tier so a session created
   // locally keeps working if the deployment is later promoted to a hosted

@@ -95,6 +95,38 @@ async function run(
 }
 
 describe("batch runtime recovery", () => {
+  it("passes a guard-provided schema into a retried consumer without rerunning the provider", async () => {
+    const upstream = {
+      ...seed("schema", { skip: true, worldSchema: { version: 1 } }),
+      status: "skipped" as const,
+    };
+    const { result, calls } = await run(
+      [
+        manifest("schema"),
+        manifest("form", {
+          inputs: {
+            schema: {
+              from: { runtime: "schema" },
+              select: "/worldSchema",
+              required: true,
+            },
+          },
+        }),
+      ],
+      "form",
+      {
+        form: async (ctx) => {
+          expect(ctx.inputs?.schema?.value).toEqual({ version: 1 });
+          return { ready: true };
+        },
+      },
+      [upstream],
+    );
+    expect(calls).toEqual(["form"]);
+    expect(result.runtimeResults).toMatchObject([
+      { runtimeId: "form", status: "success" },
+    ]);
+  });
   it("runs independent targets together using committed inputs without rerunning story or event followers", async () => {
     const bothStarted = Promise.withResolvers<void>();
     let started = 0;

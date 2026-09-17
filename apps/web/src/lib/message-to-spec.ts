@@ -171,7 +171,10 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
     required?: boolean;
     placeholder?: string;
     options?: string[] | Array<{ value: string; label: string }>;
-    defaultValue?: string;
+    defaultValue?: string | number | boolean;
+    min?: number;
+    max?: number;
+    step?: number;
   }>;
   const submitLabel = (data.submitLabel as string) ?? tr("form.submit");
   const narrativeTemplate = data.narrativeTemplate as string | undefined;
@@ -207,12 +210,15 @@ function formToSpec(data: Record<string, unknown>): NestedSpec {
     children.push({
       type: "FormField",
       props: {
-        fieldType: field.type === "select" ? "select" : "text",
+        fieldType: field.type,
         label: field.label ?? field.name,
         placeholder: field.placeholder,
         required: field.required,
         options,
         defaultValue: field.defaultValue,
+        min: field.min,
+        max: field.max,
+        step: field.step,
         value: { $bindState: `/form/${field.name}` },
       },
     });
@@ -264,13 +270,13 @@ function formToSpecDisabled(
     const raw = submittedValues?.[field.name];
     const submittedValue = raw === undefined || raw === null ? "" : String(raw);
     const props: Record<string, unknown> = {
-      fieldType: field.type === "select" ? "select" : "text",
+      fieldType: field.type,
       label: field.label ?? field.name,
       options,
       disabled: true,
     };
     if (submittedValue) {
-      props.value = submittedValue;
+      props.value = raw;
       props.placeholder = submittedValue;
     } else {
       // No persisted value (legacy submissions) — fall back to live state binding.

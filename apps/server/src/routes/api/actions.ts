@@ -72,6 +72,7 @@ import {
   sessionApprovalScope,
 } from "./session/session-guard.js";
 import { validateActionRequest } from "./actions/request.js";
+import { preflightActionApprovals } from "./actions/approval-preflight.js";
 import { buildManualTurnExecutorDeps } from "./turn-execution-deps.js";
 import {
   prepareRuntimeRetry,
@@ -170,6 +171,9 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
       409,
     );
   }
+
+  const approval = preflightActionApprovals(c, session, body);
+  if (approval) return approval;
 
   // Lazy-lock the session's embedding model once per process boot.
   // No-op when the store has no vector capability or no embed slot is

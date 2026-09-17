@@ -1,5 +1,6 @@
 import type {
   ExecutionContext,
+  LLMTargetIdentity,
   Proposal,
   RuntimeManifest,
   RuntimeResult,
@@ -18,6 +19,10 @@ import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
 import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
 import { storyOutputError } from "../agent-loop/story-output.js";
+import {
+  completionContractError,
+  withAgentFailureTarget,
+} from "../agent-loop/runtime-completion.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
@@ -54,6 +59,7 @@ export async function resumeSuspendedRuntime(
   const timeoutMs = options?.timeoutMs ?? manifest.timeoutMs ?? 60000;
   const runId = crypto.randomUUID();
   const hookPipeline = deps.hookPipeline;
+  let lastTarget: LLMTargetIdentity | undefined;
 
   // Minimal TurnInput for the resumed runtime: session/turn come from the
   // suspension and there is no fresh player message. With no model overrides the
@@ -86,7 +92,10 @@ export async function resumeSuspendedRuntime(
       manifest.outputKind === "story" && final.status === "success"
         ? storyOutputError(final.output)
         : undefined;
-    return error ? { ...final, status: "failed", output: null, error } : final;
+    return withAgentFailureTarget(
+      error ? { ...final, status: "failed", output: null, error } : final,
+      lastTarget,
+    );
   };
 
   // ── PreRuntime hook ──────────────────────────────────────────────
@@ -231,6 +240,7 @@ export async function resumeSuspendedRuntime(
       finalContent: pendingContinuation.partialContent ?? null,
       collectedToolCalls:
         pendingContinuation.toolCallsSoFar as ToolCallRecord[],
+      completionCalls: pendingContinuation.completionCalls,
       pendingProposals: pendingContinuation.pendingProposals as Proposal[],
       emittedEvents:
         (pendingContinuation.emittedEvents as EmittedEvent[] | undefined) ?? [],
@@ -240,6 +250,7 @@ export async function resumeSuspendedRuntime(
   // terminal RuntimeResult (handleSuspension is unreachable); the guard keeps
   // the union types honest.
   if ("status" in toolLoop) return toolLoop;
+  lastTarget = toolLoop.lastTarget;
 
   const {
     finalContent,
@@ -270,6 +281,22 @@ export async function resumeSuspendedRuntime(
         maxSteps: effectiveMaxSteps,
         failedToolCalls,
       }),
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  const completionError = completionContractError(manifest, toolLoop);
+  if (completionError) {
+    return finalizeWithPostRuntime({
+      pluginId: manifest.pluginId,
+      runtimeId: manifest.name,
+      runId,
+      turnId: suspension.turnId,
+      status: "failed",
+      output: null,
+      toolCalls: collectedToolCalls,
+      durationMs: Date.now() - startTime,
+      error: completionError,
       timestamp: new Date().toISOString(),
     });
   }

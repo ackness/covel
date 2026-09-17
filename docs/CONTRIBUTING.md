@@ -104,31 +104,15 @@ pnpm e2e                                   # Playwright 端到端
 
 ## Release Process
 
-Covel 的发布由 Git tag 驱动。
+发布检查的唯一操作清单是[桌面打包指南](./guide/desktop-packaging.md#release-checklist)。按以下顺序执行：
 
-1. 所有改动合并到 `main` 且 CI 通过
-2. 将 [`CHANGELOG.md`](./CHANGELOG.md) 的 `[Unreleased]` 内容整理为 `## [<version>] - YYYY-MM-DD` 版本段落，补充升级说明
-3. 将根目录与所有当前 workspace 的 `package.json` 统一为目标 SemVer，并同步 [`README.md`](../README.md) 和 [`README.zh-CN.md`](../README.zh-CN.md) 的版本徽标、Release 链接与当前版本说明。无需发布到 npm；插件 manifest 的独立版本不随 workspace 版本机械修改
-4. 运行发布前检查，核对并暂存本次发布改动，再提交并打 tag：
+1. 在开发分支准备版本、CHANGELOG 和文档。根目录、`apps/*` 与 `packages/*` 的版本匹配目标 tag；插件和世界包可以独立版本化。
+2. 先顺序完成本地 `pnpm lint`、`pnpm test`、UI/E2E 检查和 `pnpm release:preflight`，再用隔离数据完成[真实模型玩家流程](./guide/e2e-testing.md#发版前的玩家流程验收)。
+3. 本地通过后推送 PR，等待 CI / PostgreSQL 集成，以及候选分支的 `Build Desktop` dry run（`publish_release=false`）通过。
+4. 合并 PR，确认 `main` 的检查和准确提交，再在该提交创建并推送 annotated `v*` tag。
+5. [发布工作流](../.github/workflows/release.yml) 校验不可变提交、框架版本和发布说明，构建并验证 macOS arm64 / Windows x64 产物后发布 GitHub Release。下载产物复核版本、摘要、启动和插件生命周期。
 
-   ```bash
-   pnpm release:preflight
-   RELEASE_VERSION=$(node -p "require('./package.json').version")
-   # Review and stage only the release changes before committing.
-   git commit -m "chore(release): v${RELEASE_VERSION}"
-   git tag -a "v${RELEASE_VERSION}" -m "Covel v${RELEASE_VERSION}"
-   git push origin main
-   git push origin "v${RELEASE_VERSION}"
-   ```
-
-5. [`.github/workflows/release.yml`](../.github/workflows/release.yml) 将在 `v*` tag 推送时自动：
-   - 校验 tag、提交 SHA、workspace 版本、CHANGELOG 与完整发布前检查
-   - 构建并验证 Electron macOS arm64 `.dmg` / `.zip` 和 Windows x64 `.exe`
-   - 产出未签名的 macOS 与 Windows 安装包；macOS 产物也未公证
-   - 从 `docs/CHANGELOG.md` 抽取对应版本说明
-   - 所有检查通过后发布或更新 GitHub Release
-
-6. 在 Releases 页面检查正式发布页、release notes 与附件
+记录实际覆盖的平台与流程；构建通过不等于完成该平台的交互试玩。Release notes 必须说明当前产物未签名，macOS 产物也未公证。
 
 ### 代码签名
 

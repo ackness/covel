@@ -12,7 +12,7 @@ Fill in either language. You can delete the section you don't use.
 
 ## Environment / 环境
 
-- Covel version / 版本：<!-- e.g. v0.0.1-beta -->
+- Covel version / 版本：<!-- e.g. v0.0.35 -->
 - Platform / 平台：<!-- macOS arm64 / Windows x64 / source -->
 - Node.js：<!-- node -v -->
 - LLM provider + model / 模型：<!-- e.g. deepseek / deepseek-chat -->

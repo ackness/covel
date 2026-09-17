@@ -75,6 +75,29 @@ describe("plugin-rpc-ui", () => {
     );
   });
 
+  it("explains a manual action blocked by its plugin setup", () => {
+    emitPluginRpcRuntimeResponse({
+      response: {
+        status: "ok",
+        runtimeResults: [
+          {
+            runtimeId: "community/check",
+            pluginId: "community",
+            status: "skipped",
+            durationMs: 0,
+            output: { skipped: true, reason: "setup-incomplete" },
+          },
+        ],
+      },
+      t,
+      runtimeId: "community/check",
+    });
+    expect(emitToast).toHaveBeenCalledWith(
+      "info",
+      expect.stringContaining("setup first"),
+    );
+  });
+
   it("resolves approval and retries the original request", async () => {
     const retryResponse: PluginRpcResponse = { status: "ok", result: true };
     const retry = vi.fn(async () => retryResponse);
@@ -174,11 +197,11 @@ describe("plugin-rpc-ui", () => {
     expect(res).toBe(completed);
   });
 
-  it("stops after the expected approval stages", async () => {
+  it("stops when an already approved grant is requested again", async () => {
     const approval = (id: string): PluginRpcResponse => ({
       status: "approval-required",
       approvalId: id,
-      pending: { pluginId: "server-plugin", action: `action-${id}` },
+      pending: { pluginId: "server-plugin", action: "same-action" },
     });
     const retry = vi
       .fn<() => Promise<PluginRpcResponse>>()
@@ -197,12 +220,73 @@ describe("plugin-rpc-ui", () => {
       submitApproval,
     });
 
-    expect(submitApproval).toHaveBeenCalledTimes(2);
-    expect(retry).toHaveBeenCalledTimes(2);
+    expect(submitApproval).toHaveBeenCalledTimes(1);
+    expect(retry).toHaveBeenCalledTimes(1);
     expect(emitToast).toHaveBeenCalledWith(
       "error",
       expect.stringContaining("approval-required"),
     );
     expect(res).toBeNull();
+  });
+
+  it("approves every provider in a multi-plugin form batch", async () => {
+    const approval = (pluginId: string): PluginRpcResponse => ({
+      status: "approval-required",
+      approvalId: pluginId,
+      pending: {
+        sessionId: "session-1",
+        pluginId,
+        action: "covel:plugin-server-code",
+      },
+    });
+    const completed: PluginRpcResponse = { status: "ok", result: true };
+    const retry = vi
+      .fn<() => Promise<PluginRpcResponse>>()
+      .mockResolvedValueOnce(approval("two"))
+      .mockResolvedValueOnce(approval("three"))
+      .mockResolvedValueOnce(completed);
+    const submitApproval = vi.fn(async () => undefined);
+    const res = await resolvePluginRpcApprovalResponse({
+      response: approval("one"),
+      sessionId: "session-1",
+      retry,
+      pluginId: "framework",
+      actionLabel: "submit-form",
+      confirm: async () => true,
+      t,
+      submitApproval,
+    });
+    expect(submitApproval).toHaveBeenCalledTimes(3);
+    expect(retry).toHaveBeenCalledTimes(3);
+    expect(res).toBe(completed);
+  });
+
+  it("does not approve a response belonging to another session", async () => {
+    const confirm = vi.fn(async () => true);
+    const submitApproval = vi.fn(async () => undefined);
+    const retry = vi.fn();
+    expect(
+      await resolvePluginRpcApprovalResponse({
+        response: {
+          status: "approval-required",
+          approvalId: "foreign",
+          pending: {
+            sessionId: "other",
+            pluginId: "provider",
+            action: "covel:plugin-server-code",
+          },
+        },
+        sessionId: "session-1",
+        pluginId: "framework",
+        actionLabel: "submit-form",
+        confirm,
+        submitApproval,
+        retry,
+        t,
+      }),
+    ).toBeNull();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(submitApproval).not.toHaveBeenCalled();
+    expect(retry).not.toHaveBeenCalled();
   });
 });

@@ -403,6 +403,8 @@ export interface PreLLMCallRequest {
   readonly messages: readonly LLMMessage[];
   readonly model: string | undefined;
   readonly tools: readonly LLMToolDefinition[] | undefined;
+  /** A validating plugin may buffer output until its response check passes. */
+  readonly stream?: false;
 }
 
 export interface PreLLMCallPayload extends PreLLMCallRequest {
@@ -431,6 +433,7 @@ export async function runPreLLMCallHook(
       messages: replace.messages ?? request.messages,
       model: replace.model ?? request.model,
       tools: replace.tools ?? request.tools,
+      stream: replace.stream === false ? false : request.stream,
     };
   }
   return request;
@@ -440,6 +443,10 @@ export async function runPreLLMCallHook(
 
 export interface PostLLMResponsePayload {
   readonly response: LLMResponse;
+  /** Exact request sent to the provider, including governed tool results. */
+  readonly messages: readonly LLMMessage[];
+  /** Reject this draft and request a bounded correction before tool dispatch. */
+  readonly correction?: string;
   readonly pluginId: string;
   readonly runtimeId: string;
 }
@@ -447,9 +454,11 @@ export interface PostLLMResponsePayload {
 export async function runPostLLMResponseHook(
   opts: BaseOpts & { readonly pluginId: string; readonly runtimeId: string },
   response: LLMResponse,
-): Promise<LLMResponse> {
+  messages: readonly LLMMessage[],
+): Promise<{ response: LLMResponse; correction?: string }> {
   const payload: PostLLMResponsePayload = {
     response,
+    messages,
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,
   };
@@ -457,7 +466,11 @@ export async function runPostLLMResponseHook(
     pluginId: opts.pluginId,
     runtimeId: opts.runtimeId,
   });
-  return hookReplace(hookResult)?.response ?? response;
+  const replacement = hookReplace(hookResult);
+  return {
+    response: replacement?.response ?? response,
+    correction: replacement?.correction?.trim() || undefined,
+  };
 }
 
 // ── PreToolUse ───────────────────────────────────────────────────

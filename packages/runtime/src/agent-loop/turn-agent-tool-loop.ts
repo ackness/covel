@@ -7,6 +7,7 @@ import type {
   ToolCallRecord,
   TurnInput,
   InputSlot,
+  LLMTargetIdentity,
 } from "@covel/shared";
 import { isDefaultLocale, toJsonValueOrDiagnostic } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
@@ -15,13 +16,9 @@ import {
   isRuntimeDoneSentinel,
   type EmittedEvent,
 } from "@covel/tools";
-import type {
-  LLMMessage,
-  LLMResponseFormat,
-  LLMToolDefinition,
-} from "../llm/llm-adapter.js";
+import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
-import type { RetryInfo, RetryPolicy } from "../retry/llm-retry.js";
+import type { RetryInfo } from "../retry/llm-retry.js";
 import { buildAgentLoopPolicy } from "./agent-loop-policy.js";
 import { prepareBudgetedRequest } from "./request-context-budget.js";
 import { createDeltaForwarder } from "./delta-forwarder.js";
@@ -33,8 +30,8 @@ import {
   runPreToolUseHook,
   runPostToolUseHook,
   runPreLLMCallHook,
-  runPostLLMResponseHook,
 } from "../hooks/wire-helpers.js";
+import { createResponseReviewer } from "./response-review.js";
 import {
   extractToolFailureMessage,
   isRecord,
@@ -51,6 +48,12 @@ import {
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
 import { storyOutputError } from "./story-output.js";
+import {
+  checkTextCompletion,
+  hasExplicitCompletion,
+  captureCompletionCalls,
+  type CompletionCalls,
+} from "./runtime-completion.js";
 import { type BudgetOptions, type TokenEstimator } from "@covel/context";
 
 export interface AgentToolLoopCompleted {
@@ -67,24 +70,17 @@ export interface AgentToolLoopCompleted {
   readonly stoppedWithResponse: boolean;
   readonly effectiveMaxSteps: number;
   readonly deadline: number;
-  /**
-   * True when the runtime declared `requireToolUse` but finished without ever
-   * executing a business tool, even after the corrective nudge. The loop
-   * releases rather than wedging; the caller decides the outcome.
-   */
+  /** Required business tool work is still missing after the corrective step. */
   readonly requiredToolUseUnmet: boolean;
+  readonly requiredCompletionUnmet: boolean;
+  readonly lastTarget?: LLMTargetIdentity;
 }
 
 export type AgentToolLoopResult = AgentToolLoopCompleted | RuntimeResult;
 
-/**
- * Mid-loop state seeded into {@link runAgentToolLoop}. The normal execution
- * path leaves this empty (fresh loop); the resume path rebuilds it from a
- * persisted {@link import("@covel/store").SuspensionRecord} so a
- * suspended-then-resumed runtime continues with the same write set it had when
- * it suspended.
- */
+/** Mid-loop state restored from a suspension; omitted for a fresh loop. */
 export interface AgentToolLoopInitialState {
+  readonly completionCalls?: CompletionCalls;
   readonly finalContent?: string | null;
   readonly collectedToolCalls?: readonly ToolCallRecord[];
   readonly pendingProposals?: readonly Proposal[];
@@ -139,10 +135,9 @@ export async function runAgentToolLoop({
   initialState,
   allowSuspend = true,
 }: RunAgentToolLoopOptions): Promise<AgentToolLoopResult> {
-  // LLM call with tool-calling loop. State is seeded from `initialState` so the
-  // resume path continues from the persisted suspension; the normal path passes
-  // nothing and starts fresh.
+  // Resume starts with persisted loop state; ordinary execution starts fresh.
   let finalContent: string | null = initialState?.finalContent ?? null;
+  let lastTarget: LLMTargetIdentity | undefined;
   let finalToolOutput: Record<string, unknown> | null = null;
   const collectedToolCalls: ToolCallRecord[] = [
     ...(initialState?.collectedToolCalls ?? []),
@@ -167,17 +162,11 @@ export async function runAgentToolLoop({
   ];
   let steps = 0;
 
-  // Mutable: LLM-slot queue waits extend it (via onQueueWait below) so
-  // waiting for a concurrency slot doesn't burn the loop's own budget.
-  // Without this a multi-step agent that queued for minutes reaches its
-  // final "produce output" step with the loop deadline already spent and
-  // dies with "timed out while waiting for final output".
+  // Queue waits extend the deadline so they do not consume execution time.
   let deadline = Date.now() + timeoutMs;
   let stoppedWithResponse = false;
 
-  // All HOW-to-run decisions (tool surface, response format, model override,
-  // streaming gate, step/retry budgets) live in the policy module — the loop
-  // below is control flow only.
+  // The policy owns tool surfaces, model settings, and execution budgets.
   const {
     toolDefs,
     deferredToolNames,
@@ -200,9 +189,7 @@ export async function runAgentToolLoop({
     timeoutMs,
   });
 
-  // Working tool surface for this run. Starts as the policy's (possibly
-  // reduced) advertisement and grows when an intercepted `search-tools` call
-  // activates deferred tools — every subsequent LLM step sees the grown list.
+  // search-tools can activate deferred tools for subsequent steps.
   let activeToolDefs = toolDefs;
 
   // The loop's single narrative outlet — counts chunks for `message.completed`.
@@ -239,9 +226,8 @@ export async function runAgentToolLoop({
   // Set by a PostToolUse hook returning `terminate` — ends the loop after the
   // current response's tool calls are recorded.
   let terminatedByHook = false;
-  // requireToolUse: how many times we've already nudged a bare (no-tool-call)
-  // finish back into the loop. Capped at one correction so a model that keeps
-  // refusing to call its tool is released instead of burning maxSteps.
+  const reviewResponse = createResponseReviewer(hookOpts, messages);
+  // One correction for a bare finish that violates the tool-use contract.
   let noToolCallCorrections = 0;
   // Prose captured from steps that were extended by late steering (see the
   // late-steering drain below). Joined into finalContent at the final break
@@ -295,7 +281,7 @@ export async function runAgentToolLoop({
       emitter: deps.emitter,
     });
 
-    let response = await requestLLMResponse({
+    const rawResponse = await requestLLMResponse({
       manifest,
       deps,
       messages:
@@ -313,14 +299,20 @@ export async function runAgentToolLoop({
       onQueueWait: (waitedMs) => {
         deadline += waitedMs;
       },
-      useStreaming,
+      useStreaming: useStreaming && llmRequest.stream !== false,
       reportRetry,
       onStreamDelta: delta.forward,
     });
 
-    // ── PostLLMResponse hook ─────────────────────────────────────
-    // Inspect / patch the response (content, toolCalls) before tool dispatch.
-    response = await runPostLLMResponseHook(hookOpts, response);
+    lastTarget = rawResponse.target;
+    const response = await reviewResponse(
+      rawResponse,
+      budgetedRequest?.messages ?? llmRequest.messages,
+    );
+    if (!response) {
+      finalContent = null;
+      continue;
+    }
 
     if (response.toolCalls.length > 0) {
       // LLM requested tool calls — execute them and feed results back.
@@ -535,6 +527,10 @@ export async function runAgentToolLoop({
                 messages,
                 finalContent,
                 collectedToolCalls,
+                completionCalls: captureCompletionCalls(
+                  executedToolCalls,
+                  initialState?.completionCalls,
+                ),
                 pendingProposals,
                 emittedEvents,
                 executionContext,
@@ -723,32 +719,20 @@ export async function runAgentToolLoop({
       continue;
     }
 
-    // Nudge a tool-required runtime once after a bare prose finish. A second
-    // miss fails the contract; runtime-done alone is not business tool work.
-    const didBusinessToolWork =
-      seededBusinessWork ||
-      executedToolCalls.some(
-        (c) => c.success && !isRuntimeDoneSentinel(c.result),
-      );
-    if (requireToolUse && !didBusinessToolWork) {
-      if (noToolCallCorrections === 0) {
-        noToolCallCorrections++;
-        console.warn(
-          `[covel:warn] [runtime-retry] ${manifest.name} attempt=${noToolCallCorrections} reason=no-tool-call cause=finished without calling any tool`,
-        );
-        messages.push({
-          role: "system",
-          content: isDefaultLocale(input.locale)
-            ? "你没有调用任何工具就结束了。必须先调用声明的工具完成任务，再收尾。"
-            : "You finished without calling any tool. Call the declared tools to complete the task first, then wrap up.",
-        });
-        continue;
-      }
-      console.warn(
-        `[covel:warn] [runtime-retry] ${manifest.name} reason=no-tool-call cause=still no business tool call after correction; releasing`,
-      );
-      requiredToolUseUnmet = true;
+    const completion = checkTextCompletion({
+      manifest,
+      calls: executedToolCalls,
+      seededBusinessWork,
+      corrections: noToolCallCorrections,
+      locale: input.locale,
+      prior: initialState?.completionCalls,
+    });
+    if (completion.correction) {
+      noToolCallCorrections++;
+      messages.push({ role: "system", content: completion.correction });
+      continue;
     }
+    requiredToolUseUnmet ||= completion.requiredToolUseUnmet;
 
     // Late steering: an interjection that arrived while THIS response
     // was streaming would otherwise sit queued until turn release and never
@@ -794,5 +778,13 @@ export async function runAgentToolLoop({
     effectiveMaxSteps,
     deadline,
     requiredToolUseUnmet,
+    lastTarget,
+    requiredCompletionUnmet:
+      manifest.requireExplicitCompletion === true &&
+      !hasExplicitCompletion(
+        manifest,
+        executedToolCalls,
+        initialState?.completionCalls,
+      ),
   };
 }

@@ -10,6 +10,9 @@ export function createExecutionContext(input: TurnInput): ExecutionContext {
     origin: input.origin,
     countPolicy: "none",
     ...(input.logicalTurnId ? { logicalTurnId: input.logicalTurnId } : {}),
+    ...(input.manualTrigger?.sourceTurnId
+      ? { sourceTurnId: input.manualTrigger.sourceTurnId }
+      : {}),
   };
 }
 

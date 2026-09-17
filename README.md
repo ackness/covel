@@ -4,7 +4,7 @@
 
 **English** · [简体中文](./README.zh-CN.md)
 
-[![Version](https://img.shields.io/badge/version-v0.0.33-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.33)
+[![Version](https://img.shields.io/badge/version-v0.0.36-8b5cf6)](https://github.com/ackness/covel/releases/tag/v0.0.36)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Stage](https://img.shields.io/badge/stage-early--access-orange)](./docs/CHANGELOG.md)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ackness/covel)
@@ -13,7 +13,7 @@
 
 Covel is an AI RPG framework and playable studio where NPC relationships, lore, quests, inventory, memory, stage direction, and media can evolve between turns. Its architecture has three clear layers: the **kernel provides primitives and orchestration**, **plugins provide behavior**, and **world packs provide settings, resources, and a default plugin composition**.
 
-> **Release version: v0.0.33**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; read [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) and back up custom content before upgrading.
+> **Release version: v0.0.36**, early access. APIs, world data, and plugin manifests may change between versions. Current binaries target macOS Apple Silicon and Windows x64 and are unsigned; read [`docs/CHANGELOG.md`](./docs/CHANGELOG.md) and back up custom content before upgrading.
 
 ## Highlights
 
@@ -21,6 +21,7 @@ Covel is an AI RPG framework and playable studio where NPC relationships, lore, 
 - ⚙️ **Composable plugin runtimes** — combine LLM agents, deterministic functions, UI panels, data schemas, events, and lifecycle hooks in one capability-driven pipeline.
 - 🎲 **RPG mechanics built in** — pre-rolled dice checks with visible receipts, an auto-tracked quest log, a player-managed inventory, and per-NPC affinity meters. All optional plugins; worlds can seed quests, gear, and starting affinity.
 - 🧩 **Plugins stay replaceable** — the kernel discovers `capabilities` and `outputKind`; framework code does not branch on concrete plugin IDs.
+- 🎲 **Optional point-buy rules** — `tabletop-rules` uses the same typed forms, validators and deterministic tools available to third-party ZIP packages. Narration perspective is configurable in both narrative plugins; checked prose appears after review.
 - 🌍 **Portable world packs** — bundle lore, character schemas, cast, rules, memory blocks, quests, items, portraits, scenes, and plugin defaults behind one `WorldData` import protocol.
 - 🔄 **One shared WorldIR** — a post-turn fact projection lets quests, inventory, affinity, the codex, and relationship plugins reuse the same evidence instead of independently re-reading the story.
 - 🔌 **Bring your own model** — OpenAI / Anthropic / DeepSeek / Qwen model slots. Local-first: SQLite on disk; Web mode stores API keys in browser localStorage, while desktop mode saves them as plaintext in `~/.covel/keys.env`.
@@ -67,6 +68,11 @@ plugins/npc-graph/
 ```
 
 The kernel connects these pieces through declared capabilities and typed outputs. That is what makes a narrator, image provider, stage director, or rules system swappable without framework branches for a particular plugin ID.
+
+Author and validate extensions as independent community packages, including installation, approval,
+restart and removal. See [plugin testing](./docs/guide/plugin-testing.md) and the
+[player-flow checks](./docs/guide/e2e-testing.md#发版前的玩家流程验收). Framework releases share one version;
+plugins and world packs may use their own versions.
 
 ## World packs make a setting playable
 

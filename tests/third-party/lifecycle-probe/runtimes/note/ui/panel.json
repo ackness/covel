@@ -1,0 +1,88 @@
+{
+  "id": "lifecycle-probe-panel",
+  "label": {
+    "zh": "生命周期测试",
+    "en": "Lifecycle Probe"
+  },
+  "icon": "flask-conical",
+  "alwaysRender": true,
+  "dataSource": {
+    "namespace": "notes"
+  },
+  "view": {
+    "component": "Stack",
+    "props": {
+      "gap": "sm"
+    },
+    "children": [
+      {
+        "component": "Button",
+        "props": {
+          "label": {
+            "zh": "写入记录",
+            "en": "Write note"
+          }
+        },
+        "on": {
+          "click": {
+            "action": "invokeRuntime",
+            "params": {
+              "runtimeId": "lifecycle-probe/note"
+            }
+          }
+        }
+      },
+      {
+        "component": "Button",
+        "props": {
+          "label": {
+            "zh": "运行后台任务",
+            "en": "Run background job"
+          }
+        },
+        "on": {
+          "click": {
+            "action": "invokeRuntime",
+            "params": {
+              "runtimeId": "lifecycle-probe/background"
+            }
+          }
+        }
+      },
+      {
+        "component": "Button",
+        "props": {
+          "label": {
+            "zh": "调用 Agent",
+            "en": "Run agent"
+          }
+        },
+        "on": {
+          "click": {
+            "action": "invokeRuntime",
+            "params": {
+              "runtimeId": "lifecycle-probe/agent"
+            }
+          }
+        }
+      },
+      {
+        "component": "Stack",
+        "repeat": {
+          "statePath": "/entries",
+          "key": "key"
+        },
+        "children": [
+          {
+            "component": "Text",
+            "props": {
+              "content": {
+                "$item": "value/text"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -29,6 +29,7 @@ async function fixture() {
   const registry = createPluginRegistry();
   registry.register({
     id: "test-story",
+    source: "builtin",
     summary: {
       id: "test-story",
       name: "Story",

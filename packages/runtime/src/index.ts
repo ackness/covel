@@ -129,6 +129,8 @@ export type {
 } from "./rpc/rpc-executor.js";
 export {
   submitFormHandler,
+  createSubmitFormHandler,
+  findCommittedInteraction,
   RpcValidationError,
 } from "./rpc-defaults/submit-form.js";
 
@@ -229,3 +231,7 @@ export {
 export type { HandlerHelperContext } from "./function-runtime/plugin-handler-helpers.js";
 
 export { resolveRequestContextBudget } from "./agent-loop/request-context-budget.js";
+export type {
+  FormValidator,
+  ValidatePluginForm,
+} from "./rpc/form-validator.js";

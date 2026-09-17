@@ -53,7 +53,10 @@ export function defaultToolChoice(
       typeof thinking === "object" &&
       "type" in thinking &&
       (thinking.type === "enabled" || thinking.type === "adaptive"));
-  const name = thinkingEnabled ? undefined : defaults?.toolChoice?.name;
+  const choice = thinkingEnabled ? undefined : defaults?.toolChoice;
+  if (choice === "required")
+    return protocol === "anthropic" ? { type: "any" } : "required";
+  const name = choice?.name;
   if (protocol === "anthropic") {
     return name ? { type: "tool", name } : { type: "auto" };
   }

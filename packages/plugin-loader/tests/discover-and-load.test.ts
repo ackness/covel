@@ -186,6 +186,7 @@ describe("bundled plugin dataSchemas", () => {
       "living-world-rules/rules",
       "scene-stage/assets",
       "scene-stage/scenes",
+      "tabletop-rules/rules",
     ]);
   });
 });

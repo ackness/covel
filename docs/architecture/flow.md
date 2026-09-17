@@ -116,7 +116,7 @@ flowchart TB
       RT -->|function| F1["handler(ctx) → HandlerResult<br/>校验 outcome，物化 success.value / effects"]
       F1 --> G6
       RT -->|agent| G4["buildContext<br/>PLUGIN.md + 注入块 + 消息历史<br/>→ 首个 agent 按真实 system prompt 压缩并重建<br/>→ PostContextAssembly hook 后再次预算"]
-      G4 --> G5["LLM + ToolExecutor loop<br/>每次调用: PreLLMCall → LLM → PostLLMResponse<br/>每个工具: PreToolUse → execute → PostToolUse(可 terminate)"]
+      G4 --> G5["LLM + ToolExecutor loop<br/>PreLLMCall → LLM → PostLLMResponse 审查<br/>接受后才执行工具；拒绝时限次纠正<br/>PreToolUse → execute → PostToolUse"]
       G5 --> G6["normalizeOutput → Proposal[]"]
       G6 --> G7["PostRuntime hook"]
       G7 --> G8["SSE: runtime.completed<br/>status = success|skipped|suspended|failed"]
@@ -139,6 +139,16 @@ flowchart TB
 | `'playing'` | `pre-turn → narrative → post-turn → audit` | 每轮依次跑四个 stage，stage 间严格屏障（上一 stage 全部 settle——成功/失败/skip——才进下一个）。同一 stage 内由 `needs` / `after` / `inputs` 绑定推导的 DAG 排序，独立 runtime 并行，`name` 做稳定 tiebreak。依赖成环的 runtime（及其下游）本回合被 `skipped: dependency-cycle`，不会回退成任意顺序执行 |
 
 **Proposal 类型**（全部过 commit chain，源自 `ProposalPayloadMap`）：`narrative.append`、`interaction.request`、`state.patch`、`event.emit`、`ui.render`、`asset.generate`、`plugin.data` / `plugin.data.batch` / `plugin.data.delete`、`character.upsert`、`working_memory.set`、`lorebook.upsert`。
+
+**能力提供者选择**：进入触发与依赖调度前，`resolveRuntimeProviders` 从已启用 runtime 中处理
+`fallbackFor`。同能力的显式提供者替代默认 runtime，且必须使用相同 stage；多个显式提供者或
+多个默认提供者会报错。替代只影响对应 runtime，不禁用其包内其他功能。自动动作在执行前完成
+community server-code 和 runtime 授权；框架不按跑团、叙事或其他具体插件 ID 分支。
+
+**失败任务恢复**：单项和批量重试创建新执行 ID，保留原始故事回合作为 `sourceTurnId`。
+只有来源和已提交重试中成功的非目标结果，以及 guard 明确 `skip: true` 的输出，才能作为上游
+种子；依赖失败产生的 skipped 不满足依赖。种子不重复提交，重试不重写已完成正文、不增加玩家
+回合数。插件消息在提交时关联原故事锚点，舞台快捷回复和刷新恢复使用同一归属规则。
 
 ### 2.3 Staged Runtime 后台流水线
 
@@ -235,16 +245,27 @@ LLM: "调用 unlock-         ToolExecutor:
                               └─ local → allow (或需审批)
                            3. tool.execute(params, context)
                               ├─ 工具逻辑执行
-                              ├─ 写入 plugin-data / lorebook / characters
-                              ├─ eventBus emit plugin-data.changed ──► SSE → 前端 surface 更新
+                              ├─ 生成领域 proposal / execution-local 写入
+                              ├─ commit 成功后发布数据事件 ──► SSE → surface 更新
                               └─ 返回结构化结果或 `_text`
                            4. 结果序列化为 tool message
                               → `_text` 优先作为 LLM 可读文本
                               → 结构化结果保留给 trace / commit / 调试
                            5. LLM 看到结果，决定是否继续调用
 
-                           Tool Loop 直到 LLM 返回 finishReason: 'stop'
+                           Tool Loop 按完成契约、预算和取消条件收敛
 ```
+
+`finishReason: stop` 本身不能证明结构化任务成功。`requireToolUse` 要求成功的工具执行；
+`completeAfterTools` 可在终结工具成功且本批无未解决工具错误时结束；允许无变化的任务通过
+`requireExplicitCompletion` 要求真实写入或显式 `runtime-done`。纯正文和伪工具 JSON 不算写入，
+错误结果也不能变成结构化成功。function runtime 可通过声明的 `ctx.tools.call()` 走相同工具、
+权限、参数校验与事务边界，社区 handler 使用 `ctx.pluginData`，不获得完整可写 store。
+
+输出审查发生在工具分发之前。插件可通过 `PreLLMCall` 缓冲输出，在 `PostLLMResponse` 拒绝草稿
+并给出纠正要求，最多纠正两次，仍受原预算限制。两个内置叙事插件用它检查 `narrativePerson`：
+默认第二人称，允许第一或第三人称；对白保留自己的视角。它们在检查后整段展示正文，框架仍支持
+其他插件流式输出。这是有限文本检查，不保证所有剧情推断正确。
 
 ## 四、插件设计
 
@@ -435,6 +456,10 @@ plugins/my-plugin/
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+上图中的 `narrative.delta` 适用于启用流式输出的 runtime。当前内置叙事插件先缓冲并审查正文；
+客户端不能依赖每轮都收到 delta。只有 `execution.completed.committed` 或已提交记录才能确认
+本轮落库，单个 runtime 的成功事件不是整个回合的提交凭据。
+
 ### 5.2 插件面板数据流
 
 ```
@@ -528,10 +553,10 @@ plugins/my-plugin/
   │  │        payload: { turnId, submissions: [...] } }            │ │
   │  │                                                            │ │
   │  │   服务端 submit-form:                                      │ │
-  │  │   ├─ 找到 narrativeTemplate                                │ │
+  │  │   ├─ 定位已提交交互、来源插件、字段与跨字段校验             │ │
   │  │   ├─ 填充 {{characterName}} → "陆青云"                      │ │
   │  │   ├─ 生成叙事文本（自然语言，非 JSON）                      │ │
-  │  │   └─ 返回 filledNarrative（不写 turn_messages，不建角色）   │ │
+  │  │   └─ 原子保存 player_inputs，返回 filledNarrative          │ │
   │  │                                                            │ │
   │  │   下一次 /api/actions 由 char-creator 的 guard 运行：       │ │
   │  │   生成 character.upsert + plugin.data proposals            │ │
@@ -545,6 +570,10 @@ plugins/my-plugin/
   │  └────────────────────────────────────────────────────────────┘ │
   └─────────────────────────────────────────────────────────────────┘
 ```
+
+`number` / `integer` 字段保持数值类型，`min` / `max` / `step` 和插件注册的纯表单校验器在服务端
+再次检查。一个批次全部通过后才写入；失败保留可编辑表单。社区校验器在重启后需要重新授权来源
+插件，批准后重发原提交。`tabletop-rules` 是使用这些公共接口的可选配点插件，不是内核特殊路径。
 
 ## 六、数据存储设计
 
@@ -712,7 +741,7 @@ sequenceDiagram
             LLM-->>Plugin: tool 结果 / finishReason=stop
             Plugin-->>Kernel: RuntimeOutput<br/>(narrativeOutput / interactions / preGameDone)
         end
-        Kernel-->>Web: SSE: narrative.delta (流式)
+        Kernel-->>Web: SSE: narrative.delta (仅流式 runtime)
         Kernel-->>Web: SSE: narrative.completed
         Kernel-->>Web: SSE: interaction.requested (若有表单/按钮)
         Server-->>Web: SSE: runtime.completed { status }

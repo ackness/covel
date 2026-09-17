@@ -8,12 +8,32 @@ import {
 } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
 import { ignoreError } from "@/lib/ignore-error.js";
+import { requestConfirm } from "@/lib/confirm-channel.js";
 import type { MutableRef, SessionActionOwner } from "./runtime-refs.js";
 import type { SseEventHandler } from "./sse-handler.js";
 import type { SessionDispatch } from "./types.js";
 import { toExecutionStepStatus } from "./execution-steps.js";
 
 const CONNECTION_CLOSED_REASON = "__i18n:session.reasonConnectionClosed__";
+
+/** Refresh grant-backed UI state even if the subsequent form/action is rejected. */
+export function refreshApprovedSessionPlugins(
+  sessionId: string,
+  dispatch: SessionDispatch,
+  isCurrent: () => boolean,
+): void {
+  void api
+    .listSessionPlugins(sessionId)
+    .then((plugins) => {
+      if (isCurrent())
+        dispatch({
+          type: "LOAD_SESSION_PLUGINS",
+          plugins: [...plugins.items],
+          commands: [...plugins.commands],
+        });
+    })
+    .catch(ignoreError("refresh plugins after approval"));
+}
 
 export async function resumeSessionSuspension(
   suspensionId: string,
@@ -192,6 +212,32 @@ export function runActionStream(
       () => {
         observeUnfinishedAction();
         resolve();
+      },
+      async (approval) => {
+        const allowed =
+          isCurrent() &&
+          (await requestConfirm({
+            title: i18n.t("plugin.approval.title"),
+            message: i18n.t("plugin.approval.confirmMessage", {
+              pluginId: approval.pending.pluginId,
+              action: approval.pending.action,
+            }),
+            confirmLabel: i18n.t("plugin.approval.allow"),
+            cancelLabel: i18n.t("plugin.approval.deny"),
+          }));
+        const proceed = allowed && isCurrent();
+        await api.resolveApproval(
+          approval.approvalId,
+          proceed ? "allow" : "deny",
+          "session",
+          request.sessionId,
+        );
+        if (proceed) {
+          // A restart revokes community grants without changing activePlugins.
+          // Refresh the visible activation state after restoring that grant.
+          refreshApprovedSessionPlugins(request.sessionId, dispatch, isCurrent);
+        }
+        return proceed;
       },
     );
   });

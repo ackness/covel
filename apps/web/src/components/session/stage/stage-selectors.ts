@@ -641,9 +641,14 @@ export function mergeChoices(
 export function filterStalePrompts(
   promptsNamespace: Readonly<Record<string, unknown>>,
   currentTurnId: string | undefined,
+  resolveTurnId: (turnId: string) => string = (turnId) => turnId,
 ): Readonly<Record<string, unknown>> {
   const stamp = promptsNamespace.__turnId;
-  if (typeof stamp === "string" && currentTurnId && stamp !== currentTurnId) {
+  if (
+    typeof stamp === "string" &&
+    currentTurnId &&
+    resolveTurnId(stamp) !== currentTurnId
+  ) {
     return {};
   }
   return promptsNamespace;
