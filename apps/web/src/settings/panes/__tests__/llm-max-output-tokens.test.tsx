@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "@/i18n";
 import { MaxOutputTokensCard } from "../llm-max-output-tokens.js";
@@ -8,6 +8,54 @@ beforeEach(async () => {
 });
 
 describe("max output token draft", () => {
+  it("previews model clamping and input reserve using the shared budget", () => {
+    const view = render(
+      <MaxOutputTokensCard
+        override={32768}
+        modelLimit={8192}
+        contextWindow={65536}
+        onChange={vi.fn()}
+      />,
+    );
+    const cell = (label: string) =>
+      within(screen.getByText(label).parentElement!);
+    expect(cell("Effective output budget").getByText("8,192")).toBeTruthy();
+    expect(cell("Remaining input budget").getByText("57,344")).toBeTruthy();
+    view.rerender(
+      <MaxOutputTokensCard
+        override={8192}
+        contextWindow={8192}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "leave room for input",
+    );
+  });
+
+  it("uses the preset default when the UI override is cleared", () => {
+    const view = render(
+      <MaxOutputTokensCard
+        override={undefined}
+        defaultValue={4096}
+        contextWindow={32768}
+        onChange={vi.fn()}
+      />,
+    );
+    const cell = () =>
+      within(screen.getByText("Effective output budget").parentElement!);
+    expect(cell().getByText("4,096")).toBeTruthy();
+    view.rerender(
+      <MaxOutputTokensCard
+        override={8192}
+        defaultValue={4096}
+        contextWindow={32768}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(cell().getByText("8,192")).toBeTruthy();
+  });
+
   it("validates positive integers independently of catalog limits", () => {
     const onChange = vi.fn();
     render(

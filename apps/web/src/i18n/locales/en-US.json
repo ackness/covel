@@ -958,7 +958,7 @@
       "max": "Maximum"
     },
     "modelLimitsUnknown": "Model limits unknown",
-    "capabilityUnknownHint": "No exact model record was found. Protocol support is estimated; model token limits are unknown unless explicitly overridden.",
+    "capabilityUnknownHint": "No matching model record was found. Protocol support is estimated; token limits follow the model configuration and manual overrides.",
     "backToProviders": "All providers",
     "maxOutputTokensInvalid": "Enter a whole number between 1 and 1,000,000.",
     "conflictTitle": "Settings changed in another window",
@@ -973,7 +973,11 @@
     "contextWindowHint": "Total context budget, including input and reserved output. Leave blank to use the model configuration.",
     "modelMaxOutputTokens": "Model output capacity (tokens)",
     "modelMaxOutputTokensHint": "The provider's output ceiling, not the amount requested each time. Override incorrect catalog limits here.",
-    "tokenLimitInvalid": "Enter a whole number between 1 and {{max}}."
+    "tokenLimitInvalid": "Enter a whole number between 1 and {{max}}.",
+    "effectiveOutputBudget": "Effective output budget",
+    "remainingInputBudget": "Remaining input budget",
+    "outputBudgetConflict": "The output budget must leave room for input in the context window. Lower the output limit or correct the model's context window.",
+    "tokenBudgetPreviewHint": "Budget preview uses this configuration. Input includes system instructions, history and tools. Unknown context windows use 32,768; server limits may reduce the budget."
   },
   "appearance": {
     "previewTitle": "Reading preview",

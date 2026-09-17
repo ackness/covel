@@ -48,6 +48,7 @@ export function buildResumeTurnExecutorDeps(
   const utils = c.get("pluginUtils");
   const hookPipeline = c.get("hookPipeline");
   const eventBus = c.get("eventBus");
+  const contextBudget = c.get("turnContextBudget");
 
   return {
     loadRuntime: c.get("loadRuntimeFn"),
@@ -57,6 +58,7 @@ export function buildResumeTurnExecutorDeps(
     store: c.get("store"),
     toolExecutor: c.get("toolExecutor"),
     resolveModel: c.get("resolveModel"),
+    ...(contextBudget ? { estimator: estimateTokens, contextBudget } : {}),
     ...(hookPipeline ? { hookPipeline } : {}),
     ...(eventBus ? { eventBus } : {}),
     emitter,

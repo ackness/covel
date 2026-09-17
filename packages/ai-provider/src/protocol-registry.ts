@@ -48,8 +48,6 @@ export const BASE_CAPABILITY_DEFAULTS: ModelCapability = {
   input: ["text"],
   output: ["text"],
   features: ["streaming"],
-  contextWindow: 8_192,
-  maxOutputTokens: 4_096,
 };
 
 // ── Built-in protocol table (exhaustive) ───────────────────────────
@@ -70,8 +68,6 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
     capabilityDefaults: {
       ...BASE_CAPABILITY_DEFAULTS,
       features: ["function_calling", "structured_output", "streaming"],
-      contextWindow: 32_768,
-      maxOutputTokens: 4_096,
     },
   },
   "openai-responses-v1": {
@@ -85,8 +81,6 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
         "streaming",
         "web_search",
       ],
-      contextWindow: 128_000,
-      maxOutputTokens: 16_384,
     },
   },
   "anthropic-messages-v1": {
@@ -101,8 +95,6 @@ const BUILTIN_PROTOCOLS: Record<ProviderProtocol, ProtocolDefinition> = {
         "streaming",
         "prompt_caching",
       ],
-      contextWindow: 200_000,
-      maxOutputTokens: 8_192,
     },
   },
 };

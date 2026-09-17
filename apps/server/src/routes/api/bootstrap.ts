@@ -1,9 +1,4 @@
-/**
- * API Bootstrap — creates a fully wired Hono app with all dependencies injected.
- *
- * This module assembles the dependency graph and returns a ready-to-use app.
- * Can be used by the real server or by tests with mock dependencies.
- */
+/** Wire the API dependency graph for production and tests. */
 
 import { Hono, type MiddlewareHandler } from "hono";
 import type { RuntimeManifest } from "@covel/shared";
@@ -95,6 +90,7 @@ import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { setupPluginTools } from "./bootstrap/tools.js";
 import { createBootstrapPluginEntries } from "./bootstrap/plugin-entry.js";
 import { createEventDirectory } from "./bootstrap/event-directory.js";
+import { requestLlmServices } from "./bootstrap/request-llm-services.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
@@ -219,16 +215,7 @@ export interface ApiBootstrapResult {
   readonly prepareToolsForSession: (sessionId: string) => Promise<void>;
 }
 
-// ── Bootstrap function ───────────────────────────────────────────
-
-/**
- * Create a fully wired API Hono app.
- *
- * 1. Discover and register all plugins
- * 2. Create shared state (session store, event bus, etc.)
- * 3. Inject all dependencies into routes via middleware
- * 4. Mount all route groups
- */
+/** Discover plugins, construct shared services, inject dependencies, and mount routes. */
 export async function bootstrapApi(
   config: ApiBootstrapConfig,
 ): Promise<ApiBootstrapResult> {
@@ -748,32 +735,15 @@ export async function bootstrapApi(
     if (staleRead) c.res = staleRead;
   });
 
-  // Optional request-scoped middleware (e.g. per-request llmAdapter swap
-  // driven by X-Provider-Keys / X-Slot-Config headers). Runs AFTER the
-  // dependency-injection middleware above so it can override any value
-  // that was just set by reading from c.get / c.set.
-  if (config.perRequestMiddleware) {
-    for (const mw of config.perRequestMiddleware) {
-      app.use("*", mw);
-    }
-  }
-
-  // Compaction must use the same request-scoped adapter as agent calls.
-  // Both now resolve budgets from their actual target on each invocation.
-  app.use("*", async (c, next) => {
-    if (c.get("requestLlmOverridden")) {
-      c.set(
-        "compactorRunner",
-        createBootstrapCompactorRunner({
-          manifestCache,
-          store,
-          llmAdapter: c.get("llmAdapter"),
-          ...budgetSource,
-        }),
-      );
-    }
-    await next();
-  });
+  // Apply request overrides after base dependency injection, then rebind services.
+  for (const mw of config.perRequestMiddleware ?? []) app.use("*", mw);
+  app.use(
+    "*",
+    requestLlmServices(
+      { manifestCache, store, ...budgetSource },
+      bootstrapMemory,
+    ),
+  );
 
   // 9. Mount routes — all under /api/ prefix
   // Session routes: frontend uses /api/sessions (plural) for all session operations

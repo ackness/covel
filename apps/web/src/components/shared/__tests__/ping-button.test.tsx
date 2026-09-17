@@ -24,6 +24,27 @@ describe("PingButton cache invalidation", () => {
     invalidateAllPingResults();
   });
 
+  it("keeps role probes distinct from presets with slot-prefixed IDs", async () => {
+    apiMocks.pingPreset.mockResolvedValue({ ok: true, latencyMs: 10 });
+    render(
+      <>
+        <PingButton target={{ kind: "preset", presetId: "slot-plugin" }} />
+        <PingButton target={{ kind: "slot", slotId: "plugin" }} />
+      </>,
+    );
+    const buttons = screen.getAllByRole("button", { name: "Ping" });
+    fireEvent.click(buttons[0]);
+    await waitFor(() =>
+      expect(apiMocks.pingPreset).toHaveBeenCalledWith("slot-plugin"),
+    );
+    await screen.findByText("10ms");
+    fireEvent.click(buttons[1]);
+    await waitFor(() =>
+      expect(apiMocks.pingPreset).toHaveBeenCalledWith({ slot: "plugin" }),
+    );
+    expect(apiMocks.pingPreset).toHaveBeenCalledTimes(2);
+  });
+
   it("clears the visible result in an already mounted button", async () => {
     apiMocks.pingPreset.mockResolvedValue({
       ok: false,

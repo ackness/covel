@@ -271,20 +271,28 @@ export function LlmAdvancedPane({ slotId }: { slotId?: string } = {}) {
         />
         <MaxOutputTokensCard
           override={current.maxOutputTokens}
+          defaultValue={effectiveTarget.parameterDefaults?.maxOutputTokens}
           key={selectedSlot}
           modelLimit={capability?.maxOutputTokens}
+          contextWindow={capability?.contextWindow}
           onChange={(value) => setField("maxOutputTokens", value)}
         />
         {PARAMETER_DEFINITIONS.map((definition) => (
           <ParameterCard
             key={definition.field}
-            definition={definition}
+            definition={{
+              ...definition,
+              defaultValue:
+                effectiveTarget.parameterDefaults?.[definition.field] ??
+                definition.defaultValue,
+            }}
             override={current[definition.field]}
             onChange={(value) => setField(definition.field, value)}
           />
         ))}
         <ReasoningEffortCard
           profile={reasoningProfile}
+          defaultOverride={effectiveTarget.parameterDefaults?.reasoningEffort}
           override={current.reasoningEffort}
           onChange={(value) => setField("reasoningEffort", value)}
         />

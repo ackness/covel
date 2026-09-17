@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { resolveLlmTokenLimits } from "../src/utils/llm-token-limits.js";
 
 describe("LLM token limits", () => {
+  it.each([0, -1, 1.5, NaN, Infinity])(
+    "rejects invalid explicit output %s",
+    (requestedMaxOutputTokens) => {
+      expect(() => resolveLlmTokenLimits({ requestedMaxOutputTokens })).toThrow(
+        RangeError,
+      );
+    },
+  );
   it.each([
     [{}, 16_384],
     [{ contextWindow: 200_000, maxOutputTokens: 262_144 }, 16_384],

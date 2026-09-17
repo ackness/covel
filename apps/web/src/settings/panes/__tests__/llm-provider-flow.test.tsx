@@ -65,6 +65,7 @@ beforeEach(async () => {
   });
   await store.init();
   mocks.store = store;
+  delete mocks.presets[0].capability;
   mocks.lookup.mockReset().mockResolvedValue({
     found: false,
     source: "protocol-default",
@@ -95,6 +96,18 @@ describe("provider configuration flow", () => {
     );
     expect(await screen.findByText("Model limits unknown")).toBeTruthy();
     expect(screen.queryByText(/8,192 ctx/)).toBeNull();
+  });
+
+  it("keeps explicit provider model limits when the catalog has no match", async () => {
+    mocks.presets[0].capability = {
+      input: ["text"],
+      output: ["text"],
+      contextWindow: 65536,
+      maxOutputTokens: 8192,
+    };
+    render(<LlmPresetsPane />);
+    expect(await screen.findByText("65,536 ctx")).toBeTruthy();
+    expect(screen.queryByText("Model limits unknown")).toBeNull();
   });
 
   it("switches between a full-width provider list and details on narrow screens", () => {

@@ -12,7 +12,6 @@ import {
   applySlotOverlay,
   publicPresetId,
   resolveOverlayPresetId,
-  type SlotOverridesInput,
 } from "@covel/ai-provider";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { DataStore } from "@covel/store";
@@ -23,8 +22,12 @@ import {
   checkHostedOperator,
   checkSessionOwner,
 } from "./api/session/session-guard.js";
-import { decodeBase64Json } from "../lib/base64-json.js";
 import { errorBody } from "../api-error.js";
+import { modelParameters } from "./misc-api/model-parameters.js";
+import {
+  parseProviderKeys,
+  parseSlotOverrides,
+} from "../middleware/per-request-llm.js";
 
 export function createMiscApiRoutes(
   ai: AiStack,
@@ -78,6 +81,8 @@ export function createMiscApiRoutes(
         baseUrl: p.baseUrl ?? providerBaseUrl,
         protocol: p.protocol ?? providerProtocol,
         slotBindings: slotBindingsByPreset.get(p.id) ?? [],
+        ...(p.capability ? { capability: p.capability } : {}),
+        parameterOverrides: modelParameters(p.providerRequestMetadata),
       };
     });
     return c.json({ items: presets });
@@ -155,6 +160,10 @@ export function createMiscApiRoutes(
         tag: slot.tag,
         ...(fallbackSlotId ? { fallback: fallbackSlotId } : {}),
         ...(preset.capability ? { capability: preset.capability } : {}),
+        parameterOverrides: modelParameters(
+          preset.providerRequestMetadata,
+          ai.slotRegistry.getParameterOverrides(slotId),
+        ),
       };
     }
 
@@ -231,29 +240,9 @@ export function createMiscApiRoutes(
       return c.json(errorBody("Invalid ping request body"), 400);
     }
     const body = parsedBody.data;
-    const requested =
-      body.presetId ?? (body.slot ? `slot-${body.slot}` : "slot-default");
-
-    // Decode per-request API keys (base64 JSON). Keys are never persisted
-    // server-side. Malformed header → undefined; let the gateway raise a
-    // clearer error later if the key is actually needed.
-    let apiKeys: Record<string, string> | undefined;
-    const keysParsed = decodeBase64Json(c.req.header("X-Provider-Keys"));
-    if (keysParsed && typeof keysParsed === "object") {
-      apiKeys = keysParsed as Record<string, string>;
-    }
-
-    // Decode the client slot config header (base64 JSON). Shared with the
-    // turn pipeline's per-request middleware — the ping endpoint needs its
-    // own decode because ping can be called before the per-request
-    // middleware runs (same request, but the resolution we do here happens
-    // against the already-mutated registries).
-    // Malformed header → behave as if no overrides were supplied.
-    let slotConfig: SlotOverridesInput = {};
-    const slotParsed = decodeBase64Json(c.req.header("X-Slot-Config"));
-    if (slotParsed && typeof slotParsed === "object") {
-      slotConfig = slotParsed as SlotOverridesInput;
-    }
+    const apiKeys = parseProviderKeys(c.req.header("X-Provider-Keys")) ?? {};
+    const slotConfig = parseSlotOverrides(c.req.header("X-Slot-Config")) ?? {};
+    let requestedSlot = body.presetId ? undefined : (body.slot ?? "default");
 
     // Register client-declared custom presets via the shared overlay helper
     // (request-isolated scoped ids, ref-counted, base-registry-safe).
@@ -281,9 +270,12 @@ export function createMiscApiRoutes(
     // (i.e. the slot the user typed isn't actually configured).
     type ResolvedVia = "direct" | "slot" | "tag-fallback" | "any";
     let resolvedVia: ResolvedVia = "direct";
-    let preset = findPresetById(requested);
-    if (!preset && requested.startsWith("slot-")) {
-      const slotName = requested.slice("slot-".length);
+    let preset = body.presetId ? findPresetById(body.presetId) : undefined;
+    // Older clients used slot-prefixed IDs for roles without a direct preset.
+    if (!preset && body.presetId?.startsWith("slot-"))
+      requestedSlot = body.presetId.slice(5);
+    if (!preset && requestedSlot) {
+      const slotName = requestedSlot;
       const overrideId = slotConfig.slotPresetOverrides?.[slotName];
       if (overrideId) {
         preset = findPresetById(overrideId);
@@ -367,18 +359,20 @@ export function createMiscApiRoutes(
 
     try {
       for await (const event of ai.gateway.streamText(
-        { presetId: preset.id, messages: [{ role: "user", content: "hi" }] },
+        {
+          presetId:
+            resolvedVia === "any" ? preset.id : (requestedSlot ?? preset.id),
+          messages: [{ role: "user", content: "hi" }],
+        },
         {
           apiKeys,
           signal: abort.signal,
-          slotOverrides: {
-            ...(slotConfig.slotPresetOverrides
-              ? { slotPresetOverrides: slotConfig.slotPresetOverrides }
-              : {}),
-            ...(slotConfig.parameterOverrides
-              ? { parameterOverrides: slotConfig.parameterOverrides }
-              : {}),
-          },
+          envApiKeys: providerApiKeysFromEnv(),
+          slotOverrides: slotConfig,
+          capabilityOverridePolicy:
+            readRuntimeEnv().deploymentTier === "self"
+              ? "full"
+              : "restrict-only",
         },
       )) {
         if (event.type === "text-delta" && event.textDelta.length > 0) {

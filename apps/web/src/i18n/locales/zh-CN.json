@@ -958,7 +958,7 @@
       "max": "最高"
     },
     "modelLimitsUnknown": "模型上限未知",
-    "capabilityUnknownHint": "未找到对应模型记录。协议支持为估计值；模型 token 上限未知，可手动指定。",
+    "capabilityUnknownHint": "未找到对应模型记录。协议支持为估计值；token 上限以模型配置和手动覆盖为准。",
     "backToProviders": "返回服务商列表",
     "maxOutputTokensInvalid": "请输入 1 到 1,000,000 之间的整数。",
     "conflictTitle": "其他窗口已修改设置",
@@ -973,7 +973,11 @@
     "contextWindowHint": "输入与预留输出共用的上下文总预算。留空沿用模型配置；应按服务商实际限制填写。",
     "modelMaxOutputTokens": "模型最大输出能力（token）",
     "modelMaxOutputTokensHint": "服务商允许的最大输出能力，不是每次请求的输出量。资料库不准确时在此覆盖。",
-    "tokenLimitInvalid": "请输入 1 到 {{max}} 之间的整数。"
+    "tokenLimitInvalid": "请输入 1 到 {{max}} 之间的整数。",
+    "effectiveOutputBudget": "有效输出预算",
+    "remainingInputBudget": "剩余输入预算",
+    "outputBudgetConflict": "输出预算需要在上下文窗口中为输入留出空间。请降低输出上限，或修正模型的上下文窗口。",
+    "tokenBudgetPreviewHint": "预算按当前配置计算。输入包含系统指令、历史和工具；未知上下文窗口按 32,768 计算，服务端限制可能进一步缩小预算。"
   },
   "appearance": {
     "previewTitle": "阅读预览",

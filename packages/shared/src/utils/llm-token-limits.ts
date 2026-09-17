@@ -29,10 +29,12 @@ export function resolveLlmTokenLimits(options: {
       options.defaultMaxOutputTokens ?? DEFAULT_LLM_OUTPUT_TOKENS,
       Math.floor(contextWindow / 2),
     );
-  if (!Number.isSafeInteger(requested) || requested < 0) {
-    throw new RangeError(
-      "requestedMaxOutputTokens must be a non-negative integer",
-    );
+  if (
+    !Number.isSafeInteger(requested) ||
+    requested < 0 ||
+    (options.requestedMaxOutputTokens !== undefined && requested === 0)
+  ) {
+    throw new RangeError("requestedMaxOutputTokens must be a positive integer");
   }
   const maxOutputTokens = Math.min(requested, capacity ?? Infinity);
   if (maxOutputTokens >= contextWindow) {

@@ -8,6 +8,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
+import type { BudgetOptions } from "@covel/context";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { __resetSweepClockForTests } from "../../src/routes/api/suspension-sweep.js";
 import {
@@ -26,6 +27,7 @@ import { SESSION_INCARNATION_KEY } from "../../src/routes/api/session/session-gu
 // ── Helpers ──────────────────────────────────────────────────────────
 
 type Deps = {
+  contextBudget?: Omit<BudgetOptions, "estimator">;
   store: DataStore;
   pluginRegistry: PluginRegistry;
   llmAdapter: { generate: () => Promise<unknown> };
@@ -55,6 +57,7 @@ function createTestApp(
   }>();
 
   app.use("*", async (c, next) => {
+    if (deps.contextBudget) c.set("turnContextBudget", deps.contextBudget);
     c.set("store", deps.store);
     c.set("pluginRegistry", deps.pluginRegistry);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -592,6 +595,31 @@ describe("Resume Routes", () => {
       expect(res.status).toBe(400);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/validation/i);
+    });
+
+    it("applies the current context budget before resuming the provider call", async () => {
+      await createSuspension(store);
+      const generate = vi.fn(makeDefaultLLM().generate);
+      const app = createTestApp(
+        makeDefaultDeps(store, {
+          llmAdapter: { generate },
+          contextBudget: { maxInputTokens: 120, reservedForResponse: 40 },
+        }),
+      );
+      const res = await app.request(
+        "/api/sessions/sess-1/suspensions/susp-1/resume",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            data: { name: "resume-context".repeat(100) },
+          }),
+        },
+      );
+      expect(res.status).toBe(500);
+      expect((await res.json()).error).toContain("Context budget exceeded");
+      expect(generate).not.toHaveBeenCalled();
+      expect((await store.getSuspension("susp-1"))?.resolvedAt).toBeUndefined();
     });
 
     it("returns 200 with result on successful resume", async () => {

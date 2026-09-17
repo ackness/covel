@@ -136,16 +136,16 @@ export function autoBindDiscoveredSlots(
 export function collectLlmSlotPresetCandidates(
   builtInPresets: readonly Pick<
     PresetSummary,
-    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol"
+    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol" | "capability"
   >[],
   customPresets: readonly Pick<
     PresetSummary,
-    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol"
+    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol" | "capability"
   >[],
 ): Array<
   Pick<
     PresetSummary,
-    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol"
+    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol" | "capability"
   > & {
     readonly isCustom: boolean;
   }
@@ -158,6 +158,7 @@ export function collectLlmSlotPresetCandidates(
       model: p.model,
       baseUrl: p.baseUrl,
       protocol: p.protocol,
+      capability: p.capability,
       isCustom: false,
     })),
     ...customPresets.map((p) => ({

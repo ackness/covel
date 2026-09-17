@@ -1,5 +1,6 @@
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
+import { resolveLlmTokenLimits } from "@covel/shared";
 import {
   SettingsDraftConflict,
   useSettingDraft,
@@ -7,11 +8,15 @@ import {
 
 export function MaxOutputTokensCard({
   override,
+  defaultValue,
   modelLimit,
+  contextWindow,
   onChange,
 }: {
   override: number | undefined;
+  defaultValue?: number;
   modelLimit?: number;
+  contextWindow?: number;
   onChange: (value: number | undefined) => void;
 }) {
   const { t } = useTranslation();
@@ -26,6 +31,20 @@ export function MaxOutputTokensCard({
   const commit = () => {
     if (!conflict && valid && parsed !== override) onChange(parsed);
   };
+  let effectiveOutput: number | undefined;
+  let inputBudget: number | undefined;
+  let budgetInvalid = false;
+  try {
+    const limits = resolveLlmTokenLimits({
+      contextWindow,
+      maxOutputTokens: modelLimit,
+      requestedMaxOutputTokens: override ?? defaultValue,
+    });
+    effectiveOutput = limits.maxOutputTokens;
+    inputBudget = limits.contextWindow - limits.maxOutputTokens;
+  } catch {
+    budgetInvalid = true;
+  }
   return (
     <div className="border border-border p-3 space-y-3 md:col-span-2">
       <div className="flex items-start justify-between gap-3">
@@ -53,12 +72,15 @@ export function MaxOutputTokensCard({
       <div className="grid grid-cols-2 gap-2 text-[10px]">
         <ValueCell
           label={t("settings.defaultValue", "Default")}
-          value={t("settings.taskOutputDefault", "Task default (up to 16,384)")}
+          value={
+            defaultValue?.toLocaleString() ??
+            t("settings.taskOutputDefault", "Task default (up to 16,384)")
+          }
         />
         <ValueCell
           label={t("settings.requestedOutputLimit", "Requested limit")}
           value={
-            override?.toLocaleString() ??
+            (override ?? defaultValue)?.toLocaleString() ??
             t("settings.taskOutputDefault", "Task default (up to 16,384)")
           }
           active={override !== undefined}
@@ -98,6 +120,30 @@ export function MaxOutputTokensCard({
           </span>
         )}
       </div>
+      <div className="grid grid-cols-2 gap-2 text-[10px]">
+        <ValueCell
+          label={t("settings.effectiveOutputBudget", "Effective output budget")}
+          value={effectiveOutput?.toLocaleString() ?? "—"}
+        />
+        <ValueCell
+          label={t("settings.remainingInputBudget", "Remaining input budget")}
+          value={inputBudget?.toLocaleString() ?? "—"}
+        />
+      </div>
+      <p className="text-[10px] leading-relaxed text-muted-foreground">
+        {t(
+          "settings.tokenBudgetPreviewHint",
+          "Budget preview uses this configuration. Input includes system instructions, history and tools. Unknown context windows use 32,768; server limits may reduce the budget.",
+        )}
+      </p>
+      {budgetInvalid && (
+        <p role="alert" className="text-xs text-destructive">
+          {t(
+            "settings.outputBudgetConflict",
+            "The output budget must leave room for input in the context window. Lower the output limit or correct the model's context window.",
+          )}
+        </p>
+      )}
       {!valid && (
         <p id={errorId} role="alert" className="text-xs text-destructive">
           {t("settings.maxOutputTokensInvalid", {

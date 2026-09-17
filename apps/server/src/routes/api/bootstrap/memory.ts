@@ -5,6 +5,7 @@ import {
   DEFAULT_CORE_MEMORY_BLOCKS,
   type EmbedFn,
   type MemorySystem,
+  type MemoryLLMAdapter,
 } from "@covel/memory";
 import type { LLMAdapter } from "@covel/runtime";
 import { FrameworkCapability } from "@covel/shared";
@@ -48,6 +49,8 @@ export interface CreateBootstrapMemorySystemParams {
 export interface BootstrapMemorySystem {
   readonly memorySystem: MemorySystem;
   readonly tools: readonly ToolModule[];
+  /** Reuse the manager and pending-update queue with this request's model. */
+  forRequest(llmAdapter: LLMAdapter): MemorySystem;
 }
 
 export function createBootstrapMemorySystem({
@@ -139,13 +142,13 @@ export function createBootstrapMemorySystem({
     }
   };
 
-  const memoryLlm = {
+  const createMemoryLlm = (adapter: LLMAdapter): MemoryLLMAdapter => ({
     async complete(params: {
       systemPrompt: string;
       messages: readonly { role: string; content: string }[];
       model?: string;
     }) {
-      const response = await llmAdapter.generate({
+      const response = await adapter.generate({
         model: resolvedMemorySlot,
         messages: [
           { role: "system", content: params.systemPrompt },
@@ -157,12 +160,12 @@ export function createBootstrapMemorySystem({
       });
       return { content: response.content ?? "" };
     },
-  };
+  });
 
   const baseSystem = createMemorySystem(
     {
       store,
-      llm: memoryLlm,
+      llm: createMemoryLlm(llmAdapter),
       ...(embed ? { embed } : {}),
       ...(runIngestExclusive ? { runIngestExclusive } : {}),
       resolveSlot: (slot: string) =>
@@ -196,6 +199,17 @@ export function createBootstrapMemorySystem({
 
   return {
     memorySystem,
+    forRequest(adapter) {
+      const requestLlm = createMemoryLlm(adapter);
+      return {
+        ...memorySystem,
+        updater: {
+          ...memorySystem.updater,
+          updateAfterTurn: (params) =>
+            memorySystem.updater.updateAfterTurn(params, requestLlm),
+        },
+      };
+    },
     tools: createMemoryTools({
       recall: memorySystem.recall,
       archival: memorySystem.archival,
@@ -215,7 +229,7 @@ function withPostTurnIngestion(system: MemorySystem): MemorySystem {
   const realUpdater = system.updater;
   const wrappedUpdater: MemorySystem["updater"] = {
     ...realUpdater,
-    async updateAfterTurn(params) {
+    async updateAfterTurn(params, llmOverride) {
       // Fire ingestion first (does not await embeddings) then run the real
       // core-memory update. Both are post-turn best-effort.
       void system.ingest(params.sessionId).catch((err: unknown) => {
@@ -225,7 +239,7 @@ function withPostTurnIngestion(system: MemorySystem): MemorySystem {
           }`,
         );
       });
-      return realUpdater.updateAfterTurn(params);
+      return realUpdater.updateAfterTurn(params, llmOverride);
     },
   };
   return { ...system, updater: wrappedUpdater };

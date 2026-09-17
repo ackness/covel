@@ -87,6 +87,45 @@ function setup(statusCode?: number) {
 }
 
 describe("gateway target output budgets", () => {
+  it.each(["generate", "stream"] as const)(
+    "%s identifies provider setup failures before I/O",
+    async (mode) => {
+      const { gateway, calls, presetRegistry } = setup();
+      presetRegistry.addPreset({
+        ...presetRegistry.resolvePreset("primary")!,
+        provider: "missing-provider",
+      });
+      const invoke = async () => {
+        if (mode === "generate")
+          return gateway.generateText({
+            messages: [{ role: "user", content: "hi" }],
+          });
+        for await (const _ of gateway.streamText({
+          messages: [{ role: "user", content: "hi" }],
+        })) {
+          /* drain */
+        }
+      };
+      await expect(invoke()).rejects.toMatchObject({
+        code: "CONFIG_ERROR",
+        provider: "missing-provider",
+        model: "primary",
+        message: expect.stringContaining("model: primary"),
+      });
+      expect(calls).toEqual([]);
+    },
+  );
+
+  it("does not retry another model with an invalid output parameter", async () => {
+    const { gateway, calls } = setup();
+    await expect(
+      gateway.generateText(
+        { messages: [{ role: "user", content: "hi" }] },
+        { parameterOverrides: { maxOutputTokens: 0 } },
+      ),
+    ).rejects.toMatchObject({ code: "CONFIG_ERROR", model: "primary" });
+    expect(calls).toEqual([]);
+  });
   it.each(["generate", "object", "stream"] as const)(
     "%s clamps output again when falling back to a smaller model",
     async (mode) => {

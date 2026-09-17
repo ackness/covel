@@ -141,7 +141,7 @@ export function createPerRequestLlmMiddleware(
   };
 }
 
-function parseProviderKeys(
+export function parseProviderKeys(
   header: string | undefined,
 ): Record<string, string> | null {
   if (!header || header.length > MAX_HEADER_BYTES) return null;
@@ -155,7 +155,7 @@ function parseProviderKeys(
   return result;
 }
 
-function parseSlotOverrides(
+export function parseSlotOverrides(
   header: string | undefined,
 ): SlotOverridesInput | null {
   if (!header || header.length > MAX_HEADER_BYTES) return null;
@@ -194,7 +194,10 @@ function parseSlotOverrides(
           "presencePenalty",
         ] as const) {
           const value = source[key];
-          if (typeof value === "number" && Number.isFinite(value)) {
+          if (key === "maxOutputTokens") {
+            const output = cleanPositiveInt(value, MAX_OUTPUT_TOKENS);
+            if (output !== undefined) next[key] = output;
+          } else if (typeof value === "number" && Number.isFinite(value)) {
             next[key] = value;
           }
         }

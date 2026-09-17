@@ -45,6 +45,15 @@ export function normalizeError(
   provider: string,
 ): AiProviderError {
   if (error instanceof AiProviderError) return error;
+  if (error instanceof RangeError) {
+    return new AiProviderError({
+      code: "CONFIG_ERROR",
+      message: error.message,
+      provider,
+      retriable: false,
+      cause: error,
+    });
+  }
 
   if (error instanceof Error) {
     try {

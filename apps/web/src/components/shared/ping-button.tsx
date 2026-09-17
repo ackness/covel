@@ -62,12 +62,14 @@ function getCacheRevision(): number {
   return cacheNotificationRevision;
 }
 
-function requestIdFor(target: PingTarget): string {
-  return target.kind === "preset" ? target.presetId : `slot-${target.slotId}`;
+function cacheKeyFor(target: PingTarget): string {
+  return target.kind === "preset"
+    ? `preset:${target.presetId}`
+    : `slot:${target.slotId}`;
 }
 
 /**
- * Shared Ping button — calls `/api/ai/ping` with a `presetId` or `slot-<name>`,
+ * Shared Ping button — calls `/api/ai/ping` with an explicit `presetId` or `slot`,
  * displays latency or error inline, and caches results for `cacheTtlMs`.
  *
  * Used by: settings key pane, settings slot pane (display-only), onboarding
@@ -84,7 +86,7 @@ export function PingButton({
   className,
 }: PingButtonProps) {
   const { t } = useTranslation();
-  const requestId = requestIdFor(target);
+  const cacheKey = cacheKeyFor(target);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<PingResult | null>(null);
   const cacheRevision = useSyncExternalStore(
@@ -96,16 +98,16 @@ export function PingButton({
   // Hydrate from cache when the target changes (component reused for a
   // different preset/slot, or remounted within the TTL window).
   useEffect(() => {
-    const cached = resultCache.get(requestId);
+    const cached = resultCache.get(cacheKey);
     if (cached && Date.now() - cached.at < cacheTtlMs) {
       setResult(cached.result);
     } else {
       setResult(null);
     }
-  }, [requestId, cacheTtlMs, cacheRevision]);
+  }, [cacheKey, cacheTtlMs, cacheRevision]);
 
   const handleClick = useCallback(async () => {
-    const cached = resultCache.get(requestId);
+    const cached = resultCache.get(cacheKey);
     if (cached && Date.now() - cached.at < cacheTtlMs) {
       setResult(cached.result);
       return;
@@ -125,9 +127,11 @@ export function PingButton({
         }
       }
       requestGeneration = cacheInvalidationGeneration;
-      const res = await pingPreset(requestId);
+      const res = await pingPreset(
+        target.kind === "preset" ? target.presetId : { slot: target.slotId },
+      );
       if (requestGeneration !== cacheInvalidationGeneration) return;
-      resultCache.set(requestId, { result: res, at: Date.now() });
+      resultCache.set(cacheKey, { result: res, at: Date.now() });
       publishCacheChange();
       setResult(res);
       onResult?.(res);
@@ -146,7 +150,7 @@ export function PingButton({
       // Setup errors that happen before the request are shown locally and are
       // intentionally not cached. Provider responses remain shareable.
       if (requestGeneration !== undefined) {
-        resultCache.set(requestId, { result: fallback, at: Date.now() });
+        resultCache.set(cacheKey, { result: fallback, at: Date.now() });
         publishCacheChange();
       }
       setResult(fallback);
@@ -154,7 +158,7 @@ export function PingButton({
     } finally {
       setTesting(false);
     }
-  }, [requestId, cacheTtlMs, onResult, onBeforePing]);
+  }, [cacheKey, cacheTtlMs, onResult, onBeforePing]);
 
   const buttonHeight =
     size === "xs" ? "h-6 text-[10px] px-1.5" : "h-7 text-[11px] px-2.5";
@@ -270,7 +274,7 @@ export function PingButton({
 
 /** Invalidate the cached ping result for one target (e.g. after key edit). */
 export function invalidatePingResult(target: PingTarget): void {
-  resultCache.delete(requestIdFor(target));
+  resultCache.delete(cacheKeyFor(target));
   cacheInvalidationGeneration += 1;
   publishCacheChange();
 }

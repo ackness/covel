@@ -51,6 +51,10 @@ UI 的“默认用途”展示的是 manifest 声明，“服务商 · 模型”
 
 Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插件通常从自己的 `userSettings.modelPresetId` 选择对应 tag 的 provider slot；开局准备页把它显示为独立的“提供方 slot”，并写入 `plugin.<pluginId>.modelPresetId` 设备设置。Agent runtime 的会话覆盖与 function runtime 的 provider slot 不应混用。
 
+连接测试通过与回合执行相同的请求头校验、用途绑定、参数覆盖和能力限制；用途测试保留 slot 名，不能先替换成 preset ID 后丢失该用途的配置。`GET /api/presets` 与 `GET /api/llm-config` 返回模型能力和白名单中的 `parameterOverrides` 默认值，设置页据此显示 TOML 默认值及恢复默认后的预算，不返回任意 provider metadata。新旧 token 设置入口共用覆盖数据与 `resolveLlmTokenLimits`；页面同时显示有效输出预算和剩余输入预算，并提示上下文与输出冲突。未知模型的协议默认值只声明模态和特性，不推测具体模型的 token 上限。
+
+后台记忆更新使用触发它的请求 adapter，切换模型或调整输出参数后重试同样生效。请求包装器共享记忆管理器及按 session 串行的 pending 队列：`MemoryUpdater.updateAfterTurn(params, llmOverride?)` 捕获本次 adapter，`awaitPending(sessionId)` 仍等待同一队列。恢复暂停任务时重新使用当前请求的上下文预算。调用前预算超限、provider 初始化失败和上游请求失败均在错误详情保留实际 provider/model；无效输出参数归为不可重试的配置错误。
+
 ## 服务商与模型 ID
 
 设置界面将连接信息和模型 ID 分开保存：一个服务商配置一组 `baseUrl`、协议、API 密钥和价格倍率，并可包含多个模型 ID。用途绑定只引用其中一个模型。请求时前端把该引用编译为兼容服务器的自定义 preset；preset 是内部传输结构，用户无需单独创建。

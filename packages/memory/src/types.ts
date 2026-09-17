@@ -249,14 +249,17 @@ export interface MemoryUpdater {
    * the player submits two messages back-to-back and the LLM call from
    * the previous turn has not yet finished persisting.
    */
-  updateAfterTurn(params: {
-    sessionId: string;
-    narrativeText: string;
-    toolCallSummaries?: readonly string[];
-    authoritativeFacts?: MemoryAuthoritativeFacts;
-    currentBlocks: readonly CoreMemoryBlock[];
-    locale?: string;
-  }): Promise<MemoryUpdateResult>;
+  updateAfterTurn(
+    params: {
+      sessionId: string;
+      narrativeText: string;
+      toolCallSummaries?: readonly string[];
+      authoritativeFacts?: MemoryAuthoritativeFacts;
+      currentBlocks: readonly CoreMemoryBlock[];
+      locale?: string;
+    },
+    llmOverride?: MemoryLLMAdapter,
+  ): Promise<MemoryUpdateResult>;
 
   /**
    * Resolve when the most recently started `updateAfterTurn` for the given
