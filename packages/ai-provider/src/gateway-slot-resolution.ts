@@ -206,7 +206,21 @@ export function createGatewaySlotResolution(
     const perCall = options?.parameterOverrides;
     if (!configured) return perCall;
     if (!perCall) return configured;
-    return { ...configured, ...perCall };
+    return {
+      ...configured,
+      ...perCall,
+      // A runtime budget is a ceiling, not permission to increase the user's
+      // requested output. Both limits must hold on every retry.
+      ...(configured.maxOutputTokens !== undefined &&
+      perCall.maxOutputTokens !== undefined
+        ? {
+            maxOutputTokens: Math.min(
+              configured.maxOutputTokens,
+              perCall.maxOutputTokens,
+            ),
+          }
+        : {}),
+    };
   }
 
   function withParameterOverrides(

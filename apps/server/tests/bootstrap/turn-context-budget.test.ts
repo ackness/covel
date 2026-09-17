@@ -22,23 +22,23 @@ describe("createTurnContextBudget", () => {
     expect(budget.reservedForResponse).toBe(1024);
   });
 
-  it("derives window and reserve from the narrative slot capability", () => {
+  it("uses the model window without treating its output ceiling as a request default", () => {
     const budget = createTurnContextBudget({
       resolveNarrativeBudget: () => ({
         contextWindow: 200_000,
-        maxOutputTokens: 16_000,
+        maxOutputTokens: 384_000,
       }),
     });
 
     expect(budget.maxInputTokens).toBe(200_000);
-    expect(budget.reservedForResponse).toBe(16_000);
+    expect(budget.reservedForResponse).toBe(16_384);
   });
 
-  it("falls back to 32768 / 4000 when no source is available", () => {
+  it("falls back to 32768 / 16384 when no source is available", () => {
     const budget = createTurnContextBudget({});
 
     expect(budget.maxInputTokens).toBe(32_768);
-    expect(budget.reservedForResponse).toBe(4000);
+    expect(budget.reservedForResponse).toBe(16_384);
   });
 
   it("re-resolves capability on every access (llm.toml hot-reload)", () => {
@@ -56,11 +56,11 @@ describe("createTurnContextBudget", () => {
     ["non-positive window", { contextWindow: 0, maxOutputTokens: 1 }],
     [
       "reserve equal to window",
-      { contextWindow: 8_000, maxOutputTokens: 8_000 },
+      { contextWindow: 4_000, maxOutputTokens: 4_000 },
     ],
     [
       "reserve larger than window",
-      { contextWindow: 8_000, maxOutputTokens: 8_001 },
+      { contextWindow: 3_000, maxOutputTokens: 4_000 },
     ],
   ])(
     "rejects %s instead of silently producing an unusable budget",

@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import {
   SettingsDraftConflict,
@@ -14,15 +15,14 @@ export function MaxOutputTokensCard({
   onChange: (value: number | undefined) => void;
 }) {
   const { t } = useTranslation();
+  const errorId = useId();
   const { draft, setDraft, conflict, reset } = useSettingDraft(
     String(override ?? ""),
   );
   const parsed = draft.trim() ? Number(draft) : undefined;
   const valid =
     parsed === undefined ||
-    (Number.isSafeInteger(parsed) &&
-      parsed > 0 &&
-      (modelLimit === undefined || parsed <= modelLimit));
+    (Number.isSafeInteger(parsed) && parsed > 0 && parsed <= 1_000_000);
   const commit = () => {
     if (!conflict && valid && parsed !== override) onChange(parsed);
   };
@@ -36,7 +36,7 @@ export function MaxOutputTokensCard({
           <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
             {t(
               "settings.maxOutputTokensHint",
-              "Caps one response. Leave unset to use the provider default.",
+              "Limits output, not input context. Tasks default to 16,384 tokens; you can raise or lower this value for complex calls and reasoning. The selected model and context budget still constrain the request. Catalog limits are reference values; use Edit Capabilities to correct them for your provider.",
             )}
           </p>
         </div>
@@ -53,13 +53,13 @@ export function MaxOutputTokensCard({
       <div className="grid grid-cols-2 gap-2 text-[10px]">
         <ValueCell
           label={t("settings.defaultValue", "Default")}
-          value={t("settings.providerDefault", "Provider default")}
+          value={t("settings.taskOutputDefault", "Task default (up to 16,384)")}
         />
         <ValueCell
-          label={t("settings.currentValue", "Current")}
+          label={t("settings.requestedOutputLimit", "Requested limit")}
           value={
             override?.toLocaleString() ??
-            t("settings.providerDefault", "Provider default")
+            t("settings.taskOutputDefault", "Task default (up to 16,384)")
           }
           active={override !== undefined}
         />
@@ -69,12 +69,12 @@ export function MaxOutputTokensCard({
           aria-label={t("settings.maxOutputTokens", "Max output tokens")}
           type="number"
           min={1}
-          max={modelLimit}
+          max={1_000_000}
           step={1}
           placeholder={t("settings.numberPlaceholder", "e.g. 4096")}
           value={draft}
           aria-invalid={!valid}
-          aria-describedby={!valid ? "max-output-error" : undefined}
+          aria-describedby={!valid ? errorId : undefined}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
@@ -93,20 +93,15 @@ export function MaxOutputTokensCard({
           <span className="shrink-0 text-[10px] text-muted-foreground">
             {t("settings.modelOutputLimit", {
               value: modelLimit.toLocaleString(),
-              defaultValue: "Model limit: {{value}}",
+              defaultValue: "Reference model limit: {{value}}",
             })}
           </span>
         )}
       </div>
       {!valid && (
-        <p
-          id="max-output-error"
-          role="alert"
-          className="text-xs text-destructive"
-        >
+        <p id={errorId} role="alert" className="text-xs text-destructive">
           {t("settings.maxOutputTokensInvalid", {
-            defaultValue:
-              "Enter a positive whole number within the displayed limit.",
+            defaultValue: "Enter a whole number between 1 and 1,000,000.",
           })}
         </p>
       )}

@@ -8,6 +8,7 @@ import {
   flattenProviderProfiles,
   getCapabilityOverrides,
   setParamOverrides,
+  setCapabilityOverrides,
   slotBindingId,
   type ModelParameterOverrides,
 } from "@/services/api.js";
@@ -23,6 +24,7 @@ import {
 } from "./llm-effective-capability.js";
 import { useModelCapability } from "./use-model-capability.js";
 import { MaxOutputTokensCard, ValueCell } from "./llm-max-output-tokens.js";
+import { ModelTokenLimits } from "./llm-token-limits.js";
 import { useSettingsRevision } from "../use-settings-revision.js";
 import { useLlmSlotIds } from "./use-llm-slot-ids.js";
 
@@ -108,7 +110,7 @@ export function parseNumericParameterOverride(
   return Math.min(max, Math.max(min, value));
 }
 
-export function LlmAdvancedPane() {
+export function LlmAdvancedPane({ slotId }: { slotId?: string } = {}) {
   const { t } = useTranslation();
   const { state } = useSession();
   const llm = state.llmConfig;
@@ -118,7 +120,8 @@ export function LlmAdvancedPane() {
     Record<string, ModelParameterOverrides>
   >(() => getParamOverrides());
   const [selected, setSelectedSlot] = useState<string>(slots[0] ?? "");
-  const selectedSlot = slots.includes(selected) ? selected : (slots[0] ?? "");
+  const selectedSlot =
+    slotId ?? (slots.includes(selected) ? selected : (slots[0] ?? ""));
   const revision = useSettingsRevision([
     "llm.paramOverrides",
     "llm.slotConfig",
@@ -150,9 +153,12 @@ export function LlmAdvancedPane() {
     effectiveTarget.baseCapability,
     getCapabilityOverrides()[selectedSlot],
   );
-  const overrideCount = Object.values(current).filter(
-    (value) => value !== undefined,
-  ).length;
+  const overrideCount =
+    Object.values(current).filter((value) => value !== undefined).length +
+    [
+      getCapabilityOverrides()[selectedSlot]?.contextWindow,
+      getCapabilityOverrides()[selectedSlot]?.maxOutputTokens,
+    ].filter((value) => value !== undefined).length;
 
   const commit = (next: Record<string, ModelParameterOverrides>) => {
     if (!selectedSlot) return;
@@ -193,6 +199,14 @@ export function LlmAdvancedPane() {
     const next = { ...paramOverrides };
     delete next[selectedSlot];
     commit(next);
+    const capabilities = { ...getCapabilityOverrides() };
+    const slotCapability = { ...capabilities[selectedSlot] };
+    delete slotCapability.contextWindow;
+    delete slotCapability.maxOutputTokens;
+    if (Object.keys(slotCapability).length)
+      capabilities[selectedSlot] = slotCapability;
+    else delete capabilities[selectedSlot];
+    setCapabilityOverrides(capabilities);
   };
 
   return (
@@ -202,45 +216,65 @@ export function LlmAdvancedPane() {
         <span className="leading-relaxed">{t("settings.advancedDesc")}</span>
       </div>
 
-      <div className="border border-border bg-background p-3">
-        <div className="flex items-end justify-between gap-3">
-          <label className="min-w-0 flex-1 space-y-1.5">
-            <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-              {t("settings.selectSlot")}
-            </span>
-            <select
-              value={selectedSlot}
-              onChange={(event) => setSelectedSlot(event.target.value)}
-              className="w-full border border-border bg-background px-3 py-2 text-sm font-medium outline-none focus:ring-1 focus:ring-primary"
-            >
-              {slots.map((slot) => (
-                <option key={slot} value={slot}>
-                  {slot}
-                </option>
-              ))}
-            </select>
-          </label>
-          <Badge variant={overrideCount > 0 ? "default" : "outline"}>
-            {overrideCount > 0
-              ? t("settings.overrideCount", {
-                  count: overrideCount,
-                  defaultValue: "{{count}} overrides",
-                })
-              : t("settings.usingDefaults", "Using defaults")}
-          </Badge>
-        </div>
-        {(effectiveTarget.provider || effectiveTarget.model) && (
-          <div className="mt-2 flex flex-wrap gap-x-4 text-[10px] text-muted-foreground">
-            <span>{effectiveTarget.provider}</span>
-            <span className="font-mono">{effectiveTarget.model}</span>
+      {!slotId && (
+        <div className="border border-border bg-background p-3">
+          <div className="flex items-end justify-between gap-3">
+            <label className="min-w-0 flex-1 space-y-1.5">
+              <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+                {t("settings.selectSlot")}
+              </span>
+              <select
+                value={selectedSlot}
+                onChange={(event) => setSelectedSlot(event.target.value)}
+                className="w-full border border-border bg-background px-3 py-2 text-sm font-medium outline-none focus:ring-1 focus:ring-primary"
+              >
+                {slots.map((slot) => (
+                  <option key={slot} value={slot}>
+                    {slot}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Badge variant={overrideCount > 0 ? "default" : "outline"}>
+              {overrideCount > 0
+                ? t("settings.overrideCount", {
+                    count: overrideCount,
+                    defaultValue: "{{count}} overrides",
+                  })
+                : t("settings.usingDefaults", "Using defaults")}
+            </Badge>
           </div>
-        )}
-      </div>
+          {(effectiveTarget.provider || effectiveTarget.model) && (
+            <div className="mt-2 flex flex-wrap gap-x-4 text-[10px] text-muted-foreground">
+              <span>{effectiveTarget.provider}</span>
+              <span className="font-mono">{effectiveTarget.model}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <fieldset
         disabled={!selectedSlot}
         className="grid grid-cols-1 gap-3 md:grid-cols-2"
       >
+        <ModelTokenLimits
+          key={`limits:${selectedSlot}`}
+          capability={capability}
+          override={getCapabilityOverrides()[selectedSlot]}
+          onUpdate={(patch) => {
+            const overrides = getCapabilityOverrides();
+            setCapabilityOverrides({
+              ...overrides,
+              [selectedSlot]: { ...overrides[selectedSlot], ...patch },
+            });
+          }}
+        />
+        <MaxOutputTokensCard
+          override={current.maxOutputTokens}
+          key={selectedSlot}
+          modelLimit={capability?.maxOutputTokens}
+          onChange={(value) => setField("maxOutputTokens", value)}
+        />
         {PARAMETER_DEFINITIONS.map((definition) => (
           <ParameterCard
             key={definition.field}
@@ -253,12 +287,6 @@ export function LlmAdvancedPane() {
           profile={reasoningProfile}
           override={current.reasoningEffort}
           onChange={(value) => setField("reasoningEffort", value)}
-        />
-        <MaxOutputTokensCard
-          override={current.maxOutputTokens}
-          key={selectedSlot}
-          modelLimit={capability?.maxOutputTokens}
-          onChange={(value) => setField("maxOutputTokens", value)}
         />
       </fieldset>
 

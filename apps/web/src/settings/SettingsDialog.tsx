@@ -92,7 +92,9 @@ export function SettingsDialog({
   );
   const firstSelectable = selectableNodes[0] ?? null;
 
-  const [selected, setSelected] = useState<string>("");
+  const [selected, setSelected] = useState<string>(() =>
+    initialKey ? (resolveSettingsNode(tree, initialKey)?.id ?? "") : "",
+  );
   const contentRef = useRef<HTMLElement>(null);
   const appliedInitialKey = useRef<string | undefined>(undefined);
 
@@ -106,10 +108,10 @@ export function SettingsDialog({
       return;
     }
     if (initialKey && appliedInitialKey.current !== initialKey) {
-      appliedInitialKey.current = initialKey;
       setQuery("");
       const target = resolveSettingsNode(tree, initialKey);
       if (target) {
+        appliedInitialKey.current = initialKey;
         setSelected(target.id);
         return;
       }

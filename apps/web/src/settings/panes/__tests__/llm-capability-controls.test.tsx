@@ -124,11 +124,13 @@ describe("llm capability controls", () => {
     fireEvent.change(screen.getByPlaceholderText("e.g. 131072"), {
       target: { value: "64000" },
     });
+    fireEvent.blur(screen.getByPlaceholderText("e.g. 131072"));
     expect(onUpdate).toHaveBeenLastCalledWith({ contextWindow: 64000 });
 
     fireEvent.change(screen.getByPlaceholderText("e.g. 8192"), {
       target: { value: "4096" },
     });
+    fireEvent.blur(screen.getByPlaceholderText("e.g. 8192"));
     expect(onUpdate).toHaveBeenLastCalledWith({ maxOutputTokens: 4096 });
 
     fireEvent.change(screen.getByPlaceholderText("0.3"), {

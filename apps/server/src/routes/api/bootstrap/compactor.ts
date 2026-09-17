@@ -17,8 +17,8 @@ import type { ParsedPluginMd } from "@covel/plugin-loader";
  */
 const FALLBACK_CONTEXT_WINDOW = 32768;
 
-/** Matches applyBudget's own default; explicit here because getters can't omit. */
-const DEFAULT_RESERVED_FOR_RESPONSE = 4000;
+/** Enough room for structured tool output and reasoning without using the catalog ceiling. */
+const DEFAULT_RESERVED_FOR_RESPONSE = 16_384;
 
 /**
  * Live conservative view of enabled text-slot model budgets. Implemented in
@@ -47,8 +47,12 @@ function resolveTurnBudget(
       params.contextWindowOverride ??
       narrativeBudget?.contextWindow ??
       FALLBACK_CONTEXT_WINDOW,
-    reservedForResponse:
+    // Model databases describe capability ceilings, not sensible per-call
+    // defaults. A large catalog value must not become a huge max_tokens.
+    reservedForResponse: Math.min(
       narrativeBudget?.maxOutputTokens ?? DEFAULT_RESERVED_FOR_RESPONSE,
+      DEFAULT_RESERVED_FOR_RESPONSE,
+    ),
   });
 }
 

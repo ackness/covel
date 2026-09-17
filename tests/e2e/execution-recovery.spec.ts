@@ -115,6 +115,57 @@ test("older orphaned execution stays before the latest story while an optional t
   page,
 }) => {
   const fixture = await createRecoveryFixture(page, "completed", true);
+  await page.route("**/api/llm-config", (route) =>
+    route.fulfill({
+      json: {
+        configured: true,
+        providers: ["fixture-provider"],
+        slots: {
+          plugin: {
+            provider: "fixture-provider",
+            model: "failed-model",
+            protocol: "openai-chat-v1",
+            tag: "text",
+          },
+        },
+      },
+    }),
+  );
+  await page.route("**/api/presets", (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            id: "replacement",
+            name: "Replacement",
+            provider: "fixture-provider",
+            model: "replacement-model",
+            protocol: "openai-chat-v1",
+            enabled: true,
+            isDefault: false,
+            scope: "global",
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/model-db/lookup**", (route) =>
+    route.fulfill({
+      json: {
+        found: true,
+        source: "model-database",
+        candidates: [],
+        pricingKind: "unknown",
+        reasoning: null,
+        capability: {
+          input: ["text"],
+          output: ["text"],
+          contextWindow: 128000,
+          maxOutputTokens: 65536,
+        },
+      },
+    }),
+  );
   try {
     await page.goto(`/session?sid=${fixture.id}`);
     const historical = page.locator(
@@ -156,8 +207,47 @@ test("older orphaned execution stays before the latest story while an optional t
     });
     await expect(retry).toBeVisible();
     await expect(retry).toHaveText("重试此任务");
+    const callout = current.getByRole("alert");
+    await callout
+      .getByRole("button", { name: "查看详情", exact: true })
+      .click();
+    await expect(callout).toContainText("model: failed-model");
+    await callout
+      .getByRole("button", { name: "更换模型 / 调整参数", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog");
+    const role = dialog.getByRole("group", { name: "plugin", exact: true });
+    await role
+      .getByRole("combobox", { name: "模型 ID", exact: true })
+      .selectOption("replacement");
+    await role
+      .getByRole("button", {
+        name: "生成参数（token、温度、思考强度）",
+        exact: true,
+      })
+      .click();
+    await role
+      .getByRole("spinbutton", { name: "最大输出 Token 数", exact: true })
+      .fill("32768");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Escape");
+    await expect(callout).toContainText("model: failed-model");
     expect(fixture.actions).toEqual([]);
+    const retryRequest = page.waitForRequest(
+      (request) =>
+        request.url().endsWith("/api/actions") && request.method() === "POST",
+    );
     await retry.click();
+    const request = await retryRequest;
+    const overlay = JSON.parse(
+      Buffer.from(request.headers()["x-slot-config"]!, "base64").toString(
+        "utf8",
+      ),
+    );
+    expect(overlay).toMatchObject({
+      slotPresetOverrides: { plugin: "replacement" },
+      parameterOverrides: { plugin: { maxOutputTokens: 32768 } },
+    });
     await expect.poll(() => fixture.actions.length).toBe(1);
     expect(fixture.actions[0]).toMatchObject({
       sessionId: fixture.id,

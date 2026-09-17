@@ -23,6 +23,7 @@ import type {
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo, RetryPolicy } from "../retry/llm-retry.js";
 import { buildAgentLoopPolicy } from "./agent-loop-policy.js";
+import { resolveRequestContextBudget } from "./request-context-budget.js";
 import { createDeltaForwarder } from "./delta-forwarder.js";
 import { executeToolSearch, SEARCH_TOOLS_TOOL_NAME } from "./tool-search.js";
 import { requestLLMResponse } from "./tool-loop-handler.js";
@@ -297,7 +298,11 @@ export async function runAgentToolLoop({
             responseFormat,
             retryPolicy,
             estimator,
-            contextBudget,
+            contextBudget: resolveRequestContextBudget(
+              contextBudget,
+              deps.llm,
+              llmRequest.model,
+            ),
           })
         : undefined;
     if (

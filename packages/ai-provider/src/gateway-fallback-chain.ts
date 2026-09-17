@@ -115,7 +115,20 @@ export async function handleTargetFailure(args: {
     options?.traceId,
   );
 
-  const normalized = normalizeError(error, provider);
+  const failure = normalizeError(error, provider);
+  const model = targetModel(target);
+  // Persist the attempted target in the message too: runtime failures and
+  // restored execution history retain error text rather than Error objects.
+  const normalized = new AiProviderError({
+    code: failure.code,
+    message: `[provider: ${provider}, model: ${model}] ${failure.message}`,
+    provider,
+    model,
+    retriable: failure.retriable,
+    statusCode: failure.statusCode,
+    details: failure.details,
+    cause: error,
+  });
 
   if (!canFallback || !shouldFallback(normalized)) {
     throw normalized;

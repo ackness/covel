@@ -132,6 +132,7 @@ async function makeBaseDeps(
 }
 
 class RecordingLLM implements LLMAdapter {
+  resolveBudget?: LLMAdapter["resolveBudget"];
   readonly calls: Parameters<LLMAdapter["generate"]>[0][] = [];
 
   async generate(
@@ -162,6 +163,31 @@ function inputTokenCount(
 // ── Tests ────────────────────────────────────────────────────────
 
 describe("turn-executor → context budget wiring", () => {
+  it.each([2_000, 4_000])(
+    "reserves the selected model's requested output (%s) before calling the provider",
+    async (requestedMaxOutputTokens) => {
+      const llm = new RecordingLLM();
+      llm.resolveBudget = () => ({
+        contextWindow: 8_000,
+        maxOutputTokens: 6_000,
+        requestedMaxOutputTokens,
+      });
+      const manifest = makeManifest();
+      const estimator: TokenEstimator = (text) => text.length;
+      const deps: TurnExecutorDeps = {
+        ...(await makeBaseDeps(llm, manifest)),
+        estimator,
+        contextBudget: { ...BUDGET, reservedForResponse: 3_000 },
+      };
+      const result = await executeTurn(makeTurnInput(), [manifest], deps);
+      expect(result.runtimeResults[0]?.status).toBe("success");
+      expect(llm.calls).toHaveLength(1);
+      expect(llm.calls[0]?.maxOutputTokens).toBe(requestedMaxOutputTokens);
+      expect(
+        inputTokenCount(llm.calls[0]!.messages, estimator),
+      ).toBeLessThanOrEqual(8_000 - requestedMaxOutputTokens);
+    },
+  );
   it.each<[string, Partial<RuntimeManifest>]>([
     ["without declared tools", {}],
     [
