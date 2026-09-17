@@ -93,6 +93,8 @@ export interface PresetSummary {
   protocol?: string;
   /** Slot IDs whose presetId resolves here (e.g. ["default","fast"]). */
   slotBindings?: string[];
+  capability?: import("./llm.js").ModelCapabilityInfo;
+  parameterOverrides?: import("./model-settings.js").ModelParameterOverrides;
 }
 
 /** Effective runtime completion policy returned by discovery APIs. */

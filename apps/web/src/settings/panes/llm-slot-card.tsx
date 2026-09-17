@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { useState } from "react";
 import { Pencil, RotateCw } from "lucide-react";
 import {
   slotBindingId,
@@ -9,6 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { CapabilityEditor } from "./llm-capability-controls.js";
+import { LlmAdvancedPane } from "./LlmAdvancedPane.js";
 import { ResolvedCapability } from "./llm-resolved-capability.js";
 import {
   resolveDisplayCapability,
@@ -53,6 +55,7 @@ export function LlmSlotCard({
   onUpdateCapability,
 }: LlmSlotCardProps) {
   const { t } = useTranslation();
+  const [editingParameters, setEditingParameters] = useState(false);
   const selectedPresetId = slotBindingId(slotConfig[slotId]) ?? "";
   const selectedPreset = allPresets.find((p) => p.id === selectedPresetId);
   const target = resolveEffectiveModelTarget(selectedPreset, serverSlot);
@@ -81,10 +84,15 @@ export function LlmSlotCard({
   });
   const isRequired = !isConfigured && slotId === "default";
   const isVirtualSlot = isDiscovered && !serverSlot;
-  const hasCapOverride = isConfigured && !!capOverride;
+  const hasCapOverride = !!capOverride;
 
   return (
-    <div key={slotId} className="border border-border p-3 space-y-2">
+    <div
+      key={slotId}
+      role="group"
+      aria-label={slotId}
+      className="border border-border p-3 space-y-2"
+    >
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">{slotId}</span>
         <div className="flex items-center gap-1">
@@ -260,7 +268,7 @@ export function LlmSlotCard({
         />
       )}
 
-      {isConfigured && (
+      {effectiveModel && (
         <div className="flex items-center gap-1.5">
           <Button
             variant="ghost"
@@ -287,12 +295,29 @@ export function LlmSlotCard({
         </div>
       )}
 
-      {isConfigured && isEditing && (
+      {effectiveModel && isEditing && (
         <CapabilityEditor
           serverCap={resolveDisplayCapability(lookup, target.baseCapability)}
           override={capOverride}
           onUpdate={onUpdateCapability}
         />
+      )}
+      {effectiveModel && (serverSlot?.tag ?? "text") === "text" && (
+        <div className="space-y-2 border-t border-border pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            aria-expanded={editingParameters}
+            onClick={() => setEditingParameters((value) => !value)}
+          >
+            {t(
+              "settings.editGenerationParameters",
+              "Generation parameters (tokens, temperature, reasoning)",
+            )}
+          </Button>
+          {editingParameters && <LlmAdvancedPane slotId={slotId} />}
+        </div>
       )}
     </div>
   );

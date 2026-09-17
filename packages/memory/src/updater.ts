@@ -34,6 +34,7 @@ import type {
   MemoryManager,
   MemoryUpdateResult,
   MemoryUpdaterConfig,
+  MemoryUpdater,
 } from "./types.js";
 import { DEFAULT_CORE_MEMORY_BLOCKS } from "./types.js";
 import { trackMemoryBackgroundTask } from "./background-tasks.js";
@@ -114,17 +115,7 @@ export function createMemoryUpdater(
   manager: MemoryManager,
   llm: MemoryLLMAdapter,
   config?: MemoryUpdaterConfig,
-): {
-  updateAfterTurn(params: {
-    sessionId: string;
-    narrativeText: string;
-    toolCallSummaries?: readonly string[];
-    authoritativeFacts?: MemoryAuthoritativeFacts;
-    currentBlocks: readonly CoreMemoryBlock[];
-    locale?: string;
-  }): Promise<MemoryUpdateResult>;
-  awaitPending(sessionId: string): Promise<void>;
-} {
+): MemoryUpdater {
   const resolvedLocale = config?.locale ?? DEFAULT_LOCALE;
   const staticSchema = config?.blocks ?? DEFAULT_CORE_MEMORY_BLOCKS;
 
@@ -134,14 +125,10 @@ export function createMemoryUpdater(
   // but stale-mid-turn is not — especially when players spam submit.
   const pending = new Map<string, Promise<unknown>>();
 
-  async function runUpdate(params: {
-    sessionId: string;
-    narrativeText: string;
-    toolCallSummaries?: readonly string[];
-    authoritativeFacts?: MemoryAuthoritativeFacts;
-    currentBlocks: readonly CoreMemoryBlock[];
-    locale?: string;
-  }): Promise<MemoryUpdateResult> {
+  async function runUpdate(
+    params: Parameters<MemoryUpdater["updateAfterTurn"]>[0],
+    requestLlm: MemoryLLMAdapter,
+  ): Promise<MemoryUpdateResult> {
     const {
       sessionId,
       narrativeText,
@@ -202,7 +189,7 @@ export function createMemoryUpdater(
 
       const response = await retryTransientProviderCall(
         () =>
-          llm.complete({
+          requestLlm.complete({
             systemPrompt: buildSystemPrompt(schema, lang, effectiveLocale),
             messages: [{ role: "user", content: userPrompt }],
             model: config?.modelSlot,
@@ -250,7 +237,7 @@ export function createMemoryUpdater(
   }
 
   return {
-    updateAfterTurn(params): Promise<MemoryUpdateResult> {
+    updateAfterTurn(params, llmOverride): Promise<MemoryUpdateResult> {
       // Chain this call behind any in-flight update for the same session so
       // we never race two LLM completions writing the same block, and so
       // `awaitPending` can serialise on the latest write.
@@ -259,7 +246,7 @@ export function createMemoryUpdater(
         .catch(() => {
           /* previous failure already reported to its caller */
         })
-        .then(() => runUpdate(params));
+        .then(() => runUpdate(params, llmOverride ?? llm));
       const tracked = trackMemoryBackgroundTask(next, {
         kind: "core-update",
         sessionId: params.sessionId,

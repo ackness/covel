@@ -8,14 +8,16 @@ import { isReasoningEffortOverrideValid } from "./llm-reasoning-effort.js";
 export function ReasoningEffortCard({
   profile,
   override,
+  defaultOverride,
   onChange,
 }: {
   profile: ReasoningEffortProfile | null | undefined;
   override: ReasoningEffort | undefined;
+  defaultOverride?: ReasoningEffort;
   onChange: (value: ReasoningEffort | undefined) => void;
 }) {
   const { t } = useTranslation();
-  const defaultValue = profile?.defaultValue;
+  const defaultValue = defaultOverride ?? profile?.defaultValue;
   const validOverride = isReasoningEffortOverrideValid(profile, override)
     ? override
     : undefined;

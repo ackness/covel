@@ -230,6 +230,7 @@ export {
 } from "./function-runtime/plugin-handler-helpers.js";
 export type { HandlerHelperContext } from "./function-runtime/plugin-handler-helpers.js";
 
+export { resolveRequestContextBudget } from "./agent-loop/request-context-budget.js";
 export type {
   FormValidator,
   ValidatePluginForm,

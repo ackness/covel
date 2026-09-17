@@ -7,72 +7,25 @@ import {
 } from "../../src/routes/api/bootstrap/compactor.js";
 
 describe("createTurnContextBudget", () => {
-  it("prefers the explicit env override over capability", () => {
-    const budget = createTurnContextBudget({
-      contextWindowOverride: 8000,
-      resolveNarrativeBudget: () => ({
-        contextWindow: 128_000,
-        maxOutputTokens: 1024,
-      }),
-    });
-
+  it("retains the explicit deployment ceiling", () => {
+    const budget = createTurnContextBudget({ contextWindowOverride: 8000 });
     expect(budget.maxInputTokens).toBe(8000);
-    // reservedForResponse still comes from capability — the override only
-    // pins the window.
-    expect(budget.reservedForResponse).toBe(1024);
-  });
-
-  it("derives window and reserve from the narrative slot capability", () => {
-    const budget = createTurnContextBudget({
-      resolveNarrativeBudget: () => ({
-        contextWindow: 200_000,
-        maxOutputTokens: 16_000,
-      }),
-    });
-
-    expect(budget.maxInputTokens).toBe(200_000);
-    expect(budget.reservedForResponse).toBe(16_000);
-  });
-
-  it("falls back to 32768 / 4000 when no source is available", () => {
-    const budget = createTurnContextBudget({});
-
-    expect(budget.maxInputTokens).toBe(32_768);
     expect(budget.reservedForResponse).toBe(4000);
+    expect(budget.contextWindowLimit).toBe(8000);
   });
 
-  it("re-resolves capability on every access (llm.toml hot-reload)", () => {
-    let window = 64_000;
-    const budget = createTurnContextBudget({
-      resolveNarrativeBudget: () => ({ contextWindow: window }),
-    });
-
-    expect(budget.maxInputTokens).toBe(64_000);
-    window = 1_000_000;
-    expect(budget.maxInputTokens).toBe(1_000_000);
+  it("falls back to 32768 / 16384 without imposing a model ceiling", () => {
+    const budget = createTurnContextBudget({});
+    expect(budget.maxInputTokens).toBe(32_768);
+    expect(budget.reservedForResponse).toBe(16_384);
+    expect(budget.contextWindowLimit).toBeUndefined();
   });
 
-  it.each([
-    ["non-positive window", { contextWindow: 0, maxOutputTokens: 1 }],
-    [
-      "reserve equal to window",
-      { contextWindow: 8_000, maxOutputTokens: 8_000 },
-    ],
-    [
-      "reserve larger than window",
-      { contextWindow: 8_000, maxOutputTokens: 8_001 },
-    ],
-  ])(
-    "rejects %s instead of silently producing an unusable budget",
-    (_label, values) => {
-      const budget = createTurnContextBudget({
-        resolveNarrativeBudget: () => values,
-      });
-
-      expect(() => budget.maxInputTokens).toThrow(RangeError);
-      expect(() => budget.reservedForResponse).toThrow(RangeError);
-    },
-  );
+  it("rejects an invalid deployment window", () => {
+    expect(() => createTurnContextBudget({ contextWindowOverride: 0 })).toThrow(
+      RangeError,
+    );
+  });
 });
 
 describe("createBootstrapCompactorRunner", () => {
@@ -84,7 +37,11 @@ describe("createBootstrapCompactorRunner", () => {
       finishReason: "stop",
       usage: { inputTokens: 1, outputTokens: 1 },
     }));
-    const llmAdapter: LLMAdapter = { generate };
+    const resolveBudget = vi.fn(() => ({
+      contextWindow: 1000,
+      maxOutputTokens: 400,
+    }));
+    const llmAdapter: LLMAdapter = { generate, resolveBudget };
     const messages: TurnMessageRecord[] = Array.from(
       { length: 10 },
       (_, index) => ({
@@ -101,15 +58,12 @@ describe("createBootstrapCompactorRunner", () => {
       manifestCache: new Map(),
       store,
       llmAdapter,
-      resolveNarrativeBudget: () => ({
-        contextWindow: 1_000,
-        maxOutputTokens: 400,
-      }),
     });
 
     const result = await runner.run("session-1", "", messages, "en-US");
 
     expect(result.compacted).toBe(true);
+    expect(resolveBudget).toHaveBeenCalledWith("fast");
     expect(generate).toHaveBeenCalledWith(
       expect.objectContaining({ model: "fast", maxOutputTokens: 400 }),
     );

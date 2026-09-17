@@ -66,6 +66,8 @@ export interface BudgetOptions {
    * responsible for choosing this value; budget.ts does no slot lookup.
    */
   readonly maxInputTokens: number;
+  /** Explicit deployment ceiling retained when resolving a model's window. */
+  readonly contextWindowLimit?: number;
   /**
    * Tokens to reserve for the model's response (subtracted from the budget
    * before pruning decisions). Default 4000.

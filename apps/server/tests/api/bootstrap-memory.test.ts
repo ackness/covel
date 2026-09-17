@@ -41,6 +41,53 @@ class RecordingLlm implements LLMAdapter {
 }
 
 describe("createBootstrapMemorySystem", () => {
+  it("shares pending updates across request adapters without leaking their models", async () => {
+    const base = new RecordingLlm();
+    let finishFirst!: () => void;
+    const firstPending = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const first = {
+      generate: vi.fn(async () => {
+        await firstPending;
+        return { content: "{}", toolCalls: [], finishReason: "stop" as const };
+      }),
+    };
+    const second = new RecordingLlm();
+    const bootstrap = createBootstrapMemorySystem({
+      manifestCache: new Map(),
+      store: createMemoryStore(),
+      llmAdapter: base,
+      preferredMemorySlot: "memory",
+      resolveModel: (manifest) => manifest.model,
+    })!;
+    const requestA = bootstrap.forRequest(first);
+    const requestB = bootstrap.forRequest(second);
+    expect(requestA.manager).toBe(bootstrap.memorySystem.manager);
+    const input = {
+      sessionId: "shared-session",
+      narrativeText: "new clue",
+      currentBlocks: [],
+    };
+    const updateA = requestA.updater.updateAfterTurn(input);
+    await vi.waitFor(() => expect(first.generate).toHaveBeenCalledOnce());
+    const updateB = requestB.updater.updateAfterTurn(input);
+    let settled = false;
+    const pending = bootstrap.memorySystem.updater
+      .awaitPending(input.sessionId)
+      .then(() => {
+        settled = true;
+      });
+    await Promise.resolve();
+    expect(second.models).toEqual([]);
+    expect(settled).toBe(false);
+    finishFirst();
+    await Promise.all([updateA, updateB, pending]);
+    expect(second.models).toEqual(["memory"]);
+    expect(base.models).toEqual([]);
+    expect(settled).toBe(true);
+  });
+
   beforeEach(() => {
     vi.spyOn(console, "log").mockImplementation(() => undefined);
   });

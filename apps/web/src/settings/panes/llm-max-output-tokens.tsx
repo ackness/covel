@@ -1,4 +1,6 @@
+import { useId } from "react";
 import { useTranslation } from "react-i18next";
+import { resolveLlmTokenLimits } from "@covel/shared";
 import {
   SettingsDraftConflict,
   useSettingDraft,
@@ -6,26 +8,43 @@ import {
 
 export function MaxOutputTokensCard({
   override,
+  defaultValue,
   modelLimit,
+  contextWindow,
   onChange,
 }: {
   override: number | undefined;
+  defaultValue?: number;
   modelLimit?: number;
+  contextWindow?: number;
   onChange: (value: number | undefined) => void;
 }) {
   const { t } = useTranslation();
+  const errorId = useId();
   const { draft, setDraft, conflict, reset } = useSettingDraft(
     String(override ?? ""),
   );
   const parsed = draft.trim() ? Number(draft) : undefined;
   const valid =
     parsed === undefined ||
-    (Number.isSafeInteger(parsed) &&
-      parsed > 0 &&
-      (modelLimit === undefined || parsed <= modelLimit));
+    (Number.isSafeInteger(parsed) && parsed > 0 && parsed <= 1_000_000);
   const commit = () => {
     if (!conflict && valid && parsed !== override) onChange(parsed);
   };
+  let effectiveOutput: number | undefined;
+  let inputBudget: number | undefined;
+  let budgetInvalid = false;
+  try {
+    const limits = resolveLlmTokenLimits({
+      contextWindow,
+      maxOutputTokens: modelLimit,
+      requestedMaxOutputTokens: override ?? defaultValue,
+    });
+    effectiveOutput = limits.maxOutputTokens;
+    inputBudget = limits.contextWindow - limits.maxOutputTokens;
+  } catch {
+    budgetInvalid = true;
+  }
   return (
     <div className="border border-border p-3 space-y-3 md:col-span-2">
       <div className="flex items-start justify-between gap-3">
@@ -36,7 +55,7 @@ export function MaxOutputTokensCard({
           <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
             {t(
               "settings.maxOutputTokensHint",
-              "Caps one response. Leave unset to use the provider default.",
+              "Limits output, not input context. Tasks default to 16,384 tokens; you can raise or lower this value for complex calls and reasoning. The selected model and context budget still constrain the request. Catalog limits are reference values; use Edit Capabilities to correct them for your provider.",
             )}
           </p>
         </div>
@@ -53,13 +72,16 @@ export function MaxOutputTokensCard({
       <div className="grid grid-cols-2 gap-2 text-[10px]">
         <ValueCell
           label={t("settings.defaultValue", "Default")}
-          value={t("settings.providerDefault", "Provider default")}
+          value={
+            defaultValue?.toLocaleString() ??
+            t("settings.taskOutputDefault", "Task default (up to 16,384)")
+          }
         />
         <ValueCell
-          label={t("settings.currentValue", "Current")}
+          label={t("settings.requestedOutputLimit", "Requested limit")}
           value={
-            override?.toLocaleString() ??
-            t("settings.providerDefault", "Provider default")
+            (override ?? defaultValue)?.toLocaleString() ??
+            t("settings.taskOutputDefault", "Task default (up to 16,384)")
           }
           active={override !== undefined}
         />
@@ -69,12 +91,12 @@ export function MaxOutputTokensCard({
           aria-label={t("settings.maxOutputTokens", "Max output tokens")}
           type="number"
           min={1}
-          max={modelLimit}
+          max={1_000_000}
           step={1}
           placeholder={t("settings.numberPlaceholder", "e.g. 4096")}
           value={draft}
           aria-invalid={!valid}
-          aria-describedby={!valid ? "max-output-error" : undefined}
+          aria-describedby={!valid ? errorId : undefined}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
@@ -93,20 +115,39 @@ export function MaxOutputTokensCard({
           <span className="shrink-0 text-[10px] text-muted-foreground">
             {t("settings.modelOutputLimit", {
               value: modelLimit.toLocaleString(),
-              defaultValue: "Model limit: {{value}}",
+              defaultValue: "Reference model limit: {{value}}",
             })}
           </span>
         )}
       </div>
+      <div className="grid grid-cols-2 gap-2 text-[10px]">
+        <ValueCell
+          label={t("settings.effectiveOutputBudget", "Effective output budget")}
+          value={effectiveOutput?.toLocaleString() ?? "—"}
+        />
+        <ValueCell
+          label={t("settings.remainingInputBudget", "Remaining input budget")}
+          value={inputBudget?.toLocaleString() ?? "—"}
+        />
+      </div>
+      <p className="text-[10px] leading-relaxed text-muted-foreground">
+        {t(
+          "settings.tokenBudgetPreviewHint",
+          "Budget preview uses this configuration. Input includes system instructions, history and tools. Unknown context windows use 32,768; server limits may reduce the budget.",
+        )}
+      </p>
+      {budgetInvalid && (
+        <p role="alert" className="text-xs text-destructive">
+          {t(
+            "settings.outputBudgetConflict",
+            "The output budget must leave room for input in the context window. Lower the output limit or correct the model's context window.",
+          )}
+        </p>
+      )}
       {!valid && (
-        <p
-          id="max-output-error"
-          role="alert"
-          className="text-xs text-destructive"
-        >
+        <p id={errorId} role="alert" className="text-xs text-destructive">
           {t("settings.maxOutputTokensInvalid", {
-            defaultValue:
-              "Enter a positive whole number within the displayed limit.",
+            defaultValue: "Enter a whole number between 1 and 1,000,000.",
           })}
         </p>
       )}

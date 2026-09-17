@@ -32,6 +32,8 @@ const apiMocks = vi.hoisted(() => ({
   getSlotConfig: vi.fn(),
   lookupModelCapabilityDetails: vi.fn(),
   setParamOverrides: vi.fn(),
+  getCapabilityOverrides: vi.fn(),
+  setCapabilityOverrides: vi.fn(),
 }));
 
 vi.mock("@/stores/session-store.js", () => ({
@@ -74,6 +76,8 @@ vi.mock("@/services/api.js", async (importOriginal) => {
     getApiKey: vi.fn(() => ""),
     lookupModelCapabilityDetails: apiMocks.lookupModelCapabilityDetails,
     setParamOverrides: apiMocks.setParamOverrides,
+    getCapabilityOverrides: apiMocks.getCapabilityOverrides,
+    setCapabilityOverrides: apiMocks.setCapabilityOverrides,
   };
 });
 
@@ -94,6 +98,8 @@ describe("LLM settings regressions", () => {
       .mockReset()
       .mockImplementation(() => new Promise(() => undefined));
     apiMocks.setParamOverrides.mockReset();
+    apiMocks.getCapabilityOverrides.mockReset().mockReturnValue({});
+    apiMocks.setCapabilityOverrides.mockReset();
   });
 
   it("removes a reasoning override that the newly bound model cannot use", () => {
@@ -150,6 +156,26 @@ describe("LLM settings regressions", () => {
     expect(parseNumericParameterOverride("5", -2, 2)).toBe(2);
     expect(parseNumericParameterOverride("-5", -2, 2)).toBe(-2);
     expect(parseNumericParameterOverride("invalid", -2, 2)).toBeUndefined();
+  });
+
+  it("resets generation and token overrides without clearing other model capabilities", () => {
+    apiMocks.getParamOverrides.mockReturnValue({
+      story: { maxOutputTokens: 32768 },
+    });
+    apiMocks.getCapabilityOverrides.mockReturnValue({
+      story: {
+        contextWindow: 128000,
+        maxOutputTokens: 65536,
+        features: ["vision"],
+        pricing: { inputPerMToken: 1 },
+      },
+    });
+    render(<LlmAdvancedPane />);
+    fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
+    expect(apiMocks.setParamOverrides).toHaveBeenCalledWith({});
+    expect(apiMocks.setCapabilityOverrides).toHaveBeenCalledWith({
+      story: { features: ["vision"], pricing: { inputPerMToken: 1 } },
+    });
   });
 
   it("waits for the selected target profile before pruning its override", async () => {
@@ -256,8 +282,8 @@ describe("LLM settings regressions", () => {
     expect(
       screen
         .getByRole("spinbutton", { name: "Max Output Tokens" })
-        .hasAttribute("max"),
-    ).toBe(false);
+        .getAttribute("max"),
+    ).toBe("1000000");
     expect(screen.getByText("Model limits unknown")).toBeTruthy();
     expect(screen.queryByText(/384,000/)).toBeNull();
   });

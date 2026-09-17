@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { ModelTokenLimits } from "./llm-token-limits.js";
 import { Label } from "@/components/ui/label.js";
 import {
   mergeCapability,
@@ -280,44 +281,11 @@ export function CapabilityEditor({
           })}
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
-            {t("settings.contextWindowTokens", "Context Window (tokens)")}
-          </Label>
-          <input
-            type="number"
-            placeholder={effective?.contextWindow?.toString() ?? "e.g. 131072"}
-            value={override?.contextWindow ?? ""}
-            onChange={(e) =>
-              onUpdate({
-                contextWindow: e.target.value
-                  ? parseInt(e.target.value, 10)
-                  : undefined,
-              })
-            }
-            className="w-full bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary font-mono"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
-            {t("settings.maxOutputTokens", "Max Output Tokens")}
-          </Label>
-          <input
-            type="number"
-            placeholder={effective?.maxOutputTokens?.toString() ?? "e.g. 8192"}
-            value={override?.maxOutputTokens ?? ""}
-            onChange={(e) =>
-              onUpdate({
-                maxOutputTokens: e.target.value
-                  ? parseInt(e.target.value, 10)
-                  : undefined,
-              })
-            }
-            className="w-full bg-background border border-border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary font-mono"
-          />
-        </div>
-      </div>
+      <ModelTokenLimits
+        capability={effective}
+        override={override}
+        onUpdate={onUpdate}
+      />
       <div className="space-y-1">
         <Label className="text-[10px] uppercase tracking-widest text-muted-foreground">
           {t("settings.pricing")}

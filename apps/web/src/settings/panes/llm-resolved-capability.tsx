@@ -51,7 +51,7 @@ export function ResolvedCapability({
             <span>
               {t(
                 "settings.capabilityUnknownHint",
-                "No exact model record was found. Protocol support is estimated; model token limits are unknown unless explicitly overridden.",
+                "No matching model record was found. Protocol support is estimated; token limits follow the model configuration and manual overrides.",
               )}
             </span>
           )}

@@ -154,6 +154,15 @@ export interface LLMAdapter {
    */
   resolveTarget?(slot?: string): LLMTargetIdentity | undefined;
 
+  /** Effective model limits and the user's requested output budget for a slot. */
+  resolveBudget?(slot?: string):
+    | {
+        readonly contextWindow?: number;
+        readonly maxOutputTokens?: number;
+        readonly requestedMaxOutputTokens?: number;
+      }
+    | undefined;
+
   /**
    * Call the LLM with messages and optional tools.
    * The `model` parameter maps to a slot name (e.g., 'default', 'fast', 'balance').

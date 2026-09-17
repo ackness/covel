@@ -104,7 +104,12 @@ export interface GatewayLike {
       capabilityOverridePolicy?: CapabilityOverridePolicy;
       fallbackTag?: string;
     },
-  ): { provider: string; model: string } | null;
+  ): {
+    provider: string;
+    model: string;
+    capability?: { contextWindow?: number; maxOutputTokens?: number };
+    parameterOverrides?: { maxOutputTokens?: number };
+  } | null;
 
   generateText(
     input: {
@@ -225,28 +230,41 @@ export function createGatewayAdapter(
   gateway: GatewayLike,
   config?: GatewayAdapterConfig,
 ): LLMAdapter {
+  const resolveSlot = (slot?: string) => {
+    try {
+      return gateway.resolveSlot(slot, {
+        apiKeys: config?.apiKeys,
+        ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
+        ...(config?.slotOverrides
+          ? { slotOverrides: config.slotOverrides }
+          : {}),
+        ...(config?.capabilityOverridePolicy
+          ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
+          : {}),
+        fallbackTag: "text",
+      });
+    } catch {
+      // Target identity only enriches telemetry. The actual generate/stream
+      // call must retain its existing retry and paired error-trace path.
+      return undefined;
+    }
+  };
   return {
     resolveTarget(slot) {
-      try {
-        const target = gateway.resolveSlot(slot, {
-          apiKeys: config?.apiKeys,
-          ...(config?.envApiKeys ? { envApiKeys: config.envApiKeys } : {}),
-          ...(config?.slotOverrides
-            ? { slotOverrides: config.slotOverrides }
-            : {}),
-          ...(config?.capabilityOverridePolicy
-            ? { capabilityOverridePolicy: config.capabilityOverridePolicy }
-            : {}),
-          fallbackTag: "text",
-        });
-        return target
-          ? { provider: target.provider, model: target.model }
-          : undefined;
-      } catch {
-        // Target identity only enriches telemetry. The actual generate/stream
-        // call must retain its existing retry and paired error-trace path.
-        return undefined;
-      }
+      const target = resolveSlot(slot);
+      return target
+        ? { provider: target.provider, model: target.model }
+        : undefined;
+    },
+    resolveBudget(slot) {
+      const target = resolveSlot(slot);
+      return target
+        ? {
+            ...target.capability,
+            requestedMaxOutputTokens:
+              target.parameterOverrides?.maxOutputTokens,
+          }
+        : undefined;
     },
 
     async generate(params): Promise<LLMResponse> {

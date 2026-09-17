@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file. Follows [Ke
 
 ## [Unreleased]
 
+## [0.0.36] - 2026-09-17
+
+This patch makes model token budgets configurable and consistent across story, plugin, retry and background requests, and identifies the model responsible when a task fails.
+
+### Fixed
+
+- **Failed tasks show the actual provider, model and model role.** Error details retain upstream diagnostics, including failures before dispatch. Tool and output validation errors identify the model that actually responded, including fallback and resumed calls. Players can change the assigned model or its settings and retry unfinished tasks without regenerating completed story.
+- **Model settings expose context, input and output limits together.** Story and plugin roles share the same settings and resolution path. Effective budgets include TOML defaults and explicit overrides; conflicting limits are visible before a request is sent. Manual limits remain available when the model catalog does not match a provider's deployment.
+- **Automatic budgets use a 16,384-token output target and a conservative 32,768-token context when capabilities are unknown.** Known model limits and the available context can reduce that output target. Explicit output budgets can be raised for complex or reasoning calls within the configured model limits.
+- **Every request resolves the budget of its actual target.** Plugin overrides, hook-selected models, fallback targets, resumed work and background memory calls apply their own context and output limits. Settings previews and sidebar connection tests use the same effective model configuration.
+- **Provider failures retain useful attribution without exposing credentials.** Connection tests follow the normal provider-header and key handling policy, and request-scoped background queues keep settings isolated between requests.
+
+### Upgrade notes
+
+- Update the server and bundled Web client together. Existing model assignments, TOML settings and saved overrides remain supported; no SQL schema migration is required.
+- A 16,384-token automatic output target is not a mandatory minimum: smaller model limits and explicit lower settings still apply. Configure the deployment's actual limits when they differ from the catalog, then retry failed work.
+- macOS Apple Silicon and Windows x64 artifacts are unsigned, and macOS artifacts are not notarized. Gatekeeper or Windows SmartScreen may warn on first launch; updates use manual download and installation.
+
 ## [0.0.35] - 2026-09-17
 
 This release fixes plugin installation, restart and recovery failures, protects existing plugin data, and adds optional tabletop character creation and configurable narrative perspective.
@@ -1199,7 +1217,8 @@ Fifth public release. An internal, code-quality-focused refactor: systematic de-
 - 三层文档：`reference/` (API/协议)、`guide/` (作者指南)、`architecture/` (系统设计)
 - Release pipeline：`.github/workflows/release.yml`
 
-[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.31...HEAD
+[Unreleased]: https://github.com/AcKnEsS/covel/compare/v0.0.36...HEAD
+[0.0.36]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.36
 [0.0.31]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.31
 [0.0.30]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.30
 [0.0.29]: https://github.com/AcKnEsS/covel/releases/tag/v0.0.29

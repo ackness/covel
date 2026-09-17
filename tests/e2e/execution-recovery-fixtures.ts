@@ -68,7 +68,7 @@ function historySteps(completed: boolean): SnapshotTraceEvent[] {
             "2026-01-01T00:01:05Z",
             trackerRuntimeId,
             "npc-graph",
-            "npc-graph/extractor declares requireToolUse but finished without calling a business tool (a bare `runtime-done` does not count). The model answered with prose instead of doing the work.",
+            "[provider: fixture-provider, model: failed-model] npc-graph/extractor declares requireToolUse but finished without calling a business tool (a bare `runtime-done` does not count). The model answered with prose instead of doing the work.",
           ),
         ]
       : []),

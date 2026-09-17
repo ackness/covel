@@ -11,6 +11,26 @@ import {
 afterEach(() => setModelDatabase(null));
 
 describe("model identity resolution", () => {
+  it.each([
+    "openai-chat-v1",
+    "openai-responses-v1",
+    "anthropic-messages-v1",
+  ] as const)("does not invent token capacities from %s", (protocol) => {
+    const result = resolveCapabilityDetails(
+      "opaque-qa-model",
+      "custom",
+      protocol,
+    );
+    expect(result.source).toBe("protocol-default");
+    expect(result.capability.contextWindow).toBeUndefined();
+    expect(result.capability.maxOutputTokens).toBeUndefined();
+    expect(
+      resolveCapabilityDetails("opaque-qa-model", "custom", protocol, {
+        contextWindow: 16384,
+        maxOutputTokens: 8192,
+      }).capability,
+    ).toMatchObject({ contextWindow: 16384, maxOutputTokens: 8192 });
+  });
   it("keeps the routed model id and adds namespace/model-name candidates", () => {
     expect(modelLookupCandidates("openai/gpt-5.6-sol", "openai")).toEqual([
       "openai/gpt-5.6-sol",

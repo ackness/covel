@@ -59,6 +59,26 @@ describe("createGatewayAdapter target resolution", () => {
     const adapter = createGatewayAdapter(gateway);
 
     expect(adapter.resolveTarget?.("missing")).toBeUndefined();
+    expect(adapter.resolveBudget?.("missing")).toBeUndefined();
+  });
+
+  it("exposes effective capability and explicit output separately", () => {
+    const gateway: GatewayLike = {
+      resolveSlot: () => ({
+        provider: "fixture",
+        model: "model",
+        capability: { contextWindow: 128_000, maxOutputTokens: 65_536 },
+        parameterOverrides: { maxOutputTokens: 32_768 },
+      }),
+      async generateText() {
+        throw new Error("unused");
+      },
+    };
+    expect(createGatewayAdapter(gateway).resolveBudget?.("plugin")).toEqual({
+      contextWindow: 128_000,
+      maxOutputTokens: 65_536,
+      requestedMaxOutputTokens: 32_768,
+    });
   });
 
   it("forwards the per-call target observer into the gateway", async () => {

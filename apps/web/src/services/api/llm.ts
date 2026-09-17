@@ -51,6 +51,7 @@ export interface LlmSlotInfo {
   fallback?: string;
   tag: string;
   capability?: ModelCapabilityInfo;
+  parameterOverrides?: import("./model-settings.js").ModelParameterOverrides;
 }
 
 export interface LlmConfigResponse {
@@ -291,7 +292,11 @@ export interface PingResult {
  * Send a minimal "hi" to a specific preset to test connectivity and latency.
  * Requires API keys in localStorage.
  */
-export async function pingPreset(presetId: string): Promise<PingResult> {
+export async function pingPreset(
+  target: string | { slot: string },
+): Promise<PingResult> {
+  const requestTarget =
+    typeof target === "string" ? { presetId: target } : target;
   let res: Response;
   try {
     res = await requestResponse("/api/ai/ping", {
@@ -299,10 +304,10 @@ export async function pingPreset(presetId: string): Promise<PingResult> {
       headers: {
         ...buildProviderKeysHeader(),
         ...buildSlotConfigHeaderInternal({
-          includeCustomPresetIds: [presetId],
+          includeCustomPresetIds: typeof target === "string" ? [target] : [],
         }),
       },
-      body: JSON.stringify({ presetId }),
+      body: JSON.stringify(requestTarget),
       operatorAuth: true,
       silentErrors: true,
     });

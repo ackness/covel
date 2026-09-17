@@ -137,26 +137,11 @@ export function createPerRequestLlmMiddleware(
     c.set("llmAdapter", perRequestAdapter);
     c.set("pluginGateway", perRequestPluginGateway);
     c.set("requestLlmOverridden", true);
-    try {
-      const narrative = opts.ai.gateway.resolveSlot("default", {
-        apiKeys: requestKeys ?? {},
-        envApiKeys: opts.envApiKeys,
-        ...(slotOverrides ? { slotOverrides } : {}),
-        capabilityOverridePolicy,
-        fallbackTag: "text",
-      });
-      if (narrative?.capability) {
-        c.set("requestNarrativeCapability", narrative.capability);
-      }
-    } catch {
-      // Generation retains its normal explicit error path; budget rebinding
-      // falls back to the trusted startup capability when lookup fails.
-    }
     await next();
   };
 }
 
-function parseProviderKeys(
+export function parseProviderKeys(
   header: string | undefined,
 ): Record<string, string> | null {
   if (!header || header.length > MAX_HEADER_BYTES) return null;
@@ -170,7 +155,7 @@ function parseProviderKeys(
   return result;
 }
 
-function parseSlotOverrides(
+export function parseSlotOverrides(
   header: string | undefined,
 ): SlotOverridesInput | null {
   if (!header || header.length > MAX_HEADER_BYTES) return null;
@@ -209,7 +194,10 @@ function parseSlotOverrides(
           "presencePenalty",
         ] as const) {
           const value = source[key];
-          if (typeof value === "number" && Number.isFinite(value)) {
+          if (key === "maxOutputTokens") {
+            const output = cleanPositiveInt(value, MAX_OUTPUT_TOKENS);
+            if (output !== undefined) next[key] = output;
+          } else if (typeof value === "number" && Number.isFinite(value)) {
             next[key] = value;
           }
         }

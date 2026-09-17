@@ -1,55 +1,18 @@
-import type { LLMAdapter } from "@covel/runtime";
+import { resolveRequestContextBudget, type LLMAdapter } from "@covel/runtime";
+import { resolveLlmTokenLimits } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
   estimateTokens,
   maybeCompact,
-  resolveBudgetOptions,
   type BudgetOptions,
   type CompactorLLMAdapter,
   type CompactorRunner,
 } from "@covel/context";
 import type { ParsedPluginMd } from "@covel/plugin-loader";
 
-/**
- * Last-resort context window when neither an explicit env override nor a
- * model-capability lookup yields a value (e.g. an unknown model with no
- * llm.toml capability block).
- */
-const FALLBACK_CONTEXT_WINDOW = 32768;
-
-/** Matches applyBudget's own default; explicit here because getters can't omit. */
-const DEFAULT_RESERVED_FOR_RESPONSE = 4000;
-
-/**
- * Live conservative view of enabled text-slot model budgets. Implemented in
- * the composition root (app.ts) against the AI registries so llm.toml
- * hot-reloads are observed without a restart — resolve on every call.
- */
-export type ResolveNarrativeBudgetFn = () =>
-  | {
-      readonly contextWindow?: number;
-      readonly maxOutputTokens?: number;
-    }
-  | undefined;
-
 interface BudgetSourceParams {
-  /** Explicit COVEL_COMPACTOR_CONTEXT_WINDOW override — wins over capability. */
+  /** Explicit deployment ceiling, independent of other configured models. */
   readonly contextWindowOverride?: number;
-  readonly resolveNarrativeBudget?: ResolveNarrativeBudgetFn;
-}
-
-function resolveTurnBudget(
-  params: BudgetSourceParams,
-): ReturnType<typeof resolveBudgetOptions> {
-  const narrativeBudget = params.resolveNarrativeBudget?.();
-  return resolveBudgetOptions({
-    maxInputTokens:
-      params.contextWindowOverride ??
-      narrativeBudget?.contextWindow ??
-      FALLBACK_CONTEXT_WINDOW,
-    reservedForResponse:
-      narrativeBudget?.maxOutputTokens ?? DEFAULT_RESERVED_FOR_RESPONSE,
-  });
 }
 
 export interface CreateBootstrapCompactorRunnerParams extends BudgetSourceParams {
@@ -78,7 +41,11 @@ export function createBootstrapCompactorRunner(
       // capability while the provider call uses another. Compaction input and
       // output share the same model context, so only the window left after the
       // response reserve is available to the compactor prompt.
-      const budget = resolveTurnBudget(params);
+      const budget = resolveRequestContextBudget(
+        createTurnContextBudget(params),
+        llmAdapter,
+        "fast",
+      );
       const fastSlotLlm: CompactorLLMAdapter = {
         async complete(input) {
           const response = await llmAdapter.generate({
@@ -103,7 +70,8 @@ export function createBootstrapCompactorRunner(
           store,
           estimator: estimateTokens,
           fastSlotLlm,
-          contextWindow: budget.maxInputTokens - budget.reservedForResponse,
+          contextWindow:
+            budget.maxInputTokens - (budget.reservedForResponse ?? 0),
         },
         {
           focusSections,
@@ -115,20 +83,18 @@ export function createBootstrapCompactorRunner(
   };
 }
 
-/**
- * Budget config for the prompt-assembly hard prune (`applyBudget`) — the last
- * line of defense when compaction is skipped, vetoed, or insufficient.
- * Getter-based so each turn observes the current llm.toml capability.
- */
+/** Fallback limits; each call replaces these with its actual model budget. */
 export function createTurnContextBudget(
   params: BudgetSourceParams,
 ): Omit<BudgetOptions, "estimator"> {
+  const limits = resolveLlmTokenLimits({
+    contextWindow: params.contextWindowOverride,
+  });
   return {
-    get maxInputTokens(): number {
-      return resolveTurnBudget(params).maxInputTokens;
-    },
-    get reservedForResponse(): number {
-      return resolveTurnBudget(params).reservedForResponse;
-    },
+    maxInputTokens: limits.contextWindow,
+    reservedForResponse: limits.maxOutputTokens,
+    ...(params.contextWindowOverride !== undefined
+      ? { contextWindowLimit: params.contextWindowOverride }
+      : {}),
   };
 }

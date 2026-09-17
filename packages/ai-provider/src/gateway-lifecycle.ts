@@ -31,8 +31,9 @@ export function notifyTargetAttempt(
 }
 
 export function shouldFallback(error: AiProviderError): boolean {
-  // Never fallback on client errors (4xx) — the request itself is malformed,
-  // so retrying with a different provider will produce the same failure.
+  // Rate limits belong to the attempted provider, so a backup can still work.
+  if (error.statusCode === 429) return true;
+  // Other client errors retain their explicit failure path.
   if (error.statusCode && error.statusCode >= 400 && error.statusCode < 500) {
     return false;
   }
@@ -44,6 +45,15 @@ export function normalizeError(
   provider: string,
 ): AiProviderError {
   if (error instanceof AiProviderError) return error;
+  if (error instanceof RangeError) {
+    return new AiProviderError({
+      code: "CONFIG_ERROR",
+      message: error.message,
+      provider,
+      retriable: false,
+      cause: error,
+    });
+  }
 
   if (error instanceof Error) {
     try {

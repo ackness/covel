@@ -7,6 +7,7 @@ import type {
   ToolCallRecord,
   TurnInput,
   InputSlot,
+  LLMTargetIdentity,
 } from "@covel/shared";
 import { isDefaultLocale, toJsonValueOrDiagnostic } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
@@ -19,6 +20,7 @@ import type { LLMMessage } from "../llm/llm-adapter.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import type { RetryInfo } from "../retry/llm-retry.js";
 import { buildAgentLoopPolicy } from "./agent-loop-policy.js";
+import { prepareBudgetedRequest } from "./request-context-budget.js";
 import { createDeltaForwarder } from "./delta-forwarder.js";
 import { executeToolSearch, SEARCH_TOOLS_TOOL_NAME } from "./tool-search.js";
 import { requestLLMResponse } from "./tool-loop-handler.js";
@@ -45,7 +47,6 @@ import {
 } from "./turn-agent-tool-loop-messages.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
 import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
-import { applyPerCallBudget } from "./agent-call-budget.js";
 import { storyOutputError } from "./story-output.js";
 import {
   checkTextCompletion,
@@ -72,6 +73,7 @@ export interface AgentToolLoopCompleted {
   /** Required business tool work is still missing after the corrective step. */
   readonly requiredToolUseUnmet: boolean;
   readonly requiredCompletionUnmet: boolean;
+  readonly lastTarget?: LLMTargetIdentity;
 }
 
 export type AgentToolLoopResult = AgentToolLoopCompleted | RuntimeResult;
@@ -135,6 +137,7 @@ export async function runAgentToolLoop({
 }: RunAgentToolLoopOptions): Promise<AgentToolLoopResult> {
   // Resume starts with persisted loop state; ordinary execution starts fresh.
   let finalContent: string | null = initialState?.finalContent ?? null;
+  let lastTarget: LLMTargetIdentity | undefined;
   let finalToolOutput: Record<string, unknown> | null = null;
   const collectedToolCalls: ToolCallRecord[] = [
     ...(initialState?.collectedToolCalls ?? []),
@@ -263,34 +266,20 @@ export async function runAgentToolLoop({
       tools: activeToolDefs,
     });
 
-    // Budget the exact request after tools, steering, and hook rewrites.
-    const budgetedRequest =
-      estimator && contextBudget
-        ? applyPerCallBudget({
-            runtimeId: manifest.name,
-            messages: llmRequest.messages as LLMMessage[],
-            tools: llmRequest.tools,
-            responseFormat,
-            retryPolicy,
-            estimator,
-            contextBudget,
-          })
-        : undefined;
-    if (
-      budgetedRequest &&
-      (budgetedRequest.prunedMessageCount > 0 ||
-        budgetedRequest.truncatedToolResultCount > 0 ||
-        budgetedRequest.truncatedSummaryCount > 0) &&
-      deps.emitter
-    ) {
-      await deps.emitter.emit("context.pruned", {
-        runtimeId: manifest.name,
-        pluginId: manifest.pluginId,
-        prunedMessageCount: budgetedRequest.prunedMessageCount,
-        truncatedToolResultCount: budgetedRequest.truncatedToolResultCount,
-        truncatedSummaryCount: budgetedRequest.truncatedSummaryCount,
-      });
-    }
+    // Budget after hooks and tool results, immediately before each call.
+    const budgetedRequest = await prepareBudgetedRequest({
+      runtimeId: manifest.name,
+      pluginId: manifest.pluginId,
+      messages: llmRequest.messages as LLMMessage[],
+      tools: llmRequest.tools,
+      responseFormat,
+      retryPolicy,
+      estimator,
+      contextBudget,
+      llm: deps.llm,
+      slot: llmRequest.model,
+      emitter: deps.emitter,
+    });
 
     const rawResponse = await requestLLMResponse({
       manifest,
@@ -315,6 +304,7 @@ export async function runAgentToolLoop({
       onStreamDelta: delta.forward,
     });
 
+    lastTarget = rawResponse.target;
     const response = await reviewResponse(
       rawResponse,
       budgetedRequest?.messages ?? llmRequest.messages,
@@ -788,6 +778,7 @@ export async function runAgentToolLoop({
     effectiveMaxSteps,
     deadline,
     requiredToolUseUnmet,
+    lastTarget,
     requiredCompletionUnmet:
       manifest.requireExplicitCompletion === true &&
       !hasExplicitCompletion(

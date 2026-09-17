@@ -16,6 +16,7 @@ import {
   executionTone,
 } from "./execution-presentation.js";
 import type { StreamMessage } from "@/stores/session-store.js";
+import { SettingsDialog } from "@/settings/SettingsDialog.js";
 
 import {
   formatDuration,
@@ -31,11 +32,13 @@ function RuntimeFailureNotice({
   canRetry,
   onRetry,
   retryFromLabel,
+  onConfigureModel,
 }: {
   rt: RuntimeStatus;
   canRetry?: boolean;
   onRetry?: (runtimeId: string) => void;
   retryFromLabel: string;
+  onConfigureModel: () => void;
 }) {
   const { t } = useTranslation();
   const resolvedDetail =
@@ -85,18 +88,38 @@ function RuntimeFailureNotice({
           </div>
         </div>
         {canRetry && onRetry && (
-          <button
-            type="button"
-            onClick={() => onRetry(rt.runtimeId)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-(--radius-control) border border-border px-3 py-2 text-xs text-foreground transition-colors hover:bg-muted"
-            title={retryFromLabel}
-            aria-label={`${t("session.retryTask")}: ${rt.label}`}
-          >
-            <RotateCw className="h-3 w-3" />
-            {t("session.retryTask")}
-          </button>
+          <div className="flex flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={onConfigureModel}
+              className="text-xs text-foreground underline underline-offset-2"
+            >
+              {t(
+                "session.configureModelBeforeRetry",
+                "Change model / parameters",
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => onRetry(rt.runtimeId)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-(--radius-control) border border-border px-3 py-2 text-xs text-foreground transition-colors hover:bg-muted"
+              title={retryFromLabel}
+              aria-label={`${t("session.retryTask")}: ${rt.label}`}
+            >
+              <RotateCw className="h-3 w-3" />
+              {t("session.retryTask")}
+            </button>
+          </div>
         )}
       </div>
+      {canRetry && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {t(
+            "session.retryModelSettingsHint",
+            "Change the model or lower its output limit, then retry this task. The retry uses your current settings.",
+          )}
+        </p>
+      )}
     </div>
   );
 }
@@ -141,6 +164,7 @@ export function ExecutionTimeline({
   messages?: readonly StreamMessage[];
 }) {
   const { i18n, t } = useTranslation();
+  const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
   // Keep runtime details folded until explicitly opened; the summary carries
   // live progress and retry actions without interrupting the story flow.
   const [foldOverrides, setFoldOverrides] = useState<Record<string, boolean>>(
@@ -354,6 +378,7 @@ export function ExecutionTimeline({
                     key={rt.runtimeId}
                     rt={rt}
                     canRetry={canRetry && retryableFailures.includes(rt)}
+                    onConfigureModel={() => setModelSettingsOpen(true)}
                     onRetry={
                       onRetryRuntime
                         ? (rid) => onRetryRuntime(rid, group.turnId)
@@ -386,6 +411,14 @@ export function ExecutionTimeline({
           </div>
         );
       })}
+      {modelSettingsOpen && (
+        <SettingsDialog
+          open
+          onOpenChange={setModelSettingsOpen}
+          initialKey="llm.slots"
+          plugins={plugins}
+        />
+      )}
     </div>
   );
 }

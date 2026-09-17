@@ -128,6 +128,67 @@ describe("gateway", () => {
     expect(result.provider).toBe("test");
   });
 
+  it.each(["generate", "stream"])(
+    "identifies the actual failed fallback model in %s errors",
+    async (mode) => {
+      const fail = () => {
+        throw new Error(
+          JSON.stringify({
+            code: "PROVIDER_ERROR",
+            provider: "openai-chat",
+            statusCode: 500,
+            retriable: true,
+            details: { message: "Upstream failed" },
+          }),
+        );
+      };
+      const { gateway } = setup({
+        generateText: async () => fail(),
+        async *streamText() {
+          fail();
+        },
+      });
+      const run = async () => {
+        const input = { messages: [{ role: "user" as const, content: "hi" }] };
+        if (mode === "generate") return gateway.generateText(input);
+        for await (const _event of gateway.streamText(input)) {
+          /* exhaust stream */
+        }
+      };
+      await expect(run()).rejects.toMatchObject({
+        provider: "backup-provider",
+        model: "backup-model",
+        statusCode: 500,
+        message: expect.stringContaining(
+          "[provider: backup-provider, model: backup-model]",
+        ),
+        details: { message: "Upstream failed" },
+      });
+    },
+  );
+
+  it("retains the actual primary model and original 400 details without fallback", async () => {
+    const { gateway } = setup({
+      async generateText() {
+        throw new Error(
+          JSON.stringify({
+            code: "PROVIDER_ERROR",
+            provider: "openai-chat",
+            statusCode: 400,
+            details: { message: "Range of max_tokens should be [1, 131072]" },
+          }),
+        );
+      },
+    });
+    await expect(gateway.generateText({ messages: [] })).rejects.toMatchObject({
+      provider: "test",
+      model: "test-model",
+      statusCode: 400,
+      message:
+        "[provider: test, model: test-model] [openai-chat] HTTP 400 — Range of max_tokens should be [1, 131072]",
+    });
+  });
+
   it("forwards a structured response format to the provider adapter", async () => {
     const generateText = vi.fn(async () => ({
       text: '{"ok":true}',

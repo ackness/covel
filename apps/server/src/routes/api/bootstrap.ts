@@ -1,9 +1,4 @@
-/**
- * API Bootstrap — creates a fully wired Hono app with all dependencies injected.
- *
- * This module assembles the dependency graph and returns a ready-to-use app.
- * Can be used by the real server or by tests with mock dependencies.
- */
+/** Wire the API dependency graph for production and tests. */
 
 import { Hono, type MiddlewareHandler } from "hono";
 import type { RuntimeManifest } from "@covel/shared";
@@ -90,12 +85,12 @@ export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-eve
 import {
   createBootstrapCompactorRunner,
   createTurnContextBudget,
-  type ResolveNarrativeBudgetFn,
 } from "./bootstrap/compactor.js";
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { setupPluginTools } from "./bootstrap/tools.js";
 import { createBootstrapPluginEntries } from "./bootstrap/plugin-entry.js";
 import { createEventDirectory } from "./bootstrap/event-directory.js";
+import { requestLlmServices } from "./bootstrap/request-llm-services.js";
 import { createBootstrapMemorySystem } from "./bootstrap/memory.js";
 import { createBootstrapPluginRpc } from "./bootstrap/plugin-rpc-wiring.js";
 import { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-events.js";
@@ -104,30 +99,6 @@ import {
   sessionIncarnationIdentity,
   verifyResolvedSessionRead,
 } from "./session/session-guard.js";
-
-type ResolvedTextBudget = NonNullable<ReturnType<ResolveNarrativeBudgetFn>>;
-
-function narrowTextBudgets(
-  ...budgets: readonly (ResolvedTextBudget | undefined)[]
-): ResolvedTextBudget | undefined {
-  const contextWindows = budgets.flatMap((budget) =>
-    budget?.contextWindow !== undefined ? [budget.contextWindow] : [],
-  );
-  const maxOutputTokens = budgets.flatMap((budget) =>
-    budget?.maxOutputTokens !== undefined ? [budget.maxOutputTokens] : [],
-  );
-  if (contextWindows.length === 0 && maxOutputTokens.length === 0) {
-    return undefined;
-  }
-  return {
-    ...(contextWindows.length > 0
-      ? { contextWindow: Math.min(...contextWindows) }
-      : {}),
-    ...(maxOutputTokens.length > 0
-      ? { maxOutputTokens: Math.min(...maxOutputTokens) }
-      : {}),
-  };
-}
 
 // ── Bootstrap config ─────────────────────────────────────────────
 
@@ -226,12 +197,6 @@ export interface ApiBootstrapConfig {
   readonly mediaStore?: MediaStore;
   readonly mediaBackend?: MediaStoreBackend;
   readonly vectorBackend?: VectorBackend;
-  /**
-   * Live conservative text-slot budget (contextWindow / maxOutputTokens),
-   * built by the composition root against the AI registries. Drives the
-   * compaction threshold and hard prune. Absent → fixed fallback window.
-   */
-  readonly resolveNarrativeBudget?: ResolveNarrativeBudgetFn;
 }
 
 export interface ApiBootstrapResult {
@@ -250,16 +215,7 @@ export interface ApiBootstrapResult {
   readonly prepareToolsForSession: (sessionId: string) => Promise<void>;
 }
 
-// ── Bootstrap function ───────────────────────────────────────────
-
-/**
- * Create a fully wired API Hono app.
- *
- * 1. Discover and register all plugins
- * 2. Create shared state (session store, event bus, etc.)
- * 3. Inject all dependencies into routes via middleware
- * 4. Mount all route groups
- */
+/** Discover plugins, construct shared services, inject dependencies, and mount routes. */
 export async function bootstrapApi(
   config: ApiBootstrapConfig,
 ): Promise<ApiBootstrapResult> {
@@ -548,14 +504,10 @@ export async function bootstrapApi(
   };
 
   const runtimeEnv = readRuntimeEnv();
-  const budgetSource = {
-    ...(runtimeEnv.compactorContextWindow !== undefined
+  const budgetSource =
+    runtimeEnv.compactorContextWindow !== undefined
       ? { contextWindowOverride: runtimeEnv.compactorContextWindow }
-      : {}),
-    ...(config.resolveNarrativeBudget
-      ? { resolveNarrativeBudget: config.resolveNarrativeBudget }
-      : {}),
-  };
+      : {};
   const compactorRunner = createBootstrapCompactorRunner({
     manifestCache,
     store,
@@ -783,48 +735,15 @@ export async function bootstrapApi(
     if (staleRead) c.res = staleRead;
   });
 
-  // Optional request-scoped middleware (e.g. per-request llmAdapter swap
-  // driven by X-Provider-Keys / X-Slot-Config headers). Runs AFTER the
-  // dependency-injection middleware above so it can override any value
-  // that was just set by reading from c.get / c.set.
-  if (config.perRequestMiddleware) {
-    for (const mw of config.perRequestMiddleware) {
-      app.use("*", mw);
-    }
-  }
-
-  // A request-scoped LLM overlay must drive all three consumers together:
-  // runtime calls, compaction calls, and the final hard-prune budget. Rebuild
-  // these lightweight facades after per-request middleware has replaced the
-  // adapter; registry-owned startup objects remain untouched.
-  app.use("*", async (c, next) => {
-    if (c.get("requestLlmOverridden")) {
-      const requestCapability = c.get("requestNarrativeCapability");
-      const requestBudgetSource = {
-        ...budgetSource,
-        ...(requestCapability
-          ? {
-              resolveNarrativeBudget: () =>
-                narrowTextBudgets(
-                  budgetSource.resolveNarrativeBudget?.(),
-                  requestCapability,
-                ),
-            }
-          : {}),
-      };
-      c.set(
-        "compactorRunner",
-        createBootstrapCompactorRunner({
-          manifestCache,
-          store,
-          llmAdapter: c.get("llmAdapter"),
-          ...requestBudgetSource,
-        }),
-      );
-      c.set("turnContextBudget", createTurnContextBudget(requestBudgetSource));
-    }
-    await next();
-  });
+  // Apply request overrides after base dependency injection, then rebind services.
+  for (const mw of config.perRequestMiddleware ?? []) app.use("*", mw);
+  app.use(
+    "*",
+    requestLlmServices(
+      { manifestCache, store, ...budgetSource },
+      bootstrapMemory,
+    ),
+  );
 
   // 9. Mount routes — all under /api/ prefix
   // Session routes: frontend uses /api/sessions (plural) for all session operations

@@ -53,18 +53,32 @@ export function prepareTarget(
   options: GatewayOptions | undefined,
 ): { provider: string; resolved: ProviderResolution } {
   const provider = targetProvider(target);
-  let resolved = providerRegistry.resolve(target.preset ?? target.profile, {
-    mode,
-  });
-  if (options?.apiKeys || options?.envApiKeys) {
-    resolved = providerRegistry.withApiKeys(
-      resolved,
-      options.apiKeys ?? {},
-      provider,
-      options.envApiKeys,
-    );
+  try {
+    let resolved = providerRegistry.resolve(target.preset ?? target.profile, {
+      mode,
+    });
+    if (options?.apiKeys || options?.envApiKeys) {
+      resolved = providerRegistry.withApiKeys(
+        resolved,
+        options.apiKeys ?? {},
+        provider,
+        options.envApiKeys,
+      );
+    }
+    return { provider, resolved };
+  } catch (error) {
+    const failure =
+      error instanceof AiProviderError
+        ? error
+        : new AiProviderError({
+            code: "CONFIG_ERROR",
+            message: error instanceof Error ? error.message : String(error),
+            provider,
+            retriable: false,
+            cause: error,
+          });
+    throw targetFailure(failure, target);
   }
-  return { provider, resolved };
 }
 
 /**
@@ -115,11 +129,31 @@ export async function handleTargetFailure(args: {
     options?.traceId,
   );
 
-  const normalized = normalizeError(error, provider);
+  const normalized = targetFailure(error, target);
 
   if (!canFallback || !shouldFallback(normalized)) {
     throw normalized;
   }
 
   return normalized;
+}
+
+/** Preserve the attempted target even when provider setup fails before I/O. */
+function targetFailure(
+  error: unknown,
+  target: ResolvedTarget,
+): AiProviderError {
+  const provider = targetProvider(target);
+  const model = targetModel(target);
+  const failure = normalizeError(error, provider);
+  return new AiProviderError({
+    code: failure.code,
+    message: `[provider: ${provider}, model: ${model}] ${failure.message}`,
+    provider,
+    model,
+    retriable: failure.retriable,
+    statusCode: failure.statusCode,
+    details: failure.details,
+    cause: error,
+  });
 }

@@ -7,6 +7,7 @@ export type AiProviderErrorCode =
 export class AiProviderError extends Error {
   public readonly code: AiProviderErrorCode;
   public readonly provider: string;
+  public readonly model?: string;
   public readonly retriable: boolean;
   public readonly statusCode?: number;
   public readonly details?: Record<string, unknown>;
@@ -15,6 +16,7 @@ export class AiProviderError extends Error {
     code: AiProviderErrorCode;
     message: string;
     provider: string;
+    model?: string;
     retriable: boolean;
     statusCode?: number;
     details?: Record<string, unknown>;
@@ -27,6 +29,7 @@ export class AiProviderError extends Error {
     this.name = "AiProviderError";
     this.code = options.code;
     this.provider = options.provider;
+    this.model = options.model;
     this.retriable = options.retriable;
     this.statusCode = options.statusCode;
     this.details = options.details;

@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { Plus, Trash2 } from "lucide-react";
-import { type ProviderModelProfile } from "@/services/api.js";
+import {
+  type ModelCapabilityInfo,
+  type ProviderModelProfile,
+} from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
 import { Button } from "@/components/ui/button.js";
 import { PingButton } from "@/components/shared/ping-button.js";
@@ -136,6 +139,7 @@ export function ProviderDetails({
               protocol={model.protocol ?? provider.protocol}
               modelId={model.model}
               presetId={model.id}
+              capability={model.capability}
               source="server"
             />
           ))}
@@ -168,6 +172,7 @@ function ProviderModelRow({
   modelId,
   presetId,
   source,
+  capability,
   onDelete,
 }: {
   provider: string;
@@ -175,6 +180,7 @@ function ProviderModelRow({
   modelId: string;
   presetId: string;
   source: "server" | "local";
+  capability?: ModelCapabilityInfo;
   onDelete?: () => void;
 }) {
   const { t } = useTranslation();
@@ -189,6 +195,7 @@ function ProviderModelRow({
             provider={provider}
             modelId={modelId}
             protocol={protocol}
+            baseCapability={capability}
           />
         </div>
         <Badge variant="outline" className="shrink-0 text-[9px]">
@@ -216,16 +223,18 @@ function ModelCapabilitySummary({
   provider,
   modelId,
   protocol,
+  baseCapability,
 }: {
   provider: string;
   modelId: string;
   protocol: string;
+  baseCapability?: ModelCapabilityInfo;
 }) {
   const { t } = useTranslation();
   const result = useModelCapability(modelId, provider, protocol);
-  const capability = resolveDisplayCapability(result);
+  const capability = resolveDisplayCapability(result, baseCapability);
 
-  if (result === undefined) {
+  if (result === undefined && !capability) {
     return <div className="mt-0.5 text-[9px] text-muted-foreground">…</div>;
   }
   const supportsImage = capability?.input.includes("image");
@@ -234,9 +243,11 @@ function ModelCapabilitySummary({
       <span>
         {result?.found
           ? result.matchedModelId
-          : t("settings.modelLimitsUnknown", {
-              defaultValue: "Model limits unknown",
-            })}
+          : capability?.contextWindow || capability?.maxOutputTokens
+            ? null
+            : t("settings.modelLimitsUnknown", {
+                defaultValue: "Model limits unknown",
+              })}
       </span>
       {supportsImage && (
         <span>{t("settings.modalInImage", "Image input")}</span>

@@ -132,6 +132,7 @@ async function makeBaseDeps(
 }
 
 class RecordingLLM implements LLMAdapter {
+  resolveBudget?: LLMAdapter["resolveBudget"];
   readonly calls: Parameters<LLMAdapter["generate"]>[0][] = [];
 
   async generate(
@@ -162,6 +163,95 @@ function inputTokenCount(
 // ── Tests ────────────────────────────────────────────────────────
 
 describe("turn-executor → context budget wiring", () => {
+  it("keeps history that fits the actual story window instead of the shared fallback", async () => {
+    const llm = new RecordingLLM();
+    llm.resolveBudget = () => ({
+      contextWindow: 128_000,
+      maxOutputTokens: 32_768,
+    });
+    const manifest = makeManifest({ model: "story" });
+    const result = await executeTurn(makeTurnInput(), [manifest], {
+      ...(await makeBaseDeps(llm, manifest)),
+      estimator: (text) => text.length,
+      contextBudget: { maxInputTokens: 32_768, reservedForResponse: 16_384 },
+    });
+    expect(result.runtimeResults[0]?.status).toBe("success");
+    const content = llm.calls[0]!.messages.map((message) =>
+      messageText(message.content),
+    ).join("\n");
+    expect(content).toContain(OLD_USER);
+    expect(content).toContain(OLD_ASSISTANT);
+    expect(content).not.toContain("older messages pruned");
+  });
+
+  it("honors a small-window output override before validating the fallback reserve", async () => {
+    const llm = new RecordingLLM();
+    llm.resolveBudget = () => ({
+      contextWindow: 16_384,
+      maxOutputTokens: 16_384,
+      requestedMaxOutputTokens: 4096,
+    });
+    const manifest = makeManifest({ model: "plugin" });
+    const result = await executeTurn(makeTurnInput(), [manifest], {
+      ...(await makeBaseDeps(llm, manifest)),
+      estimator: (text) => text.length,
+      contextBudget: { maxInputTokens: 16_384, reservedForResponse: 16_384 },
+    });
+    expect(result.runtimeResults[0]?.status).toBe("success");
+    expect(llm.calls[0]?.maxOutputTokens).toBe(4096);
+    expect(
+      inputTokenCount(llm.calls[0]!.messages, (text) => text.length),
+    ).toBeLessThanOrEqual(12_288);
+  });
+
+  it("keeps an explicit deployment window limit when the model has more capacity", async () => {
+    const llm = new RecordingLLM();
+    llm.resolveBudget = () => ({
+      contextWindow: 128_000,
+      maxOutputTokens: 16_384,
+    });
+    const manifest = makeManifest();
+    const result = await executeTurn(makeTurnInput(), [manifest], {
+      ...(await makeBaseDeps(llm, manifest)),
+      estimator: (text) => text.length,
+      contextBudget: {
+        maxInputTokens: 32_768,
+        reservedForResponse: 16_384,
+        contextWindowLimit: 8000,
+      },
+    });
+    expect(result.runtimeResults[0]?.status).toBe("success");
+    expect(llm.calls[0]?.maxOutputTokens).toBe(4000);
+    expect(
+      inputTokenCount(llm.calls[0]!.messages, (text) => text.length),
+    ).toBeLessThanOrEqual(4000);
+  });
+
+  it.each([2_000, 4_000])(
+    "reserves the selected model's requested output (%s) before calling the provider",
+    async (requestedMaxOutputTokens) => {
+      const llm = new RecordingLLM();
+      llm.resolveBudget = () => ({
+        contextWindow: 8_000,
+        maxOutputTokens: 6_000,
+        requestedMaxOutputTokens,
+      });
+      const manifest = makeManifest();
+      const estimator: TokenEstimator = (text) => text.length;
+      const deps: TurnExecutorDeps = {
+        ...(await makeBaseDeps(llm, manifest)),
+        estimator,
+        contextBudget: { ...BUDGET, reservedForResponse: 3_000 },
+      };
+      const result = await executeTurn(makeTurnInput(), [manifest], deps);
+      expect(result.runtimeResults[0]?.status).toBe("success");
+      expect(llm.calls).toHaveLength(1);
+      expect(llm.calls[0]?.maxOutputTokens).toBe(requestedMaxOutputTokens);
+      expect(
+        inputTokenCount(llm.calls[0]!.messages, estimator),
+      ).toBeLessThanOrEqual(8_000 - requestedMaxOutputTokens);
+    },
+  );
   it.each<[string, Partial<RuntimeManifest>]>([
     ["without declared tools", {}],
     [

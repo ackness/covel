@@ -4,6 +4,11 @@ export * from "./types/index.js";
 // ── Utilities ─────────────────────────────────────────────────────
 export { deepMerge } from "./utils/deep-merge.js";
 export {
+  DEFAULT_LLM_CONTEXT_WINDOW,
+  DEFAULT_LLM_OUTPUT_TOKENS,
+  resolveLlmTokenLimits,
+} from "./utils/llm-token-limits.js";
+export {
   DEFAULT_FALLBACK_LOCALE,
   DEFAULT_LOCALE,
   LOCALE_CODE_RE,

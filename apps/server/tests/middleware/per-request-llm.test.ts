@@ -220,6 +220,38 @@ function b64(value: unknown): string {
 }
 
 describe("per-request LLM middleware", () => {
+  it.each([0, -1, 1.5, 1_000_001])(
+    "ignores invalid output override %s without dropping valid parameters",
+    async (maxOutputTokens) => {
+      const { ai, calls } = createMockAi();
+      const app = buildTestApp({
+        ai,
+        envApiKeys: {},
+        defaultAdapter: {
+          generate: async () => {
+            throw new Error("unexpected default");
+          },
+        },
+      });
+      const response = await app.request("/echo", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "X-Slot-Config": b64({
+            parameterOverrides: { fast: { temperature: 0.3, maxOutputTokens } },
+          }),
+        },
+        body: JSON.stringify({ model: "fast" }),
+      });
+      expect(response.status).toBe(200);
+      expect(calls[0].slotOverrides).toMatchObject({
+        parameterOverrides: { fast: { temperature: 0.3 } },
+      });
+      expect(
+        calls[0].slotOverrides?.parameterOverrides?.fast.maxOutputTokens,
+      ).toBeUndefined();
+    },
+  );
   it("forwards customPresets and slotPresetOverrides to the gateway", async () => {
     const { ai, calls } = createMockAi();
     const defaultAdapter: LLMAdapter = {

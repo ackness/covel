@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore } from "@covel/store";
 import { runtimeDoneTool, suspendTool, tool } from "@covel/tools";
 import { z } from "zod";
-import type { RuntimeManifest } from "@covel/shared";
+import type { LLMAdapter, RuntimeManifest } from "@covel/shared";
 import { executeTurn } from "../src/turn-executor/turn-executor.js";
 import { createToolExecutor } from "../src/agent-loop/tool-executor.js";
 import { resumeSuspendedRuntime } from "../src/resume/turn-resume.js";
@@ -80,11 +80,17 @@ async function run(
   } as RuntimeManifest;
   let index = 0;
   const generate = vi.fn(
-    async () => script[Math.min(index++, script.length - 1)]!,
+    async (params: Parameters<LLMAdapter["generate"]>[0]) => {
+      params.onTargetAttempt?.({ provider: "fallback", model: "actual-model" });
+      return script[Math.min(index++, script.length - 1)]!;
+    },
   );
   const deps = {
     store,
-    llm: { generate },
+    llm: {
+      generate,
+      resolveTarget: () => ({ provider: "primary", model: "initial-model" }),
+    },
     loadRuntime: async () => ({
       manifest,
       promptTemplate: "Extract facts conservatively.",
@@ -168,6 +174,10 @@ describe("explicit completion for third-party extractors", () => {
       expect(result?.error).toContain(
         resume === "explicit" ? "requireExplicitCompletion" : "requireToolUse",
       );
+      expect(result?.error).toContain(
+        "[provider: fallback, model: actual-model]",
+      );
+      expect(result?.error).not.toContain("initial-model");
       expect(write).not.toHaveBeenCalled();
     },
   );
@@ -179,6 +189,10 @@ describe("explicit completion for third-party extractors", () => {
     const { result, generate, write } = await run([response(text)]);
     expect(result?.status).toBe("failed");
     expect(result?.error).toContain("requireExplicitCompletion");
+    expect(result?.error).toContain(
+      "[provider: fallback, model: actual-model]",
+    );
+    expect(result?.error).not.toContain("initial-model");
     expect(generate).toHaveBeenCalledTimes(2);
     expect(write).not.toHaveBeenCalled();
   });
@@ -214,6 +228,21 @@ describe("explicit completion for third-party extractors", () => {
       response(null, "runtime-done"),
     ]);
     expect(result?.status).toBe("failed");
+  });
+
+  it("attributes exhausted invalid tool arguments to the actual response model", async () => {
+    const { result, write } = await run(
+      Array.from({ length: 4 }, (_, index) =>
+        response(null, "save-facts", { text: index }),
+      ),
+    );
+    expect(result?.status).toBe("failed");
+    expect(result?.error).toContain("exhausted the tool loop");
+    expect(result?.error).toContain(
+      "[provider: fallback, model: actual-model]",
+    );
+    expect(result?.error).not.toContain("initial-model");
+    expect(write).not.toHaveBeenCalled();
   });
 
   it("accepts a completing tool after correcting invalid arguments", async () => {

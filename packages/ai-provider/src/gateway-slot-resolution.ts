@@ -1,4 +1,4 @@
-import type { LLMProviderRequest } from "@covel/shared";
+import { resolveLlmTokenLimits, type LLMProviderRequest } from "@covel/shared";
 import type { ProviderDefaults } from "./types.js";
 import type { ProviderResolution } from "./provider-registry.js";
 import type { SlotRegistry } from "./slot-registry.js";
@@ -206,7 +206,21 @@ export function createGatewaySlotResolution(
     const perCall = options?.parameterOverrides;
     if (!configured) return perCall;
     if (!perCall) return configured;
-    return { ...configured, ...perCall };
+    return {
+      ...configured,
+      ...perCall,
+      // A runtime budget is a ceiling, not permission to increase the user's
+      // requested output. Both limits must hold on every retry.
+      ...(configured.maxOutputTokens !== undefined &&
+      perCall.maxOutputTokens !== undefined
+        ? {
+            maxOutputTokens: Math.min(
+              configured.maxOutputTokens,
+              perCall.maxOutputTokens,
+            ),
+          }
+        : {}),
+    };
   }
 
   function withParameterOverrides(
@@ -250,7 +264,23 @@ export function createGatewaySlotResolution(
     const presetMeta = target.preset?.providerRequestMetadata;
     const merged =
       presetMeta || metadata ? { ...presetMeta, ...metadata } : undefined;
-    return withParameterOverrides(merged, presetId, options);
+    const result = withParameterOverrides(merged, presetId, options);
+    const parameters = result?.parameterOverrides as
+      ModelParameterOverrides | undefined;
+    const limits = resolveLlmTokenLimits({
+      ...target.preset?.capability,
+      contextWindow:
+        target.preset?.capability?.contextWindow ??
+        target.profile.contextWindow,
+      requestedMaxOutputTokens: parameters?.maxOutputTokens,
+    });
+    return {
+      ...result,
+      parameterOverrides: {
+        ...parameters,
+        maxOutputTokens: limits.maxOutputTokens,
+      },
+    };
   }
 
   /**
@@ -281,11 +311,16 @@ export function createGatewaySlotResolution(
         tag,
         options,
       );
-      if (!effectivePresetId) return null;
-
-      const baseTarget = deps.presetRegistry.resolveTextTarget({
-        presetId: effectivePresetId,
-      });
+      let baseTarget: ResolvedTarget;
+      try {
+        // An omitted slot must resolve the same default as generateText.
+        baseTarget = deps.presetRegistry.resolveTextTarget({
+          presetId: effectivePresetId,
+        });
+      } catch (error) {
+        if (effectivePresetId === undefined) return null;
+        throw error;
+      }
       const target = applyRequestCapabilityOverlay(
         baseTarget,
         presetId,
@@ -312,7 +347,13 @@ export function createGatewaySlotResolution(
       const baseUrl = resolved.config.baseUrl ?? target.preset?.baseUrl;
       const presetTag = target.preset?.tag ?? "text";
       const presetMeta = target.preset?.providerRequestMetadata ?? {};
-      const parameterOverrides = resolveParameterOverrides(presetId, options);
+      // Budget resolution must see persisted preset defaults too, before the
+      // runtime supplies its output ceiling on generate/stream.
+      const parameterOverrides = withParameterOverrides(
+        presetMeta,
+        presetId,
+        options,
+      )?.parameterOverrides as ModelParameterOverrides | undefined;
 
       // Surface llm.toml's free-form fields (embeddingFormat + any future
       // per-slot hints) under a single `metadata` bag the plugin owns.
@@ -328,7 +369,9 @@ export function createGatewaySlotResolution(
       return {
         // Overlay registrations use internal scoped ids — surface the
         // public id so plugins see the id the request actually asked for.
-        presetId: publicPresetId(effectivePresetId),
+        presetId: publicPresetId(
+          effectivePresetId ?? target.preset?.id ?? target.profile.id,
+        ),
         provider,
         protocol: protocol as string,
         ...(baseUrl ? { baseUrl } : {}),

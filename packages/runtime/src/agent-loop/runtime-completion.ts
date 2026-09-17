@@ -1,4 +1,8 @@
-import type { RuntimeManifest } from "@covel/shared";
+import type {
+  LLMTargetIdentity,
+  RuntimeManifest,
+  RuntimeResult,
+} from "@covel/shared";
 import { isDefaultLocale } from "@covel/shared";
 import { isRuntimeDoneSentinel } from "@covel/tools";
 import type { SuspensionRecord } from "@covel/store";
@@ -56,6 +60,25 @@ export function completionContractError(
   if (state.requiredCompletionUnmet) {
     return `${manifest.name} declares requireExplicitCompletion but did not successfully complete a declared finishing tool or call runtime-done without unresolved tool failures.`;
   }
+}
+
+/** Keep response-validation failures attributable after the provider returned. */
+export function withAgentFailureTarget(
+  result: RuntimeResult,
+  target: LLMTargetIdentity | undefined,
+): RuntimeResult {
+  if (
+    result.status !== "failed" ||
+    !result.error ||
+    !target ||
+    result.error.startsWith("[provider:")
+  ) {
+    return result;
+  }
+  return {
+    ...result,
+    error: `[provider: ${target.provider}, model: ${target.model}] ${result.error}`,
+  };
 }
 
 export function completionCorrection(

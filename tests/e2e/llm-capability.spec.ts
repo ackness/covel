@@ -11,6 +11,76 @@ async function openModelRoles(page: Page) {
   return page.getByRole("dialog");
 }
 
+test("frontend plugin models expose persistent generation settings independently of catalog limits", async ({
+  page,
+}) => {
+  await seedBrowserSettings(page, {
+    "ui.onboardedVersion": ONBOARDING_VERSION,
+    "ui.locale": "en-US",
+    "llm.providers": [
+      {
+        id: "fixture",
+        name: "Fixture",
+        baseUrl: "https://fixture.invalid",
+        protocol: "openai-chat-v1",
+        models: [{ ref: "custom-fixture", modelId: "fixture-model" }],
+      },
+    ],
+    "llm.slotConfig": { plugin: { modelRef: "custom-fixture" } },
+  });
+  await page.route("**/api/llm-config", (route) =>
+    route.fulfill({ json: { configured: false, providers: [], slots: {} } }),
+  );
+  await page.route("**/api/model-db/lookup**", (route) =>
+    route.fulfill({
+      json: {
+        found: true,
+        source: "model-database",
+        pricingKind: "unknown",
+        candidates: [],
+        reasoning: null,
+        capability: {
+          input: ["text"],
+          output: ["text"],
+          contextWindow: 128_000,
+          maxOutputTokens: 4096,
+        },
+      },
+    }),
+  );
+  await page.goto("/session");
+  let dialog = await openModelRoles(page);
+  let role = dialog.getByRole("group", { name: "plugin", exact: true });
+  await role
+    .getByRole("button", { name: "Edit Capabilities", exact: true })
+    .click();
+  await role.getByPlaceholder("128000", { exact: true }).fill("64000");
+  await page.keyboard.press("Tab");
+  await role.getByRole("button", { name: /Generation parameters/ }).click();
+  const output = role.getByRole("spinbutton", { name: "Max Output Tokens" });
+  await output.fill("32768");
+  await output.press("Tab");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("covel:settings")!).entries[
+            "llm.paramOverrides"
+          ]?.plugin?.maxOutputTokens,
+      ),
+    )
+    .toBe(32768);
+  await page.keyboard.press("Escape");
+  await page.reload();
+  dialog = await openModelRoles(page);
+  role = dialog.getByRole("group", { name: "plugin", exact: true });
+  await expect(role.getByText("ctx: 64K", { exact: true })).toBeVisible();
+  await role.getByRole("button", { name: /Generation parameters/ }).click();
+  await expect(
+    role.getByRole("spinbutton", { name: "Max Output Tokens" }),
+  ).toHaveValue("32768");
+});
+
 test("partial capability overrides survive reopening and a failed lookup", async ({
   page,
 }) => {
@@ -71,6 +141,7 @@ test("partial capability overrides survive reopening and a failed lookup", async
       .first()
       .click();
     await dialog.getByPlaceholder("128000", { exact: true }).fill("64000");
+    await page.keyboard.press("Tab");
     await expect(dialog.getByText("ctx: 64K", { exact: true })).toBeVisible();
     await expect
       .poll(() =>

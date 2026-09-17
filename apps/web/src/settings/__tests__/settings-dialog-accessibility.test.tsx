@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsStoreApi } from "@covel/settings";
 import i18n from "@/i18n";
@@ -107,6 +108,20 @@ describe("SettingsDialog navigation", () => {
       <SettingsDialog open initialKey="llm.providers" onOpenChange={vi.fn()} />,
     );
     expect(await screen.findByText("Presets pane")).toBeTruthy();
+  });
+
+  it("retains a model role deep link when mount effects are replayed", async () => {
+    render(
+      <StrictMode>
+        <SettingsDialog open initialKey="llm.slots" onOpenChange={vi.fn()} />
+      </StrictMode>,
+    );
+    expect(await screen.findByText("Slots pane")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Model Roles" })
+        .getAttribute("aria-current"),
+    ).toBe("page");
   });
 
   it("labels search and clears a stale query after a locale change", async () => {

@@ -254,39 +254,6 @@ const pluginUtils = {
 };
 const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
 
-// Conservative live budget across every enabled text preset. Runtime deps
-// currently carry one process/request-level budget, while a turn may execute
-// story, plugin, and fast slots; taking the smallest declared window and
-// output cap keeps all of them within bounds. Resolved per call so llm.toml
-// hot-reloads propagate without restarting the server.
-const resolveNarrativeBudget = () => {
-  const capabilities = ai.presetRegistry
-    .listPresets()
-    .filter(
-      (preset) => preset.enabled && preset.supportedModes.includes("text"),
-    )
-    .map((preset) => preset.capability);
-  const contextWindows = capabilities.flatMap((capability) =>
-    capability?.contextWindow !== undefined ? [capability.contextWindow] : [],
-  );
-  const maxOutputTokens = capabilities.flatMap((capability) =>
-    capability?.maxOutputTokens !== undefined
-      ? [capability.maxOutputTokens]
-      : [],
-  );
-  if (contextWindows.length === 0 && maxOutputTokens.length === 0) {
-    return undefined;
-  }
-  return {
-    ...(contextWindows.length > 0
-      ? { contextWindow: Math.min(...contextWindows) }
-      : {}),
-    ...(maxOutputTokens.length > 0
-      ? { maxOutputTokens: Math.min(...maxOutputTokens) }
-      : {}),
-  };
-};
-
 // ── Bootstrap API ───────────────────────────────────────────────
 // Bundled plugins ship inside the repo / packaged app. The desktop shell
 // can additionally mount a user plugins directory via COVEL_USER_PLUGINS_DIR
@@ -342,7 +309,6 @@ const api = await bootstrapApi({
   perRequestMiddleware: [perRequestLlm],
   sessionLock,
   memoryIngestLock,
-  resolveNarrativeBudget,
 });
 
 await seedAndReconcileWorlds(store, worldsDirs);
