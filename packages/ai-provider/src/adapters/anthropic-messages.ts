@@ -41,12 +41,7 @@ import {
   toAnthropicMessages,
   toAnthropicTools,
 } from "./http.js";
-/**
- * Floor used only when the resolved model advertises no output budget.
- * Anthropic requires `max_tokens`, so something must be sent — but a fixed
- * 1024 silently truncates long narration on models capable of far more.
- */
-const ANTHROPIC_DEFAULT_MAX_TOKENS = 1024;
+import { resolveLlmTokenLimits } from "@covel/shared";
 const ANTHROPIC_VERSION = "2023-06-01";
 
 /**
@@ -238,11 +233,10 @@ function anthropicHeaders(apiKey?: string): Record<string, string> {
   return h;
 }
 
-/** Prefer the resolved model's advertised output budget over the floor. */
+/** Direct adapter calls use the same conservative default as gateway calls. */
 function resolveMaxTokens(context: ModelRequestContext | undefined): number {
-  return (
-    context?.preset?.capability?.maxOutputTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS
-  );
+  return resolveLlmTokenLimits(context?.preset?.capability ?? {})
+    .maxOutputTokens;
 }
 
 function readAnthropicUsage(payload: Record<string, unknown>): UsageSummary {

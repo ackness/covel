@@ -390,7 +390,7 @@ describe("providerRequestMetadata cannot override critical fields", () => {
       (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
     ) as Record<string, unknown>;
     expect(body["model"]).toBe("claude-3-haiku-20240307");
-    expect(body["max_tokens"]).toBe(1024);
+    expect(body["max_tokens"]).toBe(16_384);
   });
 
   it("anthropic generateObject: metadata cannot override messages or stream", async () => {

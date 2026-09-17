@@ -464,6 +464,7 @@ describe("gateway + slotOverrides", () => {
       parameterOverrides: {
         temperature: 0.2,
         topP: 0.7,
+        maxOutputTokens: 8000,
       },
     });
   });

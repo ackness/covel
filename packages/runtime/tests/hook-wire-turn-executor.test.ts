@@ -729,7 +729,7 @@ describe("Turn executor hook wire-in", () => {
 
       expect(result.runtimeResults[0]?.status).toBe("failed");
       expect(result.runtimeResults[0]?.error).toMatch(
-        /Context budget exceeded after PostContextAssembly/,
+        /Context budget exceeded before LLM call/,
       );
       expect(llm.calls).toHaveLength(0);
     });

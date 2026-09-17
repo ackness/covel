@@ -1,5 +1,5 @@
 import { resolveBudgetOptions, type BudgetOptions } from "@covel/context";
-import type { LLMAdapter } from "@covel/shared";
+import { resolveLlmTokenLimits, type LLMAdapter } from "@covel/shared";
 
 /** Reserve the requested output before pruning the final provider request. */
 export function resolveRequestContextBudget(
@@ -8,22 +8,21 @@ export function resolveRequestContextBudget(
   slot: string | undefined,
 ): Omit<BudgetOptions, "estimator"> {
   const target = llm.resolveBudget?.(slot);
-  if (!target) return base;
-  const limits = resolveBudgetOptions(base);
-  const requested =
-    target.requestedMaxOutputTokens ?? limits.reservedForResponse;
+  const limits = resolveLlmTokenLimits({
+    contextWindow: Math.min(
+      target?.contextWindow ?? base.maxInputTokens,
+      base.contextWindowLimit ?? Infinity,
+    ),
+    maxOutputTokens: target?.maxOutputTokens,
+    requestedMaxOutputTokens: target?.requestedMaxOutputTokens,
+    defaultMaxOutputTokens: base.reservedForResponse,
+  });
   return {
     ...base,
     ...resolveBudgetOptions({
       ...base,
-      maxInputTokens: Math.min(
-        limits.maxInputTokens,
-        target.contextWindow ?? Infinity,
-      ),
-      reservedForResponse: Math.min(
-        requested,
-        target.maxOutputTokens ?? Infinity,
-      ),
+      maxInputTokens: limits.contextWindow,
+      reservedForResponse: limits.maxOutputTokens,
     }),
   };
 }

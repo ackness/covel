@@ -15,11 +15,9 @@ import {
 } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/plugin-loader";
 import {
-  applyBudget,
   buildContext,
   buildContextAsync,
   needsAsyncBuild,
-  resolveBudgetOptions,
 } from "@covel/context";
 import type {
   CoreMemoryBlockView,
@@ -211,12 +209,7 @@ export async function executeAgentRuntime({
     }
   }
 
-  // Tool-declaring runtimes used to be excluded from hard budget enforcement
-  // because prefix pruning could cut between an assistant message and the
-  // `tool` results it requested, leaving an orphan the provider rejects.
-  // `applyBudget` now drops orphaned leading tool messages, so every runtime
-  // — including the tool-heavy main agents that dominate long-session token
-  // spend — gets the prompt-assembly hard prune.
+  // Every agent applies the actual target budget immediately before calling it.
   const budgetEligible =
     deps.estimator !== undefined && deps.contextBudget !== undefined;
 
@@ -287,9 +280,6 @@ export async function executeAgentRuntime({
       ...(exportSlots && Object.keys(exportSlots).length > 0
         ? { exportSlots }
         : {}),
-      ...(budgetEligible
-        ? { estimator: deps.estimator, contextBudget: deps.contextBudget }
-        : {}),
     } as const;
 
     return needsAsyncBuild({ manifest })
@@ -305,17 +295,6 @@ export async function executeAgentRuntime({
       effectiveSessionSummaries = refreshed.sessionSummaries;
       assembled = await assembleContext();
     }
-  }
-
-  // A prune means this runtime's prompt lost history to fit the slot window —
-  // the single place that knows it, so record it before the hook chain can
-  // rewrite the assembled context.
-  if (assembled.budgetExceeded && deps.emitter) {
-    await deps.emitter.emit("context.pruned", {
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      prunedMessageCount: assembled.prunedMessageCount ?? 0,
-    });
   }
 
   // ── PostContextAssembly hook ─────────────────────────────────
@@ -352,37 +331,11 @@ export async function executeAgentRuntime({
     },
   );
 
-  // Hooks may append or rewrite prompt content after the assembler's budget
-  // pass. Re-run the same hard budget against the final shaped request; if
-  // the protected tail alone cannot fit, fail explicitly instead of sending
-  // an oversized request and relying on a provider-specific window.
-  const finalContext = budgetEligible
-    ? applyBudget(shapedContext.systemPrompt, shapedContext.messages, {
-        ...deps.contextBudget!,
-        estimator: deps.estimator!,
-      })
-    : undefined;
-  if (finalContext && deps.contextBudget) {
-    const limits = resolveBudgetOptions(deps.contextBudget);
-    const inputLimit = limits.maxInputTokens - limits.reservedForResponse;
-    if (finalContext.totalTokens > inputLimit) {
-      throw new RangeError(
-        `Context budget exceeded after PostContextAssembly for runtime "${manifest.name}": estimated ${finalContext.totalTokens} input tokens, limit ${inputLimit}`,
-      );
-    }
-    if (finalContext.prunedMessageCount > 0 && deps.emitter) {
-      await deps.emitter.emit("context.pruned", {
-        runtimeId: manifest.name,
-        pluginId: manifest.pluginId,
-        prunedMessageCount: finalContext.prunedMessageCount,
-      });
-    }
-  }
-
-  // Build LLM messages
+  // Keep history intact through context hooks. The per-call budget runs after
+  // PreLLMCall resolves the actual model, including any hook-selected target.
   const messages: LLMMessage[] = [
     { role: "system", content: shapedContext.systemPrompt },
-    ...(finalContext?.messages ?? shapedContext.messages),
+    ...shapedContext.messages,
   ];
 
   const toolLoop = await runAgentToolLoop({

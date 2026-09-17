@@ -137,21 +137,6 @@ export function createPerRequestLlmMiddleware(
     c.set("llmAdapter", perRequestAdapter);
     c.set("pluginGateway", perRequestPluginGateway);
     c.set("requestLlmOverridden", true);
-    try {
-      const narrative = opts.ai.gateway.resolveSlot("default", {
-        apiKeys: requestKeys ?? {},
-        envApiKeys: opts.envApiKeys,
-        ...(slotOverrides ? { slotOverrides } : {}),
-        capabilityOverridePolicy,
-        fallbackTag: "text",
-      });
-      if (narrative?.capability) {
-        c.set("requestNarrativeCapability", narrative.capability);
-      }
-    } catch {
-      // Generation retains its normal explicit error path; budget rebinding
-      // falls back to the trusted startup capability when lookup fails.
-    }
     await next();
   };
 }

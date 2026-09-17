@@ -90,7 +90,6 @@ export { wrapStoreWithPluginDataEvents } from "./bootstrap/plugin-data-store-eve
 import {
   createBootstrapCompactorRunner,
   createTurnContextBudget,
-  type ResolveNarrativeBudgetFn,
 } from "./bootstrap/compactor.js";
 import { discoverAndRegisterPlugins } from "./bootstrap/plugin-discovery.js";
 import { setupPluginTools } from "./bootstrap/tools.js";
@@ -104,30 +103,6 @@ import {
   sessionIncarnationIdentity,
   verifyResolvedSessionRead,
 } from "./session/session-guard.js";
-
-type ResolvedTextBudget = NonNullable<ReturnType<ResolveNarrativeBudgetFn>>;
-
-function narrowTextBudgets(
-  ...budgets: readonly (ResolvedTextBudget | undefined)[]
-): ResolvedTextBudget | undefined {
-  const contextWindows = budgets.flatMap((budget) =>
-    budget?.contextWindow !== undefined ? [budget.contextWindow] : [],
-  );
-  const maxOutputTokens = budgets.flatMap((budget) =>
-    budget?.maxOutputTokens !== undefined ? [budget.maxOutputTokens] : [],
-  );
-  if (contextWindows.length === 0 && maxOutputTokens.length === 0) {
-    return undefined;
-  }
-  return {
-    ...(contextWindows.length > 0
-      ? { contextWindow: Math.min(...contextWindows) }
-      : {}),
-    ...(maxOutputTokens.length > 0
-      ? { maxOutputTokens: Math.min(...maxOutputTokens) }
-      : {}),
-  };
-}
 
 // ── Bootstrap config ─────────────────────────────────────────────
 
@@ -226,12 +201,6 @@ export interface ApiBootstrapConfig {
   readonly mediaStore?: MediaStore;
   readonly mediaBackend?: MediaStoreBackend;
   readonly vectorBackend?: VectorBackend;
-  /**
-   * Live conservative text-slot budget (contextWindow / maxOutputTokens),
-   * built by the composition root against the AI registries. Drives the
-   * compaction threshold and hard prune. Absent → fixed fallback window.
-   */
-  readonly resolveNarrativeBudget?: ResolveNarrativeBudgetFn;
 }
 
 export interface ApiBootstrapResult {
@@ -548,14 +517,10 @@ export async function bootstrapApi(
   };
 
   const runtimeEnv = readRuntimeEnv();
-  const budgetSource = {
-    ...(runtimeEnv.compactorContextWindow !== undefined
+  const budgetSource =
+    runtimeEnv.compactorContextWindow !== undefined
       ? { contextWindowOverride: runtimeEnv.compactorContextWindow }
-      : {}),
-    ...(config.resolveNarrativeBudget
-      ? { resolveNarrativeBudget: config.resolveNarrativeBudget }
-      : {}),
-  };
+      : {};
   const compactorRunner = createBootstrapCompactorRunner({
     manifestCache,
     store,
@@ -793,35 +758,19 @@ export async function bootstrapApi(
     }
   }
 
-  // A request-scoped LLM overlay must drive all three consumers together:
-  // runtime calls, compaction calls, and the final hard-prune budget. Rebuild
-  // these lightweight facades after per-request middleware has replaced the
-  // adapter; registry-owned startup objects remain untouched.
+  // Compaction must use the same request-scoped adapter as agent calls.
+  // Both now resolve budgets from their actual target on each invocation.
   app.use("*", async (c, next) => {
     if (c.get("requestLlmOverridden")) {
-      const requestCapability = c.get("requestNarrativeCapability");
-      const requestBudgetSource = {
-        ...budgetSource,
-        ...(requestCapability
-          ? {
-              resolveNarrativeBudget: () =>
-                narrowTextBudgets(
-                  budgetSource.resolveNarrativeBudget?.(),
-                  requestCapability,
-                ),
-            }
-          : {}),
-      };
       c.set(
         "compactorRunner",
         createBootstrapCompactorRunner({
           manifestCache,
           store,
           llmAdapter: c.get("llmAdapter"),
-          ...requestBudgetSource,
+          ...budgetSource,
         }),
       );
-      c.set("turnContextBudget", createTurnContextBudget(requestBudgetSource));
     }
     await next();
   });

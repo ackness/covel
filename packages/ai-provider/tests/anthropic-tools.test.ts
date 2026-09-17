@@ -13,7 +13,7 @@
  *   2. Non-streaming responses surface `tool_use` blocks as `toolCalls`.
  *   3. Streamed tool calls accumulate across `input_json_delta` fragments.
  *   4. Tool-loop messages round-trip as `tool_use` / `tool_result` blocks.
- *   5. `max_tokens` follows the resolved model's capability.
+ *   5. `max_tokens` uses a conservative default bounded by model capability.
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -288,26 +288,35 @@ describe("anthropic-messages tool calling", () => {
 });
 
 describe("anthropic-messages max_tokens", () => {
-  it("uses the resolved model's advertised output budget", async () => {
-    const captured = stubJson({
-      content: [{ type: "text", text: "ok" }],
-      stop_reason: "end_turn",
-    });
-    const adapter = createAnthropicMessagesAdapter();
-    const context = {
-      preset: { capability: { maxOutputTokens: 8192 } },
-    } as unknown as ModelRequestContext;
+  it.each([
+    [8192, 8192],
+    [262144, 16384],
+  ])(
+    "bounds the default by output capacity %s without requesting the catalog maximum",
+    async (capacity, expected) => {
+      const captured = stubJson({
+        content: [{ type: "text", text: "ok" }],
+        stop_reason: "end_turn",
+      });
+      const adapter = createAnthropicMessagesAdapter();
+      const context = {
+        preset: { capability: { maxOutputTokens: capacity } },
+      } as unknown as ModelRequestContext;
 
-    await adapter.generateText(
-      CONFIG,
-      { model: "claude-sonnet-4", messages: [{ role: "user", content: "hi" }] },
-      context,
-    );
+      await adapter.generateText(
+        CONFIG,
+        {
+          model: "claude-sonnet-4",
+          messages: [{ role: "user", content: "hi" }],
+        },
+        context,
+      );
 
-    expect(captured[0]!.body.max_tokens).toBe(8192);
-  });
+      expect(captured[0]!.body.max_tokens).toBe(expected);
+    },
+  );
 
-  it("falls back to the floor when the model advertises no budget", async () => {
+  it("defaults to 16k when the model advertises no budget", async () => {
     const captured = stubJson({
       content: [{ type: "text", text: "ok" }],
       stop_reason: "end_turn",
@@ -319,6 +328,6 @@ describe("anthropic-messages max_tokens", () => {
       messages: [{ role: "user", content: "hi" }],
     });
 
-    expect(captured[0]!.body.max_tokens).toBe(1024);
+    expect(captured[0]!.body.max_tokens).toBe(16384);
   });
 });
