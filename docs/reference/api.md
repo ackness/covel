@@ -3324,9 +3324,26 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 API 装配失败自行释放已创建的事件传输和插件注册；注入的存储仍由调用方关闭。
 
 启动扫描不阻塞 API 就绪，但通过 `ApiBootstrapResult.startupMaintenance` 跟踪，
-宿主关闭时必须等待它与两个后台队列结束，再排空记忆任务、调用 `closePluginEntries()`、
-关闭事件总线与底层存储/连接池。各排空阶段有时限；上述已跟踪的后台工作未结束时保留其依赖，
-交由进程最终退出处理。嵌入式调用方同样需要遵守这个顺序，不能仅调用 `worker.close()` 后立即关闭存储。
+宿主关闭时同时停止请求接纳、文件监听和两个后台队列，等待它们与启动扫描结束，
+再排空记忆任务、调用 `closePluginEntries()`、关闭事件总线与底层存储/连接池。
+同时通知各生产者停止，可以让后台任务释放前台请求正在等待的会话锁。
+各排空阶段有时限；已跟踪的工作未结束时保留其依赖，交由进程最终退出处理。
+
+`ApiBootstrapResult.applicationWork.close()` 跟踪业务完成，不以 HTTP 连接关闭或
+Response 创建作为完成条件。普通请求覆盖完整 middleware/handler；action、世界生成、
+长期订阅的 SSE 回调及其读写队列、请求触发的 suspension 扫描也纳入跟踪。
+关闭后新请求返回 `503 / server_shutting_down`。玩家回合、手动 runtime、resume 和
+世界生成收到宿主取消；排队的 action/resume 在取得锁后再次检查，取消的领域提交回滚，
+已经成功提交的状态不撤销。长期订阅停止读写并释放注册。
+
+客户端断开 action SSE 仍不等于取消回合，刷新后继续使用 execution 恢复协议。
+宿主取消不伪装成玩家主动 abort。世界生成收到调用方取消后不再重试 provider，
+迟到的模型输出不作为有效结果。普通 RPC handler 或插件自行启动的不合作代码不能被
+同进程强制终止；任务跟踪不替代插件能力限制或外部副作用的独立恢复协议。
+
+嵌入式调用方同样需要遵守上述顺序，不能仅调用 `worker.close()` 后立即关闭存储。
+一个外层 Hono 宿主可向 `bootstrapApi` 注入自己的 `applicationWork`，并将其 middleware
+放在宿主路由之前，使 API 与配置、模型等其它路由共享同一关闭边界。
 
 ### 关键环境变量
 

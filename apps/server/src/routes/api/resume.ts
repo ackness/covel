@@ -25,6 +25,7 @@
  */
 
 import { Hono } from "hono";
+import { trackRequestWork } from "../../application-work.js";
 import { z } from "zod";
 // Ajv 8 ships as CJS with both `module.exports = Ajv` and `exports.default = Ajv`.
 // Under NodeNext + esModuleInterop, TS sees the default-import as the module's
@@ -152,7 +153,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
     );
   }
   // Opportunistic, time-gated, best-effort: never blocks the resume.
-  void maybeSweepExpiredSuspensions(store);
+  void trackRequestWork(c, () => maybeSweepExpiredSuspensions(store));
   const pluginRegistry = c.get("pluginRegistry");
 
   const parsedBody = await parseJsonBody(
@@ -247,6 +248,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
   // (see hooks/hook-scope.ts).
   try {
     return await sessionLock.withLock(sessionId, async () => {
+      c.get("requestWork")?.signal.throwIfAborted();
       // Active gate under the lock — a paused/ended session must
       // not accept a resume (it would commit state and write history).
       const liveSession = await store.getSession(sessionId);
@@ -343,6 +345,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
         async () => {
           // Claim while holding the same lifecycle lock as resume execution and
           // suspension abandonment. This closes the delete/claim race.
+          c.get("requestWork")?.signal.throwIfAborted();
           const claimed = await store.claimSuspension(suspensionId);
           if (!claimed) {
             return c.json(errorBody("Suspension already resolved"), 409);
@@ -440,6 +443,7 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           // finalize owns the transaction, the commit barrier (buffered fan-out
           // flushed only after commit, dropped on rollback), and the hook scope.
           const outcome = await commitExecution({
+            signal: c.get("requestWork")?.signal,
             completion: {
               kind: "resume",
               turnId: suspension.turnId,
@@ -545,7 +549,7 @@ resumeRoutes.get("/:id/suspensions", async (c) => {
   const sessionId = c.req.param("id");
   const store = c.get("store");
   // Opportunistic, time-gated, best-effort: never blocks the listing.
-  void maybeSweepExpiredSuspensions(store);
+  void trackRequestWork(c, () => maybeSweepExpiredSuspensions(store));
 
   const guard = await resolveSessionParam(c);
   if (!guard.ok) return guard.response;

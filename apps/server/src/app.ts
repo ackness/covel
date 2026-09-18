@@ -58,6 +58,7 @@ import {
   createServerResourceDrain,
   type ServerResources,
 } from "./server-resources.js";
+import { createApplicationWork } from "./application-work.js";
 
 /**
  * Merge `~/.covel/keys.env` (or `$COVEL_HOME/keys.env` when overridden)
@@ -104,6 +105,9 @@ const env = readRuntimeEnv();
 // Fail fast on an unsafe hosted posture before any route is
 // wired or the caller starts listening. No-op for self-deploy/desktop.
 validateSecurityPosture(env);
+
+const applicationWork = createApplicationWork();
+app.use("*", applicationWork.middleware);
 
 // ── Global error handler ────────────────────────────────────────
 const isDev = env.nodeEnv !== "production";
@@ -177,7 +181,7 @@ app.use(
 // docker where the server is spawned directly.
 loadKeysEnvInto(process.env);
 
-const resources: ServerResources = { worldWatchers: [] };
+const resources: ServerResources = { applicationWork, worldWatchers: [] };
 export const drainServerResources = createServerResourceDrain(resources);
 
 async function initializeServer(): Promise<void> {
@@ -305,6 +309,7 @@ async function initializeServer(): Promise<void> {
     const worldsDirs = mergeDirs(bundledWorldsDir, userDirs.worlds);
 
     const api = (resources.api = await bootstrapApi({
+      applicationWork,
       pluginsDir: bundledPluginsDir,
       pluginsDirs,
       worldsDirs,

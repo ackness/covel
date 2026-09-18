@@ -18,6 +18,7 @@ function fixture() {
   const resources: ServerResources = {
     worldWatchers: [{ start() {}, stop: close("watchers") }],
     api: {
+      applicationWork: { close: close("requests") },
       runtimeJobWorker: { close: close("worker") },
       pluginBackgroundQueue: { close: close("queue") },
       startupMaintenance: Promise.resolve(),
@@ -33,6 +34,18 @@ function fixture() {
 }
 
 describe("server resource ownership", () => {
+  it("stops background lock owners before waiting for foreground and watcher work", async () => {
+    const { resources, calls } = fixture();
+    const stopped = Promise.withResolvers<void>();
+    resources.api!.applicationWork.close = () => stopped.promise;
+    resources.worldWatchers[0]!.stop = () => stopped.promise;
+    resources.api!.pluginBackgroundQueue.close = async () => {
+      stopped.resolve();
+    };
+    await createServerResourceDrain(resources)();
+    expect(calls).toContain("store");
+  });
+
   it("drains startup scans before closing dependencies and is idempotent", async () => {
     const { resources, calls } = fixture();
     const scan = Promise.withResolvers<void>();
@@ -42,12 +55,13 @@ describe("server resource ownership", () => {
     expect(drain()).toBe(closing);
     try {
       await vi.waitFor(() => expect(calls).toContain("queue"));
-      expect(calls).toEqual(["watchers", "worker", "queue"]);
+      expect(calls).toEqual(["requests", "watchers", "worker", "queue"]);
     } finally {
       scan.resolve();
       await closing;
     }
     expect(calls).toEqual([
+      "requests",
       "watchers",
       "worker",
       "queue",
@@ -79,7 +93,7 @@ describe("server resource ownership", () => {
     const closing = createServerResourceDrain(resources)();
     await vi.advanceTimersByTimeAsync(2_000);
     await closing;
-    expect(calls).toEqual(["watchers", "worker", "queue"]);
+    expect(calls).toEqual(["requests", "watchers", "worker", "queue"]);
     // A late settlement does not independently close dependencies after return.
     scan.resolve();
     await Promise.resolve();
@@ -96,6 +110,7 @@ describe("server resource ownership", () => {
     };
     await createServerResourceDrain(resources)();
     expect(calls).toEqual([
+      "requests",
       "watchers",
       "worker",
       "queue",

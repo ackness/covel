@@ -25,8 +25,10 @@ export function buildTurnExecutorDeps(
   const eventDirectory = c.get("eventDirectory");
   const hookPipeline = c.get("hookPipeline");
   const memorySystem = c.get("memorySystem");
+  const executionSignal = c.get("requestWork")?.signal;
 
   return {
+    ...(executionSignal ? { turnControl: { executionSignal } } : {}),
     loadRuntime: c.get("loadRuntimeFn"),
     llm: c.get("llmAdapter"),
     ...(hookPipeline ? { hookPipeline } : {}),

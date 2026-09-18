@@ -39,6 +39,10 @@ import {
   type SessionLock,
 } from "../../lib/session-lock.js";
 import { makeErrorHandler } from "../../api-error.js";
+import {
+  createApplicationWork,
+  type ApplicationWork,
+} from "../../application-work.js";
 import { sessionRoutes } from "./session.js";
 import { pluginRoutes } from "./plugins.js";
 import { frameworkRoutes } from "./framework.js";
@@ -107,6 +111,8 @@ import {
 // ── Bootstrap config ─────────────────────────────────────────────
 
 export interface ApiBootstrapConfig {
+  /** Share the composition root's request owner, or create one for an embedded API. */
+  readonly applicationWork?: ApplicationWork;
   /** Path to plugins directory (e.g., 'plugins/'). Used when `pluginsDirs` is not provided. */
   readonly pluginsDir: string;
   /**
@@ -204,6 +210,7 @@ export interface ApiBootstrapConfig {
 }
 
 export interface ApiBootstrapResult {
+  readonly applicationWork: ApplicationWork;
   readonly app: Hono;
   readonly registry: PluginRegistry;
   readonly store: DataStore;
@@ -691,6 +698,8 @@ async function assembleApi(
 
   // 9. Create app with dependency injection middleware
   const app = new Hono();
+  const applicationWork = config.applicationWork ?? createApplicationWork();
+  app.use("*", applicationWork.middleware);
   const browserWorkspaceCache = createBrowserWorkspaceCache();
 
   const isDev = runtimeEnv.nodeEnv !== "production";
@@ -823,6 +832,7 @@ async function assembleApi(
 
   return {
     app,
+    applicationWork,
     registry,
     store,
     eventBus,

@@ -6,15 +6,18 @@ import type { DataStore, MediaStore } from "@covel/store";
 import type { Sql } from "postgres";
 import type { ApiBootstrapResult } from "./routes/api/bootstrap.js";
 import type { WorldFileWatcher } from "./world-file-watcher.js";
+import type { ApplicationWork } from "./application-work.js";
 
 /** Assign each resource immediately after creation, before the next startup step. */
 export interface ServerResources {
+  applicationWork?: Pick<ApplicationWork, "close">;
   store?: Pick<DataStore, "close">;
   mediaStore?: Pick<MediaStore, "close">;
   api?: Pick<
     ApiBootstrapResult,
     "startupMaintenance" | "closePluginEntries"
   > & {
+    applicationWork: Pick<ApplicationWork, "close">;
     runtimeJobWorker: Pick<ApiBootstrapResult["runtimeJobWorker"], "close">;
     pluginBackgroundQueue: Pick<
       ApiBootstrapResult["pluginBackgroundQueue"],
@@ -51,27 +54,30 @@ async function drainPhase(
   }
 }
 
-/** Shared by failed startup and normal shutdown; retain dependencies under owned background work. */
+/** Shared by failed startup and normal shutdown; retain dependencies under owned work. */
 export function createServerResourceDrain(
   resources: ServerResources,
 ): () => Promise<void> {
   let closing: Promise<void> | undefined;
   async function drain(): Promise<void> {
-    if (
-      !(await drainPhase("stop world watchers", () =>
-        Promise.all(resources.worldWatchers.map((watcher) => watcher.stop())),
-      ))
-    )
-      return;
     const api = resources.api;
+    const applicationWork = resources.applicationWork ?? api?.applicationWork;
+    // Stop every producer before waiting: a foreground request or watcher can
+    // be waiting for a session lock held by a background job being cancelled.
+    const producers: Array<() => Promise<unknown> | void> = [
+      ...(applicationWork ? [() => applicationWork.close()] : []),
+      ...resources.worldWatchers.map((watcher) => () => watcher.stop()),
+      ...(api
+        ? [
+            () => api.runtimeJobWorker.close(),
+            () => api.pluginBackgroundQueue.close(),
+            () => api.startupMaintenance,
+          ]
+        : []),
+    ];
     if (
-      api &&
-      !(await drainPhase("close runtime jobs and startup maintenance", () =>
-        Promise.all([
-          api.runtimeJobWorker.close(),
-          api.pluginBackgroundQueue.close(),
-          api.startupMaintenance,
-        ]),
+      !(await drainPhase("close application and background work", () =>
+        Promise.all(producers.map((stop) => Promise.resolve().then(stop))),
       ))
     )
       return;

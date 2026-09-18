@@ -10,8 +10,9 @@ export interface ShutdownServer {
 export interface GracefulShutdownOptions {
   /**
    * Ordered async resource drain (audit R-11) run AFTER the HTTP server has
-   * stopped accepting work and closed its connections — flush the event bus,
-   * close the DataStore / PG lock pool, stop watchers. A drain failure is
+   * stopped accepting work and closed its connections. Socket closure does not
+   * prove handler completion: drain must first stop and await application and
+   * background work before closing event/store dependencies. A drain failure is
    * logged but never blocks exit; the force-exit timer bounds a hung drain.
    */
   readonly drain?: () => Promise<void>;

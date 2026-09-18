@@ -5,7 +5,7 @@
  */
 
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
+import { streamOwnedSSE } from "../../application-work.js";
 import type { EventBus } from "@covel/events";
 import type { DataStore } from "@covel/store";
 import type { SubscriptionEvent, SubscriptionTopic } from "@covel/shared";
@@ -234,7 +234,7 @@ subscribeRoutes.get(
     }
 
     try {
-      return streamSSE(c, async (stream) => {
+      return streamOwnedSSE(c, async (stream) => {
         // R-01 Bug A (event-loss race): register the live listener BEFORE
         // computing/sending the replay batch. Events emitted during replay are
         // buffered here and flushed afterwards, deduped by id against what
@@ -355,6 +355,7 @@ subscribeRoutes.get(
             closing = true;
             resolveDone();
           });
+          if (stream.aborted) return;
 
           // R-01 Bug B (cursor reset): the connected frame carries NO id, so the
           // frontend never clobbers its lastEventId back to "0" on reconnect
@@ -440,7 +441,11 @@ subscribeRoutes.get(
           unsubscribeReset?.();
           pinned?.release();
           if (heartbeatInterval) clearInterval(heartbeatInterval);
-          connectionLease.release();
+          try {
+            await writes.drain();
+          } finally {
+            connectionLease.release();
+          }
         }
       });
     } catch (err) {

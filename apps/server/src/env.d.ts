@@ -1,4 +1,5 @@
 import type { PluginBackgroundQueue } from "./routes/api/plugin-rpc/background-queue.js";
+import type { RequestWork } from "./application-work.js";
 import type { DataStore, MediaStore, StoreBackend } from "@covel/store";
 import type {
   PluginRegistry,
@@ -47,6 +48,8 @@ type ActivatePluginServerCodeFn = (
 
 declare module "hono" {
   interface ContextVariableMap {
+    /** Owns asynchronous request work, including SSE callbacks and cleanup. */
+    requestWork?: RequestWork;
     store: DataStore;
     /**
      * Incarnation captured by `resolveSessionParam()` for GET/HEAD requests.

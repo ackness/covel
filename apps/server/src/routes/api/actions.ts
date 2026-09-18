@@ -6,7 +6,7 @@
  */
 
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
+import { streamOwnedSSE } from "../../application-work.js";
 import type { DataStore, MediaStore } from "@covel/store";
 import type { PluginRegistry, LoadedRuntime } from "@covel/plugin-loader";
 import type {
@@ -246,7 +246,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     promptHistoryRewriterPluginId: undefined,
   };
 
-  return streamSSE(c, async (stream) => {
+  return streamOwnedSSE(c, async (stream) => {
     let seq = 0;
     const traceId = crypto.randomUUID();
     // The turn currently writing to this stream. The opening-continuation
@@ -366,6 +366,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
         approvalScopes,
         queuedRuntimeJobs,
       } = await sessionLock.withLock(sessionId, async () => {
+        c.get("requestWork")?.signal.throwIfAborted();
         // This execution now owns the session — events on the bus
         // from here on belong to this turn.
         subscribeEventForwarding();
@@ -423,6 +424,18 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             requestId,
           );
           releaseTurnControl = registeredTurn.release;
+          const executionSignal = c.get("requestWork")?.signal;
+          const turnControl = {
+            ...registeredTurn.turnControl,
+            ...(executionSignal ? { executionSignal } : {}),
+          };
+          const commitSignal = executionSignal
+            ? AbortSignal.any([
+                registeredTurn.turnControl.signal!,
+                executionSignal,
+              ])
+            : registeredTurn.turnControl.signal;
+          commitSignal?.throwIfAborted();
           // Progress display metadata follows the live manifests for this run.
           const outputKindByRuntime = new Map(
             activeRuntimes.map((runtime) => [
@@ -682,7 +695,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             },
             ...(memorySystem ? { memorySystem } : {}),
             // Player mid-turn steering + abort.
-            turnControl: registeredTurn.turnControl,
+            turnControl,
           });
 
           // Commit the whole execution — top-level plus nested recursiveCall
@@ -738,7 +751,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 });
               }
             },
-            signal: registeredTurn.turnControl.signal,
+            signal: commitSignal,
             store,
             sessionId,
             // A suspension persists the original counting responsibility for
@@ -1066,6 +1079,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
     } finally {
       releaseTurnControl?.();
       eventBusUnsubscribe?.();
+      await writeChain;
     }
   });
 });

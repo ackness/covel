@@ -10,12 +10,15 @@ interface LlmRequestOptions {
 export async function requestLlmResponse(
   options: LlmRequestOptions,
 ): Promise<LLMResponse> {
+  options.signal.throwIfAborted();
   if (!options.llm.stream) {
-    return options.llm.generate({
+    const response = await options.llm.generate({
       model: options.model,
       messages: options.messages,
       signal: options.signal,
     });
+    options.signal.throwIfAborted();
+    return response;
   }
 
   let content = "";
@@ -27,6 +30,7 @@ export async function requestLlmResponse(
     messages: options.messages,
     signal: options.signal,
   })) {
+    options.signal.throwIfAborted();
     if (event.type === "text-delta") {
       content += event.textDelta;
     } else if (event.type === "done") {
@@ -39,6 +43,8 @@ export async function requestLlmResponse(
       reasoningContent = event.reasoningContent ?? "";
     }
   }
+
+  options.signal.throwIfAborted();
 
   return {
     content: content || null,

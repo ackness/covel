@@ -6,11 +6,19 @@ import { createPluginRegistry } from "@covel/plugin-loader";
 import type { RuntimeManifest } from "@covel/shared";
 import { resumeRoutes } from "../../src/routes/api/resume.js";
 import { createInProcessSessionLock } from "../../src/lib/session-lock.js";
+import { createApplicationWork } from "../../src/application-work.js";
 
 describe("resume commit composition", () => {
-  it.each([true, false])(
-    "publishes exports with media ownership enforced (owned=%s)",
-    async (owned) => {
+  it.each([
+    { owned: true, shutdown: "none" },
+    { owned: false, shutdown: "none" },
+    { owned: true, shutdown: "handler" },
+    { owned: true, shutdown: "commit" },
+  ])(
+    "enforces ownership and shutdown across resume (owned=$owned, shutdown=$shutdown)",
+    async ({ owned, shutdown }) => {
+      const applicationWork = createApplicationWork();
+      let closing: Promise<void> | undefined;
       const store = createMemoryStore();
       const now = new Date().toISOString();
       await store.createSession({
@@ -98,9 +106,15 @@ describe("resume commit composition", () => {
             portrait: { type: "object" },
           },
         },
-        handler: async () => ({ outcome: "success", value }),
+        handler: async () => {
+          if (shutdown === "handler") closing = applicationWork.close();
+          return { outcome: "success", value };
+        },
       }));
-      const isReferencedBy = vi.fn(async () => owned);
+      const isReferencedBy = vi.fn(async () => {
+        if (shutdown === "commit") closing = applicationWork.close();
+        return owned;
+      });
       const updateAfterTurn = vi.fn(async () => ({
         updated: true,
         blocksChanged: [],
@@ -109,6 +123,7 @@ describe("resume commit composition", () => {
       const eventBus = createEventBus();
       eventBus.onEmit((event) => events.push(event.type));
       const app = new Hono();
+      app.use("*", applicationWork.middleware);
       app.use("*", async (c, next) => {
         c.set("store", store);
         c.set("pluginRegistry", pluginRegistry);
@@ -145,6 +160,19 @@ describe("resume commit composition", () => {
           body: JSON.stringify({ data: {} }),
         },
       );
+      await (closing ?? applicationWork.close());
+      if (shutdown !== "none") {
+        expect(response.status, await response.text()).toBe(500);
+        expect(
+          (await store.getSuspension("suspension"))?.resolvedAt,
+        ).toBeUndefined();
+        expect(await store.listRuntimeExports("session")).toEqual([]);
+        expect(await store.listTurnMessages("session")).toEqual([]);
+        expect(await store.listSnapshots("session")).toEqual([]);
+        expect(updateAfterTurn).not.toHaveBeenCalled();
+        expect(events).not.toContain("turn.resumed");
+        return;
+      }
       expect(response.status, await response.text()).toBe(200);
       const exports = await store.listRuntimeExports("session");
       expect(exports).toHaveLength(owned ? 1 : 0);

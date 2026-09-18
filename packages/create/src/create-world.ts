@@ -48,6 +48,7 @@ function log(
 export async function createWorld(
   options: CreateWorldOptions,
 ): Promise<CreateResult> {
+  options.signal?.throwIfAborted();
   const locale = canonicalizeLocale(options.locale) ?? DEFAULT_LOCALE;
   const prompt = await buildWorldPrompt(
     options.concept,
@@ -69,6 +70,8 @@ export async function createWorld(
   let lastErrors: string[] = [];
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    // Caller cancellation ends the operation; only attempt failures may retry.
+    options.signal?.throwIfAborted();
     log(
       options,
       "info",
