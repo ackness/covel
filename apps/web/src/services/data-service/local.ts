@@ -36,7 +36,12 @@ import {
   serverCheckpointWorld,
   syncWorldToServer,
 } from "./local-world-sync.js";
-import type { DataService, SessionPatch, WorldPatch } from "./types.js";
+import type {
+  DataService,
+  SessionPatch,
+  SessionWorkspaceOperations,
+  WorldPatch,
+} from "./types.js";
 
 /** Default keyset page size when a caller omits `limit` (mirrors the API default). */
 const DEFAULT_MESSAGES_PAGE_LIMIT = 80;
@@ -318,8 +323,28 @@ export class LocalDataService implements DataService {
     domain: string,
     mutate: (checkpoint: BrowserCheckpoint) => BrowserCheckpoint,
   ): Promise<BrowserCheckpoint> {
-    return this.enqueueWorkspace(() =>
-      this.mutateCheckpointNow(sessionId, domain, mutate),
+    return this.vault.withSessionLock(sessionId, async () => {
+      await this.recoverPendingCommitNow(sessionId);
+      return this.mutateCheckpointNow(sessionId, domain, mutate);
+    });
+  }
+
+  withSessionWorkspace<T>(
+    sessionId: string,
+    operation: (workspace: SessionWorkspaceOperations) => Promise<T>,
+  ): Promise<T> {
+    return this.vault.withSessionLock(sessionId, () =>
+      operation({
+        persistInput: async (message) => {
+          if (message.sessionId !== sessionId)
+            throw new Error("Workspace input session mismatch");
+          await this.recoverPendingCommitNow(sessionId);
+          await this.addMessageNow(message);
+        },
+        hydrate: () => this.syncToServerNow(sessionId),
+        stage: (actionId) => this.stageServerCommitNow(sessionId, actionId),
+        commit: (actionId) => this.commitFromServerNow(sessionId, actionId),
+      }),
     );
   }
 
@@ -399,12 +424,12 @@ export class LocalDataService implements DataService {
   async deleteWorld(id: string): Promise<void> {
     return this.enqueueWorkspace(async () => {
       const sessions = await this.listSessions(id);
-      await (await this.ready()).deleteWorld(id);
       // Only clean up mirrors owned by these browser sessions. The server's
       // shared world may still be used by another browser or player.
       await Promise.all(
         sessions.map((session) => this.deleteSession(session.id)),
       );
+      await (await this.ready()).deleteWorld(id);
     });
   }
 
@@ -476,7 +501,9 @@ export class LocalDataService implements DataService {
       updatedAt: nowIso,
     };
     const world = await vault.getWorld(worldId);
-    await vault.saveCheckpoint(initialCheckpoint(storeSession, world));
+    await vault.withSessionLock(session.id, () =>
+      vault.saveCheckpoint(initialCheckpoint(storeSession, world)),
+    );
     return session;
   }
 
@@ -510,6 +537,12 @@ export class LocalDataService implements DataService {
   }
 
   async deleteSession(sessionId: string): Promise<void> {
+    return this.vault.withSessionLock(sessionId, () =>
+      this.deleteSessionNow(sessionId),
+    );
+  }
+
+  private async deleteSessionNow(sessionId: string): Promise<void> {
     // Evict before the store teardown, not after: the in-memory list is
     // authoritative once hydrated, so it must not survive a delete that failed
     // partway through.
@@ -577,6 +610,13 @@ export class LocalDataService implements DataService {
   }
 
   async addMessage(msg: MessageRecord): Promise<void> {
+    return this.vault.withSessionLock(msg.sessionId, async () => {
+      await this.recoverPendingCommitNow(msg.sessionId);
+      await this.addMessageNow(msg);
+    });
+  }
+
+  private async addMessageNow(msg: MessageRecord): Promise<void> {
     const record: StoreMessageRecord = {
       id: msg.id,
       sessionId: msg.sessionId,
@@ -590,13 +630,17 @@ export class LocalDataService implements DataService {
       },
       createdAt: msg.createdAt,
     };
-    await this.mutateCheckpoint(record.sessionId, "message", (checkpoint) => ({
-      ...checkpoint,
-      messages: [
-        ...checkpoint.messages.filter((item) => item.id !== record.id),
-        record,
-      ],
-    }));
+    await this.mutateCheckpointNow(
+      record.sessionId,
+      "message",
+      (checkpoint) => ({
+        ...checkpoint,
+        messages: [
+          ...checkpoint.messages.filter((item) => item.id !== record.id),
+          record,
+        ],
+      }),
+    );
   }
 
   // State patches
@@ -661,14 +705,26 @@ export class LocalDataService implements DataService {
   // Sync to server
 
   async stageServerCommit(sessionId: string, actionId: string): Promise<void> {
-    return this.enqueueWorkspace(async () => {
-      await this.recoverPendingCommitNow(sessionId, actionId);
-      await (await this.ready()).stagePendingCommit(sessionId, actionId);
-    });
+    return this.vault.withSessionLock(sessionId, () =>
+      this.stageServerCommitNow(sessionId, actionId),
+    );
+  }
+
+  private async stageServerCommitNow(
+    sessionId: string,
+    actionId: string,
+  ): Promise<void> {
+    await this.recoverPendingCommitNow(sessionId, actionId);
+    const vault = await this.ready();
+    if (!(await vault.getLatestCheckpoint(sessionId)))
+      throw new Error(`Session not found: ${sessionId}`);
+    await vault.stagePendingCommit(sessionId, actionId);
   }
 
   async syncToServer(sessionId: string): Promise<void> {
-    return this.enqueueWorkspace(() => this.syncToServerNow(sessionId));
+    return this.vault.withSessionLock(sessionId, () =>
+      this.syncToServerNow(sessionId),
+    );
   }
 
   private async recoverPendingCommitNow(
@@ -693,11 +749,11 @@ export class LocalDataService implements DataService {
     await this.recoverPendingCommitNow(sessionId);
     const vault = await this.ready();
     let checkpoint = await vault.getLatestCheckpoint(sessionId);
-    if (!checkpoint) return;
+    if (!checkpoint) throw new Error(`Session not found: ${sessionId}`);
     const world = checkpoint.session.worldId
       ? await vault.getWorld(checkpoint.session.worldId)
       : null;
-    if (!world) return;
+    if (!world) throw new Error(`World not found for session: ${sessionId}`);
     if (JSON.stringify(checkpoint.world) !== JSON.stringify(world)) {
       checkpoint = await this.mutateCheckpointNow(
         sessionId,
@@ -757,7 +813,7 @@ export class LocalDataService implements DataService {
   }
 
   async commitFromServer(sessionId: string, actionId: string): Promise<void> {
-    return this.enqueueWorkspace(() =>
+    return this.vault.withSessionLock(sessionId, () =>
       this.commitFromServerNow(sessionId, actionId),
     );
   }

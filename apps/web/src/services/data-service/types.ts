@@ -12,7 +12,20 @@ export type SessionPatch = Partial<
   Pick<SessionRecord, "status" | "presetId" | "runtimeModelOverrides">
 >;
 
+/** Operations bound to one exclusively owned browser session. */
+export interface SessionWorkspaceOperations {
+  persistInput(message: MessageRecord): Promise<void>;
+  hydrate(): Promise<void>;
+  stage(actionId: string): Promise<void>;
+  commit(actionId: string): Promise<void>;
+}
+
 export interface DataService {
+  /** Browser implementations hold ownership across the whole exchange. */
+  withSessionWorkspace?<T>(
+    sessionId: string,
+    operation: (workspace: SessionWorkspaceOperations) => Promise<T>,
+  ): Promise<T>;
   // Worlds
   listWorlds(): Promise<WorldRecord[]>;
   getWorld(id: string): Promise<WorldRecord | null>;

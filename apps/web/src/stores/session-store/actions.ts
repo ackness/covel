@@ -263,14 +263,13 @@ export function useBuildSessionActions({
             content,
             ...opts,
             session: state.session,
-            ds,
             workspace,
             dispatch,
             handleSseEvent,
             sessionIdRef,
           })
         : Promise.resolve(),
-    [workspace, ds, dispatch, state.session, handleSseEvent, sessionIdRef],
+    [workspace, dispatch, state.session, handleSseEvent, sessionIdRef],
   );
 
   const sendMessage = useCallback(

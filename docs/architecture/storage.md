@@ -54,18 +54,21 @@ The browser is authoritative in local mode. The server may read API keys from
 request headers and execute a turn, but it must not durably persist the player's
 checkpoint or credentials.
 
-One action follows this sequence:
+One action follows this sequence under a Web Lock keyed by the vault database and
+session ID. Other documents in the same origin wait for the complete exchange;
+the IndexedDB transaction itself is never held open over network I/O.
 
-1. The web app atomically writes browser-authored input to `BrowserVault`.
-2. It records the pending `actionId` in `BrowserVault`, then
-   `PUT /api/sessions/:id/browser-checkpoint` hydrates an ephemeral
-   `MemoryStore` workspace with the latest full checkpoint.
-3. The normal action or plugin-RPC endpoint executes against that workspace.
+1. Recover any previous pending result, then persist this action's browser-authored
+   input to `BrowserVault`. Superseded queued actions do not persist new input.
+2. `PUT /api/sessions/:id/browser-checkpoint` hydrates an ephemeral `MemoryStore`
+   workspace with the latest full checkpoint.
+3. Record the pending `actionId`, then execute the normal action or plugin-RPC
+   endpoint against that workspace.
 4. `POST /api/sessions/:id/browser-commit` exports the resulting workspace as a
    revision-checked `SessionCommit`.
-5. Dexie applies the commit atomically and clears the pending action. Replaying
-   the same `actionId` is a no-op; stale revisions and same-revision divergent
-   heads are rejected.
+5. Dexie applies the commit atomically, then clears the pending action. Replaying
+   the same `actionId` is a no-op, including recovery after a crash between these
+   writes; stale revisions and same-revision divergent heads are rejected.
 
 The client serializes checkpoint uploads and commit downloads. SSE messages are
 rendered immediately but are not persisted one by one; the post-action
@@ -73,6 +76,18 @@ checkpoint is the single durable write. Terminal background-job events request
 an additional checkpoint so detached work is not lost. If a commit download
 fails, the pending action survives a page reload and must be recovered before
 the browser is allowed to upload an older checkpoint.
+
+Local checkpoint edits and session deletion use the same ownership boundary;
+new local input cannot advance a revision ahead of an unrecovered result. World
+deletion waits for its sessions before removing their durable records. A closed
+document releases its Web Lock, allowing another document to recover its pending
+result. Independent sessions do not share this lock. Remote/server-authoritative
+mode continues to use server coordination directly.
+
+Browser-private execution requires Web Locks (HTTPS or localhost in a supported
+browser). Missing support produces a workspace error before any action is
+dispatched; there is no unsafe per-tab fallback. This coordination is scoped to
+documents sharing the browser origin and vault, not unrelated browsers or origins.
 
 `BrowserCheckpoint` includes every domain needed to resume a session: session
 and world records, message/execution journals, events/traces, characters,
@@ -85,7 +100,7 @@ payloads, and schema v1 checkpoints at the storage boundary.
 
 The web app uses two databases with separate lifecycles:
 
-- `covel-browser-vault` (Dexie schema v3): latest session checkpoints, compact
+- `covel-browser-vault` (Dexie schema v4): latest session checkpoints, compact
   action-idempotency records, pending server commits, and browser-authored
   worlds.
 - `covel-browser-cache` (native IDB schema v1): UI state, submitted blocks,

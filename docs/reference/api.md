@@ -307,6 +307,10 @@ checkpoint 的 sessionId，world.id 必须匹配 session.worldId，违规返回 
 `400 session_record_scope_conflict`，整个 checkpoint 写入回滚。
 checkpoint 不允许携带 provider key、owner token 或其他凭据。
 
+Web 私有模式按 vault 数据库和 session ID 取得跨标签页 Web Lock，在同一次持有期间完成：恢复前次 pending、持久化本次输入、上传 checkpoint、记录本次 pending、执行、下载 commit 并清理 pending。普通本地 checkpoint 修改和会话删除也使用同一锁；排队期间已失效的动作不会持久化新输入。其它会话仍可独立执行。页面关闭会释放锁，另一个页面可继续恢复，而不会把仍由活跃页面持有的操作提前导出为旧结果。服务端单次请求的会话锁和 revision 检查不能替代这项客户端完整操作协调。
+
+浏览器私有执行需要支持 Web Locks 的 HTTPS 或 localhost 环境；缺少能力时，在发送动作前报告工作区错误，不降级为只在当前标签页排队。锁只协调共享同源 vault 的文档，不跨独立浏览器或不同 origin。远程存储模式仍由服务端协调。`LocalDataService` 的工作区回调提供已持锁的输入/同步操作，调用方须等待这些操作完成；不要在回调内再次调用获取同一会话锁的公开写方法。
+
 启用会话所有者鉴权的共享部署中，普通 checkpoint 同步保留服务端已有的全局
 世界记录，忽略上传的世界内容；后续 commit 返回服务端世界版本。通过 checkpoint
 创建或修改全局世界必须另持 operator token；普通所有者引用尚不存在的世界时

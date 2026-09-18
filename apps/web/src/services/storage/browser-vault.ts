@@ -192,6 +192,20 @@ export class BrowserVault {
     this.db = new BrowserVaultDatabase(options.dbName ?? BROWSER_VAULT_DB_NAME);
   }
 
+  /** Own a session across documents and release ownership on document exit. */
+  async withSessionLock<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    if (!globalThis.navigator?.locks) {
+      throw new BrowserVaultError(
+        "Browser-private storage requires Web Locks; use HTTPS or localhost in a supported browser",
+      );
+    }
+    const name = JSON.stringify([this.db.name, "session-workspace", sessionId]);
+    return navigator.locks.request(name, operation);
+  }
+
   async saveCheckpoint(value: BrowserCheckpoint): Promise<BrowserCheckpoint> {
     const checkpoint = validateBrowserCheckpoint(value);
     assertNoSecrets(checkpoint);

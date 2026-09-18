@@ -3,7 +3,6 @@ import * as api from "@/services/api";
 import { ApiError } from "@/services/api/request.js";
 import {
   SessionWorkspaceSyncError,
-  type DataService,
   type SessionWorkspace,
 } from "@/services/data-service.js";
 import { emitToast } from "@/lib/toast-channel.js";
@@ -248,7 +247,6 @@ export async function runSingleSessionAction({
   echoUserMessage,
   owner,
   session,
-  ds,
   workspace,
   dispatch,
   handleSseEvent,
@@ -258,7 +256,6 @@ export async function runSingleSessionAction({
   echoUserMessage: boolean;
   owner: SessionActionOwner;
   session: api.SessionRecord;
-  ds: DataService;
   workspace: SessionWorkspace;
   dispatch: SessionDispatch;
   handleSseEvent: SseEventHandler;
@@ -266,6 +263,7 @@ export async function runSingleSessionAction({
 }): Promise<void> {
   if (!owner.isCurrent()) return;
   dispatch({ type: "SET_EXECUTION_RECOVERY", recovery: null });
+  let input: api.MessageRecord | undefined;
   if (echoUserMessage && content) {
     const id = crypto.randomUUID();
     const timestamp = new Date().toISOString();
@@ -273,38 +271,38 @@ export async function runSingleSessionAction({
       type: "ADD_MESSAGE",
       message: { id, role: "user", content, timestamp },
     });
-    try {
-      await ds.addMessage({
-        id,
-        sessionId: session.id,
-        role: "user",
-        content,
-        createdAt: timestamp,
-      });
-    } catch (error) {
-      ignoreError("persist user message")(error);
-      return;
-    }
+    input = {
+      id,
+      sessionId: session.id,
+      role: "user",
+      content,
+      createdAt: timestamp,
+    };
   }
   if (!owner.isCurrent()) return;
   try {
-    await workspace.run(session.id, owner.requestId, () => {
-      if (!owner.isCurrent())
-        throw new Error("Action was superseded before execution");
-      const base = {
-        requestId: owner.requestId,
-        sessionId: session.id,
-        locale: session.locale ?? i18n.language,
-      };
-      const action: api.ActionRequest = content.startsWith("/")
-        ? { ...base, type: "execute_command", payload: { command: content } }
-        : { ...base, type: "send_message", payload: { content } };
-      return runActionStream(action, handleSseEvent, dispatch, {
-        toastOnError: true,
-        sessionIdRef,
-        isCurrentAction: owner.isCurrent,
-      });
-    });
+    await workspace.run(
+      session.id,
+      owner.requestId,
+      () => {
+        if (!owner.isCurrent())
+          throw new Error("Action was superseded before execution");
+        const base = {
+          requestId: owner.requestId,
+          sessionId: session.id,
+          locale: session.locale ?? i18n.language,
+        };
+        const action: api.ActionRequest = content.startsWith("/")
+          ? { ...base, type: "execute_command", payload: { command: content } }
+          : { ...base, type: "send_message", payload: { content } };
+        return runActionStream(action, handleSseEvent, dispatch, {
+          toastOnError: true,
+          sessionIdRef,
+          isCurrentAction: owner.isCurrent,
+        });
+      },
+      { input, isCurrent: owner.isCurrent },
+    );
   } catch (error) {
     if (owner.isCurrent()) reportWorkspaceSyncError(error, dispatch);
   }

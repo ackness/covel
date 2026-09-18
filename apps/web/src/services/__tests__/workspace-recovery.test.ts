@@ -50,6 +50,7 @@ beforeEach(async () => {
   );
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await vault.deleteDatabase();
 });
 
@@ -75,6 +76,85 @@ async function failedDownload() {
 }
 
 describe("workspace durable pending-commit recovery", () => {
+  it("owns input persistence and the server exchange without acquiring the same lock twice", async () => {
+    const service = new LocalDataService(vault);
+    await service.createSession("world", undefined, "session", [], "en-US");
+    const mutate = vi.fn(async () => "done");
+    await expect(
+      createSessionWorkspace(service, "local").run(
+        "session",
+        "input-action",
+        mutate,
+        {
+          input: {
+            id: "owned-input",
+            sessionId: "session",
+            role: "user",
+            content: "Continue",
+            createdAt: "2026-09-01T00:00:00.000Z",
+          },
+        },
+      ),
+    ).resolves.toBe("done");
+    expect(api.uploadBrowserCheckpoint).toHaveBeenCalledWith(
+      "session",
+      expect.objectContaining({
+        messages: [expect.objectContaining({ id: "owned-input" })],
+      }),
+    );
+    expect(mutate).toHaveBeenCalledOnce();
+    expect(await vault.getPendingCommit("session")).toBeNull();
+  });
+  it("recovers a failed download before a new local message advances the revision", async () => {
+    await failedDownload();
+    const before = (await vault.getLatestCheckpoint("session"))!.revision;
+    const service = new LocalDataService(vault);
+    await service.addMessage({
+      id: "next-input",
+      sessionId: "session",
+      role: "user",
+      content: "Next",
+      createdAt: "2026-09-01T00:00:01.000Z",
+    });
+    expect(api.fetchBrowserCommit).toHaveBeenLastCalledWith(
+      "session",
+      "pending-action",
+      before,
+    );
+    expect(await vault.getPendingCommit("session")).toBeNull();
+    const checkpoint = (await vault.getLatestCheckpoint("session"))!;
+    expect(checkpoint.revision).toBe(before + 2);
+    expect(checkpoint.messages.map((message) => message.id)).toEqual([
+      "durable-input",
+      "next-input",
+    ]);
+  });
+
+  it("rejects missing sessions before admitting a server mutation", async () => {
+    const service = new LocalDataService(vault);
+    const mutate = vi.fn(async () => {});
+    await expect(
+      createSessionWorkspace(service, "local").run("missing", "action", mutate),
+    ).rejects.toThrow("Session not found");
+    expect(mutate).not.toHaveBeenCalled();
+    expect(await vault.getPendingCommit("missing")).toBeNull();
+  });
+
+  it("requires cross-document ownership instead of silently falling back to a local queue", async () => {
+    vi.spyOn(navigator, "locks", "get").mockReturnValue(
+      undefined as unknown as LockManager,
+    );
+    const mutate = vi.fn(async () => {});
+    const workspace = createSessionWorkspace(
+      new LocalDataService(vault),
+      "local",
+    );
+    await expect(workspace.run("session", "action", mutate)).rejects.toThrow(
+      "Web Locks",
+    );
+    expect(mutate).not.toHaveBeenCalled();
+    expect(api.uploadBrowserCheckpoint).not.toHaveBeenCalled();
+  });
   it("rebuilds a restarted server with the same workspace instance", async () => {
     const workspace = await failedDownload();
     const checkpoint = await vault.getLatestCheckpoint("session");
