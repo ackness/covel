@@ -79,6 +79,7 @@ import {
   buildProjectedPromptHistory,
   getPreGameRuntimeState,
   loadTurnSessionState,
+  type LoadedTurnSessionState,
 } from "./session-state.js";
 import {
   countPlayerMessagesSinceRuntime,
@@ -281,11 +282,25 @@ async function executeTurnImpl(
     }
   }
 
-  const sessionState = await loadTurnSessionState({
-    input,
-    deps,
-    shouldAppendPlayerMessage,
-  });
+  let sessionState: LoadedTurnSessionState;
+  try {
+    sessionState = await loadTurnSessionState({
+      input,
+      deps,
+      shouldAppendPlayerMessage,
+    });
+  } catch (error) {
+    if (!deps.turnControl?.signal?.aborted) throw error;
+    return {
+      turnId: input.turnId,
+      sessionId: input.sessionId,
+      runtimeResults: [],
+      executionContext,
+      durationMs: Date.now() - startTime,
+      timestamp: new Date().toISOString(),
+      abortReason: PLAYER_ABORT_REASON,
+    };
+  }
   executionContext = applySessionPhaseCountPolicy(
     executionContext,
     sessionState.phase,

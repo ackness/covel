@@ -16,7 +16,7 @@ import { parseJsonSseData, readSseStream } from "./sse.js";
 // ── Types ──────────────────────────────────────────────────────────
 
 export type ConnectionState =
-  "connecting" | "connected" | "reconnecting" | "closed";
+  "connecting" | "connected" | "reconnecting" | "paused" | "closed";
 
 /**
  * Client errors that may or may not clear. They are NOT terminal on the first
@@ -68,6 +68,29 @@ const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;
 const BACKOFF_MULTIPLIER = 2;
 
+let activeActionStreams = 0;
+const refreshPauseState = new Set<() => void>();
+
+/** Give action/control requests the connection occupied by auxiliary SSE. */
+export function pauseSessionSubscriptions(): () => void {
+  activeActionStreams += 1;
+  for (const refresh of refreshPauseState) refresh();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    activeActionStreams -= 1;
+    for (const refresh of refreshPauseState) refresh();
+  };
+}
+
+function shouldPause(): boolean {
+  return (
+    activeActionStreams > 0 ||
+    (typeof document !== "undefined" && document.visibilityState === "hidden")
+  );
+}
+
 // ── Implementation ────────────────────────────────────────────────
 
 export function createSessionSubscription(
@@ -90,6 +113,7 @@ export function createSessionSubscription(
   let backoffMs = INITIAL_BACKOFF_MS;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let closed = false;
+  let paused = shouldPause();
   let clientErrorStreak = 0;
 
   // Topic -> Set<handler>
@@ -147,7 +171,7 @@ export function createSessionSubscription(
   }
 
   async function connect(): Promise<void> {
-    if (closed) return;
+    if (closed || paused) return;
 
     const controller = new AbortController();
     abortController = controller;
@@ -164,7 +188,11 @@ export function createSessionSubscription(
         silentErrors: true,
         retry: false,
       });
-      if (closed || controller.signal.aborted) {
+      if (
+        closed ||
+        controller.signal.aborted ||
+        controller !== abortController
+      ) {
         await res.body?.cancel().catch(() => {});
         return;
       }
@@ -210,16 +238,24 @@ export function createSessionSubscription(
             payload: (parsed.payload as Record<string, unknown>) || parsed,
           };
         },
-        onMessage: dispatch,
+        onMessage: (event) => {
+          if (!closed && !paused && controller === abortController)
+            dispatch(event);
+        },
       });
 
       // Stream ended normally — reconnect unless closed
-      if (!closed) {
+      if (!closed && !paused && controller === abortController) {
         scheduleReconnect();
       }
     } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        // Intentional abort from close() — don't reconnect
+      if (
+        closed ||
+        paused ||
+        controller.signal.aborted ||
+        controller !== abortController
+      ) {
+        // A hidden/closed tab or superseded stream must never reconnect itself.
         return;
       }
       if (err instanceof ApiError && isClientError(err.status)) {
@@ -231,8 +267,7 @@ export function createSessionSubscription(
           console.error(
             `[subscription] giving up after ${clientErrorStreak} client errors: SSE stream ${err.status} ${err.body}`,
           );
-          closed = true;
-          setState("closed");
+          close();
           return;
         }
       }
@@ -243,7 +278,7 @@ export function createSessionSubscription(
   }
 
   function scheduleReconnect(): void {
-    if (closed) return;
+    if (closed || paused) return;
     setState("reconnecting");
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
@@ -252,8 +287,48 @@ export function createSessionSubscription(
     backoffMs = Math.min(backoffMs * BACKOFF_MULTIPLIER, MAX_BACKOFF_MS);
   }
 
-  // Start the connection
-  void connect();
+  function stopConnection(): void {
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    abortController?.abort();
+    abortController = null;
+  }
+
+  function handlePauseChange(): void {
+    const next = shouldPause();
+    if (closed || paused === next) return;
+    paused = next;
+    if (paused) {
+      // One tab needs only its action stream while executing. Otherwise even
+      // three visible tabs can exhaust HTTP/1.1 slots needed by stop/read APIs.
+      stopConnection();
+      setState("paused");
+    } else {
+      backoffMs = INITIAL_BACKOFF_MS;
+      void connect();
+    }
+  }
+
+  function close(): void {
+    if (closed) return;
+    closed = true;
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", handlePauseChange);
+    }
+    refreshPauseState.delete(handlePauseChange);
+    stopConnection();
+    setState("closed");
+    handlers.clear();
+  }
+
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", handlePauseChange);
+  }
+  refreshPauseState.add(handlePauseChange);
+  if (paused) setState("paused");
+  else void connect();
 
   return {
     get state() {
@@ -279,19 +354,6 @@ export function createSessionSubscription(
       }
     },
 
-    close(): void {
-      if (closed) return;
-      closed = true;
-      setState("closed");
-      if (reconnectTimer !== null) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-      if (abortController) {
-        abortController.abort();
-        abortController = null;
-      }
-      handlers.clear();
-    },
+    close,
   };
 }

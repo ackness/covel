@@ -410,6 +410,9 @@ export function useSessionSubscription({
 
     const handleConnectionStateChange = (next: ConnectionState): void => {
       setConnectionState(next);
+      // Even a tab opened in the background can miss state changes before its
+      // first subscription. Recover on visibility resume as on a reconnect.
+      if (next === "paused") hasConnected = true;
       if (next === "connected") {
         const reconnected = hasConnected;
         hasConnected = true;

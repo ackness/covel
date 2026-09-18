@@ -357,7 +357,7 @@ revision 或幂等缓存。相同 ID 的新会话不继承旧实例的 revision/
 | POST | `/api/sessions/:id/steer` | 向进行中的回合插话。body `{ message: string }`。消息并入 story runtime 的下一次 LLM 调用并持久化到消息历史。无进行中回合返回 `409`  |
 | POST | `/api/sessions/:id/abort` | 中止进行中的回合：立刻切断在途 LLM 流（绕过部分内容 salvage，不落任何半截提案），停止调度后续 runtime。无进行中回合返回 `409`。幂等 |
 
-- abort 后当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`；已在 abort 前正常完成的 runtime 结果照常提交。
+- abort 后当次 action SSE 的 `execution.completed` 载荷带 `abortReason: "aborted-by-player"`。提交前收到停止信号时，本次执行不提交消息、领域状态或回合计数；已经提交的回合不回滚。回合开始前和提交前等待上一轮记忆更新时同样响应停止，取消当前等待并释放会话执行锁；上一轮已提交回合的记忆更新独立完成。
 - steer 仅对 `outputKind: story` 的 runtime 生效（plugin runtime 执行结构化任务，不接受插话）。插话在最终响应流式期间到达时，story runtime 收尾前会追加一步 LLM 调用消化它（受 maxSteps 约束）；持久化失败则撤回队列项并返回 `500`。
 - 注册表为进程内实现——多 pod（PG）部署下 steer/abort 只能到达同 pod 上的回合。
 - 注册发生在取得 session lock 后，覆盖准备、模型执行、提交和收尾，直到 action 完成才释放。因此刷新时不会在提交尚未完成时误判为空闲；排队请求不会覆盖当前回合的控制注册。停止信号不能撤回已经完成的事务；跨进程执行状态探测不改变 steer/abort 仍需到达执行进程的限制。
@@ -3178,6 +3178,8 @@ Covel 有两条独立的 SSE 流，**信封格式和帧格式都不同**：
 > 关键差异：`/api/actions` 使用 data-only 帧，前端**无法**通过 `EventSource.addEventListener` 订阅；`/api/events/stream` 才是命名事件。
 
 客户端流解析支持 LF、CRLF 和 CR 分隔；只在空行处提交完整事件，EOF 不补发未结束的帧。取消或事件处理失败时释放 reader 并取消未结束的响应；已关闭的订阅不会因迟到的响应恢复连接状态。GET 重试等待同样响应取消，不会因自定义 abort reason 继续重试或弹出网络错误。
+
+Web 隐藏标签页或本页持有 `/api/actions` 执行流时，暂停 `/api/events/stream` 辅助订阅，释放浏览器同源 HTTP 连接；执行流继续运行。页面可见且全部行动流结束后，用保存的事件游标重连，并重新读取权威会话状态，补齐暂停期间的插件数据、消息和后台任务。首次在后台打开的页面也执行恢复；暂停或关闭前的迟到响应不能重建旧连接。恢复消息按回合与内容将玩家本地回显替换为服务端记录，避免不同消息 ID 导致重复显示。
 
 ### 事件类型枚举（`CovelEventType`）
 

@@ -8,6 +8,7 @@ import {
 } from "../turn-executor/post-turn-memory.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { saveAutoSnapshot } from "../snapshot/auto-snapshot.js";
+import { awaitPendingMemory } from "../turn-executor/memory-barrier.js";
 import {
   finalizeExecution,
   type FinalizeExecutionArgs,
@@ -61,7 +62,16 @@ export async function commitExecution(
   // Detached work can return after a newer turn started memory extraction.
   // Drain under the caller's lock before writing proposals, not just before
   // snapshotting, so an older extraction cannot overwrite this commit's tools.
-  await args.memorySystem?.updater.awaitPending?.(args.sessionId);
+  try {
+    await awaitPendingMemory(
+      args.memorySystem?.updater,
+      args.sessionId,
+      args.signal,
+    );
+  } catch (error) {
+    if (!args.signal?.aborted) throw error;
+    // The shared finalizer still owns rollback and execution/job settlement.
+  }
   const stage = args.memorySystem?.updater.stageAfterTurn;
   let stagedInput: ReturnType<typeof buildPostTurnMemoryUpdate>;
   const outcome = await finalizeExecution(
