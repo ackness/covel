@@ -1259,6 +1259,8 @@ tools:
     - plugin-data-get
 ```
 
+Hook 的 `match` 谓词与 handler 使用相同的异常隔离规则：过滤器抛错会带注册 Hook 的身份发布 `hook.error`；顺序/first/stream 语义返回 abort，parallel 观察语义记录失败后继续其它 Hook。过滤器返回 false 时不执行 handler，也不发布 `hook.fired`。
+
 Hook 调用总会获得 `ctx.signal`（类型可选以兼容直接构造上下文的调用方）：超时或传入的父执行取消会通知协作式 I/O 并结束等待，迟到返回的 `replace` 不再进入流水线。同进程不合作代码无法被强制终止。顺序 pipeline 中 abort 停止后续 handler；各 wire helper 保持原有拦截/转换策略，例如 `PreLLMCall` 的 abort 表示保留原请求，真正的执行取消仍由模型调用边界检查。`PreStateCommit` 继承传入 `finalizeExecution` 的取消信号，取消会停止后续提案并回滚事务。观察型事件不因 Hook 失败撤销已完成的领域提交；`TurnStop`、`PostStateCommit` 和会话生命周期的收尾 Hook 使用自己的超时界限。
 
 #### 模型响应校验
@@ -1617,6 +1619,8 @@ effects:
 | `maxExecutionMs` | 正整数，可选          | claim 后后台控制面的最长执行时间；到期后拒绝迟到提交。它不替代 runtime 自身的 `timeoutMs` 和协作式取消    |
 | `overlap`        | 仅 `serial`，缺省同值 | 同一 `(session, plugin, runtime)` 的任务按原始回合顺序串行；不同 runtime 可受 worker 全局并发上限并发执行 |
 | `stalePolicy`    | 仅 `reject`，缺省同值 | session incarnation、插件审批代次或插件版本变化时拒绝执行/提交，不把旧结果写进新上下文                    |
+
+服务关闭时 detached worker 停止接单，取消尚未跨过提交屏障的执行并记录 `cancelled` / `worker-shutdown`；已进入 `committing` 的作业继续结算。宿主等待 worker 的在途领任务、执行收尾和存储操作完成，再释放依赖。取消不会自动重跑可能已计费的 provider 调用；不合作的代码不能被同进程强制终止，关闭排空超时会记录警告并交给进程退出处理，不提前关闭仍被 worker 使用的存储。
 
 声明是请求，不是安全证明。首版只有满足以下条件的 runtime 才会实际后台化：
 

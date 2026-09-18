@@ -122,9 +122,6 @@ export class HookPipeline {
     opts?: HookPipelineRunOptions,
   ): Promise<HookResult<P>> {
     for (const reg of handlers) {
-      if (reg.match && !reg.match(payload)) {
-        continue;
-      }
       const result = await this.invokeHandler(event, ctx, payload, reg, opts);
       if (result.action === "abort") {
         return result;
@@ -148,10 +145,6 @@ export class HookPipeline {
     const accumulated: Partial<P> = {};
 
     for (const reg of handlers) {
-      if (reg.match && !reg.match(currentPayload)) {
-        continue;
-      }
-
       const result = await this.invokeHandler(
         event,
         ctx,
@@ -184,15 +177,14 @@ export class HookPipeline {
     handlers: readonly HookRegistration<unknown>[],
     opts?: HookPipelineRunOptions,
   ): Promise<HookResult<P>> {
-    const matching = handlers.filter((reg) => !reg.match || reg.match(payload));
     const settled = await Promise.allSettled(
-      matching.map((reg) => this.invokeHandler(event, ctx, payload, reg, opts)),
+      handlers.map((reg) => this.invokeHandler(event, ctx, payload, reg, opts)),
     );
 
     for (let i = 0; i < settled.length; i++) {
       const item = settled[i];
       if (item.status === "rejected") {
-        const reg = matching[i];
+        const reg = handlers[i];
         const reason =
           item.reason instanceof Error
             ? item.reason.message
@@ -218,20 +210,6 @@ export class HookPipeline {
     const timeoutMs = reg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const handler = reg.handler as HookHandler<P>;
 
-    // Emit `hook.fired` once per invocation attempt, before the handler runs.
-    if (opts?.emitter) {
-      const proposalType = extractProposalType(event, payload);
-      await opts.emitter.emit("hook.fired", {
-        event,
-        hookName: reg.id,
-        pluginId: reg.pluginId ?? null,
-        runtimeId: ctx.runtimeId,
-        targetId: extractTargetId(event, payload),
-        targetType: extractTargetType(event),
-        ...(proposalType ? { proposalType } : {}),
-      });
-    }
-
     let result: HookResult<P>;
     const timeoutMessage = `hook ${reg.id} timed out after ${timeoutMs}ms`;
 
@@ -245,6 +223,24 @@ export class HookPipeline {
       : ctx;
 
     try {
+      // Filters are plugin code too: failures follow this event's abort or
+      // observe-only semantics and retain the registering hook's identity.
+      if (reg.match && !reg.match(payload)) return { action: "continue" };
+
+      // Emit `hook.fired` once per invocation attempt, before the handler runs.
+      if (opts?.emitter) {
+        const proposalType = extractProposalType(event, payload);
+        await opts.emitter.emit("hook.fired", {
+          event,
+          hookName: reg.id,
+          pluginId: reg.pluginId ?? null,
+          runtimeId: ctx.runtimeId,
+          targetId: extractTargetId(event, payload),
+          targetType: extractTargetType(event),
+          ...(proposalType ? { proposalType } : {}),
+        });
+      }
+
       result = await invokeWithSignal(
         (signal) => handler({ ...ctxForHandler, signal }, payload),
         ctx.signal,

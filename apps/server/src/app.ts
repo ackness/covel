@@ -325,10 +325,10 @@ const stopWatchers = () => {
 // ── Graceful shutdown drain (audit R-11) ─────────────────────────
 // Ordered resource drain passed to registerGracefulShutdown() by index.ts and
 // run after the HTTP server stops accepting requests: stop watchers (no new
-// world reloads), flush post-turn memory work before its backing store closes,
-// flush pending eventBus persistence, then close the MediaStore, DataStore, and
-// dedicated PG lock pool. Each phase is time-boxed so one stuck resource cannot
-// eat the whole force-exit budget — a timed-out phase is logged and skipped.
+// world reloads), stop/drain detached jobs, flush post-turn memory work before
+// its backing store closes, drain/close the event bus, then close MediaStore,
+// DataStore, and dedicated PG lock pools. Each phase is time-boxed; an unfinished
+// producer leaves its dependencies open for the final process exit.
 const DRAIN_PHASE_TIMEOUT_MS = 2_000;
 const MEMORY_DRAIN_TIMEOUT_MS = 5_000;
 
@@ -336,7 +336,7 @@ async function drainPhase(
   name: string,
   run: () => Promise<unknown> | void,
   timeoutMs = DRAIN_PHASE_TIMEOUT_MS,
-): Promise<void> {
+): Promise<boolean> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(
@@ -346,11 +346,13 @@ async function drainPhase(
   });
   try {
     await Promise.race([Promise.resolve(run()), timeout]);
+    return true;
   } catch (err) {
     console.warn(
       `[shutdown] drain phase "${name}" failed:`,
       err instanceof Error ? err.message : String(err),
     );
+    return false;
   } finally {
     clearTimeout(timer);
   }
@@ -358,7 +360,16 @@ async function drainPhase(
 
 export const drainServerResources = async (): Promise<void> => {
   await drainPhase("stop world watchers", () => stopWatchers());
-  await drainPhase(
+  if (
+    !(await drainPhase("close runtime job worker", () =>
+      api.runtimeJobWorker.close(),
+    ))
+  ) {
+    // The process shutdown owns the final exit. Do not close dependencies
+    // underneath a non-cooperative runner that exceeded the drain budget.
+    return;
+  }
+  const memoryDrained = await drainPhase(
     "flush memory background tasks",
     async () => {
       const result = await awaitPendingMemoryBackgroundTasks();
@@ -373,10 +384,12 @@ export const drainServerResources = async (): Promise<void> => {
   const memoryTasksStillPending = pendingMemoryBackgroundTaskCount();
   if (memoryTasksStillPending > 0) {
     console.warn(
-      `[shutdown] ${memoryTasksStillPending} memory background task(s) still pending; continuing resource shutdown`,
+      `[shutdown] ${memoryTasksStillPending} memory background task(s) still pending; leaving dependencies open for process exit`,
     );
   }
-  await drainPhase("flush event bus", () => api.eventBus.flush());
+  if (!memoryDrained || memoryTasksStillPending > 0) return;
+  if (!(await drainPhase("close event bus", () => api.eventBus.close())))
+    return;
   if (mediaStore?.close) {
     await drainPhase("close media store", () => mediaStore.close!());
   }

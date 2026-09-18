@@ -607,3 +607,22 @@ Payload notes:
 - 请求正文沿用现有 trace 的敏感上下文访问与留存边界，包含玩家文本，不能当作可公开导出的脱敏日志。function runtime 的 `gateway.*` 继续只记录形状，不扩大其正文收集范围。
 - `llm.calling.tools` is `Array<{ name, description, jsonSchema }>` — mapped from `LLMToolDefinition.parameters` to preserve the logical schema; providerRequests contains the final protocol representation.
 - `llm.calling.provider` is `null` at direct `generate` / `generateStream` sites where the resolved provider string is not available; slot-routed calls populate it with the provider name (`openai`, `anthropic`, `deepseek`, `qwen`).
+
+## Event bus lifecycle and client handler failures
+
+`EventBus.flush()` waits for the bounded audit-persistence queue. It does not
+wait for cross-process delivery and does not stop new events.
+`EventBus.close()` is idempotent: it stops local emission and remote intake,
+unsubscribes where supported, clears receive-gap timers, waits for outstanding
+persistence, ordered publishes and received-reference reads, then closes its
+owned transport. Calls to `emit()` after close are ignored. A transport may
+return an unsubscribe function from `subscribe()` and implement `close()` when
+it owns resources; the PostgreSQL implementation releases its LISTEN/NOTIFY
+client through that lifecycle. The server closes the worker before the bus,
+and the bus before its backing store.
+
+A browser subscription isolates each event handler. A synchronous handler
+failure is reported with session id, event id/type and error type; it does not
+log the event payload or exception message, and other subscribers continue.
+Connection recovery and `system.reset` still rebuild from authoritative state;
+a handler warning alone does not change the replay cursor or trigger a retry.

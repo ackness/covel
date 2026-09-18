@@ -126,25 +126,19 @@ export function createSessionSubscription(
   }
 
   function dispatch(event: SubscriptionEvent): void {
-    // Route to topic-specific handlers
-    const topicHandlers = handlers.get(event.topic);
-    if (topicHandlers) {
-      for (const handler of topicHandlers) {
+    for (const topic of [event.topic, "*"]) {
+      for (const handler of handlers.get(topic) ?? []) {
         try {
           handler(event);
-        } catch {
-          // Don't let a handler error kill the subscription
-        }
-      }
-    }
-    // Route to wildcard handlers
-    const wildcardHandlers = handlers.get("*");
-    if (wildcardHandlers) {
-      for (const handler of wildcardHandlers) {
-        try {
-          handler(event);
-        } catch {
-          // Don't let a handler error kill the subscription
+        } catch (error) {
+          // Keep subscribers isolated without logging player content or the
+          // thrown message, which can contain the event's private payload.
+          console.warn("[subscription] event handler failed", {
+            sessionId: event.sessionId,
+            eventType: event.type,
+            eventId: event.id,
+            errorType: error instanceof Error ? error.name : typeof error,
+          });
         }
       }
     }

@@ -19,6 +19,7 @@ import {
 import {
   createRuntimeJobWorker,
   makeRuntimeJobStatusRecord,
+  type RuntimeJobExecutionControl,
 } from "../../src/routes/api/plugin-rpc/runtime-job-worker.js";
 
 const ENQUEUED_AT = "2026-09-03T00:00:00.000Z";
@@ -180,6 +181,131 @@ describe.each([
     worker.close();
   });
 
+  it("cancels uncommitted work on close and waits for the runner to release resources", async () => {
+    await createRuntimeJob(store, job());
+    await createRuntimeJob(store, job("session-a", "queued-after-close"));
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let control!: RuntimeJobExecutionControl;
+    const execute = vi.fn(async (_job, next: RuntimeJobExecutionControl) => {
+      control = next;
+      await blocked;
+      await control.assertCurrent();
+      return {};
+    });
+    const eventBus = createEventBus(store);
+    const worker = createRuntimeJobWorker({
+      store,
+      eventBus,
+      execute,
+      concurrency: 1,
+    });
+    worker.wake();
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledOnce());
+
+    const closing = worker.close();
+    expect(worker.close()).toBe(closing);
+    expect(control.signal.aborted).toBe(true);
+    let closed = false;
+    void closing.then(() => {
+      closed = true;
+    });
+    await vi.waitFor(() => expect(worker.activeCount).toBe(0));
+    expect(closed).toBe(false);
+    release();
+    await closing;
+    worker.wake();
+    expect(execute).toHaveBeenCalledOnce();
+    await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+      status: "cancelled",
+      reason: "worker-shutdown",
+    });
+    await expect(
+      getRuntimeJob(store, job("session-a", "queued-after-close")),
+    ).resolves.toMatchObject({ status: "queued" });
+    const read = vi.spyOn(store, "getPluginData");
+    await expect(control.assertCurrent()).rejects.toThrow("shutting down");
+    await expect(
+      control.beforeCommit({
+        backgroundTurnId: "late",
+        backgroundExecutionId: "late",
+      }),
+    ).rejects.toThrow("shutting down");
+    expect(read).not.toHaveBeenCalled();
+    read.mockRestore();
+    await eventBus.close();
+  });
+
+  it("lets a job already inside the commit barrier finish before close resolves", async () => {
+    await createRuntimeJob(store, job());
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let signal: AbortSignal | undefined;
+    const worker = createRuntimeJobWorker({
+      store,
+      eventBus: createEventBus(),
+      execute: async (_job, control) => {
+        await control.beforeCommit({
+          backgroundTurnId: "commit-turn",
+          backgroundExecutionId: "commit-execution",
+        });
+        signal = control.signal;
+        await blocked;
+        return { result: "committed" };
+      },
+    });
+    worker.wake();
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    const closing = worker.close();
+    expect(signal!.aborted).toBe(false);
+    expect(worker.activeCount).toBe(1);
+    release();
+    await closing;
+    await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+      status: "succeeded",
+      result: "committed",
+    });
+    expect(worker.activeCount).toBe(0);
+  });
+
+  it("releases the concurrency slot when claimed-job progress persistence fails", async () => {
+    await createRuntimeJob(store, job());
+    await createRuntimeJob(store, job("session-a", "job-b"));
+    const append = vi
+      .spyOn(store, "appendJobStatus")
+      .mockRejectedValueOnce(new Error("temporary progress write failure"));
+    const execute = vi.fn(async (_job, control: RuntimeJobExecutionControl) => {
+      await control.beforeCommit({
+        backgroundTurnId: "turn-b",
+        backgroundExecutionId: "execution-b",
+      });
+      return {};
+    });
+    const worker = createRuntimeJobWorker({
+      store,
+      eventBus: createEventBus(),
+      execute,
+      concurrency: 1,
+    });
+    worker.wake();
+    await vi.waitFor(async () => {
+      await expect(
+        getRuntimeJob(store, job("session-a", "job-b")),
+      ).resolves.toMatchObject({ status: "succeeded" });
+    });
+    await worker.close();
+    expect(execute).toHaveBeenCalledOnce();
+    expect(worker.activeCount).toBe(0);
+    await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+      status: "failed",
+    });
+    append.mockRestore();
+  });
+
   it("publishes a terminal status when queued work expires before claim", async () => {
     await createRuntimeJob(
       store,
@@ -266,6 +392,44 @@ describe.each([
     });
     expect(stored).toMatchObject({ status: "claimed", attempt: 1 });
     expect(["worker-a", "worker-b"]).toContain(stored?.ownerId);
+  });
+
+  it("serializes repeated wakes while a claim is pending and cancels that claim on close", async () => {
+    await createRuntimeJob(store, job());
+    const sessions = await store.listSessions();
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const list = vi
+      .spyOn(store, "listSessions")
+      .mockImplementationOnce(async () => {
+        await blocked;
+        return sessions;
+      });
+    const execute = vi.fn();
+    const worker = createRuntimeJobWorker({
+      store,
+      eventBus: createEventBus(),
+      execute,
+      concurrency: 1,
+    });
+    worker.wake();
+    await vi.waitFor(() => expect(list).toHaveBeenCalledOnce());
+    worker.wake();
+    worker.wake();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(list).toHaveBeenCalledOnce();
+    const closing = worker.close();
+    release();
+    await closing;
+    expect(execute).not.toHaveBeenCalled();
+    expect(worker.activeCount).toBe(0);
+    await expect(getRuntimeJob(store, job())).resolves.toMatchObject({
+      status: "cancelled",
+      reason: "worker-shutdown",
+    });
+    list.mockRestore();
   });
 
   it("renews leases and rejects transitions from another owner", async () => {

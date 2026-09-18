@@ -24,6 +24,48 @@ function visibility(initial: DocumentVisibilityState = "visible") {
 }
 
 describe("subscription visibility", () => {
+  it("reports failed handlers without payloads and continues other subscribers", async () => {
+    visibility();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(
+                  new TextEncoder().encode(
+                    'id: epoch:1\nevent: state.changed\ndata: {"payload":{"privateText":"private-value"}}\n\n',
+                  ),
+                );
+              },
+            }),
+          ),
+      ),
+    );
+    const broken = () => {
+      throw new Error("private-value");
+    };
+    const received = vi.fn();
+    subscription = createSessionSubscription("session");
+    subscription.on("state", broken);
+    subscription.on("state", received);
+    subscription.on("*", broken);
+    subscription.on("*", received);
+
+    await vi.waitFor(() => expect(received).toHaveBeenCalledTimes(2));
+    expect(subscription.state).toBe("connected");
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith("[subscription] event handler failed", {
+      sessionId: "session",
+      eventType: "state.changed",
+      eventId: "epoch:1",
+      errorType: "Error",
+    });
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("private-value");
+  });
+
   it.each(["complete", "error", "abort"] as const)(
     "resumes the auxiliary stream after an action ends with %s",
     async (end) => {

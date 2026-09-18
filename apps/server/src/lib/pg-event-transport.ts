@@ -34,15 +34,22 @@ export async function createPgEventTransport(
   const sql = postgres(databaseUrl, { max: 1 });
   const handlers = new Set<(payload: string) => void>();
 
-  await sql.listen(CHANNEL, (payload) => {
-    for (const handler of handlers) {
-      try {
-        handler(payload);
-      } catch (err) {
-        console.error("[pg-event-transport] handler error:", err);
+  try {
+    await sql.listen(CHANNEL, (payload) => {
+      for (const handler of handlers) {
+        try {
+          handler(payload);
+        } catch (err) {
+          console.error("[pg-event-transport] handler error:", err);
+        }
       }
-    }
-  });
+    });
+  } catch (error) {
+    // A failed subscription still owns a client and its reconnect timers.
+    await sql.end({ timeout: 1 }).catch(() => undefined);
+    throw error;
+  }
+  let closing: Promise<void> | undefined;
 
   return {
     publish(payload: string): Promise<void> {
@@ -50,11 +57,18 @@ export async function createPgEventTransport(
       // reports a failed frame instead of treating a transport hole as sent.
       return sql.notify(CHANNEL, payload).then(() => undefined);
     },
-    subscribe(handler: (payload: string) => void): void {
+    subscribe(handler: (payload: string) => void): () => void {
       handlers.add(handler);
+      return () => {
+        handlers.delete(handler);
+      };
     },
-    async close(): Promise<void> {
-      await sql.end();
+    close(): Promise<void> {
+      if (!closing) {
+        handlers.clear();
+        closing = sql.end({ timeout: 1 });
+      }
+      return closing;
     },
   };
 }

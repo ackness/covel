@@ -79,8 +79,8 @@ export interface RuntimeJobExecutionResult {
 export interface RuntimeJobWorker {
   /** Signal that newly committed queue rows may be available. */
   wake(): void;
-  /** Stop claiming work. Active executions settle normally. Intended for tests/shutdown. */
-  close(): void;
+  /** Stop claiming, cancel uncommitted work, and await worker-owned storage operations. */
+  close(): Promise<void>;
   readonly activeCount: number;
 }
 
@@ -95,6 +95,13 @@ export class RuntimeJobExecutionTimedOutError extends Error {
   constructor(readonly maxExecutionMs: number) {
     super(`detached runtime job exceeded ${maxExecutionMs}ms execution limit`);
     this.name = "RuntimeJobExecutionTimedOutError";
+  }
+}
+
+class RuntimeJobWorkerClosedError extends Error {
+  constructor() {
+    super("runtime job worker is shutting down");
+    this.name = "RuntimeJobWorkerClosedError";
   }
 }
 
@@ -244,8 +251,15 @@ export function createRuntimeJobWorker(args: {
   const activeRuntimeKeys = new Set<string>();
   let activeCount = 0;
   let sessionCursor: string | undefined;
-  let scheduled = false;
+  let scheduled: ReturnType<typeof setImmediate> | undefined;
+  let draining: Promise<void> | undefined;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  let wakeRequested = false;
   let closed = false;
+  let closing: Promise<void> | undefined;
+  const activeTasks = new Set<Promise<void>>();
+  const executions = new Set<Promise<RuntimeJobExecutionResult>>();
+  const stopExecutions = new Set<() => void>();
 
   const transition = async (
     job: RuntimeJobRecord,
@@ -279,37 +293,52 @@ export function createRuntimeJobWorker(args: {
     let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
     let stopRenewing = false;
     const executionAbort = new AbortController();
+    let renewalTask: Promise<void> | undefined;
+    let deadlineTask: Promise<void> | undefined;
+    let onAbort: (() => void) | undefined;
+    const stop = (): void => {
+      // A job that crossed the commit barrier must finish settling its durable
+      // outcome. Cancellation before that barrier can never authorize replay.
+      if (current.status !== "committing") {
+        executionAbort.abort(new RuntimeJobWorkerClosedError());
+      }
+    };
+    stopExecutions.add(stop);
+    if (closed) stop();
 
     const scheduleRenewal = (): void => {
       if (stopRenewing) return;
       renewalTimer = setTimeout(
-        async () => {
-          if (stopRenewing) return;
-          try {
-            const renewed = await renewRuntimeJobLease(args.store, {
-              sessionId: current.sessionId,
-              pluginId: current.pluginId,
-              jobId: current.jobId,
-              ownerId,
-              leaseMs,
-            });
-            if (!renewed) {
-              const shouldAbort = !stopRenewing;
-              stopRenewing = true;
-              if (shouldAbort) {
-                executionAbort.abort(new RuntimeJobNoLongerCurrentError());
+        () => {
+          renewalTask = (async () => {
+            if (stopRenewing) return;
+            try {
+              const renewed = await renewRuntimeJobLease(args.store, {
+                sessionId: current.sessionId,
+                pluginId: current.pluginId,
+                jobId: current.jobId,
+                ownerId,
+                leaseMs,
+              });
+              if (!renewed) {
+                const shouldAbort = !stopRenewing;
+                stopRenewing = true;
+                if (shouldAbort) {
+                  executionAbort.abort(new RuntimeJobNoLongerCurrentError());
+                }
+                return;
               }
-              return;
+              if (stopRenewing) return;
+              current = renewed;
+              scheduleRenewal();
+            } catch (error) {
+              console.warn(
+                `[runtime-job-worker] lease renewal failed for ${current.jobId}:`,
+                errorMessage(error),
+              );
+              scheduleRenewal();
             }
-            current = renewed;
-            scheduleRenewal();
-          } catch (error) {
-            console.warn(
-              `[runtime-job-worker] lease renewal failed for ${current.jobId}:`,
-              errorMessage(error),
-            );
-            scheduleRenewal();
-          }
+          })();
         },
         Math.max(1, Math.floor(leaseMs / 3)),
       );
@@ -317,28 +346,39 @@ export function createRuntimeJobWorker(args: {
     };
 
     try {
+      executionAbort.signal.throwIfAborted();
+      await appendRuntimeJobStatus(args.store, args.eventBus, claimed);
       const running = await transition(current, ["claimed"], "running");
       if (!running) return;
       current = running;
+      executionAbort.signal.throwIfAborted();
       scheduleRenewal();
 
-      let rejectTimeout: ((error: Error) => void) | undefined;
-      const timeoutPromise = new Promise<never>((_resolve, reject) => {
-        rejectTimeout = reject;
+      const aborted = new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(executionAbort.signal.reason);
+        executionAbort.signal.addEventListener("abort", onAbort, {
+          once: true,
+        });
       });
       if (current.maxExecutionMs !== undefined) {
-        timeoutTimer = setTimeout(async () => {
-          const timedOut = await transition(current, ["running"], "timed_out", {
-            reason: "execution-deadline-exceeded",
-            error: `execution exceeded ${current.maxExecutionMs}ms`,
-          }).catch(() => null);
-          if (timedOut) {
-            const error = new RuntimeJobExecutionTimedOutError(
-              current.maxExecutionMs!,
-            );
-            executionAbort.abort(error);
-            rejectTimeout?.(error);
-          }
+        timeoutTimer = setTimeout(() => {
+          deadlineTask = (async () => {
+            const timedOut = await transition(
+              current,
+              ["running"],
+              "timed_out",
+              {
+                reason: "execution-deadline-exceeded",
+                error: `execution exceeded ${current.maxExecutionMs}ms`,
+              },
+            ).catch(() => null);
+            if (timedOut) {
+              const error = new RuntimeJobExecutionTimedOutError(
+                current.maxExecutionMs!,
+              );
+              executionAbort.abort(error);
+            }
+          })();
         }, current.maxExecutionMs);
         timeoutTimer.unref?.();
       }
@@ -346,12 +386,15 @@ export function createRuntimeJobWorker(args: {
       const execution = args.execute(current, {
         signal: executionAbort.signal,
         assertCurrent: async () => {
+          executionAbort.signal.throwIfAborted();
           const live = await getRuntimeJob(args.store, current);
+          executionAbort.signal.throwIfAborted();
           if (!live || live.status !== "running" || live.ownerId !== ownerId) {
             throw new RuntimeJobNoLongerCurrentError();
           }
         },
         beforeCommit: async (identity) => {
+          executionAbort.signal.throwIfAborted();
           stopRenewing = true;
           if (renewalTimer) clearTimeout(renewalTimer);
           const committing = await transition(
@@ -362,11 +405,15 @@ export function createRuntimeJobWorker(args: {
           );
           if (!committing) throw new RuntimeJobNoLongerCurrentError();
           current = committing;
+          executionAbort.signal.throwIfAborted();
         },
       });
-      const result = current.maxExecutionMs
-        ? await Promise.race([execution, timeoutPromise])
-        : await execution;
+      executions.add(execution);
+      void execution.then(
+        () => executions.delete(execution),
+        () => executions.delete(execution),
+      );
+      const result = await Promise.race([execution, aborted]);
       if (timeoutTimer) clearTimeout(timeoutTimer);
       const succeeded = await transition(
         current,
@@ -384,12 +431,17 @@ export function createRuntimeJobWorker(args: {
         (error instanceof Error &&
           (error.name === "SessionApprovalScopeChangedError" ||
             error.name === "SessionNotActiveError"));
+      const shuttingDown = error instanceof RuntimeJobWorkerClosedError;
       await transition(
         current,
         ["claimed", "running", "committing"],
-        stale ? "stale" : "failed",
+        shuttingDown ? "cancelled" : stale ? "stale" : "failed",
         {
-          reason: stale ? "commit-barrier-rejected" : "execution-failed",
+          reason: shuttingDown
+            ? "worker-shutdown"
+            : stale
+              ? "commit-barrier-rejected"
+              : "execution-failed",
           error: errorMessage(error),
         },
       ).catch((transitionError) =>
@@ -401,6 +453,10 @@ export function createRuntimeJobWorker(args: {
     } finally {
       stopRenewing = true;
       if (renewalTimer) clearTimeout(renewalTimer);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      if (onAbort) executionAbort.signal.removeEventListener("abort", onAbort);
+      await Promise.allSettled([renewalTask, deadlineTask]);
+      stopExecutions.delete(stop);
       activeRuntimeKeys.delete(runtimeKey(claimed));
       activeCount--;
       wake();
@@ -408,9 +464,7 @@ export function createRuntimeJobWorker(args: {
   };
 
   const drain = async (): Promise<void> => {
-    scheduled = false;
-    if (closed) return;
-    while (activeCount < concurrency) {
+    while (!closed && activeCount < concurrency) {
       const claimed = await claimNextRuntimeJob(args.store, {
         ownerId,
         leaseMs,
@@ -422,6 +476,7 @@ export function createRuntimeJobWorker(args: {
         // without owning an EventBus. Reconcile those durable states once the
         // runnable queue is empty so live clients never keep a stale spinner.
         for (const session of await args.store.listSessions()) {
+          if (closed) return;
           const terminal = await listRuntimeJobs(args.store, {
             sessionId: session.id,
             statuses: [
@@ -434,6 +489,7 @@ export function createRuntimeJobWorker(args: {
             ],
           });
           for (const job of terminal) {
+            if (closed) return;
             const rows = await args.store.listJobStatus(job.sessionId, {
               progressScopeId: job.jobId,
               jobId: job.jobId,
@@ -456,30 +512,61 @@ export function createRuntimeJobWorker(args: {
       sessionCursor = claimed.nextSessionCursor;
       activeCount++;
       activeRuntimeKeys.add(runtimeKey(claimed.job));
-      await appendRuntimeJobStatus(args.store, args.eventBus, claimed.job);
-      void runOne(claimed.job);
+      const task = runOne(claimed.job);
+      activeTasks.add(task);
+      void task.then(() => activeTasks.delete(task));
     }
   };
 
   function wake(): void {
-    if (closed || scheduled) return;
-    scheduled = true;
-    setImmediate(() => {
-      void drain().catch((error) => {
-        scheduled = false;
-        console.warn("[runtime-job-worker] drain failed:", errorMessage(error));
-        if (!closed) {
-          const retryTimer = setTimeout(wake, DRAIN_RETRY_MS);
-          retryTimer.unref?.();
-        }
-      });
+    if (closed) return;
+    if (draining) {
+      wakeRequested = true;
+      return;
+    }
+    if (scheduled) return;
+    if (retryTimer) clearTimeout(retryTimer);
+    scheduled = setImmediate(() => {
+      scheduled = undefined;
+      draining = drain()
+        .catch((error) => {
+          console.warn(
+            "[runtime-job-worker] drain failed:",
+            errorMessage(error),
+          );
+          if (!closed) {
+            retryTimer = setTimeout(wake, DRAIN_RETRY_MS);
+            retryTimer.unref?.();
+          }
+        })
+        .finally(() => {
+          draining = undefined;
+          if (wakeRequested) {
+            wakeRequested = false;
+            wake();
+          }
+        });
     });
   }
 
   return {
     wake,
     close() {
+      if (closing) return closing;
       closed = true;
+      if (scheduled) clearImmediate(scheduled);
+      if (retryTimer) clearTimeout(retryTimer);
+      for (const stop of stopExecutions) stop();
+      closing = (async () => {
+        // An in-flight claim may return after close. runOne sees closed and
+        // settles that claim without starting a provider call.
+        await draining;
+        await Promise.allSettled(activeTasks);
+        // The runtime cooperates with cancellation. Its outer runner may still
+        // be releasing locks or finishing a pending store read after the race.
+        await Promise.allSettled(executions);
+      })();
+      return closing;
     },
     get activeCount() {
       return activeCount;
