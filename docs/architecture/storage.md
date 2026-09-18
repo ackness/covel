@@ -117,11 +117,20 @@ payloads, and schema v1 checkpoints at the storage boundary.
 
 The web app uses two databases with separate lifecycles:
 
-- `covel-browser-vault` (Dexie schema v4): latest session checkpoints, compact
+- `covel-browser-vault` (Dexie schema v5): latest session checkpoints, compact
   action-idempotency records, pending server commits, and browser-authored
-  worlds.
+  worlds with a durable initialization marker.
 - `covel-browser-cache` (native IDB schema v1): UI state, submitted blocks,
   execution-display cache, media metadata, and render blobs.
+
+Sample worlds are inserted only when a newly created vault first initializes
+an empty library. The world records and initialization marker commit in one
+IndexedDB transaction, so concurrent tabs cannot seed duplicates and a failed
+write leaves no partial set. Initialization failures may be retried by the same
+service. Deleting every world preserves the marker and keeps the library empty
+after reload. Schema v5 upgrades mark existing libraries initialized, including
+empty ones, preserving user deletions rather than guessing whether to add
+samples. An explicit full vault reset clears the marker along with domain data.
 
 Submitted block IDs and form values merge in one IndexedDB readwrite
 transaction. Concurrent submissions, including writes from separate tabs,

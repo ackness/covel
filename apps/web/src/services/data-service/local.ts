@@ -256,20 +256,20 @@ export class LocalDataService implements DataService {
 
   private async ready(): Promise<BrowserVault> {
     if (!this.initPromise) {
-      this.initPromise = (async () => {
-        const existing = await this.vault.listWorlds();
-        if (existing.length === 0) {
-          for (const seed of LOCAL_SEED_WORLDS) {
-            await this.vault.upsertWorld({
-              id: uid("world"),
-              name: seed.name as StoreWorldRecord["name"],
-              description: seed.description as StoreWorldRecord["description"],
-              tags: seed.tags,
-              createdAt: new Date().toISOString(),
-            });
-          }
-        }
-      })();
+      this.initPromise = this.vault
+        .initializeWorlds(
+          LOCAL_SEED_WORLDS.map((seed) => ({
+            id: uid("world"),
+            name: seed.name as StoreWorldRecord["name"],
+            description: seed.description as StoreWorldRecord["description"],
+            tags: seed.tags,
+            createdAt: new Date().toISOString(),
+          })),
+        )
+        .catch((error: unknown) => {
+          this.initPromise = null;
+          throw error;
+        });
     }
     await this.initPromise;
     return this.vault;
