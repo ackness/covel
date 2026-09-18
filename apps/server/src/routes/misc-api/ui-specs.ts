@@ -58,7 +58,8 @@ async function assertInsidePluginRoot(
   const realFile = await fs
     .realpath(filePath)
     .catch((error: NodeJS.ErrnoException) => {
-      // Custom component declarations may reference assets built only on the client.
+      // Preserve missing non-JSON paths for unsupported-component diagnostics.
+      // Missing JSON resources still fail when read below.
       if (error.code === "ENOENT") {
         return path.resolve(realRoot, path.relative(pluginRoot, filePath));
       }
@@ -87,6 +88,7 @@ async function loadSlot(
         >,
       );
     } else {
+      // The validator reports this unsupported declaration without hiding siblings.
       specs.push({ _componentPath: declaredPath });
     }
   }

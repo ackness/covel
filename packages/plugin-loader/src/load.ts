@@ -349,7 +349,8 @@ async function loadUiSpecs(
         const content = await fs.readFile(fullPath, "utf-8");
         specs.push(JSON.parse(content) as Record<string, unknown>);
       } else {
-        // .tsx/.js — store path for frontend dynamic loading
+        // Preserve unsupported declarations for per-spec API diagnostics.
+        // The Web client does not dynamically load plugin component files.
         specs.push({ _componentPath: relPath });
       }
     }
