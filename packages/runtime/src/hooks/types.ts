@@ -121,6 +121,7 @@ export type HookResult<P> =
 
 // ── Hook handler ─────────────────────────────────────────────────
 
+/** Receives a private data snapshot; publish changes only through `replace`. */
 export type HookHandler<P = unknown> = (
   ctx: HookContext,
   payload: P,
@@ -134,7 +135,7 @@ export interface HookRegistration<P = unknown> {
   readonly event: HookEvent;
   /** undefined = global/framework hook. */
   readonly pluginId?: string;
-  /** Optional filter — only invoke this handler when match returns true. */
+  /** Optional filter with its own snapshot; only invoke the handler when true. */
   readonly match?: (payload: P) => boolean;
   readonly handler: HookHandler<P>;
   /** Per-handler timeout in ms. Default 5000. */

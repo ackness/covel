@@ -1262,6 +1262,10 @@ tools:
 
 Hook 的 `match` 谓词与 handler 使用相同的异常隔离规则：过滤器抛错会带注册 Hook 的身份发布 `hook.error`；顺序/first/stream 语义返回 abort，parallel 观察语义记录失败后继续其它 Hook。过滤器返回 false 时不执行 handler，也不发布 `hook.fired`。
 
+Hook 的 payload 是数据快照：流水线在入口取得副本，`match` 与每个 handler 再分别取得独立副本。原地修改后仅返回 `continue` 不会改变原始输入或后续 Hook；需要改写时显式返回 `replace`。顺序流水线浅合并替换字段，下一 handler 看到已接受的替换。返回值在 handler 完成时复制，保留返回对象后再修改不能改变已接受结果；观察型事件不接受替换。`ctx.activePluginIds` 同样按 handler 复制，取消信号和只读配置访问器仍是上下文能力。
+
+快照保留非枚举字段和 Symbol 字段，包括工具提案、领域事件、对话日志与暂停记录。payload 和替换值可使用普通数据对象、数组、Map、Set、Date、RegExp、ArrayBuffer 及其视图；不接受函数、访问器、未支持的类实例、共享内存或其它能力对象。无法复制的数据按该事件的失败语义处理并发布 `hook.error`，不会退回共享原对象。此机制隔离数据引用，不是同进程插件代码的沙箱，也不能撤销 Hook 自行发起的外部副作用。
+
 Hook 调用总会获得 `ctx.signal`（类型可选以兼容直接构造上下文的调用方）：超时或传入的父执行取消会通知协作式 I/O 并结束等待，迟到返回的 `replace` 不再进入流水线。同进程不合作代码无法被强制终止。顺序 pipeline 中 abort 停止后续 handler；各 wire helper 保持原有拦截/转换策略，例如 `PreLLMCall` 的 abort 表示保留原请求，真正的执行取消仍由模型调用边界检查。`PreStateCommit` 继承传入 `finalizeExecution` 的取消信号，取消会停止后续提案并回滚事务。观察型事件不因 Hook 失败撤销已完成的领域提交；`TurnStop`、`PostStateCommit` 和会话生命周期的收尾 Hook 使用自己的超时界限。
 
 `ctx.getOwnSettings()` 返回本插件在**本次操作开始时**解析的只读配置：请求的 `X-Plugin-User-Settings` 覆盖世界 `metadata.pluginSettings`，未提供的声明字段使用 manifest 默认值；非法覆盖值仍按字段约束回退。快照复制后深度冻结，不冻结调用方的默认值或配置对象。运行中修改玩家配置不会改变当前操作，下一次操作才读取新值。

@@ -11,6 +11,7 @@
  */
 
 import { invokeWithSignal } from "./invoke-with-signal.js";
+import { cloneHookData } from "./hook-data.js";
 import type { EventBus } from "@covel/events";
 import { HOOK_SEMANTICS } from "./types.js";
 import {
@@ -99,19 +100,39 @@ export class HookPipeline {
 
     const handlers = orderHandlers(scoped);
     const semantic = HOOK_SEMANTICS[event];
+    let ownedPayload: P;
+    try {
+      ownedPayload = cloneHookData(payload);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      // Invalid data must not bypass policy hooks or turn an observer failure
+      // into a failure of an already committed operation.
+      for (const reg of semantic === "parallel"
+        ? handlers
+        : handlers.slice(0, 1)) {
+        emitHookEvent(opts?.eventBus, ctxScoped, "hook.error", {
+          hookId: reg.id,
+          hookPluginId: reg.pluginId,
+          reason,
+        });
+      }
+      return semantic === "parallel"
+        ? { action: "continue" }
+        : { action: "abort", reason };
+    }
 
     if (semantic === "first") {
-      return this.runFirst(event, ctxScoped, payload, handlers, opts);
+      return this.runFirst(event, ctxScoped, ownedPayload, handlers, opts);
     }
     if (semantic === "sequential") {
-      return this.runSequential(event, ctxScoped, payload, handlers, opts);
+      return this.runSequential(event, ctxScoped, ownedPayload, handlers, opts);
     }
     if (semantic === "parallel") {
-      return this.runParallel(event, ctxScoped, payload, handlers, opts);
+      return this.runParallel(event, ctxScoped, ownedPayload, handlers, opts);
     }
 
     // Stream hooks share sequential behavior until a stream transform hook is added.
-    return this.runSequential(event, ctxScoped, payload, handlers, opts);
+    return this.runSequential(event, ctxScoped, ownedPayload, handlers, opts);
   }
 
   private async runFirst<P>(
@@ -219,22 +240,20 @@ export class HookPipeline {
     // gate. Scope-less calls still receive the per-handler cancellation signal.
     // Framework hooks (no pluginId) get a getter returning `{}`.
     const ownSettings = currentOwnSettings(reg.pluginId);
-    const ctxForHandler: HookContext = isHookScopeActive()
-      ? {
-          ...ctx,
-          // JS handlers can mutate a ReadonlySet at runtime. Never lend them
-          // the activation set used to authorize later hooks or other handlers.
-          ...(ctx.activePluginIds
-            ? { activePluginIds: new Set(ctx.activePluginIds) }
-            : {}),
-          getOwnSettings: () => ownSettings,
-        }
-      : ctx;
+    const ctxForHandler: HookContext = {
+      ...ctx,
+      // A supplied activation set needs isolation even without an ambient scope.
+      ...(ctx.activePluginIds
+        ? { activePluginIds: new Set(ctx.activePluginIds) }
+        : {}),
+      ...(isHookScopeActive() ? { getOwnSettings: () => ownSettings } : {}),
+    };
 
     try {
       // Filters are plugin code too: failures follow this event's abort or
       // observe-only semantics and retain the registering hook's identity.
-      if (reg.match && !reg.match(payload)) return { action: "continue" };
+      if (reg.match && !reg.match(cloneHookData(payload)))
+        return { action: "continue" };
 
       // Emit `hook.fired` once per invocation attempt, before the handler runs.
       if (opts?.emitter) {
@@ -251,7 +270,15 @@ export class HookPipeline {
       }
 
       result = await invokeWithSignal(
-        (signal) => handler({ ...ctxForHandler, signal }, payload),
+        async (signal) => {
+          const returned = await handler(
+            { ...ctxForHandler, signal },
+            cloneHookData(payload),
+          );
+          signal.throwIfAborted();
+          // Take ownership before trace awaits or the next handler can yield.
+          return cloneHookData(returned);
+        },
         ctx.signal,
         timeoutMs,
         timeoutMessage,
@@ -306,7 +333,7 @@ export class HookPipeline {
         pluginId: reg.pluginId ?? null,
         runtimeId: ctx.runtimeId,
         targetId: extractTargetId(event, payload),
-        diff: { before, after },
+        diff: cloneHookData({ before, after }),
         ...(proposalType ? { proposalType } : {}),
       });
     }
