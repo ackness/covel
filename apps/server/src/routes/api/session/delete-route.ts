@@ -40,6 +40,7 @@ export function registerSessionDeleteRoute(
     };
 
     const prepared = await sessionLock.withLock(id, async () => {
+      await c.get("memorySystem")?.updater.awaitPending?.(id);
       const lockedGuard = await resolveSessionParam(c);
       if (!lockedGuard.ok) return lockedGuard.response;
       const session = lockedGuard.session;

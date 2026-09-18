@@ -133,12 +133,14 @@ it("edits saved parameters for a default-only server configuration", async () =>
   );
 });
 
-it("disables generation inputs when no role is available", () => {
+it("exposes the framework memory role even without server-defined slots", () => {
   mocks.plugins = [];
   mocks.llm = { ...mocks.llm, slots: {} };
   render(<LlmAdvancedPane />);
-  for (const input of screen.getAllByRole("spinbutton"))
-    expect(input.matches(":disabled")).toBe(true);
+  const picker = screen.getByRole("combobox", {
+    name: i18n.t("settings.selectSlot"),
+  }) as HTMLSelectElement;
+  expect(picker.value).toBe("memory");
   expect(mocks.store.get("llm.paramOverrides")).toEqual({});
 });
 
@@ -152,6 +154,7 @@ it("keeps saved, runtime and user-selected roles in both settings panes after li
     "analysis",
     "image",
     "archived",
+    "memory",
   ]);
   await act(async () => {
     await mocks.store.set("llm.slotConfig", {

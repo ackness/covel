@@ -127,6 +127,38 @@ describe("buildFieldsZodFromSchema", () => {
 });
 
 describe("buildSessionCharacterWriteTools", () => {
+  it("advertises session bounds, enums and nested constraints without world prose", () => {
+    const tools = buildSessionCharacterWriteTools(stubStore, {}, sampleSchema);
+    for (const tool of tools) {
+      expect(tool.description).toContain(
+        '"hp":{"type":"number","min":0,"max":100}',
+      );
+      expect(tool.description).toContain('"options":["练气","筑基","金丹"]');
+      expect(tool.description).toContain('"weapon":{"type":"string"}');
+      expect(tool.description).not.toContain("当前生命值");
+      expect(tool.description).not.toContain("defaultValue");
+    }
+    const otherTools = buildSessionCharacterWriteTools(
+      stubStore,
+      {},
+      {
+        version: 1,
+        attributes: [
+          {
+            id: "trust",
+            name: "Trust",
+            type: "number",
+            category: "social",
+            min: -5,
+            max: 5,
+          },
+        ],
+      },
+    );
+    expect(otherTools[2].description).toContain('"min":-5');
+    expect(otherTools[2].description).not.toContain('"hp"');
+  });
+
   it("keeps create-character fields compact instead of duplicating the session schema", () => {
     const [createTool] = buildSessionCharacterWriteTools(
       stubStore,

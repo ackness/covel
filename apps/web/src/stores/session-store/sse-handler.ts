@@ -683,6 +683,7 @@ export function createSseEventHandler(
       // stays green (previously this fell through to `assertNeverEvent` and
       // warned on every commit).
       case "working_memory.changed":
+      case "memory.updated":
       case "tool.calling":
       case "tool.completed":
       case "tool.failed":

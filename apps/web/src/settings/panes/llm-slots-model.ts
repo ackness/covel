@@ -112,6 +112,8 @@ export function createVisibleSlotIds(args: {
   }
   args.discoveredSlotIds.forEach(add);
   args.savedSlotIds?.forEach(add);
+  // Framework work has no agent manifest from which to discover this role.
+  add("memory");
   return out;
 }
 

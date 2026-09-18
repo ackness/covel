@@ -195,7 +195,7 @@ describe("core plugin manifest contract", () => {
         builtin: ["sync-characters", "get-character"],
       },
       completeAfterTools: ["sync-characters"],
-      maxSteps: 2,
+      maxSteps: 3,
       maxRetries: 0,
     });
 

@@ -238,6 +238,8 @@ Provider 图片输入矩阵：
 
 `working_memory.changed` 由 commit chain 在提交 `working_memory.set` proposal 后通过 `makeEvent` 产出，作为 commit event **直接写入 `/api/actions` 流**（与 `narrative.completed` 等同走 commit-direct 路径，不经 `FORWARDED_EVENT_TYPES` 白名单）。因此它**是 `CovelEvent` union 的成员**（`COVEL_EVENT_META` 中 `forwardToActionStream: false`——该 flag 只管 eventBus→action-stream 转发，对 commit-direct 事件无效）。前端 actions handler **显式不渲染**它（UI 通过 `state.changed` 感知 working memory 变化）；闭合 union 会强制新增事件在前端选择处理或忽略。
 
+`memory.updated` 是后台核心记忆提取的完成记录，写入 `trace_events`，沿用来源回合的 `turnId` / `traceId`。payload 包含 `status: succeeded | failed`、`slot`、`updated`、`blocksChanged`、可选 `error` 和 `updatedAt`。它不转发到已结束的 action stream；界面通过记忆宿主插件的 `_memory/update` 数据及现有 `plugin-data.changed` 订阅显示失败，重连时从持久化数据恢复。
+
 `context.compacted` 是 **trace-only** 事件：由 Compactor 完成摘要写入后写入 `trace_events` 表，不进入 `CovelEvent` union，仅可通过 `/api/traces/:sessionId` 离线查询。
 
 `recursive.calling` / `recursive.completed` / `recursive.failed` 为递归 runtime 的 TurnEmitter trace 事件，**仅经订阅通道（topic `trace`）下发**，`forwardToActionStream: false`，不进入 `/api/actions`。它们现在也是 `CovelEvent` union 成员——使框架所有 `TurnEmitter.emit` / `makeEvent` 的事件名都受闭合 union 约束（发射端 `type` 已收紧为 `CovelEventType`，发射 union 外事件即编译错误）。

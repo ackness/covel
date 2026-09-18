@@ -314,6 +314,9 @@
     "suspensionAgoMinutes": "{{count}}м назад",
     "suspensionAgoHours": "{{count}}ч назад",
     "suspensionAgoDays": "{{count}}дн назад",
+    "memoryUpdateFailed": "Не удалось обновить память истории",
+    "memoryUpdateFailedHint": "Ход сохранён. Проверьте модель для памяти и настройки провайдера. Следующая попытка обновления будет после следующего хода.",
+    "memoryUpdateErrorDetails": "Сведения об ошибке",
     "memoryStoreWarning": "Данные теряются при перезагрузке",
     "worldDataPreflight": {
       "title": "Данные мира",

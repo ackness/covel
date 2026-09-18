@@ -312,6 +312,9 @@
     "suspensionAgoMinutes": "{{count}} 分钟前",
     "suspensionAgoHours": "{{count}} 小时前",
     "suspensionAgoDays": "{{count}} 天前",
+    "memoryUpdateFailed": "故事记忆更新失败",
+    "memoryUpdateFailedHint": "本轮剧情已保存。请检查用途分配中的记忆模型和服务商配置；下一回合会再次尝试更新。",
+    "memoryUpdateErrorDetails": "错误详情",
     "memoryStoreWarning": "重启后数据将丢失",
     "worldDataPreflight": {
       "title": "世界数据",

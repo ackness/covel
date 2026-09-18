@@ -57,6 +57,10 @@ Function runtime 不读取 `runtimeModelOverrides`。图像、语音等函数插
 
 后台记忆更新使用触发它的请求 adapter，切换模型或调整输出参数后重试同样生效。请求包装器共享记忆管理器及按 session 串行的 pending 队列：`MemoryUpdater.updateAfterTurn(params, llmOverride?)` 捕获本次 adapter，`awaitPending(sessionId)` 仍等待同一队列。恢复暂停任务时重新使用当前请求的上下文预算。调用前预算超限、provider 初始化失败和上游请求失败均在错误详情保留实际 provider/model；无效输出参数归为不可重试的配置错误。
 
+记忆提取是框架服务。用途分配始终列出 `memory`，即使服务端未定义该 slot：浏览器显式绑定优先；未绑定时服务端依次选择 `memory`、`plugin`、`story`、首个 text slot。每次任务读取最新基础配置，支持热重载；排队任务保留各自请求的 adapter 和 slot。纯 UI、无 model/stage 的自动声明不会在会话插件列表显示无效的 runtime 模型选择器。
+
+记忆请求每次调用的超时为 60 秒；沿用 memory 库的有限瞬态重试。`{}` 表示合法的无变化；非法 JSON、非对象或没有有效记忆块的非空结果均记录失败。结果以 `memory.updated` 写入该回合 trace，并在 `memory-panel` capability 的宿主下持久化 `_memory/update` 状态。失败不回滚已提交剧情；下一次有叙事输出的成功回合会重新尝试提取，成功后清除失败提示。
+
 ## 服务商与模型 ID
 
 设置界面将连接信息和模型 ID 分开保存：一个服务商配置一组 `baseUrl`、协议、API 密钥和价格倍率，并可包含多个模型 ID。用途绑定只引用其中一个模型。请求时前端把该引用编译为兼容服务器的自定义 preset；preset 是内部传输结构，用户无需单独创建。

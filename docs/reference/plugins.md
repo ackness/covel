@@ -600,9 +600,9 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 | stage              | `post-turn`（与 guide / codex / extractor 同 stage 并行）                                                                                                                                                                                                                                    |
 | trigger            | `scheduled`，`interval: 1`，`cooldownTurns: 1`                                                                                                                                                                                                                                               |
 | model              | `plugin`                                                                                                                                                                                                                                                                                     |
-| tools.builtin      | `sync-characters`、`get-character`；前者直接广播，后者通过 `tools.defer` + `search-tools` 按需激活（不声明 `list-characters`——名册已由 `<existing-characters>` 注入）                                                                                                                        |
+| tools.builtin      | `sync-characters`、`get-character` 均直接可见；`get-character` 在一次读取后移除（不声明 `list-characters`——名册已由 `<existing-characters>` 注入）                                                                                                                                           |
 | completeAfterTools | `[sync-characters]` — 整批写入成功后直接结束，不额外请求 `runtime-done`                                                                                                                                                                                                                      |
-| 调用边界           | `maxSteps: 2` · `maxRetries: 0` · `callTimeoutMs: 60000`                                                                                                                                                                                                                                     |
+| 调用边界           | `maxSteps: 3` · `maxRetries: 0` · `callTimeoutMs: 60000`                                                                                                                                                                                                                                     |
 | input.inject       | `narrator` + `chat-mode-narrator` → `narrativeOutput` → `<narrator-output>`（双引擎声明，缺席的解析为空）；`plugin-data[characters]` → `<existing-characters>`（`format: summary`，现有角色名册在构建 prompt 时注入，免去每轮 `list-characters` 往返 —— 同 codex `<existing-entries>` 模式） |
 | needs              | `[{ capability: narrative-engine }]` — 引擎无关（H-04），当前模式的叙事引擎失败时 skip                                                                                                                                                                                                       |
 
@@ -611,7 +611,7 @@ WorldIR 的 `events[]` 是事实记录，不是 `{ topic, data }` 领域事件�
 1. 查看 `<existing-characters>`（框架自动注入的现有角色名册，行首即角色 id）避免重复——名册既已注入，本 runtime 不再声明 `list-characters`
 2. 阅读叙事识别新 NPC + 状态变化
 3. 仅对明确出现的变化调用一次 `sync-characters`（update 用注入名册里的 id；摘要不足以决策时才按需 `get-character`）
-4. 每次最多创建 5 个 NPC、更新 10 个已有角色；任一子操作失败时整批 proposal 都不提交
+4. 每次最多创建 5 个 NPC、更新 10 个已有角色；重复 create 幂等返回已有 id，不覆盖档案；其他子操作失败时整批 proposal 都不提交，可在剩余步骤内修正并重提完整批次
 5. 无变化时调用 `runtime-done`；sync 成功后框架自动结束
 6. 不修改玩家角色属性（除非叙事明确描述）
 

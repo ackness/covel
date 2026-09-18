@@ -1,7 +1,10 @@
 import { estimateTokens } from "@covel/context";
 import type { TurnExecutorDeps } from "@covel/runtime";
 import type { Context } from "hono";
-import type { TurnCapabilityPluginIds } from "./turn-capabilities.js";
+import {
+  resolveTurnCapabilityPluginIds,
+  type TurnCapabilityPluginIds,
+} from "./turn-capabilities.js";
 
 /**
  * Dependencies shared by manual runtime execution and detached followers.
@@ -21,6 +24,7 @@ export function buildManualTurnExecutorDeps(
   const contextBudget = c.get("turnContextBudget");
   const eventDirectory = c.get("eventDirectory");
   const hookPipeline = c.get("hookPipeline");
+  const memorySystem = c.get("memorySystem");
 
   return {
     loadRuntime: c.get("loadRuntimeFn"),
@@ -36,6 +40,7 @@ export function buildManualTurnExecutorDeps(
     ...(contextBudget ? { estimator: estimateTokens, contextBudget } : {}),
     capabilityPluginIds,
     ...(eventDirectory ? { eventDirectory } : {}),
+    ...(memorySystem ? { memorySystem } : {}),
   };
 }
 
@@ -61,6 +66,11 @@ export function buildResumeTurnExecutorDeps(
     ...(contextBudget ? { estimator: estimateTokens, contextBudget } : {}),
     ...(hookPipeline ? { hookPipeline } : {}),
     ...(eventBus ? { eventBus } : {}),
+    capabilityPluginIds: resolveTurnCapabilityPluginIds(
+      c.get("pluginRegistry"),
+      emitter.sessionId,
+    ),
+    ...(c.get("memorySystem") ? { memorySystem: c.get("memorySystem") } : {}),
     emitter,
   };
 }

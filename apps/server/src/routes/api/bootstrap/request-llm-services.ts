@@ -13,7 +13,11 @@ export function requestLlmServices(
   return async (c, next) => {
     if (c.get("requestLlmOverridden")) {
       const llmAdapter = c.get("llmAdapter");
-      if (memory) c.set("memorySystem", memory.forRequest(llmAdapter));
+      if (memory)
+        c.set(
+          "memorySystem",
+          memory.forRequest(llmAdapter, c.get("requestMemorySlot")),
+        );
       c.set(
         "compactorRunner",
         createBootstrapCompactorRunner({ ...params, llmAdapter }),

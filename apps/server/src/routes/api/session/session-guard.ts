@@ -150,6 +150,11 @@ export async function withLockedSessionMutation<T>(options: {
   readonly mutate: (session: SessionRecord) => Promise<T>;
 }): Promise<T | Response> {
   return options.sessionLock.withLock(options.sessionId, async () => {
+    // A committed turn may still be refreshing its derived memory. Snapshots,
+    // edits and checkpoint replacement must not race that pending write.
+    await options.c
+      .get("memorySystem")
+      ?.updater.awaitPending?.(options.sessionId);
     const live = await options.store.getSession(options.sessionId);
     if (!live) {
       return options.c.json(

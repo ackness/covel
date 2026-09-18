@@ -178,6 +178,8 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
     readonly updater: {
       updateAfterTurn(params: {
         sessionId: string;
+        turnId?: string;
+        traceId?: string;
         narrativeText: string;
         toolCallSummaries?: readonly string[];
         authoritativeFacts?: {

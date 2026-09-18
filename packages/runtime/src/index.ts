@@ -48,6 +48,7 @@ export {
   isTurnAbortedError,
 } from "./turn-executor/turn-control.js";
 export type { TurnControl } from "./turn-executor/turn-control.js";
+export { schedulePostTurnMemoryUpdate } from "./turn-executor/post-turn-memory.js";
 export { collectExecutionJournal } from "./execution-journal.js";
 export { collectExecutionSuspensions } from "./suspension-artifact.js";
 export type { SuspensionArtifact } from "./suspension-artifact.js";

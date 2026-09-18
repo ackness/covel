@@ -123,11 +123,10 @@ export async function setupPluginTools(
 
   // ── Per-session tool overrides (Phase 2) ──────────────────────
   //
-  // Phase 1 made write-tool `fields` validation soft (warnings in `_text`).
-  // Phase 2 lets the LLM see the world-specific schema directly in the tool
-  // parameters: `prepareToolsForSession(sessionId)` loads the active
-  // CharacterAttributeSchema and rebuilds the character write tools with
-  // strongly-typed `fields` Zod, then caches them per session. The
+  // Advertise the world's field constraints once in each write tool's
+  // description, retaining compact generic parameters. Execution validates
+  // against the current stored schema. Preparation refreshes the per-session
+  // tools before execution so changes in worlds cannot leak between sessions. The
   // `findTool` resolver below checks this cache before falling back to the
   // generic toolMap. Action handlers call `prepareToolsForSession` before
   // every `executeTurn` so the LLM always gets the freshest schema.

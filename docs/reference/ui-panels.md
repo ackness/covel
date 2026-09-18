@@ -88,7 +88,9 @@ session 建立 → GET /api/ui-specs?sessionId=<id>
 > `world-data` 组（groupLabel "世界资料"）汇聚三个 spec：`world-init` 的 `world-overview` / `world-schema`，以及 `living-world-rules` 的 `living-world-rules`（世界规则）。合并为单个 activity-bar tab，内部横向子 Tab 在总览 / 属性 / 世界规则 之间切换。（旧 `world-entries` 子 Tab 已移除：对导入型世界它只是 `world-overview` 已格式化渲染的同一份 dimensions 的原始 JSON 重复；`entries` 的 lorebook/prompt 写入不变，`/debug` Data Explorer 仍可查看。）
 > `character` 组汇聚 `char-creator` 的 character-panel（活角色列表，character-tracker runtime 共享 namespace `characters`，由 `sync-characters` 原子批量写入；底层复用 `create-character` / `update-character`）与 `character-blueprint` 的预设角色面板（世界作者预置的登场角色模板，只读）。前者是当前存档的活状态，后者是导入的只读源；同一批角色导入后会 mirror 成活的 `CharacterRecord`，两个子 Tab 分别呈现"源"与"当前"。
 > `npc-graph/extractor` 的 npc-graph-panel 引用 `GraphCanvas` 组件读取 `nodes` + `edges` 两个 namespace，呈现 force-directed 关系图（react-force-graph-2d 懒加载）。
-> `memory` 是纯 UI 插件（`pluginType: core-plugin`，`trigger.type: manual`）：插件自身不写入 plugin-data，框架的 Memory System (`@covel/memory`) 负责在每轮结束后落 working memory / recall / archival，spec 直接读取这些表。
+> `memory` 是纯 UI 插件（`pluginType: core-plugin`，没有 stage/model，不参与自动执行）：插件自身不写入 plugin-data，框架的 Memory System (`@covel/memory`) 负责在每轮结束后更新核心记忆，并在启用向量后进行 recall / archival 索引，面板读取框架镜像的记忆块。
+
+框架按 `memory-panel` capability 发现宿主，将最近一次提取结果保存到保留 namespace `_memory` 的 `update` key。右侧面板在 `status: failed` 时展示提示和错误详情，成功后自动移除；该状态使用现有 plugin-data hydration/SSE 路径，按 session 隔离，不注入模型记忆块。没有记忆面板宿主时仍记录 trace，但不显示面板提示。
 
 ### 世界文档（框架自持 Tab）
 

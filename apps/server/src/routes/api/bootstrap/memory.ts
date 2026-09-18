@@ -13,6 +13,7 @@ import type { MemoryBlockSchema, RuntimeManifest } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import { createMemoryTools, type ToolModule } from "@covel/tools";
 import { getCachedWorld } from "../../../world-cache.js";
+import { observeMemoryUpdate } from "./memory-observation.js";
 
 export interface CreateBootstrapMemorySystemParams {
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
@@ -29,7 +30,7 @@ export interface CreateBootstrapMemorySystemParams {
     sessionId: string,
     task: () => Promise<T>,
   ) => Promise<T>;
-  readonly preferredMemorySlot?: string;
+  readonly preferredMemorySlot?: string | (() => string);
   readonly resolveModel: (
     manifest: RuntimeManifest,
     apiOverride?: string,
@@ -50,7 +51,7 @@ export interface BootstrapMemorySystem {
   readonly memorySystem: MemorySystem;
   readonly tools: readonly ToolModule[];
   /** Reuse the manager and pending-update queue with this request's model. */
-  forRequest(llmAdapter: LLMAdapter): MemorySystem;
+  forRequest(llmAdapter: LLMAdapter, modelSlot?: string): MemorySystem;
 }
 
 export function createBootstrapMemorySystem({
@@ -66,8 +67,11 @@ export function createBootstrapMemorySystem({
   // Resolve which slot to use for memory LLM calls. Use slot ids here so
   // memory follows the same contract as runtime bindings and player-facing
   // settings instead of reaching into internal preset ids.
-  const resolvedMemorySlot = preferredMemorySlot ?? "plugin";
-  console.log(`[bootstrap] Memory system using slot: ${resolvedMemorySlot}`);
+  const resolveMemorySlot = () =>
+    (typeof preferredMemorySlot === "function"
+      ? preferredMemorySlot()
+      : preferredMemorySlot) ?? "plugin";
+  console.log(`[bootstrap] Memory system using slot: ${resolveMemorySlot()}`);
 
   const memoryPanelPluginId = findMemoryPanelPluginId(manifestCache);
   if (memoryPanelPluginId) {
@@ -149,7 +153,8 @@ export function createBootstrapMemorySystem({
       model?: string;
     }) {
       const response = await adapter.generate({
-        model: resolvedMemorySlot,
+        model: params.model ?? resolveMemorySlot(),
+        signal: AbortSignal.timeout(60_000),
         messages: [
           { role: "system", content: params.systemPrompt },
           ...params.messages.map((m) => ({
@@ -177,7 +182,10 @@ export function createBootstrapMemorySystem({
         blocks: baseBlocks,
         resolveBlocks,
       },
-      updater: { modelSlot: resolvedMemorySlot },
+      updater: {
+        onUpdate: (input, result) =>
+          observeMemoryUpdate(store, memoryPanelPluginId, input, result),
+      },
     },
   );
 
@@ -187,7 +195,7 @@ export function createBootstrapMemorySystem({
   // wrap that injected method so it ALSO kicks a best-effort `ingest(sessionId)`
   // on the same post-commit tick. Ingestion is itself fire-and-forget and never
   // throws, so it cannot block or fail the turn. No-op when vectors are disabled.
-  const memorySystem: MemorySystem = embed
+  const sharedSystem: MemorySystem = embed
     ? withPostTurnIngestion(baseSystem)
     : baseSystem;
 
@@ -197,19 +205,24 @@ export function createBootstrapMemorySystem({
     } recall/archival search`,
   );
 
+  function forRequest(adapter: LLMAdapter, modelSlot?: string): MemorySystem {
+    const requestLlm = createMemoryLlm(adapter);
+    return {
+      ...sharedSystem,
+      updater: {
+        ...sharedSystem.updater,
+        updateAfterTurn: (params) =>
+          sharedSystem.updater.updateAfterTurn(
+            { ...params, modelSlot: modelSlot ?? resolveMemorySlot() },
+            requestLlm,
+          ),
+      },
+    };
+  }
+  const memorySystem = forRequest(llmAdapter);
   return {
     memorySystem,
-    forRequest(adapter) {
-      const requestLlm = createMemoryLlm(adapter);
-      return {
-        ...memorySystem,
-        updater: {
-          ...memorySystem.updater,
-          updateAfterTurn: (params) =>
-            memorySystem.updater.updateAfterTurn(params, requestLlm),
-        },
-      };
-    },
+    forRequest,
     tools: createMemoryTools({
       recall: memorySystem.recall,
       archival: memorySystem.archival,

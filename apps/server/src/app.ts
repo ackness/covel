@@ -252,7 +252,7 @@ const pluginUtils = {
   validateBaseUrl: validateBaseUrlForPlugin,
   fetchWithRetry,
 };
-const preferredMemorySlot = resolvePreferredMemorySlot(ai.slotRegistry);
+const preferredMemorySlot = () => resolvePreferredMemorySlot(ai.slotRegistry);
 
 // ── Bootstrap API ───────────────────────────────────────────────
 // Bundled plugins ship inside the repo / packaged app. The desktop shell

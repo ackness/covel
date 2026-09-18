@@ -127,6 +127,7 @@ describe("TurnExecutor EventBus Bridge", () => {
   });
 
   it("defers post-turn memory ingestion behind completeTurn() and skips it when never invoked (commit barrier)", async () => {
+    let blockContent = "seed";
     const updateAfterTurn = vi.fn().mockResolvedValue({
       updated: true,
       blocksChanged: [],
@@ -134,7 +135,7 @@ describe("TurnExecutor EventBus Bridge", () => {
     const memorySystem: NonNullable<TurnExecutorDeps["memorySystem"]> = {
       manager: {
         loadBlocks: async () => [
-          { label: "persona", content: "seed", updatedAt: "2024-01-01" },
+          { label: "persona", content: blockContent, updatedAt: "2024-01-01" },
         ],
         initializeDefaults: async () => {},
       },
@@ -200,11 +201,15 @@ describe("TurnExecutor EventBus Bridge", () => {
 
     // Successful commit path: the barrier refreshes committed context and
     // fires exactly one ingestion.
+    blockContent = "memory tool committed this turn";
     failed.completeTurn?.();
     failed.completeTurn?.();
     await new Promise((resolve) => setImmediate(resolve));
     expect(updateAfterTurn).toHaveBeenCalledTimes(1);
     expect(updateAfterTurn.mock.calls[0][0].sessionId).toBe("sess-1");
+    expect(updateAfterTurn.mock.calls[0][0].currentBlocks[0].content).toBe(
+      blockContent,
+    );
     expect(updateAfterTurn.mock.calls[0][0].authoritativeFacts).toEqual({
       playerCharacter: {
         id: "player-1",

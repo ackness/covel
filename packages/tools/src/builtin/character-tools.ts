@@ -2,9 +2,9 @@
  * Built-in character management tools.
  *
  * These tools are the canonical way for plugin LLM agents to create and update
- * characters (players, NPCs, companions) in the current session. They write
- * directly to the `characters` table via the injected DataStore and mirror each
- * write to `plugin_data[pluginId][namespace="characters"][key=charId]` so that
+ * characters (players, NPCs, companions) in the current session. They return
+ * buffered character proposals; the commit handler writes the character table
+ * and mirrors to `plugin_data[pluginId][namespace="characters"][key=charId]` so that
  * right-panel specs subscribing to plugin data receive live updates through the
  * existing SSE `plugin-data.changed` channel.
  *
@@ -42,6 +42,7 @@ import {
   buildFieldsZod,
   assertCharacterFields,
   characterTypeSchema,
+  characterFieldsHint,
   formatFields,
   formatFieldValue,
   loadCharacterSchema,
@@ -156,10 +157,11 @@ function createCharacterParametersSchema() {
 function createCreateCharacterTool(
   store: CharacterStore,
   deps: CharacterToolDeps,
+  schema?: CharacterAttributeSchema,
 ): ToolModule {
   return tool({
     name: "create-character",
-    description: CREATE_DESCRIPTION,
+    description: CREATE_DESCRIPTION + characterFieldsHint(schema),
     parameters: createCharacterParametersSchema(),
     execute: async (params, context) => {
       const now = new Date().toISOString();
@@ -251,10 +253,11 @@ function createUpdateCharacterParametersSchema() {
 function createUpdateCharacterTool(
   store: CharacterStore,
   deps: CharacterToolDeps,
+  schema?: CharacterAttributeSchema,
 ): ToolModule {
   return tool({
     name: "update-character",
-    description: UPDATE_DESCRIPTION,
+    description: UPDATE_DESCRIPTION + characterFieldsHint(schema),
     parameters: createUpdateCharacterParametersSchema(),
     execute: async (params, context) => {
       const all = await mergeCharacterViews(store, context);
@@ -361,6 +364,7 @@ interface CharacterWriteOutput {
 function createSyncCharactersTool(
   store: CharacterStore,
   deps: CharacterToolDeps,
+  schema?: CharacterAttributeSchema,
 ): ToolModule {
   const createCharacter = createCreateCharacterTool(store, deps);
   const updateCharacter = createUpdateCharacterTool(store, deps);
@@ -368,7 +372,8 @@ function createSyncCharactersTool(
   return tool({
     name: "sync-characters",
     description:
-      "Atomically submit every explicit character change from this narrative turn. Put new named NPCs in creates and patches for existing character ids in updates. Call once at most; use runtime-done when neither array has changes.",
+      "Atomically submit every explicit character change from this narrative turn. Put new named NPCs in creates and patches for existing character ids in updates. Duplicate creates are returned as unchanged and never overwrite existing profiles; put changes in updates. Correct and resubmit the full batch after a failure; use runtime-done when neither array has changes." +
+      characterFieldsHint(schema),
     parameters: z
       .object({
         creates: z
@@ -390,6 +395,7 @@ function createSyncCharactersTool(
       const proposals: Proposal[] = [];
       const created: Array<Record<string, unknown>> = [];
       const updated: Array<Record<string, unknown>> = [];
+      const unchanged: Array<Record<string, unknown>> = [];
 
       for (const params of creates) {
         const rawResult = await createCharacter.execute(params, {
@@ -397,10 +403,18 @@ function createSyncCharactersTool(
           pendingProposals: [...(context.pendingProposals ?? []), ...proposals],
         });
         const result = getToolContent(rawResult) as CharacterWriteOutput;
-        if (result.success !== true || result.existed === true) {
+        if (result.success !== true) {
           throw new Error(
             result._text ?? `Character ${params.name} could not be created`,
           );
+        }
+        if (result.existed === true) {
+          unchanged.push({
+            characterId: result.characterId,
+            name: result.name,
+            type: result.type,
+          });
+          continue;
         }
         proposals.push(...getPendingProposals(rawResult));
         created.push({
@@ -430,10 +444,11 @@ function createSyncCharactersTool(
 
       return withPendingProposals(
         {
-          _text: `Synchronized ${created.length} new and ${updated.length} existing characters.`,
+          _text: `Synchronized ${created.length} new and ${updated.length} existing characters.${unchanged.length ? ` Duplicate creates left unchanged: ${JSON.stringify(unchanged)}. Put explicit field changes in updates using these ids.` : ""}`,
           success: true,
           created,
           updated,
+          unchanged,
         },
         proposals,
       );
@@ -595,9 +610,10 @@ export function createCharacterTools(
 
 /**
  * Build session write-tool variants. The LLM-facing `fields` schema stays a
- * compact generic object: duplicating a world's complete attribute schema in
- * both create + update definitions can consume thousands of tokens. Execution
- * still loads the authoritative session schema for defaults and validation.
+ * compact generic object; each tool advertises structural field constraints
+ * once in its description. World prose/defaults are not repeated in the create
+ * and update arrays. Execution reloads the authoritative session schema for
+ * defaults and validation, including changes made after tool preparation.
  *
  * Read tools (`list-characters`, `get-character`) are schema-independent so
  * they're not rebuilt here; callers keep using the globally-registered
@@ -606,11 +622,11 @@ export function createCharacterTools(
 export function buildSessionCharacterWriteTools(
   store: CharacterStore,
   deps: CharacterToolDeps,
-  _schema: CharacterAttributeSchema,
+  schema: CharacterAttributeSchema,
 ): readonly ToolModule[] {
   return [
-    createCreateCharacterTool(store, deps),
-    createUpdateCharacterTool(store, deps),
-    createSyncCharactersTool(store, deps),
+    createCreateCharacterTool(store, deps, schema),
+    createUpdateCharacterTool(store, deps, schema),
+    createSyncCharactersTool(store, deps, schema),
   ];
 }

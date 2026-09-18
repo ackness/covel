@@ -97,7 +97,7 @@ describe("llm slots model", () => {
         discoveredSlotIds: ["image", "plugin"],
         savedSlotIds: ["custom-role", "story"],
       }),
-    ).toEqual(["story", "default", "image", "plugin", "custom-role"]);
+    ).toEqual(["story", "default", "image", "plugin", "custom-role", "memory"]);
 
     expect(
       createVisibleSlotIds({

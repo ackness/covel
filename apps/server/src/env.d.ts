@@ -67,6 +67,7 @@ declare module "hono" {
     llmAdapter: LLMAdapter;
     /** True when per-request headers replaced the startup LLM facade. */
     requestLlmOverridden?: boolean;
+    requestMemorySlot?: string;
     /**
      * Narrow gateway facade exposed to function-runtime handlers via
      * `FunctionHandlerContext.gateway`. Set by `bootstrapApi()` when the

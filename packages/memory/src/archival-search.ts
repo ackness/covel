@@ -82,7 +82,7 @@ export function createKeywordArchivalSearcher(
             results.push({
               key: char.name,
               content:
-                `[${char.type}] ${char.name}: ${char.description ?? ""}`.slice(
+                `[${char.type}] ${char.name}: ${JSON.stringify(char.fields ?? {})} ${char.description ?? ""}`.slice(
                   0,
                   500,
                 ),

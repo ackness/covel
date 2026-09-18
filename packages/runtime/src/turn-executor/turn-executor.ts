@@ -991,8 +991,10 @@ async function executeTurnImpl(
       schedulePostTurnMemoryUpdate({
         input,
         turnResult: baseResult,
+        runtimes: activeRuntimes,
         deps,
-        coreMemoryBlocks,
+        // A committed memory tool may have changed a block during this turn.
+        coreMemoryBlocks: await loadCoreMemoryBlocks({ input, deps }),
         sessionContext: committedSessionContext,
       });
     },

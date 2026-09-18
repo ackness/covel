@@ -164,7 +164,7 @@ export interface ApiBootstrapConfig {
    * memory uses the same slot-id contract exposed to runtime bindings and
    * player-facing settings (`memory` → `plugin` → `story` → first text slot).
    */
-  readonly preferredMemorySlot?: string;
+  readonly preferredMemorySlot?: string | (() => string);
   /**
    * Optional per-request middleware inserted AFTER the default dependency
    * injection middleware but BEFORE route handlers execute. Intended for

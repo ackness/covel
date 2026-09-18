@@ -312,6 +312,9 @@
     "suspensionAgoMinutes": "{{count}}m ago",
     "suspensionAgoHours": "{{count}}h ago",
     "suspensionAgoDays": "{{count}}d ago",
+    "memoryUpdateFailed": "Story memory update failed",
+    "memoryUpdateFailedHint": "This turn was saved. Check the memory model assignment and provider settings; memory will be attempted again after the next turn.",
+    "memoryUpdateErrorDetails": "Error details",
     "memoryStoreWarning": "Data lost on restart",
     "worldDataPreflight": {
       "title": "World Data",

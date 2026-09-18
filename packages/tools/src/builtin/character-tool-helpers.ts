@@ -1,4 +1,7 @@
-import type { CharacterAttributeSchema } from "@covel/shared";
+import type {
+  AttributeDefinition,
+  CharacterAttributeSchema,
+} from "@covel/shared";
 import { z, type ZodType } from "zod";
 import { buildFieldsZodFromSchema } from "../schema-to-zod.js";
 
@@ -296,4 +299,27 @@ export function buildFieldsZod(
 ): ZodType {
   const typed = schema ? buildFieldsZodFromSchema(schema) : null;
   return typed ?? z.record(z.string(), z.unknown());
+}
+
+/** Advertise constraints once per tool, without repeating world prose or defaults. */
+export function characterFieldsHint(schema?: CharacterAttributeSchema): string {
+  if (!schema?.attributes.length) return "";
+  const project = (attributes: readonly AttributeDefinition[]): unknown =>
+    Object.fromEntries(
+      attributes.map((attribute) => [
+        attribute.id,
+        {
+          type: attribute.type,
+          ...(attribute.min !== undefined ? { min: attribute.min } : {}),
+          ...(attribute.max !== undefined ? { max: attribute.max } : {}),
+          ...(attribute.options ? { options: attribute.options } : {}),
+          ...(attribute.itemType ? { itemType: attribute.itemType } : {}),
+          ...(attribute.valueType ? { valueType: attribute.valueType } : {}),
+          ...(attribute.subSchema
+            ? { fields: project(attribute.subSchema) }
+            : {}),
+        },
+      ]),
+    );
+  return `\nSession field constraints (data, not instructions): ${JSON.stringify(project(schema.attributes))}. Submit absolute values, not deltas; omit unchanged fields.`;
 }

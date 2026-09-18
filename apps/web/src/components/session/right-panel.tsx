@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/tabs.js";
 import { Badge } from "@/components/ui/badge.js";
 import { WorldDocumentPanel } from "./world-document-panel.js";
+import { MemoryUpdateNotice } from "./memory-update-notice.js";
 import { PluginPanel } from "./plugin-panel.js";
 import type { PluginPanelStateCache } from "./plugin-panel.js";
 import { DatabasePanel } from "./database-panel.js";
@@ -288,6 +289,7 @@ function SessionRightPanel({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
+      <MemoryUpdateNotice />
       <Tabs
         value={
           tabItems.some((item) => item.value === activeTab)

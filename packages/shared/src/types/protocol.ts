@@ -349,6 +349,7 @@ export type CovelEvent =
   | { readonly type: "tool.completed"; readonly payload: CovelEventPayload }
   | { readonly type: "tool.failed"; readonly payload: CovelEventPayload }
   | { readonly type: "llm.calling"; readonly payload: CovelEventPayload }
+  | { readonly type: "memory.updated"; readonly payload: CovelEventPayload }
   | { readonly type: "llm.responded"; readonly payload: CovelEventPayload }
   | { readonly type: "message.completed"; readonly payload: CovelEventPayload }
   | { readonly type: "block.emitted"; readonly payload: CovelEventPayload }
@@ -474,6 +475,7 @@ export const COVEL_EVENT_META = {
   "tool.completed": { forwardToActionStream: true },
   "tool.failed": { forwardToActionStream: true },
   "llm.calling": { forwardToActionStream: true },
+  "memory.updated": { forwardToActionStream: false },
   "llm.responded": { forwardToActionStream: true },
   "message.completed": { forwardToActionStream: true },
   "block.emitted": { forwardToActionStream: true },

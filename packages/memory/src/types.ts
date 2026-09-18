@@ -191,8 +191,13 @@ export interface MemoryManager {
 export type MemoryLLMAdapter = SimpleCompletionAdapter;
 
 export interface MemoryUpdaterConfig {
-  /** Model slot name for the summarizer. Resolution: memory → story. */
+  /** Default model slot for the summarizer; per-call modelSlot takes precedence. */
   readonly modelSlot?: string;
+  /** Observe a settled update inside the session queue, including failures. */
+  readonly onUpdate?: (
+    input: MemoryUpdateInput,
+    result: MemoryUpdateResult,
+  ) => Promise<void>;
   /** Locale for the updater prompt. Default: zh-CN. */
   readonly locale?: string;
   /**
@@ -216,6 +221,18 @@ export interface MemoryUpdateResult {
   readonly updated: boolean;
   readonly blocksChanged: readonly CoreMemoryLabel[];
   readonly error?: string;
+}
+
+export interface MemoryUpdateInput {
+  readonly sessionId: string;
+  readonly turnId?: string;
+  readonly traceId?: string;
+  readonly modelSlot?: string;
+  readonly narrativeText: string;
+  readonly toolCallSummaries?: readonly string[];
+  readonly authoritativeFacts?: MemoryAuthoritativeFacts;
+  readonly currentBlocks: readonly CoreMemoryBlock[];
+  readonly locale?: string;
 }
 
 /**
@@ -250,14 +267,7 @@ export interface MemoryUpdater {
    * the previous turn has not yet finished persisting.
    */
   updateAfterTurn(
-    params: {
-      sessionId: string;
-      narrativeText: string;
-      toolCallSummaries?: readonly string[];
-      authoritativeFacts?: MemoryAuthoritativeFacts;
-      currentBlocks: readonly CoreMemoryBlock[];
-      locale?: string;
-    },
+    params: MemoryUpdateInput,
     llmOverride?: MemoryLLMAdapter,
   ): Promise<MemoryUpdateResult>;
 

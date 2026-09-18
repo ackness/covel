@@ -22,6 +22,7 @@ export type {
   MemoryLLMAdapter,
   MemoryUpdaterConfig,
   MemoryUpdateResult,
+  MemoryUpdateInput,
   MemoryAuthoritativeFacts,
   MemoryUpdater,
   RecallSearchResult,

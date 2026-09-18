@@ -137,6 +137,9 @@ export function createPerRequestLlmMiddleware(
     c.set("llmAdapter", perRequestAdapter);
     c.set("pluginGateway", perRequestPluginGateway);
     c.set("requestLlmOverridden", true);
+    if (slotOverrides?.slotPresetOverrides?.memory) {
+      c.set("requestMemorySlot", "memory");
+    }
     await next();
   };
 }

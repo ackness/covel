@@ -64,6 +64,7 @@ import {
   readWorldPluginSettings,
 } from "./plugin-user-settings.js";
 import { buildResumeTurnExecutorDeps } from "./turn-execution-deps.js";
+import { refreshResumedMemory } from "./post-resume-memory.js";
 
 type Env = {
   Variables: {
@@ -364,11 +365,12 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
           // incarnation and activation set have been accepted.
           await prepareToolsForSession?.(sessionId);
 
+          const resumeDeps = buildResumeTurnExecutorDeps(c, emitter);
           const result = await resumeSuspendedRuntime(
             liveSuspension,
             data,
             effectiveManifest!,
-            buildResumeTurnExecutorDeps(c, emitter),
+            resumeDeps,
             { userSettings },
           );
 
@@ -524,6 +526,12 @@ resumeRoutes.post("/:id/suspensions/:suspensionId/resume", async (c) => {
             );
           }
 
+          await refreshResumedMemory(
+            liveSession,
+            result,
+            effectiveManifest,
+            resumeDeps,
+          );
           return c.json({ result, events });
         });
       },
