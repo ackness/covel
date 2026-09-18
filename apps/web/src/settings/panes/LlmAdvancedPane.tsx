@@ -110,7 +110,10 @@ export function parseNumericParameterOverride(
   return Math.min(max, Math.max(min, value));
 }
 
-export function LlmAdvancedPane({ slotId }: { slotId?: string } = {}) {
+export function LlmAdvancedPane({
+  slotId,
+  catalogRevision,
+}: { slotId?: string; catalogRevision?: string } = {}) {
   const { t } = useTranslation();
   const { state } = useSession();
   const llm = state.llmConfig;
@@ -145,6 +148,7 @@ export function LlmAdvancedPane({ slotId }: { slotId?: string } = {}) {
     effectiveTarget.model,
     effectiveTarget.provider,
     effectiveTarget.protocol,
+    catalogRevision,
   );
   const reasoningProfile = lookup?.reasoning;
   const canPruneReasoningOverride = lookup !== undefined && lookup !== null;

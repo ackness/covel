@@ -8,8 +8,14 @@ export function useModelCapability(
   model: string,
   provider: string,
   protocol: string | undefined,
+  catalogRevision?: string,
 ) {
-  const targetKey = JSON.stringify([model, provider, protocol]);
+  const targetKey = JSON.stringify([
+    model,
+    provider,
+    protocol,
+    catalogRevision,
+  ]);
   const [lookup, setLookup] = useState<{
     targetKey: string;
     result: ModelCapabilityLookupResult | null;

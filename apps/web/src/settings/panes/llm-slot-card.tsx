@@ -26,6 +26,7 @@ import {
 
 interface LlmSlotCardProps {
   slotId: string;
+  catalogRevision?: string;
   slotConfig: Record<string, SlotConfigEntry>;
   serverSlot: LlmSlotInfo | null | undefined;
   allPresets: ReturnType<typeof collectLlmSlotPresetCandidates>;
@@ -42,6 +43,7 @@ interface LlmSlotCardProps {
 
 export function LlmSlotCard({
   slotId,
+  catalogRevision,
   slotConfig,
   serverSlot,
   allPresets,
@@ -64,6 +66,7 @@ export function LlmSlotCard({
     target.model,
     target.provider,
     target.protocol,
+    catalogRevision,
   );
   const {
     provider: effectiveProvider,
@@ -320,7 +323,12 @@ export function LlmSlotCard({
               "Generation parameters (tokens, temperature, reasoning)",
             )}
           </Button>
-          {editingParameters && <LlmAdvancedPane slotId={slotId} />}
+          {editingParameters && (
+            <LlmAdvancedPane
+              slotId={slotId}
+              catalogRevision={catalogRevision}
+            />
+          )}
         </div>
       )}
     </div>

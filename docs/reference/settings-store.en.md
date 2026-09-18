@@ -40,6 +40,8 @@ Hydration and refresh reject ordinary settings snapshots containing secret entri
 
 ## Effective models and capability sources
 
+Initial model-catalog metadata and manual refreshes reload capability data without remounting model settings cards. Uncommitted input and expanded generation controls remain intact; capability displays and generation controls use the refreshed lookup results.
+
 The world-list configuration entry opens Providers directly. Narrow screens show the provider list first, then full-width details with a return action. Each model has one connectivity-test entry in provider details.
 
 Model Roles and Generation share a live role catalogue combining server configuration, plugin runtime and `type: slot` declarations, user settings, and saved bindings and parameter overrides. Custom roles remain editable in both panes, and plugin setting options follow current model configuration. Legacy key/preset links resolve to Providers; composite setting keys resolve to their owning pane. The internal onboarding version is no longer exposed as a general setting.

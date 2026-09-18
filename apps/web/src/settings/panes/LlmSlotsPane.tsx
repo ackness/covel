@@ -291,8 +291,9 @@ export function LlmSlotsPane() {
       )}
       {slots.map((slotId) => (
         <LlmSlotCard
-          key={`${slotId}:${modelDbInfo?.updatedAt ?? ""}`}
+          key={slotId}
           slotId={slotId}
+          catalogRevision={modelDbInfo?.updatedAt ?? undefined}
           slotConfig={slotConfig}
           serverSlot={isConfigured ? llm!.slots[slotId] : null}
           allPresets={allPresets}

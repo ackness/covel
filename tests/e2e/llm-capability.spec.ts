@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Route } from "@playwright/test";
 import { seedBrowserSettings, ONBOARDING_VERSION } from "./helpers/player.js";
 
 test.use({ viewport: { width: 1280, height: 900 } });
@@ -110,6 +110,13 @@ test("model reasoning defaults and role overrides persist independently", async 
 test("frontend plugin models expose persistent generation settings independently of catalog limits", async ({
   page,
 }) => {
+  const metadataRequest = Promise.withResolvers<Route>();
+  let lookups = 0;
+  await page.route(
+    "**/api/model-db",
+    (route) => metadataRequest.resolve(route),
+    { times: 1 },
+  );
   await seedBrowserSettings(page, {
     "ui.onboardedVersion": ONBOARDING_VERSION,
     "ui.locale": "en-US",
@@ -127,8 +134,9 @@ test("frontend plugin models expose persistent generation settings independently
   await page.route("**/api/llm-config", (route) =>
     route.fulfill({ json: { configured: false, providers: [], slots: {} } }),
   );
-  await page.route("**/api/model-db/lookup**", (route) =>
-    route.fulfill({
+  await page.route("**/api/model-db/lookup**", (route) => {
+    lookups += 1;
+    return route.fulfill({
       json: {
         found: true,
         source: "model-database",
@@ -142,7 +150,10 @@ test("frontend plugin models expose persistent generation settings independently
           maxOutputTokens: 4096,
         },
       },
-    }),
+    });
+  });
+  await page.route("**/api/model-db/refresh", (route) =>
+    route.fulfill({ json: { ok: true, count: 2, persisted: true } }),
   );
   await page.goto("/session");
   let dialog = await openModelRoles(page);
@@ -150,7 +161,16 @@ test("frontend plugin models expose persistent generation settings independently
   await role
     .getByRole("button", { name: "Edit Capabilities", exact: true })
     .click();
-  await role.getByPlaceholder("128000", { exact: true }).fill("64000");
+  const contextLimit = role.getByPlaceholder("128000", { exact: true });
+  await contextLimit.fill("64000");
+  const metadata = await metadataRequest.promise;
+  await metadata.fulfill({
+    json: { available: true, count: 1, updatedAt: "2026-09-19T00:00:00.000Z" },
+  });
+  await expect(
+    dialog.getByText("1 models (LiteLLM)", { exact: true }),
+  ).toBeVisible();
+  await expect(contextLimit).toHaveValue("64000");
   await page.keyboard.press("Tab");
   await role.getByRole("button", { name: /Generation parameters/ }).click();
   const output = role.getByRole("spinbutton", { name: "Max Output Tokens" });
@@ -166,6 +186,18 @@ test("frontend plugin models expose persistent generation settings independently
       ),
     )
     .toBe(32768);
+  const previousLookups = lookups;
+  await dialog
+    .getByRole("button", { name: "Update from GitHub", exact: true })
+    .click();
+  await expect(
+    dialog.getByText("2 models (LiteLLM)", { exact: true }),
+  ).toBeVisible();
+  await expect.poll(() => lookups).toBeGreaterThan(previousLookups);
+  await expect(
+    role.getByRole("button", { name: /Generation parameters/ }),
+  ).toHaveAttribute("aria-expanded", "true");
+  await expect(output).toHaveValue("32768");
   await page.keyboard.press("Escape");
   await page.reload();
   dialog = await openModelRoles(page);
