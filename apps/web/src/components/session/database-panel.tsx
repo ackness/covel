@@ -109,6 +109,7 @@ export function DatabasePanel({
   const [tables, setTables] = useState<StateTableEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -131,21 +132,11 @@ export function DatabasePanel({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, refreshKey]);
+  }, [sessionId, refreshKey, refreshVersion]);
 
   const handleRefresh = () => {
-    if (!sessionId) return;
-    setLoading(true);
-    setError(null);
-    listStateTables(sessionId)
-      .then((rows) => {
-        setTables(rows);
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : String(err));
-        setLoading(false);
-      });
+    // Manual and automatic refreshes share the effect's response ownership.
+    setRefreshVersion((version) => version + 1);
   };
 
   const { core, plugins } = useMemo(() => groupTables(tables), [tables]);
