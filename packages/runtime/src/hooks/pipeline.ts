@@ -13,6 +13,7 @@
 import { invokeWithSignal } from "./invoke-with-signal.js";
 import { cloneHookData } from "./hook-data.js";
 import type { EventBus } from "@covel/events";
+import type { TurnEmitter } from "../trace/turn-emitter.js";
 import { HOOK_SEMANTICS } from "./types.js";
 import {
   currentActivePluginIds,
@@ -33,7 +34,7 @@ const ENFORCE_ORDER = { pre: 0, normal: 1, post: 2 } as const;
 
 interface HookPipelineRunOptions {
   readonly eventBus?: EventBus;
-  readonly emitter?: import("../trace/turn-emitter.js").TurnEmitter;
+  readonly emitter?: TurnEmitter;
 }
 
 export class HookPipeline {
@@ -258,7 +259,7 @@ export class HookPipeline {
       // Emit `hook.fired` once per invocation attempt, before the handler runs.
       if (opts?.emitter) {
         const proposalType = extractProposalType(event, payload);
-        await opts.emitter.emit("hook.fired", {
+        await emitHookTrace(opts.emitter, ctx, reg, "hook.fired", {
           event,
           hookName: reg.id,
           pluginId: reg.pluginId ?? null,
@@ -307,7 +308,7 @@ export class HookPipeline {
       });
       if (opts?.emitter) {
         const proposalType = extractProposalType(event, payload);
-        await opts.emitter.emit("hook.aborted", {
+        await emitHookTrace(opts.emitter, ctx, reg, "hook.aborted", {
           event,
           hookName: reg.id,
           pluginId: reg.pluginId ?? null,
@@ -327,7 +328,7 @@ export class HookPipeline {
       const before = payload;
       const after = { ...payload, ...result.replace };
       const proposalType = extractProposalType(event, payload);
-      await opts.emitter.emit("hook.rewrote", {
+      await emitHookTrace(opts.emitter, ctx, reg, "hook.rewrote", {
         event,
         hookName: reg.id,
         pluginId: reg.pluginId ?? null,
@@ -373,29 +374,66 @@ function emitHookEvent(
   eventBus: EventBus | undefined,
   ctx: HookContext,
   subType: string,
-  extra: Record<string, unknown>,
+  extra: { hookId: string; hookPluginId?: string; reason: string },
 ): void {
   if (!eventBus) return;
-  eventBus.emit({
-    id: crypto.randomUUID(),
-    type: "event",
-    topic: "hooks",
-    sessionId: ctx.sessionId,
-    timestamp: new Date().toISOString(),
-    payload: {
-      _subTopic: "hooks",
-      _subType: subType,
+  try {
+    eventBus.emit({
+      id: crypto.randomUUID(),
+      type: "event",
+      topic: "hooks",
+      sessionId: ctx.sessionId,
+      timestamp: new Date().toISOString(),
+      payload: {
+        _subTopic: "hooks",
+        _subType: subType,
+        event: ctx.event,
+        sessionId: ctx.sessionId,
+        turnId: ctx.turnId,
+        // Context identity of the runtime being gated (e.g. the runtime whose
+        // tool is being wrapped by PreToolUse). May differ from `hookPluginId`
+        // below, which identifies the plugin that REGISTERED this hook.
+        pluginId: ctx.pluginId,
+        runtimeId: ctx.runtimeId,
+        ...extra,
+      },
+    });
+  } catch {
+    console.warn("[hook-pipeline] event delivery failed", {
+      type: subType,
       event: ctx.event,
       sessionId: ctx.sessionId,
       turnId: ctx.turnId,
-      // Context identity of the runtime being gated (e.g. the runtime whose
-      // tool is being wrapped by PreToolUse). May differ from `hookPluginId`
-      // below, which identifies the plugin that REGISTERED this hook.
-      pluginId: ctx.pluginId,
       runtimeId: ctx.runtimeId,
-      ...extra,
-    },
-  });
+      hookId: extra.hookId,
+      hookPluginId: extra.hookPluginId,
+    });
+  }
+}
+
+/** Diagnostic failures cannot skip a policy or change its accepted result. */
+async function emitHookTrace(
+  emitter: TurnEmitter,
+  ctx: HookContext,
+  reg: Pick<HookRegistration, "id" | "pluginId">,
+  type: "hook.fired" | "hook.aborted" | "hook.rewrote",
+  payload: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await emitter.emit(type, payload);
+  } catch {
+    // Error text and trace payloads can contain credentials or player content.
+    console.warn("[hook-pipeline] trace delivery failed", {
+      type,
+      event: ctx.event,
+      sessionId: ctx.sessionId,
+      turnId: ctx.turnId,
+      traceId: emitter.traceId,
+      runtimeId: ctx.runtimeId,
+      hookId: reg.id,
+      hookPluginId: reg.pluginId,
+    });
+  }
 }
 
 /**

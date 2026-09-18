@@ -79,22 +79,28 @@ export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
       };
       const createdAt = new Date().toISOString();
 
-      const persist = opts.store
-        .addTraceEvent({
-          id: crypto.randomUUID(),
-          sessionId: opts.sessionId,
-          type,
-          traceId,
-          turnId: opts.turnId,
-          payload: enriched,
-          createdAt,
-        })
-        .catch((err: unknown) => {
-          console.warn(
-            `[turn-emitter] persist failed for type=${type}:`,
-            err instanceof Error ? err.message : String(err),
-          );
-        });
+      // Invoke inside the guard: adapters may throw before returning a promise.
+      // Keep persistence owned by this emit while broadcasting independently.
+      const persist = (async () => {
+        try {
+          await opts.store.addTraceEvent({
+            id: crypto.randomUUID(),
+            sessionId: opts.sessionId,
+            type,
+            traceId,
+            turnId: opts.turnId,
+            payload: enriched,
+            createdAt,
+          });
+        } catch {
+          console.warn("[turn-emitter] persistence failed", {
+            type,
+            sessionId: opts.sessionId,
+            turnId: opts.turnId,
+            traceId,
+          });
+        }
+      })();
 
       if (opts.eventBus) {
         try {
@@ -112,11 +118,13 @@ export function createTurnEmitter(opts: CreateTurnEmitterOptions): TurnEmitter {
               ...enriched,
             },
           });
-        } catch (err) {
-          console.warn(
-            `[turn-emitter] broadcast failed for type=${type}:`,
-            err instanceof Error ? err.message : String(err),
-          );
+        } catch {
+          console.warn("[turn-emitter] broadcast failed", {
+            type,
+            sessionId: opts.sessionId,
+            turnId: opts.turnId,
+            traceId,
+          });
         }
       }
 

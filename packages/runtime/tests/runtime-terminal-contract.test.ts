@@ -131,6 +131,9 @@ const scenarios = [
   "cancel in PostRuntime",
   "invalid story",
   "trace failure",
+  "hook fired trace failure",
+  "hook rewritten trace failure",
+  "hook aborted trace failure",
   "missing runtime",
 ] as const;
 
@@ -220,11 +223,23 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
           const postRuntime = vi.fn(
             async (_context: unknown, payload: unknown) => {
               const { result } = payload as { result: RuntimeResult };
+              if (scenario === "hook aborted trace failure")
+                return { action: "abort" as const, reason: "policy denied" };
+              if (scenario === "hook rewritten trace failure")
+                return {
+                  action: "continue" as const,
+                  replace: {
+                    result: {
+                      ...result,
+                      output: { narrativeOutput: "Rewritten story" },
+                    },
+                  },
+                };
               if (scenario === "cancel in PostRuntime")
                 controller.abort(new Error("host closing"));
               if (scenario === "downgrade")
                 return {
-                  action: "replace" as const,
+                  action: "continue" as const,
                   replace: {
                     result: {
                       ...result,
@@ -236,7 +251,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                 };
               if (scenario === "recover")
                 return {
-                  action: "replace" as const,
+                  action: "continue" as const,
                   replace: {
                     result: {
                       ...result,
@@ -247,7 +262,7 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
                 };
               if (scenario === "invalid story")
                 return {
-                  action: "replace" as const,
+                  action: "continue" as const,
                   replace: {
                     result: { ...result, output: { unrelated: true } },
                   },
@@ -262,6 +277,19 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
           });
           const onRuntimeComplete = vi.fn(async () => {});
           const emit = vi.fn<TurnEmitter["emit"]>(async () => {});
+          const failingHookTrace = {
+            "hook fired trace failure": "hook.fired",
+            "hook rewritten trace failure": "hook.rewrote",
+            "hook aborted trace failure": "hook.aborted",
+          } as const;
+          if (scenario in failingHookTrace)
+            emit.mockImplementation(async (type) => {
+              if (
+                type ===
+                failingHookTrace[scenario as keyof typeof failingHookTrace]
+              )
+                throw new Error("synthetic hook trace failure");
+            });
           if (scenario === "trace failure")
             emit.mockImplementation(async (type) => {
               if (type === "message.completed")
@@ -344,10 +372,15 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
             const status =
               scenario === "success" ||
               scenario === "recover" ||
-              scenario === "trace failure"
+              scenario === "trace failure" ||
+              scenario in failingHookTrace
                 ? "success"
                 : "failed";
             expect(result.status).toBe(status);
+            if (scenario === "hook rewritten trace failure")
+              expect(result.output).toMatchObject({
+                narrativeOutput: "Rewritten story",
+              });
             expect(postRuntime).toHaveBeenCalledTimes(1);
             const terminal = events.filter(
               (event) =>
@@ -383,7 +416,11 @@ describe.each(["turn", "resume"] as const)("%s terminal contract", (entry) => {
             if (status === "success")
               expect(messages[0]![1]).toMatchObject({
                 content:
-                  scenario === "recover" ? "Recovered story" : "Original story",
+                  scenario === "recover"
+                    ? "Recovered story"
+                    : scenario === "hook rewritten trace failure"
+                      ? "Rewritten story"
+                      : "Original story",
                 turnId: "turn",
                 runId: result.runId,
               });

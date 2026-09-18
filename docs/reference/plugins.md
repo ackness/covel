@@ -1262,6 +1262,8 @@ tools:
 
 Hook 的 `match` 谓词与 handler 使用相同的异常隔离规则：过滤器抛错会带注册 Hook 的身份发布 `hook.error`；顺序/first/stream 语义返回 abort，parallel 观察语义记录失败后继续其它 Hook。过滤器返回 false 时不执行 handler，也不发布 `hook.fired`。
 
+Hook 诊断与策略结果分开处理：`hook.fired`、`hook.rewrote`、`hook.aborted` 的 trace 投递失败不会跳过 handler、丢弃改写或再次调用 Hook；`hook.error`、`hook.timeout` 等事件广播失败也不会覆盖原有拒绝或观察语义。框架记录会话、回合、runtime 和注册 Hook 的关联信息，不把投递异常原文、payload 或玩家内容复制到兜底告警。Hook 自身的异常仍按该事件的失败语义处理。
+
 Hook 的 payload 是数据快照：流水线在入口取得副本，`match` 与每个 handler 再分别取得独立副本。原地修改后仅返回 `continue` 不会改变原始输入或后续 Hook；需要改写时显式返回 `replace`。顺序流水线浅合并替换字段，下一 handler 看到已接受的替换。返回值在 handler 完成时复制，保留返回对象后再修改不能改变已接受结果；观察型事件不接受替换。`ctx.activePluginIds` 同样按 handler 复制，取消信号和只读配置访问器仍是上下文能力。
 
 快照保留非枚举字段和 Symbol 字段，包括工具提案、领域事件、对话日志与暂停记录。payload 和替换值可使用普通数据对象、数组、Map、Set、Date、RegExp、ArrayBuffer 及其视图；不接受函数、访问器、未支持的类实例、共享内存或其它能力对象。无法复制的数据按该事件的失败语义处理并发布 `hook.error`，不会退回共享原对象。此机制隔离数据引用，不是同进程插件代码的沙箱，也不能撤销 Hook 自行发起的外部副作用。

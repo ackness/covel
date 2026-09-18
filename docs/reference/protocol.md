@@ -542,6 +542,8 @@ error.occurred        → executionError
 
 ## 七、Debug trace events
 
+内置 `TurnEmitter` 的诊断持久化与广播均为 best-effort：存储接口同步抛错或异步拒绝时仍尝试广播，广播抛错时仍等待已开始的持久化完成。投递失败的兜底告警只包含事件类型、sessionId、turnId 和 traceId，不复制原始异常或 trace 正文。Hook trace 投递失败不改变已接受的策略结果，也不触发重复的 runtime 收尾；诊断记录缺失不代表领域提交失败。
+
 ### Thinking output and continuation
 
 `LLMResponse.reasoningContent` is provider-exposed text or a summary, separate from narrative content. The adapters normalize Chat `reasoning_content`, Responses `output[].summary[].text`, and Anthropic `thinking` blocks. Encrypted/redacted state and signatures are never interpreted as display text. No thinking panel is rendered when the provider returns no readable content.
