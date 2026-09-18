@@ -626,3 +626,11 @@ failure is reported with session id, event id/type and error type; it does not
 log the event payload or exception message, and other subscribers continue.
 Connection recovery and `system.reset` still rebuild from authoritative state;
 a handler warning alone does not change the replay cursor or trigger a retry.
+
+Batch plugin-data notifications are scoped to `(sessionId, pluginId)`, even
+when a single store call writes several sessions. Transactional notifications
+remain buffered until commit and are discarded on rollback.
+
+Browser media-resolution warnings identify the session, media id and HTTP
+status or error type. They omit signed URLs and exception messages so media
+access tokens do not enter diagnostic logs.

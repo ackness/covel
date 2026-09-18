@@ -53,7 +53,11 @@ async function fetchSignedUrl(
   } catch (err: unknown) {
     // AbortError from a stale render is fine — don't spam the console.
     if ((err as { name?: string })?.name !== "AbortError") {
-      console.warn("[media-resolve] media-token fetch failed", err);
+      console.warn("[media-resolve] media-token fetch failed", {
+        sessionId: opts.sessionId,
+        mediaId: ref.id,
+        errorType: err instanceof Error ? err.name : typeof err,
+      });
     }
     return null;
   }
@@ -127,12 +131,12 @@ async function fetchBlobAndCache(
       credentials: "same-origin",
     });
     if (!res.ok) {
-      console.warn(
-        "[media-resolve] blob fetch returned",
-        res.status,
-        ref.id,
-        url,
-      );
+      // Signed URLs and network exception messages can contain credentials.
+      console.warn("[media-resolve] blob fetch returned", {
+        status: res.status,
+        mediaId: ref.id,
+        sessionId: opts.sessionId,
+      });
       return null;
     }
     const blob = await res.blob();
@@ -157,7 +161,11 @@ async function fetchBlobAndCache(
     return { blob };
   } catch (err: unknown) {
     if ((err as { name?: string })?.name !== "AbortError") {
-      console.warn("[media-resolve] blob fetch failed", err);
+      console.warn("[media-resolve] blob fetch failed", {
+        sessionId: opts.sessionId,
+        mediaId: ref.id,
+        errorType: err instanceof Error ? err.name : typeof err,
+      });
     }
     return null;
   }

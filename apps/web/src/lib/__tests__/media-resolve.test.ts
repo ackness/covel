@@ -238,6 +238,55 @@ describe("mediaTokenEndpoint", () => {
 });
 
 describe("resolveMediaSrc", () => {
+  it.each(["status", "network", "authorization"])(
+    "reports %s failures without logging signed URLs or error messages",
+    async (failure) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const signedUrl = "/api/media/test?token=synthetic-private-token";
+      try {
+        const ref = await pngRef();
+        mockFetch(async (url) => {
+          if (failure === "authorization") {
+            return new Response(JSON.stringify({ error: signedUrl }), {
+              status: 403,
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          if (url.startsWith("/api/sessions/")) {
+            return new Response(JSON.stringify({ url: signedUrl }), {
+              headers: { "Content-Type": "application/json" },
+            });
+          }
+          if (failure === "network") throw new TypeError(signedUrl);
+          return new Response(null, { status: 403 });
+        });
+        await expect(
+          resolveMediaSrc(ref, { sessionId: "private-session" }),
+        ).resolves.toMatchObject({ ok: false });
+        expect(warn).toHaveBeenCalledOnce();
+        const logged = warn.mock.calls
+          .flat()
+          .map((value) =>
+            value instanceof Error ? String(value) : JSON.stringify(value),
+          )
+          .join(" ");
+        expect(logged).not.toContain("synthetic-private-token");
+        expect(warn.mock.calls[0]?.[1]).toMatchObject({
+          sessionId: "private-session",
+          mediaId: ref.id,
+          ...(failure === "status"
+            ? { status: 403 }
+            : {
+                errorType:
+                  failure === "authorization" ? "ApiError" : "TypeError",
+              }),
+        });
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
+
   it("uses the server-issued signed URL after authorization", async () => {
     storeSessionToken("s1", "owner-secret");
     const baseRef = await pngRef();

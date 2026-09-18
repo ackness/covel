@@ -79,11 +79,12 @@ export function wrapStoreWithPluginDataEvents(
       if (prop === "setPluginDataBatch") {
         return async (records: readonly PluginDataRecord[]): Promise<void> => {
           await target.setPluginDataBatch(records);
-          // Group by pluginId to emit one event per plugin.
+          // A batch may span sessions; each notification has one audience.
           const byPlugin = new Map<
             string,
             {
               sessionId: string;
+              pluginId: string;
               changes: {
                 namespace: string;
                 key: string;
@@ -93,10 +94,15 @@ export function wrapStoreWithPluginDataEvents(
             }
           >();
           for (const r of records) {
-            let entry = byPlugin.get(r.pluginId);
+            const group = JSON.stringify([r.sessionId, r.pluginId]);
+            let entry = byPlugin.get(group);
             if (!entry) {
-              entry = { sessionId: r.sessionId, changes: [] };
-              byPlugin.set(r.pluginId, entry);
+              entry = {
+                sessionId: r.sessionId,
+                pluginId: r.pluginId,
+                changes: [],
+              };
+              byPlugin.set(group, entry);
             }
             entry.changes.push({
               namespace: r.namespace,
@@ -105,7 +111,7 @@ export function wrapStoreWithPluginDataEvents(
               operation: "set",
             });
           }
-          for (const [pluginId, { sessionId, changes }] of byPlugin) {
+          for (const { pluginId, sessionId, changes } of byPlugin.values()) {
             emitPluginDataChangedEvent(eventBus, pluginId, sessionId, changes);
           }
         };

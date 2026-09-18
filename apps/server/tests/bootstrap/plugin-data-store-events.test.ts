@@ -27,6 +27,51 @@ function pluginDataChangedEmits(emit: ReturnType<typeof vi.fn>): unknown[] {
 }
 
 describe("wrapStoreWithPluginDataEvents", () => {
+  it.each([false, true])(
+    "isolates batch notifications by session and plugin (transaction=%s)",
+    async (transaction) => {
+      const emit = vi.fn();
+      const write = vi.fn(async () => {});
+      const tx = { setPluginDataBatch: write };
+      const base = {
+        ...tx,
+        withTransaction: async (fn: (view: typeof tx) => Promise<void>) =>
+          fn(tx),
+      } as unknown as DataStore;
+      const store = wrapStoreWithPluginDataEvents(base, {
+        emit,
+      } as unknown as EventBus);
+      const records = [
+        { ...makeRecord(), sessionId: "a", key: "first", value: "a1" },
+        { ...makeRecord(), sessionId: "b", key: "private", value: "b1" },
+        { ...makeRecord(), sessionId: "a", key: "second", value: "a2" },
+        { ...makeRecord(), sessionId: "a", pluginId: "other", value: "other" },
+      ];
+      if (transaction) {
+        await store.withTransaction(async (view) => {
+          await view.setPluginDataBatch(records);
+          expect(emit).not.toHaveBeenCalled();
+        });
+      } else {
+        await store.setPluginDataBatch(records);
+      }
+      expect(write).toHaveBeenCalledExactlyOnceWith(records);
+      expect(
+        emit.mock.calls.map(([event]) => ({
+          sessionId: event.sessionId,
+          pluginId: event.payload.pluginId,
+          values: event.payload.changes.map(
+            (change: { value: unknown }) => change.value,
+          ),
+        })),
+      ).toEqual([
+        { sessionId: "a", pluginId: "scene-prompts", values: ["a1", "a2"] },
+        { sessionId: "b", pluginId: "scene-prompts", values: ["b1"] },
+        { sessionId: "a", pluginId: "other", values: ["other"] },
+      ]);
+    },
+  );
+
   it("emits plugin-data.changed for writes made through the transaction view", async () => {
     const emit = vi.fn();
     const eventBus = { emit } as unknown as EventBus;
