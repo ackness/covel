@@ -179,7 +179,10 @@ export function upsertProviderModel(
     (profile) => profile.id === providerId,
   );
   const existingModel = existingProfile?.models.find(
-    (model) => model.modelId === modelId,
+    (model) =>
+      model.modelId === modelId &&
+      model.reasoningEffort === input.reasoningEffort &&
+      (model.name?.trim() || modelId) === (input.modelName?.trim() || modelId),
   );
   if (existingModel) {
     return { profiles: canonicalProfiles, modelRef: existingModel.ref };

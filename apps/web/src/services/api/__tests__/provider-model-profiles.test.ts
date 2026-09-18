@@ -7,6 +7,68 @@ import {
 } from "../provider-model-profiles.js";
 
 describe("provider model profiles", () => {
+  it("keeps same-ID configurations independently addressable and exact additions idempotent", () => {
+    const input = {
+      providerId: "fixture",
+      baseUrl: "https://fixture.invalid",
+      modelId: "qwen3.8-flash",
+    };
+    const off = upsertProviderModel(
+      [],
+      { ...input, reasoningEffort: "disabled" },
+      () => "off",
+    );
+    const on = upsertProviderModel(
+      off.profiles,
+      { ...input, reasoningEffort: "automatic" },
+      () => "on",
+    );
+    const copy = upsertProviderModel(
+      on.profiles,
+      { ...input, reasoningEffort: "automatic", modelName: "Narration" },
+      () => "copy",
+    );
+    const repeat = upsertProviderModel(
+      copy.profiles,
+      { ...input, reasoningEffort: "automatic" },
+      () => "unexpected",
+    );
+    expect(repeat.modelRef).toBe("on");
+    expect(repeat.profiles[0]!.models.map((model) => model.ref)).toEqual([
+      "off",
+      "on",
+      "copy",
+    ]);
+    expect(
+      flattenProviderProfiles(repeat.profiles).map(
+        ({ id, name, model, reasoningEffort }) => ({
+          id,
+          name,
+          model,
+          reasoningEffort,
+        }),
+      ),
+    ).toEqual([
+      {
+        id: "off",
+        name: input.modelId,
+        model: input.modelId,
+        reasoningEffort: "disabled",
+      },
+      {
+        id: "on",
+        name: input.modelId,
+        model: input.modelId,
+        reasoningEffort: "automatic",
+      },
+      {
+        id: "copy",
+        name: "Narration",
+        model: input.modelId,
+        reasoningEffort: "automatic",
+      },
+    ]);
+  });
   it("groups legacy presets by provider and preserves stable model refs", () => {
     const profiles = profilesFromLegacyPresets([
       {

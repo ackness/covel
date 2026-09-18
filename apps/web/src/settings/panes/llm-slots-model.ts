@@ -38,15 +38,8 @@ export function createProviderScopedModelChoices<
   const includesServerBase =
     !!args.serverSlot && args.serverSlot.provider === args.provider;
   return {
-    presets: args.presets.filter(
-      (preset) =>
-        preset.provider === args.provider &&
-        !(
-          includesServerBase &&
-          !preset.isCustom &&
-          preset.model === args.serverSlot?.model
-        ),
-    ),
+    // API IDs are not configuration identities: two presets can differ in reasoning.
+    presets: args.presets.filter((preset) => preset.provider === args.provider),
     includesServerBase,
   };
 }
@@ -138,16 +131,40 @@ export function autoBindDiscoveredSlots(
 export function collectLlmSlotPresetCandidates(
   builtInPresets: readonly Pick<
     PresetSummary,
-    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol" | "capability"
+    | "id"
+    | "name"
+    | "provider"
+    | "model"
+    | "baseUrl"
+    | "protocol"
+    | "capability"
+    | "reasoningEffort"
+    | "parameterOverrides"
   >[],
   customPresets: readonly Pick<
     PresetSummary,
-    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol" | "capability"
+    | "id"
+    | "name"
+    | "provider"
+    | "model"
+    | "baseUrl"
+    | "protocol"
+    | "capability"
+    | "reasoningEffort"
+    | "parameterOverrides"
   >[],
 ): Array<
   Pick<
     PresetSummary,
-    "id" | "name" | "provider" | "model" | "baseUrl" | "protocol" | "capability"
+    | "id"
+    | "name"
+    | "provider"
+    | "model"
+    | "baseUrl"
+    | "protocol"
+    | "capability"
+    | "reasoningEffort"
+    | "parameterOverrides"
   > & {
     readonly isCustom: boolean;
   }
@@ -160,6 +177,8 @@ export function collectLlmSlotPresetCandidates(
       model: p.model,
       baseUrl: p.baseUrl,
       protocol: p.protocol,
+      reasoningEffort: p.reasoningEffort,
+      parameterOverrides: p.parameterOverrides,
       capability: p.capability,
       isCustom: false,
     })),
@@ -170,6 +189,8 @@ export function collectLlmSlotPresetCandidates(
       model: p.model,
       baseUrl: p.baseUrl,
       protocol: p.protocol,
+      reasoningEffort: p.reasoningEffort,
+      parameterOverrides: p.parameterOverrides,
       isCustom: true,
     })),
   ];

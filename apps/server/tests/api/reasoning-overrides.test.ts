@@ -20,7 +20,14 @@ afterEach(() => vi.resetAllMocks());
 function fixture() {
   const bodies: Record<string, unknown>[] = [];
   fetch.mockImplementation(async (_url, init) => {
-    bodies.push(JSON.parse(String(init?.body)));
+    const body = JSON.parse(String(init?.body));
+    bodies.push(body);
+    if (body.stream) {
+      return new Response(
+        'data: {"choices":[{"delta":{"content":"hello"},"finish_reason":null}]}\n\ndata: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+        { headers: { "Content-Type": "text/event-stream" } },
+      );
+    }
     return new Response(
       JSON.stringify({
         choices: [{ message: { content: "{}" }, finish_reason: "stop" }],
@@ -51,6 +58,29 @@ function fixture() {
       }),
     ),
   );
+  app.post("/path/:kind/:slot", async (c) => {
+    const model = c.req.param("slot");
+    const messages = [
+      { role: "user" as const, content: "Continue the story." },
+    ];
+    if (c.req.param("kind") === "function") {
+      return c.json(
+        await c
+          .get("pluginGateway")
+          .generateText({ presetId: model, messages }),
+      );
+    }
+    if (c.req.param("kind") === "stream") {
+      const events = [];
+      for await (const event of c.get("llmAdapter").stream!({
+        model,
+        messages,
+      }))
+        events.push(event);
+      return c.json(events);
+    }
+    return c.json(await c.get("llmAdapter").generate({ model, messages }));
+  });
   const call = (modelDefault?: string, roleOverride?: string) =>
     app.request("/call", {
       method: "POST",
@@ -80,10 +110,65 @@ function fixture() {
         ).toString("base64"),
       },
     });
-  return { call, bodies };
+  return { call, bodies, app };
 }
 
 describe("reasoning settings through the request boundary", () => {
+  it.each(["generate", "stream", "function"])(
+    "uses independent same-ID variants for all roles through %s",
+    async (kind) => {
+      const { app, bodies } = fixture();
+      const headers = {
+        "X-Slot-Config": Buffer.from(
+          JSON.stringify({
+            customPresets: [
+              {
+                id: "thinking-on",
+                name: "Narration",
+                reasoningEffort: "automatic",
+              },
+              {
+                id: "thinking-off",
+                name: "Quick tools",
+                reasoningEffort: "disabled",
+              },
+            ].map((variant) => ({
+              ...variant,
+              provider: "fixture",
+              model: "qwen3.8-flash",
+              baseUrl: "https://provider.example/v1",
+              protocol: "openai-chat-v1",
+            })),
+            slotPresetOverrides: {
+              story: "thinking-on",
+              plugin: "thinking-off",
+              memory: "thinking-on",
+              "custom-role": "thinking-off",
+            },
+          }),
+        ).toString("base64"),
+      };
+      for (const [slot, expected] of [
+        ["story", true],
+        ["plugin", false],
+        ["memory", true],
+        ["custom-role", false],
+      ] as const) {
+        const response = await app.request(`/path/${kind}/${slot}`, {
+          method: "POST",
+          headers,
+        });
+        expect(response.status).toBe(200);
+        if (kind === "stream") expect(await response.text()).toContain("hello");
+        expect(bodies.at(-1)).toMatchObject({
+          model: "qwen3.8-flash",
+          enable_thinking: expected,
+        });
+        expect(bodies.at(-1)).not.toHaveProperty("reasoningEffort");
+      }
+      expect(bodies).toHaveLength(4);
+    },
+  );
   it.each([
     [undefined, undefined, false],
     ["automatic", undefined, true],

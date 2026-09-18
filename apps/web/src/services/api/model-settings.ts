@@ -1,4 +1,8 @@
-import { normalizeProviderKeyMap, providerKeyToId } from "@covel/shared";
+import {
+  isReasoningEffort,
+  normalizeProviderKeyMap,
+  providerKeyToId,
+} from "@covel/shared";
 import {
   PLUGIN_USER_SETTINGS_HEADER_MAX_BYTES,
   PLUGIN_USER_SETTINGS_HEADER_TOO_LARGE_CODE,
@@ -378,6 +382,9 @@ function legacyPresetState(): {
       provider: preset.provider,
       baseUrl: typeof preset.baseUrl === "string" ? preset.baseUrl : "",
       model: preset.model,
+      ...(isReasoningEffort(preset.reasoningEffort)
+        ? { reasoningEffort: preset.reasoningEffort }
+        : {}),
       ...(typeof preset.protocol === "string"
         ? { protocol: preset.protocol }
         : {}),

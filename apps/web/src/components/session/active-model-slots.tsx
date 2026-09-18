@@ -3,7 +3,10 @@ import { useTranslation } from "react-i18next";
 import { Card, CardContent } from "@/components/ui/card.js";
 import { Badge } from "@/components/ui/badge.js";
 import { PingButton } from "@/components/shared/ping-button.js";
-import type { ResolvedSlot } from "@/hooks/use-slot-config.js";
+import {
+  formatSlotModelLabel,
+  type ResolvedSlot,
+} from "@/hooks/use-slot-config.js";
 
 /**
  * Displays the user's configured model slots.
@@ -38,7 +41,7 @@ export function ActiveModelSlots({
     return (
       <div className="flex flex-wrap gap-1.5">
         {slots.map((slot) => {
-          const modelName = slot.preset?.model ?? slot.serverModel ?? "unknown";
+          const modelName = formatSlotModelLabel(slot) ?? "unknown";
           const provider = slot.preset?.provider ?? slot.serverProvider ?? "";
           const tooltip = [slot.label, provider, modelName]
             .filter(Boolean)
@@ -68,8 +71,7 @@ export function ActiveModelSlots({
     <>
       {slots.map((slot) => {
         const modelName = slot.preset?.model ?? slot.serverModel ?? "unknown";
-        const displayName =
-          slot.preset?.name ?? slot.serverModel ?? slot.presetId;
+        const displayName = formatSlotModelLabel(slot) ?? slot.presetId;
         return (
           <Card key={slot.slotId}>
             <CardContent className="p-3 space-y-2">

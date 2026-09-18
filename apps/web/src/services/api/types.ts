@@ -80,6 +80,7 @@ export interface StatePatchRecord {
 }
 
 export interface PresetSummary {
+  reasoningEffort?: import("@covel/shared").ReasoningEffort;
   id: string;
   name: string;
   provider: string;

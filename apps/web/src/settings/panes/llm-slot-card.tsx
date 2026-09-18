@@ -1,3 +1,4 @@
+import { formatModelConfigLabel } from "@/lib/model-config-label.js";
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { Pencil, RotateCw } from "lucide-react";
@@ -191,7 +192,7 @@ export function LlmSlotCard({
         </label>
         <label className="space-y-1">
           <span className="text-[10px] text-muted-foreground">
-            {t("settings.modelId", "Model ID")}
+            {t("settings.modelConfiguration")}
           </span>
           <select
             value={
@@ -223,7 +224,10 @@ export function LlmSlotCard({
             className="w-full bg-background border border-border px-3 py-1.5 text-sm font-mono outline-none focus:ring-1 focus:ring-primary"
           >
             {modelChoices.includesServerBase && serverSlot && (
-              <option value="__base">{serverSlot.model}</option>
+              <option value="__base">
+                {t("settings.useDefault")} ·{" "}
+                {formatModelConfigLabel(serverSlot)}
+              </option>
             )}
             {!modelChoices.includesServerBase &&
               modelChoices.presets.length === 0 && (
@@ -233,7 +237,7 @@ export function LlmSlotCard({
               )}
             {modelChoices.presets.map((preset) => (
               <option key={preset.id} value={preset.id}>
-                {preset.model}
+                {formatModelConfigLabel(preset)}
               </option>
             ))}
           </select>

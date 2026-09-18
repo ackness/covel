@@ -218,7 +218,7 @@ test("older orphaned execution stays before the latest story while an optional t
     const dialog = page.getByRole("dialog");
     const role = dialog.getByRole("group", { name: "plugin", exact: true });
     await role
-      .getByRole("combobox", { name: "模型 ID", exact: true })
+      .getByRole("combobox", { name: "模型配置", exact: true })
       .selectOption("replacement");
     await role
       .getByRole("button", {

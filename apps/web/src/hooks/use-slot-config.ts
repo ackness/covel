@@ -1,3 +1,4 @@
+import { formatModelConfigLabel } from "@/lib/model-config-label.js";
 import { useState, useMemo, useCallback } from "react";
 import { useSetting } from "@/settings/use-settings.js";
 import {
@@ -5,7 +6,7 @@ import {
   getCustomPresets,
   slotBindingId,
   type SlotConfigEntry,
-  type CustomPreset,
+  type ModelParameterOverrides,
   type PresetSummary,
   type LlmConfigResponse,
 } from "@/services/api.js";
@@ -22,6 +23,8 @@ export interface ResolvedSlot {
   serverModel?: string;
   /** Server-configured provider for this slot (from llm.toml). */
   serverProvider?: string;
+  /** Effective saved selection after role overrides; undefined leaves task policy in control. */
+  reasoningEffort?: ModelParameterOverrides["reasoningEffort"];
 }
 
 /** Return the model that requests for this slot will use on this client. */
@@ -33,8 +36,20 @@ export function effectiveSlotModel(
 
 /** Format a runtime-binding option as `<slot> · <effective model>`. */
 export function formatSlotBindingLabel(slot: ResolvedSlot): string {
-  const model = effectiveSlotModel(slot);
+  const model = formatSlotModelLabel(slot);
   return model ? `${slot.slotId} · ${model}` : slot.slotId;
+}
+
+/** Configuration name and effective saved reasoning, without changing the API ID. */
+export function formatSlotModelLabel(slot: ResolvedSlot): string | undefined {
+  const model = effectiveSlotModel(slot);
+  return model
+    ? formatModelConfigLabel({
+        ...slot.preset,
+        model,
+        reasoningEffort: slot.reasoningEffort ?? slot.preset?.reasoningEffort,
+      })
+    : undefined;
 }
 
 function inferClientSlotTag(slotId: string): string {
@@ -53,10 +68,10 @@ export function formatSlotLabel(
 ): string | null {
   if (!slot) return null;
   if (slot.preset) {
-    return `${slot.preset.provider} \u00B7 ${slot.preset.model}`;
+    return `${slot.preset.provider} \u00B7 ${formatSlotModelLabel(slot)}`;
   }
   if (slot.serverModel) {
-    return `${slot.slotId} \u00B7 ${slot.serverModel}`;
+    return `${slot.slotId} \u00B7 ${formatSlotModelLabel(slot)}`;
   }
   return slot.slotId;
 }
@@ -75,6 +90,8 @@ export function useSlotConfig(
   const [slotConfigSnapshot] =
     useSetting<Record<string, SlotConfigEntry>>("llm.slotConfig");
   const [providerProfilesSnapshot] = useSetting<unknown>("llm.providers");
+  const [parameterOverrides] =
+    useSetting<Record<string, ModelParameterOverrides>>("llm.paramOverrides");
   const [legacyPresetsSnapshot] = useSetting<unknown>("llm.customPresets");
 
   const refresh = useCallback(() => setVersion((v) => v + 1), []);
@@ -95,6 +112,8 @@ export function useSlotConfig(
       name: p.name,
       provider: p.provider,
       model: p.model,
+      reasoningEffort: p.reasoningEffort,
+      protocol: p.protocol,
       enabled: true,
       isDefault: false,
       scope: "custom",
@@ -194,8 +213,17 @@ export function useSlotConfig(
       }
     }
 
-    return out;
-  }, [slotConfig, allPresets, serverPresets, llmConfig]);
+    return out.map((slot) => ({
+      ...slot,
+      reasoningEffort:
+        parameterOverrides?.[slot.slotId]?.reasoningEffort ??
+        slot.preset?.reasoningEffort ??
+        slot.preset?.parameterOverrides?.reasoningEffort ??
+        (slot.preset
+          ? undefined
+          : llmConfig?.slots[slot.slotId]?.parameterOverrides?.reasoningEffort),
+    }));
+  }, [slotConfig, allPresets, serverPresets, llmConfig, parameterOverrides]);
 
   return { slotConfig, resolvedSlots, allPresets, resolveSlot, refresh };
 }

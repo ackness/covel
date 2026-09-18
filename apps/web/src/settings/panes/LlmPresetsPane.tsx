@@ -9,6 +9,7 @@ import {
   setSlotConfig,
   upsertProviderModel,
   type ProviderModelProfile,
+  type ProviderModelEntry,
   type ReasoningEffort,
 } from "@/services/api.js";
 import { getBuiltinProviderConnection } from "@covel/shared";
@@ -67,11 +68,15 @@ export function LlmPresetsPane() {
     return catalog.filter(
       (provider) =>
         provider.id.toLowerCase().includes(normalized) ||
-        provider.serverModels.some((model) =>
-          model.model.toLowerCase().includes(normalized),
+        provider.serverModels.some(
+          (model) =>
+            model.model.toLowerCase().includes(normalized) ||
+            model.name.toLowerCase().includes(normalized),
         ) ||
-        provider.localProfile?.models.some((model) =>
-          model.modelId.toLowerCase().includes(normalized),
+        provider.localProfile?.models.some(
+          (model) =>
+            model.modelId.toLowerCase().includes(normalized) ||
+            model.name?.toLowerCase().includes(normalized),
         ),
     );
   }, [catalog, query]);
@@ -171,6 +176,30 @@ export function LlmPresetsPane() {
           : profile,
       ),
     );
+  };
+
+  const duplicateModel = (model: ProviderModelEntry) => {
+    if (!selectedProvider?.localProfile) return;
+    const names = new Set(
+      selectedProvider.localProfile.models.map(
+        (entry) => entry.name || entry.modelId,
+      ),
+    );
+    const stem = t("settings.modelConfigurationCopy", {
+      name: model.name || model.modelId,
+    });
+    let name = stem;
+    let suffix = 2;
+    while (names.has(name)) name = `${stem} ${suffix++}`;
+    const result = upsertProviderModel(profiles, {
+      providerId: selectedProvider.id,
+      baseUrl: selectedProvider.baseUrl,
+      protocol: selectedProvider.protocol,
+      modelId: model.modelId,
+      modelName: name,
+      reasoningEffort: model.reasoningEffort,
+    });
+    commit(result.profiles);
   };
 
   const handleExport = () => {
@@ -278,6 +307,7 @@ export function LlmPresetsPane() {
               provider={selectedProvider}
               onAddModel={() => setModelDialogOpen(true)}
               onPatchLocalProfile={patchLocalProfile}
+              onDuplicateLocalModel={duplicateModel}
               onDeleteLocalModel={(modelRef) => {
                 const profile = selectedProvider.localProfile;
                 if (!profile) return;

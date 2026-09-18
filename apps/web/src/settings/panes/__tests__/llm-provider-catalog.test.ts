@@ -12,6 +12,35 @@ import {
 } from "../llm-provider-catalog.js";
 
 describe("provider catalogue", () => {
+  it("preserves same-ID configurations across export/import and only deduplicates references", () => {
+    const profile = {
+      id: "fixture",
+      name: "Fixture",
+      baseUrl: "https://fixture.invalid",
+      models: [
+        {
+          ref: "off",
+          name: "Quick",
+          modelId: "qwen3.8-flash",
+          reasoningEffort: "disabled",
+        },
+        {
+          ref: "on",
+          name: "Story",
+          modelId: "qwen3.8-flash",
+          reasoningEffort: "automatic",
+        },
+      ],
+    };
+    const exported = JSON.parse(JSON.stringify(profile));
+    expect(
+      sanitizeImportedProfile({
+        ...exported,
+        models: [...exported.models, exported.models[0]],
+      }),
+    ).toEqual(profile);
+  });
+
   it("preserves per-model reasoning defaults and drops invalid imported values", () => {
     const imported = sanitizeImportedProfile({
       id: "fixture",

@@ -1,3 +1,4 @@
+import i18n from "@/i18n/index.js";
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -16,6 +17,7 @@ const modelSettings = vi.hoisted(() => ({
     provider: string;
     baseUrl: string;
     model: string;
+    reasoningEffort?: "disabled" | "automatic";
   }>,
 }));
 
@@ -38,7 +40,8 @@ function preset(id: string, provider: string, model: string) {
   return { id, name: model, provider, baseUrl: "", model };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await i18n.changeLanguage("en-US");
   modelSettings.values.clear();
   modelSettings.slotConfig = { default: { modelRef: "model-a" } };
   modelSettings.customPresets = [preset("model-a", "openai", "gpt-old")];
@@ -48,6 +51,31 @@ beforeEach(() => {
 });
 
 describe("useSlotConfig", () => {
+  it("labels shared model variants and reacts to role overrides without changing the API ID", () => {
+    modelSettings.customPresets = [
+      {
+        ...preset("model-a", "fixture", "qwen3.8-flash"),
+        name: "Story",
+        reasoningEffort: "automatic",
+      },
+    ];
+    const { result, rerender } = renderHook(() => useSlotConfig([]));
+    expect(formatSlotBindingLabel(result.current.resolvedSlots[0]!)).toBe(
+      "default · Story · Thinking on",
+    );
+    expect(effectiveSlotModel(result.current.resolvedSlots[0])).toBe(
+      "qwen3.8-flash",
+    );
+    modelSettings.values.set("llm.paramOverrides", {
+      default: { reasoningEffort: "disabled" },
+    });
+    rerender();
+    expect(formatSlotLabel(result.current.resolvedSlots[0])).toBe(
+      "fixture · Story · Thinking off",
+    );
+    expect(result.current.allPresets[0]!.reasoningEffort).toBe("automatic");
+  });
+
   it("uses the client override in runtime-binding labels", () => {
     const slot = {
       slotId: "plugin",

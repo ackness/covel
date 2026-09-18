@@ -63,7 +63,11 @@ test("model reasoning defaults and role overrides persist independently", async 
   await expect(
     role.getByRole("combobox", { name: "Reasoning effort" }),
   ).toHaveValue("");
-  await expect(role.getByText("Thinking off", { exact: true })).toHaveCount(2);
+  await expect(
+    role
+      .getByText("Thinking off", { exact: true })
+      .and(page.locator(":not(option)")),
+  ).toHaveCount(2);
   await role
     .getByRole("combobox", { name: "Reasoning effort" })
     .selectOption("provider-default");
@@ -96,7 +100,11 @@ test("model reasoning defaults and role overrides persist independently", async 
   await role
     .getByRole("combobox", { name: "Reasoning effort" })
     .selectOption("");
-  await expect(role.getByText("Thinking off", { exact: true })).toHaveCount(2);
+  await expect(
+    role
+      .getByText("Thinking off", { exact: true })
+      .and(page.locator(":not(option)")),
+  ).toHaveCount(2);
 });
 
 test("frontend plugin models expose persistent generation settings independently of catalog limits", async ({

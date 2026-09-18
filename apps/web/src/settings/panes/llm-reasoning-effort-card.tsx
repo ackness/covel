@@ -107,7 +107,10 @@ export function ReasoningEffortCard({
         )}
         {profile?.options.map((option) => (
           <option key={option.value} value={option.value}>
-            {t(`settings.reasoningLevel.${option.value}`)} ({option.value})
+            {t(`settings.reasoningLevel.${option.value}`)}
+            {option.value !== "automatic" && option.value !== "disabled"
+              ? ` (${option.value})`
+              : ""}
           </option>
         ))}
       </select>
@@ -117,7 +120,11 @@ export function ReasoningEffortCard({
         </p>
       )}
       <p className="text-[10px] leading-relaxed text-muted-foreground">
-        {t("settings.reasoningPrecedenceHint")}
+        {t(
+          scope === "model"
+            ? "settings.modelReasoningReuseHint"
+            : "settings.reasoningPrecedenceHint",
+        )}
       </p>
       {profile?.family === "deepseek" && effective !== "disabled" && (
         <p className="border-l-2 border-amber-500/60 pl-2 text-[10px] leading-relaxed text-muted-foreground">

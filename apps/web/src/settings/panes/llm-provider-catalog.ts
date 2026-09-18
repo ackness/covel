@@ -193,7 +193,6 @@ export function sanitizeImportedProfile(
   if (!id) return null;
 
   const seenRefs = new Set<string>();
-  const seenModelIds = new Set<string>();
   const models = profile.models.flatMap(
     (value): ProviderModelProfile["models"] => {
       if (!value || typeof value !== "object" || Array.isArray(value))
@@ -204,11 +203,10 @@ export function sanitizeImportedProfile(
       }
       const ref = model.ref.trim().slice(0, MAX_PROVIDER_ID_LENGTH);
       const modelId = model.modelId.trim().slice(0, MAX_MODEL_ID_LENGTH);
-      if (!ref || !modelId || seenRefs.has(ref) || seenModelIds.has(modelId)) {
+      if (!ref || !modelId || seenRefs.has(ref)) {
         return [];
       }
       seenRefs.add(ref);
-      seenModelIds.add(modelId);
       const name =
         typeof model.name === "string"
           ? model.name.trim().slice(0, MAX_PROVIDER_ID_LENGTH)

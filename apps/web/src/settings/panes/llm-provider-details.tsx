@@ -1,8 +1,9 @@
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2 } from "lucide-react";
+import { Copy, Plus, Trash2 } from "lucide-react";
 import {
   type ModelCapabilityInfo,
   type ProviderModelProfile,
+  type ProviderModelEntry,
   type ReasoningEffort,
 } from "@/services/api.js";
 import { Badge } from "@/components/ui/badge.js";
@@ -24,12 +25,14 @@ export function ProviderDetails({
   onAddModel,
   onPatchLocalProfile,
   onDeleteLocalModel,
+  onDuplicateLocalModel,
   onDeleteLocalProvider,
 }: {
   provider: ProviderCatalogEntry;
   onAddModel: () => void;
   onPatchLocalProfile: (patch: Partial<ProviderModelProfile>) => void;
   onDeleteLocalModel: (modelRef: string) => void;
+  onDuplicateLocalModel: (model: ProviderModelEntry) => void;
   onDeleteLocalProvider: () => void;
 }) {
   const { t } = useTranslation();
@@ -118,7 +121,7 @@ export function ProviderDetails({
         <div className="flex items-center justify-between gap-2">
           <div>
             <h5 className="text-xs font-semibold">
-              {t("settings.modelIds", "Model IDs")}
+              {t("settings.modelConfigurations")}
             </h5>
             <p className="mt-0.5 text-[10px] text-muted-foreground">
               {t(
@@ -140,6 +143,7 @@ export function ProviderDetails({
               provider={provider.provider}
               protocol={model.protocol ?? provider.protocol}
               modelId={model.model}
+              name={model.name}
               presetId={model.id}
               capability={model.capability}
               source="server"
@@ -151,9 +155,18 @@ export function ProviderDetails({
               provider={provider.provider}
               protocol={localProfile.protocol ?? provider.protocol}
               modelId={model.modelId}
+              name={model.name}
               presetId={model.ref}
               source="local"
               reasoningEffort={model.reasoningEffort}
+              onNameChange={(name) =>
+                onPatchLocalProfile({
+                  models: localProfile.models.map((entry) =>
+                    entry.ref === model.ref ? { ...entry, name } : entry,
+                  ),
+                })
+              }
+              onDuplicate={() => onDuplicateLocalModel(model)}
               onReasoningChange={(reasoningEffort) =>
                 onPatchLocalProfile({
                   models: localProfile.models.map((entry) =>
@@ -182,31 +195,50 @@ function ProviderModelRow({
   provider,
   protocol,
   modelId,
+  name,
   presetId,
   source,
   capability,
   onDelete,
   reasoningEffort,
   onReasoningChange,
+  onNameChange,
+  onDuplicate,
 }: {
   provider: string;
   protocol: string;
   modelId: string;
+  name?: string;
   presetId: string;
   source: "server" | "local";
   capability?: ModelCapabilityInfo;
   onDelete?: () => void;
   reasoningEffort?: ReasoningEffort;
   onReasoningChange?: (value: ReasoningEffort | undefined) => void;
+  onNameChange?: (value: string) => void;
+  onDuplicate?: () => void;
 }) {
   const { t } = useTranslation();
+  const nameDraft = useSettingDraft(name ?? "", presetId);
   return (
-    <div className="space-y-2 px-2.5 py-2">
+    <div
+      role="group"
+      aria-label={name || modelId}
+      className="space-y-2 px-2.5 py-2"
+    >
       <div className="flex min-w-0 items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="truncate font-mono text-xs" title={modelId}>
-            {modelId}
+            {name || modelId}
           </div>
+          {name && name !== modelId && (
+            <div
+              className="truncate font-mono text-[10px] text-muted-foreground"
+              title={modelId}
+            >
+              {modelId}
+            </div>
+          )}
           <ModelCapabilitySummary
             provider={provider}
             modelId={modelId}
@@ -219,6 +251,17 @@ function ProviderModelRow({
             ? t("settings.fromLlmToml", "llm.toml")
             : t("settings.localModel", "Local model")}
         </Badge>
+        {onDuplicate && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={onDuplicate}
+            aria-label={t("settings.duplicateModelConfiguration")}
+            title={t("settings.duplicateModelConfiguration")}
+          >
+            <Copy className="h-3 w-3" />
+          </Button>
+        )}
         {onDelete && (
           <Button
             variant="ghost"
@@ -240,7 +283,33 @@ function ProviderModelRow({
                 : "settings.reasoningTaskDefault",
             )}
           </summary>
-          <div className="mt-2">
+          <div className="mt-2 space-y-2">
+            {onNameChange && (
+              <label className="block space-y-1 text-xs">
+                <span>{t("settings.modelConfigurationName")}</span>
+                <input
+                  value={nameDraft.draft}
+                  placeholder={modelId}
+                  maxLength={100}
+                  aria-invalid={nameDraft.conflict}
+                  onChange={(event) => nameDraft.setDraft(event.target.value)}
+                  onBlur={() => {
+                    if (
+                      !nameDraft.conflict &&
+                      nameDraft.draft.trim() !== (name ?? "")
+                    )
+                      onNameChange(nameDraft.draft.trim());
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                  className="w-full border border-border bg-background px-2 py-1.5 outline-none focus:ring-1 focus:ring-primary"
+                />
+              </label>
+            )}
+            {nameDraft.conflict && (
+              <SettingsDraftConflict onReload={nameDraft.reset} />
+            )}
             <ModelReasoningSettings
               model={modelId}
               provider={provider}

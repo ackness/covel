@@ -311,6 +311,7 @@ describe("LLM settings regressions", () => {
         onAddModel={vi.fn()}
         onPatchLocalProfile={onPatchLocalProfile}
         onDeleteLocalModel={vi.fn()}
+        onDuplicateLocalModel={vi.fn()}
         onDeleteLocalProvider={vi.fn()}
       />,
     );
@@ -356,6 +357,7 @@ describe("LLM settings regressions", () => {
         onAddModel={vi.fn()}
         onPatchLocalProfile={patch}
         onDeleteLocalModel={vi.fn()}
+        onDuplicateLocalModel={vi.fn()}
         onDeleteLocalProvider={vi.fn()}
       />
     );
