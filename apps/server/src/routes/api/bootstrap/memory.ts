@@ -160,7 +160,10 @@ export function createBootstrapMemorySystem({
     }) {
       const response = await adapter.generate({
         model: params.model ?? resolveMemorySlot(),
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(120_000),
+        // Fact extraction needs no extended reasoning. Explicit slot/model
+        // settings still take precedence over this request default.
+        defaults: { reasoningEffort: "disabled" },
         messages: [
           { role: "system", content: params.systemPrompt },
           ...params.messages.map((m) => ({

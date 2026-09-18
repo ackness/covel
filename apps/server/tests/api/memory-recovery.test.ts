@@ -124,34 +124,84 @@ describe("durable core-memory recovery", () => {
     expect(await pending(store)).toHaveLength(0);
     expect(await store.listMessages("s")).toHaveLength(0);
   });
-  it("keeps work pending when the final block transaction fails", async () => {
-    const store = await fixture();
-    await leavePending(store);
-    const complete = vi
-      .fn()
-      .mockResolvedValue({ content: '{"story_state":"Recovered."}' });
-    const broken: DataStore = {
-      ...store,
-      withTransaction: (fn) =>
-        store.withTransaction((tx) =>
-          fn({
-            ...tx,
-            upsertWorkingMemory: async () => {
-              throw new Error("disk unavailable");
-            },
+  it.each(["provider-timeout", "invalid-json"])(
+    "does not replay a settled %s failure while the next turn waits",
+    async (failure) => {
+      const store = await fixture();
+      await leavePending(store);
+      const started = Promise.withResolvers<void>();
+      const released = Promise.withResolvers<void>();
+      const complete = vi.fn(async () => {
+        started.resolve();
+        await released.promise;
+        if (failure === "provider-timeout") {
+          throw Object.assign(new Error("The operation timed out"), {
+            retriable: false,
+          });
+        }
+        return { content: "invalid JSON" };
+      });
+      const memory = boot(store, { complete });
+      const update = memory.updater.updateAfterTurn({
+        sessionId: "s",
+        turnId: "turn",
+        narrativeText: "The gate opened.",
+        currentBlocks: [],
+      });
+      await started.promise;
+      const nextTurn = memory.updater.awaitPending("s");
+      released.resolve();
+      expect(await update).toHaveProperty("error");
+      await nextTurn;
+      expect(complete).toHaveBeenCalledOnce();
+      expect(await pending(store)).toHaveLength(0);
+      await boot(store, { complete }).updater.awaitPending("s");
+      expect(complete).toHaveBeenCalledOnce();
+    },
+  );
+  it.each(["live", "recovery"])(
+    "keeps %s work pending when the final block transaction fails",
+    async (path) => {
+      const store = await fixture();
+      await leavePending(store);
+      const complete = vi
+        .fn()
+        .mockResolvedValue({ content: '{"story_state":"Recovered."}' });
+      const broken: DataStore = {
+        ...store,
+        withTransaction: (fn) =>
+          store.withTransaction((tx) =>
+            fn({
+              ...tx,
+              upsertWorkingMemory: async () => {
+                throw new Error("disk unavailable");
+              },
+            }),
+          ),
+      };
+      const memory = boot(broken, { complete });
+      if (path === "live") {
+        expect(
+          await memory.updater.updateAfterTurn({
+            sessionId: "s",
+            turnId: "turn",
+            narrativeText: "The gate opened.",
+            currentBlocks: [],
           }),
-        ),
-    };
-    await expect(
-      boot(broken, { complete }).updater.awaitPending("s"),
-    ).rejects.toThrow("disk unavailable");
-    expect(await pending(store)).toHaveLength(1);
-    expect(
-      await store.getWorkingMemory("s", "story", "story_state"),
-    ).toBeNull();
-    await boot(store, { complete }).updater.awaitPending("s");
-    expect(await pending(store)).toHaveLength(0);
-  });
+        ).toMatchObject({ error: "disk unavailable", persistenceFailed: true });
+      } else {
+        await expect(memory.updater.awaitPending("s")).rejects.toThrow(
+          "disk unavailable",
+        );
+      }
+      expect(await pending(store)).toHaveLength(1);
+      expect(
+        await store.getWorkingMemory("s", "story", "story_state"),
+      ).toBeNull();
+      await boot(store, { complete }).updater.awaitPending("s");
+      expect(await pending(store)).toHaveLength(0);
+    },
+  );
   it("serializes separate memory systems through the host lock", async () => {
     const store = await fixture();
     await leavePending(store);

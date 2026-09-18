@@ -82,6 +82,24 @@ export function createMemoryRecovery(
         kind: "core-update",
         sessionId,
       });
+    const extract: MemoryUpdater["updateAfterTurn"] = async (
+      input,
+      override,
+    ) => {
+      const result = await updater.updateAfterTurn(input, override ?? llm);
+      if (result.error && !result.persistenceFailed && input.turnId) {
+        // A settled provider/parse failure is terminal on both live and
+        // recovery paths. Leaving it pending would immediately repeat the
+        // same failed request when the next turn waits for memory.
+        await store.deletePluginData(
+          input.sessionId,
+          OWNER,
+          NAMESPACE,
+          input.turnId,
+        );
+      }
+      return result;
+    };
     return {
       async stageAfterTurn(tx, input) {
         if (!input.turnId)
@@ -101,9 +119,9 @@ export function createMemoryRecovery(
       },
       updateAfterTurn(input, override) {
         return tracked(input.sessionId, () =>
-          updater.updateAfterTurn(
+          extract(
             { ...input, modelSlot: input.modelSlot ?? modelSlot() },
-            override ?? llm,
+            override,
           ),
         );
       },
@@ -121,7 +139,7 @@ export function createMemoryRecovery(
             const input = inputSchema.parse(row.value);
             if (input.turnId !== row.key)
               throw new Error("Memory recovery scope mismatch");
-            const result = await updater.updateAfterTurn(
+            const result = await extract(
               {
                 ...input,
                 sessionId,
@@ -131,17 +149,7 @@ export function createMemoryRecovery(
               },
               llm,
             );
-            if (result.error) {
-              if (result.persistenceFailed) throw new Error(result.error);
-              // Provider failure is terminal and already observed by the host.
-              // Do not replay an older failed narrative after newer turns.
-              await store.deletePluginData(
-                sessionId,
-                OWNER,
-                NAMESPACE,
-                row.key,
-              );
-            }
+            if (result.persistenceFailed) throw new Error(result.error);
           }
         });
       },
