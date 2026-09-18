@@ -115,8 +115,8 @@ export function buildMessageHistoryWithSummaries(
  * Insert Author's Note bundles into a message array.
  *
  * Each bundle is placed before `messages[messages.length - depth]`. When
- * `depth <= 0` or `depth >= messages.length`, the bundle is appended at
- * the end (behaving like a post-history instruction). The returned array
+ * `depth <= 0`, the bundle is appended at the end. A depth at least the
+ * message count prepends it before the history. The returned array
  * is a new copy — the input is never mutated.
  */
 export function insertAuthorsNotes(
