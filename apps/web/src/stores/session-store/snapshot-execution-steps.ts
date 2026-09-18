@@ -1,3 +1,8 @@
+import {
+  appendReasoningStep,
+  mergeReasoning,
+  reasoningAction,
+} from "./reasoning.js";
 import type { SessionExecutionStatus, SnapshotTraceEvent } from "@covel/shared";
 import { toExecutionStepStatus } from "./execution-steps.js";
 import {
@@ -44,6 +49,16 @@ export function buildSnapshotExecutionSteps(
       if (pending.length) seededAttempts.add(event.turnId);
       for (const step of pending)
         if (!byKey.has(stepKey(step))) byKey.set(stepKey(step), step);
+    }
+    const reasoning = reasoningAction(
+      event.type,
+      event.payload as Record<string, unknown>,
+      event.turnId,
+      event.timestamp,
+    );
+    if (reasoning) {
+      const key = `${reasoning.turnId}|${reasoning.runtimeId}`;
+      byKey.set(key, appendReasoningStep(byKey.get(key), reasoning));
     }
     if (!lifecycleTypes.has(event.type)) continue;
     const payload = event.payload as Record<string, unknown>;
@@ -119,6 +134,10 @@ export function reconcileExecutionSteps(
     steps.set(stepKey(step), {
       ...previous,
       ...step,
+      ...(step.status === "llm" && previous ? { status: previous.status } : {}),
+      ...(previous?.reasoning || step.reasoning
+        ? { reasoning: mergeReasoning(previous?.reasoning, step.reasoning) }
+        : {}),
       ...(previous?.attemptStatus === "committed"
         ? { attemptStatus: "committed" }
         : {}),

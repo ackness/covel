@@ -149,6 +149,7 @@ export function createSubscriptionEventHandler(
       case "plugin-data.changed": {
         reducePluginDataChanged(options.dispatch, event.payload ?? {});
         if (containsTerminalBackgroundJob(event.payload ?? {})) {
+          options.onReset();
           const actionId = event.id
             ? `background:${event.id}`
             : `background:${crypto.randomUUID()}`;
@@ -181,6 +182,9 @@ export function createSubscriptionEventHandler(
         const step = buildJobStatusExecutionStep(payload, existing);
         if (step) {
           options.dispatch({ type: "UPSERT_EXECUTION_STEP", step });
+          // Detached calls finish outside the action stream. Recover their traces.
+          if (["completed", "failed", "skipped"].includes(step.status))
+            options.onReset();
         }
         break;
       }

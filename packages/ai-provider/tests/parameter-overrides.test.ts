@@ -221,7 +221,7 @@ describe("provider parameter overrides", () => {
     const body = JSON.parse(
       (vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string,
     ) as Record<string, unknown>;
-    expect(body.reasoning).toEqual({ effort: "high" });
+    expect(body.reasoning).toEqual({ effort: "high", summary: "auto" });
     expect(body).not.toHaveProperty("reasoning_effort");
   });
 

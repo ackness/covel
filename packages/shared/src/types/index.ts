@@ -23,6 +23,7 @@ export type {
   LLMContentPart,
   LLMMessageContent,
   LLMMessage,
+  LLMProviderContinuation,
   LLMToolCall,
   LLMUsageSummary,
   LLMResponse,

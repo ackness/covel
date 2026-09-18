@@ -58,7 +58,10 @@ export function createMetadataSanitizer(
     for (const [k, v] of Object.entries(meta)) {
       if (!protectedKeys.has(k)) sanitized[k] = v;
     }
-    if (readReasoningEffort(meta) === "provider-default") {
+    const selection = readReasoningEffort(meta);
+    // Explicit UI selections own the budget too; Qwen rejects budget + effort.
+    if (selection) delete sanitized.thinking_budget;
+    if (selection === "provider-default") {
       // This is an explicit opt-out, not inheritance from a lower layer.
       delete sanitized.enable_thinking;
       delete sanitized.thinking;

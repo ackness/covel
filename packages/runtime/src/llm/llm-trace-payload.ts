@@ -94,6 +94,9 @@ export function buildLlmRespondedSuccessPayload(
     runtimeId: input.runtimeId,
     pluginId: input.pluginId,
     text: input.response.content ?? "",
+    ...(input.response.reasoningContent
+      ? { reasoningContent: input.response.reasoningContent }
+      : {}),
     toolCalls: input.response.toolCalls,
     usage: input.response.usage,
     finishReason: input.response.finishReason,

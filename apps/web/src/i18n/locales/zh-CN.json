@@ -110,6 +110,8 @@
     "getStarted": "开始使用"
   },
   "session": {
+    "reasoningContent": "思考内容",
+    "reasoningContentHint": "模型返回的思考文本或摘要，按调用顺序展示。",
     "config": "工作室配置",
     "status": "会话状态",
     "providers": "激活的模型",
@@ -937,6 +939,8 @@
     "modelIdsPerLineHint": "每行输入一个模型 ID；空行和重复项会自动忽略。",
     "capabilityEstimatedShort": "使用协议基础能力",
     "reasoningEffort": "思考强度",
+    "reasoningBudget": "预算 {{count}} tokens",
+    "reasoningBudgetHint": "这些档位是应用的思考预算预设，并非模型原生档位；实际思考长度可短于预算。",
     "reasoningEffortHint": "已按 {{family}} 的接口规则列出当前模型支持的档位。",
     "reasoningUnavailable": "尚未识别到可调节的思考档位，可以继承设置或选择服务商默认。",
     "deepseekReasoningSamplingHint": "DeepSeek 开启思考时会忽略温度、Top P、频率惩罚和存在惩罚。",

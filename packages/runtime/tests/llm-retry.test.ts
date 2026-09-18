@@ -966,3 +966,62 @@ beforeEach(() => {
 afterEach(() => {
   warnSpy.mockRestore();
 });
+
+describe("thinking stream activity", () => {
+  it("counts reasoning as first output and retains its continuation without mixing it into narrative", async () => {
+    vi.useFakeTimers();
+    try {
+      const providerContinuation = {
+        protocol: "anthropic-messages-v1",
+        model: "fixture",
+        items: [{ type: "thinking", thinking: "summary", signature: "opaque" }],
+      };
+      const llm = createScriptedStreamLLM([
+        {
+          events: [
+            { type: "reasoning-delta", reasoningDelta: "summary" },
+            { delay: 100 },
+            { type: "text-delta", textDelta: "answer" },
+            {
+              type: "done",
+              finishReason: "stop",
+              reasoningContent: "summary",
+              providerContinuation,
+            },
+          ],
+        },
+      ]);
+      const emitter = makeEmitterSpy();
+      const onDelta = vi.fn();
+      const pending = streamLLMWithRetry({
+        llm,
+        messages: baseMessages,
+        policy: {
+          maxRetries: 0,
+          firstTokenTimeoutMs: 50,
+          callTimeoutMs: 500,
+          loopDetectionThreshold: 3,
+        },
+        deadline: Date.now() + 1000,
+        emitter,
+        onDelta,
+      });
+      await vi.advanceTimersByTimeAsync(150);
+      const result = await pending;
+      expect(llm.attempts).toBe(1);
+      expect(result.response).toMatchObject({
+        content: "answer",
+        reasoningContent: "summary",
+        providerContinuation,
+      });
+      expect(onDelta.mock.calls).toEqual([["answer"]]);
+      const trace = emitter.events.find(
+        (event) => event.type === "llm.responded",
+      )!.payload;
+      expect(trace.reasoningContent).toBe("summary");
+      expect(trace).not.toHaveProperty("providerContinuation");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

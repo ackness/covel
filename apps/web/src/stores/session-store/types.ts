@@ -20,6 +20,14 @@ export interface StreamMessage {
   block?: Record<string, unknown>;
 }
 
+export interface ReasoningEntry {
+  id: string;
+  content: string;
+  timestamp: string;
+  sequence?: number;
+  model?: string;
+}
+
 /**
  * Aggregated runtime status — ONE row per (turnId, runtimeId).
  *
@@ -36,6 +44,8 @@ export interface StreamMessage {
  * cleanly. That is what we adopt here to keep chips from getting stuck.
  */
 export interface ExecutionStep {
+  /** Provider-exposed reasoning, one entry per completed model call. */
+  reasoning?: readonly ReasoningEntry[];
   runtimeId: string;
   pluginId: string;
   status:
@@ -296,6 +306,13 @@ export type SessionAction =
         packageName: string;
         data?: unknown;
       }>;
+    }
+  | {
+      type: "APPEND_REASONING";
+      turnId: string;
+      runtimeId: string;
+      pluginId: string;
+      entry: ReasoningEntry;
     }
   | { type: "UPSERT_EXECUTION_STEP"; step: ExecutionStep }
   | {

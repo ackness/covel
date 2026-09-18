@@ -145,7 +145,7 @@ export type ReasoningProviderFamily =
 
 export interface ReasoningEffortProfile {
   family: ReasoningProviderFamily;
-  options: Array<{ value: ReasoningEffort }>;
+  options: Array<{ value: ReasoningEffort; thinkingBudgetTokens?: number }>;
   defaultValue?: ReasoningEffort;
 }
 

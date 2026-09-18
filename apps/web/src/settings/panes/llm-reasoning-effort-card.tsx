@@ -31,8 +31,16 @@ export function ReasoningEffortCard({
     !profile?.options.some((option) => option.value === override);
   const displayValue = (value: ReasoningEffort | undefined) =>
     value
-      ? t(`settings.reasoningLevel.${value}`)
+      ? `${t(`settings.reasoningLevel.${value}`)}${budgetLabel(value)}`
       : t("settings.reasoningTaskDefault");
+  const budgetLabel = (value: ReasoningEffort) => {
+    const budget = profile?.options.find(
+      (option) => option.value === value,
+    )?.thinkingBudgetTokens;
+    return budget === undefined
+      ? ""
+      : ` · ${t("settings.reasoningBudget", { count: budget })}`;
+  };
 
   return (
     <div className="space-y-3 border border-border p-3 md:col-span-2">
@@ -108,12 +116,21 @@ export function ReasoningEffortCard({
         {profile?.options.map((option) => (
           <option key={option.value} value={option.value}>
             {t(`settings.reasoningLevel.${option.value}`)}
-            {option.value !== "automatic" && option.value !== "disabled"
-              ? ` (${option.value})`
-              : ""}
+            {option.thinkingBudgetTokens !== undefined
+              ? budgetLabel(option.value)
+              : option.value !== "automatic" && option.value !== "disabled"
+                ? ` (${option.value})`
+                : ""}
           </option>
         ))}
       </select>
+      {profile?.options.some(
+        (option) => option.thinkingBudgetTokens !== undefined,
+      ) && (
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
+          {t("settings.reasoningBudgetHint")}
+        </p>
+      )}
       {unsupported && (
         <p role="alert" className="text-xs text-amber-600 dark:text-amber-400">
           {t("settings.reasoningUnsupported")}

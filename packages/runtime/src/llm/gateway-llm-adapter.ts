@@ -1,3 +1,4 @@
+import type { LLMProviderContinuation } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 /**
  * Bridge adapter: @covel/ai-provider gateway → LLMAdapter interface.
@@ -112,6 +113,7 @@ export interface GatewayLike {
         toolCalls?: Array<{ id: string; name: string; arguments: string }>;
         toolCallId?: string;
         reasoningContent?: string;
+        providerContinuation?: LLMProviderContinuation;
       }>;
       tools?: Array<{
         type: "function";
@@ -143,6 +145,7 @@ export interface GatewayLike {
     usage: LLMUsageSummary;
     toolCalls?: Array<{ id: string; name: string; arguments: string }>;
     reasoningContent?: string;
+    providerContinuation?: LLMProviderContinuation;
   }>;
 
   streamText?(
@@ -154,6 +157,7 @@ export interface GatewayLike {
         toolCalls?: Array<{ id: string; name: string; arguments: string }>;
         toolCallId?: string;
         reasoningContent?: string;
+        providerContinuation?: LLMProviderContinuation;
       }>;
       tools?: Array<{
         type: "function";
@@ -181,11 +185,13 @@ export interface GatewayLike {
   ): AsyncIterable<{
     type: string;
     textDelta?: string;
+    reasoningDelta?: string;
     finishReason?: string;
     id?: string;
     name?: string;
     arguments?: string;
     reasoningContent?: string;
+    providerContinuation?: LLMProviderContinuation;
     usage?: LLMUsageSummary;
   }>;
 }
@@ -317,6 +323,9 @@ export function createGatewayAdapter(
               ? "length"
               : "stop",
         usage: result.usage,
+        ...(result.providerContinuation
+          ? { providerContinuation: result.providerContinuation }
+          : {}),
         ...(result.reasoningContent
           ? { reasoningContent: result.reasoningContent }
           : {}),
@@ -366,6 +375,14 @@ export function createGatewayAdapter(
       )) {
         if (event.type === "text-delta" && event.textDelta !== undefined) {
           yield { type: "text-delta" as const, textDelta: event.textDelta };
+        } else if (
+          event.type === "reasoning-delta" &&
+          event.reasoningDelta !== undefined
+        ) {
+          yield {
+            type: "reasoning-delta",
+            reasoningDelta: event.reasoningDelta,
+          };
         } else if (event.type === "tool-call" && event.id && event.name) {
           yield {
             type: "tool-call" as const,
@@ -377,6 +394,9 @@ export function createGatewayAdapter(
           yield {
             type: "done" as const,
             finishReason: event.finishReason ?? "stop",
+            ...(event.providerContinuation
+              ? { providerContinuation: event.providerContinuation }
+              : {}),
             ...(event.reasoningContent
               ? { reasoningContent: event.reasoningContent }
               : {}),
@@ -429,6 +449,9 @@ function toGatewayMessages(
 ) {
   return messages.map((msg) => ({
     role: msg.role,
+    ...(msg.providerContinuation
+      ? { providerContinuation: msg.providerContinuation }
+      : {}),
     content: msg.content,
     ...(msg.name ? { name: msg.name } : {}),
     ...(msg.toolCallId ? { toolCallId: msg.toolCallId } : {}),

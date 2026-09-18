@@ -110,6 +110,8 @@
     "getStarted": "Get Started"
   },
   "session": {
+    "reasoningContent": "Thinking",
+    "reasoningContentHint": "Reasoning text or summaries returned by the model, in call order.",
     "config": "Studio Config",
     "status": "Session Status",
     "providers": "Active Providers",
@@ -937,6 +939,8 @@
     "modelIdsPerLineHint": "Enter one model ID per line. Empty lines and duplicates are ignored.",
     "capabilityEstimatedShort": "Protocol defaults",
     "reasoningEffort": "Reasoning effort",
+    "reasoningBudget": "{{count}} token budget",
+    "reasoningBudgetHint": "These levels are application thinking budgets, not native model effort levels. Actual reasoning may use fewer tokens.",
     "reasoningEffortHint": "Levels are limited to those recognised for the current {{family}} model.",
     "reasoningUnavailable": "No configurable reasoning level was recognised. You can inherit settings or use provider defaults.",
     "deepseekReasoningSamplingHint": "DeepSeek ignores temperature, Top P, frequency penalty, and presence penalty while thinking is enabled.",

@@ -33,6 +33,7 @@ describe("reasoning effort profiles", () => {
       family: "anthropic",
       defaultValue: "high",
       options: [
+        { value: "disabled" },
         { value: "low" },
         { value: "medium" },
         { value: "high" },
@@ -72,7 +73,7 @@ describe("reasoning effort profiles", () => {
     ).toEqual(["minimal", "low", "medium", "high"]);
   });
 
-  it("uses an automatic thinking mode for Qwen-compatible models", () => {
+  it("offers explicit budget presets for confirmed Qwen models", () => {
     expect(
       resolveReasoningEffortProfile(
         "qwen/qwen3.6-flash",
@@ -82,7 +83,13 @@ describe("reasoning effort profiles", () => {
       ),
     ).toMatchObject({
       family: "qwen",
-      options: [{ value: "disabled" }, { value: "automatic" }],
+      options: [
+        { value: "disabled" },
+        { value: "automatic" },
+        { value: "low", thinkingBudgetTokens: 2048 },
+        { value: "medium", thinkingBudgetTokens: 8192 },
+        { value: "high", thinkingBudgetTokens: 16384 },
+      ],
     });
   });
 
@@ -180,5 +187,56 @@ describe("reasoning effort profiles", () => {
         ["function_calling"],
       ),
     ).toBeNull();
+  });
+});
+
+describe("Qwen native effort and budget presets", () => {
+  it.each([
+    [
+      "qwen3.8-flash",
+      "low",
+      { enable_thinking: true, reasoning_effort: "low" },
+    ],
+    [
+      "qwen3.8-flash",
+      "xhigh",
+      { enable_thinking: true, reasoning_effort: "xhigh" },
+    ],
+    [
+      "qwen3.8-flash",
+      "disabled",
+      { enable_thinking: false, reasoning_effort: "none" },
+    ],
+    [
+      "qwen3.6-flash",
+      "medium",
+      { enable_thinking: true, thinking_budget: 8192 },
+    ],
+    ["qwen3.7-plus", "high", { enable_thinking: true, thinking_budget: 16384 }],
+  ])(
+    "maps %s / %s to the native wire control",
+    (model, reasoningEffort, fields) => {
+      expect(
+        extractReasoningRequestFields(
+          { parameterOverrides: { reasoningEffort } },
+          undefined,
+          "openai-chat-v1",
+          model,
+        ),
+      ).toEqual(fields);
+    },
+  );
+
+  it("does not invent budget support on other Qwen protocols", () => {
+    const profile = resolveReasoningEffortProfile(
+      "qwen3.6-flash",
+      "dashscope",
+      "openai-responses-v1",
+    );
+    expect(
+      profile?.options.some(
+        (option) => option.thinkingBudgetTokens !== undefined,
+      ),
+    ).toBe(false);
   });
 });

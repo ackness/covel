@@ -1,3 +1,4 @@
+import { ReasoningDisclosure } from "@/components/reasoning-disclosure.js";
 import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
@@ -312,7 +313,7 @@ function renderStructuredData(
     );
   }
 
-  if (type === "llm.responded") {
+  if (type === "llm.responded" || type === "gateway.responded") {
     const usage = isRecord(data.usage) ? data.usage : undefined;
     const toolCalls = Array.isArray(data.toolCalls) ? data.toolCalls : [];
     return (
@@ -332,6 +333,11 @@ function renderStructuredData(
             <span>finishReason: {String(data.finishReason)}</span>
           )}
         </div>
+        {typeof data.reasoningContent === "string" && (
+          <ReasoningDisclosure
+            entries={[{ id: "response", content: data.reasoningContent }]}
+          />
+        )}
         {typeof data.text === "string" && (
           <DetailSection
             title={t("debugger.responseText")}

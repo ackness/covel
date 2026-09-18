@@ -1,3 +1,5 @@
+import { continuationItems } from "../provider-continuation.js";
+import type { ProviderConfig } from "../../types.js";
 import type {
   TextMessage,
   TextMessageContent,
@@ -7,12 +9,18 @@ import type {
 import { mediaRefFallbackText } from "../common.js";
 
 export function readAnthropicText(payload: Record<string, unknown>): string {
-  const block = Array.isArray(payload.content)
-    ? payload.content.find(
-        (entry: Record<string, unknown>) => entry.type === "text",
-      )
-    : null;
-  return String(block?.text ?? "");
+  return (Array.isArray(payload.content) ? payload.content : [])
+    .filter(
+      (entry: unknown): entry is { type: "text"; text: string } =>
+        entry !== null &&
+        typeof entry === "object" &&
+        "type" in entry &&
+        entry.type === "text" &&
+        "text" in entry &&
+        typeof entry.text === "string",
+    )
+    .map((entry) => entry.text)
+    .join("");
 }
 
 /**
@@ -73,7 +81,10 @@ function isToolResultContent(content: string | readonly unknown[]): boolean {
   );
 }
 
-export function toAnthropicMessages(messages: TextMessage[]): {
+export function toAnthropicMessages(
+  messages: TextMessage[],
+  target?: { model: string; config: ProviderConfig },
+): {
   system: string;
   messages: Array<{ role: string; content: string | readonly unknown[] }>;
 } {
@@ -106,6 +117,19 @@ export function toAnthropicMessages(messages: TextMessage[]): {
     }
 
     if (msg.role !== "user" && msg.role !== "assistant") continue;
+
+    const native =
+      target &&
+      continuationItems(
+        msg,
+        "anthropic-messages-v1",
+        target.model,
+        target.config,
+      );
+    if (native) {
+      out.push({ role: "assistant", content: native });
+      continue;
+    }
 
     // An assistant turn that invoked tools must replay those calls as
     // `tool_use` blocks, or the follow-up `tool_result` has nothing to bind to

@@ -19,6 +19,8 @@ export type ReasoningProviderFamily =
 
 export interface ReasoningEffortOption {
   value: ReasoningEffort;
+  /** Application budget preset, not a native effort level. */
+  thinkingBudgetTokens?: number;
 }
 
 /** Provider/model-specific reasoning controls exposed to the settings UI. */
@@ -36,7 +38,9 @@ const ANTHROPIC_EFFORT_MODEL_PATTERN =
   /claude-(?:(?:fable|mythos|opus|sonnet)-5(?:[-.]|$)|opus-4-[5-8](?:-|$)|sonnet-4-6(?:-|$))/;
 
 function isQwenThinkingOnlyModel(model: string): boolean {
-  return /qwen[^\s]*[-_/]thinking(?:[-_/]|$)/.test(model);
+  return /qwen[^\s]*[-_/]thinking(?:[-_/]|$)|qwen3\.8-2\.4t-a95b|qwen3\.7-max-(?:preview|2026-05-17)/.test(
+    model,
+  );
 }
 
 /**
@@ -74,14 +78,17 @@ export function resolveReasoningEffortProfile(
     const supportsXHigh =
       /(?:claude-(?:opus|sonnet|fable|mythos)-5)|(?:opus-4-[78])/.test(model);
     const supportsMax = supportsXHigh || /(?:opus|sonnet)-4-6/.test(model);
+    const levels = supportsXHigh
+      ? options("low", "medium", "high", "xhigh", "max")
+      : supportsMax
+        ? options("low", "medium", "high", "max")
+        : options("low", "medium", "high");
+    const adaptive =
+      /claude-(?:(?:opus|sonnet)-5|opus-4-[678]|sonnet-4-6)/.test(model);
     return {
       family,
       defaultValue: "high",
-      options: supportsXHigh
-        ? options("low", "medium", "high", "xhigh", "max")
-        : supportsMax
-          ? options("low", "medium", "high", "max")
-          : options("low", "medium", "high"),
+      options: adaptive ? [...options("disabled"), ...levels] : levels,
     };
   }
 
@@ -109,7 +116,39 @@ export function resolveReasoningEffortProfile(
 
   if (family === "qwen") {
     if (!advertisesReasoning && !/qwen3/.test(model)) return null;
-    if (isQwenThinkingOnlyModel(model)) {
+    const thinkingOnly = isQwenThinkingOnlyModel(model);
+    const supportsChat = !protocol || protocol === "openai-chat-v1";
+    if (
+      supportsChat &&
+      /qwen3\.8-(?:max|flash|omni-flash|27b|2\.4t-a95b)(?:-|$)/.test(model)
+    ) {
+      return {
+        family,
+        defaultValue: "xhigh",
+        options: options(
+          ...(thinkingOnly ? [] : ["disabled" as const]),
+          "automatic",
+          "low",
+          "medium",
+          "xhigh",
+        ),
+      };
+    }
+    if (supportsChat && /qwen3\.[567]-(?:max|plus|flash)(?:-|$)/.test(model)) {
+      return {
+        family,
+        options: [
+          ...options(
+            ...(thinkingOnly ? [] : ["disabled" as const]),
+            "automatic",
+          ),
+          { value: "low", thinkingBudgetTokens: 2048 },
+          { value: "medium", thinkingBudgetTokens: 8192 },
+          { value: "high", thinkingBudgetTokens: 16384 },
+        ],
+      };
+    }
+    if (thinkingOnly) {
       return {
         family,
         defaultValue: "automatic",
@@ -207,8 +246,21 @@ export function extractReasoningRequestFields(
       return { thinking: { type: "disabled" } };
     }
     if (selection === "automatic") return {};
+    const adaptive =
+      family === "anthropic" &&
+      /claude-(?:(?:fable|mythos|opus|sonnet)-5|opus-4-[678]|sonnet-4-6)/.test(
+        model,
+      );
     return {
       ...(family === "deepseek" ? { thinking: { type: "enabled" } } : {}),
+      ...(adaptive
+        ? {
+            thinking: {
+              type: "adaptive",
+              display: asRecord(metadata?.thinking).display ?? "summarized",
+            },
+          }
+        : {}),
       output_config: {
         ...asRecord(metadata?.output_config),
         effort: selection,
@@ -240,8 +292,22 @@ export function extractReasoningRequestFields(
   }
 
   if (family === "qwen") {
-    if (isQwenThinkingOnlyModel(model)) {
-      return { enable_thinking: true };
+    const option = resolveReasoningEffortProfile(
+      model,
+      provider,
+      protocol,
+    )?.options.find((entry) => entry.value === selection);
+    if (option?.thinkingBudgetTokens !== undefined) {
+      return {
+        enable_thinking: true,
+        thinking_budget: option.thinkingBudgetTokens,
+      };
+    }
+    if (/qwen3\.8-/.test(model) && selection !== "automatic") {
+      return {
+        enable_thinking: selection !== "disabled",
+        reasoning_effort: selection === "disabled" ? "none" : selection,
+      };
     }
     return { enable_thinking: selection !== "disabled" };
   }

@@ -33,6 +33,7 @@ export interface PluginRuntimeGateway {
     readonly signal?: AbortSignal;
   }): Promise<{
     readonly text: string;
+    readonly reasoningContent?: string;
     readonly finishReason: string;
     readonly usage: LLMUsageSummary;
     readonly model?: string;
@@ -52,6 +53,7 @@ export interface PluginRuntimeGateway {
     readonly signal?: AbortSignal;
   }): Promise<{
     readonly object: T;
+    readonly reasoningContent?: string;
     readonly finishReason: string;
     readonly usage: LLMUsageSummary;
     readonly model?: string;

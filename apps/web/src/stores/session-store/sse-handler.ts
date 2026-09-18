@@ -1,3 +1,4 @@
+import { reasoningAction } from "./reasoning.js";
 import {
   isAssetGenerateView,
   PLAYER_ABORT_REASON,
@@ -264,6 +265,17 @@ export function createSseEventHandler(
     >;
 
     switch (eventType) {
+      case "llm.responded":
+      case "gateway.responded": {
+        const action = reasoningAction(
+          eventType,
+          payload,
+          turnId,
+          envelope.timestamp,
+        );
+        if (action) deps.dispatch(action);
+        break;
+      }
       case "narrative.delta": {
         const delta = (payload.delta as string) ?? "";
         const runtimeId = (payload.runtimeId as string) ?? "unknown";
@@ -688,7 +700,6 @@ export function createSseEventHandler(
       case "tool.completed":
       case "tool.failed":
       case "llm.calling":
-      case "llm.responded":
       case "message.completed":
       case "block.emitted":
       case "hook.fired":
@@ -711,7 +722,6 @@ export function createSseEventHandler(
       case "function.executing":
       case "function.completed":
       case "gateway.calling":
-      case "gateway.responded":
       case "gateway.failed":
       // Plugin-utils provider-call trace: /debug-only, same as gateway.*
       case "utils.fetch.calling":

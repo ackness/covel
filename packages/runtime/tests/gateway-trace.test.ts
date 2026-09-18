@@ -45,6 +45,7 @@ describe("withGatewayTrace", () => {
     const gateway = makeGateway({
       generateText: async () => ({
         text: "hello",
+        reasoningContent: "summary",
         finishReason: "stop",
         usage: {
           inputTokens: 10,
@@ -59,6 +60,7 @@ describe("withGatewayTrace", () => {
     const result = await traced.generateText({ prompt: "hi", system: "sys" });
 
     expect(result.text).toBe("hello");
+    expect(events[1]?.payload.reasoningContent).toBe("summary");
     expect(events.map((e) => e.type)).toEqual([
       "gateway.calling",
       "gateway.responded",

@@ -25,6 +25,7 @@ export function withTextRequestDefaults(
       "reasoningEffort",
       "reasoning_effort",
       "enable_thinking",
+      "thinking_budget",
       "thinking",
       "reasoning",
       "output_config",

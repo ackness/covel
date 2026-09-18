@@ -1,3 +1,4 @@
+import { appendReasoningStep, mergeReasoning } from "./reasoning.js";
 import type { AssetGenerateView } from "@covel/shared";
 import { deepMerge, encodePageCursor } from "@covel/shared";
 import {
@@ -42,6 +43,9 @@ function upsertExecutionStep(
   const updated = {
     ...(idx >= 0 ? next[idx] : undefined),
     ...step,
+    ...(next[idx]?.reasoning || step.reasoning
+      ? { reasoning: mergeReasoning(next[idx]?.reasoning, step.reasoning) }
+      : {}),
     ...(committed ? { attemptStatus: "committed" as const } : {}),
     ...(idx >= 0 &&
     next[idx].attemptStatus === "committed" &&
@@ -414,6 +418,19 @@ export function reducer(
         ...state,
         gameState: mergeGameStateForReplacement(state.gameState, action.state),
       };
+    case "APPEND_REASONING": {
+      const previous = state.executionSteps.find(
+        (step) =>
+          step.turnId === action.turnId && step.runtimeId === action.runtimeId,
+      );
+      return {
+        ...state,
+        executionSteps: upsertExecutionStep(
+          state.executionSteps,
+          appendReasoningStep(previous, action),
+        ),
+      };
+    }
     case "UPSERT_EXECUTION_STEP": {
       // Upsert on (turnId, runtimeId). Transitions running → completed/failed/
       // skipped / etc happen in place — missed runtime.completed no longer

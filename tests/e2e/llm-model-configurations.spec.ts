@@ -43,7 +43,13 @@ test("same API model configurations can be copied, named, shared, and imported i
         candidates: [],
         reasoning: {
           family: "qwen",
-          options: [{ value: "disabled" }, { value: "automatic" }],
+          options: [
+            { value: "disabled" },
+            { value: "automatic" },
+            { value: "low" },
+            { value: "medium" },
+            { value: "xhigh" },
+          ],
         },
         capability: {
           input: ["text"],
@@ -80,10 +86,8 @@ test("same API model configurations can be copied, named, shared, and imported i
   });
   await renamed
     .getByRole("combobox", { name: "Reasoning effort" })
-    .selectOption("automatic");
-  await expect(
-    renamed.getByRole("option", { name: "Thinking on", exact: true }),
-  ).toHaveCount(1);
+    .selectOption("xhigh");
+  await expect(renamed.getByRole("option", { name: /xhigh/ })).toHaveCount(1);
 
   const downloadPromise = page.waitForEvent("download");
   await dialog.getByRole("button", { name: "Export", exact: true }).click();
@@ -101,7 +105,7 @@ test("same API model configurations can be copied, named, shared, and imported i
       ref: expect.any(String),
       name: "Detailed story",
       modelId: "qwen3.8-flash",
-      reasoningEffort: "automatic",
+      reasoningEffort: "xhigh",
     },
   ]);
   const detailedRef = profiles[0].models[1].ref;
@@ -116,7 +120,7 @@ test("same API model configurations can be copied, named, shared, and imported i
   });
   await expect(
     renamed.getByRole("combobox", { name: "Reasoning effort" }),
-  ).toHaveValue("automatic");
+  ).toHaveValue("xhigh");
 
   await dialog
     .getByRole("button", { name: "Model Roles", exact: true })
@@ -125,7 +129,7 @@ test("same API model configurations can be copied, named, shared, and imported i
   const plugin = dialog.getByRole("group", { name: "plugin", exact: true });
   await story
     .getByRole("combobox", { name: "Model configuration", exact: true })
-    .selectOption({ label: "Detailed story · Thinking on" });
+    .selectOption({ label: "Detailed story · Extra high" });
   await expect(
     plugin.getByRole("combobox", { name: "Model configuration", exact: true }),
   ).toHaveValue("quick");
@@ -150,7 +154,7 @@ test("same API model configurations can be copied, named, shared, and imported i
   ).toHaveValue("");
   await expect(
     story
-      .getByText("Thinking on", { exact: true })
+      .getByText("Extra high", { exact: true })
       .and(page.locator(":not(option)")),
   ).toHaveCount(2);
   await expect(

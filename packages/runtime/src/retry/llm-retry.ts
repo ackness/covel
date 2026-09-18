@@ -1,3 +1,4 @@
+import type { LLMProviderContinuation } from "@covel/shared";
 import type { LLMProviderRequest } from "@covel/shared";
 /**
  * Smart LLM retry helpers used by turn-executor.
@@ -399,6 +400,7 @@ export async function streamLLMWithRetry(
     const streamedToolCalls: LLMToolCall[] = [];
     let streamedContent = "";
     let streamedReasoningContent = "";
+    let providerContinuation: LLMProviderContinuation | undefined;
     let streamedUsage = { inputTokens: 0, outputTokens: 0 };
     let streamFinishReason: "stop" | "tool_calls" | "length" | "error" = "stop";
     const attemptMessages = perturbMessages(messages, attempt, lastReason);
@@ -436,6 +438,9 @@ export async function streamLLMWithRetry(
             await trace.ensureCalling();
             if (forwardDeltas) await onDelta?.(event.textDelta);
           }
+        } else if (event.type === "reasoning-delta") {
+          if (event.reasoningDelta.length > 0) firstTokenSeen = true;
+          streamedReasoningContent += event.reasoningDelta;
         } else if (event.type === "tool-call") {
           firstTokenSeen = true;
           await trace.ensureCalling();
@@ -451,6 +456,8 @@ export async function streamLLMWithRetry(
           if (event.reasoningContent)
             streamedReasoningContent = event.reasoningContent;
           if (event.usage) streamedUsage = event.usage;
+          if (event.providerContinuation)
+            providerContinuation = event.providerContinuation;
         }
       }
 
@@ -464,6 +471,7 @@ export async function streamLLMWithRetry(
         toolCalls: streamedToolCalls,
         finishReason: streamFinishReason,
         usage: streamedUsage,
+        ...(providerContinuation ? { providerContinuation } : {}),
         ...(streamedReasoningContent
           ? { reasoningContent: streamedReasoningContent }
           : {}),
@@ -517,6 +525,7 @@ export async function streamLLMWithRetry(
             toolCalls: streamedToolCalls,
             finishReason: "error",
             usage: streamedUsage,
+            ...(providerContinuation ? { providerContinuation } : {}),
             ...(streamedReasoningContent
               ? { reasoningContent: streamedReasoningContent }
               : {}),

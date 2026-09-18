@@ -150,13 +150,18 @@ export function readResponsesOutputText(
   payload: Record<string, unknown>,
 ): string {
   if (typeof payload.output_text === "string") return payload.output_text;
-  const output = payload.output;
-  const firstOutput = Array.isArray(output) ? asRecord(output[0]) : undefined;
-  const content = firstOutput?.content;
-  const firstContent = Array.isArray(content)
-    ? asRecord(content[0])
-    : undefined;
-  return String(firstContent?.text ?? "");
+  return (Array.isArray(payload.output) ? payload.output : [])
+    .map(asRecord)
+    .filter((item) => item?.type === "message" || item?.type === undefined)
+    .flatMap((item) => (Array.isArray(item?.content) ? item.content : []))
+    .map(asRecord)
+    .filter(
+      (part) =>
+        (part?.type === "output_text" || part?.type === undefined) &&
+        typeof part?.text === "string",
+    )
+    .map((part) => part!.text as string)
+    .join("");
 }
 
 // ── OpenAI Responses API — streaming function calls ─────────────────

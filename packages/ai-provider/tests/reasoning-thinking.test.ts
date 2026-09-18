@@ -557,3 +557,48 @@ describe("gateway — preset providerRequestMetadata fold-in", () => {
     expect(captured[0]?.reasoning_effort).toBe("low");
   });
 });
+
+describe("Qwen thinking control precedence", () => {
+  it.each([
+    [
+      "qwen3.8-flash",
+      "low",
+      { enable_thinking: true, reasoning_effort: "low" },
+    ],
+    [
+      "qwen3.6-flash",
+      "medium",
+      { enable_thinking: true, thinking_budget: 8192 },
+    ],
+    ["qwen3.8-flash", "provider-default", {}],
+  ])(
+    "%s explicit %s clears conflicting inherited controls",
+    async (model, reasoningEffort, expected) => {
+      const captured = mockOpenAiChatResponse({
+        choices: [{ message: { content: "ok" } }],
+      });
+      await createOpenAiChatAdapter().generateText(
+        { baseUrl: "https://fixture.invalid" },
+        {
+          model,
+          messages: [{ role: "user", content: "fixture" }],
+          providerRequestMetadata: {
+            enable_thinking: false,
+            thinking_budget: 500,
+            reasoning_effort: "high",
+            parameterOverrides: { reasoningEffort },
+          },
+        },
+      );
+      const body = captured[0]!.body as Record<string, unknown>;
+      const fields = Object.fromEntries(
+        Object.entries(body).filter(([key]) =>
+          ["enable_thinking", "thinking_budget", "reasoning_effort"].includes(
+            key,
+          ),
+        ),
+      );
+      expect(fields).toEqual(expected);
+    },
+  );
+});
