@@ -49,7 +49,10 @@ import { withUtilsTrace } from "./utils-trace.js";
 import { createRuntimeTools } from "./runtime-tools.js";
 import { enforceHttpPermissions } from "./http-permissions.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
-import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
+import {
+  getTurnExecutionSignal,
+  RuntimeTimeoutError,
+} from "../turn-executor/turn-control.js";
 import {
   withDefaultGatewaySignal,
   withDefaultUtilsSignal,
@@ -506,7 +509,7 @@ export async function executeFunctionRuntime({
       aborted,
       new Promise<never>(() => {
         deadlineTimer = setTimeout(() => {
-          const err = new Error(
+          const err = new RuntimeTimeoutError(
             `function runtime "${manifest.name}" timed out after ${timeoutMs}ms`,
           );
           handlerAbort.abort(err);

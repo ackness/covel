@@ -94,8 +94,9 @@ describe("governed function tools", () => {
       description: "Fixture",
       parameters: z.object({}),
       async execute(_args, context) {
-        expect(context.signal).toBe(controller.signal);
+        expect(context.signal?.aborted).toBe(false);
         controller.abort(new Error("handler cancelled"));
+        expect(context.signal?.aborted).toBe(true);
         return { late: true };
       },
     });

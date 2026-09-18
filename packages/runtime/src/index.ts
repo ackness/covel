@@ -94,6 +94,7 @@ export type {
 export { createToolExecutor } from "./agent-loop/tool-executor.js";
 export type {
   ToolExecutor,
+  ManagedToolExecutor,
   ToolInfo,
   ToolCall,
   ToolCallContext,

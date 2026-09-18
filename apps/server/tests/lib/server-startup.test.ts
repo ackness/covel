@@ -89,6 +89,7 @@ describe("production composition root startup failure", () => {
           pluginBackgroundQueue: { close: close("queue") },
           startupMaintenance: Promise.resolve(),
           closePluginEntries: close("entries"),
+          closeTools: close("tools"),
           eventBus: { close: close("bus") },
         };
       });
@@ -115,6 +116,7 @@ describe("production composition root startup failure", () => {
         "world-seed": [
           "worker",
           "queue",
+          "tools",
           "entries",
           "bus",
           "media",
@@ -127,6 +129,7 @@ describe("production composition root startup failure", () => {
           "watcher-2",
           "worker",
           "queue",
+          "tools",
           "entries",
           "bus",
           "media",

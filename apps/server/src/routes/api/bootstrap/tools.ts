@@ -27,7 +27,7 @@ import { FrameworkCapability } from "@covel/shared";
 import type { DataStore } from "@covel/store";
 import {
   createToolExecutor,
-  type ToolExecutor,
+  type ManagedToolExecutor,
   type LLMAdapter,
 } from "@covel/runtime";
 import { createApprovalPipeline } from "@covel/approval";
@@ -53,7 +53,7 @@ export interface PluginToolsResult {
   readonly toolMap: Map<string, ToolModule>;
   readonly builtinToolNames: Set<string>;
   readonly localToolNames: Set<string>;
-  readonly toolExecutor: ToolExecutor;
+  readonly toolExecutor: ManagedToolExecutor;
   readonly prepareToolsForSession: (sessionId: string) => Promise<void>;
   /** Drop the per-session tool override cache entry. Called on session
    *  end/delete so the map does not grow for the lifetime of the process. */

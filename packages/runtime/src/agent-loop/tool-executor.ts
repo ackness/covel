@@ -22,6 +22,11 @@ import type { DataStore } from "@covel/store";
 import type { ApprovalPipeline } from "@covel/approval";
 import type { ApprovalStatus, InputSlot, Proposal } from "@covel/shared";
 import { createToolExecutionContext } from "./tool-execution-context.js";
+import {
+  createToolExecutorLifetime,
+  waitForToolWork,
+} from "./tool-executor-lifetime.js";
+import { combineAbortSignals } from "../turn-executor/turn-control.js";
 
 // ── Structured tool error shape (returned to LLM) ────────────────
 
@@ -109,6 +114,11 @@ export interface ToolExecutor {
    * active world's CharacterAttributeSchema — and enforces plugin scoping.
    */
   getToolInfo(name: string, context: ToolCallContext): ToolInfo | undefined;
+}
+
+export interface ManagedToolExecutor extends ToolExecutor {
+  /** Stop admission, cancel callers, and drain callbacks before closing their dependencies. */
+  close(): Promise<void>;
 }
 
 // ── Implementation ───────────────────────────────────────────────
@@ -215,8 +225,11 @@ function resolveToolModule(
   return config.findTool?.(name, context);
 }
 
-export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
-  return {
+export function createToolExecutor(
+  config: ToolExecutorConfig,
+): ManagedToolExecutor {
+  const lifetime = createToolExecutorLifetime();
+  const executor: ToolExecutor = {
     getToolInfo(name: string, context: ToolCallContext): ToolInfo | undefined {
       const tool = resolveToolModule(config, name, context);
       if (!tool) return undefined;
@@ -405,21 +418,28 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
         // Capture authority before any asynchronous trace work.
         await emitToolCalling(context, call, toolSource, approvalStatus);
         invocation.assertLive();
-        let rawResult: unknown;
-        try {
-          rawResult = await tool.execute(params, invocation.context);
-          invocation.assertLive();
-        } finally {
-          invocation.close();
-        }
-        // Extract symbol-backed envelopes before cloning. No plugin-owned
-        // object may change the eventual commit while trace persistence waits.
-        const parsedResult = structuredClone(getToolContent(rawResult));
-        const pendingProposals = structuredClone(
-          getPendingProposals(rawResult),
+        const active = invocation;
+        const work = lifetime.track(
+          (async () => {
+            try {
+              const rawResult = await tool.execute(params, active.context);
+              active.assertLive();
+              // Snapshot envelopes before cleanup or trace persistence can yield.
+              return {
+                parsedResult: structuredClone(getToolContent(rawResult)),
+                pendingProposals: structuredClone(
+                  getPendingProposals(rawResult),
+                ),
+                emittedEvents: structuredClone(getEmittedEvents(rawResult)),
+              };
+            } finally {
+              active.close();
+              await active.drain();
+            }
+          })(),
         );
-        const emittedEvents = structuredClone(getEmittedEvents(rawResult));
-        await invocation.drain();
+        const { parsedResult, pendingProposals, emittedEvents } =
+          await waitForToolWork(work, context.signal!, () => active.close());
         context.signal?.throwIfAborted();
 
         // Text-first convention: if the tool result is an object with a
@@ -479,7 +499,8 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
         };
       } catch (error: unknown) {
         invocation?.close();
-        await invocation?.drain();
+        // The tracked callback owns its outstanding reads after cancellation.
+        // Waiting here would wedge the caller behind an uncooperative tool.
         let errorResult: string;
         let code: ToolErrorCode;
         let details: string[] | undefined;
@@ -552,6 +573,26 @@ export function createToolExecutor(config: ToolExecutorConfig): ToolExecutor {
         invocation?.close();
       }
     },
+  };
+  return {
+    getToolInfo(name, context) {
+      lifetime.assertOpen();
+      return executor.getToolInfo(name, context);
+    },
+    execute(call, context) {
+      try {
+        lifetime.assertOpen();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      return lifetime.track(
+        executor.execute(call, {
+          ...context,
+          signal: combineAbortSignals(context.signal, lifetime.signal),
+        }),
+      );
+    },
+    close: () => lifetime.close(),
   };
 }
 

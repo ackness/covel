@@ -7,6 +7,13 @@ import { createPgEventTransport } from "../../src/lib/pg-event-transport.js";
 import { createServerResourceDrain } from "../../src/server-resources.js";
 import { createBootstrapPluginEntries } from "../../src/routes/api/bootstrap/plugin-entry.js";
 import { createBootstrapCompactorRunner } from "../../src/routes/api/bootstrap/compactor.js";
+import { setupPluginTools } from "../../src/routes/api/bootstrap/tools.js";
+
+vi.mock("../../src/routes/api/bootstrap/tools.js", async (original) => {
+  const actual =
+    await original<typeof import("../../src/routes/api/bootstrap/tools.js")>();
+  return { ...actual, setupPluginTools: vi.fn(actual.setupPluginTools) };
+});
 
 vi.mock("../../src/routes/api/bootstrap/plugin-entry.js", async (original) => {
   const actual =
@@ -44,6 +51,7 @@ afterEach(() => {
 
 describe("API bootstrap resource ownership", () => {
   it("disposes published entries when a later assembly step fails", async () => {
+    vi.mocked(setupPluginTools).mockClear();
     vi.mocked(discoverAndRegisterPlugins).mockResolvedValueOnce({
       registry: createPluginRegistry(),
       discoveryMap: new Map(),
@@ -69,6 +77,15 @@ describe("API bootstrap resource ownership", () => {
       }),
     ).rejects.toBe(failure);
     expect(close).toHaveBeenCalledOnce();
+    const tools = await vi.mocked(setupPluginTools).mock.results[0]!.value;
+    expect(() =>
+      tools.toolExecutor.getToolInfo("runtime-done", {
+        sessionId: "session",
+        turnId: "turn",
+        pluginId: "probe",
+        runtimeId: "probe/main",
+      }),
+    ).toThrow("closed");
     await store.close();
   });
 

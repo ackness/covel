@@ -220,6 +220,8 @@ export interface ApiBootstrapResult {
   readonly pluginBackgroundQueue: PluginBackgroundQueue;
   /** Non-blocking startup scans; the host must drain these before closing storage. */
   readonly startupMaintenance: Promise<void>;
+  /** Stop tool admission and drain cancelled callbacks before releasing dependencies. */
+  readonly closeTools: () => Promise<void>;
   /** Unregister capabilities only after runtime and memory producers have stopped. */
   readonly closePluginEntries: () => Promise<void>;
   /**
@@ -247,6 +249,7 @@ export async function bootstrapApi(
   let eventBus: EventBus | undefined;
   const owned: {
     pluginEntries?: Awaited<ReturnType<typeof createBootstrapPluginEntries>>;
+    closeTools?: () => Promise<void>;
   } = {};
   try {
     const databaseUrl = readRuntimeEnv().databaseUrl;
@@ -264,6 +267,7 @@ export async function bootstrapApi(
     );
     return await assembleApi(config, eventBus, owned);
   } catch (error) {
+    await owned.closeTools?.();
     try {
       await owned.pluginEntries?.close();
     } catch {
@@ -288,6 +292,7 @@ async function assembleApi(
   eventBus: EventBus,
   owned: {
     pluginEntries?: Awaited<ReturnType<typeof createBootstrapPluginEntries>>;
+    closeTools?: () => Promise<void>;
   },
 ): Promise<ApiBootstrapResult> {
   // Per-session serializer. The caller (e.g. `app.ts`) may inject a PG
@@ -444,6 +449,7 @@ async function assembleApi(
     llmAdapter: config.llmAdapter,
     eventDirectory,
   });
+  owned.closeTools = () => toolExecutor.close();
 
   const getPluginSource = (pluginId: string) => registry.get(pluginId)?.source;
 
@@ -840,6 +846,7 @@ async function assembleApi(
     runtimeJobWorker,
     pluginBackgroundQueue,
     startupMaintenance,
+    closeTools: () => toolExecutor.close(),
     closePluginEntries: () => pluginEntries.close(),
     prepareToolsForSession,
   };

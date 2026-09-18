@@ -1779,11 +1779,15 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 
 模型重试的并发队列支持取消：已取消 waiter 立即退出，不等待在途请求完成，不发起新的 provider 请求，不占用后继请求配额；有效排队时长仍按原契约补偿 runtime deadline。
 
+**Agent 工具循环预算**：工具执行及循环内的 Hook 使用剩余预算对应的取消信号。预算耗尽后，当前 runtime 失败，已有正文、工具提案或迟到的 completing-tool 结果都不能将本次执行变为成功；普通执行与恢复执行复用此边界。模型请求阶段由 retry 层管理计时和排队补偿，回到工具循环后继续使用补偿后的剩余预算。工具执行器拥有取消后仍在运行的回调，宿主关闭前必须排空；审计持久化与资源清理可能晚于执行预算完成。同进程不合作代码和已经发出的外部效果不能被强制终止或撤回。
+
+`PostRuntime` 仍可观察超时或父执行取消产生的失败，但不能将其改写为可提交的成功结果。这一终态约束适用于 agent、agent guard 和 function runtime；普通业务失败的 Hook 恢复能力保持不变。
+
 **Function runtime 只消费 `timeoutMs`**：handler 受同一运行总时长硬上限约束（默认 60000ms），超时该 runtime 以 failed 收场、turn 继续。function runtime 没有重试循环，其余字段（`maxRetries` / `callTimeoutMs` / `firstTokenTimeoutMs` / `loopDetectionThreshold` / `requireToolUse` / `completeAfterTools`）对其无效。注意超时只解除 turn 阻塞，已发出的 handler 调用无法被取消。超时后框架会**吊销 handler 的全部副作用能力**——`store`、`pluginData`、`media`、`images`、`speech`、`gateway`、`utils`、`recursiveCall`、`logger`、`assetProgress`——脱离的 handler 再调用会同步抛出 `capability ... is revoked`，避免它在本次执行已经收场之后仍然写入。吊销挂在超时本身、不挂在任何锁上，因此对持锁与不持锁的执行路径一样有效。协作式 handler 应监听 `ctx.signal` 主动取消。
 
 | 字段                     | 类型       | 默认                                              | 含义                                                                                                                                                                                                                                 |
 | ------------------------ | ---------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `timeoutMs`              | `number`   | 60000                                             | 运行总时长硬上限。任何情况下都不会超过此值                                                                                                                                                                                           |
+| `timeoutMs`              | `number`   | 60000                                             | runtime 执行预算。Agent 模型排队时间顺延；到期取消工具等待并拒绝迟到结果，审计和资源排空不构成同进程代码的强制终止保证                                                                                                               |
 | `maxSteps`               | `number`   | `20`                                              | 单次执行的模型响应轮数上限；一个响应可含多个工具调用。manifest 覆盖调用方选项，最后使用框架默认；普通、递归和恢复执行沿用同一规则。                                                                                                  |
 | `maxRetries`             | `number`   | `1`                                               | transient 错误/超时/循环时的重试次数（不含首次尝试）。`0` 禁用重试。上限 5                                                                                                                                                           |
 | `callTimeoutMs`          | `number`   | `min(60000, floor(timeoutMs / (maxRetries + 1)))` | 单次 LLM 调用的总时长。防止一个挂死请求吃掉整轮预算                                                                                                                                                                                  |
@@ -1815,7 +1819,7 @@ Agent runtime 在调用 LLM 时会受到两个方向的约束：**单次调用�
 
 **扰动策略**：重试时框架在 messages 末尾追加一条 `[retry N] ...` system 消息，并随 `N` 递增加入空格 padding，确保 prompt 字节串不同，避免 provider 端 KV-cache 复读同一回应。
 
-**与 gateway fallback 的关系**：`llm.toml` 中 `fallback = "story"` 依然生效。本层的同 preset 重试先跑完后，失败才沿 gateway 的 preset fallback chain 继续尝试下一条。总时长硬上限仍是 `timeoutMs`。
+**与 gateway fallback 的关系**：`llm.toml` 中 `fallback = "story"` 依然生效。本层的同 preset 重试先跑完后，失败才沿 gateway 的 preset fallback chain 继续尝试下一条。fallback 仍受当前剩余执行预算约束。
 
 示例 frontmatter：
 

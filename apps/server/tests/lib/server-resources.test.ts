@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createToolExecutor } from "@covel/runtime";
+import { tool, z } from "@covel/tools";
 import {
   createServerResourceDrain,
   type ServerResources,
@@ -23,6 +25,7 @@ function fixture() {
       pluginBackgroundQueue: { close: close("queue") },
       startupMaintenance: Promise.resolve(),
       closePluginEntries: close("entries"),
+      closeTools: close("tools"),
       eventBus: { close: close("bus") },
     },
     store: { close: close("store") },
@@ -34,6 +37,52 @@ function fixture() {
 }
 
 describe("server resource ownership", () => {
+  it("retains dependencies until a cancelled tool callback releases its raw host reads", async () => {
+    const { resources, calls } = fixture();
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const controller = new AbortController();
+    const module = tool({
+      name: "probe",
+      description: "Synthetic builtin",
+      parameters: z.object({}),
+      async execute() {
+        entered.resolve();
+        await release.promise;
+        calls.push("late-host-read");
+        return null;
+      },
+    });
+    const executor = createToolExecutor({ findTool: () => module });
+    resources.api!.closeTools = () => executor.close();
+    const running = executor.execute(
+      { toolCallId: "call", name: "probe", arguments: "{}" },
+      {
+        sessionId: "session",
+        turnId: "turn",
+        pluginId: "plugin",
+        runtimeId: "plugin/main",
+        signal: controller.signal,
+      },
+    );
+    await entered.promise;
+    controller.abort();
+    expect((await running).success).toBe(false);
+    const closing = createServerResourceDrain(resources)();
+    try {
+      await vi.waitFor(() => expect(calls).toContain("queue"));
+      expect(calls).not.toContain("entries");
+      expect(calls).not.toContain("store");
+    } finally {
+      release.resolve();
+      await closing;
+    }
+    expect(calls.indexOf("late-host-read")).toBeLessThan(
+      calls.indexOf("store"),
+    );
+    expect(calls).toContain("store");
+  });
+
   it("stops background lock owners before waiting for foreground and watcher work", async () => {
     const { resources, calls } = fixture();
     const stopped = Promise.withResolvers<void>();
@@ -55,7 +104,13 @@ describe("server resource ownership", () => {
     expect(drain()).toBe(closing);
     try {
       await vi.waitFor(() => expect(calls).toContain("queue"));
-      expect(calls).toEqual(["requests", "watchers", "worker", "queue"]);
+      expect(calls).toEqual([
+        "requests",
+        "watchers",
+        "worker",
+        "queue",
+        "tools",
+      ]);
     } finally {
       scan.resolve();
       await closing;
@@ -65,6 +120,7 @@ describe("server resource ownership", () => {
       "watchers",
       "worker",
       "queue",
+      "tools",
       "entries",
       "bus",
       "media",
@@ -93,7 +149,7 @@ describe("server resource ownership", () => {
     const closing = createServerResourceDrain(resources)();
     await vi.advanceTimersByTimeAsync(2_000);
     await closing;
-    expect(calls).toEqual(["requests", "watchers", "worker", "queue"]);
+    expect(calls).toEqual(["requests", "watchers", "worker", "queue", "tools"]);
     // A late settlement does not independently close dependencies after return.
     scan.resolve();
     await Promise.resolve();
@@ -114,6 +170,7 @@ describe("server resource ownership", () => {
       "watchers",
       "worker",
       "queue",
+      "tools",
       "entries",
       "bus",
       "store",

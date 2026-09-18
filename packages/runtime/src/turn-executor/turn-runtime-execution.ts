@@ -42,7 +42,11 @@ import {
 } from "../agent-loop/turn-agent-runtime.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { executeAgentGuard } from "../agent-loop/turn-agent-guard.js";
-import { combineAbortSignals } from "./turn-control.js";
+import {
+  combineAbortSignals,
+  isTurnExecutionAborted,
+  RuntimeTimeoutError,
+} from "./turn-control.js";
 import { isScopedRuntimeRecovery } from "./scheduling.js";
 
 export type ExecuteTurnFn = (
@@ -746,7 +750,7 @@ export async function executeOneRuntime(
     });
 
     // PostRuntime hook — failure path
-    return runPostRuntimeHook(
+    const finalized = await runPostRuntimeHook(
       {
         pipeline: hookPipeline,
         signal: getTurnExecutionSignal(deps.turnControl),
@@ -759,6 +763,12 @@ export async function executeOneRuntime(
       },
       failedResult,
     );
+    // PostRuntime may recover ordinary failures, but cannot revive an expired
+    // execution or publish output after its parent has cancelled it.
+    return error instanceof RuntimeTimeoutError ||
+      isTurnExecutionAborted(deps.turnControl)
+      ? { ...finalized, status: "failed", output: null, error: message }
+      : finalized;
   }
 }
 

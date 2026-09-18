@@ -912,6 +912,10 @@ export default function ({ tool, z, shortId, shortIdBatch }) {
 
 工具执行统一经过 `ToolExecutor`：通过注入的 `findTool(name, context)` 解析出 `ToolModule` 后直接调用 `module.execute(args, ctx)` —— 内置工具和插件本地工具都走这条内存内路径，审批、trace、结果 envelope 由 `ToolExecutor` 统一处理。
 
+**取消与资源归属**：执行器将调用方取消与宿主关闭合并到 `context.signal`。取消会撤销调用级读取能力，并以 `CANCELLED` 结束对工具回调的等待；迟到的返回值、提案和事件不会被接受。取消不会强制终止任意同进程 JavaScript：执行器继续跟踪尚未完成的回调和读取，包括内置工具持有的宿主能力。正常完成也会等待工具已经发起但没有自行等待的读取。
+
+`createToolExecutor` 返回 `ManagedToolExecutor`，其 `close()` 幂等地停止接收新调用、取消已有调用并排空所拥有的工作。嵌入宿主必须在关闭 Store、插件注册和事件基础设施之前等待它。服务端通过 `bootstrapApi().closeTools()` 接入统一关闭流程；若排空超过宿主关闭预算，依赖保留到进程退出，不在回调仍运行时提前关闭。
+
 **执行端授权**：工具白名单同时约束 LLM 广告面和执行面。agent loop 把当前 runtime 的精确授权集（`tools.*` 声明的全部名字 + 非 schema runtime 的 `runtime-done` 框架合同工具；`defer` 名单包含在内——延迟只影响广告、不影响授权）随 `ToolCallContext.authorizedToolNames` 传给 executor，`execute` 在解析/审批之前先校验最终工具名（session override 与 `PreToolUse` 替换之后的名字）∈ 授权集，越界返回 `UNAUTHORIZED` 结构化错误。`search-tools` 在 loop 内被拦截、不达 executor。另外 `findTool` 对缺失 context 的调用 fail-closed：无 context 只能解析 builtin，local 工具一律拒绝。
 
 接口位于 `@covel/tools`：

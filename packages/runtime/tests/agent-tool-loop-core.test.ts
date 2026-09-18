@@ -162,8 +162,9 @@ describe("runAgentToolLoop core", () => {
       parameters: z.object({}),
       async execute(_args, context) {
         entered();
-        expect(context.signal).toBe(controller.signal);
+        expect(context.signal?.aborted).toBe(false);
         controller.abort();
+        expect(context.signal?.aborted).toBe(true);
         return { late: true };
       },
     });

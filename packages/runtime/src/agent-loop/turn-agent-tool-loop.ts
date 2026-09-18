@@ -1,4 +1,4 @@
-import { getTurnExecutionSignal } from "../turn-executor/turn-control.js";
+import { createAgentLoopBudget } from "./agent-loop-budget.js";
 import type {
   Proposal,
   ExecutionContext,
@@ -46,7 +46,6 @@ import {
   buildToolResultMessage,
 } from "./turn-agent-tool-loop-messages.js";
 import type { AgentLoopDeps } from "../turn-executor/turn-executor-types.js";
-import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
 import { storyOutputError } from "./story-output.js";
 import {
   checkTextCompletion,
@@ -116,25 +115,46 @@ export interface RunAgentToolLoopOptions {
   readonly allowSuspend?: boolean;
 }
 
-export async function runAgentToolLoop({
-  manifest,
-  input,
-  turnNumber,
-  loaded,
-  inputSlots,
-  deps,
-  maxSteps,
-  timeoutMs,
-  messages,
-  estimator,
-  contextBudget,
-  hookPipeline,
-  startTime,
-  runId,
-  executionContext,
-  initialState,
-  allowSuspend = true,
-}: RunAgentToolLoopOptions): Promise<AgentToolLoopResult> {
+export async function runAgentToolLoop(
+  options: RunAgentToolLoopOptions,
+): Promise<AgentToolLoopResult> {
+  const budget = createAgentLoopBudget(
+    options.timeoutMs,
+    options.manifest.name,
+    options.deps.turnControl,
+  );
+  try {
+    return await runAgentToolLoopWithinBudget(options, budget);
+  } catch (error) {
+    budget.assertLive();
+    throw error;
+  } finally {
+    budget.close();
+  }
+}
+
+async function runAgentToolLoopWithinBudget(
+  {
+    manifest,
+    input,
+    turnNumber,
+    loaded,
+    inputSlots,
+    deps,
+    maxSteps,
+    timeoutMs,
+    messages,
+    estimator,
+    contextBudget,
+    hookPipeline,
+    startTime,
+    runId,
+    executionContext,
+    initialState,
+    allowSuspend = true,
+  }: RunAgentToolLoopOptions,
+  budget: ReturnType<typeof createAgentLoopBudget>,
+): Promise<AgentToolLoopResult> {
   // Resume starts with persisted loop state; ordinary execution starts fresh.
   let finalContent: string | null = initialState?.finalContent ?? null;
   let lastTarget: LLMTargetIdentity | undefined;
@@ -162,8 +182,6 @@ export async function runAgentToolLoop({
   ];
   let steps = 0;
 
-  // Queue waits extend the deadline so they do not consume execution time.
-  let deadline = Date.now() + timeoutMs;
   let stoppedWithResponse = false;
 
   // The policy owns tool surfaces, model settings, and execution budgets.
@@ -215,7 +233,7 @@ export async function runAgentToolLoop({
   // Shared hook wiring reused across the LLM-call and tool-call sites below.
   const hookOpts = {
     pipeline: hookPipeline,
-    signal: getTurnExecutionSignal(deps.turnControl),
+    signal: budget.signal,
     sessionId: input.sessionId,
     turnId: input.turnId,
     pluginId: manifest.pluginId,
@@ -234,7 +252,7 @@ export async function runAgentToolLoop({
   // so the persisted narrative keeps both pre- and post-interjection text.
   const steeredProse: string[] = [];
 
-  while (steps < effectiveMaxSteps && Date.now() < deadline) {
+  while (steps < effectiveMaxSteps && Date.now() < budget.deadline) {
     steps++;
 
     // ── Player turn control ─────────────────────────────────
@@ -242,7 +260,7 @@ export async function runAgentToolLoop({
     // additionally cut by the retry layer via the same signal). Steering:
     // merge queued player interjections into the live transcript so the
     // next LLM step sees them.
-    throwIfTurnExecutionAborted(deps.turnControl, manifest.name);
+    budget.assertLive();
     if (acceptsSteering) {
       for (const steer of deps.turnControl?.drainSteering?.() ?? []) {
         messages.push({ role: "user", content: steer });
@@ -281,34 +299,40 @@ export async function runAgentToolLoop({
       emitter: deps.emitter,
     });
 
-    const rawResponse = await requestLLMResponse({
-      manifest,
-      deps,
-      messages:
-        budgetedRequest?.messages ?? (llmRequest.messages as LLMMessage[]),
-      effectiveModel: llmRequest.model,
-      toolDefs: llmRequest.tools,
-      responseFormat,
-      ...(budgetedRequest?.maxOutputTokens
-        ? { maxOutputTokens: budgetedRequest.maxOutputTokens }
-        : {}),
-      retryPolicy,
-      deadline,
-      // Queue time at the LLM concurrency gate is the framework's cost:
-      // shift the loop deadline by it so later steps keep their budget.
-      onQueueWait: (waitedMs) => {
-        deadline += waitedMs;
-      },
-      useStreaming: useStreaming && llmRequest.stream !== false,
-      reportRetry,
-      onStreamDelta: delta.forward,
-    });
+    budget.pauseForModel();
+    let rawResponse: Awaited<ReturnType<typeof requestLLMResponse>>;
+    try {
+      rawResponse = await requestLLMResponse({
+        manifest,
+        deps,
+        messages:
+          budgetedRequest?.messages ?? (llmRequest.messages as LLMMessage[]),
+        effectiveModel: llmRequest.model,
+        toolDefs: llmRequest.tools,
+        responseFormat,
+        ...(budgetedRequest?.maxOutputTokens
+          ? { maxOutputTokens: budgetedRequest.maxOutputTokens }
+          : {}),
+        retryPolicy,
+        deadline: budget.deadline,
+        // Queue time at the LLM concurrency gate is the framework's cost:
+        // shift the loop deadline by it so later steps keep their budget.
+        onQueueWait: budget.extend,
+        useStreaming: useStreaming && llmRequest.stream !== false,
+        reportRetry,
+        onStreamDelta: delta.forward,
+      });
+    } finally {
+      budget.resumeAfterModel();
+    }
+    budget.assertLive();
 
     lastTarget = rawResponse.target;
     const response = await reviewResponse(
       rawResponse,
       budgetedRequest?.messages ?? llmRequest.messages,
     );
+    budget.assertLive();
     if (!response) {
       finalContent = null;
       continue;
@@ -338,6 +362,7 @@ export async function runAgentToolLoop({
         toolCallIndex += 1
       ) {
         const tc = response.toolCalls[toolCallIndex]!;
+        budget.assertLive();
         if (deps.toolExecutor) {
           const tcStart = Date.now();
 
@@ -347,6 +372,7 @@ export async function runAgentToolLoop({
             name: tc.name,
             arguments: tc.arguments,
           });
+          budget.assertLive();
           if (preToolOutcome.skipped) {
             // Skip tool execution; push synthetic tool-role message so LLM sees a result
             messages.push(
@@ -442,6 +468,7 @@ export async function runAgentToolLoop({
               authorizedToolNames,
             },
           );
+          budget.assertLive();
 
           // ── PostToolUse hook ─────────────────────────
           const { result: toolResult, terminate: terminateAfterTool } =
@@ -454,6 +481,7 @@ export async function runAgentToolLoop({
               },
               result,
             );
+          budget.assertLive();
 
           if (!toolResult.success) {
             failedToolCalls.push({
@@ -766,6 +794,7 @@ export async function runAgentToolLoop({
     break;
   }
 
+  budget.assertLive();
   return {
     finalContent,
     finalToolOutput,
@@ -777,7 +806,7 @@ export async function runAgentToolLoop({
     streamDeltaCount: delta.count(),
     stoppedWithResponse,
     effectiveMaxSteps,
-    deadline,
+    deadline: budget.deadline,
     requiredToolUseUnmet,
     lastTarget,
     requiredCompletionUnmet:

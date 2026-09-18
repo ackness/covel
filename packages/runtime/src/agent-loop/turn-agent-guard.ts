@@ -29,6 +29,7 @@ import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 import {
   combineAbortSignals,
   getTurnExecutionSignal,
+  RuntimeTimeoutError,
 } from "../turn-executor/turn-control.js";
 import {
   withDefaultGatewaySignal,
@@ -295,7 +296,7 @@ export async function executeAgentGuard({
         aborted,
         new Promise<never>(() => {
           deadlineTimer = setTimeout(() => {
-            const err = new Error(
+            const err = new RuntimeTimeoutError(
               `agent guard "${manifest.name}" timed out after ${timeoutMs}ms`,
             );
             // Revoke BEFORE rejecting: once the turn moves on, the still-

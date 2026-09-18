@@ -15,7 +15,7 @@ export interface ServerResources {
   mediaStore?: Pick<MediaStore, "close">;
   api?: Pick<
     ApiBootstrapResult,
-    "startupMaintenance" | "closePluginEntries"
+    "startupMaintenance" | "closePluginEntries" | "closeTools"
   > & {
     applicationWork: Pick<ApplicationWork, "close">;
     runtimeJobWorker: Pick<ApiBootstrapResult["runtimeJobWorker"], "close">;
@@ -71,6 +71,7 @@ export function createServerResourceDrain(
         ? [
             () => api.runtimeJobWorker.close(),
             () => api.pluginBackgroundQueue.close(),
+            () => api.closeTools(),
             () => api.startupMaintenance,
           ]
         : []),

@@ -368,11 +368,12 @@ describe("tool invocation capabilities", () => {
       });
     let retained: ToolExecutionContext["store"];
     const module = makeTool(async (ctx) => {
-      expect(ctx.signal).toBe(controller.signal);
+      expect(ctx.signal?.aborted).toBe(false);
       retained = ctx.store;
       await expect(ctx.store!.getPluginData("data", "key")).rejects.toThrow(
         "stopped",
       );
+      expect(ctx.signal?.aborted).toBe(true);
       return withPendingProposals({ late: true }, [write(2)]);
     });
     const executor = createToolExecutor({ store, findTool: () => module });
