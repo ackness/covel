@@ -44,6 +44,8 @@ The world-list configuration entry opens Providers directly. Narrow screens show
 
 Model Roles and Generation share a live role catalogue combining server configuration, plugin runtime and `type: slot` declarations, user settings, and saved bindings and parameter overrides. Custom roles remain editable in both panes, and plugin setting options follow current model configuration. Legacy key/preset links resolve to Providers; composite setting keys resolve to their owning pane. The internal onboarding version is no longer exposed as a general setting.
 
+The onboarding guide waits for its completion flag to persist before dismissing. While a write is pending, duplicate dismissal is disabled; a failed save leaves the guide open with an error and allows retry. The desktop reset action likewise reports success only after the reset persists.
+
 The `default` role remains visible when configured or saved, and in the unconfigured fallback catalogue. Generation inputs are disabled when the catalogue is empty; edits never create an empty role key.
 
 World preparation shows all stages and separate text-model bindings for each agent runtime in a selected plugin. Function runtime provider roles expose every `type: slot` setting, with explicit user overrides taking precedence over world `pluginSettings`, then plugin defaults. Clearing an override restores the current world default. The session sidebar uses current session plugin metadata and edits model overrides per runtime, explicitly indicating missing or incompatible bindings.

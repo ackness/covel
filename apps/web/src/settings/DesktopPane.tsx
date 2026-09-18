@@ -200,15 +200,24 @@ export function DesktopPane() {
     }
   }
 
-  function handleResetOnboarding() {
-    resetOnboarding();
-    setToast(
-      t(
-        "settings.desktopOnboardingResetToast",
-        "Onboarding will show on next launch",
-      ),
-    );
-    setTimeout(() => setToast(null), 3000);
+  async function handleResetOnboarding() {
+    if (busy !== null) return;
+    setBusy("onboarding");
+    setToast(null);
+    try {
+      await resetOnboarding();
+      setToast(
+        t(
+          "settings.desktopOnboardingResetToast",
+          "Onboarding will show on next launch",
+        ),
+      );
+    } catch {
+      setToast(t("settings.saveFailed"));
+    } finally {
+      setBusy(null);
+      setTimeout(() => setToast(null), 3000);
+    }
   }
 
   return (
@@ -462,7 +471,12 @@ export function DesktopPane() {
         <div className="text-xs text-muted-foreground">
           {t("settings.desktopResetOnboardingHint")}
         </div>
-        <Button size="sm" variant="outline" onClick={handleResetOnboarding}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleResetOnboarding}
+          disabled={busy !== null}
+        >
           {t("settings.desktopResetOnboarding")}
         </Button>
       </section>

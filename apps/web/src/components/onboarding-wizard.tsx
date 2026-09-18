@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -34,11 +34,25 @@ export function OnboardingWizard({
 }: OnboardingWizardProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState<OnboardingStep>(0);
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const savingRef = useRef(false);
   const slots = configuredTextSlots(resolvedSlots);
-  const dismiss = () => {
-    markOnboarded();
-    onOpenChange(false);
-    setStep(0);
+  const dismiss = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveFailed(false);
+    try {
+      await markOnboarded();
+      onOpenChange(false);
+      setStep(0);
+    } catch {
+      setSaveFailed(true);
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
   const stepNames = ["welcome", "modelsTitle", "playTitle"] as const;
 
@@ -52,6 +66,8 @@ export function OnboardingWizard({
       <DialogContent
         className="flex max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl flex-col gap-5 p-5 sm:p-7"
         data-testid="onboarding-wizard"
+        aria-busy={saving}
+        showCloseButton={!saving}
         onPointerDownOutside={(event) => event.preventDefault()}
       >
         <DialogHeader className="shrink-0 gap-3 text-left">
@@ -74,20 +90,27 @@ export function OnboardingWizard({
             />
           )}
         </div>
+        {saveFailed && (
+          <p role="alert" className="text-sm text-destructive">
+            {t("settings.saveFailed")}
+          </p>
+        )}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
           {step === 0 ? (
-            <Button variant="ghost" onClick={dismiss}>
+            <Button variant="ghost" onClick={dismiss} disabled={saving}>
               {t("onboarding.browseFirst")}
             </Button>
           ) : (
             <Button
               variant="ghost"
+              disabled={saving}
               onClick={() => setStep((step - 1) as OnboardingStep)}
             >
               {t("onboarding.back")}
             </Button>
           )}
           <Button
+            disabled={saving}
             onClick={() => {
               if (step === 2) dismiss();
               else setStep((step + 1) as OnboardingStep);

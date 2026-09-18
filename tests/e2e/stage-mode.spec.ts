@@ -68,14 +68,31 @@ test.describe("Stage view mode", () => {
     const lastChoice =
       "Walk to the library and ask the librarian about the old festival journal.";
     try {
+      // Capture the restore baseline once. Fetching inside route handlers races
+      // with route removal after the mocked action triggers another restore.
+      const apiPath = `/api/sessions/${encodeURIComponent(sessionId)}`;
+      const [sessionResponse, viewResponse, pluginsResponse] =
+        await Promise.all([
+          page.request.get(apiPath),
+          page.request.get(`${apiPath}/view`),
+          page.request.get(`${apiPath}/plugins`),
+        ]);
+      for (const response of [sessionResponse, viewResponse, pluginsResponse]) {
+        expect(
+          response.ok(),
+          "stage restore baseline unavailable",
+        ).toBeTruthy();
+      }
+      const session = (await sessionResponse.json()) as Record<string, unknown>;
+      const snapshot = (await viewResponse.json()) as {
+        session: Record<string, unknown>;
+      };
+      const directory = await pluginsResponse.json();
       // ZIP installation and execution are exercised by the server integration
       // test. This browser fixture checks capability discovery and legacy stamps
       // with that package's ID, without depending on a live provider.
       await page.route(`${sessionPath}/plugins`, async (route) => {
-        const response = await route.fetch();
-        const directory = await response.json();
         await route.fulfill({
-          response,
           json: {
             ...directory,
             items: directory.items.map(
@@ -90,20 +107,12 @@ test.describe("Stage view mode", () => {
       // Restore a deterministic completed turn without invoking a model.
       await page.route(sessionPath, async (route) => {
         if (route.request().method() !== "GET") return route.fallback();
-        const response = await route.fetch();
-        const session = (await response.json()) as Record<string, unknown>;
         await route.fulfill({
-          response,
           json: { ...session, phase: "playing" },
         });
       });
       await page.route(`${sessionPath}/view`, async (route) => {
-        const response = await route.fetch();
-        const snapshot = (await response.json()) as {
-          session: Record<string, unknown>;
-        };
         await route.fulfill({
-          response,
           json: {
             ...snapshot,
             session: { ...snapshot.session, phase: "playing" },
@@ -226,7 +235,8 @@ test.describe("Stage view mode", () => {
         payload: { content: lastChoice },
       });
     } finally {
-      // Finish pending restore requests before deleting their session or context.
+      // Stop the live UI before removing fixtures and deleting its session.
+      await page.goto("about:blank");
       await page.unrouteAll({ behavior: "wait" });
       const cleanup = await page.request.delete(
         `/api/sessions/${encodeURIComponent(sessionId)}`,

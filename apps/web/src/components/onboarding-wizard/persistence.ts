@@ -6,11 +6,11 @@ export function isOnboarded(): boolean {
   return typeof stored === "number" && stored >= ONBOARDING_VERSION;
 }
 
-export function markOnboarded(): void {
-  void getSettings().set("ui.onboardedVersion", ONBOARDING_VERSION);
+export function markOnboarded(): Promise<void> {
+  return getSettings().set("ui.onboardedVersion", ONBOARDING_VERSION);
 }
 
 /** Show the guide on its next mount without changing connection settings. */
-export function resetOnboarding(): void {
-  void getSettings().clear("ui.onboardedVersion");
+export function resetOnboarding(): Promise<void> {
+  return getSettings().clear("ui.onboardedVersion");
 }
