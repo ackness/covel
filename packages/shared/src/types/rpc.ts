@@ -30,9 +30,11 @@ export type RpcTrustLevel = "builtin" | "community";
  * Narrow structural store interface exposed to RPC handlers.
  *
  * Plugin authors compile against this surface — not the full `DataStore` —
- * so they get autocomplete and type checking inside their handlers without
- * the runtime package having to depend on `@covel/store`. The framework
- * casts the real `DataStore` to this type at the dispatch call site.
+ * so their handlers get autocomplete without importing `@covel/store` types.
+ * Plugin actions, including builtins, receive a session/plugin-scoped capability.
+ * Writes are immediate under the request's session lock, not runtime proposals;
+ * a later handler failure does not roll earlier successful writes back.
+ * Framework default handlers separately own their host transactions.
  *
  * Adding new methods here is a breaking-change boundary: any new field
  * widens the contract that every handler can rely on. Keep it minimal.

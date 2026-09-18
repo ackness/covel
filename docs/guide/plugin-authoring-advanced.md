@@ -312,6 +312,8 @@ export default async function handler(
 
 > **注意**: 函数 runtime 返回值必须是 `HandlerResult`。领域写入放在 `success.effects` 中；`skipped` / `failed` 只能携带观测 effects。`proposals: [...]` 不是 handler 的公开返回字段。
 
+运行时的 `ctx.store` 和 `ctx.pluginData` 读取共享本次执行的待提交写入；返回对象是独立副本，修改它不等于保存。builtin handler 也不获得完整 DataStore，其额外领域写入必须经过 proposal 提交。RPC action 的写入则在会话锁内即时生效，后续异常不会自动回滚先前的写入；需要整批回滚时应通过 runtime 的 effects 执行。
+
 `FunctionHandlerContext` 暴露的字段(仅列和插件作者最相关的):
 
 | 字段                      | 类型                                      | 用途                                                                                                                                                                                                                                                                         |

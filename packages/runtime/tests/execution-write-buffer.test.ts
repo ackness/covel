@@ -153,23 +153,12 @@ describe("createTrustedHandlerStore with a write buffer", () => {
     expect(chars.map((c) => c.id)).toContain("char-1");
   });
 
-  it("without a buffer keeps the legacy direct-write behaviour", async () => {
-    const store = createMemoryStore();
-    const trusted = createTrustedHandlerStore(store);
-    const now = new Date().toISOString();
-    await trusted.setPluginData({
-      id: "x",
-      sessionId: CTX.sessionId,
-      pluginId: CTX.pluginId,
-      namespace: "schema",
-      key: "k",
-      value: 1,
-      createdAt: now,
-      updatedAt: now,
-    });
-    expect(
-      await store.getPluginData(CTX.sessionId, CTX.pluginId, "schema", "k"),
-    ).not.toBeNull();
+  it("rejects missing execution ownership instead of falling back to immediate writes", () => {
+    expect(() =>
+      Reflect.apply(createTrustedHandlerStore, undefined, [
+        createMemoryStore(),
+      ]),
+    ).toThrow(/execution context and write buffer/);
   });
 
   it("keeps buffered and committed NUL-containing plugin-data tuples distinct", async () => {

@@ -1332,7 +1332,7 @@ export default function (covel) {
 | `active-runtimes` | 当前会话激活 runtime 的 `id`、`pluginId`、类型、stage、outputKind、capabilities                                                 |
 | `models`          | 包含 `active-runtimes`，并为每个 runtime 增加当前 slot、服务端解析后的 model ID 与来源（session override / manifest / default） |
 
-无论是否声明额外 scope，RPC handler 都继续获得基础 `ctx.sessionId`、`ctx.pluginId`、`ctx.locale` 和既有的 `ctx.store` 视图（community handler 的 plugin-data 访问按自身插件隔离）；`context` 不控制这些既有 RPC 能力。环境快照不包含 provider key、prompt、用户设置或任意 plugin-data。handler 看到的是**执行前**快照；响应的顶层 `environment` 是 handler 完成后重新读取 session、同步激活 runtime 并解析模型所得的**执行后**快照，因此切换 story model、启停 runtime 的命令不会把旧上下文回给客户端。
+无论是否声明额外 scope，RPC handler 都继续获得基础 `ctx.sessionId`、`ctx.pluginId`、`ctx.locale` 和既有的 `ctx.store` 视图（所有插件 action 的 plugin-data 访问都按当前 session 和自身插件隔离）；`context` 不控制这些既有 RPC 能力。环境快照不包含 provider key、prompt、用户设置或任意 plugin-data。handler 看到的是**执行前**快照；响应的顶层 `environment` 是 handler 完成后重新读取 session、同步激活 runtime 并解析模型所得的**执行后**快照，因此切换 story model、启停 runtime 的命令不会把旧上下文回给客户端。
 
 参数仅使用一个小型 shell-like tokenizer：支持空格、单/双引号和反斜杠转义，不执行变量展开、命令替换、glob 或任意代码。多个 runtime 声明同名且定义一致的命令会合并；定义不一致时服务端警告并稳定采用先发现的声明。多 runtime 插件应把命令声明放在实际 runtime 的 `PLUGIN.md`，共享的 `entry` 仍只需注册一次。
 
@@ -1456,6 +1456,30 @@ tools:
 | `failed`    | `error`      | 仅 `jobStatus` / `diagnostics` 等观测 effects                                                           |
 
 `resultFormat` 已从 manifest schema 移除；function handler 不能返回缺少 `outcome` 的旧式普通对象。业务数据放入 `success.value`，它必须是 JSON 值。`ctx.pluginData.set/delete` 写入执行 buffer，成功提交后才持久化并通知前端；实时进度使用 `ctx.progress.report`。领域 effects 仅在 `success` 中生效，由内核在 proposal 提交前物化；非 success 的领域 effects 会被剥离并记录诊断。完整 TypeScript 类型见 `packages/shared/src/types/handler-result.ts`。
+
+### Handler store and commit ownership
+
+- Function runtimes and agent guards receive an execution-owned store capability.
+  Builtins may read sessions, worlds, accepted inputs, messages, characters and
+  plugin data. Their only store writes are `setPluginData`, `setPluginDataBatch`,
+  `deletePluginData` and `upsertCharacter`, all buffered as proposals for the
+  current execution. Host transactions, session mutations, compare-and-set and
+  store disposal are not exposed. `createTrustedHandlerStore` now requires both
+  an execution context and a write buffer; callers must not use it for RPCs.
+- Community runtimes keep the narrower `FunctionStoreView`. Its reads and
+  `ctx.pluginData` share the execution buffer. Returned records and buffered
+  inputs are owned copies, so editing an object cannot mutate stored data or
+  silently change a pending proposal. Overlays apply only to the execution
+  session; deleting a row returns `null` on read. List pagination follows the
+  overlay, including pending inserts and deletes.
+- Plugin RPC actions, including builtins, receive `RpcHandlerStore` scoped to
+  the current session/plugin. Its writes are immediate and serialized by the
+  host session lock. A later handler failure does not undo an earlier successful
+  write. Actions needing whole-execution rollback should invoke a runtime and
+  submit domain effects. Registered framework defaults retain their explicit
+  host transaction ownership (for example, atomic form submission batches).
+- Progress and diagnostics retain their separate live channels. Capability
+  narrowing governs framework handles; in-process plugin code is not a sandbox.
 
 ### recursiveCall
 

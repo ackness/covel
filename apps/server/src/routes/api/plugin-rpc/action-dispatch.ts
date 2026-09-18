@@ -2,7 +2,6 @@ import type { Context } from "hono";
 import { COMMUNITY_SERVER_CODE_ACTION } from "@covel/approval";
 import {
   createRpcHandlerStoreView,
-  createTrustedHandlerStore,
   RpcDispatchError,
   RpcValidationError,
 } from "@covel/runtime";
@@ -220,16 +219,6 @@ export async function dispatchPluginAction(
 
   // Action-level dispatch.
   try {
-    // Trusted handlers keep the full store surface, minus writes into
-    // framework-reserved `_` namespaces (the job runner and other framework
-    // writers use the raw store, not this handle).
-    const rpcStore =
-      entryTrust === "builtin"
-        ? createTrustedHandlerStore(store)
-        : createRpcHandlerStoreView(store, {
-            sessionId,
-            pluginId,
-          });
     // Action handlers can perform read-validate-write sequences (the framework
     // submit-form default is one). Serialize them with turns and sibling RPCs
     // so the interaction check and idempotent player-input write are atomic at
@@ -342,8 +331,16 @@ export async function dispatchPluginAction(
             resolveModel: c.get("resolveModel"),
           })
         : undefined;
-      const dispatch = () =>
-        executor.dispatch(
+      const dispatch = () => {
+        // Select by the actual registered entry, not a plugin's claimed trust.
+        // Framework defaults own transactions; plugin actions receive only the
+        // documented immediate-write RPC capability, including builtins.
+        const entry = executor.lookupEntry(pluginId, action);
+        const rpcStore =
+          entry.pluginId === undefined
+            ? store
+            : createRpcHandlerStoreView(store, { sessionId, pluginId });
+        return executor.dispatch(
           {
             pluginId,
             action,
@@ -359,6 +356,7 @@ export async function dispatchPluginAction(
             ...(environment ? { environment } : {}),
           },
         );
+      };
       const eventBus = c.get("eventBus");
       const dispatched =
         liveCommand && liveInvocation

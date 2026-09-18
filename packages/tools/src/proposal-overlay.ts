@@ -31,8 +31,14 @@ export function overlayPluginDataValue(
   pluginId: string,
   namespace: string,
   key: string,
-): { readonly hit: boolean; readonly value?: unknown } {
-  let result: { hit: boolean; value?: unknown } = { hit: false };
+): {
+  readonly hit: boolean;
+  readonly value?: unknown;
+  readonly deleted?: true;
+} {
+  let result: { hit: boolean; value?: unknown; deleted?: true } = {
+    hit: false,
+  };
   for (const proposal of proposals) {
     if (proposal.source.pluginId !== pluginId) continue;
     if (proposal.type === "plugin.data") {
@@ -49,7 +55,7 @@ export function overlayPluginDataValue(
     } else if (proposal.type === "plugin.data.delete") {
       const p = proposal.payload;
       if (p.namespace === namespace && p.key === key) {
-        result = { hit: true, value: null };
+        result = { hit: true, value: null, deleted: true };
       }
     }
   }

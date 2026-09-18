@@ -162,7 +162,7 @@ export async function executeAgentGuard({
       ? revocable(
           trustedGuard
             ? createTrustedHandlerStore(deps.store, guardHelperCtx, writeBuffer)
-            : createFunctionStoreView(deps.store, guardHelperCtx),
+            : createFunctionStoreView(deps.store, guardHelperCtx, writeBuffer),
         )
       : undefined;
     const guardLoggerHandle =

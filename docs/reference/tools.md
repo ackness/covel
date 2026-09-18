@@ -318,7 +318,7 @@ interface UIRenderPart {
 
 **治理路径**: 写入经 Session Kernel commit chain 提交，统一进入 `PreStateCommit` / `PostStateCommit`、trace 与 store 事务。
 
-**保留命名空间**: `_` 前缀的 namespace（`_jobs` legacy 后台任务、`_runtime_jobs` staged detached 作业、`_logs` runtime 日志环）属于框架簿记，插件不可写。该限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖全部插件侧写入口：REST `PUT /api/sessions/:id/plugin-data/...`、`plugin.data` / `plugin.data.batch` commit handler（含 function runtime 输出规范化出的 proposal）、function runtime 的 `ctx.pluginData`、RPC handler 的 store view，以及 builtin 插件 handler 拿到的完整 store 句柄（function runtime / agent guard 的 `ctx.store` 与 RPC action handler 的 store 均经 `createTrustedHandlerStore()` 包装——保留 namespace 的读取不受影响，只拦截写入）。框架自身的特权写入者（后台 job runner、runtime logger）直接调 store，不走这些通路。
+**保留命名空间**: `_` 前缀的 namespace（`_jobs` legacy 后台任务、`_runtime_jobs` staged detached 作业、`_logs` runtime 日志环）属于框架簿记，插件不可写。该限制由 `reservedPluginDataNamespaceError()`（`packages/shared/src/utils/plugin-data-namespace.ts`）统一实施，覆盖全部插件侧写入口：REST `PUT /api/sessions/:id/plugin-data/...`、`plugin.data` / `plugin.data.batch` commit handler（含 function runtime 输出规范化出的 proposal）、function runtime 的 `ctx.pluginData`、RPC handler 的 store view，以及 builtin function runtime / agent guard 经 `createTrustedHandlerStore()` 获得的显式提案写入能力。全部插件 RPC action（包括 builtin）经 `createRpcHandlerStoreView()` 获取按 session/plugin 绑定的即时写入能力；保留 namespace 的读取不受影响。两类插件句柄均不暴露宿主事务、会话生命周期或存储关闭方法。框架自身的特权写入者（后台 job runner、runtime logger）直接调 store，不走这些通路。
 
 ---
 

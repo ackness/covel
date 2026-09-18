@@ -93,134 +93,135 @@ function assertWritableNamespace(namespace: string): void {
   if (reserved) throw new Error(reserved);
 }
 
+/** Builtin runtime reads and proposal-backed writes; host control stays private. */
+export type TrustedHandlerStore = Pick<
+  DataStore,
+  | "getSession"
+  | "getWorld"
+  | "listPlayerInputs"
+  | "listTurnMessages"
+  | "listRecentTurnMessages"
+  | "getPluginData"
+  | "listPluginData"
+  | "listPluginDataSessionScope"
+  | "listCharacters"
+  | "setPluginData"
+  | "setPluginDataBatch"
+  | "deletePluginData"
+  | "upsertCharacter"
+>;
+
 /**
- * Wrap a full DataStore so plugin-data writes into framework-reserved
- * (`_`-prefixed) namespaces throw. Trusted builtin handlers keep
- * the full store surface because their logic implements framework primitives,
- * but they are still plugin code — a stray write into `_jobs`/`_logs` would
- * corrupt background-job or log-ring bookkeeping. Reads (including of
- * reserved namespaces) and every other store method pass through unchanged.
- * Framework writers (the job runner, the runtime logger, asset output) call
- * the raw store directly and never receive this wrapper.
- *
- * When `buffer` is supplied (the function-runtime / agent-guard execution
- * path), the domain write methods route into the buffer as proposals instead
- * of hitting the store, and the matching read methods overlay the buffer so a
- * handler/guard reads its own not-yet-committed writes. Every OTHER method
- * still passes through to the raw store — full isolation of the remaining
- * surface waits on plugin sandboxing; this closes the four domain-write faces
- * the effects-isolation work targets.
+ * Explicit execution capability: every write becomes a proposal. No raw-store
+ * passthrough, transaction, session mutation, or disposal method is exposed.
+ * Reads own their returned values, including with the live MemoryStore backend.
  */
 export function createTrustedHandlerStore(
   store: DataStore,
-  ctx?: HandlerHelperContext,
-  buffer?: ExecutionWriteBuffer,
-): DataStore {
-  // Namespace-guarded direct writes (the pre-buffer behaviour). Used when no
-  // buffer is threaded — bare test harnesses and callers that construct the
-  // trusted store without an execution context.
-  const directGuarded: Pick<
-    DataStore,
-    "setPluginData" | "setPluginDataBatch" | "deletePluginData"
-  > = {
+  ctx: HandlerHelperContext,
+  buffer: ExecutionWriteBuffer,
+): TrustedHandlerStore {
+  if (!ctx || !buffer) {
+    throw new Error(
+      "Runtime store requires an execution context and write buffer",
+    );
+  }
+  const page = <T>(
+    rows: T[],
+    pagination?: { limit?: number; offset?: number },
+  ): T[] => {
+    const offset = pagination?.offset ?? 0;
+    return rows.slice(
+      offset,
+      pagination?.limit === undefined ? undefined : offset + pagination.limit,
+    );
+  };
+  return {
+    getSession: async (...args) =>
+      structuredClone(await store.getSession(...args)),
+    getWorld: async (...args) => structuredClone(await store.getWorld(...args)),
+    listPlayerInputs: async (...args) =>
+      structuredClone(await store.listPlayerInputs(...args)),
+    listTurnMessages: async (...args) =>
+      structuredClone(await store.listTurnMessages(...args)),
+    listRecentTurnMessages: async (...args) =>
+      structuredClone(await store.listRecentTurnMessages(...args)),
     setPluginData(record) {
       assertWritableNamespace(record.namespace);
-      return store.setPluginData(record);
+      bufferPluginData(buffer, ctx, record.namespace, record.key, record.value);
+      return Promise.resolve();
     },
     setPluginDataBatch(records) {
       for (const record of records) assertWritableNamespace(record.namespace);
-      return store.setPluginDataBatch(records);
+      bufferPluginDataBatch(buffer, ctx, records);
+      return Promise.resolve();
     },
-    deletePluginData(sessionId, pluginId, namespace, key) {
+    upsertCharacter(record) {
+      bufferCharacterUpsert(buffer, ctx, record);
+      return Promise.resolve();
+    },
+    deletePluginData(_sessionId, _pluginId, namespace, key) {
       assertWritableNamespace(namespace);
-      return store.deletePluginData(sessionId, pluginId, namespace, key);
+      bufferPluginDataDelete(buffer, ctx, namespace, key);
+      return Promise.resolve();
+    },
+    async getPluginData(sessionId, pluginId, namespace, key) {
+      if (sessionId === ctx.sessionId) {
+        const hit = overlayPluginDataValue(buffer, pluginId, namespace, key);
+        if (hit.hit) {
+          if (hit.deleted) return null;
+          const now = new Date().toISOString();
+          return {
+            id: `${sessionId}:${pluginId}:${namespace}:${key}`,
+            sessionId,
+            pluginId,
+            namespace,
+            key,
+            value: structuredClone(hit.value),
+            createdAt: now,
+            updatedAt: now,
+          };
+        }
+      }
+      return structuredClone(
+        await store.getPluginData(sessionId, pluginId, namespace, key),
+      );
+    },
+    async listPluginData(sessionId, pluginId, namespace, pagination) {
+      if (sessionId !== ctx.sessionId || buffer.length === 0) {
+        return structuredClone(
+          await store.listPluginData(
+            sessionId,
+            pluginId,
+            namespace,
+            pagination,
+          ),
+        );
+      }
+      // Apply pagination after overlaying: a deleted row must not leave a hole,
+      // and appended buffered rows must not exceed the requested page size.
+      const stored = await store.listPluginData(sessionId, pluginId, namespace);
+      return page(
+        mergePluginDataRows(stored, buffer, sessionId, pluginId, namespace),
+        pagination,
+      );
+    },
+    async listPluginDataSessionScope(sessionId, pagination) {
+      if (sessionId !== ctx.sessionId || buffer.length === 0) {
+        return structuredClone(
+          await store.listPluginDataSessionScope(sessionId, pagination),
+        );
+      }
+      const stored = await store.listPluginDataSessionScope(sessionId);
+      return page(mergePluginDataRows(stored, buffer, sessionId), pagination);
+    },
+    async listCharacters(sessionId) {
+      const stored = await store.listCharacters(sessionId);
+      return sessionId === ctx.sessionId
+        ? mergeCharacterRecords(stored, buffer, sessionId)
+        : structuredClone(stored);
     },
   };
-
-  const bufferedOverrides: Partial<DataStore> =
-    buffer && ctx
-      ? {
-          setPluginData(record) {
-            assertWritableNamespace(record.namespace);
-            bufferPluginData(
-              buffer,
-              ctx,
-              record.namespace,
-              record.key,
-              record.value,
-            );
-            return Promise.resolve();
-          },
-          setPluginDataBatch(records) {
-            for (const record of records)
-              assertWritableNamespace(record.namespace);
-            bufferPluginDataBatch(buffer, ctx, records);
-            return Promise.resolve();
-          },
-          upsertCharacter(record) {
-            bufferCharacterUpsert(buffer, ctx, record);
-            return Promise.resolve();
-          },
-          deletePluginData(_sessionId, _pluginId, namespace, key) {
-            assertWritableNamespace(namespace);
-            bufferPluginDataDelete(buffer, ctx, namespace, key);
-            return Promise.resolve();
-          },
-          async getPluginData(sessionId, pluginId, namespace, key) {
-            const hit = overlayPluginDataValue(
-              buffer,
-              pluginId,
-              namespace,
-              key,
-            );
-            if (hit.hit) {
-              const now = new Date().toISOString();
-              return {
-                id: `${sessionId}:${pluginId}:${namespace}:${key}`,
-                sessionId,
-                pluginId,
-                namespace,
-                key,
-                value: hit.value,
-                createdAt: now,
-                updatedAt: now,
-              };
-            }
-            return store.getPluginData(sessionId, pluginId, namespace, key);
-          },
-          async listPluginData(sessionId, pluginId, namespace, pagination) {
-            const stored = await store.listPluginData(
-              sessionId,
-              pluginId,
-              namespace,
-              pagination,
-            );
-            return mergePluginDataRows(
-              stored,
-              buffer,
-              sessionId,
-              pluginId,
-              namespace,
-            );
-          },
-          async listCharacters(sessionId) {
-            const stored = await store.listCharacters(sessionId);
-            return mergeCharacterRecords(stored, buffer, sessionId);
-          },
-        }
-      : directGuarded;
-
-  return new Proxy(store, {
-    get(target, prop, receiver) {
-      if (prop in bufferedOverrides) {
-        return bufferedOverrides[prop as keyof DataStore];
-      }
-      const value = Reflect.get(target, prop, receiver);
-      // Bind pass-through methods to the raw store so implementations that
-      // rely on `this` never see the proxy as their receiver.
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
 }
 
 /**
@@ -263,7 +264,7 @@ export function createPluginDataWriter(
         pluginId,
         namespace,
         key,
-        value,
+        value: structuredClone(value),
         createdAt: now,
         updatedAt: now,
       });
@@ -271,7 +272,7 @@ export function createPluginDataWriter(
     async get(namespace: string, key: string) {
       if (buffer) {
         const hit = overlayPluginDataValue(buffer, pluginId, namespace, key);
-        if (hit.hit) return hit.value;
+        if (hit.hit) return structuredClone(hit.value);
       }
       const row = await store.getPluginData(
         sessionId,
@@ -279,14 +280,16 @@ export function createPluginDataWriter(
         namespace,
         key,
       );
-      return row ? row.value : null;
+      return row ? structuredClone(row.value) : null;
     },
     async list(namespace: string) {
       const rows = await store.listPluginData(sessionId, pluginId, namespace);
       const merged = buffer
         ? mergePluginDataRows(rows, buffer, sessionId, pluginId, namespace)
         : rows;
-      return merged.map((r) => ({ key: r.key, value: r.value }));
+      return structuredClone(
+        merged.map((r) => ({ key: r.key, value: r.value })),
+      );
     },
     async delete(namespace: string, key: string) {
       assertWritableNamespace(namespace);
@@ -394,27 +397,27 @@ export function createPluginLogger(
  * misuse loudly instead of letting third-party code silently bypass
  * proposal/tool governance.
  *
- * Builtin plugins keep the full DataStore because their guard /
- * handler logic implements framework primitives — e.g. importing a world
- * package's declared character schema into the session, or a deterministic
- * player-character upsert. The runtime decides which to inject.
+ * Builtin handlers additionally receive explicit world/character reads and
+ * proposal-backed writes through createTrustedHandlerStore.
  */
 export function createFunctionStoreView(
   store: DataStore,
   ctx: HandlerHelperContext,
+  buffer?: ExecutionWriteBuffer,
 ): FunctionStoreView {
+  const reads = createTrustedHandlerStore(store, ctx, buffer ?? []);
   return {
     getPluginData(namespace, key) {
-      return store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key);
+      return reads.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key);
     },
     listPluginData(namespace) {
-      return store.listPluginData(ctx.sessionId, ctx.pluginId, namespace);
+      return reads.listPluginData(ctx.sessionId, ctx.pluginId, namespace);
     },
     getSession() {
-      return store.getSession(ctx.sessionId);
+      return reads.getSession(ctx.sessionId);
     },
     listPlayerInputs() {
-      return store.listPlayerInputs(ctx.sessionId);
+      return reads.listPlayerInputs(ctx.sessionId);
     },
     listTurnMessages(limit) {
       // A bounded read from inside a runtime handler means "recent context":
@@ -422,15 +425,15 @@ export function createFunctionStoreView(
       // `listTurnMessages(sessionId, { limit })` would return the OLDEST N, so
       // route a numeric limit through the tail query. No limit → full history.
       return typeof limit === "number"
-        ? store.listRecentTurnMessages(ctx.sessionId, limit)
-        : store.listTurnMessages(ctx.sessionId);
+        ? reads.listRecentTurnMessages(ctx.sessionId, limit)
+        : reads.listTurnMessages(ctx.sessionId);
     },
   };
 }
 
 /**
- * Build a scoped store for community action-level RPC handlers. The method
- * shapes stay compatible with `RpcHandlerStore`, while session/plugin
+ * Build a scoped immediate-write store for all plugin action-level RPC handlers.
+ * Method shapes stay compatible with `RpcHandlerStore`, while session/plugin
  * arguments are bound to the current request so handler code cannot reach a
  * different session or plugin namespace by supplying alternate ids.
  */
@@ -439,37 +442,51 @@ export function createRpcHandlerStoreView(
   ctx: Pick<HandlerHelperContext, "sessionId" | "pluginId">,
 ): RpcHandlerStore {
   return {
-    getSession() {
-      return store.getSession(ctx.sessionId);
+    async getSession() {
+      return structuredClone(await store.getSession(ctx.sessionId));
     },
-    listTurnMessages(_sessionId: string) {
-      return store.listTurnMessages(ctx.sessionId);
+    async listTurnMessages(_sessionId: string) {
+      return structuredClone(await store.listTurnMessages(ctx.sessionId));
     },
     savePlayerInput(input) {
       return store.savePlayerInput({
-        ...input,
+        ...structuredClone(input),
         sessionId: ctx.sessionId,
       });
     },
     async setPluginData(record) {
       assertWritableNamespace(record.namespace);
+      const input = structuredClone(record);
+      const existing = await store.getPluginData(
+        ctx.sessionId,
+        ctx.pluginId,
+        input.namespace,
+        input.key,
+      );
       const now = new Date().toISOString();
       await store.setPluginData({
-        id: `${ctx.sessionId}:${ctx.pluginId}:${record.namespace}:${record.key}`,
+        // Preserve existing row identity without trusting a caller-supplied id.
+        id:
+          existing?.id ??
+          `${ctx.sessionId}:${ctx.pluginId}:${input.namespace}:${input.key}`,
         sessionId: ctx.sessionId,
         pluginId: ctx.pluginId,
-        namespace: record.namespace,
-        key: record.key,
-        value: record.value,
-        createdAt: record.createdAt ?? now,
-        updatedAt: record.updatedAt ?? now,
+        namespace: input.namespace,
+        key: input.key,
+        value: input.value,
+        createdAt: existing?.createdAt ?? input.createdAt ?? now,
+        updatedAt: input.updatedAt ?? now,
       });
     },
-    getPluginData(_sessionId, _pluginId, namespace, key) {
-      return store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key);
+    async getPluginData(_sessionId, _pluginId, namespace, key) {
+      return structuredClone(
+        await store.getPluginData(ctx.sessionId, ctx.pluginId, namespace, key),
+      );
     },
     async listPluginData(_sessionId, _pluginId, namespace) {
-      return store.listPluginData(ctx.sessionId, ctx.pluginId, namespace);
+      return structuredClone(
+        await store.listPluginData(ctx.sessionId, ctx.pluginId, namespace),
+      );
     },
   };
 }

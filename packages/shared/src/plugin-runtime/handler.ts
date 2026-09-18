@@ -33,12 +33,12 @@ export interface FunctionHandlerContext {
    * Store handle exposed to the runtime. Community plugins receive a
    * narrow `FunctionStoreView` that only allows scoped reads — broader
    * mutations must go through `ctx.pluginData` or the handler's return
-   * value (proposal pipeline). Core plugins receive the full `DataStore`
-   * (typed as `unknown` here to keep this package free of a
-   * @covel/store import) because they implement framework primitives.
+   * value (proposal pipeline). Builtin plugins receive explicit domain reads
+   * and four proposal-backed writes, never host transactions or lifecycle
+   * methods (typed as `unknown` here to avoid a @covel/store dependency).
    * The runtime decides which to inject based on discovery-source trust.
    */
-  readonly store: FunctionStoreView | unknown;
+  readonly store: unknown;
   /** Declared tools, with schema/approval checks and transactional writes. Function runtimes only. */
   readonly tools?: {
     call(
@@ -154,12 +154,10 @@ export interface FunctionHandlerContext {
    */
   readonly userSettings?: Readonly<Record<string, unknown>>;
   /**
-   * Scoped plugin-data writer. Writes bypass the proposal system and land
-   * directly in `plugin_data` rows under the runtime's own `pluginId`, so
-   * handlers can publish interim placeholders (e.g. a pending image frame
-   * before DashScope responds) that the frontend can observe via SSE
-   * `plugin-data.changed`. Absent when the executor was constructed
-   * without a `store` dep (test harnesses).
+   * Scoped plugin-data writer. Production runtime writes join the execution's
+   * proposal buffer and become visible after commit. Reads see buffered writes
+   * through both this handle and the scoped store view. Use `progress` for live
+   * status updates. Absent without a `store` dependency in test harnesses.
    */
   readonly pluginData?: PluginDataWriter;
   /**
@@ -193,11 +191,10 @@ export interface FunctionHandlerContext {
  * Read-only DataStore view for community handlers. Session reads bind to the
  * current session and plugin-data reads bind to the calling plugin.
  *
- * Builtin plugins keep the full `DataStore` because they
- * implement framework primitives that need it
- * (e.g. `world-init`'s guard imports historic sessions,
- * `char-creator`'s guard upserts the player Character record). The
- * runtime decides which surface to inject based on discovery-source trust.
+ * Builtin plugins receive additional explicit world/character reads and
+ * proposal-backed plugin-data/character writes. Neither surface exposes host
+ * transaction, session mutation, or disposal methods. Reads return owned
+ * snapshots, including when persistence uses MemoryStore.
  *
  * Write own data with `ctx.pluginData` or use `ctx.tools.call` for declared
  * domain commands; both feed the proposal / commit pipeline.

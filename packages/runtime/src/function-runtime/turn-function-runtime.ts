@@ -308,7 +308,7 @@ export async function executeFunctionRuntime({
   const handlerStore = deps.store
     ? isTrustedSource
       ? createTrustedHandlerStore(deps.store, helperCtx, writeBuffer)
-      : createFunctionStoreView(deps.store, helperCtx)
+      : createFunctionStoreView(deps.store, helperCtx, writeBuffer)
     : undefined;
 
   // Community HTTP fail-closed: a community plugin may only reach an

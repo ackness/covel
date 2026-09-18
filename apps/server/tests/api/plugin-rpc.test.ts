@@ -495,6 +495,71 @@ describe("POST /api/sessions/:id/plugin-rpc", () => {
     expect(await res.json()).toMatchObject({ code: "session_not_active" });
   });
 
+  it("gives builtin plugin actions scoped immediate writes without host store authority", async () => {
+    let exposed: string[] = [];
+    const createdAt = "2026-01-01T00:00:00.000Z";
+    await store.setPluginData({
+      id: "existing-entry",
+      sessionId: "sess-rpc-1",
+      pluginId: "codex",
+      namespace: "entries",
+      key: "entry",
+      value: { ready: false },
+      createdAt,
+      updatedAt: createdAt,
+    });
+    registry.registerPluginHandler(
+      "codex",
+      "edit",
+      async (_payload, context) => {
+        exposed = ["withTransaction", "close", "updateSession"].filter(
+          (name) => typeof Reflect.get(context.store, name) === "function",
+        );
+        const snapshot = (await context.store.getSession("other")) as {
+          status: string;
+        };
+        snapshot.status = "ended";
+        const value = { ready: true };
+        const now = new Date().toISOString();
+        await context.store.setPluginData!({
+          sessionId: "other",
+          pluginId: "other",
+          namespace: "entries",
+          key: "entry",
+          value,
+          createdAt: now,
+          updatedAt: now,
+        });
+        value.ready = false;
+        throw new Error("after the immediate write");
+      },
+      {},
+      "builtin",
+    );
+    const res = await app.request("/api/sessions/sess-rpc-1/plugin-rpc", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "action",
+        pluginId: "codex",
+        action: "edit",
+      }),
+    });
+    expect(res.status).toBe(500);
+    expect(exposed).toEqual([]);
+    expect((await store.getSession("sess-rpc-1"))?.status).toBe("active");
+    expect(
+      await store.getPluginData("sess-rpc-1", "codex", "entries", "entry"),
+    ).toMatchObject({
+      id: "existing-entry",
+      createdAt,
+      value: { ready: true },
+    });
+    expect(
+      await store.getPluginData("other", "other", "entries", "entry"),
+    ).toBeNull();
+  });
+
   it("dispatches an entry-registered plugin action", async () => {
     registry.registerPluginHandler(
       "codex",

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { FunctionStoreView } from "@covel/shared/plugin-runtime";
 import type { FunctionHandler } from "@covel/plugin-loader";
 import { createMemoryStore } from "@covel/store";
 import { createCharacterTools, getPendingProposals, tool } from "@covel/tools";
@@ -85,6 +86,35 @@ async function commit(
 }
 
 describe("governed function tools", () => {
+  it("shares buffered plugin data with the community store view without early persistence", async () => {
+    let observed: unknown;
+    const f = await fixture(async (ctx) => {
+      await ctx.pluginData!.set("audit", "created", { ready: true });
+      const view = ctx.store as FunctionStoreView;
+      observed = await view.getPluginData("audit", "created");
+      return { outcome: "success", value: {} };
+    });
+    expect(f.result.runtimeResults[0]?.status).toBe("success");
+    expect(observed).toMatchObject({ value: { ready: true } });
+    expect(
+      await f.store.getPluginData(
+        input.sessionId,
+        "community",
+        "audit",
+        "created",
+      ),
+    ).toBeNull();
+    await commit(f);
+    expect(
+      await f.store.getPluginData(
+        input.sessionId,
+        "community",
+        "audit",
+        "created",
+      ),
+    ).toMatchObject({ value: { ready: true } });
+  });
+
   it("rolls character and plugin data back together when finalization fails", async () => {
     const f = await fixture(async (ctx) => {
       await ctx.tools!.call("create-character", {
