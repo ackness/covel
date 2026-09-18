@@ -3317,6 +3317,17 @@ STORE_BACKEND=pg DATABASE_URL=postgresql://covel:pass@localhost:5432/covel pnpm 
 
 > **多进程部署 session 锁**：当 `STORE_BACKEND=pg` 时，服务器启动日志会输出 `session lock: pg-advisory`。session 作用域 mutation、turn、resume、detached commit 等在专用 PG 连接上取得 advisory lock，确保同一 key 跨 Pod 串行；同一 async 分支的嵌套/批量 key 共用一条 reserved connection，避免 `max=1` 或多 key drain 耗尽连接池。Memory / SQLite 后端使用进程内 Promise-chain 锁，覆盖单进程场景。
 
+### 服务生命周期
+
+服务端启动时逐项登记 DataStore、MediaStore、PG 锁池、API 服务与文件监听器的归属。
+后续启动步骤失败时，使用与正常退出相同的幂等排空流程，并保留原始启动错误。
+API 装配失败自行释放已创建的事件传输和插件注册；注入的存储仍由调用方关闭。
+
+启动扫描不阻塞 API 就绪，但通过 `ApiBootstrapResult.startupMaintenance` 跟踪，
+宿主关闭时必须等待它与两个后台队列结束，再排空记忆任务、调用 `closePluginEntries()`、
+关闭事件总线与底层存储/连接池。各排空阶段有时限；上述已跟踪的后台工作未结束时保留其依赖，
+交由进程最终退出处理。嵌入式调用方同样需要遵守这个顺序，不能仅调用 `worker.close()` 后立即关闭存储。
+
 ### 关键环境变量
 
 完整 registry 见 [`docs/guide/env-registry.md`](../guide/env-registry.md)。

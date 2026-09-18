@@ -211,6 +211,10 @@ export interface ApiBootstrapResult {
   readonly compactorRunner: CompactorRunner;
   readonly runtimeJobWorker: RuntimeJobWorker;
   readonly pluginBackgroundQueue: PluginBackgroundQueue;
+  /** Non-blocking startup scans; the host must drain these before closing storage. */
+  readonly startupMaintenance: Promise<void>;
+  /** Unregister capabilities only after runtime and memory producers have stopped. */
+  readonly closePluginEntries: () => Promise<void>;
   /**
    * Refresh the per-session tool override cache for `(create|update)-character`
    * so the next `executeTurn` exposes schema-typed `fields` to the LLM.
@@ -233,20 +237,52 @@ export async function bootstrapApi(
   // failure propagates: with a PG store backend, an unreachable PG is fatal
   // anyway, and silently degrading to single-pod fan-out would be incorrect.
   let eventTransport: EventBusTransport | undefined;
-  const databaseUrl = readRuntimeEnv().databaseUrl;
-  if (config.storeBackend === "pg" && databaseUrl) {
-    const { createPgEventTransport } =
-      await import("../../lib/pg-event-transport.js");
-    eventTransport = await createPgEventTransport(databaseUrl);
-    console.log(
-      "[bootstrap] event bus transport: pg listen/notify (cross-pod fan-out enabled)",
+  let eventBus: EventBus | undefined;
+  const owned: {
+    pluginEntries?: Awaited<ReturnType<typeof createBootstrapPluginEntries>>;
+  } = {};
+  try {
+    const databaseUrl = readRuntimeEnv().databaseUrl;
+    if (config.storeBackend === "pg" && databaseUrl) {
+      const { createPgEventTransport } =
+        await import("../../lib/pg-event-transport.js");
+      eventTransport = await createPgEventTransport(databaseUrl);
+      console.log(
+        "[bootstrap] event bus transport: pg listen/notify (cross-pod fan-out enabled)",
+      );
+    }
+    eventBus = createEventBus(
+      config.store,
+      eventTransport ? { transport: eventTransport } : undefined,
     );
+    return await assembleApi(config, eventBus, owned);
+  } catch (error) {
+    try {
+      await owned.pluginEntries?.close();
+    } catch {
+      console.warn(
+        "[bootstrap] failed to clean up plugin entries after startup failure",
+      );
+    }
+    try {
+      if (eventBus) await eventBus.close();
+      else await eventTransport?.close?.();
+    } catch {
+      console.warn(
+        "[bootstrap] failed to close event infrastructure after startup failure",
+      );
+    }
+    throw error;
   }
-  const eventBus = createEventBus(
-    config.store,
-    eventTransport ? { transport: eventTransport } : undefined,
-  );
+}
 
+async function assembleApi(
+  config: ApiBootstrapConfig,
+  eventBus: EventBus,
+  owned: {
+    pluginEntries?: Awaited<ReturnType<typeof createBootstrapPluginEntries>>;
+  },
+): Promise<ApiBootstrapResult> {
   // Per-session serializer. The caller (e.g. `app.ts`) may inject a PG
   // advisory-lock implementation for multi-pod safety; otherwise we fall
   // back to the in-process chain lock which is correct for single-process
@@ -263,40 +299,6 @@ export async function bootstrapApi(
   // Wrap store to automatically emit plugin-data.changed SSE events
   // on every setPluginData / setPluginDataBatch call, regardless of caller.
   const store = wrapStoreWithPluginDataEvents(config.store, eventBus);
-
-  // One-time startup sweep of stale suspensions accumulated while the server
-  // was down. Fire-and-forget — never blocks boot.
-  void maybeSweepExpiredSuspensions(store, { force: true }).catch(
-    (err: unknown) =>
-      console.warn(
-        "[suspension-sweep] startup sweep failed:",
-        err instanceof Error ? err.message : String(err),
-      ),
-  );
-
-  // One-time startup sweep of background-job rows orphaned by a crash/restart
-  // (audit R-10). Ownership is process-local, so it is exact only for the
-  // single-process memory/sqlite deployments. A PG deployment may have other
-  // live Pods; sweeping their foreign owner ids would falsely fail live work.
-  // Leave PG orphans pending until the job model gains a renewable lease.
-  if (config.storeBackend !== "pg") {
-    void sweepStalePendingJobs(store).catch((err: unknown) =>
-      console.warn(
-        "[job-sweep] startup sweep failed:",
-        err instanceof Error ? err.message : String(err),
-      ),
-    );
-  }
-
-  // Durable staged-runtime jobs use renewable leases, so the sweep is safe on
-  // every backend, including multiple PostgreSQL Pods. Expired work becomes a
-  // terminal audit record and is never silently re-billed.
-  void recoverExpiredRuntimeJobs(store).catch((err: unknown) =>
-    console.warn(
-      "[runtime-job-sweep] startup sweep failed:",
-      err instanceof Error ? err.message : String(err),
-    ),
-  );
 
   const { registry, discoveryMap, manifestCache } =
     await discoverAndRegisterPlugins({
@@ -485,18 +487,19 @@ export async function bootstrapApi(
   // Unified plugin server entries (`entry` frontmatter field) — needs the
   // tool map, hook pipeline, and rpc registry above. Builtin
   // entries run here; community entries defer to ensurePluginEntry.
-  const pluginEntries = await createBootstrapPluginEntries({
-    discoveryMap,
-    manifestCache,
-    store,
-    toolMap,
-    localToolNames,
-    pluginToolAccess,
-    hookPipeline,
-    rpcRegistry,
-    isCommunityServerCodeApproved,
-    isCommunityHookApproved,
-  });
+  const pluginEntries = (owned.pluginEntries =
+    await createBootstrapPluginEntries({
+      discoveryMap,
+      manifestCache,
+      store,
+      toolMap,
+      localToolNames,
+      pluginToolAccess,
+      hookPipeline,
+      rpcRegistry,
+      isCommunityServerCodeApproved,
+      isCommunityHookApproved,
+    }));
   ensurePluginEntry = pluginEntries.ensurePluginEntry;
 
   // Community activation seam: running the plugin's `entry` module is what
@@ -685,7 +688,6 @@ export async function bootstrapApi(
       };
     },
   });
-  runtimeJobWorker.wake();
 
   // 9. Create app with dependency injection middleware
   const app = new Hono();
@@ -799,6 +801,26 @@ export async function bootstrapApi(
   app.route("/api/traces", traceRoutes);
   app.route("/api/media", mediaRoutes); // SPEC §5.1 (g): signed-URL access to MediaStore
 
+  // Start maintenance only after assembly succeeds. These scans remain
+  // non-blocking for readiness, but belong to the host's drain boundary.
+  const startupMaintenance = Promise.all([
+    maybeSweepExpiredSuspensions(store, { force: true }).catch(() => {
+      console.warn("[suspension-sweep] startup sweep failed");
+    }),
+    // Legacy ownership is process-local; PG may still have other live owners.
+    ...(config.storeBackend !== "pg"
+      ? [
+          sweepStalePendingJobs(store).catch(() => {
+            console.warn("[job-sweep] startup sweep failed");
+          }),
+        ]
+      : []),
+    recoverExpiredRuntimeJobs(store).catch(() => {
+      console.warn("[runtime-job-sweep] startup sweep failed");
+    }),
+  ]).then(() => undefined);
+  runtimeJobWorker.wake();
+
   return {
     app,
     registry,
@@ -807,6 +829,8 @@ export async function bootstrapApi(
     compactorRunner,
     runtimeJobWorker,
     pluginBackgroundQueue,
+    startupMaintenance,
+    closePluginEntries: () => pluginEntries.close(),
     prepareToolsForSession,
   };
 }

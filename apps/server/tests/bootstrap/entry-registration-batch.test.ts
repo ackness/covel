@@ -70,6 +70,15 @@ describe("entry publication", () => {
     expect(() => api.registerRpc("late", async () => true)).toThrow(
       "registration is closed",
     );
+    batch.dispose();
+    expect(params.toolMap.size).toBe(0);
+    expect(params.rpcRegistry.list()).toEqual([]);
+    expect(
+      params.rpcRegistry.getFormValidator("batch-fixture", "staged"),
+    ).toBeUndefined();
+    await params.hookPipeline.run("TurnStart", ctx, {});
+    expect(hook).toHaveBeenCalledOnce();
+    expect(() => batch.dispose()).not.toThrow();
   });
 
   it("rolls back a failed publication across tools, hooks, RPC, and every wire kind", async () => {

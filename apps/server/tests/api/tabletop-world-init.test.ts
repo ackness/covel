@@ -1,3 +1,4 @@
+import { closeTestApi } from "../helpers/close-api.js";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -50,8 +51,7 @@ it("creates a third-party form from the real world-init guard in the first setup
       body: upload,
     });
     expect(installed.status, await installed.text()).toBe(201);
-    boot.runtimeJobWorker.close();
-    await boot.eventBus.flush();
+    await closeTestApi(boot);
     boot = await start();
     expect(boot.registry.get(tabletopProbeId)?.source).toBe("community");
 
@@ -149,8 +149,7 @@ it("creates a third-party form from the real world-init guard in the first setup
     const trace = await store.listTraceEvents(sessionId);
     expect(trace.filter((event) => event.type === "llm.calling")).toEqual([]);
   } finally {
-    boot?.runtimeJobWorker.close();
-    await boot?.eventBus.flush();
+    await closeTestApi(boot);
     await store.close();
     vi.unstubAllEnvs();
     await rm(root, { recursive: true, force: true });

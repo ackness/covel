@@ -62,6 +62,8 @@ export interface BootstrapPluginEntriesParams {
 }
 
 export interface BootstrapPluginEntries {
+  /** Stop activation, await in-flight factories/approval checks, then unregister owned capabilities. */
+  close(): Promise<void>;
   /** Deferred entry invocation — memoized per pluginId, safe to await repeatedly. */
   readonly ensurePluginEntry: (
     pluginId: string,
@@ -82,6 +84,10 @@ export async function createBootstrapPluginEntries(
 ): Promise<BootstrapPluginEntries> {
   const { discoveryMap, manifestCache, isCommunityServerCodeApproved } = params;
   const entryDefinitions = new Map<string, PluginEntryDefinition>();
+  const registrations: EntryRegistrationBatch[] = [];
+  const admissions = new Set<Promise<void>>();
+  let closed = false;
+  let closing: Promise<void> | undefined;
 
   // Compile entry declarations once. Both the approval/pending path and actual
   // activation consume this exact definition, so metadata-only multi-runtime
@@ -133,7 +139,9 @@ export async function createBootstrapPluginEntries(
         }
         await factory(api);
       }
+      if (closed) throw new Error("plugin entries are closed");
       batch.commit();
+      registrations.push(batch);
     } catch (error) {
       const failure = new Error(
         `[plugin-entry] ${pluginRelPath}: failed to activate entry "${currentEntry}"`,
@@ -166,7 +174,7 @@ export async function createBootstrapPluginEntries(
 
   // Community entry hooks exist only after the entry is approved and invoked;
   // lifecycle events emitted before activation are intentionally not replayed.
-  const ensurePluginEntry = async (
+  const activate = async (
     pluginId: string,
     sessionId?: string,
   ): Promise<void> => {
@@ -181,6 +189,7 @@ export async function createBootstrapPluginEntries(
         `[plugin-entry] ${pluginId}: community server code requires explicit approval for session ${sessionId ?? "<missing>"}`,
       );
     }
+    if (closed) throw new Error("plugin entries are closed");
     if (invokedPluginIds.has(pluginId)) return;
     const pending = inFlight.get(pluginId);
     if (pending) return pending;
@@ -197,6 +206,20 @@ export async function createBootstrapPluginEntries(
     return promise;
   };
 
+  const ensurePluginEntry = (
+    pluginId: string,
+    sessionId?: string,
+  ): Promise<void> => {
+    if (closed) return Promise.reject(new Error("plugin entries are closed"));
+    const admission = activate(pluginId, sessionId);
+    admissions.add(admission);
+    void admission.then(
+      () => admissions.delete(admission),
+      () => admissions.delete(admission),
+    );
+    return admission;
+  };
+
   const hasPendingEntry = (pluginId: string): boolean => {
     if (invokedPluginIds.has(pluginId)) return false;
     const discovery = discoveryMap.get(pluginId);
@@ -205,5 +228,26 @@ export async function createBootstrapPluginEntries(
     return (entryDefinitions.get(pluginId)?.entryPaths.length ?? 0) > 0;
   };
 
-  return { ensurePluginEntry, hasPendingEntry };
+  return {
+    ensurePluginEntry,
+    hasPendingEntry,
+    close() {
+      if (closing) return closing;
+      closed = true;
+      closing = Promise.resolve().then(async () => {
+        await Promise.allSettled(admissions);
+        const errors: unknown[] = [];
+        for (const batch of registrations.splice(0).reverse()) {
+          try {
+            batch.dispose();
+          } catch (error) {
+            errors.push(error);
+          }
+        }
+        if (errors.length)
+          throw new AggregateError(errors, "plugin entry cleanup failed");
+      });
+      return closing;
+    },
+  };
 }

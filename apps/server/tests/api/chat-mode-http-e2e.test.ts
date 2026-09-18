@@ -1,6 +1,7 @@
+import { closeTestApi } from "../helpers/close-api.js";
 import path from "node:path";
 import type { Hono } from "hono";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type {
   LLMAdapter,
   LLMResponse,
@@ -173,6 +174,7 @@ async function drainActionStream(res: Response): Promise<ActionEnvelope[]> {
 }
 
 describe("HTTP API e2e: haruka academy chat mode", () => {
+  let boot: Awaited<ReturnType<typeof bootstrapApi>>;
   let app: Hono;
   let mockLLM: ChatModeMockLLM;
   let store: Awaited<ReturnType<typeof bootstrapApi>>["store"];
@@ -185,15 +187,20 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     "../../../../worlds/haruka-academy",
   );
 
+  afterAll(async () => {
+    await closeTestApi(boot);
+    await store?.close();
+  });
+
   beforeAll(async () => {
     mockLLM = new ChatModeMockLLM();
-    const result = await bootstrapApi({
+    const result = (boot = await bootstrapApi({
       pluginsDir,
       worldsDirs: [worldsDir],
       llmAdapter: mockLLM,
       store: createMemoryStore(),
       storeBackend: "memory",
-    });
+    }));
     app = result.app;
     store = result.store;
     registry = result.registry;

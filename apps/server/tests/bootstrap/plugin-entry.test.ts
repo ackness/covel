@@ -104,6 +104,108 @@ export default function (covel) {
 const hookCtx = { sessionId: "s1", turnId: "t1" } as unknown as HookContext;
 
 describe("createBootstrapPluginEntries", () => {
+  it("unregisters successful entries so a fresh host can register the same wires", async () => {
+    const plugin = writePlugin("entry-host-lifecycle", FULL_ENTRY_SRC);
+    const params = makeParams([plugin]);
+    const closeStore = vi.spyOn(params.store, "close");
+    const entries = await createBootstrapPluginEntries(params);
+    expect(getSpeechWire("entry-host-lifecycle/entry-tts")).not.toBeNull();
+    const closing = entries.close();
+    expect(entries.close()).toBe(closing);
+    await closing;
+    expect(getSpeechWire("entry-host-lifecycle/entry-tts")).toBeNull();
+    expect(params.toolMap.size).toBe(0);
+    expect(params.localToolNames.size).toBe(0);
+    expect(params.pluginToolAccess.size).toBe(0);
+    expect(params.rpcRegistry.list()).toEqual([]);
+    expect(closeStore).not.toHaveBeenCalled();
+    await expect(
+      entries.ensurePluginEntry("entry-host-lifecycle"),
+    ).rejects.toThrow("closed");
+    const replacement = await createBootstrapPluginEntries(
+      makeParams([plugin]),
+    );
+    try {
+      expect(getSpeechWire("entry-host-lifecycle/entry-tts")).not.toBeNull();
+      await entries.close();
+      expect(getSpeechWire("entry-host-lifecycle/entry-tts")).not.toBeNull();
+    } finally {
+      await replacement.close();
+    }
+  });
+
+  it("drains an admitted approval check without loading code after close", async () => {
+    const plugin = writePlugin("entry-closing-approval", FULL_ENTRY_SRC, {
+      source: "community",
+    });
+    const params = makeParams([plugin]);
+    const approval = Promise.withResolvers<boolean>();
+    const entries = await createBootstrapPluginEntries({
+      ...params,
+      isCommunityServerCodeApproved: () => approval.promise,
+    });
+    const activation = entries.ensurePluginEntry(
+      "entry-closing-approval",
+      "session",
+    );
+    const rejected = expect(activation).rejects.toThrow("closed");
+    let closed = false;
+    const closing = entries.close().then(() => {
+      closed = true;
+    });
+    try {
+      await Promise.resolve();
+      expect(closed).toBe(false);
+    } finally {
+      approval.resolve(true);
+      await Promise.all([rejected, closing]);
+    }
+    expect(params.toolMap.size).toBe(0);
+    expect(getSpeechWire("entry-closing-approval/entry-tts")).toBeNull();
+  });
+
+  it("waits for a running entry factory and discards its late publication", async () => {
+    const state = {
+      started: Promise.withResolvers<void>(),
+      release: Promise.withResolvers<void>(),
+    };
+    const globals = globalThis as Record<string, unknown>;
+    globals.__covelClosingEntry = state;
+    const plugin = writePlugin(
+      "entry-closing-factory",
+      `
+      export default async function(api) {
+        api.registerRpc("early", async () => true);
+        globalThis.__covelClosingEntry.started.resolve();
+        await globalThis.__covelClosingEntry.release.promise;
+        api.registerRpc("late", async () => true);
+      }
+    `,
+      { source: "community" },
+    );
+    const params = makeParams([plugin]);
+    const entries = await createBootstrapPluginEntries(params);
+    const activation = entries.ensurePluginEntry(
+      "entry-closing-factory",
+      "session",
+    );
+    const rejected = expect(activation).rejects.toThrow("failed to activate");
+    await state.started.promise;
+    let closed = false;
+    const closing = entries.close().then(() => {
+      closed = true;
+    });
+    try {
+      await Promise.resolve();
+      expect(closed).toBe(false);
+    } finally {
+      state.release.resolve();
+      await Promise.all([rejected, closing]);
+      delete globals.__covelClosingEntry;
+    }
+    expect(params.rpcRegistry.list()).toEqual([]);
+  });
+
   it("runs builtin entries at boot: tool, hook, rpc, and wires all registered", async () => {
     const p = writePlugin("entry-full-a", FULL_ENTRY_SRC);
     const params = makeParams([p]);
