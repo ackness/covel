@@ -593,6 +593,9 @@ export class LocalDataService implements DataService {
       appKv
         .removeSubmittedBlocks(sessionId)
         .catch(ignoreError("remove submitted blocks on delete")),
+      appKv
+        .removeExecutionSteps(sessionId)
+        .catch(ignoreError("remove execution steps on delete")),
     ]);
   }
 
@@ -684,10 +687,19 @@ export class LocalDataService implements DataService {
     if (patch.sessionId !== sessionId)
       throw new Error("State patch session mismatch");
     const owned = structuredClone(patch);
+    await this.writeSessionCache(sessionId, () =>
+      appKv.appendStatePatch(owned),
+    );
+  }
+
+  private async writeSessionCache(
+    sessionId: string,
+    write: () => Promise<void>,
+  ): Promise<void> {
     await this.withSessionWorkspaceLock(sessionId, async () => {
       if (!(await this.vault.getSession(sessionId)))
         throw new Error(`Session not found: ${sessionId}`);
-      await appKv.appendStatePatch(owned);
+      await write();
     });
   }
 
@@ -698,7 +710,10 @@ export class LocalDataService implements DataService {
     blockIds: string[],
     values: Record<string, Record<string, unknown>>,
   ): Promise<void> {
-    await appKv.saveSubmittedBlocks(sessionId, blockIds, values);
+    const owned = structuredClone({ blockIds, values });
+    await this.writeSessionCache(sessionId, () =>
+      appKv.saveSubmittedBlocks(sessionId, owned.blockIds, owned.values),
+    );
   }
 
   async loadSubmittedBlocks(sessionId: string) {
@@ -850,7 +865,10 @@ export class LocalDataService implements DataService {
   }
 
   async saveExecutionSteps(sessionId: string, steps: unknown[]): Promise<void> {
-    await appKv.saveExecutionSteps(sessionId, steps);
+    const owned = structuredClone(steps);
+    await this.writeSessionCache(sessionId, () =>
+      appKv.saveExecutionSteps(sessionId, owned),
+    );
   }
 
   async loadExecutionSteps(sessionId: string): Promise<unknown[]> {

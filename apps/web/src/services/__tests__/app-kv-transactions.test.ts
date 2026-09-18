@@ -3,13 +3,26 @@ import { afterEach, expect, it, vi } from "vitest";
 import { APP_KV_STORE_WORLD_OVERLAYS } from "@covel/store/idb-schema";
 import {
   appendStatePatch,
+  getExecutionSteps,
   getStatePatches,
   getWorldOverlay,
   removeWorldOverlay,
   setWorldOverlay,
+  saveExecutionSteps,
 } from "../app-kv-store.js";
 
 afterEach(() => vi.restoreAllMocks());
+
+it("captures timeline entries before asynchronous storage work", async () => {
+  const sessionId = `owned-timeline-${crypto.randomUUID()}`;
+  const steps = [{ runtimeId: "probe", detail: { progress: 1 } }];
+  const saving = saveExecutionSteps(sessionId, steps);
+  steps[0]!.detail.progress = 99;
+  await saving;
+  expect(await getExecutionSteps(sessionId)).toEqual([
+    { runtimeId: "probe", detail: { progress: 1 } },
+  ]);
+});
 
 it("appends atomically even without the service's session lock", async () => {
   const sessionId = `direct-patches-${crypto.randomUUID()}`;

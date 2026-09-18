@@ -78,11 +78,12 @@ async function idbPut<T>(
   key: string,
   value: T,
 ): Promise<void> {
+  const owned = structuredClone(value);
   const db = await openAppDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
     const store = tx.objectStore(storeName);
-    store.put(value, key);
+    store.put(owned, key);
     tx.oncomplete = () => resolve();
     tx.onabort = () =>
       reject(tx.error ?? new Error("Cache write transaction aborted"));
@@ -179,6 +180,7 @@ export async function saveSubmittedBlocks(
   ids: string[],
   values: Record<string, Record<string, unknown>>,
 ): Promise<void> {
+  const owned = structuredClone({ ids, values });
   const db = await openAppDb();
   return new Promise((resolve, reject) => {
     // One readwrite transaction serializes concurrent submissions, including
@@ -190,8 +192,8 @@ export async function saveSubmittedBlocks(
       const current = req.result as SubmittedBlocksRecord | undefined;
       store.put(
         {
-          ids: [...new Set([...(current?.ids ?? []), ...ids])],
-          values: { ...current?.values, ...values },
+          ids: [...new Set([...(current?.ids ?? []), ...owned.ids])],
+          values: { ...current?.values, ...owned.values },
         } satisfies SubmittedBlocksRecord,
         sessionId,
       );
@@ -217,4 +219,8 @@ export async function saveExecutionSteps(
   steps: unknown[],
 ): Promise<void> {
   return idbPut(STORE_EXECUTION_STEPS, sessionId, steps);
+}
+
+export async function removeExecutionSteps(sessionId: string): Promise<void> {
+  return idbDelete(STORE_EXECUTION_STEPS, sessionId);
 }

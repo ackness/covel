@@ -8,6 +8,7 @@ vi.mock("../api.js", () => api);
 vi.mock("../app-kv-store.js", () => ({
   removeStatePatches: async () => {},
   removeSubmittedBlocks: async () => {},
+  removeExecutionSteps: async () => {},
 }));
 
 function deferred() {

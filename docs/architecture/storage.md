@@ -135,6 +135,8 @@ samples. An explicit full vault reset clears the marker along with domain data.
 Submitted block IDs and form values merge in one IndexedDB readwrite
 transaction. Concurrent submissions, including writes from separate tabs,
 retain each block; a later write to the same block replaces that block's values.
+Form inputs and timeline snapshots are copied before asynchronous storage work,
+so caller mutations cannot change an already requested save.
 Removing the session's submitted-block record remains the explicit reset path.
 
 State-change display history is an IndexedDB read-through cache, not a second
@@ -142,9 +144,16 @@ authoritative game-state store. Appending one record reads and writes within one
 readwrite transaction; there is no per-service array cache to overwrite another
 tab's history or retain stale reads. LocalDataService snapshots each append and
 holds world/session ownership through the write, checking that the session still
-exists after admission. An append queued behind deletion fails without recreating
-the cache. Deletion waits for patch/submitted-block cleanup to settle before
-releasing ownership; cleanup failures are reported and do not undo domain deletion.
+exists after admission. The same ownership and existence check applies to local
+form and timeline writes; inputs are copied before waiting for admission.
+Writes queued behind deletion fail without recreating the cache. Session deletion,
+including world deletion's session cleanup, waits for patch/form/timeline cleanup
+before releasing ownership. Cleanup failures do not undo domain deletion; they
+use the existing development warning path and can be retried by deleting again.
+Remote mode still uses browser form/timeline caches without this local-vault
+ownership guarantee; cross-device form state and remote cache cleanup are not
+provided by this mechanism. Timeline saves replace the display snapshot and do
+not merge concurrent tabs' distinct histories.
 
 App-KV writes and deletions resolve on transaction completion, not individual
 request success. An aborted transaction rejects even if its request succeeded.

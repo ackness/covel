@@ -23,6 +23,7 @@ const appKv = vi.hoisted(() => ({
   saveSubmittedBlocks: vi.fn(async () => {}),
   removeSubmittedBlocks: vi.fn(async () => {}),
   saveExecutionSteps: vi.fn(async () => {}),
+  removeExecutionSteps: vi.fn(async () => {}),
   getExecutionSteps: vi.fn(async () => []),
 }));
 
