@@ -1,3 +1,4 @@
+import { runImageGeneration } from "@covel/plugin-handlers-utils/image-generation";
 /**
  * @covel/plugin-dashscope-image-gen — image-generator handler
  *
@@ -24,11 +25,7 @@
  * namespace and re-renders when the commit lands.
  */
 
-import {
-  optionalNumber,
-  optionalString,
-  runImageGeneration,
-} from "@covel/plugin-handlers-utils";
+import { optionalNumber, optionalString } from "@covel/plugin-handlers-utils";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 300000;
 

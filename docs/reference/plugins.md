@@ -2061,3 +2061,7 @@ tools:
 通知、快照或记忆准备失败不会把已持久化结果改为失败；`snapshotFailed` 独立报告检查点问题。核心记忆提取仍为异步派生任务，检查点包含提交前已完成的记忆及本次事务写入，不保证包含本次尚未完成的提取。此 API 每次认领执行调用一次，不提供跨进程执行去重；低层 `finalizeExecution` 保留给事务本身的测试和组合。旧宿主应将 `finalizeExecution`、快照和 `result.completeTurn()` 的组合迁移到此入口。
 
 执行契约（`LoadedRuntime`、`FunctionHandlerContext`、gateway/media 接口）从 `@covel/shared/plugin-runtime` 导入。该入口仅导出类型；`plugin-loader` 保留兼容类型导出，负责文件发现、加载和注册，不是 runtime 的生产依赖。
+
+世界时间通过内置 core-plugin 提供，使用 capability 输入绑定和普通事务化 plugin-data，无内核插件 ID 分支。历法、粗粒度时段与倒流/随机 prompt 见 [World time](./world-time.md)。
+
+图片 handler 的共享流程现在从 `@covel/plugin-handlers-utils/image-generation` 导入 `runImageGeneration`；基础字符串、proposal 与取消辅助函数继续从根入口导入。

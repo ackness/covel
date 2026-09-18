@@ -57,3 +57,7 @@ When `<runtime-inputs>` contains `tabletopCheck`, its `value` is authoritative f
 - Weave in the player background; keep voices, motives, places, factions, and terms consistent with known facts
 - Advance through environment, reactions, and sensory details; never decide the player's action
 - Adjust tone and style to match the narrative tone ({{ world.tone }})
+
+## World time
+
+When `<runtime-inputs>` contains `worldTime`, use its value as this turn's authoritative starting date/phase. Follow the definition's direction and evolution.prompt; describe elapsed time or transitions coherently. The time plugin settles after narration. Old memory must not override this starting time.

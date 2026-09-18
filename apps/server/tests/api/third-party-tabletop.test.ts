@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSqliteStore, type DataStore } from "@covel/store";
+import { awaitPendingMemoryBackgroundTasks } from "@covel/memory";
 import { importWorldDataForSession } from "../../src/world-data/session-import.js";
 import type { LLMAdapter } from "@covel/runtime";
 import {
@@ -56,6 +57,7 @@ describe("tabletop package installed as a third-party ZIP", () => {
 
   async function restart() {
     boot?.runtimeJobWorker.close();
+    await awaitPendingMemoryBackgroundTasks();
     await boot?.eventBus.flush();
     await store.close();
     store = createSqliteStore(path.join(root, "session.sqlite"));
@@ -300,6 +302,7 @@ sources:
   });
   afterEach(async () => {
     boot?.runtimeJobWorker.close();
+    await awaitPendingMemoryBackgroundTasks();
     await boot?.eventBus.flush();
     await store?.close();
     vi.unstubAllEnvs();

@@ -529,6 +529,11 @@ export async function bootstrapApi(
         `memory-ingest:${JSON.stringify([sessionId])}`,
         task,
       ),
+    runCoreExclusive: (sessionId, task) =>
+      memoryIngestLock.withLock(
+        `memory-core:${JSON.stringify([sessionId])}`,
+        task,
+      ),
     preferredMemorySlot: config.preferredMemorySlot,
     resolveModel,
     // Break memoryBlocks label collisions by trust tier (builtin > community),

@@ -377,3 +377,9 @@ the affected table in the relevant reference doc.
 - **`POST /worlds/:id/sync-data`** — 冲突扫描在事务外进行（需要读文件系统的世界包），因此 apply transaction 内会对每个待覆盖目标**重读 hash 做 CAS**：扫描后被改动过就整体中止，返回 `409 { code: "world_data_sync_conflict" }`。调用方重跑（新扫描会把该改动报为正常 conflict）或显式 `force`。路由同时持 SessionLock，挡住回合并发写。
 - **媒体副作用仍在 DB 事务内**（`deferMediaFinalize: false`）。DB 回滚无法撤销已写入的 media bytes，因此 materialize 过程使用**增量补偿栈**：每次 `put` 成功立即登记，中途失败也能清理已落盘的资产。
 - **Compactor** 的 summary 写入与 message tag 在同一 transaction 内：只写 summary 会产生 orphan——`message-insertion` 会把它当 system message 发出，而未打 tag 的原始历史仍然注入，形成双份上下文。
+
+核心记忆恢复任务也进入 `commitExecution` 的故事事务：宿主可提供 `memorySystem.updater.stageAfterTurn(tx, input)`，将叙事、已提交角色事实及模型槽标识存入保留命名空间，不保存凭据。存储失败会使本次提交失败，避免出现已承诺故事但没有恢复任务的间隙。
+
+服务器在提交后异步处理任务，并在下一次回合或会话修改之前通过 `awaitPending` 补做中断任务。核心记忆使用独立的 `memory-core` 锁；PostgreSQL 宿主提供 advisory lock，向量摄取使用另一个锁键。最终核心块、面板镜像和任务删除在同一个事务中提交；存储失败保留任务，已完成任务不再提取。模型响应失败按既有错误状态和 trace 报告后终结，避免旧失败任务越过新故事重新写入。恢复使用下一请求的 adapter/slot，不保存或重放旧 API Key。进程重启后按会话访问恢复，不在启动时调用所有会话的模型。
+
+恢复记录的会话归属取自存储行，payload 不冗余保存 sessionId；快照分支复制后仅处理子会话自身的任务与核心块。正常关机仍等待已登记的后台任务。独立消费者未提供 stageAfterTurn 时保留原有进程内 best-effort 更新行为。

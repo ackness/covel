@@ -74,6 +74,20 @@ export function WorldDimensionsPanel({
 
   return (
     <div className="space-y-1">
+      {dims.time && (
+        <Section title={text(dims.time.name)} icon={Clock}>
+          {dims.time.evolution.prompt && (
+            <p className="text-[11px] text-muted-foreground">
+              {text(dims.time.evolution.prompt)}
+            </p>
+          )}
+          <p className="text-[11px]">
+            {dims.time.kind === "phases"
+              ? dims.time.phases.map((phase) => text(phase)).join(" / ")
+              : text(dims.time.calendar.era)}
+          </p>
+        </Section>
+      )}
       {/* Geography */}
       {dims.geography && (
         <Section title={t("world.geography")} icon={MapPin}>

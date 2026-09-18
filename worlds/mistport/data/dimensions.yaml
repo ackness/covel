@@ -503,3 +503,21 @@ startingConditions:
   startingResources:
     潮币: 50
     雾灯: 1
+
+time:
+  kind: phases
+  name: { zh-CN: 雾港潮时, en-US: Mistport tide time }
+  cycleLabel: { zh-CN: 潮周期, en-US: Tide cycle }
+  phases:
+    - { zh-CN: 涨潮, en-US: Rising tide }
+    - { zh-CN: 满潮, en-US: High tide }
+    - { zh-CN: 退潮, en-US: Falling tide }
+    - { zh-CN: 低潮, en-US: Low tide }
+  initial: { cycle: 1, phase: 0 }
+  evolution:
+    mode: forward
+    defaultStep: 1
+    maxStep: 16
+    prompt:
+      zh-CN: 以潮汐阶段计时，不换算现实钟点。连续的短对话可保持当前阶段，等待潮水或跨区域探索应推进；深退潮属于剧情事件，不是常规阶段。
+      en-US: Count tide phases, not real-world hours. Brief continuous conversation may remain in the phase; waiting for tides or exploring across districts advances it. Deep ebb is a story event, not a routine phase.

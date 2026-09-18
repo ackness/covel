@@ -19,7 +19,7 @@ import type {
   StoreBackend,
   VectorBackend,
 } from "@covel/store";
-import { describeStorageCapabilities } from "@covel/store";
+import { describeStorageCapabilities } from "@covel/store/capabilities";
 
 const bootId = crypto.randomUUID();
 

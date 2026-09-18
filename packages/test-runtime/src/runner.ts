@@ -4,7 +4,7 @@ import {
   type RuntimeResult,
   type TurnInput,
 } from "@covel/shared";
-import { createMemoryMediaStore, createMemoryStore } from "@covel/store";
+import { createMemoryMediaStore, createMemoryStore } from "@covel/store/memory";
 import type { RunRuntimeDebugOptions } from "./types.js";
 import {
   createToolExecutor,

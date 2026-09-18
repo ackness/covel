@@ -9,14 +9,20 @@ import {
 import type { TurnExecutorDeps } from "./turn-executor-types.js";
 import type { CoreMemoryBlock } from "./session-state.js";
 
-export function schedulePostTurnMemoryUpdate(args: {
+export function buildPostTurnMemoryUpdate(args: {
   readonly input: Pick<TurnInput, "sessionId" | "turnId" | "locale">;
   readonly turnResult: Pick<TurnResult, "runtimeResults">;
   readonly runtimes: readonly Pick<RuntimeManifest, "name" | "outputKind">[];
   readonly deps: Pick<TurnExecutorDeps, "memorySystem" | "emitter">;
   readonly coreMemoryBlocks: readonly CoreMemoryBlock[];
   readonly sessionContext?: SessionContextSnapshot;
-}): void {
+}):
+  | Parameters<
+      NonNullable<
+        TurnExecutorDeps["memorySystem"]
+      >["updater"]["updateAfterTurn"]
+    >[0]
+  | undefined {
   const { input, turnResult, deps, coreMemoryBlocks, sessionContext } = args;
   if (!deps.memorySystem || coreMemoryBlocks.length === 0) {
     return;
@@ -72,30 +78,36 @@ export function schedulePostTurnMemoryUpdate(args: {
         }
       : undefined;
 
-  deps.memorySystem.updater
-    .updateAfterTurn({
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      traceId: deps.emitter?.traceId,
-      narrativeText,
-      toolCallSummaries: toolSummaries.length > 0 ? toolSummaries : undefined,
-      authoritativeFacts,
-      currentBlocks: coreMemoryBlocks,
-      locale: input.locale,
-    })
+  return {
+    sessionId: input.sessionId,
+    turnId: input.turnId,
+    traceId: deps.emitter?.traceId,
+    narrativeText,
+    toolCallSummaries: toolSummaries.length > 0 ? toolSummaries : undefined,
+    authoritativeFacts,
+    currentBlocks: coreMemoryBlocks,
+    locale: input.locale,
+  };
+}
+
+export function dispatchMemoryUpdate(
+  memory: NonNullable<TurnExecutorDeps["memorySystem"]>,
+  input: Parameters<typeof memory.updater.updateAfterTurn>[0],
+): void {
+  void memory.updater
+    .updateAfterTurn(input)
     .then((result) => {
-      if (result.error) {
+      if (result.error)
         console.warn(
           `[turn-executor] memory update for ${input.sessionId} reported error: ${result.error}`,
         );
-      }
     })
-    .catch((err) => {
+    .catch((error: unknown) =>
       console.warn(
         `[turn-executor] memory update failed for ${input.sessionId}:`,
-        err,
-      );
-    });
+        error,
+      ),
+    );
 }
 
 function extractPlayerFieldLabels(

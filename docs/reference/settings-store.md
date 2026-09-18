@@ -62,3 +62,5 @@ Web 在 `covel:settings` 的 storage 事件、窗口 focus 和恢复可见时刷
 ## 调试刷新
 
 调试页首次选择会话、手动刷新和自动刷新都会读取会话数据，并同步侧栏中的 phase、已完成回合数和 setup runtimes。数据页展示最近成功读取时间；失败保留上一次成功结果并标注可能过期。跨会话返回的旧响应不会覆盖当前数据。自动刷新只合并最新 trace 页，保留已加载的较早页和分页游标。
+
+`createJsonFileBackend({ ipc, fetchImpl, getAuthHeaders })` 的 IPC transport 由宿主显式提供，不再探测 `globalThis.covelIpc`。Web 应用在环境探测结束后调用 `getCovelIpc()` 并传入 adapter；未提供 IPC 时使用 REST。版本冲突、密钥隔离和加载失败语义保持不变。

@@ -18,7 +18,10 @@ import type {
   MemoryBlockSchema,
   SimpleCompletionAdapter,
 } from "@covel/shared";
-import type { WorkingMemoryRecord } from "@covel/store/contracts";
+import type {
+  WorkingMemoryRecord,
+  StoreTransaction,
+} from "@covel/store/contracts";
 
 // ── Core Memory Blocks ──────────────────────────────────────────
 
@@ -77,8 +80,8 @@ export const DEFAULT_CORE_MEMORY_BLOCKS: readonly CoreMemoryBlockSchema[] = [
     displayName: { zh: "当前场景", en: "Current Scene" },
     icon: "MapPin",
     extractionHint: {
-      zh: "当前所在位置、时间、氛围与环境描写要点。",
-      en: "Current location, time, atmosphere, and salient environmental details.",
+      zh: "当前所在位置、氛围与环境描写要点。可记录晨昏氛围，不维护当前日期或时刻；以世界时间插件的结构化状态为准。",
+      en: "Current location, atmosphere, and salient environmental details. Record ambient light, not an authoritative date or clock; structured world time owns those values.",
     },
   },
   {
@@ -193,6 +196,11 @@ export interface MemoryManager {
 export type MemoryLLMAdapter = SimpleCompletionAdapter;
 
 export interface MemoryUpdaterConfig {
+  /** Host persistence boundary for final blocks plus a durable work receipt. */
+  readonly commitUpdate?: (
+    input: MemoryUpdateInput,
+    updates: ReadonlyMap<CoreMemoryLabel, string>,
+  ) => Promise<void>;
   /** Default model slot for the summarizer; per-call modelSlot takes precedence. */
   readonly modelSlot?: string;
   /** Observe a settled update inside the session queue, including failures. */
@@ -223,6 +231,8 @@ export interface MemoryUpdateResult {
   readonly updated: boolean;
   readonly blocksChanged: readonly CoreMemoryLabel[];
   readonly error?: string;
+  /** Durable work must remain pending when the storage boundary failed. */
+  readonly persistenceFailed?: boolean;
 }
 
 export interface MemoryUpdateInput {
@@ -257,6 +267,11 @@ export interface MemoryAuthoritativeFacts {
 }
 
 export interface MemoryUpdater {
+  /** Optional host-owned durable queue. Called inside the story transaction. */
+  stageAfterTurn?(
+    tx: Pick<StoreTransaction, "setPluginData">,
+    input: MemoryUpdateInput,
+  ): Promise<void>;
   /**
    * Analyze completed turn results and update core memory blocks.
    * Uses a cheap LLM call to extract key information.

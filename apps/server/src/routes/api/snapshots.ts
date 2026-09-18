@@ -24,7 +24,7 @@ import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { collectMediaRefIds } from "@covel/shared";
-import { rebindSnapshotPayloadSession } from "@covel/store";
+import { rebindSnapshotPayloadSession } from "@covel/store/session";
 import type {
   DataStore,
   MediaStore,

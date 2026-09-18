@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createJsonFileBackend,
+  type SettingsIpcTransport,
   SERVER_MANAGED_SECRET,
 } from "../src/backends/json-file.js";
 
@@ -23,6 +24,16 @@ afterEach(() => {
 });
 
 describe("json-file backend load contract", () => {
+  it("does not discover another host's ambient IPC transport", async () => {
+    const invoke = vi.fn();
+    (globalThis as { covelIpc?: unknown }).covelIpc = { invoke };
+    const fetchImpl = vi.fn().mockResolvedValue(res(404, {}));
+    await expect(createJsonFileBackend({ fetchImpl }).load()).resolves.toEqual(
+      {},
+    );
+    expect(invoke).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
   it("treats 404 as an empty store", async () => {
     const backend = createJsonFileBackend({
       fetchImpl: vi.fn().mockResolvedValue(res(404, {})),
@@ -84,7 +95,9 @@ describe("json-file backend IPC write contract", () => {
         });
       });
     (globalThis as { covelIpc?: unknown }).covelIpc = { invoke };
-    const backend = createJsonFileBackend();
+    const backend = createJsonFileBackend({
+      ipc: (globalThis as { covelIpc?: SettingsIpcTransport }).covelIpc,
+    });
 
     await expect(
       backend.saveWithRevision!({ next: true }, 4),
@@ -102,7 +115,9 @@ describe("json-file backend IPC write contract", () => {
         revision: 3,
       }),
     };
-    const backend = createJsonFileBackend();
+    const backend = createJsonFileBackend({
+      ipc: (globalThis as { covelIpc?: SettingsIpcTransport }).covelIpc,
+    });
     await expect(backend.saveWithRevision!({}, 2)).rejects.toMatchObject({
       code: "settings_revision_conflict",
       currentRevision: 3,
@@ -122,7 +137,9 @@ describe("json-file backend IPC write contract", () => {
           : Promise.resolve({ ok: false }),
       ),
     };
-    const backend = createJsonFileBackend();
+    const backend = createJsonFileBackend({
+      ipc: (globalThis as { covelIpc?: SettingsIpcTransport }).covelIpc,
+    });
 
     await expect(backend.save({ "ui.locale": "en-US" })).rejects.toThrow(
       /settings:save.*failed/i,
@@ -133,7 +150,9 @@ describe("json-file backend IPC write contract", () => {
     (globalThis as { covelIpc?: unknown }).covelIpc = {
       invoke: vi.fn().mockResolvedValue({ ok: false }),
     };
-    const backend = createJsonFileBackend();
+    const backend = createJsonFileBackend({
+      ipc: (globalThis as { covelIpc?: SettingsIpcTransport }).covelIpc,
+    });
 
     await expect(backend.saveSecrets({ openai: "sk-test" })).rejects.toThrow(
       /keys:save.*failed/i,

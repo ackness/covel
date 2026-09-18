@@ -10,7 +10,7 @@ postHistory:
   role: system
   content: |
     Process only explicit character changes in `<narrator-output>` relative to `<existing-characters>`.
-    Put new characters in `creates` and known-character patches in `updates`. Use `get-character` only on the first step when necessary. After a failed sync, use the remaining step to correct and resubmit the full batch.
+    Put new characters in `creates` and known-character patches in `updates`. Use `get-character` only on the first step when necessary. After a failed sync, use the remaining tool budget to correct and resubmit the full batch.
     Call `runtime-done` when unchanged; the framework finishes after `sync-characters` succeeds.
 ---
 

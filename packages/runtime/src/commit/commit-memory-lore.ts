@@ -16,9 +16,8 @@ import {
 /**
  * Storage-quota check shared with the REST working-memory route — the limits
  * and off-by-one semantics live in `@covel/shared` (`working-memory-quota.ts`)
- * so the two write paths cannot drift apart. `listWorkingMemory` is optional
- * on KernelStore; without it the entry-count check is skipped and only the
- * value-size cap applies.
+ * so the two write paths cannot drift apart. A writable adapter must supply
+ * the listing capability too; otherwise the entry-count invariant is unknown.
  */
 async function workingMemoryQuotaFailure(
   store: KernelStore,
@@ -27,9 +26,12 @@ async function workingMemoryQuotaFailure(
   key: string,
   value: unknown,
 ): Promise<CommitResult | undefined> {
-  const existing = store.listWorkingMemory
-    ? await store.listWorkingMemory(sessionId)
-    : undefined;
+  if (!store.listWorkingMemory) {
+    return commitError(
+      "working_memory.set: store does not support working memory quota checks",
+    );
+  }
+  const existing = await store.listWorkingMemory(sessionId);
   const violation = workingMemoryQuotaViolation(scope, key, value, existing);
   return violation
     ? commitError(`working_memory.set: ${violation.message}`)

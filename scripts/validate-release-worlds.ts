@@ -3,10 +3,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
-import {
-  formatValidationErrors,
-  validateWorldManifest,
-} from "../packages/shared/src/index.js";
+import { formatValidationErrors, validateWorldManifest } from "@covel/shared";
 import { loadWorldDataSummary } from "../apps/server/src/world-data/world-load.js";
 
 const worldDirs = process.argv.slice(2);

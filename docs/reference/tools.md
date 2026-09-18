@@ -1196,3 +1196,5 @@ commit trace 会记录 `ui.rendered`，并为每个 part 记录 `ui.part.update`
   "payload": { "scope": "player", "key": "mood" }
 }
 ```
+
+`working_memory.set` 提交要求适配器同时提供 `upsertWorkingMemory` 和 `listWorkingMemory`；缺少查询能力时拒绝写入，不跳过会话条目配额。

@@ -5,7 +5,11 @@ import type {
   PluginRuntimeUtils,
   PluginSource,
 } from "@covel/shared/plugin-runtime";
-import type { DataStore, WorkingMemoryRecord } from "@covel/store";
+import type {
+  DataStore,
+  WorkingMemoryRecord,
+  StoreTransaction,
+} from "@covel/store";
 import type {
   BudgetOptions,
   CompactorRunner,
@@ -199,6 +203,15 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
         blocksChanged: readonly string[];
         error?: string;
       }>;
+      /** Persist recovery intent inside the story transaction, when supported. */
+      stageAfterTurn?(
+        tx: Pick<StoreTransaction, "setPluginData">,
+        input: Parameters<
+          NonNullable<
+            TurnExecutorDeps["memorySystem"]
+          >["updater"]["updateAfterTurn"]
+        >[0],
+      ): Promise<void>;
       /** Optional — await any pending updateAfterTurn for the session. */
       awaitPending?(sessionId: string): Promise<void>;
     };

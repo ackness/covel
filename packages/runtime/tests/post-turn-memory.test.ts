@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { RuntimeResult } from "@covel/shared";
 import type { TurnExecutorDeps } from "../src/turn-executor/turn-executor-types.js";
-import { schedulePostTurnMemoryUpdate } from "../src/turn-executor/post-turn-memory.js";
+import { buildPostTurnMemoryUpdate } from "../src/turn-executor/post-turn-memory.js";
 
 function result(
   turnId: string,
@@ -23,9 +23,6 @@ function result(
 
 describe("post-turn memory source selection", () => {
   it("does not re-extract a retry seed or failed output", () => {
-    const updateAfterTurn = vi
-      .fn()
-      .mockResolvedValue({ updated: false, blocksChanged: [] });
     const deps: TurnExecutorDeps = {
       loadRuntime: async () => undefined,
       llm: {
@@ -40,12 +37,14 @@ describe("post-turn memory source selection", () => {
           initializeDefaults: async () => {},
           loadBlocks: async () => [],
         },
-        updater: { updateAfterTurn },
+        updater: {
+          updateAfterTurn: async () => ({ updated: false, blocksChanged: [] }),
+        },
       },
     };
-    const schedule = (runtimeResults: RuntimeResult[]) =>
-      schedulePostTurnMemoryUpdate({
-        input: { sessionId: "session", turnId: "retry", playerMessage: "" },
+    const build = (runtimeResults: RuntimeResult[]) =>
+      buildPostTurnMemoryUpdate({
+        input: { sessionId: "session", turnId: "retry" },
         turnResult: { runtimeResults },
         runtimes: [
           { name: "fixture", outputKind: "story" },
@@ -56,26 +55,27 @@ describe("post-turn memory source selection", () => {
           { label: "scene", content: "harbor", updatedAt: "2026-01-01" },
         ],
       });
-    schedule([
-      result("old-turn", "success", "old narrative"),
-      result("retry", "failed", "uncommitted narrative"),
-    ]);
-    expect(updateAfterTurn).not.toHaveBeenCalled();
-    schedule([result("retry", "success", 7)]);
-    expect(updateAfterTurn).not.toHaveBeenCalled();
-    schedule([
-      {
-        ...result("retry", "success", "internal plugin text"),
-        runtimeId: "plugin",
-      },
-    ]);
-    expect(updateAfterTurn).not.toHaveBeenCalled();
-    schedule([
-      result("old-turn", "success", "old narrative"),
-      result("retry", "success", "new narrative"),
-    ]);
-    expect(updateAfterTurn).toHaveBeenCalledOnce();
-    expect(updateAfterTurn).toHaveBeenCalledWith(
+    expect(
+      build([
+        result("old-turn", "success", "old narrative"),
+        result("retry", "failed", "uncommitted narrative"),
+      ]),
+    ).toBeUndefined();
+    expect(build([result("retry", "success", 7)])).toBeUndefined();
+    expect(
+      build([
+        {
+          ...result("retry", "success", "internal plugin text"),
+          runtimeId: "plugin",
+        },
+      ]),
+    ).toBeUndefined();
+    expect(
+      build([
+        result("old-turn", "success", "old narrative"),
+        result("retry", "success", "new narrative"),
+      ]),
+    ).toEqual(
       expect.objectContaining({
         turnId: "retry",
         narrativeText: "new narrative",

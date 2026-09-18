@@ -301,3 +301,46 @@ startingConditions:
     - 答应凛午休接受采访
     - 问清社团登记截止时间
     - 记住窗外那段吉他旋律
+
+# Calendar definition is copied into each session on its first committed turn.
+time:
+  kind: calendar
+  name: { zh-CN: 学园时间, en-US: Campus time }
+  calendar:
+    era: { zh-CN: 学园历, en-US: Campus year }
+    months:
+      - { name: { zh-CN: 1月, en-US: January }, days: 31 }
+      - { name: { zh-CN: 2月, en-US: February }, days: 28 }
+      - { name: { zh-CN: 3月, en-US: March }, days: 31 }
+      - { name: { zh-CN: 4月, en-US: April }, days: 30 }
+      - { name: { zh-CN: 5月, en-US: May }, days: 31 }
+      - { name: { zh-CN: 6月, en-US: June }, days: 30 }
+      - { name: { zh-CN: 7月, en-US: July }, days: 31 }
+      - { name: { zh-CN: 8月, en-US: August }, days: 31 }
+      - { name: { zh-CN: 9月, en-US: September }, days: 30 }
+      - { name: { zh-CN: 10月, en-US: October }, days: 31 }
+      - { name: { zh-CN: 11月, en-US: November }, days: 30 }
+      - { name: { zh-CN: 12月, en-US: December }, days: 31 }
+    hoursPerDay: 24
+    minutesPerHour: 60
+    weekdays:
+      - { zh-CN: 周一, en-US: Monday }
+      - { zh-CN: 周二, en-US: Tuesday }
+      - { zh-CN: 周三, en-US: Wednesday }
+      - { zh-CN: 周四, en-US: Thursday }
+      - { zh-CN: 周五, en-US: Friday }
+      - { zh-CN: 周六, en-US: Saturday }
+      - { zh-CN: 周日, en-US: Sunday }
+    periods:
+      - { startHour: 0, name: { zh-CN: 深夜, en-US: Night } }
+      - { startHour: 6, name: { zh-CN: 早晨, en-US: Morning } }
+      - { startHour: 12, name: { zh-CN: 午后, en-US: Afternoon } }
+      - { startHour: 18, name: { zh-CN: 晚间, en-US: Evening } }
+  initial: { year: 1, month: 4, day: 8, hour: 8, minute: 20, weekday: 0 }
+  evolution:
+    mode: forward
+    defaultStep: 5
+    maxStep: 43200
+    prompt:
+      zh-CN: 对话通常几分钟，课堂与社团活动按剧情耗时结算，睡眠或明确的次日转场应跨日。回忆不改变当前日期。
+      en-US: Conversation usually takes minutes; classes and club activities take their narrated duration. Sleep or an explicit next-day transition crosses a day. Flashbacks do not move the present clock.

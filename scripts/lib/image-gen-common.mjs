@@ -10,13 +10,13 @@ import { readFile, access } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { parseEnv } from "node:util";
-import { loadLlmConfig } from "../../packages/ai-provider/src/config/llm-loader.ts";
-import { providerApiKeyEnvName } from "../../packages/shared/src/env/index.ts";
+import { loadLlmConfig } from "@covel/ai-provider/config";
+import { providerApiKeyEnvName } from "@covel/shared";
 import {
   getImageWire,
   DEFAULT_IMAGE_WIRE,
-} from "../../packages/ai-provider/src/image/wire-registry.ts";
-import { validateBaseUrl } from "../../packages/ai-provider/src/adapters/http.ts";
+} from "@covel/ai-provider/image-wires";
+import { validateBaseUrl } from "@covel/ai-provider/url-safety";
 
 function covelHome() {
   return process.env.COVEL_HOME || path.join(os.homedir(), ".covel");

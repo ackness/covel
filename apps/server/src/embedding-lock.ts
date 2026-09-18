@@ -27,7 +27,7 @@ import type {
   EmbeddingModelIdentity,
   VectorTarget,
 } from "@covel/store";
-import { supportsVector } from "@covel/store";
+import { supportsVector } from "@covel/store/vector";
 import type { AiStack } from "./ai-setup.js";
 
 interface CachedDim {

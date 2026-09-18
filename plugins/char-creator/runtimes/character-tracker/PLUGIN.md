@@ -66,7 +66,7 @@ postHistory:
   role: system
   content: |
     只处理 `<narrator-output>` 相对 `<existing-characters>` 的明确角色变化。
-    只有一次读取机会；第一步可调用 `get-character` 获取必要详情，读完后仅在有明确变化时调用 `sync-characters`；失败后可用剩余一步修正并重交完整批次。无变化调用 `runtime-done`，不要提交空数组。
+    只有一次读取机会；第一步可调用 `get-character` 获取必要详情，读完后仅在有明确变化时调用 `sync-characters`；失败后在剩余工具预算内修正并重交完整批次。无变化调用 `runtime-done`，不要提交空数组。
     无变化时调用 `runtime-done`；`sync-characters` 成功后框架自动结束。
 ---
 

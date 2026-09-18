@@ -11,7 +11,11 @@ import {
   registerProviderKeys,
 } from "./registry/index.js";
 import i18n from "i18next";
-import { getDesktopRestAuthHeaders, isDesktopApp } from "@/lib/desktop-bridge";
+import {
+  getCovelIpc,
+  getDesktopRestAuthHeaders,
+  isDesktopApp,
+} from "@/lib/desktop-bridge";
 import { emitToast } from "@/lib/toast-channel";
 import { synchronizeSettings } from "./synchronize-settings.js";
 import { resolveSettingEntryText } from "./framework-i18n.js";
@@ -27,7 +31,10 @@ function createStore(): SettingsStore {
   // result; without that ordering REST-desktop silently fell back to
   // localStorage and settings never reached ~/.covel/settings.json.
   const adapter = isDesktopApp()
-    ? createJsonFileBackend({ getAuthHeaders: getDesktopRestAuthHeaders })
+    ? createJsonFileBackend({
+        ipc: getCovelIpc(),
+        getAuthHeaders: getDesktopRestAuthHeaders,
+      })
     : createLocalStorageBackend();
   const store = new SettingsStore(adapter);
   registerCoreSettings(store);

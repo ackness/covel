@@ -18,7 +18,7 @@ import {
   createMediaStoreFromEnv,
   createStoreFromEnv,
   resolveBackendFromEnv,
-} from "@covel/store";
+} from "@covel/store/factory";
 import { resolveUserResourceDirs } from "./lib/user-resource-dirs.js";
 import { createEmbeddingLockHelper } from "./embedding-lock.js";
 import {

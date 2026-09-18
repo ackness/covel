@@ -174,6 +174,10 @@ export {
 } from "./schemas/world.js";
 
 export type { WorldManifestInput } from "./schemas/world.js";
+export {
+  worldTimeSchema,
+  type WorldTimeDefinition,
+} from "./schemas/world-time.js";
 
 // ── API Transport Contracts ────────────────────────────────────
 export {

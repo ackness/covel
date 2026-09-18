@@ -34,8 +34,8 @@ memoryBlocks:
     displayName: { zh: 当前场景, en: Current Scene }
     icon: MapPin
     extractionHint:
-      zh: 当前所在位置、时间、氛围与环境描写要点。
-      en: Current location, time, atmosphere, and salient environmental details.
+      zh: 当前所在位置、氛围与环境描写要点。可记录晨昏氛围，不维护当前日期或时刻；以世界时间插件的结构化状态为准。
+      en: Current location, atmosphere, and salient environmental details. Record ambient light, not an authoritative date or clock; structured world time owns those values.
   - label: player_profile
     displayName: { zh: 玩家状态, en: Player Profile }
     icon: User

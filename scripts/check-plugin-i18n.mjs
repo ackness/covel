@@ -20,10 +20,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
-import {
-  canonicalizeLocale,
-  localeLanguage,
-} from "../packages/shared/src/index.ts";
+import { canonicalizeLocale, localeLanguage } from "@covel/shared";
 
 const CJK_REGEX = /[\u3400-\u4dbf\u4e00-\u9fff]/;
 const HERE = fileURLToPath(new URL(".", import.meta.url));

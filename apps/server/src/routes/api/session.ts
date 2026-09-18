@@ -18,7 +18,7 @@ import { Hono } from "hono";
 import { isSetupRuntime, readRuntimeEnv } from "@covel/shared";
 import type { PluginRegistry } from "@covel/plugin-loader";
 import type { SessionRecord } from "@covel/store";
-import { SessionAlreadyExistsError } from "@covel/store";
+import { SessionAlreadyExistsError } from "@covel/store/errors";
 import { runSessionStartHook, runWithHookScope } from "@covel/runtime";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import { normalizeLocale } from "../../lib/validators.js";

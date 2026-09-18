@@ -23,6 +23,34 @@
     "./vector": {
       "types": "./src/vector-store.ts",
       "import": "./src/vector-store.ts"
+    },
+    "./factory": {
+      "types": "./src/factory.ts",
+      "import": "./src/factory.ts"
+    },
+    "./memory": {
+      "types": "./src/memory-entry.ts",
+      "import": "./src/memory-entry.ts"
+    },
+    "./sqlite": {
+      "types": "./src/sqlite-entry.ts",
+      "import": "./src/sqlite-entry.ts"
+    },
+    "./postgres": {
+      "types": "./src/postgres-entry.ts",
+      "import": "./src/postgres-entry.ts"
+    },
+    "./session": {
+      "types": "./src/session-entry.ts",
+      "import": "./src/session-entry.ts"
+    },
+    "./errors": {
+      "types": "./src/errors.ts",
+      "import": "./src/errors.ts"
+    },
+    "./capabilities": {
+      "types": "./src/storage-capabilities.ts",
+      "import": "./src/storage-capabilities.ts"
     }
   },
   "scripts": {

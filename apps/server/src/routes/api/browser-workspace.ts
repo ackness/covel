@@ -10,7 +10,7 @@ import {
   type BrowserCheckpoint,
   type DataStore,
   type SessionCommit,
-} from "@covel/store";
+} from "@covel/store/session";
 import { errorBody, readJsonBody } from "../../api-error.js";
 import {
   publicSessionMetadata,

@@ -158,6 +158,7 @@ export function createMemoryUpdater(
     );
 
     let authoritativeBlocksChanged: CoreMemoryLabel[] = [];
+    let persisting = false;
 
     try {
       // Persist confirmed character fields before waiting on the summarizer.
@@ -170,7 +171,9 @@ export function createMemoryUpdater(
         lang,
       });
       if (authoritativeUpdates.size > 0) {
+        persisting = true;
         await manager.updateBlocks(sessionId, authoritativeUpdates);
+        persisting = false;
         authoritativeBlocksChanged = [...authoritativeUpdates.keys()];
       }
 
@@ -211,13 +214,17 @@ export function createMemoryUpdater(
         lang,
       });
       if (parsed.size === 0) {
+        persisting = true;
+        await config?.commitUpdate?.(params, parsed);
         return {
           updated: authoritativeBlocksChanged.length > 0,
           blocksChanged: authoritativeBlocksChanged,
         };
       }
 
-      await manager.updateBlocks(sessionId, parsed);
+      persisting = true;
+      if (config?.commitUpdate) await config.commitUpdate(params, parsed);
+      else await manager.updateBlocks(sessionId, parsed);
 
       return {
         updated: true,
@@ -232,6 +239,7 @@ export function createMemoryUpdater(
         updated: authoritativeBlocksChanged.length > 0,
         blocksChanged: authoritativeBlocksChanged,
         error: err instanceof Error ? err.message : String(err),
+        ...(persisting ? { persistenceFailed: true } : {}),
       };
     }
   }
@@ -262,6 +270,7 @@ export function createMemoryUpdater(
           updated: false,
           blocksChanged: [],
           error: error instanceof Error ? error.message : String(error),
+          persistenceFailed: true,
         }))
         .then(async (result) => {
           try {

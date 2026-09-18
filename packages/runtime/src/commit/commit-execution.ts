@@ -1,7 +1,11 @@
 import { buildSessionContextSnapshot } from "@covel/context";
 import { DEFAULT_LOCALE, type RuntimeResult } from "@covel/shared";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
-import { schedulePostTurnMemoryUpdate } from "../turn-executor/post-turn-memory.js";
+import type { StoreTransaction } from "@covel/store/contracts";
+import {
+  buildPostTurnMemoryUpdate,
+  dispatchMemoryUpdate,
+} from "../turn-executor/post-turn-memory.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import { saveAutoSnapshot } from "../snapshot/auto-snapshot.js";
 import {
@@ -58,7 +62,20 @@ export async function commitExecution(
   // Drain under the caller's lock before writing proposals, not just before
   // snapshotting, so an older extraction cannot overwrite this commit's tools.
   await args.memorySystem?.updater.awaitPending?.(args.sessionId);
-  const outcome = await finalizeExecution(args);
+  const stage = args.memorySystem?.updater.stageAfterTurn;
+  let stagedInput: ReturnType<typeof buildPostTurnMemoryUpdate>;
+  const outcome = await finalizeExecution(
+    stage
+      ? {
+          ...args,
+          extraInTx: async (tx) => {
+            await args.extraInTx?.(tx);
+            stagedInput = await prepareCommittedMemory(args, tx);
+            if (stagedInput) await stage(tx, stagedInput);
+          },
+        }
+      : args,
+  );
   try {
     await args.onFinalized?.(outcome);
   } catch (error) {
@@ -119,7 +136,17 @@ export async function commitExecution(
       }
     }
     try {
-      await refreshCommittedMemory(args);
+      if (stage && stagedInput) {
+        void args.memorySystem?.updater
+          .awaitPending?.(sessionId)
+          .catch((error: unknown) => {
+            console.warn("[commit-execution] memory recovery failed:", error);
+          });
+      } else if (!stage) {
+        const input = await prepareCommittedMemory(args, args.store);
+        if (input && args.memorySystem)
+          dispatchMemoryUpdate(args.memorySystem, input);
+      }
     } catch (error) {
       console.warn("[commit-execution] memory preparation failed:", error);
     }
@@ -127,12 +154,17 @@ export async function commitExecution(
   return { ...outcome, snapshotFailed };
 }
 
-async function refreshCommittedMemory(
+async function prepareCommittedMemory(
   args: CommitExecutionArgs,
-): Promise<void> {
-  const { memorySystem, store, sessionId, completion, capabilityPluginIds } =
-    args;
-  if (!memorySystem) return;
+  store: StoreTransaction,
+): Promise<ReturnType<typeof buildPostTurnMemoryUpdate>> {
+  const { memorySystem, sessionId, completion, capabilityPluginIds } = args;
+  if (
+    !memorySystem ||
+    completion.kind === "detached" ||
+    args.results.some((result) => result.status === "suspended")
+  )
+    return;
   const storyIds = new Set(
     args.runtimes
       .filter((runtime) => runtime.outputKind === "story")
@@ -150,7 +182,10 @@ async function refreshCommittedMemory(
 
   const session = await store.getSession(sessionId);
   const locale = session?.locale ?? DEFAULT_LOCALE;
-  const coreMemoryBlocks = await memorySystem.manager.loadBlocks(sessionId);
+  const coreMemoryBlocks = await memorySystem.manager.loadBlocks(
+    sessionId,
+    await store.listWorkingMemory(sessionId),
+  );
   const sessionContext = await buildSessionContextSnapshot(store, sessionId, {
     locale,
     worldId: session?.worldId ?? undefined,
@@ -159,7 +194,7 @@ async function refreshCommittedMemory(
     turnNumber: session?.completedPlayerTurns ?? 0,
     coreMemoryBlocks,
   });
-  schedulePostTurnMemoryUpdate({
+  return buildPostTurnMemoryUpdate({
     input: {
       sessionId,
       turnId: completion.turnId,

@@ -24,6 +24,7 @@ class ChatModeMockLLM implements LLMAdapter {
   scenePromptCalls = 0;
   memoryCalls = 0;
   trackerCalls = 0;
+  timeCalls = 0;
   readonly calls: Array<{
     readonly tools: readonly string[];
     readonly messages: readonly LLMMessage[];
@@ -50,6 +51,26 @@ class ChatModeMockLLM implements LLMAdapter {
         toolCalls: [],
         finishReason: "stop",
         usage: { inputTokens: 80, outputTokens: 12 },
+      };
+    }
+
+    if (toolNames.includes("advance-world-time")) {
+      this.timeCalls += 1;
+      return {
+        content: null,
+        toolCalls: [
+          {
+            id: `tc-time-${this.timeCalls}`,
+            name: "advance-world-time",
+            arguments: JSON.stringify({
+              amount: 5,
+              unit: "minute",
+              reason: "A short classroom conversation.",
+            }),
+          },
+        ],
+        finishReason: "tool_calls",
+        usage: { inputTokens: 90, outputTokens: 20 },
       };
     }
 
@@ -207,6 +228,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
         "scene-cast",
         "scene-prompts",
         "character-blueprint",
+        "world-time",
       ]),
     );
     expect(created.activePlugins).not.toContain("narrator");
@@ -339,6 +361,7 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
           "scene-cast",
           "chat-mode-narrator",
           "scene-prompts",
+          "world-time/advance",
         ]),
       );
       const failedRows = runtimeRows.filter((row) => row.status === "failed");
@@ -352,6 +375,11 @@ describe("HTTP API e2e: haruka academy chat mode", () => {
     // Acceptance: character-tracker executes in dialogue mode once the
     // chat engine succeeds (it gates on the narrative-engine capability now).
     expect(mockLLM.trackerCalls).toBe(3);
+    expect(mockLLM.timeCalls).toBe(3);
+    expect(
+      (await store.getPluginData(sessionId, "world-time", "clock", "current"))
+        ?.value,
+    ).toMatchObject({ month: 4, day: 8, hour: 8, minute: 35, weekdayIndex: 0 });
 
     const messages = await store.listTurnMessages(sessionId);
     const storyMessages = messages.filter(

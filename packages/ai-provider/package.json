@@ -7,6 +7,18 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./config": {
+      "types": "./src/config/llm-loader.ts",
+      "import": "./src/config/llm-loader.ts"
+    },
+    "./image-wires": {
+      "types": "./src/image/wire-registry.ts",
+      "import": "./src/image/wire-registry.ts"
+    },
+    "./url-safety": {
+      "types": "./src/adapters/http/url-safety.ts",
+      "import": "./src/adapters/http/url-safety.ts"
     }
   },
   "scripts": {

@@ -27,5 +27,6 @@
       "entry": ["src/routes/**/*.{ts,tsx}"],
       "ignoreUnresolved": ["\\./routeTree\\.gen"]
     }
-  }
+  },
+  "ignore": ["plugins/_archive/**", "templates/**"]
 }

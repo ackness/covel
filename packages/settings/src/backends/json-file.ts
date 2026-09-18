@@ -9,14 +9,8 @@ import {
   type SettingsPersistenceBundle,
 } from "@covel/shared/settings-persistence";
 
-interface CovelIpcApiShape {
+export interface SettingsIpcTransport {
   invoke<T = unknown>(channel: string, payload?: unknown): Promise<T>;
-}
-
-function getIpc(): CovelIpcApiShape | null {
-  if (typeof globalThis === "undefined") return null;
-  const w = globalThis as unknown as { covelIpc?: CovelIpcApiShape };
-  return w.covelIpc ?? null;
 }
 
 function assertIpcWriteSucceeded(channel: string, result: unknown): void {
@@ -57,7 +51,9 @@ async function throwForSaveResponse(res: Response): Promise<never> {
   throw new Error(`[settings] save failed: HTTP ${res.status}`);
 }
 
-interface JsonFileBackendOptions {
+export interface JsonFileBackendOptions {
+  /** Host-owned IPC transport. Without it this adapter uses REST. */
+  readonly ipc?: SettingsIpcTransport | null;
   /** Defaults to `/api/config/settings`. */
   readonly restEndpoint?: string;
   /** Defaults to `/api/config/keys`. */
@@ -86,7 +82,7 @@ export function isServerManagedSecret(value: unknown): boolean {
 /**
  * Desktop backend. Writes to `<covelHome>/settings.json` via one of:
  *  1. Electron IPC (`covel:settings:*` channels) when the preload bridge is
- *     present (`window.covelIpc`).
+ *     explicitly supplied by the host.
  *  2. REST (`/api/config/settings`) otherwise — self-deploy setups where the
  *     sidecar owns the file.
  */
@@ -94,6 +90,7 @@ export function createJsonFileBackend(
   opts: JsonFileBackendOptions = {},
 ): SettingsBackendAdapter {
   const endpoint = opts.restEndpoint ?? "/api/config/settings";
+  const getIpc = () => opts.ipc ?? null;
   const secretsEndpoint = opts.restSecretsEndpoint ?? "/api/config/keys";
   const fetchImpl = opts.fetchImpl ?? fetch;
   const authHeaders = (): Record<string, string> =>

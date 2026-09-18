@@ -7,6 +7,10 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./image-generation": {
+      "types": "./src/image-generation.ts",
+      "import": "./src/image-generation.ts"
     }
   },
   "scripts": {

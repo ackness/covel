@@ -14,6 +14,7 @@ import type { DataStore } from "@covel/store";
 import { createMemoryTools, type ToolModule } from "@covel/tools";
 import { getCachedWorld } from "../../../world-cache.js";
 import { observeMemoryUpdate } from "./memory-observation.js";
+import { createMemoryRecovery } from "./memory-recovery.js";
 
 export interface CreateBootstrapMemorySystemParams {
   readonly manifestCache: ReadonlyMap<string, readonly ParsedPluginMd[]>;
@@ -27,6 +28,10 @@ export interface CreateBootstrapMemorySystemParams {
   readonly embed?: EmbedFn;
   /** Serialize a complete vector-ingestion sweep across server processes. */
   readonly runIngestExclusive?: <T>(
+    sessionId: string,
+    task: () => Promise<T>,
+  ) => Promise<T>;
+  readonly runCoreExclusive?: <T>(
     sessionId: string,
     task: () => Promise<T>,
   ) => Promise<T>;
@@ -60,6 +65,7 @@ export function createBootstrapMemorySystem({
   llmAdapter,
   embed,
   runIngestExclusive,
+  runCoreExclusive,
   preferredMemorySlot,
   resolveModel,
   getPluginSource,
@@ -167,6 +173,12 @@ export function createBootstrapMemorySystem({
     },
   });
 
+  const coreMemory = {
+    ...(memoryPanelPluginId ? { pluginId: memoryPanelPluginId } : {}),
+    blocks: baseBlocks,
+    resolveBlocks,
+  };
+  const recovery = createMemoryRecovery(store, coreMemory, runCoreExclusive);
   const baseSystem = createMemorySystem(
     {
       store,
@@ -177,12 +189,9 @@ export function createBootstrapMemorySystem({
         resolveModel({ name: slot, model: slot } as RuntimeManifest),
     },
     {
-      coreMemory: {
-        ...(memoryPanelPluginId ? { pluginId: memoryPanelPluginId } : {}),
-        blocks: baseBlocks,
-        resolveBlocks,
-      },
+      coreMemory,
       updater: {
+        commitUpdate: recovery.commitUpdate,
         onUpdate: (input, result) =>
           observeMemoryUpdate(store, memoryPanelPluginId, input, result),
       },
@@ -209,14 +218,12 @@ export function createBootstrapMemorySystem({
     const requestLlm = createMemoryLlm(adapter);
     return {
       ...sharedSystem,
-      updater: {
-        ...sharedSystem.updater,
-        updateAfterTurn: (params) =>
-          sharedSystem.updater.updateAfterTurn(
-            { ...params, modelSlot: modelSlot ?? resolveMemorySlot() },
-            requestLlm,
-          ),
-      },
+      updater: recovery.wrap(
+        sharedSystem.updater,
+        sharedSystem.manager,
+        requestLlm,
+        () => modelSlot ?? resolveMemorySlot(),
+      ),
     };
   }
   const memorySystem = forRequest(llmAdapter);

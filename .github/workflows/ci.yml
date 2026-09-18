@@ -64,6 +64,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Package boundaries
+        run: pnpm check:boundaries
+
       - name: Dependency hygiene (knip)
         run: pnpm deps:check
 
