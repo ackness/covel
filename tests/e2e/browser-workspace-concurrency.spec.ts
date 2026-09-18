@@ -79,7 +79,12 @@ test("closing an owner tab releases the workspace and lets another tab recover t
   }
 });
 
-for (const followUp of ["hydrate", "local write", "delete world"] as const) {
+for (const followUp of [
+  "hydrate",
+  "local write",
+  "edit world",
+  "delete world",
+] as const) {
   test(`another tab waits for a live workspace before ${followUp}`, async ({
     page,
     context,
@@ -160,7 +165,11 @@ for (const followUp of ["hydrate", "local write", "delete world"] as const) {
                 ? getDataService().updateSession(sessionId, {
                     runtimeModelOverrides: { "probe/main": "second-tab-slot" },
                   })
-                : getDataService().deleteWorld(worldId);
+                : followUp === "edit world"
+                  ? getDataService().updateWorld(worldId, {
+                      name: "Edited in another tab",
+                    })
+                  : getDataService().deleteWorld(worldId);
           probe.hydrationResult = pending.then(
             () => {
               probe.hydrationFinished = true;
@@ -174,18 +183,23 @@ for (const followUp of ["hydrate", "local write", "delete world"] as const) {
       // Observe either admission to the lock queue or an incorrect early finish.
       await expect
         .poll(() =>
-          second.evaluate(async (sessionId) => {
-            if (
-              (window as unknown as { hydrationFinished?: boolean })
-                .hydrationFinished
-            )
-              return true;
-            return (
-              (await navigator.locks.query()).pending?.some((lock) =>
-                lock.name?.includes(sessionId),
-              ) ?? false
-            );
-          }, sessionId),
+          second.evaluate(
+            async ({ sessionId, worldId }) => {
+              if (
+                (window as unknown as { hydrationFinished?: boolean })
+                  .hydrationFinished
+              )
+                return true;
+              return (
+                (await navigator.locks.query()).pending?.some(
+                  (lock) =>
+                    lock.name?.includes(sessionId) ||
+                    lock.name?.includes(worldId),
+                ) ?? false
+              );
+            },
+            { sessionId, worldId },
+          ),
         )
         .toBe(true);
       const recoveredWhileLive = await second.evaluate(
@@ -230,6 +244,14 @@ for (const followUp of ["hydrate", "local write", "delete world"] as const) {
           expect(persisted.runtimeModelOverrides).toEqual({
             "probe/main": "second-tab-slot",
           });
+        if (followUp === "edit world") {
+          const world = await second.evaluate(async (worldId) => {
+            const servicePath = "/src/services/data-service.ts";
+            const { getDataService } = await import(servicePath);
+            return getDataService().getWorld(worldId);
+          }, worldId);
+          expect(world.name).toBe("Edited in another tab");
+        }
       }
       expect(recoveredWhileLive).toBe(false);
     } finally {

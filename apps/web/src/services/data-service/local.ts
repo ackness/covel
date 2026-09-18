@@ -249,7 +249,6 @@ export class LocalDataService implements DataService {
   private readonly vault: BrowserVault;
   private statePatches = new Map<string, StatePatchRecord[]>();
   private initPromise: Promise<void> | null = null;
-  private workspaceTail: Promise<void> = Promise.resolve();
 
   constructor(vault?: BrowserVault) {
     this.vault = vault ?? new BrowserVault();
@@ -309,13 +308,26 @@ export class LocalDataService implements DataService {
     return result.checkpoint;
   }
 
-  private enqueueWorkspace<T>(operation: () => Promise<T>): Promise<T> {
-    const result = this.workspaceTail.then(operation, operation);
-    this.workspaceTail = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
+  private async withSessionWorkspaceLock<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+    creatingWorldId?: string,
+  ): Promise<T> {
+    const vault = await this.ready();
+    const worldId =
+      creatingWorldId ??
+      (await vault.getLatestCheckpoint(sessionId))?.session.worldId;
+    // Always acquire world before session. World deletion holds the exclusive
+    // world lock before draining session locks, so reversing this order deadlocks.
+    const run = () =>
+      vault.withSessionLock(sessionId, async () => {
+        const current = await vault.getLatestCheckpoint(sessionId);
+        if (current && current.session.worldId !== worldId) {
+          throw new Error(`Session world changed while waiting: ${sessionId}`);
+        }
+        return operation();
+      });
+    return worldId ? vault.withWorldLock(worldId, "shared", run) : run();
   }
 
   private mutateCheckpoint(
@@ -323,7 +335,7 @@ export class LocalDataService implements DataService {
     domain: string,
     mutate: (checkpoint: BrowserCheckpoint) => BrowserCheckpoint,
   ): Promise<BrowserCheckpoint> {
-    return this.vault.withSessionLock(sessionId, async () => {
+    return this.withSessionWorkspaceLock(sessionId, async () => {
       await this.recoverPendingCommitNow(sessionId);
       return this.mutateCheckpointNow(sessionId, domain, mutate);
     });
@@ -333,7 +345,7 @@ export class LocalDataService implements DataService {
     sessionId: string,
     operation: (workspace: SessionWorkspaceOperations) => Promise<T>,
   ): Promise<T> {
-    return this.vault.withSessionLock(sessionId, () =>
+    return this.withSessionWorkspaceLock(sessionId, () =>
       operation({
         persistInput: async (message) => {
           if (message.sessionId !== sessionId)
@@ -370,7 +382,9 @@ export class LocalDataService implements DataService {
       description,
       createdAt: new Date().toISOString(),
     };
-    await vault.upsertWorld(world as StoreWorldRecord);
+    await vault.withWorldLock(world.id, "exclusive", () =>
+      vault.upsertWorld(world as StoreWorldRecord),
+    );
     return world;
   }
 
@@ -395,12 +409,16 @@ export class LocalDataService implements DataService {
       updatedAt: now,
       createdAt: world.createdAt ?? now,
     };
-    await vault.upsertWorld(record as StoreWorldRecord);
+    await vault.withWorldLock(record.id, "exclusive", () =>
+      vault.upsertWorld(record as StoreWorldRecord),
+    );
     return record;
   }
 
   async updateWorld(id: string, patch: WorldPatch): Promise<WorldRecord> {
-    return this.enqueueWorkspace(() => this.updateWorldNow(id, patch));
+    return this.vault.withWorldLock(id, "exclusive", () =>
+      this.updateWorldNow(id, patch),
+    );
   }
 
   private async updateWorldNow(
@@ -422,19 +440,25 @@ export class LocalDataService implements DataService {
   }
 
   async deleteWorld(id: string): Promise<void> {
-    return this.enqueueWorkspace(async () => {
+    return this.vault.withWorldLock(id, "exclusive", async () => {
       const sessions = await this.listSessions(id);
       // Only clean up mirrors owned by these browser sessions. The server's
       // shared world may still be used by another browser or player.
       await Promise.all(
-        sessions.map((session) => this.deleteSession(session.id)),
+        // The exclusive world lock already excludes all session work and new
+        // creation. Do not request a shared world lock recursively here.
+        sessions.map((session) =>
+          this.vault.withSessionLock(session.id, () =>
+            this.deleteSessionNow(session.id),
+          ),
+        ),
       );
       await (await this.ready()).deleteWorld(id);
     });
   }
 
   async prepareWorldForServer(worldId: string): Promise<void> {
-    return this.enqueueWorkspace(async () => {
+    return this.vault.withWorldLock(worldId, "shared", async () => {
       const world = await (await this.ready()).getWorld(worldId);
       if (!world) throw new Error(`World not found: ${worldId}`);
       await syncWorldToServer(world);
@@ -500,9 +524,14 @@ export class LocalDataService implements DataService {
       createdAt: nowIso,
       updatedAt: nowIso,
     };
-    const world = await vault.getWorld(worldId);
-    await vault.withSessionLock(session.id, () =>
-      vault.saveCheckpoint(initialCheckpoint(storeSession, world)),
+    await this.withSessionWorkspaceLock(
+      session.id,
+      async () => {
+        const world = await vault.getWorld(worldId);
+        if (!world) throw new Error(`World not found: ${worldId}`);
+        await vault.saveCheckpoint(initialCheckpoint(storeSession, world));
+      },
+      worldId,
     );
     return session;
   }
@@ -537,7 +566,7 @@ export class LocalDataService implements DataService {
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    return this.vault.withSessionLock(sessionId, () =>
+    return this.withSessionWorkspaceLock(sessionId, () =>
       this.deleteSessionNow(sessionId),
     );
   }
@@ -610,7 +639,7 @@ export class LocalDataService implements DataService {
   }
 
   async addMessage(msg: MessageRecord): Promise<void> {
-    return this.vault.withSessionLock(msg.sessionId, async () => {
+    return this.withSessionWorkspaceLock(msg.sessionId, async () => {
       await this.recoverPendingCommitNow(msg.sessionId);
       await this.addMessageNow(msg);
     });
@@ -705,7 +734,7 @@ export class LocalDataService implements DataService {
   // Sync to server
 
   async stageServerCommit(sessionId: string, actionId: string): Promise<void> {
-    return this.vault.withSessionLock(sessionId, () =>
+    return this.withSessionWorkspaceLock(sessionId, () =>
       this.stageServerCommitNow(sessionId, actionId),
     );
   }
@@ -722,7 +751,7 @@ export class LocalDataService implements DataService {
   }
 
   async syncToServer(sessionId: string): Promise<void> {
-    return this.vault.withSessionLock(sessionId, () =>
+    return this.withSessionWorkspaceLock(sessionId, () =>
       this.syncToServerNow(sessionId),
     );
   }
@@ -813,7 +842,7 @@ export class LocalDataService implements DataService {
   }
 
   async commitFromServer(sessionId: string, actionId: string): Promise<void> {
-    return this.vault.withSessionLock(sessionId, () =>
+    return this.withSessionWorkspaceLock(sessionId, () =>
       this.commitFromServerNow(sessionId, actionId),
     );
   }

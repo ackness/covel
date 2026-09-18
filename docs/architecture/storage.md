@@ -78,11 +78,28 @@ fails, the pending action survives a page reload and must be recovered before
 the browser is allowed to upload an older checkpoint.
 
 Local checkpoint edits and session deletion use the same ownership boundary;
-new local input cannot advance a revision ahead of an unrecovered result. World
-deletion waits for its sessions before removing their durable records. A closed
+new local input cannot advance a revision ahead of an unrecovered result. A closed
 document releases its Web Lock, allowing another document to recover its pending
 result. Independent sessions do not share this lock. Remote/server-authoritative
 mode continues to use server coordination directly.
+
+World ownership precedes session ownership. Each `LocalDataService` session
+operation, including creation and deletion, holds a shared world Web Lock and
+then its exclusive session lock. World reads for checkpoint construction happen
+inside this boundary. World edits, generated-world replacement and world
+deletion hold the exclusive world lock; preparing the server world uses shared
+ownership. Field patches therefore merge with the latest world, and a session
+checkpoint cannot overwrite a concurrently edited world with an old copy.
+Different sessions retain parallel execution through shared world ownership.
+
+World deletion drains admitted session operations before enumerating sessions,
+cleans up their mirrors under session locks, then removes local domain records.
+New session creation queued behind deletion rechecks the world and fails if it
+is gone. Lock acquisition always follows world then session; workspace callbacks
+must not recursively request local world or session locks. The low-level vault
+write methods rely on this service-level ownership, rather than acquiring locks
+again inside an existing operation. Explicit generated-world saves replace the
+entire record; they are not field patches or a merge of stale documents.
 
 Browser-private execution requires Web Locks (HTTPS or localhost in a supported
 browser). Missing support produces a workspace error before any action is

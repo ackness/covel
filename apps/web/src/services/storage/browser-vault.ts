@@ -197,13 +197,35 @@ export class BrowserVault {
     sessionId: string,
     operation: () => Promise<T>,
   ): Promise<T> {
+    return this.withLock(
+      "session-workspace",
+      sessionId,
+      "exclusive",
+      operation,
+    );
+  }
+
+  async withWorldLock<T>(
+    worldId: string,
+    mode: "shared" | "exclusive",
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    return this.withLock("world-workspace", worldId, mode, operation);
+  }
+
+  private async withLock<T>(
+    scope: string,
+    id: string,
+    mode: "shared" | "exclusive",
+    operation: () => Promise<T>,
+  ): Promise<T> {
     if (!globalThis.navigator?.locks) {
       throw new BrowserVaultError(
         "Browser-private storage requires Web Locks; use HTTPS or localhost in a supported browser",
       );
     }
-    const name = JSON.stringify([this.db.name, "session-workspace", sessionId]);
-    return navigator.locks.request(name, operation);
+    const name = JSON.stringify([this.db.name, scope, id]);
+    return navigator.locks.request(name, { mode }, operation);
   }
 
   async saveCheckpoint(value: BrowserCheckpoint): Promise<BrowserCheckpoint> {
