@@ -43,7 +43,6 @@ import {
 import type { CompactorRunner } from "@covel/context";
 import { errorBody } from "../../api-error.js";
 import { rateLimiter } from "../../middleware/rate-limit.js";
-import { createRuntimeResultProcessor } from "./runtime-result-processor.js";
 import { createPluginRpcJobRunner } from "./plugin-rpc/background-jobs.js";
 import { createPluginRpcRuntimeTurnRunner } from "./plugin-rpc/runtime-turn.js";
 import { createRuntimeJob, type RuntimeJobRecord } from "./plugin-rpc/jobs.js";
@@ -239,14 +238,6 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
   // registry before its ABA check rejects.
   let activeRuntimes: readonly RuntimeManifest[] = [];
 
-  // Resolve runtime display kind from manifest declarations for progress SSE.
-  // The commit path creates its own processor once the per-turn emitter exists.
-  let outputKindResolver = createRuntimeResultProcessor({
-    store,
-    sessionId,
-    runtimes: activeRuntimes,
-  });
-
   // Framework-capability plugin ids discovered by capability — never by id.
   // Single source of truth in resolveTurnCapabilityPluginIds.
   let capabilityPluginIds: TurnCapabilityPluginIds = {
@@ -432,11 +423,13 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
             requestId,
           );
           releaseTurnControl = registeredTurn.release;
-          outputKindResolver = createRuntimeResultProcessor({
-            store,
-            sessionId,
-            runtimes: activeRuntimes,
-          });
+          // Progress display metadata follows the live manifests for this run.
+          const outputKindByRuntime = new Map(
+            activeRuntimes.map((runtime) => [
+              runtime.name,
+              runtime.outputKind ?? "plugin",
+            ]),
+          );
           capabilityPluginIds = resolveTurnCapabilityPluginIds(
             pluginRegistry,
             sessionId,
@@ -644,7 +637,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               await writeEvent("narrative.delta", {
                 runtimeId: delta.runtimeId,
                 pluginId: delta.pluginId,
-                kind: outputKindResolver.getOutputKind(delta.runtimeId),
+                kind: outputKindByRuntime.get(delta.runtimeId) ?? "plugin",
                 delta: delta.textDelta,
               });
             },
@@ -654,7 +647,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
                 pluginId: info.pluginId,
                 ...(info.stage !== undefined ? { stage: info.stage } : {}),
               });
-              const kind = outputKindResolver.getOutputKind(info.runtimeId);
+              const kind = outputKindByRuntime.get(info.runtimeId) ?? "plugin";
               await writeEvent("runtime.started", {
                 runtimeId: info.runtimeId,
                 pluginId: info.pluginId,

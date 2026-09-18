@@ -274,6 +274,12 @@ describe("POST /api/actions — hook pipeline wired through commit chain", () =>
       }),
     });
     const events = await drainActionStream(response);
+    expect(
+      events.find((event) => event.type === "runtime.started")?.payload,
+    ).toMatchObject({
+      runtimeId: RUNTIME_ID,
+      kind: "story",
+    });
     expect(llmCalls).toEqual([
       expect.objectContaining({ model: "hook-shaped-model" }),
     ]);

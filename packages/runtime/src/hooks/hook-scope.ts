@@ -19,7 +19,7 @@
  * points):
  *   - executeTurn (turn pipeline) — turn + LLM + tool hooks, compaction
  *   - server session routes — SessionStart / SessionEnd
- *   - createRuntimeResultProcessor.process — commit (Pre/PostStateCommit)
+ *   - finalizeExecution — commit (Pre/PostStateCommit)
  *   - resume route — resume exec + its commit
  *   - characters route — direct character.upsert commit
  */
