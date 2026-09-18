@@ -11,6 +11,7 @@ import {
   RECEIVE_STATES_MAX,
   type EventBusTransport,
 } from "../src/event-bus.js";
+import type { EventStore, EventStoreRecord } from "../src/index.js";
 
 function makeMessage(overrides?: Partial<CovelMessage>): CovelMessage {
   return {
@@ -89,9 +90,17 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     expect(busA.getEventsAfter("sess-echo", 0).events).toHaveLength(1);
   });
 
-  it("fans out oversize events as store refs after persistence", async () => {
+  it("fans out oversize events with only the public event persistence contract", async () => {
     const hub = createHub();
-    const store = createMemoryStore(); // shared, like a shared PG database
+    const records = new Map<string, EventStoreRecord>();
+    const store: EventStore = {
+      async saveEvent(record) {
+        records.set(JSON.stringify([record.sessionId, record.id]), record);
+      },
+      async getEventById(sessionId, id) {
+        return records.get(JSON.stringify([sessionId, id])) ?? null;
+      },
+    };
     const busA = createEventBus(store, { transport: hub.connect() });
     const busB = createEventBus(store, { transport: hub.connect() });
     const receivedB: SubscriptionEvent[] = [];
@@ -109,6 +118,10 @@ describe("EventBus transport fan-out (audit R-02)", () => {
     await busA.flush(); // ref frame publishes only after saveEvent settles
 
     await vi.waitFor(() => expect(receivedB).toHaveLength(1));
+    expect(await store.getEventById("other-session", "msg-big")).toBeNull();
+    expect(await store.getEventById("sess-big", "msg-big")).toEqual(
+      expect.objectContaining({ payload: bigPayload, topic: "asset.ready" }),
+    );
     expect(receivedB[0]!.sessionId).toBe("sess-big");
     expect(receivedB[0]!.topic).toBe("asset.ready");
     expect(receivedB[0]!.payload).toEqual(bigPayload);

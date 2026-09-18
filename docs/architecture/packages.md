@@ -34,7 +34,8 @@
 
 ## Reuse constraints
 
-- `context` 的 `setPromptsRoot` 和环境配置可以脱离仓库路径运行，但 prompt 根目录仍是模块级状态；同进程多套 prompt 根目录不具备实例隔离。
-- `memory` / `events` 保留 DataStore 类型耦合；runtime 的状态、schema、proposal 和调度语义属于 Covel。拆分文件夹不等于这些库已与领域协议解耦。
+- `context` 的 `createPromptLoader(root)` 提供独立目录的加载器，可通过 `CompactorDeps.loadPrompt` / `CreateWorldOptions.loadPrompt` 注入；世界生成、重试和 lore 修复使用同一来源。默认 `loadPrompt` / `setPromptsRoot` 仍是进程级兼容入口；并发多目录消费方应使用实例加载器。磁盘加载仍要求 Node，也可注入自定义 `PromptLoader` 函数。
+- `events` 只要求 `EventStore.saveEvent` / `getEventById`，不再以 `store` 为生产依赖；现有 DataStore 通过结构类型直接兼容。事件与订阅格式仍是 shared 中的 Covel 协议。
+- `memory` 保留 DataStore 类型耦合；runtime 的状态、schema、proposal 和调度语义属于 Covel。拆分文件夹不等于这些库已与领域协议解耦。
 - `scripts/lib/image-gen-common.mjs` 仍深导入 ai-provider 的内部配置/HTTP/wire 文件。这是开发脚本的内部路径耦合，修改这些路径时必须检查该消费方。
 - 面向外部发布需要单独定义 API、构建产物、资源与平台入口；在出现该交付需求前，不新增一层只转发现有接口的包装库。

@@ -36,7 +36,13 @@ export type {
 } from "./budget.js";
 
 // ── Prompt Loader ────────────────────────────────────────────────
-export { loadPrompt, interpolate, setPromptsRoot } from "./prompts-loader.js";
+export {
+  loadPrompt,
+  createPromptLoader,
+  interpolate,
+  setPromptsRoot,
+} from "./prompts-loader.js";
+export type { PromptLoader } from "./prompts-loader.js";
 
 // ── Compactor ────────────────────────────────────────────
 export { maybeCompact } from "./compactor.js";

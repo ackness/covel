@@ -259,6 +259,8 @@ Provider 图片输入矩阵：
 
 `/api/events/stream` 在连接建立时先发一条 `system.connected`，每 30s 发 `system.heartbeat`；带 `lastEventId` 时会先回放 EventBus 缓存中 `seq > lastEventId` 的事件再切到实时。
 
+`@covel/events` 的 `createEventBus(store?, options?)` 只要求可选的 `EventStore`，包含 `saveEvent(record)` 和按 session 隔离的 `getEventById(sessionId, id)` 两个异步方法。记录类型 `EventStoreRecord` 随包导出；现有 DataStore 可直接传入，独立宿主无需实现其他数据库方法。持久化仍是有界、尽力而为的审计队列，`flush()` 等待队列排空但不保证 transport 已送达。超大 transport 帧仍在保存成功后发送引用，由接收方通过相同存储读取；此接口收窄不改变回放、顺序或失败处理语义。
+
 #### 事件 id 形态：`${epoch}:${seq}`（H-05/H-06）
 
 每条订阅事件的 `id`（同时是 SSE `id:` 行与重连时的 `lastEventId` 游标）为 `${epoch}:${seq}`：

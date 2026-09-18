@@ -132,10 +132,23 @@ Anthropic adapter 会把 sentinel 转成 `cache_control: { type: "ephemeral" }` 
 
 - `compactor.<locale>.md`：`packages/context/src/compactor.ts` 通过 `loadPrompt("server", "compactor", locale)` 加载；当前含 `zh` / `en` / `ru`，`compactor.md` 是 canonical English fallback。
 - `generate-world.<locale>.md`：`packages/create/src/prompts.ts` 通过 `loadPrompt("server", "generate-world", locale)` 加载；仓库当前只有 canonical `generate-world.md`，贡献者可按需加入 locale 变体。
+- `repair-world-lore.<locale>.md`：世界生成后的定向 lore 修复模板，默认使用 canonical `repair-world-lore.md`。
 
-两者都按 exact locale → script 兼容的 primary language → English locale/language → canonical 文件解析。`zh-Hant` 不会命中简体中文的 `zh` 文件。
+模板都按 exact locale → script 兼容的 primary language → English locale/language → canonical 文件解析。`zh-Hant` 不会命中简体中文的 `zh` 文件。
 
 Prompt 根目录由 `COVEL_PROMPTS_DIR` 覆盖；未设置时 `prompts-loader` 会从包路径向上查找仓库根目录下的 `prompts/`。覆盖值替换整个 prompt root，不是按文件叠加；自维护目录必须包含应用会加载的 canonical 文件。locale 会在进入文件路径前统一 canonicalize，非法值不会参与路径查找。
+
+需要在同一进程使用多套模板时，从 `@covel/context` 调用 `createPromptLoader(root)`，并注入 `CompactorDeps.loadPrompt` 或 `CreateWorldOptions.loadPrompt`。加载器在创建时解析目录，每次调用重新读取模板，支持修改即时生效；locale fallback 限于该目录，不会混入进程默认目录。世界生成的主请求、重试及定向修复都使用本次调用的加载器。也可以提供相同签名的 `PromptLoader` 函数，从宿主资源服务读取模板：
+
+```ts
+type PromptLoader = (
+  dir: string,
+  name: string,
+  locale?: string,
+) => Promise<string>;
+```
+
+未注入时保留现有目录发现和 locale 行为。`setPromptsRoot(root | null)` 只修改默认加载器的进程级状态，不影响已创建的独立加载器；多实例宿主和并发测试应使用依赖注入。
 
 ## 7. 相关实现
 

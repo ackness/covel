@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { LLMAdapter, LLMResponse } from "@covel/shared";
 import { createWorld } from "./create-world.js";
+import { createPromptLoader } from "@covel/context";
 
 const WORLD_YAML = `schemaVersion: "1.0"
 id: repair-world
@@ -111,6 +112,52 @@ describe("createWorld WORLD.md repair", () => {
     await expect(
       readFile(path.join(outputDir, "repair-world", "world.yaml"), "utf8"),
     ).resolves.toContain("id: repair-world");
+  });
+
+  it("keeps concurrent template sources isolated through repair and retry", async () => {
+    await Promise.all(
+      ["first", "second"].map(async (owner) => {
+        const root = path.join(outputDir, owner, "prompts");
+        await mkdir(path.join(root, "server"), { recursive: true });
+        await writeFile(
+          path.join(root, "server", "generate-world.md"),
+          `${owner} generation: {{ concept }}`,
+          "utf8",
+        );
+        await writeFile(
+          path.join(root, "server", "repair-world-lore.md"),
+          `${owner} repair: {{ locale }}`,
+          "utf8",
+        );
+        const llm = new RecordingSequenceLlm([
+          fullPackage(META_LORE),
+          "invalid repair output",
+          fullPackage(META_LORE),
+          loreRepair(CLEAN_LORE),
+        ]);
+        const result = await createWorld({
+          llm,
+          concept: owner,
+          outputDir: path.join(outputDir, owner, "worlds"),
+          loadPrompt: createPromptLoader(root),
+          attemptTimeoutMs: 5_000,
+        });
+        expect(result.success).toBe(true);
+        expect(llm.requests).toHaveLength(4);
+        expect(llm.requests.map((request) => messageText(request, 0))).toEqual([
+          `${owner} generation: ${owner}`,
+          `${owner} repair: zh-CN`,
+          `${owner} generation: ${owner}`,
+          `${owner} repair: zh-CN`,
+        ]);
+        await expect(
+          readFile(
+            path.join(outputDir, owner, "worlds", "repair-world", "WORLD.md"),
+            "utf8",
+          ),
+        ).resolves.toBe(CLEAN_LORE);
+      }),
+    );
   });
 
   it("falls back to full generation when the targeted response is invalid", async () => {

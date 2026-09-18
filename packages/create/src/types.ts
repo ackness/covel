@@ -3,6 +3,7 @@
  */
 
 import type { LLMAdapter, WorldCreationBrief } from "@covel/shared";
+import type { PromptLoader } from "@covel/context";
 
 export interface CreateWorldLogger {
   info(...args: unknown[]): void;
@@ -30,6 +31,8 @@ export interface CreateWorldOptions {
   readonly attemptTimeoutMs?: number;
   /** Optional logger for recording generation progress. */
   readonly logger?: CreateWorldLogger;
+  /** Template source shared by generation and repair for this invocation. */
+  readonly loadPrompt?: PromptLoader;
 }
 
 /** Result of a creation operation. */

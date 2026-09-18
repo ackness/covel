@@ -39,7 +39,11 @@ import type {
   TurnMessageRecord,
 } from "./session-context-store.js";
 import type { TokenEstimator } from "./budget.js";
-import { loadPrompt, interpolate } from "./prompts-loader.js";
+import {
+  loadPrompt,
+  interpolate,
+  type PromptLoader,
+} from "./prompts-loader.js";
 import { resolveLocaleLanguageName } from "./prompt-internals.js";
 
 // ── Public types ────────────────────────────────────────────────
@@ -59,6 +63,8 @@ export interface CompactorDeps {
   readonly fastSlotLlm: CompactorLLMAdapter;
   /** Total context window size in tokens for the active slot. */
   readonly contextWindow: number;
+  /** Template source for this consumer; defaults to the framework loader. */
+  readonly loadPrompt?: PromptLoader;
 }
 
 export interface CompactorOptions {
@@ -190,6 +196,7 @@ function compactorText(
 async function buildCompactorSystemPrompt(
   locale: string,
   focusSections: readonly string[],
+  loader: PromptLoader,
 ): Promise<string> {
   const effective =
     focusSections.length > 0
@@ -197,7 +204,7 @@ async function buildCompactorSystemPrompt(
       : DEFAULT_FOCUS_SECTIONS.map(
           (section) => resolveI18nText(section, locale) ?? "",
         );
-  const template = await loadPrompt("server", "compactor", locale);
+  const template = await loader("server", "compactor", locale);
   const canonicalLocale = canonicalizeLocale(locale) ?? DEFAULT_LOCALE;
   const languageName = resolveLocaleLanguageName(canonicalLocale);
   return `${interpolate(template, {
@@ -412,6 +419,7 @@ export async function maybeCompact(
     compactorSystemPrompt = await buildCompactorSystemPrompt(
       locale,
       mergedFocusSections,
+      deps.loadPrompt ?? loadPrompt,
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

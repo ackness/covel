@@ -49,7 +49,12 @@ export async function createWorld(
   options: CreateWorldOptions,
 ): Promise<CreateResult> {
   const locale = canonicalizeLocale(options.locale) ?? DEFAULT_LOCALE;
-  const prompt = await buildWorldPrompt(options.concept, locale, options.brief);
+  const prompt = await buildWorldPrompt(
+    options.concept,
+    locale,
+    options.brief,
+    options.loadPrompt,
+  );
   log(
     options,
     "info",
@@ -271,6 +276,7 @@ export async function createWorld(
       try {
         const repair = await repairWorldLore({
           llm: options.llm,
+          loadPrompt: options.loadPrompt,
           model: options.model,
           locale,
           lore: normalizedLore,

@@ -1,6 +1,6 @@
 /**
  * Event bus — fan-out to onEmit subscribers with per-session replay buffer.
- * Optionally persists events to a DataStore for audit trail.
+ * Optionally persists events through an EventStore for audit trail.
  *
  * Ring buffer design (RING_BUFFER_MAX = 1000 per session):
  * Enables SSE reconnection recovery — when a client disconnects and reconnects,
@@ -42,7 +42,7 @@
  */
 
 import type { CovelMessage, SubscriptionEvent } from "@covel/shared";
-import type { DataStore, EventRecord } from "@covel/store";
+import type { EventStore, EventStoreRecord } from "./event-store.js";
 import { RingBuffer } from "./ring-buffer.js";
 
 /** Result of a replay query — `gap` means the cursor could not be bridged. */
@@ -159,7 +159,7 @@ interface SessionState {
  * Wire frame moved over the transport. `seq` is the origin's per-session
  * sequence number (receivers order-buffer on it). Exactly one of `event` /
  * `ref` is set: `event` inlines the full SubscriptionEvent (small payloads);
- * `ref` points at a persisted EventRecord for oversize payloads (receivers
+ * `ref` points at a persisted EventStoreRecord for oversize payloads (receivers
  * re-fetch from the shared store via `getEventById`).
  */
 interface TransportFrame {
@@ -257,7 +257,7 @@ function parseTransportFrame(payload: string): TransportFrame | undefined {
 }
 
 export function createEventBus(
-  store?: DataStore,
+  store?: EventStore,
   options?: EventBusOptions,
 ): EventBus {
   // ── Subscription infrastructure ────────────────────────────────
@@ -280,7 +280,7 @@ export function createEventBus(
 
   // ── Bounded persist queue ─────────────────────────
   interface PersistItem {
-    readonly record: EventRecord;
+    readonly record: EventStoreRecord;
     /** Always called exactly once: true after a successful save, false on error/drop. */
     readonly settle?: (ok: boolean) => void;
   }
