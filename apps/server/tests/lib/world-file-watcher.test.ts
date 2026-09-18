@@ -133,7 +133,7 @@ dimensionSources:
         });
       }
     } finally {
-      watcher.stop();
+      await watcher.stop();
       emit.mockRestore();
       await store.close();
       await rm(root, { recursive: true, force: true });

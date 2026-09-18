@@ -58,7 +58,7 @@ it("ignores shadowed packages while reloading the higher-priority renamed packag
     );
     upsert.mockRestore();
   } finally {
-    for (const watcher of watchers) watcher.stop();
+    for (const watcher of watchers) await watcher.stop();
     await store.close();
     await rm(root, { recursive: true, force: true });
   }

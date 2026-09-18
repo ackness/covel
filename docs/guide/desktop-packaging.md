@@ -152,6 +152,20 @@ still lands on two files:
 
 Release CI verifies the unpacked application resources on each platform before uploading only the distributable files. Signature checks are intentionally absent while official builds are unsigned.
 
+## Sidecar shutdown
+
+Normal application quit waits for the sidecar to exit before allowing Electron
+to terminate. Restart uses the same stop barrier. A private parent-child IPC
+message requests the server drain on every platform; SIGTERM is only a fallback
+when IPC is unavailable (Windows terminates forcibly on that fallback).
+The sidecar has 12 seconds to finish its server drain (whose own force-exit
+budget is 10 seconds), then
+receives SIGKILL; failure to observe exit within another second is reported
+and prevents starting a replacement sidecar. Signal errors do not count as
+confirmed exit. Operating-system forced termination remains outside this
+graceful path. Run `pnpm --filter @covel/desktop test` for process-drain and
+quit re-entry regression checks.
+
 ## Auto-update publishing
 
 Automatic downloading and installation are **not enabled**. `apps/desktop/electron-builder.yml` ships with

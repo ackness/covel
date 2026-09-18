@@ -19,7 +19,8 @@ import { resolveWorldRoot } from "./world-data/session-import/utils.js";
 
 export interface WorldFileWatcher {
   start(): void;
-  stop(): void;
+  /** Stop intake and wait for reloads already using the store/event bus. */
+  stop(): Promise<void>;
 }
 
 /**
@@ -41,6 +42,7 @@ export function createWorldFileWatcher(
 
   // Debounce timers per physical directory; manifest ids can differ.
   const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const reloads = new Map<string, Promise<void>>();
   const DEBOUNCE_MS = 500;
 
   /**
@@ -48,6 +50,7 @@ export function createWorldFileWatcher(
    * Debounced to avoid processing partial writes.
    */
   function scheduleReload(directoryName: string) {
+    if (!watcher) return;
     const existing = debounceTimers.get(directoryName);
     if (existing) clearTimeout(existing);
 
@@ -55,7 +58,14 @@ export function createWorldFileWatcher(
       directoryName,
       setTimeout(() => {
         debounceTimers.delete(directoryName);
-        void reloadWorld(directoryName);
+        // A slow earlier read must not overwrite a newer package revision.
+        const previous = reloads.get(directoryName) ?? Promise.resolve();
+        const reload = previous.then(() => reloadWorld(directoryName));
+        reloads.set(directoryName, reload);
+        void reload.then(() => {
+          if (reloads.get(directoryName) === reload)
+            reloads.delete(directoryName);
+        });
       }, DEBOUNCE_MS),
     );
   }
@@ -189,7 +199,7 @@ export function createWorldFileWatcher(
       }
     },
 
-    stop() {
+    async stop() {
       if (watcher) {
         watcher.close();
         watcher = null;
@@ -198,6 +208,7 @@ export function createWorldFileWatcher(
         clearTimeout(timer);
       }
       debounceTimers.clear();
+      await Promise.allSettled(reloads.values());
     },
   };
 }

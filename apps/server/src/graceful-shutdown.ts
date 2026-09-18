@@ -26,7 +26,7 @@ export const registerGracefulShutdown = (
 ): void => {
   let shuttingDown = false;
 
-  const shutdown = (signal: ShutdownSignal) => {
+  const shutdown = (signal: ShutdownSignal | "IPC") => {
     if (shuttingDown) {
       return;
     }
@@ -74,4 +74,17 @@ export const registerGracefulShutdown = (
       shutdown(signal);
     });
   }
+
+  // The desktop owns this private parent-child channel. Windows kill(SIGTERM)
+  // terminates abruptly, so request the same drain cooperatively over IPC.
+  process.on("message", (message) => {
+    if (
+      message !== null &&
+      typeof message === "object" &&
+      "type" in message &&
+      message.type === "covel:shutdown"
+    ) {
+      shutdown("IPC");
+    }
+  });
 };

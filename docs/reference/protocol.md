@@ -621,6 +621,11 @@ it owns resources; the PostgreSQL implementation releases its LISTEN/NOTIFY
 client through that lifecycle. The server closes the worker before the bus,
 and the bus before its backing store.
 
+World file watchers stop intake and await their accepted reloads before worker
+shutdown. Reloads of one physical world directory run in order, so a slow
+earlier load cannot replace the result of a later reload. Shutdown leaves
+dependencies open for process exit if a producer exceeds its drain budget.
+
 A browser subscription isolates each event handler. A synchronous handler
 failure is reported with session id, event id/type and error type; it does not
 log the event payload or exception message, and other subscribers continue.

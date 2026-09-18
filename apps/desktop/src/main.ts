@@ -49,6 +49,8 @@ import {
 import { initDesktopI18n, t } from "./main-i18n.js";
 import { resolveSystemProxyRequest } from "./system-proxy.js";
 import { showAppUpdateNotification } from "./app-update-notification.js";
+import { createQuitHandler, stopServerProcess } from "./server-shutdown.js";
+import { waitForServerProcess } from "./server-readiness.js";
 import {
   parseSettingsPersistenceBundle,
   type SettingsPersistenceBundle,
@@ -158,6 +160,7 @@ let serverProcess: ChildProcess | null = null;
 let serverPort = 0;
 let serverStartedAt = 0;
 let manualStop = false;
+let quitting = false;
 let restartAttempts = 0;
 const MAX_RESTART_ATTEMPTS = 3;
 
@@ -197,6 +200,7 @@ async function startServer(
   paths: ReturnType<typeof ensureUserPaths>,
 ): Promise<number> {
   const port = await findFreePort();
+  if (quitting) throw new Error("Application is shutting down");
   serverPort = port;
   fs.writeFileSync(userServerPortFile(), String(port), "utf-8");
 
@@ -266,6 +270,9 @@ async function startServer(
   serverStartedAt = Date.now();
 
   const child = serverProcess;
+  child.on("error", (error) => {
+    writeLog("warn", "Server process error:", error);
+  });
   child.on("message", async (message) => {
     const response = await resolveSystemProxyRequest(message, (url) =>
       session.defaultSession.resolveProxy(url),
@@ -302,10 +309,10 @@ async function startServer(
       "warn",
       `Server exited (code=${code}, signal=${signal}, uptime=${uptime}ms)`,
     );
-    serverProcess = null;
+    if (serverProcess === child) serverProcess = null;
 
     // Only auto-restart on unexpected exit after a successful boot.
-    if (manualStop) return;
+    if (manualStop || quitting) return;
     if (uptime < 2000) {
       // Crashed during boot — let the outer retry loop handle it.
       return;
@@ -325,13 +332,16 @@ async function startServer(
     { threshold: 15_000, label: t("startup.status.almostReady") },
   ];
 
-  await waitForServer(healthUrl, 30_000, 150, (elapsed) => {
+  await waitForServerProcess(child, healthUrl, (elapsed) => {
+    if (quitting) throw new Error("Application is shutting down");
     let currentLabel = PROGRESS_STEPS[0].label;
     for (const step of PROGRESS_STEPS) {
       if (elapsed >= step.threshold) currentLabel = step.label;
     }
     broadcastProgress(currentLabel);
   });
+
+  if (quitting) throw new Error("Application is shutting down");
 
   broadcastProgress(t("startup.status.ready"));
   writeLog("info", `Server ready on port ${port}`);
@@ -349,7 +359,7 @@ let restartTimer: NodeJS.Timeout | null = null;
 function scheduleServerRestart(
   paths: ReturnType<typeof ensureUserPaths>,
 ): void {
-  if (restartTimer) return;
+  if (restartTimer || quitting || manualStop) return;
   if (restartAttempts >= MAX_RESTART_ATTEMPTS) {
     writeLog(
       "error",
@@ -433,12 +443,7 @@ function stopHealthHeartbeat(): void {
 /**
  * Graceful shutdown.
  *
- * Returns a promise that resolves once the child process has actually exited
- * (or 5 s has passed and SIGKILL has been sent). The previous implementation
- * fire-and-forgot SIGTERM, then immediately set `serverProcess = null`,
- * which let `startServer()` race the still-alive sidecar for the SQLite
- * file, listening port, and plugin file handles.
- *
+ * Wait for confirmed child exit before allowing another sidecar to start.
  * Concurrent calls share the same in-flight promise — the second restart
  * click while shutdown is mid-flight does not double-send signals.
  */
@@ -457,44 +462,13 @@ function stopServer(): Promise<void> {
   const child = serverProcess;
   if (!child) return Promise.resolve();
 
-  pendingStop = new Promise<void>((resolveStop) => {
-    let resolved = false;
-    const finish = (): void => {
-      if (resolved) return;
-      resolved = true;
-      clearTimeout(killTimer);
-      // Only clear `serverProcess` if it's still pointing at the child we
-      // just stopped. Defensive: in pathological races a new spawn could
-      // have already replaced it.
+  pendingStop = stopServerProcess(child, writeLog)
+    .then(() => {
       if (serverProcess === child) serverProcess = null;
-      resolveStop();
-    };
-
-    child.once("exit", finish);
-    child.once("error", finish);
-
-    writeLog("info", "Stopping server (SIGTERM)");
-    try {
-      child.kill("SIGTERM");
-    } catch (err) {
-      writeLog("warn", "SIGTERM threw — assuming child already gone:", err);
-      finish();
-      return;
-    }
-
-    const killTimer = setTimeout(() => {
-      if (resolved) return;
-      writeLog("warn", "Server did not exit in 5s — sending SIGKILL");
-      try {
-        child.kill("SIGKILL");
-      } catch (err) {
-        writeLog("warn", "SIGKILL threw:", err);
-        finish();
-      }
-    }, 5000);
-  }).finally(() => {
-    pendingStop = null;
-  });
+    })
+    .finally(() => {
+      pendingStop = null;
+    });
 
   return pendingStop;
 }
@@ -516,8 +490,10 @@ async function productionStartup(
     try {
       await startServer(paths);
       await new Promise((r) => setTimeout(r, 400));
+      if (quitting) return;
       navigateToApp(win, serverPort);
     } catch (err) {
+      if (quitting) return;
       const diag = diagnoseStartupError(err);
       writeLog("error", `Startup failed: ${diag.title}: ${diag.detail}`);
 
@@ -572,17 +548,21 @@ async function devStartup(
 // ── App lifecycle ───────────────────────────────────────────────
 
 app.on("window-all-closed", () => {
-  // App is exiting; fire-and-forget the stop. The kernel will reap the
-  // child when our process dies even if the SIGTERM grace period overruns.
-  void stopServer();
   app.quit();
 });
 
-app.on("before-quit", () => {
-  void stopServer();
+const quitAfterServerStops = createQuitHandler(
+  stopServer,
+  () => app.quit(),
+  writeLog,
+);
+app.on("before-quit", (event) => {
+  quitting = true;
+  quitAfterServerStops(event);
 });
 
 app.whenReady().then(async () => {
+  if (quitting) return;
   const paths = ensureUserPaths();
   initDesktopI18n(paths.userSettingsJsonPath, app.getLocale());
   initPersistentLog(paths.logsDir, paths.logRotation, app.getVersion());

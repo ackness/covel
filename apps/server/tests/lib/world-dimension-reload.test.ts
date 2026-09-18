@@ -4,6 +4,28 @@ import path from "node:path";
 import { createEventBus } from "@covel/events";
 import { createMemoryStore } from "@covel/store";
 import { expect, it, vi } from "vitest";
+
+// This suite checks invalid-package recovery, not native event delivery.
+// Real fs.watch coverage lives in world-file-watcher.test.ts; an immediate
+// write after watch() can be coalesced by the OS during registration.
+const changes = vi.hoisted(() => ({
+  notify: undefined as ((event: string, filename: string) => void) | undefined,
+}));
+vi.mock("node:fs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:fs")>()),
+  watch: (
+    _path: string,
+    _options: unknown,
+    callback: typeof changes.notify,
+  ) => {
+    changes.notify = callback;
+    return {
+      close: () => {
+        changes.notify = undefined;
+      },
+    };
+  },
+}));
 import { createWorldFileWatcher } from "../../src/world-file-watcher.js";
 import { loadSingleWorld, seedWorlds } from "../../src/world-seed-loader.js";
 import { seedAndReconcileWorlds } from "../../src/world-seed-reconcile.js";
@@ -65,6 +87,7 @@ dimensionSources:
           "utf8",
         );
       }
+      changes.notify!("change", path.join("fixture-world", "tone.yaml"));
       await vi.waitFor(() => expect(warn).toHaveBeenCalled(), {
         timeout: 5000,
       });
@@ -83,6 +106,7 @@ dimensionSources:
       if (failure === "unreadable") {
         await writeFile(manifestFile, manifest, "utf8");
       }
+      changes.notify!("change", path.join("fixture-world", "tone.yaml"));
       await vi.waitFor(
         async () => {
           expect(await store.getWorld("fixture-world")).toMatchObject({
@@ -94,7 +118,7 @@ dimensionSources:
       await seedAndReconcileWorlds(store, [root]);
       expect(await store.getWorld("absent-package")).toBeNull();
     } finally {
-      watcher.stop();
+      await watcher.stop();
       emit.mockRestore();
       warn.mockRestore();
       await store.close();

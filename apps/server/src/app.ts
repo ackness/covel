@@ -318,9 +318,8 @@ const worldWatchers = worldsDirs.map((dir) =>
   createWorldFileWatcher(dir, store, api.eventBus, worldsDirs),
 );
 for (const watcher of worldWatchers) watcher.start();
-const stopWatchers = () => {
-  for (const watcher of worldWatchers) watcher.stop();
-};
+const stopWatchers = () =>
+  Promise.all(worldWatchers.map((watcher) => watcher.stop()));
 
 // ── Graceful shutdown drain (audit R-11) ─────────────────────────
 // Ordered resource drain passed to registerGracefulShutdown() by index.ts and
@@ -359,7 +358,7 @@ async function drainPhase(
 }
 
 export const drainServerResources = async (): Promise<void> => {
-  await drainPhase("stop world watchers", () => stopWatchers());
+  if (!(await drainPhase("stop world watchers", () => stopWatchers()))) return;
   if (
     !(await drainPhase("close runtime job worker", () =>
       api.runtimeJobWorker.close(),
