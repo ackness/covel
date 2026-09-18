@@ -952,6 +952,7 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
           ...(hookPipeline ? { hookPipeline } : {}),
         });
         const jobRunner = createPluginRpcJobRunner({
+          queue: c.get("pluginBackgroundQueue"),
           store,
           sessionId,
           sessionLock,

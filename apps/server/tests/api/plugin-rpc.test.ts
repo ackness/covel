@@ -2,6 +2,7 @@
  * POST /api/sessions/:id/plugin-rpc integration tests.
  */
 
+import { createTestBackgroundQueue } from "./__helpers/background-queue.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
@@ -68,8 +69,10 @@ function setup(): {
   const gate = createRpcApprovalGate();
   const pluginRegistry = createPluginRegistry();
   const sessionLock = createInProcessSessionLock();
+  const pluginBackgroundQueue = createTestBackgroundQueue();
   const app = new Hono<Env>();
   app.use("*", async (c, next) => {
+    c.set("pluginBackgroundQueue", pluginBackgroundQueue);
     c.set("store", store);
     c.set("rpcExecutor", executor);
     c.set("rpcRegistry", registry);
@@ -877,8 +880,10 @@ describe("POST /api/sessions/:id/plugin-rpc — deferred community entry (H2)", 
     const hasPendingEntry = (pluginId: string): boolean =>
       pluginId === PLUGIN_ID && !activated;
 
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("rpcExecutor", executor);
       c.set("rpcRegistry", registry);
@@ -1225,8 +1230,10 @@ function setupRuntimeTestEnv(args: {
     },
   };
 
+  const pluginBackgroundQueue = createTestBackgroundQueue();
   const app = new Hono();
   app.use("*", async (c, next) => {
+    c.set("pluginBackgroundQueue", pluginBackgroundQueue);
     c.set("store", store);
     c.set("pluginRegistry", pluginRegistry);
     c.set("rpcExecutor", rpcExecutor);
@@ -1470,8 +1477,10 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       if (manifest.name === "chat-mode-narrator") return narratorLoaded;
       return undefined;
     };
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("rpcExecutor", rpcExecutor);
@@ -2322,8 +2331,10 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       },
     };
 
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("rpcExecutor", rpcExecutor);
@@ -2474,8 +2485,10 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       },
     };
 
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("rpcExecutor", rpcExecutor);
@@ -2723,8 +2736,10 @@ describe("POST /api/sessions/:id/plugin-rpc — runtime mode (M8b)", () => {
       },
     };
 
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       c.set("rpcExecutor", rpcExecutor);

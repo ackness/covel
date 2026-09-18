@@ -6,7 +6,8 @@
  * and follower paths already enforce.
  */
 
-import { describe, expect, it } from "vitest";
+import { createTestBackgroundQueue } from "./__helpers/background-queue.js";
+import { describe, expect, it, vi } from "vitest";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { createPluginRpcJobRunner } from "../../src/routes/api/plugin-rpc/background-jobs.js";
 import type { ManualTurnSummary } from "../../src/routes/api/plugin-rpc/runtime-response.js";
@@ -77,6 +78,100 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 describe("expected-background-follower commit gate", () => {
+  it.each(["background", "prompt", "follower"] as const)(
+    "drains the %s terminal write during shutdown without executing the runtime",
+    async (mode) => {
+      const store = createMemoryStore();
+      const now = new Date().toISOString();
+      const session = {
+        id: SESSION_ID,
+        status: "active" as const,
+        phase: "playing" as const,
+        setupRuntimes: {},
+        completedPlayerTurns: 1,
+        activePlugins: [PLUGIN_ID],
+        metadata: {
+          approvalScopeNonce: "approval",
+          sessionIncarnationNonce: "incarnation",
+        },
+        createdAt: now,
+        updatedAt: now,
+      };
+      await store.createSession(session);
+      const queue = createTestBackgroundQueue();
+      const terminalStarted = deferred();
+      const terminalWrite = deferred();
+      const write = store.setPluginData.bind(store);
+      vi.spyOn(store, "setPluginData").mockImplementation(async (record) => {
+        if (
+          record.namespace === "_jobs" &&
+          (record.value as { status: string }).status === "failed"
+        ) {
+          terminalStarted.resolve();
+          await terminalWrite.promise;
+        }
+        await write(record);
+      });
+      const runManualTurn = vi.fn(async () => successfulSummary());
+      const runDeferredFollowerTurn = vi.fn(async () => {
+        throw new Error("must not execute");
+      });
+      const runner = createPluginRpcJobRunner({
+        queue,
+        store,
+        sessionId: SESSION_ID,
+        sessionLock: createInProcessSessionLock(),
+        approvalScopes: new Map([
+          [PLUGIN_ID, sessionApprovalScope(session, PLUGIN_ID)],
+        ]),
+        runManualTurn,
+        runDeferredFollowerTurn,
+        hasActiveRuntime: () => true,
+      });
+      if (mode === "follower") {
+        await runner.scheduleDeferredFollowers([
+          {
+            pluginId: PLUGIN_ID,
+            runtimeId: FOLLOWER_RUNTIME,
+            triggerEvent: { topic: "generate", data: {} },
+          },
+        ]);
+      } else {
+        const args = {
+          pluginId: PLUGIN_ID,
+          runtimeId: RUNTIME_ID,
+          turnId: "turn-close",
+        };
+        if (mode === "prompt")
+          await runner.enqueueExpectedFollowerRuntime(args);
+        else await runner.enqueueBackgroundRuntime(args);
+      }
+      let drained = false;
+      const closing = queue.close();
+      void closing.then(() => {
+        drained = true;
+      });
+      try {
+        await terminalStarted.promise;
+        expect(drained).toBe(false);
+        expect(runManualTurn).not.toHaveBeenCalled();
+        expect(runDeferredFollowerTurn).not.toHaveBeenCalled();
+      } finally {
+        terminalWrite.resolve();
+        await closing;
+      }
+      const jobs = await store.listPluginData(SESSION_ID, PLUGIN_ID, "_jobs");
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0]?.value).toMatchObject({
+        status: "failed",
+        progress: 100,
+        reason: "server-shutdown",
+      });
+      expect(jobs[0]?.value).not.toHaveProperty("messageKey");
+      expect(jobs[0]?.value).not.toHaveProperty("owner");
+    },
+  );
+
   it("reserves concurrency slots before yielding to a burst of jobs", async () => {
     const store: DataStore = createMemoryStore();
     const now = new Date().toISOString();
@@ -103,6 +198,7 @@ describe("expected-background-follower commit gate", () => {
     let maximum = 0;
     let started = 0;
     const runner = createPluginRpcJobRunner({
+      queue: createTestBackgroundQueue(),
       store,
       sessionId: SESSION_ID,
       sessionLock: createInProcessSessionLock(),
@@ -174,6 +270,7 @@ describe("expected-background-follower commit gate", () => {
     const started = deferred();
     const finish = deferred();
     const runner = createPluginRpcJobRunner({
+      queue: createTestBackgroundQueue(),
       store,
       sessionId: SESSION_ID,
       sessionLock: createInProcessSessionLock(),
@@ -235,6 +332,7 @@ describe("expected-background-follower commit gate", () => {
     const session = await store.getSession(SESSION_ID);
     if (!session) throw new Error("expected session");
     const runner = createPluginRpcJobRunner({
+      queue: createTestBackgroundQueue(),
       store,
       sessionId: SESSION_ID,
       sessionLock: createInProcessSessionLock(),
@@ -297,6 +395,7 @@ describe("expected-background-follower commit gate", () => {
     const started = deferred();
     const finish = deferred();
     const runner = createPluginRpcJobRunner({
+      queue: createTestBackgroundQueue(),
       store,
       sessionId: SESSION_ID,
       sessionLock: createInProcessSessionLock(),

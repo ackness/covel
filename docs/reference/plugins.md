@@ -1615,7 +1615,8 @@ outputKind: story
 - **不持会话锁执行**:后台 follower 的 handler 跑在会话锁**外**,只有提交阶段(finalize 事务 + auto-snapshot)进锁——否则一次几分钟的出图会把玩家的下一条消息一起堵住。由此带来两条对插件作者可见的约定:
   - 同一 runtime 的并发 follower 由框架按 `<sessionId>::<runtimeId>` 串行,所以 handler 里"这张图是不是已经生成过"这类 check-then-act 仍然是原子的,不会重复计费;**跨 runtime 不保证**。
   - handler 执行期间读到的会话数据可能被并发的玩家回合改写。handler 对**自己**命名空间的读-改-写是安全的(读经 writeBuffer overlay、写在同一事务提交),但如果 handler 把别处的状态读出来再写回去,请假设中途可能已经变了。
-- **进程重启不恢复**:后台任务由进程内队列驱动,没有持久队列。重启后开机扫描会把上一个进程留下的 `pending` 行标为 `failed`(`reason: "orphaned"`,保留 `triggerEvent` 供重试),框架**不自动重跑**——重跑要再计一次费,且请求级 `userSettings` 没有持久化在任务行上。需要"一键重试"的插件自行读这行的 `triggerEvent` 提供入口。
+- **队列与关闭责任**：每个 API bootstrap 持有独立队列，最多同时执行 4 个任务、排队 1024 个任务；等待任务按会话轮转，同一会话按入队顺序执行。队满的任务记为 `failed`（`reason: "background-queue-full"`）。宿主关闭时拒绝新任务，将尚未执行的任务记为 `failed`（`reason: "server-shutdown"`），向运行中的任务传递取消信号，并等待登记、执行及终态写入结束后再关闭存储与事件总线。取消发生在提交完成前会阻止领域写入，已成功提交的领域数据不会因此回滚或自动重跑。超过宿主排空时限时，仍有生产者使用的依赖保持打开直到进程退出；同进程 JS 无法被强制终止。
+- **进程重启不重跑**：后台任务由进程内队列驱动，`_jobs` 是状态记录，不是持久执行队列。Memory/SQLite 单进程模式下，启动扫描会把上一个进程留下的 `pending` 行标为 `failed`（`reason: "orphaned"`，保留 `triggerEvent` 供重试）。PostgreSQL 模式不执行这项扫描，因为旧 `_jobs` 没有可续租的跨进程所有权，无法区分崩溃任务与其它活跃实例的任务；异常退出后可能留下 `pending`。框架**不自动重跑**——重跑可能再次计费，且请求级 `userSettings` 没有持久化在任务行上。需要重试的插件自行读取 `triggerEvent` 提供入口。下节的 staged detached job 使用另一套持久租约协议。
 
 示例:
 

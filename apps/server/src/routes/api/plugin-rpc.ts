@@ -349,8 +349,9 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       ...(hookPipeline ? { hookPipeline } : {}),
     });
 
-    const runManualTurn = () =>
+    const runManualTurn = (executionSignal?: AbortSignal) =>
       runtimeTurnRunner.runManualTurn({
+        executionSignal,
         turnId,
         runtimeId: body.runtimeId!,
         // Background mode returns 202 and detaches from this request, and the
@@ -366,6 +367,7 @@ pluginRpcRoutes.post("/:id/plugin-rpc", rateLimiter({ max: 30 }), async (c) => {
       });
 
     const jobRunner = createPluginRpcJobRunner({
+      queue: c.get("pluginBackgroundQueue"),
       store,
       sessionId,
       sessionLock,

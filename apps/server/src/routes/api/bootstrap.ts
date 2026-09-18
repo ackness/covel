@@ -1,5 +1,9 @@
 /** Wire the API dependency graph for production and tests. */
 
+import {
+  createPluginBackgroundQueue,
+  type PluginBackgroundQueue,
+} from "./plugin-rpc/background-queue.js";
 import { Hono, type MiddlewareHandler } from "hono";
 import type { RuntimeManifest } from "@covel/shared";
 import { readRuntimeEnv } from "@covel/shared";
@@ -206,6 +210,7 @@ export interface ApiBootstrapResult {
   readonly eventBus: EventBus;
   readonly compactorRunner: CompactorRunner;
   readonly runtimeJobWorker: RuntimeJobWorker;
+  readonly pluginBackgroundQueue: PluginBackgroundQueue;
   /**
    * Refresh the per-session tool override cache for `(create|update)-character`
    * so the next `executeTurn` exposes schema-typed `fields` to the LLM.
@@ -548,6 +553,7 @@ export async function bootstrapApi(
     }
   }
 
+  const pluginBackgroundQueue = createPluginBackgroundQueue();
   const runtimeJobWorker = createRuntimeJobWorker({
     store,
     eventBus,
@@ -715,6 +721,7 @@ export async function bootstrapApi(
     c.set("rpcApprovalGate", rpcApprovalGate);
     c.set("sessionLock", sessionLock);
     c.set("runtimeJobWorker", runtimeJobWorker);
+    c.set("pluginBackgroundQueue", pluginBackgroundQueue);
     c.set("prepareToolsForSession", prepareToolsForSession);
     c.set("clearSessionToolOverrides", clearSessionToolOverrides);
     c.set("clearBrowserWorkspace", browserWorkspaceCache.clearSession);
@@ -799,6 +806,7 @@ export async function bootstrapApi(
     eventBus,
     compactorRunner,
     runtimeJobWorker,
+    pluginBackgroundQueue,
     prepareToolsForSession,
   };
 }

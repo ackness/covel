@@ -122,6 +122,69 @@ describe("detached runtime cross-process lock boundary", () => {
     data: { prompt: "same image", variant: "day" },
   };
 
+  it("does not start a cancelled follower after waiting for its runtime lock", async () => {
+    const started = deferred();
+    const release = deferred();
+    const abort = new AbortController();
+    const handler = vi.fn<FunctionHandler>(async () => {
+      started.resolve();
+      await release.promise;
+      return { ok: true };
+    });
+    const { runner } = await setup(handler);
+    const first = runner.runDeferredFollowerTurn({
+      followerTurnId: "first",
+      runtimeId: RUNTIME_A,
+      triggerEvent,
+    });
+    await started.promise;
+    const second = runner.runDeferredFollowerTurn({
+      followerTurnId: "cancelled",
+      runtimeId: RUNTIME_A,
+      triggerEvent,
+      executionSignal: abort.signal,
+    });
+    const cancelled = expect(second).rejects.toThrow("host shutdown");
+    abort.abort(new Error("host shutdown"));
+    release.resolve();
+    await Promise.all([first, cancelled]);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels provider work and rejects a late follower's domain output", async () => {
+    const started = deferred();
+    const abort = new AbortController();
+    let providerSignal: AbortSignal | undefined;
+    const { runner, store } = await setup(async (ctx) => {
+      providerSignal = ctx.signal;
+      started.resolve();
+      await new Promise<void>((resolve) =>
+        ctx.signal!.addEventListener("abort", () => resolve(), { once: true }),
+      );
+      return {
+        outcome: "success",
+        value: {},
+        effects: {
+          pluginData: [{ namespace: "images", key: "late", value: {} }],
+        },
+      };
+    });
+    const running = runner.runDeferredFollowerTurn({
+      followerTurnId: "cancel-provider",
+      runtimeId: RUNTIME_A,
+      triggerEvent,
+      executionSignal: abort.signal,
+    });
+    await started.promise;
+    abort.abort(new Error("host shutdown"));
+    const result = await running;
+    expect(providerSignal?.aborted).toBe(true);
+    expect(result.commit.committed).toBe(false);
+    expect(await store.listPluginData(SESSION_ID, PLUGIN_ID, "images")).toEqual(
+      [],
+    );
+  });
+
   it("serializes the same runtime while leaving the session commit key free", async () => {
     const firstGate = deferred();
     let calls = 0;

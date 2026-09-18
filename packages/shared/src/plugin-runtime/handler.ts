@@ -176,13 +176,12 @@ export interface FunctionHandlerContext {
    */
   readonly progress?: ProgressReporter;
   /**
-   * Player abort signal for THIS turn. Fires when the player stops the turn
-   * mid-flight. Handlers running long provider work (image generation, TTS,
-   * bespoke `fetch`) should thread it into their calls so an abort cuts the
-   * in-flight request instead of running to completion. Absent when the turn
-   * carries no `TurnControl` (test harnesses, non-abortable runs). Commit
-   * semantics are unchanged: a handler that ignores the signal and returns a
-   * completed result still has its proposals committed.
+   * Cancellation for this execution, including player abort, runtime deadlines
+   * and host shutdown. Thread it into long provider calls and bespoke fetches.
+   * Absent in non-abortable test harnesses. Commit policy belongs to the host:
+   * player abort may preserve completed work, while background execution
+   * cancellation is also checked at the domain commit boundary. A handler must
+   * not assume that returning a result guarantees its proposals will commit.
    */
   readonly signal?: AbortSignal;
 }

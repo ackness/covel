@@ -56,6 +56,7 @@ export interface PluginRpcRuntimeTurnContext {
 }
 
 export interface RunManualTurnArgs {
+  readonly executionSignal?: AbortSignal;
   readonly turnId: string;
   readonly runtimeId: string;
   readonly payload?: unknown;
@@ -78,6 +79,7 @@ export interface RunManualTurnArgs {
 }
 
 export interface RunDeferredFollowerArgs {
+  readonly executionSignal?: AbortSignal;
   readonly followerTurnId: string;
   readonly runtimeId: string;
   readonly triggerEvent: {
@@ -135,6 +137,20 @@ export function createPluginRpcRuntimeTurnRunner(
     readonly commit: TurnCommitOutcome;
   }>;
 } {
+  function executionControl(
+    signal?: AbortSignal,
+  ): TurnExecutorDeps["turnControl"] {
+    const current = ctx.deps.turnControl;
+    return signal
+      ? {
+          ...current,
+          executionSignal: current?.executionSignal
+            ? AbortSignal.any([current.executionSignal, signal])
+            : signal,
+        }
+      : current;
+  }
+
   function assertApprovalScope(
     session: SessionRecord,
     runtimeId: string,
@@ -171,6 +187,7 @@ export function createPluginRpcRuntimeTurnRunner(
     emitter: ReturnType<typeof createTurnEmitter>,
     hookSettings: ReturnType<typeof buildHookSettings>,
     opts: {
+      readonly executionSignal?: AbortSignal;
       readonly proposalGuard?: Parameters<
         typeof commitExecution
       >[0]["proposalGuard"];
@@ -183,6 +200,7 @@ export function createPluginRpcRuntimeTurnRunner(
     // turn_results row to `failed`; a clean run settles it `committed`, both
     // inside that transaction.
     const outcome = await commitExecution({
+      signal: opts.executionSignal,
       completion:
         opts.completionKind === "detached"
           ? { kind: "detached", turnId: turnResult.turnId }
@@ -291,8 +309,11 @@ export function createPluginRpcRuntimeTurnRunner(
     const userSettings = snapshotUserSettings(turnInput.userSettings);
     const hookSettings = buildHookSettings(ctx.activeRuntimes, userSettings);
     const executionInput = { ...turnInput, userSettings };
+    const turnControl = executionControl(opts.executionSignal);
+    const executionSignal = turnControl?.executionSignal;
     const jobLockId = backgroundRuntimeLockId(ctx.sessionId, runtimeId);
     return ctx.sessionLock.withLock(jobLockId, async () => {
+      executionSignal?.throwIfAborted();
       // Detached work does not hold the main session lock during provider
       // execution. Take it briefly to linearize authorization against a
       // concurrent revoke/disable/delete before spending external work.
@@ -314,6 +335,7 @@ export function createPluginRpcRuntimeTurnRunner(
             throw new SessionApprovalScopeChangedError();
           }
           await opts.beforeExecute?.();
+          executionSignal?.throwIfAborted();
         }),
       );
       const result = await executeTurn(executionInput, ctx.activeRuntimes, {
@@ -322,9 +344,7 @@ export function createPluginRpcRuntimeTurnRunner(
         eventBus: ctx.eventBus,
         emitter,
         ...(ctx.hookPipeline ? { hookPipeline: ctx.hookPipeline } : {}),
-        ...(opts.executionSignal
-          ? { turnControl: { executionSignal: opts.executionSignal } }
-          : {}),
+        turnControl,
       });
       if (
         opts.rejectSuspension === true &&
@@ -363,6 +383,7 @@ export function createPluginRpcRuntimeTurnRunner(
             });
           }
           return processTurnResults(result, emitter, hookSettings, {
+            executionSignal,
             ...(opts.proposalGuard
               ? { proposalGuard: opts.proposalGuard }
               : {}),
@@ -418,20 +439,24 @@ export function createPluginRpcRuntimeTurnRunner(
     // generation (mimo-tts/manual-narrate) — exactly the shape that must not
     // hold the session lock. Sync mode is request-bound, short, and its caller
     // awaits the HTTP response, so it keeps the whole run serialised.
+    const turnControl = executionControl(args.executionSignal);
+    const executionSignal = turnControl?.executionSignal;
     const { result, commit } = args.detached
-      ? await runDetached(args.runtimeId, executionInput, emitter).then(
-          (r) => ({
-            result: r.turnResult,
-            commit: r.commit,
-          }),
-        )
+      ? await runDetached(args.runtimeId, executionInput, emitter, {
+          executionSignal: args.executionSignal,
+        }).then((r) => ({
+          result: r.turnResult,
+          commit: r.commit,
+        }))
       : await ctx.sessionLock.withLock(ctx.sessionId, async () => {
           await requireLiveApprovedSession(args.runtimeId);
+          executionSignal?.throwIfAborted();
           const turnResult = await executeTurn(
             executionInput,
             ctx.activeRuntimes,
             {
               ...ctx.deps,
+              turnControl,
               store: ctx.store,
               eventBus: ctx.eventBus,
               emitter,
@@ -442,6 +467,7 @@ export function createPluginRpcRuntimeTurnRunner(
             turnResult,
             emitter,
             hookSettings,
+            { executionSignal },
           );
           return { result: turnResult, commit: outcome };
         });
@@ -494,7 +520,9 @@ export function createPluginRpcRuntimeTurnRunner(
         : {}),
     };
 
-    return runDetached(args.runtimeId, turnInput, emitter);
+    return runDetached(args.runtimeId, turnInput, emitter, {
+      executionSignal: args.executionSignal,
+    });
   }
 
   async function runDetachedStage(args: RunDetachedStageArgs): Promise<{

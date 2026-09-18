@@ -360,8 +360,11 @@ async function drainPhase(
 export const drainServerResources = async (): Promise<void> => {
   if (!(await drainPhase("stop world watchers", () => stopWatchers()))) return;
   if (
-    !(await drainPhase("close runtime job worker", () =>
-      api.runtimeJobWorker.close(),
+    !(await drainPhase("close runtime job queues", () =>
+      Promise.all([
+        api.runtimeJobWorker.close(),
+        api.pluginBackgroundQueue.close(),
+      ]),
     ))
   ) {
     // The process shutdown owns the final exit. Do not close dependencies

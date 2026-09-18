@@ -1,3 +1,4 @@
+import type { PluginBackgroundQueue } from "./background-queue.js";
 import type { DataStore } from "@covel/store";
 import type { TurnResult } from "@covel/shared";
 import type { SessionLock } from "../../../lib/session-lock.js";
@@ -32,6 +33,7 @@ export interface DeferredFollower {
 }
 
 interface PluginRpcJobRunnerOptions {
+  readonly queue: PluginBackgroundQueue;
   readonly store: DataStore;
   readonly sessionId: string;
   readonly sessionLock: SessionLock;
@@ -39,10 +41,11 @@ interface PluginRpcJobRunnerOptions {
   readonly userSettings?: Readonly<
     Record<string, Readonly<Record<string, unknown>>>
   >;
-  readonly runManualTurn: () => Promise<ManualTurnSummary>;
+  readonly runManualTurn: (signal: AbortSignal) => Promise<ManualTurnSummary>;
   readonly runDeferredFollowerTurn: (args: {
     readonly followerTurnId: string;
     readonly runtimeId: string;
+    readonly executionSignal: AbortSignal;
     readonly triggerEvent: PluginJobTriggerEvent;
     readonly userSettings?: Readonly<
       Record<string, Readonly<Record<string, unknown>>>
@@ -52,74 +55,6 @@ interface PluginRpcJobRunnerOptions {
     readonly commit: TurnCommitOutcome;
   }>;
   readonly hasActiveRuntime: (runtimeId: string) => boolean;
-}
-
-// ── Bounded background fan-out ──────────────────────────────────────
-//
-// The setImmediate fan-out used to be unbounded: a burst of RPC calls (or a
-// follower cascade) could start arbitrarily many manual turns at once. Cap
-// concurrent background jobs per process; overflow starts round-robin by
-// session and FIFO within a session as slots free.
-// Safe with follower chains: a parent only *enqueues* its followers (it never
-// awaits their execution), so holding a slot cannot deadlock the queue.
-const MAX_CONCURRENT_BACKGROUND_JOBS = 4;
-const MAX_QUEUED_BACKGROUND_JOBS = 1024;
-let runningBackgroundJobs = 0;
-let queuedBackgroundJobs = 0;
-let lastDequeuedSessionId: string | undefined;
-const backgroundJobQueues = new Map<string, Array<() => Promise<void>>>();
-
-function takeNextBackgroundJob():
-  | { readonly sessionId: string; readonly task: () => Promise<void> }
-  | undefined {
-  const sessionIds = [...backgroundJobQueues.keys()].sort();
-  if (sessionIds.length === 0) return undefined;
-  const after = lastDequeuedSessionId
-    ? sessionIds.findIndex((id) => id > lastDequeuedSessionId!)
-    : 0;
-  const sessionId = sessionIds[after >= 0 ? after : 0]!;
-  const queue = backgroundJobQueues.get(sessionId)!;
-  const task = queue.shift()!;
-  if (queue.length === 0) backgroundJobQueues.delete(sessionId);
-  queuedBackgroundJobs--;
-  lastDequeuedSessionId = sessionId;
-  return { sessionId, task };
-}
-
-function startBackgroundJob(
-  sessionId: string,
-  task: () => Promise<void>,
-): void {
-  // Reserve the slot before yielding to setImmediate. Otherwise every job in
-  // one request burst observes the old count and bypasses the cap.
-  runningBackgroundJobs++;
-  setImmediate(() => {
-    void task()
-      .finally(() => {
-        runningBackgroundJobs--;
-        const next = takeNextBackgroundJob();
-        if (next) startBackgroundJob(next.sessionId, next.task);
-      })
-      .catch((err: unknown) => {
-        console.error("[plugin-rpc] background job escaped its handler", err);
-      });
-  });
-}
-
-function scheduleBackgroundJob(
-  sessionId: string,
-  task: () => Promise<void>,
-): boolean {
-  if (runningBackgroundJobs < MAX_CONCURRENT_BACKGROUND_JOBS) {
-    startBackgroundJob(sessionId, task);
-    return true;
-  }
-  if (queuedBackgroundJobs >= MAX_QUEUED_BACKGROUND_JOBS) return false;
-  const queue = backgroundJobQueues.get(sessionId) ?? [];
-  queue.push(task);
-  backgroundJobQueues.set(sessionId, queue);
-  queuedBackgroundJobs++;
-  return true;
 }
 
 export interface PluginRpcJobRunner {
@@ -177,6 +112,50 @@ export function createPluginRpcJobRunner(
     });
   };
 
+  const scheduleJob = async (
+    args: Parameters<typeof makePendingPluginJobValue>[0] & {
+      readonly pluginId: string;
+      readonly jobId: string;
+    },
+    run: (signal: AbortSignal) => Promise<void>,
+  ): Promise<void> => {
+    await options.queue.schedule({
+      sessionId: options.sessionId,
+      jobId: args.jobId,
+      prepare: () =>
+        persistJob({
+          pluginId: args.pluginId,
+          jobId: args.jobId,
+          startedAt: args.startedAt,
+          value: makePendingPluginJobValue(args),
+        }),
+      run,
+      reject: async (reason) => {
+        const completedAt = new Date().toISOString();
+        await persistJob({
+          pluginId: args.pluginId,
+          jobId: args.jobId,
+          startedAt: args.startedAt,
+          updatedAt: completedAt,
+          terminal: true,
+          value: makeTerminalPluginJobValue({
+            ...args,
+            status: "failed",
+            progress: 100,
+            message: undefined,
+            messageKey: undefined,
+            completedAt,
+            reason,
+            error:
+              reason === "server-shutdown"
+                ? "server shut down before job execution"
+                : "background job queue is full",
+          }),
+        });
+      },
+    });
+  };
+
   const runDeferredFollower = async (args: {
     readonly jobId: string;
     readonly runtimeId: string;
@@ -184,6 +163,7 @@ export function createPluginRpcJobRunner(
     readonly triggerEvent: PluginJobTriggerEvent;
     readonly followerTurnId: string;
     readonly startedAt: string;
+    readonly executionSignal: AbortSignal;
   }): Promise<void> => {
     if (!options.hasActiveRuntime(args.runtimeId)) {
       const completedAt = new Date().toISOString();
@@ -210,6 +190,7 @@ export function createPluginRpcJobRunner(
       const { turnResult, commit } = await options.runDeferredFollowerTurn({
         followerTurnId: args.followerTurnId,
         runtimeId: args.runtimeId,
+        executionSignal: args.executionSignal,
         triggerEvent: args.triggerEvent,
         ...(options.userSettings ? { userSettings: options.userSettings } : {}),
       });
@@ -273,7 +254,7 @@ export function createPluginRpcJobRunner(
           completedAt,
           error: err instanceof Error ? err.message : String(err),
         }),
-      }).catch(() => undefined);
+      });
     }
   };
 
@@ -282,51 +263,31 @@ export function createPluginRpcJobRunner(
   ): Promise<readonly ScheduledPluginJob[]> => {
     const scheduled: ScheduledPluginJob[] = [];
     for (const follower of followers) {
+      if (options.queue.signal.aborted) break;
       const jobId = crypto.randomUUID();
       const followerTurnId = crypto.randomUUID();
       const startedAt = new Date().toISOString();
-      await persistJob({
-        pluginId: follower.pluginId,
-        jobId,
-        startedAt,
-        value: makePendingPluginJobValue({
+      await scheduleJob(
+        {
+          pluginId: follower.pluginId,
+          jobId,
+          startedAt,
           runtimeId: follower.runtimeId,
           turnId: followerTurnId,
           triggerEvent: follower.triggerEvent,
-          startedAt,
-        }),
-      });
-      scheduled.push({ jobId, runtimeId: follower.runtimeId });
-      const accepted = scheduleBackgroundJob(options.sessionId, () =>
-        runDeferredFollower({
-          jobId,
-          runtimeId: follower.runtimeId,
-          pluginId: follower.pluginId,
-          triggerEvent: follower.triggerEvent,
-          followerTurnId,
-          startedAt,
-        }),
-      );
-      if (!accepted) {
-        const completedAt = new Date().toISOString();
-        await persistJob({
-          pluginId: follower.pluginId,
-          jobId,
-          startedAt,
-          updatedAt: completedAt,
-          terminal: true,
-          value: makeTerminalPluginJobValue({
-            status: "failed",
+        },
+        (executionSignal) =>
+          runDeferredFollower({
+            jobId,
             runtimeId: follower.runtimeId,
-            turnId: followerTurnId,
+            pluginId: follower.pluginId,
             triggerEvent: follower.triggerEvent,
+            followerTurnId,
             startedAt,
-            completedAt,
-            reason: "background-queue-full",
-            error: "background job queue is full",
+            executionSignal,
           }),
-        });
-      }
+      );
+      scheduled.push({ jobId, runtimeId: follower.runtimeId });
     }
     return scheduled;
   };
@@ -339,23 +300,18 @@ export function createPluginRpcJobRunner(
   }): Promise<ScheduledPluginJob> => {
     const jobId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
-    await persistJob({
-      pluginId: args.pluginId,
-      jobId,
-      startedAt,
-      value: makePendingPluginJobValue({
+    await scheduleJob(
+      {
+        pluginId: args.pluginId,
+        jobId,
+        startedAt,
         runtimeId: args.runtimeId,
         turnId: args.turnId,
-        payload: args.payload,
-        startedAt,
-      }),
-    });
-
-    const accepted = scheduleBackgroundJob(
-      options.sessionId,
-      async (): Promise<void> => {
+        ...(args.payload !== undefined ? { payload: args.payload } : {}),
+      },
+      async (executionSignal): Promise<void> => {
         try {
-          const summary = await options.runManualTurn();
+          const summary = await options.runManualTurn(executionSignal);
           const completion = deriveBackgroundJobCompletion(summary);
           // A background entry runtime may itself emit events for additional
           // `execution: background` followers (for example, image prompt
@@ -410,31 +366,10 @@ export function createPluginRpcJobRunner(
               error:
                 err instanceof Error ? err.message : "runtime execution failed",
             }),
-          }).catch(() => undefined);
+          });
         }
       },
     );
-    if (!accepted) {
-      const completedAt = new Date().toISOString();
-      await persistJob({
-        pluginId: args.pluginId,
-        jobId,
-        startedAt,
-        updatedAt: completedAt,
-        terminal: true,
-        value: makeTerminalPluginJobValue({
-          status: "failed",
-          runtimeId: args.runtimeId,
-          turnId: args.turnId,
-          payload: args.payload,
-          startedAt,
-          completedAt,
-          reason: "background-queue-full",
-          error: "background job queue is full",
-        }),
-      });
-    }
-
     return { jobId, runtimeId: args.runtimeId };
   };
 
@@ -445,26 +380,21 @@ export function createPluginRpcJobRunner(
   }): Promise<ScheduledPluginJob & { readonly phase: "prompt" }> => {
     const jobId = crypto.randomUUID();
     const startedAt = new Date().toISOString();
-    await persistJob({
-      pluginId: args.pluginId,
-      jobId,
-      startedAt,
-      value: makePendingPluginJobValue({
-        progress: 1,
+    await scheduleJob(
+      {
+        pluginId: args.pluginId,
+        jobId,
+        startedAt,
         runtimeId: args.runtimeId,
         turnId: args.turnId,
-        startedAt,
+        progress: 1,
         phase: "prompt",
         messageKey: "pluginRpc.jobs.imagePromptGenerating",
         message: "Generating image prompt...",
-      }),
-    });
-
-    const accepted = scheduleBackgroundJob(
-      options.sessionId,
-      async (): Promise<void> => {
+      },
+      async (executionSignal): Promise<void> => {
         try {
-          const summary = await options.runManualTurn();
+          const summary = await options.runManualTurn(executionSignal);
           // A runtime can report success while its proposals fail to commit.
           // Scheduling the expected follower onto rolled-back state — or marking
           // the parent job done — would build on writes that never landed.
@@ -567,30 +497,10 @@ export function createPluginRpcJobRunner(
               error:
                 err instanceof Error ? err.message : "runtime execution failed",
             }),
-          }).catch(() => undefined);
+          });
         }
       },
     );
-    if (!accepted) {
-      const completedAt = new Date().toISOString();
-      await persistJob({
-        pluginId: args.pluginId,
-        jobId,
-        startedAt,
-        updatedAt: completedAt,
-        terminal: true,
-        value: makeTerminalPluginJobValue({
-          status: "failed",
-          runtimeId: args.runtimeId,
-          turnId: args.turnId,
-          startedAt,
-          completedAt,
-          reason: "background-queue-full",
-          error: "background job queue is full",
-        }),
-      });
-    }
-
     return { jobId, runtimeId: args.runtimeId, phase: "prompt" };
   };
 

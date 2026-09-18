@@ -10,6 +10,7 @@
  * This test pins the fix: the follower actually executes and commits.
  */
 
+import { createTestBackgroundQueue } from "./__helpers/background-queue.js";
 import { describe, it, expect } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
@@ -156,8 +157,10 @@ describe("POST /api/actions — deferred background followers (main path)", () =
           ? followerLoaded
           : undefined;
 
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -322,8 +325,10 @@ describe("POST /api/actions — deferred background followers (main path)", () =
           ? followerLoaded
           : undefined;
 
+    const pluginBackgroundQueue = createTestBackgroundQueue();
     const app = new Hono();
     app.use("*", async (c, next) => {
+      c.set("pluginBackgroundQueue", pluginBackgroundQueue);
       c.set("store", store);
       c.set("pluginRegistry", pluginRegistry);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
