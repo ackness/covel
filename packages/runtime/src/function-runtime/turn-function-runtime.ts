@@ -1,3 +1,4 @@
+import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import type {
   RuntimeManifest,
   RuntimeResult,
@@ -10,7 +11,6 @@ import type {
 } from "@covel/shared";
 import { validateWorldIRV1, WORLD_IR_V1_SCHEMA_URI } from "@covel/shared";
 import { attachRuntimeJournal } from "../execution-journal.js";
-import { getRuntimeSpec } from "@covel/shared";
 import type { LoadedRuntime } from "@covel/shared/plugin-runtime";
 import type { SuspensionRecord } from "@covel/store";
 import {
@@ -33,7 +33,7 @@ import { createRuntimeMediaContext } from "./runtime-media-context.js";
 import { createRuntimeImagesContext } from "./runtime-images-context.js";
 import { createRuntimeSpeechContext } from "./runtime-speech-context.js";
 import { createProgressReporter } from "../job-status/job-status.js";
-import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
+import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import type { HookPipeline } from "../hooks/pipeline.js";
 import {
   makeFailedResult,
@@ -41,7 +41,6 @@ import {
 } from "../turn-executor/turn-executor-helpers.js";
 import {
   createAssetProgressEmitter,
-  emitSubEvent,
   isTrustedPluginSource,
 } from "../turn-executor/turn-runtime-helpers.js";
 import { withGatewayTrace } from "./gateway-trace.js";
@@ -131,20 +130,9 @@ export async function executeFunctionRuntime({
   allowSuspend = true,
 }: ExecuteFunctionRuntimeOptions): Promise<RuntimeResult> {
   // Emit start for function runtimes (no guard to check)
-  const stage = getRuntimeSpec(manifest).stage;
-  try {
-    await deps.onRuntimeStart?.({
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      ...(stage !== undefined ? { stage } : {}),
-    });
-  } catch {
-    /* callback error must not kill runtime */
-  }
-  emitSubEvent(deps.eventBus, "runtime", "runtime.started", input.sessionId, {
-    runtimeId: manifest.name,
-    pluginId: manifest.pluginId,
-    ...(stage !== undefined ? { stage } : {}),
+  await reportRuntimeStarted(deps, input.sessionId, manifest, {
+    turnId: input.turnId,
+    runId,
   });
 
   const helperCtx = {
@@ -161,54 +149,17 @@ export async function executeFunctionRuntime({
   const writeBuffer = createExecutionWriteBuffer();
 
   if (!loaded.handler) {
-    // A missing handler returns (never throws), so it would bypass the dispatch
-    // catch and leave the runtime.started above with no terminal event. Emit a
-    // terminal runtime.failed + run the PostRuntime hook to close that gap.
-    const failed = makeFailedResult(
+    return finalizeRuntimeResult(
+      { ...deps, hookPipeline },
       manifest,
       input,
-      runId,
-      startTime,
-      "Function runtime missing handler",
-    );
-    try {
-      await deps.onRuntimeComplete?.({
-        runtimeId: manifest.name,
-        pluginId: manifest.pluginId,
-        status: failed.status,
-        durationMs: failed.durationMs,
-        error: "Function runtime missing handler",
-      });
-    } catch {
-      /* callback error must not kill runtime */
-    }
-    emitSubEvent(deps.eventBus, "runtime", "runtime.failed", input.sessionId, {
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      status: failed.status,
-      durationMs: failed.durationMs,
-      error: "Function runtime missing handler",
-    });
-    return runPostRuntimeHook(
-      {
-        pipeline: hookPipeline,
-        signal: getTurnExecutionSignal(deps.turnControl),
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        pluginId: manifest.pluginId,
-        runtimeId: manifest.name,
-        ...(input.detachedStage
-          ? {
-              contextData: {
-                runtimeJobId: input.detachedStage.jobId,
-                originTurnId: input.detachedStage.sourceTurnId,
-              },
-            }
-          : {}),
-        eventBus: deps.eventBus,
-        emitter: deps.emitter,
-      },
-      failed,
+      makeFailedResult(
+        manifest,
+        input,
+        runId,
+        startTime,
+        "Function runtime missing handler",
+      ),
     );
   }
   const manualPayloadForRuntime =
@@ -596,47 +547,15 @@ export async function executeFunctionRuntime({
       timestamp: new Date().toISOString(),
     };
 
-    const finalResult = attachSuspensionArtifact(
-      await runPostRuntimeHook(
-        {
-          pipeline: hookPipeline,
-          signal: getTurnExecutionSignal(deps.turnControl),
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          pluginId: manifest.pluginId,
-          runtimeId: manifest.name,
-          eventBus: deps.eventBus,
-          emitter: deps.emitter,
-        },
-        suspendedResult,
-      ),
-      { record: suspension },
+    const finalResult = await finalizeRuntimeResult(
+      { ...deps, hookPipeline },
+      manifest,
+      input,
+      suspendedResult,
     );
-
-    try {
-      await deps.onRuntimeComplete?.({
-        runtimeId: manifest.name,
-        pluginId: manifest.pluginId,
-        status: "suspended",
-        durationMs: finalResult.durationMs,
-      });
-    } catch {
-      /* callback error must not kill runtime */
-    }
-
-    emitSubEvent(
-      deps.eventBus,
-      "runtime",
-      "runtime.completed",
-      input.sessionId,
-      {
-        runtimeId: manifest.name,
-        pluginId: manifest.pluginId,
-        status: "suspended",
-        durationMs: finalResult.durationMs,
-      },
-    );
-    return finalResult;
+    return finalResult.status === "suspended"
+      ? attachSuspensionArtifact(finalResult, { record: suspension })
+      : finalResult;
   }
 
   // `output.schema` validates the canonical success value. A mismatch fails
@@ -706,20 +625,10 @@ export async function executeFunctionRuntime({
     timestamp: new Date().toISOString(),
   };
 
-  // PostRuntime hook — function runtime path. Runs BEFORE
-  // persistence so prompt history, commit proposals, and SSE all see
-  // the same finalized output — see the agent-path comment for rationale.
-  const result = await runPostRuntimeHook(
-    {
-      pipeline: hookPipeline,
-      signal: getTurnExecutionSignal(deps.turnControl),
-      sessionId: input.sessionId,
-      turnId: input.turnId,
-      pluginId: manifest.pluginId,
-      runtimeId: manifest.name,
-      eventBus: deps.eventBus,
-      emitter: deps.emitter,
-    },
+  const result = await finalizeRuntimeResult(
+    { ...deps, hookPipeline },
+    manifest,
+    input,
     rawResult,
   );
 
@@ -745,24 +654,6 @@ export async function executeFunctionRuntime({
   const finalOutput = (result.output ?? output) as Record<string, unknown>;
 
   if (deps.store) attachRuntimeJournal(result, input, manifest, finalOutput);
-
-  try {
-    await deps.onRuntimeComplete?.({
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      status: result.status,
-      durationMs: result.durationMs,
-    });
-  } catch {
-    /* callback error must not kill runtime */
-  }
-
-  emitSubEvent(deps.eventBus, "runtime", "runtime.completed", input.sessionId, {
-    runtimeId: manifest.name,
-    pluginId: manifest.pluginId,
-    status: result.status,
-    durationMs: result.durationMs,
-  });
 
   return result;
 }

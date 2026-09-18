@@ -61,6 +61,8 @@ export interface AgentLoopDeps {
   readonly onRuntimeComplete?: (info: {
     runtimeId: string;
     pluginId: string;
+    turnId?: string;
+    runId?: string;
     status: string;
     durationMs: number;
     error?: string;
@@ -123,6 +125,8 @@ export interface TurnExecutorDeps extends AgentLoopDeps {
   readonly onRuntimeStart?: (info: {
     runtimeId: string;
     pluginId: string;
+    turnId?: string;
+    runId?: string;
     /** Named stage; absent for event/manual/UI-only runtimes. */
     stage?: Stage;
   }) => Promise<void>;

@@ -110,16 +110,18 @@ flowchart TB
 
     subgraph Group["每个 DAG 层级组（同组并行，跨组串行；name 做并列 tiebreak）"]
       direction TB
-      G1["guard? (agent runtime)"] --> G2["SSE: runtime.started"]
-      G2 --> G3["PreRuntime hook"]
-      G3 --> RT{"runtimeType"}
+      Gate["框架依赖 / 输入 / 权限检查"] --> G3["PreRuntime hook"]
+      G3 --> G1["guard? (agent runtime)"]
+      G1 --> G2["SSE: runtime.started"]
+      G2 --> RT{"runtimeType"}
       RT -->|function| F1["handler(ctx) → HandlerResult<br/>校验 outcome，物化 success.value / effects"]
       F1 --> G6
       RT -->|agent| G4["buildContext<br/>PLUGIN.md + 注入块 + 消息历史<br/>→ 首个 agent 按真实 system prompt 压缩并重建<br/>→ PostContextAssembly hook 后再次预算"]
       G4 --> G5["LLM + ToolExecutor loop<br/>PreLLMCall → LLM → PostLLMResponse 审查<br/>接受后才执行工具；拒绝时限次纠正<br/>PreToolUse → execute → PostToolUse"]
       G5 --> G6["normalizeOutput → Proposal[]"]
       G6 --> G7["PostRuntime hook"]
-      G7 --> G8["SSE: runtime.completed<br/>status = success|skipped|suspended|failed"]
+      G7 --> Final["校验故事输出 / 超时 / 父级取消"]
+      Final --> G8["唯一终态 + turnId / runId<br/>runtime.completed / runtime.failed / runtime.skipped"]
     end
 
     Group --> Commit["CommitPipeline.commitAll<br/>PreStateCommit → handler → PostStateCommit"]
@@ -744,7 +746,7 @@ sequenceDiagram
         Kernel-->>Web: SSE: narrative.delta (仅流式 runtime)
         Kernel-->>Web: SSE: narrative.completed
         Kernel-->>Web: SSE: interaction.requested (若有表单/按钮)
-        Server-->>Web: SSE: runtime.completed { status }
+        Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
     Kernel->>Server: 登记 setupRuntimes 完成镜像；未集齐则 phase 保持 'setup'
     end
@@ -776,7 +778,7 @@ sequenceDiagram
         Kernel-->>Web: SSE: interaction.requested (如 guide 的 action 卡片)
         Kernel-->>Web: SSE: plugin-data.changed (plugin-data-set 工具写入)
         Kernel-->>Web: SSE: state.changed / record.updated / event.emitted
-        Server-->>Web: SSE: runtime.completed { status: success | skipped | suspended | failed }
+        Server-->>Web: SSE: runtime.completed / runtime.failed / runtime.skipped { status, runId }
     end
     end
 

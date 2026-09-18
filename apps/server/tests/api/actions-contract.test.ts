@@ -10,7 +10,7 @@
  *   path. Whole-turn retry is the explicit `retry_turn` action.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Hono } from "hono";
 import { createMemoryStore, type DataStore } from "@covel/store";
 import { createEventBus } from "@covel/events";
@@ -131,6 +131,104 @@ describe("POST /api/actions — action type contract ", () => {
       await next();
     });
     app.route("/api/actions", actionRoutes);
+  });
+
+  it.each(["success", "failed"] as const)(
+    "preserves runtime identity and final status in SSE and trace: %s",
+    async (status) => {
+      if (status === "failed") {
+        const loaded = loadedByName.get(NARRATOR_ID)!;
+        loadedByName.set(NARRATOR_ID, {
+          ...loaded,
+          inputSchema: { type: "object", required: ["unavailableField"] },
+        });
+      }
+      const response = await app.request("/api/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: "terminal-contract",
+          type: "send_message",
+          sessionId,
+          payload: { content: "Continue" },
+        }),
+      });
+      expect(response.status).toBe(200);
+      const envelopes = (await response.text())
+        .split("\n")
+        .filter((line) => line.startsWith("data: "))
+        .map(
+          (line) =>
+            JSON.parse(line.slice(6)) as {
+              type: string;
+              turnId: string;
+              payload: Record<string, unknown>;
+            },
+        );
+      const terminal = envelopes.filter(
+        (event) =>
+          ["runtime.completed", "runtime.failed"].includes(event.type) &&
+          event.payload.runtimeId === NARRATOR_ID,
+      );
+      expect(terminal).toHaveLength(1);
+      const event = terminal[0]!;
+      expect(event).toMatchObject({
+        type: status === "failed" ? "runtime.failed" : "runtime.completed",
+        payload: { status, runId: expect.any(String), turnId: event.turnId },
+      });
+      const traces = (await store.listTraceEvents(sessionId)).filter(
+        (trace) =>
+          ["runtime.completed", "runtime.failed"].includes(trace.type) &&
+          (trace.payload as Record<string, unknown>).runtimeId === NARRATOR_ID,
+      );
+      expect(traces).toHaveLength(1);
+      expect(traces[0]).toMatchObject({
+        type: event.type,
+        turnId: event.turnId,
+        payload: { status, runId: event.payload.runId, turnId: event.turnId },
+      });
+    },
+  );
+
+  it("delivers runtime SSE even when runtime trace persistence fails", async () => {
+    const persist = store.addTraceEvent.bind(store);
+    vi.spyOn(store, "addTraceEvent").mockImplementation(async (record) => {
+      if (record.type.startsWith("runtime."))
+        throw new Error("synthetic trace failure");
+      return persist(record);
+    });
+    const response = await app.request("/api/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        requestId: "trace-failure",
+        type: "send_message",
+        sessionId,
+        payload: { content: "Continue" },
+      }),
+    });
+    const envelopes = (await response.text())
+      .split("\n")
+      .filter((line) => line.startsWith("data: "))
+      .map(
+        (line) =>
+          JSON.parse(line.slice(6)) as {
+            type: string;
+            payload: Record<string, unknown>;
+          },
+      );
+    const runtime = envelopes.filter(
+      (event) => event.payload?.runtimeId === NARRATOR_ID,
+    );
+    expect(
+      runtime.filter((event) => event.type === "runtime.started"),
+    ).toHaveLength(1);
+    expect(
+      runtime.filter((event) => event.type === "runtime.completed"),
+    ).toHaveLength(1);
+    expect(
+      runtime.filter((event) => event.type === "runtime.failed"),
+    ).toHaveLength(0);
   });
 
   it("rejects the removed trigger_event action with 400", async () => {

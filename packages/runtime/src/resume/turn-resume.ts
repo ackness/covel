@@ -1,3 +1,4 @@
+import { reportRuntimeStarted } from "../trace/runtime-telemetry.js";
 import { DEFAULT_MAX_TOOL_STEPS } from "../agent-loop/agent-loop-policy.js";
 import type {
   ExecutionContext,
@@ -11,26 +12,18 @@ import type {
 import type { SuspensionRecord } from "@covel/store";
 import type { EmittedEvent } from "@covel/tools";
 import type { LLMMessage } from "../llm/llm-adapter.js";
-import {
-  runPostRuntimeHook,
-  runPreRuntimeHook,
-} from "../hooks/wire-helpers.js";
 import { formatToolLoopFailure } from "../turn-executor/turn-output-helpers.js";
 import { runAgentToolLoop } from "../agent-loop/turn-agent-tool-loop.js";
 import { finalizeAgentOutput } from "../agent-loop/finalize-agent-output.js";
-import { storyOutputError } from "../agent-loop/story-output.js";
-import {
-  completionContractError,
-  withAgentFailureTarget,
-} from "../agent-loop/runtime-completion.js";
+import { completionContractError } from "../agent-loop/runtime-completion.js";
 import { freezeInputSlots } from "../agent-loop/runtime-input-slots.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { makeFailedResult } from "../turn-executor/turn-executor-helpers.js";
-import { finalizeRuntimeFailure } from "../turn-executor/turn-runtime-failure.js";
 import {
-  getTurnExecutionSignal,
-  throwIfTurnExecutionAborted,
-} from "../turn-executor/turn-control.js";
+  finalizeRuntimeResult,
+  runRuntimePreHook,
+} from "../turn-executor/runtime-finalization.js";
+import { throwIfTurnExecutionAborted } from "../turn-executor/turn-control.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
 export interface ResumeSuspendedRuntimeOptions {
@@ -83,7 +76,7 @@ export async function resumeSuspendedRuntime(
       options,
     });
   } catch (error: unknown) {
-    return finalizeRuntimeFailure(
+    return finalizeRuntimeResult(
       deps,
       manifest,
       input,
@@ -94,7 +87,7 @@ export async function resumeSuspendedRuntime(
         startTime,
         error instanceof Error ? error.message : String(error),
       ),
-      error,
+      { cause: error },
     );
   }
 }
@@ -116,63 +109,24 @@ async function executeResumedRuntime(
   const timeoutMs = options?.timeoutMs ?? manifest.timeoutMs ?? 60000;
   const hookPipeline = deps.hookPipeline;
   let lastTarget: LLMTargetIdentity | undefined;
+  let deltaCount = 0;
 
-  const postRuntimeOpts = {
-    pipeline: hookPipeline,
-    signal: getTurnExecutionSignal(deps.turnControl),
-    sessionId: suspension.sessionId,
-    turnId: suspension.turnId,
-    pluginId: manifest.pluginId,
-    runtimeId: manifest.name,
-    eventBus: deps.eventBus,
-    emitter: deps.emitter,
-  };
-  const finalizeWithPostRuntime = async (
+  const finalizeWithPostRuntime = (
     result: RuntimeResult,
-  ): Promise<RuntimeResult> => {
-    const final =
-      result.status === "failed"
-        ? await finalizeRuntimeFailure(deps, manifest, input, result)
-        : await runPostRuntimeHook(postRuntimeOpts, result);
-    const error =
-      manifest.outputKind === "story" && final.status === "success"
-        ? storyOutputError(final.output)
-        : undefined;
-    return withAgentFailureTarget(
-      error ? { ...final, status: "failed", output: null, error } : final,
+  ): Promise<RuntimeResult> =>
+    finalizeRuntimeResult(deps, manifest, input, result, {
       lastTarget,
-    );
-  };
-
-  throwIfTurnExecutionAborted(deps.turnControl, "resume entry");
-
-  // ── PreRuntime hook ──────────────────────────────────────────────
-  if (hookPipeline) {
-    const preRtResult = await runPreRuntimeHook({
-      pipeline: hookPipeline,
-      signal: getTurnExecutionSignal(deps.turnControl),
-      sessionId: suspension.sessionId,
-      turnId: suspension.turnId,
-      manifest,
-      input,
-      eventBus: deps.eventBus,
-      emitter: deps.emitter,
+      deltaCount,
     });
-    throwIfTurnExecutionAborted(deps.turnControl, "resume PreRuntime");
-    if (preRtResult.action === "abort") {
-      return finalizeWithPostRuntime({
-        pluginId: manifest.pluginId,
-        runtimeId: manifest.name,
-        runId,
-        turnId: suspension.turnId,
-        status: "skipped",
-        output: null,
-        toolCalls: [],
-        durationMs: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
+
+  const preRuntime = await runRuntimePreHook(
+    deps,
+    manifest,
+    input,
+    runId,
+    startTime,
+  );
+  if (preRuntime) return preRuntime;
 
   const loaded = await deps.loadRuntime(
     manifest,
@@ -230,6 +184,11 @@ async function executeResumedRuntime(
       allowSuspend: false,
     });
   }
+
+  await reportRuntimeStarted(deps, input.sessionId, manifest, {
+    turnId: input.turnId,
+    runId,
+  });
 
   // Rebuild the mid-turn transcript from the suspension and append the resume
   // payload: a tool result for the suspend tool (agent runtimes) or a user
@@ -302,6 +261,7 @@ async function executeResumedRuntime(
   // the union types honest.
   if ("status" in toolLoop) return toolLoop;
   lastTarget = toolLoop.lastTarget;
+  deltaCount = toolLoop.streamDeltaCount;
 
   const {
     finalContent,

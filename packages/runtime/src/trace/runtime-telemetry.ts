@@ -1,46 +1,93 @@
-/**
- * Runtime-level telemetry helpers for agent runtimes.
- *
- * `turn-agent-runtime.ts` emits `runtime.failed` on each early-return failure
- * path and `runtime.completed` / `message.completed` on the success path. These
- * thin wrappers centralise the event payload shapes so the runtime body reads
- * as orchestration rather than event plumbing.
- */
+/** Runtime lifecycle notifications describe finalized execution, not commit. */
 
-import type { RuntimeManifest, RuntimeResult } from "@covel/shared";
+import {
+  getRuntimeSpec,
+  type RuntimeManifest,
+  type RuntimeResult,
+} from "@covel/shared";
 import type { TurnEmitter } from "./turn-emitter.js";
 import { emitSubEvent } from "../turn-executor/turn-runtime-helpers.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
 
-/** Emit a `runtime.failed` sub-event for a failed RuntimeResult. */
-export function emitRuntimeFailed(
-  deps: TurnExecutorDeps,
+/** Started execution retains its turn and invocation identity on every entry. */
+export async function reportRuntimeStarted(
+  deps: Pick<TurnExecutorDeps, "onRuntimeStart" | "eventBus">,
   sessionId: string,
   manifest: RuntimeManifest,
-  result: RuntimeResult,
-): void {
-  emitSubEvent(deps.eventBus, "runtime", "runtime.failed", sessionId, {
+  identity: { readonly turnId: string; readonly runId: string },
+): Promise<void> {
+  const stage = getRuntimeSpec(manifest).stage;
+  const payload = {
     runtimeId: manifest.name,
     pluginId: manifest.pluginId,
-    status: result.status,
-    durationMs: result.durationMs,
-    error: result.error,
-  });
+    ...identity,
+    ...(stage !== undefined ? { stage } : {}),
+  };
+  try {
+    await deps.onRuntimeStart?.(payload);
+  } catch {
+    console.warn("[runtime-telemetry] start observer failed", {
+      runtimeId: manifest.name,
+      runId: identity.runId,
+    });
+  }
+  try {
+    emitSubEvent(
+      deps.eventBus,
+      "runtime",
+      "runtime.started",
+      sessionId,
+      payload,
+    );
+  } catch {
+    console.warn("[runtime-telemetry] start delivery failed", {
+      runtimeId: manifest.name,
+      runId: identity.runId,
+    });
+  }
 }
 
-/** Emit a `runtime.completed` sub-event for a finished RuntimeResult. */
-export function emitRuntimeCompleted(
-  deps: TurnExecutorDeps,
+/** Report the finalized execution result, never a pre-Hook intermediate state. */
+export async function reportRuntimeResult(
+  deps: Pick<TurnExecutorDeps, "onRuntimeComplete" | "eventBus">,
   sessionId: string,
-  manifest: RuntimeManifest,
   result: RuntimeResult,
-): void {
-  emitSubEvent(deps.eventBus, "runtime", "runtime.completed", sessionId, {
-    runtimeId: manifest.name,
-    pluginId: manifest.pluginId,
+  reason?: string,
+): Promise<void> {
+  const payload = {
+    runtimeId: result.runtimeId,
+    pluginId: result.pluginId,
+    turnId: result.turnId,
+    runId: result.runId,
     status: result.status,
     durationMs: result.durationMs,
-  });
+    ...(result.status === "failed" && result.error
+      ? { error: result.error }
+      : {}),
+    ...(reason ? { reason } : {}),
+  };
+  try {
+    await deps.onRuntimeComplete?.(payload);
+  } catch {
+    console.warn("[runtime-telemetry] completion observer failed", {
+      runtimeId: result.runtimeId,
+      runId: result.runId,
+    });
+  }
+  try {
+    emitSubEvent(
+      deps.eventBus,
+      "runtime",
+      result.status === "failed" ? "runtime.failed" : "runtime.completed",
+      sessionId,
+      payload,
+    );
+  } catch {
+    console.warn("[runtime-telemetry] terminal delivery failed", {
+      runtimeId: result.runtimeId,
+      runId: result.runId,
+    });
+  }
 }
 
 /**
@@ -52,14 +99,16 @@ export function emitRuntimeCompleted(
  */
 export async function emitMessageCompleted(
   emitter: TurnEmitter | undefined,
-  manifest: RuntimeManifest,
+  result: RuntimeResult,
   finalContent: string,
   deltaCount: number,
 ): Promise<void> {
   if (!emitter) return;
   await emitter.emit("message.completed", {
-    runtimeId: manifest.name,
-    pluginId: manifest.pluginId,
+    runtimeId: result.runtimeId,
+    pluginId: result.pluginId,
+    turnId: result.turnId,
+    runId: result.runId,
     content: finalContent,
     len: finalContent.length,
     deltaCount,

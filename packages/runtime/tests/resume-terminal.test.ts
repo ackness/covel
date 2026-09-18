@@ -136,11 +136,15 @@ describe("resumed runtime terminal failures", () => {
         });
         expect(f.onRuntimeComplete).toHaveBeenCalledExactlyOnceWith(
           expect.objectContaining({
-            status: "failed",
-            error: expect.stringContaining("synthetic execution failure"),
+            status: recover ? "success" : "failed",
+            ...(!recover
+              ? {
+                  error: expect.stringContaining("synthetic execution failure"),
+                }
+              : {}),
           }),
         );
-        expect(f.failedEvents()).toHaveLength(1);
+        expect(f.failedEvents()).toHaveLength(recover ? 0 : 1);
       } finally {
         await f.eventBus.close();
       }

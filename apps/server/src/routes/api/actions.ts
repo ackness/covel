@@ -655,43 +655,37 @@ actionRoutes.post("/", rateLimiter({ max: 30 }), async (c) => {
               });
             },
             onRuntimeStart: async (info) => {
-              await trace.runtimeStarted({
-                runtimeId: info.runtimeId,
-                pluginId: info.pluginId,
-                ...(info.stage !== undefined ? { stage: info.stage } : {}),
-              });
-              const kind = outputKindByRuntime.get(info.runtimeId) ?? "plugin";
-              await writeEvent("runtime.started", {
-                runtimeId: info.runtimeId,
-                pluginId: info.pluginId,
-                ...(info.stage !== undefined ? { stage: info.stage } : {}),
-                kind,
-                label: info.pluginId + "/" + kind,
-              });
+              try {
+                await trace.runtimeStarted(info);
+              } finally {
+                const kind =
+                  outputKindByRuntime.get(info.runtimeId) ?? "plugin";
+                await writeEvent("runtime.started", {
+                  ...info,
+                  kind,
+                  label: info.pluginId + "/" + kind,
+                });
+              }
             },
             onRuntimeComplete: async (info) => {
-              await trace.runtimeCompleted({
-                runtimeId: info.runtimeId,
-                pluginId: info.pluginId,
-                status: info.status,
-                durationMs: info.durationMs,
-                ...(info.error ? { error: info.error } : {}),
-              });
-              const eventType =
-                info.status === "failed"
-                  ? "runtime.failed"
-                  : info.status === "skipped"
-                    ? "runtime.skipped"
-                    : "runtime.completed";
-              await writeEvent(eventType, {
-                runtimeId: info.runtimeId,
-                pluginId: info.pluginId,
-                durationMs: info.durationMs,
-                status: info.status,
-                ...(info.status === "failed" && info.error
-                  ? { error: info.error }
-                  : {}),
-              });
+              try {
+                if (info.status === "failed") {
+                  await trace.runtimeFailed({
+                    ...info,
+                    error: info.error ?? "Runtime failed",
+                  });
+                } else {
+                  await trace.runtimeCompleted(info);
+                }
+              } finally {
+                const eventType =
+                  info.status === "failed"
+                    ? "runtime.failed"
+                    : info.status === "skipped"
+                      ? "runtime.skipped"
+                      : "runtime.completed";
+                await writeEvent(eventType, { ...info });
+              }
             },
             ...(memorySystem ? { memorySystem } : {}),
             // Player mid-turn steering + abort.

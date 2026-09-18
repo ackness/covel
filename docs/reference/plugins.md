@@ -2098,7 +2098,11 @@ tools:
 
 `executeTurn` / `resumeSuspendedRuntime` 仅执行并返回结果，宿主负责会话锁、权限、执行认领和重试身份，然后调用 `@covel/runtime` 的 `commitExecution`。它在一个事务中提交顶层与嵌套结果、消息、暂停状态、会话计数与 `recordAs` 导出，随后负责通知与快照，并从已提交的会话状态准备记忆。`loadOutputSchema` 与 `mediaStore` 在普通、manual 和 resume 入口都由宿主提供。
 
-恢复执行中的模型、工具循环、函数或加载异常会转换为 `RuntimeResult` 失败结果，经过完成回调、`runtime.failed` 事件和 `PostRuntime`，与普通执行的异常收尾一致。调用方应检查返回的 `status`；不能依赖这些执行异常抛出来判断失败。普通业务异常可以由 `PostRuntime` 恢复，执行超时和父级取消始终保留失败且无输出。恢复入口的 `PreRuntime` 和 `PostRuntime` 也接收父级取消信号；已经取消时不再启动新工作。HTTP 恢复失败仍返回 500 并释放认领，暂停记录保持未解决，可再次重试；执行失败事件不代表领域状态已经提交。
+普通执行与恢复执行共用 runtime 生命周期：`PreRuntime` 在 agent、function 或 agent guard 的业务执行之前运行一次；框架的依赖、激活输入及权限检查仍先行，失败时不会交由插件 Hook 绕过。`PostRuntime` 处理返回结果后，再校验故事输出、超时与父级取消，最后发送完成回调和唯一的 runtime 终态事件。两种 Hook 都接收父级取消信号。钩子拒绝后不执行 handler、guard 或模型调用；钩子处理期间发生父级取消时，返回失败且无输出，暂停结果也不再附带可持久化的继续执行记录。
+
+恢复执行中的模型、工具循环、函数或加载异常会转换为 `RuntimeResult` 失败候选，与普通执行一起经过 `PostRuntime`。调用方应检查最终返回的 `status`，不能依赖这些执行异常抛出来判断失败。普通业务异常可以由 Hook 恢复；超时和父级取消不能恢复为成功，story 的成功输出仍须包含有效正文。HTTP 恢复最终失败仍返回 500 并释放认领，暂停记录保持未解决，可再次重试。
+
+完成回调与 `runtime.failed` / `runtime.completed` 反映 **Hook 处理后的最终结果**：已恢复为成功的业务错误报告成功，Hook 降级和无效故事输出报告失败。运行通知、故事完成 trace 与 action SSE 保留 `turnId` 和 `runId`；runtime 终态表示执行结束，不表示领域事务已提交。trace 持久化失败不阻断 runtime SSE，回调或终态通知失败不重新执行 Hook。
 
 - `completion.kind: "turn"`：快照后发出 `turn.completed`，调度当前成功故事结果的记忆提取。
 - `completion.kind: "resume"`：提交后发出 `turn.resumed`、强制快照并提取记忆，不额外发出 `turn.completed`。

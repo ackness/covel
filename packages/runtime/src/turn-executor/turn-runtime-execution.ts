@@ -27,8 +27,7 @@ import {
   makeFailedResult,
   makeSkippedResult,
 } from "./turn-executor-helpers.js";
-import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
-import { emitSubEvent } from "./turn-runtime-helpers.js";
+import { reportRuntimeResult } from "../trace/runtime-telemetry.js";
 import { isRequiredUpstreamSatisfied } from "./turn-output-helpers.js";
 import {
   MaxRecursionExceeded,
@@ -43,7 +42,10 @@ import {
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { executeAgentGuard } from "../agent-loop/turn-agent-guard.js";
 import { combineAbortSignals } from "./turn-control.js";
-import { finalizeRuntimeFailure } from "./turn-runtime-failure.js";
+import {
+  finalizeRuntimeResult,
+  runRuntimePreHook,
+} from "./runtime-finalization.js";
 import { isScopedRuntimeRecovery } from "./scheduling.js";
 
 export type ExecuteTurnFn = (
@@ -310,37 +312,12 @@ export async function executeOneRuntime(
     };
   };
 
-  // Emit a terminal `runtime.completed` for a pre-dispatch gate result
-  // (input.schema failure, binding gate skip) — no `runtime.started` fired yet,
-  // mirroring the upstream/session gates above.
+  // Framework gates are not plugin execution and cannot be bypassed by Hooks.
   const emitGateTerminal = async (
     result: RuntimeResult,
     reason?: string,
   ): Promise<RuntimeResult> => {
-    try {
-      await deps.onRuntimeComplete?.({
-        runtimeId: manifest.name,
-        pluginId: manifest.pluginId,
-        status: result.status,
-        durationMs: result.durationMs,
-        ...(result.error ? { error: result.error } : {}),
-      });
-    } catch {
-      /* callback error must not kill runtime */
-    }
-    emitSubEvent(
-      deps.eventBus,
-      "runtime",
-      "runtime.completed",
-      input.sessionId,
-      {
-        runtimeId: manifest.name,
-        pluginId: manifest.pluginId,
-        status: result.status,
-        durationMs: result.durationMs,
-        ...(reason ? { reason } : {}),
-      },
-    );
+    await reportRuntimeResult(deps, input.sessionId, result, reason);
     return result;
   };
 
@@ -358,30 +335,7 @@ export async function executeOneRuntime(
           "setup-incomplete",
           "framework:setupGate",
         );
-        try {
-          await deps.onRuntimeComplete?.({
-            runtimeId: manifest.name,
-            pluginId: manifest.pluginId,
-            status: "skipped",
-            durationMs: skipResult.durationMs,
-          });
-        } catch {
-          /* callback error must not kill runtime */
-        }
-        emitSubEvent(
-          deps.eventBus,
-          "runtime",
-          "runtime.completed",
-          input.sessionId,
-          {
-            runtimeId: manifest.name,
-            pluginId: manifest.pluginId,
-            status: "skipped",
-            durationMs: skipResult.durationMs,
-            reason: "setup-incomplete",
-          },
-        );
-        return skipResult;
+        return emitGateTerminal(skipResult, "setup-incomplete");
       }
     }
 
@@ -444,30 +398,7 @@ export async function executeOneRuntime(
           durationMs: Date.now() - startTime,
           timestamp: new Date().toISOString(),
         };
-        try {
-          await deps.onRuntimeComplete?.({
-            runtimeId: manifest.name,
-            pluginId: manifest.pluginId,
-            status: "skipped",
-            durationMs: skipResult.durationMs,
-          });
-        } catch {
-          /* callback error must not kill runtime */
-        }
-        emitSubEvent(
-          deps.eventBus,
-          "runtime",
-          "runtime.completed",
-          input.sessionId,
-          {
-            runtimeId: manifest.name,
-            pluginId: manifest.pluginId,
-            status: "skipped",
-            durationMs: skipResult.durationMs,
-            reason,
-          },
-        );
-        return skipResult;
+        return emitGateTerminal(skipResult, reason);
       }
     }
 
@@ -508,12 +439,17 @@ export async function executeOneRuntime(
       input.sessionId,
     );
     if (!loaded) {
-      return makeFailedResult(
+      return finalizeRuntimeResult(
+        { ...deps, hookPipeline },
         manifest,
         input,
-        runId,
-        startTime,
-        "Runtime not found",
+        makeFailedResult(
+          manifest,
+          input,
+          runId,
+          startTime,
+          "Runtime not found",
+        ),
       );
     }
 
@@ -658,6 +594,15 @@ export async function executeOneRuntime(
       exportSlots = exportRes.slots;
     }
 
+    const preRuntime = await runRuntimePreHook(
+      { ...deps, hookPipeline },
+      manifest,
+      input,
+      runId,
+      startTime,
+    );
+    if (preRuntime) return preRuntime;
+
     if (manifest.runtimeType === "function") {
       return await executeFunctionRuntime({
         manifest,
@@ -726,12 +671,12 @@ export async function executeOneRuntime(
       startTime,
       message,
     );
-    return finalizeRuntimeFailure(
+    return finalizeRuntimeResult(
       { ...deps, hookPipeline },
       manifest,
       input,
       failedResult,
-      error,
+      { cause: error },
     );
   }
 }

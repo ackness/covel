@@ -18,11 +18,10 @@ import {
 import { createExecutionWriteBuffer } from "../function-runtime/execution-write-buffer.js";
 import { createRuntimeMediaContext } from "../function-runtime/runtime-media-context.js";
 import { withUtilsTrace } from "../function-runtime/utils-trace.js";
-import { runPostRuntimeHook } from "../hooks/wire-helpers.js";
+import { finalizeRuntimeResult } from "../turn-executor/runtime-finalization.js";
 import { resolveUserSettings } from "../turn-executor/turn-executor-helpers.js";
 import {
   createAssetProgressEmitter,
-  emitSubEvent,
   isTrustedPluginSource,
 } from "../turn-executor/turn-runtime-helpers.js";
 import type { TurnExecutorDeps } from "../turn-executor/turn-executor-types.js";
@@ -359,44 +358,10 @@ export async function executeAgentGuard({
         timestamp: new Date().toISOString(),
       };
 
-      // Guard skipped: emit completed (without ever emitting started) so frontend
-      // shows "skipped" instead of an infinite spinner.
-      try {
-        await deps.onRuntimeComplete?.({
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-          status: "skipped",
-          durationMs: result.durationMs,
-        });
-      } catch {
-        /* callback error must not kill runtime */
-      }
-
-      emitSubEvent(
-        deps.eventBus,
-        "runtime",
-        "runtime.completed",
-        input.sessionId,
-        {
-          runtimeId: manifest.name,
-          pluginId: manifest.pluginId,
-          status: "skipped",
-          durationMs: result.durationMs,
-        },
-      );
-
-      // PostRuntime hook — guard-skipped path
-      const postResult = await runPostRuntimeHook(
-        {
-          pipeline: hookPipeline,
-          signal: getTurnExecutionSignal(deps.turnControl),
-          sessionId: input.sessionId,
-          turnId: input.turnId,
-          pluginId: manifest.pluginId,
-          runtimeId: manifest.name,
-          eventBus: deps.eventBus,
-          emitter: deps.emitter,
-        },
+      const postResult = await finalizeRuntimeResult(
+        { ...deps, hookPipeline },
+        manifest,
+        input,
         result,
       );
       const postOutput = postResult.output as Record<string, unknown> | null;
