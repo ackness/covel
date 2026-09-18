@@ -2098,6 +2098,8 @@ tools:
 
 `executeTurn` / `resumeSuspendedRuntime` 仅执行并返回结果，宿主负责会话锁、权限、执行认领和重试身份，然后调用 `@covel/runtime` 的 `commitExecution`。它在一个事务中提交顶层与嵌套结果、消息、暂停状态、会话计数与 `recordAs` 导出，随后负责通知与快照，并从已提交的会话状态准备记忆。`loadOutputSchema` 与 `mediaStore` 在普通、manual 和 resume 入口都由宿主提供。
 
+恢复执行中的模型、工具循环、函数或加载异常会转换为 `RuntimeResult` 失败结果，经过完成回调、`runtime.failed` 事件和 `PostRuntime`，与普通执行的异常收尾一致。调用方应检查返回的 `status`；不能依赖这些执行异常抛出来判断失败。普通业务异常可以由 `PostRuntime` 恢复，执行超时和父级取消始终保留失败且无输出。恢复入口的 `PreRuntime` 和 `PostRuntime` 也接收父级取消信号；已经取消时不再启动新工作。HTTP 恢复失败仍返回 500 并释放认领，暂停记录保持未解决，可再次重试；执行失败事件不代表领域状态已经提交。
+
 - `completion.kind: "turn"`：快照后发出 `turn.completed`，调度当前成功故事结果的记忆提取。
 - `completion.kind: "resume"`：提交后发出 `turn.resumed`、强制快照并提取记忆，不额外发出 `turn.completed`。
 - `completion.kind: "detached"`：保留提交与快照，不完成父回合或重复提取故事。

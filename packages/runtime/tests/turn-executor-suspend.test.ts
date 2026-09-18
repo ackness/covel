@@ -1075,7 +1075,11 @@ describe("resumeSuspendedRuntime", () => {
 
     await expect(
       resumeSuspendedRuntime(suspension!, { name: "Budget" }, manifest, deps),
-    ).rejects.toThrow(/Context budget exceeded before LLM call/);
+    ).resolves.toMatchObject({
+      status: "failed",
+      output: null,
+      error: expect.stringMatching(/Context budget exceeded before LLM call/),
+    });
     expect(attempts).toBe(1);
     expect(firstMaxOutputTokens).toBe(100);
   });

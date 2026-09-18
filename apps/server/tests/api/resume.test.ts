@@ -638,6 +638,44 @@ describe("Resume Routes", () => {
       expect((await store.getSuspension("susp-1"))?.resolvedAt).toBeUndefined();
     });
 
+    it("releases a failed execution claim and retries the same suspension", async () => {
+      await createSuspension(store);
+      const hookPipeline = createHookPipeline();
+      const postRuntime = vi.fn(async () => ({ action: "continue" as const }));
+      hookPipeline.register({
+        id: "resume-terminal",
+        event: "PostRuntime",
+        handler: postRuntime,
+      });
+      const generate = vi.fn(makeDefaultLLM().generate);
+      generate.mockRejectedValueOnce(new Error("synthetic provider failure"));
+      const app = createTestApp(
+        makeDefaultDeps(store, { llmAdapter: { generate }, hookPipeline }),
+      );
+      const resume = () =>
+        app.request("/api/sessions/sess-1/suspensions/susp-1/resume", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: { name: "Alice" } }),
+        });
+
+      const failed = await resume();
+      expect(failed.status).toBe(500);
+      expect(await failed.json()).toMatchObject({
+        result: {
+          status: "failed",
+          output: null,
+          error: expect.stringContaining("synthetic provider failure"),
+        },
+      });
+      expect(postRuntime).toHaveBeenCalledTimes(1);
+      expect((await store.getSuspension("susp-1"))?.resolvedAt).toBeUndefined();
+
+      expect((await resume()).status).toBe(200);
+      expect(postRuntime).toHaveBeenCalledTimes(2);
+      expect((await store.getSuspension("susp-1"))?.resolvedAt).toBeDefined();
+    });
+
     it("returns 200 with result on successful resume", async () => {
       await createSuspension(store);
       const app = createTestApp(makeDefaultDeps(store));

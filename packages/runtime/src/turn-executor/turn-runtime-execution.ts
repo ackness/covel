@@ -42,11 +42,8 @@ import {
 } from "../agent-loop/turn-agent-runtime.js";
 import { executeFunctionRuntime } from "../function-runtime/turn-function-runtime.js";
 import { executeAgentGuard } from "../agent-loop/turn-agent-guard.js";
-import {
-  combineAbortSignals,
-  isTurnExecutionAborted,
-  RuntimeTimeoutError,
-} from "./turn-control.js";
+import { combineAbortSignals } from "./turn-control.js";
+import { finalizeRuntimeFailure } from "./turn-runtime-failure.js";
 import { isScopedRuntimeRecovery } from "./scheduling.js";
 
 export type ExecuteTurnFn = (
@@ -729,46 +726,13 @@ export async function executeOneRuntime(
       startTime,
       message,
     );
-    try {
-      await deps.onRuntimeComplete?.({
-        runtimeId: manifest.name,
-        pluginId: manifest.pluginId,
-        status: failedResult.status,
-        durationMs: failedResult.durationMs,
-        error: message,
-      });
-    } catch {
-      /* callback error must not replace the runtime failure */
-    }
-
-    emitSubEvent(deps.eventBus, "runtime", "runtime.failed", input.sessionId, {
-      runtimeId: manifest.name,
-      pluginId: manifest.pluginId,
-      status: failedResult.status,
-      durationMs: failedResult.durationMs,
-      error: message,
-    });
-
-    // PostRuntime hook — failure path
-    const finalized = await runPostRuntimeHook(
-      {
-        pipeline: hookPipeline,
-        signal: getTurnExecutionSignal(deps.turnControl),
-        sessionId: input.sessionId,
-        turnId: input.turnId,
-        pluginId: manifest.pluginId,
-        runtimeId: manifest.name,
-        eventBus: deps.eventBus,
-        emitter: deps.emitter,
-      },
+    return finalizeRuntimeFailure(
+      { ...deps, hookPipeline },
+      manifest,
+      input,
       failedResult,
+      error,
     );
-    // PostRuntime may recover ordinary failures, but cannot revive an expired
-    // execution or publish output after its parent has cancelled it.
-    return error instanceof RuntimeTimeoutError ||
-      isTurnExecutionAborted(deps.turnControl)
-      ? { ...finalized, status: "failed", output: null, error: message }
-      : finalized;
   }
 }
 

@@ -302,17 +302,26 @@ describe("agent tool deadline", () => {
               },
               { timeoutMs: 100 },
             );
-      let failure: unknown;
-      void running.catch((error) => {
-        failure = error;
-      });
+      const settled = running.then(
+        (result) => ({ result, error: undefined }),
+        (error: unknown) => ({ result: undefined, error }),
+      );
       try {
         await entered.promise;
         await vi.advanceTimersByTimeAsync(101);
         expect(signal?.aborted).toBe(true);
-        expect(failure).toBeInstanceOf(Error);
-        expect((failure as Error).message).toContain("timed out");
-        expect(failure).not.toMatchObject({ code: "TURN_ABORTED" });
+        const outcome = await settled;
+        if (path === "loop") {
+          expect(outcome.error).toBeInstanceOf(Error);
+          expect((outcome.error as Error).message).toContain("timed out");
+          expect(outcome.error).not.toMatchObject({ code: "TURN_ABORTED" });
+        } else {
+          expect(outcome.result).toMatchObject({
+            status: "failed",
+            output: null,
+            error: expect.stringContaining("timed out"),
+          });
+        }
       } finally {
         release.resolve();
         await running.catch(() => {});
